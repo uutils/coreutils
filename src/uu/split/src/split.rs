@@ -8,10 +8,14 @@
 // spell-checker:ignore (ToDO) PREFIXaa
 
 #[macro_use]
+extern crate clap;
+
+#[macro_use]
 extern crate uucore;
 
 mod platform;
 
+use clap::{App, Arg};
 use std::char;
 use std::env;
 use std::fs::File;
@@ -20,80 +24,122 @@ use std::path::Path;
 
 static NAME: &str = "split";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
+// TODO: pack OPTION_… into local module?
+static OPTION_SUFFIX_LENGTH: &str = "suffix-length";
+static DEFAULT_SUFFIX_LENGTH: usize = 2;
+static OPTION_BYTES: &str = "bytes";
+static OPTION_LINE_BYTES: &str = "line-bytes";
+static OPTION_NUMERIC_SUFFIXES: &str = "numeric-suffixes";
+static OPTION_ADDITIONAL_SUFFIX: &str = "additional-suffix";
+static OPTION_FILTER: &str = "filter";
+static OPTION_LINES: &str = "lines";
+static OPTION_VERBOSE: &str = "verbose";
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+static ARG_INPUT: &str = "input";
+static ARG_PREFIX: &str = "prefix";
 
-    let mut opts = getopts::Options::new();
-
-    opts.optopt(
-        "a",
-        "suffix-length",
-        "use suffixes of length N (default 2)",
-        "N",
-    );
-    opts.optopt("b", "bytes", "put SIZE bytes per output file", "SIZE");
-    opts.optopt(
-        "C",
-        "line-bytes",
-        "put at most SIZE bytes of lines per output file",
-        "SIZE",
-    );
-    opts.optflag(
-        "d",
-        "numeric-suffixes",
-        "use numeric suffixes instead of alphabetic",
-    );
-    opts.optopt(
-        "",
-        "additional-suffix",
-        "additional suffix to append to output file names",
-        "SUFFIX",
-    );
-    opts.optopt(
-        "",
-        "filter",
-        "write to shell COMMAND file name is $FILE (Currently not implemented for Windows)",
-        "COMMAND",
-    );
-    opts.optopt("l", "lines", "put NUMBER lines per output file", "NUMBER");
-    opts.optflag(
-        "",
-        "verbose",
-        "print a diagnostic just before each output file is opened",
-    );
-    opts.optflag("h", "help", "display help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => crash!(1, "{}", f),
-    };
-
-    if matches.opt_present("h") {
-        let msg = format!(
-            "{0} {1}
-
-Usage:
+fn get_usage() -> String {
+    format!("{0} [OPTION]... [INPUT [PREFIX]]", executable!())
+}
+fn get_long_usage() -> String {
+    String::from(
+        "Usage:
   {0} [OPTION]... [INPUT [PREFIX]]
 
 Output fixed-size pieces of INPUT to PREFIXaa, PREFIX ab, ...; default
 size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
 -, read standard input.",
-            NAME, VERSION
-        );
+    )
+}
 
-        println!(
-            "{}\nSIZE may have a multiplier suffix: b for 512, k for 1K, m for 1 Meg.",
-            opts.usage(&msg)
-        );
-        return 0;
-    }
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let usage = get_usage();
+    let long_usage = get_long_usage();
 
-    if matches.opt_present("V") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about("Create output files containing consecutive or interleaved sections of input")
+        .usage(&usage[..])
+        .after_help(&long_usage[..])
+        .arg(
+            Arg::with_name(OPTION_SUFFIX_LENGTH)
+                .short("a")
+                .long(OPTION_SUFFIX_LENGTH)
+                .takes_value(true)
+                .default_value(format!("{}", DEFAULT_SUFFIX_LENGTH))
+                .help("use suffixes of length N (default 2)"),
+        )
+        .arg(
+            Arg::with_name(OPTION_BYTES)
+                .short("b")
+                .conflicts_with(OPTION_LINES)
+                .conflicts_with(OPTION_LINE_BYTES)
+                .long(OPTION_BYTES)
+                .takes_value(true)
+                .default_value("2")
+                .help("use suffixes of length N (default 2)"),
+        )
+        .arg(
+            Arg::with_name(OPTION_LINE_BYTES)
+                .short("C")
+                .conflicts_with(OPTION_BYTES)
+                .conflicts_with(OPTION_LINES)
+                .long(OPTION_BYTES)
+                .takes_value(true)
+                .default_value("2")
+                .help("put at most SIZE bytes of lines per output file"),
+        )
+        .arg(
+            // TODO: this argument doesn't have any tests
+            Arg::with_name(OPTION_NUMERIC_SUFFIXES)
+                .short("d")
+                .long(OPTION_NUMERIC_SUFFIXES)
+                .takes_value(true)
+                .default_value("0")
+                .help("use numeric suffixes instead of alphabetic"),
+        )
+        .arg(
+            Arg::with_name(OPTION_ADDITIONAL_SUFFIX)
+                .long(OPTION_ADDITIONAL_SUFFIX)
+                .takes_value(true)
+                .default_value("")
+                .help("additional suffix to append to output file names"),
+        )
+        .arg(
+            Arg::with_name(OPTION_FILTER)
+                .long(OPTION_FILTER)
+                .takes_value(true)
+                .help("write to shell COMMAND file name is $FILE (Currently not implemented for Windows)"),
+        )
+        .arg(
+            Arg::with_name(OPTION_LINES)
+                .short("l")
+                .conflicts_with(OPTION_BYTES)
+                .conflicts_with(OPTION_LINE_BYTES)
+                .long(OPTION_LINES)
+                .takes_value(true)
+                .default_value("1000")
+                .help("write to shell COMMAND file name is $FILE (Currently not implemented for Windows)"),
+        )
+        .arg(
+            Arg::with_name(OPTION_VERBOSE)
+                .long(OPTION_VERBOSE)
+                .help("print a diagnostic just before each output file is opened"),
+        )
+        // TODO are the ones below handled Ok? How do I [INPUT [PREFIX]] ?
+        .arg(
+            Arg::with_name(ARG_INPUT)
+            .takes_value(true)
+            .default_value("-")
+            .index(1)
+        )
+        .arg(
+            Arg::with_name(ARG_PREFIX)
+            .takes_value(true)
+            .default_value("x")
+            .index(2)
+        )
+        .get_matches_from(args);
 
     let mut settings = Settings {
         prefix: "".to_owned(),
@@ -107,53 +153,35 @@ size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
         verbose: false,
     };
 
-    settings.numeric_suffix = matches.opt_present("d");
+    settings.suffix_length = matches
+        .value_of(OPTION_SUFFIX_LENGTH)
+        .unwrap()
+        .parse()
+        .expect(format!("Invalid number for {}", OPTION_SUFFIX_LENGTH));
 
-    settings.suffix_length = match matches.opt_str("a") {
-        Some(n) => match n.parse() {
-            Ok(m) => m,
-            Err(e) => crash!(1, "cannot parse num: {}", e),
-        },
-        None => 2,
-    };
+    settings.numeric_suffix = matches.is_present(OPTION_NUMERIC_SUFFIXES);
+    settings.additional_suffix = matches.value_of(OPTION_SUFFIX_LENGTH).unwrap().to_owned();
 
-    settings.additional_suffix = if matches.opt_present("additional-suffix") {
-        matches.opt_str("additional-suffix").unwrap()
-    } else {
-        "".to_owned()
-    };
+    settings.verbose = matches.is_present("verbose");
 
-    settings.verbose = matches.opt_present("verbose");
+    settings.strategy = String::from(OPTION_LINES); // default strategy
+    settings.strategy_param = matches.value_of(OPTION_LINES).unwrap().to_owned();
+    // take any defined strategy
 
-    settings.strategy = "l".to_owned();
-    settings.strategy_param = "1000".to_owned();
-    let strategies = vec!["b", "C", "l"];
-    for e in &strategies {
-        if let Some(a) = matches.opt_str(*e) {
-            if settings.strategy == "l" {
-                settings.strategy = (*e).to_owned();
-                settings.strategy_param = a;
-            } else {
-                crash!(1, "{}: cannot split in more than one way", NAME)
-            }
+    settings.input = matches.value_of(ARG_INPUT).unwrap().to_owned();
+    settings.prefix = matches.value_of(ARG_PREFIX).unwrap().to_owned();
+
+    if matches.is_present(OPTION_FILTER) {
+        if cfg!(windows) {
+            // see https://github.com/rust-lang/rust/issues/29494
+            show_error!(format!(
+                "{} is currently not supported in this platform",
+                OPTION_FILTER
+            ));
+            exit!(-1);
+        } else {
+            settings.filter = Some(matches.value_of(OPTION_FILTER).unwrap().to_owned());
         }
-    }
-
-    let mut v = matches.free.iter();
-    let (input, prefix) = match (v.next(), v.next()) {
-        (Some(a), None) => (a.to_owned(), "x".to_owned()),
-        (Some(a), Some(b)) => (a.clone(), b.clone()),
-        (None, _) => ("-".to_owned(), "x".to_owned()),
-    };
-    settings.input = input;
-    settings.prefix = prefix;
-
-    settings.filter = matches.opt_str("filter");
-
-    if settings.filter.is_some() && cfg!(windows) {
-        // see https://github.com/rust-lang/rust/issues/29494
-        show_error!("--filter is currently not supported in this platform");
-        exit!(-1);
     }
 
     split(&settings)
