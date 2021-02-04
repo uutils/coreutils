@@ -21,7 +21,7 @@ use std::path::Path;
 
 static NAME: &str = "split";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
-// TODO: pack OPTION_… into local module?
+// TODO: pack OPTION_… into local module? in alphabetic order
 static OPTION_SUFFIX_LENGTH: &str = "suffix-length";
 static DEFAULT_SUFFIX_LENGTH: usize = 2;
 static OPTION_BYTES: &str = "bytes";
@@ -36,34 +36,37 @@ static ARG_INPUT: &str = "input";
 static ARG_PREFIX: &str = "prefix";
 
 fn get_usage() -> String {
-    format!("{0} [OPTION]... [INPUT [PREFIX]]", executable!())
+    format!("{0} [OPTION]... [INPUT [PREFIX]]", NAME)
 }
 fn get_long_usage() -> String {
-    String::from(
+    format!(
         "Usage:
-  {0} [OPTION]... [INPUT [PREFIX]]
+  {0}
 
 Output fixed-size pieces of INPUT to PREFIXaa, PREFIX ab, ...; default
 size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
 -, read standard input.",
+        get_usage()
     )
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let long_usage = get_long_usage();
+    let default_suffix_length_str = DEFAULT_SUFFIX_LENGTH.to_string();
 
     let matches = App::new(executable!())
         .version(VERSION)
         .about("Create output files containing consecutive or interleaved sections of input")
         .usage(&usage[..])
         .after_help(&long_usage[..])
+        // TODO: re-order these .arg(…) in alphabetic order
         .arg(
             Arg::with_name(OPTION_SUFFIX_LENGTH)
                 .short("a")
                 .long(OPTION_SUFFIX_LENGTH)
                 .takes_value(true)
-                .default_value(format!("{}", DEFAULT_SUFFIX_LENGTH))
+                .default_value(default_suffix_length_str.as_str())
                 .help("use suffixes of length N (default 2)"),
         )
         .arg(
