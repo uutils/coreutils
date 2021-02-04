@@ -33,20 +33,42 @@ jobs:
     - name: Build binaries
       shell: bash
       run: |
+        sudo apt-get update
+        sudo apt-get install autoconf autopoint bison texinfo gperf gcc g++ gdb python-pyinotify expect python3-sphinx
         pushd uutils
-        cargo build --release
+        make PROFILE=release
         BUILDDIR="$PWD/target/release/"
         popd
         GNULIB_SRCDIR="$PWD/gnulib"
         pushd gnu/
-        sudo apt-get update
-        sudo apt-get install autoconf autopoint bison texinfo gperf gcc gdb python-pyinotify expect
         ./bootstrap --gnulib-srcdir="$GNULIB_SRCDIR"
         ./configure --quiet --disable-gcc-warnings
         # Change the PATH in the Makefile to test the uutils coreutils instead of the GNU coreutils 
         sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${BUILDDIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
         sed -i 's| tr | /usr/bin/tr |' tests/init.sh
         make
+        # Generate the factor tests, so they can be fixed
+        for i in $(seq -w 1 36)
+        do
+          make tests/factor/t${i}.sh
+        done
+        grep -rl 'path_prepend_' tests/* | xargs sed -i 's|path_prepend_ ./src||'
+        sed -i -e 's|^seq |/usr/bin/seq |' tests/factor/t*sh
+        sed -i -e '/tests\/misc\/cat-self.sh/ D' Makefile # issue #1707
+        sed -i -e '/tests\/misc\/numfmt.pl/ D' Makefile # issue #1708
+        sed -i -e '/tests\/chown\/preserve-root.sh/ D' Makefile # issue #1709
+        sed -i -e '/tests\/cp\/file-perm-race.sh/ D' Makefile # issue #1710
+        sed -i -e '/tests\/cp\/special-f.sh/ D' Makefile # issue #1710
+        sed -i -e '/tests\/mv\/mv-special-1.sh/ D' Makefile # issue #1710
+        sed -i -e '/tests\/dd\/stats.sh/ D' Makefile # issue #1710
+        sed -i -e '/tests\/cp\/existing-perm-race.sh/ D' Makefile # hangs, cp doesn't implement --copy-contents
+        # Remove tests that rely on seq with large numbers. See issue #1703
+        sed -i -e '/tests\/misc\/seq.pl/ D' \
+               -e '/tests\/misc\/seq-precision.sh/D' \
+               Makefile
+        sed -i -e '/tests\/tail-2\/pid.sh/ D' Makefile # hangs on github, tail doesn't support -f
+        sed -i -e'/incompat4/ D' -e"/options '-co' are incompatible/ d" tests/misc/sort.pl # Sort doesn't correctly check for incompatible options, waits for input
+
         test -f "${BUILDDIR}/getlimits" || cp src/getlimits "${BUILDDIR}"
     - name: Run GNU tests
       shell: bash
@@ -54,6 +76,9 @@ jobs:
         BUILDDIR="${PWD}/uutils/target/release"
         GNULIB_DIR="${PWD}/gnulib"
         pushd gnu
-        ulimit -t 60
         
-        unbuffer make -j "$(nproc)" check SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no || :
+        unbuffer timeout -sKILL 3600 make -j "$(nproc)" check SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no || :
+    - uses: actions/upload-artifact@v2
+      with:
+        name: test-report
+        path: gnu/tests/**/*.log
