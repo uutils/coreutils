@@ -8,9 +8,6 @@
 // spell-checker:ignore (ToDO) PREFIXaa
 
 #[macro_use]
-extern crate clap;
-
-#[macro_use]
 extern crate uucore;
 
 mod platform;
