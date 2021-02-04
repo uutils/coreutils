@@ -1,6 +1,6 @@
 [package]
 name = "uu_factor"
-version = "0.0.2"
+version = "0.0.3"
 authors = ["uutils developers"]
 license = "MIT"
 description = "factor ~ (uutils) display the prime factors of each NUMBER"
@@ -12,14 +12,14 @@ categories = ["command-line-utilities"]
 edition = "2018"
 
 [build-dependencies]
-num-traits = "0.2" # used in src/numerics.rs, which is included by build.rs
+num-traits = "0.2.13" # used in src/numerics.rs, which is included by build.rs
 
 
 [dependencies]
-num-traits = "0.2"
+num-traits = "0.2.13" # Needs at least version 0.2.13 for "OverflowingAdd"
 rand = { version="0.7", features=["small_rng"] }
 smallvec = { version="0.6.13, < 1.0" }
-uucore = { version=">=0.0.5", package="uucore", path="../../uucore" }
+uucore = { version=">=0.0.6", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [dev-dependencies]

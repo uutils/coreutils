@@ -1,6 +1,6 @@
 [package]
 name = "uu_tr"
-version = "0.0.2"
+version = "0.0.3"
 authors = ["uutils developers"]
 license = "MIT"
 description = "tr ~ (uutils) translate characters within input and display"
@@ -18,7 +18,7 @@ path = "src/tr.rs"
 bit-set = "0.5.0"
 fnv = "1.0.5"
 getopts = "0.2.18"
-uucore = { version=">=0.0.5", package="uucore", path="../../uucore" }
+uucore = { version=">=0.0.6", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]

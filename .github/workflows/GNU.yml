@@ -1,0 +1,59 @@
+name: GNU
+
+on: [push, pull_request]
+
+jobs:
+  gnu:
+    name: Run GNU tests
+    runs-on: ubuntu-latest
+    steps:
+      # Checks out a copy of your repository on the ubuntu-latest machine
+    - name: Checkout code uutil
+      uses: actions/checkout@v2
+      with:
+        path: 'uutils'
+    - name: Chechout GNU coreutils
+      uses: actions/checkout@v2
+      with:
+        repository: 'coreutils/coreutils'
+        path: 'gnu'
+    - name: Chechout GNU corelib
+      uses: actions/checkout@v2
+      with:
+        repository: 'coreutils/gnulib'
+        path: 'gnulib'
+        fetch-depth: 0 # gnu gets upset if gnulib is a shallow checkout
+    - name: Install `rust` toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        default: true
+        profile: minimal # minimal component installation (ie, no documentation)
+        components: rustfmt
+    - name: Build binaries
+      shell: bash
+      run: |
+        pushd uutils
+        cargo build --release
+        BUILDDIR="$PWD/target/release/"
+        popd
+        GNULIB_SRCDIR="$PWD/gnulib"
+        pushd gnu/
+        sudo apt-get update
+        sudo apt-get install autoconf autopoint bison texinfo gperf gcc gdb python-pyinotify expect
+        ./bootstrap --gnulib-srcdir="$GNULIB_SRCDIR"
+        ./configure --quiet --disable-gcc-warnings
+        # Change the PATH in the Makefile to test the uutils coreutils instead of the GNU coreutils 
+        sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${BUILDDIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
+        sed -i 's| tr | /usr/bin/tr |' tests/init.sh
+        make
+        test -f "${BUILDDIR}/getlimits" || cp src/getlimits "${BUILDDIR}"
+    - name: Run GNU tests
+      shell: bash
+      run: |
+        BUILDDIR="${PWD}/uutils/target/release"
+        GNULIB_DIR="${PWD}/gnulib"
+        pushd gnu
+        ulimit -t 60
+        
+        unbuffer make -j "$(nproc)" check SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no || :

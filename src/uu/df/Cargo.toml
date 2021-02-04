@@ -1,6 +1,6 @@
 [package]
 name = "uu_df"
-version = "0.0.2"
+version = "0.0.3"
 authors = ["uutils developers"]
 license = "MIT"
 description = "df ~ (uutils) display file system information"
@@ -18,7 +18,7 @@ path = "src/df.rs"
 clap = "2.33"
 libc = "0.2"
 number_prefix = "0.4"
-uucore = { version=">=0.0.5", package="uucore", path="../../uucore" }
+uucore = { version=">=0.0.6", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [target.'cfg(target_os = "windows")'.dependencies]

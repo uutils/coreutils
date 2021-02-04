@@ -1,6 +1,6 @@
 [package]
 name = "uu_wc"
-version = "0.0.2"
+version = "0.0.3"
 authors = ["uutils developers"]
 license = "MIT"
 description = "wc ~ (uutils) display newline, word, and byte counts for input"
@@ -16,7 +16,7 @@ path = "src/wc.rs"
 
 [dependencies]
 clap = "2.33"
-uucore = { version=">=0.0.5", package="uucore", path="../../uucore" }
+uucore = { version=">=0.0.6", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]

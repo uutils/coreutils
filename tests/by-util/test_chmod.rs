@@ -352,7 +352,7 @@ fn test_chmod_symlink_non_existing_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.symlink_file("/non-existing", "test-long.link");
 
-    let result = ucmd
+    let _result = ucmd
         .arg("-R")
         .arg("755")
         .arg("-v")

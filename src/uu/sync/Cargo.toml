@@ -1,6 +1,6 @@
 [package]
 name = "uu_sync"
-version = "0.0.2"
+version = "0.0.3"
 authors = ["uutils developers"]
 license = "MIT"
 description = "sync ~ (uutils) synchronize cache writes to storage"
@@ -17,7 +17,7 @@ path = "src/sync.rs"
 [dependencies]
 clap = "2.33"
 libc = "0.2.42"
-uucore = { version=">=0.0.5", package="uucore", path="../../uucore", features=["wide"] }
+uucore = { version=">=0.0.6", package="uucore", path="../../uucore", features=["wide"] }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 winapi = { version = "0.3", features = ["errhandlingapi", "fileapi", "handleapi", "std", "winbase", "winerror"] }
 
