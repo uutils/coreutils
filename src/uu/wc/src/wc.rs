@@ -190,9 +190,7 @@ fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
         } {
             // GNU 'wc' only counts lines that end in LF as lines
             ends_lf = *raw_line.last().unwrap() == LF;
-            if ends_lf {
-                line_count += 1;
-            }
+            line_count += ends_lf as usize;
 
             byte_count += raw_line.len();
 
