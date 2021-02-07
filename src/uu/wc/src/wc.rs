@@ -212,11 +212,7 @@ fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
                 char_count += current_char_count;
                 if current_char_count > longest_line_length {
                     // -L is a GNU 'wc' extension so same behavior on LF
-                    if ends_lf {
-                        longest_line_length = current_char_count - 1;
-                    } else {
-                        longest_line_length = current_char_count;
-                    }
+                    longest_line_length = current_char_count - (ends_lf as usize);
                 }
             }
 
