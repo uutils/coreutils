@@ -495,7 +495,7 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
         return Err(());
     }
 
-    if b.owner != "" {
+    if !b.owner.is_empty() {
         let meta = match fs::metadata(to) {
             Ok(meta) => meta,
             Err(f) => crash!(1, "{}", f.to_string()),
@@ -515,7 +515,7 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
             Verbosity::Normal,
         ) {
             Ok(n) => {
-                if n != "" {
+                if !n.is_empty() {
                     show_info!("{}", n);
                 }
             }
@@ -523,7 +523,7 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
         }
     }
 
-    if b.group != "" {
+    if !b.group.is_empty() {
         let meta = match fs::metadata(to) {
             Ok(meta) => meta,
             Err(f) => crash!(1, "{}", f.to_string()),
@@ -535,7 +535,7 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
         };
         match wrap_chgrp(to.as_path(), &meta, group_id, false, Verbosity::Normal) {
             Ok(n) => {
-                if n != "" {
+                if !n.is_empty() {
                     show_info!("{}", n);
                 }
             }

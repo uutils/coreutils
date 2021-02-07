@@ -75,9 +75,7 @@ impl FilterWriter {
             .spawn()
             .expect("Couldn't spawn filter command");
 
-        FilterWriter {
-            shell_process: shell_process,
-        }
+        FilterWriter { shell_process }
     }
 }
 

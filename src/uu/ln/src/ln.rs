@@ -325,9 +325,8 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &PathBuf, settings: &Setting
                     // Not sure why but on Windows, the symlink can be
                     // considered as a dir
                     // See test_ln::test_symlink_no_deref_dir
-                    match fs::remove_dir(target_dir) {
-                        Err(e) => show_error!("Could not update {}: {}", target_dir.display(), e),
-                        _ => (),
+                    if let Err(e) = fs::remove_dir(target_dir) {
+                        show_error!("Could not update {}: {}", target_dir.display(), e)
                     };
                 }
             }

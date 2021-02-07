@@ -163,7 +163,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     match matches.value_of(OPT_LINES) {
         Some(n) => {
-            let mut slice: &str = n.as_ref();
+            let mut slice: &str = n;
             if slice.chars().next().unwrap_or('_') == '+' {
                 settings.beginning = true;
                 slice = &slice[1..];
@@ -178,7 +178,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
         None => {
             if let Some(n) = matches.value_of(OPT_BYTES) {
-                let mut slice: &str = n.as_ref();
+                let mut slice: &str = n;
                 if slice.chars().next().unwrap_or('_') == '+' {
                     settings.beginning = true;
                     slice = &slice[1..];
