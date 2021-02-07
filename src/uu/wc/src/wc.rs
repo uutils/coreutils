@@ -177,7 +177,7 @@ fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
         let mut char_count: usize = 0;
         let mut longest_line_length: usize = 0;
         let mut raw_line = Vec::new();
-
+        let mut ends_lf: bool;
         // reading from a TTY seems to raise a condition on, rather than return Some(0) like a file.
         // hence the option wrapped in a result here
         while match reader.read_until(LF, &mut raw_line) {
@@ -189,7 +189,8 @@ fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
             _ => false,
         } {
             // GNU 'wc' only counts lines that end in LF as lines
-            if *raw_line.last().unwrap() == LF {
+            ends_lf = *raw_line.last().unwrap() == LF;
+            if ends_lf {
                 line_count += 1;
             }
 
@@ -209,11 +210,13 @@ fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
                     }
                 }
                 char_count += current_char_count;
-
                 if current_char_count > longest_line_length {
-                    // we subtract one here because `line.len()` includes the LF
-                    // matches GNU 'wc' behavior
-                    longest_line_length = current_char_count - 1;
+                    // -L is a GNU 'wc' extension so same behavior on LF
+                    if ends_lf {
+                        longest_line_length = current_char_count - 1;
+                    } else {
+                        longest_line_length = current_char_count;
+                    }
                 }
             }
 
