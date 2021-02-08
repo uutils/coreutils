@@ -9,6 +9,15 @@ fn test_stdin_default() {
 }
 
 #[test]
+fn test_stdin_line_len_regression() {
+    new_ucmd!()
+        .args(&["-L"])
+        .pipe_in("\n123456")
+        .run()
+        .stdout_is(" 6\n");
+}
+
+#[test]
 fn test_stdin_only_bytes() {
     new_ucmd!()
         .args(&["-c"])
