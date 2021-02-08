@@ -19,25 +19,25 @@ use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 
-const NAME: &str = "split";
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+static NAME: &str = "split";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 mod options {
     pub mod strategies {
-        pub const BYTES: &str = "bytes";
-        pub const LINE_BYTES: &str = "line-bytes";
-        pub const LINES: &str = "lines";
+        pub static BYTES: &str = "bytes";
+        pub static LINE_BYTES: &str = "line-bytes";
+        pub static LINES: &str = "lines";
     }
-    pub const ADDITIONAL_SUFFIX: &str = "additional-suffix";
-    pub const FILTER: &str = "filter";
-    pub const NUMERIC_SUFFIXES: &str = "numeric-suffixes";
-    pub const SUFFIX_LENGTH: &str = "suffix-length";
-    pub const DEFAULT_SUFFIX_LENGTH: usize = 2;
-    pub const VERBOSE: &str = "verbose";
+    pub static ADDITIONAL_SUFFIX: &str = "additional-suffix";
+    pub static FILTER: &str = "filter";
+    pub static NUMERIC_SUFFIXES: &str = "numeric-suffixes";
+    pub static SUFFIX_LENGTH: &str = "suffix-length";
+    pub static DEFAULT_SUFFIX_LENGTH: usize = 2;
+    pub static VERBOSE: &str = "verbose";
 }
 
-const ARG_INPUT: &str = "input";
-const ARG_PREFIX: &str = "prefix";
+static ARG_INPUT: &str = "input";
+static ARG_PREFIX: &str = "prefix";
 
 fn get_usage() -> String {
     format!("{0} [OPTION]... [INPUT [PREFIX]]", NAME)
@@ -380,9 +380,9 @@ fn split(settings: &Settings) -> i32 {
         Box::new(r) as Box<dyn Read>
     });
 
-    let mut splitter: Box<dyn Splitter> = match settings.strategy.as_ref() {
-        options::strategies::LINES => Box::new(LineSplitter::new(settings)),
-        options::strategies::BYTES | options::strategies::LINE_BYTES => {
+    let mut splitter: Box<dyn Splitter> = match settings.strategy.as_str() {
+        s if s == options::strategies::LINES => Box::new(LineSplitter::new(settings)),
+        s if (s == options::strategies::BYTES || s == options::strategies::LINE_BYTES) => {
             Box::new(ByteSplitter::new(settings))
         }
         a => crash!(1, "strategy {} not supported", a),
