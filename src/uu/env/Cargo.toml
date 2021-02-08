@@ -1,6 +1,6 @@
 [package]
 name = "uu_env"
-version = "0.0.2"
+version = "0.0.3"
 authors = ["uutils developers"]
 license = "MIT"
 description = "env ~ (uutils) set each NAME to VALUE in the environment and run COMMAND"
@@ -18,7 +18,7 @@ path = "src/env.rs"
 clap = "2.33"
 libc = "0.2.42"
 rust-ini = "0.13.0"
-uucore = { version=">=0.0.5", package="uucore", path="../../uucore" }
+uucore = { version=">=0.0.6", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]

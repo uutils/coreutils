@@ -1,6 +1,6 @@
 [package]
 name = "uu_stat"
-version = "0.0.2"
+version = "0.0.3"
 authors = ["uutils developers"]
 license = "MIT"
 description = "stat ~ (uutils) display FILE status"
@@ -17,7 +17,7 @@ path = "src/stat.rs"
 [dependencies]
 clap = "2.33"
 time = "0.1.40"
-uucore = { version=">=0.0.5", package="uucore", path="../../uucore", features=["entries", "libc"] }
+uucore = { version=">=0.0.6", package="uucore", path="../../uucore", features=["entries", "libc"] }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]

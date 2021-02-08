@@ -1,6 +1,6 @@
 [package]
 name = "uu_csplit"
-version = "0.0.2"
+version = "0.0.3"
 authors = ["uutils developers"]
 license = "MIT"
 description = "csplit ~ (uutils) Output pieces of FILE separated by PATTERN(s) to files 'xx00', 'xx01', ..., and output byte counts of each piece to standard output"
@@ -19,7 +19,7 @@ getopts = "0.2.17"
 thiserror = "1.0"
 regex = "1.0.0"
 glob = "0.2.11"
-uucore = { version=">=0.0.5", package="uucore", path="../../uucore", features=["entries", "fs"] }
+uucore = { version=">=0.0.6", package="uucore", path="../../uucore", features=["entries", "fs"] }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]
