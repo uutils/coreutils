@@ -104,7 +104,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("write to shell COMMAND file name is $FILE (Currently not implemented for Windows)"),
         )
         .arg(
-            // TODO: this argument doesn't have any tests
             Arg::with_name(options::NUMERIC_SUFFIXES)
                 .short("d")
                 .long(options::NUMERIC_SUFFIXES)
