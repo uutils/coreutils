@@ -100,6 +100,33 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .get_matches_from(args);
 
     let template = matches.value_of(ARG_TEMPLATE).unwrap();
+    let tmpdir = matches.value_of(OPT_TMPDIR).unwrap_or_default();
+
+    let (template, mut tmpdir) = if matches.is_present(OPT_TMPDIR)
+        && !PathBuf::from(tmpdir).is_dir() // if a temp dir is provided, it must be an actual path
+        && tmpdir.contains("XXX")
+    // If this is a template, it has to contain at least 3 X
+        && template == DEFAULT_TEMPLATE
+    // That means that clap does not think we provided a template
+    {
+        // Special case to workaround a limitation of clap when doing
+        // mktemp --tmpdir apt-key-gpghome.XXX
+        // The behavior should be
+        // mktemp --tmpdir $TMPDIR apt-key-gpghome.XX
+        // As --tmpdir is empty
+        //
+        // Fixed in clap 3
+        // See https://github.com/clap-rs/clap/pull/1587
+        let tmp = env::temp_dir();
+        (tmpdir, tmp)
+    } else {
+        if !matches.is_present(OPT_TMPDIR) {
+            let tmp = env::temp_dir();
+            (template, tmp)
+        } else {
+            (template, PathBuf::from(tmpdir))
+        }
+    };
 
     let make_dir = matches.is_present(OPT_DIRECTORY);
     let dry_run = matches.is_present(OPT_DRY_RUN);
@@ -130,18 +157,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         crash!(1, "suffix cannot contain any path separators");
     }
 
-    let mut tmpdir = match matches.value_of(OPT_TMPDIR) {
-        Some(s) => {
-            if PathBuf::from(prefix).is_absolute() {
-                show_info!(
-                    "invalid template, ‘{}’; with --tmpdir, it may not be absolute",
-                    template
-                );
-                return 1;
-            }
-            PathBuf::from(s)
+    if matches.is_present(OPT_TMPDIR) {
+        if PathBuf::from(prefix).is_absolute() {
+            show_info!(
+                "invalid template, ‘{}’; with --tmpdir, it may not be absolute",
+                template
+            );
+            return 1;
         }
-        None => env::temp_dir(),
     };
 
     if matches.is_present(OPT_T) {
@@ -209,18 +232,17 @@ fn exec(
             }
             Err(e) => {
                 if !quiet {
-                    show_info!("{}", e);
+                    show_info!("{}: {}", e, tmpdir.display());
                 }
                 return 1;
             }
         }
     }
-
     let tmpfile = Builder::new()
+        .prefix(prefix)
         .rand_bytes(rand)
         .suffix(suffix)
         .tempfile_in(tmpdir);
-
     let tmpfile = match tmpfile {
         Ok(f) => f,
         Err(e) => {
