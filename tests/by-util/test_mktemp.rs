@@ -1,5 +1,6 @@
 use crate::common::util::*;
 
+use std::path::PathBuf;
 use tempfile::tempdir;
 
 static TEST_TEMPLATE1: &'static str = "tempXXXXXX";
@@ -379,4 +380,35 @@ fn test_mktemp_tmpdir() {
         .arg(pathname)
         .arg(TEST_TEMPLATE8)
         .fails();
+}
+
+#[test]
+fn test_mktemp_tmpdir_one_arg() {
+    let scene = TestScenario::new(util_name!());
+
+    let result = scene
+        .ucmd()
+        .arg("--tmpdir")
+        .arg("apt-key-gpghome.XXXXXXXXXX")
+        .succeeds();
+    println!("stdout {}", result.stdout);
+    println!("stderr {}", result.stderr);
+    assert!(result.stdout.contains("apt-key-gpghome."));
+    assert!(PathBuf::from(result.stdout.trim()).is_file());
+}
+
+#[test]
+fn test_mktemp_directory_tmpdir() {
+    let scene = TestScenario::new(util_name!());
+
+    let result = scene
+        .ucmd()
+        .arg("--directory")
+        .arg("--tmpdir")
+        .arg("apt-key-gpghome.XXXXXXXXXX")
+        .succeeds();
+    println!("stdout {}", result.stdout);
+    println!("stderr {}", result.stderr);
+    assert!(result.stdout.contains("apt-key-gpghome."));
+    assert!(PathBuf::from(result.stdout.trim()).is_dir());
 }
