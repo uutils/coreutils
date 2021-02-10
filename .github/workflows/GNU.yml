@@ -76,8 +76,19 @@ jobs:
         BUILDDIR="${PWD}/uutils/target/release"
         GNULIB_DIR="${PWD}/gnulib"
         pushd gnu
-        
+
         unbuffer timeout -sKILL 3600 make -j "$(nproc)" check SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no || :
+    - name: Extract tests info
+      shell: bash
+      run: |
+        TOTAL=$( grep "# TOTAL:" gnu/tests/test-suite.log|cut -d' ' -f2-)
+        PASS=$( grep "# PASS:" gnu/tests/test-suite.log|cut -d' ' -f2-)
+        SKIP=$( grep "# SKIP:" gnu/tests/test-suite.log|cut -d' ' -f2-)
+        FAIL=$( grep "# FAIL:" gnu/tests/test-suite.log|cut -d' ' -f2-)
+        XPASS=$( grep "# XPASS:" gnu/tests/test-suite.log|cut -d' ' -f2-)
+        ERROR=$( grep "# ERROR:" gnu/tests/test-suite.log|cut -d' ' -f2-)
+        echo "::warning ::GNU testsuite = $TOTAL / $PASS / $FAIL / $ERROR"
+
     - uses: actions/upload-artifact@v2
       with:
         name: test-report
