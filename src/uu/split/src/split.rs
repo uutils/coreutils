@@ -22,19 +22,15 @@ use std::path::Path;
 static NAME: &str = "split";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
-mod options {
-    pub mod strategies {
-        pub static BYTES: &str = "bytes";
-        pub static LINE_BYTES: &str = "line-bytes";
-        pub static LINES: &str = "lines";
-    }
-    pub static ADDITIONAL_SUFFIX: &str = "additional-suffix";
-    pub static FILTER: &str = "filter";
-    pub static NUMERIC_SUFFIXES: &str = "numeric-suffixes";
-    pub static SUFFIX_LENGTH: &str = "suffix-length";
-    pub static DEFAULT_SUFFIX_LENGTH: usize = 2;
-    pub static VERBOSE: &str = "verbose";
-}
+static OPTION_BYTES: &str = "bytes";
+static OPTION_LINE_BYTES: &str = "line-bytes";
+static OPTION_LINES: &str = "lines";
+static OPTION_ADDITIONAL_SUFFIX: &str = "additional-suffix";
+static OPTION_FILTER: &str = "filter";
+static OPTION_NUMERIC_SUFFIXES: &str = "numeric-suffixes";
+static OPTION_SUFFIX_LENGTH: &str = "suffix-length";
+static OPTION_DEFAULT_SUFFIX_LENGTH: usize = 2;
+static OPTION_VERBOSE: &str = "verbose";
 
 static ARG_INPUT: &str = "input";
 static ARG_PREFIX: &str = "prefix";
@@ -57,7 +53,7 @@ size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let long_usage = get_long_usage();
-    let default_suffix_length_str = options::DEFAULT_SUFFIX_LENGTH.to_string();
+    let default_suffix_length_str = OPTION_DEFAULT_SUFFIX_LENGTH.to_string();
 
     let matches = App::new(executable!())
         .version(VERSION)
@@ -66,62 +62,62 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .after_help(&long_usage[..])
         // strategy (mutually exclusive)
         .arg(
-            Arg::with_name(options::strategies::BYTES)
+            Arg::with_name(OPTION_BYTES)
                 .short("b")
-                .long(options::strategies::BYTES)
+                .long(OPTION_BYTES)
                 .takes_value(true)
                 .default_value("2")
                 .help("use suffixes of length N (default 2)"),
         )
         .arg(
-            Arg::with_name(options::strategies::LINE_BYTES)
+            Arg::with_name(OPTION_LINE_BYTES)
                 .short("C")
-                .long(options::strategies::LINE_BYTES)
+                .long(OPTION_LINE_BYTES)
                 .takes_value(true)
                 .default_value("2")
                 .help("put at most SIZE bytes of lines per output file"),
         )
         .arg(
-            Arg::with_name(options::strategies::LINES)
+            Arg::with_name(OPTION_LINES)
                 .short("l")
-                .long(options::strategies::LINES)
+                .long(OPTION_LINES)
                 .takes_value(true)
                 .default_value("1000")
                 .help("write to shell COMMAND file name is $FILE (Currently not implemented for Windows)"),
         )
         // rest of the arguments
         .arg(
-            Arg::with_name(options::ADDITIONAL_SUFFIX)
-                .long(options::ADDITIONAL_SUFFIX)
+            Arg::with_name(OPTION_ADDITIONAL_SUFFIX)
+                .long(OPTION_ADDITIONAL_SUFFIX)
                 .takes_value(true)
                 .default_value("")
                 .help("additional suffix to append to output file names"),
         )
         .arg(
-            Arg::with_name(options::FILTER)
-                .long(options::FILTER)
+            Arg::with_name(OPTION_FILTER)
+                .long(OPTION_FILTER)
                 .takes_value(true)
                 .help("write to shell COMMAND file name is $FILE (Currently not implemented for Windows)"),
         )
         .arg(
-            Arg::with_name(options::NUMERIC_SUFFIXES)
+            Arg::with_name(OPTION_NUMERIC_SUFFIXES)
                 .short("d")
-                .long(options::NUMERIC_SUFFIXES)
+                .long(OPTION_NUMERIC_SUFFIXES)
                 .takes_value(true)
                 .default_value("0")
                 .help("use numeric suffixes instead of alphabetic"),
         )
         .arg(
-            Arg::with_name(options::SUFFIX_LENGTH)
+            Arg::with_name(OPTION_SUFFIX_LENGTH)
                 .short("a")
-                .long(options::SUFFIX_LENGTH)
+                .long(OPTION_SUFFIX_LENGTH)
                 .takes_value(true)
                 .default_value(default_suffix_length_str.as_str())
                 .help("use suffixes of length N (default 2)"),
         )
         .arg(
-            Arg::with_name(options::VERBOSE)
-                .long(options::VERBOSE)
+            Arg::with_name(OPTION_VERBOSE)
+                .long(OPTION_VERBOSE)
                 .help("print a diagnostic just before each output file is opened"),
         )
         .arg(
@@ -151,14 +147,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     };
 
     settings.suffix_length = matches
-        .value_of(options::SUFFIX_LENGTH)
+        .value_of(OPTION_SUFFIX_LENGTH)
         .unwrap()
         .parse()
-        .expect(format!("Invalid number for {}", options::SUFFIX_LENGTH).as_str());
+        .expect(format!("Invalid number for {}", OPTION_SUFFIX_LENGTH).as_str());
 
-    settings.numeric_suffix = matches.occurrences_of(options::NUMERIC_SUFFIXES) > 0;
+    settings.numeric_suffix = matches.occurrences_of(OPTION_NUMERIC_SUFFIXES) > 0;
     settings.additional_suffix = matches
-        .value_of(options::ADDITIONAL_SUFFIX)
+        .value_of(OPTION_ADDITIONAL_SUFFIX)
         .unwrap()
         .to_owned();
 
@@ -166,31 +162,24 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     // check that the user is not specifying more than one strategy
     // note: right now, this exact behaviour cannot be handled by ArgGroup since ArgGroup
     // considers a default value Arg as "defined"
-    let explicit_strategies = vec![
-        options::strategies::LINE_BYTES,
-        options::strategies::LINES,
-        options::strategies::BYTES,
-    ]
-    .into_iter()
-    .fold(0, |count, strat| {
-        if matches.occurrences_of(strat) > 0 {
-            count + 1
-        } else {
-            count
-        }
-    });
+    let explicit_strategies = vec![OPTION_LINE_BYTES, OPTION_LINES, OPTION_BYTES]
+        .into_iter()
+        .fold(0, |count, strat| {
+            if matches.occurrences_of(strat) > 0 {
+                count + 1
+            } else {
+                count
+            }
+        });
     if explicit_strategies > 1 {
         crash!(1, "cannot split in more than one way");
     }
 
     // default strategy (if no strategy is passed, use this one)
-    settings.strategy = String::from(options::strategies::LINES);
-    settings.strategy_param = matches
-        .value_of(options::strategies::LINES)
-        .unwrap()
-        .to_owned();
+    settings.strategy = String::from(OPTION_LINES);
+    settings.strategy_param = matches.value_of(OPTION_LINES).unwrap().to_owned();
     // take any (other) defined strategy
-    for strat in vec![options::strategies::LINE_BYTES, options::strategies::BYTES].into_iter() {
+    for strat in vec![OPTION_LINE_BYTES, OPTION_BYTES].into_iter() {
         if matches.occurrences_of(strat) > 0 {
             settings.strategy = String::from(strat);
             settings.strategy_param = matches.value_of(strat).unwrap().to_owned();
@@ -200,16 +189,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     settings.input = matches.value_of(ARG_INPUT).unwrap().to_owned();
     settings.prefix = matches.value_of(ARG_PREFIX).unwrap().to_owned();
 
-    if matches.occurrences_of(options::FILTER) > 0 {
+    if matches.occurrences_of(OPTION_FILTER) > 0 {
         if cfg!(windows) {
             // see https://github.com/rust-lang/rust/issues/29494
             show_error!(
                 "{} is currently not supported in this platform",
-                options::FILTER
+                OPTION_FILTER
             );
             exit!(-1);
         } else {
-            settings.filter = Some(matches.value_of(options::FILTER).unwrap().to_owned());
+            settings.filter = Some(matches.value_of(OPTION_FILTER).unwrap().to_owned());
         }
     }
 
@@ -381,10 +370,8 @@ fn split(settings: &Settings) -> i32 {
     });
 
     let mut splitter: Box<dyn Splitter> = match settings.strategy.as_str() {
-        s if s == options::strategies::LINES => Box::new(LineSplitter::new(settings)),
-        s if (s == options::strategies::BYTES || s == options::strategies::LINE_BYTES) => {
-            Box::new(ByteSplitter::new(settings))
-        }
+        s if s == OPTION_LINES => Box::new(LineSplitter::new(settings)),
+        s if (s == OPTION_BYTES || s == OPTION_LINE_BYTES) => Box::new(ByteSplitter::new(settings)),
         a => crash!(1, "strategy {} not supported", a),
     };
 
