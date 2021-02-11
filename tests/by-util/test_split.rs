@@ -112,12 +112,17 @@ fn test_split_default() {
 }
 
 #[test]
-fn test_split_num_prefixed_chunks_by_bytes() {
+fn test_split_numeric_prefixed_chunks_by_bytes() {
     let (at, mut ucmd) = at_and_ucmd!();
     let name = "split_num_prefixed_chunks_by_bytes";
     let glob = Glob::new(&at, ".", r"a\d\d$");
     RandomFile::new(&at, name).add_bytes(10000);
-    ucmd.args(&["-d", "-b", "1000", name, "a"]).succeeds();
+    ucmd.args(&[
+        "-d", // --numeric-suffixes
+        "-b", // --bytes
+        "1000", name, "a",
+    ])
+    .succeeds();
     assert_eq!(glob.count(), 10);
     assert_eq!(glob.collate(), at.read(name).into_bytes());
 }
