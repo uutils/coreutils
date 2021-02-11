@@ -911,14 +911,8 @@ fn test_cp_target_file_dev_null() {
     let file1 = "/dev/null";
     let file2 = "test_cp_target_file_file_i2";
 
-    at.touch(file1);
     at.touch(file2);
-    ucmd.arg(file1).arg(file2).fails();
-
-    /* Uncomment when fixed
     ucmd.arg(file1).arg(file2).succeeds().no_stderr();
 
-    assert!(at.file_exists(file1));
     assert!(at.file_exists(file2));
-    */
 }
