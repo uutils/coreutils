@@ -35,6 +35,17 @@ static LONG_HELP: &str = "UNIT options:
           1Ki = 1024, 1Mi = 1048576, ...
 ";
 
+mod options {
+    pub const FROM: &str = "from";
+    pub const FROM_DEFAULT: &str = "none";
+    pub const HEADER: &str = "header";
+    pub const HEADER_DEFAULT: &str = "1";
+    pub const NUMBER: &str = "NUMBER";
+    pub const PADDING: &str = "padding";
+    pub const TO: &str = "to";
+    pub const TO_DEFAULT: &str = "none";
+}
+
 fn get_usage() -> String {
     format!("{0} [OPTION]... [NUMBER]...", executable!())
 }
@@ -247,23 +258,23 @@ fn format_string(source: &str, options: &NumfmtOptions) -> Result<String> {
 }
 
 fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
-    let from = parse_unit(args.value_of("from").unwrap())?;
-    let to = parse_unit(args.value_of("to").unwrap())?;
+    let from = parse_unit(args.value_of(options::FROM).unwrap())?;
+    let to = parse_unit(args.value_of(options::TO).unwrap())?;
 
     let transform = TransformOptions {
         from: Transform { unit: from },
         to: Transform { unit: to },
     };
 
-    let padding = match args.value_of("padding") {
+    let padding = match args.value_of(options::PADDING) {
         Some(s) => s.parse::<isize>().map_err(|err| err.to_string()),
         None => Ok(0),
     }?;
 
-    let header = match args.occurrences_of("header") {
+    let header = match args.occurrences_of(options::HEADER) {
         0 => Ok(0),
         _ => args
-            .value_of("header")
+            .value_of(options::HEADER)
             .unwrap()
             .parse::<usize>()
             .map_err(|err| err.to_string()),
@@ -311,35 +322,35 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .usage(&usage[..])
         .after_help(LONG_HELP)
         .arg(
-            Arg::with_name("from")
-                .long("from")
+            Arg::with_name(options::FROM)
+                .long(options::FROM)
                 .help("auto-scale input numbers to UNITs; see UNIT below")
                 .value_name("UNIT")
-                .default_value("none")
+                .default_value(options::FROM_DEFAULT)
         )
         .arg(
-            Arg::with_name("to")
-                .long("to")
+            Arg::with_name(options::TO)
+                .long(options::TO)
                 .help("auto-scale output numbers to UNITs; see UNIT below")
                 .value_name("UNIT")
-                .default_value("none")
+                .default_value(options::TO_DEFAULT)
         )
         .arg(
-            Arg::with_name("padding")
-                .long("padding")
+            Arg::with_name(options::PADDING)
+                .long(options::PADDING)
                 .help("pad the output to N characters; positive N will right-align; negative N will left-align; padding is ignored if the output is wider than N")
                 .value_name("N")
         )
         .arg(
-            Arg::with_name("header")
-                .long("header")
+            Arg::with_name(options::HEADER)
+                .long(options::HEADER)
                 .help("print (without converting) the first N header lines; N defaults to 1 if not specified")
                 .value_name("N")
-                .default_value("1")
+                .default_value(options::HEADER_DEFAULT)
                 .hide_default_value(true)
         )
         .arg(
-            Arg::with_name("NUMBER")
+            Arg::with_name(options::NUMBER)
                 .hidden(true)
                 .multiple(true)
         )
@@ -347,7 +358,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let options = parse_options(&matches).unwrap();
 
-    let result = match matches.values_of("NUMBER") {
+    let result = match matches.values_of(options::NUMBER) {
         Some(values) => handle_args(values, options),
         None => handle_stdin(options),
     };
