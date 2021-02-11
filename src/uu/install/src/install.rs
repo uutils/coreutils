@@ -17,6 +17,7 @@ use uucore::entries::{grp2gid, usr2uid};
 use uucore::perms::{wrap_chgrp, wrap_chown, Verbosity};
 
 use std::fs;
+use std::fs::File;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::result::Result;
@@ -419,7 +420,7 @@ fn standard(paths: Vec<String>, b: Behavior) -> i32 {
 ///
 fn copy_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behavior) -> i32 {
     if !target_dir.is_dir() {
-        show_error!("target ‘{}’ is not a directory", target_dir.display());
+        show_error!("target '{}' is not a directory", target_dir.display());
         return 1;
     }
 
@@ -429,7 +430,7 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behavior) ->
             Some(name) => target_dir.join(name),
             None => {
                 show_error!(
-                    "cannot stat ‘{}’: No such file or directory",
+                    "cannot stat '{}': No such file or directory",
                     sourcepath.display()
                 );
 
@@ -479,11 +480,22 @@ fn copy_file_to_file(file: &PathBuf, target: &PathBuf, b: &Behavior) -> i32 {
 /// If the copy system call fails, we print a verbose error and return an empty error value.
 ///
 fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
-    let io_result = fs::copy(from, to);
-
-    if let Err(err) = io_result {
+    if from.to_string_lossy() == "/dev/null" {
+        /* workaround a limitation of fs::copy
+         * https://github.com/rust-lang/rust/issues/79390
+         */
+        if let Err(err) = File::create(to) {
+            show_error!(
+                "install: cannot install '{}' to '{}': {}",
+                from.display(),
+                to.display(),
+                err
+            );
+            return Err(());
+        }
+    } else if let Err(err) = fs::copy(from, to) {
         show_error!(
-            "cannot install ‘{}’ to ‘{}’: {}",
+            "cannot install '{}' to '{}': {}",
             from.display(),
             to.display(),
             err
