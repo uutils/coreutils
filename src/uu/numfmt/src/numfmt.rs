@@ -265,10 +265,7 @@ fn format_and_print(s: &str, options: &NumfmtOptions) -> Result<()> {
     let (prefix, field, suffix) = extract_field(&s)?;
 
     let implicit_padding = match !prefix.is_empty() && options.padding == 0 {
-        true => {
-            use std::convert::TryInto;
-            (prefix.len() + field.len()).try_into().ok()
-        }
+        true => Some((prefix.len() + field.len()) as isize),
         false => None,
     };
 
