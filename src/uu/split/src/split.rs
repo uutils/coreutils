@@ -12,6 +12,7 @@ extern crate uucore;
 
 mod platform;
 
+use clap::{App, Arg};
 use std::char;
 use std::env;
 use std::fs::File;
@@ -21,79 +22,117 @@ use std::path::Path;
 static NAME: &str = "split";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+static OPT_BYTES: &str = "bytes";
+static OPT_LINE_BYTES: &str = "line-bytes";
+static OPT_LINES: &str = "lines";
+static OPT_ADDITIONAL_SUFFIX: &str = "additional-suffix";
+static OPT_FILTER: &str = "filter";
+static OPT_NUMERIC_SUFFIXES: &str = "numeric-suffixes";
+static OPT_SUFFIX_LENGTH: &str = "suffix-length";
+static OPT_DEFAULT_SUFFIX_LENGTH: usize = 2;
+static OPT_VERBOSE: &str = "verbose";
 
-    let mut opts = getopts::Options::new();
+static ARG_INPUT: &str = "input";
+static ARG_PREFIX: &str = "prefix";
 
-    opts.optopt(
-        "a",
-        "suffix-length",
-        "use suffixes of length N (default 2)",
-        "N",
-    );
-    opts.optopt("b", "bytes", "put SIZE bytes per output file", "SIZE");
-    opts.optopt(
-        "C",
-        "line-bytes",
-        "put at most SIZE bytes of lines per output file",
-        "SIZE",
-    );
-    opts.optflag(
-        "d",
-        "numeric-suffixes",
-        "use numeric suffixes instead of alphabetic",
-    );
-    opts.optopt(
-        "",
-        "additional-suffix",
-        "additional suffix to append to output file names",
-        "SUFFIX",
-    );
-    opts.optopt(
-        "",
-        "filter",
-        "write to shell COMMAND file name is $FILE (Currently not implemented for Windows)",
-        "COMMAND",
-    );
-    opts.optopt("l", "lines", "put NUMBER lines per output file", "NUMBER");
-    opts.optflag(
-        "",
-        "verbose",
-        "print a diagnostic just before each output file is opened",
-    );
-    opts.optflag("h", "help", "display help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => crash!(1, "{}", f),
-    };
-
-    if matches.opt_present("h") {
-        let msg = format!(
-            "{0} {1}
-
-Usage:
-  {0} [OPTION]... [INPUT [PREFIX]]
+fn get_usage() -> String {
+    format!("{0} [OPTION]... [INPUT [PREFIX]]", NAME)
+}
+fn get_long_usage() -> String {
+    format!(
+        "Usage:
+  {0}
 
 Output fixed-size pieces of INPUT to PREFIXaa, PREFIX ab, ...; default
 size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
 -, read standard input.",
-            NAME, VERSION
-        );
+        get_usage()
+    )
+}
 
-        println!(
-            "{}\nSIZE may have a multiplier suffix: b for 512, k for 1K, m for 1 Meg.",
-            opts.usage(&msg)
-        );
-        return 0;
-    }
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let usage = get_usage();
+    let long_usage = get_long_usage();
+    let default_suffix_length_str = OPT_DEFAULT_SUFFIX_LENGTH.to_string();
 
-    if matches.opt_present("V") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about("Create output files containing consecutive or interleaved sections of input")
+        .usage(&usage[..])
+        .after_help(&long_usage[..])
+        // strategy (mutually exclusive)
+        .arg(
+            Arg::with_name(OPT_BYTES)
+                .short("b")
+                .long(OPT_BYTES)
+                .takes_value(true)
+                .default_value("2")
+                .help("use suffixes of length N (default 2)"),
+        )
+        .arg(
+            Arg::with_name(OPT_LINE_BYTES)
+                .short("C")
+                .long(OPT_LINE_BYTES)
+                .takes_value(true)
+                .default_value("2")
+                .help("put at most SIZE bytes of lines per output file"),
+        )
+        .arg(
+            Arg::with_name(OPT_LINES)
+                .short("l")
+                .long(OPT_LINES)
+                .takes_value(true)
+                .default_value("1000")
+                .help("write to shell COMMAND file name is $FILE (Currently not implemented for Windows)"),
+        )
+        // rest of the arguments
+        .arg(
+            Arg::with_name(OPT_ADDITIONAL_SUFFIX)
+                .long(OPT_ADDITIONAL_SUFFIX)
+                .takes_value(true)
+                .default_value("")
+                .help("additional suffix to append to output file names"),
+        )
+        .arg(
+            Arg::with_name(OPT_FILTER)
+                .long(OPT_FILTER)
+                .takes_value(true)
+                .help("write to shell COMMAND file name is $FILE (Currently not implemented for Windows)"),
+        )
+        .arg(
+            Arg::with_name(OPT_NUMERIC_SUFFIXES)
+                .short("d")
+                .long(OPT_NUMERIC_SUFFIXES)
+                .takes_value(true)
+                .default_value("0")
+                .help("use numeric suffixes instead of alphabetic"),
+        )
+        .arg(
+            Arg::with_name(OPT_SUFFIX_LENGTH)
+                .short("a")
+                .long(OPT_SUFFIX_LENGTH)
+                .takes_value(true)
+                .default_value(default_suffix_length_str.as_str())
+                .help("use suffixes of length N (default 2)"),
+        )
+        .arg(
+            Arg::with_name(OPT_VERBOSE)
+                .long(OPT_VERBOSE)
+                .help("print a diagnostic just before each output file is opened"),
+        )
+        .arg(
+            Arg::with_name(ARG_INPUT)
+            .takes_value(true)
+            .default_value("-")
+            .index(1)
+        )
+        .arg(
+            Arg::with_name(ARG_PREFIX)
+            .takes_value(true)
+            .default_value("x")
+            .index(2)
+        )
+        .get_matches_from(args);
 
     let mut settings = Settings {
         prefix: "".to_owned(),
@@ -107,53 +146,55 @@ size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
         verbose: false,
     };
 
-    settings.numeric_suffix = matches.opt_present("d");
+    settings.suffix_length = matches
+        .value_of(OPT_SUFFIX_LENGTH)
+        .unwrap()
+        .parse()
+        .expect(format!("Invalid number for {}", OPT_SUFFIX_LENGTH).as_str());
 
-    settings.suffix_length = match matches.opt_str("a") {
-        Some(n) => match n.parse() {
-            Ok(m) => m,
-            Err(e) => crash!(1, "cannot parse num: {}", e),
-        },
-        None => 2,
-    };
+    settings.numeric_suffix = matches.occurrences_of(OPT_NUMERIC_SUFFIXES) > 0;
+    settings.additional_suffix = matches.value_of(OPT_ADDITIONAL_SUFFIX).unwrap().to_owned();
 
-    settings.additional_suffix = if matches.opt_present("additional-suffix") {
-        matches.opt_str("additional-suffix").unwrap()
-    } else {
-        "".to_owned()
-    };
+    settings.verbose = matches.occurrences_of("verbose") > 0;
+    // check that the user is not specifying more than one strategy
+    // note: right now, this exact behaviour cannot be handled by ArgGroup since ArgGroup
+    // considers a default value Arg as "defined"
+    let explicit_strategies =
+        vec![OPT_LINE_BYTES, OPT_LINES, OPT_BYTES]
+            .into_iter()
+            .fold(0, |count, strat| {
+                if matches.occurrences_of(strat) > 0 {
+                    count + 1
+                } else {
+                    count
+                }
+            });
+    if explicit_strategies > 1 {
+        crash!(1, "cannot split in more than one way");
+    }
 
-    settings.verbose = matches.opt_present("verbose");
-
-    settings.strategy = "l".to_owned();
-    settings.strategy_param = "1000".to_owned();
-    let strategies = vec!["b", "C", "l"];
-    for e in &strategies {
-        if let Some(a) = matches.opt_str(*e) {
-            if settings.strategy == "l" {
-                settings.strategy = (*e).to_owned();
-                settings.strategy_param = a;
-            } else {
-                crash!(1, "{}: cannot split in more than one way", NAME)
-            }
+    // default strategy (if no strategy is passed, use this one)
+    settings.strategy = String::from(OPT_LINES);
+    settings.strategy_param = matches.value_of(OPT_LINES).unwrap().to_owned();
+    // take any (other) defined strategy
+    for strat in vec![OPT_LINE_BYTES, OPT_BYTES].into_iter() {
+        if matches.occurrences_of(strat) > 0 {
+            settings.strategy = String::from(strat);
+            settings.strategy_param = matches.value_of(strat).unwrap().to_owned();
         }
     }
 
-    let mut v = matches.free.iter();
-    let (input, prefix) = match (v.next(), v.next()) {
-        (Some(a), None) => (a.to_owned(), "x".to_owned()),
-        (Some(a), Some(b)) => (a.clone(), b.clone()),
-        (None, _) => ("-".to_owned(), "x".to_owned()),
-    };
-    settings.input = input;
-    settings.prefix = prefix;
+    settings.input = matches.value_of(ARG_INPUT).unwrap().to_owned();
+    settings.prefix = matches.value_of(ARG_PREFIX).unwrap().to_owned();
 
-    settings.filter = matches.opt_str("filter");
-
-    if settings.filter.is_some() && cfg!(windows) {
-        // see https://github.com/rust-lang/rust/issues/29494
-        show_error!("--filter is currently not supported in this platform");
-        exit!(-1);
+    if matches.occurrences_of(OPT_FILTER) > 0 {
+        if cfg!(windows) {
+            // see https://github.com/rust-lang/rust/issues/29494
+            show_error!("{} is currently not supported in this platform", OPT_FILTER);
+            exit!(-1);
+        } else {
+            settings.filter = Some(matches.value_of(OPT_FILTER).unwrap().to_owned());
+        }
     }
 
     split(&settings)
@@ -323,9 +364,9 @@ fn split(settings: &Settings) -> i32 {
         Box::new(r) as Box<dyn Read>
     });
 
-    let mut splitter: Box<dyn Splitter> = match settings.strategy.as_ref() {
-        "l" => Box::new(LineSplitter::new(settings)),
-        "b" | "C" => Box::new(ByteSplitter::new(settings)),
+    let mut splitter: Box<dyn Splitter> = match settings.strategy.as_str() {
+        s if s == OPT_LINES => Box::new(LineSplitter::new(settings)),
+        s if (s == OPT_BYTES || s == OPT_LINE_BYTES) => Box::new(ByteSplitter::new(settings)),
         a => crash!(1, "strategy {} not supported", a),
     };
 

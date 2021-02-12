@@ -5,12 +5,50 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-use getopts::{Matches, Options};
 use std::fmt;
 use std::io::BufRead;
 
-static NAME: &str = "numfmt";
+#[macro_use]
+extern crate uucore;
+
+use clap::{App, Arg, ArgMatches};
+
 static VERSION: &str = env!("CARGO_PKG_VERSION");
+static ABOUT: &str = "Convert numbers from/to human-readable strings";
+static LONG_HELP: &str = "UNIT options:
+   none   no auto-scaling is done; suffixes will trigger an error
+
+   auto   accept optional single/two letter suffix:
+
+          1K = 1000, 1Ki = 1024, 1M = 1000000, 1Mi = 1048576,
+
+   si     accept optional single letter suffix:
+
+          1K = 1000, 1M = 1000000, ...
+
+   iec    accept optional single letter suffix:
+
+          1K = 1024, 1M = 1048576, ...
+
+   iec-i  accept optional two-letter suffix:
+
+          1Ki = 1024, 1Mi = 1048576, ...
+";
+
+mod options {
+    pub const FROM: &str = "from";
+    pub const FROM_DEFAULT: &str = "none";
+    pub const HEADER: &str = "header";
+    pub const HEADER_DEFAULT: &str = "1";
+    pub const NUMBER: &str = "NUMBER";
+    pub const PADDING: &str = "padding";
+    pub const TO: &str = "to";
+    pub const TO_DEFAULT: &str = "none";
+}
+
+fn get_usage() -> String {
+    format!("{0} [OPTION]... [NUMBER]...", executable!())
+}
 
 const IEC_BASES: [f64; 10] = [
     //premature optimization
@@ -72,7 +110,7 @@ impl fmt::Display for DisplayableSuffix {
     }
 }
 
-fn parse_suffix(s: String) -> Result<(f64, Option<Suffix>)> {
+fn parse_suffix(s: &str) -> Result<(f64, Option<Suffix>)> {
     let with_i = s.ends_with('i');
     let mut iter = s.chars();
     if with_i {
@@ -104,8 +142,8 @@ fn parse_suffix(s: String) -> Result<(f64, Option<Suffix>)> {
     Ok((number, suffix))
 }
 
-fn parse_unit(s: String) -> Result<Unit> {
-    match &s[..] {
+fn parse_unit(s: &str) -> Result<Unit> {
+    match s {
         "auto" => Ok(Unit::Auto),
         "si" => Ok(Unit::Si),
         "iec" => Ok(Unit::Iec(false)),
@@ -161,7 +199,7 @@ fn remove_suffix(i: f64, s: Option<Suffix>, u: &Unit) -> Result<f64> {
     }
 }
 
-fn transform_from(s: String, opts: &Transform) -> Result<f64> {
+fn transform_from(s: &str, opts: &Transform) -> Result<f64> {
     let (i, suffix) = parse_suffix(s)?;
     remove_suffix(i, suffix, &opts.unit).map(|n| n.round())
 }
@@ -206,7 +244,7 @@ fn transform_to(s: f64, opts: &Transform) -> Result<String> {
     })
 }
 
-fn format_string(source: String, options: &NumfmtOptions) -> Result<String> {
+fn format_string(source: &str, options: &NumfmtOptions) -> Result<String> {
     let number = transform_to(
         transform_from(source, &options.transform.from)?,
         &options.transform.to,
@@ -219,30 +257,27 @@ fn format_string(source: String, options: &NumfmtOptions) -> Result<String> {
     })
 }
 
-fn parse_options(args: &Matches) -> Result<NumfmtOptions> {
+fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
+    let from = parse_unit(args.value_of(options::FROM).unwrap())?;
+    let to = parse_unit(args.value_of(options::TO).unwrap())?;
+
     let transform = TransformOptions {
-        from: Transform {
-            unit: args
-                .opt_str("from")
-                .map(parse_unit)
-                .unwrap_or(Ok(Unit::None))?,
-        },
-        to: Transform {
-            unit: args
-                .opt_str("to")
-                .map(parse_unit)
-                .unwrap_or(Ok(Unit::None))?,
-        },
+        from: Transform { unit: from },
+        to: Transform { unit: to },
     };
 
-    let padding = match args.opt_str("padding") {
+    let padding = match args.value_of(options::PADDING) {
         Some(s) => s.parse::<isize>().map_err(|err| err.to_string()),
         None => Ok(0),
     }?;
 
-    let header = match args.opt_default("header", "1") {
-        Some(s) => s.parse::<usize>().map_err(|err| err.to_string()),
-        None => Ok(0),
+    let header = match args.occurrences_of(options::HEADER) {
+        0 => Ok(0),
+        _ => args
+            .value_of(options::HEADER)
+            .unwrap()
+            .parse::<usize>()
+            .map_err(|err| err.to_string()),
     }?;
 
     Ok(NumfmtOptions {
@@ -252,9 +287,9 @@ fn parse_options(args: &Matches) -> Result<NumfmtOptions> {
     })
 }
 
-fn handle_args(args: &[String], options: NumfmtOptions) -> Result<()> {
+fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: NumfmtOptions) -> Result<()> {
     for l in args {
-        println!("{}", format_string(l.clone(), &options)?)
+        println!("{}", format_string(l, &options)?)
     }
     Ok(())
 }
@@ -270,7 +305,7 @@ fn handle_stdin(options: NumfmtOptions) -> Result<()> {
 
     for l in lines {
         l.map_err(|e| e.to_string()).and_then(|l| {
-            let l = format_string(l, &options)?;
+            let l = format_string(l.as_ref(), &options)?;
             println!("{}", l);
             Ok(())
         })?
@@ -279,83 +314,57 @@ fn handle_stdin(options: NumfmtOptions) -> Result<()> {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let usage = get_usage();
 
-    let mut opts = Options::new();
-
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-    opts.optopt(
-        "",
-        "from",
-        "auto-scale input numbers to UNITs; default is 'none'; see UNIT above",
-        "UNIT",
-    );
-    opts.optopt(
-        "",
-        "to",
-        "auto-scale output numbers to UNITs; see Unit above",
-        "UNIT",
-    );
-    opts.optopt(
-        "",
-        "padding",
-        "pad the output to N characters; positive N will right-align; negative N will left-align; padding is ignored if the output is wider than N",
-        "N"
-    );
-    opts.optflagopt(
-        "",
-        "header",
-        "print (without converting) the first N header lines; N defaults to 1 if not specified",
-        "N",
-    );
-
-    let matches = opts.parse(&args[1..]).unwrap();
-    if matches.opt_present("help") {
-        println!("{} {}", NAME, VERSION);
-        println!();
-        println!("Usage:");
-        println!("  {0} [STRING]... [OPTION]...", NAME);
-        println!();
-        print!(
-            "{}",
-            opts.usage("Convert numbers from/to human-readable strings")
-        );
-        println!(
-            "UNIT options:
-   none   no auto-scaling is done; suffixes will trigger an error
-
-   auto   accept optional single/two letter suffix:
-
-          1K = 1000, 1Ki = 1024, 1M = 1000000, 1Mi = 1048576,
-
-   si     accept optional single letter suffix:
-
-          1K = 1000, 1M = 1000000, ...
-
-   iec    accept optional single letter suffix:
-
-          1K = 1024, 1M = 1048576, ...
-
-   iec-i  accept optional two-letter suffix:
-
-          1Ki = 1024, 1Mi = 1048576, ..."
-        );
-
-        return 0;
-    }
-    if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .after_help(LONG_HELP)
+        .arg(
+            Arg::with_name(options::FROM)
+                .long(options::FROM)
+                .help("auto-scale input numbers to UNITs; see UNIT below")
+                .value_name("UNIT")
+                .default_value(options::FROM_DEFAULT)
+        )
+        .arg(
+            Arg::with_name(options::TO)
+                .long(options::TO)
+                .help("auto-scale output numbers to UNITs; see UNIT below")
+                .value_name("UNIT")
+                .default_value(options::TO_DEFAULT)
+        )
+        .arg(
+            Arg::with_name(options::PADDING)
+                .long(options::PADDING)
+                .help("pad the output to N characters; positive N will right-align; negative N will left-align; padding is ignored if the output is wider than N")
+                .value_name("N")
+        )
+        .arg(
+            Arg::with_name(options::HEADER)
+                .long(options::HEADER)
+                .help("print (without converting) the first N header lines; N defaults to 1 if not specified")
+                .value_name("N")
+                .default_value(options::HEADER_DEFAULT)
+                .hide_default_value(true)
+        )
+        .arg(
+            Arg::with_name(options::NUMBER)
+                .hidden(true)
+                .multiple(true)
+        )
+        .get_matches_from(args);
 
     let options = parse_options(&matches).unwrap();
 
-    if matches.free.is_empty() {
-        handle_stdin(options).unwrap()
-    } else {
-        handle_args(&matches.free, options).unwrap()
+    let result = match matches.values_of(options::NUMBER) {
+        Some(values) => handle_args(values, options),
+        None => handle_stdin(options),
     };
 
-    0
+    match result {
+        Err(e) => crash!(1, "{}", e),
+        _ => 0,
+    }
 }
