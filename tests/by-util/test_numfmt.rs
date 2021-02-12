@@ -145,3 +145,114 @@ fn test_si_to_iec() {
         .run()
         .stdout_is("13.9T\n");
 }
+
+#[test]
+fn test_should_report_invalid_empty_number_on_empty_stdin() {
+    new_ucmd!()
+        .args(&["--from=auto"])
+        .pipe_in("\n")
+        .run()
+        .stderr_is("numfmt: invalid number: ‘’\n");
+}
+
+#[test]
+fn test_should_report_invalid_empty_number_on_blank_stdin() {
+    new_ucmd!()
+        .args(&["--from=auto"])
+        .pipe_in("  \t  \n")
+        .run()
+        .stderr_is("numfmt: invalid number: ‘’\n");
+}
+
+#[test]
+fn test_should_report_invalid_suffix_on_stdin() {
+    new_ucmd!()
+        .args(&["--from=auto"])
+        .pipe_in("1k")
+        .run()
+        .stderr_is("numfmt: invalid suffix in input: ‘1k’\n");
+
+    // GNU numfmt reports this one as “invalid number”
+    new_ucmd!()
+        .args(&["--from=auto"])
+        .pipe_in("NaN")
+        .run()
+        .stderr_is("numfmt: invalid suffix in input: ‘NaN’\n");
+}
+
+#[test]
+fn test_should_report_invalid_number_with_interior_junk() {
+    // GNU numfmt reports this as “invalid suffix”
+    new_ucmd!()
+        .args(&["--from=auto"])
+        .pipe_in("1x0K")
+        .run()
+        .stderr_is("numfmt: invalid number: ‘1x0K’\n");
+}
+
+#[test]
+fn test_should_skip_leading_space_from_stdin() {
+    new_ucmd!()
+        .args(&["--from=auto"])
+        .pipe_in(" 2Ki")
+        .run()
+        .stdout_is("2048\n");
+
+    // multiline
+    new_ucmd!()
+        .args(&["--from=auto"])
+        .pipe_in("\t1Ki\n  2K")
+        .run()
+        .stdout_is("1024\n2000\n");
+}
+
+#[test]
+fn test_should_convert_only_first_number_in_line() {
+    new_ucmd!()
+        .args(&["--from=auto"])
+        .pipe_in("1Ki 2M 3G")
+        .run()
+        .stdout_is("1024 2M 3G\n");
+}
+
+#[test]
+fn test_leading_whitespace_should_imply_padding() {
+    new_ucmd!()
+        .args(&["--from=auto"])
+        .pipe_in("   1K")
+        .run()
+        .stdout_is(" 1000\n");
+
+
+    new_ucmd!()
+        .args(&["--from=auto"])
+        .pipe_in("    202Ki")
+        .run()
+        .stdout_is("   206848\n");
+}
+
+#[test]
+fn test_should_calculate_implicit_padding_per_line() {
+    new_ucmd!()
+        .args(&["--from=auto"])
+        .pipe_in("   1Ki\n        2K")
+        .run()
+        .stdout_is("  1024\n      2000\n");
+}
+
+#[test]
+fn test_leading_whitespace_in_free_argument_should_imply_padding() {
+    new_ucmd!()
+        .args(&["--from=auto", "   1Ki"])
+        .run()
+        .stdout_is("  1024\n");
+}
+
+#[test]
+fn test_should_calculate_implicit_padding_per_free_argument() {
+    new_ucmd!()
+        .args(&["--from=auto", "   1Ki", "        2K"])
+        .pipe_in("   1Ki\n        2K")
+        .run()
+        .stdout_is("  1024\n      2000\n");
+}

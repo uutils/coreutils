@@ -126,7 +126,7 @@ fn parse_suffix(s: &str) -> Result<(f64, Option<Suffix>)> {
         Some('Z') => Ok(Some((RawSuffix::Z, with_i))),
         Some('Y') => Ok(Some((RawSuffix::Y, with_i))),
         Some('0'..='9') => Ok(None),
-        _ => Err("Failed to parse suffix"),
+        _ => Err(format!("invalid suffix in input: ‘{}’", s)),
     }?;
 
     let suffix_len = match suffix {
@@ -137,7 +137,7 @@ fn parse_suffix(s: &str) -> Result<(f64, Option<Suffix>)> {
 
     let number = s[..s.len() - suffix_len]
         .parse::<f64>()
-        .map_err(|err| err.to_string())?;
+        .map_err(|_| format!("invalid number: ‘{}’", s))?;
 
     Ok((number, suffix))
 }
@@ -244,17 +244,38 @@ fn transform_to(s: f64, opts: &Transform) -> Result<String> {
     })
 }
 
-fn format_string(source: &str, options: &NumfmtOptions) -> Result<String> {
+fn format_string(
+    source: &str,
+    options: &NumfmtOptions,
+    implicit_padding: Option<isize>,
+) -> Result<String> {
     let number = transform_to(
         transform_from(source, &options.transform.from)?,
         &options.transform.to,
     )?;
 
-    Ok(match options.padding {
+    Ok(match implicit_padding.unwrap_or(options.padding) {
         p if p == 0 => number,
         p if p > 0 => format!("{:>padding$}", number, padding = p as usize),
         p => format!("{:<padding$}", number, padding = p.abs() as usize),
     })
+}
+
+fn format_and_print(s: &str, options: &NumfmtOptions) -> Result<()> {
+    let (prefix, field, suffix) = extract_field(&s)?;
+
+    let implicit_padding = match !prefix.is_empty() && options.padding == 0 {
+        true => {
+            use std::convert::TryInto;
+            (prefix.len() + field.len()).try_into().ok()
+        }
+        false => None,
+    };
+
+    let field = format_string(field, options, implicit_padding)?;
+    println!("{}{}", field, suffix);
+
+    Ok(())
 }
 
 fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
@@ -287,10 +308,57 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
     })
 }
 
+/// Extract the field to convert from `line`.
+///
+/// The field is the first sequence of non-whitespace characters in `line`.
+///
+/// Returns a [`Result`] of `(prefix: &str, field: &str, suffix: &str)`, where
+/// `prefix` contains any leading whitespace, `field` is the field to convert,
+/// and `suffix` is everything after the field. `prefix` and `suffix` may be
+/// empty.
+///
+/// Returns an [`Err`] if `line` is empty or consists only of whitespace.
+///
+/// Examples:
+///
+/// ```
+/// use uu_numfmt::extract_field;
+///
+/// assert_eq!("1K", extract_field("1K").unwrap().1);
+///
+/// let (prefix, field, suffix) = extract_field("   1K qux").unwrap();
+/// assert_eq!("   ", prefix);
+/// assert_eq!("1K", field);
+/// assert_eq!(" qux", suffix);
+///
+/// assert!(extract_field("").is_err());
+/// ```
+pub fn extract_field(line: &str) -> Result<(&str, &str, &str)> {
+    let start = line
+        .find(|c: char| !c.is_whitespace())
+        .ok_or("invalid number: ‘’")?;
+
+    let prefix = &line[..start];
+
+    let mut field = &line[start..];
+
+    let suffix = match field.find(|c: char| c.is_whitespace()) {
+        Some(i) => {
+            let suffix = &field[i..];
+            field = &field[..i];
+            suffix
+        }
+        None => "",
+    };
+
+    Ok((prefix, field, suffix))
+}
+
 fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: NumfmtOptions) -> Result<()> {
     for l in args {
-        println!("{}", format_string(l, &options)?)
+        format_and_print(l, &options)?;
     }
+
     Ok(())
 }
 
@@ -300,16 +368,14 @@ fn handle_stdin(options: NumfmtOptions) -> Result<()> {
 
     let mut lines = locked_stdin.lines();
     for l in lines.by_ref().take(options.header) {
-        l.map(|s| println!("{}", s)).map_err(|e| e.to_string())?
+        l.map(|s| println!("{}", s)).map_err(|e| e.to_string())?;
     }
 
     for l in lines {
-        l.map_err(|e| e.to_string()).and_then(|l| {
-            let l = format_string(l.as_ref(), &options)?;
-            println!("{}", l);
-            Ok(())
-        })?
+        l.map_err(|e| e.to_string())
+            .and_then(|l| format_and_print(&l, &options))?;
     }
+
     Ok(())
 }
 
@@ -326,34 +392,38 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(options::FROM)
                 .help("auto-scale input numbers to UNITs; see UNIT below")
                 .value_name("UNIT")
-                .default_value(options::FROM_DEFAULT)
+                .default_value(options::FROM_DEFAULT),
         )
         .arg(
             Arg::with_name(options::TO)
                 .long(options::TO)
                 .help("auto-scale output numbers to UNITs; see UNIT below")
                 .value_name("UNIT")
-                .default_value(options::TO_DEFAULT)
+                .default_value(options::TO_DEFAULT),
         )
         .arg(
             Arg::with_name(options::PADDING)
                 .long(options::PADDING)
-                .help("pad the output to N characters; positive N will right-align; negative N will left-align; padding is ignored if the output is wider than N")
-                .value_name("N")
+                .help(
+                    "pad the output to N characters; positive N will \
+                    right-align; negative N will left-align; padding is \
+                    ignored if the output is wider than N; the default is \
+                    to automatically pad if a whitespace is found",
+                )
+                .value_name("N"),
         )
         .arg(
             Arg::with_name(options::HEADER)
                 .long(options::HEADER)
-                .help("print (without converting) the first N header lines; N defaults to 1 if not specified")
+                .help(
+                    "print (without converting) the first N header lines; \
+                    N defaults to 1 if not specified",
+                )
                 .value_name("N")
                 .default_value(options::HEADER_DEFAULT)
-                .hide_default_value(true)
+                .hide_default_value(true),
         )
-        .arg(
-            Arg::with_name(options::NUMBER)
-                .hidden(true)
-                .multiple(true)
-        )
+        .arg(Arg::with_name(options::NUMBER).hidden(true).multiple(true))
         .get_matches_from(args);
 
     let options = parse_options(&matches).unwrap();
@@ -364,7 +434,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     };
 
     match result {
-        Err(e) => crash!(1, "{}", e),
+        Err(e) => {
+            show_info!("{}", e);
+            exit!(1);
+        }
         _ => 0,
     }
 }
