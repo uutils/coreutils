@@ -43,7 +43,7 @@ jobs:
         pushd gnu/
         ./bootstrap --gnulib-srcdir="$GNULIB_SRCDIR"
         ./configure --quiet --disable-gcc-warnings
-        # Change the PATH in the Makefile to test the uutils coreutils instead of the GNU coreutils 
+        # Change the PATH in the Makefile to test the uutils coreutils instead of the GNU coreutils
         sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${BUILDDIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
         sed -i 's| tr | /usr/bin/tr |' tests/init.sh
         make
@@ -65,6 +65,12 @@ jobs:
         # Remove tests that rely on seq with large numbers. See issue #1703
         sed -i -e '/tests\/misc\/seq.pl/ D' \
                -e '/tests\/misc\/seq-precision.sh/D' \
+               Makefile
+        # Remove tests checking for --version & --help
+        # Not really interesting for us and logs are too big
+        sed -i -e '/tests\/misc\/invalid-opt.pl/ D' \
+               -e '/tests\/misc\/help-version.sh/ D' \
+               -e '/tests\/misc\/help-version-getopt.sh/ D' \
                Makefile
         sed -i -e '/tests\/tail-2\/pid.sh/ D' Makefile # hangs on github, tail doesn't support -f
         sed -i -e'/incompat4/ D' -e"/options '-co' are incompatible/ d" tests/misc/sort.pl # Sort doesn't correctly check for incompatible options, waits for input
