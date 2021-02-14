@@ -215,10 +215,7 @@ extern "C" {
     #[link_name = "getmntinfo$INODE64"]
     fn getmntinfo(mntbufp: *mut *mut statfs, flags: c_int) -> c_int;
 
-    #[cfg(all(
-        target_os = "freebsd",
-        not(all(target_os = "macos", target_arch = "x86_64"))
-    ))]
+    #[cfg(any( all(target_os = "freebsd"), all(target_os = "macos", target_arch="aarch64")))]
     fn getmntinfo(mntbufp: *mut *mut statfs, flags: c_int) -> c_int;
 }
 

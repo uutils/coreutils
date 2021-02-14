@@ -27,7 +27,7 @@ platform-info = { version="<= 0.0.1", optional=true }
 time = { version="<= 0.1.42", optional=true }
 # * "problem" dependencies (pinned)
 data-encoding = { version="~2.1", optional=true } ## data-encoding: require v2.1; but v2.2.0 breaks the build for MinSRV v1.31.0
-libc = { version="0.2.15, <= 0.2.66", optional=true } ## libc: initial utmp support added in v0.2.15; but v0.2.68 breaks the build for MinSRV v1.31.0
+libc = { version="0.2.15, <= 0.2.85", optional=true } ## libc: initial utmp support added in v0.2.15; but v0.2.68 breaks the build for MinSRV v1.31.0
 
 [target.'cfg(target_os = "redox")'.dependencies]
 termion = "1.5"
