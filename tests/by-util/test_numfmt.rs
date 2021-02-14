@@ -108,6 +108,30 @@ fn test_header_default() {
 }
 
 #[test]
+fn test_header_error_if_non_numeric() {
+    new_ucmd!()
+        .args(&["--header=two"])
+        .run()
+        .stderr_is("numfmt: invalid header value ‘two’");
+}
+
+#[test]
+fn test_header_error_if_0() {
+    new_ucmd!()
+        .args(&["--header=0"])
+        .run()
+        .stderr_is("numfmt: invalid header value ‘0’");
+}
+
+#[test]
+fn test_header_error_if_negative() {
+    new_ucmd!()
+        .args(&["--header=-3"])
+        .run()
+        .stderr_is("numfmt: invalid header value ‘-3’");
+}
+
+#[test]
 fn test_negative() {
     new_ucmd!()
         .args(&["--from=si"])
