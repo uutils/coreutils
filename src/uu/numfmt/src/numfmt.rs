@@ -291,11 +291,18 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
 
     let header = match args.occurrences_of(options::HEADER) {
         0 => Ok(0),
-        _ => args
-            .value_of(options::HEADER)
-            .unwrap()
-            .parse::<usize>()
-            .map_err(|err| err.to_string()),
+        _ => {
+            let value = args.value_of(options::HEADER).unwrap();
+
+            value
+                .parse::<usize>()
+                .map_err(|_| value)
+                .and_then(|n| match n {
+                    0 => Err(value),
+                    _ => Ok(n),
+                })
+                .map_err(|value| format!("invalid header value ‘{}’", value))
+        }
     }?;
 
     Ok(NumfmtOptions {
@@ -423,17 +430,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(Arg::with_name(options::NUMBER).hidden(true).multiple(true))
         .get_matches_from(args);
 
-    let options = parse_options(&matches).unwrap();
-
-    let result = match matches.values_of(options::NUMBER) {
-        Some(values) => handle_args(values, options),
-        None => handle_stdin(options),
-    };
+    let result =
+        parse_options(&matches).and_then(|options| match matches.values_of(options::NUMBER) {
+            Some(values) => handle_args(values, options),
+            None => handle_stdin(options),
+        });
 
     match result {
         Err(e) => {
             show_info!("{}", e);
-            exit!(1);
+            1
         }
         _ => 0,
     }
