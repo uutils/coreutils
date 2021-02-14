@@ -11,7 +11,7 @@ env:
   PROJECT_NAME: coreutils
   PROJECT_DESC: "Core universal (cross-platform) utilities"
   PROJECT_AUTH: "uutils"
-  RUST_MIN_SRV: "1.49.0" ## v1.33.0 - minimum version for aarch64-apple
+  RUST_MIN_SRV: "1.33.0" ## v1.33.0 - minimum version for libc required on aarch64-apple
   RUST_COV_SRV: "2020-08-01" ## (~v1.47.0) supported rust version for code coverage; (date required/used by 'coverage') ## !maint: refactor when code coverage support is included in the stable channel
 
 on: [push, pull_request]

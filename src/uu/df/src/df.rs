@@ -215,7 +215,10 @@ extern "C" {
     #[link_name = "getmntinfo$INODE64"]
     fn getmntinfo(mntbufp: *mut *mut statfs, flags: c_int) -> c_int;
 
-    #[cfg(any( all(target_os = "freebsd"), all(target_os = "macos", target_arch="aarch64")))]
+    #[cfg(any(
+        all(target_os = "freebsd"),
+        all(target_os = "macos", target_arch = "aarch64")
+    ))]
     fn getmntinfo(mntbufp: *mut *mut statfs, flags: c_int) -> c_int;
 }
 
@@ -750,7 +753,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .takes_value(true)
                 .help(
                     "scale sizes by SIZE before printing them; e.g.\
-                      '-BM' prints sizes in units of 1,048,576 bytes",
+                     '-BM' prints sizes in units of 1,048,576 bytes",
                 ),
         )
         .arg(
@@ -807,7 +810,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .use_delimiter(true)
                 .help(
                     "use the output format defined by FIELD_LIST,\
-                    or print all fields if FIELD_LIST is omitted.",
+                     or print all fields if FIELD_LIST is omitted.",
                 ),
         )
         .arg(
