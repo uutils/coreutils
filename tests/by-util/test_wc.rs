@@ -9,15 +9,14 @@ fn test_stdin_default() {
 }
 
 #[test]
-fn test_utf8(){
+fn test_utf8() {
     new_ucmd!()
         .args(&["-lwmcL"])
         .pipe_in_fixture("UTF_8_test.txt")
         .run()
         .stdout_is(" 0 0 0 0 0\n");
-        //GNU returns "  300  2086 22219 22781    79"
+    //GNU returns "  300  2086 22219 22781    79"
 }
-
 
 #[test]
 fn test_stdin_line_len_regression() {
