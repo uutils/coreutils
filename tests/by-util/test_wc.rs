@@ -15,7 +15,8 @@ fn test_utf8() {
         .pipe_in_fixture("UTF_8_test.txt")
         .run()
         .stdout_is(" 0 0 0 0 0\n");
-    //GNU returns "  300  2086 22219 22781    79"
+    // GNU returns "  300  2086 22219 22781    79"
+    // TODO: we should fix that to match GNU's behavior
 }
 
 #[test]
