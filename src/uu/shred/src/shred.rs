@@ -16,7 +16,6 @@ use std::io;
 use std::io::prelude::*;
 use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
 
 #[macro_use]
 extern crate uucore;
@@ -120,7 +119,7 @@ struct BytesGenerator<'a> {
     exact: bool, // if false, every block's size is block_size
     gen_type: PassType<'a>,
     rng: Option<RefCell<ThreadRng>>,
-    bytes: Rc<RefCell<Vec<u8>>>,
+    bytes: [u8; BLOCK_SIZE],
 }
 
 impl<'a> BytesGenerator<'a> {
@@ -130,8 +129,7 @@ impl<'a> BytesGenerator<'a> {
             _ => None,
         };
 
-        let bytes = Vec::with_capacity(BLOCK_SIZE);
-        let bytes = Rc::new(RefCell::new(bytes));
+        let bytes = [0; BLOCK_SIZE];
 
         BytesGenerator {
             total_bytes,
@@ -156,12 +154,8 @@ impl<'a> BytesGenerator<'a> {
 
         self.bytes_generated.set(0);
     }
-}
 
-impl<'a> Iterator for BytesGenerator<'a> {
-    type Item = Rc<RefCell<Vec<u8>>>;
-
-    fn next(&mut self) -> Option<Self::Item> {
+    pub fn next(&mut self) -> Option<&[u8]> {
         // We go over the total_bytes limit when !self.exact and total_bytes isn't a multiple
         // of self.block_size
         if self.bytes_generated.get() >= self.total_bytes {
@@ -181,20 +175,14 @@ impl<'a> Iterator for BytesGenerator<'a> {
             }
         };
 
-        let mut bytes = self.bytes.borrow_mut();
+        let bytes = &mut self.bytes[..this_block_size];
 
         match self.gen_type {
             PassType::Random => {
-                if bytes.len() != this_block_size {
-                    bytes.resize(this_block_size, 0);
-                }
-
                 let mut rng = self.rng.as_ref().unwrap().borrow_mut();
-                rng.fill(&mut bytes[..]);
+                rng.fill(bytes);
             }
             PassType::Pattern(pattern) => {
-                bytes.truncate(0);
-
                 let skip = {
                     if self.bytes_generated.get() == 0 {
                         0
@@ -202,11 +190,17 @@ impl<'a> Iterator for BytesGenerator<'a> {
                         (pattern.len() as u64 % self.bytes_generated.get()) as usize
                     }
                 };
-                // Same range as 0..this_block_size but we start with the right index
-                // TODO: copy ranges rather than a byte at a time to improve performance
-                for i in skip..this_block_size + skip {
-                    let index = i % pattern.len();
-                    bytes.push(pattern[index]);
+
+                // Copy the pattern in chunks rather than simply one byte at a time
+                let mut i = 0;
+                while i < this_block_size {
+                    let start = (i + skip) % pattern.len();
+                    let end = (this_block_size - i).min(pattern.len());
+                    let len = end - start;
+
+                    bytes[i..i + len].copy_from_slice(&pattern[start..end]);
+
+                    i += len;
                 }
             }
         };
@@ -214,7 +208,7 @@ impl<'a> Iterator for BytesGenerator<'a> {
         let new_bytes_generated = self.bytes_generated.get() + this_block_size as u64;
         self.bytes_generated.set(new_bytes_generated);
 
-        Some(self.bytes.clone())
+        Some(bytes)
     }
 }
 
@@ -517,8 +511,8 @@ fn do_pass<'a>(
 
     generator.reset(size, generator_type);
 
-    for block in generator {
-        file.write_all(&block.borrow()[..])?;
+    while let Some(block) = generator.next() {
+        file.write_all(block)?;
     }
 
     file.sync_data()?;
