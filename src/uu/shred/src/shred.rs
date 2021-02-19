@@ -492,7 +492,8 @@ fn wipe_file(
                 }
             }
             // size is an optional argument for exactly how many bytes we want to shred
-            do_pass(&mut file, path, &mut generator, *pass_type, size).expect("File write pass failed");
+            do_pass(&mut file, path, &mut generator, *pass_type, size)
+                .expect("File write pass failed");
             // Ignore failed writes; just keep trying
         }
     }
