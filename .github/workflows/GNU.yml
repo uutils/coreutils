@@ -55,7 +55,6 @@ jobs:
         grep -rl 'path_prepend_' tests/* | xargs sed -i 's|path_prepend_ ./src||'
         sed -i -e 's|^seq |/usr/bin/seq |' tests/factor/t*sh
         sed -i -e '/tests\/misc\/cat-self.sh/ D' Makefile # issue #1707
-        sed -i -e '/tests\/misc\/numfmt.pl/ D' Makefile # issue #1708
         sed -i -e '/tests\/chown\/preserve-root.sh/ D' Makefile # issue #1709
         sed -i -e '/tests\/cp\/file-perm-race.sh/ D' Makefile # issue #1710
         sed -i -e '/tests\/cp\/special-f.sh/ D' Makefile # issue #1710
