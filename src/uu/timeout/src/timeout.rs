@@ -26,6 +26,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let program = args[0].clone();
 
     let mut opts = getopts::Options::new();
+    opts.parsing_style(getopts::ParsingStyle::StopAtFirstFree);
     opts.optflag(
         "",
         "preserve-status",

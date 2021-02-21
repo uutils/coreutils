@@ -37,6 +37,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args.collect_str();
 
     let mut opts = getopts::Options::new();
+    opts.parsing_style(getopts::ParsingStyle::StopAtFirstFree);
 
     opts.optflag("h", "help", "Show help and exit");
     opts.optflag("V", "version", "Show version and exit");
