@@ -37,6 +37,7 @@ jobs:
         sudo apt-get install autoconf autopoint bison texinfo gperf gcc g++ gdb python-pyinotify expect python3-sphinx
         pushd uutils
         make PROFILE=release
+        cp target/release/install target/release/ginstall # The GNU tests rename this script before running, to avoid confusion with the make target
         BUILDDIR="$PWD/target/release/"
         popd
         GNULIB_SRCDIR="$PWD/gnulib"
