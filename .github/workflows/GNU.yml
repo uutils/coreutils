@@ -44,6 +44,8 @@ jobs:
         pushd gnu/
         ./bootstrap --gnulib-srcdir="$GNULIB_SRCDIR"
         ./configure --quiet --disable-gcc-warnings
+        #Add timeout to tests to protest against hangs
+        sed -i -e 's|"\$@|timeout 600 "\$@|' build-aux/test-driver
         # Change the PATH in the Makefile to test the uutils coreutils instead of the GNU coreutils
         sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${BUILDDIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
         sed -i 's| tr | /usr/bin/tr |' tests/init.sh
@@ -55,25 +57,13 @@ jobs:
         done
         grep -rl 'path_prepend_' tests/* | xargs sed -i 's|path_prepend_ ./src||'
         sed -i -e 's|^seq |/usr/bin/seq |' tests/factor/t*sh
-        sed -i -e '/tests\/misc\/cat-self.sh/ D' Makefile # issue #1707
-        sed -i -e '/tests\/chown\/preserve-root.sh/ D' Makefile # issue #1709
-        sed -i -e '/tests\/cp\/file-perm-race.sh/ D' Makefile # issue #1710
-        sed -i -e '/tests\/cp\/special-f.sh/ D' Makefile # issue #1710
-        sed -i -e '/tests\/mv\/mv-special-1.sh/ D' Makefile # issue #1710
-        sed -i -e '/tests\/dd\/stats.sh/ D' Makefile # issue #1710
-        sed -i -e '/tests\/cp\/existing-perm-race.sh/ D' Makefile # hangs, cp doesn't implement --copy-contents
-        # Remove tests that rely on seq with large numbers. See issue #1703
-        sed -i -e '/tests\/misc\/seq.pl/ D' \
-               -e '/tests\/misc\/seq-precision.sh/D' \
-               Makefile
+
         # Remove tests checking for --version & --help
         # Not really interesting for us and logs are too big
         sed -i -e '/tests\/misc\/invalid-opt.pl/ D' \
                -e '/tests\/misc\/help-version.sh/ D' \
                -e '/tests\/misc\/help-version-getopt.sh/ D' \
                Makefile
-        sed -i -e '/tests\/tail-2\/pid.sh/ D' Makefile # hangs on github, tail doesn't support -f
-        sed -i -e'/incompat4/ D' -e"/options '-co' are incompatible/ d" tests/misc/sort.pl # Sort doesn't correctly check for incompatible options, waits for input
 
         # Use the system coreutils where the test fails due to error in a util that is not the one being tested
         sed -i -e "s|stat|$(which stat)|" tests/chgrp/basic.sh tests/cp/existing-perm-dir.sh tests/touch/60-seconds.sh tests/misc/sort-compress-proc.sh tests/touch/60-seconds.sh
@@ -93,7 +83,7 @@ jobs:
         GNULIB_DIR="${PWD}/gnulib"
         pushd gnu
 
-        unbuffer timeout -sKILL 3600 make -j "$(nproc)" check SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no || :
+        unbuffer make -j "$(nproc)" check SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no || :
     - name: Extract tests info
       shell: bash
       run: |
