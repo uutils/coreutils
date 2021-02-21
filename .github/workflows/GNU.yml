@@ -78,7 +78,7 @@ jobs:
         sed -i -e 's|stat|/usr/bin/stat|' tests/chgrp/basic.sh tests/cp/existing-perm-dir.sh tests/chgrp/basic.sh tests/touch/60-seconds.sh tests/misc/sort-compress-proc.sh tests/touch/60-seconds.sh
         sed -i -e 's|ls -|/usr/bin/ls -|' tests/chgrp/posix-H.sh tests/chown/deref.sh tests/cp/same-file.sh tests/misc/mknod.sh tests/mv/part-symlink.sh
         sed -i -e 's|mkdir |/usr/bin/mkdir |' tests/cp/existing-perm-dir.sh tests/rm/empty-inacc.sh
-        sed -i -e 's|timeout |/usr/bin/timeout |' tests/cp/parent-perm-race.sh tests/ls/infloop.sh tests/misc/sort-exit-early.sh tests/misc/sort-NaN-infloop.log tests/misc/uniq-perf.sh tests/tail-2/inotify-only-regular.sh tests/tail-2/inotify-rotate.sh tests/tail-2/pipe-f2.sh tests/tail-2/retry.sh tests/tail-2/symlink.sh tests/tail-2/wait.sh
+        sed -i -e 's|timeout |/usr/bin/timeout |' tests/cp/parent-perm-race.sh tests/ls/infloop.sh tests/misc/sort-exit-early.sh tests/misc/sort-NaN-infloop.sh tests/misc/uniq-perf.sh tests/tail-2/inotify-only-regular.sh tests/tail-2/inotify-rotate.sh tests/tail-2/pipe-f2.sh tests/tail-2/retry.sh tests/tail-2/symlink.sh tests/tail-2/wait.sh
         sed -i -e 's|chmod |/usr/bin/chmod |' tests/du/inacc-dir.sh tests/mkdir/p-3.sh
         sed -i -e 's|sort |/usr/bin/sort |' tests/ls/hyperlink.sh
         sed -i -e 's|split |/usr/bin/split |' tests/misc/factor-parallel.sh
