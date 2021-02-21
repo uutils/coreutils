@@ -15,16 +15,25 @@ fn test_from_iec() {
         .args(&["--from=iec"])
         .pipe_in("1024\n1.1M\n0.1G")
         .run()
-        .stdout_is("1024\n1153434\n107374182\n");
+        .stdout_is("1024\n1153434\n107374183\n");
 }
 
 #[test]
 fn test_from_iec_i() {
     new_ucmd!()
         .args(&["--from=iec-i"])
-        .pipe_in("1024\n1.1Mi\n0.1Gi")
+        .pipe_in("1.1Mi\n0.1Gi")
         .run()
-        .stdout_is("1024\n1153434\n107374182\n");
+        .stdout_is("1153434\n107374183\n");
+}
+
+#[test]
+#[ignore] // FIXME: GNU from iec-i requires suffix
+fn test_from_iec_i_requires_suffix() {
+    new_ucmd!()
+        .args(&["--from=iec-i", "1024"])
+        .fails()
+        .stderr_is("numfmt: missing 'i' suffix in input: ‘1024’ (e.g Ki/Mi/Gi)");
 }
 
 #[test]
@@ -42,7 +51,7 @@ fn test_to_si() {
         .args(&["--to=si"])
         .pipe_in("1000\n1100000\n100000000")
         .run()
-        .stdout_is("1.0K\n1.1M\n100.0M\n");
+        .stdout_is("1.0K\n1.1M\n100M\n");
 }
 
 #[test]
@@ -51,7 +60,7 @@ fn test_to_iec() {
         .args(&["--to=iec"])
         .pipe_in("1024\n1153434\n107374182")
         .run()
-        .stdout_is("1.0K\n1.1M\n102.4M\n");
+        .stdout_is("1.0K\n1.2M\n103M\n");
 }
 
 #[test]
@@ -60,7 +69,7 @@ fn test_to_iec_i() {
         .args(&["--to=iec-i"])
         .pipe_in("1024\n1153434\n107374182")
         .run()
-        .stdout_is("1.0Ki\n1.1Mi\n102.4Mi\n");
+        .stdout_is("1.0Ki\n1.2Mi\n103Mi\n");
 }
 
 #[test]
@@ -142,7 +151,7 @@ fn test_negative() {
         .args(&["--to=iec-i"])
         .pipe_in("-1024\n-1153434\n-107374182")
         .run()
-        .stdout_is("-1.0Ki\n-1.1Mi\n-102.4Mi\n");
+        .stdout_is("-1.0Ki\n-1.2Mi\n-103Mi\n");
 }
 
 #[test]
@@ -159,7 +168,7 @@ fn test_normalize() {
         .args(&["--from=si", "--to=si"])
         .pipe_in("10000000K\n0.001K")
         .run()
-        .stdout_is("10.0G\n1\n");
+        .stdout_is("10G\n1\n");
 }
 
 #[test]
@@ -167,7 +176,7 @@ fn test_si_to_iec() {
     new_ucmd!()
         .args(&["--from=si", "--to=iec", "15334263563K"])
         .run()
-        .stdout_is("13.9T\n");
+        .stdout_is("14T\n");
 }
 
 #[test]
@@ -247,7 +256,6 @@ fn test_leading_whitespace_should_imply_padding() {
         .run()
         .stdout_is(" 1000\n");
 
-
     new_ucmd!()
         .args(&["--from=auto"])
         .pipe_in("    202Ki")
@@ -279,4 +287,31 @@ fn test_should_calculate_implicit_padding_per_free_argument() {
         .pipe_in("   1Ki\n        2K")
         .run()
         .stdout_is("  1024\n      2000\n");
+}
+
+#[test]
+fn test_to_si_should_truncate_output() {
+    new_ucmd!()
+        .args(&["--to=si"])
+        .pipe_in_fixture("gnutest_si_input.txt")
+        .succeeds()
+        .stdout_is_fixture("gnutest_si_result.txt");
+}
+
+#[test]
+fn test_to_iec_should_truncate_output() {
+    new_ucmd!()
+        .args(&["--to=iec"])
+        .pipe_in_fixture("gnutest_iec_input.txt")
+        .succeeds()
+        .stdout_is_fixture("gnutest_iec_result.txt");
+}
+
+#[test]
+fn test_to_iec_i_should_truncate_output() {
+    new_ucmd!()
+        .args(&["--to=iec-i"])
+        .pipe_in_fixture("gnutest_iec_input.txt")
+        .succeeds()
+        .stdout_is_fixture("gnutest_iec-i_result.txt");
 }
