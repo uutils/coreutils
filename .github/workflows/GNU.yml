@@ -45,7 +45,7 @@ jobs:
         ./bootstrap --gnulib-srcdir="$GNULIB_SRCDIR"
         ./configure --quiet --disable-gcc-warnings
         #Add timeout to to protect against hangs
-        sed -i -e 's|"\$@|timeout 600 "\$@|' build-aux/test-driver
+        sed -i -e "s|\"\$@|$(which timeout) 600 \"\$@|" build-aux/test-driver
         # Change the PATH in the Makefile to test the uutils coreutils instead of the GNU coreutils
         sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${BUILDDIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
         sed -i 's| tr | /usr/bin/tr |' tests/init.sh
