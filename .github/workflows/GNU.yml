@@ -76,6 +76,9 @@ jobs:
         sed -i -e "s|split |$(which split) |" tests/misc/factor-parallel.sh
         sed -i -e "s|truncate |$(which truncate) |" tests/split/fail.sh
 
+        #Add specific timeout to seq-precision.sh because otherwise seq will fill logs and cause something to jam in make
+        sed -i -e "s| seq |$(which timeout) 1 seq |" tests/misc/seq-precision.sh
+
         test -f "${BUILDDIR}/getlimits" || cp src/getlimits "${BUILDDIR}"
     - name: Run GNU tests
       shell: bash
