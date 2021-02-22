@@ -6,6 +6,7 @@ jobs:
   gnu:
     name: Run GNU tests
     runs-on: ubuntu-latest
+    timeout-minutes: 240 # Kill after 4 hours in case something gets stuck
     steps:
       # Checks out a copy of your repository on the ubuntu-latest machine
     - name: Checkout code uutil
