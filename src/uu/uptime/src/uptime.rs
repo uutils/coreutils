@@ -6,8 +6,6 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-/* last synced with: cat (GNU coreutils) 8.13 */
-
 // spell-checker:ignore (ToDO) getloadavg upsecs updays nusers loadavg boottime uphours upmins
 
 use chrono::{Local, TimeZone, Utc};
@@ -137,11 +135,11 @@ fn print_nusers(nusers: usize) {
 }
 
 fn print_time() {
-    let local_time = time::now();
+    let local_time = Local::now().time();
 
     print!(
-        " {:02}:{:02}:{:02} ",
-        local_time.tm_hour, local_time.tm_min, local_time.tm_sec
+        " {} ",
+        local_time.format("%H:%M:%S")
     );
 }
 
@@ -150,25 +148,24 @@ fn get_uptime(boot_time: Option<time_t>) -> i64 {
     use std::fs::File;
     use std::io::Read;
 
-    let mut proc_uptime = String::new();
+    let mut proc_uptime_s = String::new();
 
-    if let Some(n) = File::open("/proc/uptime")
+    let proc_uptime = File::open("/proc/uptime")
         .ok()
-        .and_then(|mut f| f.read_to_string(&mut proc_uptime).ok())
-        .and_then(|_| proc_uptime.split_whitespace().next())
-        .and_then(|s| s.split('.').next().unwrap_or("0").parse().ok())
-    {
-        n
-    } else {
+        .and_then(|mut f| f.read_to_string(&mut proc_uptime_s).ok())
+        .and_then(|_| proc_uptime_s.split_whitespace().next())
+        .and_then(|s| s.split('.').next().unwrap_or("0").parse().ok());
+
+    proc_uptime.unwrap_or_else(|| {
         match boot_time {
             Some(t) => {
-                let now = time::get_time().sec;
+                let now = Local::now().timestamp();
                 let boottime = t as i64;
                 now - boottime
             }
-            _ => -1,
+            None => -1,
         }
-    }
+    })
 }
 
 #[cfg(windows)]

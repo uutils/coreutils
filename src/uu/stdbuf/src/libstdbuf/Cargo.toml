@@ -17,7 +17,7 @@ path = "src/libstdbuf.rs"
 crate-type = ["cdylib", "rlib"] # XXX: note: the rlib is just to prevent Cargo from spitting out a warning
 
 [dependencies]
-cpp = "0.4"
+cpp = "0.5"
 libc = "0.2"
 uucore = { version=">=0.0.6", package="uucore", path="../../../../uucore" }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../../../uucore_procs" }
