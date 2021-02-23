@@ -21,7 +21,7 @@ path = "src/cp.rs"
 [dependencies]
 clap = "2.33"
 filetime = "0.2"
-libc = "0.2.42"
+libc = "0.2.85"
 quick-error = "1.2.3"
 uucore = { version=">=0.0.6", package="uucore", path="../../uucore", features=["fs"] }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
