@@ -69,6 +69,8 @@ pub fn repeat_str(s: &str, n: u32) -> String {
 pub struct CmdResult {
     //tmpd is used for convenience functions for asserts against fixtures
     tmpd: Option<Rc<TempDir>>,
+    /// exit status for command (if there is one)
+    pub code: Option<i32>,
     /// zero-exit from running the Command?
     /// see [`success`]
     pub success: bool,
@@ -88,6 +90,12 @@ impl CmdResult {
     /// asserts that the command resulted in a failure (non-zero) status code
     pub fn failure(&self) -> Box<&CmdResult> {
         assert!(!self.success);
+        Box::new(self)
+    }
+
+    /// asserts that the command's exit code is the same as the given one
+    pub fn status_code(&self, code: i32) -> Box<&CmdResult> {
+        assert!(self.code == Some(code));
         Box::new(self)
     }
 
@@ -573,6 +581,7 @@ impl UCommand {
 
         CmdResult {
             tmpd: self.tmpd.clone(),
+            code: prog.status.code(),
             success: prog.status.success(),
             stdout: from_utf8(&prog.stdout).unwrap().to_string(),
             stderr: from_utf8(&prog.stderr).unwrap().to_string(),

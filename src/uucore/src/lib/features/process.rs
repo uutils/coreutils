@@ -9,11 +9,11 @@
 // spell-checker:ignore (vars) cvar exitstatus
 // spell-checker:ignore (sys/unix) WIFSIGNALED
 
-use libc::{c_int, gid_t, pid_t, uid_t};
+use libc::{gid_t, pid_t, uid_t};
 use std::fmt;
 use std::io;
 use std::process::Child;
-use std::sync::{Arc, Condvar, Mutex};
+use std::process::ExitStatus as StdExitStatus;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -41,13 +41,18 @@ pub enum ExitStatus {
 }
 
 impl ExitStatus {
-    fn from_status(status: c_int) -> ExitStatus {
-        if status & 0x7F != 0 {
-            // WIFSIGNALED(status) == terminating by/with unhandled signal
-            ExitStatus::Signal(status & 0x7F)
-        } else {
-            ExitStatus::Code(status & 0xFF00 >> 8)
+    fn from_std_status(status: StdExitStatus) -> Self {
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::ExitStatusExt;
+
+            if let Some(signal) = status.signal() {
+                return ExitStatus::Signal(signal);
+            }
         }
+
+        // NOTE: this should never fail as we check if the program exited through a signal above
+        ExitStatus::Code(status.code().unwrap())
     }
 
     pub fn success(&self) -> bool {
@@ -100,47 +105,25 @@ impl ChildExt for Child {
     }
 
     fn wait_or_timeout(&mut self, timeout: Duration) -> io::Result<Option<ExitStatus>> {
-        // The result will be written to that Option, protected by a Mutex
-        // Then the Condvar will be signaled
-        let state = Arc::new((
-            Mutex::new(Option::None::<io::Result<ExitStatus>>),
-            Condvar::new(),
-        ));
+        // .try_wait() doesn't drop stdin, so we do it manually
+        drop(self.stdin.take());
 
-        // Start the waiting thread
-        let state_th = state.clone();
-        let pid_th = self.id();
-        thread::spawn(move || {
-            let &(ref lock_th, ref cvar_th) = &*state_th;
-            // Child::wait() would need a &mut to self, can't use that...
-            // use waitpid() directly, with our own ExitStatus
-            let mut status: c_int = 0;
-            let r = unsafe { libc::waitpid(pid_th as i32, &mut status, 0) };
-            // Fill the Option and notify on the Condvar
-            let mut exitstatus_th = lock_th.lock().unwrap();
-            if r != pid_th as c_int {
-                *exitstatus_th = Some(Err(io::Error::last_os_error()));
-            } else {
-                let s = ExitStatus::from_status(status);
-                *exitstatus_th = Some(Ok(s));
-            }
-            cvar_th.notify_one();
-        });
-
-        // Main thread waits
-        let &(ref lock, ref cvar) = &*state;
-        let mut exitstatus = lock.lock().unwrap();
-        // Condvar::wait_timeout_ms() can wake too soon, in this case wait again
         let start = Instant::now();
         loop {
-            if let Some(exitstatus) = exitstatus.take() {
-                return exitstatus.map(Some);
+            if let Some(status) = self.try_wait()? {
+                return Ok(Some(ExitStatus::from_std_status(status)));
             }
+
             if start.elapsed() >= timeout {
-                return Ok(None);
+                break;
             }
-            let cvar_timeout = timeout - start.elapsed();
-            exitstatus = cvar.wait_timeout(exitstatus, cvar_timeout).unwrap().0;
+
+            // XXX: this is kinda gross, but it's cleaner than starting a thread just to wait
+            //      (which was the previous solution).  We might want to use a different duration
+            //      here as well
+            thread::sleep(Duration::from_millis(100));
         }
+
+        Ok(None)
     }
 }
