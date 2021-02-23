@@ -285,7 +285,7 @@ fn test_ls_ls_color() {
     scene.ucmd().arg("--color=never").arg("z").succeeds();
 }
 
-#[cfg(not(target_os = "macos"))] // Truncate not available on mac
+#[cfg(not(any(target_os = "macos", target_os = "windows")))] // Truncate not available on mac or win
 #[test]
 fn test_ls_human() {
     let scene = TestScenario::new(util_name!());

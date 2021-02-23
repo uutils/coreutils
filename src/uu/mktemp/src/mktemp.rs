@@ -25,7 +25,11 @@ mod tempdir;
 
 static ABOUT: &str = "create a temporary file or directory.";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
+
+#[cfg(unix)]
 static DEFAULT_TEMPLATE: &str = "tmp.XXXXXXXXXX";
+#[cfg(windows)]
+static DEFAULT_TEMPLATE: &str = "XXXXXXXXXX.tmp";
 
 static OPT_DIRECTORY: &str = "directory";
 static OPT_DRY_RUN: &str = "dry-run";
