@@ -133,6 +133,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     } else {
         1.0
     };
+    if increment == 0.0 {
+        show_error!("increment value: '{}'", &numbers[1][..]);
+        return 1;
+    }
     let last = {
         let slice = &numbers[numbers.len() - 1][..];
         padding = cmp::max(padding, slice.find('.').unwrap_or_else(|| slice.len()));

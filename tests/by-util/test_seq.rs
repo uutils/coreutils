@@ -40,3 +40,9 @@ fn test_equalize_widths() {
 fn test_seq_wrong_arg() {
     new_ucmd!().args(&["-w", "5", "10", "33", "32"]).fails();
 }
+
+#[test]
+fn test_zero_step() {
+    new_ucmd!().args(&["10", "0", "32"]).fails();
+}
+

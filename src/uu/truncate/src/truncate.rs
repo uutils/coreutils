@@ -63,10 +63,6 @@ fn get_long_usage() -> String {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    /*
-    let args = args.collect_str();
-
-    let mut opts = getopts::Options::new();*/
     let usage = get_usage();
     let long_usage = get_long_usage();
 
