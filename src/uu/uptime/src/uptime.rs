@@ -137,10 +137,7 @@ fn print_nusers(nusers: usize) {
 fn print_time() {
     let local_time = Local::now().time();
 
-    print!(
-        " {} ",
-        local_time.format("%H:%M:%S")
-    );
+    print!(" {} ", local_time.format("%H:%M:%S"));
 }
 
 #[cfg(unix)]
@@ -156,15 +153,13 @@ fn get_uptime(boot_time: Option<time_t>) -> i64 {
         .and_then(|_| proc_uptime_s.split_whitespace().next())
         .and_then(|s| s.split('.').next().unwrap_or("0").parse().ok());
 
-    proc_uptime.unwrap_or_else(|| {
-        match boot_time {
-            Some(t) => {
-                let now = Local::now().timestamp();
-                let boottime = t as i64;
-                now - boottime
-            }
-            None => -1,
+    proc_uptime.unwrap_or_else(|| match boot_time {
+        Some(t) => {
+            let now = Local::now().timestamp();
+            let boottime = t as i64;
+            now - boottime
         }
+        None => -1,
     })
 }
 
