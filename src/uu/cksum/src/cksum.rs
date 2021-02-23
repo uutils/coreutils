@@ -25,7 +25,7 @@ const LONG_HELP: &str = "";
 // this is basically a hack to get "loops" to work on Rust 1.33.  Once we update to Rust 1.46 or
 // greater, we can just use while loops
 macro_rules! unroll {
-    (256, |$i:ident| $s:stmt) => {{
+    (256, |$i:ident| $s:expr) => {{
         unroll!(@ 32, 0 * 32, $i, $s);
         unroll!(@ 32, 1 * 32, $i, $s);
         unroll!(@ 32, 2 * 32, $i, $s);
@@ -35,31 +35,31 @@ macro_rules! unroll {
         unroll!(@ 32, 6 * 32, $i, $s);
         unroll!(@ 32, 7 * 32, $i, $s);
     }};
-    (8, |$i:ident| $s:stmt) => {{
+    (8, |$i:ident| $s:expr) => {{
         unroll!(@ 8, 0, $i, $s);
     }};
 
-    (@ 32, $start:expr, $i:ident, $s:stmt) => {{
+    (@ 32, $start:expr, $i:ident, $s:expr) => {{
         unroll!(@ 8, $start + 0 * 8, $i, $s);
         unroll!(@ 8, $start + 1 * 8, $i, $s);
         unroll!(@ 8, $start + 2 * 8, $i, $s);
         unroll!(@ 8, $start + 3 * 8, $i, $s);
     }};
-    (@ 8, $start:expr, $i:ident, $s:stmt) => {{
+    (@ 8, $start:expr, $i:ident, $s:expr) => {{
         unroll!(@ 4, $start, $i, $s);
         unroll!(@ 4, $start + 4, $i, $s);
     }};
-    (@ 4, $start:expr, $i:ident, $s:stmt) => {{
+    (@ 4, $start:expr, $i:ident, $s:expr) => {{
         unroll!(@ 2, $start, $i, $s);
         unroll!(@ 2, $start + 2, $i, $s);
     }};
-    (@ 2, $start:expr, $i:ident, $s:stmt) => {{
+    (@ 2, $start:expr, $i:ident, $s:expr) => {{
         unroll!(@ 1, $start, $i, $s);
         unroll!(@ 1, $start + 1, $i, $s);
     }};
-    (@ 1, $start:expr, $i:ident, $s:stmt) => {{
+    (@ 1, $start:expr, $i:ident, $s:expr) => {{
         let $i = $start;
-        $s;
+        let _ = $s;
     }};
 }
 
