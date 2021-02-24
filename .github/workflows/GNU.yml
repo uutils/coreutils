@@ -69,14 +69,17 @@ jobs:
         sed -i -e "s|stat|$(which stat)|" tests/chgrp/basic.sh tests/cp/existing-perm-dir.sh tests/touch/60-seconds.sh tests/misc/sort-compress-proc.sh tests/touch/60-seconds.sh
         sed -i -e "s|ls -|$(which ls) -|" tests/chgrp/posix-H.sh tests/chown/deref.sh tests/cp/same-file.sh tests/misc/mknod.sh tests/mv/part-symlink.sh
         sed -i -e "s|mkdir |$(which mkdir) |" tests/cp/existing-perm-dir.sh tests/rm/empty-inacc.sh
-        sed -i -e "s|timeout |$(which timeout) |" tests/cp/parent-perm-race.sh tests/ls/infloop.sh tests/misc/sort-exit-early.sh tests/misc/sort-NaN-infloop.sh tests/misc/uniq-perf.sh tests/tail-2/inotify-only-regular.sh tests/tail-2/inotify-rotate.sh tests/tail-2/pipe-f2.sh tests/tail-2/retry.sh tests/tail-2/symlink.sh tests/tail-2/wait.sh
+        sed -i -e "s|timeout |$(which timeout) |" tests/cp/parent-perm-race.sh tests/ls/infloop.sh tests/misc/sort-exit-early.sh tests/misc/sort-NaN-infloop.sh tests/misc/uniq-perf.sh tests/tail-2/inotify-only-regular.sh tests/tail-2/inotify-rotate.sh tests/tail-2/pipe-f2.sh tests/tail-2/retry.sh tests/tail-2/symlink.sh tests/tail-2/wait.sh tests/tail-2/pid.sh tests/dd/stats.sh
         sed -i -e "s|chmod |$(which chmod) |" tests/du/inacc-dir.sh tests/mkdir/p-3.sh
         sed -i -e "s|sort |$(which sort) |" tests/ls/hyperlink.sh
         sed -i -e "s|split |$(which split) |" tests/misc/factor-parallel.sh
         sed -i -e "s|truncate |$(which truncate) |" tests/split/fail.sh
 
-        # take seq-precision out
-        sed -i '/seq-precision.sh/ D' Makefile
+        #Add specific timeout to tests that currently hang to limit time spent waiting
+        sed -i -e "s| seq |$(which timeout) 0.1 seq |" tests/misc/seq-precision.sh
+        sed -i -e "s|cat |$(which timeout) 0.1 cat |" tests/misc/cat-self.sh
+         
+
         test -f "${BUILDDIR}/getlimits" || cp src/getlimits "${BUILDDIR}"
     - name: Run GNU tests
       shell: bash
