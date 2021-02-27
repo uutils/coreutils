@@ -38,6 +38,12 @@ jobs:
         pushd uutils
         make PROFILE=release
         cp target/release/install target/release/ginstall # The GNU tests rename this script before running, to avoid confusion with the make target
+        # Create *sum binaries
+        for sum in b2sum md5sum sha1sum sha224sum sha256sum sha384sum sha512sum
+        do
+          sum_path="target/release/${sum}"
+          fest -f "${sum_path}" || cp target/release/hashsum "${sum_path}"
+        done
         BUILDDIR="$PWD/target/release/"
         popd
         GNULIB_SRCDIR="$PWD/gnulib"
