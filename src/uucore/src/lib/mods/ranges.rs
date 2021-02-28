@@ -144,3 +144,31 @@ pub fn complement(ranges: &[Range]) -> Vec<Range> {
 
     complements
 }
+
+/// Test if at least one of the given Ranges contain the supplied value.
+///
+/// Examples:
+///
+/// ```
+/// let ranges = uucore::ranges::Range::from_list("11,2,6-8").unwrap();
+///
+/// assert!(!uucore::ranges::contain(&ranges, 0));
+/// assert!(!uucore::ranges::contain(&ranges, 1));
+/// assert!(!uucore::ranges::contain(&ranges, 5));
+/// assert!(!uucore::ranges::contain(&ranges, 10));
+///
+/// assert!(uucore::ranges::contain(&ranges, 2));
+/// assert!(uucore::ranges::contain(&ranges, 6));
+/// assert!(uucore::ranges::contain(&ranges, 7));
+/// assert!(uucore::ranges::contain(&ranges, 8));
+/// assert!(uucore::ranges::contain(&ranges, 11));
+/// ```
+pub fn contain(ranges: &[Range], n: usize) -> bool {
+    for range in ranges {
+        if n >= range.low && n <= range.high {
+            return true;
+        }
+    }
+
+    false
+}

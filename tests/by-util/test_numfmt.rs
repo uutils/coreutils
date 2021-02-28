@@ -315,3 +315,71 @@ fn test_to_iec_i_should_truncate_output() {
         .succeeds()
         .stdout_is_fixture("gnutest_iec-i_result.txt");
 }
+
+#[test]
+fn test_format_selected_field() {
+    new_ucmd!()
+        .args(&["--from=auto", "--field", "3", "1K 2K 3K"])
+        .succeeds()
+        .stdout_only("1K 2K 3000\n");
+    new_ucmd!()
+        .args(&["--from=auto", "--field", "2", "1K 2K 3K"])
+        .succeeds()
+        .stdout_only("1K 2000 3K\n");
+}
+
+#[test]
+fn test_format_selected_fields() {
+    new_ucmd!()
+        .args(&["--from=auto", "--field", "1,4,3", "1K 2K 3K 4K 5K 6K"])
+        .succeeds()
+        .stdout_only("1000 2K 3000 4000 5K 6K\n");
+}
+
+#[test]
+fn test_should_succeed_if_selected_field_out_of_range() {
+    new_ucmd!()
+        .args(&["--from=auto", "--field", "9", "1K 2K 3K"])
+        .succeeds()
+        .stdout_only("1K 2K 3K\n");
+}
+
+#[test]
+fn test_format_selected_field_range() {
+    new_ucmd!()
+        .args(&["--from=auto", "--field", "2-5", "1K 2K 3K 4K 5K 6K"])
+        .succeeds()
+        .stdout_only("1K 2000 3000 4000 5000 6K\n");
+}
+
+#[test]
+fn test_should_succeed_if_range_out_of_bounds() {
+    new_ucmd!()
+        .args(&["--from=auto", "--field", "5-10", "1K 2K 3K 4K 5K 6K"])
+        .succeeds()
+        .stdout_only("1K 2K 3K 4K 5000 6000\n");
+}
+
+#[test]
+fn test_implied_initial_field_value() {
+    new_ucmd!()
+        .args(&["--from=auto", "--field", "-2", "1K 2K 3K"])
+        .succeeds()
+        .stdout_only("1000 2000 3K\n");
+
+    // same as above but with the equal sign
+    new_ucmd!()
+        .args(&["--from=auto", "--field=-2", "1K 2K 3K"])
+        .succeeds()
+        .stdout_only("1000 2000 3K\n");
+}
+
+#[test]
+fn test_field_df_example() {
+    // df -B1 | numfmt --header --field 2-4 --to=si
+    new_ucmd!()
+        .args(&["--header", "--field", "2-4", "--to=si"])
+        .pipe_in_fixture("df_input.txt")
+        .succeeds()
+        .stdout_is_fixture("df_expected.txt");
+}
