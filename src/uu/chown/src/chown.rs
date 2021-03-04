@@ -27,20 +27,30 @@ use std::path::Path;
 static ABOUT: &str = "change file owner and group";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
-static OPT_CHANGES: &str = "changes";
-static OPT_DEREFERENCE: &str = "dereference";
-static OPT_NO_DEREFERENCE: &str = "no-dereference";
-static OPT_FROM: &str = "from";
-static OPT_PRESERVE_ROOT: &str = "preserve-root";
-static OPT_NO_PRESERVE_ROOT: &str = "no-preserve-root";
-static OPT_QUIET: &str = "quiet";
-static OPT_RECURSIVE: &str = "recursive";
-static OPT_REFERENCE: &str = "reference";
-static OPT_SILENT: &str = "silent";
-static OPT_TRAVERSE: &str = "H";
-static OPT_NO_TRAVERSE: &str = "P";
-static OPT_TRAVERSE_EVERY: &str = "L";
-static OPT_VERBOSE: &str = "verbose";
+pub mod options {
+    pub mod verbosity {
+        pub static CHANGES: &str = "changes";
+        pub static QUIET: &str = "quiet";
+        pub static SILENT: &str = "silent";
+        pub static VERBOSE: &str = "verbose";
+    }
+    pub mod preserve_root {
+        pub static PRESERVE: &str = "preserve-root";
+        pub static NO_PRESERVE: &str = "no-preserve-root";
+    }
+    pub mod dereference {
+        pub static DEREFERENCE: &str = "dereference";
+        pub static NO_DEREFERENCE: &str = "no-dereference"; // not actually read?
+    }
+    pub static FROM: &str = "from";
+    pub static RECURSIVE: &str = "recursive"; // TODO(felipel) recursive, reference, traverse related?
+    pub mod traverse {
+        pub static TRAVERSE: &str = "H";
+        pub static NO_TRAVERSE: &str = "P";
+        pub static EVERY: &str = "L";
+    }
+    pub static REFERENCE: &str = "reference";
+}
 
 static ARG_OWNER: &str = "owner";
 static ARG_FILES: &str = "files";
@@ -66,80 +76,80 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .about(ABOUT)
         .usage(&usage[..])
         .arg(
-            Arg::with_name(OPT_CHANGES)
+            Arg::with_name(options::verbosity::CHANGES)
                 .short("c")
-                .long(OPT_CHANGES)
+                .long(options::verbosity::CHANGES)
                 .help("like verbose but report only when a change is made"),
         )
-        .arg(Arg::with_name(OPT_DEREFERENCE).long(OPT_DEREFERENCE).help(
+        .arg(Arg::with_name(options::dereference::DEREFERENCE).long(options::dereference::DEREFERENCE).help(
             "affect the referent of each symbolic link (this is the default), rather than the symbolic link itself",
         ))
         .arg(
-            Arg::with_name(OPT_NO_DEREFERENCE)
+            Arg::with_name(options::dereference::NO_DEREFERENCE)
                 .short("h")
-                .long(OPT_NO_DEREFERENCE)
+                .long(options::dereference::NO_DEREFERENCE)
                 .help(
                     "affect symbolic links instead of any referenced file (useful only on systems that can change the ownership of a symlink)",
                 ),
         )
         .arg(
-            Arg::with_name(OPT_FROM)
-                .long(OPT_FROM)
+            Arg::with_name(options::FROM)
+                .long(options::FROM)
                 .help(
                     "change the owner and/or group of each file only if its current owner and/or group match those specified here. Either may be omitted, in which case a match is not required for the omitted attribute",
                 )
                 .value_name("CURRENT_OWNER:CURRENT_GROUP"),
         )
         .arg(
-            Arg::with_name(OPT_PRESERVE_ROOT)
-                .long(OPT_PRESERVE_ROOT)
+            Arg::with_name(options::preserve_root::PRESERVE)
+                .long(options::preserve_root::PRESERVE)
                 .help("fail to operate recursively on '/'"),
         )
         .arg(
-            Arg::with_name(OPT_NO_PRESERVE_ROOT)
-                .long(OPT_NO_PRESERVE_ROOT)
+            Arg::with_name(options::preserve_root::NO_PRESERVE)
+                .long(options::preserve_root::NO_PRESERVE)
                 .help("do not treat '/' specially (the default)"),
         )
         .arg(
-            Arg::with_name(OPT_QUIET)
-                .long(OPT_QUIET)
+            Arg::with_name(options::verbosity::QUIET)
+                .long(options::verbosity::QUIET)
                 .help("suppress most error messages"),
         )
         .arg(
-            Arg::with_name(OPT_RECURSIVE)
+            Arg::with_name(options::RECURSIVE)
                 .short("R")
-                .long(OPT_RECURSIVE)
+                .long(options::RECURSIVE)
                 .help("operate on files and directories recursively"),
         )
         .arg(
-            Arg::with_name(OPT_REFERENCE)
-                .long(OPT_REFERENCE)
+            Arg::with_name(options::REFERENCE)
+                .long(options::REFERENCE)
                 .help("use RFILE's owner and group rather than specifying OWNER:GROUP values")
                 .value_name("RFILE")
                 .min_values(1),
         )
-        .arg(Arg::with_name(OPT_SILENT).short("f").long(OPT_SILENT))
+        .arg(Arg::with_name(options::verbosity::SILENT).short("f").long(options::verbosity::SILENT))
         .arg(
-            Arg::with_name(OPT_TRAVERSE)
-                .short(OPT_TRAVERSE)
+            Arg::with_name(options::traverse::TRAVERSE)
+                .short(options::traverse::TRAVERSE)
                 .help("if a command line argument is a symbolic link to a directory, traverse it")
-                .overrides_with_all(&[OPT_TRAVERSE_EVERY, OPT_NO_TRAVERSE]),
+                .overrides_with_all(&[options::traverse::EVERY, options::traverse::NO_TRAVERSE]),
         )
         .arg(
-            Arg::with_name(OPT_TRAVERSE_EVERY)
-                .short(OPT_TRAVERSE_EVERY)
+            Arg::with_name(options::traverse::EVERY)
+                .short(options::traverse::EVERY)
                 .help("traverse every symbolic link to a directory encountered")
-                .overrides_with_all(&[OPT_TRAVERSE, OPT_NO_TRAVERSE]),
+                .overrides_with_all(&[options::traverse::TRAVERSE, options::traverse::NO_TRAVERSE]),
         )
         .arg(
-            Arg::with_name(OPT_NO_TRAVERSE)
-                .short(OPT_NO_TRAVERSE)
+            Arg::with_name(options::traverse::NO_TRAVERSE)
+                .short(options::traverse::NO_TRAVERSE)
                 .help("do not traverse any symbolic links (default)")
-                .overrides_with_all(&[OPT_TRAVERSE, OPT_TRAVERSE_EVERY]),
+                .overrides_with_all(&[options::traverse::TRAVERSE, options::traverse::EVERY]),
         )
         .arg(
-            Arg::with_name(OPT_VERBOSE)
-                .long(OPT_VERBOSE)
+            Arg::with_name(options::verbosity::VERBOSE)
+                .long(options::verbosity::VERBOSE)
                 .help("output a diagnostic for every file processed"),
         )
         .arg(
@@ -166,23 +176,23 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    let preserve_root = matches.is_present(OPT_PRESERVE_ROOT);
+    let preserve_root = matches.is_present(options::preserve_root::PRESERVE);
 
-    let mut derefer = if matches.is_present(OPT_NO_DEREFERENCE) {
+    let mut derefer = if matches.is_present(options::dereference::NO_DEREFERENCE) {
         1
     } else {
         0
     };
 
-    let mut bit_flag = if matches.is_present(OPT_TRAVERSE) {
+    let mut bit_flag = if matches.is_present(options::traverse::TRAVERSE) {
         FTS_COMFOLLOW | FTS_PHYSICAL
-    } else if matches.is_present(OPT_TRAVERSE_EVERY) {
+    } else if matches.is_present(options::traverse::EVERY) {
         FTS_LOGICAL
     } else {
         FTS_PHYSICAL
     };
 
-    let recursive = matches.is_present(OPT_RECURSIVE);
+    let recursive = matches.is_present(options::RECURSIVE);
     if recursive {
         if bit_flag == FTS_PHYSICAL {
             if derefer == 1 {
@@ -195,17 +205,19 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         bit_flag = FTS_PHYSICAL;
     }
 
-    let verbosity = if matches.is_present(OPT_CHANGES) {
+    let verbosity = if matches.is_present(options::verbosity::CHANGES) {
         Verbosity::Changes
-    } else if matches.is_present(OPT_SILENT) || matches.is_present(OPT_QUIET) {
+    } else if matches.is_present(options::verbosity::SILENT)
+        || matches.is_present(options::verbosity::QUIET)
+    {
         Verbosity::Silent
-    } else if matches.is_present(OPT_VERBOSE) {
+    } else if matches.is_present(options::verbosity::VERBOSE) {
         Verbosity::Verbose
     } else {
         Verbosity::Normal
     };
 
-    let filter = if let Some(spec) = matches.value_of(OPT_FROM) {
+    let filter = if let Some(spec) = matches.value_of(options::FROM) {
         match parse_spec(&spec) {
             Ok((Some(uid), None)) => IfFrom::User(uid),
             Ok((None, Some(gid))) => IfFrom::Group(gid),
@@ -222,7 +234,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let dest_uid: Option<u32>;
     let dest_gid: Option<u32>;
-    if let Some(file) = matches.value_of(OPT_REFERENCE) {
+    if let Some(file) = matches.value_of(options::REFERENCE) {
         match fs::metadata(&file) {
             Ok(meta) => {
                 dest_gid = Some(meta.gid());
