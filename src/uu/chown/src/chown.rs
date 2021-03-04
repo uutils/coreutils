@@ -40,10 +40,10 @@ pub mod options {
     }
     pub mod dereference {
         pub static DEREFERENCE: &str = "dereference";
-        pub static NO_DEREFERENCE: &str = "no-dereference"; // not actually read?
+        pub static NO_DEREFERENCE: &str = "no-dereference";
     }
     pub static FROM: &str = "from";
-    pub static RECURSIVE: &str = "recursive"; // TODO(felipel) recursive, reference, traverse related?
+    pub static RECURSIVE: &str = "recursive";
     pub mod traverse {
         pub static TRAVERSE: &str = "H";
         pub static NO_TRAVERSE: &str = "P";
