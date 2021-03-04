@@ -37,17 +37,26 @@ jobs:
         sudo apt-get install autoconf autopoint bison texinfo gperf gcc g++ gdb python-pyinotify expect python3-sphinx
         pushd uutils
         make PROFILE=release
-        cp target/release/install target/release/ginstall # The GNU tests rename this script before running, to avoid confusion with the make target
+        BUILDDIR="$PWD/target/release/"
+        cp ${BUILDDIR}/install ${BUILDDIR}/ginstall # The GNU tests rename this script before running, to avoid confusion with the make target
         # Create *sum binaries
         for sum in b2sum md5sum sha1sum sha224sum sha256sum sha384sum sha512sum
         do
-          sum_path="target/release/${sum}"
-          fest -f "${sum_path}" || cp target/release/hashsum "${sum_path}"
+          sum_path="${BUILDDIR}/${sum}"
+          test -f "${sum_path}" || cp "${BUILDDIR}/hashsum" "${sum_path}"
         done
-        BUILDDIR="$PWD/target/release/"
+        test -f "${BUILDDIR}/[" || cp "${BUILDDIR}/test" "${BUILDDIR}/["
         popd
         GNULIB_SRCDIR="$PWD/gnulib"
         pushd gnu/
+
+        # Any binaries that aren't built become `false` so their tests fail
+        for binary in $(./build-aux/gen-lists-of-programs.sh --list-progs)
+        do
+          bin_path="${BUILDDIR}/${binary}"
+          test -f "${bin_path}" || cp "${BUILDDIR}/false" "${bin_path}"
+        done
+
         ./bootstrap --gnulib-srcdir="$GNULIB_SRCDIR"
         ./configure --quiet --disable-gcc-warnings
         #Add timeout to to protect against hangs
