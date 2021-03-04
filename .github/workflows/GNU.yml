@@ -57,7 +57,7 @@ jobs:
         sed -i 's| tr | /usr/bin/tr |' tests/init.sh
         make
         # Generate the factor tests, so they can be fixed
-        for i in $(seq -w 1 36)
+        for i in $(seq -w 0 36)
         do
           make tests/factor/t${i}.sh
         done
