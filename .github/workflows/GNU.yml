@@ -62,7 +62,7 @@ jobs:
           make tests/factor/t${i}.sh
         done
         grep -rl 'path_prepend_' tests/* | xargs sed -i 's|path_prepend_ ./src||'
-        sed -i -e 's|^seq |/usr/bin/seq |' tests/factor/t*sh
+        sed -i -e 's|^seq |/usr/bin/seq |' -e "s|sha1sum |$(which sha1sum) |" tests/factor/t*sh
 
         # Remove tests checking for --version & --help
         # Not really interesting for us and logs are too big
