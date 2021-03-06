@@ -95,8 +95,8 @@ fn test_follow_stdin() {
         .stdout_is_fixture("follow_stdin.expected");
 }
 
-// FixME: test PASSES for usual windows builds, but fails for coverage testing builds (likely related to the specific RUSTFLAGS '-Zpanic_abort_tests -Cpanic=abort')
-#[cfg(not(windows))]
+// FixME: test PASSES for usual windows builds, but fails for coverage testing builds (likely related to the specific RUSTFLAGS '-Zpanic_abort_tests -Cpanic=abort')  This test also breaks tty settings under bash requiring a 'stty sane' or reset.
+#[cfg(disable_until_fixed)]
 #[test]
 fn test_follow_with_pid() {
     use std::process::{Command, Stdio};

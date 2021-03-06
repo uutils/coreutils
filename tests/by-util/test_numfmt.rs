@@ -247,7 +247,6 @@ fn test_leading_whitespace_should_imply_padding() {
         .run()
         .stdout_is(" 1000\n");
 
-
     new_ucmd!()
         .args(&["--from=auto"])
         .pipe_in("    202Ki")
