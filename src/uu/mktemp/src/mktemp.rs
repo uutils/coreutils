@@ -25,6 +25,7 @@ mod tempdir;
 
 static ABOUT: &str = "create a temporary file or directory.";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
+
 static DEFAULT_TEMPLATE: &str = "tmp.XXXXXXXXXX";
 
 static OPT_DIRECTORY: &str = "directory";
