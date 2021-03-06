@@ -50,8 +50,9 @@ fn get_usage() -> String {
     format!("{0} [OPTION]... [NUMBER]...", executable!())
 }
 
+const SI_BASES: [f64; 10] = [1., 1e3, 1e6, 1e9, 1e12, 1e15, 1e18, 1e21, 1e24, 1e27];
+
 const IEC_BASES: [f64; 10] = [
-    //premature optimization
     1.,
     1_024.,
     1_048_576.,
@@ -75,6 +76,7 @@ enum Unit {
     None,
 }
 
+#[derive(Clone, Copy, Debug)]
 enum RawSuffix {
     K,
     M,
@@ -201,38 +203,74 @@ fn remove_suffix(i: f64, s: Option<Suffix>, u: &Unit) -> Result<f64> {
 
 fn transform_from(s: &str, opts: &Transform) -> Result<f64> {
     let (i, suffix) = parse_suffix(s)?;
-    remove_suffix(i, suffix, &opts.unit).map(|n| n.round())
+
+    remove_suffix(i, suffix, &opts.unit).map(|n| if n < 0.0 { -n.abs().ceil() } else { n.ceil() })
 }
 
-fn consider_suffix(i: f64, u: &Unit) -> Result<(f64, Option<Suffix>)> {
-    let j = i.abs();
-    match *u {
-        Unit::Si => match j {
-            _ if j < 1e3 => Ok((i, None)),
-            _ if j < 1e6 => Ok((i / 1e3, Some((RawSuffix::K, false)))),
-            _ if j < 1e9 => Ok((i / 1e6, Some((RawSuffix::M, false)))),
-            _ if j < 1e12 => Ok((i / 1e9, Some((RawSuffix::G, false)))),
-            _ if j < 1e15 => Ok((i / 1e12, Some((RawSuffix::T, false)))),
-            _ if j < 1e18 => Ok((i / 1e15, Some((RawSuffix::P, false)))),
-            _ if j < 1e21 => Ok((i / 1e18, Some((RawSuffix::E, false)))),
-            _ if j < 1e24 => Ok((i / 1e21, Some((RawSuffix::Z, false)))),
-            _ if j < 1e27 => Ok((i / 1e24, Some((RawSuffix::Y, false)))),
-            _ => Err("Number is too big and unsupported".to_owned()),
-        },
-        Unit::Iec(with_i) => match j {
-            _ if j < IEC_BASES[1] => Ok((i, None)),
-            _ if j < IEC_BASES[2] => Ok((i / IEC_BASES[1], Some((RawSuffix::K, with_i)))),
-            _ if j < IEC_BASES[3] => Ok((i / IEC_BASES[2], Some((RawSuffix::M, with_i)))),
-            _ if j < IEC_BASES[4] => Ok((i / IEC_BASES[3], Some((RawSuffix::G, with_i)))),
-            _ if j < IEC_BASES[5] => Ok((i / IEC_BASES[4], Some((RawSuffix::T, with_i)))),
-            _ if j < IEC_BASES[6] => Ok((i / IEC_BASES[5], Some((RawSuffix::P, with_i)))),
-            _ if j < IEC_BASES[7] => Ok((i / IEC_BASES[6], Some((RawSuffix::E, with_i)))),
-            _ if j < IEC_BASES[8] => Ok((i / IEC_BASES[7], Some((RawSuffix::Z, with_i)))),
-            _ if j < IEC_BASES[9] => Ok((i / IEC_BASES[8], Some((RawSuffix::Y, with_i)))),
-            _ => Err("Number is too big and unsupported".to_owned()),
-        },
-        Unit::Auto => Err("Unit 'auto' isn't supported with --to options".to_owned()),
-        Unit::None => Ok((i, None)),
+/// Divide numerator by denominator, with ceiling.
+///
+/// If the result of the division is less than 10.0, truncate the result
+/// to the next highest tenth.
+///
+/// Otherwise, truncate the result to the next highest whole number.
+///
+/// Examples:
+///
+/// ```
+/// use uu_numfmt::div_ceil;
+///
+/// assert_eq!(div_ceil(1.01, 1.0), 1.1);
+/// assert_eq!(div_ceil(999.1, 1000.), 1.0);
+/// assert_eq!(div_ceil(1001., 10.), 101.);
+/// assert_eq!(div_ceil(9991., 10.), 1000.);
+/// assert_eq!(div_ceil(-12.34, 1.0), -13.0);
+/// assert_eq!(div_ceil(1000.0, -3.14), -319.0);
+/// assert_eq!(div_ceil(-271828.0, -271.0), 1004.0);
+/// ```
+pub fn div_ceil(n: f64, d: f64) -> f64 {
+    let v = n / (d / 10.0);
+    let (v, sign) = if v < 0.0 { (v.abs(), -1.0) } else { (v, 1.0) };
+
+    if v < 100.0 {
+        v.ceil() / 10.0 * sign
+    } else {
+        (v / 10.0).ceil() * sign
+    }
+}
+
+fn consider_suffix(n: f64, u: &Unit) -> Result<(f64, Option<Suffix>)> {
+    use RawSuffix::*;
+
+    let abs_n = n.abs();
+    let suffixes = [K, M, G, T, P, E, Z, Y];
+
+    let (bases, with_i) = match *u {
+        Unit::Si => (&SI_BASES, false),
+        Unit::Iec(with_i) => (&IEC_BASES, with_i),
+        Unit::Auto => return Err("Unit 'auto' isn't supported with --to options".to_owned()),
+        Unit::None => return Ok((n, None)),
+    };
+
+    let i = match abs_n {
+        _ if abs_n <= bases[1] - 1.0 => return Ok((n, None)),
+        _ if abs_n < bases[2] => 1,
+        _ if abs_n < bases[3] => 2,
+        _ if abs_n < bases[4] => 3,
+        _ if abs_n < bases[5] => 4,
+        _ if abs_n < bases[6] => 5,
+        _ if abs_n < bases[7] => 6,
+        _ if abs_n < bases[8] => 7,
+        _ if abs_n < bases[9] => 8,
+        _ => return Err("Number is too big and unsupported".to_string()),
+    };
+
+    let v = div_ceil(n, bases[i]);
+
+    // check if rounding pushed us into the next base
+    if v.abs() >= bases[1] {
+        Ok((v / bases[1], Some((suffixes[i], with_i))))
+    } else {
+        Ok((v, Some((suffixes[i - 1], with_i))))
     }
 }
 
@@ -240,7 +278,8 @@ fn transform_to(s: f64, opts: &Transform) -> Result<String> {
     let (i2, s) = consider_suffix(s, &opts.unit)?;
     Ok(match s {
         None => format!("{}", i2),
-        Some(s) => format!("{:.1}{}", i2, DisplayableSuffix(s)),
+        Some(s) if i2.abs() < 10.0 => format!("{:.1}{}", i2, DisplayableSuffix(s)),
+        Some(s) => format!("{:.0}{}", i2, DisplayableSuffix(s)),
     })
 }
 
