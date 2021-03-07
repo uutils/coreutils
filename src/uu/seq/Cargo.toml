@@ -1,6 +1,6 @@
 [package]
 name = "uu_seq"
-version = "0.0.3"
+version = "0.0.4"
 authors = ["uutils developers"]
 license = "MIT"
 description = "seq ~ (uutils) display a sequence of numbers"

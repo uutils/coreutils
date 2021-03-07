@@ -1,6 +1,6 @@
 [package]
 name = "uu_df"
-version = "0.0.3"
+version = "0.0.4"
 authors = ["uutils developers"]
 license = "MIT"
 description = "df ~ (uutils) display file system information"
