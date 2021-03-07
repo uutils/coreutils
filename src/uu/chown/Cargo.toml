@@ -17,7 +17,7 @@ path = "src/chown.rs"
 [dependencies]
 clap = "2.33"
 glob = "0.3.0"
-uucore = { version=">=0.0.6", package="uucore", path="../../uucore", features=["entries", "fs", "perms"] }
+uucore = { version=">=0.0.7", package="uucore", path="../../uucore", features=["entries", "fs", "perms"] }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 walkdir = "2.2"
 
