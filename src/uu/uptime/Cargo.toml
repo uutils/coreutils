@@ -1,6 +1,6 @@
 [package]
 name = "uu_uptime"
-version = "0.0.3"
+version = "0.0.4"
 authors = ["uutils developers"]
 license = "MIT"
 description = "uptime ~ (uutils) display dynamic system information"
@@ -17,7 +17,7 @@ path = "src/uptime.rs"
 [dependencies]
 chrono = "0.4"
 clap = "2.33"
-uucore = { version=">=0.0.6", package="uucore", path="../../uucore", features=["libc", "utmpx"] }
+uucore = { version=">=0.0.7", package="uucore", path="../../uucore", features=["libc", "utmpx"] }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]

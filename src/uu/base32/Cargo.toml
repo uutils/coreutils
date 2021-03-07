@@ -1,6 +1,6 @@
 [package]
 name = "uu_base32"
-version = "0.0.3"
+version = "0.0.4"
 authors = ["uutils developers"]
 license = "MIT"
 description = "base32 ~ (uutils) decode/encode input (base32-encoding)"
@@ -15,7 +15,7 @@ edition = "2018"
 path = "src/base32.rs"
 
 [dependencies]
-uucore = { version=">=0.0.6", package="uucore", path="../../uucore", features = ["encoding"] }
+uucore = { version=">=0.0.7", package="uucore", path="../../uucore", features = ["encoding"] }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]

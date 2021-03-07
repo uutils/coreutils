@@ -1,6 +1,6 @@
 [package]
 name = "uu_pinky"
-version = "0.0.3"
+version = "0.0.4"
 authors = ["uutils developers"]
 license = "MIT"
 description = "pinky ~ (uutils) display user information"
@@ -15,7 +15,7 @@ edition = "2018"
 path = "src/pinky.rs"
 
 [dependencies]
-uucore = { version=">=0.0.6", package="uucore", path="../../uucore", features=["utmpx", "entries"] }
+uucore = { version=">=0.0.7", package="uucore", path="../../uucore", features=["utmpx", "entries"] }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]

@@ -1,6 +1,6 @@
 [package]
 name = "uucore"
-version = "0.0.6"
+version = "0.0.7"
 authors = ["uutils developers"]
 license = "MIT"
 description = "uutils ~ 'core' uutils code library (cross-platform)"
@@ -23,7 +23,7 @@ wild = "2.0.4"
 thiserror = { version="1.0", optional=true }
 lazy_static = { version="1.3", optional=true }
 nix = { version="<= 0.13", optional=true }
-platform-info = { version="<= 0.0.1", optional=true }
+platform-info = { version="<= 0.1", optional=true }
 time = { version="<= 0.1.42", optional=true }
 # * "problem" dependencies (pinned)
 data-encoding = { version="~2.1", optional=true } ## data-encoding: require v2.1; but v2.2.0 breaks the build for MinSRV v1.31.0
