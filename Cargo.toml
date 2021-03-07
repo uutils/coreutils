@@ -3,7 +3,7 @@
 
 [package]
 name = "coreutils"
-version = "0.0.3" # "0.0.3.1"
+version = "0.0.3"
 authors = ["uutils developers"]
 license = "MIT"
 description = "coreutils ~ GNU coreutils (updated); implemented as universal (cross-platform) utils, written in Rust"
