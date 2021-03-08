@@ -5,13 +5,13 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-use std::fmt;
-use std::io::BufRead;
-
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg, ArgMatches};
+use clap::{App, AppSettings, Arg, ArgMatches};
+use std::fmt;
+use std::io::{BufRead, Write};
+use uucore::ranges::Range;
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Convert numbers from/to human-readable strings";
@@ -33,9 +33,19 @@ static LONG_HELP: &str = "UNIT options:
    iec-i  accept optional two-letter suffix:
 
           1Ki = 1024, 1Mi = 1048576, ...
+
+FIELDS supports cut(1) style field ranges:
+  N    N'th field, counted from 1
+  N-   from N'th field, to end of line
+  N-M  from N'th to M'th field (inclusive)
+  -M   from first to M'th field (inclusive)
+  -    all fields
+Multiple fields/ranges can be separated with commas
 ";
 
 mod options {
+    pub const FIELD: &str = "field";
+    pub const FIELD_DEFAULT: &str = "1";
     pub const FROM: &str = "from";
     pub const FROM_DEFAULT: &str = "none";
     pub const HEADER: &str = "header";
@@ -113,6 +123,10 @@ impl fmt::Display for DisplayableSuffix {
 }
 
 fn parse_suffix(s: &str) -> Result<(f64, Option<Suffix>)> {
+    if s.is_empty() {
+        return Err("invalid number: ‘’".to_string());
+    }
+
     let with_i = s.ends_with('i');
     let mut iter = s.chars();
     if with_i {
@@ -168,6 +182,64 @@ struct NumfmtOptions {
     transform: TransformOptions,
     padding: isize,
     header: usize,
+    fields: Vec<Range>,
+}
+
+/// Iterate over a line's fields, where each field is a contiguous sequence of
+/// non-whitespace, optionally prefixed with one or more characters of leading
+/// whitespace. Fields are returned as tuples of `(prefix, field)`.
+///
+/// # Examples:
+///
+/// ```
+/// let mut fields = uu_numfmt::WhitespaceSplitter { s: Some("    1234 5") };
+///
+/// assert_eq!(Some(("    ", "1234")), fields.next());
+/// assert_eq!(Some((" ", "5")), fields.next());
+/// assert_eq!(None, fields.next());
+/// ```
+///
+/// Delimiters are included in the results; `prefix` will be empty only for
+/// the first field of the line (including the case where the input line is
+/// empty):
+///
+/// ```
+/// let mut fields = uu_numfmt::WhitespaceSplitter { s: Some("first second") };
+///
+/// assert_eq!(Some(("", "first")), fields.next());
+/// assert_eq!(Some((" ", "second")), fields.next());
+///
+/// let mut fields = uu_numfmt::WhitespaceSplitter { s: Some("") };
+///
+/// assert_eq!(Some(("", "")), fields.next());
+/// ```
+pub struct WhitespaceSplitter<'a> {
+    pub s: Option<&'a str>,
+}
+
+impl<'a> Iterator for WhitespaceSplitter<'a> {
+    type Item = (&'a str, &'a str);
+
+    /// Yield the next field in the input string as a tuple `(prefix, field)`.
+    fn next(&mut self) -> Option<Self::Item> {
+        let haystack = self.s?;
+
+        let (prefix, field) = haystack.split_at(
+            haystack
+                .find(|c: char| !c.is_whitespace())
+                .unwrap_or_else(|| haystack.len()),
+        );
+
+        let (field, rest) = field.split_at(
+            field
+                .find(|c: char| c.is_whitespace())
+                .unwrap_or_else(|| field.len()),
+        );
+
+        self.s = if !rest.is_empty() { Some(rest) } else { None };
+
+        Some((prefix, field))
+    }
 }
 
 fn remove_suffix(i: f64, s: Option<Suffix>, u: &Unit) -> Result<f64> {
@@ -214,7 +286,7 @@ fn transform_from(s: &str, opts: &Transform) -> Result<f64> {
 ///
 /// Otherwise, truncate the result to the next highest whole number.
 ///
-/// Examples:
+/// # Examples:
 ///
 /// ```
 /// use uu_numfmt::div_ceil;
@@ -301,15 +373,34 @@ fn format_string(
 }
 
 fn format_and_print(s: &str, options: &NumfmtOptions) -> Result<()> {
-    let (prefix, field, suffix) = extract_field(&s)?;
+    for (n, (prefix, field)) in (1..).zip(WhitespaceSplitter { s: Some(s) }) {
+        let field_selected = uucore::ranges::contain(&options.fields, n);
 
-    let implicit_padding = match !prefix.is_empty() && options.padding == 0 {
-        true => Some((prefix.len() + field.len()) as isize),
-        false => None,
-    };
+        if field_selected {
+            let empty_prefix = prefix.is_empty();
 
-    let field = format_string(field, options, implicit_padding)?;
-    println!("{}{}", field, suffix);
+            // print delimiter before second and subsequent fields
+            let prefix = if n > 1 {
+                print!(" ");
+                &prefix[1..]
+            } else {
+                &prefix
+            };
+
+            let implicit_padding = if !empty_prefix && options.padding == 0 {
+                Some((prefix.len() + field.len()) as isize)
+            } else {
+                None
+            };
+
+            print!("{}", format_string(&field, options, implicit_padding)?);
+        } else {
+            // print unselected field without conversion
+            print!("{}{}", prefix, field);
+        }
+    }
+
+    println!();
 
     Ok(())
 }
@@ -344,57 +435,21 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         }
     }?;
 
+    let fields = match args.value_of(options::FIELD) {
+        Some("-") => vec![Range {
+            low: 1,
+            high: std::usize::MAX,
+        }],
+        Some(v) => Range::from_list(v)?,
+        None => unreachable!(),
+    };
+
     Ok(NumfmtOptions {
         transform,
         padding,
         header,
+        fields,
     })
-}
-
-/// Extract the field to convert from `line`.
-///
-/// The field is the first sequence of non-whitespace characters in `line`.
-///
-/// Returns a [`Result`] of `(prefix: &str, field: &str, suffix: &str)`, where
-/// `prefix` contains any leading whitespace, `field` is the field to convert,
-/// and `suffix` is everything after the field. `prefix` and `suffix` may be
-/// empty.
-///
-/// Returns an [`Err`] if `line` is empty or consists only of whitespace.
-///
-/// Examples:
-///
-/// ```
-/// use uu_numfmt::extract_field;
-///
-/// assert_eq!("1K", extract_field("1K").unwrap().1);
-///
-/// let (prefix, field, suffix) = extract_field("   1K qux").unwrap();
-/// assert_eq!("   ", prefix);
-/// assert_eq!("1K", field);
-/// assert_eq!(" qux", suffix);
-///
-/// assert!(extract_field("").is_err());
-/// ```
-pub fn extract_field(line: &str) -> Result<(&str, &str, &str)> {
-    let start = line
-        .find(|c: char| !c.is_whitespace())
-        .ok_or("invalid number: ‘’")?;
-
-    let prefix = &line[..start];
-
-    let mut field = &line[start..];
-
-    let suffix = match field.find(|c: char| c.is_whitespace()) {
-        Some(i) => {
-            let suffix = &field[i..];
-            field = &field[..i];
-            suffix
-        }
-        None => "",
-    };
-
-    Ok((prefix, field, suffix))
 }
 
 fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: NumfmtOptions) -> Result<()> {
@@ -430,6 +485,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .about(ABOUT)
         .usage(&usage[..])
         .after_help(LONG_HELP)
+        .setting(AppSettings::AllowNegativeNumbers)
+        .arg(
+            Arg::with_name(options::FIELD)
+                .long(options::FIELD)
+                .help("replace the numbers in these input fields (default=1) see FIELDS below")
+                .value_name("FIELDS")
+                .default_value(options::FIELD_DEFAULT),
+        )
         .arg(
             Arg::with_name(options::FROM)
                 .long(options::FROM)
@@ -477,6 +540,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     match result {
         Err(e) => {
+            std::io::stdout().flush().expect("error flushing stdout");
             show_info!("{}", e);
             1
         }
