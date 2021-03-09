@@ -207,6 +207,7 @@ pub struct Options {
     one_file_system: bool,
     overwrite: OverwriteMode,
     parents: bool,
+    strip_trailing_slashes: bool,
     reflink: bool,
     reflink_mode: ReflinkMode,
     preserve_attributes: Vec<Attribute>,
@@ -333,6 +334,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(Arg::with_name(OPT_RECURSIVE_ALIAS)
              .short("R")
              .help("same as -r"))
+        .arg(Arg::with_name(OPT_STRIP_TRAILING_SLASHES)
+             .long(OPT_STRIP_TRAILING_SLASHES)
+             .help("remove any trailing slashes from each SOURCE argument"))
         .arg(Arg::with_name(OPT_VERBOSE)
              .short("v")
              .long(OPT_VERBOSE)
@@ -436,9 +440,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
              .takes_value(true)
              .value_name("WHEN")
              .help("NotImplemented: control creation of sparse files. See below"))
-        .arg(Arg::with_name(OPT_STRIP_TRAILING_SLASHES)
-             .long(OPT_STRIP_TRAILING_SLASHES)
-             .help("NotImplemented: remove any trailing slashes from each SOURCE argument"))
         .arg(Arg::with_name(OPT_ONE_FILE_SYSTEM)
              .short("x")
              .long(OPT_ONE_FILE_SYSTEM)
@@ -561,7 +562,6 @@ impl Options {
             OPT_COPY_CONTENTS,
             OPT_PARENTS,
             OPT_SPARSE,
-            OPT_STRIP_TRAILING_SLASHES,
             OPT_ONE_FILE_SYSTEM,
             OPT_CONTEXT,
             #[cfg(windows)]
@@ -629,6 +629,7 @@ impl Options {
             backup_suffix: matches.value_of(OPT_SUFFIX).unwrap().to_string(),
             update: matches.is_present(OPT_UPDATE),
             verbose: matches.is_present(OPT_VERBOSE),
+            strip_trailing_slashes: matches.is_present(OPT_STRIP_TRAILING_SLASHES),
             reflink: matches.is_present(OPT_REFLINK),
             reflink_mode: {
                 if let Some(reflink) = matches.value_of(OPT_REFLINK) {
@@ -686,7 +687,7 @@ fn parse_path_args(path_args: &[String], options: &Options) -> CopyResult<(Vec<S
         return Err(format!("extra operand {:?}", paths[2]).into());
     }
 
-    let (sources, target) = match options.target_dir {
+    let (mut sources, target) = match options.target_dir {
         Some(ref target) => {
             // All path args are sources, and the target dir was
             // specified separately
@@ -699,6 +700,12 @@ fn parse_path_args(path_args: &[String], options: &Options) -> CopyResult<(Vec<S
             (paths, target)
         }
     };
+
+    if options.strip_trailing_slashes {
+        for source in sources.iter_mut() {
+            *source = source.components().as_path().to_owned()
+        }
+    }
 
     Ok((sources, target))
 }
