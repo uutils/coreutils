@@ -480,6 +480,24 @@ fn test_cp_no_deref() {
 }
 
 #[test]
+fn test_cp_strip_trailing_slashes() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    //using --strip-trailing-slashes option
+    let result = ucmd
+        .arg("--strip-trailing-slashes")
+        .arg(format!("{}/", TEST_HELLO_WORLD_SOURCE))
+        .arg(TEST_HELLO_WORLD_DEST)
+        .run();
+
+    // Check that the exit code represents a successful copy.
+    assert!(result.success);
+
+    // Check the content of the destination file that was copied.
+    assert_eq!(at.read(TEST_HELLO_WORLD_DEST), "Hello, World!\n");
+}
+
+#[test]
 // For now, disable the test on Windows. Symlinks aren't well support on Windows.
 // It works on Unix for now and it works locally when run from a powershell
 #[cfg(not(windows))]
