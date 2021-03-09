@@ -21,7 +21,7 @@ aggregate GNU coreutils rewrites.
 Why?
 ----
 
-Many GNU, Linux and other utilities are useful, and obviously
+Many GNU, Linux, and other utilities are useful and obviously
 [some](http://gnuwin32.sourceforge.net) [effort](http://unxutils.sourceforge.net)
 has been spent in the past to port them to Windows. However, those projects
 are either old and abandoned, are hosted on CVS (which makes it more difficult
@@ -41,10 +41,10 @@ Requirements
 
 ### Rust Version ###
 
-uutils follows Rust's release channels and is tested against stable, beta and nightly.
+uutils follows Rust's release channels and is tested against stable, beta, and nightly.
 The current oldest supported version of the Rust compiler is `1.33.0`.
 
-On both Windows and Redox, only the nightly version is tested currently.
+On both Windows and Redox, only the nightly version is currently tested.
 
 Build Instructions
 ------------------
@@ -83,8 +83,7 @@ you want to build manually.  For example:
 $ cargo build --features "base32 cat echo rm" --no-default-features
 ```
 
-If you don't even want to build the multicall binary and would prefer to just
-build the utilities as individual binaries, that is possible too.  For example:
+If you don't even want to build the multicall binary and prefer to build the utilities as individual binaries, that is possible.  For example:
 ```bash
 $ cargo build -p uu_base32 -p uu_cat -p uu_echo -p uu_rm
 ```
@@ -93,7 +92,7 @@ $ cargo build -p uu_base32 -p uu_cat -p uu_echo -p uu_rm
 
 Building using `make` is a simple process as well.
 
-To simply build all available utilities:
+To build all available utilities:
 ```bash
 $ make
 ```
@@ -113,7 +112,7 @@ Installation Instructions
 
 ### Cargo ###
 
-Likewise, installing can simply be done using:
+Likewise, installing can be done using:
 ```bash
 $ cargo install
 ```
@@ -142,7 +141,7 @@ To install only a few of the available utilities:
 $ make UTILS='UTILITY_1 UTILITY_2' install
 ```
 
-To install every program with a prefix (e.g. uu-echo uu-cat):
+To install every program with a prefix (e.g., uu-echo uu-cat):
 ```bash
 $ make PROG_PREFIX=PREFIX_GOES_HERE install
 ```
@@ -237,7 +236,7 @@ $ gdb --args target/debug/coreutils ls
 
 ### GNU Make ###
 
-To simply test all available utilities:
+To test all available utilities:
 ```bash
 $ make test
 ```
