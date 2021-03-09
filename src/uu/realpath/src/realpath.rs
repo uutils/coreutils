@@ -67,7 +67,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let paths: Vec<PathBuf> = matches
         .values_of(ARG_FILES)
         .unwrap()
-        .map(|path| PathBuf::from(path))
+        .map(PathBuf::from)
         .collect();
 
     let strip = matches.is_present(OPT_STRIP);

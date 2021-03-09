@@ -150,7 +150,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .value_of(OPT_SUFFIX_LENGTH)
         .unwrap()
         .parse()
-        .expect(format!("Invalid number for {}", OPT_SUFFIX_LENGTH).as_str());
+        .unwrap_or_else(|_| panic!("Invalid number for {}", OPT_SUFFIX_LENGTH));
 
     settings.numeric_suffix = matches.occurrences_of(OPT_NUMERIC_SUFFIXES) > 0;
     settings.additional_suffix = matches.value_of(OPT_ADDITIONAL_SUFFIX).unwrap().to_owned();

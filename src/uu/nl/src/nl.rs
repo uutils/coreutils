@@ -55,7 +55,7 @@ enum NumberingStyle {
     NumberForAll,
     NumberForNonEmpty,
     NumberForNone,
-    NumberForRegularExpression(regex::Regex),
+    NumberForRegularExpression(Box<regex::Regex>),
 }
 
 // NumberFormat specifies how line numbers are output within their allocated

@@ -275,7 +275,11 @@ impl Error for ParseSizeErr {
 
 impl fmt::Display for ParseSizeErr {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(f, "{}", self.to_string())
+        let s = match self {
+            ParseSizeErr::ParseFailure(s) => s,
+            ParseSizeErr::SizeTooBig(s) => s,
+        };
+        write!(f, "{}", s)
     }
 }
 
