@@ -32,6 +32,15 @@ macro_rules! show_error(
 
 /// Show a warning to stderr in a silimar style to GNU coreutils.
 #[macro_export]
+macro_rules! show_error_custom_description (
+    ($err:expr,$($args:tt)+) => ({
+        eprint!("{}: {}: ", executable!(), $err);
+        eprintln!($($args)+);
+    })
+);
+
+
+#[macro_export]
 macro_rules! show_warning(
     ($($args:tt)+) => ({
         eprint!("{}: warning: ", executable!());
