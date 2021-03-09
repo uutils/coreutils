@@ -380,4 +380,6 @@ License
 
 uutils is licensed under the MIT License - see the `LICENSE` file for details
 
+GNU Coreutils is licensed under the GPL V3.
+
 [![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fuutils%2Fcoreutils.svg?type=large)](https://app.fossa.io/projects/git%2Bgithub.com%2Fuutils%2Fcoreutils?ref=badge_large)
