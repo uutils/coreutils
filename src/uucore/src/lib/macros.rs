@@ -27,6 +27,14 @@ macro_rules! show_error(
 );
 
 #[macro_export]
+macro_rules! show_error_custom_description (
+    ($err:expr,$($args:tt)+) => ({
+        eprint!("{}: {}: ", executable!(), $err);
+        eprintln!($($args)+);
+    })
+);
+
+#[macro_export]
 macro_rules! show_warning(
     ($($args:tt)+) => ({
         eprint!("{}: warning: ", executable!());
