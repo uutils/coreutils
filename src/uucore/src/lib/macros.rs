@@ -39,7 +39,6 @@ macro_rules! show_error_custom_description (
     })
 );
 
-
 #[macro_export]
 macro_rules! show_warning(
     ($($args:tt)+) => ({
