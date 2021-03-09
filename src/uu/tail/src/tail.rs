@@ -27,15 +27,19 @@ use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
 
-static OPT_BYTES: &str = "bytes";
-static OPT_FOLLOW: &str = "follow";
-static OPT_LINES: &str = "lines";
-static OPT_PID: &str = "pid";
-static OPT_QUIET: &str = "quiet";
-static OPT_SILENT: &str = "silent";
-static OPT_SLEEP_INT: &str = "sleep-interval";
-static OPT_VERBOSE: &str = "verbose";
-static OPT_ZERO_TERM: &str = "zero-terminated";
+pub mod options {
+    pub mod verbosity {
+        pub static QUIET: &str = "quiet";
+        pub static SILENT: &str = "silent";
+        pub static VERBOSE: &str = "verbose";
+    }
+    pub static BYTES: &str = "bytes";
+    pub static FOLLOW: &str = "follow";
+    pub static LINES: &str = "lines";
+    pub static PID: &str = "pid";
+    pub static SLEEP_INT: &str = "sleep-interval";
+    pub static ZERO_TERM: &str = "zero-terminated";
+}
 
 static ARG_FILES: &str = "files";
 
@@ -72,58 +76,58 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .version(crate_version!())
         .about("output the last part of files")
         .arg(
-            Arg::with_name(OPT_BYTES)
+            Arg::with_name(options::BYTES)
                 .short("c")
-                .long(OPT_BYTES)
+                .long(options::BYTES)
                 .takes_value(true)
                 .help("Number of bytes to print"),
         )
         .arg(
-            Arg::with_name(OPT_FOLLOW)
+            Arg::with_name(options::FOLLOW)
                 .short("f")
-                .long(OPT_FOLLOW)
+                .long(options::FOLLOW)
                 .help("Print the file as it grows"),
         )
         .arg(
-            Arg::with_name(OPT_LINES)
+            Arg::with_name(options::LINES)
                 .short("n")
-                .long(OPT_LINES)
+                .long(options::LINES)
                 .takes_value(true)
                 .help("Number of lines to print"),
         )
         .arg(
-            Arg::with_name(OPT_PID)
-                .long(OPT_PID)
+            Arg::with_name(options::PID)
+                .long(options::PID)
                 .takes_value(true)
                 .help("with -f, terminate after process ID, PID dies"),
         )
         .arg(
-            Arg::with_name(OPT_QUIET)
+            Arg::with_name(options::verbosity::QUIET)
                 .short("q")
-                .long(OPT_QUIET)
+                .long(options::verbosity::QUIET)
                 .help("never output headers giving file names"),
         )
         .arg(
-            Arg::with_name(OPT_SILENT)
-                .long(OPT_SILENT)
+            Arg::with_name(options::verbosity::SILENT)
+                .long(options::verbosity::SILENT)
                 .help("synonym of --quiet"),
         )
         .arg(
-            Arg::with_name(OPT_SLEEP_INT)
+            Arg::with_name(options::SLEEP_INT)
                 .short("s")
-                .long(OPT_SLEEP_INT)
+                .long(options::SLEEP_INT)
                 .help("Number or seconds to sleep between polling the file when running with -f"),
         )
         .arg(
-            Arg::with_name(OPT_VERBOSE)
+            Arg::with_name(options::verbosity::VERBOSE)
                 .short("v")
-                .long(OPT_VERBOSE)
+                .long(options::verbosity::VERBOSE)
                 .help("always output headers giving file names"),
         )
         .arg(
-            Arg::with_name(OPT_ZERO_TERM)
+            Arg::with_name(options::ZERO_TERM)
                 .short("z")
-                .long(OPT_ZERO_TERM)
+                .long(options::ZERO_TERM)
                 .help("Line delimiter is NUL, not newline"),
         )
         .arg(
@@ -135,9 +139,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let matches = app.get_matches_from(args);
 
-    settings.follow = matches.is_present(OPT_FOLLOW);
+    settings.follow = matches.is_present(options::FOLLOW);
     if settings.follow {
-        if let Some(n) = matches.value_of(OPT_SLEEP_INT) {
+        if let Some(n) = matches.value_of(options::SLEEP_INT) {
             let parsed: Option<u32> = n.parse().ok();
             if let Some(m) = parsed {
                 settings.sleep_msec = m * 1000
@@ -145,7 +149,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     }
 
-    if let Some(pid_str) = matches.value_of(OPT_PID) {
+    if let Some(pid_str) = matches.value_of(options::PID) {
         if let Ok(pid) = pid_str.parse() {
             settings.pid = pid;
             if pid != 0 {
@@ -161,7 +165,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     }
 
-    match matches.value_of(OPT_LINES) {
+    match matches.value_of(options::LINES) {
         Some(n) => {
             let mut slice: &str = n;
             if slice.chars().next().unwrap_or('_') == '+' {
@@ -177,7 +181,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             }
         }
         None => {
-            if let Some(n) = matches.value_of(OPT_BYTES) {
+            if let Some(n) = matches.value_of(options::BYTES) {
                 let mut slice: &str = n;
                 if slice.chars().next().unwrap_or('_') == '+' {
                     settings.beginning = true;
@@ -194,14 +198,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     };
 
-    if matches.is_present(OPT_ZERO_TERM) {
+    if matches.is_present(options::ZERO_TERM) {
         if let FilterMode::Lines(count, _) = settings.mode {
             settings.mode = FilterMode::Lines(count, 0);
         }
     }
 
-    let verbose = matches.is_present(OPT_VERBOSE);
-    let quiet = matches.is_present(OPT_QUIET) || matches.is_present(OPT_SILENT);
+    let verbose = matches.is_present(options::verbosity::VERBOSE);
+    let quiet = matches.is_present(options::verbosity::QUIET)
+        || matches.is_present(options::verbosity::SILENT);
 
     let files: Vec<String> = matches
         .values_of(ARG_FILES)

@@ -19,19 +19,17 @@ use platform_info::*;
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const ABOUT: &str = "Print certain system information.  With no OPTION, same as -s.";
 
-const OPT_ALL: &str = "all";
-const OPT_KERNELNAME: &str = "kernel-name";
-const OPT_NODENAME: &str = "nodename";
-const OPT_KERNELVERSION: &str = "kernel-version";
-const OPT_KERNELRELEASE: &str = "kernel-release";
-const OPT_MACHINE: &str = "machine";
-const OPT_PROCESSOR: &str = "processor";
-const OPT_HWPLATFORM: &str = "hardware-platform";
-
-//FIXME: unimplemented options
-//const OPT_PROCESSOR: &'static str = "processor";
-//const OPT_HWPLATFORM: &'static str = "hardware-platform";
-const OPT_OS: &str = "operating-system";
+pub mod options {
+    pub static ALL: &str = "all";
+    pub static KERNELNAME: &str = "kernel-name";
+    pub static NODENAME: &str = "nodename";
+    pub static KERNELVERSION: &str = "kernel-version";
+    pub static KERNELRELEASE: &str = "kernel-release";
+    pub static MACHINE: &str = "machine";
+    pub static PROCESSOR: &str = "processor";
+    pub static HWPLATFORM: &str = "hardware-platform";
+    pub static OS: &str = "operating-system";
+}
 
 #[cfg(target_os = "linux")]
 const HOST_OS: &str = "GNU/Linux";
@@ -54,58 +52,58 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .version(VERSION)
         .about(ABOUT)
         .usage(&usage[..])
-        .arg(Arg::with_name(OPT_ALL)
+        .arg(Arg::with_name(options::ALL)
             .short("a")
-            .long(OPT_ALL)
+            .long(options::ALL)
             .help("Behave as though all of the options -mnrsv were specified."))
-        .arg(Arg::with_name(OPT_KERNELNAME)
+        .arg(Arg::with_name(options::KERNELNAME)
             .short("s")
-            .long(OPT_KERNELNAME)
+            .long(options::KERNELNAME)
             .alias("sysname") // Obsolescent option in GNU uname
             .help("print the kernel name."))
-        .arg(Arg::with_name(OPT_NODENAME)
+        .arg(Arg::with_name(options::NODENAME)
             .short("n")
-            .long(OPT_NODENAME)
+            .long(options::NODENAME)
             .help("print the nodename (the nodename may be a name that the system is known by to a communications network)."))
-        .arg(Arg::with_name(OPT_KERNELRELEASE)
+        .arg(Arg::with_name(options::KERNELRELEASE)
             .short("r")
-            .long(OPT_KERNELRELEASE)
+            .long(options::KERNELRELEASE)
             .alias("release") // Obsolescent option in GNU uname
             .help("print the operating system release."))
-        .arg(Arg::with_name(OPT_KERNELVERSION)
+        .arg(Arg::with_name(options::KERNELVERSION)
             .short("v")
-            .long(OPT_KERNELVERSION)
+            .long(options::KERNELVERSION)
             .help("print the operating system version."))
-        .arg(Arg::with_name(OPT_HWPLATFORM)
+        .arg(Arg::with_name(options::HWPLATFORM)
             .short("i")
-            .long(OPT_HWPLATFORM)
+            .long(options::HWPLATFORM)
             .help("print the hardware platform (non-portable)"))
-        .arg(Arg::with_name(OPT_MACHINE)
+        .arg(Arg::with_name(options::MACHINE)
             .short("m")
-            .long(OPT_MACHINE)
+            .long(options::MACHINE)
             .help("print the machine hardware name."))
-        .arg(Arg::with_name(OPT_PROCESSOR)
+        .arg(Arg::with_name(options::PROCESSOR)
             .short("p")
-            .long(OPT_PROCESSOR)
+            .long(options::PROCESSOR)
             .help("print the processor type (non-portable)"))
-        .arg(Arg::with_name(OPT_OS)
+        .arg(Arg::with_name(options::OS)
             .short("o")
-            .long(OPT_OS)
+            .long(options::OS)
             .help("print the operating system name."))
         .get_matches_from(args);
 
     let uname = return_if_err!(1, PlatformInfo::new());
     let mut output = String::new();
 
-    let all = matches.is_present(OPT_ALL);
-    let kernelname = matches.is_present(OPT_KERNELNAME);
-    let nodename = matches.is_present(OPT_NODENAME);
-    let kernelrelease = matches.is_present(OPT_KERNELRELEASE);
-    let kernelversion = matches.is_present(OPT_KERNELVERSION);
-    let machine = matches.is_present(OPT_MACHINE);
-    let processor = matches.is_present(OPT_PROCESSOR);
-    let hwplatform = matches.is_present(OPT_HWPLATFORM);
-    let os = matches.is_present(OPT_OS);
+    let all = matches.is_present(options::ALL);
+    let kernelname = matches.is_present(options::KERNELNAME);
+    let nodename = matches.is_present(options::NODENAME);
+    let kernelrelease = matches.is_present(options::KERNELRELEASE);
+    let kernelversion = matches.is_present(options::KERNELVERSION);
+    let machine = matches.is_present(options::MACHINE);
+    let processor = matches.is_present(options::PROCESSOR);
+    let hwplatform = matches.is_present(options::HWPLATFORM);
+    let os = matches.is_present(options::OS);
 
     let none = !(all
         || kernelname

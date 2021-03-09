@@ -87,11 +87,13 @@ macro_rules! print_adjusted {
 static ABOUT: &str = "Display file or file system status.";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
-static OPT_DEREFERENCE: &str = "dereference";
-static OPT_FILE_SYSTEM: &str = "file-system";
-static OPT_FORMAT: &str = "format";
-static OPT_PRINTF: &str = "printf";
-static OPT_TERSE: &str = "terse";
+pub mod options {
+    pub static DEREFERENCE: &str = "dereference";
+    pub static FILE_SYSTEM: &str = "file-system";
+    pub static FORMAT: &str = "format";
+    pub static PRINTF: &str = "printf";
+    pub static TERSE: &str = "terse";
+}
 
 static ARG_FILES: &str = "files";
 
@@ -464,15 +466,17 @@ impl Stater {
             .map(|v| v.map(ToString::to_string).collect())
             .unwrap_or_default();
 
-        let fmtstr = if matches.is_present(OPT_PRINTF) {
-            matches.value_of(OPT_PRINTF).expect("Invalid format string")
+        let fmtstr = if matches.is_present(options::PRINTF) {
+            matches
+                .value_of(options::PRINTF)
+                .expect("Invalid format string")
         } else {
-            matches.value_of(OPT_FORMAT).unwrap_or("")
+            matches.value_of(options::FORMAT).unwrap_or("")
         };
 
-        let use_printf = matches.is_present(OPT_PRINTF);
-        let terse = matches.is_present(OPT_TERSE);
-        let showfs = matches.is_present(OPT_FILE_SYSTEM);
+        let use_printf = matches.is_present(options::PRINTF);
+        let terse = matches.is_present(options::TERSE);
+        let showfs = matches.is_present(options::FILE_SYSTEM);
 
         let default_tokens = if fmtstr.is_empty() {
             Stater::generate_tokens(&Stater::default_fmt(showfs, terse, false), use_printf).unwrap()
@@ -501,7 +505,7 @@ impl Stater {
         };
 
         Ok(Stater {
-            follow: matches.is_present(OPT_DEREFERENCE),
+            follow: matches.is_present(options::DEREFERENCE),
             showfs,
             from_user: !fmtstr.is_empty(),
             files,
@@ -955,27 +959,27 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .usage(&usage[..])
         .after_help(&long_usage[..])
         .arg(
-            Arg::with_name(OPT_DEREFERENCE)
+            Arg::with_name(options::DEREFERENCE)
                 .short("L")
-                .long(OPT_DEREFERENCE)
+                .long(options::DEREFERENCE)
                 .help("follow links"),
         )
         .arg(
-            Arg::with_name(OPT_FILE_SYSTEM)
+            Arg::with_name(options::FILE_SYSTEM)
                 .short("f")
-                .long(OPT_FILE_SYSTEM)
+                .long(options::FILE_SYSTEM)
                 .help("display file system status instead of file status"),
         )
         .arg(
-            Arg::with_name(OPT_TERSE)
+            Arg::with_name(options::TERSE)
                 .short("t")
-                .long(OPT_TERSE)
+                .long(options::TERSE)
                 .help("print the information in terse form"),
         )
         .arg(
-            Arg::with_name(OPT_FORMAT)
+            Arg::with_name(options::FORMAT)
                 .short("c")
-                .long(OPT_FORMAT)
+                .long(options::FORMAT)
                 .help(
                     "use the specified FORMAT instead of the default;
  output a newline after each use of FORMAT",
@@ -983,8 +987,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .value_name("FORMAT"),
         )
         .arg(
-            Arg::with_name(OPT_PRINTF)
-                .long(OPT_PRINTF)
+            Arg::with_name(options::PRINTF)
+                .long(options::PRINTF)
                 .value_name("FORMAT")
                 .help(
                     "like --format, but interpret backslash escapes,
