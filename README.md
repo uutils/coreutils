@@ -115,7 +115,7 @@ Installation Instructions
 
 Likewise, installing can simply be done using:
 ```bash
-$ cargo install
+$ cargo install --path .
 ```
 
 This command will install uutils into Cargo's *bin* folder (*e.g.* `$HOME/.cargo/bin`).
