@@ -26,7 +26,11 @@ mod options {
 }
 
 fn get_usage() -> String {
-    format!("{0} {1}[SUFFIX]... \n    {0} OPTION", executable!(), options::NUMBER)
+    format!(
+        "{0} {1}[SUFFIX]... \n    {0} OPTION",
+        executable!(),
+        options::NUMBER
+    )
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
@@ -44,14 +48,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .value_name(options::NUMBER)
                 .index(1)
                 .multiple(true)
-                .required(true)
-        ).get_matches_from(args);
-    
+                .required(true),
+        )
+        .get_matches_from(args);
+
     if let Some(values) = matches.values_of(options::NUMBER) {
         let numbers = values.collect();
         sleep(numbers);
     }
-    
+
     0
 }
 
