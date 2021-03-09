@@ -150,6 +150,12 @@ fn test_rm_errors() {
         "rm: error: could not remove directory 'test_rm_errors_directory' (did you mean \
                 to pass '-r'?)\n",
     );
+
+    // $ rm -d test_rm_errors_directory
+    // rm: cannot remove 'test_rm_errors_directory_2': Directory not empty
+    ucmd.arg("-d").arg(dir).fails().stderr_is(
+        "rm: cannot remove 'test_rm_errors_directory': Directory not empty\n"
+    );
 }
 
 #[test]
