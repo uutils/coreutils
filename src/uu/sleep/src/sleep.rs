@@ -26,7 +26,7 @@ mod options {
 }
 
 fn get_usage() -> String {
-    format!("{0} [NUMBER]<SUFFIX> \n  or\n    {0} [OPTION]", executable!())
+    format!("{0} {1}[SUFFIX]... \n    {0} OPTION", executable!(), options::NUMBER)
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
@@ -41,9 +41,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(options::NUMBER)
                 .long(options::NUMBER)
                 .help("pause for NUMBER seconds")
-                .value_name("DURATION")
+                .value_name(options::NUMBER)
                 .index(1)
                 .multiple(true)
+                .required(true)
         ).get_matches_from(args);
     
     if let Some(values) = matches.values_of(options::NUMBER) {
