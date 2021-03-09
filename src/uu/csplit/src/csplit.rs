@@ -344,7 +344,7 @@ impl<'a> SplitWriter<'a> {
     ///
     /// In addition to errors reading/writing from/to a file, the following errors may be returned:
     /// - if no line matched, an [`::CsplitError::MatchNotFound`].
-    /// - if there are not enough lines to accomodate the offset, an
+    /// - if there are not enough lines to accommodate the offset, an
     /// [`::CsplitError::LineOutOfRange`].
     fn do_to_match<I>(
         &mut self,
@@ -471,7 +471,7 @@ where
         }
     }
 
-    /// Rewind the iteration by outputing the buffer's content.
+    /// Rewind the iteration by outputting the buffer's content.
     fn rewind_buffer(&mut self) {
         self.rewind = true;
     }
