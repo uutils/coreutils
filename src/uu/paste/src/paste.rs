@@ -10,59 +10,57 @@
 #[macro_use]
 extern crate uucore;
 
+use clap::{App, Arg};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::iter::repeat;
 use std::path::Path;
 
-static NAME: &str = "paste";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
+static ABOUT: &str = "Write lines consisting of the sequentially corresponding lines from each
+FILE, separated by TABs, to standard output.";
+
+mod options {
+    pub const DELIMITER: &str = "delimiters";
+    pub const SERIAL: &str = "serial";
+    pub const FILE: &str = "file";
+}
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .arg(
+            Arg::with_name(options::SERIAL)
+                .long(options::SERIAL)
+                .short("s")
+                .help("paste one file at a time instead of in parallel"),
+        )
+        .arg(
+            Arg::with_name(options::DELIMITER)
+                .long(options::DELIMITER)
+                .short("d")
+                .help("reuse characters from LIST instead of TABs")
+                .value_name("LIST")
+                .default_value("\t")
+                .hide_default_value(true),
+        )
+        .arg(
+            Arg::with_name(options::FILE)
+                .value_name("FILE")
+                .multiple(true)
+                .required(true),
+        )
+        .get_matches_from(args);
 
-    let mut opts = getopts::Options::new();
-
-    opts.optflag(
-        "s",
-        "serial",
-        "paste one file at a time instead of in parallel",
-    );
-    opts.optopt(
-        "d",
-        "delimiters",
-        "reuse characters from LIST instead of TABs",
-        "LIST",
-    );
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(e) => crash!(1, "{}", e),
-    };
-
-    if matches.opt_present("help") {
-        let msg = format!(
-            "{0} {1}
-
-Usage:
-  {0} [OPTION]... [FILE]...
-
-Write lines consisting of the sequentially corresponding lines from each
-FILE, separated by TABs, to standard output.",
-            NAME, VERSION
-        );
-        print!("{}", opts.usage(&msg));
-    } else if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-    } else {
-        let serial = matches.opt_present("serial");
-        let delimiters = matches
-            .opt_str("delimiters")
-            .unwrap_or_else(|| "\t".to_owned());
-        paste(matches.free, serial, delimiters);
-    }
+    let serial = matches.is_present(options::SERIAL);
+    let delimiters = matches.value_of(options::DELIMITER).unwrap().to_owned();
+    let files = matches
+        .values_of(options::FILE)
+        .unwrap()
+        .map(|s| s.to_owned())
+        .collect();
+    paste(files, serial, delimiters);
 
     0
 }
