@@ -151,11 +151,18 @@ fn test_rm_errors() {
                 to pass '-r'?)\n",
     );
 
-    // $ rm -d test_rm_errors_directory
-    // rm: cannot remove 'test_rm_errors_directory_2': Directory not empty
-    ucmd.arg("-d").arg(dir).fails().stderr_is(
-        "rm: cannot remove 'test_rm_errors_directory': Directory not empty\n"
+}
+
+#[test]                                                         fn test_rm_dir_not_empty() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_rm_errors_directory";                           let file = "test_rm_errors_directory/test_rm_errors_file";
+                                                                    at.mkdir(dir);
+    at.touch(file);                                                               
+
+    // rm: cannot remove 'test_rm_errors_directory_2': Directory not empty              
+    ucmd.arg("-d").arg(dir).fails().stderr_is(                          "rm: cannot remove 'test_rm_errors_directory': Directory not empty\n"
     );
+
 }
 
 #[test]
