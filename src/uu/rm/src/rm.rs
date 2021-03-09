@@ -251,6 +251,10 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
             if let Err(e) = remove_dir_all(path) {
                 had_err = true;
                 show_error!("could not remove '{}': {}", path.display(), e);
+            } else {
+                if options.verbose {
+                    println!("removed directory '{}'", path.display());
+                }
             }
         } else {
             let mut dirs: VecDeque<DirEntry> = VecDeque::new();
