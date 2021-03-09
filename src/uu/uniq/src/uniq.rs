@@ -16,15 +16,17 @@ use std::str::FromStr;
 
 static ABOUT: &str = "Report or omit repeated lines.";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
-static OPT_ALL_REPEATED: &str = "all-repeated";
-static OPT_CHECK_CHARS: &str = "check-chars";
-static OPT_COUNT: &str = "count";
-static OPT_IGNORE_CASE: &str = "ignore-case";
-static OPT_REPEATED: &str = "repeated";
-static OPT_SKIP_FIELDS: &str = "skip-fields";
-static OPT_SKIP_CHARS: &str = "skip-chars";
-static OPT_UNIQUE: &str = "unique";
-static OPT_ZERO_TERMINATED: &str = "zero-terminated";
+pub mod options {
+    pub static ALL_REPEATED: &str = "all-repeated";
+    pub static CHECK_CHARS: &str = "check-chars";
+    pub static COUNT: &str = "count";
+    pub static IGNORE_CASE: &str = "ignore-case";
+    pub static REPEATED: &str = "repeated";
+    pub static SKIP_FIELDS: &str = "skip-fields";
+    pub static SKIP_CHARS: &str = "skip-chars";
+    pub static UNIQUE: &str = "unique";
+    pub static ZERO_TERMINATED: &str = "zero-terminated";
+}
 
 static ARG_FILES: &str = "files";
 
@@ -233,63 +235,63 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .usage(&usage[..])
         .after_help(&long_usage[..])
         .arg(
-            Arg::with_name(OPT_ALL_REPEATED)
+            Arg::with_name(options::ALL_REPEATED)
                 .short("D")
-                .long(OPT_ALL_REPEATED)
+                .long(options::ALL_REPEATED)
                 .possible_values(&["none", "prepend", "separate"])
                 .help("print all duplicate lines. Delimiting is done with blank lines")
                 .value_name("delimit-method")
                 .default_value("none"),
         )
         .arg(
-            Arg::with_name(OPT_CHECK_CHARS)
+            Arg::with_name(options::CHECK_CHARS)
                 .short("w")
-                .long(OPT_CHECK_CHARS)
+                .long(options::CHECK_CHARS)
                 .help("compare no more than N characters in lines")
                 .value_name("N"),
         )
         .arg(
-            Arg::with_name(OPT_COUNT)
+            Arg::with_name(options::COUNT)
                 .short("c")
-                .long(OPT_COUNT)
+                .long(options::COUNT)
                 .help("prefix lines by the number of occurrences"),
         )
         .arg(
-            Arg::with_name(OPT_IGNORE_CASE)
+            Arg::with_name(options::IGNORE_CASE)
                 .short("i")
-                .long(OPT_IGNORE_CASE)
+                .long(options::IGNORE_CASE)
                 .help("ignore differences in case when comparing"),
         )
         .arg(
-            Arg::with_name(OPT_REPEATED)
+            Arg::with_name(options::REPEATED)
                 .short("d")
-                .long(OPT_REPEATED)
+                .long(options::REPEATED)
                 .help("only print duplicate lines"),
         )
         .arg(
-            Arg::with_name(OPT_SKIP_CHARS)
+            Arg::with_name(options::SKIP_CHARS)
                 .short("s")
-                .long(OPT_SKIP_CHARS)
+                .long(options::SKIP_CHARS)
                 .help("avoid comparing the first N characters")
                 .value_name("N"),
         )
         .arg(
-            Arg::with_name(OPT_SKIP_FIELDS)
+            Arg::with_name(options::SKIP_FIELDS)
                 .short("f")
-                .long(OPT_SKIP_FIELDS)
+                .long(options::SKIP_FIELDS)
                 .help("avoid comparing the first N fields")
                 .value_name("N"),
         )
         .arg(
-            Arg::with_name(OPT_UNIQUE)
+            Arg::with_name(options::UNIQUE)
                 .short("u")
-                .long(OPT_UNIQUE)
+                .long(options::UNIQUE)
                 .help("only print unique lines"),
         )
         .arg(
-            Arg::with_name(OPT_ZERO_TERMINATED)
+            Arg::with_name(options::ZERO_TERMINATED)
                 .short("z")
-                .long(OPT_ZERO_TERMINATED)
+                .long(options::ZERO_TERMINATED)
                 .help("end lines with 0 byte, not newline"),
         )
         .arg(
@@ -316,11 +318,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     };
 
     let uniq = Uniq {
-        repeats_only: matches.is_present(OPT_REPEATED)
-            || matches.occurrences_of(OPT_ALL_REPEATED) > 0,
-        uniques_only: matches.is_present(OPT_UNIQUE),
-        all_repeated: matches.occurrences_of(OPT_ALL_REPEATED) > 0,
-        delimiters: match matches.value_of(OPT_ALL_REPEATED).map(String::from) {
+        repeats_only: matches.is_present(options::REPEATED)
+            || matches.occurrences_of(options::ALL_REPEATED) > 0,
+        uniques_only: matches.is_present(options::UNIQUE),
+        all_repeated: matches.occurrences_of(options::ALL_REPEATED) > 0,
+        delimiters: match matches.value_of(options::ALL_REPEATED).map(String::from) {
             Some(ref opt_arg) if opt_arg != "none" => match &(*opt_arg.as_str()) {
                 "prepend" => Delimiters::Prepend,
                 "separate" => Delimiters::Separate,
@@ -328,12 +330,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             },
             _ => Delimiters::None,
         },
-        show_counts: matches.is_present(OPT_COUNT),
-        skip_fields: opt_parsed(OPT_SKIP_FIELDS, &matches),
-        slice_start: opt_parsed(OPT_SKIP_CHARS, &matches),
-        slice_stop: opt_parsed(OPT_CHECK_CHARS, &matches),
-        ignore_case: matches.is_present(OPT_IGNORE_CASE),
-        zero_terminated: matches.is_present(OPT_ZERO_TERMINATED),
+        show_counts: matches.is_present(options::COUNT),
+        skip_fields: opt_parsed(options::SKIP_FIELDS, &matches),
+        slice_start: opt_parsed(options::SKIP_CHARS, &matches),
+        slice_stop: opt_parsed(options::CHECK_CHARS, &matches),
+        ignore_case: matches.is_present(options::IGNORE_CASE),
+        zero_terminated: matches.is_present(options::ZERO_TERMINATED),
     };
     uniq.print_uniq(
         &mut open_input_file(in_file_name),

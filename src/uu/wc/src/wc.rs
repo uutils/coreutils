@@ -29,11 +29,11 @@ struct Settings {
 impl Settings {
     fn new(matches: &ArgMatches) -> Settings {
         let settings = Settings {
-            show_bytes: matches.is_present(OPT_BYTES),
-            show_chars: matches.is_present(OPT_CHAR),
-            show_lines: matches.is_present(OPT_LINES),
-            show_words: matches.is_present(OPT_WORDS),
-            show_max_line_length: matches.is_present(OPT_MAX_LINE_LENGTH),
+            show_bytes: matches.is_present(options::BYTES),
+            show_chars: matches.is_present(options::CHAR),
+            show_lines: matches.is_present(options::LINES),
+            show_words: matches.is_present(options::WORDS),
+            show_max_line_length: matches.is_present(options::MAX_LINE_LENGTH),
         };
 
         if settings.show_bytes
@@ -68,11 +68,13 @@ static ABOUT: &str = "Display newline, word, and byte counts for each FILE, and 
 more than one FILE is specified.";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
-static OPT_BYTES: &str = "bytes";
-static OPT_CHAR: &str = "chars";
-static OPT_LINES: &str = "lines";
-static OPT_MAX_LINE_LENGTH: &str = "max-line-length";
-static OPT_WORDS: &str = "words";
+pub mod options {
+    pub static BYTES: &str = "bytes";
+    pub static CHAR: &str = "chars";
+    pub static LINES: &str = "lines";
+    pub static MAX_LINE_LENGTH: &str = "max-line-length";
+    pub static WORDS: &str = "words";
+}
 
 static ARG_FILES: &str = "files";
 
@@ -92,33 +94,33 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .about(ABOUT)
         .usage(&usage[..])
         .arg(
-            Arg::with_name(OPT_BYTES)
+            Arg::with_name(options::BYTES)
                 .short("c")
-                .long(OPT_BYTES)
+                .long(options::BYTES)
                 .help("print the byte counts"),
         )
         .arg(
-            Arg::with_name(OPT_CHAR)
+            Arg::with_name(options::CHAR)
                 .short("m")
-                .long(OPT_CHAR)
+                .long(options::CHAR)
                 .help("print the character counts"),
         )
         .arg(
-            Arg::with_name(OPT_LINES)
+            Arg::with_name(options::LINES)
                 .short("l")
-                .long(OPT_LINES)
+                .long(options::LINES)
                 .help("print the newline counts"),
         )
         .arg(
-            Arg::with_name(OPT_MAX_LINE_LENGTH)
+            Arg::with_name(options::MAX_LINE_LENGTH)
                 .short("L")
-                .long(OPT_MAX_LINE_LENGTH)
+                .long(options::MAX_LINE_LENGTH)
                 .help("print the length of the longest line"),
         )
         .arg(
-            Arg::with_name(OPT_WORDS)
+            Arg::with_name(options::WORDS)
                 .short("w")
-                .long(OPT_WORDS)
+                .long(options::WORDS)
                 .help("print the word counts"),
         )
         .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true))
