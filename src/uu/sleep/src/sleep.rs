@@ -11,55 +11,50 @@ extern crate uucore;
 use std::thread;
 use std::time::Duration;
 
-static NAME: &str = "sleep";
+use clap::{App, Arg};
+
 static VERSION: &str = env!("CARGO_PKG_VERSION");
-
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
-
-    let mut opts = getopts::Options::new();
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => {
-            show_error!("{}", f);
-            return 1;
-        }
-    };
-
-    if matches.opt_present("help") {
-        let msg = format!(
-            "{0} {1}
-
-Usage:
-  {0} NUMBER[SUFFIX]
-or
-  {0} OPTION
-
-Pause for NUMBER seconds.  SUFFIX may be 's' for seconds (the default),
+static ABOUT: &str = "Pause for NUMBER seconds.";
+static LONG_HELP: &str = "Pause for NUMBER seconds.  SUFFIX may be 's' for seconds (the default),
 'm' for minutes, 'h' for hours or 'd' for days.  Unlike most implementations
 that require NUMBER be an integer, here NUMBER may be an arbitrary floating
 point number.  Given two or more arguments, pause for the amount of time
-specified by the sum of their values.",
-            NAME, VERSION
-        );
-        print!("{}", opts.usage(&msg));
-    } else if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-    } else if matches.free.is_empty() {
-        show_error!("missing an argument");
-        show_error!("for help, try '{0} --help'", NAME);
-        return 1;
-    } else {
-        sleep(matches.free);
-    }
+specified by the sum of their values.";
 
+mod options {
+    pub const NUMBER: &str = "NUMBER";
+}
+
+fn get_usage() -> String {
+    format!("{0} [NUMBER]<SUFFIX> \n  or\n    {0} [OPTION]", executable!())
+}
+
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let usage = get_usage();
+
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .after_help(LONG_HELP)
+        .arg(
+            Arg::with_name(options::NUMBER)
+                .long(options::NUMBER)
+                .help("pause for NUMBER seconds")
+                .value_name("DURATION")
+                .index(1)
+                .multiple(true)
+        ).get_matches_from(args);
+    
+    if let Some(values) = matches.values_of(options::NUMBER) {
+        let numbers = values.collect();
+        sleep(numbers);
+    }
+    
     0
 }
 
-fn sleep(args: Vec<String>) {
+fn sleep(args: Vec<&str>) {
     let sleep_dur =
         args.iter().fold(
             Duration::new(0, 0),
