@@ -298,6 +298,7 @@ fn remove_dir(path: &Path, options: &Options) -> bool {
     } else {
         true
     };
+
     if response {
         match fs::remove_dir(path) {
             Ok(_) => {
@@ -306,7 +307,18 @@ fn remove_dir(path: &Path, options: &Options) -> bool {
                 }
             }
             Err(e) => {
-                show_error!("removing '{}': {}", path.display(), e);
+                match e.raw_os_error() {
+                    Some(39) => {
+                        let description = format!("removing '{}'", path.display());
+                        let error_message = "Directory not empty";
+
+                        show_error_custom_description!(description, "{}", error_message);
+                    }
+                    _ => {
+                        show_error!("removing '{}': {}", path.display(), e);
+                    }
+                };
+
                 return true;
             }
         }
