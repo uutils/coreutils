@@ -131,10 +131,7 @@ impl Uniq {
 
             // fast path: avoid skipping
             if self.ignore_case && slice_start == 0 && slice_stop == len {
-                return closure(&mut fields_to_check.chars().map(|c| match c {
-                    'a'..='z' => ((c as u8) - 32) as char,
-                    _ => c,
-                }));
+                return closure(&mut fields_to_check.chars().flat_map(|c| c.to_uppercase()));
             }
 
             // fast path: we can avoid mapping chars to upper-case, if we don't want to ignore the case
@@ -147,10 +144,7 @@ impl Uniq {
                     .chars()
                     .skip(slice_start)
                     .take(slice_stop)
-                    .map(|c| match c {
-                        'a'..='z' => ((c as u8) - 32) as char,
-                        _ => c,
-                    }),
+                    .flat_map(|c| c.to_uppercase()),
             )
         } else {
             closure(&mut fields_to_check.chars())
