@@ -1238,15 +1238,13 @@ fn copy_helper(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> 
             dest.into()
         };
         symlink_file(&link, &dest, &*context_for(&link, &dest))?;
+    } else if source.to_string_lossy() == "/dev/null" {
+        /* workaround a limitation of fs::copy
+         * https://github.com/rust-lang/rust/issues/79390
+         */
+        File::create(dest)?;
     } else {
-        if source.to_string_lossy() == "/dev/null" {
-            /* workaround a limitation of fs::copy
-             * https://github.com/rust-lang/rust/issues/79390
-             */
-            File::create(dest)?;
-        } else {
-            fs::copy(source, dest).context(&*context_for(source, dest))?;
-        }
+        fs::copy(source, dest).context(&*context_for(source, dest))?;
     }
 
     Ok(())

@@ -12,7 +12,6 @@ extern crate uucore;
 
 use clap::{App, Arg};
 use std::fs::{metadata, File, OpenOptions};
-use std::io::Result;
 use std::path::Path;
 
 #[derive(Eq, PartialEq)]
@@ -118,10 +117,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         if reference.is_none() && size.is_none() {
             crash!(1, "you must specify either --reference or --size");
         } else {
-            match truncate(no_create, io_blocks, reference, size, files) {
-                Ok(()) => ( /* pass */ ),
-                Err(_) => return 1,
-            }
+            truncate(no_create, io_blocks, reference, size, files);
         }
     }
 
@@ -134,7 +130,7 @@ fn truncate(
     reference: Option<String>,
     size: Option<String>,
     filenames: Vec<String>,
-) -> Result<()> {
+) {
     let (refsize, mode) = match reference {
         Some(rfilename) => {
             let _ = match File::open(Path::new(&rfilename)) {
@@ -193,7 +189,6 @@ fn truncate(
             Err(f) => crash!(1, "{}", f.to_string()),
         }
     }
-    Ok(())
 }
 
 fn parse_size(size: &str) -> (u64, TruncateMode) {

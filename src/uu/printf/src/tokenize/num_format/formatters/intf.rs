@@ -198,9 +198,10 @@ impl Formatter for Intf {
         // We always will have a format primitive to return
         Some(if convert_hints.len_digits == 0 || convert_hints.is_zero {
             // if non-digit or end is reached before a non-zero digit
-            let mut fmt_prim: FormatPrimitive = Default::default();
-            fmt_prim.pre_decimal = Some(String::from("0"));
-            fmt_prim
+            FormatPrimitive {
+                pre_decimal: Some(String::from("0")),
+                ..Default::default()
+            }
         } else if !convert_hints.past_max {
             // if the number is or may be below the bounds limit
             let radix_out = match *field.field_char {
