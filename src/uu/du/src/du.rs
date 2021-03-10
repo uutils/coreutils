@@ -51,7 +51,6 @@ struct Stat {
     is_dir: bool,
     size: u64,
     blocks: u64,
-    #[cfg(not(windows))]
     inode: u64,
     created: u64,
     accessed: u64,
@@ -79,6 +78,8 @@ impl Stat {
 
             #[cfg(windows)]
             blocks: (metadata.len() + 512 - 1) / 512, // round up
+            #[cfg(windows)]
+            inode: 0,
             #[cfg(windows)]
             created: windows_time_to_unix_time(metadata.creation_time()),
             #[cfg(windows)]
@@ -190,8 +191,8 @@ fn du(
                         if this_stat.is_dir {
                             futures.push(du(this_stat, options, depth + 1, inodes));
                         } else {
-                            #[cfg(not(windows))]
                             if inodes.contains(&this_stat.inode) {
+                                #[cfg(not(windows))]
                                 continue;
                             }
                             #[cfg(not(windows))]
