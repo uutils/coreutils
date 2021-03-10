@@ -58,33 +58,31 @@ struct Stat {
 }
 
 impl Stat {
+    #[cfg(not(windows))]
     fn new(path: PathBuf) -> Result<Stat> {
         let metadata = fs::symlink_metadata(&path)?;
         Ok(Stat {
             path,
             is_dir: metadata.is_dir(),
             size: metadata.len(),
-
-            #[cfg(not(windows))]
             blocks: metadata.blocks() as u64,
-            #[cfg(not(windows))]
             inode: metadata.ino() as u64,
-            #[cfg(not(windows))]
             created: metadata.mtime() as u64,
-            #[cfg(not(windows))]
             accessed: metadata.atime() as u64,
-            #[cfg(not(windows))]
             modified: metadata.mtime() as u64,
-
-            #[cfg(windows)]
+        })
+    }
+    #[cfg(windows)]
+    fn new(path: PathBuf) -> Result<Stat> {
+        let metadata = fs::symlink_metadata(&path)?;
+        Ok(Stat {
+            path,
+            is_dir: metadata.is_dir(),
+            size: metadata.len(),
             blocks: (metadata.len() + 512 - 1) / 512, // round up
-            #[cfg(windows)]
             inode: 0,
-            #[cfg(windows)]
             created: windows_time_to_unix_time(metadata.creation_time()),
-            #[cfg(windows)]
             accessed: windows_time_to_unix_time(metadata.last_access_time()),
-            #[cfg(windows)]
             modified: windows_time_to_unix_time(metadata.last_write_time()),
         })
     }
