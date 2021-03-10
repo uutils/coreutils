@@ -12,7 +12,7 @@ extern crate uucore;
 
 use clap::{App, Arg};
 use std::fs::File;
-use std::io::{stdin, BufRead, BufReader, Read};
+use std::io::{stdin, BufRead, BufReader, Stdin};
 use std::iter::repeat;
 use std::path::Path;
 
@@ -24,6 +24,29 @@ mod options {
     pub const DELIMITER: &str = "delimiters";
     pub const SERIAL: &str = "serial";
     pub const FILE: &str = "file";
+}
+
+// We need this trait to wrap both BufReader and Stdin. We need
+// `read_line` function only, but Stdin does not provide BufRead
+// unless lock function is called, which prevents us from using stdin
+// multiple times
+trait ReadLine {
+    fn read_line(&mut self, buf: &mut String) -> std::io::Result<usize>;
+}
+
+struct StdinReadLine(Stdin);
+struct BufReadReadLine<R: BufRead>(R);
+
+impl ReadLine for StdinReadLine {
+    fn read_line(&mut self, buf: &mut String) -> std::io::Result<usize> {
+        return self.0.read_line(buf);
+    }
+}
+
+impl<R: BufRead> ReadLine for BufReadReadLine<R> {
+    fn read_line(&mut self, buf: &mut String) -> std::io::Result<usize> {
+        return self.0.read_line(buf);
+    }
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
@@ -49,7 +72,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(options::FILE)
                 .value_name("FILE")
                 .multiple(true)
-                .required(true),
+                .default_value("-"),
         )
         .get_matches_from(args);
 
@@ -66,15 +89,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 fn paste(filenames: Vec<String>, serial: bool, delimiters: String) {
-    let mut files: Vec<BufReader<Box<dyn Read>>> = filenames
+    let mut files: Vec<Box<dyn ReadLine>> = filenames
         .into_iter()
         .map(|name| {
-            BufReader::new(if name == "-" {
-                Box::new(stdin()) as Box<dyn Read>
+            if name == "-" {
+                Box::new(StdinReadLine(stdin())) as Box<dyn ReadLine>
             } else {
                 let r = crash_if_err!(1, File::open(Path::new(&name)));
-                Box::new(r) as Box<dyn Read>
-            })
+                Box::new(BufReadReadLine(BufReader::new(r))) as Box<dyn ReadLine>
+            }
         })
         .collect();
 
