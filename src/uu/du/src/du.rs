@@ -58,10 +58,11 @@ struct Stat {
 }
 
 impl Stat {
-    #[cfg(not(windows))]
+    
     fn new(path: PathBuf) -> Result<Stat> {
         let metadata = fs::symlink_metadata(&path)?;
-        Ok(Stat {
+        #[cfg(not(windows))]
+        return Ok(Stat {
             path,
             is_dir: metadata.is_dir(),
             size: metadata.len(),
@@ -70,11 +71,8 @@ impl Stat {
             created: metadata.mtime() as u64,
             accessed: metadata.atime() as u64,
             modified: metadata.mtime() as u64,
-        })
-    }
-    #[cfg(windows)]
-    fn new(path: PathBuf) -> Result<Stat> {
-        let metadata = fs::symlink_metadata(&path)?;
+        });
+        #[cfg(windows)]
         Ok(Stat {
             path,
             is_dir: metadata.is_dir(),
