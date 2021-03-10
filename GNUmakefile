@@ -41,7 +41,7 @@ PKG_BUILDDIR  := $(BUILDDIR)/deps
 DOCSDIR       := $(BASEDIR)/docs
 
 BUSYBOX_ROOT := $(BASEDIR)/tmp
-BUSYBOX_VER  := 1.24.1
+BUSYBOX_VER  := 1.32.1
 BUSYBOX_SRC  := $(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER)
 
 # Possible programs
@@ -228,7 +228,7 @@ endif
 
 define TEST_BUSYBOX
 test_busybox_$(1):
-	(cd $(BUSYBOX_SRC)/testsuite && bindir=$(BUILDDIR) ./runtest $(RUNTEST_ARGS) $(1) )
+	-(cd $(BUSYBOX_SRC)/testsuite && bindir=$(BUILDDIR) ./runtest $(RUNTEST_ARGS) $(1))
 endef
 
 # Output names
@@ -276,7 +276,7 @@ $(BUILDDIR)/.config: $(BASEDIR)/.busybox-config
 
 # Test under the busybox testsuite
 $(BUILDDIR)/busybox: busybox-src build-uutils $(BUILDDIR)/.config
-	cp $(BUILDDIR)/uutils $(BUILDDIR)/busybox; \
+	cp $(BUILDDIR)/coreutils $(BUILDDIR)/busybox; \
 	chmod +x $@;
 
 ifeq ($(EXES),)
