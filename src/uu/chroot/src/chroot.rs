@@ -10,50 +10,68 @@
 
 #[macro_use]
 extern crate uucore;
-use uucore::entries;
-use uucore::libc::{self, chroot, setgid, setgroups, setuid};
-
+use clap::{App, Arg};
 use std::ffi::CString;
 use std::io::Error;
 use std::path::Path;
 use std::process::Command;
+use uucore::entries;
+use uucore::libc::{self, chroot, setgid, setgroups, setuid};
 
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 static NAME: &str = "chroot";
+static ABOUT: &str = "Run COMMAND with root directory set to NEWROOT.";
 static SYNTAX: &str = "[OPTION]... NEWROOT [COMMAND [ARG]...]";
-static SUMMARY: &str = "Run COMMAND with root directory set to NEWROOT.";
-static LONG_HELP: &str = "
- If COMMAND is not specified, it defaults to '$(SHELL) -i'.
- If $(SHELL) is not set, /bin/sh is used.
-";
+// static SUMMARY: &str = "Run COMMAND with root directory set to NEWROOT.";
+// static LONG_HELP: &str = "
+//  If COMMAND is not specified, it defaults to '$(SHELL) -i'.
+//  If $(SHELL) is not set, /bin/sh is used.
+// ";
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args.collect_str();
 
-    let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
-        .optopt(
-            "u",
-            "user",
-            "User (ID or name) to switch before running the program",
-            "USER",
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(SYNTAX)
+        // .help(SUMMARY)
+        // .after_help(LONG_HELP)
+        .arg(Arg::with_name("newroot").hidden(true))
+        .arg(
+            Arg::with_name("user")
+                .short("u")
+                .long("user")
+                .help("User (ID or name) to switch before running the program")
+                .value_name("USER"),
         )
-        .optopt("g", "group", "Group (ID or name) to switch to", "GROUP")
-        .optopt(
-            "G",
-            "groups",
-            "Comma-separated list of groups to switch to",
-            "GROUP1,GROUP2...",
+        .arg(
+            Arg::with_name("group")
+                .short("g")
+                .long("group")
+                .help("Group (ID or name) to switch to")
+                .value_name("GROUP"),
         )
-        .optopt(
-            "",
-            "userspec",
-            "Colon-separated user and group to switch to. \
+        .arg(
+            Arg::with_name("groups")
+                .short("G")
+                .long("groups")
+                .help("Comma-separated list of groups to switch to")
+                .value_name("GROUP1,GROUP2..."),
+        )
+        .arg(
+            Arg::with_name("userspec")
+                .long("userspec")
+                .help(
+                    "Colon-separated user and group to switch to. \
              Same as -u USER -g GROUP. \
              Userspec has higher preference than -u and/or -g",
-            "USER:GROUP",
+                )
+                .value_name("USER:GROUP"),
         )
-        .parse(args);
+        .get_matches_from(args);
 
-    if matches.free.is_empty() {
+    if matches.args.is_empty() {
         println!("Missing operand: NEWROOT");
         println!("Try `{} --help` for more information.", NAME);
         return 1;
@@ -62,8 +80,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let default_shell: &'static str = "/bin/sh";
     let default_option: &'static str = "-i";
     let user_shell = std::env::var("SHELL");
+    println!("{:?}", matches);
 
-    let newroot = Path::new(&matches.free[0][..]);
+    let newroot: &Path = match matches.value_of("newroot") {
+        Some(v) => Path::new(v),
+        None => crash!(1, "chroot: missing operand"),
+    };
+
     if !newroot.is_dir() {
         crash!(
             1,
@@ -72,7 +95,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         );
     }
 
-    let command: Vec<&str> = match matches.free.len() {
+    let command: Vec<&str> = match matches.args.len() {
         1 => {
             let shell: &str = match user_shell {
                 Err(_) => default_shell,
@@ -80,7 +103,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             };
             vec![shell, default_option]
         }
-        _ => matches.free[1..].iter().map(|x| &x[..]).collect(),
+        _ => {
+            let mut vector: Vec<&str> = Vec::new();
+            for (&k, v) in matches.args.iter() {
+                vector.push(k.clone());
+                vector.push(&v.vals[0].to_str().unwrap());
+            }
+            vector
+        }
     };
 
     set_context(&newroot, &matches);
@@ -97,11 +127,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 }
 
-fn set_context(root: &Path, options: &getopts::Matches) {
-    let userspec_str = options.opt_str("userspec");
-    let user_str = options.opt_str("user").unwrap_or_default();
-    let group_str = options.opt_str("group").unwrap_or_default();
-    let groups_str = options.opt_str("groups").unwrap_or_default();
+fn set_context(root: &Path, options: &clap::ArgMatches) {
+    let userspec_str = options.value_of("userspec");
+    let user_str = options.value_of("user").unwrap_or_default();
+    let group_str = options.value_of("group").unwrap_or_default();
+    let groups_str = options.value_of("groups").unwrap_or_default();
     let userspec = match userspec_str {
         Some(ref u) => {
             let s: Vec<&str> = u.split(':').collect();

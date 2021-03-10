@@ -1,23 +1,23 @@
 [package]
+authors = ["uutils developers"]
+description = "chroot ~ (uutils) run COMMAND under a new root directory"
+license = "MIT"
 name = "uu_chroot"
 version = "0.0.4"
-authors = ["uutils developers"]
-license = "MIT"
-description = "chroot ~ (uutils) run COMMAND under a new root directory"
 
-homepage = "https://github.com/uutils/coreutils"
-repository = "https://github.com/uutils/coreutils/tree/master/src/uu/chroot"
-keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
 categories = ["command-line-utilities"]
 edition = "2018"
+homepage = "https://github.com/uutils/coreutils"
+keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/chroot"
 
 [lib]
 path = "src/chroot.rs"
 
 [dependencies]
-getopts = "0.2.18"
-uucore = { version=">=0.0.7", package="uucore", path="../../uucore", features=["entries"] }
-uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
+clap = "2.33"
+uucore = {version = ">=0.0.7", package = "uucore", path = "../../uucore", features = ["entries"]}
+uucore_procs = {version = ">=0.0.5", package = "uucore_procs", path = "../../uucore_procs"}
 
 [[bin]]
 name = "chroot"
