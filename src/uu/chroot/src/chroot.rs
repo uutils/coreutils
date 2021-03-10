@@ -73,7 +73,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let default_shell: &'static str = "/bin/sh";
     let default_option: &'static str = "-i";
     let user_shell = std::env::var("SHELL");
-    println!("{:?}", matches);
 
     let newroot: &Path = match matches.value_of("newroot") {
         Some(v) => Path::new(v),
