@@ -307,17 +307,14 @@ fn remove_dir(path: &Path, options: &Options) -> bool {
                 }
             }
             Err(e) => {
-                match e.raw_os_error() {
-                    Some(39) => {
-                        let description = format!("cannot remove '{}'", path.display());
-                        let error_message = "Directory not empty";
+                if e.to_string().starts_with("Directory not empty") {
+                    let description = format!("cannot remove '{}'", path.display());
+                    let error_message = "Directory not empty";
 
-                        show_error_custom_description!(description, "{}", error_message);
-                    }
-                    _ => {
-                        show_error!("removing '{}': {}", path.display(), e);
-                    }
-                };
+                    show_error_custom_description!(description, "{}", error_message);
+                } else {
+                    show_error!("removing '{}': {}", path.display(), e);
+                }
 
                 return true;
             }
