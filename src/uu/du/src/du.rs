@@ -15,7 +15,10 @@ use std::env;
 use std::fs;
 use std::io::{stderr, Result, Write};
 use std::iter;
+#[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
+#[cfg(windows)]
+use std::os::windows::fs::MetadataExt;
 use std::path::PathBuf;
 use time::Timespec;
 
@@ -48,6 +51,7 @@ struct Stat {
     is_dir: bool,
     size: u64,
     blocks: u64,
+    #[cfg(not(windows))]
     inode: u64,
     created: u64,
     accessed: u64,
@@ -61,13 +65,35 @@ impl Stat {
             path,
             is_dir: metadata.is_dir(),
             size: metadata.len(),
+
+            #[cfg(not(windows))]
             blocks: metadata.blocks() as u64,
+            #[cfg(not(windows))]
             inode: metadata.ino() as u64,
+            #[cfg(not(windows))]
             created: metadata.mtime() as u64,
+            #[cfg(not(windows))]
             accessed: metadata.atime() as u64,
+            #[cfg(not(windows))]
             modified: metadata.mtime() as u64,
+
+            #[cfg(windows)]
+            blocks: (metadata.len() + 512 - 1) / 512, // round up
+            #[cfg(windows)]
+            created: windows_time_to_unix_time(metadata.creation_time()),
+            #[cfg(windows)]
+            accessed: windows_time_to_unix_time(metadata.last_access_time()),
+            #[cfg(windows)]
+            modified: windows_time_to_unix_time(metadata.last_write_time()),
         })
     }
+}
+
+#[cfg(windows)]
+// https://doc.rust-lang.org/std/os/windows/fs/trait.MetadataExt.html#tymethod.creation_time
+// "The returned 64-bit value [...] which represents the number of 100-nanosecond intervals since January 1, 1601 (UTC)."
+fn windows_time_to_unix_time(win_time: u64) -> u64 {
+    win_time / 10_000 - 11_644_473_600_000
 }
 
 fn unit_string_to_number(s: &str) -> Option<u64> {
@@ -164,9 +190,11 @@ fn du(
                         if this_stat.is_dir {
                             futures.push(du(this_stat, options, depth + 1, inodes));
                         } else {
+                            #[cfg(not(windows))]
                             if inodes.contains(&this_stat.inode) {
                                 continue;
                             }
+                            #[cfg(not(windows))]
                             inodes.insert(this_stat.inode);
                             my_stat.size += this_stat.size;
                             my_stat.blocks += this_stat.blocks;
