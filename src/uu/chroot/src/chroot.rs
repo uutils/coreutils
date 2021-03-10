@@ -22,11 +22,6 @@ static VERSION: &str = env!("CARGO_PKG_VERSION");
 static NAME: &str = "chroot";
 static ABOUT: &str = "Run COMMAND with root directory set to NEWROOT.";
 static SYNTAX: &str = "[OPTION]... NEWROOT [COMMAND [ARG]...]";
-// static SUMMARY: &str = "Run COMMAND with root directory set to NEWROOT.";
-// static LONG_HELP: &str = "
-//  If COMMAND is not specified, it defaults to '$(SHELL) -i'.
-//  If $(SHELL) is not set, /bin/sh is used.
-// ";
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args.collect_str();
@@ -35,8 +30,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .version(VERSION)
         .about(ABOUT)
         .usage(SYNTAX)
-        // .help(SUMMARY)
-        // .after_help(LONG_HELP)
         .arg(Arg::with_name("newroot").hidden(true))
         .arg(
             Arg::with_name("user")
