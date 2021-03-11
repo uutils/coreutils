@@ -307,7 +307,9 @@ fn remove_dir(path: &Path, options: &Options) -> bool {
                 }
             }
             Err(e) => {
-                if e.to_string().starts_with("Directory not empty") || (cfg!(windows) && e.to_string().starts_with("The directory is not empty")) {
+                if e.to_string().starts_with("Directory not empty")
+                    || (cfg!(windows) && e.to_string().starts_with("The directory is not empty"))
+                {
                     let description = format!("cannot remove '{}'", path.display());
                     let error_message = "Directory not empty";
 
