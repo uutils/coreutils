@@ -12,16 +12,20 @@
 #[macro_use]
 extern crate uucore;
 
+use chrono::{DateTime, FixedOffset, Local, Offset, Utc};
+#[cfg(windows)]
+use chrono::{Datelike, Timelike};
 use clap::{App, Arg};
-
-use chrono::{Datelike, Timelike, Utc, DateTime, FixedOffset, Local, Offset};
+#[cfg(unix)]
+use libc::{clock_settime, timespec, CLOCK_REALTIME};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-#[cfg(unix)]
-use libc::{clock_settime, timespec, CLOCK_REALTIME};
 #[cfg(windows)]
-use winapi::{shared::minwindef::WORD, um::{sysinfoapi::SetSystemTime, minwinbase::SYSTEMTIME}};
+use winapi::{
+    shared::minwindef::WORD,
+    um::{minwinbase::SYSTEMTIME, sysinfoapi::SetSystemTime},
+};
 
 // Options
 const DATE: &str = "date";
