@@ -509,7 +509,13 @@ fn test_cp_parents() {
 
     assert!(result.success);
     // Check the content of the destination file that was copied.
-    assert_eq!(at.read(&format!("{}/{}", TEST_COPY_TO_FOLDER, TEST_COPY_FROM_FOLDER_FILE)), "Hello, World!\n");
+    assert_eq!(
+        at.read(&format!(
+            "{}/{}",
+            TEST_COPY_TO_FOLDER, TEST_COPY_FROM_FOLDER_FILE
+        )),
+        "Hello, World!\n"
+    );
 }
 
 #[test]
@@ -525,9 +531,10 @@ fn test_cp_parents_dest_not_directory() {
 
     // Check that we did not succeed in copying.
     assert!(!result.success);
-    assert!(result.stderr.contains("with --parents, the destination must be a directory"));
+    assert!(result
+        .stderr
+        .contains("with --parents, the destination must be a directory"));
 }
-
 
 #[test]
 // For now, disable the test on Windows. Symlinks aren't well support on Windows.
