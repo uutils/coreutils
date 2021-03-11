@@ -16,7 +16,7 @@ use chrono::{DateTime, FixedOffset, Local, Offset, Utc};
 #[cfg(windows)]
 use chrono::{Datelike, Timelike};
 use clap::{App, Arg};
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 use libc::{clock_settime, timespec, CLOCK_REALTIME};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -139,7 +139,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
  {0} [OPTION]... [MMDDhhmm[[CC]YY][.ss]]",
         NAME
     );
-    let matches = App::new(executable!())
+    let app = App::new(executable!())
         .version(VERSION)
         .about(ABOUT)
         .usage(&syntax[..])
@@ -189,21 +189,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("display the last modification time of FILE"),
         )
         .arg(
-            Arg::with_name(OPT_SET)
-                .short("s")
-                .long(OPT_SET)
-                .takes_value(true)
-                .help("set time described by STRING"),
-        )
-        .arg(
             Arg::with_name(OPT_UNIVERSAL)
                 .short("u")
                 .long(OPT_UNIVERSAL)
                 .alias(OPT_UNIVERSAL_2)
                 .help("print or set Coordinated Universal Time (UTC)"),
         )
-        .arg(Arg::with_name(OPT_FORMAT).multiple(true))
-        .get_matches_from(args);
+        .arg(Arg::with_name(OPT_FORMAT).multiple(true));
+
+    let matches = make_platform_app(app).get_matches_from(args);
 
     let format = if let Some(form) = matches.value_of(OPT_FORMAT) {
         let form = form[1..].into();
@@ -229,6 +223,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         DateSource::Now
     };
 
+    #[cfg(any(windows, all(unix, not(target_os = "macos"))))]
     let set_to = match matches.value_of(OPT_SET).map(parse_date) {
         None => None,
         Some(Err((input, _err))) => {
@@ -237,6 +232,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
         Some(Ok(date)) => Some(date),
     };
+
+    #[cfg(not(any(windows, all(unix, not(target_os = "macos")))))]
+    let set_to = None;
 
     let settings = Settings {
         utc: matches.is_present(OPT_UNIVERSAL),
@@ -305,6 +303,23 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     0
 }
 
+#[cfg(any(windows, all(unix, not(target_os = "macos"))))]
+/// Apply platform specific matcher arguments to the app given.
+fn make_platform_app<'a, 'b>(app: App<'a, 'b>) -> App<'a, 'b> {
+    app.arg(
+        Arg::with_name(OPT_SET)
+            .short("s")
+            .long(OPT_SET)
+            .takes_value(true)
+            .help("set time described by STRING"),
+    )
+}
+
+#[cfg(not(any(windows, all(unix, not(target_os = "macos")))))]
+fn make_platform_app<'a, 'b>(app: App<'a, 'b>) -> App<'a, 'b> {
+    app
+}
+
 /// Return the appropriate format string for the given settings.
 fn make_format_string(settings: &Settings) -> &str {
     match settings.format {
@@ -347,7 +362,7 @@ fn set_system_datetime(_date: DateTime<Utc>) -> i32 {
     unimplemented!("setting date not implemented (unsupported target)");
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 /// System call to set date (unix).
 /// See here for more:
 /// https://doc.rust-lang.org/libc/i686-unknown-linux-gnu/libc/fn.clock_settime.html
