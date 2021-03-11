@@ -227,7 +227,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let set_to = match matches.value_of(OPT_SET).map(parse_date) {
         None => None,
         Some(Err((input, _err))) => {
-            eprintln!("date: invalid date to set to (parsing error): '{}'", input);
+            eprintln!("date: invalid date '{}'", input);
             return 1;
         }
         Some(Ok(date)) => Some(date),
@@ -353,7 +353,7 @@ fn parse_date<S: AsRef<str> + Clone>(
 /// Displays the errno string to stderr and returns the error code.
 fn get_errno() -> i32 {
     let error = std::io::Error::last_os_error();
-    eprintln!("date: system error: {}", error);
+    eprintln!("date: cannot set date: {}", error);
     error.raw_os_error().unwrap()
 }
 
