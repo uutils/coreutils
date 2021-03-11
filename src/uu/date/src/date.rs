@@ -14,15 +14,14 @@ extern crate uucore;
 
 use clap::{App, Arg};
 
-use chrono::offset::Utc;
-use chrono::{DateTime, FixedOffset, Local, Offset};
+use chrono::{Datelike, Timelike, Utc, DateTime, FixedOffset, Local, Offset};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 #[cfg(unix)]
-use uucore::libc::{clock_settime, timespec, CLOCK_REALTIME};
+use libc::{clock_settime, timespec, CLOCK_REALTIME};
 #[cfg(windows)]
-use uucore::winapi::um::{sysinfoapi::SetSystemTime, minwinbase::SYSTEMTIME, minwindef::WORD};
+use winapi::{shared::minwindef::WORD, um::{sysinfoapi::SetSystemTime, minwinbase::SYSTEMTIME}};
 
 // Options
 const DATE: &str = "date";
@@ -384,7 +383,7 @@ fn set_system_datetime(date: DateTime<Utc>) -> i32 {
         wMilliseconds: ((date.nanosecond() / 1_000_000) % 1000) as WORD,
     };
 
-    let _result = unsafe { SetSystemTime(&system_time) };
+    let result = unsafe { SetSystemTime(&system_time) };
 
     if result == 0 {
         get_errno()
