@@ -21,8 +21,8 @@ use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 #[cfg(unix)]
 use uucore::libc::{clock_settime, timespec, CLOCK_REALTIME};
-// #[cfg(windows)]
-// use winapi::um::{sysinfoapi::SetSystemTime, minwinbase::SYSTEMTIME, minwindef::WORD};
+#[cfg(windows)]
+use uucore::winapi::um::{sysinfoapi::SetSystemTime, minwinbase::SYSTEMTIME, minwindef::WORD};
 
 // Options
 const DATE: &str = "date";
