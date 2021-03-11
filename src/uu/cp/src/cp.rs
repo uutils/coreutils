@@ -249,6 +249,7 @@ static OPT_NO_DEREFERENCE_PRESERVE_LINKS: &str = "no-dereference-preserve-linkgs
 static OPT_NO_PRESERVE: &str = "no-preserve";
 static OPT_NO_TARGET_DIRECTORY: &str = "no-target-directory";
 static OPT_ONE_FILE_SYSTEM: &str = "one-file-system";
+static OPT_PARENT: &str = "parent";
 static OPT_PARENTS: &str = "parents";
 static OPT_PATHS: &str = "paths";
 static OPT_PRESERVE: &str = "preserve";
@@ -409,6 +410,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
              .help("don't preserve the specified attributes"))
         .arg(Arg::with_name(OPT_PARENTS)
             .long(OPT_PARENTS)
+            .alias(OPT_PARENT)
             .help("use full source file name under DIRECTORY"))
         .arg(Arg::with_name(OPT_NO_DEREFERENCE)
              .short("-P")
