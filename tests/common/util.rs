@@ -261,7 +261,10 @@ impl AtPath {
     }
 
     pub fn write(&self, name: &str, contents: &str) {
-        let mut f = self.open(name);
+        let mut f = OpenOptions::new()
+            .write(true)
+            .open(self.plus(name))
+            .unwrap();
         let _ = f.write(contents.as_bytes());
     }
 
