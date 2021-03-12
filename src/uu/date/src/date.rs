@@ -369,6 +369,8 @@ fn set_system_datetime(_date: DateTime<Utc>) -> i32 {
 /// https://linux.die.net/man/3/clock_settime
 /// https://www.gnu.org/software/libc/manual/html_node/Time-Types.html
 fn set_system_datetime(date: DateTime<Utc>) -> i32 {
+    use std::convert::TryInto;
+    
     let timespec = timespec {
         tv_sec: date.timestamp().try_into().expect("Timestamp overflow (Y2038 problem)"),
         tv_nsec: date.timestamp_subsec_nanos() as _,
