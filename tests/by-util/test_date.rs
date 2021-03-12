@@ -2,6 +2,7 @@ extern crate regex;
 
 use self::regex::Regex;
 use crate::common::util::*;
+use rust_users::*;
 
 #[test]
 fn test_date_email() {
@@ -144,8 +145,10 @@ fn test_date_set_invalid() {
 #[test]
 #[cfg(any(windows, all(unix, not(target_os = "macos"))))]
 fn test_date_set_permissions_error() {
-    let (_, mut ucmd) = at_and_ucmd!();
-    let result = ucmd.arg("--set").arg("2020-03-11 21:45:00+08:00").fails();
-    let result = result.no_stdout();
-    assert!(result.stderr.starts_with("date: cannot set date: "));
+    if !(get_effective_uid() == 0 || is_wsl()) {
+        let (_, mut ucmd) = at_and_ucmd!();
+        let result = ucmd.arg("--set").arg("2020-03-11 21:45:00+08:00").fails();
+        let result = result.no_stdout();
+        assert!(result.stderr.starts_with("date: cannot set date: "));
+    }
 }
