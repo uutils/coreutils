@@ -261,6 +261,7 @@ impl AtPath {
     }
 
     pub fn write(&self, name: &str, contents: &str) {
+        log_info("open(write)", self.plus_as_string(name));
         let _ = std::fs::write(self.plus(name), contents);
     }
 
