@@ -140,7 +140,7 @@ fn test_date_set_valid() {
     if get_effective_uid() == 0 {
         let (_, mut ucmd) = at_and_ucmd!();
         let result = ucmd.arg("--set").arg("2020-03-12 13:30:00+08:00").succeeds();
-        let result = result.no_stdout().no_stderr();
+        result.no_stdout().no_stderr();
     }
 }
 
