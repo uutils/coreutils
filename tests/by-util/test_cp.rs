@@ -519,6 +519,34 @@ fn test_cp_parents() {
 }
 
 #[test]
+fn test_cp_parents_multiple_files() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let result = ucmd
+        .arg("--parents")
+        .arg(TEST_COPY_FROM_FOLDER_FILE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .arg(TEST_COPY_TO_FOLDER)
+        .run();
+
+    assert!(result.success);
+    assert_eq!(
+        at.read(&format!(
+            "{}/{}",
+            TEST_COPY_TO_FOLDER, TEST_COPY_FROM_FOLDER_FILE
+        )),
+        "Hello, World!\n"
+    );
+    assert_eq!(
+        at.read(&format!(
+            "{}/{}",
+            TEST_COPY_TO_FOLDER, TEST_HOW_ARE_YOU_SOURCE
+        )),
+        "How are you?\n"
+    );
+}
+
+#[test]
 fn test_cp_parents_dest_not_directory() {
     let (_, mut ucmd) = at_and_ucmd!();
 
