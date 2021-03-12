@@ -262,11 +262,7 @@ impl AtPath {
 
     pub fn write(&self, name: &str, contents: &str) {
         log_info("open(write)", self.plus_as_string(name));
-        let mut f = OpenOptions::new()
-            .write(true)
-            .open(self.plus(name))
-            .unwrap();
-        let _ = f.write(contents.as_bytes());
+        let _ = std::fs::write(self.plus(name), contents);
     }
 
     pub fn append(&self, name: &str, contents: &str) {

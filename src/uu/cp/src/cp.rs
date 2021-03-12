@@ -249,6 +249,7 @@ static OPT_NO_DEREFERENCE_PRESERVE_LINKS: &str = "no-dereference-preserve-linkgs
 static OPT_NO_PRESERVE: &str = "no-preserve";
 static OPT_NO_TARGET_DIRECTORY: &str = "no-target-directory";
 static OPT_ONE_FILE_SYSTEM: &str = "one-file-system";
+static OPT_PARENT: &str = "parent";
 static OPT_PARENTS: &str = "parents";
 static OPT_PATHS: &str = "paths";
 static OPT_PRESERVE: &str = "preserve";
@@ -407,6 +408,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
              .value_name("ATTR_LIST")
              .conflicts_with_all(&[OPT_PRESERVE_DEFAULT_ATTRIBUTES, OPT_PRESERVE, OPT_ARCHIVE])
              .help("don't preserve the specified attributes"))
+        .arg(Arg::with_name(OPT_PARENTS)
+            .long(OPT_PARENTS)
+            .alias(OPT_PARENT)
+            .help("use full source file name under DIRECTORY"))
         .arg(Arg::with_name(OPT_NO_DEREFERENCE)
              .short("-P")
              .long(OPT_NO_DEREFERENCE)
@@ -432,9 +437,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
              .long(OPT_COPY_CONTENTS)
              .conflicts_with(OPT_ATTRIBUTES_ONLY)
              .help("NotImplemented: copy contents of special files when recursive"))
-        .arg(Arg::with_name(OPT_PARENTS)
-             .long(OPT_PARENTS)
-             .help("NotImplemented: use full source file name under DIRECTORY"))
         .arg(Arg::with_name(OPT_SPARSE)
              .long(OPT_SPARSE)
              .takes_value(true)
@@ -560,7 +562,6 @@ impl Options {
     fn from_matches(matches: &ArgMatches) -> CopyResult<Options> {
         let not_implemented_opts = vec![
             OPT_COPY_CONTENTS,
-            OPT_PARENTS,
             OPT_SPARSE,
             OPT_ONE_FILE_SYSTEM,
             OPT_CONTEXT,
@@ -850,9 +851,17 @@ fn construct_dest_path(
         .into());
     }
 
+    if options.parents && !target.is_dir() {
+        return Err("with --parents, the destination must be a directory".into());
+    }
+
     Ok(match *target_type {
         TargetType::Directory => {
-            let root = source_path.parent().unwrap_or(source_path);
+            let root = if options.parents {
+                Path::new("")
+            } else {
+                source_path.parent().unwrap_or(source_path)
+            };
             localize_to_target(root, source_path, target)?
         }
         TargetType::File => target.to_path_buf(),
@@ -1244,6 +1253,10 @@ fn copy_helper(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> 
          */
         File::create(dest)?;
     } else {
+        if options.parents {
+            let parent = dest.parent().unwrap_or(dest);
+            fs::create_dir_all(parent)?;
+        }
         fs::copy(source, dest).context(&*context_for(source, dest))?;
     }
 

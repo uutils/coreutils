@@ -498,6 +498,73 @@ fn test_cp_strip_trailing_slashes() {
 }
 
 #[test]
+fn test_cp_parents() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let result = ucmd
+        .arg("--parents")
+        .arg(TEST_COPY_FROM_FOLDER_FILE)
+        .arg(TEST_COPY_TO_FOLDER)
+        .run();
+
+    assert!(result.success);
+    // Check the content of the destination file that was copied.
+    assert_eq!(
+        at.read(&format!(
+            "{}/{}",
+            TEST_COPY_TO_FOLDER, TEST_COPY_FROM_FOLDER_FILE
+        )),
+        "Hello, World!\n"
+    );
+}
+
+#[test]
+fn test_cp_parents_multiple_files() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let result = ucmd
+        .arg("--parents")
+        .arg(TEST_COPY_FROM_FOLDER_FILE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .arg(TEST_COPY_TO_FOLDER)
+        .run();
+
+    assert!(result.success);
+    assert_eq!(
+        at.read(&format!(
+            "{}/{}",
+            TEST_COPY_TO_FOLDER, TEST_COPY_FROM_FOLDER_FILE
+        )),
+        "Hello, World!\n"
+    );
+    assert_eq!(
+        at.read(&format!(
+            "{}/{}",
+            TEST_COPY_TO_FOLDER, TEST_HOW_ARE_YOU_SOURCE
+        )),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_parents_dest_not_directory() {
+    let (_, mut ucmd) = at_and_ucmd!();
+
+    let result = ucmd
+        .arg("--parents")
+        .arg(TEST_COPY_FROM_FOLDER_FILE)
+        .arg(TEST_HELLO_WORLD_DEST)
+        .run();
+    println!("{:?}", result);
+
+    // Check that we did not succeed in copying.
+    assert!(!result.success);
+    assert!(result
+        .stderr
+        .contains("with --parents, the destination must be a directory"));
+}
+
+#[test]
 // For now, disable the test on Windows. Symlinks aren't well support on Windows.
 // It works on Unix for now and it works locally when run from a powershell
 #[cfg(not(windows))]

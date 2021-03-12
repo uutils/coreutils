@@ -12,7 +12,7 @@ extern crate uucore;
 
 use clap::{App, Arg};
 use std::fs::File;
-use std::io::{stdin, BufRead, BufReader, Stdin};
+use std::io::{stdin, BufRead, BufReader, Read};
 use std::iter::repeat;
 use std::path::Path;
 
@@ -26,26 +26,14 @@ mod options {
     pub const FILE: &str = "file";
 }
 
-// We need this trait to wrap both BufReader and Stdin. We need
-// `read_line` function only, but Stdin does not provide BufRead
-// unless lock function is called, which prevents us from using stdin
-// multiple times
-trait ReadLine {
-    fn read_line(&mut self, buf: &mut String) -> std::io::Result<usize>;
-}
-
-struct StdinReadLine(Stdin);
-struct BufReadReadLine<R: BufRead>(R);
-
-impl ReadLine for StdinReadLine {
-    fn read_line(&mut self, buf: &mut String) -> std::io::Result<usize> {
-        return self.0.read_line(buf);
-    }
-}
-
-impl<R: BufRead> ReadLine for BufReadReadLine<R> {
-    fn read_line(&mut self, buf: &mut String) -> std::io::Result<usize> {
-        return self.0.read_line(buf);
+// Wraps BufReader and stdin
+fn read_line<R: Read>(
+    reader: Option<&mut BufReader<R>>,
+    buf: &mut String,
+) -> std::io::Result<usize> {
+    match reader {
+        Some(reader) => reader.read_line(buf),
+        None => stdin().read_line(buf),
     }
 }
 
@@ -89,14 +77,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 fn paste(filenames: Vec<String>, serial: bool, delimiters: String) {
-    let mut files: Vec<Box<dyn ReadLine>> = filenames
+    let mut files: Vec<_> = filenames
         .into_iter()
         .map(|name| {
             if name == "-" {
-                Box::new(StdinReadLine(stdin())) as Box<dyn ReadLine>
+                None
             } else {
                 let r = crash_if_err!(1, File::open(Path::new(&name)));
-                Box::new(BufReadReadLine(BufReader::new(r))) as Box<dyn ReadLine>
+                Some(BufReader::new(r))
             }
         })
         .collect();
@@ -112,7 +100,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: String) {
             let mut output = String::new();
             loop {
                 let mut line = String::new();
-                match file.read_line(&mut line) {
+                match read_line(file.as_mut(), &mut line) {
                     Ok(0) => break,
                     Ok(_) => {
                         output.push_str(line.trim_end());
@@ -134,7 +122,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: String) {
                     eof_count += 1;
                 } else {
                     let mut line = String::new();
-                    match file.read_line(&mut line) {
+                    match read_line(file.as_mut(), &mut line) {
                         Ok(0) => {
                             eof[i] = true;
                             eof_count += 1;
