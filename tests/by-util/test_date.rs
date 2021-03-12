@@ -131,3 +131,19 @@ fn test_date_format_full_day() {
     let re = Regex::new(r"\S+ \d{4}-\d{2}-\d{2}").unwrap();
     assert!(re.is_match(&result.stdout.trim()));
 }
+
+#[test]
+fn test_date_set_invalid() {
+    let (_, mut ucmd) = at_and_ucmd!();
+    let result = ucmd.arg("--set").arg("'123abcd'").fails();
+    let result = result.no_stdout();
+    assert!(result.stderr.starts_with("date: invalid date "));
+}
+
+#[test]
+fn test_date_set_permissions_error() {
+    let (_, mut ucmd) = at_and_ucmd!();
+    let result = ucmd.arg("--set").arg("2020-03-11 21:45:00+08:00").fails();
+    let result = result.no_stdout();
+    assert!(result.stderr.starts_with("date: cannot set date: "));
+}
