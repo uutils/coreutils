@@ -14,9 +14,11 @@ extern crate uucore;
 
 use clap::{App, Arg, ArgMatches};
 use filetime::{set_file_times, FileTime};
+use file_diff::diff;
 use uucore::entries::{grp2gid, usr2uid};
 use uucore::perms::{wrap_chgrp, wrap_chown, Verbosity};
 
+use libc::{getegid, geteuid};
 use std::fs;
 use std::fs::File;
 use std::os::unix::fs::MetadataExt;
@@ -34,6 +36,7 @@ pub struct Behavior {
     group: String,
     verbose: bool,
     preserve_timestamps: bool,
+    compare: bool,
 }
 
 #[derive(Clone, Eq, PartialEq)]
@@ -112,11 +115,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             .help("ignored")
         )
         .arg(
-            // TODO implement flag
             Arg::with_name(OPT_COMPARE)
             .short("C")
             .long(OPT_COMPARE)
-            .help("(unimplemented) compare each pair of source and destination files, and in some cases, do not modify the destination at all")
+            .help("compare each pair of source and destination files, and in some cases, do not modify the destination at all")
         )
         .arg(
             Arg::with_name(OPT_DIRECTORY)
@@ -262,8 +264,6 @@ fn check_unimplemented<'a>(matches: &ArgMatches) -> Result<(), &'a str> {
         Err("--backup")
     } else if matches.is_present(OPT_BACKUP_2) {
         Err("-b")
-    } else if matches.is_present(OPT_COMPARE) {
-        Err("--compare, -C")
     } else if matches.is_present(OPT_CREATED) {
         Err("-D")
     } else if matches.is_present(OPT_STRIP) {
@@ -338,6 +338,7 @@ fn behavior(matches: &ArgMatches) -> Result<Behavior, i32> {
         group: matches.value_of(OPT_GROUP).unwrap_or("").to_string(),
         verbose: matches.is_present(OPT_VERBOSE),
         preserve_timestamps: matches.is_present(OPT_PRESERVE_TIMESTAMPS),
+        compare: matches.is_present(OPT_COMPARE),
     })
 }
 
@@ -500,7 +501,13 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
             );
             return Err(());
         }
-    } else if let Err(err) = fs::copy(from, to) {
+    }
+
+    if b.compare && !need_copy(from, to, b) {
+        return Ok(());
+    }
+
+    if let Err(err) = fs::copy(from, to) {
         show_error!(
             "cannot install '{}' to '{}': {}",
             from.display(),
@@ -582,4 +589,82 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
     }
 
     Ok(())
+}
+
+/// Return true if a file is necessary to copy. This is the case when:
+/// - _from_ or _to_ is nonexistent;
+/// - either file has a sticky bit or set[ug]id bit, or the user specified one;
+/// - either file isn't a regular file;
+/// - the sizes of _from_ and _to_ differ;
+/// - _to_'s owner differs from intended; or
+/// - the contents of _from_ and _to_ differ.
+///
+/// # Parameters
+///
+/// _from_ and _to_, if existent, must be non-directories.
+///
+/// # Errors
+///
+/// Crashes the program if a nonexistent owner or group is specified in _b_.
+///
+fn need_copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> bool {
+    let from_meta = match fs::metadata(from) {
+        Ok(meta) => meta,
+        Err(_) => return true,
+    };
+    let to_meta = match fs::metadata(to) {
+        Ok(meta) => meta,
+        Err(_) => return true,
+    };
+
+    // setuid || setgid || sticky
+    let extra_mode: u32 = 0o7000;
+
+    if b.specified_mode.unwrap_or(0) & extra_mode != 0
+        || from_meta.mode() & extra_mode != 0
+        || to_meta.mode() & extra_mode != 0
+    {
+        return true;
+    }
+
+    if !from_meta.is_file() || !to_meta.is_file() {
+        return true;
+    }
+
+    if from_meta.len() != to_meta.len() {
+        return true;
+    }
+
+    // TODO: if -P (#1809) and from/to contexts mismatch, return true.
+
+    if !b.owner.is_empty() {
+        let owner_id = match usr2uid(&b.owner) {
+            Ok(id) => id,
+            _ => crash!(1, "no such user: {}", b.owner),
+        };
+        if owner_id != to_meta.uid() {
+            return true;
+        }
+    } else if !b.group.is_empty() {
+        let group_id = match grp2gid(&b.group) {
+            Ok(id) => id,
+            _ => crash!(1, "no such group: {}", b.group),
+        };
+        if group_id != to_meta.gid() {
+            return true;
+        }
+    } else {
+        #[cfg(not(target_os = "windows"))]
+        unsafe {
+            if to_meta.uid() != geteuid() || to_meta.gid() != getegid() {
+                return true;
+            }
+        }
+    }
+
+    if !diff(from.to_str().unwrap(), to.to_str().unwrap()) {
+        return true;
+    }
+
+    false
 }
