@@ -15,7 +15,7 @@ use std::ffi::CString;
 use std::io::Error;
 use std::ptr;
 
-const NAME: &str = "nice";
+use clap::{App, AppSettings, Arg};
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 // XXX: PRIO_PROCESS is 0 on at least FreeBSD and Linux.  Don't know about Mac OS X.
@@ -26,64 +26,57 @@ extern "C" {
     fn setpriority(which: c_int, who: c_int, prio: c_int) -> c_int;
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+pub mod options {
+    pub static ADJUSTMENT: &str = "adjustment";
+    pub static COMMAND: &str = "COMMAND";
+}
 
-    let mut opts = getopts::Options::new();
-
-    opts.optopt(
-        "n",
-        "adjustment",
-        "add N to the niceness (default is 10)",
-        "N",
-    );
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(err) => {
-            show_error!("{}", err);
-            return 125;
-        }
-    };
-
-    if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
-
-    if matches.opt_present("help") {
-        let msg = format!(
-            "{0} {1}
-
-Usage:
+fn get_usage() -> String {
+    format!(
+        "
   {0} [OPTIONS] [COMMAND [ARGS]]
 
 Run COMMAND with an adjusted niceness, which affects process scheduling.
 With no COMMAND, print the current niceness.  Niceness values range from at
 least -20 (most favorable to the process) to 19 (least favorable to the
 process).",
-            NAME, VERSION
-        );
+        executable!()
+    )
+}
 
-        print!("{}", opts.usage(&msg));
-        return 0;
-    }
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let usage = get_usage();
 
-    let mut niceness = unsafe { getpriority(PRIO_PROCESS, 0) };
+    let matches = App::new(executable!())
+        .setting(AppSettings::TrailingVarArg)
+        .version(VERSION)
+        .usage(&usage[..])
+        .arg(
+            Arg::with_name(options::ADJUSTMENT)
+                .short("n")
+                .long(options::ADJUSTMENT)
+                .help("add N to the niceness (default is 10)")
+                .takes_value(true)
+                .allow_hyphen_values(true),
+        )
+        .arg(Arg::with_name(options::COMMAND).multiple(true))
+        .get_matches_from(args);
+
+    let mut niceness = unsafe {
+        nix::errno::Errno::clear();
+        getpriority(PRIO_PROCESS, 0)
+    };
     if Error::last_os_error().raw_os_error().unwrap() != 0 {
-        show_error!("{}", Error::last_os_error());
+        show_error!("getpriority: {}", Error::last_os_error());
         return 125;
     }
 
-    let adjustment = match matches.opt_str("adjustment") {
+    let adjustment = match matches.value_of(options::ADJUSTMENT) {
         Some(nstr) => {
-            if matches.free.is_empty() {
+            if !matches.is_present(options::COMMAND) {
                 show_error!(
-                    "A command must be given with an adjustment.
-                                Try \"{} --help\" for more information.",
-                    args[0]
+                    "A command must be given with an adjustment.\nTry \"{} --help\" for more information.",
+                    executable!()
                 );
                 return 125;
             }
@@ -96,7 +89,7 @@ process).",
             }
         }
         None => {
-            if matches.free.is_empty() {
+            if !matches.is_present(options::COMMAND) {
                 println!("{}", niceness);
                 return 0;
             }
@@ -105,25 +98,23 @@ process).",
     };
 
     niceness += adjustment;
-    unsafe {
-        setpriority(PRIO_PROCESS, 0, niceness);
-    }
-    if Error::last_os_error().raw_os_error().unwrap() != 0 {
-        show_warning!("{}", Error::last_os_error());
+    if unsafe { setpriority(PRIO_PROCESS, 0, niceness) } == -1 {
+        show_warning!("setpriority: {}", Error::last_os_error());
     }
 
     let cstrs: Vec<CString> = matches
-        .free
-        .iter()
+        .values_of(options::COMMAND)
+        .unwrap()
         .map(|x| CString::new(x.as_bytes()).unwrap())
         .collect();
+
     let mut args: Vec<*const c_char> = cstrs.iter().map(|s| s.as_ptr()).collect();
     args.push(ptr::null::<c_char>());
     unsafe {
         execvp(args[0], args.as_mut_ptr());
     }
 
-    show_error!("{}", Error::last_os_error());
+    show_error!("execvp: {}", Error::last_os_error());
     if Error::last_os_error().raw_os_error().unwrap() as c_int == libc::ENOENT {
         127
     } else {
