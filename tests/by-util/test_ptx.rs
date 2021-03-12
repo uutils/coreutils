@@ -55,3 +55,19 @@ fn gnu_ext_disabled_ignore_and_only_file() {
         .succeeds()
         .stdout_only_fixture("gnu_ext_disabled_ignore_and_only_file.expected");
 }
+
+#[test]
+fn gnu_ext_disabled_output_width_50() {
+    new_ucmd!()
+        .args(&["-G", "-w", "50", "input"])
+        .succeeds()
+        .stdout_only_fixture("gnu_ext_disabled_output_width_50.expected");
+}
+
+#[test]
+fn gnu_ext_disabled_output_width_70() {
+    new_ucmd!()
+        .args(&["-G", "-w", "70", "input"])
+        .succeeds()
+        .stdout_only_fixture("gnu_ext_disabled_output_width_70.expected");
+}
