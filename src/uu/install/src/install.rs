@@ -13,6 +13,7 @@ mod mode;
 extern crate uucore;
 
 use clap::{App, Arg, ArgMatches};
+use filetime::{FileTime, set_file_times};
 use uucore::entries::{grp2gid, usr2uid};
 use uucore::perms::{wrap_chgrp, wrap_chown, Verbosity};
 
@@ -32,6 +33,7 @@ pub struct Behavior {
     owner: String,
     group: String,
     verbose: bool,
+    preserve_timestamps: bool,
 }
 
 #[derive(Clone, Eq, PartialEq)]
@@ -154,11 +156,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .takes_value(true)
         )
         .arg(
-            // TODO implement flag
             Arg::with_name(OPT_PRESERVE_TIMESTAMPS)
                 .short("p")
                 .long(OPT_PRESERVE_TIMESTAMPS)
-                .help("(unimplemented) apply access/modification times of SOURCE files to corresponding destination files")
+                .help("apply access/modification times of SOURCE files to corresponding destination files")
         )
         .arg(
             // TODO implement flag
@@ -265,8 +266,6 @@ fn check_unimplemented<'a>(matches: &ArgMatches) -> Result<(), &'a str> {
         Err("--compare, -C")
     } else if matches.is_present(OPT_CREATED) {
         Err("-D")
-    } else if matches.is_present(OPT_PRESERVE_TIMESTAMPS) {
-        Err("--preserve-timestamps, -p")
     } else if matches.is_present(OPT_STRIP) {
         Err("--strip, -s")
     } else if matches.is_present(OPT_STRIP_PROGRAM) {
@@ -338,6 +337,7 @@ fn behavior(matches: &ArgMatches) -> Result<Behavior, i32> {
         owner: matches.value_of(OPT_OWNER).unwrap_or("").to_string(),
         group: matches.value_of(OPT_GROUP).unwrap_or("").to_string(),
         verbose: matches.is_present(OPT_VERBOSE),
+        preserve_timestamps: matches.is_present(OPT_PRESERVE_TIMESTAMPS)
     })
 }
 
@@ -553,6 +553,22 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
             }
             Err(e) => show_info!("{}", e),
         }
+    }
+
+    if b.preserve_timestamps {
+        let meta = match fs::metadata(from) {
+            Ok(meta) => meta,
+            Err(f) => crash!(1, "{}", f.to_string()),
+        };
+
+        let modified_time = FileTime::from_last_modification_time(&meta);
+        let accessed_time = FileTime::from_last_access_time(&meta);
+
+        match set_file_times(to.as_path(), accessed_time, modified_time) {
+            Ok(_) => {},
+            Err(e) => show_info!("{}", e)
+        }
+
     }
 
     if b.verbose {

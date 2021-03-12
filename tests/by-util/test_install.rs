@@ -309,6 +309,25 @@ fn test_install_target_new_file_failing_nonexistent_parent() {
     assert!(err.contains("not a directory"))
 }
 
+#[test]
+fn test_install_preserve_timestamps() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file1 = "test_install_target_dir_file_a1";
+    let file2 = "test_install_target_dir_file_a2";
+    at.touch(file1);
+
+    ucmd.arg(file1).arg(file2).arg("-p").succeeds().no_stderr();
+
+    assert!(at.file_exists(file1));
+    assert!(at.file_exists(file2));
+
+    let file1_metadata = at.metadata(file1);
+    let file2_metadata = at.metadata(file2);
+
+    assert_eq!(file1_metadata.accessed().ok(), file2_metadata.accessed().ok());
+    assert_eq!(file1_metadata.modified().ok(), file2_metadata.modified().ok());
+}
+
 // These two tests are failing but should work
 #[test]
 fn test_install_copy_file() {
