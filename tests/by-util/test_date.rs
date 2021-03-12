@@ -133,14 +133,16 @@ fn test_date_format_full_day() {
 }
 
 #[test]
+#[cfg(any(windows, all(unix, not(target_os = "macos"))))]
 fn test_date_set_invalid() {
     let (_, mut ucmd) = at_and_ucmd!();
-    let result = ucmd.arg("--set").arg("'123abcd'").fails();
+    let result = ucmd.arg("--set").arg("123abcd").fails();
     let result = result.no_stdout();
     assert!(result.stderr.starts_with("date: invalid date "));
 }
 
 #[test]
+#[cfg(any(windows, all(unix, not(target_os = "macos"))))]
 fn test_date_set_permissions_error() {
     let (_, mut ucmd) = at_and_ucmd!();
     let result = ucmd.arg("--set").arg("2020-03-11 21:45:00+08:00").fails();
