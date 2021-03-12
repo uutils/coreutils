@@ -370,8 +370,8 @@ fn set_system_datetime(_date: DateTime<Utc>) -> i32 {
 /// https://www.gnu.org/software/libc/manual/html_node/Time-Types.html
 fn set_system_datetime(date: DateTime<Utc>) -> i32 {
     let timespec = timespec {
-        tv_sec: date.timestamp(),
-        tv_nsec: date.timestamp_subsec_nanos() as i64,
+        tv_sec: date.timestamp().try_into().expect("Timestamp overflow (Y2038 problem)"),
+        tv_nsec: date.timestamp_subsec_nanos() as _,
     };
 
     let result = unsafe { clock_settime(CLOCK_REALTIME, &timespec) };
