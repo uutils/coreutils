@@ -357,7 +357,7 @@ fn get_errno() -> i32 {
     error.raw_os_error().unwrap()
 }
 
-#[cfg(not(any(unix, windows)))]
+#[cfg(any(not(any(unix, windows)), target_os = "macos"))]
 fn set_system_datetime(_date: DateTime<Utc>) -> i32 {
     unimplemented!("setting date not implemented (unsupported target)");
 }
@@ -370,9 +370,12 @@ fn set_system_datetime(_date: DateTime<Utc>) -> i32 {
 /// https://www.gnu.org/software/libc/manual/html_node/Time-Types.html
 fn set_system_datetime(date: DateTime<Utc>) -> i32 {
     use std::convert::TryInto;
-    
+
     let timespec = timespec {
-        tv_sec: date.timestamp().try_into().expect("Timestamp overflow (Y2038 problem)"),
+        tv_sec: date
+            .timestamp()
+            .try_into()
+            .expect("Timestamp overflow (Y2038 problem)"),
         tv_nsec: date.timestamp_subsec_nanos() as _,
     };
 
