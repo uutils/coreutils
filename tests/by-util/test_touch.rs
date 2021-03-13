@@ -204,6 +204,44 @@ fn test_touch_set_only_mtime_failed() {
 }
 
 #[test]
+fn test_touch_set_both_time_and_reference() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let ref_file = "test_touch_reference";
+    let file = "test_touch_set_both_time_and_reference";
+
+    let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
+
+    at.touch(ref_file);
+    set_file_times(&at, ref_file, start_of_year, start_of_year);
+    assert!(at.file_exists(ref_file));
+
+    ucmd.args(&["-t", "2015010112342", "-r", ref_file]).fails();
+}
+
+#[test]
+fn test_touch_set_both_date_and_reference() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let ref_file = "test_touch_reference";
+    let file = "test_touch_set_both_date_and_reference";
+
+    let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
+
+    at.touch(ref_file);
+    set_file_times(&at, ref_file, start_of_year, start_of_year);
+    assert!(at.file_exists(ref_file));
+
+    ucmd.args(&["-d", "Thu Jan 01 12:34:00 2015", "-r", ref_file]).fails();
+}
+
+#[test]
+fn test_touch_set_both_time_and_date() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_set_both_time_and_date";
+
+    ucmd.args(&["-t", "2015010112342", "-d", "Thu Jan 01 12:34:00 2015", file]).fails();
+}
+
+#[test]
 fn test_touch_set_only_mtime() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_set_only_mtime";
