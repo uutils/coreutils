@@ -1,20 +1,24 @@
-use getopts::Matches;
+use super::options;
+use clap::ArgMatches;
 
 /// Abstraction for getopts
 pub trait CommandLineOpts {
     /// returns all command line parameters which do not belong to an option.
-    fn inputs(&self) -> Vec<String>;
+    fn inputs(&self) -> Vec<&str>;
     /// tests if any of the specified options is present.
     fn opts_present(&self, _: &[&str]) -> bool;
 }
 
 /// Implementation for `getopts`
-impl CommandLineOpts for Matches {
-    fn inputs(&self) -> Vec<String> {
-        self.free.clone()
+impl<'a> CommandLineOpts for ArgMatches<'a> {
+    fn inputs(&self) -> Vec<&str> {
+        self.values_of(options::FILENAME)
+            .map(|values| values.collect())
+            .unwrap_or_default()
     }
+
     fn opts_present(&self, opts: &[&str]) -> bool {
-        self.opts_present(&opts.iter().map(|s| (*s).to_string()).collect::<Vec<_>>())
+        opts.iter().any(|opt| self.is_present(opt))
     }
 }
 
@@ -39,7 +43,7 @@ pub enum CommandLineInputs {
 /// '-' is used as filename if stdin is meant. This is also returned if
 /// there is no input, as stdin is the default input.
 pub fn parse_inputs(matches: &dyn CommandLineOpts) -> Result<CommandLineInputs, String> {
-    let mut input_strings: Vec<String> = matches.inputs();
+    let mut input_strings = matches.inputs();
 
     if matches.opts_present(&["traditional"]) {
         return parse_inputs_traditional(input_strings);
@@ -59,7 +63,7 @@ pub fn parse_inputs(matches: &dyn CommandLineOpts) -> Result<CommandLineInputs, 
                 }
                 if input_strings.len() == 2 {
                     return Ok(CommandLineInputs::FileAndOffset((
-                        input_strings[0].clone(),
+                        input_strings[0].clone().to_owned(),
                         n,
                         None,
                     )));
@@ -69,23 +73,27 @@ pub fn parse_inputs(matches: &dyn CommandLineOpts) -> Result<CommandLineInputs, 
     }
 
     if input_strings.is_empty() {
-        input_strings.push("-".to_string());
+        input_strings.push("-");
     }
-    Ok(CommandLineInputs::FileNames(input_strings))
+    Ok(CommandLineInputs::FileNames(
+        input_strings.iter().map(|s| s.to_string()).collect(),
+    ))
 }
 
 /// interprets inputs when --traditional is on the command line
 ///
 /// normally returns CommandLineInputs::FileAndOffset, but if no offset is found,
 /// it returns CommandLineInputs::FileNames (also to differentiate from the offset == 0)
-pub fn parse_inputs_traditional(input_strings: Vec<String>) -> Result<CommandLineInputs, String> {
+pub fn parse_inputs_traditional(input_strings: Vec<&str>) -> Result<CommandLineInputs, String> {
     match input_strings.len() {
         0 => Ok(CommandLineInputs::FileNames(vec!["-".to_string()])),
         1 => {
             let offset0 = parse_offset_operand(&input_strings[0]);
             Ok(match offset0 {
                 Ok(n) => CommandLineInputs::FileAndOffset(("-".to_string(), n, None)),
-                _ => CommandLineInputs::FileNames(input_strings),
+                _ => CommandLineInputs::FileNames(
+                    input_strings.iter().map(|s| s.to_string()).collect(),
+                ),
             })
         }
         2 => {
@@ -98,7 +106,7 @@ pub fn parse_inputs_traditional(input_strings: Vec<String>) -> Result<CommandLin
                     Some(m),
                 ))),
                 (_, Ok(m)) => Ok(CommandLineInputs::FileAndOffset((
-                    input_strings[0].clone(),
+                    input_strings[0].clone().to_owned(),
                     m,
                     None,
                 ))),
@@ -110,7 +118,7 @@ pub fn parse_inputs_traditional(input_strings: Vec<String>) -> Result<CommandLin
             let label = parse_offset_operand(&input_strings[2]);
             match (offset, label) {
                 (Ok(n), Ok(m)) => Ok(CommandLineInputs::FileAndOffset((
-                    input_strings[0].clone(),
+                    input_strings[0].clone().to_owned(),
                     n,
                     Some(m),
                 ))),
