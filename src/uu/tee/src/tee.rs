@@ -5,6 +5,10 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
+#[macro_use]
+extern crate uucore;
+
+use clap::{App, Arg};
 use std::fs::OpenOptions;
 use std::io::{copy, sink, stdin, stdout, Error, ErrorKind, Read, Result, Write};
 use std::path::{Path, PathBuf};
@@ -12,13 +16,42 @@ use std::path::{Path, PathBuf};
 #[cfg(unix)]
 use uucore::libc;
 
-static NAME: &str = "tee";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
+static ABOUT: &str = "Copy standard input to each FILE, and also to standard output.";
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let usage = get_usage();
 
-    match options(&args).and_then(exec) {
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .after_help("If a FILE is -, it refers to a file named - .")
+        .arg(
+            Arg::with_name(options::APPEND)
+                .long(options::APPEND)
+                .short("a")
+                .help("append to the given FILEs, do not overwrite"),
+        )
+        .arg(
+            Arg::with_name(options::IGNORE_INTERRUPTS)
+                .long(options::IGNORE_INTERRUPTS)
+                .short("i")
+                .help("ignore interrupt signals (ignored on non-Unix platforms)"),
+        )
+        .arg(Arg::with_name(options::FILE).multiple(true))
+        .get_matches_from(args);
+
+    let options = Options {
+        append: matches.is_present(options::APPEND),
+        ignore_interrupts: matches.is_present(options::IGNORE_INTERRUPTS),
+        files: matches
+            .values_of(options::FILE)
+            .map(|v| v.map(ToString::to_string).collect())
+            .unwrap_or_default(),
+    };
+
+    match tee(options) {
         Ok(_) => 0,
         Err(_) => 1,
     }
@@ -26,67 +59,19 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
 #[allow(dead_code)]
 struct Options {
-    program: String,
     append: bool,
     ignore_interrupts: bool,
-    print_and_exit: Option<String>,
     files: Vec<String>,
 }
 
-fn options(args: &[String]) -> Result<Options> {
-    let mut opts = getopts::Options::new();
-
-    opts.optflag("a", "append", "append to the given FILEs, do not overwrite");
-    opts.optflag(
-        "i",
-        "ignore-interrupts",
-        "ignore interrupt signals (ignored on non-Unix platforms)",
-    );
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-
-    opts.parse(&args[1..])
-        .map_err(|e| Error::new(ErrorKind::Other, format!("{}", e)))
-        .map(|m| {
-            let version = format!("{} {}", NAME, VERSION);
-            let arguments = "[OPTION]... [FILE]...";
-            let brief = "Copy standard input to each FILE, and also to standard output.";
-            let comment = "If a FILE is -, it refers to a file named - .";
-            let help = format!(
-                "{}\n\nUsage:\n  {} {}\n\n{}\n{}",
-                version,
-                NAME,
-                arguments,
-                opts.usage(brief),
-                comment
-            );
-            let names: Vec<String> = m.free.clone().into_iter().collect();
-            let to_print = if m.opt_present("help") {
-                Some(help)
-            } else if m.opt_present("version") {
-                Some(version)
-            } else {
-                None
-            };
-            Options {
-                program: NAME.to_owned(),
-                append: m.opt_present("append"),
-                ignore_interrupts: m.opt_present("ignore-interrupts"),
-                print_and_exit: to_print,
-                files: names,
-            }
-        })
-        .map_err(|message| warn(format!("{}", message).as_ref()))
+mod options {
+    pub const APPEND: &str = "append";
+    pub const IGNORE_INTERRUPTS: &str = "ignore-interrupts";
+    pub const FILE: &str = "file";
 }
 
-fn exec(options: Options) -> Result<()> {
-    match options.print_and_exit {
-        Some(text) => {
-            println!("{}", text);
-            Ok(())
-        }
-        None => tee(options),
-    }
+fn get_usage() -> String {
+    format!("{0} [OPTION]... [FILE]...", executable!())
 }
 
 #[cfg(unix)]
@@ -209,6 +194,6 @@ impl Read for NamedReader {
 }
 
 fn warn(message: &str) -> Error {
-    eprintln!("{}: {}", NAME, message);
-    Error::new(ErrorKind::Other, format!("{}: {}", NAME, message))
+    eprintln!("{}: {}", executable!(), message);
+    Error::new(ErrorKind::Other, format!("{}: {}", executable!(), message))
 }
