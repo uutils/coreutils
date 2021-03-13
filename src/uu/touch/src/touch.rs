@@ -22,6 +22,8 @@ use std::path::Path;
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Update the access and modification times of each FILE to the current time.";
 pub mod options {
+    // Both SOURCES and sources are needed as we need to be able to refer to the ArgGroup.
+    pub static SOURCES: &str = "sources";
     pub mod sources {
         pub static DATE: &str = "date";
         pub static REFERENCE: &str = "reference";
@@ -121,7 +123,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .takes_value(true)
                 .min_values(1),
         )
-        .group(ArgGroup::with_name("sources").args(&[
+        .group(ArgGroup::with_name(options::SOURCES).args(&[
             options::sources::CURRENT,
             options::sources::DATE,
             options::sources::REFERENCE,
@@ -172,7 +174,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             };
 
             // Minor optimization: if no reference time was specified, we're done.
-            if !matches.is_present("sources") {
+            if !matches.is_present(options::SOURCES) {
                 continue;
             }
         }
