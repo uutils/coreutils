@@ -13,7 +13,7 @@ pub extern crate filetime;
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{App, Arg, ArgGroup};
 use filetime::*;
 use std::fs::{self, File};
 use std::io::Error;
@@ -129,25 +129,17 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .takes_value(true)
                 .min_values(1),
         )
+        .group(ArgGroup::with_name("sources").args(&[
+            options::sources::CURRENT,
+            options::sources::DATE,
+            options::sources::REFERENCE,
+        ]))
         .get_matches_from(args);
 
     let files: Vec<String> = matches
         .values_of(ARG_FILES)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
-
-    if matches.is_present(options::sources::DATE)
-        && (matches.is_present(options::sources::REFERENCE)
-            || matches.is_present(options::sources::CURRENT))
-        || matches.is_present(options::sources::REFERENCE)
-            && (matches.is_present(options::sources::DATE)
-                || matches.is_present(options::sources::CURRENT))
-        || matches.is_present(options::sources::CURRENT)
-            && (matches.is_present(options::sources::DATE)
-                || matches.is_present(options::sources::REFERENCE))
-    {
-        panic!("Invalid options: cannot specify reference time from more than one source");
-    }
 
     let (mut atime, mut mtime) = if matches.is_present(options::sources::REFERENCE) {
         stat(
@@ -188,10 +180,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             };
 
             // Minor optimization: if no reference time was specified, we're done.
-            if !(matches.is_present(options::sources::DATE)
-                || matches.is_present(options::sources::REFERENCE)
-                || matches.is_present(options::sources::CURRENT))
-            {
+            if !matches.is_present("sources") {
                 continue;
             }
         }
