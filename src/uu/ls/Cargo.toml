@@ -15,7 +15,7 @@ edition = "2018"
 path = "src/ls.rs"
 
 [dependencies]
-getopts = "0.2.18"
+clap = "2.33"
 lazy_static = "1.0.1"
 number_prefix = "0.4"
 term_grid = "0.1.5"
