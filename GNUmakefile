@@ -279,6 +279,8 @@ $(BUILDDIR)/busybox: busybox-src build-uutils $(BUILDDIR)/.config
 	cp $(BUILDDIR)/coreutils $(BUILDDIR)/busybox; \
 	chmod +x $@;
 
+prepare-busytest: $(BUILDDIR)/busybox
+
 ifeq ($(EXES),)
 busytest:
 else

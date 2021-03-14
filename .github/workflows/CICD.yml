@@ -154,6 +154,33 @@ jobs:
       env:
         RUSTFLAGS: '-Awarnings'
 
+  busybox_test:
+    name: Busybox test suite
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: ubuntu-latest }
+    steps:
+    - uses: actions/checkout@v1
+    - name: Install `rust` toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        default: true
+        profile: minimal # minimal component installation (ie, no documentation)
+    - name: "prepare busytest"
+      shell: bash
+      run: |
+        make prepare-busytest
+    - name: "run busybox testsuite"
+      shell: bash
+      run: |
+        bindir=$(pwd)/target/debug
+        cd tmp/busybox-*/testsuite
+        S=$(bindir=$bindir ./runtest) && printf "%s\n" "$S" || { printf "%s\n" "$S" | grep "FAIL:" | sed -e "s/FAIL: /::warning ::Test failure:/g" ; }
+
   build:
     name: Build
     runs-on: ${{ matrix.job.os }}
