@@ -138,6 +138,7 @@ pub mod options {
     pub static NUMERIC_UID_GID: &str = "numeric-uid-gid";
     pub static REVERSE: &str = "reverse";
     pub static RECURSIVE: &str = "recursive";
+    #[cfg(unix)]
     pub static COLOR: &str = "color";
     pub static PATHS: &str = "paths";
 }
@@ -230,17 +231,13 @@ impl Config {
         };
 
         #[cfg(unix)]
-        let color = if options.is_present(options::COLOR) {
-            match options.value_of(options::COLOR) {
-                None => atty::is(atty::Stream::Stdout),
-                Some(val) => match val {
-                    "" | "always" | "yes" | "force" => true,
-                    "auto" | "tty" | "if-tty" => atty::is(atty::Stream::Stdout),
-                    /* "never" | "no" | "none" | */ _ => false,
-                },
-            }
-        } else {
-            false
+        let color = match options.value_of(options::COLOR) {
+            None => options.is_present(options::COLOR),
+            Some(val) => match val {
+                "" | "always" | "yes" | "force" => true,
+                "auto" | "tty" | "if-tty" => atty::is(atty::Stream::Stdout),
+                /* "never" | "no" | "none" | */ _ => false,
+            },
         };
 
         let size_format = if options.is_present(options::HUMAN_READABLE) {
@@ -275,7 +272,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let usage = get_usage();
 
-    let matches = App::new(executable!())
+    let mut app = App::new(executable!())
         .version(VERSION)
         .about(ABOUT)
         .usage(&usage[..])
@@ -319,7 +316,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("If the long listing format (e.g., -l, -o) is being used, print the status \
                 access time instead of the modification time. When explicitly sorting by time \
                 (--sort=time or -t) or when not using a long listing format, sort according to the \
-                status change time.")
+                access time.")
         )
         .arg(
             Arg::with_name(options::DIRECTORY)
@@ -404,16 +401,21 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 directory.  This is especially useful when listing very large directories, \
                 since not doing any sorting can be noticeably faster.",
         ))
-        .arg(
+        .arg(Arg::with_name(options::PATHS).multiple(true).takes_value(true));
+    
+    #[cfg(unix)]
+    {
+        app = app.arg(
             Arg::with_name(options::COLOR)
-                .long(options::COLOR)
-                .help("Color output based on file type.")
-                .takes_value(true)
-                .require_equals(true)
-                .min_values(0),
-        )
-        .arg(Arg::with_name(options::PATHS).multiple(true).takes_value(true))
-        .get_matches_from(args);
+                    .long(options::COLOR)
+                    .help("Color output based on file type.")
+                    .takes_value(true)
+                    .require_equals(true)
+                    .min_values(0),
+        );
+    }
+
+    let matches = app.get_matches_from(args);
 
     let locs = matches
         .values_of(options::PATHS)
