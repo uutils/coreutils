@@ -19,6 +19,23 @@ use uucore::libc;
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Copy standard input to each FILE, and also to standard output.";
 
+mod options {
+    pub const APPEND: &str = "append";
+    pub const IGNORE_INTERRUPTS: &str = "ignore-interrupts";
+    pub const FILE: &str = "file";
+}
+
+#[allow(dead_code)]
+struct Options {
+    append: bool,
+    ignore_interrupts: bool,
+    files: Vec<String>,
+}
+
+fn get_usage() -> String {
+    format!("{0} [OPTION]... [FILE]...", executable!())
+}
+
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
@@ -55,23 +72,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         Ok(_) => 0,
         Err(_) => 1,
     }
-}
-
-#[allow(dead_code)]
-struct Options {
-    append: bool,
-    ignore_interrupts: bool,
-    files: Vec<String>,
-}
-
-mod options {
-    pub const APPEND: &str = "append";
-    pub const IGNORE_INTERRUPTS: &str = "ignore-interrupts";
-    pub const FILE: &str = "file";
-}
-
-fn get_usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", executable!())
 }
 
 #[cfg(unix)]
@@ -194,6 +194,6 @@ impl Read for NamedReader {
 }
 
 fn warn(message: &str) -> Error {
-    eprintln!("{}: {}", executable!(), message);
+    show_warning!("{}", message);
     Error::new(ErrorKind::Other, format!("{}: {}", executable!(), message))
 }
