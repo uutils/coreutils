@@ -158,7 +158,7 @@ impl Write for NamedWriter {
         match self.inner.write(buf) {
             Err(f) => {
                 self.inner = Box::new(sink()) as Box<dyn Write>;
-                warn(format!("{}: {}", self.path.display(), f.to_string()).as_ref());
+                show_warning!("{}: {}", self.path.display(), f.to_string());
                 Err(f)
             }
             okay => okay,
@@ -169,7 +169,7 @@ impl Write for NamedWriter {
         match self.inner.flush() {
             Err(f) => {
                 self.inner = Box::new(sink()) as Box<dyn Write>;
-                warn(format!("{}: {}", self.path.display(), f.to_string()).as_ref());
+                show_warning!("{}: {}", self.path.display(), f.to_string());
                 Err(f)
             }
             okay => okay,
@@ -185,15 +185,10 @@ impl Read for NamedReader {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         match self.inner.read(buf) {
             Err(f) => {
-                warn(format!("{}: {}", Path::new("stdin").display(), f.to_string()).as_ref());
+                show_warning!("{}: {}", Path::new("stdin").display(), f.to_string());
                 Err(f)
             }
             okay => okay,
         }
     }
-}
-
-fn warn(message: &str) -> Error {
-    show_warning!("{}", message);
-    Error::new(ErrorKind::Other, format!("{}: {}", executable!(), message))
 }
