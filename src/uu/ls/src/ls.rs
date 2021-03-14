@@ -42,10 +42,7 @@ static ABOUT: &str = "
 ";
 
 fn get_usage() -> String {
-    format!(
-        "{0} [OPTION]... [FILE]...",
-        executable!()
-    )
+    format!("{0} [OPTION]... [FILE]...", executable!())
 }
 
 #[cfg(unix)]
@@ -73,11 +70,10 @@ lazy_static! {
 }
 
 pub mod options {
-    pub static ONE: &str = "1";
+    pub static ONELINE: &str = "1";
     pub static ALL: &str = "all";
     pub static ALMOST_ALL: &str = "almost-all";
     pub static IGNORE_BACKUPS: &str = "ignore-backups";
-    pub static COLUMNS: &str = "c";
     pub static DIRECTORY: &str = "directory";
     pub static CLASSIFY: &str = "classify";
     pub static HUMAN_READABLE: &str = "human-readable";
@@ -90,8 +86,126 @@ pub mod options {
     pub static SORT_SIZE: &str = "S";
     pub static SORT_TIME: &str = "t";
     pub static SORT_NONE: &str = "U";
+    pub static SORT_CTIME: &str = "c";
     pub static COLOR: &str = "color";
     pub static PATHS: &str = "paths";
+}
+
+#[derive(PartialEq, Eq)]
+enum DisplayOptions {
+    Columns,
+    Long,
+    OneLine,
+}
+
+enum Sort {
+    None,
+    Name,
+    Size,
+    Time,
+    CTime,
+}
+
+enum SizeFormats {
+    Bytes,
+    Binary, // Powers of 1024, --human-readable
+}
+
+#[derive(PartialEq, Eq)]
+enum Files {
+    All,
+    AlmostAll,
+    Normal,
+}
+
+struct Config {
+    display: DisplayOptions,
+    files: Files,
+    sort: Sort,
+    
+    recursive: bool,
+    reverse: bool,
+    dereference: bool,
+    classify: bool,
+    ignore_backups: bool,
+    size_format: SizeFormats,
+    numeric_uid_gid: bool,
+    directory: bool,
+    #[cfg(unix)]
+    inode: bool,
+    #[cfg(unix)]
+    color: bool,
+}
+
+impl Config {
+    fn from(options: clap::ArgMatches) -> Config {
+        let display = if options.is_present(options::LONG) {
+            DisplayOptions::Long
+        } else if options.is_present(options::ONELINE) {
+            DisplayOptions::OneLine
+        } else {
+            DisplayOptions::Columns
+        };
+
+        let files = if options.is_present(options::ALL) {
+            Files::All
+        } else if options.is_present(options::ALMOST_ALL) {
+            Files::AlmostAll
+        } else {
+            Files::Normal
+        };
+
+        let sort = if options.is_present(options::SORT_TIME) {
+            Sort::Time
+        } else if options.is_present(options::SORT_CTIME) {
+            Sort::CTime
+        } else if options.is_present(options::SORT_SIZE) {
+            Sort::Size
+        } else if options.is_present(options::SORT_NONE) {
+            Sort::None
+        } else {
+            Sort::Name
+        };
+
+        #[cfg(unix)]
+        let color = if options.is_present(options::COLOR) {
+            match options.value_of(options::COLOR) {
+                None => atty::is(atty::Stream::Stdout),
+                Some(val) => match val {
+                    "" | "always" | "yes" | "force" => true,
+                    "auto" | "tty" | "if-tty" => atty::is(atty::Stream::Stdout),
+                    /* "never" | "no" | "none" | */ _ => false,
+                },
+            }
+        } else {
+            false
+        };
+
+        let size_format = if options.is_present(options::HUMAN_READABLE) {
+            SizeFormats::Binary
+        } else {
+            SizeFormats::Bytes
+        };
+
+        Config {
+            display,
+            files,
+            sort,
+            
+            recursive: options.is_present(options::RECURSIVE),
+            reverse: options.is_present(options::REVERSE),
+            dereference: options.is_present(options::DEREFERENCE),
+            classify: options.is_present(options::CLASSIFY),
+            ignore_backups: options.is_present(options::IGNORE_BACKUPS),
+            size_format,
+            numeric_uid_gid: options.is_present(options::NUMERIC_UID_GID),
+            directory: options.is_present(options::DIRECTORY),
+            #[cfg(unix)]
+            color,
+            #[cfg(unix)]
+            inode: options.is_present(options::INODE),
+        }
+    }
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
@@ -104,8 +218,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .about(ABOUT)
         .usage(&usage[..])
         .arg(
-            Arg::with_name(options::ONE)
-                .short(options::ONE)
+            Arg::with_name(options ::ONELINE)
+                .short(options ::ONELINE)
                 .help("list one file per line."),
         )
         .arg(
@@ -130,8 +244,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("Ignore entries which end with ~."),
         )
         .arg(
-            Arg::with_name(options::COLUMNS)
-            .short(options::COLUMNS)
+            Arg::with_name(options::SORT_CTIME)
+            .short(options::SORT_CTIME)
             .help("If the long listing format (e.g., -l, -o) is being used, print the status \
                 change time (the ‘ctime’ in the inode) instead of the modification time. When \
                 explicitly sorting by time (--sort=time or -t) or when not using a long listing \
@@ -231,15 +345,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(Arg::with_name(options::PATHS).multiple(true).takes_value(true))
         .get_matches_from(args);
 
-    list(matches)
-}
-
-fn list(options: clap::ArgMatches) -> i32 {
-    let locs: Vec<String> = options
+    let locs = matches
         .values_of(options::PATHS)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_else(|| vec![String::from(".")]);
 
+    list(locs, Config::from(matches))
+}
+
+fn list(locs: Vec<String>, config: Config) -> i32 {
     let number_of_locs = locs.len();
 
     let mut files = Vec::<PathBuf>::new();
@@ -256,9 +370,9 @@ fn list(options: clap::ArgMatches) -> i32 {
         }
         let mut dir = false;
 
-        if p.is_dir() && !options.is_present(options::DIRECTORY) {
+        if p.is_dir() && !config.directory {
             dir = true;
-            if options.is_present(options::LONG) && !options.is_present(options::DEREFERENCE) {
+            if config.display == DisplayOptions::Long && !config.dereference {
                 if let Ok(md) = p.symlink_metadata() {
                     if md.file_type().is_symlink() && !p.ends_with("/") {
                         dir = false;
@@ -272,15 +386,15 @@ fn list(options: clap::ArgMatches) -> i32 {
             files.push(p);
         }
     }
-    sort_entries(&mut files, &options);
-    display_items(&files, None, &options);
+    sort_entries(&mut files, &config);
+    display_items(&files, None, &config);
 
-    sort_entries(&mut dirs, &options);
+    sort_entries(&mut dirs, &config);
     for dir in dirs {
         if number_of_locs > 1 {
             println!("\n{}:", dir.to_string_lossy());
         }
-        enter_directory(&dir, &options);
+        enter_directory(&dir, &config);
     }
     if has_failed {
         1
@@ -290,128 +404,118 @@ fn list(options: clap::ArgMatches) -> i32 {
 }
 
 #[cfg(any(unix, target_os = "redox"))]
-fn sort_entries(entries: &mut Vec<PathBuf>, options: &clap::ArgMatches) {
-    let mut reverse = options.is_present(options::REVERSE);
-    if options.is_present(options::SORT_TIME) {
-        if options.is_present(options::COLUMNS) {
-            entries.sort_by_key(|k| {
-                Reverse(get_metadata(k, options).map(|md| md.ctime()).unwrap_or(0))
-            });
-        } else {
-            entries.sort_by_key(|k| {
-                // Newest first
-                Reverse(
-                    get_metadata(k, options)
-                        .and_then(|md| md.modified())
-                        .unwrap_or(std::time::UNIX_EPOCH),
-                )
-            });
-        }
-    } else if options.is_present(options::SORT_SIZE) {
-        entries.sort_by_key(|k| get_metadata(k, options).map(|md| md.size()).unwrap_or(0));
-        reverse = !reverse;
-    } else if !options.is_present(options::SORT_NONE) {
-        entries.sort();
-    }
-
-    if reverse {
-        entries.reverse();
-    }
-}
-
-#[cfg(windows)]
-fn is_hidden(file_path: &DirEntry) -> std::io::Result<bool> {
-    let metadata = fs::metadata(file_path.path())?;
-    let attr = metadata.file_attributes();
-    Ok(((attr & 0x2) > 0) || file_path.file_name().to_string_lossy().starts_with('.'))
-}
-
-#[cfg(unix)]
-fn is_hidden(file_path: &DirEntry) -> std::io::Result<bool> {
-    Ok(file_path.file_name().to_string_lossy().starts_with('.'))
-}
-
-#[cfg(windows)]
-fn sort_entries(entries: &mut Vec<PathBuf>, options: &clap::ArgMatches) {
-    let mut reverse = options.is_present(options::REVERSE);
-    if options.is_present(options::SORT_TIME) {
-        entries.sort_by_key(|k| {
-            // Newest first
+fn sort_entries(entries: &mut Vec<PathBuf>, config: &Config) {
+    match config.sort {
+        Sort::CTime => entries
+            .sort_by_key(|k| Reverse(get_metadata(k, config).map(|md| md.ctime()).unwrap_or(0))),
+        Sort::Time => entries.sort_by_key(|k| {
             Reverse(
-                get_metadata(k, options)
+                get_metadata(k, config)
                     .and_then(|md| md.modified())
                     .unwrap_or(std::time::UNIX_EPOCH),
             )
-        });
-    } else if options.is_present(options::SORT_SIZE) {
-        entries.sort_by_key(|k| {
-            get_metadata(k, options)
-                .map(|md| md.file_size())
-                .unwrap_or(0)
-        });
-        reverse = !reverse;
-    } else if !options.is_present(options::SORT_NONE) {
-        entries.sort();
+        }),
+        Sort::Size => entries
+            .sort_by_key(|k| Reverse(get_metadata(k, config).map(|md| md.size()).unwrap_or(0))),
+        Sort::Name => entries.sort(),
+        Sort::None => {}
     }
 
-    if reverse {
+    if config.reverse {
         entries.reverse();
     }
 }
 
-fn should_display(entry: &DirEntry, options: &clap::ArgMatches) -> bool {
+#[cfg(windows)]
+fn is_hidden(file_path: &DirEntry) -> bool {
+    let metadata = fs::metadata(file_path.path()).unwrap();
+    let attr = metadata.file_attributes();
+    ((attr & 0x2) > 0) || file_path.file_name().to_string_lossy().starts_with('.')
+}
+
+#[cfg(unix)]
+fn is_hidden(file_path: &DirEntry) -> bool {
+    file_path.file_name().to_string_lossy().starts_with('.')
+}
+
+#[cfg(windows)]
+fn sort_entries(entries: &mut Vec<PathBuf>, config: &Config) {
+    match config.sort {
+        Sort::CTime | Sort::Time => entries.sort_by_key(|k| {
+            // Newest first
+            Reverse(
+                get_metadata(k, config)
+                    .and_then(|md| md.modified())
+                    .unwrap_or(std::time::UNIX_EPOCH),
+            )
+        }),
+        Sort::Size => entries.sort_by_key(|k| {
+            // Largest first
+            Reverse(
+                get_metadata(k, config)
+                    .map(|md| md.file_size())
+                    .unwrap_or(0),
+            )
+        }),
+        Sort::Name => entries.sort(),
+        Sort::None => {},
+    }
+
+    if config.reverse {
+        entries.reverse();
+    }
+}
+
+fn should_display(entry: &DirEntry, config: &Config) -> bool {
     let ffi_name = entry.file_name();
     let name = ffi_name.to_string_lossy();
-    if !options.is_present(options::ALL)
-        && !options.is_present(options::ALMOST_ALL)
-        && is_hidden(entry).unwrap()
-    {
+    if config.files == Files::Normal && is_hidden(entry) {
         return false;
     }
-    if options.is_present(options::IGNORE_BACKUPS) && name.ends_with('~') {
+    if config.ignore_backups && name.ends_with('~') {
         return false;
     }
     true
 }
 
-fn enter_directory(dir: &PathBuf, options: &clap::ArgMatches) {
+fn enter_directory(dir: &PathBuf, config: &Config) {
     let mut entries: Vec<_> = safe_unwrap!(fs::read_dir(dir).and_then(Iterator::collect));
 
-    entries.retain(|e| should_display(e, options));
+    entries.retain(|e| should_display(e, config));
 
     let mut entries: Vec<_> = entries.iter().map(DirEntry::path).collect();
-    sort_entries(&mut entries, options);
+    sort_entries(&mut entries, config);
 
-    if options.is_present(options::ALL) {
+    if config.files == Files::All {
         let mut display_entries = entries.clone();
         display_entries.insert(0, dir.join(".."));
         display_entries.insert(0, dir.join("."));
-        display_items(&display_entries, Some(dir), options);
+        display_items(&display_entries, Some(dir), config);
     } else {
-        display_items(&entries, Some(dir), options);
+        display_items(&entries, Some(dir), config);
     }
 
-    if options.is_present(options::RECURSIVE) {
+    if config.recursive {
         for e in entries.iter().filter(|p| p.is_dir()) {
             println!("\n{}:", e.to_string_lossy());
-            enter_directory(&e, options);
+            enter_directory(&e, config);
         }
     }
 }
 
-fn get_metadata(entry: &PathBuf, options: &clap::ArgMatches) -> std::io::Result<Metadata> {
-    if options.is_present(options::DEREFERENCE) {
+fn get_metadata(entry: &PathBuf, config: &Config) -> std::io::Result<Metadata> {
+    if config.dereference {
         entry.metadata().or_else(|_| entry.symlink_metadata())
     } else {
         entry.symlink_metadata()
     }
 }
 
-fn display_dir_entry_size(entry: &PathBuf, options: &clap::ArgMatches) -> (usize, usize) {
-    if let Ok(md) = get_metadata(entry, options) {
+fn display_dir_entry_size(entry: &PathBuf, config: &Config) -> (usize, usize) {
+    if let Ok(md) = get_metadata(entry, config) {
         (
             display_symlink_count(&md).len(),
-            display_file_size(&md, options).len(),
+            display_file_size(&md, config).len(),
         )
     } else {
         (0, 0)
@@ -422,28 +526,28 @@ fn pad_left(string: String, count: usize) -> String {
     format!("{:>width$}", string, width = count)
 }
 
-fn display_items(items: &[PathBuf], strip: Option<&Path>, options: &clap::ArgMatches) {
-    if options.is_present(options::LONG) || options.is_present(options::NUMERIC_UID_GID) {
+fn display_items(items: &[PathBuf], strip: Option<&Path>, config: &Config) {
+    if config.display == DisplayOptions::Long || config.numeric_uid_gid {
         let (mut max_links, mut max_size) = (1, 1);
         for item in items {
-            let (links, size) = display_dir_entry_size(item, options);
+            let (links, size) = display_dir_entry_size(item, config);
             max_links = links.max(max_links);
             max_size = size.max(max_size);
         }
         for item in items {
-            display_item_long(item, strip, max_links, max_size, options);
+            display_item_long(item, strip, max_links, max_size, config);
         }
     } else {
-        if !options.is_present(options::ONE) {
+        if config.display != DisplayOptions::OneLine {
             let names = items.iter().filter_map(|i| {
-                let md = get_metadata(i, options);
+                let md = get_metadata(i, config);
                 match md {
                     Err(e) => {
                         let filename = get_file_name(i, strip);
                         show_error!("'{}': {}", filename, e);
                         None
                     }
-                    Ok(md) => Some(display_file_name(&i, strip, &md, options)),
+                    Ok(md) => Some(display_file_name(&i, strip, &md, config)),
                 }
             });
 
@@ -467,9 +571,9 @@ fn display_items(items: &[PathBuf], strip: Option<&Path>, options: &clap::ArgMat
         // Couldn't display a grid, either because we don't know
         // the terminal width or because fit_into_width failed
         for i in items {
-            let md = get_metadata(i, options);
+            let md = get_metadata(i, config);
             if let Ok(md) = md {
-                println!("{}", display_file_name(&i, strip, &md, options).contents);
+                println!("{}", display_file_name(&i, strip, &md, config).contents);
             }
         }
     }
@@ -482,9 +586,9 @@ fn display_item_long(
     strip: Option<&Path>,
     max_links: usize,
     max_size: usize,
-    options: &clap::ArgMatches,
+    config: &Config,
 ) {
-    let md = match get_metadata(item, options) {
+    let md = match get_metadata(item, config) {
         Err(e) => {
             let filename = get_file_name(&item, strip);
             show_error!("{}: {}", filename, e);
@@ -495,21 +599,21 @@ fn display_item_long(
 
     println!(
         "{}{}{} {} {} {} {} {} {}",
-        get_inode(&md, options),
+        get_inode(&md, config),
         display_file_type(md.file_type()),
         display_permissions(&md),
         pad_left(display_symlink_count(&md), max_links),
-        display_uname(&md, options),
-        display_group(&md, options),
-        pad_left(display_file_size(&md, options), max_size),
-        display_date(&md, options),
-        display_file_name(&item, strip, &md, options).contents
+        display_uname(&md, config),
+        display_group(&md, config),
+        pad_left(display_file_size(&md, config), max_size),
+        display_date(&md, config),
+        display_file_name(&item, strip, &md, config).contents
     );
 }
 
 #[cfg(unix)]
-fn get_inode(metadata: &Metadata, options: &clap::ArgMatches) -> String {
-    if options.is_present(options::INODE) {
+fn get_inode(metadata: &Metadata, config: &Config) -> String {
+    if config.inode {
         format!("{:8} ", metadata.ino())
     } else {
         "".to_string()
@@ -517,7 +621,7 @@ fn get_inode(metadata: &Metadata, options: &clap::ArgMatches) -> String {
 }
 
 #[cfg(not(unix))]
-fn get_inode(_metadata: &Metadata, _options: &clap::ArgMatches) -> String {
+fn get_inode(_metadata: &Metadata, _config: &Config) -> String {
     "".to_string()
 }
 
@@ -527,8 +631,8 @@ fn get_inode(_metadata: &Metadata, _options: &clap::ArgMatches) -> String {
 use uucore::entries;
 
 #[cfg(unix)]
-fn display_uname(metadata: &Metadata, options: &clap::ArgMatches) -> String {
-    if options.is_present(options::NUMERIC_UID_GID) {
+fn display_uname(metadata: &Metadata, config: &Config) -> String {
+    if config.numeric_uid_gid {
         metadata.uid().to_string()
     } else {
         entries::uid2usr(metadata.uid()).unwrap_or_else(|_| metadata.uid().to_string())
@@ -536,8 +640,8 @@ fn display_uname(metadata: &Metadata, options: &clap::ArgMatches) -> String {
 }
 
 #[cfg(unix)]
-fn display_group(metadata: &Metadata, options: &clap::ArgMatches) -> String {
-    if options.is_present(options::NUMERIC_UID_GID) {
+fn display_group(metadata: &Metadata, config: &Config) -> String {
+    if config.numeric_uid_gid {
         metadata.gid().to_string()
     } else {
         entries::gid2grp(metadata.gid()).unwrap_or_else(|_| metadata.gid().to_string())
@@ -545,31 +649,29 @@ fn display_group(metadata: &Metadata, options: &clap::ArgMatches) -> String {
 }
 
 #[cfg(not(unix))]
-#[allow(unused_variables)]
-fn display_uname(metadata: &Metadata, _options: &clap::ArgMatches) -> String {
+fn display_uname(_metadata: &Metadata, _config: &Config) -> String {
     "somebody".to_string()
 }
 
 #[cfg(not(unix))]
 #[allow(unused_variables)]
-fn display_group(metadata: &Metadata, _options: &clap::ArgMatches) -> String {
+fn display_group(_metadata: &Metadata, _config: &Config) -> String {
     "somegroup".to_string()
 }
 
 #[cfg(unix)]
-fn display_date(metadata: &Metadata, options: &clap::ArgMatches) -> String {
-    let secs = if options.is_present(options::COLUMNS) {
-        metadata.ctime()
-    } else {
-        metadata.mtime()
+fn display_date(metadata: &Metadata, config: &Config) -> String {
+    let secs = match config.sort {
+        Sort::CTime => metadata.ctime(),
+        Sort::Time => metadata.mtime(),
+        _ => 0,
     };
     let time = time::at(Timespec::new(secs, 0));
     strftime("%F %R", &time).unwrap()
 }
 
 #[cfg(not(unix))]
-#[allow(unused_variables)]
-fn display_date(metadata: &Metadata, options: &clap::ArgMatches) -> String {
+fn display_date(metadata: &Metadata, _config: &Config) -> String {
     if let Ok(mtime) = metadata.modified() {
         let time = time::at(Timespec::new(
             mtime
@@ -584,18 +686,17 @@ fn display_date(metadata: &Metadata, options: &clap::ArgMatches) -> String {
     }
 }
 
-fn display_file_size(metadata: &Metadata, options: &clap::ArgMatches) -> String {
+fn display_file_size(metadata: &Metadata, config: &Config) -> String {
     // NOTE: The human-readable behaviour deviates from the GNU ls.
     // The GNU ls uses binary prefixes by default.
-    if options.is_present(options::HUMAN_READABLE) {
-        match NumberPrefix::decimal(metadata.len() as f64) {
+    match config.size_format {
+        SizeFormats::Binary => match NumberPrefix::decimal(metadata.len() as f64) {
             NumberPrefix::Standalone(bytes) => bytes.to_string(),
             NumberPrefix::Prefixed(prefix, bytes) => {
                 format!("{:.2}{}", bytes, prefix).to_uppercase()
             }
-        }
-    } else {
-        metadata.len().to_string()
+        },
+        SizeFormats::Bytes => metadata.len().to_string(),
     }
 }
 
@@ -625,15 +726,15 @@ fn display_file_name(
     path: &Path,
     strip: Option<&Path>,
     metadata: &Metadata,
-    options: &clap::ArgMatches,
+    config: &Config,
 ) -> Cell {
     let mut name = get_file_name(path, strip);
 
-    if !options.is_present(options::LONG) {
-        name = get_inode(metadata, options) + &name;
+    if config.display == DisplayOptions::Long {
+        name = get_inode(metadata, config) + &name;
     }
 
-    if options.is_present(options::CLASSIFY) {
+    if config.classify {
         let file_type = metadata.file_type();
         if file_type.is_dir() {
             name.push('/');
@@ -642,7 +743,7 @@ fn display_file_name(
         }
     }
 
-    if options.is_present(options::LONG) && metadata.file_type().is_symlink() {
+    if config.display == DisplayOptions::Long && metadata.file_type().is_symlink() {
         if let Ok(target) = path.read_link() {
             // We don't bother updating width here because it's not used for long listings
             let target_name = target.to_string_lossy().to_string();
@@ -687,30 +788,17 @@ fn display_file_name(
     path: &Path,
     strip: Option<&Path>,
     metadata: &Metadata,
-    options: &clap::ArgMatches,
+    config: &Config,
 ) -> Cell {
     let mut name = get_file_name(path, strip);
-    if !options.is_present(options::LONG) {
-        name = get_inode(metadata, options) + &name;
+    if config.display != DisplayOptions::Long {
+        name = get_inode(metadata, config) + &name;
     }
     let mut width = UnicodeWidthStr::width(&*name);
 
-    let color = if options.is_present(options::COLOR) {
-        match options.value_of(options::COLOR) {
-            None => atty::is(atty::Stream::Stdout),
-            Some(val) => match val {
-                "" | "always" | "yes" | "force" => true,
-                "auto" | "tty" | "if-tty" => atty::is(atty::Stream::Stdout),
-                /* "never" | "no" | "none" | */ _ => false,
-            },
-        }
-    } else {
-        false
-    };
-    let classify = options.is_present(options::CLASSIFY);
     let ext;
 
-    if color || classify {
+    if config.color || config.classify {
         let file_type = metadata.file_type();
 
         let (code, sym) = if file_type.is_dir() {
@@ -760,10 +848,10 @@ fn display_file_name(
             ("", None)
         };
 
-        if color {
+        if config.color {
             name = color_name(name, code);
         }
-        if classify {
+        if config.classify {
             if let Some(s) = sym {
                 name.push(s);
                 width += 1;
@@ -771,7 +859,7 @@ fn display_file_name(
         }
     }
 
-    if options.is_present(options::LONG) && metadata.file_type().is_symlink() {
+    if config.display == DisplayOptions::Long && metadata.file_type().is_symlink() {
         if let Ok(target) = path.read_link() {
             // We don't bother updating width here because it's not used for long listings
             let code = if target.exists() { "fi" } else { "mi" };
@@ -788,8 +876,7 @@ fn display_file_name(
 }
 
 #[cfg(not(unix))]
-#[allow(unused_variables)]
-fn display_symlink_count(metadata: &Metadata) -> String {
+fn display_symlink_count(_metadata: &Metadata) -> String {
     // Currently not sure of how to get this on Windows, so I'm punting.
     // Git Bash looks like it may do the same thing.
     String::from("1")
