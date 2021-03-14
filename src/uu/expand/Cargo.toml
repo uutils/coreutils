@@ -15,7 +15,7 @@ edition = "2018"
 path = "src/expand.rs"
 
 [dependencies]
-getopts = "0.2.18"
+clap = "2.33"
 unicode-width = "0.1.5"
 uucore = { version=">=0.0.7", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }

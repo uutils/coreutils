@@ -12,18 +12,24 @@
 #[macro_use]
 extern crate uucore;
 
+use clap::{App, Arg, ArgMatches};
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::iter::repeat;
 use std::str::from_utf8;
 use unicode_width::UnicodeWidthChar;
 
-static SYNTAX: &str = "[OPTION]... [FILE]...";
-static SUMMARY: &str = "Convert tabs in each FILE to spaces, writing to standard output.
+static VERSION: &str = env!("CARGO_PKG_VERSION");
+static ABOUT: &str = "Convert tabs in each FILE to spaces, writing to standard output.
  With no FILE, or when FILE is -, read standard input.";
+
 static LONG_HELP: &str = "";
 
 static DEFAULT_TABSTOP: usize = 8;
+
+fn get_usage() -> String {
+    format!("{0} [OPTION]... [FILE]...", executable!())
+}
 
 fn tabstops_parse(s: String) -> Vec<usize> {
     let words = s.split(',');
@@ -58,14 +64,14 @@ struct Options {
 }
 
 impl Options {
-    fn new(matches: getopts::Matches) -> Options {
-        let tabstops = match matches.opt_str("t") {
+    fn new(matches: &ArgMatches) -> Options {
+        let tabstops = match matches.value_of("tabstops") {
+            Some(s) => tabstops_parse(s.to_string()),
             None => vec![DEFAULT_TABSTOP],
-            Some(s) => tabstops_parse(s),
         };
 
-        let iflag = matches.opt_present("i");
-        let uflag = !matches.opt_present("U");
+        let iflag = matches.is_present("iflag");
+        let uflag = !matches.is_present("uflag");
 
         // avoid allocations when dumping out long sequences of spaces
         // by precomputing the longest string of spaces we will ever need
@@ -80,10 +86,9 @@ impl Options {
             .unwrap(); // length of tabstops is guaranteed >= 1
         let tspaces = repeat(' ').take(nspaces).collect();
 
-        let files = if matches.free.is_empty() {
-            vec!["-".to_owned()]
-        } else {
-            matches.free
+        let files: Vec<String> = match matches.values_of("files") {
+            Some(s) => s.map(|v| v.to_string()).collect(),
+            None => vec!["-".to_owned()],
         };
 
         Options {
@@ -97,31 +102,34 @@ impl Options {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
-
-    let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
-        .optflag("i", "initial", "do not convert tabs after non blanks")
-        .optopt(
-            "t",
-            "tabs",
-            "have tabs NUMBER characters apart, not 8",
-            "NUMBER",
+    let usage = get_usage();
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .after_help(LONG_HELP)
+        .arg(
+            Arg::with_name("iflag")
+                .long("initial")
+                .short("i")
+                .help("do not convert tabs after non blanks"),
         )
-        .optopt(
-            "t",
-            "tabs",
-            "use comma separated list of explicit tab positions",
-            "LIST",
+        .arg(
+            Arg::with_name("tabstops")
+                .long("tabs")
+                .short("t")
+                .value_name("N, LIST")
+                .takes_value(true)
+                .help("have tabs N characters apart, not 8 or use comma separated list of explicit tab positions"),
         )
-        .optflag(
-            "U",
-            "no-utf8",
-            "interpret input file as 8-bit ASCII rather than UTF-8",
+        .arg(
+            Arg::with_name("uflags").long("no-utf8").short("U").help("interpret input file as 8-bit ASCII rather than UTF-8"),
+        ).arg(
+            Arg::with_name("files").multiple(true).hidden(true).takes_value(true)
         )
-        .parse(args);
+        .get_matches_from(args);
 
-    expand(Options::new(matches));
-
+    expand(Options::new(&matches));
     0
 }
 
