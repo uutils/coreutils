@@ -122,7 +122,6 @@ struct Config {
     display: DisplayOptions,
     files: Files,
     sort: Sort,
-    
     recursive: bool,
     reverse: bool,
     dereference: bool,
@@ -191,7 +190,7 @@ impl Config {
             display,
             files,
             sort,
-            
+
             recursive: options.is_present(options::RECURSIVE),
             reverse: options.is_present(options::REVERSE),
             dereference: options.is_present(options::DEREFERENCE),
@@ -458,7 +457,7 @@ fn sort_entries(entries: &mut Vec<PathBuf>, config: &Config) {
             )
         }),
         Sort::Name => entries.sort(),
-        Sort::None => {},
+        Sort::None => {}
     }
 
     if config.reverse {
