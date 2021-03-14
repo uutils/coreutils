@@ -54,7 +54,6 @@ extern crate uucore;
 
 use clap::{App, Arg};
 use number_prefix::NumberPrefix;
-use std::cmp::Reverse;
 #[cfg(unix)]
 use std::collections::HashMap;
 use std::fs;
@@ -66,6 +65,10 @@ use std::os::unix::fs::MetadataExt;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf};
+use std::cmp::Reverse;
+#[cfg(not(unix))]
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use time::{strftime, Timespec};
 #[cfg(unix)]
@@ -121,7 +124,10 @@ pub mod options {
         pub static SIZE: &str = "S";
         pub static TIME: &str = "t";
         pub static NONE: &str = "U";
-        pub static CTIME: &str = "c";
+    }
+    pub mod time {
+        pub static ACCESS: &str = "u";
+        pub static CHANGE: &str = "c";
     }
     pub static IGNORE_BACKUPS: &str = "ignore-backups";
     pub static DIRECTORY: &str = "directory";
@@ -148,7 +154,6 @@ enum Sort {
     Name,
     Size,
     Time,
-    CTime,
 }
 
 enum SizeFormats {
@@ -163,6 +168,12 @@ enum Files {
     Normal,
 }
 
+enum Time {
+    Modification,
+    Access,
+    Change,
+}
+
 struct Config {
     display: DisplayOptions,
     files: Files,
@@ -175,6 +186,7 @@ struct Config {
     size_format: SizeFormats,
     numeric_uid_gid: bool,
     directory: bool,
+    time: Time,
     #[cfg(unix)]
     inode: bool,
     #[cfg(unix)]
@@ -201,14 +213,20 @@ impl Config {
 
         let sort = if options.is_present(options::sort::TIME) {
             Sort::Time
-        } else if options.is_present(options::sort::CTIME) {
-            Sort::CTime
         } else if options.is_present(options::sort::SIZE) {
             Sort::Size
         } else if options.is_present(options::sort::NONE) {
             Sort::None
         } else {
             Sort::Name
+        };
+
+        let time = if options.is_present(options::time::ACCESS) {
+            Time::Access
+        } else if options.is_present(options::time::CHANGE) {
+            Time::Change
+        } else {
+            Time::Modification
         };
 
         #[cfg(unix)]
@@ -243,6 +261,7 @@ impl Config {
             size_format,
             numeric_uid_gid: options.is_present(options::NUMERIC_UID_GID),
             directory: options.is_present(options::DIRECTORY),
+            time,
             #[cfg(unix)]
             color,
             #[cfg(unix)]
@@ -287,13 +306,21 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("Ignore entries which end with ~."),
         )
         .arg(
-            Arg::with_name(options::sort::CTIME)
-            .short(options::sort::CTIME)
-            .help("If the long listing format (e.g., -l, -o) is being used, print the status \
+            Arg::with_name(options::time::CHANGE)
+                .short(options::time::CHANGE)
+                .help("If the long listing format (e.g., -l, -o) is being used, print the status \
                 change time (the ‘ctime’ in the inode) instead of the modification time. When \
                 explicitly sorting by time (--sort=time or -t) or when not using a long listing \
                 format, sort according to the status change time.",
         ))
+        .arg(
+            Arg::with_name(options::time::ACCESS)
+                .short(options::time::ACCESS)
+                .help("If the long listing format (e.g., -l, -o) is being used, print the status \
+                access time instead of the modification time. When explicitly sorting by time \
+                (--sort=time or -t) or when not using a long listing format, sort according to the \
+                status change time.")
+        )
         .arg(
             Arg::with_name(options::DIRECTORY)
                 .short("d")
@@ -449,13 +476,11 @@ fn list(locs: Vec<String>, config: Config) -> i32 {
 #[cfg(any(unix, target_os = "redox"))]
 fn sort_entries(entries: &mut Vec<PathBuf>, config: &Config) {
     match config.sort {
-        Sort::CTime => entries
-            .sort_by_key(|k| Reverse(get_metadata(k, config).map(|md| md.ctime()).unwrap_or(0))),
         Sort::Time => entries.sort_by_key(|k| {
             Reverse(
                 get_metadata(k, config)
-                    .and_then(|md| md.modified())
-                    .unwrap_or(std::time::UNIX_EPOCH),
+                    .map(|md| get_time(&md, config))
+                    .unwrap_or(0),
             )
         }),
         Sort::Size => entries
@@ -484,13 +509,9 @@ fn is_hidden(file_path: &DirEntry) -> bool {
 #[cfg(windows)]
 fn sort_entries(entries: &mut Vec<PathBuf>, config: &Config) {
     match config.sort {
-        Sort::CTime | Sort::Time => entries.sort_by_key(|k| {
+        Sort::Time => entries.sort_by_key(|k| {
             // Newest first
-            Reverse(
-                get_metadata(k, config)
-                    .and_then(|md| md.modified())
-                    .unwrap_or(std::time::UNIX_EPOCH),
-            )
+            Reverse(get_time(get_metadata(k, config), config).unwrap_or(std::time::UNIX_EPOCH))
         }),
         Sort::Size => entries.sort_by_key(|k| {
             // Largest first
@@ -702,23 +723,38 @@ fn display_group(_metadata: &Metadata, _config: &Config) -> String {
     "somegroup".to_string()
 }
 
+// The implementations for get_time are separated because some options, such
+// as ctime will not be available
+#[cfg(unix)]
+fn get_time(md: &Metadata, config: &Config) -> i64 {
+    match config.time {
+        Time::Change => md.ctime(),
+        Time::Modification => md.mtime(),
+        Time::Access => md.atime(),
+    }
+}
+
+#[cfg(not(unix))]
+fn get_time(md: &Metadata, config: &Config) -> Option<SystemTime> {
+    match config.time {
+        Time::Modification => md.modification().ok(),
+        Time::Access => md.access().ok(),
+        _ => None,
+    }
+}
+
 #[cfg(unix)]
 fn display_date(metadata: &Metadata, config: &Config) -> String {
-    let secs = match config.sort {
-        Sort::CTime => metadata.ctime(),
-        Sort::Time => metadata.mtime(),
-        _ => 0,
-    };
+    let secs = get_time(metadata, config);
     let time = time::at(Timespec::new(secs, 0));
     strftime("%F %R", &time).unwrap()
 }
 
 #[cfg(not(unix))]
-fn display_date(metadata: &Metadata, _config: &Config) -> String {
-    if let Ok(mtime) = metadata.modified() {
+fn display_date(metadata: &Metadata, config: &Config) -> String {
+    if let Some(time) = get_time(metadata, config) {
         let time = time::at(Timespec::new(
-            mtime
-                .duration_since(std::time::UNIX_EPOCH)
+            time.duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_secs() as i64,
             0,
