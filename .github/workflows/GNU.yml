@@ -34,11 +34,11 @@ jobs:
       shell: bash
       run: |
         sudo apt-get update
-        sudo apt-get install autoconf autopoint bison texinfo gperf gcc g++ gdb python-pyinotify expect python3-sphinx
+        sudo apt-get install autoconf autopoint bison texinfo gperf gcc g++ gdb python-pyinotify python3-sphinx
         pushd uutils
         make PROFILE=release
         BUILDDIR="$PWD/target/release/"
-        cp ${BUILDDIR}/install ${BUILDDIR}/ginstall # The GNU tests rename this script before running, to avoid confusion with the make target
+        cp "${BUILDDIR}/install" "${BUILDDIR}/ginstall" # The GNU tests rename this script before running, to avoid confusion with the make target
         # Create *sum binaries
         for sum in b2sum md5sum sha1sum sha224sum sha256sum sha384sum sha512sum
         do
@@ -54,7 +54,7 @@ jobs:
         for binary in $(./build-aux/gen-lists-of-programs.sh --list-progs)
         do
           bin_path="${BUILDDIR}/${binary}"
-          test -f "${bin_path}" || cp "${BUILDDIR}/false" "${bin_path}"
+          test -f "${bin_path}" || { echo "'${binary}' was not built with uutils, using the 'false' program"; cp "${BUILDDIR}/false" "${bin_path}"; }
         done
 
         ./bootstrap --gnulib-srcdir="$GNULIB_SRCDIR"
@@ -66,7 +66,7 @@ jobs:
         sed -i 's| tr | /usr/bin/tr |' tests/init.sh
         make
         # Generate the factor tests, so they can be fixed
-        for i in $(seq -w 0 36)
+        for i in {00..36}
         do
           make tests/factor/t${i}.sh
         done
@@ -106,7 +106,7 @@ jobs:
         GNULIB_DIR="${PWD}/gnulib"
         pushd gnu
 
-        timeout -sKILL 4h make -j "$(nproc)" check SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no || : # Kill after 4 hours in case something gets stuck in make
+        timeout -sKILL 2h make -j "$(nproc)" check SUBDIRS=. RUN_EXPENSIVE_TESTS=yes RUN_VERY_EXPENSIVE_TESTS=yes VERBOSE=no || : # Kill after 4 hours in case something gets stuck in make
     - name: Extract tests info
       shell: bash
       run: |
