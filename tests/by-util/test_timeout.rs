@@ -5,14 +5,7 @@ use crate::common::util::*;
 //        utility that requires executing another program (kill, for instance)
 #[test]
 fn test_subcommand_retcode() {
-    new_ucmd!()
-        .arg("1")
-        .arg("true")
-        .succeeds();
+    new_ucmd!().arg("1").arg("true").succeeds();
 
-    new_ucmd!()
-        .arg("1")
-        .arg("false")
-        .run()
-        .status_code(1);
+    new_ucmd!().arg("1").arg("false").run().status_code(1);
 }
