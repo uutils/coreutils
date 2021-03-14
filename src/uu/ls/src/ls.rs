@@ -56,7 +56,7 @@ lazy_static! {
         let codes = LS_COLORS.split(':');
         let mut map = HashMap::new();
         for c in codes {
-            let p: Vec<_> = c.splitn(1, '=').collect();
+            let p: Vec<_> = c.splitn(2, '=').collect();
             if p.len() == 2 {
                 map.insert(p[0], p[1]);
             }
@@ -337,9 +337,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(options::COLOR)
                 .long(options::COLOR)
                 .help("Color output based on file type.")
-                .possible_values(&["always", "yes", "force", "tty", "if-tty", "auto", "never", "no", "none"])
+                .takes_value(true)
                 .require_equals(true)
-                .empty_values(true),
+                .min_values(0),
         )
         .arg(Arg::with_name(options::PATHS).multiple(true).takes_value(true))
         .get_matches_from(args);
