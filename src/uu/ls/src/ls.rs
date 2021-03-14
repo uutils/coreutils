@@ -7,6 +7,45 @@
 
 // spell-checker:ignore (ToDO) cpio svgz webm somegroup nlink rmvb xspf
 
+// Missing features from GNU Coreutils:
+//     --author
+// -b, --escape
+//     --block-size=SIZE
+// -c
+// -D, --Dired
+// -f
+//     --file-type
+//     --format=WORD
+//     --full-time
+// -g
+//     --group-directories-first
+// -G, --no-group
+//     --si
+// -H, --dereference-command-line
+//     --dereference-command-line-symlink-to-dir
+//     --hide=PATTERN
+//     --hyperlink[=WHEN]
+//     --indicator-style=WORD
+// -I, --ignore
+// -k, --kibibytes
+// -m
+// -N, --literal
+// -o
+// -p, --indicator-style=slash
+// -q, --hide-control-chars
+//     --show-control-chars
+// -Q, --quote-name
+//     --quoting-style=WORD
+//     --time=WORD
+//     --time-style=TIME_STYLE
+// -T, --tabsize=COLS
+// -u
+// -v
+// -w, --width=COLS
+// -x
+// -X
+// -Z, --context
+
 #[cfg(unix)]
 #[macro_use]
 extern crate lazy_static;
@@ -70,23 +109,29 @@ lazy_static! {
 }
 
 pub mod options {
-    pub static ONELINE: &str = "1";
-    pub static ALL: &str = "all";
-    pub static ALMOST_ALL: &str = "almost-all";
+    pub mod display {
+        pub static ONELINE: &str = "1";
+        pub static LONG: &str = "long";
+    }
+    pub mod files {
+        pub static ALL: &str = "all";
+        pub static ALMOST_ALL: &str = "almost-all";
+    }
+    pub mod sort {
+        pub static SIZE: &str = "S";
+        pub static TIME: &str = "t";
+        pub static NONE: &str = "U";
+        pub static CTIME: &str = "c";
+    }
     pub static IGNORE_BACKUPS: &str = "ignore-backups";
     pub static DIRECTORY: &str = "directory";
     pub static CLASSIFY: &str = "classify";
     pub static HUMAN_READABLE: &str = "human-readable";
     pub static INODE: &str = "inode";
     pub static DEREFERENCE: &str = "dereference";
-    pub static LONG: &str = "long";
     pub static NUMERIC_UID_GID: &str = "numeric-uid-gid";
     pub static REVERSE: &str = "reverse";
     pub static RECURSIVE: &str = "recursive";
-    pub static SORT_SIZE: &str = "S";
-    pub static SORT_TIME: &str = "t";
-    pub static SORT_NONE: &str = "U";
-    pub static SORT_CTIME: &str = "c";
     pub static COLOR: &str = "color";
     pub static PATHS: &str = "paths";
 }
@@ -138,29 +183,29 @@ struct Config {
 
 impl Config {
     fn from(options: clap::ArgMatches) -> Config {
-        let display = if options.is_present(options::LONG) {
+        let display = if options.is_present(options::display::LONG) {
             DisplayOptions::Long
-        } else if options.is_present(options::ONELINE) {
+        } else if options.is_present(options::display::ONELINE) {
             DisplayOptions::OneLine
         } else {
             DisplayOptions::Columns
         };
 
-        let files = if options.is_present(options::ALL) {
+        let files = if options.is_present(options::files::ALL) {
             Files::All
-        } else if options.is_present(options::ALMOST_ALL) {
+        } else if options.is_present(options::files::ALMOST_ALL) {
             Files::AlmostAll
         } else {
             Files::Normal
         };
 
-        let sort = if options.is_present(options::SORT_TIME) {
+        let sort = if options.is_present(options::sort::TIME) {
             Sort::Time
-        } else if options.is_present(options::SORT_CTIME) {
+        } else if options.is_present(options::sort::CTIME) {
             Sort::CTime
-        } else if options.is_present(options::SORT_SIZE) {
+        } else if options.is_present(options::sort::SIZE) {
             Sort::Size
-        } else if options.is_present(options::SORT_NONE) {
+        } else if options.is_present(options::sort::NONE) {
             Sort::None
         } else {
             Sort::Name
@@ -190,7 +235,6 @@ impl Config {
             display,
             files,
             sort,
-
             recursive: options.is_present(options::RECURSIVE),
             reverse: options.is_present(options::REVERSE),
             dereference: options.is_present(options::DEREFERENCE),
@@ -217,20 +261,20 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .about(ABOUT)
         .usage(&usage[..])
         .arg(
-            Arg::with_name(options ::ONELINE)
-                .short(options ::ONELINE)
+            Arg::with_name(options::display::ONELINE)
+                .short(options::display::ONELINE)
                 .help("list one file per line."),
         )
         .arg(
-            Arg::with_name(options::ALL)
+            Arg::with_name(options::files::ALL)
                 .short("a")
-                .long(options::ALL)
+                .long(options::files::ALL)
                 .help("Do not ignore hidden files (files with names that start with '.')."),
         )
         .arg(
-            Arg::with_name(options::ALMOST_ALL)
+            Arg::with_name(options::files::ALMOST_ALL)
                 .short("A")
-                .long(options::ALMOST_ALL)
+                .long(options::files::ALMOST_ALL)
                 .help(
                 "In a directory, do not ignore all file names that start with '.', only ignore \
                 '.' and '..'.",
@@ -243,8 +287,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("Ignore entries which end with ~."),
         )
         .arg(
-            Arg::with_name(options::SORT_CTIME)
-            .short(options::SORT_CTIME)
+            Arg::with_name(options::sort::CTIME)
+            .short(options::sort::CTIME)
             .help("If the long listing format (e.g., -l, -o) is being used, print the status \
                 change time (the ‘ctime’ in the inode) instead of the modification time. When \
                 explicitly sorting by time (--sort=time or -t) or when not using a long listing \
@@ -292,9 +336,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 ),
         )
         .arg(
-            Arg::with_name(options::LONG)
+            Arg::with_name(options::display::LONG)
                 .short("l")
-                .long(options::LONG)
+                .long(options::display::LONG)
                 .help("Display detailed information."),
         )
         .arg(
@@ -317,18 +361,18 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("List the contents of all directories recursively."),
         )
         .arg(
-            Arg::with_name(options::SORT_SIZE)
-                .short(options::SORT_SIZE)
+            Arg::with_name(options::sort::SIZE)
+                .short(options::sort::SIZE)
                 .help("Sort by file size, largest first."),
         )
         .arg(
-            Arg::with_name(options::SORT_TIME)
-                .short(options::SORT_TIME)
+            Arg::with_name(options::sort::TIME)
+                .short(options::sort::TIME)
                 .help("Sort by modification time (the 'mtime' in the inode), newest first."),
         )
         .arg(
-            Arg::with_name(options::SORT_NONE)
-                .short(options::SORT_NONE)
+            Arg::with_name(options::sort::NONE)
+                .short(options::sort::NONE)
                 .help("Do not sort; list the files in whatever order they are stored in the \
                 directory.  This is especially useful when listing very large directories, \
                 since not doing any sorting can be noticeably faster.",
