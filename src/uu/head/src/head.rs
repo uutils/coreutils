@@ -29,6 +29,7 @@ enum FilterMode {
 struct Settings {
     mode: FilterMode,
     verbose: bool,
+    zero_terminated: bool,
 }
 
 impl Default for Settings {
@@ -36,6 +37,7 @@ impl Default for Settings {
         Settings {
             mode: FilterMode::Lines(10),
             verbose: false,
+            zero_terminated: false,
         }
     }
 }
@@ -69,6 +71,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         )
         .optflag("q", "quiet", "never print headers giving file names")
         .optflag("v", "verbose", "always print headers giving file names")
+        .optflag("z", "zero-terminated", "line delimiter is NUL, not newline")
         .optflag("h", "help", "display this help and exit")
         .optflag("V", "version", "output version information and exit")
         .parse(new_args);
@@ -113,6 +116,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let quiet = matches.opt_present("q");
     let verbose = matches.opt_present("v");
+    settings.zero_terminated = matches.opt_present("z");
     let files = matches.free;
 
     // GNU implementation allows multiple declarations of "-q" and "-v" with the
@@ -128,6 +132,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if verbose {
         settings.verbose = true;
     }
+
 
     if files.is_empty() {
         let mut buffer = BufReader::new(stdin());
@@ -203,8 +208,14 @@ fn head<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> bool {
             }
         }
         FilterMode::Lines(count) => {
-            for line in reader.lines().take(count) {
-                println!("{}", line.unwrap());
+            if settings.zero_terminated {
+                for line in reader.split(0).take(count) {
+                    print!("{}\0", String::from_utf8(line.unwrap()).unwrap())
+                }
+            } else {
+                for line in reader.lines().take(count) {
+                    println!("{}", line.unwrap());
+                }
             }
         }
         FilterMode::NLines(count) => {

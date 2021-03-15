@@ -87,6 +87,14 @@ fn test_verbose() {
 }
 
 #[test]
+fn test_zero_terminated() {
+    new_ucmd!()
+        .args(&["-z", "zero_terminated.txt"])
+        .run()
+        .stdout_is_fixture("zero_terminated.expected");
+}
+
+#[test]
 #[ignore]
 fn test_spams_newline() {
     new_ucmd!().pipe_in("a").succeeds().stdout_is("a\n");
