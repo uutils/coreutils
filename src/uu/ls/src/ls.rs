@@ -579,7 +579,8 @@ fn sort_entries(entries: &mut Vec<PathBuf>, config: &Config) {
         }),
         Sort::Size => entries
             .sort_by_key(|k| Reverse(get_metadata(k, config).map(|md| md.size()).unwrap_or(0))),
-        Sort::Name => entries.sort(),
+        // The default sort in GNU ls is case insensitive
+        Sort::Name => entries.sort_by_key(|k| k.to_string_lossy().to_lowercase()),
         Sort::None => {}
     }
 
