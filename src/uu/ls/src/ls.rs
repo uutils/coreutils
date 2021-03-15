@@ -27,6 +27,7 @@ use std::os::unix::fs::MetadataExt;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use time::{strftime, Timespec};
@@ -532,8 +533,8 @@ fn sort_entries(entries: &mut Vec<PathBuf>, config: &Config) {
             Reverse(
                 get_metadata(k, config)
                     .ok()
-                    .and_then(|md| get_time(&md, config))
-                    .unwrap_or(0),
+                    .and_then(|md| get_system_time(&md, config))
+                    .unwrap_or(UNIX_EPOCH),
             )
         }),
         Sort::Size => entries
@@ -756,34 +757,35 @@ fn display_group(_metadata: &Metadata, _config: &Config) -> String {
 // The implementations for get_time are separated because some options, such
 // as ctime will not be available
 #[cfg(unix)]
-fn get_time(md: &Metadata, config: &Config) -> Option<i64> {
-    Some(match config.time {
-        Time::Change => md.ctime(),
-        Time::Modification => md.mtime(),
-        Time::Access => md.atime(),
-    })
+fn get_system_time(md: &Metadata, config: &Config) -> Option<SystemTime> {
+    match config.time {
+        Time::Change => Some(UNIX_EPOCH + Duration::new(md.ctime() as u64, md.ctime_nsec() as u32)),
+        Time::Modification => md.modified().ok(),
+        Time::Access => md.accessed().ok(),
+    }
 }
 
 #[cfg(not(unix))]
-fn get_time(md: &Metadata, config: &Config) -> Option<i64> {
-    let time = match config.time {
-        Time::Modification => md.modified().ok()?,
-        Time::Access => md.accessed().ok()?,
-        _ => return None,
-    };
-    Some(
-        time.duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64,
-    )
+fn get_system_time(md: &Metadata, config: &Config) -> Option<SystemTime> {
+    match config.time {
+        Time::Modification => md.modified().ok(),
+        Time::Access => md.accessed().ok(),
+        _ => None,
+    }
+}
+
+fn get_time(md: &Metadata, config: &Config) -> Option<time::Tm> {
+    let duration = get_system_time(md, config)?
+        .duration_since(UNIX_EPOCH)
+        .ok()?;
+    let secs = duration.as_secs() as i64;
+    let nsec = duration.subsec_nanos() as i32;
+    Some(time::at(Timespec::new(secs, nsec)))
 }
 
 fn display_date(metadata: &Metadata, config: &Config) -> String {
     match get_time(metadata, config) {
-        Some(secs) => {
-            let time = time::at(Timespec::new(secs, 0));
-            strftime("%F %R", &time).unwrap()
-        }
+        Some(time) => strftime("%F %R", &time).unwrap(),
         None => "???".into(),
     }
 }
