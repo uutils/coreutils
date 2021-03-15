@@ -7,45 +7,6 @@
 
 // spell-checker:ignore (ToDO) cpio svgz webm somegroup nlink rmvb xspf
 
-// Missing features from GNU Coreutils:
-//     --author
-// -b, --escape
-//     --block-size=SIZE
-// -c
-// -D, --Dired
-// -f
-//     --file-type
-//     --format=WORD
-//     --full-time
-// -g
-//     --group-directories-first
-// -G, --no-group
-//     --si
-// -H, --dereference-command-line
-//     --dereference-command-line-symlink-to-dir
-//     --hide=PATTERN
-//     --hyperlink[=WHEN]
-//     --indicator-style=WORD
-// -I, --ignore
-// -k, --kibibytes
-// -m
-// -N, --literal
-// -o
-// -p, --indicator-style=slash
-// -q, --hide-control-chars
-//     --show-control-chars
-// -Q, --quote-name
-//     --quoting-style=WORD
-//     --time=WORD
-//     --time-style=TIME_STYLE
-// -T, --tabsize=COLS
-// -u
-// -v
-// -w, --width=COLS
-// -x
-// -X
-// -Z, --context
-
 #[cfg(unix)]
 #[macro_use]
 extern crate lazy_static;
