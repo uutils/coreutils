@@ -15,6 +15,7 @@ extern crate uucore;
 
 use clap::{App, Arg};
 use number_prefix::NumberPrefix;
+use std::cmp::Reverse;
 #[cfg(unix)]
 use std::collections::HashMap;
 use std::fs;
@@ -26,9 +27,6 @@ use std::os::unix::fs::MetadataExt;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf};
-use std::cmp::Reverse;
-#[cfg(not(unix))]
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use time::{strftime, Timespec};
@@ -167,7 +165,7 @@ impl Config {
                 "single-column" => Format::OneLine,
                 "columns" => Format::Columns,
                 // below should never happen as clap already restricts the values.
-                _ => panic!("Invalid field for --format")
+                _ => panic!("Invalid field for --format"),
             }
         } else if options.is_present(options::format::LONG) {
             Format::Long
@@ -194,7 +192,7 @@ impl Config {
                 "time" => Sort::Time,
                 "size" => Sort::Size,
                 // below should never happen as clap already restricts the values.
-                _ => panic!("Invalid field for --sort")
+                _ => panic!("Invalid field for --sort"),
             }
         } else if options.is_present(options::sort::TIME) {
             Sort::Time
@@ -211,7 +209,7 @@ impl Config {
                 "ctime" | "status" => Time::Change,
                 "access" | "atime" | "use" => Time::Access,
                 // below should never happen as clap already restricts the values.
-                _ => panic!("Invalid field for --time")
+                _ => panic!("Invalid field for --time"),
             }
         } else if options.is_present(options::time::ACCESS) {
             Time::Access
@@ -263,7 +261,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let usage = get_usage();
 
-    let mut app = App::new(executable!())
+    let app = App::new(executable!())
         .version(VERSION)
         .about(ABOUT)
         .usage(&usage[..])
@@ -455,18 +453,18 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
         // Positional arguments
         .arg(Arg::with_name(options::PATHS).multiple(true).takes_value(true));
-    
+
     #[cfg(unix)]
-    {
-        app = app.arg(
+    let app = {
+        app.arg(
             Arg::with_name(options::COLOR)
-                    .long(options::COLOR)
-                    .help("Color output based on file type.")
-                    .takes_value(true)
-                    .require_equals(true)
-                    .min_values(0),
-        );
-    }
+                .long(options::COLOR)
+                .help("Color output based on file type.")
+                .takes_value(true)
+                .require_equals(true)
+                .min_values(0),
+        )
+    };
 
     let matches = app.get_matches_from(args);
 
@@ -528,18 +526,18 @@ fn list(locs: Vec<String>, config: Config) -> i32 {
     }
 }
 
-#[cfg(any(unix, target_os = "redox"))]
 fn sort_entries(entries: &mut Vec<PathBuf>, config: &Config) {
     match config.sort {
         Sort::Time => entries.sort_by_key(|k| {
             Reverse(
                 get_metadata(k, config)
-                    .map(|md| get_time(&md, config))
+                    .ok()
+                    .and_then(|md| get_time(&md, config))
                     .unwrap_or(0),
             )
         }),
         Sort::Size => entries
-            .sort_by_key(|k| Reverse(get_metadata(k, config).map(|md| md.size()).unwrap_or(0))),
+            .sort_by_key(|k| Reverse(get_metadata(k, config).map(|md| md.len()).unwrap_or(0))),
         // The default sort in GNU ls is case insensitive
         Sort::Name => entries.sort_by_key(|k| k.to_string_lossy().to_lowercase()),
         Sort::None => {}
@@ -560,30 +558,6 @@ fn is_hidden(file_path: &DirEntry) -> bool {
 #[cfg(unix)]
 fn is_hidden(file_path: &DirEntry) -> bool {
     file_path.file_name().to_string_lossy().starts_with('.')
-}
-
-#[cfg(windows)]
-fn sort_entries(entries: &mut Vec<PathBuf>, config: &Config) {
-    match config.sort {
-        Sort::Time => entries.sort_by_key(|k| {
-            // Newest first
-            Reverse(get_time(get_metadata(k, config), config).unwrap_or(std::time::UNIX_EPOCH))
-        }),
-        Sort::Size => entries.sort_by_key(|k| {
-            // Largest first
-            Reverse(
-                get_metadata(k, config)
-                    .map(|md| md.file_size())
-                    .unwrap_or(0),
-            )
-        }),
-        Sort::Name => entries.sort(),
-        Sort::None => {}
-    }
-
-    if config.reverse {
-        entries.reverse();
-    }
 }
 
 fn should_display(entry: &DirEntry, config: &Config) -> bool {
@@ -782,42 +756,35 @@ fn display_group(_metadata: &Metadata, _config: &Config) -> String {
 // The implementations for get_time are separated because some options, such
 // as ctime will not be available
 #[cfg(unix)]
-fn get_time(md: &Metadata, config: &Config) -> i64 {
-    match config.time {
+fn get_time(md: &Metadata, config: &Config) -> Option<i64> {
+    Some(match config.time {
         Time::Change => md.ctime(),
         Time::Modification => md.mtime(),
         Time::Access => md.atime(),
-    }
+    })
 }
 
 #[cfg(not(unix))]
-fn get_time(md: &Metadata, config: &Config) -> Option<SystemTime> {
-    match config.time {
-        Time::Modification => md.modification().ok(),
-        Time::Access => md.access().ok(),
-        _ => None,
-    }
+fn get_time(md: &Metadata, config: &Config) -> Option<i64> {
+    let time = match config.time {
+        Time::Modification => md.modified().ok()?,
+        Time::Access => md.accessed().ok()?,
+        _ => return None,
+    };
+    Some(
+        time.duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64,
+    )
 }
 
-#[cfg(unix)]
 fn display_date(metadata: &Metadata, config: &Config) -> String {
-    let secs = get_time(metadata, config);
-    let time = time::at(Timespec::new(secs, 0));
-    strftime("%F %R", &time).unwrap()
-}
-
-#[cfg(not(unix))]
-fn display_date(metadata: &Metadata, config: &Config) -> String {
-    if let Some(time) = get_time(metadata, config) {
-        let time = time::at(Timespec::new(
-            time.duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs() as i64,
-            0,
-        ));
-        strftime("%F %R", &time).unwrap()
-    } else {
-        "???".to_string()
+    match get_time(metadata, config) {
+        Some(secs) => {
+            let time = time::at(Timespec::new(secs, 0));
+            strftime("%F %R", &time).unwrap()
+        }
+        None => "???".into(),
     }
 }
 
