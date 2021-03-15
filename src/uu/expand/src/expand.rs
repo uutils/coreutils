@@ -23,6 +23,13 @@ static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Convert tabs in each FILE to spaces, writing to standard output.
  With no FILE, or when FILE is -, read standard input.";
 
+pub mod options {
+    pub static TABS: &str = "tabs";
+    pub static INITIAL: &str = "initial";
+    pub static NO_UTF8: &str = "no-utf8";
+    pub static FILES: &str = "FILES";
+}
+
 static LONG_HELP: &str = "";
 
 static DEFAULT_TABSTOP: usize = 8;
@@ -65,13 +72,13 @@ struct Options {
 
 impl Options {
     fn new(matches: &ArgMatches) -> Options {
-        let tabstops = match matches.value_of("tabstops") {
+        let tabstops = match matches.value_of(options::TABS) {
             Some(s) => tabstops_parse(s.to_string()),
             None => vec![DEFAULT_TABSTOP],
         };
 
-        let iflag = matches.is_present("iflag");
-        let uflag = !matches.is_present("uflag");
+        let iflag = matches.is_present(options::INITIAL);
+        let uflag = !matches.is_present(options::NO_UTF8);
 
         // avoid allocations when dumping out long sequences of spaces
         // by precomputing the longest string of spaces we will ever need
@@ -86,7 +93,7 @@ impl Options {
             .unwrap(); // length of tabstops is guaranteed >= 1
         let tspaces = repeat(' ').take(nspaces).collect();
 
-        let files: Vec<String> = match matches.values_of("files") {
+        let files: Vec<String> = match matches.values_of(options::FILES) {
             Some(s) => s.map(|v| v.to_string()).collect(),
             None => vec!["-".to_owned()],
         };
@@ -109,23 +116,29 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .usage(&usage[..])
         .after_help(LONG_HELP)
         .arg(
-            Arg::with_name("iflag")
-                .long("initial")
+            Arg::with_name(options::INITIAL)
+                .long(options::INITIAL)
                 .short("i")
                 .help("do not convert tabs after non blanks"),
         )
         .arg(
-            Arg::with_name("tabstops")
-                .long("tabs")
+            Arg::with_name(options::TABS)
+                .long(options::TABS)
                 .short("t")
                 .value_name("N, LIST")
                 .takes_value(true)
                 .help("have tabs N characters apart, not 8 or use comma separated list of explicit tab positions"),
         )
         .arg(
-            Arg::with_name("uflags").long("no-utf8").short("U").help("interpret input file as 8-bit ASCII rather than UTF-8"),
+            Arg::with_name(options::NO_UTF8)
+                .long(options::NO_UTF8)
+                .short("U")
+                .help("interpret input file as 8-bit ASCII rather than UTF-8"),
         ).arg(
-            Arg::with_name("files").multiple(true).hidden(true).takes_value(true)
+            Arg::with_name(options::FILES)
+                .multiple(true)
+                .hidden(true)
+                .takes_value(true)
         )
         .get_matches_from(args);
 
