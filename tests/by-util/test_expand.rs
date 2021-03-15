@@ -46,3 +46,13 @@ fn test_with_space() {
     assert!(result.success);
     assert!(result.stdout.contains("    return"));
 }
+
+#[test]
+fn test_with_multiple_files() {
+    let (_, mut ucmd) = at_and_ucmd!();
+
+    let result = ucmd.arg("with-spaces.txt").arg("with-tab.txt").run();
+    assert!(result.success);
+    assert!(result.stdout.contains("    return"));
+    assert!(result.stdout.contains("        "));
+}
