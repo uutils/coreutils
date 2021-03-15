@@ -112,9 +112,10 @@ lazy_static! {
 }
 
 pub mod options {
-    pub mod display {
+    pub mod format {
         pub static ONELINE: &str = "1";
         pub static LONG: &str = "long";
+        pub static COLUMNS: &str = "C";
     }
     pub mod files {
         pub static ALL: &str = "all";
@@ -129,6 +130,9 @@ pub mod options {
         pub static ACCESS: &str = "u";
         pub static CHANGE: &str = "c";
     }
+    pub static FORMAT: &str = "format";
+    pub static SORT: &str = "sort";
+    pub static TIME: &str = "time";
     pub static IGNORE_BACKUPS: &str = "ignore-backups";
     pub static DIRECTORY: &str = "directory";
     pub static CLASSIFY: &str = "classify";
@@ -144,7 +148,7 @@ pub mod options {
 }
 
 #[derive(PartialEq, Eq)]
-enum DisplayOptions {
+enum Format {
     Columns,
     Long,
     OneLine,
@@ -176,7 +180,7 @@ enum Time {
 }
 
 struct Config {
-    display: DisplayOptions,
+    format: Format,
     files: Files,
     sort: Sort,
     recursive: bool,
@@ -196,12 +200,22 @@ struct Config {
 
 impl Config {
     fn from(options: clap::ArgMatches) -> Config {
-        let display = if options.is_present(options::display::LONG) {
-            DisplayOptions::Long
-        } else if options.is_present(options::display::ONELINE) {
-            DisplayOptions::OneLine
+        let format = if let Some(format_) = options.value_of(options::FORMAT) {
+            match format_ {
+                "long" | "verbose" => Format::Long,
+                "single-column" => Format::OneLine,
+                "columns" => Format::Columns,
+                // below should never happen as clap already restricts the values.
+                _ => panic!("Invalid field for --format")
+            }
+        } else if options.is_present(options::format::LONG) {
+            Format::Long
+        } else if options.is_present(options::format::ONELINE) {
+            Format::OneLine
+        } else if options.is_present(options::format::COLUMNS) {
+            Format::Columns
         } else {
-            DisplayOptions::Columns
+            Format::Columns
         };
 
         let files = if options.is_present(options::files::ALL) {
@@ -212,7 +226,16 @@ impl Config {
             Files::Normal
         };
 
-        let sort = if options.is_present(options::sort::TIME) {
+        let sort = if let Some(field) = options.value_of(options::SORT) {
+            match field {
+                "none" => Sort::None,
+                "name" => Sort::Name,
+                "time" => Sort::Time,
+                "size" => Sort::Size,
+                // below should never happen as clap already restricts the values.
+                _ => panic!("Invalid field for --sort")
+            }
+        } else if options.is_present(options::sort::TIME) {
             Sort::Time
         } else if options.is_present(options::sort::SIZE) {
             Sort::Size
@@ -222,7 +245,14 @@ impl Config {
             Sort::Name
         };
 
-        let time = if options.is_present(options::time::ACCESS) {
+        let time = if let Some(field) = options.value_of(options::TIME) {
+            match field {
+                "ctime" | "status" => Time::Change,
+                "access" | "atime" | "use" => Time::Access,
+                // below should never happen as clap already restricts the values.
+                _ => panic!("Invalid field for --time")
+            }
+        } else if options.is_present(options::time::ACCESS) {
             Time::Access
         } else if options.is_present(options::time::CHANGE) {
             Time::Change
@@ -247,7 +277,7 @@ impl Config {
         };
 
         Config {
-            display,
+            format,
             files,
             sort,
             recursive: options.is_present(options::RECURSIVE),
@@ -276,11 +306,110 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .version(VERSION)
         .about(ABOUT)
         .usage(&usage[..])
+
+        // Format arguments
         .arg(
-            Arg::with_name(options::display::ONELINE)
-                .short(options::display::ONELINE)
-                .help("list one file per line."),
+            Arg::with_name(options::FORMAT)
+                .long(options::FORMAT)
+                .help("Set the display format.")
+                .takes_value(true)
+                .possible_values(&["long", "verbose", "single-column", "columns"])
+                .hide_possible_values(true)
+                .require_equals(true)
+                .overrides_with_all(&[
+                    options::FORMAT,
+                    options::format::COLUMNS,
+                    options::format::ONELINE,
+                    options::format::LONG,
+                ]),
         )
+        .arg(
+            Arg::with_name(options::format::COLUMNS)
+                .short(options::format::COLUMNS)
+                .help("Display the files in columns.")
+        )
+        .arg(
+            Arg::with_name(options::format::ONELINE)
+                .short(options::format::ONELINE)
+                .help("List one file per line.")
+        )
+        .arg(
+            Arg::with_name(options::format::LONG)
+                .short("l")
+                .long(options::format::LONG)
+                .help("Display detailed information.")
+        )
+
+        // Time arguments
+        .arg(
+            Arg::with_name(options::TIME)
+                .long(options::TIME)
+                .help("Show time in <field>:\n\
+                    \taccess time (-u): atime, access, use;\n\
+                    \tchange time (-t): ctime, status.")
+                .value_name("field")
+                .takes_value(true)
+                .possible_values(&["atime", "access", "use", "ctime", "status"])
+                .hide_possible_values(true)
+                .require_equals(true)
+                .overrides_with_all(&[
+                    options::TIME,
+                    options::time::ACCESS,
+                    options::time::CHANGE,
+                ])
+        )
+        .arg(
+            Arg::with_name(options::time::CHANGE)
+                .short(options::time::CHANGE)
+                .help("If the long listing format (e.g., -l, -o) is being used, print the status \
+                change time (the ‘ctime’ in the inode) instead of the modification time. When \
+                explicitly sorting by time (--sort=time or -t) or when not using a long listing \
+                format, sort according to the status change time.",
+        ))
+        .arg(
+            Arg::with_name(options::time::ACCESS)
+                .short(options::time::ACCESS)
+                .help("If the long listing format (e.g., -l, -o) is being used, print the status \
+                access time instead of the modification time. When explicitly sorting by time \
+                (--sort=time or -t) or when not using a long listing format, sort according to the \
+                access time.")
+        )
+
+        // Sort arguments
+        .arg(
+            Arg::with_name(options::SORT)
+                .long(options::SORT)
+                .help("Sort by <field>: name, none (-U), time (-t) or size (-S)")
+                .value_name("field")
+                .takes_value(true)
+                .possible_values(&["name", "none", "time", "size"])
+                .require_equals(true)
+                .overrides_with_all(&[
+                    options::SORT,
+                    options::sort::SIZE,
+                    options::sort::TIME,
+                    options::sort::NONE,
+                ])
+        )
+        .arg(
+            Arg::with_name(options::sort::SIZE)
+                .short(options::sort::SIZE)
+                .help("Sort by file size, largest first."),
+        )
+        .arg(
+            Arg::with_name(options::sort::TIME)
+                .short(options::sort::TIME)
+                .help("Sort by modification time (the 'mtime' in the inode), newest first."),
+        )
+        .arg(
+            Arg::with_name(options::sort::NONE)
+                .short(options::sort::NONE)
+                .help("Do not sort; list the files in whatever order they are stored in the \
+                directory.  This is especially useful when listing very large directories, \
+                since not doing any sorting can be noticeably faster.")
+        )
+
+        // Other Flags
         .arg(
             Arg::with_name(options::files::ALL)
                 .short("a")
@@ -301,22 +430,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .short("B")
                 .long(options::IGNORE_BACKUPS)
                 .help("Ignore entries which end with ~."),
-        )
-        .arg(
-            Arg::with_name(options::time::CHANGE)
-                .short(options::time::CHANGE)
-                .help("If the long listing format (e.g., -l, -o) is being used, print the status \
-                change time (the ‘ctime’ in the inode) instead of the modification time. When \
-                explicitly sorting by time (--sort=time or -t) or when not using a long listing \
-                format, sort according to the status change time.",
-        ))
-        .arg(
-            Arg::with_name(options::time::ACCESS)
-                .short(options::time::ACCESS)
-                .help("If the long listing format (e.g., -l, -o) is being used, print the status \
-                access time instead of the modification time. When explicitly sorting by time \
-                (--sort=time or -t) or when not using a long listing format, sort according to the \
-                access time.")
         )
         .arg(
             Arg::with_name(options::DIRECTORY)
@@ -360,12 +473,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 ),
         )
         .arg(
-            Arg::with_name(options::display::LONG)
-                .short("l")
-                .long(options::display::LONG)
-                .help("Display detailed information."),
-        )
-        .arg(
             Arg::with_name(options::NUMERIC_UID_GID)
                 .short("n")
                 .long(options::NUMERIC_UID_GID)
@@ -384,23 +491,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(options::RECURSIVE)
                 .help("List the contents of all directories recursively."),
         )
-        .arg(
-            Arg::with_name(options::sort::SIZE)
-                .short(options::sort::SIZE)
-                .help("Sort by file size, largest first."),
-        )
-        .arg(
-            Arg::with_name(options::sort::TIME)
-                .short(options::sort::TIME)
-                .help("Sort by modification time (the 'mtime' in the inode), newest first."),
-        )
-        .arg(
-            Arg::with_name(options::sort::NONE)
-                .short(options::sort::NONE)
-                .help("Do not sort; list the files in whatever order they are stored in the \
-                directory.  This is especially useful when listing very large directories, \
-                since not doing any sorting can be noticeably faster.",
-        ))
+
+        // Positional arguments
         .arg(Arg::with_name(options::PATHS).multiple(true).takes_value(true));
     
     #[cfg(unix)]
@@ -444,7 +536,7 @@ fn list(locs: Vec<String>, config: Config) -> i32 {
 
         if p.is_dir() && !config.directory {
             dir = true;
-            if config.display == DisplayOptions::Long && !config.dereference {
+            if config.format == Format::Long && !config.dereference {
                 if let Ok(md) = p.symlink_metadata() {
                     if md.file_type().is_symlink() && !p.ends_with("/") {
                         dir = false;
@@ -593,7 +685,7 @@ fn pad_left(string: String, count: usize) -> String {
 }
 
 fn display_items(items: &[PathBuf], strip: Option<&Path>, config: &Config) {
-    if config.display == DisplayOptions::Long || config.numeric_uid_gid {
+    if config.format == Format::Long || config.numeric_uid_gid {
         let (mut max_links, mut max_size) = (1, 1);
         for item in items {
             let (links, size) = display_dir_entry_size(item, config);
@@ -604,7 +696,7 @@ fn display_items(items: &[PathBuf], strip: Option<&Path>, config: &Config) {
             display_item_long(item, strip, max_links, max_size, config);
         }
     } else {
-        if config.display != DisplayOptions::OneLine {
+        if config.format != Format::OneLine {
             let names = items.iter().filter_map(|i| {
                 let md = get_metadata(i, config);
                 match md {
@@ -811,7 +903,7 @@ fn display_file_name(
 ) -> Cell {
     let mut name = get_file_name(path, strip);
 
-    if config.display == DisplayOptions::Long {
+    if config.format == Format::Long {
         name = get_inode(metadata, config) + &name;
     }
 
@@ -824,7 +916,7 @@ fn display_file_name(
         }
     }
 
-    if config.display == DisplayOptions::Long && metadata.file_type().is_symlink() {
+    if config.format == Format::Long && metadata.file_type().is_symlink() {
         if let Ok(target) = path.read_link() {
             // We don't bother updating width here because it's not used for long listings
             let target_name = target.to_string_lossy().to_string();
@@ -872,7 +964,7 @@ fn display_file_name(
     config: &Config,
 ) -> Cell {
     let mut name = get_file_name(path, strip);
-    if config.display != DisplayOptions::Long {
+    if config.format != Format::Long {
         name = get_inode(metadata, config) + &name;
     }
     let mut width = UnicodeWidthStr::width(&*name);
@@ -940,7 +1032,7 @@ fn display_file_name(
         }
     }
 
-    if config.display == DisplayOptions::Long && metadata.file_type().is_symlink() {
+    if config.format == Format::Long && metadata.file_type().is_symlink() {
         if let Ok(target) = path.read_link() {
             // We don't bother updating width here because it's not used for long listings
             let code = if target.exists() { "fi" } else { "mi" };
