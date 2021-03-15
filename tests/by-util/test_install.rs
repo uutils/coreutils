@@ -324,8 +324,14 @@ fn test_install_preserve_timestamps() {
     let file1_metadata = at.metadata(file1);
     let file2_metadata = at.metadata(file2);
 
-    assert_eq!(file1_metadata.accessed().ok(), file2_metadata.accessed().ok());
-    assert_eq!(file1_metadata.modified().ok(), file2_metadata.modified().ok());
+    assert_eq!(
+        file1_metadata.accessed().ok(),
+        file2_metadata.accessed().ok()
+    );
+    assert_eq!(
+        file1_metadata.modified().ok(),
+        file2_metadata.modified().ok()
+    );
 }
 
 // These two tests are failing but should work
