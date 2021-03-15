@@ -79,22 +79,19 @@ impl Uniq {
 
     fn skip_fields<'a>(&self, line: &'a str) -> &'a str {
         if let Some(skip_fields) = self.skip_fields {
-            if line.split_whitespace().count() > skip_fields {
-                let mut field = 0;
-                let mut i = 0;
-                while field < skip_fields && i < line.len() {
-                    while i < line.len() && line.chars().nth(i).unwrap().is_whitespace() {
-                        i += 1;
-                    }
-                    while i < line.len() && !line.chars().nth(i).unwrap().is_whitespace() {
-                        i += 1;
-                    }
-                    field += 1;
+            let mut i = 0;
+            let mut char_indices = line.char_indices();
+            for _ in 0..skip_fields {
+                if char_indices.find(|(_, c)| !c.is_whitespace()) == None {
+                    return "";
                 }
-                &line[i..]
-            } else {
-                ""
+                match char_indices.find(|(_, c)| c.is_whitespace()) {
+                    None => return "",
+
+                    Some((next_field_i, _)) => i = next_field_i,
+                }
             }
+            &line[i..]
         } else {
             line
         }
