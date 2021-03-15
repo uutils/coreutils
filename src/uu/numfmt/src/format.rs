@@ -226,12 +226,31 @@ fn format_string(
     })
 }
 
-/// Format a line of text according to the selected options.
-///
-/// Given a line of text `s`, split the line into fields, transform and format
-/// any selected numeric fields, and print the result to stdout. Fields not
-/// selected for conversion are passed through unmodified.
-pub fn format_and_print(s: &str, options: &NumfmtOptions) -> Result<()> {
+fn format_and_print_delimited(s: &str, options: &NumfmtOptions) -> Result<()> {
+    let delimiter = options.delimiter.as_ref().unwrap();
+
+    for (n, field) in (1..).zip(s.split(delimiter)) {
+        let field_selected = uucore::ranges::contain(&options.fields, n);
+
+        // print delimiter before second and subsequent fields
+        if n > 1 {
+            print!("{}", delimiter);
+        }
+
+        if field_selected {
+            print!("{}", format_string(&field.trim_start(), options, None)?);
+        } else {
+            // print unselected field without conversion
+            print!("{}", field);
+        }
+    }
+
+    println!();
+
+    Ok(())
+}
+
+fn format_and_print_whitespace(s: &str, options: &NumfmtOptions) -> Result<()> {
     for (n, (prefix, field)) in (1..).zip(WhitespaceSplitter { s: Some(s) }) {
         let field_selected = uucore::ranges::contain(&options.fields, n);
 
@@ -262,4 +281,16 @@ pub fn format_and_print(s: &str, options: &NumfmtOptions) -> Result<()> {
     println!();
 
     Ok(())
+}
+
+/// Format a line of text according to the selected options.
+///
+/// Given a line of text `s`, split the line into fields, transform and format
+/// any selected numeric fields, and print the result to stdout. Fields not
+/// selected for conversion are passed through unmodified.
+pub fn format_and_print(s: &str, options: &NumfmtOptions) -> Result<()> {
+    match &options.delimiter {
+        Some(_) => format_and_print_delimited(s, options),
+        None => format_and_print_whitespace(s, options),
+    }
 }

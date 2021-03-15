@@ -1,6 +1,7 @@
 use crate::units::Transform;
 use uucore::ranges::Range;
 
+pub const DELIMITER: &str = "delimiter";
 pub const FIELD: &str = "field";
 pub const FIELD_DEFAULT: &str = "1";
 pub const FROM: &str = "from";
@@ -22,4 +23,5 @@ pub struct NumfmtOptions {
     pub padding: isize,
     pub header: usize,
     pub fields: Vec<Range>,
+    pub delimiter: Option<String>,
 }

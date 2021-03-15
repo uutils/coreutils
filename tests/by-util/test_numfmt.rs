@@ -383,3 +383,98 @@ fn test_field_df_example() {
         .succeeds()
         .stdout_is_fixture("df_expected.txt");
 }
+
+#[test]
+fn test_delimiter_must_not_be_empty() {
+    new_ucmd!().args(&["-d"]).fails();
+}
+
+#[test]
+fn test_delimiter_must_not_be_more_than_one_character() {
+    new_ucmd!()
+        .args(&["--delimiter", "sad"])
+        .fails()
+        .stderr_is("numfmt: the delimiter must be a single character");
+}
+
+#[test]
+fn test_delimiter_only() {
+    new_ucmd!()
+        .args(&["-d", ","])
+        .pipe_in("1234,56")
+        .succeeds()
+        .stdout_only("1234,56\n");
+}
+
+#[test]
+fn test_line_is_field_with_no_delimiter() {
+    new_ucmd!()
+        .args(&["-d,", "--to=iec"])
+        .pipe_in("123456")
+        .succeeds()
+        .stdout_only("121K\n");
+}
+
+#[test]
+fn test_delimiter_to_si() {
+    new_ucmd!()
+        .args(&["-d=,", "--to=si"])
+        .pipe_in("1234,56")
+        .succeeds()
+        .stdout_only("1.3K,56\n");
+}
+
+#[test]
+fn test_delimiter_skips_leading_whitespace() {
+    new_ucmd!()
+        .args(&["-d=,", "--to=si"])
+        .pipe_in("     \t               1234,56")
+        .succeeds()
+        .stdout_only("1.3K,56\n");
+}
+
+#[test]
+fn test_delimiter_preserves_leading_whitespace_in_unselected_fields() {
+    new_ucmd!()
+        .args(&["-d=|", "--to=si"])
+        .pipe_in("             1000|   2000")
+        .succeeds()
+        .stdout_only("1.0K|   2000\n");
+}
+
+#[test]
+fn test_delimiter_from_si() {
+    new_ucmd!()
+        .args(&["-d=,", "--from=si"])
+        .pipe_in("1.2K,56")
+        .succeeds()
+        .stdout_only("1200,56\n");
+}
+
+#[test]
+fn test_delimiter_overrides_whitespace_separator() {
+    // GNU numfmt reports this as “invalid suffix”
+    new_ucmd!()
+        .args(&["-d,"])
+        .pipe_in("1 234,56")
+        .fails()
+        .stderr_is("numfmt: invalid number: ‘1 234’\n");
+}
+
+#[test]
+fn test_delimiter_with_padding() {
+    new_ucmd!()
+        .args(&["-d=|", "--to=si", "--padding=5"])
+        .pipe_in("1000|2000")
+        .succeeds()
+        .stdout_only(" 1.0K|2000\n");
+}
+
+#[test]
+fn test_delimiter_with_padding_and_fields() {
+    new_ucmd!()
+        .args(&["-d=|", "--to=si", "--padding=5", "--field=-"])
+        .pipe_in("1000|2000")
+        .succeeds()
+        .stdout_only(" 1.0K| 2.0K\n");
+}

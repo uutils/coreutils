@@ -128,11 +128,20 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         None => unreachable!(),
     };
 
+    let delimiter = args.value_of(options::DELIMITER).map_or(Ok(None), |arg| {
+        if arg.len() == 1 {
+            Ok(Some(arg.to_string()))
+        } else {
+            Err("the delimiter must be a single character".to_string())
+        }
+    })?;
+
     Ok(NumfmtOptions {
         transform,
         padding,
         header,
         fields,
+        delimiter,
     })
 }
 
@@ -145,6 +154,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .usage(&usage[..])
         .after_help(LONG_HELP)
         .setting(AppSettings::AllowNegativeNumbers)
+        .arg(
+            Arg::with_name(options::DELIMITER)
+                .short("d")
+                .long(options::DELIMITER)
+                .value_name("X")
+                .help("use X instead of whitespace for field delimiter"),
+        )
         .arg(
             Arg::with_name(options::FIELD)
                 .long(options::FIELD)
