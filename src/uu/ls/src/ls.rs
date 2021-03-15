@@ -102,7 +102,6 @@ pub mod options {
     pub static NUMERIC_UID_GID: &str = "numeric-uid-gid";
     pub static REVERSE: &str = "reverse";
     pub static RECURSIVE: &str = "recursive";
-    #[cfg(unix)]
     pub static COLOR: &str = "color";
     pub static PATHS: &str = "paths";
 }
@@ -451,13 +450,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(options::RECURSIVE)
                 .help("List the contents of all directories recursively."),
         )
-
-        // Positional arguments
-        .arg(Arg::with_name(options::PATHS).multiple(true).takes_value(true));
-
-    #[cfg(unix)]
-    let app = {
-        app.arg(
+        .arg(
             Arg::with_name(options::COLOR)
                 .long(options::COLOR)
                 .help("Color output based on file type.")
@@ -465,7 +458,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .require_equals(true)
                 .min_values(0),
         )
-    };
+
+        // Positional arguments
+        .arg(Arg::with_name(options::PATHS).multiple(true).takes_value(true));
 
     let matches = app.get_matches_from(args);
 
