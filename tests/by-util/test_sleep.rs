@@ -45,3 +45,68 @@ fn test_sleep_h_suffix() {
     let duration = before_test.elapsed();
     assert!(duration >= millis_360);
 }
+
+#[test]
+fn test_sleep_negative_duration() {
+    new_ucmd!().args(&["-1"]).fails();
+    new_ucmd!().args(&["-1s"]).fails();
+    new_ucmd!().args(&["-1m"]).fails();
+    new_ucmd!().args(&["-1h"]).fails();
+    new_ucmd!().args(&["-1d"]).fails();
+}
+
+#[test]
+fn test_sleep_zero_duration() {
+    new_ucmd!().args(&["0"]).succeeds().stdout_only("");
+    new_ucmd!().args(&["0s"]).succeeds().stdout_only("");
+    new_ucmd!().args(&["0m"]).succeeds().stdout_only("");
+    new_ucmd!().args(&["0h"]).succeeds().stdout_only("");
+    new_ucmd!().args(&["0d"]).succeeds().stdout_only("");
+}
+
+#[test]
+fn test_sleep_no_argument() {
+    new_ucmd!().fails();
+}
+
+#[test]
+fn test_sleep_sum_duration_same_suffix() {
+    let millis_200 = Duration::from_millis(100 + 100);
+    let before_test = Instant::now();
+
+    new_ucmd!()
+        .args(&["0.1s", "0.1s"])
+        .succeeds()
+        .stdout_only("");
+
+    let duration = before_test.elapsed();
+    assert!(duration >= millis_200);
+}
+
+#[test]
+fn test_sleep_sum_duration_different_suffix() {
+    let millis_700 = Duration::from_millis(100 + 600);
+    let before_test = Instant::now();
+
+    new_ucmd!()
+        .args(&["0.1s", "0.01m"])
+        .succeeds()
+        .stdout_only("");
+
+    let duration = before_test.elapsed();
+    assert!(duration >= millis_700);
+}
+
+#[test]
+fn test_sleep_sum_duration_many() {
+    let millis_900 = Duration::from_millis(100 + 100 + 300 + 400);
+    let before_test = Instant::now();
+
+    new_ucmd!()
+        .args(&["0.1s", "0.1s", "0.3s", "0.4s"])
+        .succeeds()
+        .stdout_only("");
+
+    let duration = before_test.elapsed();
+    assert!(duration >= millis_900);
+}
