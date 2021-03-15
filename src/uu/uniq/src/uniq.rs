@@ -10,7 +10,7 @@ extern crate uucore;
 
 use clap::{App, Arg, ArgMatches};
 use std::fs::File;
-use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
+use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Result, Write};
 use std::path::Path;
 use std::str::FromStr;
 
@@ -61,8 +61,7 @@ impl Uniq {
         let delimiters = &self.delimiters;
         let line_terminator = self.get_line_terminator();
 
-        for io_line in reader.split(line_terminator) {
-            let line = String::from_utf8(crash_if_err!(1, io_line)).unwrap();
+        for line in reader.split(line_terminator).map(get_line_string) {
             if !lines.is_empty() && self.cmp_keys(&lines[0], &line) {
                 let print_delimiter = delimiters == &Delimiters::Prepend
                     || (delimiters == &Delimiters::Separate && first_line_printed);
@@ -197,6 +196,11 @@ impl Uniq {
         );
         crash_if_err!(1, writer.write_all(&[line_terminator]));
     }
+}
+
+fn get_line_string(io_line: Result<Vec<u8>>) -> String {
+    let line_bytes = crash_if_err!(1, io_line);
+    crash_if_err!(1, String::from_utf8(line_bytes))
 }
 
 fn opt_parsed<T: FromStr>(opt_name: &str, matches: &ArgMatches) -> Option<T> {

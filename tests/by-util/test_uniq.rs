@@ -138,3 +138,12 @@ fn test_stdin_zero_terminated() {
         .run()
         .stdout_is_fixture("sorted-zero-terminated.expected");
 }
+
+#[test]
+fn test_invalid_utf8() {
+    new_ucmd!()
+        .arg("not-utf8-sequence.txt")
+        .run()
+        .failure()
+        .stderr_only("uniq: error: invalid utf-8 sequence of 1 bytes from index 0");
+}
