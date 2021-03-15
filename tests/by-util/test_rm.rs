@@ -204,3 +204,18 @@ fn test_rm_no_operand() {
     ucmd.fails()
         .stderr_is("rm: error: missing an argument\nrm: error: for help, try 'rm --help'\n");
 }
+
+#[test]
+fn test_rm_verbose_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_rm_verbose_directory";
+
+    at.mkdir(dir);
+
+    ucmd.arg("-r")
+        .arg("-f")
+        .arg("-v")
+        .arg(dir)
+        .succeeds()
+        .stdout_only(format!("removed directory '{}'\n", dir));
+}
