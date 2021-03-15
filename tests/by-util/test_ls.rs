@@ -292,8 +292,11 @@ fn test_ls_order_time() {
     assert!(result.success);
     #[cfg(not(windows))]
     assert_eq!(result.stdout, "test-3\ntest-4\ntest-2\ntest-1\n");
+
+    // Access time does not seem to be set on Windows on read call
+    // so the order is 4 3 2 1
     #[cfg(windows)]
-    assert_eq!(result.stdout, "test-3  test-4  test-2  test-1\n");
+    assert_eq!(result.stdout, "test-4  test-3  test-2  test-1\n");
 
     // test-2 had the last ctime change when the permissions were set
     // So the order should be 2 4 3 1
