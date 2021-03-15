@@ -27,7 +27,9 @@ use std::os::unix::fs::MetadataExt;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+#[cfg(unix)]
+use std::time::Duration;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use time::{strftime, Timespec};
@@ -165,7 +167,7 @@ impl Config {
                 "single-column" => Format::OneLine,
                 "columns" => Format::Columns,
                 // below should never happen as clap already restricts the values.
-                _ => panic!("Invalid field for --format"),
+                _ => unreachable!("Invalid field for --format"),
             }
         } else if options.is_present(options::format::LONG) {
             Format::Long
@@ -192,7 +194,7 @@ impl Config {
                 "time" => Sort::Time,
                 "size" => Sort::Size,
                 // below should never happen as clap already restricts the values.
-                _ => panic!("Invalid field for --sort"),
+                _ => unreachable!("Invalid field for --sort"),
             }
         } else if options.is_present(options::sort::TIME) {
             Sort::Time
@@ -209,7 +211,7 @@ impl Config {
                 "ctime" | "status" => Time::Change,
                 "access" | "atime" | "use" => Time::Access,
                 // below should never happen as clap already restricts the values.
-                _ => panic!("Invalid field for --time"),
+                _ => unreachable!("Invalid field for --time"),
             }
         } else if options.is_present(options::time::ACCESS) {
             Time::Access
