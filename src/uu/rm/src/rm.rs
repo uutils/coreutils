@@ -48,6 +48,7 @@ static OPT_PRESERVE_ROOT: &str = "preserve-root";
 static OPT_PROMPT: &str = "prompt";
 static OPT_PROMPT_MORE: &str = "prompt-more";
 static OPT_RECURSIVE: &str = "recursive";
+static OPT_RECURSIVE_R: &str = "recursive_R";
 static OPT_VERBOSE: &str = "verbose";
 
 static ARG_FILES: &str = "files";
@@ -58,7 +59,7 @@ fn get_usage() -> String {
 
 fn get_long_usage() -> String {
     String::from(
-        "By default, rm does not remove directories.  Use the --recursive (-r)
+        "By default, rm does not remove directories.  Use the --recursive (-r or -R)
         option to remove each listed directory, too, along with all of its contents
 
         To remove a file whose name starts with a '-', for example '-foo',
@@ -82,7 +83,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .about(ABOUT)
         .usage(&usage[..])
         .after_help(&long_usage[..])
-    // TODO: make getopts support -R in addition to -r
 
         .arg(
             Arg::with_name(OPT_FORCE)
@@ -127,6 +127,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(OPT_RECURSIVE).short("r")
             .long(OPT_RECURSIVE)
             .help("remove directories and their contents recursively")
+        )
+        .arg(
+            Arg::with_name(OPT_RECURSIVE_R).short("R")
+            .help("Equivalent to -r")
         )
         .arg(
             Arg::with_name(OPT_DIR)
@@ -182,7 +186,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             },
             one_fs: matches.is_present(OPT_ONE_FILE_SYSTEM),
             preserve_root: !matches.is_present(OPT_NO_PRESERVE_ROOT),
-            recursive: matches.is_present(OPT_RECURSIVE),
+            recursive: matches.is_present(OPT_RECURSIVE) || matches.is_present(OPT_RECURSIVE_R),
             dir: matches.is_present(OPT_DIR),
             verbose: matches.is_present(OPT_VERBOSE),
         };
@@ -246,12 +250,7 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
     let is_root = path.has_root() && path.parent().is_none();
     if options.recursive && (!is_root || !options.preserve_root) {
         if options.interactive != InteractiveMode::Always {
-            // we need the extra crate because apparently fs::remove_dir_all() does not function
-            // correctly on Windows
-            if let Err(e) = remove_dir_all(path) {
-                had_err = true;
-                show_error!("could not remove '{}': {}", path.display(), e);
-            }
+            had_err = remove_dir(path, options).bitor(had_err);
         } else {
             let mut dirs: VecDeque<DirEntry> = VecDeque::new();
 
@@ -283,7 +282,7 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
         had_err = true;
     } else {
         show_error!(
-            "could not remove directory '{}' (did you mean to pass '-r'?)",
+            "could not remove directory '{}' (did you mean to pass '-r' or '-R'?)",
             path.display()
         );
         had_err = true;
@@ -299,14 +298,17 @@ fn remove_dir(path: &Path, options: &Options) -> bool {
         true
     };
     if response {
-        match fs::remove_dir(path) {
+        // remove_dir_all - on non-Windows this is a re-export of std::fs::remove_dir_all.
+        // For Windows an implementation that handles the locking of directories that occurs when
+        // deleting directory trees rapidly.
+        match remove_dir_all(path) {
             Ok(_) => {
                 if options.verbose {
-                    println!("removed '{}'", path.display());
+                    println!("removed directory '{}'", path.display());
                 }
             }
             Err(e) => {
-                show_error!("removing '{}': {}", path.display(), e);
+                show_error!("cannot remove '{}': {}", path.display(), e);
                 return true;
             }
         }
@@ -329,7 +331,7 @@ fn remove_file(path: &Path, options: &Options) -> bool {
                 }
             }
             Err(e) => {
-                show_error!("removing '{}': {}", path.display(), e);
+                show_error!("cannot remove '{}': {}", path.display(), e);
                 return true;
             }
         }
@@ -339,11 +341,11 @@ fn remove_file(path: &Path, options: &Options) -> bool {
 }
 
 fn prompt_file(path: &Path, is_dir: bool) -> bool {
-    if is_dir {
-        prompt(&(format!("rm: remove directory '{}'? ", path.display())))
-    } else {
-        prompt(&(format!("rm: remove file '{}'? ", path.display())))
-    }
+    prompt(&format!(
+        "rm: remove {} '{}'? ",
+        if is_dir { "directory" } else { "file" },
+        path.display()
+    ))
 }
 
 fn prompt(msg: &str) -> bool {
