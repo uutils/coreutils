@@ -133,7 +133,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         settings.verbose = true;
     }
 
-
     if files.is_empty() {
         let mut buffer = BufReader::new(stdin());
         head(&mut buffer, &settings);
