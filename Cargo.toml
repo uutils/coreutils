@@ -150,6 +150,7 @@ feat_require_unix = [
     "chown",
     "chroot",
     "du",
+    "dd",
     "groups",
     "hostid",
     "id",
@@ -249,6 +250,7 @@ df       = { optional=true, version="0.0.4", package="uu_df", path="src/uu/df" }
 dircolors= { optional=true, version="0.0.4", package="uu_dircolors", path="src/uu/dircolors" }
 dirname  = { optional=true, version="0.0.4", package="uu_dirname", path="src/uu/dirname" }
 du       = { optional=true, version="0.0.4", package="uu_du", path="src/uu/du" }
+dd       = { optional=true, version="0.0.4", package="uu_dd", path="src/uu/dd" }
 echo     = { optional=true, version="0.0.4", package="uu_echo", path="src/uu/echo" }
 env      = { optional=true, version="0.0.4", package="uu_env", path="src/uu/env" }
 expand   = { optional=true, version="0.0.4", package="uu_expand", path="src/uu/expand" }

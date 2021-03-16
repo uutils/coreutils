@@ -1,0 +1,23 @@
+[package]
+name = "uu_dd"
+version = "0.0.4"
+authors = ["uutils developers"]
+license = "MIT"
+description = "dd ~ (uutils) copy and convert files"
+
+homepage = "https://github.com/uutils/coreutils"
+repository = "https://github.com/uutils/coreutils/tree/master/src/uu/dd"
+keywords = ["coreutils", "uutils", "cross-platform", "cli", "utility"]
+categories = ["command-line-utilities"]
+edition = "2018"
+
+[lib]
+path = "src/dd.rs"
+
+[dependencies]
+uucore = { version=">=0.0.7", package="uucore", path="../../uucore" }
+uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
+
+[[bin]]
+name = "dd"
+path = "src/main.rs"
