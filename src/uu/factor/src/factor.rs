@@ -282,9 +282,8 @@ mod tests {
             i == 0 || factor(i).product() == i
         }
 
-        fn recombines_factors(f: Factors) -> bool {
+        fn recombines_factors(f: Factors) -> () {
             assert_eq!(factor(f.product()), f);
-            true
         }
     }
 }
