@@ -341,11 +341,11 @@ fn remove_file(path: &Path, options: &Options) -> bool {
 }
 
 fn prompt_file(path: &Path, is_dir: bool) -> bool {
-    if is_dir {
-        prompt(&(format!("rm: remove directory '{}'? ", path.display())))
-    } else {
-        prompt(&(format!("rm: remove file '{}'? ", path.display())))
-    }
+    prompt(&format!(
+        "rm: remove {} '{}'? ",
+        if is_dir { "directory" } else { "file" },
+        path.display()
+    ))
 }
 
 fn prompt(msg: &str) -> bool {
