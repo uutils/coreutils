@@ -331,11 +331,13 @@ impl std::ops::BitXor<Exponent> for Factors {
     type Output = Self;
 
     fn bitxor(self, rhs: Exponent) -> Factors {
+        debug_assert_ne!(rhs, 0);
         let mut r = Factors::one();
         for (p, e) in self.0.borrow().0.iter() {
             r.add(*p, rhs * e);
         }
 
+        debug_assert_eq!(r.product(), self.product().pow(rhs.into()));
         return r;
     }
 }
