@@ -10,7 +10,7 @@ extern crate uucore;
 
 use clap::{App, Arg, ArgMatches};
 use std::fs::File;
-use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
+use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Result, Write};
 use std::path::Path;
 use std::str::FromStr;
 
@@ -61,8 +61,7 @@ impl Uniq {
         let delimiters = &self.delimiters;
         let line_terminator = self.get_line_terminator();
 
-        for io_line in reader.split(line_terminator) {
-            let line = String::from_utf8(crash_if_err!(1, io_line)).unwrap();
+        for line in reader.split(line_terminator).map(get_line_string) {
             if !lines.is_empty() && self.cmp_keys(&lines[0], &line) {
                 let print_delimiter = delimiters == &Delimiters::Prepend
                     || (delimiters == &Delimiters::Separate && first_line_printed);
@@ -80,22 +79,19 @@ impl Uniq {
 
     fn skip_fields<'a>(&self, line: &'a str) -> &'a str {
         if let Some(skip_fields) = self.skip_fields {
-            if line.split_whitespace().count() > skip_fields {
-                let mut field = 0;
-                let mut i = 0;
-                while field < skip_fields && i < line.len() {
-                    while i < line.len() && line.chars().nth(i).unwrap().is_whitespace() {
-                        i += 1;
-                    }
-                    while i < line.len() && !line.chars().nth(i).unwrap().is_whitespace() {
-                        i += 1;
-                    }
-                    field += 1;
+            let mut i = 0;
+            let mut char_indices = line.char_indices();
+            for _ in 0..skip_fields {
+                if char_indices.find(|(_, c)| !c.is_whitespace()) == None {
+                    return "";
                 }
-                &line[i..]
-            } else {
-                ""
+                match char_indices.find(|(_, c)| c.is_whitespace()) {
+                    None => return "",
+
+                    Some((next_field_i, _)) => i = next_field_i,
+                }
             }
+            &line[i..]
         } else {
             line
         }
@@ -197,6 +193,11 @@ impl Uniq {
         );
         crash_if_err!(1, writer.write_all(&[line_terminator]));
     }
+}
+
+fn get_line_string(io_line: Result<Vec<u8>>) -> String {
+    let line_bytes = crash_if_err!(1, io_line);
+    crash_if_err!(1, String::from_utf8(line_bytes))
 }
 
 fn opt_parsed<T: FromStr>(opt_name: &str, matches: &ArgMatches) -> Option<T> {
