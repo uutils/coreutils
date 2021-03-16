@@ -225,7 +225,7 @@ pub fn factor(num: u64) -> Factors {
 
 #[cfg(test)]
 mod tests {
-    use super::{factor, Factors};
+    use super::{factor, Exponent, Factors};
     use quickcheck::quickcheck;
 
     #[test]
@@ -285,6 +285,13 @@ mod tests {
         fn recombines_factors(f: Factors) -> () {
             assert_eq!(factor(f.product()), f);
         }
+
+        fn exponentiate_factors(f: Factors, e: Exponent) -> () {
+            if e == 0 { return; }
+            if let Some(fe) = f.product().checked_pow(e.into()) {
+                assert_eq!(factor(fe), f ^ e);
+            }
+        }
     }
 }
 
@@ -316,5 +323,19 @@ impl quickcheck::Arbitrary for Factors {
 
             return f;
         }
+    }
+}
+
+#[cfg(test)]
+impl std::ops::BitXor<Exponent> for Factors {
+    type Output = Self;
+
+    fn bitxor(self, rhs: Exponent) -> Factors {
+        let mut r = Factors::one();
+        for (p, e) in self.0.borrow().0.iter() {
+            r.add(*p, rhs * e);
+        }
+
+        return r;
     }
 }
