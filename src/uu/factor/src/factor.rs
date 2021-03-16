@@ -225,13 +225,19 @@ pub fn factor(num: u64) -> Factors {
 
 #[cfg(test)]
 mod tests {
-    use super::{factor, Exponent, Factors};
+    use super::{factor, Decomposition, Exponent, Factors};
     use quickcheck::quickcheck;
+    use smallvec::smallvec;
+    use std::cell::RefCell;
 
     #[test]
     fn factor_2044854919485649() {
-        let n = 503 * 2423 * 40961.pow(2);
-        assert_eq!(factor(n).product(), n);
+        let f = Factors(RefCell::new(Decomposition(smallvec![
+            (503, 1),
+            (2423, 1),
+            (40961, 2)
+        ])));
+        assert_eq!(factor(f.product()), f);
     }
 
     #[test]
