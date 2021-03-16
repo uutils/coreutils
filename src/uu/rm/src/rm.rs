@@ -246,12 +246,7 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
     let is_root = path.has_root() && path.parent().is_none();
     if options.recursive && (!is_root || !options.preserve_root) {
         if options.interactive != InteractiveMode::Always {
-            // we need the extra crate because apparently fs::remove_dir_all() does not function
-            // correctly on Windows
-            if let Err(e) = remove_dir_all(path) {
-                had_err = true;
-                show_error!("could not remove '{}': {}", path.display(), e);
-            }
+            had_err = remove_dir(path, options).bitor(had_err);
         } else {
             let mut dirs: VecDeque<DirEntry> = VecDeque::new();
 
@@ -299,14 +294,17 @@ fn remove_dir(path: &Path, options: &Options) -> bool {
         true
     };
     if response {
-        match fs::remove_dir(path) {
+        // remove_dir_all - on non-Windows this is a re-export of std::fs::remove_dir_all.
+        // For Windows an implementation that handles the locking of directories that occurs when
+        // deleting directory trees rapidly.
+        match remove_dir_all(path) {
             Ok(_) => {
                 if options.verbose {
-                    println!("removed '{}'", path.display());
+                    println!("removed directory '{}'", path.display());
                 }
             }
             Err(e) => {
-                show_error!("removing '{}': {}", path.display(), e);
+                show_error!("cannot remove '{}': {}", path.display(), e);
                 return true;
             }
         }
@@ -329,7 +327,7 @@ fn remove_file(path: &Path, options: &Options) -> bool {
                 }
             }
             Err(e) => {
-                show_error!("removing '{}': {}", path.display(), e);
+                show_error!("cannot remove '{}': {}", path.display(), e);
                 return true;
             }
         }
