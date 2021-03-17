@@ -225,35 +225,25 @@ pub fn factor(num: u64) -> Factors {
 
 #[cfg(test)]
 mod tests {
-    use super::{factor, Factors};
+    use super::{factor, Decomposition, Exponent, Factors};
     use quickcheck::quickcheck;
+    use smallvec::smallvec;
+    use std::cell::RefCell;
 
     #[test]
-    fn factor_correctly_recombines_prior_test_failures() {
-        let prior_failures = [
-            // * integers with duplicate factors (ie, N.pow(M))
-            4566769_u64, // == 2137.pow(2)
-            2044854919485649_u64,
-            18446739546814299361_u64,
-            18446738440860217487_u64,
-            18446736729316206481_u64,
-        ];
-        assert!(prior_failures.iter().all(|i| factor(*i).product() == *i));
+    fn factor_2044854919485649() {
+        let f = Factors(RefCell::new(Decomposition(smallvec![
+            (503, 1),
+            (2423, 1),
+            (40961, 2)
+        ])));
+        assert_eq!(factor(f.product()), f);
     }
 
     #[test]
     fn factor_recombines_small() {
         assert!((1..10_000)
             .map(|i| 2 * i + 1)
-            .all(|i| factor(i).product() == i));
-    }
-
-    #[test]
-    fn factor_recombines_small_squares() {
-        // factor(18446736729316206481) == 4294966441 ** 2 ; causes debug_assert fault for repeated decomposition factor in add()
-        // ToDO: explain/combine with factor_18446736729316206481 and factor_18446739546814299361 tests
-        assert!((1..10_000)
-            .map(|i| (2 * i + 1) * (2 * i + 1))
             .all(|i| factor(i).product() == i));
     }
 
@@ -282,9 +272,15 @@ mod tests {
             i == 0 || factor(i).product() == i
         }
 
-        fn recombines_factors(f: Factors) -> bool {
+        fn recombines_factors(f: Factors) -> () {
             assert_eq!(factor(f.product()), f);
-            true
+        }
+
+        fn exponentiate_factors(f: Factors, e: Exponent) -> () {
+            if e == 0 { return; }
+            if let Some(fe) = f.product().checked_pow(e.into()) {
+                assert_eq!(factor(fe), f ^ e);
+            }
         }
     }
 }
@@ -317,5 +313,21 @@ impl quickcheck::Arbitrary for Factors {
 
             return f;
         }
+    }
+}
+
+#[cfg(test)]
+impl std::ops::BitXor<Exponent> for Factors {
+    type Output = Self;
+
+    fn bitxor(self, rhs: Exponent) -> Factors {
+        debug_assert_ne!(rhs, 0);
+        let mut r = Factors::one();
+        for (p, e) in self.0.borrow().0.iter() {
+            r.add(*p, rhs * e);
+        }
+
+        debug_assert_eq!(r.product(), self.product().pow(rhs.into()));
+        return r;
     }
 }
