@@ -48,6 +48,7 @@ static OPT_PRESERVE_ROOT: &str = "preserve-root";
 static OPT_PROMPT: &str = "prompt";
 static OPT_PROMPT_MORE: &str = "prompt-more";
 static OPT_RECURSIVE: &str = "recursive";
+static OPT_RECURSIVE_R: &str = "recursive_R";
 static OPT_VERBOSE: &str = "verbose";
 
 static ARG_FILES: &str = "files";
@@ -58,7 +59,7 @@ fn get_usage() -> String {
 
 fn get_long_usage() -> String {
     String::from(
-        "By default, rm does not remove directories.  Use the --recursive (-r)
+        "By default, rm does not remove directories.  Use the --recursive (-r or -R)
         option to remove each listed directory, too, along with all of its contents
 
         To remove a file whose name starts with a '-', for example '-foo',
@@ -82,7 +83,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .about(ABOUT)
         .usage(&usage[..])
         .after_help(&long_usage[..])
-    // TODO: make getopts support -R in addition to -r
 
         .arg(
             Arg::with_name(OPT_FORCE)
@@ -127,6 +127,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(OPT_RECURSIVE).short("r")
             .long(OPT_RECURSIVE)
             .help("remove directories and their contents recursively")
+        )
+        .arg(
+            // To mimic GNU's behavior we also want the '-R' flag. However, using clap's
+            // alias method 'visible_alias("R")' would result in a long '--R' flag.
+            Arg::with_name(OPT_RECURSIVE_R).short("R")
+            .help("Equivalent to -r")
         )
         .arg(
             Arg::with_name(OPT_DIR)
@@ -182,7 +188,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             },
             one_fs: matches.is_present(OPT_ONE_FILE_SYSTEM),
             preserve_root: !matches.is_present(OPT_NO_PRESERVE_ROOT),
-            recursive: matches.is_present(OPT_RECURSIVE),
+            recursive: matches.is_present(OPT_RECURSIVE) || matches.is_present(OPT_RECURSIVE_R),
             dir: matches.is_present(OPT_DIR),
             verbose: matches.is_present(OPT_VERBOSE),
         };
@@ -283,7 +289,7 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
         had_err = true;
     } else {
         show_error!(
-            "could not remove directory '{}' (did you mean to pass '-r'?)",
+            "could not remove directory '{}' (did you mean to pass '-r' or '-R'?)",
             path.display()
         );
         had_err = true;
