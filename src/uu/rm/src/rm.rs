@@ -129,6 +129,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             .help("remove directories and their contents recursively")
         )
         .arg(
+            // To mimic GNU's behavior we also want the '-R' flag. However, using clap's
+            // alias method 'visible_alias("R")' would result in a long '--R' flag.
             Arg::with_name(OPT_RECURSIVE_R).short("R")
             .help("Equivalent to -r")
         )
