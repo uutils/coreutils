@@ -11,7 +11,11 @@
 extern crate uucore;
 
 use std::error::Error;
-use std::io;
+use std::fs::File;
+use std::io::{
+    self, Read, Write,
+    BufWriter,
+};
 use std::sync::mpsc;
 use std::thread;
 
@@ -21,89 +25,167 @@ const LONG_HELP: &str = "
 TODO: This is where the long help string for dd goes!
 ";
 
-struct Input
+const RTN_SUCCESS: i32 = 0;
+const RTN_FAILURE: i32 = 1;
+
+// Conversion tables are just lookup tables.
+// eg.
+// The ASCII->EBDIC table stores the EBDIC code at the index
+// obtained by treating the ASCII representation as a number.
+// This idea is from the original GNU implementation.
+type ConversionTable = [u8; u8::MAX as usize];
+
+struct Input<R: Read>
 {
-    src: Box<dyn io::Read>,
+    src: R,
+    read_size: usize,
 }
 
-impl Input
+impl<R: Read> Read for Input<R>
 {
-    fn run(&self, tx: mpsc::SyncSender<Vec<u8>>) -> Result<(), Box<dyn Error>>
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize>
     {
-        let buff = vec![0; 128];
-        let msg = self.src.read(&buff)?;
-
-        println!("Sender sending:\t\t{:?}", &msg);
-        tx.send(msg)?;
-
-        Ok(())
+        self.src.read(buf)
     }
 }
 
-struct Output
+struct Output<W: Write>
 {
-    dst: Box<dyn io::Write>,
+    dst: W,
+    write_size: usize,
+    conv_table: Option<ConversionTable>,
 }
 
-impl Output
+impl<W: Write> Write for Output<W>
 {
-    fn run(&self, rx: mpsc::Receiver<Vec<u8>>) -> Result<(), Box<dyn Error>>
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize>
     {
-        let data = rx.recv()?;
+        if let Some(ct) = self.conv_table
+        {
+            let mut cbuf = vec![0; buf.len()];
+           
+            for (idx, byte) in buf.iter().enumerate()
+            {
+                cbuf[idx] = ct[*byte as usize]
+            }
 
-        println!("Receiver received:\t{:?}", data);
+            self.dst.write(&cbuf)
+        }
+        else
+        {
+            self.dst.write(buf)
+        }
+    }
 
-        Ok(())
+    fn flush(&mut self) -> io::Result<()>
+    {
+        self.dst.flush()
     }
 }
 
-fn dd(i: Input, o: Output) -> ()
+
+
+fn dd<R: Read, W: Write>(mut i: Input<R>, mut o: Output<W>) -> Result<(), Box<dyn Error>>
 {
-    let (tx, rx) = mpsc::sync_channel(0); // each send will block until the recv'r is ready for it
+    let (prog_tx, prog_rx) = mpsc::channel();
 
     thread::spawn(move || {
-        i.run(tx);
+        // TODO: Replace ?? with accurate info
+        print!("Progress ({}/??)", 0);
+
+        loop {
+            let prog = prog_rx.recv()
+                   .expect("TODO: Handle this error in the project-specific way");
+            print!("\rProgress ({}/??)", prog);
+        }
     });
 
-    thread::spawn(move || {
-        o.run(rx);
-    });
+    let mut buf = vec![0; i.read_size];
 
-    loop{};
+    loop
+    {
+        let r_len = i.read(&mut buf)?;
+        if r_len == 0 { break; }
+
+        let w_len = o.write(&buf[..r_len])?;
+
+        // if *full write buffer* { o.flush(); }
+
+        prog_tx.send(w_len)?;
+
+        buf.clear();
+    }
+
+    Ok(())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32
 {
     // TODO: parse args
 
-    -1
+    let if_name = "foo.txt";
+    let of_name = "bar.txt";
+    let read_size = 512;
+    let write_size = 4096;
+
+    let in_f = File::open(if_name)
+        .expect("TODO: Handle this error in the project-specific way");
+
+    let out_f = File::open(of_name)
+        .expect("TODO: Handle this error in the project-specific way");
+    let out_f = BufWriter::with_capacity(write_size, out_f);
+
+    let i = Input {
+        src: in_f,
+        read_size,
+    };
+    let o = Output {
+        dst: out_f,
+        write_size,
+        conv_table: None,
+    };
+
+    match dd(i, o) {
+        Ok(_) =>
+            RTN_SUCCESS,
+        Err(_) =>
+            RTN_FAILURE,
+    }
 }
 
 #[cfg(test)]
-mod test_dd_internal {
+mod test_dd_internal
+{
     #[allow(unused_imports)]
     use super::*;
 
-    #[test]
-    fn hello_world_test()
-    {
-        let (src, dst) = mpsc::channel();
-        let data = vec![0xFF; 128];
+    use std::io::prelude::*;
 
-        for c in data {
-            src.send(c);
-        }
+    #[test]
+    fn empty_reader_test()
+    {
+        let src = io::empty();
+       
+        let dst = vec![0xFF as u8, 128];
+        let dst_ptr = dst.as_ptr();
+        let exp = vec![0xFF as u8, 128];
 
         let i = Input {
-            src: Box::new(src),
+            src,
+            read_size: 1,
         };
 
         let o = Output {
-            dst: Box::new(dst),
+            dst,
+            write_size: 1,
+            conv_table: None,
         };
 
-        dd(i,o);
+        dd(i,o).unwrap();
 
-        assert_eq!(data, dst);
+        for (i, byte) in exp.iter().enumerate()
+        {
+            panic!();
+        }
     }
 }
