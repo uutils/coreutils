@@ -374,19 +374,56 @@ fn test_ls_recursive() {
     assert!(result.stdout.contains("a\\b:\nb"));
 }
 
+#[cfg(unix)]
 #[test]
 fn test_ls_ls_color() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.mkdir("a");
+    at.mkdir("a/nested_dir");
     at.mkdir("z");
-    at.touch(&at.plus_as_string("a/a"));
-    scene.ucmd().arg("--color").succeeds();
-    scene.ucmd().arg("--color=always").succeeds();
-    scene.ucmd().arg("--color=never").succeeds();
-    scene.ucmd().arg("--color").arg("a").succeeds();
-    scene.ucmd().arg("--color=always").arg("a/a").succeeds();
-    scene.ucmd().arg("--color=never").arg("z").succeeds();
+    at.touch(&at.plus_as_string("a/nested_file"));
+    at.touch("test-color");
+
+    let a_with_colors = "\x1b[01;34ma\x1b[0m";
+    let z_with_colors = "\x1b[01;34mz\x1b[0m";
+    let nested_dir_with_colors = "\x1b[01;34mnested_dir\x1b[0m";
+
+    // Color is disabled by default
+    let result = scene.ucmd().succeeds();
+    assert!(!result.stdout.contains(a_with_colors));
+    assert!(!result.stdout.contains(z_with_colors));
+
+    // Color should be enabled
+    let result = scene.ucmd().arg("--color").succeeds();
+    assert!(result.stdout.contains(a_with_colors));
+    assert!(result.stdout.contains(z_with_colors));
+
+    // Color should be enabled
+    let result = scene.ucmd().arg("--color=always").succeeds();
+    assert!(result.stdout.contains(a_with_colors));
+    assert!(result.stdout.contains(z_with_colors));
+
+    // Color should be disabled
+    let result = scene.ucmd().arg("--color=never").succeeds();
+    assert!(!result.stdout.contains(a_with_colors));
+    assert!(!result.stdout.contains(z_with_colors));
+
+    // Nested dir should be shown and colored
+    let result = scene.ucmd().arg("--color").arg("a").succeeds();
+    assert!(result.stdout.contains(nested_dir_with_colors));
+
+    // Color has no effect
+    let result = scene
+        .ucmd()
+        .arg("--color=always")
+        .arg("a/nested_file")
+        .succeeds();
+    assert!(result.stdout.contains("a/nested_file\n"));
+
+    // No output
+    let result = scene.ucmd().arg("--color=never").arg("z").succeeds();
+    assert_eq!(result.stdout, "");
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))] // Truncate not available on mac or win
