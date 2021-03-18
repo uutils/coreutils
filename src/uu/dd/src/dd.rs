@@ -35,10 +35,16 @@ const RTN_FAILURE: i32 = 1;
 // This idea is from the original GNU implementation.
 type ConversionTable = [u8; u8::MAX as usize];
 
+enum SrcStat
+{
+    Read(usize),
+    EOF,
+}
+
 struct Input<R: Read>
 {
     src: R,
-    read_size: usize,
+    ibs: usize,
 }
 
 impl<R: Read> Read for Input<R>
@@ -49,10 +55,36 @@ impl<R: Read> Read for Input<R>
     }
 }
 
+impl<R: Read> Input<R>
+{
+    fn fill_n(&mut self, buf: &mut [u8], obs: usize) -> Result<SrcStat, Box<dyn Error>>
+    {
+        let ibs = self.ibs;
+        let mut bytes_read = 0;
+
+        for n in 0..(obs/ibs) {
+            // fill an ibs-len slice from src
+            let this_read = self.read(&mut buf[n*ibs..(n+1)*ibs])?;
+
+            if this_read != 0 {
+                bytes_read += this_read;
+            } else {
+                break;
+            }
+        }
+
+        if bytes_read != 0 {
+            Ok(SrcStat::Read(bytes_read))
+        } else {
+            Ok(SrcStat::EOF)
+        }
+    }
+}
+
 struct Output<W: Write>
 {
     dst: W,
-    write_size: usize,
+    obs: usize,
     conv_table: Option<ConversionTable>,
 }
 
@@ -83,40 +115,60 @@ impl<W: Write> Write for Output<W>
     }
 }
 
+fn gen_prog_updater(rx: mpsc::Receiver<usize>) -> impl Fn() -> ()
+{
+    move || { // LAAAAMBDA!
 
+        // TODO: Replace ?? with accurate info
+        print!("\rProgress ({}/??)", 0);
 
-fn dd<R: Read, W: Write>(mut i: Input<R>, mut o: Output<W>) -> Result<(), Box<dyn Error>>
+        loop
+        {
+            match rx.recv()
+            {
+                Ok(wr_total) => {
+                    print!("\rProgress ({}/??)", wr_total);
+                },
+                Err(_) => {
+                    println!("");
+                    break
+                },
+            }
+        }
+    }
+}
+
+fn dd<R: Read, W: Write>(mut i: Input<R>, mut o: Output<W>) -> Result<(usize, usize), Box<dyn Error>>
 {
     let (prog_tx, prog_rx) = mpsc::channel();
+    thread::spawn(gen_prog_updater(prog_rx));
 
-    thread::spawn(move || {
-        // TODO: Replace ?? with accurate info
-        print!("Progress ({}/??)", 0);
-
-        loop {
-            let prog = prog_rx.recv()
-                   .expect("TODO: Handle this error in the project-specific way");
-            print!("\rProgress ({}/??)", prog);
-        }
-    });
-
-    let mut buf = vec![0; i.read_size];
+    let mut bytes_in  = 0;
+    let mut bytes_out = 0;
 
     loop
     {
-        let r_len = i.read(&mut buf)?;
-        if r_len == 0 { break; }
+        let mut buf = vec![0xDD; o.obs];
+        let r_len =
+            match i.fill_n(&mut buf, o.obs)? {
+                SrcStat::Read(len) =>
+                {
+                    bytes_in += len;
+                    len
+                },
+                SrcStat::EOF =>
+                    break,
+        };
 
         let w_len = o.write(&buf[..r_len])?;
+        o.flush()?;
 
-        // if *full write buffer* { o.flush(); }
+        bytes_out += w_len;
 
-        prog_tx.send(w_len)?;
-
-        buf.clear();
+        prog_tx.send(bytes_out)?;
     }
 
-    Ok(())
+    Ok((bytes_in, bytes_out))
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32
@@ -125,29 +177,33 @@ pub fn uumain(args: impl uucore::Args) -> i32
 
     let if_name = "foo.txt";
     let of_name = "bar.txt";
-    let read_size = 512;
-    let write_size = 4096;
+    let ibs = 512;
+    let obs = 4096;
 
     let in_f = File::open(if_name)
         .expect("TODO: Handle this error in the project-specific way");
 
     let out_f = File::open(of_name)
         .expect("TODO: Handle this error in the project-specific way");
-    let out_f = BufWriter::with_capacity(write_size, out_f);
+    let out_f = BufWriter::with_capacity(obs, out_f);
 
     let i = Input {
         src: in_f,
-        read_size,
+        ibs,
     };
     let o = Output {
         dst: out_f,
-        write_size,
+        obs,
         conv_table: None,
     };
 
     match dd(i, o) {
-        Ok(_) =>
-            RTN_SUCCESS,
+        Ok((b_in, b_out)) =>
+        {
+            println!("Completed: Bytes in: {}, Bytes out: {}", b_in, b_out);
+           
+            RTN_SUCCESS
+        },
         Err(_) =>
             RTN_FAILURE,
     }
@@ -160,32 +216,86 @@ mod test_dd_internal
     use super::*;
 
     use std::io::prelude::*;
+    use std::io::BufReader;
+    use std::fs;
+    use md5::{ Md5, Digest, };
+    use hex_literal::hex;
 
-    #[test]
-    fn empty_reader_test()
-    {
-        let src = io::empty();
-       
-        let dst = vec![0xFF as u8, 128];
-        let dst_ptr = dst.as_ptr();
-        let exp = vec![0xFF as u8, 128];
-
-        let i = Input {
-            src,
-            read_size: 1,
-        };
-
-        let o = Output {
-            dst,
-            write_size: 1,
-            conv_table: None,
-        };
-
-        dd(i,o).unwrap();
-
-        for (i, byte) in exp.iter().enumerate()
+    macro_rules! make_test (
+        ( $test_id:ident, $test_name:expr, $src:expr, $exp:expr ) =>
         {
-            panic!();
-        }
-    }
+            #[test]
+            fn $test_id()
+            {
+                // let test_name = "6ae59e64850377ee5470c854761551ea-ones";
+                let tmp_fname = format!("./test-resources/FAILED-{}.test", $test_name);
+
+                let i = Input {
+                    src: $src,
+                    ibs: 256,
+                };
+
+                let o = Output {
+                    dst: File::create(&tmp_fname).unwrap(),
+                    obs: 1024,
+                    conv_table: None,
+                };
+
+                dd(i,o).unwrap();
+
+                let res = {
+                    let res = File::open(&tmp_fname).unwrap();
+                    let res = BufReader::new(res);
+
+                    let mut h = Md5::new();
+                    for b in res.bytes()
+                    {
+                        h.update([b.unwrap()]);
+                    }
+
+                    h.finalize()
+                };
+
+                assert_eq!(hex!($exp), res[..]);
+
+                fs::remove_file(&tmp_fname).unwrap();
+            }
+        };
+    );
+
+    make_test!(
+        empty_file_test,
+        "stdio-empty-file",
+        io::empty(),
+        "d41d8cd98f00b204e9800998ecf8427e"
+    );
+
+    make_test!(
+        zeros_4k_test,
+        "zeros-4k",
+        File::open("./test-resources/620f0b67a91f7f74151bc5be745b7110-zeros.test").unwrap(),
+        "620f0b67a91f7f74151bc5be745b7110"
+    );
+
+    make_test!(
+        ones_4k_test,
+        "ones-4k",
+        File::open("./test-resources/6ae59e64850377ee5470c854761551ea-ones.test").unwrap(),
+        "6ae59e64850377ee5470c854761551ea"
+    );
+
+    make_test!(
+        deadbeef_32k_test,
+        "deadbeef_32k",
+        File::open("./test-resources/18d99661a1de1fc9af21b0ec2cd67ba3-deadbeef.test").unwrap(),
+        "18d99661a1de1fc9af21b0ec2cd67ba3"
+    );
+
+    make_test!(
+        random_73k_test,
+        "random_73k",
+        File::open("./test-resources/5828891cb1230748e146f34223bbd3b5-random.test").unwrap(),
+        "5828891cb1230748e146f34223bbd3b5"
+    );
+
 }

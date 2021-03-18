@@ -18,6 +18,10 @@ path = "src/dd.rs"
 uucore = { version=">=0.0.7", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
+[dev-dependencies]
+md-5 = "0.9"
+hex-literal = "0.3"
+
 [[bin]]
 name = "dd"
 path = "src/main.rs"
