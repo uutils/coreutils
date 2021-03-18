@@ -4,12 +4,12 @@ use std::env;
 use std::fs;
 use std::path::Path;
 
-#[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "windows")))]
+#[cfg(not(any(target_vendor = "apple", target_os = "windows")))]
 mod platform {
     pub const DYLIB_EXT: &str = ".so";
 }
 
-#[cfg(any(target_os = "macos", target_os = "ios"))]
+#[cfg(any(target_vendor = "apple"))]
 mod platform {
     pub const DYLIB_EXT: &str = ".dylib";
 }

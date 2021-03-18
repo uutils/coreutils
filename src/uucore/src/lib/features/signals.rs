@@ -197,7 +197,7 @@ No    Name         Default Action       Description
 
 */
 
-#[cfg(any(target_os = "macos", target_os = "freebsd"))]
+#[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
 pub static ALL_SIGNALS: [Signal<'static>; 31] = [
     Signal {
         name: "HUP",

@@ -164,7 +164,7 @@ fn set_main_group(group: &str) {
     }
 }
 
-#[cfg(any(target_os = "macos", target_os = "freebsd"))]
+#[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
 fn set_groups(groups: Vec<libc::gid_t>) -> libc::c_int {
     unsafe { setgroups(groups.len() as libc::c_int, groups.as_ptr()) }
 }

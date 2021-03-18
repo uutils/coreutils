@@ -149,7 +149,7 @@ use std::path::Path;
 
 #[cfg(any(
     target_os = "linux",
-    target_os = "macos",
+    target_vendor = "apple",
     target_os = "android",
     target_os = "freebsd"
 ))]
@@ -165,7 +165,7 @@ use uucore::libc::statvfs as Sstatfs;
 
 #[cfg(any(
     target_os = "linux",
-    target_os = "macos",
+    target_vendor = "apple",
     target_os = "android",
     target_os = "freebsd"
 ))]
@@ -211,11 +211,11 @@ impl FsMeta for Sstatfs {
     fn free_fnodes(&self) -> u64 {
         self.f_ffree as u64
     }
-    #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
+    #[cfg(any(target_os = "linux", target_vendor = "apple", target_os = "freebsd"))]
     fn fs_type(&self) -> i64 {
         self.f_type as i64
     }
-    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "freebsd")))]
+    #[cfg(not(any(target_os = "linux", target_vendor = "apple", target_os = "freebsd")))]
     fn fs_type(&self) -> i64 {
         // FIXME: statvfs doesn't have an equivalent, so we need to do something else
         unimplemented!()
@@ -225,12 +225,12 @@ impl FsMeta for Sstatfs {
     fn iosize(&self) -> u64 {
         self.f_frsize as u64
     }
-    #[cfg(any(target_os = "macos", target_os = "freebsd"))]
+    #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
     fn iosize(&self) -> u64 {
         self.f_iosize as u64
     }
     // XXX: dunno if this is right
-    #[cfg(not(any(target_os = "macos", target_os = "freebsd", target_os = "linux")))]
+    #[cfg(not(any(target_vendor = "apple", target_os = "freebsd", target_os = "linux")))]
     fn iosize(&self) -> u64 {
         self.f_bsize as u64
     }
@@ -241,13 +241,13 @@ impl FsMeta for Sstatfs {
     //
     // Solaris, Irix and POSIX have a system call statvfs(2) that returns a
     // struct statvfs, containing an  unsigned  long  f_fsid
-    #[cfg(any(target_os = "macos", target_os = "freebsd", target_os = "linux"))]
+    #[cfg(any(target_vendor = "apple", target_os = "freebsd", target_os = "linux"))]
     fn fsid(&self) -> u64 {
         let f_fsid: &[u32; 2] =
             unsafe { &*(&self.f_fsid as *const uucore::libc::fsid_t as *const [u32; 2]) };
         (u64::from(f_fsid[0])) << 32 | u64::from(f_fsid[1])
     }
-    #[cfg(not(any(target_os = "macos", target_os = "freebsd", target_os = "linux")))]
+    #[cfg(not(any(target_vendor = "apple", target_os = "freebsd", target_os = "linux")))]
     fn fsid(&self) -> u64 {
         self.f_fsid as u64
     }
@@ -256,7 +256,7 @@ impl FsMeta for Sstatfs {
     fn namelen(&self) -> u64 {
         self.f_namelen as u64
     }
-    #[cfg(target_os = "macos")]
+    #[cfg(target_vendor = "apple")]
     fn namelen(&self) -> u64 {
         1024
     }
@@ -265,7 +265,7 @@ impl FsMeta for Sstatfs {
         self.f_namemax as u64
     }
     // XXX: should everything just use statvfs?
-    #[cfg(not(any(target_os = "macos", target_os = "freebsd", target_os = "linux")))]
+    #[cfg(not(any(target_vendor = "apple", target_os = "freebsd", target_os = "linux")))]
     fn namelen(&self) -> u64 {
         self.f_namemax as u64
     }
