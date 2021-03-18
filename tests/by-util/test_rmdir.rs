@@ -40,7 +40,7 @@ fn test_rmdir_nonempty_directory_no_parents() {
 
     ucmd.arg(dir).fails().stderr_is(
         "rmdir: error: failed to remove 'test_rmdir_nonempty_no_parents': Directory not \
-                empty\n",
+         empty\n",
     );
 
     assert!(at.dir_exists(dir));
@@ -60,9 +60,9 @@ fn test_rmdir_nonempty_directory_with_parents() {
 
     ucmd.arg("-p").arg(dir).fails().stderr_is(
         "rmdir: error: failed to remove 'test_rmdir_nonempty/with/parents': Directory not \
-                empty\nrmdir: error: failed to remove 'test_rmdir_nonempty/with': Directory not \
-                empty\nrmdir: error: failed to remove 'test_rmdir_nonempty': Directory not \
-                empty\n",
+         empty\nrmdir: error: failed to remove 'test_rmdir_nonempty/with': Directory not \
+         empty\nrmdir: error: failed to remove 'test_rmdir_nonempty': Directory not \
+         empty\n",
     );
 
     assert!(at.dir_exists(dir));
