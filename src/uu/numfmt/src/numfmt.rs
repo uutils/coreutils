@@ -5,13 +5,19 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-use std::fmt;
-use std::io::BufRead;
-
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg, ArgMatches};
+use crate::format::format_and_print;
+use crate::options::*;
+use crate::units::{Result, Transform, Unit};
+use clap::{App, AppSettings, Arg, ArgMatches};
+use std::io::{BufRead, Write};
+use uucore::ranges::Range;
+
+pub mod format;
+mod options;
+mod units;
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Convert numbers from/to human-readable strings";
@@ -33,113 +39,43 @@ static LONG_HELP: &str = "UNIT options:
    iec-i  accept optional two-letter suffix:
 
           1Ki = 1024, 1Mi = 1048576, ...
-";
 
-mod options {
-    pub const FROM: &str = "from";
-    pub const FROM_DEFAULT: &str = "none";
-    pub const HEADER: &str = "header";
-    pub const HEADER_DEFAULT: &str = "1";
-    pub const NUMBER: &str = "NUMBER";
-    pub const PADDING: &str = "padding";
-    pub const TO: &str = "to";
-    pub const TO_DEFAULT: &str = "none";
-}
+FIELDS supports cut(1) style field ranges:
+  N    N'th field, counted from 1
+  N-   from N'th field, to end of line
+  N-M  from N'th to M'th field (inclusive)
+  -M   from first to M'th field (inclusive)
+  -    all fields
+Multiple fields/ranges can be separated with commas
+";
 
 fn get_usage() -> String {
     format!("{0} [OPTION]... [NUMBER]...", executable!())
 }
 
-const IEC_BASES: [f64; 10] = [
-    //premature optimization
-    1.,
-    1_024.,
-    1_048_576.,
-    1_073_741_824.,
-    1_099_511_627_776.,
-    1_125_899_906_842_624.,
-    1_152_921_504_606_846_976.,
-    1_180_591_620_717_411_303_424.,
-    1_208_925_819_614_629_174_706_176.,
-    1_237_940_039_285_380_274_899_124_224.,
-];
-
-type Result<T> = std::result::Result<T, String>;
-
-type WithI = bool;
-
-enum Unit {
-    Auto,
-    Si,
-    Iec(WithI),
-    None,
-}
-
-enum RawSuffix {
-    K,
-    M,
-    G,
-    T,
-    P,
-    E,
-    Z,
-    Y,
-}
-
-type Suffix = (RawSuffix, WithI);
-
-struct DisplayableSuffix(Suffix);
-
-impl fmt::Display for DisplayableSuffix {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let DisplayableSuffix((ref raw_suffix, ref with_i)) = *self;
-        match raw_suffix {
-            RawSuffix::K => write!(f, "K"),
-            RawSuffix::M => write!(f, "M"),
-            RawSuffix::G => write!(f, "G"),
-            RawSuffix::T => write!(f, "T"),
-            RawSuffix::P => write!(f, "P"),
-            RawSuffix::E => write!(f, "E"),
-            RawSuffix::Z => write!(f, "Z"),
-            RawSuffix::Y => write!(f, "Y"),
-        }
-        .and_then(|()| match with_i {
-            true => write!(f, "i"),
-            false => Ok(()),
-        })
+fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: NumfmtOptions) -> Result<()> {
+    for l in args {
+        format_and_print(l, &options)?;
     }
+
+    Ok(())
 }
 
-fn parse_suffix(s: &str) -> Result<(f64, Option<Suffix>)> {
-    let with_i = s.ends_with('i');
-    let mut iter = s.chars();
-    if with_i {
-        iter.next_back();
+fn handle_stdin(options: NumfmtOptions) -> Result<()> {
+    let stdin = std::io::stdin();
+    let locked_stdin = stdin.lock();
+
+    let mut lines = locked_stdin.lines();
+    for l in lines.by_ref().take(options.header) {
+        l.map(|s| println!("{}", s)).map_err(|e| e.to_string())?;
     }
-    let suffix: Option<Suffix> = match iter.next_back() {
-        Some('K') => Ok(Some((RawSuffix::K, with_i))),
-        Some('M') => Ok(Some((RawSuffix::M, with_i))),
-        Some('G') => Ok(Some((RawSuffix::G, with_i))),
-        Some('T') => Ok(Some((RawSuffix::T, with_i))),
-        Some('P') => Ok(Some((RawSuffix::P, with_i))),
-        Some('E') => Ok(Some((RawSuffix::E, with_i))),
-        Some('Z') => Ok(Some((RawSuffix::Z, with_i))),
-        Some('Y') => Ok(Some((RawSuffix::Y, with_i))),
-        Some('0'..='9') => Ok(None),
-        _ => Err(format!("invalid suffix in input: ‘{}’", s)),
-    }?;
 
-    let suffix_len = match suffix {
-        None => 0,
-        Some((_, false)) => 1,
-        Some((_, true)) => 2,
-    };
+    for l in lines {
+        l.map_err(|e| e.to_string())
+            .and_then(|l| format_and_print(&l, &options))?;
+    }
 
-    let number = s[..s.len() - suffix_len]
-        .parse::<f64>()
-        .map_err(|_| format!("invalid number: ‘{}’", s))?;
-
-    Ok((number, suffix))
+    Ok(())
 }
 
 fn parse_unit(s: &str) -> Result<Unit> {
@@ -151,128 +87,6 @@ fn parse_unit(s: &str) -> Result<Unit> {
         "none" => Ok(Unit::None),
         _ => Err("Unsupported unit is specified".to_owned()),
     }
-}
-
-struct TransformOptions {
-    from: Transform,
-    to: Transform,
-}
-
-struct Transform {
-    unit: Unit,
-}
-
-struct NumfmtOptions {
-    transform: TransformOptions,
-    padding: isize,
-    header: usize,
-}
-
-fn remove_suffix(i: f64, s: Option<Suffix>, u: &Unit) -> Result<f64> {
-    match (s, u) {
-        (None, _) => Ok(i),
-        (Some((raw_suffix, false)), &Unit::Auto) | (Some((raw_suffix, false)), &Unit::Si) => {
-            match raw_suffix {
-                RawSuffix::K => Ok(i * 1e3),
-                RawSuffix::M => Ok(i * 1e6),
-                RawSuffix::G => Ok(i * 1e9),
-                RawSuffix::T => Ok(i * 1e12),
-                RawSuffix::P => Ok(i * 1e15),
-                RawSuffix::E => Ok(i * 1e18),
-                RawSuffix::Z => Ok(i * 1e21),
-                RawSuffix::Y => Ok(i * 1e24),
-            }
-        }
-        (Some((raw_suffix, false)), &Unit::Iec(false))
-        | (Some((raw_suffix, true)), &Unit::Auto)
-        | (Some((raw_suffix, true)), &Unit::Iec(true)) => match raw_suffix {
-            RawSuffix::K => Ok(i * IEC_BASES[1]),
-            RawSuffix::M => Ok(i * IEC_BASES[2]),
-            RawSuffix::G => Ok(i * IEC_BASES[3]),
-            RawSuffix::T => Ok(i * IEC_BASES[4]),
-            RawSuffix::P => Ok(i * IEC_BASES[5]),
-            RawSuffix::E => Ok(i * IEC_BASES[6]),
-            RawSuffix::Z => Ok(i * IEC_BASES[7]),
-            RawSuffix::Y => Ok(i * IEC_BASES[8]),
-        },
-        (_, _) => Err("This suffix is unsupported for specified unit".to_owned()),
-    }
-}
-
-fn transform_from(s: &str, opts: &Transform) -> Result<f64> {
-    let (i, suffix) = parse_suffix(s)?;
-    remove_suffix(i, suffix, &opts.unit).map(|n| n.round())
-}
-
-fn consider_suffix(i: f64, u: &Unit) -> Result<(f64, Option<Suffix>)> {
-    let j = i.abs();
-    match *u {
-        Unit::Si => match j {
-            _ if j < 1e3 => Ok((i, None)),
-            _ if j < 1e6 => Ok((i / 1e3, Some((RawSuffix::K, false)))),
-            _ if j < 1e9 => Ok((i / 1e6, Some((RawSuffix::M, false)))),
-            _ if j < 1e12 => Ok((i / 1e9, Some((RawSuffix::G, false)))),
-            _ if j < 1e15 => Ok((i / 1e12, Some((RawSuffix::T, false)))),
-            _ if j < 1e18 => Ok((i / 1e15, Some((RawSuffix::P, false)))),
-            _ if j < 1e21 => Ok((i / 1e18, Some((RawSuffix::E, false)))),
-            _ if j < 1e24 => Ok((i / 1e21, Some((RawSuffix::Z, false)))),
-            _ if j < 1e27 => Ok((i / 1e24, Some((RawSuffix::Y, false)))),
-            _ => Err("Number is too big and unsupported".to_owned()),
-        },
-        Unit::Iec(with_i) => match j {
-            _ if j < IEC_BASES[1] => Ok((i, None)),
-            _ if j < IEC_BASES[2] => Ok((i / IEC_BASES[1], Some((RawSuffix::K, with_i)))),
-            _ if j < IEC_BASES[3] => Ok((i / IEC_BASES[2], Some((RawSuffix::M, with_i)))),
-            _ if j < IEC_BASES[4] => Ok((i / IEC_BASES[3], Some((RawSuffix::G, with_i)))),
-            _ if j < IEC_BASES[5] => Ok((i / IEC_BASES[4], Some((RawSuffix::T, with_i)))),
-            _ if j < IEC_BASES[6] => Ok((i / IEC_BASES[5], Some((RawSuffix::P, with_i)))),
-            _ if j < IEC_BASES[7] => Ok((i / IEC_BASES[6], Some((RawSuffix::E, with_i)))),
-            _ if j < IEC_BASES[8] => Ok((i / IEC_BASES[7], Some((RawSuffix::Z, with_i)))),
-            _ if j < IEC_BASES[9] => Ok((i / IEC_BASES[8], Some((RawSuffix::Y, with_i)))),
-            _ => Err("Number is too big and unsupported".to_owned()),
-        },
-        Unit::Auto => Err("Unit 'auto' isn't supported with --to options".to_owned()),
-        Unit::None => Ok((i, None)),
-    }
-}
-
-fn transform_to(s: f64, opts: &Transform) -> Result<String> {
-    let (i2, s) = consider_suffix(s, &opts.unit)?;
-    Ok(match s {
-        None => format!("{}", i2),
-        Some(s) => format!("{:.1}{}", i2, DisplayableSuffix(s)),
-    })
-}
-
-fn format_string(
-    source: &str,
-    options: &NumfmtOptions,
-    implicit_padding: Option<isize>,
-) -> Result<String> {
-    let number = transform_to(
-        transform_from(source, &options.transform.from)?,
-        &options.transform.to,
-    )?;
-
-    Ok(match implicit_padding.unwrap_or(options.padding) {
-        p if p == 0 => number,
-        p if p > 0 => format!("{:>padding$}", number, padding = p as usize),
-        p => format!("{:<padding$}", number, padding = p.abs() as usize),
-    })
-}
-
-fn format_and_print(s: &str, options: &NumfmtOptions) -> Result<()> {
-    let (prefix, field, suffix) = extract_field(&s)?;
-
-    let implicit_padding = match !prefix.is_empty() && options.padding == 0 {
-        true => Some((prefix.len() + field.len()) as isize),
-        false => None,
-    };
-
-    let field = format_string(field, options, implicit_padding)?;
-    println!("{}{}", field, suffix);
-
-    Ok(())
 }
 
 fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
@@ -305,82 +119,30 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         }
     }?;
 
+    let fields = match args.value_of(options::FIELD) {
+        Some("-") => vec![Range {
+            low: 1,
+            high: std::usize::MAX,
+        }],
+        Some(v) => Range::from_list(v)?,
+        None => unreachable!(),
+    };
+
+    let delimiter = args.value_of(options::DELIMITER).map_or(Ok(None), |arg| {
+        if arg.len() == 1 {
+            Ok(Some(arg.to_string()))
+        } else {
+            Err("the delimiter must be a single character".to_string())
+        }
+    })?;
+
     Ok(NumfmtOptions {
         transform,
         padding,
         header,
+        fields,
+        delimiter,
     })
-}
-
-/// Extract the field to convert from `line`.
-///
-/// The field is the first sequence of non-whitespace characters in `line`.
-///
-/// Returns a [`Result`] of `(prefix: &str, field: &str, suffix: &str)`, where
-/// `prefix` contains any leading whitespace, `field` is the field to convert,
-/// and `suffix` is everything after the field. `prefix` and `suffix` may be
-/// empty.
-///
-/// Returns an [`Err`] if `line` is empty or consists only of whitespace.
-///
-/// Examples:
-///
-/// ```
-/// use uu_numfmt::extract_field;
-///
-/// assert_eq!("1K", extract_field("1K").unwrap().1);
-///
-/// let (prefix, field, suffix) = extract_field("   1K qux").unwrap();
-/// assert_eq!("   ", prefix);
-/// assert_eq!("1K", field);
-/// assert_eq!(" qux", suffix);
-///
-/// assert!(extract_field("").is_err());
-/// ```
-pub fn extract_field(line: &str) -> Result<(&str, &str, &str)> {
-    let start = line
-        .find(|c: char| !c.is_whitespace())
-        .ok_or("invalid number: ‘’")?;
-
-    let prefix = &line[..start];
-
-    let mut field = &line[start..];
-
-    let suffix = match field.find(|c: char| c.is_whitespace()) {
-        Some(i) => {
-            let suffix = &field[i..];
-            field = &field[..i];
-            suffix
-        }
-        None => "",
-    };
-
-    Ok((prefix, field, suffix))
-}
-
-fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: NumfmtOptions) -> Result<()> {
-    for l in args {
-        format_and_print(l, &options)?;
-    }
-
-    Ok(())
-}
-
-fn handle_stdin(options: NumfmtOptions) -> Result<()> {
-    let stdin = std::io::stdin();
-    let locked_stdin = stdin.lock();
-
-    let mut lines = locked_stdin.lines();
-    for l in lines.by_ref().take(options.header) {
-        l.map(|s| println!("{}", s)).map_err(|e| e.to_string())?;
-    }
-
-    for l in lines {
-        l.map_err(|e| e.to_string())
-            .and_then(|l| format_and_print(&l, &options))?;
-    }
-
-    Ok(())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
@@ -391,6 +153,21 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .about(ABOUT)
         .usage(&usage[..])
         .after_help(LONG_HELP)
+        .setting(AppSettings::AllowNegativeNumbers)
+        .arg(
+            Arg::with_name(options::DELIMITER)
+                .short("d")
+                .long(options::DELIMITER)
+                .value_name("X")
+                .help("use X instead of whitespace for field delimiter"),
+        )
+        .arg(
+            Arg::with_name(options::FIELD)
+                .long(options::FIELD)
+                .help("replace the numbers in these input fields (default=1) see FIELDS below")
+                .value_name("FIELDS")
+                .default_value(options::FIELD_DEFAULT),
+        )
         .arg(
             Arg::with_name(options::FROM)
                 .long(options::FROM)
@@ -438,6 +215,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     match result {
         Err(e) => {
+            std::io::stdout().flush().expect("error flushing stdout");
             show_info!("{}", e);
             1
         }

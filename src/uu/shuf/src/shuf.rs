@@ -97,9 +97,9 @@ With no FILE, or when FILE is -, read standard input.",
         };
         let repeat = matches.opt_present("repeat");
         let sep = if matches.opt_present("zero-terminated") {
-            0x00 as u8
+            0x00_u8
         } else {
-            0x0a as u8
+            0x0a_u8
         };
         let count = match matches.opt_str("head-count") {
             Some(cnt) => match cnt.parse::<usize>() {

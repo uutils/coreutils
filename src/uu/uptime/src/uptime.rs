@@ -21,7 +21,9 @@ static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Display the current time, the length of time the system has been up,\n\
 the number of users on the system, and the average number of jobs\n\
 in the run queue over the last 1, 5 and 15 minutes.";
-static OPT_SINCE: &str = "since";
+pub mod options {
+    pub static SINCE: &str = "since";
+}
 
 #[cfg(unix)]
 use uucore::libc::getloadavg;
@@ -42,9 +44,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .about(ABOUT)
         .usage(&usage[..])
         .arg(
-            Arg::with_name(OPT_SINCE)
+            Arg::with_name(options::SINCE)
                 .short("s")
-                .long(OPT_SINCE)
+                .long(options::SINCE)
                 .help("system up since"),
         )
         .get_matches_from(args);
@@ -56,7 +58,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
         1
     } else {
-        if matches.is_present(OPT_SINCE) {
+        if matches.is_present(options::SINCE) {
             let initial_date = Local.timestamp(Utc::now().timestamp() - uptime, 0);
             println!("{}", initial_date.format("%Y-%m-%d %H:%M:%S"));
             return 0;

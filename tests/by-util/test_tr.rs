@@ -134,3 +134,66 @@ fn missing_required_second_arg_fails() {
     assert!(!result.success);
     assert!(result.stderr.contains("missing operand after"));
 }
+
+#[test]
+fn test_interpret_backslash_escapes() {
+    new_ucmd!()
+        .args(&["abfnrtv", r"\a\b\f\n\r\t\v"])
+        .pipe_in("abfnrtv")
+        .succeeds()
+        .stdout_is("\u{7}\u{8}\u{c}\n\r\t\u{b}");
+}
+
+#[test]
+fn test_interpret_unrecognized_backslash_escape_as_character() {
+    new_ucmd!()
+        .args(&["qcz+=~-", r"\q\c\z\+\=\~\-"])
+        .pipe_in("qcz+=~-")
+        .succeeds()
+        .stdout_is("qcz+=~-");
+}
+
+#[test]
+fn test_interpret_single_octal_escape() {
+    new_ucmd!()
+        .args(&["X", r"\015"])
+        .pipe_in("X")
+        .succeeds()
+        .stdout_is("\r");
+}
+
+#[test]
+fn test_interpret_one_and_two_digit_octal_escape() {
+    new_ucmd!()
+        .args(&["XYZ", r"\0\11\77"])
+        .pipe_in("XYZ")
+        .succeeds()
+        .stdout_is("\0\t?");
+}
+
+#[test]
+fn test_octal_escape_is_at_most_three_digits() {
+    new_ucmd!()
+        .args(&["XY", r"\0156"])
+        .pipe_in("XY")
+        .succeeds()
+        .stdout_is("\r6");
+}
+
+#[test]
+fn test_non_octal_digit_ends_escape() {
+    new_ucmd!()
+        .args(&["rust", r"\08\11956"])
+        .pipe_in("rust")
+        .succeeds()
+        .stdout_is("\08\t9");
+}
+
+#[test]
+fn test_interpret_backslash_at_eol_literally() {
+    new_ucmd!()
+        .args(&["X", r"\"])
+        .pipe_in("X")
+        .succeeds()
+        .stdout_is("\\");
+}

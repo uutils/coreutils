@@ -472,11 +472,11 @@ fn print_bytes(prefix: &str, input_decoder: &MemoryDecoder, output_info: &Output
 ///
 /// `skip_bytes` is the number of bytes skipped from the input
 /// `read_bytes` is an optional limit to the number of bytes to read
-fn open_input_peek_reader<'a>(
-    input_strings: &'a [String],
+fn open_input_peek_reader(
+    input_strings: &[String],
     skip_bytes: usize,
     read_bytes: Option<usize>,
-) -> PeekReader<PartialReader<MultifileReader<'a>>> {
+) -> PeekReader<PartialReader<MultifileReader>> {
     // should return  "impl PeekRead + Read + HasError" when supported in (stable) rust
     let inputs = input_strings
         .iter()

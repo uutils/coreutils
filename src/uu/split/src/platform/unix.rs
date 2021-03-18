@@ -4,7 +4,7 @@ use std::io::{BufWriter, Result};
 use std::process::{Child, Command, Stdio};
 /// A writer that writes to a shell_process' stdin
 ///
-/// We use a shell process (not directy calling a sub-process) so we can forward the name of the
+/// We use a shell process (not directly calling a sub-process) so we can forward the name of the
 /// corresponding output file (xaa, xab, xac… ). This is the way it was implemented in GNU split.
 struct FilterWriter {
     /// Running shell process
@@ -68,12 +68,13 @@ impl FilterWriter {
         // set $FILE, save previous value (if there was one)
         let _with_env_var_set = WithEnvVarSet::new("FILE", &filepath);
 
-        let shell_process = Command::new(env::var("SHELL").unwrap_or("/bin/sh".to_owned()))
-            .arg("-c")
-            .arg(command)
-            .stdin(Stdio::piped())
-            .spawn()
-            .expect("Couldn't spawn filter command");
+        let shell_process =
+            Command::new(env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_owned()))
+                .arg("-c")
+                .arg(command)
+                .stdin(Stdio::piped())
+                .spawn()
+                .expect("Couldn't spawn filter command");
 
         FilterWriter { shell_process }
     }

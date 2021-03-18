@@ -14,11 +14,10 @@ use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, Read, Stdout, Write};
 use std::path::Path;
 
-use self::ranges::Range;
 use self::searcher::Searcher;
+use uucore::ranges::Range;
 
 mod buffer;
-mod ranges;
 mod searcher;
 
 static SYNTAX: &str =
@@ -125,7 +124,7 @@ enum Mode {
 
 fn list_to_ranges(list: &str, complement: bool) -> Result<Vec<Range>, String> {
     if complement {
-        Range::from_list(list).map(|r| ranges::complement(&r))
+        Range::from_list(list).map(|r| uucore::ranges::complement(&r))
     } else {
         Range::from_list(list)
     }

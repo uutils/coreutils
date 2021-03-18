@@ -32,15 +32,15 @@ use std::ffi::CString;
 #[cfg(unix)]
 use std::mem;
 
-#[cfg(any(target_os = "macos", target_os = "freebsd"))]
+#[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
 use libc::c_int;
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 use libc::statfs;
-#[cfg(any(target_os = "macos", target_os = "freebsd"))]
+#[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
 use std::ffi::CStr;
-#[cfg(any(target_os = "macos", target_os = "freebsd", target_os = "windows"))]
+#[cfg(any(target_vendor = "apple", target_os = "freebsd", target_os = "windows"))]
 use std::ptr;
-#[cfg(any(target_os = "macos", target_os = "freebsd"))]
+#[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
 use std::slice;
 
 #[cfg(target_os = "freebsd")]
@@ -137,7 +137,7 @@ struct MountInfo {
 
 #[cfg(all(
     target_os = "freebsd",
-    not(all(target_os = "macos", target_arch = "x86_64"))
+    not(all(target_vendor = "apple", target_arch = "x86_64"))
 ))]
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -209,20 +209,20 @@ fn get_usage() -> String {
     format!("{0} [OPTION]... [FILE]...", executable!())
 }
 
-#[cfg(any(target_os = "freebsd", target_os = "macos"))]
+#[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
 extern "C" {
-    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+    #[cfg(all(target_vendor = "apple", target_arch = "x86_64"))]
     #[link_name = "getmntinfo$INODE64"]
     fn getmntinfo(mntbufp: *mut *mut statfs, flags: c_int) -> c_int;
 
     #[cfg(any(
         all(target_os = "freebsd"),
-        all(target_os = "macos", target_arch = "aarch64")
+        all(target_vendor = "apple", target_arch = "aarch64")
     ))]
     fn getmntinfo(mntbufp: *mut *mut statfs, flags: c_int) -> c_int;
 }
 
-#[cfg(any(target_os = "freebsd", target_os = "macos"))]
+#[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
 impl From<statfs> for MountInfo {
     fn from(statfs: statfs) -> Self {
         let mut info = MountInfo {
@@ -585,7 +585,7 @@ fn read_fs_list() -> Vec<MountInfo> {
             })
             .collect::<Vec<_>>()
     }
-    #[cfg(any(target_os = "freebsd", target_os = "macos"))]
+    #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
     {
         let mut mptr: *mut statfs = ptr::null_mut();
         let len = unsafe { getmntinfo(&mut mptr, 1 as c_int) };

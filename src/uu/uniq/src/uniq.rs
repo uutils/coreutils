@@ -10,21 +10,23 @@ extern crate uucore;
 
 use clap::{App, Arg, ArgMatches};
 use std::fs::File;
-use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
+use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Result, Write};
 use std::path::Path;
 use std::str::FromStr;
 
 static ABOUT: &str = "Report or omit repeated lines.";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
-static OPT_ALL_REPEATED: &str = "all-repeated";
-static OPT_CHECK_CHARS: &str = "check-chars";
-static OPT_COUNT: &str = "count";
-static OPT_IGNORE_CASE: &str = "ignore-case";
-static OPT_REPEATED: &str = "repeated";
-static OPT_SKIP_FIELDS: &str = "skip-fields";
-static OPT_SKIP_CHARS: &str = "skip-chars";
-static OPT_UNIQUE: &str = "unique";
-static OPT_ZERO_TERMINATED: &str = "zero-terminated";
+pub mod options {
+    pub static ALL_REPEATED: &str = "all-repeated";
+    pub static CHECK_CHARS: &str = "check-chars";
+    pub static COUNT: &str = "count";
+    pub static IGNORE_CASE: &str = "ignore-case";
+    pub static REPEATED: &str = "repeated";
+    pub static SKIP_FIELDS: &str = "skip-fields";
+    pub static SKIP_CHARS: &str = "skip-chars";
+    pub static UNIQUE: &str = "unique";
+    pub static ZERO_TERMINATED: &str = "zero-terminated";
+}
 
 static ARG_FILES: &str = "files";
 
@@ -59,8 +61,7 @@ impl Uniq {
         let delimiters = &self.delimiters;
         let line_terminator = self.get_line_terminator();
 
-        for io_line in reader.split(line_terminator) {
-            let line = String::from_utf8(crash_if_err!(1, io_line)).unwrap();
+        for line in reader.split(line_terminator).map(get_line_string) {
             if !lines.is_empty() && self.cmp_keys(&lines[0], &line) {
                 let print_delimiter = delimiters == &Delimiters::Prepend
                     || (delimiters == &Delimiters::Separate && first_line_printed);
@@ -78,22 +79,19 @@ impl Uniq {
 
     fn skip_fields<'a>(&self, line: &'a str) -> &'a str {
         if let Some(skip_fields) = self.skip_fields {
-            if line.split_whitespace().count() > skip_fields {
-                let mut field = 0;
-                let mut i = 0;
-                while field < skip_fields && i < line.len() {
-                    while i < line.len() && line.chars().nth(i).unwrap().is_whitespace() {
-                        i += 1;
-                    }
-                    while i < line.len() && !line.chars().nth(i).unwrap().is_whitespace() {
-                        i += 1;
-                    }
-                    field += 1;
+            let mut i = 0;
+            let mut char_indices = line.char_indices();
+            for _ in 0..skip_fields {
+                if char_indices.find(|(_, c)| !c.is_whitespace()) == None {
+                    return "";
                 }
-                &line[i..]
-            } else {
-                ""
+                match char_indices.find(|(_, c)| c.is_whitespace()) {
+                    None => return "",
+
+                    Some((next_field_i, _)) => i = next_field_i,
+                }
             }
+            &line[i..]
         } else {
             line
         }
@@ -129,10 +127,7 @@ impl Uniq {
 
             // fast path: avoid skipping
             if self.ignore_case && slice_start == 0 && slice_stop == len {
-                return closure(&mut fields_to_check.chars().map(|c| match c {
-                    'a'..='z' => ((c as u8) - 32) as char,
-                    _ => c,
-                }));
+                return closure(&mut fields_to_check.chars().flat_map(|c| c.to_uppercase()));
             }
 
             // fast path: we can avoid mapping chars to upper-case, if we don't want to ignore the case
@@ -145,10 +140,7 @@ impl Uniq {
                     .chars()
                     .skip(slice_start)
                     .take(slice_stop)
-                    .map(|c| match c {
-                        'a'..='z' => ((c as u8) - 32) as char,
-                        _ => c,
-                    }),
+                    .flat_map(|c| c.to_uppercase()),
             )
         } else {
             closure(&mut fields_to_check.chars())
@@ -203,6 +195,11 @@ impl Uniq {
     }
 }
 
+fn get_line_string(io_line: Result<Vec<u8>>) -> String {
+    let line_bytes = crash_if_err!(1, io_line);
+    crash_if_err!(1, String::from_utf8(line_bytes))
+}
+
 fn opt_parsed<T: FromStr>(opt_name: &str, matches: &ArgMatches) -> Option<T> {
     matches.value_of(opt_name).map(|arg_str| {
         let opt_val: Option<T> = arg_str.parse().ok();
@@ -233,63 +230,63 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .usage(&usage[..])
         .after_help(&long_usage[..])
         .arg(
-            Arg::with_name(OPT_ALL_REPEATED)
+            Arg::with_name(options::ALL_REPEATED)
                 .short("D")
-                .long(OPT_ALL_REPEATED)
+                .long(options::ALL_REPEATED)
                 .possible_values(&["none", "prepend", "separate"])
                 .help("print all duplicate lines. Delimiting is done with blank lines")
                 .value_name("delimit-method")
                 .default_value("none"),
         )
         .arg(
-            Arg::with_name(OPT_CHECK_CHARS)
+            Arg::with_name(options::CHECK_CHARS)
                 .short("w")
-                .long(OPT_CHECK_CHARS)
+                .long(options::CHECK_CHARS)
                 .help("compare no more than N characters in lines")
                 .value_name("N"),
         )
         .arg(
-            Arg::with_name(OPT_COUNT)
+            Arg::with_name(options::COUNT)
                 .short("c")
-                .long(OPT_COUNT)
+                .long(options::COUNT)
                 .help("prefix lines by the number of occurrences"),
         )
         .arg(
-            Arg::with_name(OPT_IGNORE_CASE)
+            Arg::with_name(options::IGNORE_CASE)
                 .short("i")
-                .long(OPT_IGNORE_CASE)
+                .long(options::IGNORE_CASE)
                 .help("ignore differences in case when comparing"),
         )
         .arg(
-            Arg::with_name(OPT_REPEATED)
+            Arg::with_name(options::REPEATED)
                 .short("d")
-                .long(OPT_REPEATED)
+                .long(options::REPEATED)
                 .help("only print duplicate lines"),
         )
         .arg(
-            Arg::with_name(OPT_SKIP_CHARS)
+            Arg::with_name(options::SKIP_CHARS)
                 .short("s")
-                .long(OPT_SKIP_CHARS)
+                .long(options::SKIP_CHARS)
                 .help("avoid comparing the first N characters")
                 .value_name("N"),
         )
         .arg(
-            Arg::with_name(OPT_SKIP_FIELDS)
+            Arg::with_name(options::SKIP_FIELDS)
                 .short("f")
-                .long(OPT_SKIP_FIELDS)
+                .long(options::SKIP_FIELDS)
                 .help("avoid comparing the first N fields")
                 .value_name("N"),
         )
         .arg(
-            Arg::with_name(OPT_UNIQUE)
+            Arg::with_name(options::UNIQUE)
                 .short("u")
-                .long(OPT_UNIQUE)
+                .long(options::UNIQUE)
                 .help("only print unique lines"),
         )
         .arg(
-            Arg::with_name(OPT_ZERO_TERMINATED)
+            Arg::with_name(options::ZERO_TERMINATED)
                 .short("z")
-                .long(OPT_ZERO_TERMINATED)
+                .long(options::ZERO_TERMINATED)
                 .help("end lines with 0 byte, not newline"),
         )
         .arg(
@@ -316,11 +313,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     };
 
     let uniq = Uniq {
-        repeats_only: matches.is_present(OPT_REPEATED)
-            || matches.occurrences_of(OPT_ALL_REPEATED) > 0,
-        uniques_only: matches.is_present(OPT_UNIQUE),
-        all_repeated: matches.occurrences_of(OPT_ALL_REPEATED) > 0,
-        delimiters: match matches.value_of(OPT_ALL_REPEATED).map(String::from) {
+        repeats_only: matches.is_present(options::REPEATED)
+            || matches.occurrences_of(options::ALL_REPEATED) > 0,
+        uniques_only: matches.is_present(options::UNIQUE),
+        all_repeated: matches.occurrences_of(options::ALL_REPEATED) > 0,
+        delimiters: match matches.value_of(options::ALL_REPEATED).map(String::from) {
             Some(ref opt_arg) if opt_arg != "none" => match &(*opt_arg.as_str()) {
                 "prepend" => Delimiters::Prepend,
                 "separate" => Delimiters::Separate,
@@ -328,12 +325,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             },
             _ => Delimiters::None,
         },
-        show_counts: matches.is_present(OPT_COUNT),
-        skip_fields: opt_parsed(OPT_SKIP_FIELDS, &matches),
-        slice_start: opt_parsed(OPT_SKIP_CHARS, &matches),
-        slice_stop: opt_parsed(OPT_CHECK_CHARS, &matches),
-        ignore_case: matches.is_present(OPT_IGNORE_CASE),
-        zero_terminated: matches.is_present(OPT_ZERO_TERMINATED),
+        show_counts: matches.is_present(options::COUNT),
+        skip_fields: opt_parsed(options::SKIP_FIELDS, &matches),
+        slice_start: opt_parsed(options::SKIP_CHARS, &matches),
+        slice_stop: opt_parsed(options::CHECK_CHARS, &matches),
+        ignore_case: matches.is_present(options::IGNORE_CASE),
+        zero_terminated: matches.is_present(options::ZERO_TERMINATED),
     };
     uniq.print_uniq(
         &mut open_input_file(in_file_name),

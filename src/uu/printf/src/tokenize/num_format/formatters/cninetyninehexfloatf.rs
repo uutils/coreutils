@@ -52,8 +52,7 @@ fn get_primitive_hex(
     last_dec_place: usize,
     capitalized: bool,
 ) -> FormatPrimitive {
-    let mut f: FormatPrimitive = Default::default();
-    f.prefix = Some(String::from(if inprefix.sign == -1 { "-0x" } else { "0x" }));
+    let prefix = Some(String::from(if inprefix.sign == -1 { "-0x" } else { "0x" }));
 
     // assign the digits before and after the decimal points
     // to separate slices. If no digits after decimal point,
@@ -97,7 +96,7 @@ fn get_primitive_hex(
     // conversion. The best way to do it is to just convert the floatnum
     // directly to base 2 and then at the end translate back to hex.
     let mantissa = 0;
-    f.suffix = Some({
+    let suffix = Some({
         let ind = if capitalized { "P" } else { "p" };
         if mantissa >= 0 {
             format!("{}+{}", ind, mantissa)
@@ -105,7 +104,11 @@ fn get_primitive_hex(
             format!("{}{}", ind, mantissa)
         }
     });
-    f
+    FormatPrimitive {
+        prefix,
+        suffix,
+        ..Default::default()
+    }
 }
 
 fn to_hex(src: &str, before_decimal: bool) -> String {

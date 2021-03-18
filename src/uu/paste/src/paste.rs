@@ -10,73 +10,82 @@
 #[macro_use]
 extern crate uucore;
 
+use clap::{App, Arg};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::iter::repeat;
 use std::path::Path;
 
-static NAME: &str = "paste";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
+static ABOUT: &str = "Write lines consisting of the sequentially corresponding lines from each
+FILE, separated by TABs, to standard output.";
+
+mod options {
+    pub const DELIMITER: &str = "delimiters";
+    pub const SERIAL: &str = "serial";
+    pub const FILE: &str = "file";
+}
+
+// Wraps BufReader and stdin
+fn read_line<R: Read>(
+    reader: Option<&mut BufReader<R>>,
+    buf: &mut String,
+) -> std::io::Result<usize> {
+    match reader {
+        Some(reader) => reader.read_line(buf),
+        None => stdin().read_line(buf),
+    }
+}
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .arg(
+            Arg::with_name(options::SERIAL)
+                .long(options::SERIAL)
+                .short("s")
+                .help("paste one file at a time instead of in parallel"),
+        )
+        .arg(
+            Arg::with_name(options::DELIMITER)
+                .long(options::DELIMITER)
+                .short("d")
+                .help("reuse characters from LIST instead of TABs")
+                .value_name("LIST")
+                .default_value("\t")
+                .hide_default_value(true),
+        )
+        .arg(
+            Arg::with_name(options::FILE)
+                .value_name("FILE")
+                .multiple(true)
+                .default_value("-"),
+        )
+        .get_matches_from(args);
 
-    let mut opts = getopts::Options::new();
-
-    opts.optflag(
-        "s",
-        "serial",
-        "paste one file at a time instead of in parallel",
-    );
-    opts.optopt(
-        "d",
-        "delimiters",
-        "reuse characters from LIST instead of TABs",
-        "LIST",
-    );
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(e) => crash!(1, "{}", e),
-    };
-
-    if matches.opt_present("help") {
-        let msg = format!(
-            "{0} {1}
-
-Usage:
-  {0} [OPTION]... [FILE]...
-
-Write lines consisting of the sequentially corresponding lines from each
-FILE, separated by TABs, to standard output.",
-            NAME, VERSION
-        );
-        print!("{}", opts.usage(&msg));
-    } else if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-    } else {
-        let serial = matches.opt_present("serial");
-        let delimiters = matches
-            .opt_str("delimiters")
-            .unwrap_or_else(|| "\t".to_owned());
-        paste(matches.free, serial, delimiters);
-    }
+    let serial = matches.is_present(options::SERIAL);
+    let delimiters = matches.value_of(options::DELIMITER).unwrap().to_owned();
+    let files = matches
+        .values_of(options::FILE)
+        .unwrap()
+        .map(|s| s.to_owned())
+        .collect();
+    paste(files, serial, delimiters);
 
     0
 }
 
 fn paste(filenames: Vec<String>, serial: bool, delimiters: String) {
-    let mut files: Vec<BufReader<Box<dyn Read>>> = filenames
+    let mut files: Vec<_> = filenames
         .into_iter()
         .map(|name| {
-            BufReader::new(if name == "-" {
-                Box::new(stdin()) as Box<dyn Read>
+            if name == "-" {
+                None
             } else {
                 let r = crash_if_err!(1, File::open(Path::new(&name)));
-                Box::new(r) as Box<dyn Read>
-            })
+                Some(BufReader::new(r))
+            }
         })
         .collect();
 
@@ -91,7 +100,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: String) {
             let mut output = String::new();
             loop {
                 let mut line = String::new();
-                match file.read_line(&mut line) {
+                match read_line(file.as_mut(), &mut line) {
                     Ok(0) => break,
                     Ok(_) => {
                         output.push_str(line.trim_end());
@@ -113,7 +122,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: String) {
                     eof_count += 1;
                 } else {
                     let mut line = String::new();
-                    match file.read_line(&mut line) {
+                    match read_line(file.as_mut(), &mut line) {
                         Ok(0) => {
                             eof[i] = true;
                             eof_count += 1;

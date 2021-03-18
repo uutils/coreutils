@@ -1,6 +1,6 @@
 [package]
 name = "uu_cut"
-version = "0.0.3"
+version = "0.0.4"
 authors = ["uutils developers"]
 license = "MIT"
 description = "cut ~ (uutils) display byte/field columns of input lines"
@@ -15,7 +15,7 @@ edition = "2018"
 path = "src/cut.rs"
 
 [dependencies]
-uucore = { version=">=0.0.6", package="uucore", path="../../uucore" }
+uucore = { version=">=0.0.7", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]

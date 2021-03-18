@@ -34,7 +34,7 @@
 //! assert!(entries::Group::locate(root_group).is_ok());
 //! ```
 
-#[cfg(any(target_os = "freebsd", target_os = "macos"))]
+#[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
 use libc::time_t;
 use libc::{c_char, c_int, gid_t, uid_t};
 use libc::{getgrgid, getgrnam, getgroups, getpwnam, getpwuid, group, passwd};
@@ -119,19 +119,19 @@ impl Passwd {
     }
 
     /// AKA passwd.pw_class
-    #[cfg(any(target_os = "freebsd", target_os = "macos"))]
+    #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
     pub fn user_access_class(&self) -> Cow<str> {
         cstr2cow!(self.inner.pw_class)
     }
 
     /// AKA passwd.pw_change
-    #[cfg(any(target_os = "freebsd", target_os = "macos"))]
+    #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
     pub fn passwd_change_time(&self) -> time_t {
         self.inner.pw_change
     }
 
     /// AKA passwd.pw_expire
-    #[cfg(any(target_os = "freebsd", target_os = "macos"))]
+    #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
     pub fn expiration(&self) -> time_t {
         self.inner.pw_expire
     }

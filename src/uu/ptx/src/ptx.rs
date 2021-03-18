@@ -95,12 +95,21 @@ impl WordFilter {
         if matches.opt_present("b") {
             crash!(1, "-b not implemented yet");
         }
-        let reg = if matches.opt_present("W") {
-            matches.opt_str("W").expect("parsing options failed!")
-        } else if config.gnu_ext {
-            "\\w+".to_owned()
+        // Ignore empty string regex from cmd-line-args
+        let arg_reg: Option<String> = if matches.opt_present("W") {
+            matches.opt_str("W").filter(|reg| !reg.is_empty())
         } else {
-            "[^ \t\n]+".to_owned()
+            None
+        };
+        let reg = match arg_reg {
+            Some(arg_reg) => arg_reg,
+            None => {
+                if config.gnu_ext {
+                    "\\w+".to_owned()
+                } else {
+                    "[^ \t\n]+".to_owned()
+                }
+            }
         };
         WordFilter {
             only_specified: o,

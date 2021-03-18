@@ -9,6 +9,22 @@ fn gnu_ext_disabled_roff_no_ref() {
 }
 
 #[test]
+fn gnu_ext_disabled_roff_no_ref_empty_word_regexp() {
+    new_ucmd!()
+        .args(&["-G", "-R", "-W", "", "input"])
+        .succeeds()
+        .stdout_only_fixture("gnu_ext_disabled_roff_no_ref.expected");
+}
+
+#[test]
+fn gnu_ext_disabled_roff_no_ref_word_regexp_exc_space() {
+    new_ucmd!()
+        .args(&["-G", "-R", "-W", "[^\t\n]+", "input"])
+        .succeeds()
+        .stdout_only_fixture("gnu_ext_disabled_roff_no_ref_word_regexp_exc_space.expected");
+}
+
+#[test]
 fn gnu_ext_disabled_roff_input_ref() {
     new_ucmd!()
         .args(&["-G", "-r", "-R", "input"])

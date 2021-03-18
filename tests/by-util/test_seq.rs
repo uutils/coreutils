@@ -45,4 +45,3 @@ fn test_seq_wrong_arg() {
 fn test_zero_step() {
     new_ucmd!().args(&["10", "0", "32"]).fails();
 }
-

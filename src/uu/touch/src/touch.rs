@@ -13,7 +13,7 @@ pub extern crate filetime;
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{App, Arg, ArgGroup};
 use filetime::*;
 use std::fs::{self, File};
 use std::io::Error;
@@ -21,34 +21,32 @@ use std::path::Path;
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Update the access and modification times of each FILE to the current time.";
-static OPT_ACCESS: &str = "access";
-static OPT_CURRENT: &str = "current";
-static OPT_DATE: &str = "date";
-static OPT_MODIFICATION: &str = "modification";
-static OPT_NO_CREATE: &str = "no-create";
-static OPT_NO_DEREF: &str = "no-dereference";
-static OPT_REFERENCE: &str = "reference";
-static OPT_TIME: &str = "time";
+pub mod options {
+    // Both SOURCES and sources are needed as we need to be able to refer to the ArgGroup.
+    pub static SOURCES: &str = "sources";
+    pub mod sources {
+        pub static DATE: &str = "date";
+        pub static REFERENCE: &str = "reference";
+        pub static CURRENT: &str = "current";
+    }
+    pub static ACCESS: &str = "access";
+    pub static MODIFICATION: &str = "modification";
+    pub static NO_CREATE: &str = "no-create";
+    pub static NO_DEREF: &str = "no-dereference";
+    pub static TIME: &str = "time";
+}
 
 static ARG_FILES: &str = "files";
 
-// Since touch's date/timestamp parsing doesn't account for timezone, the
-// returned value from time::strptime() is UTC. We get system's timezone to
-// localize the time.
-macro_rules! to_local(
-    ($exp:expr) => ({
-        let mut tm = $exp;
-        tm.tm_utcoff = time::now().tm_utcoff;
-        tm
-    })
-);
+fn to_local(mut tm: time::Tm) -> time::Tm {
+    tm.tm_utcoff = time::now().tm_utcoff;
+    tm
+}
 
-macro_rules! local_tm_to_filetime(
-    ($exp:expr) => ({
-        let ts = $exp.to_timespec();
-        FileTime::from_unix_time(ts.sec as i64, ts.nsec as u32)
-    })
-);
+fn local_tm_to_filetime(tm: time::Tm) -> FileTime {
+    let ts = tm.to_timespec();
+    FileTime::from_unix_time(ts.sec as i64, ts.nsec as u32)
+}
 
 fn get_usage() -> String {
     format!("{0} [OPTION]... [USER]", executable!())
@@ -62,54 +60,54 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .about(ABOUT)
         .usage(&usage[..])
         .arg(
-            Arg::with_name(OPT_ACCESS)
+            Arg::with_name(options::ACCESS)
                 .short("a")
                 .help("change only the access time"),
         )
         .arg(
-            Arg::with_name(OPT_CURRENT)
+            Arg::with_name(options::sources::CURRENT)
                 .short("t")
                 .help("use [[CC]YY]MMDDhhmm[.ss] instead of the current time")
                 .value_name("STAMP")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name(OPT_DATE)
+            Arg::with_name(options::sources::DATE)
                 .short("d")
-                .long(OPT_DATE)
+                .long(options::sources::DATE)
                 .help("parse argument and use it instead of current time")
                 .value_name("STRING"),
         )
         .arg(
-            Arg::with_name(OPT_MODIFICATION)
+            Arg::with_name(options::MODIFICATION)
                 .short("m")
                 .help("change only the modification time"),
         )
         .arg(
-            Arg::with_name(OPT_NO_CREATE)
+            Arg::with_name(options::NO_CREATE)
                 .short("c")
-                .long(OPT_NO_CREATE)
+                .long(options::NO_CREATE)
                 .help("do not create any files"),
         )
         .arg(
-            Arg::with_name(OPT_NO_DEREF)
+            Arg::with_name(options::NO_DEREF)
                 .short("h")
-                .long(OPT_NO_DEREF)
+                .long(options::NO_DEREF)
                 .help(
                     "affect each symbolic link instead of any referenced file \
                      (only for systems that can change the timestamps of a symlink)",
                 ),
         )
         .arg(
-            Arg::with_name(OPT_REFERENCE)
+            Arg::with_name(options::sources::REFERENCE)
                 .short("r")
-                .long(OPT_REFERENCE)
+                .long(options::sources::REFERENCE)
                 .help("use this file's times instead of the current time")
                 .value_name("FILE"),
         )
         .arg(
-            Arg::with_name(OPT_TIME)
-                .long(OPT_TIME)
+            Arg::with_name(options::TIME)
+                .long(options::TIME)
                 .help(
                     "change only the specified time: \"access\", \"atime\", or \
                      \"use\" are equivalent to -a; \"modify\" or \"mtime\" are \
@@ -125,6 +123,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .takes_value(true)
                 .min_values(1),
         )
+        .group(ArgGroup::with_name(options::SOURCES).args(&[
+            options::sources::CURRENT,
+            options::sources::DATE,
+            options::sources::REFERENCE,
+        ]))
         .get_matches_from(args);
 
     let files: Vec<String> = matches
@@ -132,30 +135,27 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    if matches.is_present(OPT_DATE)
-        && (matches.is_present(OPT_REFERENCE) || matches.is_present(OPT_CURRENT))
-        || matches.is_present(OPT_REFERENCE)
-            && (matches.is_present(OPT_DATE) || matches.is_present(OPT_CURRENT))
-        || matches.is_present(OPT_CURRENT)
-            && (matches.is_present(OPT_DATE) || matches.is_present(OPT_REFERENCE))
-    {
-        panic!("Invalid options: cannot specify reference time from more than one source");
-    }
-
-    let (mut atime, mut mtime) = if matches.is_present(OPT_REFERENCE) {
+    let (mut atime, mut mtime) = if matches.is_present(options::sources::REFERENCE) {
         stat(
-            &matches.value_of(OPT_REFERENCE).unwrap()[..],
-            !matches.is_present(OPT_NO_DEREF),
+            &matches.value_of(options::sources::REFERENCE).unwrap()[..],
+            !matches.is_present(options::NO_DEREF),
         )
-    } else if matches.is_present(OPT_DATE) || matches.is_present(OPT_CURRENT) {
-        let timestamp = if matches.is_present(OPT_DATE) {
-            parse_date(matches.value_of(OPT_DATE).unwrap().as_ref())
+    } else if matches.is_present(options::sources::DATE)
+        || matches.is_present(options::sources::CURRENT)
+    {
+        let timestamp = if matches.is_present(options::sources::DATE) {
+            parse_date(matches.value_of(options::sources::DATE).unwrap().as_ref())
         } else {
-            parse_timestamp(matches.value_of(OPT_CURRENT).unwrap().as_ref())
+            parse_timestamp(
+                matches
+                    .value_of(options::sources::CURRENT)
+                    .unwrap()
+                    .as_ref(),
+            )
         };
         (timestamp, timestamp)
     } else {
-        let now = local_tm_to_filetime!(time::now());
+        let now = local_tm_to_filetime(time::now());
         (now, now)
     };
 
@@ -164,7 +164,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
         if !Path::new(path).exists() {
             // no-dereference included here for compatibility
-            if matches.is_present(OPT_NO_CREATE) || matches.is_present(OPT_NO_DEREF) {
+            if matches.is_present(options::NO_CREATE) || matches.is_present(options::NO_DEREF) {
                 continue;
             }
 
@@ -174,24 +174,21 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             };
 
             // Minor optimization: if no reference time was specified, we're done.
-            if !(matches.is_present(OPT_DATE)
-                || matches.is_present(OPT_REFERENCE)
-                || matches.is_present(OPT_CURRENT))
-            {
+            if !matches.is_present(options::SOURCES) {
                 continue;
             }
         }
 
         // If changing "only" atime or mtime, grab the existing value of the other.
         // Note that "-a" and "-m" may be passed together; this is not an xor.
-        if matches.is_present(OPT_ACCESS)
-            || matches.is_present(OPT_MODIFICATION)
-            || matches.is_present(OPT_TIME)
+        if matches.is_present(options::ACCESS)
+            || matches.is_present(options::MODIFICATION)
+            || matches.is_present(options::TIME)
         {
-            let st = stat(path, !matches.is_present(OPT_NO_DEREF));
-            let time = matches.value_of(OPT_TIME).unwrap_or("");
+            let st = stat(path, !matches.is_present(options::NO_DEREF));
+            let time = matches.value_of(options::TIME).unwrap_or("");
 
-            if !(matches.is_present(OPT_ACCESS)
+            if !(matches.is_present(options::ACCESS)
                 || time.contains(&"access".to_owned())
                 || time.contains(&"atime".to_owned())
                 || time.contains(&"use".to_owned()))
@@ -199,7 +196,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 atime = st.0;
             }
 
-            if !(matches.is_present(OPT_MODIFICATION)
+            if !(matches.is_present(options::MODIFICATION)
                 || time.contains(&"modify".to_owned())
                 || time.contains(&"mtime".to_owned()))
             {
@@ -207,7 +204,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             }
         }
 
-        if matches.is_present(OPT_NO_DEREF) {
+        if matches.is_present(options::NO_DEREF) {
             if let Err(e) = set_symlink_file_times(path, atime, mtime) {
                 show_warning!("cannot touch '{}': {}", path, e);
             }
@@ -246,7 +243,7 @@ fn parse_date(str: &str) -> FileTime {
     // not about to implement GNU parse_datetime.
     // http://git.savannah.gnu.org/gitweb/?p=gnulib.git;a=blob_plain;f=lib/parse-datetime.y
     match time::strptime(str, "%c") {
-        Ok(tm) => local_tm_to_filetime!(to_local!(tm)),
+        Ok(tm) => local_tm_to_filetime(to_local(tm)),
         Err(e) => panic!("Unable to parse date\n{}", e),
     }
 }
@@ -264,7 +261,7 @@ fn parse_timestamp(s: &str) -> FileTime {
     };
 
     match time::strptime(&ts, format) {
-        Ok(tm) => local_tm_to_filetime!(to_local!(tm)),
+        Ok(tm) => local_tm_to_filetime(to_local(tm)),
         Err(e) => panic!("Unable to parse timestamp\n{}", e),
     }
 }

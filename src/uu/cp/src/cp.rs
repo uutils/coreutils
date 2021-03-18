@@ -207,6 +207,7 @@ pub struct Options {
     one_file_system: bool,
     overwrite: OverwriteMode,
     parents: bool,
+    strip_trailing_slashes: bool,
     reflink: bool,
     reflink_mode: ReflinkMode,
     preserve_attributes: Vec<Attribute>,
@@ -248,6 +249,7 @@ static OPT_NO_DEREFERENCE_PRESERVE_LINKS: &str = "no-dereference-preserve-linkgs
 static OPT_NO_PRESERVE: &str = "no-preserve";
 static OPT_NO_TARGET_DIRECTORY: &str = "no-target-directory";
 static OPT_ONE_FILE_SYSTEM: &str = "one-file-system";
+static OPT_PARENT: &str = "parent";
 static OPT_PARENTS: &str = "parents";
 static OPT_PATHS: &str = "paths";
 static OPT_PRESERVE: &str = "preserve";
@@ -333,6 +335,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(Arg::with_name(OPT_RECURSIVE_ALIAS)
              .short("R")
              .help("same as -r"))
+        .arg(Arg::with_name(OPT_STRIP_TRAILING_SLASHES)
+             .long(OPT_STRIP_TRAILING_SLASHES)
+             .help("remove any trailing slashes from each SOURCE argument"))
         .arg(Arg::with_name(OPT_VERBOSE)
              .short("v")
              .long(OPT_VERBOSE)
@@ -403,6 +408,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
              .value_name("ATTR_LIST")
              .conflicts_with_all(&[OPT_PRESERVE_DEFAULT_ATTRIBUTES, OPT_PRESERVE, OPT_ARCHIVE])
              .help("don't preserve the specified attributes"))
+        .arg(Arg::with_name(OPT_PARENTS)
+            .long(OPT_PARENTS)
+            .alias(OPT_PARENT)
+            .help("use full source file name under DIRECTORY"))
         .arg(Arg::with_name(OPT_NO_DEREFERENCE)
              .short("-P")
              .long(OPT_NO_DEREFERENCE)
@@ -428,17 +437,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
              .long(OPT_COPY_CONTENTS)
              .conflicts_with(OPT_ATTRIBUTES_ONLY)
              .help("NotImplemented: copy contents of special files when recursive"))
-        .arg(Arg::with_name(OPT_PARENTS)
-             .long(OPT_PARENTS)
-             .help("NotImplemented: use full source file name under DIRECTORY"))
         .arg(Arg::with_name(OPT_SPARSE)
              .long(OPT_SPARSE)
              .takes_value(true)
              .value_name("WHEN")
              .help("NotImplemented: control creation of sparse files. See below"))
-        .arg(Arg::with_name(OPT_STRIP_TRAILING_SLASHES)
-             .long(OPT_STRIP_TRAILING_SLASHES)
-             .help("NotImplemented: remove any trailing slashes from each SOURCE argument"))
         .arg(Arg::with_name(OPT_ONE_FILE_SYSTEM)
              .short("x")
              .long(OPT_ONE_FILE_SYSTEM)
@@ -559,9 +562,7 @@ impl Options {
     fn from_matches(matches: &ArgMatches) -> CopyResult<Options> {
         let not_implemented_opts = vec![
             OPT_COPY_CONTENTS,
-            OPT_PARENTS,
             OPT_SPARSE,
-            OPT_STRIP_TRAILING_SLASHES,
             OPT_ONE_FILE_SYSTEM,
             OPT_CONTEXT,
             #[cfg(windows)]
@@ -629,6 +630,7 @@ impl Options {
             backup_suffix: matches.value_of(OPT_SUFFIX).unwrap().to_string(),
             update: matches.is_present(OPT_UPDATE),
             verbose: matches.is_present(OPT_VERBOSE),
+            strip_trailing_slashes: matches.is_present(OPT_STRIP_TRAILING_SLASHES),
             reflink: matches.is_present(OPT_REFLINK),
             reflink_mode: {
                 if let Some(reflink) = matches.value_of(OPT_REFLINK) {
@@ -686,7 +688,7 @@ fn parse_path_args(path_args: &[String], options: &Options) -> CopyResult<(Vec<S
         return Err(format!("extra operand {:?}", paths[2]).into());
     }
 
-    let (sources, target) = match options.target_dir {
+    let (mut sources, target) = match options.target_dir {
         Some(ref target) => {
             // All path args are sources, and the target dir was
             // specified separately
@@ -699,6 +701,12 @@ fn parse_path_args(path_args: &[String], options: &Options) -> CopyResult<(Vec<S
             (paths, target)
         }
     };
+
+    if options.strip_trailing_slashes {
+        for source in sources.iter_mut() {
+            *source = source.components().as_path().to_owned()
+        }
+    }
 
     Ok((sources, target))
 }
@@ -843,9 +851,17 @@ fn construct_dest_path(
         .into());
     }
 
+    if options.parents && !target.is_dir() {
+        return Err("with --parents, the destination must be a directory".into());
+    }
+
     Ok(match *target_type {
         TargetType::Directory => {
-            let root = source_path.parent().unwrap_or(source_path);
+            let root = if options.parents {
+                Path::new("")
+            } else {
+                source_path.parent().unwrap_or(source_path)
+            };
             localize_to_target(root, source_path, target)?
         }
         TargetType::File => target.to_path_buf(),
@@ -938,7 +954,7 @@ fn copy_directory(root: &Path, target: &Target, options: &Options) -> CopyResult
             Some(parent) => {
                 #[cfg(windows)]
                 {
-                    // On Windows, some pathes are starting with \\?
+                    // On Windows, some paths are starting with \\?
                     // but not always, so, make sure that we are consistent for strip_prefix
                     // See https://docs.microsoft.com/en-us/windows/win32/fileio/naming-a-file for more info
                     let parent_can = adjust_canonicalization(parent);
@@ -1231,15 +1247,17 @@ fn copy_helper(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> 
             dest.into()
         };
         symlink_file(&link, &dest, &*context_for(&link, &dest))?;
+    } else if source.to_string_lossy() == "/dev/null" {
+        /* workaround a limitation of fs::copy
+         * https://github.com/rust-lang/rust/issues/79390
+         */
+        File::create(dest)?;
     } else {
-        if source.to_string_lossy() == "/dev/null" {
-            /* workaround a limitation of fs::copy
-             * https://github.com/rust-lang/rust/issues/79390
-             */
-            File::create(dest)?;
-        } else {
-            fs::copy(source, dest).context(&*context_for(source, dest))?;
+        if options.parents {
+            let parent = dest.parent().unwrap_or(dest);
+            fs::create_dir_all(parent)?;
         }
+        fs::copy(source, dest).context(&*context_for(source, dest))?;
     }
 
     Ok(())

@@ -19,8 +19,10 @@ static EXIT_ERR: i32 = 1;
 
 static ABOUT: &str = "Synchronize cached writes to persistent storage";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
-static OPT_FILE_SYSTEM: &str = "file-system";
-static OPT_DATA: &str = "data";
+pub mod options {
+    pub static FILE_SYSTEM: &str = "file-system";
+    pub static DATA: &str = "data";
+}
 
 static ARG_FILES: &str = "files";
 
@@ -170,17 +172,17 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .about(ABOUT)
         .usage(&usage[..])
         .arg(
-            Arg::with_name(OPT_FILE_SYSTEM)
+            Arg::with_name(options::FILE_SYSTEM)
                 .short("f")
-                .long(OPT_FILE_SYSTEM)
-                .conflicts_with(OPT_DATA)
+                .long(options::FILE_SYSTEM)
+                .conflicts_with(options::DATA)
                 .help("sync the file systems that contain the files (Linux and Windows only)"),
         )
         .arg(
-            Arg::with_name(OPT_DATA)
+            Arg::with_name(options::DATA)
                 .short("d")
-                .long(OPT_DATA)
-                .conflicts_with(OPT_FILE_SYSTEM)
+                .long(options::DATA)
+                .conflicts_with(options::FILE_SYSTEM)
                 .help("sync only file data, no unneeded metadata (Linux only)"),
         )
         .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true))
@@ -197,10 +199,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     }
 
-    if matches.is_present(OPT_FILE_SYSTEM) {
+    if matches.is_present(options::FILE_SYSTEM) {
         #[cfg(any(target_os = "linux", target_os = "windows"))]
         syncfs(files);
-    } else if matches.is_present(OPT_DATA) {
+    } else if matches.is_present(options::DATA) {
         #[cfg(target_os = "linux")]
         fdatasync(files);
     } else {

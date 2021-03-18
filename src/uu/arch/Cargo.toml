@@ -1,6 +1,6 @@
 [package]
 name = "uu_arch"
-version = "0.0.3"
+version = "0.0.4"
 authors = ["uutils developers"]
 license = "MIT"
 description = "arch ~ (uutils) display machine architecture"
@@ -15,8 +15,8 @@ edition = "2018"
 path = "src/arch.rs"
 
 [dependencies]
-platform-info = "0.0.1"
-uucore = { version=">=0.0.6", package="uucore", path="../../uucore" }
+platform-info = "0.1"
+uucore = { version=">=0.0.7", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]

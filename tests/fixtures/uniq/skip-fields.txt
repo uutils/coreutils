@@ -1,4 +1,4 @@
-	  aaa  aa  a
+	  aaa  ⟪⟫  a
 	  ZZZ     aa  a
 ZZZ     aa  a
 	  ZZZ     bb  a

@@ -12,7 +12,7 @@ fn test_du_basics() {
     assert!(result.success);
     assert_eq!(result.stderr, "");
 }
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 fn _du_basics(s: String) {
     let answer = "32\t./subdir
 8\t./subdir/deeper
@@ -21,7 +21,7 @@ fn _du_basics(s: String) {
 ";
     assert_eq!(s, answer);
 }
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(target_vendor = "apple"))]
 fn _du_basics(s: String) {
     let answer = "28\t./subdir
 8\t./subdir/deeper
@@ -41,11 +41,11 @@ fn test_du_basics_subdir() {
     _du_basics_subdir(result.stdout);
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 fn _du_basics_subdir(s: String) {
     assert_eq!(s, "4\tsubdir/deeper\n");
 }
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(target_vendor = "apple"))]
 fn _du_basics_subdir(s: String) {
     // MS-WSL linux has altered expected output
     if !is_wsl() {
@@ -80,12 +80,12 @@ fn test_du_soft_link() {
     _du_soft_link(result.stdout);
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 fn _du_soft_link(s: String) {
     // 'macos' host variants may have `du` output variation for soft links
     assert!((s == "12\tsubdir/links\n") || (s == "16\tsubdir/links\n"));
 }
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(target_vendor = "apple"))]
 fn _du_soft_link(s: String) {
     // MS-WSL linux has altered expected output
     if !is_wsl() {
@@ -109,11 +109,11 @@ fn test_du_hard_link() {
     _du_hard_link(result.stdout);
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 fn _du_hard_link(s: String) {
     assert_eq!(s, "12\tsubdir/links\n")
 }
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(target_vendor = "apple"))]
 fn _du_hard_link(s: String) {
     // MS-WSL linux has altered expected output
     if !is_wsl() {
@@ -133,11 +133,11 @@ fn test_du_d_flag() {
     _du_d_flag(result.stdout);
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 fn _du_d_flag(s: String) {
     assert_eq!(s, "16\t./subdir\n20\t./\n");
 }
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(target_vendor = "apple"))]
 fn _du_d_flag(s: String) {
     // MS-WSL linux has altered expected output
     if !is_wsl() {

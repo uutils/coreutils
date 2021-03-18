@@ -81,6 +81,6 @@ fn test_multiple_default() {
         .run()
         .stdout_is(
             "   13  109  772 lorem_ipsum.txt\n   18  204 1115 moby_dick.txt\n    5   57  302 \
-                alice_in_wonderland.txt\n   36  370 2189 total\n",
+             alice_in_wonderland.txt\n   36  370 2189 total\n",
         );
 }
