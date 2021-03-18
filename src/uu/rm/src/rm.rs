@@ -305,16 +305,28 @@ fn remove_dir(path: &Path, options: &Options) -> bool {
         true
     };
     if response {
-        match fs::remove_dir(path) {
-            Ok(_) => {
-                if options.verbose {
-                    println!("removed '{}'", path.display());
+        if let Ok(mut read_dir) = fs::read_dir(path) {
+            if options.dir && read_dir.next().is_none() {
+                match fs::remove_dir(path) {
+                    Ok(_) => {
+                        if options.verbose {
+                            println!("removed directory '{}'", path.display());
+                        }
+                    }
+                    Err(e) => {
+                        show_error!("cannot remove '{}': {}", path.display(), e);
+                        return true;
+                    }
                 }
-            }
-            Err(e) => {
-                show_error!("removing '{}': {}", path.display(), e);
+            } else {
+                // directory can be read but is not empty
+                show_error!("cannot remove '{}': Directory not empty", path.display());
                 return true;
             }
+        } else {
+            // GNU's rm shows this message if directory is empty but not readable
+            show_error!("cannot remove '{}': Directory not empty", path.display());
+            return true;
         }
     }
 

@@ -116,6 +116,23 @@ fn test_rm_empty_directory() {
 }
 
 #[test]
+fn test_rm_non_empty_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_rm_non_empty_dir";
+    let file_a = &format!("{}/test_rm_non_empty_file_a", dir);
+
+    at.mkdir(dir);
+    at.touch(file_a);
+
+    let result = ucmd.arg("-d").arg(dir).fails();
+    assert!(result
+        .stderr
+        .contains(&format!("cannot remove '{}': Directory not empty", dir)));
+    assert!(at.file_exists(file_a));
+    assert!(at.dir_exists(dir));
+}
+
+#[test]
 fn test_rm_recursive() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_rm_recursive_directory";
