@@ -16,15 +16,15 @@ path = "src/more.rs"
 
 [dependencies]
 getopts = "0.2.18"
-uucore = { version=">=0.0.7", package="uucore", path="../../uucore" }
-uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
+uucore = { version = ">=0.0.7", package = "uucore", path = "../../uucore" }
+uucore_procs = { version = ">=0.0.5", package = "uucore_procs", path = "../../uucore_procs" }
 
 [target.'cfg(target_os = "redox")'.dependencies]
 redox_termios = "0.1"
 redox_syscall = "0.1"
 
 [target.'cfg(all(unix, not(target_os = "fuchsia")))'.dependencies]
-nix = "0.8.1"
+nix = "<=0.13"
 
 [[bin]]
 name = "more"
