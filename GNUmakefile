@@ -1,5 +1,6 @@
 # Config options
 PROFILE         ?= debug
+TARGET          ?= $(shell rustc --version --verbose | grep host | awk '{ print $$2 }')
 MULTICALL       ?= n
 INSTALL         ?= install
 ifneq (,$(filter install, $(MAKECMDGOALS)))
@@ -15,7 +16,7 @@ RM := rm -rf
 
 # Binaries
 CARGO  ?= cargo
-CARGOFLAGS ?=
+CARGOFLAGS ?= --target $(TARGET)
 
 # Install directories
 PREFIX ?= /usr/local
@@ -36,7 +37,7 @@ PROG_PREFIX ?=
 # This won't support any directory with spaces in its name, but you can just
 # make a symlink without spaces that points to the directory.
 BASEDIR       ?= $(shell pwd)
-BUILDDIR      := $(BASEDIR)/target/${PROFILE}
+BUILDDIR      := $(BASEDIR)/target/${TARGET}/${PROFILE}
 PKG_BUILDDIR  := $(BUILDDIR)/deps
 DOCSDIR       := $(BASEDIR)/docs
 
