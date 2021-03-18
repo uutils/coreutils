@@ -15,7 +15,7 @@ use std::env;
 
 #[cfg(target_os = "linux")]
 pub const _SC_NPROCESSORS_CONF: libc::c_int = 83;
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 pub const _SC_NPROCESSORS_CONF: libc::c_int = libc::_SC_NPROCESSORS_CONF;
 #[cfg(target_os = "freebsd")]
 pub const _SC_NPROCESSORS_CONF: libc::c_int = 57;
@@ -89,7 +89,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
 #[cfg(any(
     target_os = "linux",
-    target_os = "macos",
+    target_vendor = "apple",
     target_os = "freebsd",
     target_os = "netbsd"
 ))]
@@ -109,7 +109,7 @@ fn num_cpus_all() -> usize {
 // Other platforms (e.g., windows), num_cpus::get() directly.
 #[cfg(not(any(
     target_os = "linux",
-    target_os = "macos",
+    target_vendor = "apple",
     target_os = "freebsd",
     target_os = "netbsd"
 )))]

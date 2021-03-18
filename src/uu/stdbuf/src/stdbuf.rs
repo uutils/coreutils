@@ -57,7 +57,7 @@ fn preload_strings() -> (&'static str, &'static str) {
     ("LD_PRELOAD", "so")
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 fn preload_strings() -> (&'static str, &'static str) {
     ("DYLD_LIBRARY_PATH", "dylib")
 }
@@ -67,7 +67,7 @@ fn preload_strings() -> (&'static str, &'static str) {
     target_os = "freebsd",
     target_os = "netbsd",
     target_os = "dragonflybsd",
-    target_os = "macos"
+    target_vendor = "apple"
 )))]
 fn preload_strings() -> (&'static str, &'static str) {
     crash!(1, "Command not supported for this operating system!")

@@ -23,7 +23,7 @@ use uucore::fs::{is_stderr_interactive, is_stdin_interactive, is_stdout_interact
 static NAME: &str = "nohup";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 extern "C" {
     fn _vprocmgr_detach_from_console(flags: u32) -> *const libc::c_int;
 }
