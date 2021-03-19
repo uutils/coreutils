@@ -31,6 +31,10 @@ static TEST_COPY_FROM_FOLDER: &str = "hello_dir_with_file/";
 static TEST_COPY_FROM_FOLDER_FILE: &str = "hello_dir_with_file/hello_world.txt";
 static TEST_COPY_TO_FOLDER_NEW: &str = "hello_dir_new";
 static TEST_COPY_TO_FOLDER_NEW_FILE: &str = "hello_dir_new/hello_world.txt";
+static TEST_MOUNT_COPY_FROM_FOLDER: &str = "dir_with_mount";
+static TEST_MOUNT_MOUNTPOINT: &str = "mount";
+static TEST_MOUNT_OTHER_FILESYSTEM_FILE: &str = "mount/DO_NOT_copy_me.txt";
+static TEST_MOUNT_DISK_IMAGE: &str = "disk_file.iso";
 
 #[test]
 fn test_cp_cp() {
@@ -1000,4 +1004,83 @@ fn test_cp_target_file_dev_null() {
     ucmd.arg(file1).arg(file2).succeeds().no_stderr();
 
     assert!(at.file_exists(file2));
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_one_file_system() {
+    use std::process::Command;
+    use walkdir::WalkDir;
+    use crate::common::util::AtPath;
+
+    // Test must be run as root (or with `sudo -E`)
+    let username = Command::new("whoami").output().unwrap().stdout;
+    let username = String::from_utf8(username).unwrap();
+    if username != "root\n" {
+        return;
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let at_src = AtPath::new(&at.plus(TEST_MOUNT_COPY_FROM_FOLDER));
+    let at_dst = AtPath::new(&at.plus(TEST_COPY_TO_FOLDER_NEW));
+
+    // Prepare the mount
+    let disk_image_path = &at.plus_as_string(TEST_MOUNT_DISK_IMAGE);
+    let mountpoint_path = &at_src.plus_as_string(TEST_MOUNT_MOUNTPOINT);
+
+    let _r = Command::new("/usr/bin/dd")
+        .arg("if=/dev/zero")
+        .arg(format!("of={}", disk_image_path))
+        .arg("bs=640K") // Ought to be enough
+        .arg("count=1")
+        .output()
+        .expect("failed to run /usr/bin/dd");
+    assert!(_r.status.success(), "failed to create disk file");
+
+    let _r = Command::new("/usr/sbin/mkfs.fat")
+        .arg(disk_image_path)
+        .output()
+        .expect("failed to run /usr/sbin/mkfs.fat");
+    assert!(_r.status.success(), "failed to format disk file");
+
+    at_src.mkdir(TEST_MOUNT_MOUNTPOINT);
+
+    let _r = Command::new("/usr/bin/mount")
+        .arg(disk_image_path)
+        .arg(mountpoint_path)
+        .output()
+        .expect("failed to run /usr/bin/mount");
+    assert!(_r.status.success(), "failed to mount disk file");
+
+    at_src.touch(TEST_MOUNT_OTHER_FILESYSTEM_FILE);
+
+    // Begin testing -x flag
+    let result = ucmd
+        .arg("-rx")
+        .arg(TEST_MOUNT_COPY_FROM_FOLDER)
+        .arg(TEST_COPY_TO_FOLDER_NEW)
+        .run();
+    // Ditch the mount before the assets
+    let _r = Command::new("/usr/bin/umount")
+        .arg(mountpoint_path)
+        .output()
+        .expect("failed to run /usr/bin/umount");
+    assert!(_r.status.success(), "failed to unmount disk_file");
+
+    assert!(result.success);
+    assert!(!at_dst.file_exists(TEST_MOUNT_OTHER_FILESYSTEM_FILE));
+    // Check if the other files were copied from the source folder hirerarchy
+    for entry in WalkDir::new(at_src.as_string()) {
+        let entry = entry.unwrap();
+        let relative_src = entry.path()
+            .strip_prefix(at_src.as_string()).unwrap()
+            .to_str().unwrap();
+
+        let ft = entry.file_type();
+        match (ft.is_dir(), ft.is_file(), ft.is_symlink()) {
+            (true, _, _) => assert!(at_dst.dir_exists(relative_src)),
+            (_, true, _) => assert!(at_dst.file_exists(relative_src)),
+            (_, _, _) => panic!()
+        }
+    }
 }

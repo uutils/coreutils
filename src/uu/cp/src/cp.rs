@@ -432,9 +432,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
              .short("d")
              .help("same as --no-dereference --preserve=links"))
         .arg(Arg::with_name(OPT_ONE_FILE_SYSTEM)
-                  .short("x")
-                  .long(OPT_ONE_FILE_SYSTEM)
-                  .help("stay on this file system"))
+             .short("x")
+             .long(OPT_ONE_FILE_SYSTEM)
+             .help("stay on this file system"))
 
         // TODO: implement the following args
         .arg(Arg::with_name(OPT_COPY_CONTENTS)
