@@ -314,23 +314,51 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::format::COLUMNS,
                     options::format::ONELINE,
                     options::format::LONG,
+                    options::format::LONG_NO_GROUP,
+                    options::format::LONG_NO_OWNER,
                 ]),
         )
         .arg(
             Arg::with_name(options::format::COLUMNS)
                 .short(options::format::COLUMNS)
                 .help("Display the files in columns.")
+                .overrides_with_all(&[
+                    options::FORMAT,
+                    options::format::COLUMNS,
+                    options::format::ONELINE,
+                    options::format::LONG,
+                    options::format::LONG_NO_GROUP,
+                    options::format::LONG_NO_OWNER,
+                ]),
         )
+        // Detail in the GNU implementation that is replicated here:
+        // The -1 option does not override the -l option, because
+        // the -l already does "1 file per line".
+        // This actually makes -1 different from 
+        // --format=single-column, which does override -l.
         .arg(
             Arg::with_name(options::format::ONELINE)
                 .short(options::format::ONELINE)
                 .help("List one file per line.")
+                .overrides_with_all(&[
+                    options::FORMAT,
+                    options::format::COLUMNS,
+                    options::format::ONELINE,
+                ]),
         )
+        // -l, -g, -o should not override each other:
+        // i.e. -glo should hide both owner and group.
         .arg(
             Arg::with_name(options::format::LONG)
                 .short("l")
                 .long(options::format::LONG)
                 .help("Display detailed information.")
+                .overrides_with_all(&[
+                    options::FORMAT,
+                    options::format::COLUMNS,
+                    options::format::ONELINE,
+                    options::format::LONG,
+                ]),
         )
         .arg(
             Arg::with_name(options::format::LONG_NO_GROUP)
@@ -379,8 +407,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("If the long listing format (e.g., -l, -o) is being used, print the status \
                 change time (the ‘ctime’ in the inode) instead of the modification time. When \
                 explicitly sorting by time (--sort=time or -t) or when not using a long listing \
-                format, sort according to the status change time.",
-        ))
+                format, sort according to the status change time.")
+                .overrides_with_all(&[
+                    options::TIME,
+                    options::time::ACCESS,
+                    options::time::CHANGE,
+                ]),                
+        )
         .arg(
             Arg::with_name(options::time::ACCESS)
                 .short(options::time::ACCESS)
@@ -388,6 +421,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 access time instead of the modification time. When explicitly sorting by time \
                 (--sort=time or -t) or when not using a long listing format, sort according to the \
                 access time.")
+                .overrides_with_all(&[
+                    options::TIME,
+                    options::time::ACCESS,
+                    options::time::CHANGE,
+                ])
         )
 
         // Sort arguments
@@ -409,12 +447,24 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(
             Arg::with_name(options::sort::SIZE)
                 .short(options::sort::SIZE)
-                .help("Sort by file size, largest first."),
+                .help("Sort by file size, largest first.")
+                .overrides_with_all(&[
+                    options::SORT,
+                    options::sort::SIZE,
+                    options::sort::TIME,
+                    options::sort::NONE,
+                ])
         )
         .arg(
             Arg::with_name(options::sort::TIME)
                 .short(options::sort::TIME)
-                .help("Sort by modification time (the 'mtime' in the inode), newest first."),
+                .help("Sort by modification time (the 'mtime' in the inode), newest first.")
+                .overrides_with_all(&[
+                    options::SORT,
+                    options::sort::SIZE,
+                    options::sort::TIME,
+                    options::sort::NONE,
+                ])
         )
         .arg(
             Arg::with_name(options::sort::NONE)
@@ -422,6 +472,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("Do not sort; list the files in whatever order they are stored in the \
                 directory.  This is especially useful when listing very large directories, \
                 since not doing any sorting can be noticeably faster.")
+                .overrides_with_all(&[
+                    options::SORT,
+                    options::sort::SIZE,
+                    options::sort::TIME,
+                    options::sort::NONE,
+                ])
+        )
+
         // Long format options
         .arg(
             Arg::with_name(options::NO_GROUP)
