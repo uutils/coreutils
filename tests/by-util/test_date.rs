@@ -144,7 +144,6 @@ fn test_date_set_valid() {
     }
 }
 
-
 #[test]
 #[cfg(any(windows, all(unix, not(target_os = "macos"))))]
 fn test_date_set_invalid() {

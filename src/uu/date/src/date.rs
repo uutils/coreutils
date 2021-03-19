@@ -16,7 +16,7 @@ use chrono::{DateTime, FixedOffset, Local, Offset, Utc};
 #[cfg(windows)]
 use chrono::{Datelike, Timelike};
 use clap::{App, Arg};
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "macos")))]
 use libc::{clock_settime, timespec, CLOCK_REALTIME};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -68,6 +68,11 @@ static RFC_3339_HELP_STRING: &str = "output date/time in RFC 3339 format.
  FMT='date', 'seconds', or 'ns'
  for date and time to the indicated precision.
  Example: 2006-08-14 02:34:56-06:00";
+
+#[cfg(not(target_os = "macos"))]
+static OPT_SET_HELP_STRING: &str = "set time described by STRING";
+#[cfg(target_os = "macos")]
+static OPT_SET_HELP_STRING: &str = "set time described by STRING (not available on mac yet)";
 
 /// Settings for this program, parsed from the command line
 struct Settings {
@@ -193,7 +198,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .short("s")
                 .long(OPT_SET)
                 .takes_value(true)
-                .help("set time described by STRING"),
+                .help(OPT_SET_HELP_STRING),
         )
         .arg(
             Arg::with_name(OPT_UNIVERSAL)
@@ -335,19 +340,18 @@ fn parse_date<S: AsRef<str> + Clone>(
     s.as_ref().parse().map_err(|e| (s.as_ref().into(), e))
 }
 
-/// Displays the errno string to stderr and returns the error code.
-fn get_errno() -> i32 {
-    let error = std::io::Error::last_os_error();
-    eprintln!("date: cannot set date: {}", error);
-    error.raw_os_error().unwrap()
-}
-
-#[cfg(any(not(any(unix, windows)), target_os = "macos"))]
+#[cfg(not(any(unix, windows)))]
 fn set_system_datetime(_date: DateTime<Utc>) -> i32 {
     unimplemented!("setting date not implemented (unsupported target)");
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "macos")]
+fn set_system_datetime(_date: DateTime<Utc>) -> i32 {
+    eprintln!("date: setting the date is not supported by macOS");
+    return 1;
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
 /// System call to set date (unix).
 /// See here for more:
 /// https://doc.rust-lang.org/libc/i686-unknown-linux-gnu/libc/fn.clock_settime.html
@@ -362,7 +366,9 @@ fn set_system_datetime(date: DateTime<Utc>) -> i32 {
     let result = unsafe { clock_settime(CLOCK_REALTIME, &timespec) };
 
     if result != 0 {
-        get_errno()
+        let error = std::io::Error::last_os_error();
+        eprintln!("date: cannot set date: {}", error);
+        error.raw_os_error().unwrap()
     } else {
         0
     }
@@ -390,7 +396,9 @@ fn set_system_datetime(date: DateTime<Utc>) -> i32 {
     let result = unsafe { SetSystemTime(&system_time) };
 
     if result == 0 {
-        get_errno()
+        let error = std::io::Error::last_os_error();
+        eprintln!("date: cannot set date: {}", error);
+        error.raw_os_error().unwrap()
     } else {
         0
     }
