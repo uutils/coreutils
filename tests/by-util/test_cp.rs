@@ -1029,15 +1029,6 @@ fn test_cp_one_file_system() {
     let disk_image_path = &at.plus_as_string(TEST_MOUNT_DISK_IMAGE);
     let mountpoint_path = &at_src.plus_as_string(TEST_MOUNT_MOUNTPOINT);
 
-    let _r = scene.cmd("dd")
-        .arg("if=/dev/zero")
-        .arg(format!("of={}", disk_image_path))
-        .arg("bs=640K") // Ought to be enough
-        .arg("count=1")
-        .run();
-    let _r = scene.cmd("mkfs.fat")
-        .arg(disk_image_path)
-        .run();
     at_src.mkdir(TEST_MOUNT_MOUNTPOINT);
     let _r = scene.cmd("mount")
         .arg(disk_image_path)
