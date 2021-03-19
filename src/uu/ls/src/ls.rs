@@ -92,13 +92,16 @@ pub mod options {
         pub static ACCESS: &str = "u";
         pub static CHANGE: &str = "c";
     }
+    pub mod size {
+        pub static HUMAN_READABLE: &str = "human-readable";
+        pub static SI: &str = "si";
+    }
     pub static FORMAT: &str = "format";
     pub static SORT: &str = "sort";
     pub static TIME: &str = "time";
     pub static IGNORE_BACKUPS: &str = "ignore-backups";
     pub static DIRECTORY: &str = "directory";
     pub static CLASSIFY: &str = "classify";
-    pub static HUMAN_READABLE: &str = "human-readable";
     pub static INODE: &str = "inode";
     pub static DEREFERENCE: &str = "dereference";
     pub static NUMERIC_UID_GID: &str = "numeric-uid-gid";
@@ -122,9 +125,10 @@ enum Sort {
     Time,
 }
 
-enum SizeFormats {
+enum SizeFormat {
     Bytes,
-    Binary, // Powers of 1024, --human-readable
+    Binary,  // Powers of 1024, --human-readable, -h
+    Decimal, // Powers of 1000, --si
 }
 
 #[derive(PartialEq, Eq)]
@@ -149,7 +153,7 @@ struct Config {
     dereference: bool,
     classify: bool,
     ignore_backups: bool,
-    size_format: SizeFormats,
+    size_format: SizeFormat,
     numeric_uid_gid: bool,
     directory: bool,
     time: Time,
@@ -231,10 +235,12 @@ impl Config {
             },
         };
 
-        let size_format = if options.is_present(options::HUMAN_READABLE) {
-            SizeFormats::Binary
+        let size_format = if options.is_present(options::size::HUMAN_READABLE) {
+            SizeFormat::Binary
+        } else if options.is_present(options::size::SI) {
+            SizeFormat::Decimal
         } else {
-            SizeFormats::Bytes
+            SizeFormat::Bytes
         };
 
         Config {
@@ -413,10 +419,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     '>' for doors, and nothing for regular files.",
         ))
         .arg(
-            Arg::with_name(options::HUMAN_READABLE)
+            Arg::with_name(options::size::HUMAN_READABLE)
                 .short("h")
-                .long(options::HUMAN_READABLE)
-                .help("Print human readable file sizes (e.g. 1K 234M 56G)."),
+                .long(options::size::HUMAN_READABLE)
+                .help("Print human readable file sizes (e.g. 1K 234M 56G).")
+                .overrides_with(options::size::SI),
+        )
+        .arg(
+            Arg::with_name(options::size::SI)
+                .long(options::size::SI)
+                .help("Print human readable file sizes using powers of 1000 instead of 1024.")
         )
         .arg(
             Arg::with_name(options::INODE)
@@ -787,17 +799,37 @@ fn display_date(metadata: &Metadata, config: &Config) -> String {
     }
 }
 
+// There are a few peculiarities to how GNU formats the sizes:
+// 1. One decimal place is given if and only if the size is smaller than 10
+// 2. It rounds sizes up.
+// 3. The human-readable format uses powers for 1024, but does not display the "i"
+//    that is commonly used to denote Kibi, Mebi, etc.
+// 4. Kibi and Kilo are denoted differently ("k" and "K", respectively)
+fn format_prefixed(prefixed: NumberPrefix<f64>) -> String {
+    match prefixed {
+        NumberPrefix::Standalone(bytes) => bytes.to_string(),
+        NumberPrefix::Prefixed(prefix, bytes) => {
+            // Remove the "i" from "Ki", "Mi", etc. if present
+            let prefix_str = prefix.symbol().trim_end_matches("i");
+
+            // Check whether we get more than 10 if we round up to the first decimal
+            // because we want do display 9.81 as "9.9", not as "10".
+            if (10.0 * bytes).ceil() >= 100.0 {
+                format!("{:.0}{}", bytes.ceil(), prefix_str)
+            } else {
+                format!("{:.1}{}", (10.0 * bytes).ceil() / 10.0, prefix_str)
+            }
+        }
+    }
+}
+
 fn display_file_size(metadata: &Metadata, config: &Config) -> String {
     // NOTE: The human-readable behaviour deviates from the GNU ls.
     // The GNU ls uses binary prefixes by default.
     match config.size_format {
-        SizeFormats::Binary => match NumberPrefix::decimal(metadata.len() as f64) {
-            NumberPrefix::Standalone(bytes) => bytes.to_string(),
-            NumberPrefix::Prefixed(prefix, bytes) => {
-                format!("{:.2}{}", bytes, prefix).to_uppercase()
-            }
-        },
-        SizeFormats::Bytes => metadata.len().to_string(),
+        SizeFormat::Binary => format_prefixed(NumberPrefix::binary(metadata.len() as f64)),
+        SizeFormat::Decimal => format_prefixed(NumberPrefix::decimal(metadata.len() as f64)),
+        SizeFormat::Bytes => metadata.len().to_string(),
     }
 }
 
