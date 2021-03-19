@@ -1009,18 +1009,19 @@ fn test_cp_target_file_dev_null() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_cp_one_file_system() {
-    use std::process::Command;
     use walkdir::WalkDir;
     use crate::common::util::AtPath;
 
+    let scene = TestScenario::new(util_name!());
+
     // Test must be run as root (or with `sudo -E`)
-    let username = Command::new("whoami").output().unwrap().stdout;
-    let username = String::from_utf8(username).unwrap();
-    if username != "root\n" {
-        return;
+    if !is_ci() {
+        if scene.cmd("whoami").run().stdout != "root\n" {
+            return;
+        }
     }
 
-    let (at, mut ucmd) = at_and_ucmd!();
+    let at = scene.fixtures.clone();
     let at_src = AtPath::new(&at.plus(TEST_MOUNT_COPY_FROM_FOLDER));
     let at_dst = AtPath::new(&at.plus(TEST_COPY_TO_FOLDER_NEW));
 
@@ -1028,44 +1029,32 @@ fn test_cp_one_file_system() {
     let disk_image_path = &at.plus_as_string(TEST_MOUNT_DISK_IMAGE);
     let mountpoint_path = &at_src.plus_as_string(TEST_MOUNT_MOUNTPOINT);
 
-    let _r = Command::new("/usr/bin/dd")
+    let _r = scene.cmd("/usr/bin/dd")
         .arg("if=/dev/zero")
         .arg(format!("of={}", disk_image_path))
         .arg("bs=640K") // Ought to be enough
         .arg("count=1")
-        .output()
-        .expect("failed to run /usr/bin/dd");
-    assert!(_r.status.success(), "failed to create disk file");
-
-    let _r = Command::new("/usr/sbin/mkfs.fat")
+        .run();
+    let _r = scene.cmd("/usr/sbin/mkfs.fat")
         .arg(disk_image_path)
-        .output()
-        .expect("failed to run /usr/sbin/mkfs.fat");
-    assert!(_r.status.success(), "failed to format disk file");
-
+        .run();
     at_src.mkdir(TEST_MOUNT_MOUNTPOINT);
-
-    let _r = Command::new("/usr/bin/mount")
+    let _r = scene.cmd("/usr/bin/mount")
         .arg(disk_image_path)
         .arg(mountpoint_path)
-        .output()
-        .expect("failed to run /usr/bin/mount");
-    assert!(_r.status.success(), "failed to mount disk file");
-
+        .run();
     at_src.touch(TEST_MOUNT_OTHER_FILESYSTEM_FILE);
 
     // Begin testing -x flag
-    let result = ucmd
+    let result = scene.ucmd()
         .arg("-rx")
         .arg(TEST_MOUNT_COPY_FROM_FOLDER)
         .arg(TEST_COPY_TO_FOLDER_NEW)
         .run();
-    // Ditch the mount before the assets
-    let _r = Command::new("/usr/bin/umount")
+    // Ditch the mount before the asserts
+    let _r = scene.cmd("/usr/bin/umount")
         .arg(mountpoint_path)
-        .output()
-        .expect("failed to run /usr/bin/umount");
-    assert!(_r.status.success(), "failed to unmount disk_file");
+        .run();
 
     assert!(result.success);
     assert!(!at_dst.file_exists(TEST_MOUNT_OTHER_FILESYSTEM_FILE));
