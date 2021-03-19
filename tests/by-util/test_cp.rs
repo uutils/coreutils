@@ -1006,7 +1006,7 @@ fn test_cp_target_file_dev_null() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
 fn test_cp_one_file_system() {
     use walkdir::WalkDir;
     use crate::common::util::AtPath;
@@ -1014,10 +1014,8 @@ fn test_cp_one_file_system() {
     let scene = TestScenario::new(util_name!());
 
     // Test must be run as root (or with `sudo -E`)
-    if !is_ci() {
-        if scene.cmd("whoami").run().stdout != "root\n" {
-            return;
-        }
+    if scene.cmd("whoami").run().stdout != "root\n" {
+        return;
     }
 
     let at = scene.fixtures.clone();
