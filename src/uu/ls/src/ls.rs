@@ -78,6 +78,8 @@ pub mod options {
         pub static ONELINE: &str = "1";
         pub static LONG: &str = "long";
         pub static COLUMNS: &str = "C";
+        pub static LONG_NO_OWNER: &str = "g";
+        pub static LONG_NO_GROUP: &str = "o";
     }
     pub mod files {
         pub static ALL: &str = "all";
@@ -96,6 +98,8 @@ pub mod options {
         pub static HUMAN_READABLE: &str = "human-readable";
         pub static SI: &str = "si";
     }
+    pub static AUTHOR: &str = "author";
+    pub static NO_GROUP: &str = "no-group";
     pub static FORMAT: &str = "format";
     pub static SORT: &str = "sort";
     pub static TIME: &str = "time";
@@ -161,6 +165,14 @@ struct Config {
     inode: bool,
     #[cfg(unix)]
     color: bool,
+    long: LongFormat,
+}
+
+// Fields that can be removed or added to the long format
+struct LongFormat {
+    author: bool,
+    group: bool,
+    owner: bool,
 }
 
 impl Config {
@@ -173,7 +185,10 @@ impl Config {
                 // below should never happen as clap already restricts the values.
                 _ => unreachable!("Invalid field for --format"),
             }
-        } else if options.is_present(options::format::LONG) {
+        } else if options.is_present(options::format::LONG)
+            | options.is_present(options::format::LONG_NO_GROUP)
+            | options.is_present(options::format::LONG_NO_OWNER)
+        {
             Format::Long
         } else if options.is_present(options::format::ONELINE) {
             Format::OneLine
@@ -241,6 +256,18 @@ impl Config {
             SizeFormat::Bytes
         };
 
+        let long = {
+            let author = options.is_present(options::AUTHOR);
+            let group = !options.is_present(options::NO_GROUP)
+                && !options.is_present(options::format::LONG_NO_GROUP);
+            let owner = !options.is_present(options::format::LONG_NO_OWNER);
+            LongFormat {
+                author,
+                group,
+                owner,
+            }
+        };
+
         Config {
             format,
             files,
@@ -258,6 +285,7 @@ impl Config {
             color,
             #[cfg(unix)]
             inode: options.is_present(options::INODE),
+            long,
         }
     }
 }
@@ -303,6 +331,28 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .short("l")
                 .long(options::format::LONG)
                 .help("Display detailed information.")
+        )
+        .arg(
+            Arg::with_name(options::format::LONG_NO_GROUP)
+                .short(options::format::LONG_NO_GROUP)
+                .help("Long format without group information. Identical to --format=long with --no-group.")
+                .overrides_with_all(&[
+                    options::FORMAT,
+                    options::format::COLUMNS,
+                    options::format::ONELINE,
+                    options::format::LONG_NO_GROUP,
+                ]),
+        )
+        .arg(
+            Arg::with_name(options::format::LONG_NO_OWNER)
+                .short(options::format::LONG_NO_OWNER)
+                .help("Long format without owner information.")
+                .overrides_with_all(&[
+                    options::FORMAT,
+                    options::format::COLUMNS,
+                    options::format::ONELINE,
+                    options::format::LONG_NO_OWNER,
+                ]),
         )
 
         // Time arguments
@@ -372,8 +422,20 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("Do not sort; list the files in whatever order they are stored in the \
                 directory.  This is especially useful when listing very large directories, \
                 since not doing any sorting can be noticeably faster.")
+        // Long format options
+        .arg(
+            Arg::with_name(options::NO_GROUP)
+                .long(options::NO_GROUP)
+                .short("-G")
+                .help("Do not show group in long format.")
         )
-
+        .arg(
+            Arg::with_name(options::AUTHOR)
+                .long(options::AUTHOR)
+                .help("Show author in long format. On the supported platforms, the author \
+                always matches the file owner.")
+                
+        )
         // Other Flags
         .arg(
             Arg::with_name(options::files::ALL)
@@ -700,30 +762,33 @@ fn display_item_long(
     };
 
     println!(
-        "{}{}{} {} {} {} {} {} {}",
-        get_inode(&md, config),
-        display_file_type(md.file_type()),
-        display_permissions(&md),
-        pad_left(display_symlink_count(&md), max_links),
-        display_uname(&md, config),
-        display_group(&md, config),
-        pad_left(display_file_size(&md, config), max_size),
-        display_date(&md, config),
-        display_file_name(&item, strip, &md, config).contents
+        "{}",
+        vec![
+            config.inode.then(|| get_inode(&md)),
+            Some(format!("{}{}",
+                display_file_type(md.file_type()),
+                display_permissions(&md),
+            )),
+            Some(pad_left(display_symlink_count(&md), max_links)),
+            config.long.owner.then(|| display_uname(&md, config)),
+            config.long.group.then(|| display_group(&md, config)),
+            // Author is only different from owner on GNU/Hurd, so we reuse
+            // the owner, since GNU/Hurd is not currently supported by Rust.
+            config.long.author.then(|| display_uname(&md, config)),
+            Some(pad_left(display_file_size(&md, config), max_size)),
+            Some(display_date(&md, config)),
+            Some(display_file_name(&item, strip, &md, config).contents)
+        ].into_iter().filter_map(|x| x).collect::<Vec<_>>().join(" ")
     );
 }
 
 #[cfg(unix)]
-fn get_inode(metadata: &Metadata, config: &Config) -> String {
-    if config.inode {
-        format!("{:8} ", metadata.ino())
-    } else {
-        "".to_string()
-    }
+fn get_inode(metadata: &Metadata) -> String {
+    format!("{:8}", metadata.ino())
 }
 
 #[cfg(not(unix))]
-fn get_inode(_metadata: &Metadata, _config: &Config) -> String {
+fn get_inode(_metadata: &Metadata) -> String {
     "".to_string()
 }
 
@@ -922,8 +987,8 @@ fn display_file_name(
     config: &Config,
 ) -> Cell {
     let mut name = get_file_name(path, strip);
-    if config.format != Format::Long {
-        name = get_inode(metadata, config) + &name;
+    if config.format != Format::Long && config.inode {
+        name = get_inode(metadata) + &name;
     }
     let mut width = UnicodeWidthStr::width(&*name);
 
