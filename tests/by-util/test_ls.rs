@@ -428,28 +428,94 @@ fn test_ls_ls_color() {
 
 #[cfg(not(any(target_vendor = "apple", target_os = "windows")))] // Truncate not available on mac or win
 #[test]
-fn test_ls_human() {
+fn test_ls_human_si() {
     let scene = TestScenario::new(util_name!());
-    let file = "test_human";
-    let result = scene.cmd("truncate").arg("-s").arg("+1000").arg(file).run();
+    let file1 = "test_human-1";
+    let result = scene
+        .cmd("truncate")
+        .arg("-s")
+        .arg("+1000")
+        .arg(file1)
+        .run();
     println!("stderr = {:?}", result.stderr);
     println!("stdout = {:?}", result.stdout);
-    let result = scene.ucmd().arg("-hl").arg(file).run();
+
+    let result = scene.ucmd().arg("-hl").arg(file1).run();
     println!("stderr = {:?}", result.stderr);
     println!("stdout = {:?}", result.stdout);
     assert!(result.success);
-    assert!(result.stdout.contains("1.00K"));
+    assert!(result.stdout.contains(" 1000 "));
+
+    let result = scene.ucmd().arg("-l").arg("--si").arg(file1).run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+    assert!(result.success);
+    assert!(result.stdout.contains(" 1.0k "));
+
     scene
         .cmd("truncate")
         .arg("-s")
         .arg("+1000k")
-        .arg(file)
+        .arg(file1)
         .run();
-    let result = scene.ucmd().arg("-hl").arg(file).run();
+
+    let result = scene.ucmd().arg("-hl").arg(file1).run();
     println!("stderr = {:?}", result.stderr);
     println!("stdout = {:?}", result.stdout);
     assert!(result.success);
-    assert!(result.stdout.contains("1.02M"));
+    assert!(result.stdout.contains(" 1001K "));
+
+    let result = scene.ucmd().arg("-l").arg("--si").arg(file1).run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+    assert!(result.success);
+    assert!(result.stdout.contains(" 1.1M "));
+
+    let file2 = "test-human-2";
+    let result = scene
+        .cmd("truncate")
+        .arg("-s")
+        .arg("+12300k")
+        .arg(file2)
+        .run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+    assert!(result.success);
+    let result = scene.ucmd().arg("-hl").arg(file2).run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+    assert!(result.success);
+    // GNU rounds up, so we must too.
+    assert!(result.stdout.contains(" 13M "));
+
+    let result = scene.ucmd().arg("-l").arg("--si").arg(file2).run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+    // GNU rounds up, so we must too.
+    assert!(result.stdout.contains(" 13M "));
+
+    let file3 = "test-human-3";
+    let result = scene
+        .cmd("truncate")
+        .arg("-s")
+        .arg("+9999")
+        .arg(file3)
+        .run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+    assert!(result.success);
+
+    let result = scene.ucmd().arg("-hl").arg(file3).run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+    assert!(result.success);
+    assert!(result.stdout.contains(" 9.8K "));
+
+    let result = scene.ucmd().arg("-l").arg("--si").arg(file3).run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+    assert!(result.success);
+    assert!(result.stdout.contains(" 10k "));
 }
 
 #[cfg(windows)]
