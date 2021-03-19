@@ -431,6 +431,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(Arg::with_name(OPT_NO_DEREFERENCE_PRESERVE_LINKS)
              .short("d")
              .help("same as --no-dereference --preserve=links"))
+        .arg(Arg::with_name(OPT_ONE_FILE_SYSTEM)
+             .short("x")
+             .long(OPT_ONE_FILE_SYSTEM)
+             .help("stay on this file system"))
 
         // TODO: implement the following args
         .arg(Arg::with_name(OPT_COPY_CONTENTS)
@@ -442,10 +446,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
              .takes_value(true)
              .value_name("WHEN")
              .help("NotImplemented: control creation of sparse files. See below"))
-        .arg(Arg::with_name(OPT_ONE_FILE_SYSTEM)
-             .short("x")
-             .long(OPT_ONE_FILE_SYSTEM)
-             .help("NotImplemented: stay on this file system"))
         .arg(Arg::with_name(OPT_CONTEXT)
              .long(OPT_CONTEXT)
              .takes_value(true)
@@ -563,6 +563,7 @@ impl Options {
         let not_implemented_opts = vec![
             OPT_COPY_CONTENTS,
             OPT_SPARSE,
+            #[cfg(not(any(windows, unix)))]
             OPT_ONE_FILE_SYSTEM,
             OPT_CONTEXT,
             #[cfg(windows)]
@@ -937,7 +938,7 @@ fn copy_directory(root: &Path, target: &Target, options: &Options) -> CopyResult
     #[cfg(any(windows, target_os = "redox"))]
     let mut hard_links: Vec<(String, u64)> = vec![];
 
-    for path in WalkDir::new(root) {
+    for path in WalkDir::new(root).same_file_system(options.one_file_system) {
         let p = or_continue!(path);
         let is_symlink = fs::symlink_metadata(p.path())?.file_type().is_symlink();
         let path = if (options.no_dereference || options.dereference) && is_symlink {

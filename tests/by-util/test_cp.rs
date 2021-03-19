@@ -31,6 +31,12 @@ static TEST_COPY_FROM_FOLDER: &str = "hello_dir_with_file/";
 static TEST_COPY_FROM_FOLDER_FILE: &str = "hello_dir_with_file/hello_world.txt";
 static TEST_COPY_TO_FOLDER_NEW: &str = "hello_dir_new";
 static TEST_COPY_TO_FOLDER_NEW_FILE: &str = "hello_dir_new/hello_world.txt";
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+static TEST_MOUNT_COPY_FROM_FOLDER: &str = "dir_with_mount";
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+static TEST_MOUNT_MOUNTPOINT: &str = "mount";
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+static TEST_MOUNT_OTHER_FILESYSTEM_FILE: &str = "mount/DO_NOT_copy_me.txt";
 
 #[test]
 fn test_cp_cp() {
@@ -1000,4 +1006,71 @@ fn test_cp_target_file_dev_null() {
     ucmd.arg(file1).arg(file2).succeeds().no_stderr();
 
     assert!(at.file_exists(file2));
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+fn test_cp_one_file_system() {
+    use crate::common::util::AtPath;
+    use walkdir::WalkDir;
+
+    let scene = TestScenario::new(util_name!());
+
+    // Test must be run as root (or with `sudo -E`)
+    if scene.cmd("whoami").run().stdout != "root\n" {
+        return;
+    }
+
+    let at = scene.fixtures.clone();
+    let at_src = AtPath::new(&at.plus(TEST_MOUNT_COPY_FROM_FOLDER));
+    let at_dst = AtPath::new(&at.plus(TEST_COPY_TO_FOLDER_NEW));
+
+    // Prepare the mount
+    at_src.mkdir(TEST_MOUNT_MOUNTPOINT);
+    let mountpoint_path = &at_src.plus_as_string(TEST_MOUNT_MOUNTPOINT);
+
+    let _r = scene
+        .cmd("mount")
+        .arg("-t")
+        .arg("tmpfs")
+        .arg("-o")
+        .arg("size=640k") // ought to be enough
+        .arg("tmpfs")
+        .arg(mountpoint_path)
+        .run();
+    assert!(_r.code == Some(0), _r.stderr);
+
+    at_src.touch(TEST_MOUNT_OTHER_FILESYSTEM_FILE);
+
+    // Begin testing -x flag
+    let result = scene
+        .ucmd()
+        .arg("-rx")
+        .arg(TEST_MOUNT_COPY_FROM_FOLDER)
+        .arg(TEST_COPY_TO_FOLDER_NEW)
+        .run();
+
+    // Ditch the mount before the asserts
+    let _r = scene.cmd("umount").arg(mountpoint_path).run();
+    assert!(_r.code == Some(0), _r.stderr);
+
+    assert!(result.success);
+    assert!(!at_dst.file_exists(TEST_MOUNT_OTHER_FILESYSTEM_FILE));
+    // Check if the other files were copied from the source folder hirerarchy
+    for entry in WalkDir::new(at_src.as_string()) {
+        let entry = entry.unwrap();
+        let relative_src = entry
+            .path()
+            .strip_prefix(at_src.as_string())
+            .unwrap()
+            .to_str()
+            .unwrap();
+
+        let ft = entry.file_type();
+        match (ft.is_dir(), ft.is_file(), ft.is_symlink()) {
+            (true, _, _) => assert!(at_dst.dir_exists(relative_src)),
+            (_, true, _) => assert!(at_dst.file_exists(relative_src)),
+            (_, _, _) => panic!(),
+        }
+    }
 }
