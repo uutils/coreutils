@@ -1008,8 +1008,8 @@ fn test_cp_target_file_dev_null() {
 #[test]
 #[cfg(any(target_os = "linux", target_os = "freebsd"))]
 fn test_cp_one_file_system() {
-    use walkdir::WalkDir;
     use crate::common::util::AtPath;
+    use walkdir::WalkDir;
 
     let scene = TestScenario::new(util_name!());
 
@@ -1026,11 +1026,12 @@ fn test_cp_one_file_system() {
     at_src.mkdir(TEST_MOUNT_MOUNTPOINT);
     let mountpoint_path = &at_src.plus_as_string(TEST_MOUNT_MOUNTPOINT);
 
-    let _r = scene.cmd("mount")
+    let _r = scene
+        .cmd("mount")
         .arg("-t")
         .arg("tmpfs")
         .arg("-o")
-        .arg("size=640k")   // ought to be enough
+        .arg("size=640k") // ought to be enough
         .arg("tmpfs")
         .arg(mountpoint_path)
         .run();
@@ -1039,16 +1040,15 @@ fn test_cp_one_file_system() {
     at_src.touch(TEST_MOUNT_OTHER_FILESYSTEM_FILE);
 
     // Begin testing -x flag
-    let result = scene.ucmd()
+    let result = scene
+        .ucmd()
         .arg("-rx")
         .arg(TEST_MOUNT_COPY_FROM_FOLDER)
         .arg(TEST_COPY_TO_FOLDER_NEW)
         .run();
 
     // Ditch the mount before the asserts
-    let _r = scene.cmd("umount")
-        .arg(mountpoint_path)
-        .run();
+    let _r = scene.cmd("umount").arg(mountpoint_path).run();
     assert!(_r.code == Some(0), _r.stderr);
 
     assert!(result.success);
@@ -1056,15 +1056,18 @@ fn test_cp_one_file_system() {
     // Check if the other files were copied from the source folder hirerarchy
     for entry in WalkDir::new(at_src.as_string()) {
         let entry = entry.unwrap();
-        let relative_src = entry.path()
-            .strip_prefix(at_src.as_string()).unwrap()
-            .to_str().unwrap();
+        let relative_src = entry
+            .path()
+            .strip_prefix(at_src.as_string())
+            .unwrap()
+            .to_str()
+            .unwrap();
 
         let ft = entry.file_type();
         match (ft.is_dir(), ft.is_file(), ft.is_symlink()) {
             (true, _, _) => assert!(at_dst.dir_exists(relative_src)),
             (_, true, _) => assert!(at_dst.file_exists(relative_src)),
-            (_, _, _) => panic!()
+            (_, _, _) => panic!(),
         }
     }
 }
