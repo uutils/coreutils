@@ -163,3 +163,12 @@ fn test_date_set_permissions_error() {
         assert!(result.stderr.starts_with("date: cannot set date: "));
     }
 }
+
+#[test]
+#[cfg(target_os = "macos")]
+fn test_date_set_mac_unavailable() {
+    let (_, mut ucmd) = at_and_ucmd!();
+    let result = ucmd.arg("--set").arg("2020-03-11 21:45:00+08:00").fails();
+    let result = result.no_stdout();
+    assert!(result.stderr.starts_with("date: setting the date is not supported by macOS"));
+}
