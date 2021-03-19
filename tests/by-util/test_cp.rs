@@ -1029,17 +1029,17 @@ fn test_cp_one_file_system() {
     let disk_image_path = &at.plus_as_string(TEST_MOUNT_DISK_IMAGE);
     let mountpoint_path = &at_src.plus_as_string(TEST_MOUNT_MOUNTPOINT);
 
-    let _r = scene.cmd("/usr/bin/dd")
+    let _r = scene.cmd("dd")
         .arg("if=/dev/zero")
         .arg(format!("of={}", disk_image_path))
         .arg("bs=640K") // Ought to be enough
         .arg("count=1")
         .run();
-    let _r = scene.cmd("/usr/sbin/mkfs.fat")
+    let _r = scene.cmd("mkfs.fat")
         .arg(disk_image_path)
         .run();
     at_src.mkdir(TEST_MOUNT_MOUNTPOINT);
-    let _r = scene.cmd("/usr/bin/mount")
+    let _r = scene.cmd("mount")
         .arg(disk_image_path)
         .arg(mountpoint_path)
         .run();
@@ -1052,7 +1052,7 @@ fn test_cp_one_file_system() {
         .arg(TEST_COPY_TO_FOLDER_NEW)
         .run();
     // Ditch the mount before the asserts
-    let _r = scene.cmd("/usr/bin/umount")
+    let _r = scene.cmd("umount")
         .arg(mountpoint_path)
         .run();
 
