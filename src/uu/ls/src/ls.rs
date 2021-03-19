@@ -173,8 +173,6 @@ impl Config {
             Format::Long
         } else if options.is_present(options::format::ONELINE) {
             Format::OneLine
-        } else if options.is_present(options::format::COLUMNS) {
-            Format::Columns
         } else {
             Format::Columns
         };
