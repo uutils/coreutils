@@ -34,7 +34,6 @@ static TEST_COPY_TO_FOLDER_NEW_FILE: &str = "hello_dir_new/hello_world.txt";
 static TEST_MOUNT_COPY_FROM_FOLDER: &str = "dir_with_mount";
 static TEST_MOUNT_MOUNTPOINT: &str = "mount";
 static TEST_MOUNT_OTHER_FILESYSTEM_FILE: &str = "mount/DO_NOT_copy_me.txt";
-static TEST_MOUNT_DISK_IMAGE: &str = "disk_file.iso";
 
 #[test]
 fn test_cp_cp() {
@@ -1007,7 +1006,7 @@ fn test_cp_target_file_dev_null() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 fn test_cp_one_file_system() {
     use walkdir::WalkDir;
     use crate::common::util::AtPath;
@@ -1026,33 +1025,15 @@ fn test_cp_one_file_system() {
     let at_dst = AtPath::new(&at.plus(TEST_COPY_TO_FOLDER_NEW));
 
     // Prepare the mount
-    let disk_image_path = &at.plus_as_string(TEST_MOUNT_DISK_IMAGE);
+    at_src.mkdir(TEST_MOUNT_MOUNTPOINT);
     let mountpoint_path = &at_src.plus_as_string(TEST_MOUNT_MOUNTPOINT);
 
-    let _r = scene.cmd("dd")
-        .arg("if=/dev/zero")
-        .arg(format!("of={}", disk_image_path))
-        .arg("bs=640K") // Ought to be enough
-        .arg("count=1")
-        .run();
-    assert!(_r.code == Some(0), _r.stderr);
-
-    // pick any mkfs that's available. absolute paths seem to be required
-    let _r = scene.cmd("whereis")
-        .arg("mkfs")
-        .run();
-    assert!(_r.code == Some(0), _r.stderr);
-    let mkfs_path = _r.stdout.split(" ").nth(1).expect("no mkfs found on system");
-
-    let _r = scene.cmd(mkfs_path)
-        .arg(disk_image_path)
-        .run();
-    assert!(_r.code == Some(0), _r.stderr);
-
-    at_src.mkdir(TEST_MOUNT_MOUNTPOINT);
-
     let _r = scene.cmd("mount")
-        .arg(disk_image_path)
+        .arg("-t")
+        .arg("tmpfs")
+        .arg("-o")
+        .arg("size=640k")   // ought to be enough
+        .arg("tmpfs")
         .arg(mountpoint_path)
         .run();
     assert!(_r.code == Some(0), _r.stderr);
@@ -1065,6 +1046,7 @@ fn test_cp_one_file_system() {
         .arg(TEST_MOUNT_COPY_FROM_FOLDER)
         .arg(TEST_COPY_TO_FOLDER_NEW)
         .run();
+
     // Ditch the mount before the asserts
     let _r = scene.cmd("umount")
         .arg(mountpoint_path)
