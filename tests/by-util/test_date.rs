@@ -139,7 +139,10 @@ fn test_date_format_full_day() {
 fn test_date_set_valid() {
     if get_effective_uid() == 0 {
         let (_, mut ucmd) = at_and_ucmd!();
-        let result = ucmd.arg("--set").arg("2020-03-12 13:30:00+08:00").succeeds();
+        let result = ucmd
+            .arg("--set")
+            .arg("2020-03-12 13:30:00+08:00")
+            .succeeds();
         result.no_stdout().no_stderr();
     }
 }
@@ -170,5 +173,7 @@ fn test_date_set_mac_unavailable() {
     let (_, mut ucmd) = at_and_ucmd!();
     let result = ucmd.arg("--set").arg("2020-03-11 21:45:00+08:00").fails();
     let result = result.no_stdout();
-    assert!(result.stderr.starts_with("date: setting the date is not supported by macOS"));
+    assert!(result
+        .stderr
+        .starts_with("date: setting the date is not supported by macOS"));
 }
