@@ -1029,12 +1029,34 @@ fn test_cp_one_file_system() {
     let disk_image_path = &at.plus_as_string(TEST_MOUNT_DISK_IMAGE);
     let mountpoint_path = &at_src.plus_as_string(TEST_MOUNT_MOUNTPOINT);
 
+    let _r = scene.cmd("dd")
+        .arg("if=/dev/zero")
+        .arg(format!("of={}", disk_image_path))
+        .arg("bs=640K") // Ought to be enough
+        .arg("count=1")
+        .run();
+    assert!(_r.code == Some(0), _r.stderr);
+
+    // pick any mkfs that's available. absolute paths seem to be required
+    let _r = scene.cmd("whereis")
+        .arg("mkfs")
+        .run();
+    assert!(_r.code == Some(0), _r.stderr);
+    let mkfs_path = _r.stdout.split(" ").nth(1).expect("no mkfs found on system");
+
+    let _r = scene.cmd(mkfs_path)
+        .arg(disk_image_path)
+        .run();
+    assert!(_r.code == Some(0), _r.stderr);
+
     at_src.mkdir(TEST_MOUNT_MOUNTPOINT);
+
     let _r = scene.cmd("mount")
         .arg(disk_image_path)
         .arg(mountpoint_path)
         .run();
     assert!(_r.code == Some(0), _r.stderr);
+
     at_src.touch(TEST_MOUNT_OTHER_FILESYSTEM_FILE);
 
     // Begin testing -x flag
