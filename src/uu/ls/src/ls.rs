@@ -177,24 +177,65 @@ struct LongFormat {
 
 impl Config {
     fn from(options: clap::ArgMatches) -> Config {
-        let format = if let Some(format_) = options.value_of(options::FORMAT) {
-            match format_ {
+        let (mut format, opt) = if let Some(format_) = options.value_of(options::FORMAT) {
+            (match format_ {
                 "long" | "verbose" => Format::Long,
                 "single-column" => Format::OneLine,
-                "columns" => Format::Columns,
+                "columns" | "vertical" => Format::Columns,
                 // below should never happen as clap already restricts the values.
                 _ => unreachable!("Invalid field for --format"),
-            }
-        } else if options.is_present(options::format::LONG)
-            | options.is_present(options::format::LONG_NO_GROUP)
-            | options.is_present(options::format::LONG_NO_OWNER)
-        {
-            Format::Long
-        } else if options.is_present(options::format::ONELINE) {
-            Format::OneLine
+            }, options::FORMAT)
+        } else if options.is_present(options::format::LONG) {
+            (Format::Long, options::format::LONG)
         } else {
-            Format::Columns
+            (Format::Columns, options::format::COLUMNS)
         };
+
+        // The -o and -g options are tricky. They cannot override with each
+        // other because it's possible to combine them. For example, the option
+        // -og should hide both owner and group. Furthermore, they are not
+        // reset if -l or --format=long is used. So these should just show the
+        // group: -gl or "-g --format=long". Finally, they are also not reset
+        // when switching to a different format option inbetween like this:
+        // -ogCl or "-og --format=vertical --format=long".
+        //
+        // -1 has a similar issue: it does nothing if the format is long. This
+        // actually makes it distinct from the --format=singe-column option,
+        // which always applies.
+        //
+        // The idea here is to not let these options override with the other 
+        // options, but manually check the last index they occur. If this index
+        // is larger than the index for the other format options, we apply the
+        // long format.
+        match options.indices_of(opt).map(|x| x.max().unwrap()) {
+            None => if options.is_present(options::format::LONG_NO_GROUP) || options.is_present(options::format::LONG_NO_OWNER) {
+                format = Format::Long;
+            } else if options.is_present(options::format::ONELINE) {
+                format = Format::OneLine;
+            }
+            Some(mut idx) => {
+                if let Some(indices) = options.indices_of(options::format::LONG_NO_OWNER) {
+                    let i = indices.max().unwrap();
+                    if i > idx {
+                        format = Format::Long;
+                        idx = i;
+                    }
+                }
+                if let Some(indices) = options.indices_of(options::format::LONG_NO_GROUP) {
+                    let i = indices.max().unwrap();
+                    if i > idx {
+                        format = Format::Long;
+                        idx = i;
+                    }
+                }
+                if let Some(indices) = options.indices_of(options::format::ONELINE) {
+                    let i = indices.max().unwrap();
+                    if i > idx && format != Format::Long {
+                        format = Format::OneLine;
+                    }
+                }
+            }
+        }
 
         let files = if options.is_present(options::files::ALL) {
             Files::All
@@ -312,10 +353,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .overrides_with_all(&[
                     options::FORMAT,
                     options::format::COLUMNS,
-                    options::format::ONELINE,
                     options::format::LONG,
-                    options::format::LONG_NO_GROUP,
-                    options::format::LONG_NO_OWNER,
                 ]),
         )
         .arg(
@@ -325,29 +363,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .overrides_with_all(&[
                     options::FORMAT,
                     options::format::COLUMNS,
-                    options::format::ONELINE,
                     options::format::LONG,
-                    options::format::LONG_NO_GROUP,
-                    options::format::LONG_NO_OWNER,
                 ]),
         )
-        // Detail in the GNU implementation that is replicated here:
-        // The -1 option does not override the -l option, because
-        // the -l already does "1 file per line".
-        // This actually makes -1 different from 
-        // --format=single-column, which does override -l.
-        .arg(
-            Arg::with_name(options::format::ONELINE)
-                .short(options::format::ONELINE)
-                .help("List one file per line.")
-                .overrides_with_all(&[
-                    options::FORMAT,
-                    options::format::COLUMNS,
-                    options::format::ONELINE,
-                ]),
-        )
-        // -l, -g, -o should not override each other:
-        // i.e. -glo should hide both owner and group.
         .arg(
             Arg::with_name(options::format::LONG)
                 .short("l")
@@ -360,27 +378,22 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::format::LONG,
                 ]),
         )
+        // The next three arguments do not override with the other format
+        // options, see the comment in Config::from for the reason.
+        .arg(
+            Arg::with_name(options::format::ONELINE)
+                .short(options::format::ONELINE)
+                .help("List one file per line.")
+        )
         .arg(
             Arg::with_name(options::format::LONG_NO_GROUP)
                 .short(options::format::LONG_NO_GROUP)
                 .help("Long format without group information. Identical to --format=long with --no-group.")
-                .overrides_with_all(&[
-                    options::FORMAT,
-                    options::format::COLUMNS,
-                    options::format::ONELINE,
-                    options::format::LONG_NO_GROUP,
-                ]),
         )
         .arg(
             Arg::with_name(options::format::LONG_NO_OWNER)
                 .short(options::format::LONG_NO_OWNER)
                 .help("Long format without owner information.")
-                .overrides_with_all(&[
-                    options::FORMAT,
-                    options::format::COLUMNS,
-                    options::format::ONELINE,
-                    options::format::LONG_NO_OWNER,
-                ]),
         )
 
         // Time arguments
