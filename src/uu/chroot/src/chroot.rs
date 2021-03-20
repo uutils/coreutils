@@ -23,6 +23,14 @@ static NAME: &str = "chroot";
 static ABOUT: &str = "Run COMMAND with root directory set to NEWROOT.";
 static SYNTAX: &str = "[OPTION]... NEWROOT [COMMAND [ARG]...]";
 
+mod options {
+    pub const NEWROOT: &str = "newroot";
+    pub const USER: &str = "user";
+    pub const GROUP: &str = "group";
+    pub const GROUPS: &str = "groups";
+    pub const USERSPEC: &str = "userspec";
+}
+
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args.collect_str();
 
@@ -30,30 +38,30 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .version(VERSION)
         .about(ABOUT)
         .usage(SYNTAX)
-        .arg(Arg::with_name("newroot").hidden(true))
+        .arg(Arg::with_name(options::NEWROOT).hidden(true))
         .arg(
-            Arg::with_name("user")
+            Arg::with_name(options::USER)
                 .short("u")
                 .long("user")
                 .help("User (ID or name) to switch before running the program")
                 .value_name("USER"),
         )
         .arg(
-            Arg::with_name("group")
+            Arg::with_name(options::GROUP)
                 .short("g")
                 .long("group")
                 .help("Group (ID or name) to switch to")
                 .value_name("GROUP"),
         )
         .arg(
-            Arg::with_name("groups")
+            Arg::with_name(options::GROUPS)
                 .short("G")
                 .long("groups")
                 .help("Comma-separated list of groups to switch to")
                 .value_name("GROUP1,GROUP2..."),
         )
         .arg(
-            Arg::with_name("userspec")
+            Arg::with_name(options::USERSPEC)
                 .long("userspec")
                 .help(
                     "Colon-separated user and group to switch to. \
