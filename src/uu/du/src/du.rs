@@ -92,7 +92,7 @@ impl Stat {
             path,
             is_dir: metadata.is_dir(),
             size: metadata.len(),
-            blocks: size_on_disk / 512,
+            blocks: size_on_disk / 1024 * 2,
             inode: 0,
             created: windows_time_to_unix_time(metadata.creation_time()),
             accessed: windows_time_to_unix_time(metadata.last_access_time()),
