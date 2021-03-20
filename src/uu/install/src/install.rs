@@ -426,18 +426,25 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behavior) ->
 
     let mut all_successful = true;
     for sourcepath in files.iter() {
-        let targetpath = match sourcepath.as_os_str().to_str() {
-            Some(name) => target_dir.join(name),
-            None => {
-                show_error!(
-                    "cannot stat '{}': No such file or directory",
-                    sourcepath.display()
-                );
+        if !sourcepath.exists() {
+            show_error!(
+                "cannot stat '{}': No such file or directory",
+                sourcepath.display()
+            );
 
-                all_successful = false;
-                continue;
-            }
-        };
+            all_successful = false;
+            continue;
+        }
+
+        if sourcepath.is_dir() {
+            show_info!("omitting directory '{}'", sourcepath.display());
+            all_successful = false;
+            continue;
+        }
+
+        let mut targetpath = target_dir.clone().to_path_buf();
+        let filename = sourcepath.components().last().unwrap();
+        targetpath.push(filename);
 
         if copy(sourcepath, &targetpath, b).is_err() {
             all_successful = false;
