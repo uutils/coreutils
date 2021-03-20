@@ -24,3 +24,15 @@ fn test_no_such_directory() {
         .fails()
         .stderr_is("chroot: error: cannot change root directory to `a`: no such directory");
 }
+
+#[test]
+fn test_invalid_user_spec() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("a");
+
+    ucmd.arg("a")
+        .arg("--userspec=ARABA:")
+        .fails()
+        .stderr_is("chroot: error: invalid userspec: `ARABA:'");
+}

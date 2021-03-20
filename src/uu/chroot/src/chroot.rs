@@ -136,22 +136,18 @@ fn set_context(root: &Path, options: &clap::ArgMatches) {
     let userspec = match userspec_str {
         Some(ref u) => {
             let s: Vec<&str> = u.split(':').collect();
-            if s.len() != 2 {
+            if s.len() != 2 || s.iter().any(|&spec| spec == "") {
                 crash!(1, "invalid userspec: `{}`", u)
             };
             s
         }
         None => Vec::new(),
     };
-    let user = if userspec.is_empty() {
-        &user_str[..]
+
+    let (user, group) = if userspec.is_empty() {
+        (&user_str[..], &group_str[..])
     } else {
-        &userspec[0][..]
-    };
-    let group = if userspec.is_empty() {
-        &group_str[..]
-    } else {
-        &userspec[1][..]
+        (&userspec[0][..], &userspec[1][..])
     };
 
     enter_chroot(root);
