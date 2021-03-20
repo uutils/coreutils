@@ -47,7 +47,7 @@ use libc::utmpx;
 pub use libc::endutxent;
 pub use libc::getutxent;
 pub use libc::setutxent;
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(any(target_vendor = "apple", target_os = "linux"))]
 pub use libc::utmpxname;
 #[cfg(target_os = "freebsd")]
 pub unsafe extern "C" fn utmpxname(_file: *const libc::c_char) -> libc::c_int {
@@ -85,7 +85,7 @@ mod ut {
     pub use libc::USER_PROCESS;
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 mod ut {
     pub static DEFAULT_FILE: &str = "/var/run/utmpx";
 

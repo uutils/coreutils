@@ -17,7 +17,7 @@ use std::io::{stdout, Read, Write};
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 extern crate nix;
 #[cfg(all(unix, not(target_os = "fuchsia")))]
-use nix::sys::termios;
+use nix::sys::termios::{self, LocalFlags, SetArg};
 
 #[cfg(target_os = "redox")]
 extern crate redox_termios;
@@ -92,10 +92,10 @@ fn help(usage: &str) {
 fn setup_term() -> termios::Termios {
     let mut term = termios::tcgetattr(0).unwrap();
     // Unset canonical mode, so we get characters immediately
-    term.c_lflag.remove(termios::ICANON);
+    term.local_flags.remove(LocalFlags::ICANON);
     // Disable local echo
-    term.c_lflag.remove(termios::ECHO);
-    termios::tcsetattr(0, termios::TCSADRAIN, &term).unwrap();
+    term.local_flags.remove(LocalFlags::ECHO);
+    termios::tcsetattr(0, SetArg::TCSADRAIN, &term).unwrap();
     term
 }
 
@@ -110,8 +110,8 @@ fn setup_term() -> redox_termios::Termios {
     let mut term = redox_termios::Termios::default();
     let fd = syscall::dup(0, b"termios").unwrap();
     syscall::read(fd, &mut term).unwrap();
-    term.c_lflag &= !redox_termios::ICANON;
-    term.c_lflag &= !redox_termios::ECHO;
+    term.local_flags &= !redox_termios::ICANON;
+    term.local_flags &= !redox_termios::ECHO;
     syscall::write(fd, &term).unwrap();
     let _ = syscall::close(fd);
     term
@@ -119,9 +119,9 @@ fn setup_term() -> redox_termios::Termios {
 
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 fn reset_term(term: &mut termios::Termios) {
-    term.c_lflag.insert(termios::ICANON);
-    term.c_lflag.insert(termios::ECHO);
-    termios::tcsetattr(0, termios::TCSADRAIN, &term).unwrap();
+    term.local_flags.insert(LocalFlags::ICANON);
+    term.local_flags.insert(LocalFlags::ECHO);
+    termios::tcsetattr(0, SetArg::TCSADRAIN, &term).unwrap();
 }
 
 #[cfg(any(windows, target_os = "fuchsia"))]
@@ -132,8 +132,8 @@ fn reset_term(_: &mut usize) {}
 fn reset_term(term: &mut redox_termios::Termios) {
     let fd = syscall::dup(0, b"termios").unwrap();
     syscall::read(fd, term).unwrap();
-    term.c_lflag |= redox_termios::ICANON;
-    term.c_lflag |= redox_termios::ECHO;
+    term.local_flags |= redox_termios::ICANON;
+    term.local_flags |= redox_termios::ECHO;
     syscall::write(fd, &term).unwrap();
     let _ = syscall::close(fd);
 }

@@ -13,7 +13,7 @@ pub extern crate filetime;
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{App, Arg, ArgGroup};
 use filetime::*;
 use std::fs::{self, File};
 use std::io::Error;
@@ -22,6 +22,8 @@ use std::path::Path;
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Update the access and modification times of each FILE to the current time.";
 pub mod options {
+    // Both SOURCES and sources are needed as we need to be able to refer to the ArgGroup.
+    pub static SOURCES: &str = "sources";
     pub mod sources {
         pub static DATE: &str = "date";
         pub static REFERENCE: &str = "reference";
@@ -36,23 +38,15 @@ pub mod options {
 
 static ARG_FILES: &str = "files";
 
-// Since touch's date/timestamp parsing doesn't account for timezone, the
-// returned value from time::strptime() is UTC. We get system's timezone to
-// localize the time.
-macro_rules! to_local(
-    ($exp:expr) => ({
-        let mut tm = $exp;
-        tm.tm_utcoff = time::now().tm_utcoff;
-        tm
-    })
-);
+fn to_local(mut tm: time::Tm) -> time::Tm {
+    tm.tm_utcoff = time::now().tm_utcoff;
+    tm
+}
 
-macro_rules! local_tm_to_filetime(
-    ($exp:expr) => ({
-        let ts = $exp.to_timespec();
-        FileTime::from_unix_time(ts.sec as i64, ts.nsec as u32)
-    })
-);
+fn local_tm_to_filetime(tm: time::Tm) -> FileTime {
+    let ts = tm.to_timespec();
+    FileTime::from_unix_time(ts.sec as i64, ts.nsec as u32)
+}
 
 fn get_usage() -> String {
     format!("{0} [OPTION]... [USER]", executable!())
@@ -129,25 +123,17 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .takes_value(true)
                 .min_values(1),
         )
+        .group(ArgGroup::with_name(options::SOURCES).args(&[
+            options::sources::CURRENT,
+            options::sources::DATE,
+            options::sources::REFERENCE,
+        ]))
         .get_matches_from(args);
 
     let files: Vec<String> = matches
         .values_of(ARG_FILES)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
-
-    if matches.is_present(options::sources::DATE)
-        && (matches.is_present(options::sources::REFERENCE)
-            || matches.is_present(options::sources::CURRENT))
-        || matches.is_present(options::sources::REFERENCE)
-            && (matches.is_present(options::sources::DATE)
-                || matches.is_present(options::sources::CURRENT))
-        || matches.is_present(options::sources::CURRENT)
-            && (matches.is_present(options::sources::DATE)
-                || matches.is_present(options::sources::REFERENCE))
-    {
-        panic!("Invalid options: cannot specify reference time from more than one source");
-    }
 
     let (mut atime, mut mtime) = if matches.is_present(options::sources::REFERENCE) {
         stat(
@@ -169,7 +155,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         };
         (timestamp, timestamp)
     } else {
-        let now = local_tm_to_filetime!(time::now());
+        let now = local_tm_to_filetime(time::now());
         (now, now)
     };
 
@@ -188,10 +174,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             };
 
             // Minor optimization: if no reference time was specified, we're done.
-            if !(matches.is_present(options::sources::DATE)
-                || matches.is_present(options::sources::REFERENCE)
-                || matches.is_present(options::sources::CURRENT))
-            {
+            if !matches.is_present(options::SOURCES) {
                 continue;
             }
         }
@@ -260,7 +243,7 @@ fn parse_date(str: &str) -> FileTime {
     // not about to implement GNU parse_datetime.
     // http://git.savannah.gnu.org/gitweb/?p=gnulib.git;a=blob_plain;f=lib/parse-datetime.y
     match time::strptime(str, "%c") {
-        Ok(tm) => local_tm_to_filetime!(to_local!(tm)),
+        Ok(tm) => local_tm_to_filetime(to_local(tm)),
         Err(e) => panic!("Unable to parse date\n{}", e),
     }
 }
@@ -278,7 +261,7 @@ fn parse_timestamp(s: &str) -> FileTime {
     };
 
     match time::strptime(&ts, format) {
-        Ok(tm) => local_tm_to_filetime!(to_local!(tm)),
+        Ok(tm) => local_tm_to_filetime(to_local(tm)),
         Err(e) => panic!("Unable to parse timestamp\n{}", e),
     }
 }

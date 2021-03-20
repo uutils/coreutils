@@ -261,8 +261,8 @@ impl AtPath {
     }
 
     pub fn write(&self, name: &str, contents: &str) {
-        let mut f = self.open(name);
-        let _ = f.write(contents.as_bytes());
+        log_info("open(write)", self.plus_as_string(name));
+        let _ = std::fs::write(self.plus(name), contents);
     }
 
     pub fn append(&self, name: &str, contents: &str) {

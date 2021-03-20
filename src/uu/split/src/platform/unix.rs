@@ -68,12 +68,13 @@ impl FilterWriter {
         // set $FILE, save previous value (if there was one)
         let _with_env_var_set = WithEnvVarSet::new("FILE", &filepath);
 
-        let shell_process = Command::new(env::var("SHELL").unwrap_or("/bin/sh".to_owned()))
-            .arg("-c")
-            .arg(command)
-            .stdin(Stdio::piped())
-            .spawn()
-            .expect("Couldn't spawn filter command");
+        let shell_process =
+            Command::new(env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_owned()))
+                .arg("-c")
+                .arg(command)
+                .stdin(Stdio::piped())
+                .spawn()
+                .expect("Couldn't spawn filter command");
 
         FilterWriter { shell_process }
     }

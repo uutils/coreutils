@@ -24,7 +24,7 @@ pub trait HasError {
 }
 
 impl<'b> MultifileReader<'b> {
-    pub fn new<'a>(fnames: Vec<InputSource<'a>>) -> MultifileReader<'a> {
+    pub fn new(fnames: Vec<InputSource>) -> MultifileReader {
         let mut mf = MultifileReader {
             ni: fnames,
             curr_file: None, // normally this means done; call next_file()

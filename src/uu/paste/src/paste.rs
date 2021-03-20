@@ -26,6 +26,17 @@ mod options {
     pub const FILE: &str = "file";
 }
 
+// Wraps BufReader and stdin
+fn read_line<R: Read>(
+    reader: Option<&mut BufReader<R>>,
+    buf: &mut String,
+) -> std::io::Result<usize> {
+    match reader {
+        Some(reader) => reader.read_line(buf),
+        None => stdin().read_line(buf),
+    }
+}
+
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let matches = App::new(executable!())
         .version(VERSION)
@@ -49,7 +60,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(options::FILE)
                 .value_name("FILE")
                 .multiple(true)
-                .required(true),
+                .default_value("-"),
         )
         .get_matches_from(args);
 
@@ -66,15 +77,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 fn paste(filenames: Vec<String>, serial: bool, delimiters: String) {
-    let mut files: Vec<BufReader<Box<dyn Read>>> = filenames
+    let mut files: Vec<_> = filenames
         .into_iter()
         .map(|name| {
-            BufReader::new(if name == "-" {
-                Box::new(stdin()) as Box<dyn Read>
+            if name == "-" {
+                None
             } else {
                 let r = crash_if_err!(1, File::open(Path::new(&name)));
-                Box::new(r) as Box<dyn Read>
-            })
+                Some(BufReader::new(r))
+            }
         })
         .collect();
 
@@ -89,7 +100,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: String) {
             let mut output = String::new();
             loop {
                 let mut line = String::new();
-                match file.read_line(&mut line) {
+                match read_line(file.as_mut(), &mut line) {
                     Ok(0) => break,
                     Ok(_) => {
                         output.push_str(line.trim_end());
@@ -111,7 +122,7 @@ fn paste(filenames: Vec<String>, serial: bool, delimiters: String) {
                     eof_count += 1;
                 } else {
                     let mut line = String::new();
-                    match file.read_line(&mut line) {
+                    match read_line(file.as_mut(), &mut line) {
                         Ok(0) => {
                             eof[i] = true;
                             eof_count += 1;

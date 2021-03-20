@@ -60,12 +60,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         "count",
         "all login names and number of users logged on",
     );
-    #[cfg(any(
-        target_os = "macos",
-        target_os = "ios",
-        target_os = "linux",
-        target_os = "android"
-    ))]
+    #[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
     opts.optflag("r", "runlevel", "print current runlevel");
     opts.optflag("s", "short", "print only name, line, and time (default)");
     opts.optflag("t", "time", "print last system clock change");
@@ -305,12 +300,7 @@ impl Who {
             #[allow(unused_assignments)]
             let mut res = false;
 
-            #[cfg(any(
-                target_os = "macos",
-                target_os = "ios",
-                target_os = "linux",
-                target_os = "android"
-            ))]
+            #[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
             {
                 res = record == utmpx::RUN_LVL;
             }

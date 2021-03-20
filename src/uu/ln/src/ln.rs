@@ -207,7 +207,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let paths: Vec<PathBuf> = matches
         .values_of(ARG_FILES)
         .unwrap()
-        .map(|path| PathBuf::from(path))
+        .map(PathBuf::from)
         .collect();
 
     let overwrite_mode = if matches.is_present(OPT_FORCE) {
@@ -316,9 +316,8 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &PathBuf, settings: &Setting
             // We need to clean the target
             if is_symlink(target_dir) {
                 if target_dir.is_file() {
-                    match fs::remove_file(target_dir) {
-                        Err(e) => show_error!("Could not update {}: {}", target_dir.display(), e),
-                        _ => (),
+                    if let Err(e) = fs::remove_file(target_dir) {
+                        show_error!("Could not update {}: {}", target_dir.display(), e)
                     };
                 }
                 if target_dir.is_dir() {
@@ -423,10 +422,8 @@ fn link(src: &PathBuf, dst: &PathBuf, settings: &Settings) -> Result<()> {
         }
     }
 
-    if settings.no_dereference && settings.force {
-        if dst.exists() {
-            fs::remove_file(dst)?;
-        }
+    if settings.no_dereference && settings.force && dst.exists() {
+        fs::remove_file(dst)?;
     }
 
     if settings.symbolic {

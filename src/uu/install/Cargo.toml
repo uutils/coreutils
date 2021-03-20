@@ -19,6 +19,7 @@ path = "src/install.rs"
 
 [dependencies]
 clap = "2.33"
+filetime = "0.2"
 libc = ">= 0.2"
 uucore = { version=">=0.0.7", package="uucore", path="../../uucore", features=["mode", "perms", "entries"] }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }

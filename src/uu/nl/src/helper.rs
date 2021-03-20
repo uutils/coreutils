@@ -11,7 +11,9 @@ fn parse_style(chars: &[char]) -> Result<crate::NumberingStyle, String> {
     } else if chars.len() > 1 && chars[0] == 'p' {
         let s: String = chars[1..].iter().cloned().collect();
         match regex::Regex::new(&s) {
-            Ok(re) => Ok(crate::NumberingStyle::NumberForRegularExpression(re)),
+            Ok(re) => Ok(crate::NumberingStyle::NumberForRegularExpression(Box::new(
+                re,
+            ))),
             Err(_) => Err(String::from("Illegal regular expression")),
         }
     } else {

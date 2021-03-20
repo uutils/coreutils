@@ -120,13 +120,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         // See https://github.com/clap-rs/clap/pull/1587
         let tmp = env::temp_dir();
         (tmpdir, tmp)
+    } else if !matches.is_present(OPT_TMPDIR) {
+        let tmp = env::temp_dir();
+        (template, tmp)
     } else {
-        if !matches.is_present(OPT_TMPDIR) {
-            let tmp = env::temp_dir();
-            (template, tmp)
-        } else {
-            (template, PathBuf::from(tmpdir))
-        }
+        (template, PathBuf::from(tmpdir))
     };
 
     let make_dir = matches.is_present(OPT_DIRECTORY);
@@ -158,14 +156,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         crash!(1, "suffix cannot contain any path separators");
     }
 
-    if matches.is_present(OPT_TMPDIR) {
-        if PathBuf::from(prefix).is_absolute() {
-            show_info!(
-                "invalid template, ‘{}’; with --tmpdir, it may not be absolute",
-                template
-            );
-            return 1;
-        }
+    if matches.is_present(OPT_TMPDIR) && PathBuf::from(prefix).is_absolute() {
+        show_info!(
+            "invalid template, ‘{}’; with --tmpdir, it may not be absolute",
+            template
+        );
+        return 1;
     };
 
     if matches.is_present(OPT_T) {

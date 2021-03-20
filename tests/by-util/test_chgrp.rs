@@ -115,7 +115,7 @@ fn test_reference() {
 }
 
 #[test]
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 fn test_reference() {
     new_ucmd!()
         .arg("-v")

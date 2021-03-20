@@ -148,7 +148,7 @@ fn test_rm_errors() {
     // rm: error: could not remove directory 'test_rm_errors_directory' (did you mean to pass '-r'?)
     ucmd.arg(dir).fails().stderr_is(
         "rm: error: could not remove directory 'test_rm_errors_directory' (did you mean \
-                to pass '-r'?)\n",
+         to pass '-r' or '-R'?)\n",
     );
 }
 
