@@ -131,20 +131,19 @@ fn test_ls_long_formats() {
     at.touch(&at.plus_as_string("test-long-formats"));
 
     // Regex for three names, so all of author, group and owner
-    let re_three = Regex::new(r"[xrw-]{9} \d ([_a-z][-0-9_a-z]+ ){3}").unwrap();
+    let re_three = Regex::new(r"[xrw-]{9} \d ([-0-9_a-z]+ ){3}0").unwrap();
 
     // Regex for two names, either:
     // - group and owner
     // - author and owner
     // - author and group
-    let re_two = Regex::new(r"[xrw-]{9} \d ([_a-z][-0-9_a-z]+ ){2}").unwrap();
+    let re_two = Regex::new(r"[xrw-]{9} \d ([-0-9_a-z]+ ){2}0").unwrap();
 
     // Regex for one name: author, group or owner
-    let re_one = Regex::new(r"[xrw-]{9} \d [_a-z][-0-9_a-z]+ ").unwrap();
+    let re_one = Regex::new(r"[xrw-]{9} \d [-0-9_a-z]+ 0").unwrap();
 
-    // Regex for no names.
-    // Names cannot start with a number, so the second \d will only match the file size
-    let re_zero = Regex::new(r"[xrw-]{9} \d \d").unwrap();
+    // Regex for no names
+    let re_zero = Regex::new(r"[xrw-]{9} \d 0").unwrap();
 
     let result = scene
         .ucmd()
