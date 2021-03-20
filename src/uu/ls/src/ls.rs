@@ -833,8 +833,10 @@ fn display_item_long(
     };
 
     #[cfg(unix)]
-    if config.inode {
-        print!("{} ", get_inode(&md));
+    {
+        if config.inode {
+            print!("{} ", get_inode(&md));
+        }
     }
 
     print!(
