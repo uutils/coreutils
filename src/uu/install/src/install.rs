@@ -427,7 +427,7 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behavior) ->
     let mut all_successful = true;
     for sourcepath in files.iter() {
         if !sourcepath.exists() {
-            show_error!(
+            show_info!(
                 "cannot stat '{}': No such file or directory",
                 sourcepath.display()
             );
