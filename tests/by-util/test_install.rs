@@ -360,7 +360,7 @@ fn test_install_target_file_dev_null() {
 }
 
 #[test]
-fn test_install_copy_file_leading_dot() {
+fn test_install_nested_paths_copy_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir1 = "test_install_target_new_file_dir_l";
     let dir2 = "test_install_target_new_file_dir_m";
@@ -375,4 +375,35 @@ fn test_install_copy_file_leading_dot() {
         .succeeds()
         .no_stderr();
     assert!(at.file_exists(&format!("{}/{}", dir2, file1)));
+}
+
+#[test]
+fn test_install_failing_omitting_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir1 = "source_dir";
+    let file1 = "source_file";
+    let dir2 = "target_dir";
+
+    at.mkdir(dir1);
+    at.mkdir(dir2);
+    at.touch(file1);
+
+    let r = ucmd.arg(dir1).arg(file1).arg(dir2).run();
+    assert!(r.code == Some(1));
+    assert!(r.stderr.contains("omitting directory"));
+}
+
+#[test]
+fn test_install_failing_no_such_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file1 = "source_file";
+    let file2 = "inexistent_file";
+    let dir1 = "target_dir";
+
+    at.mkdir(dir1);
+    at.touch(file1);
+
+    let r = ucmd.arg(file1).arg(file2).arg(dir1).run();
+    assert!(r.code == Some(1));
+    assert!(r.stderr.contains("No such file or directory"));
 }
