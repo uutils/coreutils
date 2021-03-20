@@ -125,6 +125,109 @@ fn test_ls_long() {
 }
 
 #[test]
+fn test_ls_long_formats() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch(&at.plus_as_string("test-long-formats"));
+
+    // Regex for three names, so all of author, group and owner
+    let re_three = Regex::new(r"[xrw-]{9} \d ([_a-z][-0-9_a-z]+ ){3}").unwrap();
+
+    // Regex for two names, either:
+    // - group and owner
+    // - author and owner
+    // - author and group
+    let re_two = Regex::new(r"[xrw-]{9} \d ([_a-z][-0-9_a-z]+ ){2}").unwrap();
+
+    // Regex for one name: author, group or owner
+    let re_one = Regex::new(r"[xrw-]{9} \d [_a-z][-0-9_a-z]+ ").unwrap();
+
+    // Regex for no names.
+    // Names cannot start with a number, so the second \d will only match the file size
+    let re_zero = Regex::new(r"[xrw-]{9} \d \d").unwrap();
+
+    let result = scene
+        .ucmd()
+        .arg("-l")
+        .arg("--author")
+        .arg("test-long-formats")
+        .run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+    assert!(re_three.is_match(&result.stdout));
+
+    let result = scene
+        .ucmd()
+        .arg("-l1")
+        .arg("--author")
+        .arg("test-long-formats")
+        .run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+    assert!(re_three.is_match(&result.stdout));
+
+    for arg in &[
+        "-l", // only group and owner
+        "-g --author", // only author and group
+        "-o --author", // only author and owner
+        "-lG --author", // only author and owner
+        "-l --no-group --author", // only author and owner
+    ] {
+        let result = scene
+            .ucmd()
+            .args(&arg.split(" ").collect::<Vec<_>>())
+            .arg("test-long-formats")
+            .succeeds();
+        println!("stderr = {:?}", result.stderr);
+        println!("stdout = {:?}", result.stdout);
+        assert!(re_two.is_match(&result.stdout));
+    }
+
+    for arg in &[
+        "-g", // only group
+        "-gl", // only group
+        "-o", // only owner
+        "-ol", // only owner
+        "-oG", // only owner
+        "-lG", // only owner
+        "-l --no-group", // only owner
+        "-gG --author", // only author
+    ] {
+        let result = scene
+            .ucmd()
+            .args(&arg.split(" ").collect::<Vec<_>>())
+            .arg("test-long-formats")
+            .succeeds();
+        println!("stderr = {:?}", result.stderr);
+        println!("stdout = {:?}", result.stdout);
+        assert!(re_one.is_match(&result.stdout));
+    }
+
+    for arg in &[
+        "-og",
+        "-ogl",
+        "-lgo",
+        "-gG",
+        "-g --no-group",
+        "-og --no-group",
+        "-og --format=long",
+        "-ogCl",
+        "-og --format=vertical -l",
+        "-og1",
+        "-og1l",
+    ] {
+        let result = scene
+            .ucmd()
+            .args(&arg.split(" ").collect::<Vec<_>>())
+            .arg("test-long-formats")
+            .succeeds();
+        println!("stderr = {:?}", result.stderr);
+        println!("stdout = {:?}", result.stdout);
+        assert!(re_zero.is_match(&result.stdout));
+    }
+}
+
+#[test]
 fn test_ls_oneline() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
