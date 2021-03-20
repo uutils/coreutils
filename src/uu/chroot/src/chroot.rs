@@ -42,27 +42,27 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(
             Arg::with_name(options::USER)
                 .short("u")
-                .long("user")
+                .long(options::USER)
                 .help("User (ID or name) to switch before running the program")
                 .value_name("USER"),
         )
         .arg(
             Arg::with_name(options::GROUP)
                 .short("g")
-                .long("group")
+                .long(options::GROUP)
                 .help("Group (ID or name) to switch to")
                 .value_name("GROUP"),
         )
         .arg(
             Arg::with_name(options::GROUPS)
                 .short("G")
-                .long("groups")
+                .long(options::GROUPS)
                 .help("Comma-separated list of groups to switch to")
                 .value_name("GROUP1,GROUP2..."),
         )
         .arg(
             Arg::with_name(options::USERSPEC)
-                .long("userspec")
+                .long(options::USERSPEC)
                 .help(
                     "Colon-separated user and group to switch to. \
              Same as -u USER -g GROUP. \
