@@ -2,12 +2,16 @@ use crate::common::util::*;
 
 #[test]
 fn test_missing_operand() {
-    new_ucmd!()
-        .fails()
-        .stderr_is(
-            "chroot: error: Missing operand: NEWROOT\nTry `chroot --help` for more information.",
-        )
-        .status_code(1);
+    let result = new_ucmd!().run();
+
+    assert_eq!(
+        true,
+        result
+            .stderr
+            .starts_with("error: The following required arguments were not provided")
+    );
+
+    assert_eq!(true, result.stderr.contains("<newroot>"));
 }
 
 #[test]
