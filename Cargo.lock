@@ -297,6 +297,7 @@ dependencies = [
  "uu_whoami 0.0.4",
  "uu_yes 0.0.4",
  "uucore 0.0.7",
+ "walkdir 2.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "winapi-util 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -2128,7 +2129,7 @@ dependencies = [
 name = "uu_tee"
 version = "0.0.4"
 dependencies = [
- "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
+ "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.85 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.7",
  "uucore_procs 0.0.5",
