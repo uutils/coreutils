@@ -67,6 +67,11 @@ fn test_preference_of_userspec() {
     println!("result.stdout {}", result.stdout);
     println!("result.stderr = {}", result.stderr);
     let username = result.stdout.trim_end();
+
+    let result = scene.cmd("id -g -n").run();
+    println!("result.stdout {}", result.stdout);
+    println!("result.stderr = {}", result.stderr);
+    let group_name = result.stdout.trim_end();
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.mkdir("a");
@@ -77,6 +82,9 @@ fn test_preference_of_userspec() {
         .arg("fake")
         .arg("-G")
         .arg("ABC,DEF")
-        .arg(format!("--userspec={}:InvalidGroup", username))
+        .arg(format!("--userspec={}:{}", username, group_name))
         .run();
+
+    println!("result.stdout {}", result.stdout);
+    println!("result.stderr = {}", result.stderr);
 }
