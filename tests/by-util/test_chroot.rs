@@ -31,8 +31,10 @@ fn test_invalid_user_spec() {
 
     at.mkdir("a");
 
-    ucmd.arg("a")
-        .arg("--userspec=ARABA:")
-        .fails()
-        .stderr_is("chroot: error: invalid userspec: `ARABA:'");
+    let result = ucmd.arg("a").arg("--userspec=ARABA:").run();
+
+    assert_eq!(
+        true,
+        result.stderr.starts_with("chroot: error: invalid userspec")
+    );
 }
