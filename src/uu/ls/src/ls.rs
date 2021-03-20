@@ -832,24 +832,36 @@ fn display_item_long(
         Ok(md) => md,
     };
 
+    if config.inode {
+        print!("{} ", get_inode(&md));
+    }
+
+    print!(
+        "{}{} {}",
+        display_file_type(md.file_type()),
+        display_permissions(&md),
+        pad_left(display_symlink_count(&md), max_links),
+    );
+
+    if config.long.owner {
+        print!(" {}", display_uname(&md, config));
+    }
+
+    if config.long.group {
+        print!(" {}", display_group(&md, config));
+    }
+
+    // Author is only different from owner on GNU/Hurd, so we reuse
+    // the owner, since GNU/Hurd is not currently supported by Rust.
+    if config.long.author {
+        print!(" {}", display_uname(&md, config));
+    }
+
     println!(
-        "{}",
-        vec![
-            config.inode.then(|| get_inode(&md)),
-            Some(format!("{}{}",
-                display_file_type(md.file_type()),
-                display_permissions(&md),
-            )),
-            Some(pad_left(display_symlink_count(&md), max_links)),
-            config.long.owner.then(|| display_uname(&md, config)),
-            config.long.group.then(|| display_group(&md, config)),
-            // Author is only different from owner on GNU/Hurd, so we reuse
-            // the owner, since GNU/Hurd is not currently supported by Rust.
-            config.long.author.then(|| display_uname(&md, config)),
-            Some(pad_left(display_file_size(&md, config), max_size)),
-            Some(display_date(&md, config)),
-            Some(display_file_name(&item, strip, &md, config).contents)
-        ].into_iter().filter_map(|x| x).collect::<Vec<_>>().join(" ")
+        " {} {} {}",
+        pad_left(display_file_size(&md, config), max_size),
+        display_date(&md, config),
+        display_file_name(&item, strip, &md, config).contents,
     );
 }
 
