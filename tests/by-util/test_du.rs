@@ -45,7 +45,11 @@ fn test_du_basics_subdir() {
 fn _du_basics_subdir(s: String) {
     assert_eq!(s, "4\tsubdir/deeper\n");
 }
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
+fn _du_basics_subdir(s: String) {
+    assert_eq!(s, "0\tsubdir/deeper\n");
+}
+#[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
 fn _du_basics_subdir(s: String) {
     // MS-WSL linux has altered expected output
     if !is_wsl() {
@@ -137,7 +141,11 @@ fn test_du_d_flag() {
 fn _du_d_flag(s: String) {
     assert_eq!(s, "16\t./subdir\n20\t./\n");
 }
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
+fn _du_d_flag(s: String) {
+    assert_eq!(s, "8\t./subdir\n8\t./\n");
+}
+#[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
 fn _du_d_flag(s: String) {
     // MS-WSL linux has altered expected output
     if !is_wsl() {
