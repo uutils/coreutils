@@ -73,9 +73,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .get_matches_from(args);
 
     if matches.args.is_empty() {
-        println!("Missing operand: NEWROOT");
-        println!("Try `{} --help` for more information.", NAME);
-        return 1;
+        show_error!("Missing operand: NEWROOT");
+        crash!(
+            1,
+            "{}",
+            format!("Try '{} --help' for more information.", NAME)
+        )
     }
 
     let default_shell: &'static str = "/bin/sh";
