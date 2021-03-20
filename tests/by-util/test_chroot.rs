@@ -73,7 +73,7 @@ fn test_preference_of_userspec() {
     println!("result.stdout {}", result.stdout);
     println!("result.stderr = {}", result.stderr);
 
-    if is_ci() && id.stderr.contains("cannot find name for user ID") {
+    if is_ci() && result.stderr.contains("cannot find name for user ID") {
         // In the CI, some server are failing to return id.
         // As seems to be a configuration issue, ignoring it
         return;
