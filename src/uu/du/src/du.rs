@@ -19,8 +19,20 @@ use std::iter;
 use std::os::unix::fs::MetadataExt;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
+#[cfg(windows)]
+use std::os::windows::io::AsRawHandle;
 use std::path::PathBuf;
 use time::Timespec;
+#[cfg(windows)]
+use winapi::shared::minwindef::DWORD;
+#[cfg(windows)]
+use winapi::shared::minwindef::LPVOID;
+#[cfg(windows)]
+use winapi::um::fileapi::FILE_STANDARD_INFO;
+#[cfg(windows)]
+use winapi::um::minwinbase::FileStandardInfo;
+#[cfg(windows)]
+use winapi::um::winbase::GetFileInformationByHandleEx;
 
 const NAME: &str = "du";
 const SUMMARY: &str = "estimate file space usage";
@@ -58,9 +70,9 @@ struct Stat {
 }
 
 impl Stat {
-    
     fn new(path: PathBuf) -> Result<Stat> {
         let metadata = fs::symlink_metadata(&path)?;
+
         #[cfg(not(windows))]
         return Ok(Stat {
             path,
@@ -72,12 +84,15 @@ impl Stat {
             accessed: metadata.atime() as u64,
             modified: metadata.mtime() as u64,
         });
+
+        #[cfg(windows)]
+        let size_on_disk = get_size_on_disk(&path);
         #[cfg(windows)]
         Ok(Stat {
             path,
             is_dir: metadata.is_dir(),
             size: metadata.len(),
-            blocks: (metadata.len() + 512 - 1) / 512, // round up
+            blocks: size_on_disk / 512,
             inode: 0,
             created: windows_time_to_unix_time(metadata.creation_time()),
             accessed: windows_time_to_unix_time(metadata.last_access_time()),
@@ -91,6 +106,38 @@ impl Stat {
 // "The returned 64-bit value [...] which represents the number of 100-nanosecond intervals since January 1, 1601 (UTC)."
 fn windows_time_to_unix_time(win_time: u64) -> u64 {
     win_time / 10_000 - 11_644_473_600_000
+}
+
+#[cfg(windows)]
+fn get_size_on_disk(path: &PathBuf) -> u64 {
+    let mut size_on_disk = 0;
+
+    // bind file so it stays in scope until end of function
+    // if it goes out of scope the handle below becomes invalid
+    let file = match fs::File::open(path) {
+        Ok(file) => file,
+        Err(_) => return size_on_disk, // openning directories will fail
+    };
+
+    let handle = file.as_raw_handle();
+
+    unsafe {
+        let mut file_info: FILE_STANDARD_INFO = core::mem::zeroed();
+        let file_info_ptr: *mut FILE_STANDARD_INFO = &mut file_info;
+
+        let success = GetFileInformationByHandleEx(
+            handle,
+            FileStandardInfo,
+            file_info_ptr as LPVOID,
+            std::mem::size_of::<FILE_STANDARD_INFO>() as DWORD,
+        );
+
+        if success != 0 {
+            size_on_disk = *file_info.AllocationSize.QuadPart() as u64;
+        }
+    }
+
+    size_on_disk
 }
 
 fn unit_string_to_number(s: &str) -> Option<u64> {
