@@ -370,6 +370,9 @@ fn test_install_copy_file_leading_dot() {
     at.mkdir(dir2);
     at.touch(&format!("{}/{}", dir1, file1));
 
-    ucmd.arg(format!("{}/{}", dir1, file1)).arg(dir2).succeeds().no_stderr();
+    ucmd.arg(format!("{}/{}", dir1, file1))
+        .arg(dir2)
+        .succeeds()
+        .no_stderr();
     assert!(at.file_exists(&format!("{}/{}", dir2, file1)));
 }
