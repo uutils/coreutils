@@ -24,7 +24,7 @@ fn test_enter_chroot_fails() {
 
     assert_eq!(
         true,
-        result.stderr.startswith(
+        result.stderr.starts_with(
             "chroot: error: cannot chroot to jail: Operation not permitted (os error 1)"
         )
     )
