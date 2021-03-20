@@ -82,7 +82,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let default_option: &'static str = "-i";
     let user_shell = std::env::var("SHELL");
 
-    let newroot: &Path = match matches.value_of("newroot") {
+    let newroot: &Path = match matches.value_of(options::NEWROOT) {
         Some(v) => Path::new(v),
         None => crash!(1, "chroot: missing operand"),
     };
@@ -128,10 +128,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 fn set_context(root: &Path, options: &clap::ArgMatches) {
-    let userspec_str = options.value_of("userspec");
-    let user_str = options.value_of("user").unwrap_or_default();
-    let group_str = options.value_of("group").unwrap_or_default();
-    let groups_str = options.value_of("groups").unwrap_or_default();
+    let userspec_str = options.value_of(options::USERSPEC);
+    let user_str = options.value_of(options::USER).unwrap_or_default();
+    let group_str = options.value_of(options::GROUP).unwrap_or_default();
+    let groups_str = options.value_of(options::GROUPS).unwrap_or_default();
     let userspec = match userspec_str {
         Some(ref u) => {
             let s: Vec<&str> = u.split(':').collect();
