@@ -38,7 +38,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .version(VERSION)
         .about(ABOUT)
         .usage(SYNTAX)
-        .arg(Arg::with_name(options::NEWROOT).hidden(true))
+        .arg(Arg::with_name(options::NEWROOT).hidden(true).required(true))
         .arg(
             Arg::with_name(options::USER)
                 .short("u")

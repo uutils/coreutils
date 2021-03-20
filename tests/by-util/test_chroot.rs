@@ -16,7 +16,7 @@ fn test_no_such_directory() {
 
     at.touch(&at.plus_as_string("a"));
 
-    ucmd.arg(&["a"])
+    ucmd.arg("a")
         .fails()
         .stderr_is("chroot: error: cannot change root directory to `a`: no such directory");
 }
