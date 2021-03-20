@@ -832,6 +832,7 @@ fn display_item_long(
         Ok(md) => md,
     };
 
+    #[cfg(unix)]
     if config.inode {
         print!("{} ", get_inode(&md));
     }
@@ -868,11 +869,6 @@ fn display_item_long(
 #[cfg(unix)]
 fn get_inode(metadata: &Metadata) -> String {
     format!("{:8}", metadata.ino())
-}
-
-#[cfg(not(unix))]
-fn get_inode(_metadata: &Metadata) -> String {
-    "".to_string()
 }
 
 // Currently getpwuid is `linux` target only. If it's broken out into
@@ -956,7 +952,7 @@ fn format_prefixed(prefixed: NumberPrefix<f64>) -> String {
         NumberPrefix::Standalone(bytes) => bytes.to_string(),
         NumberPrefix::Prefixed(prefix, bytes) => {
             // Remove the "i" from "Ki", "Mi", etc. if present
-            let prefix_str = prefix.symbol().trim_end_matches("i");
+            let prefix_str = prefix.symbol().trim_end_matches('i');
 
             // Check whether we get more than 10 if we round up to the first decimal
             // because we want do display 9.81 as "9.9", not as "10".
@@ -1008,10 +1004,6 @@ fn display_file_name(
     config: &Config,
 ) -> Cell {
     let mut name = get_file_name(path, strip);
-
-    if config.format == Format::Long {
-        name = get_inode(metadata, config) + &name;
-    }
 
     if config.classify {
         let file_type = metadata.file_type();
