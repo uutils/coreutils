@@ -492,3 +492,43 @@ fn test_install_copy_then_compare_file_with_extra_mode() {
 
     assert!(after_install_sticky != after_install_sticky_again);
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_install_copy_then_compare_nonregular_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let file1 = "test_install_copy_then_compare_nonregular_file_a1";
+    let file2 = "test_install_copy_then_compare_nonregular_file_a2";
+
+    mknod(
+        &at.plus(file1),
+        SFlag::S_IFBLK,
+        Mode::from_bits_truncate(0o644),
+        0,
+    )
+    .unwrap();
+    scene
+        .ucmd()
+        .arg("-C")
+        .arg(file1)
+        .arg(file2)
+        .succeeds()
+        .no_stderr();
+
+    let mut file2_meta = at.metadata(file2);
+    let before = FileTime::from_last_modification_time(&file2_meta);
+
+    scene
+        .ucmd()
+        .arg("-C")
+        .arg(file1)
+        .arg(file2)
+        .succeeds()
+        .no_stderr();
+
+    file2_meta = at.metadata(file2);
+    let after = FileTime::from_last_modification_time(&file2_meta);
+
+    assert!(before == after);
+}
