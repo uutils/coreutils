@@ -72,22 +72,20 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         )
         .get_matches_from(args);
 
-    if matches.args.is_empty() {
-        show_error!("Missing operand: NEWROOT");
-        crash!(
-            1,
-            "{}",
-            format!("Try '{} --help' for more information.", NAME)
-        )
-    }
-
     let default_shell: &'static str = "/bin/sh";
     let default_option: &'static str = "-i";
     let user_shell = std::env::var("SHELL");
 
     let newroot: &Path = match matches.value_of(options::NEWROOT) {
         Some(v) => Path::new(v),
-        None => crash!(1, "chroot: missing operand"),
+        None => crash!(
+            1,
+            "{}",
+            format!(
+                "Missing operand: NEWROOT\nTry '{} --help' for more information.",
+                NAME
+            )
+        ),
     };
 
     if !newroot.is_dir() {
