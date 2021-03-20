@@ -15,6 +15,22 @@ fn test_missing_operand() {
 }
 
 #[test]
+fn test_enter_chroot_fails() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("jail");
+
+    let result = ucmd.arg("jail").run();
+
+    assert_eq!(
+        true,
+        result.stderr.startswith(
+            "chroot: error: cannot chroot to jail: Operation not permitted (os error 1)"
+        )
+    )
+}
+
+#[test]
 fn test_no_such_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -37,4 +53,30 @@ fn test_invalid_user_spec() {
         true,
         result.stderr.starts_with("chroot: error: invalid userspec")
     );
+}
+
+#[test]
+fn test_preference_of_userspec() {
+    let scene = TestScenario::new(util_name!());
+    let result = scene.cmd("whoami").run();
+    if is_ci() && result.stderr.contains("No such user/group") {
+        // In the CI, some server are failing to return whoami.
+        // As seems to be a configuration issue, ignoring it
+        return;
+    }
+    println!("result.stdout {}", result.stdout);
+    println!("result.stderr = {}", result.stderr);
+    let username = result.stdout.trim_end();
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("a");
+
+    let result = ucmd
+        .arg("a")
+        .arg("--user")
+        .arg("fake")
+        .arg("-G")
+        .arg("ABC,DEF")
+        .arg(format!("--userspec={}:InvalidGroup", username))
+        .run();
 }
