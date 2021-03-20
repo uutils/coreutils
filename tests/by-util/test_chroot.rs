@@ -68,9 +68,17 @@ fn test_preference_of_userspec() {
     println!("result.stderr = {}", result.stderr);
     let username = result.stdout.trim_end();
 
-    let result = scene.cmd("id -g -n").run();
+    let ts = TestScenario::new("id");
+    let result = ts.cmd("id").arg("-g").arg("-n").run();
     println!("result.stdout {}", result.stdout);
     println!("result.stderr = {}", result.stderr);
+
+    if is_ci() && id.stderr.contains("cannot find name for user ID") {
+        // In the CI, some server are failing to return id.
+        // As seems to be a configuration issue, ignoring it
+        return;
+    }
+
     let group_name = result.stdout.trim_end();
     let (at, mut ucmd) = at_and_ucmd!();
 
