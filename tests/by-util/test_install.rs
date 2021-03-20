@@ -358,3 +358,18 @@ fn test_install_target_file_dev_null() {
     ucmd.arg(file1).arg(file2).succeeds().no_stderr();
     assert!(at.file_exists(file2));
 }
+
+#[test]
+fn test_install_copy_file_leading_dot() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir1 = "test_install_target_new_file_dir_l";
+    let dir2 = "test_install_target_new_file_dir_m";
+    let file1 = "test_install_target_file_file_l1";
+
+    at.mkdir(dir1);
+    at.mkdir(dir2);
+    at.touch(&format!("{}/{}", dir1, file1));
+
+    ucmd.arg(format!("{}/{}", dir1, file1)).arg(dir2).succeeds().no_stderr();
+    assert!(at.file_exists(&format!("{}/{}", dir2, file1)));
+}
