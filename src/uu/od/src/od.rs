@@ -101,7 +101,6 @@ pub(crate) mod options {
     pub const OUTPUT_DUPLICATES: &str = "output-duplicates";
     pub const TRADITIONAL: &str = "traditional";
     pub const WIDTH: &str = "width";
-    pub const HELP: &str = "help";
     pub const VERSION: &str = "version";
     pub const FILENAME: &str = "FILENAME";
 }
@@ -234,7 +233,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .short("A")
                 .long(options::ADDRESS_RADIX)
                 .help("Select the base in which file offsets are printed.")
-                .takes_value(true)
                 .value_name("RADIX"),
         )
         .arg(
@@ -242,7 +240,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .short("j")
                 .long(options::SKIP_BYTES)
                 .help("Skip bytes input bytes before formatting and writing.")
-                .takes_value(true)
                 .value_name("BYTES"),
         )
         .arg(
@@ -250,14 +247,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .short("N")
                 .long(options::READ_BYTES)
                 .help("limit dump to BYTES input bytes")
-                .takes_value(true)
                 .value_name("BYTES"),
         )
         .arg(
             Arg::with_name(options::ENDIAN)
                 .long(options::ENDIAN)
                 .help("byte order to use for multi-byte formats")
-                .takes_value(true)
                 .possible_values(&["big", "little"])
                 .value_name("big|little"),
         )
@@ -269,7 +264,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     "output strings of at least BYTES graphic chars. 3 is assumed when \
                      BYTES is not specified.",
                 )
-                .takes_value(true)
                 .default_value("3")
                 .value_name("BYTES"),
         )
@@ -412,7 +406,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(options::FORMAT)
                 .help("select output format or formats")
                 .multiple(true)
-                .takes_value(true)
                 .value_name("TYPE"),
         )
         .arg(
@@ -431,7 +424,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     "output BYTES bytes per output line. 32 is implied when BYTES is not \
                      specified.",
                 )
-                .takes_value(true)
                 .default_value("32")
                 .value_name("BYTES"),
         )
@@ -451,7 +443,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(options::FILENAME)
                 .hidden(true)
                 .multiple(true)
-                .takes_value(true),
         )
         .settings(&[
             AppSettings::TrailingVarArg,
