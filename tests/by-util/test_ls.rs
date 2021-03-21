@@ -344,6 +344,7 @@ fn test_ls_order_time() {
     sleep(Duration::from_millis(100));
     at.touch("test-2");
     at.append("test-2", "22");
+
     sleep(Duration::from_millis(100));
     at.touch("test-3");
     at.append("test-3", "333");
@@ -361,6 +362,7 @@ fn test_ls_order_time() {
         at.metadata("test-2").permissions(),
     )
     .unwrap();
+    let second_access = at.open("test-2").metadata().unwrap().accessed().unwrap();
 
     let result = scene.ucmd().arg("-al").run();
     println!("stderr = {:?}", result.stderr);
@@ -392,13 +394,23 @@ fn test_ls_order_time() {
     println!("stderr = {:?}", result.stderr);
     println!("stdout = {:?}", result.stdout);
     assert!(result.success);
-    #[cfg(not(windows))]
-    assert_eq!(result.stdout, "test-3\ntest-4\ntest-2\ntest-1\n");
-
-    // Access time does not seem to be set on Windows on read call
-    // so the order is 4 3 2 1
-    #[cfg(windows)]
-    assert_eq!(result.stdout, "test-4  test-3  test-2  test-1\n");
+    let file3_access = at.open("test-3").metadata().unwrap().accessed().unwrap();
+    let file4_access = at.open("test-4").metadata().unwrap().accessed().unwrap();
+    if file3_access > file4_access {
+        if cfg!(not(windows)) {
+            assert_eq!(result.stdout, "test-3\ntest-4\ntest-2\ntest-1\n");
+        } else {
+            assert_eq!(result.stdout, "test-3  test-4  test-2  test-1\n");
+        }
+    } else {
+        // Access time does not seem to be set on Windows and some other
+        // systems so the order is 4 3 2 1
+        if cfg!(not(windows)) {
+            assert_eq!(result.stdout, "test-4\ntest-3\ntest-2\ntest-1\n");
+        } else {
+            assert_eq!(result.stdout, "test-4  test-3  test-2  test-1\n");
+        }
+    }
 
     // test-2 had the last ctime change when the permissions were set
     // So the order should be 2 4 3 1
