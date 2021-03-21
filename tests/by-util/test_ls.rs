@@ -166,10 +166,10 @@ fn test_ls_long_formats() {
     assert!(re_three.is_match(&result.stdout));
 
     for arg in &[
-        "-l", // only group and owner
-        "-g --author", // only author and group
-        "-o --author", // only author and owner
-        "-lG --author", // only author and owner
+        "-l",                     // only group and owner
+        "-g --author",            // only author and group
+        "-o --author",            // only author and owner
+        "-lG --author",           // only author and owner
         "-l --no-group --author", // only author and owner
     ] {
         let result = scene
@@ -183,14 +183,14 @@ fn test_ls_long_formats() {
     }
 
     for arg in &[
-        "-g", // only group
-        "-gl", // only group
-        "-o", // only owner
-        "-ol", // only owner
-        "-oG", // only owner
-        "-lG", // only owner
+        "-g",            // only group
+        "-gl",           // only group
+        "-o",            // only owner
+        "-ol",           // only owner
+        "-oG",           // only owner
+        "-lG",           // only owner
         "-l --no-group", // only owner
-        "-gG --author", // only author
+        "-gG --author",  // only author
     ] {
         let result = scene
             .ucmd()
