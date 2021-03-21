@@ -528,6 +528,55 @@ fn test_ls_ls_color() {
     assert_eq!(result.stdout, "");
 }
 
+#[cfg(unix)]
+#[test]
+fn test_ls_inode() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file = "test_inode";
+    at.touch(file);
+
+    let re_short = Regex::new(r" *(\d+) test_inode").unwrap();
+    let re_long = Regex::new(r" *(\d+) [xrw-]{10} \d .+ test_inode").unwrap();
+
+    let result = scene.ucmd().arg("test_inode").arg("-i").run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+    assert!(re_short.is_match(&result.stdout));
+    let inode_short = re_short
+        .captures(&result.stdout)
+        .unwrap()
+        .get(1)
+        .unwrap()
+        .as_str();
+
+    let result = scene.ucmd().arg("test_inode").run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+    assert!(!re_short.is_match(&result.stdout));
+    assert!(!result.stdout.contains(inode_short));
+
+    let result = scene.ucmd().arg("-li").arg("test_inode").run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+    assert!(re_long.is_match(&result.stdout));
+    let inode_long = re_long
+        .captures(&result.stdout)
+        .unwrap()
+        .get(1)
+        .unwrap()
+        .as_str();
+
+    let result = scene.ucmd().arg("-l").arg("test_inode").run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+    assert!(!re_long.is_match(&result.stdout));
+    assert!(!result.stdout.contains(inode_long));
+
+    assert_eq!(inode_short, inode_long)
+}
+
 #[cfg(not(any(target_vendor = "apple", target_os = "windows")))] // Truncate not available on mac or win
 #[test]
 fn test_ls_human_si() {

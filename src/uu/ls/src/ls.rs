@@ -1071,7 +1071,7 @@ fn display_file_name(
 ) -> Cell {
     let mut name = get_file_name(path, strip);
     if config.format != Format::Long && config.inode {
-        name = get_inode(metadata) + &name;
+        name = get_inode(metadata) + " " + &name;
     }
     let mut width = UnicodeWidthStr::width(&*name);
 
