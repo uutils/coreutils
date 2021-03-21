@@ -125,6 +125,108 @@ fn test_ls_long() {
 }
 
 #[test]
+fn test_ls_long_formats() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch(&at.plus_as_string("test-long-formats"));
+
+    // Regex for three names, so all of author, group and owner
+    let re_three = Regex::new(r"[xrw-]{9} \d ([-0-9_a-z]+ ){3}0").unwrap();
+
+    // Regex for two names, either:
+    // - group and owner
+    // - author and owner
+    // - author and group
+    let re_two = Regex::new(r"[xrw-]{9} \d ([-0-9_a-z]+ ){2}0").unwrap();
+
+    // Regex for one name: author, group or owner
+    let re_one = Regex::new(r"[xrw-]{9} \d [-0-9_a-z]+ 0").unwrap();
+
+    // Regex for no names
+    let re_zero = Regex::new(r"[xrw-]{9} \d 0").unwrap();
+
+    let result = scene
+        .ucmd()
+        .arg("-l")
+        .arg("--author")
+        .arg("test-long-formats")
+        .run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+    assert!(re_three.is_match(&result.stdout));
+
+    let result = scene
+        .ucmd()
+        .arg("-l1")
+        .arg("--author")
+        .arg("test-long-formats")
+        .run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+    assert!(re_three.is_match(&result.stdout));
+
+    for arg in &[
+        "-l",                     // only group and owner
+        "-g --author",            // only author and group
+        "-o --author",            // only author and owner
+        "-lG --author",           // only author and owner
+        "-l --no-group --author", // only author and owner
+    ] {
+        let result = scene
+            .ucmd()
+            .args(&arg.split(" ").collect::<Vec<_>>())
+            .arg("test-long-formats")
+            .succeeds();
+        println!("stderr = {:?}", result.stderr);
+        println!("stdout = {:?}", result.stdout);
+        assert!(re_two.is_match(&result.stdout));
+    }
+
+    for arg in &[
+        "-g",            // only group
+        "-gl",           // only group
+        "-o",            // only owner
+        "-ol",           // only owner
+        "-oG",           // only owner
+        "-lG",           // only owner
+        "-l --no-group", // only owner
+        "-gG --author",  // only author
+    ] {
+        let result = scene
+            .ucmd()
+            .args(&arg.split(" ").collect::<Vec<_>>())
+            .arg("test-long-formats")
+            .succeeds();
+        println!("stderr = {:?}", result.stderr);
+        println!("stdout = {:?}", result.stdout);
+        assert!(re_one.is_match(&result.stdout));
+    }
+
+    for arg in &[
+        "-og",
+        "-ogl",
+        "-lgo",
+        "-gG",
+        "-g --no-group",
+        "-og --no-group",
+        "-og --format=long",
+        "-ogCl",
+        "-og --format=vertical -l",
+        "-og1",
+        "-og1l",
+    ] {
+        let result = scene
+            .ucmd()
+            .args(&arg.split(" ").collect::<Vec<_>>())
+            .arg("test-long-formats")
+            .succeeds();
+        println!("stderr = {:?}", result.stderr);
+        println!("stdout = {:?}", result.stdout);
+        assert!(re_zero.is_match(&result.stdout));
+    }
+}
+
+#[test]
 fn test_ls_oneline() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -424,6 +526,55 @@ fn test_ls_ls_color() {
     // No output
     let result = scene.ucmd().arg("--color=never").arg("z").succeeds();
     assert_eq!(result.stdout, "");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_ls_inode() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file = "test_inode";
+    at.touch(file);
+
+    let re_short = Regex::new(r" *(\d+) test_inode").unwrap();
+    let re_long = Regex::new(r" *(\d+) [xrw-]{10} \d .+ test_inode").unwrap();
+
+    let result = scene.ucmd().arg("test_inode").arg("-i").run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+    assert!(re_short.is_match(&result.stdout));
+    let inode_short = re_short
+        .captures(&result.stdout)
+        .unwrap()
+        .get(1)
+        .unwrap()
+        .as_str();
+
+    let result = scene.ucmd().arg("test_inode").run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+    assert!(!re_short.is_match(&result.stdout));
+    assert!(!result.stdout.contains(inode_short));
+
+    let result = scene.ucmd().arg("-li").arg("test_inode").run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+    assert!(re_long.is_match(&result.stdout));
+    let inode_long = re_long
+        .captures(&result.stdout)
+        .unwrap()
+        .get(1)
+        .unwrap()
+        .as_str();
+
+    let result = scene.ucmd().arg("-l").arg("test_inode").run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+    assert!(!re_long.is_match(&result.stdout));
+    assert!(!result.stdout.contains(inode_long));
+
+    assert_eq!(inode_short, inode_long)
 }
 
 #[cfg(not(any(target_vendor = "apple", target_os = "windows")))] // Truncate not available on mac or win
