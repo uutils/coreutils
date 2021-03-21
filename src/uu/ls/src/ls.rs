@@ -178,13 +178,16 @@ struct LongFormat {
 impl Config {
     fn from(options: clap::ArgMatches) -> Config {
         let (mut format, opt) = if let Some(format_) = options.value_of(options::FORMAT) {
-            (match format_ {
-                "long" | "verbose" => Format::Long,
-                "single-column" => Format::OneLine,
-                "columns" | "vertical" => Format::Columns,
-                // below should never happen as clap already restricts the values.
-                _ => unreachable!("Invalid field for --format"),
-            }, options::FORMAT)
+            (
+                match format_ {
+                    "long" | "verbose" => Format::Long,
+                    "single-column" => Format::OneLine,
+                    "columns" | "vertical" => Format::Columns,
+                    // below should never happen as clap already restricts the values.
+                    _ => unreachable!("Invalid field for --format"),
+                },
+                options::FORMAT,
+            )
         } else if options.is_present(options::format::LONG) {
             (Format::Long, options::format::LONG)
         } else {
@@ -203,15 +206,19 @@ impl Config {
         // actually makes it distinct from the --format=singe-column option,
         // which always applies.
         //
-        // The idea here is to not let these options override with the other 
+        // The idea here is to not let these options override with the other
         // options, but manually check the last index they occur. If this index
         // is larger than the index for the other format options, we apply the
         // long format.
         match options.indices_of(opt).map(|x| x.max().unwrap()) {
-            None => if options.is_present(options::format::LONG_NO_GROUP) || options.is_present(options::format::LONG_NO_OWNER) {
-                format = Format::Long;
-            } else if options.is_present(options::format::ONELINE) {
-                format = Format::OneLine;
+            None => {
+                if options.is_present(options::format::LONG_NO_GROUP)
+                    || options.is_present(options::format::LONG_NO_OWNER)
+                {
+                    format = Format::Long;
+                } else if options.is_present(options::format::ONELINE) {
+                    format = Format::OneLine;
+                }
             }
             Some(mut idx) => {
                 if let Some(indices) = options.indices_of(options::format::LONG_NO_OWNER) {
@@ -425,7 +432,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::TIME,
                     options::time::ACCESS,
                     options::time::CHANGE,
-                ]),                
+                ])
         )
         .arg(
             Arg::with_name(options::time::ACCESS)
@@ -505,7 +512,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(options::AUTHOR)
                 .help("Show author in long format. On the supported platforms, the author \
                 always matches the file owner.")
-                
         )
         // Other Flags
         .arg(
