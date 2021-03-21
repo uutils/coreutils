@@ -410,6 +410,7 @@ fn test_install_failing_no_such_file() {
     assert!(r.stderr.contains("No such file or directory"));
 }
 
+#[test]
 fn test_install_copy_then_compare_file() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
