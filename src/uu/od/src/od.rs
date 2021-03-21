@@ -442,7 +442,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(
             Arg::with_name(options::FILENAME)
                 .hidden(true)
-                .multiple(true)
+                .multiple(true),
         )
         .settings(&[
             AppSettings::TrailingVarArg,
