@@ -90,7 +90,7 @@ jobs:
         sed -i 's|sort |/usr/bin/sort |' tests/ls/hyperlink.sh tests/misc/test-N.sh
         sed -i 's|split |/usr/bin/split |' tests/misc/factor-parallel.sh
         sed -i 's|truncate |/usr/bin/truncate |' tests/split/fail.sh
-        sed -i '|dd |/usr/bin/dd |' tests/du/8gb.sh tests/tail-2/big-4gb.sh
+        sed -i 's|dd |/usr/bin/dd |' tests/du/8gb.sh tests/tail-2/big-4gb.sh
         sed -i 's|id -|/usr/bin/id -|' tests/misc/runcon-no-reorder.sh
 
         #Add specific timeout to tests that currently hang to limit time spent waiting
