@@ -150,11 +150,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
             let path = Path::new(file);
             if !path.is_file() {
-                crash!(
-                    1,
+                eprintln!(
                     "cannot open '{}' for reading: No such file or directory",
                     &path.to_str().unwrap()
-                )
+                );
+                continue;
             }
             let reader = File::open(&path).unwrap();
             let mut buffer = BufReader::new(reader);
