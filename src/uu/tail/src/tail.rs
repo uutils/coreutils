@@ -80,6 +80,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .short("c")
                 .long(options::BYTES)
                 .takes_value(true)
+                .allow_hyphen_values(true)
                 .help("Number of bytes to print"),
         )
         .arg(
@@ -93,6 +94,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .short("n")
                 .long(options::LINES)
                 .takes_value(true)
+                .allow_hyphen_values(true)
                 .help("Number of lines to print"),
         )
         .arg(
