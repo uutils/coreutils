@@ -78,6 +78,8 @@ pub mod options {
         pub static ONELINE: &str = "1";
         pub static LONG: &str = "long";
         pub static COLUMNS: &str = "C";
+        pub static ACROSS: &str = "x";
+        pub static COMMAS: &str = "m";
     }
     pub mod files {
         pub static ALL: &str = "all";
@@ -116,6 +118,8 @@ enum Format {
     Columns,
     Long,
     OneLine,
+    Across,
+    Commas,
 }
 
 enum Sort {
@@ -168,6 +172,8 @@ impl Config {
         let format = if let Some(format_) = options.value_of(options::FORMAT) {
             match format_ {
                 "long" | "verbose" => Format::Long,
+                "horizontal" | "across" => Format::Across,
+                "commas" => Format::Commas,
                 "single-column" => Format::OneLine,
                 "columns" => Format::Columns,
                 // below should never happen as clap already restricts the values.
@@ -177,6 +183,10 @@ impl Config {
             Format::Long
         } else if options.is_present(options::format::ONELINE) {
             Format::OneLine
+        } else if options.is_present(options::format::ACROSS) {
+            Format::Across
+        } else if options.is_present(options::format::COMMAS) {
+            Format::Commas
         } else {
             Format::Columns
         };
@@ -278,7 +288,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(options::FORMAT)
                 .help("Set the display format.")
                 .takes_value(true)
-                .possible_values(&["long", "verbose", "single-column", "columns"])
+                .possible_values(&["long", "verbose", "single-column", "columns", "vertical", "across", "horizontal", "commas"])
                 .hide_possible_values(true)
                 .require_equals(true)
                 .overrides_with_all(&[
@@ -286,6 +296,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::format::COLUMNS,
                     options::format::ONELINE,
                     options::format::LONG,
+                    options::format::ACROSS,
+                    options::format::COLUMNS,
                 ]),
         )
         .arg(
@@ -303,6 +315,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .short("l")
                 .long(options::format::LONG)
                 .help("Display detailed information.")
+        )
+        .arg(
+            Arg::with_name(options::format::ACROSS)
+                .short(options::format::ACROSS)
+                .help("List entries in rows instead of in columns.")
+        )
+        .arg(
+            Arg::with_name(options::format::COMMAS)
+                .short(options::format::COMMAS)
+                .help("List entries separated by commas.")
         )
 
         // Time arguments
@@ -640,44 +662,61 @@ fn display_items(items: &[PathBuf], strip: Option<&Path>, config: &Config) {
             display_item_long(item, strip, max_links, max_size, config);
         }
     } else {
-        if config.format != Format::OneLine {
-            let names = items.iter().filter_map(|i| {
-                let md = get_metadata(i, config);
-                match md {
-                    Err(e) => {
-                        let filename = get_file_name(i, strip);
-                        show_error!("'{}': {}", filename, e);
-                        None
-                    }
-                    Ok(md) => Some(display_file_name(&i, strip, &md, config)),
-                }
-            });
-
-            if let Some(size) = termsize::get() {
-                let mut grid = Grid::new(GridOptions {
-                    filling: Filling::Spaces(2),
-                    direction: Direction::TopToBottom,
-                });
-
-                for name in names {
-                    grid.add(name);
-                }
-
-                if let Some(output) = grid.fit_into_width(size.cols as usize) {
-                    print!("{}", output);
-                    return;
-                }
-            }
-        }
-
-        // Couldn't display a grid, either because we don't know
-        // the terminal width or because fit_into_width failed
-        for i in items {
+        let names = items.iter().filter_map(|i| {
             let md = get_metadata(i, config);
-            if let Ok(md) = md {
-                println!("{}", display_file_name(&i, strip, &md, config).contents);
+            match md {
+                Err(e) => {
+                    let filename = get_file_name(i, strip);
+                    show_error!("'{}': {}", filename, e);
+                    None
+                }
+                Ok(md) => Some(display_file_name(&i, strip, &md, config)),
+            }
+        });
+
+        match (&config.format, termsize::get()) {
+            (Format::Columns, Some(size)) => display_grid(names, size, Direction::TopToBottom),
+            (Format::Across, Some(size)) => display_grid(names, size, Direction::LeftToRight),
+            (Format::Commas, size_opt) => {
+                let cols = match size_opt {
+                    Some(size) => size.cols,
+                    None => 1,
+                };
+                let mut current_col = 0;
+                for name in names {
+                    let width = name.width as u16;
+                    if current_col + width + 1 > cols {
+                        current_col = width + 2;
+                        print!("\n{}, ", name.contents);
+                    } else {
+                        current_col += width + 2;
+                        print!("{}, ", name.contents);
+                    }
+                }
+            }
+            _ => {
+                for name in names {
+                    println!("{}", name.contents);
+                }
             }
         }
+    }
+}
+
+fn display_grid(names: impl Iterator<Item = Cell>, size: termsize::Size, direction: Direction) {
+    let mut grid = Grid::new(GridOptions {
+        filling: Filling::Spaces(2),
+        direction,
+    });
+
+    for name in names {
+        grid.add(name);
+    }
+
+    match grid.fit_into_width(size.cols as usize) {
+        Some(output) => print!("{}", output),
+        // Width is too small for the grid, so we fit it in one column
+        None => print!("{}", grid.fit_into_columns(1)),
     }
 }
 
