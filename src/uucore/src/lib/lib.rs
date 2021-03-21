@@ -71,7 +71,17 @@ pub trait Args: Iterator<Item = OsString> + Sized {
     /// Converts each iterator to a String and collects these into a vector
     /// Arguments that cannot be converted to a string will result in empty strings inside the vector
     fn collect_str(self) -> Vec<String> {
-        self.map(|s| s.into_string().unwrap_or_default()).collect()
+        self.map(|s| match s.into_string() {
+            Ok(string) => string,
+            Err(s_ret) => {
+                eprintln!(
+                    "Input with broken encoding ignored! (s = '{}') ",
+                    s_ret.to_string_lossy()
+                );
+                String::new()
+            }
+        })
+        .collect()
     }
 }
 
