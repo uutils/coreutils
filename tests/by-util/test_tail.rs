@@ -332,9 +332,14 @@ fn test_multiple_input_quiet_flag_overrides_verbose_flag_for_suppressing_headers
 
 #[test]
 fn test_negative_indexing() {
-    let positive_index = new_ucmd!().arg("-n").arg("5").arg(FOOBAR_TXT).run();
+    let positive_lines_index = new_ucmd!().arg("-n").arg("5").arg(FOOBAR_TXT).run();
 
-    let negative_index = new_ucmd!().arg("-n").arg("-5").arg(FOOBAR_TXT).run();
+    let negative_lines_index = new_ucmd!().arg("-n").arg("-5").arg(FOOBAR_TXT).run();
 
-    assert_eq!(positive_index.stdout, negative_index.stdout);
+    let positive_bytes_index = new_ucmd!().arg("-c").arg("20").arg(FOOBAR_TXT).run();
+
+    let negative_bytes_index = new_ucmd!().arg("-c").arg("-20").arg(FOOBAR_TXT).run();
+
+    assert_eq!(positive_lines_index.stdout, negative_lines_index.stdout);
+    assert_eq!(positive_bytes_index.stdout, negative_bytes_index.stdout);
 }
