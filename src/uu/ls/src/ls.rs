@@ -187,6 +187,8 @@ impl Config {
                     "long" | "verbose" => Format::Long,
                     "single-column" => Format::OneLine,
                     "columns" | "vertical" => Format::Columns,
+                    "across" | "horizontal" => Format::Across,
+                    "commas" => Format::Commas,
                     // below should never happen as clap already restricts the values.
                     _ => unreachable!("Invalid field for --format"),
                 },
@@ -820,15 +822,25 @@ fn display_items(items: &[PathBuf], strip: Option<&Path>, config: &Config) {
                     None => 1,
                 };
                 let mut current_col = 0;
+                let mut names = names;
+                if let Some(name) = names.next() {
+                    print!("{}", name.contents);
+                    current_col = name.width as u16 + 2;
+                }
                 for name in names {
                     let width = name.width as u16;
                     if current_col + width + 1 > cols {
                         current_col = width + 2;
-                        print!("\n{}, ", name.contents);
+                        print!(",\n{}", name.contents);
                     } else {
                         current_col += width + 2;
-                        print!("{}, ", name.contents);
+                        print!(", {}", name.contents);
                     }
+                }
+                // Current col is never zero again if names have been printed.
+                // So we print a newline.
+                if current_col > 0 {
+                    println!();
                 }
             }
             _ => {

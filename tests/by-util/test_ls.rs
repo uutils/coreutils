@@ -88,6 +88,34 @@ fn test_ls_columns() {
 }
 
 #[test]
+fn test_ls_across() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch(&at.plus_as_string("test-across-1"));
+    at.touch(&at.plus_as_string("test-across-2"));
+
+    for option in &["-x", "--format=across"] {
+        let result = scene.ucmd().arg(option).succeeds();
+        // Because the test terminal has width 0, this is the same output as
+        // the columns option.
+        assert_eq!(result.stdout, "test-across-1\ntest-across-2\n");
+    }
+}
+
+#[test]
+fn test_ls_commas() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch(&at.plus_as_string("test-commas-1"));
+    at.touch(&at.plus_as_string("test-commas-2"));
+
+    for option in &["-m", "--format=commas"] {
+        let result = scene.ucmd().arg(option).succeeds();
+        assert_eq!(result.stdout, "test-commas-1,\ntest-commas-2\n");
+    }
+}
+
+#[test]
 fn test_ls_long() {
     #[cfg(not(windows))]
     let last;
