@@ -167,3 +167,11 @@ fn test_bug_in_negative_zero_lines() {
         //GNU Head returns "a\nb\n"
         .stdout_is("");
 }
+
+#[test]
+fn test_no_such_file_or_directory() {
+    new_ucmd!()
+        .arg("no_such_file.toml")
+        .run()
+        .stderr_is("head: cannot open 'no_such_file.toml' for reading: No such file or directory");
+}
