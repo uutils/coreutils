@@ -329,3 +329,12 @@ fn test_multiple_input_quiet_flag_overrides_verbose_flag_for_suppressing_headers
         .run()
         .stdout_is_fixture("foobar_multiple_quiet.expected");
 }
+
+#[test]
+fn test_negative_indexing() {
+    let positive_index = new_ucmd!().arg("-n").arg("5").arg(FOOBAR_TXT).run();
+
+    let negative_index = new_ucmd!().arg("-n").arg("-5").arg(FOOBAR_TXT).run();
+
+    assert_eq!(positive_index.stdout, negative_index.stdout);
+}
