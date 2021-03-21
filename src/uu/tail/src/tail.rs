@@ -345,9 +345,9 @@ pub fn parse_size(mut size_slice: &str) -> Result<u64, ParseSizeErr> {
         // sole B is not a valid suffix
         Err(ParseSizeErr::parse_failure(size_slice))
     } else {
-        let value: Option<u64> = size_slice.parse().ok();
+        let value: Option<i64> = size_slice.parse().ok();
         value
-            .map(|v| Ok(multiplier * v))
+            .map(|v| Ok((multiplier as i64 * v.abs()) as u64))
             .unwrap_or_else(|| Err(ParseSizeErr::parse_failure(size_slice)))
     }
 }
