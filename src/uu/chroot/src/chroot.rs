@@ -80,11 +80,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         Some(v) => Path::new(v),
         None => crash!(
             1,
-            "{}",
-            format!(
-                "Missing operand: NEWROOT\nTry '{} --help' for more information.",
-                NAME
-            )
+            "Missing operand: NEWROOT\nTry '{} --help' for more information.",
+            NAME
         ),
     };
 
