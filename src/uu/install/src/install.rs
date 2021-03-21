@@ -13,8 +13,8 @@ mod mode;
 extern crate uucore;
 
 use clap::{App, Arg, ArgMatches};
-use filetime::{set_file_times, FileTime};
 use file_diff::diff;
+use filetime::{set_file_times, FileTime};
 use uucore::entries::{grp2gid, usr2uid};
 use uucore::perms::{wrap_chgrp, wrap_chown, Verbosity};
 
