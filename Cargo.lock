@@ -1410,7 +1410,7 @@ dependencies = [
 name = "uu_chroot"
 version = "0.0.4"
 dependencies = [
- "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
+ "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.7",
  "uucore_procs 0.0.5",
 ]
