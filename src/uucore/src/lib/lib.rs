@@ -68,9 +68,10 @@ pub use crate::features::wide;
 use std::ffi::OsString;
 
 pub trait Args: Iterator<Item = OsString> + Sized {
+    /// Converts each iterator to a String and collects these into a vector
+    /// Arguments that cannot be converted to a string will result in empty strings inside the vector
     fn collect_str(self) -> Vec<String> {
-        // FIXME: avoid unwrap()
-        self.map(|s| s.into_string().unwrap()).collect()
+        self.map(|s| s.into_string().unwrap_or_default()).collect()
     }
 }
 
