@@ -170,9 +170,12 @@ fn test_bug_in_negative_zero_lines() {
 
 #[test]
 fn test_no_such_file_or_directory() {
-    new_ucmd!()
-        .arg("no_such_file.toml")
-        .run()
-        .stderr
-        .contains("cannot open 'no_such_file.toml' for reading: No such file or directory");
+    let result = new_ucmd!().arg("no_such_file.toml").run();
+
+    assert_eq!(
+        true,
+        result
+            .stderr
+            .contains("cannot open 'no_such_file.toml' for reading: No such file or directory")
+    )
 }
