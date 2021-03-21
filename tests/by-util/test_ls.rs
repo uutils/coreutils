@@ -344,6 +344,7 @@ fn test_ls_order_time() {
     sleep(Duration::from_millis(100));
     at.touch("test-2");
     at.append("test-2", "22");
+
     sleep(Duration::from_millis(100));
     at.touch("test-3");
     at.append("test-3", "333");
