@@ -186,8 +186,8 @@ mod tests {
     }
 
     impl<'a> CommandLineOpts for MockOptions<'a> {
-        fn inputs(&self) -> Vec<String> {
-            self.inputs.clone()
+        fn inputs(&self) -> Vec<&str> {
+            self.inputs.iter().map(|s| s.as_str()).collect()
         }
         fn opts_present(&self, opts: &[&str]) -> bool {
             for expected in opts.iter() {
