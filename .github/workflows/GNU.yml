@@ -110,13 +110,18 @@ jobs:
     - name: Extract tests info
       shell: bash
       run: |
-        TOTAL=$( grep "# TOTAL:" gnu/tests/test-suite.log|cut -d' ' -f2-)
-        PASS=$( grep "# PASS:" gnu/tests/test-suite.log|cut -d' ' -f2-)
-        SKIP=$( grep "# SKIP:" gnu/tests/test-suite.log|cut -d' ' -f2-)
-        FAIL=$( grep "# FAIL:" gnu/tests/test-suite.log|cut -d' ' -f2-)
-        XPASS=$( grep "# XPASS:" gnu/tests/test-suite.log|cut -d' ' -f2-)
-        ERROR=$( grep "# ERROR:" gnu/tests/test-suite.log|cut -d' ' -f2-)
-        echo "::warning ::GNU testsuite = $TOTAL / $PASS / $FAIL / $ERROR"
+        if test -f gnu/tests/test-suite.log
+        then
+            TOTAL=$( grep "# TOTAL:" gnu/tests/test-suite.log|cut -d' ' -f2-)
+            PASS=$( grep "# PASS:" gnu/tests/test-suite.log|cut -d' ' -f2-)
+            SKIP=$( grep "# SKIP:" gnu/tests/test-suite.log|cut -d' ' -f2-)
+            FAIL=$( grep "# FAIL:" gnu/tests/test-suite.log|cut -d' ' -f2-)
+            XPASS=$( grep "# XPASS:" gnu/tests/test-suite.log|cut -d' ' -f2-)
+            ERROR=$( grep "# ERROR:" gnu/tests/test-suite.log|cut -d' ' -f2-)
+            echo "::warning ::GNU testsuite = $TOTAL / $PASS / $FAIL / $ERROR"
+          else
+            echo "::error ::Failed to get summary of test results"
+          fi
 
     - uses: actions/upload-artifact@v2
       with:
