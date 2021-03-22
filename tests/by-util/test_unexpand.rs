@@ -136,3 +136,17 @@ fn unexpand_spaces_after_fields() {
         .run()
         .stdout_is("\t\tA B C D\t\t    A\t\n");
 }
+
+#[test]
+fn unexpand_read_from_file() {
+    let result = new_ucmd!()
+        .arg("with-spaces.txt")
+        .arg("-a")
+        .arg("-t4")
+        .run();
+
+    assert!(result.success);
+    assert!(result
+        .stdout
+        .contains("int foo() {\n\t// with spaces\t\nreturn 0;\n}"));
+}
