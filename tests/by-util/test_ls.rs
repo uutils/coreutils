@@ -58,11 +58,71 @@ fn test_ls_a() {
 }
 
 #[test]
+fn test_ls_width() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch(&at.plus_as_string("test-width-1"));
+    at.touch(&at.plus_as_string("test-width-2"));
+    at.touch(&at.plus_as_string("test-width-3"));
+    at.touch(&at.plus_as_string("test-width-4"));
+
+    for option in &["-w 100", "-w=100", "--width=100", "--width 100"] {
+        let result = scene
+            .ucmd()
+            .args(&option.split(" ").collect::<Vec<_>>())
+            .run();
+        println!("stderr = {:?}", result.stderr);
+        println!("stdout = {:?}", result.stdout);
+        assert_eq!(
+            result.stdout,
+            "test-width-1  test-width-2  test-width-3  test-width-4\n",
+        )
+    }
+
+    for option in &["-w 50", "-w=50", "--width=50", "--width 50"] {
+        let result = scene
+            .ucmd()
+            .args(&option.split(" ").collect::<Vec<_>>())
+            .run();
+        println!("stderr = {:?}", result.stderr);
+        println!("stdout = {:?}", result.stdout);
+        assert_eq!(
+            result.stdout,
+            "test-width-1  test-width-3\ntest-width-2  test-width-4\n",
+        )
+    }
+
+    for option in &[
+        "-w 25",
+        "-w=25",
+        "--width=25",
+        "--width 25",
+        "-w 0",
+        "-w=0",
+        "--width=0",
+        "--width 0",
+    ] {
+        let result = scene
+            .ucmd()
+            .args(&option.split(" ").collect::<Vec<_>>())
+            .run();
+        println!("stderr = {:?}", result.stderr);
+        println!("stdout = {:?}", result.stdout);
+        assert_eq!(
+            result.stdout,
+            "test-width-1\ntest-width-2\ntest-width-3\ntest-width-4\n",
+        )
+    }
+}
+
+#[test]
 fn test_ls_columns() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.touch(&at.plus_as_string("test-columns-1"));
     at.touch(&at.plus_as_string("test-columns-2"));
+    at.touch(&at.plus_as_string("test-columns-3"));
+    at.touch(&at.plus_as_string("test-columns-4"));
 
     // Columns is the default
     let result = scene.ucmd().run();
@@ -71,9 +131,15 @@ fn test_ls_columns() {
     assert!(result.success);
 
     #[cfg(not(windows))]
-    assert_eq!(result.stdout, "test-columns-1\ntest-columns-2\n");
+    assert_eq!(
+        result.stdout,
+        "test-columns-1\ntest-columns-2\ntest-columns-3\ntest-columns-4\n"
+    );
     #[cfg(windows)]
-    assert_eq!(result.stdout, "test-columns-1  test-columns-2\n");
+    assert_eq!(
+        result.stdout,
+        "test-columns-1  test-columns-2  test-columns-3  test-columns-4\n"
+    );
 
     for option in &["-C", "--format=columns"] {
         let result = scene.ucmd().arg(option).run();
@@ -81,9 +147,107 @@ fn test_ls_columns() {
         println!("stdout = {:?}", result.stdout);
         assert!(result.success);
         #[cfg(not(windows))]
-        assert_eq!(result.stdout, "test-columns-1\ntest-columns-2\n");
+        assert_eq!(
+            result.stdout,
+            "test-columns-1\ntest-columns-2\ntest-columns-3\ntest-columns-4\n"
+        );
         #[cfg(windows)]
-        assert_eq!(result.stdout, "test-columns-1  test-columns-2\n");
+        assert_eq!(
+            result.stdout,
+            "test-columns-1  test-columns-2  test-columns-3  test-columns-4\n"
+        );
+    }
+
+    for option in &["-C", "--format=columns"] {
+        let result = scene.ucmd().arg("-w=40").arg(option).run();
+        println!("stderr = {:?}", result.stderr);
+        println!("stdout = {:?}", result.stdout);
+        assert!(result.success);
+        assert_eq!(
+            result.stdout,
+            "test-columns-1  test-columns-3\ntest-columns-2  test-columns-4\n"
+        );
+    }
+}
+
+#[test]
+fn test_ls_across() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch(&at.plus_as_string("test-across-1"));
+    at.touch(&at.plus_as_string("test-across-2"));
+    at.touch(&at.plus_as_string("test-across-3"));
+    at.touch(&at.plus_as_string("test-across-4"));
+
+    for option in &["-x", "--format=across"] {
+        let result = scene.ucmd().arg(option).succeeds();
+        // Because the test terminal has width 0, this is the same output as
+        // the columns option.
+        println!("stderr = {:?}", result.stderr);
+        println!("stdout = {:?}", result.stdout);
+        if cfg!(unix) {
+            assert_eq!(
+                result.stdout,
+                "test-across-1\ntest-across-2\ntest-across-3\ntest-across-4\n"
+            );
+        } else {
+            assert_eq!(
+                result.stdout,
+                "test-across-1  test-across-2  test-across-3  test-across-4\n"
+            );
+        }
+    }
+
+    for option in &["-x", "--format=across"] {
+        let result = scene.ucmd().arg("-w=30").arg(option).run();
+        // Because the test terminal has width 0, this is the same output as
+        // the columns option.
+        println!("stderr = {:?}", result.stderr);
+        println!("stdout = {:?}", result.stdout);
+        assert_eq!(
+            result.stdout,
+            "test-across-1  test-across-2\ntest-across-3  test-across-4\n"
+        );
+    }
+}
+
+#[test]
+fn test_ls_commas() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch(&at.plus_as_string("test-commas-1"));
+    at.touch(&at.plus_as_string("test-commas-2"));
+    at.touch(&at.plus_as_string("test-commas-3"));
+    at.touch(&at.plus_as_string("test-commas-4"));
+
+    for option in &["-m", "--format=commas"] {
+        let result = scene.ucmd().arg(option).succeeds();
+        if cfg!(unix) {
+            assert_eq!(
+                result.stdout,
+                "test-commas-1,\ntest-commas-2,\ntest-commas-3,\ntest-commas-4\n"
+            );
+        } else {
+            assert_eq!(
+                result.stdout,
+                "test-commas-1, test-commas-2, test-commas-3, test-commas-4\n"
+            );
+        }
+    }
+
+    for option in &["-m", "--format=commas"] {
+        let result = scene.ucmd().arg("-w=30").arg(option).succeeds();
+        assert_eq!(
+            result.stdout,
+            "test-commas-1, test-commas-2,\ntest-commas-3, test-commas-4\n"
+        );
+    }
+    for option in &["-m", "--format=commas"] {
+        let result = scene.ucmd().arg("-w=45").arg(option).succeeds();
+        assert_eq!(
+            result.stdout,
+            "test-commas-1, test-commas-2, test-commas-3,\ntest-commas-4\n"
+        );
     }
 }
 
