@@ -9,53 +9,37 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
 use std::io::{self, Write};
 use std::iter::Peekable;
 use std::str::Chars;
 use clap::{crate_version, App, Arg};
 
-<<<<<<< Updated upstream
-static VERSION: &str = env!("CARGO_PKG_VERSION");
-const NAME: &str = "echo";
-const SYNTAX: &str = "[OPTIONS]... [STRING]...";
-const SUMMARY: &str = "display a line of text";
-const HELP: &str = r#"
-=======
 static NAME: &str = "echo";
 static USAGE: &str = "[OPTIONS]... [STRING]...";
 static SUMMARY: &str = "display a line of text";
 static AFTER_HELP: &str = r#"
->>>>>>> Stashed changes
  Echo the STRING(s) to standard output.
  If -e is in effect, the following sequences are recognized:
 
- \\      backslash
- \a      alert (BEL)
- \b      backspace
- \c      produce no further output
- \e      escape
- \f      form feed
- \n      new line
- \r      carriage return
- \t      horizontal tab
- \v      vertical tab
- \0NNN   byte with octal value NNN (1 to 3 digits)
- \xHH    byte with hexadecimal value HH (1 to 2 digits)
+ \\\\      backslash
+ \\a      alert (BEL)
+ \\b      backspace
+ \\c      produce no further output
+ \\e      escape
+ \\f      form feed
+ \\n      new line
+ \\r      carriage return
+ \\t      horizontal tab
+ \\v      vertical tab
+ \\0NNN   byte with octal value NNN (1 to 3 digits)
+ \\xHH    byte with hexadecimal value HH (1 to 2 digits)
 "#;
 
 mod options {
-<<<<<<< Updated upstream
-    pub const STRING: &str = "string";
-    pub const NEWLINE: &str = "n";
-    pub const ENABLE_ESCAPE: &str = "e";
-    pub const DISABLE_ESCAPE: &str = "E";
-=======
     pub static STRING: &str = "STRING";
     pub static NO_NEWLINE: &str = "no_newline";
     pub static ENABLE_BACKSLASH_ESCAPE: &str = "enable_backslash_escape";
     pub static DISABLE_BACKSLASH_ESCAPE: &str = "disable_backslash_escape";
->>>>>>> Stashed changes
 }
 
 fn parse_code(
@@ -132,81 +116,38 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let matches = App::new(executable!())
         .name(NAME)
-<<<<<<< Updated upstream
-        .version(VERSION)
-        .usage(SYNTAX)
-        .about(SUMMARY)
-        .help(HELP)
-        .arg(Arg::with_name(options::STRING).hidden(true).multiple(true))
-        .arg(
-            Arg::with_name(options::NEWLINE)
-                .short("n")
-                .help("do not output the trailing newline"),
-        )
-        .arg(
-            Arg::with_name(options::ENABLE_ESCAPE)
-                .short("e")
-                .help("enable interpretation of backslash escapes"),
-        )
-        .arg(
-            Arg::with_name(options::DISABLE_ESCAPE)
-                .short("E")
-                .help("disable interpretation of backslash escapes (default)"),
-        )
-        .get_matches_from(args);
-
-    let no_newline = matches.is_present("n");
-    let escaped = matches.is_present("e");
-    let values: Vec<String> = match matches.values_of(options::STRING) {
-        Some(v) => v.map(|v| v.to_string()).collect(),
-=======
         .version(crate_version!())
-        .author("TEST")
         .usage(USAGE)
         .about(SUMMARY)
         .after_help(AFTER_HELP)
-        .arg(Arg::with_name("HELP")
-            .long("help")
-            .long_help("print usage information")
-            .takes_value(false)
-        )
         .arg(Arg::with_name(options::NO_NEWLINE)
             .short("n")
-            .long_help("do not output the trailing newline")
+            .help("do not output the trailing newline")
             .takes_value(false)
+            .display_order(1)
         )
         .arg(Arg::with_name(options::ENABLE_BACKSLASH_ESCAPE)
             .short("e")
-            .long_help("enable interpretation of backslash escapes")
+            .help("enable interpretation of backslash escapes")
             .takes_value(false)
+            .display_order(2)
         )
         .arg(Arg::with_name(options::DISABLE_BACKSLASH_ESCAPE)
             .short("E")
-            .long_help("disable interpretation of backslash escapes (default)")
+            .help("disable interpretation of backslash escapes (default)")
+            .display_order(3)
         )
         .arg(Arg::with_name(options::STRING)
-        .hidden(true)
-        .multiple(true)
-        .takes_value(true)
-        // .allow_hyphen_values(true)
+            .hidden(true)
+            .multiple(true)
+            .index(1)
         )
         .get_matches_from(args);
-
-/*     let matches = app!(SYNTAX, SUMMARY, HELP)
-        .optflag("n", "", "do not output the trailing newline")
-        .optflag("e", "", "enable interpretation of backslash escapes")
-        .optflag(
-            "E",
-            "",
-            "disable interpretation of backslash escapes (default)",
-        )
-        .parse(args); */
 
     let no_newline = matches.is_present(options::NO_NEWLINE);
     let escaped = matches.is_present(options::ENABLE_BACKSLASH_ESCAPE);
     let values: Vec<String> =  match matches.values_of(options::STRING) {
         Some(s) => s.map(|s| s.to_string()).collect(),
->>>>>>> Stashed changes
         None => vec!["".to_string()],
     };
 

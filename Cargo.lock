@@ -1992,7 +1992,7 @@ dependencies = [
 name = "uu_nohup"
 version = "0.0.4"
 dependencies = [
- "getopts",
+ "clap",
  "libc",
  "uucore",
  "uucore_procs",

@@ -173,3 +173,11 @@ fn test_disable_escapes() {
         .succeeds()
         .stdout_only(format!("{}\n", input_str));
 }
+
+#[test]
+fn test_leading_hyphen() {
+    new_ucmd!()
+        .arg("-foo")
+        .succeeds()
+        .stdout_only("-foo\n");
+}
