@@ -140,9 +140,7 @@ fn unexpand_spaces_after_fields() {
 #[test]
 fn unexpand_read_from_file() {
     let (_, mut ucmd) = at_and_ucmd!();
-    let result = ucmd.arg("with_spaces.txt").arg("-t4").run();
-
-    assert!(result.success);
+    let result = ucmd.arg("with_spaces.txt").arg("-t4").run().success();
 }
 
 #[test]
@@ -152,7 +150,6 @@ fn unexpand_read_from_two_file() {
         .arg("with_spaces.txt")
         .arg("with_spaces.txt")
         .arg("-t4")
-        .run();
-
-    assert!(result.success);
+        .run()
+        .success();
 }
