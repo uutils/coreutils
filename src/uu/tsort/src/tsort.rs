@@ -15,7 +15,6 @@ use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
 
-static NAME: &str = "tsort";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static SUMMARY: &str = "Topological sort the strings in FILE. 
 Strings are defined as any sequence of tokens separated by whitespace (tab, space, or newline). 

@@ -18,9 +18,9 @@ fn test_sort_self_loop() {
 
 #[test]
 fn test_no_such_file() {
-    let result = new_ucmd!().pipe_in("invalid_file_txt").run();
+    let result = new_ucmd!().arg("invalid_file_txt").run();
 
-    assert_eq!(true, result.stdout.contains("No such file or directory"));
+    assert_eq!(true, result.stderr.contains("No such file or directory"));
 }
 
 #[test]
@@ -46,5 +46,5 @@ fn test_multiple_arguments() {
         .arg("invalid_file.txt")
         .run();
 
-    assert_eq!(true, result.stdout.contains("error: Found argument 'invalid_file.txt' which wasn't expected, or isn't valid in this context"))
+    assert_eq!(true, result.stderr.contains("error: Found argument 'invalid_file.txt' which wasn't expected, or isn't valid in this context"))
 }
