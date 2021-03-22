@@ -102,13 +102,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(options::ALL)
                 .short("a")
                 .long(options::ALL)
-                .long_help("convert all blanks, instead of just initial blanks")
+                .help("convert all blanks, instead of just initial blanks")
                 .takes_value(false),
         )
         .arg(
             Arg::with_name(options::FIRST_ONLY)
                 .long(options::FIRST_ONLY)
-                .long_help("convert only leading sequences of blanks (overrides -a)")
+                .help("convert only leading sequences of blanks (overrides -a)")
                 .takes_value(false),
         )
         .arg(
@@ -118,7 +118,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long_help("use comma separated LIST of tab positions or have tabs N characters apart instead of 8 (enables -a)")
                 .takes_value(true)
         )
-        .arg(Arg::with_name(options::NO_UTF8).short("U").long(options::NO_UTF8).takes_value(false).long_help("interpret input file as 8-bit ASCII rather than UTF-8"))
+        .arg(
+            Arg::with_name(options::NO_UTF8)
+                .short("U")
+                .long(options::NO_UTF8)
+                .takes_value(false)
+                .help("interpret input file as 8-bit ASCII rather than UTF-8"))
         .get_matches_from(args);
 
     unexpand(Options::new(matches));
