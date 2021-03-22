@@ -24,7 +24,7 @@ fn test_no_such_file() {
 }
 
 #[test]
-fn test_no_such_file() {
+fn test_version_flag() {
     let version_short = new_ucmd!().arg("-V").run();
     let version_long = new_ucmd!().arg("--version").run();
 
@@ -32,7 +32,7 @@ fn test_no_such_file() {
 }
 
 #[test]
-fn test_no_such_file() {
+fn test_help_flag() {
     let help_short = new_ucmd!().arg("-h").run();
     let help_long = new_ucmd!().arg("--help").run();
 
