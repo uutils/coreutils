@@ -97,7 +97,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .version(VERSION)
         .usage(USAGE)
         .about(SUMMARY)
-        .arg(Arg::with_name(options::FILE).hidden(true))
+        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
         .arg(
             Arg::with_name(options::ALL)
                 .short("a")
