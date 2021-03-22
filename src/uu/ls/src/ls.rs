@@ -396,6 +396,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::FORMAT,
                     options::format::COLUMNS,
                     options::format::LONG,
+                    options::format::ACROSS,
+                    options::format::COLUMNS,
                 ]),
         )
         .arg(
@@ -406,8 +408,33 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .overrides_with_all(&[
                     options::FORMAT,
                     options::format::COLUMNS,
-                    options::format::ONELINE,
                     options::format::LONG,
+                    options::format::ACROSS,
+                    options::format::COLUMNS,
+                ]),
+        )
+        .arg(
+            Arg::with_name(options::format::ACROSS)
+                .short(options::format::ACROSS)
+                .help("List entries in rows instead of in columns.")
+                .overrides_with_all(&[
+                    options::FORMAT,
+                    options::format::COLUMNS,
+                    options::format::LONG,
+                    options::format::ACROSS,
+                    options::format::COLUMNS,
+                ]),
+        )
+        .arg(
+            Arg::with_name(options::format::COMMAS)
+                .short(options::format::COMMAS)
+                .help("List entries separated by commas.")
+                .overrides_with_all(&[
+                    options::FORMAT,
+                    options::format::COLUMNS,
+                    options::format::LONG,
+                    options::format::ACROSS,
+                    options::format::COLUMNS,
                 ]),
         )
         // The next three arguments do not override with the other format
@@ -426,16 +453,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(options::format::LONG_NO_OWNER)
                 .short(options::format::LONG_NO_OWNER)
                 .help("Long format without owner information.")
-        )
-        .arg(
-            Arg::with_name(options::format::ACROSS)
-                .short(options::format::ACROSS)
-                .help("List entries in rows instead of in columns.")
-        )
-        .arg(
-            Arg::with_name(options::format::COMMAS)
-                .short(options::format::COMMAS)
-                .help("List entries separated by commas.")
         )
 
         // Time arguments
