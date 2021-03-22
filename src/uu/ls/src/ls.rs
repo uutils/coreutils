@@ -15,7 +15,6 @@ extern crate uucore;
 
 use clap::{App, Arg};
 use number_prefix::NumberPrefix;
-use std::cmp::Reverse;
 #[cfg(unix)]
 use std::collections::HashMap;
 use std::fs;
@@ -30,6 +29,7 @@ use std::path::{Path, PathBuf};
 #[cfg(unix)]
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::{cmp::Reverse, process::exit};
 
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use time::{strftime, Timespec};
@@ -100,6 +100,7 @@ pub mod options {
         pub static HUMAN_READABLE: &str = "human-readable";
         pub static SI: &str = "si";
     }
+    pub static WIDTH: &str = "width";
     pub static AUTHOR: &str = "author";
     pub static NO_GROUP: &str = "no-group";
     pub static FORMAT: &str = "format";
@@ -170,6 +171,7 @@ struct Config {
     #[cfg(unix)]
     color: bool,
     long: LongFormat,
+    width: Option<u16>,
 }
 
 // Fields that can be removed or added to the long format
@@ -326,6 +328,16 @@ impl Config {
             }
         };
 
+        let width = options
+            .value_of(options::WIDTH)
+            .map(|x| {
+                x.parse::<u16>().unwrap_or_else(|_e| {
+                    show_error!("invalid line width: ‘{}’", x);
+                    exit(2);
+                })
+            })
+            .or_else(|| termsize::get().map(|s| s.cols));
+
         Config {
             format,
             files,
@@ -344,6 +356,7 @@ impl Config {
             #[cfg(unix)]
             inode: options.is_present(options::INODE),
             long,
+            width,
         }
     }
 }
@@ -624,6 +637,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("List the contents of all directories recursively."),
         )
         .arg(
+            Arg::with_name(options::WIDTH)
+                .long(options::WIDTH)
+                .short("w")
+                .help("Assume that the terminal is COLS columns wide.")
+                .value_name("COLS")
+                .takes_value(true)
+        )
+        .arg(
             Arg::with_name(options::COLOR)
                 .long(options::COLOR)
                 .help("Color output based on file type.")
@@ -813,14 +834,11 @@ fn display_items(items: &[PathBuf], strip: Option<&Path>, config: &Config) {
             }
         });
 
-        match (&config.format, termsize::get()) {
-            (Format::Columns, Some(size)) => display_grid(names, size, Direction::TopToBottom),
-            (Format::Across, Some(size)) => display_grid(names, size, Direction::LeftToRight),
-            (Format::Commas, size_opt) => {
-                let cols = match size_opt {
-                    Some(size) => size.cols,
-                    None => 1,
-                };
+        match (&config.format, config.width) {
+            (Format::Columns, Some(width)) => display_grid(names, width, Direction::TopToBottom),
+            (Format::Across, Some(width)) => display_grid(names, width, Direction::LeftToRight),
+            (Format::Commas, width_opt) => {
+                let term_width = width_opt.unwrap_or(1);
                 let mut current_col = 0;
                 let mut names = names;
                 if let Some(name) = names.next() {
@@ -828,12 +846,12 @@ fn display_items(items: &[PathBuf], strip: Option<&Path>, config: &Config) {
                     current_col = name.width as u16 + 2;
                 }
                 for name in names {
-                    let width = name.width as u16;
-                    if current_col + width + 1 > cols {
-                        current_col = width + 2;
+                    let name_width = name.width as u16;
+                    if current_col + name_width + 1 > term_width {
+                        current_col = name_width + 2;
                         print!(",\n{}", name.contents);
                     } else {
-                        current_col += width + 2;
+                        current_col += name_width + 2;
                         print!(", {}", name.contents);
                     }
                 }
@@ -852,7 +870,7 @@ fn display_items(items: &[PathBuf], strip: Option<&Path>, config: &Config) {
     }
 }
 
-fn display_grid(names: impl Iterator<Item = Cell>, size: termsize::Size, direction: Direction) {
+fn display_grid(names: impl Iterator<Item = Cell>, width: u16, direction: Direction) {
     let mut grid = Grid::new(GridOptions {
         filling: Filling::Spaces(2),
         direction,
@@ -862,7 +880,7 @@ fn display_grid(names: impl Iterator<Item = Cell>, size: termsize::Size, directi
         grid.add(name);
     }
 
-    match grid.fit_into_width(size.cols as usize) {
+    match grid.fit_into_width(width as usize) {
         Some(output) => print!("{}", output),
         // Width is too small for the grid, so we fit it in one column
         None => print!("{}", grid.fit_into_columns(1)),
