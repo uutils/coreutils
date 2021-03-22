@@ -26,7 +26,7 @@ fn test_no_such_file() {
 #[test]
 fn test_no_such_file() {
     let version_short = new_ucmd!().arg("-V").run();
-    let version_long = new_ucmd!().arg("--versioon").run();
+    let version_long = new_ucmd!().arg("--version").run();
 
     assert_eq!(version_short.stdout, version_long.stdout);
 }
