@@ -9,10 +9,13 @@
 #[macro_use]
 extern crate uucore;
 
+use clap::{App, Arg};
 use std::io::{self, Write};
 use std::iter::Peekable;
 use std::str::Chars;
 
+static VERSION: &str = env!("CARGO_PKG_VERSION");
+const NAME: &str = "echo";
 const SYNTAX: &str = "[OPTIONS]... [STRING]...";
 const SUMMARY: &str = "display a line of text";
 const HELP: &str = r#"
@@ -32,6 +35,13 @@ const HELP: &str = r#"
  \\0NNN   byte with octal value NNN (1 to 3 digits)
  \\xHH    byte with hexadecimal value HH (1 to 2 digits)
 "#;
+
+mod options {
+    pub const STRING: &str = "string";
+    pub const NEWLINE: &str = "n";
+    pub const ENABLE_ESCAPE: &str = "e";
+    pub const DISABLE_ESCAPE: &str = "E";
+}
 
 fn parse_code(
     input: &mut Peekable<Chars>,
@@ -105,20 +115,38 @@ fn print_escaped(input: &str, mut output: impl Write) -> io::Result<bool> {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args.collect_str();
 
-    let matches = app!(SYNTAX, SUMMARY, HELP)
-        .optflag("n", "", "do not output the trailing newline")
-        .optflag("e", "", "enable interpretation of backslash escapes")
-        .optflag(
-            "E",
-            "",
-            "disable interpretation of backslash escapes (default)",
+    let matches = App::new(executable!())
+        .name(NAME)
+        .version(VERSION)
+        .usage(SYNTAX)
+        .about(SUMMARY)
+        .help(HELP)
+        .arg(Arg::with_name(options::STRING).hidden(true).multiple(true))
+        .arg(
+            Arg::with_name(options::NEWLINE)
+                .short("n")
+                .help("do not output the trailing newline"),
         )
-        .parse(args);
+        .arg(
+            Arg::with_name(options::ENABLE_ESCAPE)
+                .short("e")
+                .help("enable interpretation of backslash escapes"),
+        )
+        .arg(
+            Arg::with_name(options::DISABLE_ESCAPE)
+                .short("E")
+                .help("disable interpretation of backslash escapes (default)"),
+        )
+        .get_matches_from(args);
 
-    let no_newline = matches.opt_present("n");
-    let escaped = matches.opt_present("e");
+    let no_newline = matches.is_present("n");
+    let escaped = matches.is_present("e");
+    let values: Vec<String> = match matches.values_of(options::STRING) {
+        Some(v) => v.map(|v| v.to_string()).collect(),
+        None => vec!["".to_string()],
+    };
 
-    match execute(no_newline, escaped, matches.free) {
+    match execute(no_newline, escaped, values) {
         Ok(_) => 0,
         Err(f) => {
             show_error!("{}", f);
