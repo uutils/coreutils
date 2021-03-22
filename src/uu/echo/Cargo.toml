@@ -18,6 +18,7 @@ path = "src/echo.rs"
 clap = "2.33"
 uucore = { version=">=0.0.7", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
+clap = "2.33"
 
 [[bin]]
 name = "echo"
