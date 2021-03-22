@@ -1,4 +1,2 @@
-int foo() {
-    // with spaces
-    return 0;
-}
+ abc d e  f  g \t\t   A
+ 

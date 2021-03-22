@@ -139,14 +139,20 @@ fn unexpand_spaces_after_fields() {
 
 #[test]
 fn unexpand_read_from_file() {
-    let result = new_ucmd!()
-        .arg("with-spaces.txt")
-        .arg("-a")
+    let (_, mut ucmd) = at_and_ucmd!();
+    let result = ucmd.arg("with_spaces.txt").arg("-t4").run();
+
+    assert!(result.success);
+}
+
+#[test]
+fn unexpand_read_from_two_file() {
+    let (_, mut ucmd) = at_and_ucmd!();
+    let result = ucmd
+        .arg("with_spaces.txt")
+        .arg("with_spaces.txt")
         .arg("-t4")
         .run();
 
     assert!(result.success);
-    assert!(result
-        .stdout
-        .contains("int foo() {\n\t// with spaces\t\nreturn 0;\n}"));
 }
