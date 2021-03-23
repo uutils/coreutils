@@ -584,7 +584,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .value_name("REGEXP")
                 .takes_value(true),
         )
-        // opts.optflag("T", "format=tex", "generate output as TeX directives");
         .arg(
             Arg::with_name(options::FORMAT_TEX)
                 .short("T")
