@@ -173,3 +173,25 @@ fn test_disable_escapes() {
         .succeeds()
         .stdout_only(format!("{}\n", input_str));
 }
+
+#[test]
+fn test_hyphen_value() {
+    new_ucmd!().arg("-abc").succeeds().stdout_is("-abc\n");
+}
+
+#[test]
+fn test_multiple_hyphen_values() {
+    new_ucmd!()
+        .args(&["-abc", "-def", "-edf"])
+        .succeeds()
+        .stdout_is("-abc -def -edf\n");
+}
+
+#[test]
+fn test_hyphen_values_inside_string() {
+    new_ucmd!()
+        .arg("'\"\n'CXXFLAGS=-g -O2'\n\"'")
+        .succeeds()
+        .stdout
+        .contains("CXXFLAGS");
+}
