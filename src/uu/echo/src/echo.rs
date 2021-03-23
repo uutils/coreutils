@@ -117,6 +117,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let matches = App::new(executable!())
         .name(NAME)
+        // TrailingVarArg specifies the final positional argument is a VarArg
+        // and it doesn't attempts the parse any further args.
+        // Final argument must have multiple(true) or the usage string equivalent.
+        .setting(clap::AppSettings::TrailingVarArg)
+        .setting(clap::AppSettings::AllowLeadingHyphen)
         .version(VERSION)
         .usage(SYNTAX)
         .about(SUMMARY)
