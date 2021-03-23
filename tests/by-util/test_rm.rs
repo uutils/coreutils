@@ -194,7 +194,10 @@ fn test_rm_dir_symlink() {
     at.mkdir(dir);
     at.symlink_dir(dir, link);
 
+    #[cfg(not(windows))]
     ucmd.arg(link).succeeds();
+    #[cfg(windows)]
+    ucmd.arg("-r").arg(link).succeeds();
 }
 
 #[test]

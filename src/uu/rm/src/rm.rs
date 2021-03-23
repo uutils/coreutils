@@ -306,21 +306,30 @@ fn remove_dir(path: &Path, options: &Options) -> bool {
     };
     if response {
         if let Ok(mut read_dir) = fs::read_dir(path) {
-            if options.dir && read_dir.next().is_none() {
-                match fs::remove_dir(path) {
-                    Ok(_) => {
-                        if options.verbose {
-                            println!("removed directory '{}'", path.display());
+            if options.dir || options.recursive {
+                if read_dir.next().is_none() {
+                    match fs::remove_dir(path) {
+                        Ok(_) => {
+                            if options.verbose {
+                                println!("removed directory '{}'", path.display());
+                            }
+                        }
+                        Err(e) => {
+                            show_error!("cannot remove '{}': {}", path.display(), e);
+                            return true;
                         }
                     }
-                    Err(e) => {
-                        show_error!("cannot remove '{}': {}", path.display(), e);
-                        return true;
-                    }
+                } else {
+                    // directory can be read but is not empty
+                    show_error!("cannot remove '{}': Directory not empty", path.display());
+                    return true;
                 }
             } else {
-                // directory can be read but is not empty
-                show_error!("cannot remove '{}': Directory not empty", path.display());
+                // called to remove a symlink_dir (windows) without "-r"/"-R" or "-d"
+                show_error!(
+                    "could not remove directory '{}' (did you mean to pass '-r' or '-R'?)",
+                    path.display()
+                );
                 return true;
             }
         } else {
