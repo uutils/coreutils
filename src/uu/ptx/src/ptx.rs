@@ -25,8 +25,7 @@ static BRIEF: &str = "Usage: ptx [OPTION]... [INPUT]...   (without -G) or: \
                  including context, of the words in the input files. \n\n Mandatory \
                  arguments to long options are mandatory for short options too.\n
                  With no FILE, or when FILE is -, read standard input. \
-                        Default is '-F /'.";
-static EXPLANATION: &str = "";
+                Default is '-F /'.";
 
 #[derive(Debug)]
 enum OutFormat {
@@ -196,7 +195,7 @@ fn get_config(matches: &clap::ArgMatches) -> Config {
     config
 }
 
-fn read_input(input_files: &Vec<String>, config: &Config) -> HashMap<String, (Vec<String>, usize)> {
+fn read_input(input_files: &[String], config: &Config) -> HashMap<String, (Vec<String>, usize)> {
     let mut file_map: HashMap<String, (Vec<String>, usize)> = HashMap::new();
     let mut files = Vec::new();
     if input_files.is_empty() {
