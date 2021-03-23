@@ -230,16 +230,16 @@ fn check_default(path: &[String]) -> bool {
 
 // check whether a path is or if other problems arise
 fn check_searchable(path: &str) -> bool {
-    // we use lstat, just like the original implementation
+    // we use lstat and reject the empty file name
+    // just like the original implementation
     match fs::symlink_metadata(path) {
         Ok(_) => true,
         Err(e) => {
-            if e.kind() == ErrorKind::NotFound {
-                true
-            } else {
+            if e.kind() != ErrorKind::NotFound || path.len() == 0 {
                 writeln!(&mut std::io::stderr(), "{}", e);
-                false
-            }
+                return false
+            };
+            true
         }
     }
 }
