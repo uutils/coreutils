@@ -195,3 +195,36 @@ fn test_hyphen_values_inside_string() {
         .stdout
         .contains("CXXFLAGS");
 }
+
+#[test]
+fn test_hyphen_values_at_start() {
+    let result = new_ucmd!()
+        .arg("-E")
+        .arg("-test")
+        .arg("araba")
+        .arg("-merci")
+        .run();
+
+    assert!(result.success);
+    assert_eq!(false, result.stdout.contains("-E"));
+    assert_eq!(result.stdout, "-test araba -merci\n");
+}
+
+#[test]
+fn test_hyphen_values_between() {
+    let result = new_ucmd!().arg("test").arg("-E").arg("araba").run();
+
+    assert!(result.success);
+    assert_eq!(result.stdout, "test -E araba\n");
+
+    let result = new_ucmd!()
+        .arg("dumdum ")
+        .arg("dum dum dum")
+        .arg("-e")
+        .arg("dum")
+        .run();
+
+    assert!(result.success);
+    assert_eq!(result.stdout, "dumdum  dum dum dum -e dum\n");
+    assert_eq!(true, result.stdout.contains("-e"));
+}
