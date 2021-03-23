@@ -9,17 +9,17 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::io::{self, Write};
 use std::iter::Peekable;
 use std::str::Chars;
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
-const NAME: &str = "echo";
-const SYNTAX: &str = "[OPTIONS]... [STRING]...";
-const SUMMARY: &str = "display a line of text";
-const HELP: &str = r#"
+static NAME: &str = "echo";
+static USAGE: &str = "[OPTIONS]... [STRING]...";
+static SUMMARY: &str = "display a line of text";
+static AFTER_HELP: &str = r#"
  Echo the STRING(s) to standard output.
+
  If -e is in effect, the following sequences are recognized:
 
  \\\\      backslash
@@ -37,10 +37,10 @@ const HELP: &str = r#"
 "#;
 
 mod options {
-    pub const STRING: &str = "string";
-    pub const NEWLINE: &str = "n";
-    pub const ENABLE_ESCAPE: &str = "e";
-    pub const DISABLE_ESCAPE: &str = "E";
+    pub static STRING: &str = "STRING";
+    pub static NO_NEWLINE: &str = "no_newline";
+    pub static ENABLE_BACKSLASH_ESCAPE: &str = "enable_backslash_escape";
+    pub static DISABLE_BACKSLASH_ESCAPE: &str = "disable_backslash_escape";
 }
 
 fn parse_code(
@@ -122,32 +122,43 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         // Final argument must have multiple(true) or the usage string equivalent.
         .setting(clap::AppSettings::TrailingVarArg)
         .setting(clap::AppSettings::AllowLeadingHyphen)
-        .version(VERSION)
-        .usage(SYNTAX)
+        .version(crate_version!())
+        .usage(USAGE)
         .about(SUMMARY)
-        .help(HELP)
-        .arg(Arg::with_name(options::STRING).hidden(true).multiple(true))
+        .after_help(AFTER_HELP)
         .arg(
-            Arg::with_name(options::NEWLINE)
+            Arg::with_name(options::NO_NEWLINE)
                 .short("n")
-                .help("do not output the trailing newline"),
+                .help("do not output the trailing newline")
+                .takes_value(false)
+                .display_order(1),
         )
         .arg(
-            Arg::with_name(options::ENABLE_ESCAPE)
+            Arg::with_name(options::ENABLE_BACKSLASH_ESCAPE)
                 .short("e")
-                .help("enable interpretation of backslash escapes"),
+                .help("enable interpretation of backslash escapes")
+                .takes_value(false)
+                .display_order(2),
         )
         .arg(
-            Arg::with_name(options::DISABLE_ESCAPE)
+            Arg::with_name(options::DISABLE_BACKSLASH_ESCAPE)
                 .short("E")
-                .help("disable interpretation of backslash escapes (default)"),
+                .help("disable interpretation of backslash escapes (default)")
+                .takes_value(false)
+                .display_order(3),
+        )
+        .arg(
+            Arg::with_name(options::STRING)
+                .hidden(true)
+                .multiple(true)
+                .allow_hyphen_values(true),
         )
         .get_matches_from(args);
 
-    let no_newline = matches.is_present("n");
-    let escaped = matches.is_present("e");
+    let no_newline = matches.is_present(options::NO_NEWLINE);
+    let escaped = matches.is_present(options::ENABLE_BACKSLASH_ESCAPE);
     let values: Vec<String> = match matches.values_of(options::STRING) {
-        Some(v) => v.map(|v| v.to_string()).collect(),
+        Some(s) => s.map(|s| s.to_string()).collect(),
         None => vec!["".to_string()],
     };
 
