@@ -117,6 +117,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let matches = App::new(executable!())
         .name(NAME)
+        .setting(clap::AppSettings::TrailingVarArg)
+        .setting(clap::AppSettings::AllowLeadingHyphen)
         .version(VERSION)
         .usage(SYNTAX)
         .about(SUMMARY)
