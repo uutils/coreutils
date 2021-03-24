@@ -17,7 +17,6 @@ use clap::{App, Arg};
 use number_prefix::NumberPrefix;
 #[cfg(unix)]
 use std::collections::HashMap;
-use std::fs;
 use std::fs::{DirEntry, FileType, Metadata};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
@@ -29,6 +28,7 @@ use std::path::{Path, PathBuf};
 #[cfg(unix)]
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::{cmp::Ordering, fs};
 use std::{cmp::Reverse, process::exit};
 
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
@@ -91,6 +91,7 @@ pub mod options {
         pub static SIZE: &str = "S";
         pub static TIME: &str = "t";
         pub static NONE: &str = "U";
+        pub static VERSION: &str = "v";
     }
     pub mod time {
         pub static ACCESS: &str = "u";
@@ -132,6 +133,7 @@ enum Sort {
     Name,
     Size,
     Time,
+    Version,
 }
 
 enum SizeFormat {
@@ -270,6 +272,7 @@ impl Config {
                 "name" => Sort::Name,
                 "time" => Sort::Time,
                 "size" => Sort::Size,
+                "version" => Sort::Version,
                 // below should never happen as clap already restricts the values.
                 _ => unreachable!("Invalid field for --sort"),
             }
@@ -279,6 +282,8 @@ impl Config {
             Sort::Size
         } else if options.is_present(options::sort::NONE) {
             Sort::None
+        } else if options.is_present(options::sort::VERSION) {
+            Sort::Version
         } else {
             Sort::Name
         };
@@ -507,13 +512,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("Sort by <field>: name, none (-U), time (-t) or size (-S)")
                 .value_name("field")
                 .takes_value(true)
-                .possible_values(&["name", "none", "time", "size"])
+                .possible_values(&["name", "none", "time", "size", "version"])
                 .require_equals(true)
                 .overrides_with_all(&[
                     options::SORT,
                     options::sort::SIZE,
                     options::sort::TIME,
                     options::sort::NONE,
+                    options::sort::VERSION,
                 ])
         )
         .arg(
@@ -525,6 +531,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::sort::SIZE,
                     options::sort::TIME,
                     options::sort::NONE,
+                    options::sort::VERSION,
                 ])
         )
         .arg(
@@ -536,6 +543,19 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::sort::SIZE,
                     options::sort::TIME,
                     options::sort::NONE,
+                    options::sort::VERSION,
+                ])
+        )
+        .arg(
+            Arg::with_name(options::sort::VERSION)
+                .short(options::sort::VERSION)
+                .help("Natural sort of (version) numbers in the filenames.")
+                .overrides_with_all(&[
+                    options::SORT,
+                    options::sort::SIZE,
+                    options::sort::TIME,
+                    options::sort::NONE,
+                    options::sort::VERSION,
                 ])
         )
         .arg(
@@ -549,6 +569,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::sort::SIZE,
                     options::sort::TIME,
                     options::sort::NONE,
+                    options::sort::VERSION,
                 ])
         )
 
@@ -733,6 +754,51 @@ fn list(locs: Vec<String>, config: Config) -> i32 {
     }
 }
 
+/// Compare pathbufs in a way that matches the GNU version sort, meaning that numbers
+/// get sorted in a natural way.
+fn version_cmp(a: &PathBuf, b: &PathBuf) -> Ordering {
+    // TODO: handle invalid UTF-8
+    let mut a = a.to_str().unwrap().chars().peekable();
+    let mut b = b.to_str().unwrap().chars().peekable();
+
+    loop {
+        match (a.next(), b.next()) {
+            // If the characters are both numerical. We collect the rest of the number
+            // and parse them to u64's and compare them.
+            (Some(a_char @ '0'..='9'), Some(b_char @ '0'..='9')) => {
+                let mut a_str = String::from(a_char);
+                let mut b_str = String::from(b_char);
+
+                // Unwrapping here is fine because we only call next if peek returns
+                // Some(_), so next should also return Some(_).
+                while let Some('0'..='9') = a.peek() {
+                    a_str.push(a.next().unwrap());
+                }
+
+                while let Some('0'..='9') = b.peek() {
+                    b_str.push(b.next().unwrap());
+                }
+
+                // Unwrapping here is fine because we build the string from characters
+                // in the range '0'..='9'.
+                let a_int: u64 = a_str.parse().unwrap();
+                let b_int: u64 = b_str.parse().unwrap();
+                match a_int.cmp(&b_int) {
+                    Ordering::Equal => {}
+                    x => return x,
+                }
+            }
+            // If there are two characters we just compare the characters
+            (Some(a_char), Some(b_char)) => match a_char.cmp(&b_char) {
+                Ordering::Equal => {}
+                x => return x,
+            },
+            // Otherise, we compare the options (because None < Some(_))
+            (a_opt, b_opt) => return a_opt.cmp(&b_opt),
+        }
+    }
+}
+
 fn sort_entries(entries: &mut Vec<PathBuf>, config: &Config) {
     match config.sort {
         Sort::Time => entries.sort_by_key(|k| {
@@ -747,6 +813,7 @@ fn sort_entries(entries: &mut Vec<PathBuf>, config: &Config) {
             .sort_by_key(|k| Reverse(get_metadata(k, config).map(|md| md.len()).unwrap_or(0))),
         // The default sort in GNU ls is case insensitive
         Sort::Name => entries.sort_by_key(|k| k.to_string_lossy().to_lowercase()),
+        Sort::Version => entries.sort_by(version_cmp),
         Sort::None => {}
     }
 

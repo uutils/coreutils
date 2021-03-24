@@ -526,7 +526,6 @@ fn test_ls_order_time() {
         at.metadata("test-2").permissions(),
     )
     .unwrap();
-    let second_access = at.open("test-2").metadata().unwrap().accessed().unwrap();
 
     let result = scene.ucmd().arg("-al").run();
     println!("stderr = {:?}", result.stderr);
@@ -869,4 +868,51 @@ fn test_ls_hidden_windows() {
     println!("stdout = {:?}", result.stdout);
     assert!(result.success);
     assert!(result.stdout.contains(file));
+}
+
+#[test]
+fn test_ls_version_sort() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    for filename in &[
+        "a2", "b1", "b20", "a1.4", "a1.40", "b3", "b11", "b20b", "b20a", "a100", "a1.13", "aa",
+        "a1", "aaa", "abab", "ab",
+    ] {
+        at.touch(filename);
+    }
+
+    let result = scene.ucmd().arg("-1v").run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+
+    assert_eq!(
+        result.stdout.split('\n').collect::<Vec<_>>(),
+        vec![
+            "a1", "a1.4", "a1.13", "a1.40", "a2", "a100", "aa", "aaa", "ab", "abab", "b1", "b3",
+            "b11", "b20", "b20a", "b20b", "",
+        ]
+    );
+
+    let result = scene.ucmd().arg("-1").arg("--sort=version").run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+
+    assert_eq!(
+        result.stdout.split('\n').collect::<Vec<_>>(),
+        vec![
+            "a1", "a1.4", "a1.13", "a1.40", "a2", "a100", "aa", "aaa", "ab", "abab", "b1", "b3",
+            "b11", "b20", "b20a", "b20b", "",
+        ]
+    );
+
+    let result = scene.ucmd().arg("-a1v").run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+    assert_eq!(
+        result.stdout.split('\n').collect::<Vec<_>>(),
+        vec![
+            ".", "..", "a1", "a1.4", "a1.13", "a1.40", "a2", "a100", "aa", "aaa", "ab", "abab",
+            "b1", "b3", "b11", "b20", "b20a", "b20b", "",
+        ]
+    )
 }
