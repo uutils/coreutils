@@ -369,24 +369,24 @@ fn wc(files: Vec<String>, settings: &Settings) -> Result<(), u32> {
     }
 
     for result in &results {
-        print_stats_or_warning(settings, &result, max_width);
+        if let Err(err) = print_stats(settings, &result, max_width) {
+            show_warning!("failed to print result for {}: {}", result.title, err);
+            error_count += 1;
+        }
     }
 
     if num_files > 1 {
         let total_result = total_word_count.with_title("total");
-        print_stats_or_warning(settings, &total_result, max_width);
+        if let Err(err) = print_stats(settings, &total_result, max_width) {
+            show_warning!("failed to print total: {}", err);
+            error_count += 1;
+        }
     }
 
     if error_count == 0 {
         Ok(())
     } else {
         Err(error_count)
-    }
-}
-
-fn print_stats_or_warning(settings: &Settings, result: &TitledWordCount, min_width: usize) {
-    if let Err(err) = print_stats(settings, result, min_width) {
-        show_warning!("failed to print stats: {}", err);
     }
 }
 
