@@ -38,8 +38,8 @@ fn count_bytes_using_splice(fd: RawFd) -> nix::Result<usize> {
         if res == 0 {
             break;
         }
-        let res = splice(pipe_rd, None, null, None, BUF_SIZE, SpliceFFlags::empty())?;
         byte_count += res;
+        splice(pipe_rd, None, null, None, res, SpliceFFlags::empty())?;
     }
 
     Ok(byte_count)
