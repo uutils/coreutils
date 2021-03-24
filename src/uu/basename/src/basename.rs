@@ -20,7 +20,7 @@ static LONG_HELP: &str = "";
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args.collect_str();
-
+    let args = args.into_iter().filter(|s| !s.is_empty()).collect();
     //
     // Argument parsing
     //
