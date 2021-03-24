@@ -16,8 +16,6 @@ use clap::{App, Arg};
 use std::fs;
 use std::io::{ErrorKind, Write};
 
-mod options;
-
 // operating mode
 enum Mode {
     Default, // use filesystem to determine information and limits
@@ -29,6 +27,13 @@ enum Mode {
 static NAME: &str = "pathchk";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Check whether file names are valid or portable";
+
+mod options {
+    pub const POSIX: &str = "posix";
+    pub const POSIX_SPECIAL: &str = "posix-special";
+    pub const PORTABILITY: &str = "portability";
+    pub const PATH: &str = "path";    
+}
 
 // a few global constants as used in the GNU implementation
 const POSIX_PATH_MAX: usize = 256;
