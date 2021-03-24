@@ -301,7 +301,7 @@ Utilities
 | csplit    | date      |        |
 | cut       | join      |        |
 | dircolors | df        |        |
-| dirname   |           |        |
+| dirname   | tac       |        |
 | du        |           |        |
 | echo      |           |        |
 | env       |           |        |
@@ -354,7 +354,6 @@ Utilities
 | stdbuf    |           |        |
 | sum       |           |        |
 | sync      |           |        |
-| tac       |           |        |
 | tee       |           |        |
 | timeout   |           |        |
 | touch     |           |        |
