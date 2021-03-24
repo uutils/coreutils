@@ -875,44 +875,75 @@ fn test_ls_version_sort() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     for filename in &[
-        "a2", "b1", "b20", "a1.4", "a1.40", "b3", "b11", "b20b", "b20a", "a100", "a1.13", "aa",
-        "a1", "aaa", "abab", "ab",
+        "a2",
+        "b1",
+        "b20",
+        "a1.4",
+        "a1.40",
+        "b3",
+        "b11",
+        "b20b",
+        "b20a",
+        "a100",
+        "a1.13",
+        "aa",
+        "a1",
+        "aaa",
+        "a1.00000040",
+        "abab",
+        "ab",
+        "a01.40",
+        "a001.001",
+        "a01.0000001",
+        "a01.001",
+        "a001.01",
     ] {
         at.touch(filename);
     }
+
+    let mut expected = vec![
+        "a1",
+        "a001.001",
+        "a001.01",
+        "a01.0000001",
+        "a01.001",
+        "a1.4",
+        "a1.13",
+        "a01.40",
+        "a1.00000040",
+        "a1.40",
+        "a2",
+        "a100",
+        "aa",
+        "aaa",
+        "ab",
+        "abab",
+        "b1",
+        "b3",
+        "b11",
+        "b20",
+        "b20a",
+        "b20b",
+        "", // because of '\n' at the end of the output
+    ];
 
     let result = scene.ucmd().arg("-1v").run();
     println!("stderr = {:?}", result.stderr);
     println!("stdout = {:?}", result.stdout);
 
-    assert_eq!(
-        result.stdout.split('\n').collect::<Vec<_>>(),
-        vec![
-            "a1", "a1.4", "a1.13", "a1.40", "a2", "a100", "aa", "aaa", "ab", "abab", "b1", "b3",
-            "b11", "b20", "b20a", "b20b", "",
-        ]
-    );
+    assert_eq!(result.stdout.split('\n').collect::<Vec<_>>(), expected);
 
     let result = scene.ucmd().arg("-1").arg("--sort=version").run();
     println!("stderr = {:?}", result.stderr);
     println!("stdout = {:?}", result.stdout);
 
-    assert_eq!(
-        result.stdout.split('\n').collect::<Vec<_>>(),
-        vec![
-            "a1", "a1.4", "a1.13", "a1.40", "a2", "a100", "aa", "aaa", "ab", "abab", "b1", "b3",
-            "b11", "b20", "b20a", "b20b", "",
-        ]
-    );
+    assert_eq!(result.stdout.split('\n').collect::<Vec<_>>(), expected);
 
     let result = scene.ucmd().arg("-a1v").run();
     println!("stderr = {:?}", result.stderr);
     println!("stdout = {:?}", result.stdout);
-    assert_eq!(
-        result.stdout.split('\n').collect::<Vec<_>>(),
-        vec![
-            ".", "..", "a1", "a1.4", "a1.13", "a1.40", "a2", "a100", "aa", "aaa", "ab", "abab",
-            "b1", "b3", "b11", "b20", "b20a", "b20b", "",
-        ]
-    )
+
+    expected.insert(0, "..");
+    expected.insert(0, ".");
+    assert_eq!(result.stdout.split('\n').collect::<Vec<_>>(), expected,)
 }

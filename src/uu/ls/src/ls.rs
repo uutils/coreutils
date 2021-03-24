@@ -761,6 +761,9 @@ fn version_cmp(a: &PathBuf, b: &PathBuf) -> Ordering {
     let mut a = a.to_str().unwrap().chars().peekable();
     let mut b = b.to_str().unwrap().chars().peekable();
 
+    let mut a_leading_zeroes = Vec::new();
+    let mut b_leading_zeroes = Vec::new();
+
     loop {
         match (a.next(), b.next()) {
             // If the characters are both numerical. We collect the rest of the number
@@ -768,6 +771,28 @@ fn version_cmp(a: &PathBuf, b: &PathBuf) -> Ordering {
             (Some(a_char @ '0'..='9'), Some(b_char @ '0'..='9')) => {
                 let mut a_str = String::from(a_char);
                 let mut b_str = String::from(b_char);
+
+                a_leading_zeroes.push(if a_char == '0' {
+                    let mut leading_zeroes = 1;
+                    while let Some('0') = a.peek() {
+                        leading_zeroes += 1;
+                        a.next();
+                    }
+                    leading_zeroes
+                } else {
+                    0
+                });
+
+                b_leading_zeroes.push(if b_char == '0' {
+                    let mut leading_zeroes = 1;
+                    while let Some('0') = b.peek() {
+                        leading_zeroes += 1;
+                        b.next();
+                    }
+                    leading_zeroes
+                } else {
+                    0
+                });
 
                 // Unwrapping here is fine because we only call next if peek returns
                 // Some(_), so next should also return Some(_).
@@ -794,7 +819,10 @@ fn version_cmp(a: &PathBuf, b: &PathBuf) -> Ordering {
                 x => return x,
             },
             // Otherise, we compare the options (because None < Some(_))
-            (a_opt, b_opt) => return a_opt.cmp(&b_opt),
+            (a_opt, b_opt) => match a_opt.cmp(&b_opt) {
+                Ordering::Equal => return b_leading_zeroes.cmp(&a_leading_zeroes),
+                x => return x,
+            },
         }
     }
 }
