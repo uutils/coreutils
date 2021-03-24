@@ -90,7 +90,7 @@ dependencies = [
  "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "memchr 2.3.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "regex-automata 0.1.9 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde 1.0.124 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde 1.0.125 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -295,7 +295,7 @@ dependencies = [
  "uu_whoami 0.0.4",
  "uu_yes 0.0.4",
  "uucore 0.0.7",
- "walkdir 2.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "walkdir 2.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "winapi-util 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -401,12 +401,12 @@ dependencies = [
  "plotters 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rayon 1.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "regex 1.4.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde 1.0.124 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde 1.0.125 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_cbor 0.11.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde_derive 1.0.124 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde_derive 1.0.125 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_json 1.0.64 (registry+https://github.com/rust-lang/crates.io-index)",
  "tinytemplate 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "walkdir 2.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "walkdir 2.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -468,7 +468,7 @@ dependencies = [
  "csv-core 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "itoa 0.4.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "ryu 1.0.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde 1.0.124 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde 1.0.125 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -1100,7 +1100,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "serde"
-version = "1.0.124"
+version = "1.0.125"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
@@ -1109,12 +1109,12 @@ version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "half 1.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde 1.0.124 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde 1.0.125 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.124"
+version = "1.0.125"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "proc-macro2 1.0.24 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1129,7 +1129,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "itoa 0.4.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "ryu 1.0.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde 1.0.124 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde 1.0.125 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -1286,7 +1286,7 @@ name = "tinytemplate"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "serde 1.0.124 (registry+https://github.com/rust-lang/crates.io-index)",
+ "serde 1.0.125 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_json 1.0.64 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -1382,7 +1382,7 @@ version = "0.0.4"
 dependencies = [
  "uucore 0.0.7",
  "uucore_procs 0.0.5",
- "walkdir 2.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "walkdir 2.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -1392,7 +1392,7 @@ dependencies = [
  "libc 0.2.85 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.7",
  "uucore_procs 0.0.5",
- "walkdir 2.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "walkdir 2.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -1403,7 +1403,7 @@ dependencies = [
  "glob 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.7",
  "uucore_procs 0.0.5",
- "walkdir 2.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "walkdir 2.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -1445,7 +1445,7 @@ dependencies = [
  "quick-error 1.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.7",
  "uucore_procs 0.0.5",
- "walkdir 2.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "walkdir 2.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "winapi 0.3.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "xattr 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -1525,6 +1525,7 @@ dependencies = [
 name = "uu_echo"
 version = "0.0.4"
 dependencies = [
+ "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.7",
  "uucore_procs 0.0.5",
 ]
@@ -1835,7 +1836,7 @@ dependencies = [
 name = "uu_nohup"
 version = "0.0.4"
 dependencies = [
- "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
+ "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.85 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.7",
  "uucore_procs 0.0.5",
@@ -1977,7 +1978,7 @@ dependencies = [
  "remove_dir_all 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.7",
  "uucore_procs 0.0.5",
- "walkdir 2.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "walkdir 2.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -2196,7 +2197,7 @@ dependencies = [
 name = "uu_tsort"
 version = "0.0.4"
 dependencies = [
- "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
+ "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.7",
  "uucore_procs 0.0.5",
 ]
@@ -2225,7 +2226,7 @@ dependencies = [
 name = "uu_unexpand"
 version = "0.0.4"
 dependencies = [
- "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
+ "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "unicode-width 0.1.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "uucore 0.0.7",
  "uucore_procs 0.0.5",
@@ -2344,7 +2345,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "walkdir"
-version = "2.3.1"
+version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "same-file 1.0.5 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2595,9 +2596,9 @@ dependencies = [
 "checksum scopeguard 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "d29ab0c6d3fc0ee92fe66e2d99f700eab17a8d57d1c1d3b748380fb20baa78cd"
 "checksum semver 0.9.0 (registry+https://github.com/rust-lang/crates.io-index)" = "1d7eb9ef2c18661902cc47e535f9bc51b78acd254da71d375c2f6720d9a40403"
 "checksum semver-parser 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)" = "388a1df253eca08550bef6c72392cfe7c30914bf41df5269b68cbd6ff8f570a3"
-"checksum serde 1.0.124 (registry+https://github.com/rust-lang/crates.io-index)" = "bd761ff957cb2a45fbb9ab3da6512de9de55872866160b23c25f1a841e99d29f"
+"checksum serde 1.0.125 (registry+https://github.com/rust-lang/crates.io-index)" = "558dc50e1a5a5fa7112ca2ce4effcb321b0300c0d4ccf0776a9f60cd89031171"
 "checksum serde_cbor 0.11.1 (registry+https://github.com/rust-lang/crates.io-index)" = "1e18acfa2f90e8b735b2836ab8d538de304cbb6729a7360729ea5a895d15a622"
-"checksum serde_derive 1.0.124 (registry+https://github.com/rust-lang/crates.io-index)" = "1800f7693e94e186f5e25a28291ae1570da908aff7d97a095dec1e56ff99069b"
+"checksum serde_derive 1.0.125 (registry+https://github.com/rust-lang/crates.io-index)" = "b093b7a2bb58203b5da3056c05b4ec1fed827dcfdb37347a8841695263b3d06d"
 "checksum serde_json 1.0.64 (registry+https://github.com/rust-lang/crates.io-index)" = "799e97dc9fdae36a5c8b8f2cae9ce2ee9fdce2058c57a93e6099d919fd982f79"
 "checksum sha1 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)" = "2579985fda508104f7587689507983eadd6a6e84dd35d6d115361f530916fa0d"
 "checksum sha2 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)" = "7d963c78ce367df26d7ea8b8cc655c651b42e8a1e584e869c1e17dae3ccb116a"
@@ -2625,7 +2626,7 @@ dependencies = [
 "checksum users 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)" = "aa4227e95324a443c9fcb06e03d4d85e91aabe9a5a02aa818688b6918b6af486"
 "checksum vec_map 0.8.2 (registry+https://github.com/rust-lang/crates.io-index)" = "f1bddf1187be692e79c5ffeab891132dfb0f236ed36a43c7ed39f1165ee20191"
 "checksum void 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)" = "6a02e4885ed3bc0f2de90ea6dd45ebcbb66dacffe03547fadbb0eeae2770887d"
-"checksum walkdir 2.3.1 (registry+https://github.com/rust-lang/crates.io-index)" = "777182bc735b6424e1a57516d35ed72cb8019d85c8c9bf536dccb3445c1a2f7d"
+"checksum walkdir 2.3.2 (registry+https://github.com/rust-lang/crates.io-index)" = "808cf2735cd4b6866113f648b791c6adc5714537bc222d9347bb203386ffda56"
 "checksum wasi 0.9.0+wasi-snapshot-preview1 (registry+https://github.com/rust-lang/crates.io-index)" = "cccddf32554fecc6acb585f82a32a72e28b48f8c4c1883ddfeeeaa96f7d8e519"
 "checksum wasm-bindgen 0.2.72 (registry+https://github.com/rust-lang/crates.io-index)" = "8fe8f61dba8e5d645a4d8132dc7a0a66861ed5e1045d2c0ed940fab33bac0fbe"
 "checksum wasm-bindgen-backend 0.2.72 (registry+https://github.com/rust-lang/crates.io-index)" = "046ceba58ff062da072c7cb4ba5b22a37f00a302483f7e2a6cdc18fedbdc1fd3"
