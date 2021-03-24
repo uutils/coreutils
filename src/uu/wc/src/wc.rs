@@ -18,7 +18,7 @@ use thiserror::Error;
 
 use std::cmp::max;
 use std::fs::File;
-use std::io::{self, stdin, BufRead, BufReader, Read, Stdin};
+use std::io::{self, BufRead, BufReader, Read, StdinLock};
 use std::ops::{Add, AddAssign};
 #[cfg(unix)]
 use std::os::unix::io::AsRawFd;
@@ -27,7 +27,7 @@ use std::str::from_utf8;
 
 #[derive(Error, Debug)]
 pub enum WcError {
-    #[error("IO error")]
+    #[error("{0}")]
     Io(#[from] io::Error),
     #[error("Expected a file, found directory {0}")]
     IsDirectory(String),
@@ -73,11 +73,30 @@ impl Settings {
 }
 
 #[cfg(unix)]
-trait WordCountable: Read + AsRawFd {}
+trait WordCountable: AsRawFd + Read {
+    type Buffered: BufRead;
+    fn get_buffered(self) -> Self::Buffered;
+}
 #[cfg(not(unix))]
-trait WordCountable: Read {}
-impl WordCountable for Stdin {}
-impl WordCountable for File {}
+trait WordCountable: Read {
+    type Buffered: BufRead;
+    fn get_buffered(self) -> Self::Buffered;
+}
+
+impl WordCountable for StdinLock<'_> {
+    type Buffered = Self;
+
+    fn get_buffered(self) -> Self::Buffered {
+        return self;
+    }
+}
+impl WordCountable for File {
+    type Buffered = BufReader<Self>;
+
+    fn get_buffered(self) -> Self::Buffered {
+        return BufReader::new(self);
+    }
+}
 
 #[derive(Debug, Default, Copy, Clone)]
 struct WordCount {
@@ -220,7 +239,7 @@ fn is_word_separator(byte: u8) -> bool {
 }
 
 fn word_count_from_reader<T: WordCountable>(
-    reader: &mut T,
+    mut reader: T,
     settings: &Settings,
     path: &String,
 ) -> WcResult<WordCount> {
@@ -231,7 +250,7 @@ fn word_count_from_reader<T: WordCountable>(
             || settings.show_words));
     if only_count_bytes {
         return Ok(WordCount {
-            bytes: count_bytes_fast(reader)?,
+            bytes: count_bytes_fast(&mut reader)?,
             ..WordCount::default()
         });
     }
@@ -247,9 +266,9 @@ fn word_count_from_reader<T: WordCountable>(
     let mut raw_line = Vec::new();
     let mut ends_lf: bool;
 
-    let mut buffered_reader = BufReader::new(reader);
     // reading from a TTY seems to raise a condition on, rather than return Some(0) like a file.
     // hence the option wrapped in a result here
+    let mut buffered_reader = reader.get_buffered();
     while match buffered_reader.read_until(LF, &mut raw_line) {
         Ok(n) if n > 0 => true,
         Err(ref e) if !raw_line.is_empty() => {
@@ -298,15 +317,16 @@ fn word_count_from_reader<T: WordCountable>(
 
 fn word_count_from_path(path: &String, settings: &Settings) -> WcResult<WordCount> {
     if path == "-" {
-        let mut reader = stdin();
-        return Ok(word_count_from_reader(&mut reader, settings, path)?);
+        let stdin = io::stdin();
+        let stdin_lock = stdin.lock();
+        return Ok(word_count_from_reader(stdin_lock, settings, path)?);
     } else {
         let path_obj = Path::new(path);
         if path_obj.is_dir() {
             return Err(WcError::IsDirectory(path.clone()));
         } else {
-            let mut reader = File::open(path)?;
-            return Ok(word_count_from_reader(&mut reader, settings, path)?);
+            let file = File::open(path)?;
+            return Ok(word_count_from_reader(file, settings, path)?);
         }
     }
 }
@@ -321,7 +341,7 @@ fn wc(files: Vec<String>, settings: &Settings) -> Result<(), u32> {
 
     for path in &files {
         let word_count = word_count_from_path(&path, settings).unwrap_or_else(|err| {
-            eprintln!("{}", err);
+            show_error!("{}", err);
             error_count += 1;
             WordCount::default()
         });
@@ -339,9 +359,10 @@ fn wc(files: Vec<String>, settings: &Settings) -> Result<(), u32> {
         print_stats(settings, &total_result, max_width);
     }
 
-    match error_count {
-        0 => Ok(()),
-        _ => Err(error_count),
+    if error_count == 0 {
+        Ok(())
+    } else {
+        Err(error_count)
     }
 }
 
