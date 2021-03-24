@@ -18,7 +18,7 @@ use thiserror::Error;
 
 use std::cmp::max;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Read, StdinLock};
+use std::io::{self, BufRead, BufReader, Read, Write, StdinLock};
 use std::ops::{Add, AddAssign};
 #[cfg(unix)]
 use std::os::unix::io::AsRawFd;
@@ -69,6 +69,16 @@ impl Settings {
             show_words: true,
             show_max_line_length: false,
         }
+    }
+
+    fn number_enabled(&self) -> u32 {
+        let mut result = 0;
+        result += self.show_bytes as u32;
+        result += self.show_chars as u32;
+        result += self.show_lines as u32;
+        result += self.show_max_line_length as u32;
+        result += self.show_words as u32;
+        result
     }
 }
 
@@ -351,12 +361,12 @@ fn wc(files: Vec<String>, settings: &Settings) -> Result<(), u32> {
     }
 
     for result in &results {
-        print_stats(settings, &result, max_width);
+        print_stats(settings, &result, max_width).unwrap();
     }
 
     if num_files > 1 {
         let total_result = total_word_count.with_title("total");
-        print_stats(settings, &total_result, max_width);
+        print_stats(settings, &total_result, max_width).unwrap();
     }
 
     if error_count == 0 {
@@ -366,26 +376,37 @@ fn wc(files: Vec<String>, settings: &Settings) -> Result<(), u32> {
     }
 }
 
-fn print_stats(settings: &Settings, result: &TitledWordCount, max_width: usize) {
+fn print_stats(settings: &Settings, result: &TitledWordCount, mut min_width: usize) -> WcResult<()> {
+    let stdout = io::stdout();
+    let mut stdout_lock = stdout.lock();
+
+    if settings.number_enabled() <= 1 {
+        // Prevent a leading space in case we only need to display a single
+        // number.
+        min_width = 0;
+    }
+
     if settings.show_lines {
-        print!("{:1$}", result.count.lines, max_width);
+        write!(stdout_lock, "{:1$}", result.count.lines, min_width)?;
     }
     if settings.show_words {
-        print!("{:1$}", result.count.words, max_width);
+        write!(stdout_lock, "{:1$}", result.count.words, min_width)?;
     }
     if settings.show_bytes {
-        print!("{:1$}", result.count.bytes, max_width);
+        write!(stdout_lock, "{:1$}", result.count.bytes, min_width)?;
     }
     if settings.show_chars {
-        print!("{:1$}", result.count.chars, max_width);
+        write!(stdout_lock, "{:1$}", result.count.chars, min_width)?;
     }
     if settings.show_max_line_length {
-        print!("{:1$}", result.count.max_line_length, max_width);
+        write!(stdout_lock, "{:1$}", result.count.max_line_length, min_width)?;
     }
 
     if result.title == "-" {
-        println!("");
+        writeln!(stdout_lock, "")?;
     } else {
-        println!(" {}", result.title);
+        writeln!(stdout_lock, " {}", result.title)?;
     }
+
+    Ok(())
 }
