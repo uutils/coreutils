@@ -770,8 +770,8 @@ fn version_cmp(a: &PathBuf, b: &PathBuf) -> Ordering {
             // If the characters are both numerical. We collect the rest of the number
             // and parse them to u64's and compare them.
             (Some(a_char @ '0'..='9'), Some(b_char @ '0'..='9')) => {
-                let mut a_str = String::from(a_char);
-                let mut b_str = String::from(b_char);
+                let mut a_str = a_char.to_string();
+                let mut b_str = b_char.to_string();
 
                 // The first different number of leading zeros determines the order
                 // so if it's already been determined by a previous number, we leave
