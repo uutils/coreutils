@@ -278,7 +278,7 @@ fn print_stats(settings: &Settings, result: &Result, max_width: usize) {
     }
 
     if result.title != "-" {
-        println!(" {}", result.title);
+        println!("{}", result.title);
     } else {
         println!();
     }
