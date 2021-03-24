@@ -23,9 +23,7 @@ Why?
 Many GNU, Linux and other utilities are useful, and obviously
 [some](http://gnuwin32.sourceforge.net) [effort](http://unxutils.sourceforge.net)
 has been spent in the past to port them to Windows. However, those projects
-are either old and abandoned, are hosted on CVS (which makes it more difficult
-for new contributors to contribute to them), are written in platform-specific C, or
-suffer from other issues.
+are written in platform-specific C, a language considered as unsafe compared to Rust.
 
 Rust provides a good, platform-agnostic way of writing systems utilities that are easy
 to compile anywhere, and this is as good a way as any to try and learn it.
