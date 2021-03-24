@@ -18,7 +18,7 @@ use thiserror::Error;
 
 use std::cmp::max;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Read, Write, StdinLock};
+use std::io::{self, BufRead, BufReader, Read, StdinLock, Write};
 use std::ops::{Add, AddAssign};
 #[cfg(unix)]
 use std::os::unix::io::AsRawFd;
@@ -97,14 +97,14 @@ impl WordCountable for StdinLock<'_> {
     type Buffered = Self;
 
     fn get_buffered(self) -> Self::Buffered {
-        return self;
+        self
     }
 }
 impl WordCountable for File {
     type Buffered = BufReader<Self>;
 
     fn get_buffered(self) -> Self::Buffered {
-        return BufReader::new(self);
+        BufReader::new(self)
     }
 }
 
@@ -376,7 +376,11 @@ fn wc(files: Vec<String>, settings: &Settings) -> Result<(), u32> {
     }
 }
 
-fn print_stats(settings: &Settings, result: &TitledWordCount, mut min_width: usize) -> WcResult<()> {
+fn print_stats(
+    settings: &Settings,
+    result: &TitledWordCount,
+    mut min_width: usize,
+) -> WcResult<()> {
     let stdout = io::stdout();
     let mut stdout_lock = stdout.lock();
 
@@ -399,7 +403,11 @@ fn print_stats(settings: &Settings, result: &TitledWordCount, mut min_width: usi
         write!(stdout_lock, "{:1$}", result.count.chars, min_width)?;
     }
     if settings.show_max_line_length {
-        write!(stdout_lock, "{:1$}", result.count.max_line_length, min_width)?;
+        write!(
+            stdout_lock,
+            "{:1$}",
+            result.count.max_line_length, min_width
+        )?;
     }
 
     if result.title == "-" {
