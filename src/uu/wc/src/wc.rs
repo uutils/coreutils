@@ -279,14 +279,22 @@ fn word_count_from_reader<T: WordCountable>(
     // reading from a TTY seems to raise a condition on, rather than return Some(0) like a file.
     // hence the option wrapped in a result here
     let mut buffered_reader = reader.get_buffered();
-    while match buffered_reader.read_until(LF, &mut raw_line) {
-        Ok(n) if n > 0 => true,
-        Err(ref e) if !raw_line.is_empty() => {
-            show_warning!("Error while reading {}: {}", path, e);
-            !raw_line.is_empty()
-        }
-        _ => false,
-    } {
+    loop {
+        match buffered_reader.read_until(LF, &mut raw_line) {
+            Ok(n) => {
+                if n == 0 {
+                    break;
+                }
+            },
+            Err(ref e) => {
+                if !raw_line.is_empty() {
+                    show_warning!("Error while reading {}: {}", path, e);
+                } else {
+                    break;
+                }
+            }
+        };
+
         // GNU 'wc' only counts lines that end in LF as lines
         ends_lf = *raw_line.last().unwrap() == LF;
         line_count += ends_lf as usize;
