@@ -187,8 +187,8 @@ fn test_date_set_valid_2() {
         let result = ucmd
             .arg("--set")
             .arg("Sat 20 Mar 2021 14:53:01 AWST")
-            .fails()
-            .no_stdout();
+            .fails();
+        let result = result.no_stdout();
         assert!(result.stderr.starts_with("date: invalid date "));
     }
 }
@@ -202,8 +202,8 @@ fn test_date_set_valid_3() {
         let result = ucmd
             .arg("--set")
             .arg("Sat 20 Mar 2021 14:53:01") // Local timezone
-            .fails()
-            .no_stdout();
+            .fails();
+        let result = result.no_stdout();
         assert!(result.stderr.starts_with("date: invalid date "));
     }
 }
@@ -217,8 +217,8 @@ fn test_date_set_valid_4() {
         let result = ucmd
             .arg("--set")
             .arg("2020-03-11 21:45:00") // Local timezone
-            .fails()
-            .no_stdout();
+            .fails();
+        let result = result.no_stdout();
         assert!(result.stderr.starts_with("date: invalid date "));
     }
 }
