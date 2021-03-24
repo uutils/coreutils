@@ -761,8 +761,9 @@ fn version_cmp(a: &PathBuf, b: &PathBuf) -> Ordering {
     let mut a = a.to_str().unwrap().chars().peekable();
     let mut b = b.to_str().unwrap().chars().peekable();
 
-    let mut a_leading_zeroes = Vec::new();
-    let mut b_leading_zeroes = Vec::new();
+    // The order determined from the number of leading zeroes.
+    // This is used if the filenames are equivalent up to leading zeroes.
+    let mut leading_zeroes = Ordering::Equal;
 
     loop {
         match (a.next(), b.next()) {
@@ -772,27 +773,31 @@ fn version_cmp(a: &PathBuf, b: &PathBuf) -> Ordering {
                 let mut a_str = String::from(a_char);
                 let mut b_str = String::from(b_char);
 
-                a_leading_zeroes.push(if a_char == '0' {
-                    let mut leading_zeroes = 1;
-                    while let Some('0') = a.peek() {
-                        leading_zeroes += 1;
-                        a.next();
+                // The first different number of leading zeros determines the order
+                // so if it's already been determined by a previous number, we leave
+                // it as that ordering.
+                if leading_zeroes == Ordering::Equal {
+                    let mut a_leading_zeroes = 0;
+                    if a_char == '0' {
+                        a_leading_zeroes = 1;
+                        while let Some('0') = a.peek() {
+                            a_leading_zeroes += 1;
+                            a.next();
+                        }
                     }
-                    leading_zeroes
-                } else {
-                    0
-                });
 
-                b_leading_zeroes.push(if b_char == '0' {
-                    let mut leading_zeroes = 1;
-                    while let Some('0') = b.peek() {
-                        leading_zeroes += 1;
-                        b.next();
+                    let mut b_leading_zeroes = 0;
+                    if b_char == '0' {
+                        b_leading_zeroes = 1;
+                        while let Some('0') = b.peek() {
+                            b_leading_zeroes += 1;
+                            b.next();
+                        }
                     }
-                    leading_zeroes
-                } else {
-                    0
-                });
+                    // It's b.cmp(&a), because the *largest* number of leading zeros
+                    // should go first
+                    leading_zeroes = b_leading_zeroes.cmp(&a_leading_zeroes);
+                }
 
                 // Unwrapping here is fine because we only call next if peek returns
                 // Some(_), so next should also return Some(_).
@@ -820,7 +825,7 @@ fn version_cmp(a: &PathBuf, b: &PathBuf) -> Ordering {
             },
             // Otherise, we compare the options (because None < Some(_))
             (a_opt, b_opt) => match a_opt.cmp(&b_opt) {
-                Ordering::Equal => return b_leading_zeroes.cmp(&a_leading_zeroes),
+                Ordering::Equal => return leading_zeroes,
                 x => return x,
             },
         }
