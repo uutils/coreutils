@@ -65,7 +65,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     // set working mode
     let is_posix = matches.values_of(options::POSIX).is_some();
-    let is_posix_special = matches.values_of(options::POSIX).is_some();
+    let is_posix_special = matches.values_of(options::POSIX_SPECIAL).is_some();
     let is_portability = matches.values_of(options::PORTABILITY).is_some();
 
     let mode = if (is_posix && is_posix_special) || is_portability {
