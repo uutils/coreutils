@@ -13,6 +13,8 @@ extern crate lazy_static;
 #[macro_use]
 extern crate uucore;
 
+mod version_cmp;
+
 use clap::{App, Arg};
 use number_prefix::NumberPrefix;
 #[cfg(unix)]
@@ -91,6 +93,7 @@ pub mod options {
         pub static SIZE: &str = "S";
         pub static TIME: &str = "t";
         pub static NONE: &str = "U";
+        pub static VERSION: &str = "v";
     }
     pub mod time {
         pub static ACCESS: &str = "u";
@@ -132,6 +135,7 @@ enum Sort {
     Name,
     Size,
     Time,
+    Version,
 }
 
 enum SizeFormat {
@@ -270,6 +274,7 @@ impl Config {
                 "name" => Sort::Name,
                 "time" => Sort::Time,
                 "size" => Sort::Size,
+                "version" => Sort::Version,
                 // below should never happen as clap already restricts the values.
                 _ => unreachable!("Invalid field for --sort"),
             }
@@ -279,6 +284,8 @@ impl Config {
             Sort::Size
         } else if options.is_present(options::sort::NONE) {
             Sort::None
+        } else if options.is_present(options::sort::VERSION) {
+            Sort::Version
         } else {
             Sort::Name
         };
@@ -507,13 +514,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("Sort by <field>: name, none (-U), time (-t) or size (-S)")
                 .value_name("field")
                 .takes_value(true)
-                .possible_values(&["name", "none", "time", "size"])
+                .possible_values(&["name", "none", "time", "size", "version"])
                 .require_equals(true)
                 .overrides_with_all(&[
                     options::SORT,
                     options::sort::SIZE,
                     options::sort::TIME,
                     options::sort::NONE,
+                    options::sort::VERSION,
                 ])
         )
         .arg(
@@ -525,6 +533,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::sort::SIZE,
                     options::sort::TIME,
                     options::sort::NONE,
+                    options::sort::VERSION,
                 ])
         )
         .arg(
@@ -536,6 +545,19 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::sort::SIZE,
                     options::sort::TIME,
                     options::sort::NONE,
+                    options::sort::VERSION,
+                ])
+        )
+        .arg(
+            Arg::with_name(options::sort::VERSION)
+                .short(options::sort::VERSION)
+                .help("Natural sort of (version) numbers in the filenames.")
+                .overrides_with_all(&[
+                    options::SORT,
+                    options::sort::SIZE,
+                    options::sort::TIME,
+                    options::sort::NONE,
+                    options::sort::VERSION,
                 ])
         )
         .arg(
@@ -549,6 +571,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::sort::SIZE,
                     options::sort::TIME,
                     options::sort::NONE,
+                    options::sort::VERSION,
                 ])
         )
 
@@ -747,6 +770,7 @@ fn sort_entries(entries: &mut Vec<PathBuf>, config: &Config) {
             .sort_by_key(|k| Reverse(get_metadata(k, config).map(|md| md.len()).unwrap_or(0))),
         // The default sort in GNU ls is case insensitive
         Sort::Name => entries.sort_by_key(|k| k.to_string_lossy().to_lowercase()),
+        Sort::Version => entries.sort_by(version_cmp::version_cmp),
         Sort::None => {}
     }
 
