@@ -773,33 +773,39 @@ fn version_cmp(a: &PathBuf, b: &PathBuf) -> Ordering {
             // If the characters are both numerical. We collect the rest of the number
             // and parse them to u64's and compare them.
             (Some(a_char @ '0'..='9'), Some(b_char @ '0'..='9')) => {
-                let mut a_str = a_char.to_string();
-                let mut b_str = b_char.to_string();
+                let mut a_leading_zeroes = 0;
+                if a_char == '0' {
+                    a_leading_zeroes = 1;
+                    while let Some('0') = a.peek() {
+                        a_leading_zeroes += 1;
+                        a.next();
+                    }
+                }
 
+                let mut b_leading_zeroes = 0;
+                if b_char == '0' {
+                    b_leading_zeroes = 1;
+                    while let Some('0') = b.peek() {
+                        b_leading_zeroes += 1;
+                        b.next();
+                    }
+                }
                 // The first different number of leading zeros determines the order
                 // so if it's already been determined by a previous number, we leave
                 // it as that ordering.
+                // It's b.cmp(&a), because the *largest* number of leading zeros
+                // should go first
                 if leading_zeroes == Ordering::Equal {
-                    let mut a_leading_zeroes = 0;
-                    if a_char == '0' {
-                        a_leading_zeroes = 1;
-                        while let Some('0') = a.peek() {
-                            a_leading_zeroes += 1;
-                            a.next();
-                        }
-                    }
-
-                    let mut b_leading_zeroes = 0;
-                    if b_char == '0' {
-                        b_leading_zeroes = 1;
-                        while let Some('0') = b.peek() {
-                            b_leading_zeroes += 1;
-                            b.next();
-                        }
-                    }
-                    // It's b.cmp(&a), because the *largest* number of leading zeros
-                    // should go first
                     leading_zeroes = b_leading_zeroes.cmp(&a_leading_zeroes);
+                }
+
+                let mut a_str = String::new();
+                let mut b_str = String::new();
+                if a_char != '0' {
+                    a_str.push(a_char);
+                }
+                if b_char != '0' {
+                    b_str.push(b_char);
                 }
 
                 // Unwrapping here is fine because we only call next if peek returns
@@ -812,11 +818,17 @@ fn version_cmp(a: &PathBuf, b: &PathBuf) -> Ordering {
                     b_str.push(b.next().unwrap());
                 }
 
-                // Unwrapping here is fine because we build the string from characters
-                // in the range '0'..='9'.
-                let a_int: u64 = a_str.parse().unwrap();
-                let b_int: u64 = b_str.parse().unwrap();
-                match a_int.cmp(&b_int) {
+                // Since the leading zeroes are stripped, the length can be
+                // used to compare the numbers.
+                match a_str.len().cmp(&b_str.len()) {
+                    Ordering::Equal => {}
+                    x => return x,
+                }
+
+                // At this point, leading zeroes are stripped and the lengths
+                // are equal, meaning that the strings can be compared using
+                // the standard compare function.
+                match a_str.cmp(&b_str) {
                     Ordering::Equal => {}
                     x => return x,
                 }
