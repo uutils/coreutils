@@ -13,10 +13,13 @@ extern crate lazy_static;
 #[macro_use]
 extern crate uucore;
 
+mod version_cmp;
+
 use clap::{App, Arg};
 use number_prefix::NumberPrefix;
 #[cfg(unix)]
 use std::collections::HashMap;
+use std::fs;
 use std::fs::{DirEntry, FileType, Metadata};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
@@ -28,7 +31,6 @@ use std::path::{Path, PathBuf};
 #[cfg(unix)]
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
-use std::{cmp::Ordering, fs};
 use std::{cmp::Reverse, process::exit};
 
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
@@ -754,98 +756,6 @@ fn list(locs: Vec<String>, config: Config) -> i32 {
     }
 }
 
-/// Compare pathbufs in a way that matches the GNU version sort, meaning that
-/// numbers get sorted in a natural way.
-fn version_cmp(a: &PathBuf, b: &PathBuf) -> Ordering {
-    let a_string = a.to_string_lossy();
-    let b_string = b.to_string_lossy();
-    let mut a = a_string.chars().peekable();
-    let mut b = b_string.chars().peekable();
-
-    // The order determined from the number of leading zeroes.
-    // This is used if the filenames are equivalent up to leading zeroes.
-    let mut leading_zeroes = Ordering::Equal;
-
-    loop {
-        match (a.next(), b.next()) {
-            // If the characters are both numerical. We collect the rest of the number
-            // and parse them to u64's and compare them.
-            (Some(a_char @ '0'..='9'), Some(b_char @ '0'..='9')) => {
-                let mut a_leading_zeroes = 0;
-                if a_char == '0' {
-                    a_leading_zeroes = 1;
-                    while let Some('0') = a.peek() {
-                        a_leading_zeroes += 1;
-                        a.next();
-                    }
-                }
-
-                let mut b_leading_zeroes = 0;
-                if b_char == '0' {
-                    b_leading_zeroes = 1;
-                    while let Some('0') = b.peek() {
-                        b_leading_zeroes += 1;
-                        b.next();
-                    }
-                }
-                // The first different number of leading zeros determines the order
-                // so if it's already been determined by a previous number, we leave
-                // it as that ordering.
-                // It's b.cmp(&a), because the *largest* number of leading zeros
-                // should go first
-                if leading_zeroes == Ordering::Equal {
-                    leading_zeroes = b_leading_zeroes.cmp(&a_leading_zeroes);
-                }
-
-                let mut a_str = String::new();
-                let mut b_str = String::new();
-                if a_char != '0' {
-                    a_str.push(a_char);
-                }
-                if b_char != '0' {
-                    b_str.push(b_char);
-                }
-
-                // Unwrapping here is fine because we only call next if peek returns
-                // Some(_), so next should also return Some(_).
-                while let Some('0'..='9') = a.peek() {
-                    a_str.push(a.next().unwrap());
-                }
-
-                while let Some('0'..='9') = b.peek() {
-                    b_str.push(b.next().unwrap());
-                }
-
-                // Since the leading zeroes are stripped, the length can be
-                // used to compare the numbers.
-                match a_str.len().cmp(&b_str.len()) {
-                    Ordering::Equal => {}
-                    x => return x,
-                }
-
-                // At this point, leading zeroes are stripped and the lengths
-                // are equal, meaning that the strings can be compared using
-                // the standard compare function.
-                match a_str.cmp(&b_str) {
-                    Ordering::Equal => {}
-                    x => return x,
-                }
-            }
-            // If there are two characters we just compare the characters
-            (Some(a_char), Some(b_char)) => match a_char.cmp(&b_char) {
-                Ordering::Equal => {}
-                x => return x,
-            },
-            // Otherise, we compare the options (because None < Some(_))
-            (a_opt, b_opt) => match a_opt.cmp(&b_opt) {
-                // If they are completely equal except for leading zeroes, we use the leading zeroes.
-                Ordering::Equal => return leading_zeroes,
-                x => return x,
-            },
-        }
-    }
-}
-
 fn sort_entries(entries: &mut Vec<PathBuf>, config: &Config) {
     match config.sort {
         Sort::Time => entries.sort_by_key(|k| {
@@ -860,7 +770,7 @@ fn sort_entries(entries: &mut Vec<PathBuf>, config: &Config) {
             .sort_by_key(|k| Reverse(get_metadata(k, config).map(|md| md.len()).unwrap_or(0))),
         // The default sort in GNU ls is case insensitive
         Sort::Name => entries.sort_by_key(|k| k.to_string_lossy().to_lowercase()),
-        Sort::Version => entries.sort_by(version_cmp),
+        Sort::Version => entries.sort_by(version_cmp::version_cmp),
         Sort::None => {}
     }
 
