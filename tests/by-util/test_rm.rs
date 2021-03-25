@@ -17,7 +17,12 @@ fn test_rm_failed() {
     let (_at, mut ucmd) = at_and_ucmd!();
     let file = "test_rm_one_file";
 
-    ucmd.arg(file).fails(); // Doesn't exist
+    let result = ucmd.arg(file).fails(); // Doesn't exist
+
+    assert!(result.stderr.contains(&format!(
+        "cannot remove '{}': No such file or directory",
+        file
+    )));
 }
 
 #[test]
@@ -116,6 +121,22 @@ fn test_rm_empty_directory() {
 }
 
 #[test]
+fn test_rm_empty_directory_verbose() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_rm_empty_directory_verbose";
+
+    at.mkdir(dir);
+
+    ucmd.arg("-d")
+        .arg("-v")
+        .arg(dir)
+        .succeeds()
+        .stdout_only(format!("removed directory '{}'\n", dir));
+
+    assert!(!at.dir_exists(dir));
+}
+
+#[test]
 fn test_rm_non_empty_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_rm_non_empty_dir";
@@ -151,22 +172,17 @@ fn test_rm_recursive() {
 }
 
 #[test]
-fn test_rm_errors() {
+fn test_rm_directory_without_flag() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let dir = "test_rm_errors_directory";
-    let file_a = "test_rm_errors_directory/test_rm_errors_file_a";
-    let file_b = "test_rm_errors_directory/test_rm_errors_file_b";
+    let dir = "test_rm_directory_without_flag_dir";
 
     at.mkdir(dir);
-    at.touch(file_a);
-    at.touch(file_b);
 
-    // $ rm test_rm_errors_directory
-    // rm: error: could not remove directory 'test_rm_errors_directory' (did you mean to pass '-r'?)
-    ucmd.arg(dir).fails().stderr_is(
-        "rm: error: could not remove directory 'test_rm_errors_directory' (did you mean \
-                to pass '-r' or '-R'?)\n",
-    );
+    let result = ucmd.arg(dir).fails();
+    println!("{}", result.stderr);
+    assert!(result
+        .stderr
+        .contains(&format!("cannot remove '{}': Is a directory", dir)));
 }
 
 #[test]
@@ -186,18 +202,41 @@ fn test_rm_verbose() {
 }
 
 #[test]
-fn test_rm_dir_symlink() {
+#[cfg(not(windows))]
+// on unix symlink_dir is a file
+fn test_rm_symlink_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let dir = "test_rm_dir_symlink_dir";
-    let link = "test_rm_dir_symlink_link";
+
+    let dir = "test_rm_symlink_dir_directory";
+    let link = "test_rm_symlink_dir_link";
 
     at.mkdir(dir);
     at.symlink_dir(dir, link);
 
-    #[cfg(not(windows))]
     ucmd.arg(link).succeeds();
-    #[cfg(windows)]
-    ucmd.arg("-r").arg(link).succeeds();
+}
+
+#[test]
+#[cfg(windows)]
+// on windows removing symlink_dir requires "-r" or "-d"
+fn test_rm_symlink_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let dir = "test_rm_symlink_dir_directory";
+    let link = "test_rm_symlink_dir_link";
+
+    at.mkdir(dir);
+    at.symlink_dir(dir, link);
+
+    let result = scene.ucmd().arg(link).fails();
+    assert!(result
+        .stderr
+        .contains(&format!("cannot remove '{}': Is a directory", link)));
+
+    assert!(at.dir_exists(link));
+
+    scene.ucmd().arg("-r").arg(link).succeeds();
 }
 
 #[test]

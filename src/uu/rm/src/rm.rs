@@ -233,7 +233,7 @@ fn remove(files: Vec<String>, options: Options) -> bool {
                 // (e.g., permission), even rm -f should fail with
                 // outputting the error, but there's no easy eay.
                 if !options.force {
-                    show_error!("no such file or directory '{}'", filename);
+                    show_error!("cannot remove '{}': No such file or directory", filename);
                     true
                 } else {
                     false
@@ -289,7 +289,7 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
         had_err = true;
     } else {
         show_error!(
-            "could not remove directory '{}' (did you mean to pass '-r' or '-R'?)",
+            "cannot remove '{}': Is a directory", // GNU's rm error message does not include help
             path.display()
         );
         had_err = true;
@@ -326,10 +326,7 @@ fn remove_dir(path: &Path, options: &Options) -> bool {
                 }
             } else {
                 // called to remove a symlink_dir (windows) without "-r"/"-R" or "-d"
-                show_error!(
-                    "could not remove directory '{}' (did you mean to pass '-r' or '-R'?)",
-                    path.display()
-                );
+                show_error!("cannot remove '{}': Is a directory", path.display());
                 return true;
             }
         } else {
