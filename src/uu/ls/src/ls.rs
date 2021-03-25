@@ -756,8 +756,6 @@ fn list(locs: Vec<String>, config: Config) -> i32 {
 
 /// Compare pathbufs in a way that matches the GNU version sort, meaning that
 /// numbers get sorted in a natural way.
-/// One limitation is that the current implementation cannot handle values
-/// greater than u64::MAX.
 fn version_cmp(a: &PathBuf, b: &PathBuf) -> Ordering {
     let a_string = a.to_string_lossy();
     let b_string = b.to_string_lossy();
