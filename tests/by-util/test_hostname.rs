@@ -11,7 +11,7 @@ fn test_hostname() {
 }
 
 // FixME: fails for "MacOS"
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(target_vendor = "apple"))]
 #[test]
 fn test_hostname_ip() {
     let result = new_ucmd!().arg("-i").run();

@@ -15,7 +15,9 @@ fn test_negative_adjustment() {
     // correctly.
 
     let res = new_ucmd!().args(&["-n", "-1", "true"]).run();
-    assert!(res.stderr.starts_with("nice: warning: setpriority: Permission denied"));
+    assert!(res
+        .stderr
+        .starts_with("nice: warning: setpriority: Permission denied"));
 }
 
 #[test]

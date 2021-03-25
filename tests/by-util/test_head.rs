@@ -87,6 +87,14 @@ fn test_verbose() {
 }
 
 #[test]
+fn test_zero_terminated() {
+    new_ucmd!()
+        .args(&["-z", "zero_terminated.txt"])
+        .run()
+        .stdout_is_fixture("zero_terminated.expected");
+}
+
+#[test]
 #[ignore]
 fn test_spams_newline() {
     new_ucmd!().pipe_in("a").succeeds().stdout_is("a\n");
@@ -158,4 +166,16 @@ fn test_bug_in_negative_zero_lines() {
         .succeeds()
         //GNU Head returns "a\nb\n"
         .stdout_is("");
+}
+
+#[test]
+fn test_no_such_file_or_directory() {
+    let result = new_ucmd!().arg("no_such_file.toml").run();
+
+    assert_eq!(
+        true,
+        result
+            .stderr
+            .contains("cannot open 'no_such_file.toml' for reading: No such file or directory")
+    )
 }

@@ -9,7 +9,7 @@ fn test_default_mode() {
 
     // fail on long inputs
     new_ucmd!()
-        .args(&[repeat_str("test", 20000)])
+        .args(&["test".repeat(20000)])
         .fails()
         .no_stdout();
 }
