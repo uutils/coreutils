@@ -12,6 +12,9 @@ extern crate uucore;
 
 use clap::{App, Arg};
 use itertools::Itertools;
+use md5::*;
+use rand::distributions::Alphanumeric;
+use rand::{thread_rng, Rng};
 use semver::Version;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
@@ -19,11 +22,8 @@ use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Lines, Read, Write};
 use std::mem::replace;
 use std::path::Path;
-use md5::*;
-use rand::{thread_rng, Rng};
-use rand::distributions::{Alphanumeric};
-
 use uucore::fs::is_stdin_interactive; // for Iterator::dedup()
+
 static NAME: &str = "sort";
 static ABOUT: &str = "Display sorted concatenation of all FILE(s).";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -248,7 +248,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(OPT_RANDOM)
                 .short("R")
                 .long(OPT_RANDOM)
-                .help("shuffle in random order.")
+                .help("shuffle in random order."),
         )
         .arg(
             Arg::with_name(OPT_REVERSE)
@@ -378,8 +378,7 @@ fn exec(files: Vec<String>, settings: &Settings) -> i32 {
         print_sorted(lines.iter(), &settings.outfile)
     }
 
-0
-
+    0
 }
 
 fn exec_check_file(lines: Lines<BufReader<Box<dyn Read>>>, settings: &Settings) -> i32 {
@@ -533,15 +532,15 @@ fn get_rand_string() -> String {
 }
 
 fn random_shuffle(a: &str, b: &str) -> Ordering {
-    #![allow(clippy::comparison_chain)] 
-    
+    #![allow(clippy::comparison_chain)]
+
     let rand_string = get_rand_string();
     let rand_slice = rand_string.as_str();
-    
+
     let da = md5::compute([a, rand_slice].concat());
     let db = md5::compute([b, rand_slice].concat());
-    
-    da.cmp(&db)    
+
+    da.cmp(&db)
 }
 
 #[derive(Eq, Ord, PartialEq, PartialOrd)]
