@@ -759,7 +759,7 @@ fn test_ls_indicator_style() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    // Setup: Directory, Symlink, FIFO, Socket.
+    // Setup: Directory, Symlink.
     at.mkdir("directory");
     assert!(at.dir_exists("directory"));
 

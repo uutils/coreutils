@@ -644,54 +644,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 ),
         )
         .arg(
-            Arg::with_name(options::CLASSIFY)
-                .short("F")
-                .long(options::CLASSIFY)
-                .help("Append a character to each file name indicating the file type. Also, for \
-                       regular files that are executable, append '*'. The file type indicators are \
-                       '/' for directories, '@' for symbolic links, '|' for FIFOs, '=' for sockets, \
-                       '>' for doors, and nothing for regular files.")
-                .overrides_with_all(&[
-                    options::FILE_TYPE,
-                    options::SLASH,
-                    options::CLASSIFY,
-                    options::INDICATOR_STYLE,
-                    options::indicator_style::NONE,
-                    options::indicator_style::SLASH,
-                    options::indicator_style::FILE_TYPE,
-                    options::indicator_style::CLASSIFY,
-                ])
-        )
-        .arg(
-            Arg::with_name(options::FILE_TYPE)
-                .long(options::FILE_TYPE)
-                .help("Same as --classify, but do not append '*'")
-                .overrides_with_all(&[
-                    options::FILE_TYPE,
-                    options::SLASH,
-                    options::CLASSIFY,
-                    options::INDICATOR_STYLE,
-                    options::indicator_style::NONE,
-                    options::indicator_style::SLASH,
-                    options::indicator_style::FILE_TYPE,
-                    options::indicator_style::CLASSIFY,
-                ]))
-        .arg(
-            Arg::with_name(options::SLASH)
-                .short(options::SLASH)
-                .help("Append / indicator to directories."
-                )
-                .overrides_with_all(&[
-                    options::FILE_TYPE,
-                    options::SLASH,
-                    options::CLASSIFY,
-                    options::INDICATOR_STYLE,
-                    options::indicator_style::NONE,
-                    options::indicator_style::SLASH,
-                    options::indicator_style::FILE_TYPE,
-                    options::indicator_style::CLASSIFY,
-                ]))
-        .arg(
             Arg::with_name(options::size::HUMAN_READABLE)
                 .short("h")
                 .long(options::size::HUMAN_READABLE)
@@ -759,17 +711,49 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help(" append indicator with style WORD to entry names: none (default),  slash\
                        (-p), file-type (--file-type), classify (-F)")
                 .takes_value(true)
+                .possible_values(&["none", "slash", "file-type", "classify"])
                 .overrides_with_all(&[
                     options::FILE_TYPE,
                     options::SLASH,
                     options::CLASSIFY,
                     options::INDICATOR_STYLE,
-                    options::indicator_style::NONE,
-                    options::indicator_style::SLASH,
-                    options::indicator_style::FILE_TYPE,
-                    options::indicator_style::CLASSIFY,
+                ]))
+                .arg(
+            Arg::with_name(options::CLASSIFY)
+                .short("F")
+                .long(options::CLASSIFY)
+                .help("Append a character to each file name indicating the file type. Also, for \
+                       regular files that are executable, append '*'. The file type indicators are \
+                       '/' for directories, '@' for symbolic links, '|' for FIFOs, '=' for sockets, \
+                       '>' for doors, and nothing for regular files.")
+                .overrides_with_all(&[
+                    options::FILE_TYPE,
+                    options::SLASH,
+                    options::CLASSIFY,
+                    options::INDICATOR_STYLE,
                 ])
         )
+        .arg(
+            Arg::with_name(options::FILE_TYPE)
+                .long(options::FILE_TYPE)
+                .help("Same as --classify, but do not append '*'")
+                .overrides_with_all(&[
+                    options::FILE_TYPE,
+                    options::SLASH,
+                    options::CLASSIFY,
+                    options::INDICATOR_STYLE,
+                ]))
+        .arg(
+            Arg::with_name(options::SLASH)
+                .short(options::SLASH)
+                .help("Append / indicator to directories."
+                )
+                .overrides_with_all(&[
+                    options::FILE_TYPE,
+                    options::SLASH,
+                    options::CLASSIFY,
+                    options::INDICATOR_STYLE,
+                ]))
 
     // Positional arguments
         .arg(Arg::with_name(options::PATHS).multiple(true).takes_value(true));
