@@ -147,6 +147,18 @@ fn test_negative_zero_lines() {
         .stdout_is("a\nb\n");
 }
 
+#[test]
+fn test_no_such_file_or_directory() {
+    let result = new_ucmd!().arg("no_such_file.toml").run();
+
+    assert_eq!(
+        true,
+        result
+            .stderr
+            .contains("cannot open 'no_such_file.toml' for reading: No such file or directory")
+    )
+}
+
 // there was a bug not caught by previous tests
 // where for negative n > 3, the total amount of lines
 // was correct, but it would eat from the second line
@@ -157,4 +169,12 @@ fn test_sequence_fixture() {
         .pipe_in_fixture("sequence")
         .run()
         .stdout_is_fixture("sequence.expected");
+}
+
+#[test]
+fn test_zero_terminated() {
+    new_ucmd!()
+        .args(&["-z", "zero_terminated.txt"])
+        .run()
+        .stdout_is_fixture("zero_terminated.expected");
 }
