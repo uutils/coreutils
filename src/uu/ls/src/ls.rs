@@ -1331,7 +1331,7 @@ fn display_file_name(
                 // Don't append an asterisk.
                 match sym {
                     Some('*') => None,
-                    _=> sym
+                    _ => sym,
                 }
             }
             IndicatorStyle::Slash => {
