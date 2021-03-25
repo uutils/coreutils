@@ -435,7 +435,7 @@ fn write_file_lines(file: &str, options: &OutputOptions, state: &mut OutputState
                     }
                     writer.write_all(options.end_of_line.as_bytes())?;
                     if handle.is_interactive {
-                        writer.flush().context(&file[..])?;
+                        writer.flush().context(file)?;
                     }
                 }
                 state.at_line_start = true;
