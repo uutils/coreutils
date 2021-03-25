@@ -754,12 +754,15 @@ fn list(locs: Vec<String>, config: Config) -> i32 {
     }
 }
 
-/// Compare pathbufs in a way that matches the GNU version sort, meaning that numbers
-/// get sorted in a natural way.
+/// Compare pathbufs in a way that matches the GNU version sort, meaning that
+/// numbers get sorted in a natural way.
+/// One limitation is that the current implementation cannot handle values
+/// greater than u64::MAX.
 fn version_cmp(a: &PathBuf, b: &PathBuf) -> Ordering {
-    // TODO: handle invalid UTF-8
-    let mut a = a.to_str().unwrap().chars().peekable();
-    let mut b = b.to_str().unwrap().chars().peekable();
+    let a_string = a.to_string_lossy();
+    let b_string = b.to_string_lossy();
+    let mut a = a_string.chars().peekable();
+    let mut b = b_string.chars().peekable();
 
     // The order determined from the number of leading zeroes.
     // This is used if the filenames are equivalent up to leading zeroes.
@@ -825,6 +828,7 @@ fn version_cmp(a: &PathBuf, b: &PathBuf) -> Ordering {
             },
             // Otherise, we compare the options (because None < Some(_))
             (a_opt, b_opt) => match a_opt.cmp(&b_opt) {
+                // If they are completely equal except for leading zeroes, we use the leading zeroes.
                 Ordering::Equal => return leading_zeroes,
                 x => return x,
             },
