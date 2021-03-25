@@ -1,6 +1,6 @@
 use std::convert::TryFrom;
 use std::io::{ErrorKind, Read, Seek, SeekFrom, Write};
-use uucore::exit;
+use uucore::{crash, executable, show_error};
 
 mod app;
 mod constants;
@@ -10,7 +10,7 @@ use app::*;
 
 fn rbuf_n_bytes(input: &mut impl std::io::BufRead, n: usize) -> std::io::Result<()> {
     if n == 0 {
-        return Ok(())
+        return Ok(());
     }
     let mut readbuf = [0u8; constants::BUF_SIZE];
     let mut i = 0usize;
@@ -240,22 +240,26 @@ fn uu_head(options: &HeadOptions) {
                     Ok(f) => f,
                     Err(err) => match err.kind() {
                         ErrorKind::NotFound => {
-                            eprintln!(
+                            crash!(
+                                constants::EXIT_FAILURE,
                                 "head: cannot open '{}' for reading: No such file or directory",
                                 name
                             );
-                            exit!(constants::EXIT_FAILURE);
                         }
                         ErrorKind::PermissionDenied => {
-                            eprintln!(
+                            crash!(
+                                constants::EXIT_FAILURE,
                                 "head: cannot open '{}' for reading: Permission denied",
                                 name
                             );
-                            exit!(constants::EXIT_FAILURE);
                         }
                         _ => {
-                            eprintln!("head: cannot open '{}' for reading: {}", name, err);
-                            exit!(constants::EXIT_FAILURE);
+                            crash!(
+                                constants::EXIT_FAILURE,
+                                "head: cannot open '{}' for reading: {}",
+                                name,
+                                err
+                            );
                         }
                     },
                 };
@@ -267,11 +271,17 @@ fn uu_head(options: &HeadOptions) {
         };
         if res.is_err() {
             if fname.as_str() == "-" {
-                eprintln!("head: error reading standard input: Input/output error");
+                crash!(
+                    constants::EXIT_FAILURE,
+                    "head: error reading standard input: Input/output error"
+                );
             } else {
-                eprintln!("head: error reading {}: Input/output error", fname);
+                crash!(
+                    constants::EXIT_FAILURE,
+                    "head: error reading {}: Input/output error",
+                    fname
+                );
             }
-            exit!(constants::EXIT_FAILURE);
         }
         first = false;
     }
@@ -281,8 +291,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = match HeadOptions::get_from(args) {
         Ok(o) => o,
         Err(s) => {
-            eprintln!("head: {}", s);
-            exit!(constants::EXIT_FAILURE);
+            crash!(constants::EXIT_FAILURE, "head: {}", s);
         }
     };
     uu_head(&args);

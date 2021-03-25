@@ -1,4 +1,3 @@
-
 pub const EXIT_FAILURE: i32 = 1;
 pub const EXIT_SUCCESS: i32 = 0;
 pub const BUF_SIZE: usize = 65536;

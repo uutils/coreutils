@@ -2,7 +2,7 @@ use crate::constants;
 use crate::parse;
 use clap::{App, Arg};
 use std::ffi::OsString;
-use uucore::{executable, exit};
+use uucore::{crash, executable, show_error};
 
 pub fn app<'a>() -> App<'a, 'a> {
     App::new(executable!())
@@ -110,7 +110,7 @@ impl<IterType: Iterator<Item = OsString>> Iterator for ArgIterator<IterType> {
                         if oss == "head" {
                             return Some(oss);
                         }
-                        let arg_str = &oss.clone().into_string().unwrap_or_else(|_|"".to_owned());
+                        let arg_str = &oss.clone().into_string().unwrap_or_else(|_| "".to_owned());
                         if let Some(res) = parse::parse_obsolete(&arg_str) {
                             match res {
                                 Ok((n, b)) => {
@@ -124,15 +124,18 @@ impl<IterType: Iterator<Item = OsString>> Iterator for ArgIterator<IterType> {
                                 }
                                 Err(e) => match e {
                                     parse::ParseError::Overflow => {
-                                        eprintln!(
+                                        crash!(
+                                            constants::EXIT_FAILURE,
                                             "head: Value too large for defined datatype: '{}'",
                                             arg_str
                                         );
-                                        exit!(constants::EXIT_FAILURE);
                                     }
                                     parse::ParseError::Syntax => {
-                                        eprintln!("head: bad number: '{}'", arg_str);
-                                        exit!(constants::EXIT_FAILURE);
+                                        crash!(
+                                            constants::EXIT_FAILURE,
+                                            "head: bad number: '{}'",
+                                            arg_str
+                                        );
                                     }
                                 },
                             }
