@@ -15,6 +15,8 @@ edition = "2018"
 path = "src/sort.rs"
 
 [dependencies]
+md5 = "0.7.0"
+rand = "0.8.3"
 clap = "2.33"
 itertools = "0.8.0"
 semver = "0.9.0"
