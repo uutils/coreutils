@@ -753,6 +753,40 @@ fn test_ls_inode() {
     assert_eq!(inode_short, inode_long)
 }
 
+#[cfg(unix)]
+#[test]
+fn test_ls_indicator_style() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Setup: Directory, Symlink, FIFO, Socket.
+    at.mkdir("directory");
+    assert!(at.dir_exists("directory"));
+
+    at.touch(&at.plus_as_string("link-src"));
+    at.symlink_file("link-src", "link-dest.link");
+    assert!(at.is_symlink("link-dest.link"));
+
+    // Classify, File-Type, and Slash all contain indicators for directories.
+    let options = vec!["classify", "file-type", "slash"];
+    for opt in options {
+        // Verify that classify and file-type both contain indicators for symlinks.
+        let result = scene.ucmd().arg(format!("--indicator-style={}", opt)).run();
+        println!("stdout = {:?}", result.stdout);
+        assert!(result.stdout.contains("/"));
+    }
+
+    // Classify, File-Type, and Slash all contain indicators for directories.
+    let options = vec!["classify", "file-type"];
+    for opt in options {
+        // Verify that classify and file-type both contain indicators for symlinks.
+        let result = scene.ucmd().arg(format!("--indicator-style={}", opt)).run();
+        println!("stdout = {:?}", result.stdout);
+        assert!(result.stdout.contains("@"));
+    }
+
+}
+
 #[cfg(not(any(target_vendor = "apple", target_os = "windows")))] // Truncate not available on mac or win
 #[test]
 fn test_ls_human_si() {
