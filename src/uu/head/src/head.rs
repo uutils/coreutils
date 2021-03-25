@@ -1,240 +1,291 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * (c) Alan Andrade <alan.andradec@gmail.com>
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
-//  *
-//  * Synced with: https://raw.github.com/avsm/src/master/usr.bin/head/head.c
+use std::convert::TryFrom;
+use std::io::{ErrorKind, Read, Seek, SeekFrom, Write};
+use uucore::exit;
 
-#[macro_use]
-extern crate uucore;
+mod app;
+mod constants;
+mod parse;
+mod split;
+use app::*;
 
-use std::collections::VecDeque;
-use std::fs::File;
-use std::io::{stdin, BufRead, BufReader, Read};
-use std::path::Path;
-use std::str::from_utf8;
+fn rbuf_n_bytes(input: &mut impl std::io::BufRead, n: usize) -> std::io::Result<()> {
+    if n == 0 {
+        return Ok(())
+    }
+    let mut readbuf = [0u8; constants::BUF_SIZE];
+    let mut i = 0usize;
 
-static SYNTAX: &str = "";
-static SUMMARY: &str = "";
-static LONG_HELP: &str = "";
+    let stdout = std::io::stdout();
+    let mut stdout = stdout.lock();
 
-enum FilterMode {
-    Bytes(usize),
-    Lines(usize),
-    NLines(usize),
-}
-
-struct Settings {
-    mode: FilterMode,
-    verbose: bool,
-    zero_terminated: bool,
-}
-
-impl Default for Settings {
-    fn default() -> Settings {
-        Settings {
-            mode: FilterMode::Lines(10),
-            verbose: false,
-            zero_terminated: false,
+    loop {
+        let read = input.read(&mut readbuf)?;
+        if read == 0 {
+            // might be unexpected if
+            // we haven't read `n` bytes
+            // but this mirrors GNU's behavior
+            return Ok(());
         }
+        stdout.write_all(&readbuf[..read.min(n - i)])?;
+        i += read.min(n - i);
+        if i == n {
+            return Ok(());
+        }
+    }
+}
+
+fn rbuf_n_lines(input: &mut impl std::io::BufRead, n: usize, zero: bool) -> std::io::Result<()> {
+    if n == 0 {
+        return Ok(());
+    }
+    let stdout = std::io::stdout();
+    let mut stdout = stdout.lock();
+    let mut lines = 0usize;
+    split::walk_lines(input, zero, |e| match e {
+        split::Event::Data(dat) => {
+            stdout.write_all(dat)?;
+            Ok(true)
+        }
+        split::Event::Line => {
+            lines += 1;
+            if lines == n {
+                Ok(false)
+            } else {
+                Ok(true)
+            }
+        }
+    })
+}
+
+fn rbuf_but_last_n_bytes(input: &mut impl std::io::BufRead, n: usize) -> std::io::Result<()> {
+    if n == 0 {
+        //prints everything
+        return rbuf_n_bytes(input, usize::MAX);
+    }
+    let stdout = std::io::stdout();
+    let mut stdout = stdout.lock();
+
+    let mut ringbuf = vec![0u8; n];
+
+    // first we fill the ring buffer
+    if let Err(e) = input.read_exact(&mut ringbuf) {
+        if e.kind() == ErrorKind::UnexpectedEof {
+            return Ok(());
+        } else {
+            return Err(e);
+        }
+    }
+    let mut buffer = [0u8; constants::BUF_SIZE];
+    loop {
+        let read = input.read(&mut buffer)?;
+        if read == 0 {
+            return Ok(());
+        } else if read >= n {
+            stdout.write_all(&ringbuf)?;
+            stdout.write_all(&buffer[..read - n])?;
+            for i in 0..n {
+                ringbuf[i] = buffer[read - n + i];
+            }
+        } else {
+            stdout.write_all(&ringbuf[..read])?;
+            for i in 0..n - read {
+                ringbuf[i] = ringbuf[read + i];
+            }
+            ringbuf[n - read..].copy_from_slice(&buffer[..read]);
+        }
+    }
+}
+
+fn rbuf_but_last_n_lines(
+    input: &mut impl std::io::BufRead,
+    n: usize,
+    zero: bool,
+) -> std::io::Result<()> {
+    if n == 0 {
+        //prints everything
+        return rbuf_n_bytes(input, usize::MAX);
+    }
+    let mut ringbuf = vec![Vec::new(); n];
+    let stdout = std::io::stdout();
+    let mut stdout = stdout.lock();
+    let mut line = Vec::new();
+    let mut lines = 0usize;
+    split::walk_lines(input, zero, |e| match e {
+        split::Event::Data(dat) => {
+            line.extend_from_slice(dat);
+            Ok(true)
+        }
+        split::Event::Line => {
+            if lines < n {
+                ringbuf[lines] = std::mem::replace(&mut line, Vec::new());
+                lines += 1;
+            } else {
+                stdout.write_all(&ringbuf[0])?;
+                ringbuf.rotate_left(1);
+                ringbuf[n - 1] = std::mem::replace(&mut line, Vec::new());
+            }
+            Ok(true)
+        }
+    })
+}
+
+fn head_backwards_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Result<()> {
+    assert!(options.all_but_last);
+    let size = input.seek(SeekFrom::End(0))?;
+    let size = usize::try_from(size).unwrap();
+    match options.mode {
+        Modes::Bytes(n) => {
+            if n >= size {
+                return Ok(());
+            } else {
+                input.seek(SeekFrom::Start(0))?;
+                rbuf_n_bytes(
+                    &mut std::io::BufReader::with_capacity(constants::BUF_SIZE, input),
+                    size - n,
+                )?;
+            }
+        }
+        Modes::Lines(n) => {
+            let mut buffer = [0u8; constants::BUF_SIZE];
+            let buffer = &mut buffer[..constants::BUF_SIZE.min(size)];
+            let mut i = 0usize;
+            let mut lines = 0usize;
+
+            let found = 'o: loop {
+                // the casts here are ok, `buffer.len()` should never be above a few k
+                input.seek(SeekFrom::Current(
+                    -((buffer.len() as i64).min((size - i) as i64)),
+                ))?;
+                input.read_exact(buffer)?;
+                for byte in buffer.iter().rev() {
+                    match byte {
+                        b'\n' if !options.zeroed => {
+                            lines += 1;
+                        }
+                        0u8 if options.zeroed => {
+                            lines += 1;
+                        }
+                        _ => {}
+                    }
+                    // if it were just `n`,
+                    if lines == n + 1 {
+                        break 'o i;
+                    }
+                    i += 1;
+                }
+                if size - i == 0 {
+                    return Ok(());
+                }
+            };
+            input.seek(SeekFrom::Start(0))?;
+            rbuf_n_bytes(
+                &mut std::io::BufReader::with_capacity(constants::BUF_SIZE, input),
+                size - found,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn head_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Result<()> {
+    if options.all_but_last {
+        head_backwards_file(input, options)
+    } else {
+        match options.mode {
+            Modes::Bytes(n) => rbuf_n_bytes(
+                &mut std::io::BufReader::with_capacity(constants::BUF_SIZE, input),
+                n,
+            ),
+            Modes::Lines(n) => rbuf_n_lines(
+                &mut std::io::BufReader::with_capacity(constants::BUF_SIZE, input),
+                n,
+                options.zeroed,
+            ),
+        }
+    }
+}
+
+fn uu_head(options: &HeadOptions) {
+    let mut first = true;
+    for fname in &options.files {
+        let res = match fname.as_str() {
+            "-" => {
+                if options.verbose {
+                    if !first {
+                        println!();
+                    }
+                    println!("==> standard input <==")
+                }
+                let stdin = std::io::stdin();
+                let mut stdin = stdin.lock();
+                match options.mode {
+                    Modes::Bytes(n) => {
+                        if options.all_but_last {
+                            rbuf_but_last_n_bytes(&mut stdin, n)
+                        } else {
+                            rbuf_n_bytes(&mut stdin, n)
+                        }
+                    }
+                    Modes::Lines(n) => {
+                        if options.all_but_last {
+                            rbuf_but_last_n_lines(&mut stdin, n, options.zeroed)
+                        } else {
+                            rbuf_n_lines(&mut stdin, n, options.zeroed)
+                        }
+                    }
+                }
+            }
+            name => {
+                let mut file = match std::fs::File::open(name) {
+                    Ok(f) => f,
+                    Err(err) => match err.kind() {
+                        ErrorKind::NotFound => {
+                            eprintln!(
+                                "head: cannot open '{}' for reading: No such file or directory",
+                                name
+                            );
+                            exit!(constants::EXIT_FAILURE);
+                        }
+                        ErrorKind::PermissionDenied => {
+                            eprintln!(
+                                "head: cannot open '{}' for reading: Permission denied",
+                                name
+                            );
+                            exit!(constants::EXIT_FAILURE);
+                        }
+                        _ => {
+                            eprintln!("head: cannot open '{}' for reading: {}", name, err);
+                            exit!(constants::EXIT_FAILURE);
+                        }
+                    },
+                };
+                if (options.files.len() > 1 && !options.quiet) || options.verbose {
+                    println!("==> {} <==", name)
+                }
+                head_file(&mut file, options)
+            }
+        };
+        if res.is_err() {
+            if fname.as_str() == "-" {
+                eprintln!("head: error reading standard input: Input/output error");
+            } else {
+                eprintln!("head: error reading {}: Input/output error", fname);
+            }
+            exit!(constants::EXIT_FAILURE);
+        }
+        first = false;
     }
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
-
-    let mut settings: Settings = Default::default();
-
-    // handle obsolete -number syntax
-    let new_args = match obsolete(&args[0..]) {
-        (args, Some(n)) => {
-            settings.mode = FilterMode::Lines(n);
-            args
-        }
-        (args, None) => args,
-    };
-
-    let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
-        .optopt(
-            "c",
-            "bytes",
-            "Print the first K bytes.  With the leading '-', print all but the last K bytes",
-            "[-]K",
-        )
-        .optopt(
-            "n",
-            "lines",
-            "Print the first K lines.  With the leading '-', print all but the last K lines",
-            "[-]K",
-        )
-        .optflag("q", "quiet", "never print headers giving file names")
-        .optflag("v", "verbose", "always print headers giving file names")
-        .optflag("z", "zero-terminated", "line delimiter is NUL, not newline")
-        .optflag("h", "help", "display this help and exit")
-        .optflag("V", "version", "output version information and exit")
-        .parse(new_args);
-
-    let use_bytes = matches.opt_present("c");
-    // TODO: suffixes (e.g. b, kB, etc.)
-    match matches.opt_str("n") {
-        Some(n) => {
-            if use_bytes {
-                show_error!("cannot specify both --bytes and --lines.");
-                return 1;
-            }
-
-            match n.parse::<isize>() {
-                Ok(m) => {
-                    settings.mode = if m < 0 {
-                        let m: usize = m.abs() as usize;
-                        FilterMode::NLines(m)
-                    } else {
-                        let m: usize = m.abs() as usize;
-                        FilterMode::Lines(m)
-                    }
-                }
-                Err(e) => {
-                    show_error!("invalid line count '{}': {}", n, e);
-                    return 1;
-                }
-            }
-        }
-        None => {
-            if let Some(count) = matches.opt_str("c") {
-                match count.parse::<usize>() {
-                    Ok(m) => settings.mode = FilterMode::Bytes(m),
-                    Err(e) => {
-                        show_error!("invalid byte count '{}': {}", count, e);
-                        return 1;
-                    }
-                }
-            }
+    let args = match HeadOptions::get_from(args) {
+        Ok(o) => o,
+        Err(s) => {
+            eprintln!("head: {}", s);
+            exit!(constants::EXIT_FAILURE);
         }
     };
+    uu_head(&args);
 
-    let quiet = matches.opt_present("q");
-    let verbose = matches.opt_present("v");
-    settings.zero_terminated = matches.opt_present("z");
-    let files = matches.free;
-
-    // GNU implementation allows multiple declarations of "-q" and "-v" with the
-    // last flag winning. This can't be simulated with the getopts cargo unless
-    // we manually parse the arguments. Given the declaration of both flags,
-    // verbose mode always wins. This is a potential future improvement.
-    if files.len() > 1 && !quiet && !verbose {
-        settings.verbose = true;
-    }
-    if quiet {
-        settings.verbose = false;
-    }
-    if verbose {
-        settings.verbose = true;
-    }
-
-    if files.is_empty() {
-        let mut buffer = BufReader::new(stdin());
-        head(&mut buffer, &settings);
-    } else {
-        let mut first_time = true;
-
-        for file in &files {
-            if settings.verbose {
-                if !first_time {
-                    println!();
-                }
-                println!("==> {} <==", file);
-            }
-            first_time = false;
-
-            let path = Path::new(file);
-            if path.is_dir() || !path.metadata().is_ok() {
-                eprintln!(
-                    "cannot open '{}' for reading: No such file or directory",
-                    &path.to_str().unwrap()
-                );
-                continue;
-            }
-            let reader = File::open(&path).unwrap();
-            let mut buffer = BufReader::new(reader);
-            if !head(&mut buffer, &settings) {
-                break;
-            }
-        }
-    }
-
-    0
-}
-
-// It searches for an option in the form of -123123
-//
-// In case is found, the options vector will get rid of that object so that
-// getopts works correctly.
-fn obsolete(options: &[String]) -> (Vec<String>, Option<usize>) {
-    let mut options: Vec<String> = options.to_vec();
-    let mut a = 1;
-    let b = options.len();
-
-    while a < b {
-        let previous = options[a - 1].clone();
-        let current = options[a].clone();
-        let current = current.as_bytes();
-
-        if previous != "-n" && current.len() > 1 && current[0] == b'-' {
-            let len = current.len();
-            for pos in 1..len {
-                // Ensure that the argument is only made out of digits
-                if !(current[pos] as char).is_numeric() {
-                    break;
-                }
-
-                // If this is the last number
-                if pos == len - 1 {
-                    options.remove(a);
-                    let number: Option<usize> =
-                        from_utf8(&current[1..len]).unwrap().parse::<usize>().ok();
-                    return (options, Some(number.unwrap()));
-                }
-            }
-        }
-
-        a += 1;
-    }
-
-    (options, None)
-}
-
-// TODO: handle errors on read
-fn head<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> bool {
-    match settings.mode {
-        FilterMode::Bytes(count) => {
-            for byte in reader.bytes().take(count) {
-                print!("{}", byte.unwrap() as char);
-            }
-        }
-        FilterMode::Lines(count) => {
-            if settings.zero_terminated {
-                for line in reader.split(0).take(count) {
-                    print!("{}\0", String::from_utf8(line.unwrap()).unwrap())
-                }
-            } else {
-                for line in reader.lines().take(count) {
-                    println!("{}", line.unwrap());
-                }
-            }
-        }
-        FilterMode::NLines(count) => {
-            let mut vector: VecDeque<String> = VecDeque::new();
-
-            for line in reader.lines() {
-                vector.push_back(line.unwrap());
-                if vector.len() <= count {
-                    continue;
-                }
-                println!("{}", vector.pop_front().unwrap());
-            }
-        }
-    }
-    true
+    constants::EXIT_SUCCESS
 }
