@@ -19,8 +19,11 @@ use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Lines, Read, Write};
 use std::mem::replace;
 use std::path::Path;
-use uucore::fs::is_stdin_interactive; // for Iterator::dedup()
+use md5::*;
+use rand::{thread_rng, Rng};
+use rand::distributions::{Alphanumeric};
 
+use uucore::fs::is_stdin_interactive; // for Iterator::dedup()
 static NAME: &str = "sort";
 static ABOUT: &str = "Display sorted concatenation of all FILE(s).";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -29,6 +32,7 @@ static OPT_HUMAN_NUMERIC_SORT: &str = "human-numeric-sort";
 static OPT_MONTH_SORT: &str = "month-sort";
 static OPT_NUMERIC_SORT: &str = "numeric-sort";
 static OPT_VERSION_SORT: &str = "version-sort";
+static OPT_RANDOM_SORT: &str = "random-sort";
 
 static OPT_DICTIONARY_ORDER: &str = "dictionary-order";
 static OPT_MERGE: &str = "merge";
@@ -38,6 +42,7 @@ static OPT_OUTPUT: &str = "output";
 static OPT_REVERSE: &str = "reverse";
 static OPT_STABLE: &str = "stable";
 static OPT_UNIQUE: &str = "unique";
+static OPT_RANDOM: &str = "random-sort";
 
 static ARG_FILES: &str = "files";
 
@@ -49,6 +54,7 @@ enum SortMode {
     HumanNumeric,
     Month,
     Version,
+    Random,
     Default,
 }
 
@@ -60,6 +66,7 @@ struct Settings {
     stable: bool,
     unique: bool,
     check: bool,
+    random: bool,
     compare_fns: Vec<fn(&str, &str) -> Ordering>,
     transform_fns: Vec<fn(&str) -> String>,
 }
@@ -74,6 +81,7 @@ impl Default for Settings {
             stable: false,
             unique: false,
             check: false,
+            random: false,
             compare_fns: Vec::new(),
             transform_fns: Vec::new(),
         }
@@ -237,6 +245,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .value_name("FILENAME"),
         )
         .arg(
+            Arg::with_name(OPT_RANDOM)
+                .short("R")
+                .long(OPT_RANDOM)
+                .help("shuffle in random order.")
+        )
+        .arg(
             Arg::with_name(OPT_REVERSE)
                 .short("r")
                 .long(OPT_REVERSE)
@@ -270,6 +284,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         SortMode::Numeric
     } else if matches.is_present(OPT_VERSION_SORT) {
         SortMode::Version
+    } else if matches.is_present(OPT_RANDOM_SORT) {
+        SortMode::Random
     } else {
         SortMode::Default
     };
@@ -303,6 +319,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         SortMode::HumanNumeric => human_numeric_size_compare,
         SortMode::Month => month_compare,
         SortMode::Version => version_compare,
+        SortMode::Random => random_shuffle,
         SortMode::Default => default_compare,
     });
 
@@ -348,16 +365,21 @@ fn exec(files: Vec<String>, settings: &Settings) -> i32 {
     if settings.merge {
         if settings.unique {
             print_sorted(file_merger.dedup(), &settings.outfile)
+        } else if settings.random {
+            print_sorted(file_merger.dedup(), &settings.outfile)
         } else {
             print_sorted(file_merger, &settings.outfile)
         }
     } else if settings.unique {
         print_sorted(lines.iter().dedup(), &settings.outfile)
+    } else if settings.random {
+        print_sorted(lines.iter().dedup(), &settings.outfile)
     } else {
         print_sorted(lines.iter(), &settings.outfile)
     }
 
-    0
+0
+
 }
 
 fn exec_check_file(lines: Lines<BufReader<Box<dyn Read>>>, settings: &Settings) -> i32 {
@@ -499,6 +521,27 @@ fn human_numeric_size_compare(a: &str, b: &str) -> Ordering {
     } else {
         Ordering::Equal
     }
+}
+
+fn get_rand_string() -> String {
+    let rand_string = thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(16)
+        .map(char::from)
+        .collect::<String>();
+    rand_string
+}
+
+fn random_shuffle(a: &str, b: &str) -> Ordering {
+    #![allow(clippy::comparison_chain)] 
+    
+    let rand_string = get_rand_string();
+    let rand_slice = rand_string.as_str();
+    
+    let da = md5::compute([a, rand_slice].concat());
+    let db = md5::compute([b, rand_slice].concat());
+    
+    da.cmp(&db)    
 }
 
 #[derive(Eq, Ord, PartialEq, PartialOrd)]
