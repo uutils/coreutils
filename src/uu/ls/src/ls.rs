@@ -182,6 +182,7 @@ struct LongFormat {
     author: bool,
     group: bool,
     owner: bool,
+    #[cfg(unix)]
     numeric_uid_gid: bool,
 }
 
@@ -312,11 +313,13 @@ impl Config {
             let group = !options.is_present(options::NO_GROUP)
                 && !options.is_present(options::format::LONG_NO_GROUP);
             let owner = !options.is_present(options::format::LONG_NO_OWNER);
+            #[cfg(unix)]
             let numeric_uid_gid = options.is_present(options::format::LONG_NUMERIC_UID_GID);
             LongFormat {
                 author,
                 group,
                 owner,
+                #[cfg(unix)]
                 numeric_uid_gid,
             }
         };

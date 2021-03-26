@@ -296,6 +296,8 @@ fn test_ls_long_formats() {
 
     // Regex for three names, so all of author, group and owner
     let re_three = Regex::new(r"[xrw-]{9} \d ([-0-9_a-z]+ ){3}0").unwrap();
+
+    #[cfg(unix)]
     let re_three_num = Regex::new(r"[xrw-]{9} \d (\d+ ){3}0").unwrap();
 
     // Regex for two names, either:
@@ -303,10 +305,14 @@ fn test_ls_long_formats() {
     // - author and owner
     // - author and group
     let re_two = Regex::new(r"[xrw-]{9} \d ([-0-9_a-z]+ ){2}0").unwrap();
+
+    #[cfg(unix)]
     let re_two_num = Regex::new(r"[xrw-]{9} \d (\d+ ){2}0").unwrap();
 
     // Regex for one name: author, group or owner
     let re_one = Regex::new(r"[xrw-]{9} \d [-0-9_a-z]+ 0").unwrap();
+
+    #[cfg(unix)]
     let re_one_num = Regex::new(r"[xrw-]{9} \d \d+ 0").unwrap();
 
     // Regex for no names
@@ -332,15 +338,18 @@ fn test_ls_long_formats() {
     println!("stdout = {:?}", result.stdout);
     assert!(re_three.is_match(&result.stdout));
 
-    let result = scene
-        .ucmd()
-        .arg("-n")
-        .arg("--author")
-        .arg("test-long-formats")
-        .succeeds();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert!(re_three_num.is_match(&result.stdout));
+    #[cfg(unix)]
+    {
+        let result = scene
+            .ucmd()
+            .arg("-n")
+            .arg("--author")
+            .arg("test-long-formats")
+            .succeeds();
+        println!("stderr = {:?}", result.stderr);
+        println!("stdout = {:?}", result.stdout);
+        assert!(re_three_num.is_match(&result.stdout));
+    }
 
     for arg in &[
         "-l",                     // only group and owner
@@ -358,15 +367,18 @@ fn test_ls_long_formats() {
         println!("stdout = {:?}", result.stdout);
         assert!(re_two.is_match(&result.stdout));
 
-        let result = scene
-            .ucmd()
-            .arg("-n")
-            .args(&arg.split(" ").collect::<Vec<_>>())
-            .arg("test-long-formats")
-            .succeeds();
-        println!("stderr = {:?}", result.stderr);
-        println!("stdout = {:?}", result.stdout);
-        assert!(re_two_num.is_match(&result.stdout));
+        #[cfg(unix)]
+        {
+            let result = scene
+                .ucmd()
+                .arg("-n")
+                .args(&arg.split(" ").collect::<Vec<_>>())
+                .arg("test-long-formats")
+                .succeeds();
+            println!("stderr = {:?}", result.stderr);
+            println!("stdout = {:?}", result.stdout);
+            assert!(re_two_num.is_match(&result.stdout));
+        }
     }
 
     for arg in &[
@@ -388,15 +400,18 @@ fn test_ls_long_formats() {
         println!("stdout = {:?}", result.stdout);
         assert!(re_one.is_match(&result.stdout));
 
-        let result = scene
-            .ucmd()
-            .arg("-n")
-            .args(&arg.split(" ").collect::<Vec<_>>())
-            .arg("test-long-formats")
-            .succeeds();
-        println!("stderr = {:?}", result.stderr);
-        println!("stdout = {:?}", result.stdout);
-        assert!(re_one_num.is_match(&result.stdout));
+        #[cfg(unix)]
+        {
+            let result = scene
+                .ucmd()
+                .arg("-n")
+                .args(&arg.split(" ").collect::<Vec<_>>())
+                .arg("test-long-formats")
+                .succeeds();
+            println!("stderr = {:?}", result.stderr);
+            println!("stdout = {:?}", result.stdout);
+            assert!(re_one_num.is_match(&result.stdout));
+        }
     }
 
     for arg in &[
@@ -421,15 +436,18 @@ fn test_ls_long_formats() {
         println!("stdout = {:?}", result.stdout);
         assert!(re_zero.is_match(&result.stdout));
 
-        let result = scene
-            .ucmd()
-            .arg("-n")
-            .args(&arg.split(" ").collect::<Vec<_>>())
-            .arg("test-long-formats")
-            .succeeds();
-        println!("stderr = {:?}", result.stderr);
-        println!("stdout = {:?}", result.stdout);
-        assert!(re_zero.is_match(&result.stdout));
+        #[cfg(unix)]
+        {
+            let result = scene
+                .ucmd()
+                .arg("-n")
+                .args(&arg.split(" ").collect::<Vec<_>>())
+                .arg("test-long-formats")
+                .succeeds();
+            println!("stderr = {:?}", result.stderr);
+            println!("stdout = {:?}", result.stdout);
+            assert!(re_zero.is_match(&result.stdout));
+        }
     }
 }
 
