@@ -12,6 +12,9 @@ extern crate uucore;
 
 use clap::{App, Arg};
 use itertools::Itertools;
+use md5::*;
+use rand::distributions::Alphanumeric;
+use rand::{thread_rng, Rng};
 use semver::Version;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
@@ -29,6 +32,7 @@ static OPT_HUMAN_NUMERIC_SORT: &str = "human-numeric-sort";
 static OPT_MONTH_SORT: &str = "month-sort";
 static OPT_NUMERIC_SORT: &str = "numeric-sort";
 static OPT_VERSION_SORT: &str = "version-sort";
+static OPT_RANDOM_SORT: &str = "random-sort";
 
 static OPT_DICTIONARY_ORDER: &str = "dictionary-order";
 static OPT_MERGE: &str = "merge";
@@ -38,6 +42,7 @@ static OPT_OUTPUT: &str = "output";
 static OPT_REVERSE: &str = "reverse";
 static OPT_STABLE: &str = "stable";
 static OPT_UNIQUE: &str = "unique";
+static OPT_RANDOM: &str = "random-sort";
 
 static ARG_FILES: &str = "files";
 
@@ -60,8 +65,10 @@ struct Settings {
     stable: bool,
     unique: bool,
     check: bool,
+    random: bool,
     compare_fns: Vec<fn(&str, &str) -> Ordering>,
     transform_fns: Vec<fn(&str) -> String>,
+    salt: String,
 }
 
 impl Default for Settings {
@@ -74,8 +81,10 @@ impl Default for Settings {
             stable: false,
             unique: false,
             check: false,
+            random: false,
             compare_fns: Vec::new(),
             transform_fns: Vec::new(),
+            salt: String::new(),
         }
     }
 }
@@ -155,17 +164,14 @@ impl<'a> Iterator for FileMerger<'a> {
         }
     }
 }
+
 fn get_usage() -> String {
     format!(
         "{0} {1}
-
 Usage:
  {0} [OPTION]... [FILE]...
-
 Write the sorted concatenation of all FILE(s) to standard output.
-
 Mandatory arguments for long options are mandatory for short options too.
-
 With no FILE, or when FILE is -, read standard input.",
         NAME, VERSION
     )
@@ -237,6 +243,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .value_name("FILENAME"),
         )
         .arg(
+            Arg::with_name(OPT_RANDOM)
+                .short("R")
+                .long(OPT_RANDOM)
+                .help("shuffle in random order."),
+        )
+        .arg(
             Arg::with_name(OPT_REVERSE)
                 .short("r")
                 .long(OPT_REVERSE)
@@ -290,6 +302,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     settings.stable = matches.is_present(OPT_STABLE);
     settings.unique = matches.is_present(OPT_UNIQUE);
 
+    if matches.is_present(OPT_RANDOM) {
+        settings.random = matches.is_present(OPT_RANDOM);
+        settings.salt = get_rand_string();
+    }
+
     //let mut files = matches.free;
     if files.is_empty() {
         /* if no file, default to stdin */
@@ -313,10 +330,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     }
 
-    exec(files, &settings)
+    exec(files, &mut settings)
 }
 
-fn exec(files: Vec<String>, settings: &Settings) -> i32 {
+fn exec(files: Vec<String>, settings: &mut Settings) -> i32 {
     let mut lines = Vec::new();
     let mut file_merger = FileMerger::new(&settings);
 
@@ -419,7 +436,11 @@ fn compare_by(a: &str, b: &str, settings: &Settings) -> Ordering {
     };
 
     for compare_fn in &settings.compare_fns {
-        let cmp = compare_fn(a, b);
+        let cmp: Ordering = if settings.random {
+            random_shuffle(a, b, settings.salt.clone())
+        } else {
+            compare_fn(a, b)
+        };
         if cmp != Ordering::Equal {
             if settings.reverse {
                 return cmp.reverse();
@@ -499,6 +520,25 @@ fn human_numeric_size_compare(a: &str, b: &str) -> Ordering {
     } else {
         Ordering::Equal
     }
+}
+
+fn random_shuffle(a: &str, b: &str, salt: String) -> Ordering {
+    #![allow(clippy::comparison_chain)]
+    let salt_slice = salt.as_str();
+
+    let da = md5::compute([a, salt_slice].concat());
+    let db = md5::compute([b, salt_slice].concat());
+
+    da.cmp(&db)
+}
+
+fn get_rand_string() -> String {
+    let rand_string = thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(16)
+        .map(char::from)
+        .collect::<String>();
+    rand_string
 }
 
 #[derive(Eq, Ord, PartialEq, PartialOrd)]
