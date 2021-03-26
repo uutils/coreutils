@@ -44,119 +44,89 @@ pub fn parse_obsolete(src: &str) -> Option<Result<(usize, bool), ParseError>> {
 /// Parses an -c or -n argument,
 /// the bool specifies whether to read from the end
 pub fn parse_num(src: &str) -> Result<(usize, bool), ParseError> {
-    // we're not using the bytefmt or byte_unit crates
-    // because they aren't fully `head` format compliant
-
-    if src.is_empty() {
-        return Err(ParseError::Syntax);
+    let mut num_start = 0;
+    let mut chars = src.char_indices();
+    let (mut chars, all_but_last) = match chars.next() {
+        Some((_, c)) => {
+            if c == '-' {
+                num_start += 1;
+                (chars, true)
+            } else {
+                (src.char_indices(), false)
+            }
+        }
+        None => return Err(ParseError::Syntax),
+    };
+    let mut num_end = 0usize;
+    let mut last_char = 0 as char;
+    let mut num_count = 0usize;
+    while let Some((n, c)) = chars.next() {
+        if c.is_numeric() {
+            num_end = n;
+            num_count += 1;
+        } else {
+            last_char = c;
+            break;
+        }
     }
 
-    // (1) is the number
-    // (2) is b
-    // (3) is any of the other units
-    // (4) is `i`
-    // (5) is `B`
-    let re = regex::Regex::new(r"^-?(\d+)?(?:(b)|([kKmMgGtTpPeEzZyY])(?:(i)B|(B))?)?$").unwrap();
-
-    match re.captures(src) {
-        Some(cap) => {
-            let number = match cap.get(1) {
-                Some(n) => {
-                    // we're matching digits so it's ok to unwrap
-                    n.as_str().parse().unwrap()
-                }
-                None => 1usize,
-            };
-            //`{unit}iB` means base2 as well as just `{unit}`
-            let is_base_2 = cap.get(4).is_some() || cap.get(5).is_none();
-
-            let multiplier = if cap.get(2).is_some() {
-                512
-            } else if let Some(unit) = cap.get(3) {
-                //this is safe as the first byte cannot be
-                //part of a multi-byte character if it is
-                //an ascii character
-                match &unit.as_str().as_bytes()[0] {
-                    b'k' | b'K' => {
-                        if is_base_2 {
-                            1024u128.pow(1)
-                        } else {
-                            1000u128.pow(1)
-                        }
-                    }
-                    b'm' | b'M' => {
-                        if is_base_2 {
-                            1024u128.pow(2)
-                        } else {
-                            1000u128.pow(2)
-                        }
-                    }
-                    b'g' | b'G' => {
-                        if is_base_2 {
-                            1024u128.pow(3)
-                        } else {
-                            1000u128.pow(3)
-                        }
-                    }
-                    b't' | b'T' => {
-                        if is_base_2 {
-                            1024u128.pow(4)
-                        } else {
-                            1000u128.pow(4)
-                        }
-                    }
-                    b'p' | b'P' => {
-                        if is_base_2 {
-                            1024u128.pow(5)
-                        } else {
-                            1000u128.pow(5)
-                        }
-                    }
-                    b'e' | b'E' => {
-                        if is_base_2 {
-                            1024u128.pow(6)
-                        } else {
-                            1000u128.pow(6)
-                        }
-                    }
-                    b'z' | b'Z' => {
-                        if is_base_2 {
-                            1024u128.pow(7)
-                        } else {
-                            1000u128.pow(7)
-                        }
-                    }
-                    b'y' | b'Y' => {
-                        if is_base_2 {
-                            1024u128.pow(8)
-                        } else {
-                            1000u128.pow(8)
-                        }
-                    }
-                    _ => {
-                        // this branch should never run since the regex
-                        // will only match an argument with valid branches
-                        // in this case we just crash - something's gone very wrong
-                        panic!("Fatal error parsing arguments")
-                    }
-                }
-            } else {
-                1
-            };
-
-            let number = match usize::try_from(multiplier) {
-                Ok(n) => match number.checked_mul(n) {
-                    Some(n) => n,
-                    None => return Err(ParseError::Overflow),
-                },
-                Err(_) => return Err(ParseError::Overflow),
-            };
-            // again, first byte
-            // the regex would've failed if src was empty,
-            // i.e. we can index here safely
-            Ok((number, src.as_bytes()[0] == b'-'))
+    let num = if num_count > 0 {
+        match src[num_start..=num_end].parse::<usize>() {
+            Ok(n) => Some(n),
+            Err(_) => return Err(ParseError::Overflow),
         }
-        None => Err(ParseError::Syntax),
+    } else {
+        None
+    };
+
+    if last_char == 0 as char {
+        if let Some(n) = num {
+            Ok((n, all_but_last))
+        } else {
+            Err(ParseError::Syntax)
+        }
+    } else {
+        let base: u128 = match chars.next() {
+            Some((_, c)) => {
+                let b = match c {
+                    'B' if last_char != 'b' => 1000,
+                    'i' if last_char != 'b' => {
+                        if let Some((_, 'B')) = chars.next() {
+                            1024
+                        } else {
+                            return Err(ParseError::Syntax);
+                        }
+                    }
+                    _ => return Err(ParseError::Syntax),
+                };
+                if let Some(_) = chars.next() {
+                    return Err(ParseError::Syntax);
+                } else {
+                    b
+                }
+            }
+            None => 1024,
+        };
+        let mul = match last_char.to_lowercase().next().unwrap() {
+            'b' => 512,
+            'k' => base.pow(1),
+            'm' => base.pow(2),
+            'g' => base.pow(3),
+            't' => base.pow(4),
+            'p' => base.pow(5),
+            'e' => base.pow(6),
+            'z' => base.pow(7),
+            'y' => base.pow(8),
+            _ => return Err(ParseError::Syntax),
+        };
+        let mul = match usize::try_from(mul) {
+            Ok(n) => n,
+            Err(_) => return Err(ParseError::Overflow),
+        };
+        match num.unwrap_or(1).checked_mul(mul) {
+            Some(n) => Ok((n, all_but_last)),
+            None => Err(ParseError::Overflow),
+        }
     }
 }
 #[cfg(test)]
