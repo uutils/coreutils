@@ -54,7 +54,6 @@ enum SortMode {
     HumanNumeric,
     Month,
     Version,
-    Random,
     Default,
 }
 
@@ -69,6 +68,7 @@ struct Settings {
     random: bool,
     compare_fns: Vec<fn(&str, &str) -> Ordering>,
     transform_fns: Vec<fn(&str) -> String>,
+    salt: String,
 }
 
 impl Default for Settings {
@@ -84,6 +84,7 @@ impl Default for Settings {
             random: false,
             compare_fns: Vec::new(),
             transform_fns: Vec::new(),
+            salt: get_rand_string(),
         }
     }
 }
@@ -163,17 +164,14 @@ impl<'a> Iterator for FileMerger<'a> {
         }
     }
 }
+
 fn get_usage() -> String {
     format!(
         "{0} {1}
-
 Usage:
  {0} [OPTION]... [FILE]...
-
 Write the sorted concatenation of all FILE(s) to standard output.
-
 Mandatory arguments for long options are mandatory for short options too.
-
 With no FILE, or when FILE is -, read standard input.",
         NAME, VERSION
     )
@@ -284,8 +282,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         SortMode::Numeric
     } else if matches.is_present(OPT_VERSION_SORT) {
         SortMode::Version
-    } else if matches.is_present(OPT_RANDOM_SORT) {
-        SortMode::Random
     } else {
         SortMode::Default
     };
@@ -305,6 +301,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     settings.reverse = matches.is_present(OPT_REVERSE);
     settings.stable = matches.is_present(OPT_STABLE);
     settings.unique = matches.is_present(OPT_UNIQUE);
+    settings.random = matches.is_present(OPT_RANDOM);
 
     //let mut files = matches.free;
     if files.is_empty() {
@@ -314,12 +311,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         crash!(1, "sort: extra operand `{}' not allowed with -c", files[1])
     }
 
+    // The Random Sort is a dummy match because we have to pass a
+    // settings struct value to the random function.
     settings.compare_fns.push(match settings.mode {
         SortMode::Numeric => numeric_compare,
         SortMode::HumanNumeric => human_numeric_size_compare,
         SortMode::Month => month_compare,
         SortMode::Version => version_compare,
-        SortMode::Random => random_shuffle,
         SortMode::Default => default_compare,
     });
 
@@ -330,10 +328,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     }
 
-    exec(files, &settings)
+    exec(files, &mut settings)
 }
 
-fn exec(files: Vec<String>, settings: &Settings) -> i32 {
+fn exec(files: Vec<String>, settings: &mut Settings) -> i32 {
     let mut lines = Vec::new();
     let mut file_merger = FileMerger::new(&settings);
 
@@ -365,14 +363,10 @@ fn exec(files: Vec<String>, settings: &Settings) -> i32 {
     if settings.merge {
         if settings.unique {
             print_sorted(file_merger.dedup(), &settings.outfile)
-        } else if settings.random {
-            print_sorted(file_merger.dedup(), &settings.outfile)
         } else {
             print_sorted(file_merger, &settings.outfile)
         }
     } else if settings.unique {
-        print_sorted(lines.iter().dedup(), &settings.outfile)
-    } else if settings.random {
         print_sorted(lines.iter().dedup(), &settings.outfile)
     } else {
         print_sorted(lines.iter(), &settings.outfile)
@@ -440,7 +434,11 @@ fn compare_by(a: &str, b: &str, settings: &Settings) -> Ordering {
     };
 
     for compare_fn in &settings.compare_fns {
-        let cmp = compare_fn(a, b);
+        let cmp: Ordering = if settings.random {
+            random_shuffle(a, b, settings.salt.clone())
+        } else {
+            compare_fn(a, b)
+        };
         if cmp != Ordering::Equal {
             if settings.reverse {
                 return cmp.reverse();
@@ -522,6 +520,16 @@ fn human_numeric_size_compare(a: &str, b: &str) -> Ordering {
     }
 }
 
+fn random_shuffle(a: &str, b: &str, salt: String) -> Ordering {
+    #![allow(clippy::comparison_chain)]
+    let salt_slice = salt.as_str();
+
+    let da = md5::compute([a, salt_slice].concat());
+    let db = md5::compute([b, salt_slice].concat());
+
+    da.cmp(&db)
+}
+
 fn get_rand_string() -> String {
     let rand_string = thread_rng()
         .sample_iter(&Alphanumeric)
@@ -529,18 +537,6 @@ fn get_rand_string() -> String {
         .map(char::from)
         .collect::<String>();
     rand_string
-}
-
-fn random_shuffle(a: &str, b: &str) -> Ordering {
-    #![allow(clippy::comparison_chain)]
-
-    let rand_string = get_rand_string();
-    let rand_slice = rand_string.as_str();
-
-    let da = md5::compute([a, rand_slice].concat());
-    let db = md5::compute([b, rand_slice].concat());
-
-    da.cmp(&db)
 }
 
 #[derive(Eq, Ord, PartialEq, PartialOrd)]
