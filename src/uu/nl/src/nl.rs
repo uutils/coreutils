@@ -93,83 +93,81 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
         .arg(
             Arg::with_name(options::BODY_NUMBERING)
-            .short("b")
-            .long(options::BODY_NUMBERING)
-            .help("use STYLE for numbering body lines")
-            .value_name("SYNTAX")
+                .short("b")
+                .long(options::BODY_NUMBERING)
+                .help("use STYLE for numbering body lines")
+                .value_name("SYNTAX"),
         )
         .arg(
             Arg::with_name(options::SECTION_DELIMITER)
-            .short("d")
-            .long(options::SECTION_DELIMITER)
-            .help("use CC for separating logical pages")
-            .value_name("CC")
+                .short("d")
+                .long(options::SECTION_DELIMITER)
+                .help("use CC for separating logical pages")
+                .value_name("CC"),
         )
         .arg(
             Arg::with_name(options::FOOTER_NUMBERING)
-            .short("f")
-            .long(options::FOOTER_NUMBERING)
-            .help("use STYLE for numbering footer lines")
-            .value_name("STYLE")
+                .short("f")
+                .long(options::FOOTER_NUMBERING)
+                .help("use STYLE for numbering footer lines")
+                .value_name("STYLE"),
         )
         .arg(
             Arg::with_name(options::HEADER_NUMBERING)
-            .short("h")
-            .long(options::HEADER_NUMBERING)
-            .help("use STYLE for numbering header lines")
-            .value_name("STYLE")
+                .short("h")
+                .long(options::HEADER_NUMBERING)
+                .help("use STYLE for numbering header lines")
+                .value_name("STYLE"),
         )
         .arg(
             Arg::with_name(options::LINE_INCREMENT)
-            .short("i")
-            .long(options::LINE_INCREMENT)
-            .help("line number increment at each line")
-            .value_name("")
+                .short("i")
+                .long(options::LINE_INCREMENT)
+                .help("line number increment at each line")
+                .value_name("NUMBER"),
         )
         .arg(
             Arg::with_name(options::JOIN_BLANK_LINES)
-            .short("l")
-            .long(options::JOIN_BLANK_LINES)
-            .help("group of NUMBER empty lines counted as one")
-            .value_name("NUMBER")
+                .short("l")
+                .long(options::JOIN_BLANK_LINES)
+                .help("group of NUMBER empty lines counted as one")
+                .value_name("NUMBER"),
         )
         .arg(
             Arg::with_name(options::NUMBER_FORMAT)
-            .short("n")
-            .long(options::NUMBER_FORMAT)
-            .help("insert line numbers according to FORMAT")
-            .value_name("FORMAT")
+                .short("n")
+                .long(options::NUMBER_FORMAT)
+                .help("insert line numbers according to FORMAT")
+                .value_name("FORMAT"),
         )
         .arg(
             Arg::with_name(options::NO_RENUMBER)
-            .short("p")
-            .long(options::NO_RENUMBER)
-            .help("do not reset line numbers at logical pages")
+                .short("p")
+                .long(options::NO_RENUMBER)
+                .help("do not reset line numbers at logical pages"),
         )
         .arg(
             Arg::with_name(options::NUMER_SEPARATOR)
-            .short("s")
-            .long(options::NUMER_SEPARATOR)
-            .help("add STRING after (possible) line number")
-            .value_name("STRING")
+                .short("s")
+                .long(options::NUMER_SEPARATOR)
+                .help("add STRING after (possible) line number")
+                .value_name("STRING"),
         )
         .arg(
             Arg::with_name(options::STARTING_LINE_NUMER)
-            .short("v")
-            .long(options::STARTING_LINE_NUMER)
-            .help("first line number on each logical page")
-            .value_name("NUMBER")
+                .short("v")
+                .long(options::STARTING_LINE_NUMER)
+                .help("first line number on each logical page")
+                .value_name("NUMBER"),
         )
         .arg(
             Arg::with_name(options::NUMBER_WIDTH)
-            .short("w")
-            .long(options::NUMBER_WIDTH)
-            .help("use NUMBER columns for line numbers")
-            .value_name("NUMBER")
-        ).get_matches_from(args);
-
-    //opts.optflag("", "help", "display this help and exit");
-    //opts.optflag("V", "version", "version");
+                .short("w")
+                .long(options::NUMBER_WIDTH)
+                .help("use NUMBER columns for line numbers")
+                .value_name("NUMBER"),
+        )
+        .get_matches_from(args);
 
     // A mutable settings object, initialized with the defaults.
     let mut settings = Settings {
@@ -185,24 +183,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         renumber: true,
         number_separator: String::from("\t"),
     };
-
-    /*let given_options = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => {
-            show_error!("{}", f);
-            print_usage(&opts);
-            return 1;
-        }
-    };
-
-    if given_options.opt_present("help") {
-        print_usage(&opts);
-        return 0;
-    }
-    if given_options.opt_present("version") {
-        version();
-        return 0;
-    }*/
 
     // Update the settings from the command line options, and terminate the
     // program if some options could not successfully be parsed.
