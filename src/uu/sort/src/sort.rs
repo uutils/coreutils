@@ -12,17 +12,17 @@ extern crate uucore;
 
 use clap::{App, Arg};
 use itertools::Itertools;
-use twox_hash::XxHash64;
-use std::hash::{Hash, Hasher};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use semver::Version;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::fs::File;
+use std::hash::{Hash, Hasher};
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Lines, Read, Write};
 use std::mem::replace;
 use std::path::Path;
+use twox_hash::XxHash64;
 use uucore::fs::is_stdin_interactive; // for Iterator::dedup()
 
 static NAME: &str = "sort";
@@ -545,12 +545,11 @@ fn random_shuffle(a: &str, b: &str, salt: String) -> Ordering {
 }
 
 fn get_rand_string() -> String {
-    let rand_string = thread_rng()
+    thread_rng()
         .sample_iter(&Alphanumeric)
         .take(16)
         .map(char::from)
-        .collect::<String>();
-    rand_string
+        .collect::<String>()
 }
 
 fn xxhash<T: Hash>(t: &T) -> u64 {
