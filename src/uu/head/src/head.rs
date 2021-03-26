@@ -22,12 +22,10 @@ fn rbuf_n_bytes(input: &mut impl std::io::BufRead, n: usize) -> std::io::Result<
         let read = loop {
             match input.read(&mut readbuf) {
                 Ok(n) => break n,
-                Err(e) => {
-                    match e.kind() {
-                        ErrorKind::Interrupted => {},
-                        _ => return Err(e)
-                    }
-                }
+                Err(e) => match e.kind() {
+                    ErrorKind::Interrupted => {}
+                    _ => return Err(e),
+                },
             }
         };
         if read == 0 {
@@ -91,9 +89,9 @@ fn rbuf_but_last_n_bytes(input: &mut impl std::io::BufRead, n: usize) -> std::io
             match input.read(&mut buffer) {
                 Ok(n) => break n,
                 Err(e) => match e.kind() {
-                    ErrorKind::Interrupted => {},
-                    _ => return Err(e)
-                }
+                    ErrorKind::Interrupted => {}
+                    _ => return Err(e),
+                },
             }
         };
         if read == 0 {
