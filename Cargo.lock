@@ -206,6 +206,8 @@ dependencies = [
 name = "coreutils"
 version = "0.0.4"
 dependencies = [
+ "byteorder",
+ "cc",
  "conv",
  "filetime",
  "glob 0.3.0",
@@ -213,9 +215,12 @@ dependencies = [
  "libc",
  "rand 0.7.3",
  "regex",
+ "rustc-demangle",
+ "same-file",
  "sha1",
  "tempfile",
  "textwrap",
+ "thread_local",
  "time",
  "unindent",
  "unix_socket",
@@ -317,6 +322,7 @@ dependencies = [
  "uu_yes",
  "uucore",
  "walkdir",
+ "winapi-util",
 ]
 
 [[package]]
@@ -1236,6 +1242,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3e52c148ef37f8c375d49d5a73aa70713125b7f19095948a923f80afdeb22ec2"
 
 [[package]]
+name = "rustc-demangle"
+version = "0.1.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4c691c0e608126e00913e33f0ccf3727d5fc84573623b8d65b2df340b5201783"
+
+[[package]]
 name = "rustc_version"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1482,6 +1494,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "thread_local"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bb9bc092d0d51e76b2b19d9d85534ffc9ec2db959a2523cdae0697e2972cd447"
+dependencies = [
+ "lazy_static",
+]
+
+[[package]]
 name = "time"
 version = "0.1.42"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1595,7 +1616,6 @@ dependencies = [
 name = "uu_cat"
 version = "0.0.4"
 dependencies = [
- "clap",
  "quick-error",
  "unix_socket",
  "uucore",
