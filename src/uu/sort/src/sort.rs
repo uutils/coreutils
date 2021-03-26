@@ -315,8 +315,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         crash!(1, "sort: extra operand `{}' not allowed with -c", files[1])
     }
 
-    // The Random Sort is a dummy match because we have to pass a
-    // settings struct value to the random function.
     settings.compare_fns.push(match settings.mode {
         SortMode::Numeric => numeric_compare,
         SortMode::HumanNumeric => human_numeric_size_compare,
