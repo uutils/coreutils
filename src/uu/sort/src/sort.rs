@@ -545,12 +545,11 @@ fn random_shuffle(a: &str, b: &str, salt: String) -> Ordering {
 }
 
 fn get_rand_string() -> String {
-    let rand_string = thread_rng()
+    thread_rng()
         .sample_iter(&Alphanumeric)
         .take(16)
         .map(char::from)
-        .collect::<String>();
-    rand_string
+        .collect::<String>()
 }
 
 fn xxhash<T: Hash>(t: &T) -> u64 {
