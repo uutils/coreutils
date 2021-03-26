@@ -84,6 +84,7 @@ pub mod options {
         pub static COMMAS: &str = "m";
         pub static LONG_NO_OWNER: &str = "g";
         pub static LONG_NO_GROUP: &str = "o";
+        pub static LONG_NUMERIC_UID_GID: &str = "numeric-uid-gid";
     }
     pub mod files {
         pub static ALL: &str = "all";
@@ -114,7 +115,6 @@ pub mod options {
     pub static CLASSIFY: &str = "classify";
     pub static INODE: &str = "inode";
     pub static DEREFERENCE: &str = "dereference";
-    pub static NUMERIC_UID_GID: &str = "numeric-uid-gid";
     pub static REVERSE: &str = "reverse";
     pub static RECURSIVE: &str = "recursive";
     pub static COLOR: &str = "color";
@@ -167,7 +167,6 @@ struct Config {
     classify: bool,
     ignore_backups: bool,
     size_format: SizeFormat,
-    numeric_uid_gid: bool,
     directory: bool,
     time: Time,
     #[cfg(unix)]
@@ -183,6 +182,7 @@ struct LongFormat {
     author: bool,
     group: bool,
     owner: bool,
+    numeric_uid_gid: bool,
 }
 
 impl Config {
@@ -230,6 +230,7 @@ impl Config {
             None => {
                 if options.is_present(options::format::LONG_NO_GROUP)
                     || options.is_present(options::format::LONG_NO_OWNER)
+                    || options.is_present(options::format::LONG_NUMERIC_UID_GID)
                 {
                     format = Format::Long;
                 } else if options.is_present(options::format::ONELINE) {
@@ -245,6 +246,13 @@ impl Config {
                     }
                 }
                 if let Some(indices) = options.indices_of(options::format::LONG_NO_GROUP) {
+                    let i = indices.max().unwrap();
+                    if i > idx {
+                        format = Format::Long;
+                        idx = i;
+                    }
+                }
+                if let Some(indices) = options.indices_of(options::format::LONG_NUMERIC_UID_GID) {
                     let i = indices.max().unwrap();
                     if i > idx {
                         format = Format::Long;
@@ -328,10 +336,12 @@ impl Config {
             let group = !options.is_present(options::NO_GROUP)
                 && !options.is_present(options::format::LONG_NO_GROUP);
             let owner = !options.is_present(options::format::LONG_NO_OWNER);
+            let numeric_uid_gid = options.is_present(options::format::LONG_NUMERIC_UID_GID);
             LongFormat {
                 author,
                 group,
                 owner,
+                numeric_uid_gid,
             }
         };
 
@@ -355,7 +365,6 @@ impl Config {
             classify: options.is_present(options::CLASSIFY),
             ignore_backups: options.is_present(options::IGNORE_BACKUPS),
             size_format,
-            numeric_uid_gid: options.is_present(options::NUMERIC_UID_GID),
             directory: options.is_present(options::DIRECTORY),
             time,
             #[cfg(unix)]
@@ -444,7 +453,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::format::COLUMNS,
                 ]),
         )
-        // The next three arguments do not override with the other format
+        // The next four arguments do not override with the other format
         // options, see the comment in Config::from for the reason.
         .arg(
             Arg::with_name(options::format::ONELINE)
@@ -460,6 +469,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(options::format::LONG_NO_OWNER)
                 .short(options::format::LONG_NO_OWNER)
                 .help("Long format without owner information.")
+        )
+        .arg(
+            Arg::with_name(options::format::LONG_NUMERIC_UID_GID)
+                .short("n")
+                .long(options::format::LONG_NUMERIC_UID_GID)
+                .help("-l with numeric UIDs and GIDs."),
         )
 
         // Time arguments
@@ -657,12 +672,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 file the link references rather than the link itself.",
                 ),
         )
-        .arg(
-            Arg::with_name(options::NUMERIC_UID_GID)
-                .short("n")
-                .long(options::NUMERIC_UID_GID)
-                .help("-l with numeric UIDs and GIDs."),
-        )
+        
         .arg(
             Arg::with_name(options::REVERSE)
                 .short("r")
@@ -852,7 +862,7 @@ fn pad_left(string: String, count: usize) -> String {
 }
 
 fn display_items(items: &[PathBuf], strip: Option<&Path>, config: &Config) {
-    if config.format == Format::Long || config.numeric_uid_gid {
+    if config.format == Format::Long {
         let (mut max_links, mut max_size) = (1, 1);
         for item in items {
             let (links, size) = display_dir_entry_size(item, config);
@@ -994,7 +1004,7 @@ use uucore::entries;
 
 #[cfg(unix)]
 fn display_uname(metadata: &Metadata, config: &Config) -> String {
-    if config.numeric_uid_gid {
+    if config.long.numeric_uid_gid {
         metadata.uid().to_string()
     } else {
         entries::uid2usr(metadata.uid()).unwrap_or_else(|_| metadata.uid().to_string())
@@ -1003,7 +1013,7 @@ fn display_uname(metadata: &Metadata, config: &Config) -> String {
 
 #[cfg(unix)]
 fn display_group(metadata: &Metadata, config: &Config) -> String {
-    if config.numeric_uid_gid {
+    if config.long.numeric_uid_gid {
         metadata.gid().to_string()
     } else {
         entries::gid2grp(metadata.gid()).unwrap_or_else(|_| metadata.gid().to_string())
