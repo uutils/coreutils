@@ -21,6 +21,7 @@ uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_p
 [dev-dependencies]
 md-5 = "0.9"
 hex-literal = "0.3"
+rand = "0.8"
 
 [[bin]]
 name = "dd"
