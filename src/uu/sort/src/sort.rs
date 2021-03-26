@@ -38,6 +38,7 @@ static OPT_DICTIONARY_ORDER: &str = "dictionary-order";
 static OPT_MERGE: &str = "merge";
 static OPT_CHECK: &str = "check";
 static OPT_IGNORE_CASE: &str = "ignore-case";
+static OPT_IGNORE_BLANKS: &str = "ignore-blanks";
 static OPT_OUTPUT: &str = "output";
 static OPT_REVERSE: &str = "reverse";
 static OPT_STABLE: &str = "stable";
@@ -235,6 +236,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("fold lower case to upper case characters"),
         )
         .arg(
+            Arg::with_name(OPT_IGNORE_BLANKS)
+                .short("b")
+                .long(OPT_IGNORE_BLANKS)
+                .help("ignore leading blanks when finding sort keys in each line"),
+        )
+        .arg(
             Arg::with_name(OPT_OUTPUT)
                 .short("o")
                 .long(OPT_OUTPUT)
@@ -295,6 +302,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     if matches.is_present(OPT_IGNORE_CASE) {
         settings.transform_fns.push(|s| s.to_uppercase());
+    }
+
+    if matches.is_present(OPT_IGNORE_BLANKS) {
+        settings.transform_fns.push(|s| s.trim_start().to_string());
     }
 
     settings.outfile = matches.value_of(OPT_OUTPUT).map(String::from);
