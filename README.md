@@ -23,9 +23,8 @@ Why?
 Many GNU, Linux and other utilities are useful, and obviously
 [some](http://gnuwin32.sourceforge.net) [effort](http://unxutils.sourceforge.net)
 has been spent in the past to port them to Windows. However, those projects
-are either old and abandoned, are hosted on CVS (which makes it more difficult
-for new contributors to contribute to them), are written in platform-specific C, or
-suffer from other issues.
+are written in platform-specific C, a language considered unsafe compared to Rust, and 
+have other issues.
 
 Rust provides a good, platform-agnostic way of writing systems utilities that are easy
 to compile anywhere, and this is as good a way as any to try and learn it.
@@ -41,7 +40,7 @@ Requirements
 ### Rust Version ###
 
 uutils follows Rust's release channels and is tested against stable, beta and nightly.
-The current oldest supported version of the Rust compiler is `1.33.0`.
+The current oldest supported version of the Rust compiler is `1.40.0`.
 
 On both Windows and Redox, only the nightly version is tested currently.
 
@@ -301,7 +300,7 @@ Utilities
 | csplit    | date      |        |
 | cut       | join      |        |
 | dircolors | df        |        |
-| dirname   |           |        |
+| dirname   | tac       |        |
 | du        |           |        |
 | echo      |           |        |
 | env       |           |        |
@@ -354,7 +353,6 @@ Utilities
 | stdbuf    |           |        |
 | sum       |           |        |
 | sync      |           |        |
-| tac       |           |        |
 | tee       |           |        |
 | timeout   |           |        |
 | touch     |           |        |
