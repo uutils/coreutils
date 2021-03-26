@@ -437,7 +437,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             return status;
         }
     }
-    return 0;
+
+    0
 }
 
 /// Returns re-written arguments which are passed to the program.
@@ -447,7 +448,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 fn recreate_arguments(args: &Vec<String>) -> Vec<String> {
     let column_page_option = Regex::new(r"^[-+]\d+.*").unwrap();
     let num_regex: Regex = Regex::new(r"(.\d+)|(\d+)|^[^-]$").unwrap();
-    let a_file: Regex = Regex::new(r"^[^-+].*").unwrap();
+    //let a_file: Regex = Regex::new(r"^[^-+].*").unwrap();
     let n_regex: Regex = Regex::new(r"^-n\s*$").unwrap();
     let mut arguments = args.clone();
     let num_option: Option<(usize, &String)> =
@@ -455,23 +456,24 @@ fn recreate_arguments(args: &Vec<String>) -> Vec<String> {
     if num_option.is_some() {
         let (pos, _value) = num_option.unwrap();
         let num_val_opt = args.get(pos + 1);
-        if num_val_opt.is_some() {
-            if !num_regex.is_match(num_val_opt.unwrap()) {
-                let could_be_file = arguments.remove(pos + 1);
-                arguments.insert(pos + 1, format!("{}", NumberingMode::default().width));
-                if a_file.is_match(could_be_file.trim().as_ref()) {
-                    arguments.insert(pos + 2, could_be_file);
-                } else {
-                    arguments.insert(pos + 2, could_be_file);
-                }
-            }
+        if num_val_opt.is_some() && !num_regex.is_match(num_val_opt.unwrap()) {
+            let could_be_file = arguments.remove(pos + 1);
+            arguments.insert(pos + 1, format!("{}", NumberingMode::default().width));
+            // FIXME: the following line replaces the block below that had the same
+            // code for both conditional branches. Figure this out.
+            arguments.insert(pos + 2, could_be_file);
+            // if a_file.is_match(could_be_file.trim().as_ref()) {
+            //     arguments.insert(pos + 2, could_be_file);
+            // } else {
+            //     arguments.insert(pos + 2, could_be_file);
+            // }
         }
     }
 
-    return arguments
+    arguments
         .into_iter()
         .filter(|i| !column_page_option.is_match(i))
-        .collect();
+        .collect()
 }
 
 fn print_error(matches: &Matches, err: PrError) {
@@ -520,7 +522,8 @@ fn print_usage(opts: &mut Options, matches: &Matches) -> i32 {
     if matches.free.is_empty() {
         return 1;
     }
-    return 0;
+
+    0
 }
 
 fn parse_usize(matches: &Matches, opt: &str) -> Option<Result<usize, PrError>> {
@@ -570,7 +573,7 @@ fn build_options(
         .unwrap_or(if is_merge_mode {
             String::new()
         } else {
-            if paths[0].to_string() == FILE_STDIN {
+            if paths[0] == FILE_STDIN {
                 String::new()
             } else {
                 paths[0].to_string()
@@ -610,7 +613,8 @@ fn build_options(
             if matches.opt_present(NUMBERING_MODE_OPTION) {
                 return Some(NumberingMode::default());
             }
-            return None;
+
+            None
         });
 
     let double_space: bool = matches.opt_present(DOUBLE_SPACE_OPTION);
@@ -634,7 +638,7 @@ fn build_options(
     let page_plus_re = Regex::new(r"\s*\+(\d+:*\d*)\s*").unwrap();
     let start_page_in_plus_option: usize = match page_plus_re.captures(&free_args).map(|i| {
         let unparsed_num = i.get(1).unwrap().as_str().trim();
-        let x: Vec<&str> = unparsed_num.split(":").collect();
+        let x: Vec<&str> = unparsed_num.split(':').collect();
         x[0].to_string().parse::<usize>().map_err(|_e| {
             PrError::EncounteredErrors(format!("invalid {} argument '{}'", "+", unparsed_num))
         })
@@ -646,9 +650,9 @@ fn build_options(
     let end_page_in_plus_option: Option<usize> = match page_plus_re
         .captures(&free_args)
         .map(|i| i.get(1).unwrap().as_str().trim())
-        .filter(|i| i.contains(":"))
+        .filter(|i| i.contains(':'))
         .map(|unparsed_num| {
-            let x: Vec<&str> = unparsed_num.split(":").collect();
+            let x: Vec<&str> = unparsed_num.split(':').collect();
             x[1].to_string().parse::<usize>().map_err(|_e| {
                 PrError::EncounteredErrors(format!("invalid {} argument '{}'", "+", unparsed_num))
             })
@@ -667,7 +671,7 @@ fn build_options(
     let start_page: usize = match matches
         .opt_str(PAGE_RANGE_OPTION)
         .map(|i| {
-            let x: Vec<&str> = i.split(":").collect();
+            let x: Vec<&str> = i.split(':').collect();
             x[0].to_string()
         })
         .map(invalid_pages_map)
@@ -678,9 +682,9 @@ fn build_options(
 
     let end_page: Option<usize> = match matches
         .opt_str(PAGE_RANGE_OPTION)
-        .filter(|i: &String| i.contains(":"))
+        .filter(|i: &String| i.contains(':'))
         .map(|i: String| {
-            let x: Vec<&str> = i.split(":").collect();
+            let x: Vec<&str> = i.split(':').collect();
             x[1].to_string()
         })
         .map(invalid_pages_map)
@@ -885,7 +889,7 @@ fn split_lines_if_form_feed(file_content: Result<String, IOError>) -> Vec<FileLi
             }
 
             lines.push(FileLine {
-                line_content: Ok(String::from_utf8(chunk.clone()).unwrap()),
+                line_content: Ok(String::from_utf8(chunk).unwrap()),
                 form_feeds_after: f_occurred,
                 ..FileLine::default()
             });
@@ -900,7 +904,7 @@ fn split_lines_if_form_feed(file_content: Result<String, IOError>) -> Vec<FileLi
         })
 }
 
-fn pr(path: &String, options: &OutputOptions) -> Result<i32, PrError> {
+fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
     let lines: Lines<BufReader<Box<dyn Read>>> =
         BufReader::with_capacity(READ_BUFFER_SIZE, open(path)?).lines();
 
@@ -910,9 +914,10 @@ fn pr(path: &String, options: &OutputOptions) -> Result<i32, PrError> {
     for page_with_page_number in pages {
         let page_number = page_with_page_number.0 + 1;
         let page = page_with_page_number.1;
-        print_page(&page, options, &page_number)?;
+        print_page(&page, options, page_number)?;
     }
-    return Ok(0);
+
+    Ok(0)
 }
 
 fn read_stream_and_create_pages(
@@ -925,10 +930,10 @@ fn read_stream_and_create_pages(
     let last_page: Option<usize> = options.end_page;
     let lines_needed_per_page: usize = lines_to_read_for_page(options);
 
-    return Box::new(
+    Box::new(
         lines
             .map(split_lines_if_form_feed)
-            .flat_map(|i: Vec<FileLine>| i)
+            .flatten()
             .enumerate()
             .map(move |i: (usize, FileLine)| FileLine {
                 line_number: i.0 + start_line_number,
@@ -956,26 +961,28 @@ fn read_stream_and_create_pages(
                     }
                 }
 
-                if first_page.len() == 0 {
+                if first_page.is_empty() {
                     return None;
                 }
                 page_with_lines.push(first_page);
-                return Some(page_with_lines);
+                Some(page_with_lines)
             }) // Create set of pages as form feeds could lead to empty pages
-            .flat_map(|x| x) // Flatten to pages from page sets
+            .flatten() // Flatten to pages from page sets
             .enumerate() // Assign page number
             .skip_while(move |x: &(usize, Vec<FileLine>)| {
                 // Skip the not needed pages
                 let current_page = x.0 + 1;
-                return current_page < start_page;
+
+                current_page < start_page
             })
             .take_while(move |x: &(usize, Vec<FileLine>)| {
                 // Take only the required pages
                 let current_page = x.0 + 1;
-                return current_page >= start_page
-                    && (last_page.is_none() || current_page <= last_page.unwrap());
+
+                current_page >= start_page
+                    && (last_page.is_none() || current_page <= last_page.unwrap())
             }),
-    );
+    )
 }
 
 fn mpr(paths: &Vec<String>, options: &OutputOptions) -> Result<i32, PrError> {
@@ -1021,9 +1028,9 @@ fn mpr(paths: &Vec<String>, options: &OutputOptions) -> Result<i32, PrError> {
         })
         .group_by(|file_line: &FileLine| file_line.group_key);
 
-    let start_page: &usize = &options.start_page;
+    let start_page: usize = options.start_page;
     let mut lines: Vec<FileLine> = Vec::new();
-    let mut page_counter: usize = *start_page;
+    let mut page_counter = start_page;
 
     for (_key, file_line_group) in file_line_groups.into_iter() {
         for file_line in file_line_group {
@@ -1032,7 +1039,7 @@ fn mpr(paths: &Vec<String>, options: &OutputOptions) -> Result<i32, PrError> {
             }
             let new_page_number = file_line.page_number;
             if page_counter != new_page_number {
-                print_page(&lines, options, &page_counter)?;
+                print_page(&lines, options, page_counter)?;
                 lines = Vec::new();
                 page_counter = new_page_number;
             }
@@ -1040,15 +1047,15 @@ fn mpr(paths: &Vec<String>, options: &OutputOptions) -> Result<i32, PrError> {
         }
     }
 
-    print_page(&lines, options, &page_counter)?;
+    print_page(&lines, options, page_counter)?;
 
-    return Ok(0);
+    Ok(0)
 }
 
 fn print_page(
     lines: &Vec<FileLine>,
     options: &OutputOptions,
-    page: &usize,
+    page: usize,
 ) -> Result<usize, IOError> {
     let line_separator = options.line_separator.as_bytes();
     let page_separator = options.page_separator_char.as_bytes();
@@ -1059,20 +1066,20 @@ fn print_page(
 
     out.lock();
     for x in header {
-        out.write(x.as_bytes())?;
-        out.write(line_separator)?;
+        out.write_all(x.as_bytes())?;
+        out.write_all(line_separator)?;
     }
 
     let lines_written = write_columns(lines, options, out)?;
 
     for index in 0..trailer_content.len() {
         let x: &String = trailer_content.get(index).unwrap();
-        out.write(x.as_bytes())?;
+        out.write_all(x.as_bytes())?;
         if index + 1 != trailer_content.len() {
-            out.write(line_separator)?;
+            out.write_all(line_separator)?;
         }
     }
-    out.write(page_separator)?;
+    out.write_all(page_separator)?;
     out.flush()?;
     Ok(lines_written)
 }
@@ -1146,8 +1153,8 @@ fn write_columns(
         let indexes = row.len();
         for (i, cell) in row.iter().enumerate() {
             if cell.is_none() && options.merge_files_print.is_some() {
-                out.write(
-                    get_line_for_printing(&options, &blank_line, columns, &i, &line_width, indexes)
+                out.write_all(
+                    get_line_for_printing(&options, &blank_line, columns, i, &line_width, indexes)
                         .as_bytes(),
                 )?;
             } else if cell.is_none() {
@@ -1156,8 +1163,8 @@ fn write_columns(
             } else if cell.is_some() {
                 let file_line: &FileLine = cell.unwrap();
 
-                out.write(
-                    get_line_for_printing(&options, file_line, columns, &i, &line_width, indexes)
+                out.write_all(
+                    get_line_for_printing(&options, file_line, columns, i, &line_width, indexes)
                         .as_bytes(),
                 )?;
                 lines_printed += 1;
@@ -1166,7 +1173,7 @@ fn write_columns(
         if not_found_break && feed_line_present {
             break;
         } else {
-            out.write(line_separator)?;
+            out.write_all(line_separator)?;
         }
     }
 
@@ -1177,7 +1184,7 @@ fn get_line_for_printing(
     options: &OutputOptions,
     file_line: &FileLine,
     columns: usize,
-    index: &usize,
+    index: usize,
     line_width: &Option<usize>,
     indexes: usize,
 ) -> String {
@@ -1222,9 +1229,9 @@ fn get_line_for_printing(
     )
 }
 
-fn get_fmtd_line_number(opts: &OutputOptions, line_number: usize, index: &usize) -> String {
+fn get_fmtd_line_number(opts: &OutputOptions, line_number: usize, index: usize) -> String {
     let should_show_line_number =
-        opts.number.is_some() && (opts.merge_files_print.is_none() || index == &0);
+        opts.number.is_some() && (opts.merge_files_print.is_none() || index == 0);
     if should_show_line_number && line_number != 0 {
         let line_str = line_number.to_string();
         let num_opt = opts.number.as_ref().unwrap();
@@ -1250,7 +1257,7 @@ fn get_fmtd_line_number(opts: &OutputOptions, line_number: usize, index: &usize)
 /// # Arguments
 /// * `options` - A reference to OutputOptions
 /// * `page` - A reference to page number
-fn header_content(options: &OutputOptions, page: &usize) -> Vec<String> {
+fn header_content(options: &OutputOptions, page: usize) -> Vec<String> {
     if options.display_header_and_trailer {
         let first_line: String = format!(
             "{} {} Page {}",
