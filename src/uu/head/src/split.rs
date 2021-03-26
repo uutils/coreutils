@@ -24,7 +24,15 @@ where
 {
     let mut buffer = [0u8; constants::BUF_SIZE];
     loop {
-        let read = input.read(&mut buffer)?;
+        let read = loop {
+            match input.read(&mut buffer) {
+                Ok(n) => break n,
+                Err(e) => match e.kind() {
+                    std::io::ErrorKind::Interrupted => {},
+                    _ => return Err(e)
+                }
+            }
+        };
         if read == 0 {
             return Ok(());
         }
