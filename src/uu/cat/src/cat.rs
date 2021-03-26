@@ -17,7 +17,6 @@ extern crate unix_socket;
 extern crate uucore;
 
 // last synced with: cat (GNU coreutils) 8.13
-use clap::{App, Arg};
 use quick_error::ResultExt;
 use std::fs::{metadata, File};
 use std::io::{self, stderr, stdin, stdout, BufWriter, Read, Write};
@@ -31,11 +30,10 @@ use std::os::unix::fs::FileTypeExt;
 #[cfg(unix)]
 use unix_socket::UnixStream;
 
-static NAME: &str = "cat";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static SYNTAX: &str = "[OPTION]... [FILE]...";
 static SUMMARY: &str = "Concatenate FILE(s), or standard input, to standard output
  With no FILE, or when FILE is -, read standard input.";
+static LONG_HELP: &str = "";
 
 #[derive(PartialEq)]
 enum NumberingMode {
@@ -126,122 +124,50 @@ enum InputType {
 
 type CatResult<T> = Result<T, CatError>;
 
-mod options {
-    pub static FILE: &str = "file";
-    pub static SHOW_ALL: &str = "show-all";
-    pub static NUMBER_NONBLANK: &str = "number-nonblank";
-    pub static SHOW_NONPRINTING_ENDS: &str = "e";
-    pub static SHOW_ENDS: &str = "show-ends";
-    pub static NUMBER: &str = "number";
-    pub static SQUEEZE_BLANK: &str = "squeeze-blank";
-    pub static SHOW_NONPRINTING_TABS: &str = "t";
-    pub static SHOW_TABS: &str = "show-tabs";
-    pub static SHOW_NONPRINTING: &str = "show-nonprinting";
-}
-
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args.collect_str();
 
-    let matches = App::new(executable!())
-        .name(NAME)
-        .version(VERSION)
-        .usage(SYNTAX)
-        .about(SUMMARY)
-        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
-        .arg(
-            Arg::with_name(options::SHOW_ALL)
-                .short("A")
-                .long(options::SHOW_ALL)
-                .help("equivalent to -vET"),
+    let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
+        .optflag("A", "show-all", "equivalent to -vET")
+        .optflag(
+            "b",
+            "number-nonblank",
+            "number nonempty output lines, overrides -n",
         )
-        .arg(
-            Arg::with_name(options::NUMBER_NONBLANK)
-                .short("b")
-                .long(options::NUMBER_NONBLANK)
-                .help("number nonempty output lines, overrides -n")
-                .overrides_with(options::NUMBER),
+        .optflag("e", "", "equivalent to -vE")
+        .optflag("E", "show-ends", "display $ at end of each line")
+        .optflag("n", "number", "number all output lines")
+        .optflag("s", "squeeze-blank", "suppress repeated empty output lines")
+        .optflag("t", "", "equivalent to -vT")
+        .optflag("T", "show-tabs", "display TAB characters as ^I")
+        .optflag(
+            "v",
+            "show-nonprinting",
+            "use ^ and M- notation, except for LF (\\n) and TAB (\\t)",
         )
-        .arg(
-            Arg::with_name(options::SHOW_NONPRINTING_ENDS)
-                .short("e")
-                .help("equivalent to -vE"),
-        )
-        .arg(
-            Arg::with_name(options::SHOW_ENDS)
-                .short("E")
-                .long(options::SHOW_ENDS)
-                .help("display $ at end of each line"),
-        )
-        .arg(
-            Arg::with_name(options::NUMBER)
-                .short("n")
-                .long(options::NUMBER)
-                .help("number all output lines"),
-        )
-        .arg(
-            Arg::with_name(options::SQUEEZE_BLANK)
-                .short("s")
-                .long(options::SQUEEZE_BLANK)
-                .help("suppress repeated empty output lines"),
-        )
-        .arg(
-            Arg::with_name(options::SHOW_NONPRINTING_TABS)
-                .short("t")
-                .long(options::SHOW_NONPRINTING_TABS)
-                .help("equivalent to -vT"),
-        )
-        .arg(
-            Arg::with_name(options::SHOW_TABS)
-                .short("T")
-                .long(options::SHOW_TABS)
-                .help("display TAB characters at ^I"),
-        )
-        .arg(
-            Arg::with_name(options::SHOW_NONPRINTING)
-                .short("v")
-                .long(options::SHOW_NONPRINTING)
-                .help("use ^ and M- notation, except for LF (\\n) and TAB (\\t)"),
-        )
-        .get_matches_from(args);
+        .parse(args);
 
-    let number_mode = if matches.is_present(options::NUMBER_NONBLANK) {
+    let number_mode = if matches.opt_present("b") {
         NumberingMode::NonEmpty
-    } else if matches.is_present(options::NUMBER) {
+    } else if matches.opt_present("n") {
         NumberingMode::All
     } else {
         NumberingMode::None
     };
 
-    let show_nonprint = vec![
-        options::SHOW_ALL.to_owned(),
-        options::SHOW_NONPRINTING_ENDS.to_owned(),
-        options::SHOW_NONPRINTING_TABS.to_owned(),
-        options::SHOW_NONPRINTING.to_owned(),
-    ]
-    .iter()
-    .any(|v| matches.is_present(v));
-
-    let show_ends = vec![
-        options::SHOW_ENDS.to_owned(),
-        options::SHOW_ALL.to_owned(),
-        options::SHOW_NONPRINTING_ENDS.to_owned(),
-    ]
-    .iter()
-    .any(|v| matches.is_present(v));
-
-    let show_tabs = vec![
-        options::SHOW_ALL.to_owned(),
-        options::SHOW_TABS.to_owned(),
-        options::SHOW_NONPRINTING_TABS.to_owned(),
-    ]
-    .iter()
-    .any(|v| matches.is_present(v));
-
-    let squeeze_blank = matches.is_present(options::SQUEEZE_BLANK);
-    let files: Vec<String> = match matches.values_of(options::FILE) {
-        Some(v) => v.clone().map(|v| v.to_owned()).collect(),
-        None => vec!["-".to_owned()],
-    };
+    let show_nonprint = matches.opts_present(&[
+        "A".to_owned(),
+        "e".to_owned(),
+        "t".to_owned(),
+        "v".to_owned(),
+    ]);
+    let show_ends = matches.opts_present(&["E".to_owned(), "A".to_owned(), "e".to_owned()]);
+    let show_tabs = matches.opts_present(&["A".to_owned(), "T".to_owned(), "t".to_owned()]);
+    let squeeze_blank = matches.opt_present("s");
+    let mut files = matches.free;
+    if files.is_empty() {
+        files.push("-".to_owned());
+    }
 
     let can_write_fast = !(show_tabs
         || show_nonprint
@@ -435,7 +361,7 @@ fn write_file_lines(file: &str, options: &OutputOptions, state: &mut OutputState
                     }
                     writer.write_all(options.end_of_line.as_bytes())?;
                     if handle.is_interactive {
-                        writer.flush().context(file)?;
+                        writer.flush().context(&file[..])?;
                     }
                 }
                 state.at_line_start = true;
