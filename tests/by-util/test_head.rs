@@ -178,3 +178,12 @@ fn test_zero_terminated() {
         .run()
         .stdout_is_fixture("zero_terminated.expected");
 }
+
+#[test]
+fn test_obsolete_extras() {
+    new_ucmd!()
+        .args(&["-5zv"])
+        .pipe_in("1\02\03\04\05\06")
+        .succeeds()
+        .stdout_is("==> standard input <==\n1\02\03\04\05\0");
+}
