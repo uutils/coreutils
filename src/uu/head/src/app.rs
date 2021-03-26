@@ -2,7 +2,7 @@ use crate::constants;
 use crate::parse;
 use clap::{App, Arg};
 use std::ffi::OsString;
-use uucore::{crash, executable, show_error};
+use uucore::executable;
 
 pub fn app<'a>() -> App<'a, 'a> {
     App::new(executable!())
@@ -85,79 +85,42 @@ pub struct HeadOptions {
     pub mode: Modes,
     pub files: Vec<String>,
 }
-struct ArgIterator<IterType: Iterator<Item = OsString>> {
-    args: IterType,
-    flag: bool,
-    mode: Option<Modes>,
-}
-impl<IterType: Iterator<Item = OsString>> ArgIterator<IterType> {
-    fn new(args: IterType) -> ArgIterator<IterType> {
-        ArgIterator {
-            args,
-            flag: true,
-            mode: None,
-        }
-    }
-}
 
-impl<IterType: Iterator<Item = OsString>> Iterator for ArgIterator<IterType> {
-    type Item = OsString;
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.flag {
-            if self.mode.is_none() {
-                match self.args.next() {
-                    Some(oss) => {
-                        if oss == "head" {
-                            return Some(oss);
-                        }
-                        let arg_str = &oss.clone().into_string().unwrap_or_else(|_| "".to_owned());
-                        if let Some(res) = parse::parse_obsolete(&arg_str) {
-                            match res {
-                                Ok((n, b)) => {
-                                    if b {
-                                        self.mode = Some(Modes::Bytes(n));
-                                        Some(OsString::from("-c"))
-                                    } else {
-                                        self.mode = Some(Modes::Lines(n));
-                                        Some(OsString::from("-n"))
-                                    }
-                                }
-                                Err(e) => match e {
-                                    parse::ParseError::Overflow => {
-                                        crash!(
-                                            constants::EXIT_FAILURE,
-                                            "head: Value too large for defined datatype: '{}'",
-                                            arg_str
-                                        );
-                                    }
-                                    parse::ParseError::Syntax => {
-                                        crash!(
-                                            constants::EXIT_FAILURE,
-                                            "head: bad number: '{}'",
-                                            arg_str
-                                        );
-                                    }
-                                },
-                            }
-                        } else {
-                            self.flag = false;
-                            Some(oss)
-                        }
-                    }
-                    None => None,
-                }
+fn arg_iterate<'a>(
+    mut args: impl uucore::Args + 'a,
+) -> Result<Box<dyn Iterator<Item = OsString> + 'a>, String> {
+    if let Some(mut oss) = args.next() {
+        if oss == "head" {
+            if let Some(os) = args.next() {
+                oss = os
             } else {
-                let mode = self.mode.unwrap();
-                let n = match mode {
-                    Modes::Bytes(n) => n,
-                    Modes::Lines(n) => n,
-                };
-                self.flag = false;
-                return Some(OsString::from(format!("{}", n)));
+                return Ok(Box::new(vec![OsString::from("head")].into_iter()));
+            };
+        }
+        if let Some(s) = oss.to_str() {
+            match parse::parse_obsolete(s) {
+                Some(Ok(iter)) => Ok(Box::new(
+                    vec![OsString::from("head")]
+                        .into_iter()
+                        .chain(iter)
+                        .chain(args),
+                )),
+                Some(Err(e)) => match e {
+                    parse::ParseError::Syntax => Err(format!("bad argument format: '{}'", s)),
+                    parse::ParseError::Overflow => Err(format!(
+                        "invalid argument: '{}' Value too large for defined datatype",
+                        s
+                    )),
+                },
+                None => Ok(Box::new(
+                    vec![OsString::from("head"), oss].into_iter().chain(args),
+                )),
             }
         } else {
-            self.args.next()
+            Err("bad argument encoding".to_owned())
         }
+    } else {
+        Ok(Box::new(args))
     }
 }
 
@@ -175,7 +138,7 @@ impl HeadOptions {
 
     ///Construct options from matches
     pub fn get_from(args: impl uucore::Args) -> Result<Self, String> {
-        let matches = app().get_matches_from(ArgIterator::new(args));
+        let matches = app().get_matches_from(arg_iterate(args)?);
 
         let mut options = HeadOptions::new();
 
