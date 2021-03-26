@@ -89,22 +89,12 @@ pub struct HeadOptions {
 fn arg_iterate<'a>(
     mut args: impl uucore::Args + 'a,
 ) -> Result<Box<dyn Iterator<Item = OsString> + 'a>, String> {
-    if let Some(mut oss) = args.next() {
-        if oss == "head" {
-            if let Some(os) = args.next() {
-                oss = os
-            } else {
-                return Ok(Box::new(vec![OsString::from("head")].into_iter()));
-            };
-        }
-        if let Some(s) = oss.to_str() {
+    // argv[0] is always present
+    let first = args.next().unwrap();
+    if let Some(second) = args.next() {
+        if let Some(s) = second.to_str() {
             match parse::parse_obsolete(s) {
-                Some(Ok(iter)) => Ok(Box::new(
-                    vec![OsString::from("head")]
-                        .into_iter()
-                        .chain(iter)
-                        .chain(args),
-                )),
+                Some(Ok(iter)) => Ok(Box::new(vec![first].into_iter().chain(iter).chain(args))),
                 Some(Err(e)) => match e {
                     parse::ParseError::Syntax => Err(format!("bad argument format: '{}'", s)),
                     parse::ParseError::Overflow => Err(format!(
@@ -112,15 +102,13 @@ fn arg_iterate<'a>(
                         s
                     )),
                 },
-                None => Ok(Box::new(
-                    vec![OsString::from("head"), oss].into_iter().chain(args),
-                )),
+                None => Ok(Box::new(vec![first, second].into_iter().chain(args))),
             }
         } else {
             Err("bad argument encoding".to_owned())
         }
     } else {
-        Ok(Box::new(args))
+        Ok(Box::new(vec![first].into_iter()))
     }
 }
 
