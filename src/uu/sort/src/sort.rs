@@ -12,7 +12,8 @@ extern crate uucore;
 
 use clap::{App, Arg};
 use itertools::Itertools;
-use md5::*;
+use std::hash::{Hash, Hasher};
+use fasthash::{xx, XXHasher};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use semver::Version;
@@ -537,8 +538,8 @@ fn random_shuffle(a: &str, b: &str, salt: String) -> Ordering {
     #![allow(clippy::comparison_chain)]
     let salt_slice = salt.as_str();
 
-    let da = md5::compute([a, salt_slice].concat());
-    let db = md5::compute([b, salt_slice].concat());
+    let da = xx::hash64([a, salt_slice].concat());
+    let db = xx::hash64([b, salt_slice].concat());
 
     da.cmp(&db)
 }
@@ -550,6 +551,12 @@ fn get_rand_string() -> String {
         .map(char::from)
         .collect::<String>();
     rand_string
+}
+
+fn xxhash<T: Hash>(t: &T) -> u64 {
+    let mut s: XXHasher = Default::default();
+    t.hash(&mut s);
+    s.finish()
 }
 
 #[derive(Eq, Ord, PartialEq, PartialOrd)]
