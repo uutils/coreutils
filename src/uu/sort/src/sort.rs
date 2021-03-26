@@ -84,7 +84,7 @@ impl Default for Settings {
             random: false,
             compare_fns: Vec::new(),
             transform_fns: Vec::new(),
-            salt: get_rand_string(),
+            salt: String::new(),
         }
     }
 }
@@ -301,7 +301,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     settings.reverse = matches.is_present(OPT_REVERSE);
     settings.stable = matches.is_present(OPT_STABLE);
     settings.unique = matches.is_present(OPT_UNIQUE);
-    settings.random = matches.is_present(OPT_RANDOM);
+
+    if matches.is_present(OPT_RANDOM) {
+        settings.random = matches.is_present(OPT_RANDOM);
+        settings.salt = get_rand_string();
+    }
 
     //let mut files = matches.free;
     if files.is_empty() {
