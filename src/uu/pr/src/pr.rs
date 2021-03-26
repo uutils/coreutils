@@ -6,15 +6,8 @@
 // that was distributed with this source code.
 //
 
-#[cfg(unix)]
-extern crate unix_socket;
 #[macro_use]
 extern crate quick_error;
-extern crate chrono;
-extern crate getopts;
-extern crate itertools;
-extern crate regex;
-extern crate uucore;
 
 use chrono::offset::Local;
 use chrono::DateTime;
@@ -26,7 +19,7 @@ use quick_error::ResultExt;
 use regex::Regex;
 use std::convert::From;
 use std::fs::{metadata, File, Metadata};
-use std::io::{stderr, stdin, stdout, BufRead, BufReader, Lines, Read, Stdin, Stdout, Write};
+use std::io::{stdin, stdout, BufRead, BufReader, Lines, Read, Stdin, Stdout, Write};
 use std::iter::{FlatMap, Map};
 use std::num::ParseIntError;
 #[cfg(unix)]
@@ -185,7 +178,8 @@ quick_error! {
     }
 }
 
-pub fn uumain(args: Vec<String>) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args = args.collect_str();
     let mut opts = getopts::Options::new();
 
     opts.opt(
@@ -482,7 +476,7 @@ fn recreate_arguments(args: &Vec<String>) -> Vec<String> {
 
 fn print_error(matches: &Matches, err: PrError) {
     if !matches.opt_present(SUPPRESS_PRINTING_ERROR) {
-        writeln!(&mut stderr(), "{}", err);
+        eprintln!("{}", err);
     }
 }
 
@@ -838,10 +832,10 @@ fn build_options(
     })
 }
 
-fn open(path: &str) -> Result<Box<Read>, PrError> {
+fn open(path: &str) -> Result<Box<dyn Read>, PrError> {
     if path == FILE_STDIN {
         let stdin: Stdin = stdin();
-        return Ok(Box::new(stdin) as Box<Read>);
+        return Ok(Box::new(stdin) as Box<dyn Read>);
     }
 
     metadata(path)
@@ -858,7 +852,7 @@ fn open(path: &str) -> Result<Box<Read>, PrError> {
                 ft if ft.is_socket() => Err(PrError::IsSocket(path_string)),
                 ft if ft.is_dir() => Err(PrError::IsDirectory(path_string)),
                 ft if ft.is_file() || ft.is_symlink() => {
-                    Ok(Box::new(File::open(path).context(path)?) as Box<Read>)
+                    Ok(Box::new(File::open(path).context(path)?) as Box<dyn Read>)
                 }
                 _ => Err(PrError::UnknownFiletype(path_string)),
             }
@@ -907,10 +901,10 @@ fn split_lines_if_form_feed(file_content: Result<String, IOError>) -> Vec<FileLi
 }
 
 fn pr(path: &String, options: &OutputOptions) -> Result<i32, PrError> {
-    let lines: Lines<BufReader<Box<Read>>> =
+    let lines: Lines<BufReader<Box<dyn Read>>> =
         BufReader::with_capacity(READ_BUFFER_SIZE, open(path)?).lines();
 
-    let pages: Box<Iterator<Item = (usize, Vec<FileLine>)>> =
+    let pages: Box<dyn Iterator<Item = (usize, Vec<FileLine>)>> =
         read_stream_and_create_pages(options, lines, 0);
 
     for page_with_page_number in pages {
@@ -923,9 +917,9 @@ fn pr(path: &String, options: &OutputOptions) -> Result<i32, PrError> {
 
 fn read_stream_and_create_pages(
     options: &OutputOptions,
-    lines: Lines<BufReader<Box<Read>>>,
+    lines: Lines<BufReader<Box<dyn Read>>>,
     file_id: usize,
-) -> Box<Iterator<Item = (usize, Vec<FileLine>)>> {
+) -> Box<dyn Iterator<Item = (usize, Vec<FileLine>)>> {
     let start_page: usize = options.start_page;
     let start_line_number: usize = get_start_line_number(options);
     let last_page: Option<usize> = options.end_page;
@@ -994,7 +988,7 @@ fn mpr(paths: &Vec<String>, options: &OutputOptions) -> Result<i32, PrError> {
 
     let file_line_groups: GroupBy<
         usize,
-        KMergeBy<FlatMap<Map<Box<Iterator<Item = (usize, Vec<FileLine>)>>, _>, _, _>, _>,
+        KMergeBy<FlatMap<Map<Box<dyn Iterator<Item = (usize, Vec<FileLine>)>>, _>, _, _>, _>,
         _,
     > = paths
         .iter()

@@ -301,7 +301,7 @@ Utilities
 | cut       | join      |        |
 | dircolors | df        |        |
 | dirname   | tac       |        |
-| du        |           |        |
+| du        | pr        |        |
 | echo      |           |        |
 | env       |           |        |
 | expand    |           |        |

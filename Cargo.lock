@@ -182,6 +182,7 @@ dependencies = [
 name = "coreutils"
 version = "0.0.4"
 dependencies = [
+ "chrono 0.4.11 (registry+https://github.com/rust-lang/crates.io-index)",
  "conv 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "filetime 0.2.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "glob 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -251,6 +252,7 @@ dependencies = [
  "uu_paste 0.0.4",
  "uu_pathchk 0.0.4",
  "uu_pinky 0.0.4",
+ "uu_pr 0.0.4",
  "uu_printenv 0.0.4",
  "uu_printf 0.0.4",
  "uu_ptx 0.0.4",
@@ -441,7 +443,7 @@ dependencies = [
  "cfg-if 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "crossbeam-utils 0.8.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "memoffset 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "memoffset 0.6.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "scopeguard 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
@@ -712,7 +714,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "memoffset"
-version = "0.6.1"
+version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "autocfg 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1885,6 +1887,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "uu_pr"
+version = "0.0.4"
+dependencies = [
+ "chrono 0.4.11 (registry+https://github.com/rust-lang/crates.io-index)",
+ "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
+ "itertools 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "quick-error 1.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "regex 1.4.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "time 0.1.42 (registry+https://github.com/rust-lang/crates.io-index)",
+ "uucore 0.0.7",
+ "uucore_procs 0.0.5",
+]
+
+[[package]]
 name = "uu_printenv"
 version = "0.0.4"
 dependencies = [
@@ -2530,7 +2546,7 @@ dependencies = [
 "checksum md5 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)" = "79c56d6a0b07f9e19282511c83fc5b086364cbae4ba8c7d5f190c3d9b0425a48"
 "checksum memchr 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)" = "148fab2e51b4f1cfc66da2a7c32981d1d3c083a803978268bb11fe4b86925e7a"
 "checksum memchr 2.3.4 (registry+https://github.com/rust-lang/crates.io-index)" = "0ee1c47aaa256ecabcaea351eae4a9b01ef39ed810004e298d2511ed284b1525"
-"checksum memoffset 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)" = "157b4208e3059a8f9e78d559edc658e13df41410cb3ae03979c83130067fdd87"
+"checksum memoffset 0.6.2 (registry+https://github.com/rust-lang/crates.io-index)" = "cc14fc54a812b4472b4113facc3e44d099fbc0ea2ce0551fa5c703f8edfbfd38"
 "checksum nix 0.13.1 (registry+https://github.com/rust-lang/crates.io-index)" = "4dbdc256eaac2e3bd236d93ad999d3479ef775c863dbda3068c4006a92eec51b"
 "checksum nodrop 0.1.14 (registry+https://github.com/rust-lang/crates.io-index)" = "72ef4a56884ca558e5ddb05a1d1e7e1bfd9a68d9ed024c21704cc98872dae1bb"
 "checksum num-integer 0.1.44 (registry+https://github.com/rust-lang/crates.io-index)" = "d2cc698a63b549a70bc047073d2949cce27cd1c7b0a4a862d08a8031bc2801db"

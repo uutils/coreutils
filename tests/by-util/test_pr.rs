@@ -1,9 +1,7 @@
-extern crate chrono;
-
-use common::util::*;
+use crate::common::util::*;
 use std::fs::metadata;
-use test_pr::chrono::offset::Local;
-use test_pr::chrono::DateTime;
+use chrono::offset::Local;
+use chrono::DateTime;
 
 fn file_last_modified_time(ucmd: &UCommand, path: &str) -> String {
     let tmp_dir_path = ucmd.get_full_fixture_path(path);
@@ -243,10 +241,11 @@ fn test_with_no_header_trailer_option() {
     let test_file_path = "test_one_page.log";
     let expected_test_file_path = "test_one_page_no_ht.log.expected";
     let mut scenario = new_ucmd!();
+    let value = file_last_modified_time(&scenario, test_file_path);
     scenario
         .args(&["-t", test_file_path])
         .succeeds()
-        .stdout_is_fixture(expected_test_file_path);
+        .stdout_is_templated_fixture(expected_test_file_path, vec![(&"{last_modified_time}".to_string(), &value)]);
 }
 
 #[test]
@@ -480,7 +479,7 @@ fn test_with_pr_core_utils_tests() {
 
         arguments.extend(input_file.clone());
 
-        let mut scenario_with_args = scenario.args(&arguments);
+        let scenario_with_args = scenario.args(&arguments);
 
         let scenario_with_expected_status = if return_code == 0 {
             scenario_with_args.succeeds()
