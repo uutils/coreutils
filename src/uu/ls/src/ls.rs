@@ -223,50 +223,26 @@ impl Config {
         // which always applies.
         //
         // The idea here is to not let these options override with the other
-        // options, but manually check the last index they occur. If this index
-        // is larger than the index for the other format options, we apply the
-        // long format.
-        match options.indices_of(opt).map(|x| x.max().unwrap()) {
-            None => {
-                if options.is_present(options::format::LONG_NO_GROUP)
-                    || options.is_present(options::format::LONG_NO_OWNER)
-                    || options.is_present(options::format::LONG_NUMERIC_UID_GID)
-                {
-                    format = Format::Long;
-                } else if options.is_present(options::format::ONELINE) {
-                    format = Format::OneLine;
-                }
-            }
-            Some(mut idx) => {
-                if let Some(indices) = options.indices_of(options::format::LONG_NO_OWNER) {
-                    let i = indices.max().unwrap();
-                    if i > idx {
-                        format = Format::Long;
-                        idx = i;
-                    }
-                }
-                if let Some(indices) = options.indices_of(options::format::LONG_NO_GROUP) {
-                    let i = indices.max().unwrap();
-                    if i > idx {
-                        format = Format::Long;
-                        idx = i;
-                    }
-                }
-                if let Some(indices) = options.indices_of(options::format::LONG_NUMERIC_UID_GID) {
-                    let i = indices.max().unwrap();
-                    if i > idx {
-                        format = Format::Long;
-                        idx = i;
-                    }
-                }
-                if let Some(indices) = options.indices_of(options::format::ONELINE) {
-                    let i = indices.max().unwrap();
-                    if i > idx && format != Format::Long {
+        // options, but manually whether they have an index that's greater than
+        // the other format options. If so, we set the appropriate format.
+        if format != Format::Long {
+            let idx = options.indices_of(opt).map(|x| x.max().unwrap()).unwrap_or(0);    
+            if [options::format::LONG_NO_OWNER, options::format::LONG_NO_GROUP, options::format::LONG_NUMERIC_UID_GID]
+                .iter()
+                .flat_map(|opt| options.indices_of(opt))
+                .flatten()
+                .any(|i| i >= idx)
+            {
+                format = Format::Long;
+            } else {
+                if let Some(mut indices) = options.indices_of(options::format::ONELINE) {
+                    if indices.any(|i| i > idx) {
                         format = Format::OneLine;
                     }
                 }
             }
         }
+        
 
         let files = if options.is_present(options::files::ALL) {
             Files::All
@@ -455,26 +431,34 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         )
         // The next four arguments do not override with the other format
         // options, see the comment in Config::from for the reason.
+        // Ideally, they would use Arg::override_with, with their own name
+        // but that doesn't seem to work in all cases. Example:
+        // ls -1g1
+        // even though `ls -11` and `ls -1 -g -1` work.
         .arg(
             Arg::with_name(options::format::ONELINE)
                 .short(options::format::ONELINE)
                 .help("List one file per line.")
+                .multiple(true)
         )
         .arg(
             Arg::with_name(options::format::LONG_NO_GROUP)
                 .short(options::format::LONG_NO_GROUP)
                 .help("Long format without group information. Identical to --format=long with --no-group.")
+                .multiple(true)
         )
         .arg(
             Arg::with_name(options::format::LONG_NO_OWNER)
                 .short(options::format::LONG_NO_OWNER)
                 .help("Long format without owner information.")
+                .multiple(true)
         )
         .arg(
             Arg::with_name(options::format::LONG_NUMERIC_UID_GID)
                 .short("n")
                 .long(options::format::LONG_NUMERIC_UID_GID)
-                .help("-l with numeric UIDs and GIDs."),
+                .help("-l with numeric UIDs and GIDs.")
+                .multiple(true)
         )
 
         // Time arguments
