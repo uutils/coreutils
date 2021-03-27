@@ -495,7 +495,7 @@ fn permissive_f64_parse(a: &str) -> f64 {
     }
 }
 
-/// Compares two floats, with errors and non-numerics assumed to be 0.
+/// Compares two floats, with errors and non-numerics assumed to be -inf.
 /// Stops coercing at the first non-numeric char.
 fn numeric_compare(a: &str, b: &str) -> Ordering {
     #![allow(clippy::comparison_chain)]
