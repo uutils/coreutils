@@ -11,7 +11,6 @@ extern crate uucore;
 use clap::{App, Arg};
 use libc::mkfifo;
 use std::ffi::CString;
-use std::io::Error;
 
 static NAME: &str = "mkfifo";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -73,17 +72,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         None => crash!(1, "missing operand"),
     };
 
-    let mut exit_status = 0;
     for f in fifos {
         let err = unsafe {
             let name = CString::new(f.as_bytes()).unwrap();
             mkfifo(name.as_ptr(), mode as libc::mode_t)
         };
         if err == -1 {
-            show_error!("cannot create fifo '{}': File exists", f);
-            exit_status = 1;
+            crash!(1, "cannot create fifo '{}': File exists", f);
         }
     }
 
-    exit_status
+    0
 }
