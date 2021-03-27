@@ -302,14 +302,23 @@ fn test_ls_long_formats() {
     // Regex for three names, so all of author, group and owner
     let re_three = Regex::new(r"[xrw-]{9} \d ([-0-9_a-z]+ ){3}0").unwrap();
 
+    #[cfg(unix)]
+    let re_three_num = Regex::new(r"[xrw-]{9} \d (\d+ ){3}0").unwrap();
+
     // Regex for two names, either:
     // - group and owner
     // - author and owner
     // - author and group
     let re_two = Regex::new(r"[xrw-]{9} \d ([-0-9_a-z]+ ){2}0").unwrap();
 
+    #[cfg(unix)]
+    let re_two_num = Regex::new(r"[xrw-]{9} \d (\d+ ){2}0").unwrap();
+
     // Regex for one name: author, group or owner
     let re_one = Regex::new(r"[xrw-]{9} \d [-0-9_a-z]+ 0").unwrap();
+
+    #[cfg(unix)]
+    let re_one_num = Regex::new(r"[xrw-]{9} \d \d+ 0").unwrap();
 
     // Regex for no names
     let re_zero = Regex::new(r"[xrw-]{9} \d 0").unwrap();
@@ -334,6 +343,19 @@ fn test_ls_long_formats() {
     println!("stdout = {:?}", result.stdout);
     assert!(re_three.is_match(&result.stdout));
 
+    #[cfg(unix)]
+    {
+        let result = scene
+            .ucmd()
+            .arg("-n")
+            .arg("--author")
+            .arg("test-long-formats")
+            .succeeds();
+        println!("stderr = {:?}", result.stderr);
+        println!("stdout = {:?}", result.stdout);
+        assert!(re_three_num.is_match(&result.stdout));
+    }
+
     for arg in &[
         "-l",                     // only group and owner
         "-g --author",            // only author and group
@@ -349,6 +371,19 @@ fn test_ls_long_formats() {
         println!("stderr = {:?}", result.stderr);
         println!("stdout = {:?}", result.stdout);
         assert!(re_two.is_match(&result.stdout));
+
+        #[cfg(unix)]
+        {
+            let result = scene
+                .ucmd()
+                .arg("-n")
+                .args(&arg.split(" ").collect::<Vec<_>>())
+                .arg("test-long-formats")
+                .succeeds();
+            println!("stderr = {:?}", result.stderr);
+            println!("stdout = {:?}", result.stdout);
+            assert!(re_two_num.is_match(&result.stdout));
+        }
     }
 
     for arg in &[
@@ -369,6 +404,19 @@ fn test_ls_long_formats() {
         println!("stderr = {:?}", result.stderr);
         println!("stdout = {:?}", result.stdout);
         assert!(re_one.is_match(&result.stdout));
+
+        #[cfg(unix)]
+        {
+            let result = scene
+                .ucmd()
+                .arg("-n")
+                .args(&arg.split(" ").collect::<Vec<_>>())
+                .arg("test-long-formats")
+                .succeeds();
+            println!("stderr = {:?}", result.stderr);
+            println!("stdout = {:?}", result.stdout);
+            assert!(re_one_num.is_match(&result.stdout));
+        }
     }
 
     for arg in &[
@@ -392,6 +440,19 @@ fn test_ls_long_formats() {
         println!("stderr = {:?}", result.stderr);
         println!("stdout = {:?}", result.stdout);
         assert!(re_zero.is_match(&result.stdout));
+
+        #[cfg(unix)]
+        {
+            let result = scene
+                .ucmd()
+                .arg("-n")
+                .args(&arg.split(" ").collect::<Vec<_>>())
+                .arg("test-long-formats")
+                .succeeds();
+            println!("stderr = {:?}", result.stderr);
+            println!("stdout = {:?}", result.stdout);
+            assert!(re_zero.is_match(&result.stdout));
+        }
     }
 }
 
@@ -531,7 +592,6 @@ fn test_ls_order_time() {
         at.metadata("test-2").permissions(),
     )
     .unwrap();
-    let second_access = at.open("test-2").metadata().unwrap().accessed().unwrap();
 
     let result = scene.ucmd().arg("-al").run();
     println!("stderr = {:?}", result.stderr);
@@ -936,4 +996,82 @@ fn test_ls_hidden_windows() {
     println!("stdout = {:?}", result.stdout);
     assert!(result.success);
     assert!(result.stdout.contains(file));
+}
+
+#[test]
+fn test_ls_version_sort() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    for filename in &[
+        "a2",
+        "b1",
+        "b20",
+        "a1.4",
+        "a1.40",
+        "b3",
+        "b11",
+        "b20b",
+        "b20a",
+        "a100",
+        "a1.13",
+        "aa",
+        "a1",
+        "aaa",
+        "a1.00000040",
+        "abab",
+        "ab",
+        "a01.40",
+        "a001.001",
+        "a01.0000001",
+        "a01.001",
+        "a001.01",
+    ] {
+        at.touch(filename);
+    }
+
+    let mut expected = vec![
+        "a1",
+        "a001.001",
+        "a001.01",
+        "a01.0000001",
+        "a01.001",
+        "a1.4",
+        "a1.13",
+        "a01.40",
+        "a1.00000040",
+        "a1.40",
+        "a2",
+        "a100",
+        "aa",
+        "aaa",
+        "ab",
+        "abab",
+        "b1",
+        "b3",
+        "b11",
+        "b20",
+        "b20a",
+        "b20b",
+        "", // because of '\n' at the end of the output
+    ];
+
+    let result = scene.ucmd().arg("-1v").run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+
+    assert_eq!(result.stdout.split('\n').collect::<Vec<_>>(), expected);
+
+    let result = scene.ucmd().arg("-1").arg("--sort=version").run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+
+    assert_eq!(result.stdout.split('\n').collect::<Vec<_>>(), expected);
+
+    let result = scene.ucmd().arg("-a1v").run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+
+    expected.insert(0, "..");
+    expected.insert(0, ".");
+    assert_eq!(result.stdout.split('\n').collect::<Vec<_>>(), expected,)
 }
