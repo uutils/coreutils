@@ -474,24 +474,23 @@ fn permissive_f64_parse(a: &str) -> f64 {
     // GNU sort treats "1,234" as "1" in numeric.
     // GNU sort treats "NaN" as non-number in numeric, so it needs special care.
 
-    let mut slice = "";
+    let mut s = "";
     for c in a.chars() {
         if !c.is_numeric() {
-            slice = a.split_terminator(c).next().unwrap();
+            s = a.split_terminator(c).next().unwrap();
             break;
         };
     }
 
-    match slice.parse::<f64>() {
+    match s.parse::<f64>() {
         Ok(a) if a.is_nan() => 0.0f64,
         Ok(a) => a,
         Err(_) => 0.0f64,
     }
 }
 
-/// Compares two floating point numbers, with errors being assumed to be -inf.
-/// Stops coercing at the first whitespace char, so 1e2 will parse as 100 but
-/// 1,000 will parse as -inf.
+/// Compares two floating point numbers, with errors being assumed to be 0.0.
+/// Stops coercing at the first non-numeric char.
 fn numeric_compare(a: &str, b: &str) -> Ordering {
     #![allow(clippy::comparison_chain)]
     let fa = permissive_f64_parse(a);
