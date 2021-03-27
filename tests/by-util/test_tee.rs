@@ -60,28 +60,31 @@ fn test_tee_append() {
 
 #[test]
 #[cfg(target_os = "linux")]
-fn test_tee_no_more_writeable_stdout() {
-    let (_at, mut ucmd) = at_and_ucmd!();
+fn test_tee_no_more_writeable_1() {
+    // equals to 'tee /dev/full out2 <multi_read' call
+    let (at, mut ucmd) = at_and_ucmd!();
     let content = (1..=10)
         .map(|x| format!("{}\n", x.to_string()))
         .collect::<String>();
     let file_out = "tee_file_out";
 
-    let _result = ucmd
+    let result = ucmd
         .arg("/dev/full")
         .arg(file_out)
         .pipe_in(&content[..])
         .fails();
 
-    // TODO: comment in after https://github.com/uutils/coreutils/issues/1805 is fixed
-    // assert_eq!(at.read(file_out), content);
-    // assert!(result.stdout.contains(&content));
-    // assert!(result.stderr.contains("No space left on device"));
+    assert_eq!(at.read(file_out), content);
+    assert!(result.stdout.contains(&content));
+    assert!(result.stderr.contains("No space left on device"));
 }
 
 #[test]
 #[cfg(target_os = "linux")]
-fn test_tee_no_more_writeable_stdin() {
+fn test_tee_no_more_writeable_2() {
+    // should be equals to 'tee out1 out2 >/dev/full <multi_read' call
+    // but currently there is no way to redirect stdout to /dev/full
+    // so this test is disabled
     let (_at, mut ucmd) = at_and_ucmd!();
     let _content = (1..=10)
         .map(|x| format!("{}\n", x.to_string()))
