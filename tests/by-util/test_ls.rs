@@ -1,10 +1,6 @@
 #[cfg(unix)]
 extern crate unix_socket;
 extern crate tempdir;
-
-#[cfg(unix)]
-use std::os::unix::net::*;
-
 use crate::common::util::*;
 use std::path::PathBuf;
 

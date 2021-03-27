@@ -286,11 +286,13 @@ impl AtPath {
         }
     }
 
+    #[cfg(not(windows))]
     pub fn touch(&self, file: &str) {
         log_info("touch", self.plus_as_string(file));
         File::create(&self.plus(file)).unwrap();
     }
 
+    #[cfg(not(windows))]
     pub fn mkfifo(&self, fifo: &str) {
         let full_path = self.plus_as_string(fifo);
         log_info("mkfifo", &full_path);
