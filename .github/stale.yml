@@ -1,7 +1,7 @@
 # Number of days of inactivity before an issue/PR becomes stale
 daysUntilStale: 365
 # Number of days of inactivity before a stale issue/PR is closed
-daysUntilClose: 14
+daysUntilClose: 365
 # Issues with these labels will never be considered stale
 exemptLabels:
   - pinned
