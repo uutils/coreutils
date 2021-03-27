@@ -9,8 +9,8 @@ const EXIT_SUCCESS: i32 = 0;
 const BUF_SIZE: usize = 65536;
 
 mod options {
-    pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
-    pub const ABOUT: &'static str = "\
+    pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+    pub const ABOUT: &str = "\
         Print the first 10 lines of each FILE to standard output.\n\
         With more than one FILE, precede each with a header giving the file name.\n\
         \n\
@@ -18,26 +18,26 @@ mod options {
         \n\
         Mandatory arguments to long flags are mandatory for short flags too.\
         ";
-    pub const USAGE: &'static str = "head [FLAG]... [FILE]...";
-    pub const BYTES_NAME: &'static str = "BYTES";
-    pub const BYTES_HELP: &'static str = "\
+    pub const USAGE: &str = "head [FLAG]... [FILE]...";
+    pub const BYTES_NAME: &str = "BYTES";
+    pub const BYTES_HELP: &str = "\
         print the first NUM bytes of each file;\n\
         with the leading '-', print all but the last\n\
         NUM bytes of each file\
         ";
-    pub const LINES_NAME: &'static str = "LINES";
-    pub const LINES_HELP: &'static str = "\
+    pub const LINES_NAME: &str = "LINES";
+    pub const LINES_HELP: &str = "\
         print the first NUM lines instead of the first 10;\n\
         with the leading '-', print all but the last\n\
         NUM lines of each file\
         ";
-    pub const QUIET_NAME: &'static str = "QUIET";
-    pub const QUIET_HELP: &'static str = "never print headers giving file names";
-    pub const VERBOSE_NAME: &'static str = "VERBOSE";
-    pub const VERBOSE_HELP: &'static str = "always print headers giving file names";
-    pub const ZERO_NAME: &'static str = "ZERO";
-    pub const ZERO_HELP: &'static str = "line delimiter is NUL, not newline";
-    pub const FILES_NAME: &'static str = "FILE";
+    pub const QUIET_NAME: &str = "QUIET";
+    pub const QUIET_HELP: &str = "never print headers giving file names";
+    pub const VERBOSE_NAME: &str = "VERBOSE";
+    pub const VERBOSE_HELP: &str = "always print headers giving file names";
+    pub const ZERO_NAME: &str = "ZERO";
+    pub const ZERO_HELP: &str = "line delimiter is NUL, not newline";
+    pub const FILES_NAME: &str = "FILE";
 }
 mod parse;
 mod split;
@@ -112,18 +112,6 @@ where
     }
 }
 
-//TODO: find better name for the `all_but_last` field
-//and apply it across the code
-#[derive(Debug)]
-pub struct HeadOptions {
-    pub quiet: bool,
-    pub verbose: bool,
-    pub zeroed: bool,
-    pub all_but_last: bool,
-    pub mode: Modes,
-    pub files: Vec<String>,
-}
-
 fn arg_iterate<'a>(
     mut args: impl uucore::Args + 'a,
 ) -> Result<Box<dyn Iterator<Item = OsString> + 'a>, String> {
@@ -148,6 +136,16 @@ fn arg_iterate<'a>(
     } else {
         Ok(Box::new(vec![first].into_iter()))
     }
+}
+
+#[derive(Debug)]
+pub struct HeadOptions {
+    pub quiet: bool,
+    pub verbose: bool,
+    pub zeroed: bool,
+    pub all_but_last: bool,
+    pub mode: Modes,
+    pub files: Vec<String>,
 }
 
 impl HeadOptions {
@@ -199,6 +197,12 @@ impl HeadOptions {
         };
         //println!("{:#?}", options);
         Ok(options)
+    }
+}
+// to make clippy shut up
+impl Default for HeadOptions {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

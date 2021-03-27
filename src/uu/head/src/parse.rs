@@ -26,9 +26,9 @@ pub fn parse_obsolete(src: &str) -> Option<Result<impl Iterator<Item = OsString>
         if has_num {
             match src[1..=num_end].parse::<usize>() {
                 Ok(num) => {
-                    let mut q = false;
-                    let mut v = false;
-                    let mut z = false;
+                    let mut quiet = false;
+                    let mut verbose = false;
+                    let mut zero_terminated = false;
                     let mut multiplier = None;
                     let mut c = last_char;
                     loop {
@@ -37,14 +37,14 @@ pub fn parse_obsolete(src: &str) -> Option<Result<impl Iterator<Item = OsString>
                             // we want to preserve order
                             // this also saves us 1 heap allocation
                             'q' => {
-                                q = true;
-                                v = false
+                                quiet = true;
+                                verbose = false
                             }
                             'v' => {
-                                v = true;
-                                q = false
+                                verbose = true;
+                                quiet = false
                             }
-                            'z' => z = true,
+                            'z' => zero_terminated = true,
                             'c' => multiplier = Some(1),
                             'b' => multiplier = Some(512),
                             'k' => multiplier = Some(1024),
@@ -59,13 +59,13 @@ pub fn parse_obsolete(src: &str) -> Option<Result<impl Iterator<Item = OsString>
                         }
                     }
                     let mut options = Vec::new();
-                    if q {
+                    if quiet {
                         options.push(OsString::from("-q"))
                     }
-                    if v {
+                    if verbose {
                         options.push(OsString::from("-v"))
                     }
-                    if z {
+                    if zero_terminated {
                         options.push(OsString::from("-z"))
                     }
                     if let Some(n) = multiplier {
@@ -148,7 +148,7 @@ pub fn parse_num(src: &str) -> Result<(usize, bool), ParseError> {
                     }
                     _ => return Err(ParseError::Syntax),
                 };
-                if let Some(_) = chars.next() {
+                if chars.next().is_some() {
                     return Err(ParseError::Syntax);
                 } else {
                     b
