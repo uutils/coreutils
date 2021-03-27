@@ -517,9 +517,9 @@ fn numeric_compare(a: &str, b: &str) -> Ordering {
 
 fn human_numeric_convert(a: &str) -> f64 {
     let int_str = obtain_leading_number(a);
-    let suffix = a.strip_prefix(int_str).unwrap_or("\0").chars().next();
+    let (_, s) = a.split_at(int_str.len());
     let int_part = permissive_f64_parse(int_str);
-    let suffix: f64 = match suffix.unwrap_or('\0') {
+    let suffix: f64 = match s.parse().unwrap_or('\0') {
         'K' => 1000f64,
         'M' => 1E6,
         'G' => 1E9,
@@ -707,7 +707,7 @@ mod tests {
 
     #[test]
     fn test_human_numeric_compare() {
-        let a = "100K";
+        let a = "300K";
         let b = "1M";
 
         assert_eq!(Ordering::Less, human_numeric_size_compare(a, b));
