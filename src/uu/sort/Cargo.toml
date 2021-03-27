@@ -15,7 +15,7 @@ edition = "2018"
 path = "src/sort.rs"
 
 [dependencies]
-rand = "0.8.3"
+rand = "0.7"
 clap = "2.33"
 twox-hash = "1.6.0"
 itertools = "0.8.0"
