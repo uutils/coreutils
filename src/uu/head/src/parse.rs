@@ -267,13 +267,7 @@ mod tests {
     #[test]
     #[cfg(target_pointer_width = "32")]
     fn test_parse_obsolete_overflow_x32() {
-        assert_eq!(
-            obsolete("-42949672960"),
-            Some(Err(ParseError::Overflow))
-        );
-        assert_eq!(
-            obsolete("-42949672k"),
-            Some(Err(ParseError::Overflow))
-        );
+        assert_eq!(obsolete("-42949672960"), Some(Err(ParseError::Overflow)));
+        assert_eq!(obsolete("-42949672k"), Some(Err(ParseError::Overflow)));
     }
 }

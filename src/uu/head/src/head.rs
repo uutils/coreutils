@@ -8,7 +8,6 @@ const EXIT_FAILURE: i32 = 1;
 const EXIT_SUCCESS: i32 = 0;
 const BUF_SIZE: usize = 65536;
 
-
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const ABOUT: &str = "\
     Print the first 10 lines of each FILE to standard output.\n\
@@ -268,7 +267,7 @@ fn rbuf_n_lines(input: &mut impl std::io::BufRead, n: usize, zero: bool) -> std:
 fn rbuf_but_last_n_bytes(input: &mut impl std::io::BufRead, n: usize) -> std::io::Result<()> {
     if n == 0 {
         //prints everything
-        return rbuf_n_bytes(input, usize::MAX);
+        return rbuf_n_bytes(input, std::usize::MAX);
     }
     let stdout = std::io::stdout();
     let mut stdout = stdout.lock();
@@ -319,7 +318,7 @@ fn rbuf_but_last_n_lines(
 ) -> std::io::Result<()> {
     if n == 0 {
         //prints everything
-        return rbuf_n_bytes(input, usize::MAX);
+        return rbuf_n_bytes(input, std::usize::MAX);
     }
     let mut ringbuf = vec![Vec::new(); n];
     let stdout = std::io::stdout();
