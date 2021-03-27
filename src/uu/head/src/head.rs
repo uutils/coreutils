@@ -15,6 +15,7 @@ use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
 use std::str::from_utf8;
+use uucore::InvalidEncodingHandling;
 
 static SYNTAX: &str = "";
 static SUMMARY: &str = "";
@@ -43,7 +44,9 @@ impl Default for Settings {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     let mut settings: Settings = Default::default();
 

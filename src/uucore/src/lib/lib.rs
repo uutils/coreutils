@@ -67,21 +67,58 @@ pub use crate::features::wide;
 
 use std::ffi::OsString;
 
+pub enum InvalidEncodingHandling {
+    Ignore,
+    ConvertLossy,
+    Panic,
+}
+
+#[must_use]
+pub enum ConversionResult {
+    FullyDecoded(Vec<String>),
+    Lossy(Vec<String>),
+}
+
+impl ConversionResult {
+    pub fn accept_any(&self) -> &Vec<String> {
+        match self {
+            Self::FullyDecoded(result) => result,
+            Self::Lossy(result) => result,
+        }
+    }
+}
+
 pub trait Args: Iterator<Item = OsString> + Sized {
     /// Converts each iterator to a String and collects these into a vector
-    /// Arguments that cannot be converted to a string will result in empty strings inside the vector
-    fn collect_str(self) -> Vec<String> {
-        self.map(|s| match s.into_string() {
-            Ok(string) => string,
-            Err(s_ret) => {
-                eprintln!(
-                    "Input with broken encoding ignored! (s = '{}') ",
-                    s_ret.to_string_lossy()
-                );
-                String::new()
-            }
-        })
-        .collect()
+    /// On failure, the result will may be lossy or incomplete
+    /// # Arguments
+    /// * `handling` - This switch allows to define the behavior, when invalid encoding is encountered
+    fn collect_str(self, handling: InvalidEncodingHandling) -> ConversionResult {
+        let mut full_conversion = true;
+        let result_vector: Vec<String> = self
+            .map(|s| match s.into_string() {
+                Ok(string) => string,
+                Err(s_ret) => {
+                    full_conversion = false;
+                    let lossy_conversion = s_ret.to_string_lossy();
+                    eprintln!(
+                        "Input with broken encoding occured! (s = '{}') ",
+                        &lossy_conversion
+                    );
+                    match handling {
+                        InvalidEncodingHandling::Ignore => String::new(),
+                        InvalidEncodingHandling::ConvertLossy => lossy_conversion.to_string(),
+                        InvalidEncodingHandling::Panic => {
+                            panic!("Broken encoding found but caller cannot handle it")
+                        }
+                    }
+                }
+            })
+            .collect();
+        match full_conversion {
+            true => ConversionResult::FullyDecoded(result_vector),
+            false => ConversionResult::Lossy(result_vector),
+        }
     }
 }
 
