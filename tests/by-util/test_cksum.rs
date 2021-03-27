@@ -58,7 +58,6 @@ fn test_invalid_file() {
         .fails()
         .stderr
         .contains("cksum: error: 'a'");
-    
 }
 
 // Make sure crc is correct for files larger than 32 bytes
