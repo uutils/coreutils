@@ -1254,7 +1254,6 @@ fn display_file_name(
     let mut width = UnicodeWidthStr::width(&*name);
 
     let ext;
-
     if config.color || config.indicator_style != IndicatorStyle::None {
         let file_type = metadata.file_type();
 

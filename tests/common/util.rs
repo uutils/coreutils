@@ -1,7 +1,8 @@
 #![allow(dead_code)]
 
+use libc;
 use std::env;
-use std::ffi::OsStr;
+use std::ffi::{CString, OsStr};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Result, Write};
 #[cfg(unix)]
@@ -288,6 +289,27 @@ impl AtPath {
     pub fn touch(&self, file: &str) {
         log_info("touch", self.plus_as_string(file));
         File::create(&self.plus(file)).unwrap();
+    }
+
+    pub fn mkfifo(&self, fifo: &str) {
+        let full_path = self.plus_as_string(fifo);
+        log_info("mkfifo", &full_path);
+        unsafe {
+            let fifo_name: CString = CString::new(full_path).expect("CString creation failed.");
+            libc::mkfifo(fifo_name.as_ptr(), libc::S_IWUSR | libc::S_IRUSR);
+        }
+    }
+
+    pub fn is_fifo(&self, fifo: &str) -> bool {
+        unsafe {
+            let name = CString::new(self.plus_as_string(fifo)).unwrap();
+            let mut stat: libc::stat = std::mem::zeroed();
+            if libc::stat(name.as_ptr(), &mut stat) >= 0 {
+                libc::S_IFIFO & stat.st_mode != 0
+            } else {
+                false
+            }
+        }
     }
 
     pub fn symlink_file(&self, src: &str, dst: &str) {
