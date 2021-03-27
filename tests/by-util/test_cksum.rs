@@ -40,8 +40,8 @@ fn test_arg_overrides_stdin() {
 
     at.touch("a");
 
-    ucmd.pipe_in("foobarfoobar")
-        .arg("a")
+    ucmd.arg("a")
+        .pipe_in("foobarfoobar")
         .succeeds()
         .stdout
         .ends_with("0 a");
