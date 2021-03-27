@@ -8,17 +8,19 @@ const EXIT_FAILURE: i32 = 1;
 const EXIT_SUCCESS: i32 = 0;
 const BUF_SIZE: usize = 65536;
 
+
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+const ABOUT: &str = "\
+    Print the first 10 lines of each FILE to standard output.\n\
+    With more than one FILE, precede each with a header giving the file name.\n\
+    \n\
+    With no FILE, or when FILE is -, read standard input.\n\
+    \n\
+    Mandatory arguments to long flags are mandatory for short flags too.\
+    ";
+const USAGE: &str = "head [FLAG]... [FILE]...";
+
 mod options {
-    pub const VERSION: &str = env!("CARGO_PKG_VERSION");
-    pub const ABOUT: &str = "\
-        Print the first 10 lines of each FILE to standard output.\n\
-        With more than one FILE, precede each with a header giving the file name.\n\
-        \n\
-        With no FILE, or when FILE is -, read standard input.\n\
-        \n\
-        Mandatory arguments to long flags are mandatory for short flags too.\
-        ";
-    pub const USAGE: &str = "head [FLAG]... [FILE]...";
     pub const BYTES_NAME: &str = "BYTES";
     pub const BYTES_HELP: &str = "\
         print the first NUM bytes of each file;\n\
@@ -44,9 +46,9 @@ mod split;
 
 fn app<'a>() -> App<'a, 'a> {
     App::new(executable!())
-        .version(options::VERSION)
-        .about(options::ABOUT)
-        .usage(options::USAGE)
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(USAGE)
         .arg(
             Arg::with_name(options::BYTES_NAME)
                 .short("c")
