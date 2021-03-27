@@ -464,25 +464,29 @@ fn compare_by(a: &str, b: &str, settings: &Settings) -> Ordering {
     Ordering::Equal
 }
 
-/// Parse the beginning string into an f64, returning -inf instead of NaN on errors.
-fn permissive_f64_parse(a: &str) -> f64 {
-    // Maybe should be split on non-digit, but then 10e100 won't parse properly.
-    // On the flip side, this will give NEG_INFINITY for "1,234", which might be OK
-    // because there's no way to handle both CSV and thousands separators without a new flag.
-    // GNU sort treats "1,234" as "1" in numeric, so maybe it's fine.
-    // GNU sort treats "NaN" as non-number in numeric, so it needs special care.
-    match a.split_whitespace().next() {
-        None => std::f64::NEG_INFINITY,
-        Some(sa) => match sa.parse::<f64>() {
-            Ok(a) if a.is_nan() => std::f64::NEG_INFINITY,
-            Ok(a) => a,
-            Err(_) => std::f64::NEG_INFINITY,
-        },
-    }
-}
-
 fn default_compare(a: &str, b: &str) -> Ordering {
     a.cmp(b)
+}
+
+/// Parse the beginning string into an f64, returning 0.0 instead of NaN on errors.
+fn permissive_f64_parse(a: &str) -> f64 {
+    // This appears to match the GNU sort method.
+    // GNU sort treats "1,234" as "1" in numeric.
+    // GNU sort treats "NaN" as non-number in numeric, so it needs special care.
+
+    let mut slice = "";
+    for c in a.chars() {
+        if !c.is_numeric() {
+            slice = a.split_terminator(c).next().unwrap();
+            break;
+        };
+    }
+
+    match slice.parse::<f64>() {
+        Ok(a) if a.is_nan() => 0.0f64,
+        Ok(a) => a,
+        Err(_) => 0.0f64,
+    }
 }
 
 /// Compares two floating point numbers, with errors being assumed to be -inf.
@@ -538,8 +542,8 @@ fn random_shuffle(a: &str, b: &str, salt: String) -> Ordering {
     #![allow(clippy::comparison_chain)]
     let salt_slice = salt.as_str();
 
-    let da = xxhash(&[a, salt_slice].concat());
-    let db = xxhash(&[b, salt_slice].concat());
+    let da = hash(&[a, salt_slice].concat());
+    let db = hash(&[b, salt_slice].concat());
 
     da.cmp(&db)
 }
@@ -552,7 +556,7 @@ fn get_rand_string() -> String {
         .collect::<String>()
 }
 
-fn xxhash<T: Hash>(t: &T) -> u64 {
+fn hash<T: Hash>(t: &T) -> u64 {
     let mut s: XxHash64 = Default::default();
     t.hash(&mut s);
     s.finish()
@@ -661,5 +665,51 @@ fn open(path: &str) -> Option<(Box<dyn Read>, bool)> {
             show_error!("sort: {0}: {1}", path, e.to_string());
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn test_default_compare() {
+        let a = "your own";
+        let b = "your place";
+
+        assert_eq!(Ordering::Less, default_compare(a, b));
+    }
+
+    #[test]
+    fn test_numeric_compare() {
+        let a = "149:7";
+        let b = "150:5";
+
+        assert_eq!(Ordering::Less, numeric_compare(a, b));
+    }
+
+    #[test]
+    fn test_month_compare() {
+        let a = "JaN";
+        let b = "OCt";
+
+        assert_eq!(Ordering::Less, month_compare(a, b));
+    }
+    #[test]
+    fn test_version_compare() {
+        let a = "1.2.3-alpha2";
+        let b = "1.4.0";
+
+        assert_eq!(Ordering::Less, version_compare(a, b));
+    }
+
+    #[test]
+    fn test_random_compare() {
+        let a = "9";
+        let b = "9";
+        let c = get_rand_string();
+
+        assert_eq!(Ordering::Equal, random_shuffle(a, b, c));
     }
 }
