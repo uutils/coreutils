@@ -15,7 +15,6 @@ edition = "2018"
 path = "src/head.rs"
 
 [dependencies]
-regex = "1"
 clap = "2.33"
 uucore = { version=">=0.0.7", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
