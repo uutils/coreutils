@@ -1,6 +1,7 @@
 //  * This file is part of the uutils coreutils package.
 //  *
 //  * (c) Michael Yin <mikeyin@mikeyin.org>
+//  * (c) Robert Swinford <robert.swinford..AT..gmail.com>
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
@@ -468,35 +469,43 @@ fn default_compare(a: &str, b: &str) -> Ordering {
     a.cmp(b)
 }
 
-/// Parse the beginning string into an f64, returning 0.0 instead of NaN on errors.
-fn permissive_f64_parse(a: &str) -> f64 {
-    // This appears to match the GNU sort method.
-    // GNU sort treats "1,234" as "1" in numeric.
-    // GNU sort treats "NaN" as non-number in numeric, so it needs special care.
-
+fn obtain_leading_number(a: &str) -> &str {
     let mut s = "";
-    for c in a.chars() {
-        if !c.is_numeric() {
-            s = a.split_terminator(c).next().unwrap();
-            break;
-        };
-    }
+    if a.is_empty() {
+        s = "0"
+    } else {
+        for c in a.chars() {
+            if !c.is_numeric() && !c.eq(&'-') && !c.eq(&' ') && !c.eq(&'.') && !c.eq(&',') {
+                s = a.trim().split(c).next().unwrap();
+                break;
+            }
+            s = a.trim();
+        }
+    };
+    return s;
+}
 
-    match s.parse::<f64>() {
-        Ok(a) if a.is_nan() => 0.0f64,
+/// Parse the beginning string into an f64, returning -inf instead of NaN on errors.
+fn permissive_f64_parse(a: &str) -> f64 {
+    // GNU sort treats "NaN" as non-number in numeric, so it needs special care.
+    match a.parse::<f64>() {
+        Ok(a) if a.is_nan() => std::f64::NEG_INFINITY,
         Ok(a) => a,
-        Err(_) => 0.0f64,
+        Err(_) => std::f64::NEG_INFINITY,
     }
 }
 
-/// Compares two floating point numbers, with errors being assumed to be 0.0.
+/// Compares two floats, with errors and non-numerics assumed to be 0.
 /// Stops coercing at the first non-numeric char.
 fn numeric_compare(a: &str, b: &str) -> Ordering {
     #![allow(clippy::comparison_chain)]
-    let fa = permissive_f64_parse(a);
-    let fb = permissive_f64_parse(b);
-    // f64::cmp isn't implemented because NaN messes with it
-    // but we sidestep that with permissive_f64_parse so just fake it
+
+    let sa = obtain_leading_number(a);
+    let sb = obtain_leading_number(b);
+
+    let fa = permissive_f64_parse(sa);
+    let fb = permissive_f64_parse(sb);
+
     if fa > fb {
         Ordering::Greater
     } else if fa < fb {
@@ -507,9 +516,9 @@ fn numeric_compare(a: &str, b: &str) -> Ordering {
 }
 
 fn human_numeric_convert(a: &str) -> f64 {
-    let int_str: String = a.chars().take_while(|c| c.is_numeric()).collect();
-    let suffix = a.chars().find(|c| !c.is_numeric());
-    let int_part = int_str.parse::<f64>().unwrap_or(-1f64) as f64;
+    let int_str = obtain_leading_number(a);
+    let suffix = a.strip_prefix(int_str).unwrap_or("\0").chars().next();
+    let int_part = permissive_f64_parse(int_str);
     let suffix: f64 = match suffix.unwrap_or('\0') {
         'K' => 1000f64,
         'M' => 1E6,
@@ -681,11 +690,27 @@ mod tests {
     }
 
     #[test]
-    fn test_numeric_compare() {
+    fn test_numeric_compare1() {
         let a = "149:7";
         let b = "150:5";
 
         assert_eq!(Ordering::Less, numeric_compare(a, b));
+    }
+
+    #[test]
+    fn test_numeric_compare2() {
+        let a = "-1.02";
+        let b = "1";
+
+        assert_eq!(Ordering::Less, numeric_compare(a, b));
+    }
+
+    #[test]
+    fn test_human_numeric_compare() {
+        let a = "100K";
+        let b = "1M";
+
+        assert_eq!(Ordering::Less, human_numeric_size_compare(a, b));
     }
 
     #[test]
