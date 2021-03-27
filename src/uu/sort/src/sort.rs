@@ -506,6 +506,7 @@ fn numeric_compare(a: &str, b: &str) -> Ordering {
     let fa = permissive_f64_parse(sa);
     let fb = permissive_f64_parse(sb);
 
+    // f64::cmp isn't implemented (due to NaN issues); implement directly instead
     if fa > fb {
         Ordering::Greater
     } else if fa < fb {
