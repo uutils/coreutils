@@ -382,7 +382,7 @@ fn follow<T: Read>(readers: &mut [BufReader<T>], filenames: &[String], settings:
                         }
                         print!("{}", datum);
                     }
-                    Err(err) => panic!(err),
+                    Err(err) => panic!("{}", err),
                 }
             }
         }
@@ -509,7 +509,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
                             ringbuf.push_back(datum);
                         }
                     }
-                    Err(err) => panic!(err),
+                    Err(err) => panic!("{}", err),
                 }
             }
             let mut stdout = stdout();
@@ -540,7 +540,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
                             ringbuf.push_back(datum[0]);
                         }
                     }
-                    Err(err) => panic!(err),
+                    Err(err) => panic!("{}", err),
                 }
             }
             let mut stdout = stdout();
