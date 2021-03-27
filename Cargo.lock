@@ -1205,6 +1205,11 @@ dependencies = [
 ]
 
 [[package]]
+name = "retain_mut"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
 name = "rust-ini"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1612,9 +1617,10 @@ dependencies = [
 name = "uu_cksum"
 version = "0.0.4"
 dependencies = [
- "libc",
- "uucore",
- "uucore_procs",
+ "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libc 0.2.85 (registry+https://github.com/rust-lang/crates.io-index)",
+ "uucore 0.0.7",
+ "uucore_procs 0.0.5",
 ]
 
 [[package]]
@@ -1952,10 +1958,10 @@ dependencies = [
 name = "uu_mkfifo"
 version = "0.0.4"
 dependencies = [
- "getopts",
- "libc",
- "uucore",
- "uucore_procs",
+ "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libc 0.2.85 (registry+https://github.com/rust-lang/crates.io-index)",
+ "uucore 0.0.7",
+ "uucore_procs 0.0.5",
 ]
 
 [[package]]
@@ -2322,10 +2328,11 @@ dependencies = [
 name = "uu_tee"
 version = "0.0.4"
 dependencies = [
- "clap",
- "libc",
- "uucore",
- "uucore_procs",
+ "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libc 0.2.85 (registry+https://github.com/rust-lang/crates.io-index)",
+ "retain_mut 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "uucore 0.0.7",
+ "uucore_procs 0.0.5",
 ]
 
 [[package]]
@@ -2802,6 +2809,7 @@ dependencies = [
 "checksum regex-automata 0.1.9 (registry+https://github.com/rust-lang/crates.io-index)" = "ae1ded71d66a4a97f5e961fd0cb25a5f366a42a41570d16a763a69c092c26ae4"
 "checksum regex-syntax 0.6.23 (registry+https://github.com/rust-lang/crates.io-index)" = "24d5f089152e60f62d28b835fbff2cd2e8dc0baf1ac13343bef92ab7eed84548"
 "checksum remove_dir_all 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)" = "3acd125665422973a33ac9d3dd2df85edad0f4ae9b00dafb1a05e43a9f5ef8e7"
+"checksum retain_mut 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "53552c6c49e1e13f1a203ef0080ab3bbef0beb570a528993e83df057a9d9bba1"
 "checksum rust-ini 0.13.0 (registry+https://github.com/rust-lang/crates.io-index)" = "3e52c148ef37f8c375d49d5a73aa70713125b7f19095948a923f80afdeb22ec2"
 "checksum rustc_version 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)" = "138e3e0acb6c9fb258b19b67cb8abd63c00679d2851805ea151465464fe9030a"
 "checksum ryu 1.0.5 (registry+https://github.com/rust-lang/crates.io-index)" = "71d301d4193d031abdd79ff7e3dd721168a9572ef3fe51a1517aba235bd8f86e"
