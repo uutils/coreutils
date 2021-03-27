@@ -286,7 +286,6 @@ impl AtPath {
         }
     }
 
-    #[cfg(not(windows))]
     pub fn touch(&self, file: &str) {
         log_info("touch", self.plus_as_string(file));
         File::create(&self.plus(file)).unwrap();
@@ -302,6 +301,7 @@ impl AtPath {
         }
     }
 
+    #[cfg(not(windows))]
     pub fn is_fifo(&self, fifo: &str) -> bool {
         unsafe {
             let name = CString::new(self.plus_as_string(fifo)).unwrap();
