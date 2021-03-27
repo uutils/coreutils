@@ -16,7 +16,8 @@ fn test_create_one_fifo() {
 fn test_create_one_fifo_with_invalid_mode() {
     new_ucmd!()
         .arg("abcd")
-        .arg("-m50000")
+        .arg("-m")
+        .arg("invalid")
         .fails()
         .stderr
         .contains("invalid mode");
