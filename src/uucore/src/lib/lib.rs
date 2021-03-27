@@ -120,6 +120,11 @@ pub trait Args: Iterator<Item = OsString> + Sized {
             false => ConversionResult::Lossy(result_vector),
         }
     }
+
+    /// convience function for a more slim interface
+    fn collect_str_lossy(self) -> ConversionResult {
+        collect_str(InvalidEncodingHandling::ConvertLossy)
+    }
 }
 
 impl<T: Iterator<Item = OsString> + Sized> Args for T {}
