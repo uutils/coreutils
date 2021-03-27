@@ -1,4 +1,5 @@
 use crate::common::util::*;
+use filetime::FileTime;
 use rust_users::*;
 use std::os::unix::fs::PermissionsExt;
 
@@ -406,4 +407,88 @@ fn test_install_failing_no_such_file() {
     let r = ucmd.arg(file1).arg(file2).arg(dir1).run();
     assert!(r.code == Some(1));
     assert!(r.stderr.contains("No such file or directory"));
+}
+
+#[test]
+fn test_install_copy_then_compare_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let file1 = "test_install_copy_then_compare_file_a1";
+    let file2 = "test_install_copy_then_compare_file_a2";
+
+    at.touch(file1);
+    scene
+        .ucmd()
+        .arg("-C")
+        .arg(file1)
+        .arg(file2)
+        .succeeds()
+        .no_stderr();
+
+    let mut file2_meta = at.metadata(file2);
+    let before = FileTime::from_last_modification_time(&file2_meta);
+
+    scene
+        .ucmd()
+        .arg("-C")
+        .arg(file1)
+        .arg(file2)
+        .succeeds()
+        .no_stderr();
+
+    file2_meta = at.metadata(file2);
+    let after = FileTime::from_last_modification_time(&file2_meta);
+
+    assert!(before == after);
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_install_copy_then_compare_file_with_extra_mode() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    // XXX: can't tests introspect on their own names?
+    let file1 = "test_install_copy_then_compare_file_with_extra_mode_a1";
+    let file2 = "test_install_copy_then_compare_file_with_extra_mode_a2";
+
+    at.touch(file1);
+    scene
+        .ucmd()
+        .arg("-C")
+        .arg(file1)
+        .arg(file2)
+        .succeeds()
+        .no_stderr();
+
+    let mut file2_meta = at.metadata(file2);
+    let before = FileTime::from_last_modification_time(&file2_meta);
+
+    scene
+        .ucmd()
+        .arg("-C")
+        .arg(file1)
+        .arg(file2)
+        .arg("-m")
+        .arg("1644")
+        .succeeds()
+        .no_stderr();
+
+    file2_meta = at.metadata(file2);
+    let after_install_sticky = FileTime::from_last_modification_time(&file2_meta);
+
+    assert!(before != after_install_sticky);
+
+    // dest file still 1644, so need_copy ought to return `true`
+    scene
+        .ucmd()
+        .arg("-C")
+        .arg(file1)
+        .arg(file2)
+        .succeeds()
+        .no_stderr();
+
+    file2_meta = at.metadata(file2);
+    let after_install_sticky_again = FileTime::from_last_modification_time(&file2_meta);
+
+    assert!(after_install_sticky != after_install_sticky_again);
 }
