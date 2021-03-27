@@ -1,4 +1,3 @@
-use crate::constants;
 #[derive(Debug)]
 pub enum Event<'a> {
     Data(&'a [u8]),
@@ -22,7 +21,7 @@ pub fn walk_lines<F>(
 where
     F: FnMut(Event) -> std::io::Result<bool>,
 {
-    let mut buffer = [0u8; constants::BUF_SIZE];
+    let mut buffer = [0u8; super::BUF_SIZE];
     loop {
         let read = loop {
             match input.read(&mut buffer) {

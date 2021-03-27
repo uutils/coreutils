@@ -4,58 +4,92 @@ use std::ffi::OsString;
 use std::io::{ErrorKind, Read, Seek, SeekFrom, Write};
 use uucore::{crash, executable, show_error};
 
-mod constants;
+const EXIT_FAILURE: i32 = 1;
+const EXIT_SUCCESS: i32 = 0;
+const BUF_SIZE: usize = 65536;
+
+mod options {
+    pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+    pub const ABOUT: &'static str = "\
+        Print the first 10 lines of each FILE to standard output.\n\
+        With more than one FILE, precede each with a header giving the file name.\n\
+        \n\
+        With no FILE, or when FILE is -, read standard input.\n\
+        \n\
+        Mandatory arguments to long flags are mandatory for short flags too.\
+        ";
+    pub const USAGE: &'static str = "head [FLAG]... [FILE]...";
+    pub const BYTES_NAME: &'static str = "BYTES";
+    pub const BYTES_HELP: &'static str = "\
+        print the first NUM bytes of each file;\n\
+        with the leading '-', print all but the last\n\
+        NUM bytes of each file\
+        ";
+    pub const LINES_NAME: &'static str = "LINES";
+    pub const LINES_HELP: &'static str = "\
+        print the first NUM lines instead of the first 10;\n\
+        with the leading '-', print all but the last\n\
+        NUM lines of each file\
+        ";
+    pub const QUIET_NAME: &'static str = "QUIET";
+    pub const QUIET_HELP: &'static str = "never print headers giving file names";
+    pub const VERBOSE_NAME: &'static str = "VERBOSE";
+    pub const VERBOSE_HELP: &'static str = "always print headers giving file names";
+    pub const ZERO_NAME: &'static str = "ZERO";
+    pub const ZERO_HELP: &'static str = "line delimiter is NUL, not newline";
+    pub const FILES_NAME: &'static str = "FILE";
+}
 mod parse;
 mod split;
 
-pub fn app<'a>() -> App<'a, 'a> {
+fn app<'a>() -> App<'a, 'a> {
     App::new(executable!())
-        .version(constants::version())
-        .about(constants::about())
-        .usage(constants::usage())
+        .version(options::VERSION)
+        .about(options::ABOUT)
+        .usage(options::USAGE)
         .arg(
-            Arg::with_name(constants::bytes_name())
+            Arg::with_name(options::BYTES_NAME)
                 .short("c")
                 .long("bytes")
                 .value_name("[-]NUM")
                 .takes_value(true)
-                .help(constants::bytes_help())
-                .overrides_with_all(&[constants::bytes_name(), constants::lines_name()])
+                .help(options::BYTES_HELP)
+                .overrides_with_all(&[options::BYTES_NAME, options::LINES_NAME])
                 .allow_hyphen_values(true),
         )
         .arg(
-            Arg::with_name(constants::lines_name())
+            Arg::with_name(options::LINES_NAME)
                 .short("n")
                 .long("lines")
                 .value_name("[-]NUM")
                 .takes_value(true)
-                .help(constants::lines_help())
-                .overrides_with_all(&[constants::lines_name(), constants::bytes_name()])
+                .help(options::LINES_HELP)
+                .overrides_with_all(&[options::LINES_NAME, options::BYTES_NAME])
                 .allow_hyphen_values(true),
         )
         .arg(
-            Arg::with_name(constants::quiet_name())
+            Arg::with_name(options::QUIET_NAME)
                 .short("q")
                 .long("--quiet")
                 .visible_alias("silent")
-                .help(constants::quiet_help())
-                .overrides_with_all(&[constants::verbose_name(), constants::quiet_name()]),
+                .help(options::QUIET_HELP)
+                .overrides_with_all(&[options::VERBOSE_NAME, options::QUIET_NAME]),
         )
         .arg(
-            Arg::with_name(constants::verbose_name())
+            Arg::with_name(options::VERBOSE_NAME)
                 .short("v")
                 .long("verbose")
-                .help(constants::verbose_help())
-                .overrides_with_all(&[constants::quiet_name(), constants::verbose_name()]),
+                .help(options::VERBOSE_HELP)
+                .overrides_with_all(&[options::QUIET_NAME, options::VERBOSE_NAME]),
         )
         .arg(
-            Arg::with_name(constants::zero_name())
+            Arg::with_name(options::ZERO_NAME)
                 .short("z")
                 .long("zero-terminated")
-                .help(constants::zero_help())
-                .overrides_with(constants::zero_name()),
+                .help(options::ZERO_HELP)
+                .overrides_with(options::ZERO_NAME),
         )
-        .arg(Arg::with_name(constants::files_name()).multiple(true))
+        .arg(Arg::with_name(options::FILES_NAME).multiple(true))
 }
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub enum Modes {
@@ -134,18 +168,18 @@ impl HeadOptions {
 
         let mut options = HeadOptions::new();
 
-        options.quiet = matches.is_present(constants::quiet_name());
-        options.verbose = matches.is_present(constants::verbose_name());
-        options.zeroed = matches.is_present(constants::zero_name());
+        options.quiet = matches.is_present(options::QUIET_NAME);
+        options.verbose = matches.is_present(options::VERBOSE_NAME);
+        options.zeroed = matches.is_present(options::ZERO_NAME);
 
-        let mode_and_from_end = if let Some(v) = matches.value_of(constants::bytes_name()) {
+        let mode_and_from_end = if let Some(v) = matches.value_of(options::BYTES_NAME) {
             match parse_mode(v, Modes::Bytes) {
                 Ok(v) => v,
                 Err(err) => {
                     return Err(format!("invalid number of bytes: {}", err));
                 }
             }
-        } else if let Some(v) = matches.value_of(constants::lines_name()) {
+        } else if let Some(v) = matches.value_of(options::LINES_NAME) {
             match parse_mode(v, Modes::Lines) {
                 Ok(v) => v,
                 Err(err) => {
@@ -159,7 +193,7 @@ impl HeadOptions {
         options.mode = mode_and_from_end.0;
         options.all_but_last = mode_and_from_end.1;
 
-        options.files = match matches.values_of(constants::files_name()) {
+        options.files = match matches.values_of(options::FILES_NAME) {
             Some(v) => v.map(|s| s.to_owned()).collect(),
             None => vec!["-".to_owned()],
         };
@@ -172,7 +206,7 @@ fn rbuf_n_bytes(input: &mut impl std::io::BufRead, n: usize) -> std::io::Result<
     if n == 0 {
         return Ok(());
     }
-    let mut readbuf = [0u8; constants::BUF_SIZE];
+    let mut readbuf = [0u8; BUF_SIZE];
     let mut i = 0usize;
 
     let stdout = std::io::stdout();
@@ -243,7 +277,7 @@ fn rbuf_but_last_n_bytes(input: &mut impl std::io::BufRead, n: usize) -> std::io
             return Err(e);
         }
     }
-    let mut buffer = [0u8; constants::BUF_SIZE];
+    let mut buffer = [0u8; BUF_SIZE];
     loop {
         let read = loop {
             match input.read(&mut buffer) {
@@ -316,14 +350,14 @@ fn head_backwards_file(input: &mut std::fs::File, options: &HeadOptions) -> std:
             } else {
                 input.seek(SeekFrom::Start(0))?;
                 rbuf_n_bytes(
-                    &mut std::io::BufReader::with_capacity(constants::BUF_SIZE, input),
+                    &mut std::io::BufReader::with_capacity(BUF_SIZE, input),
                     size - n,
                 )?;
             }
         }
         Modes::Lines(n) => {
-            let mut buffer = [0u8; constants::BUF_SIZE];
-            let buffer = &mut buffer[..constants::BUF_SIZE.min(size)];
+            let mut buffer = [0u8; BUF_SIZE];
+            let buffer = &mut buffer[..BUF_SIZE.min(size)];
             let mut i = 0usize;
             let mut lines = 0usize;
 
@@ -355,7 +389,7 @@ fn head_backwards_file(input: &mut std::fs::File, options: &HeadOptions) -> std:
             };
             input.seek(SeekFrom::Start(0))?;
             rbuf_n_bytes(
-                &mut std::io::BufReader::with_capacity(constants::BUF_SIZE, input),
+                &mut std::io::BufReader::with_capacity(BUF_SIZE, input),
                 size - found,
             )?;
         }
@@ -368,12 +402,11 @@ fn head_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Resul
         head_backwards_file(input, options)
     } else {
         match options.mode {
-            Modes::Bytes(n) => rbuf_n_bytes(
-                &mut std::io::BufReader::with_capacity(constants::BUF_SIZE, input),
-                n,
-            ),
+            Modes::Bytes(n) => {
+                rbuf_n_bytes(&mut std::io::BufReader::with_capacity(BUF_SIZE, input), n)
+            }
             Modes::Lines(n) => rbuf_n_lines(
-                &mut std::io::BufReader::with_capacity(constants::BUF_SIZE, input),
+                &mut std::io::BufReader::with_capacity(BUF_SIZE, input),
                 n,
                 options.zeroed,
             ),
@@ -417,21 +450,21 @@ fn uu_head(options: &HeadOptions) {
                     Err(err) => match err.kind() {
                         ErrorKind::NotFound => {
                             crash!(
-                                constants::EXIT_FAILURE,
+                                EXIT_FAILURE,
                                 "head: cannot open '{}' for reading: No such file or directory",
                                 name
                             );
                         }
                         ErrorKind::PermissionDenied => {
                             crash!(
-                                constants::EXIT_FAILURE,
+                                EXIT_FAILURE,
                                 "head: cannot open '{}' for reading: Permission denied",
                                 name
                             );
                         }
                         _ => {
                             crash!(
-                                constants::EXIT_FAILURE,
+                                EXIT_FAILURE,
                                 "head: cannot open '{}' for reading: {}",
                                 name,
                                 err
@@ -448,12 +481,12 @@ fn uu_head(options: &HeadOptions) {
         if res.is_err() {
             if fname.as_str() == "-" {
                 crash!(
-                    constants::EXIT_FAILURE,
+                    EXIT_FAILURE,
                     "head: error reading standard input: Input/output error"
                 );
             } else {
                 crash!(
-                    constants::EXIT_FAILURE,
+                    EXIT_FAILURE,
                     "head: error reading {}: Input/output error",
                     fname
                 );
@@ -467,12 +500,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = match HeadOptions::get_from(args) {
         Ok(o) => o,
         Err(s) => {
-            crash!(constants::EXIT_FAILURE, "head: {}", s);
+            crash!(EXIT_FAILURE, "head: {}", s);
         }
     };
     uu_head(&args);
 
-    constants::EXIT_SUCCESS
+    EXIT_SUCCESS
 }
 
 #[cfg(test)]
