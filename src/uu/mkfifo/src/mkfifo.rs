@@ -72,15 +72,17 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         None => crash!(1, "missing operand"),
     };
 
+    let mut exit_code = 0;
     for f in fifos {
         let err = unsafe {
             let name = CString::new(f.as_bytes()).unwrap();
             mkfifo(name.as_ptr(), mode as libc::mode_t)
         };
         if err == -1 {
-            crash!(1, "cannot create fifo '{}': File exists", f);
+            show_error!("cannot create fifo '{}': File exists", f);
+            exit_code = 1;
         }
     }
 
-    0
+    exit_code
 }
