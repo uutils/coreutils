@@ -453,7 +453,6 @@ fn test_install_copy_then_compare_file() {
 
 #[test]
 #[cfg(target_os = "linux")]
-#[ignore]
 fn test_install_copy_then_compare_file_with_extra_mode() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
