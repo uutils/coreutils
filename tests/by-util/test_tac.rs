@@ -49,3 +49,21 @@ fn test_single_non_newline_separator_before() {
         .run()
         .stdout_is_fixture("delimited_primes_before.expected");
 }
+
+#[test]
+fn test_invalid_input() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("b")
+        .fails()
+        .stderr
+        .contains("tac: error: failed to open 'b' for reading");
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("a");
+    ucmd.arg("a")
+        .run()
+        .stderr
+        .contains("tac: error: failed to read 'a'");
+}
