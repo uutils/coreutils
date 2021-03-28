@@ -165,10 +165,16 @@ fn test_no_such_file_or_directory() {
 #[test]
 fn test_sequence_fixture() {
     new_ucmd!()
-        .args(&["-n", "-10"])
-        .pipe_in_fixture("sequence")
+        .args(&["-n", "-10", "sequence"])
         .run()
         .stdout_is_fixture("sequence.expected");
+}
+#[test]
+fn test_file_backwards() {
+    new_ucmd!()
+        .args(&["-c", "-10", "lorem_ipsum.txt"])
+        .run()
+        .stdout_is_fixture("lorem_ipsum_backwards_file.expected");
 }
 
 #[test]
