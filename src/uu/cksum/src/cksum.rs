@@ -153,7 +153,7 @@ fn cksum(fname: &str) -> io::Result<(u32, usize)> {
                     "No such file or directory",
                 ));
             };
-            file = File::open(&Path::new(fname))?;
+            file = File::open(&path)?;
             Box::new(BufReader::new(file))
         }
     };
