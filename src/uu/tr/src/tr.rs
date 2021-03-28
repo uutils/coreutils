@@ -16,15 +16,26 @@ extern crate uucore;
 mod expand;
 
 use bit_set::BitSet;
+use clap::{App, Arg};
 use fnv::FnvHashMap;
-use getopts::Options;
 use std::io::{stdin, stdout, BufRead, BufWriter, Write};
 
 use crate::expand::ExpandSet;
 
 static NAME: &str = "tr";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
+static ABOUT: &str = "translate or delete characters";
+static LONG_HELP: &str = "Translate,  squeeze, and/or delete characters from standard input,
+writing to standard output.";
 const BUFFER_LEN: usize = 1024;
+
+mod options {
+    pub const COMPLEMENT: &str = "complement";
+    pub const DELETE: &str = "delete";
+    pub const SQUEEZE: &str = "squeeze-repeats";
+    pub const TRUNCATE: &str = "truncate";
+    pub const SETS: &str = "sets";
+}
 
 trait SymbolTranslator {
     fn translate(&self, c: char, prev_c: char) -> Option<char>;
@@ -170,55 +181,59 @@ fn translate_input<T: SymbolTranslator>(
     }
 }
 
-fn usage(opts: &Options) {
-    println!("{} {}", NAME, VERSION);
-    println!();
-    println!("Usage:");
-    println!("  {} [OPTIONS] SET1 [SET2]", NAME);
-    println!();
-    println!("{}", opts.usage("Translate or delete characters."));
+fn get_usage() -> String {
+    format!("{} [OPTION]... SET1 [SET2]", executable!())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let usage = get_usage();
 
-    let mut opts = Options::new();
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .after_help(LONG_HELP)
+        .arg(
+            Arg::with_name(options::COMPLEMENT)
+                .short("C")
+                .short("c")
+                .long(options::COMPLEMENT)
+                .help("use the complement of SET1"),
+        )
+        .arg(
+            Arg::with_name(options::DELETE)
+                .short("d")
+                .long(options::DELETE)
+                .help("delete characters in SET1, do not translate"),
+        )
+        .arg(
+            Arg::with_name(options::SQUEEZE)
+                .long(options::SQUEEZE)
+                .short("s")
+                .help(
+                    "replace each sequence  of  a  repeated  character  that  is
+            listed  in the last specified SET, with a single occurrence
+            of that character",
+                ),
+        )
+        .arg(
+            Arg::with_name(options::TRUNCATE)
+                .long(options::TRUNCATE)
+                .short("t")
+                .help("first truncate SET1 to length of SET2"),
+        )
+        .arg(Arg::with_name(options::SETS).multiple(true))
+        .get_matches_from(args);
 
-    opts.optflag("c", "complement", "use the complement of SET1");
-    opts.optflag("C", "", "same as -c");
-    opts.optflag("d", "delete", "delete characters in SET1");
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("s", "squeeze", "replace each sequence of a repeated character that is listed in the last specified SET, with a single occurrence of that character");
-    opts.optflag(
-        "t",
-        "truncate-set1",
-        "first truncate SET1 to length of SET2",
-    );
-    opts.optflag("V", "version", "output version information and exit");
+    let dflag = matches.is_present(options::DELETE);
+    let cflag = matches.is_present(options::COMPLEMENT);
+    let sflag = matches.is_present(options::SQUEEZE);
+    let tflag = matches.is_present(options::TRUNCATE);
 
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(err) => {
-            show_error!("{}", err);
-            return 1;
-        }
+    let sets: Vec<String> = match matches.values_of(options::SETS) {
+        Some(v) => v.map(|v| v.to_string()).collect(),
+        None => vec!["".to_string()],
     };
-
-    if matches.opt_present("help") {
-        usage(&opts);
-        return 0;
-    }
-
-    if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
-
-    let dflag = matches.opt_present("d");
-    let cflag = matches.opts_present(&["c".to_owned(), "C".to_owned()]);
-    let sflag = matches.opt_present("s");
-    let tflag = matches.opt_present("t");
-    let sets = matches.free;
 
     if sets.is_empty() {
         show_error!(
