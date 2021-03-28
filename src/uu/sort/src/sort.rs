@@ -489,7 +489,7 @@ fn get_leading_number(a: &str) -> &str {
 
 // Matches GNU behavior, see:
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
-// See that specifically *not* the same as sort -n | uniq
+// Specifically *not* the same as sort -n | uniq
 fn num_sort_dedup(a: &str) -> &str {
     // Empty lines are dumped
     if a.is_empty() {
