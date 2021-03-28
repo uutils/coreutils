@@ -254,7 +254,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(OPT_RANDOM)
                 .short("R")
                 .long(OPT_RANDOM)
-                .help("shuffle in random order."),
+                .help("shuffle in random order"),
         )
         .arg(
             Arg::with_name(OPT_REVERSE)
