@@ -23,6 +23,7 @@ use std::os::unix::fs::MetadataExt;
 
 use std::convert::AsRef;
 use std::path::Path;
+use uucore::InvalidEncodingHandling;
 
 static ABOUT: &str = "change file owner and group";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -67,7 +68,9 @@ fn get_usage() -> String {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
 
     let usage = get_usage();
 

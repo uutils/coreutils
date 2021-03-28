@@ -13,6 +13,7 @@ extern crate uucore;
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
+use uucore::InvalidEncodingHandling;
 
 static SYNTAX: &str = "[OPTION]... [FILE]...";
 static SUMMARY: &str = "Writes each file (or standard input if no files are given)
@@ -20,7 +21,9 @@ static SUMMARY: &str = "Writes each file (or standard input if no files are give
 static LONG_HELP: &str = "";
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     let (args, obs_width) = handle_obsolete(&args[..]);
     let matches = app!(SYNTAX, SUMMARY, LONG_HELP)

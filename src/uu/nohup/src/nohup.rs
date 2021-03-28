@@ -19,6 +19,7 @@ use std::io::Error;
 use std::os::unix::prelude::*;
 use std::path::{Path, PathBuf};
 use uucore::fs::{is_stderr_interactive, is_stdin_interactive, is_stdout_interactive};
+use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "nohup";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -34,7 +35,9 @@ unsafe fn _vprocmgr_detach_from_console(_: u32) -> *const libc::c_int {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     let mut opts = getopts::Options::new();
 

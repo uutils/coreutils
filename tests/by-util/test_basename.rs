@@ -88,7 +88,12 @@ fn test_too_many_args() {
 
 fn test_invalid_utf8_args(os_str: &OsStr) {
     let test_vec = vec![os_str.to_os_string()];
-    assert!(new_ucmd!().args(&test_vec).fails().no_stdout().stderr.len() > 0);
+    new_ucmd!()
+        .args(&test_vec)
+        .succeeds()
+        .stdout_is("fo�o\n")
+        .stderr
+        .contains("broken encoding occured");
 }
 
 #[cfg(any(unix, target_os = "redox"))]

@@ -12,6 +12,7 @@ extern crate uucore;
 use std::io::{self, Write};
 use std::iter::Peekable;
 use std::str::Chars;
+use uucore::InvalidEncodingHandling;
 
 const SYNTAX: &str = "[OPTIONS]... [STRING]...";
 const SUMMARY: &str = "display a line of text";
@@ -103,7 +104,9 @@ fn print_escaped(input: &str, mut output: impl Write) -> io::Result<bool> {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     let matches = app!(SYNTAX, SUMMARY, HELP)
         .optflag("n", "", "do not output the trailing newline")

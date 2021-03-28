@@ -11,6 +11,7 @@
 extern crate uucore;
 
 use libc::c_long;
+use uucore::InvalidEncodingHandling;
 
 static SYNTAX: &str = "[options]";
 static SUMMARY: &str = "";
@@ -22,7 +23,10 @@ extern "C" {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    app!(SYNTAX, SUMMARY, LONG_HELP).parse(args.collect_str());
+    app!(SYNTAX, SUMMARY, LONG_HELP).parse(
+        args.collect_str(InvalidEncodingHandling::ConvertLossy)
+            .accept_any(),
+    );
     hostid();
     0
 }

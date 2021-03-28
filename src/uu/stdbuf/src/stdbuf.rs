@@ -18,6 +18,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use tempfile::tempdir;
 use tempfile::TempDir;
+use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "stdbuf";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -215,7 +216,9 @@ fn get_preload_env(tmp_dir: &mut TempDir) -> io::Result<(String, PathBuf)> {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
 
     let mut opts = Options::new();
 

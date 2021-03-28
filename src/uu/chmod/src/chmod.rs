@@ -16,6 +16,7 @@ use std::path::Path;
 use uucore::fs::display_permissions_unix;
 #[cfg(not(windows))]
 use uucore::mode;
+use uucore::InvalidEncodingHandling;
 use walkdir::WalkDir;
 
 const NAME: &str = "chmod";
@@ -26,7 +27,9 @@ static LONG_HELP: &str = "
 ";
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let mut args = args.collect_str();
+    let mut args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     let syntax = format!(
         "[OPTION]... MODE[,MODE]... FILE...

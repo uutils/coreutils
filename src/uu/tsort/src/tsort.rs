@@ -13,12 +13,15 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
+use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "tsort";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     let mut opts = getopts::Options::new();
 

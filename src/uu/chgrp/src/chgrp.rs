@@ -22,6 +22,7 @@ use std::fs::Metadata;
 use std::os::unix::fs::MetadataExt;
 
 use std::path::Path;
+use uucore::InvalidEncodingHandling;
 
 static SYNTAX: &str =
     "chgrp [OPTION]... GROUP FILE...\n or :  chgrp [OPTION]... --reference=RFILE FILE...";
@@ -32,7 +33,9 @@ const FTS_PHYSICAL: u8 = 1 << 1;
 const FTS_LOGICAL: u8 = 1 << 2;
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     let mut opts = app!(SYNTAX, SUMMARY, "");
     opts.optflag("c",

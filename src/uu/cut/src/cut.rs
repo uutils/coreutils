@@ -16,6 +16,7 @@ use std::path::Path;
 
 use self::searcher::Searcher;
 use uucore::ranges::Range;
+use uucore::InvalidEncodingHandling;
 
 mod buffer;
 mod searcher;
@@ -423,7 +424,9 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> i32 {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
 
     let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
         .optopt("b", "bytes", "filter byte columns from the input source", "sequence")

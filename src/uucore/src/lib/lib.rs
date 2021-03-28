@@ -80,7 +80,7 @@ pub enum ConversionResult {
 }
 
 impl ConversionResult {
-    pub fn accept_any(&self) -> &Vec<String> {
+    pub fn accept_any(self) -> Vec<String> {
         match self {
             Self::FullyDecoded(result) => result,
             Self::Lossy(result) => result,
@@ -97,7 +97,7 @@ pub trait Args: Iterator<Item = OsString> + Sized {
         let mut full_conversion = true;
         let result_vector: Vec<String> = self
             .map(|s| match s.into_string() {
-                Ok(string) => string,
+                Ok(string) => Ok(string),
                 Err(s_ret) => {
                     full_conversion = false;
                     let lossy_conversion = s_ret.to_string_lossy();
@@ -106,15 +106,24 @@ pub trait Args: Iterator<Item = OsString> + Sized {
                         &lossy_conversion
                     );
                     match handling {
-                        InvalidEncodingHandling::Ignore => String::new(),
-                        InvalidEncodingHandling::ConvertLossy => lossy_conversion.to_string(),
+                        InvalidEncodingHandling::Ignore => Err(String::new()),
+                        InvalidEncodingHandling::ConvertLossy => Err(lossy_conversion.to_string()),
                         InvalidEncodingHandling::Panic => {
                             panic!("Broken encoding found but caller cannot handle it")
                         }
                     }
                 }
             })
+            .filter(|s| match handling {
+                InvalidEncodingHandling::Ignore => s.is_ok(),
+                _ => true,
+            })
+            .map(|s| match s.is_ok() {
+                true => s.unwrap(),
+                false => s.unwrap_err(),
+            })
             .collect();
+
         match full_conversion {
             true => ConversionResult::FullyDecoded(result_vector),
             false => ConversionResult::Lossy(result_vector),
@@ -123,7 +132,7 @@ pub trait Args: Iterator<Item = OsString> + Sized {
 
     /// convience function for a more slim interface
     fn collect_str_lossy(self) -> ConversionResult {
-        collect_str(InvalidEncodingHandling::ConvertLossy)
+        self.collect_str(InvalidEncodingHandling::ConvertLossy)
     }
 }
 

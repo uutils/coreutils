@@ -14,6 +14,7 @@ use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{self, stdin, BufRead, BufReader, Stdin};
 use std::path::Path;
+use uucore::InvalidEncodingHandling;
 
 static SYNTAX: &str = "[OPTIONS] FILE1 FILE2";
 static SUMMARY: &str = "Compare sorted files line by line";
@@ -120,7 +121,9 @@ fn open_file(name: &str) -> io::Result<LineReader> {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
         .optflag("1", "", "suppress column 1 (lines uniq to FILE1)")

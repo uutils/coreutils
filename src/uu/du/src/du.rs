@@ -18,6 +18,7 @@ use std::iter;
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 use time::Timespec;
+use uucore::InvalidEncodingHandling;
 
 const NAME: &str = "du";
 const SUMMARY: &str = "estimate file space usage";
@@ -224,7 +225,9 @@ fn convert_size_other(size: u64, _multiplier: u64, block_size: u64) -> String {
 
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
 
     let syntax = format!(
         "[OPTION]... [FILE]...

@@ -13,6 +13,7 @@ extern crate uucore;
 use std::fs::File;
 use std::io::{self, stdin, BufReader, Read};
 use std::path::Path;
+use uucore::InvalidEncodingHandling;
 
 // NOTE: CRC_TABLE_LEN *must* be <= 256 as we cast 0..CRC_TABLE_LEN to u8
 const CRC_TABLE_LEN: usize = 256;
@@ -161,7 +162,10 @@ fn cksum(fname: &str) -> io::Result<(u32, usize)> {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let matches = app!(SYNTAX, SUMMARY, LONG_HELP).parse(args.collect_str());
+    let matches = app!(SYNTAX, SUMMARY, LONG_HELP).parse(
+        args.collect_str(InvalidEncodingHandling::Ignore)
+            .accept_any(),
+    );
 
     let files = matches.free;
 

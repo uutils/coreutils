@@ -13,12 +13,15 @@ extern crate uucore;
 use std::env;
 use std::path::{Path, PathBuf};
 use uucore::fs::{canonicalize, CanonicalizeMode};
+use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "relpath";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     let mut opts = getopts::Options::new();
 

@@ -17,12 +17,13 @@ use libc::{lstat, stat, unlink};
 use libc::{S_IFLNK, S_IFMT, S_IFREG};
 use std::ffi::CString;
 use std::io::{Error, ErrorKind};
+use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "unlink";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args.collect_str(InvalidEncodingHandling::ConvertLossy).accept_any();
 
     let mut opts = Options::new();
 

@@ -15,8 +15,8 @@ use std::ffi::CString;
 use std::io::Error;
 use std::path::Path;
 use std::process::Command;
-use uucore::entries;
 use uucore::libc::{self, chroot, setgid, setgroups, setuid};
+use uucore::{entries, InvalidEncodingHandling};
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static NAME: &str = "chroot";
@@ -32,7 +32,9 @@ mod options {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     let matches = App::new(executable!())
         .version(VERSION)

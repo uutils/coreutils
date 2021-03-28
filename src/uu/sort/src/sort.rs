@@ -19,7 +19,8 @@ use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Lines, Read, Write};
 use std::mem::replace;
 use std::path::Path;
-use uucore::fs::is_stdin_interactive; // for Iterator::dedup()
+use uucore::fs::is_stdin_interactive;
+use uucore::InvalidEncodingHandling; // for Iterator::dedup()
 
 static NAME: &str = "sort";
 static ABOUT: &str = "Display sorted concatenation of all FILE(s).";
@@ -172,7 +173,9 @@ With no FILE, or when FILE is -, read standard input.",
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
     let usage = get_usage();
     let mut settings: Settings = Default::default();
 

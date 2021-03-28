@@ -17,6 +17,7 @@ mod splitname;
 
 use crate::csplit_error::CsplitError;
 use crate::splitname::SplitName;
+use uucore::InvalidEncodingHandling;
 
 static SYNTAX: &str = "[OPTION]... FILE PATTERN...";
 static SUMMARY: &str = "split a file into sections determined by context lines";
@@ -702,7 +703,9 @@ mod tests {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
 
     let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
         .optopt(

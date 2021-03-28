@@ -18,6 +18,7 @@ use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOT
 use getopts::Options;
 
 use std::ffi::CString;
+use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "mknod";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -42,7 +43,9 @@ fn _makenod(path: CString, mode: mode_t, dev: dev_t) -> i32 {
 
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
 
     let mut opts = Options::new();
 

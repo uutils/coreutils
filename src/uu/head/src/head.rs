@@ -44,7 +44,9 @@ impl Default for Settings {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str_lossy().accept_any();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
 
     let mut settings: Settings = Default::default();
 

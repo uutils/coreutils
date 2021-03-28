@@ -14,6 +14,7 @@ use rand::Rng;
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
 use std::usize::MAX as MAX_USIZE;
+use uucore::InvalidEncodingHandling;
 
 enum Mode {
     Default,
@@ -25,7 +26,9 @@ static NAME: &str = "shuf";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     let mut opts = getopts::Options::new();
     opts.optflag("e", "echo", "treat each ARG as an input line");

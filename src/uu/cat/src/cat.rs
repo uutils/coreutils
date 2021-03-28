@@ -29,6 +29,7 @@ use std::net::Shutdown;
 use std::os::unix::fs::FileTypeExt;
 #[cfg(unix)]
 use unix_socket::UnixStream;
+use uucore::InvalidEncodingHandling;
 
 static SYNTAX: &str = "[OPTION]... [FILE]...";
 static SUMMARY: &str = "Concatenate FILE(s), or standard input, to standard output
@@ -125,7 +126,9 @@ enum InputType {
 type CatResult<T> = Result<T, CatError>;
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
 
     let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
         .optflag("A", "show-all", "equivalent to -vET")

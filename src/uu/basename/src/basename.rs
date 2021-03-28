@@ -11,6 +11,7 @@
 extern crate uucore;
 
 use std::path::{is_separator, PathBuf};
+use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "basename";
 static SYNTAX: &str = "NAME [SUFFIX]";
@@ -19,8 +20,9 @@ static SUMMARY: &str = "Print NAME with any leading directory components removed
 static LONG_HELP: &str = "";
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
-    let args = args.into_iter().filter(|s| !s.is_empty()).collect();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
     //
     // Argument parsing
     //

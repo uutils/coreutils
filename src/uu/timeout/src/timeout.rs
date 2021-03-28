@@ -14,6 +14,7 @@ use std::io::ErrorKind;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 use uucore::process::ChildExt;
+use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "timeout";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -21,7 +22,9 @@ static VERSION: &str = env!("CARGO_PKG_VERSION");
 const ERR_EXIT_STATUS: i32 = 125;
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     let program = args[0].clone();
 

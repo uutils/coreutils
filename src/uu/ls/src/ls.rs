@@ -339,7 +339,9 @@ impl Config {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
 
     let usage = get_usage();
 
@@ -883,6 +885,7 @@ fn get_inode(metadata: &Metadata) -> String {
 // a posix-compliant attribute this can be updated...
 #[cfg(unix)]
 use uucore::entries;
+use uucore::InvalidEncodingHandling;
 
 #[cfg(unix)]
 fn display_uname(metadata: &Metadata, config: &Config) -> String {

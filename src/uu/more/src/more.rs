@@ -18,6 +18,7 @@ use std::io::{stdout, Read, Write};
 extern crate nix;
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 use nix::sys::termios::{self, LocalFlags, SetArg};
+use uucore::InvalidEncodingHandling;
 
 #[cfg(target_os = "redox")]
 extern crate redox_termios;
@@ -35,7 +36,9 @@ static NAME: &str = "more";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     let mut opts = Options::new();
 

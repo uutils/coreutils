@@ -15,6 +15,7 @@ extern crate uucore;
 use getopts::Options;
 use std::fs;
 use std::io::{ErrorKind, Write};
+use uucore::InvalidEncodingHandling;
 
 // operating mode
 enum Mode {
@@ -34,7 +35,9 @@ const POSIX_PATH_MAX: usize = 256;
 const POSIX_NAME_MAX: usize = 14;
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     // add options
     let mut opts = Options::new();

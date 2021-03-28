@@ -11,12 +11,15 @@ extern crate uucore;
 use libc::mkfifo;
 use std::ffi::CString;
 use std::io::Error;
+use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "mkfifo";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
 
     let mut opts = getopts::Options::new();
 
