@@ -51,14 +51,14 @@ fn test_arg_overrides_stdin() {
 fn test_invalid_file() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    let folder_name = "a".to_string();
+    let folder_name = "asdf".to_string();
     at.mkdir(&folder_name);
 
     let result = ucmd.arg(&folder_name).run();
 
     println!("{:?}", result.stdout);
     println!("{:?}", result.stdout);
-    assert!(result.stderr.contains("cksum: error: 'a'"));
+    assert!(result.stderr.contains("cksum: error: 'asdf'"));
     assert!(!result.success);
 }
 
