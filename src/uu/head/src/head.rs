@@ -570,4 +570,36 @@ mod tests {
         #[cfg(target_pointer_width = "32")]
         assert!(parse_mode("1T", Modes::Bytes).is_err());
     }
+    fn arg_outputs(src: &str) -> Result<String, String> {
+        let split = src.split_whitespace().map(|x| OsString::from(x));
+        match arg_iterate(split) {
+            Ok(args) => {
+                let vec = args
+                    .map(|s| s.to_str().unwrap().to_owned())
+                    .collect::<Vec<_>>();
+                Ok(vec.join(" "))
+            }
+            Err(e) => Err(e),
+        }
+    }
+    #[test]
+    fn test_arg_iterate() {
+        // test that normal args remain unchanged
+        assert_eq!(
+            arg_outputs("head -n -5 -zv"),
+            Ok("head -n -5 -zv".to_owned())
+        );
+        // tests that nonsensical args are unchanged
+        assert_eq!(
+            arg_outputs("head -to_be_or_not_to_be,..."),
+            Ok("head -to_be_or_not_to_be,...".to_owned())
+        );
+        //test that the obsolete syntax is unrolled
+        assert_eq!(
+            arg_outputs("head -123qvqvqzc"),
+            Ok("head -q -z -c 123".to_owned())
+        );
+        //test that bad obsoletes are an error
+        assert!(arg_outputs("head -123FooBar").is_err());
+    }
 }
