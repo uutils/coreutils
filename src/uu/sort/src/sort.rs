@@ -477,21 +477,17 @@ fn default_compare(a: &str, b: &str) -> Ordering {
 
 fn get_leading_number(a: &str) -> &str {
     let mut s = "";
-    if a.is_empty() {
-        s = "0"
-    } else {
-        for c in a.chars() {
-            if !c.is_numeric() && !c.eq(&'-') && !c.eq(&' ') && !c.eq(&'.') && !c.eq(&',') {
-                s = a.trim().split(c).next().unwrap();
-                break;
-            }
-            s = a.trim();
+    for c in a.chars() {
+        if !c.is_numeric() && !c.eq(&'-') && !c.eq(&' ') && !c.eq(&'.') && !c.eq(&',') {
+            s = a.trim().split(c).next().unwrap();
+            break;
         }
-    };
+        s = a.trim();
+    }
     return s;
 }
 
-// Matches GNU behavior, see: 
+// Matches GNU behavior, see:
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 // See that specifically *not* the same as sort -n | uniq
 fn get_leading_number_dedup(a: &str) -> &str {
@@ -504,15 +500,15 @@ fn get_leading_number_dedup(a: &str) -> &str {
         s = "0";
         return s;
     } else {
-        // Prepare for line comparison of only the numerical leading numbers
+    // Prepare lines for comparison of only the numerical leading numbers
         for c in a.chars() {
             if !c.is_numeric() && !c.eq(&'-') && !c.eq(&' ') && !c.eq(&'.') && !c.eq(&',') {
                 s = a.trim().split(c).next().unwrap();
                 break;
-            }
+            };
             s = a.trim();
-        }
-    }
+        };
+    };
     return s;
 }
 
