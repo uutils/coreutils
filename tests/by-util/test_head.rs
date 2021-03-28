@@ -146,7 +146,14 @@ fn test_negative_zero_lines() {
         .succeeds()
         .stdout_is("a\nb\n");
 }
-
+#[test]
+fn test_negative_zero_bytes() {
+    new_ucmd!()
+        .args(&["--bytes=-0"])
+        .pipe_in("qwerty")
+        .succeeds()
+        .stdout_is("qwerty");
+}
 #[test]
 fn test_no_such_file_or_directory() {
     let result = new_ucmd!().arg("no_such_file.toml").run();

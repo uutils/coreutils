@@ -632,4 +632,10 @@ mod tests {
             arg_iterate(vec![OsString::from("head"), OsString::from(invalid)].into_iter()).is_err()
         );
     }
+    #[test]
+    fn rbuf_early_exit() {
+        let mut empty = std::io::BufReader::new(std::io::Cursor::new(Vec::new()));
+        assert!(rbuf_n_bytes(&mut empty, 0).is_ok());
+        assert!(rbuf_n_lines(&mut empty, 0, false).is_ok());
+    }
 }
