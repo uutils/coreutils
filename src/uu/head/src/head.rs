@@ -600,6 +600,8 @@ mod tests {
         );
         //test that bad obsoletes are an error
         assert!(arg_outputs("head -123FooBar").is_err());
+        //test overflow
+        assert!(arg_outputs("head -100000000000000000000000000000000000000000").is_err());
         //test that empty args remain unchanged
         assert_eq!(arg_outputs("head"), Ok("head".to_owned()));
     }
@@ -611,5 +613,4 @@ mod tests {
             arg_iterate(vec![OsString::from("head"), OsString::from(invalid)].into_iter()).is_err()
         );
     }
-
 }
