@@ -21,23 +21,10 @@ const USAGE: &str = "head [FLAG]... [FILE]...";
 
 mod options {
     pub const BYTES_NAME: &str = "BYTES";
-    pub const BYTES_HELP: &str = "\
-        print the first NUM bytes of each file;\n\
-        with the leading '-', print all but the last\n\
-        NUM bytes of each file\
-        ";
     pub const LINES_NAME: &str = "LINES";
-    pub const LINES_HELP: &str = "\
-        print the first NUM lines instead of the first 10;\n\
-        with the leading '-', print all but the last\n\
-        NUM lines of each file\
-        ";
     pub const QUIET_NAME: &str = "QUIET";
-    pub const QUIET_HELP: &str = "never print headers giving file names";
     pub const VERBOSE_NAME: &str = "VERBOSE";
-    pub const VERBOSE_HELP: &str = "always print headers giving file names";
     pub const ZERO_NAME: &str = "ZERO";
-    pub const ZERO_HELP: &str = "line delimiter is NUL, not newline";
     pub const FILES_NAME: &str = "FILE";
 }
 mod parse;
@@ -54,7 +41,13 @@ fn app<'a>() -> App<'a, 'a> {
                 .long("bytes")
                 .value_name("[-]NUM")
                 .takes_value(true)
-                .help(options::BYTES_HELP)
+                .help(
+                    "\
+                    print the first NUM bytes of each file;\n\
+                    with the leading '-', print all but the last\n\
+                    NUM bytes of each file\
+                    ",
+                )
                 .overrides_with_all(&[options::BYTES_NAME, options::LINES_NAME])
                 .allow_hyphen_values(true),
         )
@@ -64,7 +57,13 @@ fn app<'a>() -> App<'a, 'a> {
                 .long("lines")
                 .value_name("[-]NUM")
                 .takes_value(true)
-                .help(options::LINES_HELP)
+                .help(
+                    "\
+                    print the first NUM lines instead of the first 10;\n\
+                    with the leading '-', print all but the last\n\
+                    NUM lines of each file\
+                    ",
+                )
                 .overrides_with_all(&[options::LINES_NAME, options::BYTES_NAME])
                 .allow_hyphen_values(true),
         )
@@ -73,21 +72,21 @@ fn app<'a>() -> App<'a, 'a> {
                 .short("q")
                 .long("--quiet")
                 .visible_alias("silent")
-                .help(options::QUIET_HELP)
+                .help("never print headers giving file names")
                 .overrides_with_all(&[options::VERBOSE_NAME, options::QUIET_NAME]),
         )
         .arg(
             Arg::with_name(options::VERBOSE_NAME)
                 .short("v")
                 .long("verbose")
-                .help(options::VERBOSE_HELP)
+                .help("always print headers giving file names")
                 .overrides_with_all(&[options::QUIET_NAME, options::VERBOSE_NAME]),
         )
         .arg(
             Arg::with_name(options::ZERO_NAME)
                 .short("z")
                 .long("zero-terminated")
-                .help(options::ZERO_HELP)
+                .help("line delimiter is NUL, not newline")
                 .overrides_with(options::ZERO_NAME),
         )
         .arg(Arg::with_name(options::FILES_NAME).multiple(true))
