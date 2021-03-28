@@ -15,6 +15,16 @@ use rand::Rng;
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
 
+static NAME: &str = "shuf";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
+static USAGE: &str = r#"shuf [OPTION]... [FILE]
+  or:  shuf -e [OPTION]... [ARG]...
+  or:  shuf -i LO-HI [OPTION]...
+Write a random permutation of the input lines to standard output.
+
+With no FILE, or when FILE is -, read standard input.
+"#;
+
 struct Options {
     head_count: usize,
     output: Option<String>,
@@ -29,23 +39,16 @@ enum Mode {
     InputRange((usize, usize)),
 }
 
-static NAME: &str = "shuf";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
-static OPT_ECHO: &str = "echo";
-static OPT_INPUT_RANGE: &str = "input-range";
-static OPT_HEAD_COUNT: &str = "head-count";
-static OPT_OUTPUT: &str = "output";
-static OPT_RANDOM_SOURCE: &str = "random-source";
-static OPT_REPEAT: &str = "repeat";
-static OPT_ZERO_TERMINATED: &str = "zero-terminated";
-static OPT_FILE: &str = "file";
-static USAGE: &str = r#"shuf [OPTION]... [FILE]
-  or:  shuf -e [OPTION]... [ARG]...
-  or:  shuf -i LO-HI [OPTION]...
-Write a random permutation of the input lines to standard output.
-
-With no FILE, or when FILE is -, read standard input.
-"#;
+mod options {
+    pub static ECHO: &str = "echo";
+    pub static INPUT_RANGE: &str = "input-range";
+    pub static HEAD_COUNT: &str = "head-count";
+    pub static OUTPUT: &str = "output";
+    pub static RANDOM_SOURCE: &str = "random-source";
+    pub static REPEAT: &str = "repeat";
+    pub static ZERO_TERMINATED: &str = "zero-terminated";
+    pub static FILE: &str = "file";
+}
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let matches = App::new(executable!())
@@ -53,74 +56,68 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .version(VERSION)
         .template("Usage: {usage}\nMandatory arguments to long options are mandatory for short options too.\n{unified}")
         .usage(USAGE)
-        .help_short("")
         .arg(
-            Arg::with_name(OPT_ECHO)
+            Arg::with_name(options::ECHO)
                 .short("e")
-                .long(OPT_ECHO)
+                .long(options::ECHO)
                 .takes_value(true)
                 .value_name("ARG")
                 .help("treat each ARG as an input line")
                 .multiple(true)
                 .use_delimiter(false)
                 .min_values(0)
-                .conflicts_with(OPT_INPUT_RANGE),
+                .conflicts_with(options::INPUT_RANGE),
         )
         .arg(
-            Arg::with_name(OPT_INPUT_RANGE)
+            Arg::with_name(options::INPUT_RANGE)
                 .short("i")
-                .long(OPT_INPUT_RANGE)
+                .long(options::INPUT_RANGE)
                 .takes_value(true)
                 .value_name("LO-HI")
                 .help("treat each number LO through HI as an input line")
-                .conflicts_with(OPT_FILE)
+                .conflicts_with(options::FILE)
         )
         .arg(
-            Arg::with_name(OPT_HEAD_COUNT)
+            Arg::with_name(options::HEAD_COUNT)
                 .short("n")
-                .long(OPT_HEAD_COUNT)
+                .long(options::HEAD_COUNT)
                 .takes_value(true)
                 .value_name("COUNT")
                 .help("output at most COUNT lines"),
         )
         .arg(
-            Arg::with_name(OPT_OUTPUT)
+            Arg::with_name(options::OUTPUT)
                 .short("o")
-                .long(OPT_OUTPUT)
+                .long(options::OUTPUT)
                 .takes_value(true)
                 .value_name("FILE")
                 .help("write result to FILE instead of standard output"),
         )
         .arg(
-            Arg::with_name(OPT_RANDOM_SOURCE)
-                .long(OPT_RANDOM_SOURCE)
+            Arg::with_name(options::RANDOM_SOURCE)
+                .long(options::RANDOM_SOURCE)
                 .takes_value(true)
                 .value_name("FILE")
                 .help("get random bytes from FILE"),
         )
         .arg(
-            Arg::with_name(OPT_REPEAT)
+            Arg::with_name(options::REPEAT)
                 .short("r")
-                .long(OPT_REPEAT)
+                .long(options::REPEAT)
                 .help("output lines can be repeated"),
         )
         .arg(
-            Arg::with_name(OPT_ZERO_TERMINATED)
+            Arg::with_name(options::ZERO_TERMINATED)
                 .short("z")
-                .long(OPT_ZERO_TERMINATED)
+                .long(options::ZERO_TERMINATED)
                 .help("line delimiter is NUL, not newline"),
         )
-        .arg(Arg::with_name(OPT_FILE).takes_value(true))
+        .arg(Arg::with_name(options::FILE).takes_value(true))
         .get_matches_from(args);
 
-    // TODO: Which is better. To catch it using `conflicts_with` above or here so we can have the same error message as the GNU version?
-    // if matches.is_present(OPT_ECHO) && matches.is_present(OPT_INPUT_RANGE) {
-    //     show_error!("cannot combine -e and -i options");
-    // }
-
-    let mode = if let Some(args) = matches.values_of(OPT_ECHO) {
+    let mode = if let Some(args) = matches.values_of(options::ECHO) {
         Mode::Echo(args.map(String::from).collect())
-    } else if let Some(range) = matches.value_of(OPT_INPUT_RANGE) {
+    } else if let Some(range) = matches.value_of(options::INPUT_RANGE) {
         match parse_range(range) {
             Ok(m) => Mode::InputRange(m),
             Err(msg) => {
@@ -128,24 +125,24 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             }
         }
     } else {
-        Mode::Default(matches.value_of(OPT_FILE).unwrap_or("-").to_string())
+        Mode::Default(matches.value_of(options::FILE).unwrap_or("-").to_string())
     };
 
     let options = Options {
-        head_count: match matches.value_of(OPT_HEAD_COUNT) {
+        head_count: match matches.value_of(options::HEAD_COUNT) {
             Some(count) => match count.parse::<usize>() {
                 Ok(val) => val,
                 Err(_) => {
-                    show_error!("invalid line count: '{}'", count.trim());
+                    show_error!("invalid line count: '{}'", count);
                     return 1;
                 }
             },
             None => usize::MAX,
         },
-        output: matches.value_of(OPT_OUTPUT).map(String::from),
-        random_source: matches.value_of(OPT_RANDOM_SOURCE).map(String::from),
-        repeat: matches.is_present(OPT_REPEAT),
-        sep: if matches.is_present(OPT_ZERO_TERMINATED) {
+        output: matches.value_of(options::OUTPUT).map(String::from),
+        random_source: matches.value_of(options::RANDOM_SOURCE).map(String::from),
+        repeat: matches.is_present(options::REPEAT),
+        sep: if matches.is_present(options::ZERO_TERMINATED) {
             0x00_u8
         } else {
             0x0a_u8
@@ -154,7 +151,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     match mode {
         Mode::Echo(args) => {
-            // XXX: this doesn't correctly handle non-UTF-8 cmdline args
             let mut evec = args.iter().map(String::as_bytes).collect::<Vec<_>>();
             find_seps(&mut evec, options.sep);
             shuf_bytes(&mut evec, options);
@@ -286,11 +282,11 @@ fn parse_range(input_range: &str) -> Result<(usize, usize), String> {
     } else {
         let begin = match split[0].parse::<usize>() {
             Ok(m) => m,
-            Err(_) => return Err(format!("invalid input range: '{}'", split[0].trim())),
+            Err(_) => return Err(format!("invalid input range: '{}'", split[0])),
         };
         let end = match split[1].parse::<usize>() {
             Ok(m) => m,
-            Err(_) => return Err(format!("invalid input range: '{}'", split[1].trim())),
+            Err(_) => return Err(format!("invalid input range: '{}'", split[1])),
         };
         Ok((begin, end + 1))
     }
