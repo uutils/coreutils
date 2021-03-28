@@ -5,7 +5,7 @@ fn test_numeric_floats_and_ints() {
     for numeric_sort_param in vec!["-n", "--numeric-sort"] {
         let input = "1.444\n8.013\n1\n-8\n1.04\n-1";
         new_ucmd!()
-            .arg(numeric_sort_param) 
+            .arg(numeric_sort_param)
             .pipe_in(input)
             .succeeds()
             .stdout_only("-8\n-1\n1\n1.04\n1.444\n8.013\n");
@@ -17,7 +17,7 @@ fn test_numeric_floats() {
     for numeric_sort_param in vec!["-n", "--numeric-sort"] {
         let input = "1.444\n8.013\n1.58590\n-8.90880\n1.040000000\n-.05";
         new_ucmd!()
-            .arg(numeric_sort_param) 
+            .arg(numeric_sort_param)
             .pipe_in(input)
             .succeeds()
             .stdout_only("-8.90880\n-.05\n1.040000000\n1.444\n1.58590\n8.013\n");
@@ -29,7 +29,7 @@ fn test_numeric_floats_with_nan() {
     for numeric_sort_param in vec!["-n", "--numeric-sort"] {
         let input = "1.444\n1.0/0.0\n1.58590\n-8.90880\n1.040000000\n-.05";
         new_ucmd!()
-            .arg(numeric_sort_param) 
+            .arg(numeric_sort_param)
             .pipe_in(input)
             .succeeds()
             .stdout_only("-8.90880\n-.05\n1.0/0.0\n1.040000000\n1.444\n1.58590\n");
@@ -56,7 +56,7 @@ fn test_human_block_sizes() {
     for human_numeric_sort_param in vec!["-h", "--human-numeric-sort"] {
         let input = "8981K\n909991M\n-8T\n21G\n0.8M";
         new_ucmd!()
-            .arg(human_numeric_sort_param) 
+            .arg(human_numeric_sort_param)
             .pipe_in(input)
             .succeeds()
             .stdout_only("-8T\n0.8M\n8981K\n21G\n909991M\n");
@@ -68,7 +68,7 @@ fn test_month_default() {
     for month_sort_param in vec!["-M", "--month-sort"] {
         let input = "JAn\nMAY\n000may\nJun\nFeb";
         new_ucmd!()
-            .arg(month_sort_param) 
+            .arg(month_sort_param)
             .pipe_in(input)
             .succeeds()
             .stdout_only("000may\nJAn\nFeb\nMAY\nJun\n");
@@ -94,7 +94,7 @@ fn test_numeric_unique_ints() {
     for numeric_unique_sort_param in vec!["-nu"] {
         let input = "9\n9\n8\n1\n";
         new_ucmd!()
-            .arg(numeric_unique_sort_param) 
+            .arg(numeric_unique_sort_param)
             .pipe_in(input)
             .succeeds()
             .stdout_only("1\n8\n9\n");
