@@ -625,6 +625,7 @@ mod tests {
         assert_eq!(arg_outputs("head"), Ok("head".to_owned()));
     }
     #[test]
+    #[cfg(linux)]
     fn test_arg_iterate_bad_encoding() {
         let invalid = unsafe { std::str::from_utf8_unchecked(b"\x80\x81") };
         // this arises from a conversion from OsString to &str
