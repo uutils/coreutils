@@ -70,12 +70,18 @@ fn open(name: &str) -> Result<Box<dyn Read>> {
         "-" => Ok(Box::new(stdin()) as Box<dyn Read>),
         _ => {
             let path = &Path::new(name);
-            if !path.is_file() {
+            if path.is_dir() {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
                     "Is a directory",
                 ));
-            }
+            };
+            if !path.metadata().is_ok() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "No such file or directory",
+                ));
+            };
             let f = File::open(path)?;
             Ok(Box::new(f) as Box<dyn Read>)
         }
@@ -127,14 +133,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     for file in &files {
         let reader = match open(file) {
             Ok(f) => f,
-            Err(error) => match error.kind() {
-                std::io::ErrorKind::InvalidInput => {
-                    show_error!("'{}' Is a directory", file);
-                    exit_code = 1;
-                    continue;
-                }
-                _ => crash!(1, "unable to open file"),
-            },
+            Err(error) => {
+                show_error!("'{}' {}", file, error);
+                exit_code = 2;
+                continue;
+            }
         };
         let (blocks, sum) = if sysv {
             sysv_sum(reader)
