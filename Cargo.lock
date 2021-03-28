@@ -2250,9 +2250,9 @@ dependencies = [
 name = "uu_sum"
 version = "0.0.4"
 dependencies = [
- "getopts",
- "uucore",
- "uucore_procs",
+ "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "uucore 0.0.7",
+ "uucore_procs 0.0.5",
 ]
 
 [[package]]
