@@ -381,7 +381,12 @@ fn exec(files: Vec<String>, settings: &mut Settings) -> i32 {
             print_sorted(file_merger, &settings.outfile)
         }
     } else if settings.unique && settings.mode == SortMode::Numeric {
-        print_sorted(lines.iter().dedup_by(|a, b| { get_leading_number_dedup(a) == get_leading_number_dedup(b) }), &settings.outfile)
+        print_sorted(
+            lines
+                .iter()
+                .dedup_by(|a, b| get_leading_number_dedup(a) == get_leading_number_dedup(b)),
+            &settings.outfile,
+        )
     } else if settings.unique {
         print_sorted(lines.iter().dedup(), &settings.outfile)
     } else {
@@ -486,26 +491,28 @@ fn get_leading_number(a: &str) -> &str {
     return s;
 }
 
-
-//  This is a little
+// Matches GNU behavior, see: 
+// https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
+// See that specifically *not* the same as sort -n | uniq
 fn get_leading_number_dedup(a: &str) -> &str {
     let mut s = "";
+    // Empty lines are dumped
     if a.is_empty() {
-        s = "0" 
+        s = "0"
+    // And lines that don't begin numerically are dumped
+    } else if !a.trim().chars().nth(0).unwrap_or('\0').is_numeric() {
+        s = "0";
+        return s;
     } else {
-            if !a.trim().chars().nth(0).unwrap_or('\0').is_numeric() {
-                s = "0";
-                return s;
-            } else {
-                for c in a.chars() {
-                    if !c.is_numeric() && !c.eq(&'-') && !c.eq(&' ') && !c.eq(&'.') && !c.eq(&',') {
-                        s = a.trim().split(c).next().unwrap();
-                        break;
-                    }
-                    s = a.trim();
-                }
+        // Prepare for line comparison of only the numerical leading numbers
+        for c in a.chars() {
+            if !c.is_numeric() && !c.eq(&'-') && !c.eq(&' ') && !c.eq(&'.') && !c.eq(&',') {
+                s = a.trim().split(c).next().unwrap();
+                break;
             }
+            s = a.trim();
         }
+    }
     return s;
 }
 
