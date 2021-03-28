@@ -34,7 +34,6 @@ static OPT_HUMAN_NUMERIC_SORT: &str = "human-numeric-sort";
 static OPT_MONTH_SORT: &str = "month-sort";
 static OPT_NUMERIC_SORT: &str = "numeric-sort";
 static OPT_VERSION_SORT: &str = "version-sort";
-static OPT_RANDOM_SORT: &str = "random-sort";
 
 static OPT_DICTIONARY_ORDER: &str = "dictionary-order";
 static OPT_MERGE: &str = "merge";
