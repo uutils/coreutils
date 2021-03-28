@@ -170,7 +170,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 // Iterate 'args' and delete the first occurrence
 // of a prefix '-' if it's associated with MODE
 // e.g. "chmod -v -xw -R FILE" -> "chmod -v xw -R FILE"
-fn strip_minus_from_mode(args: &mut Vec<String>) -> bool {
+pub fn strip_minus_from_mode(args: &mut Vec<String>) -> bool {
     for i in 0..args.len() {
         if args[i].starts_with("-") {
             if let Some(second) = args[i].chars().nth(1) {
