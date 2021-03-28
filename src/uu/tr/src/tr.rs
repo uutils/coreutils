@@ -232,7 +232,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let sets: Vec<String> = match matches.values_of(options::SETS) {
         Some(v) => v.map(|v| v.to_string()).collect(),
-        None => vec!["".to_string()],
+        None => vec![],
     };
 
     if sets.is_empty() {
