@@ -195,10 +195,17 @@ mod tests {
         Some(Ok(src.iter().map(|s| s.to_string()).collect()))
     }
     #[test]
-    #[cfg(target_pointer_width = "64")]
+    #[cfg(not(target_pointer_width = "128"))]
     fn test_parse_overflow_x64() {
         assert_eq!(parse_num("1Y"), Err(ParseError::Overflow));
+        assert_eq!(parse_num("1Z"), Err(ParseError::Overflow));
+        assert_eq!(parse_num("100E"), Err(ParseError::Overflow));
+        assert_eq!(parse_num("100000P"), Err(ParseError::Overflow));
         assert_eq!(parse_num("1000000000T"), Err(ParseError::Overflow));
+        assert_eq!(
+            parse_num("10000000000000000000000"),
+            Err(ParseError::Overflow)
+        );
     }
     #[test]
     #[cfg(target_pointer_width = "32")]
@@ -212,6 +219,7 @@ mod tests {
         assert_eq!(parse_num("Nonsense string"), Err(ParseError::Syntax));
         assert_eq!(parse_num("5mib"), Err(ParseError::Syntax));
         assert_eq!(parse_num("biB"), Err(ParseError::Syntax));
+        assert_eq!(parse_num("-"), Err(ParseError::Syntax));
         assert_eq!(parse_num(""), Err(ParseError::Syntax));
     }
     #[test]
@@ -222,6 +230,7 @@ mod tests {
         assert_eq!(parse_num("b"), Ok((512, false)));
         assert_eq!(parse_num("-2GiB"), Ok((2 * 1024 * 1024 * 1024, true)));
         assert_eq!(parse_num("5M"), Ok((5 * 1024 * 1024, false)));
+        assert_eq!(parse_num("5MB"), Ok((5 * 1000 * 1000, false)));
     }
     #[test]
     fn test_parse_numbers_obsolete() {
