@@ -63,7 +63,7 @@ fn test_invalid_input() {
 
     at.mkdir("a");
     ucmd.arg("a")
-        .run()
+        .fails()
         .stderr
         .contains("tac: error: failed to read 'a'");
 }
