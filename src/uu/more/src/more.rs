@@ -10,7 +10,6 @@
 #[macro_use]
 extern crate uucore;
 
-use getopts::Options;
 use std::fs::File;
 use std::io::{stdout, Read, Write};
 
@@ -24,68 +23,31 @@ extern crate redox_termios;
 #[cfg(target_os = "redox")]
 extern crate syscall;
 
-#[derive(Clone, Eq, PartialEq)]
-pub enum Mode {
-    More,
-    Help,
-    Version,
-}
+use clap::{App, Arg, ArgMatches};
 
-static NAME: &str = "more";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
+static USAGE: &str = "more [options] <file>...";
+static ABOUT: &str = "A file perusal filter for CRT viewing.";
+
+mod options {
+    pub const FILE: &str = "file";
+}
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .usage(USAGE)
+        .about(ABOUT)
+        .arg(
+            Arg::with_name(options::FILE)
+                .number_of_values(1)
+                .multiple(true),
+        )
+        .get_matches_from(args);
 
-    let mut opts = Options::new();
-
-    // FixME: fail without panic for now; but `more` should work with no arguments (ie, for piped input)
-    if args.len() < 2 {
-        println!("{}: incorrect usage", args[0]);
-        return 1;
-    }
-
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("v", "version", "output version information and exit");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(e) => {
-            show_error!("{}", e);
-            panic!()
-        }
-    };
-    let usage = opts.usage("more TARGET.");
-    let mode = if matches.opt_present("version") {
-        Mode::Version
-    } else if matches.opt_present("help") {
-        Mode::Help
-    } else {
-        Mode::More
-    };
-
-    match mode {
-        Mode::More => more(matches),
-        Mode::Help => help(&usage),
-        Mode::Version => version(),
-    }
+    more(matches);
 
     0
-}
-
-fn version() {
-    println!("{} {}", NAME, VERSION);
-}
-
-fn help(usage: &str) {
-    let msg = format!(
-        "{0} {1}\n\n\
-         Usage: {0} TARGET\n  \
-         \n\
-         {2}",
-        NAME, VERSION, usage
-    );
-    println!("{}", msg);
 }
 
 #[cfg(all(unix, not(target_os = "fuchsia")))]
@@ -138,9 +100,9 @@ fn reset_term(term: &mut redox_termios::Termios) {
     let _ = syscall::close(fd);
 }
 
-fn more(matches: getopts::Matches) {
-    let files = matches.free;
-    let mut f = File::open(files.first().unwrap()).unwrap();
+fn more(matches: ArgMatches) {
+    // FixME: currently panics but `more` should work with no arguments (ie, for piped input)
+    let mut f = File::open(matches.value_of(options::FILE).unwrap()).unwrap();
     let mut buffer = [0; 1024];
 
     let mut term = setup_term();
