@@ -93,12 +93,12 @@ fn app<'a>() -> App<'a, 'a> {
         .arg(Arg::with_name(options::FILES_NAME).multiple(true))
 }
 #[derive(PartialEq, Debug, Clone, Copy)]
-pub enum Modes {
+enum Modes {
     Lines(usize),
     Bytes(usize),
 }
 
-pub fn parse_mode<F>(src: &str, closure: F) -> Result<(Modes, bool), String>
+fn parse_mode<F>(src: &str, closure: F) -> Result<(Modes, bool), String>
 where
     F: FnOnce(usize) -> Modes,
 {
@@ -140,7 +140,7 @@ fn arg_iterate<'a>(
 }
 
 #[derive(Debug)]
-pub struct HeadOptions {
+struct HeadOptions {
     pub quiet: bool,
     pub verbose: bool,
     pub zeroed: bool,
@@ -553,5 +553,21 @@ mod tests {
         assert_eq!(options("-n 15").unwrap().mode, Modes::Lines(15));
         assert_eq!(options("--bytes 15").unwrap().mode, Modes::Bytes(15));
         assert_eq!(options("-c 15").unwrap().mode, Modes::Bytes(15));
+    }
+    #[test]
+    fn test_parse_mode() {
+        assert_eq!(
+            parse_mode("123", Modes::Lines),
+            Ok((Modes::Lines(123), false))
+        );
+        assert_eq!(
+            parse_mode("-456", Modes::Bytes),
+            Ok((Modes::Bytes(456), true))
+        );
+        assert!(parse_mode("Nonsensical Nonsense", Modes::Bytes).is_err());
+        #[cfg(target_pointer_width = "64")]
+        assert!(parse_mode("1Y", Modes::Lines).is_err());
+        #[cfg(target_pointer_width = "32")]
+        assert!(parse_mode("1T", Modes::Bytes).is_err());
     }
 }
