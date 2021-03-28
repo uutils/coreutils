@@ -10,26 +10,26 @@
 #[macro_use]
 extern crate uucore;
 
+use clap::{App, Arg};
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{self, stdin, BufRead, BufReader, Stdin};
 use std::path::Path;
 
-static SYNTAX: &str = "[OPTIONS] FILE1 FILE2";
+static USAGE: &str = "[OPTIONS] FILE1 FILE2";
 static SUMMARY: &str = "Compare sorted files line by line";
-static LONG_HELP: &str = "";
 
-fn mkdelim(col: usize, opts: &getopts::Matches) -> String {
+fn mkdelim(col: usize, opts: &clap::ArgMatches) -> String {
     let mut s = String::new();
-    let delim = match opts.opt_str("output-delimiter") {
-        Some(d) => d,
+    let delim = match opts.value_of("output-delimiter") {
+        Some(d) => d.to_owned(),
         None => "\t".to_owned(),
     };
 
-    if col > 1 && !opts.opt_present("1") {
+    if col > 1 && !opts.is_present("1") {
         s.push_str(delim.as_ref());
     }
-    if col > 2 && !opts.opt_present("2") {
+    if col > 2 && !opts.is_present("2") {
         s.push_str(delim.as_ref());
     }
 
@@ -57,7 +57,7 @@ impl LineReader {
     }
 }
 
-fn comm(a: &mut LineReader, b: &mut LineReader, opts: &getopts::Matches) {
+fn comm(a: &mut LineReader, b: &mut LineReader, opts: &clap::ArgMatches) {
     let delim: Vec<String> = (0..4).map(|col| mkdelim(col, opts)).collect();
 
     let ra = &mut String::new();
@@ -80,7 +80,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, opts: &getopts::Matches) {
 
         match ord {
             Ordering::Less => {
-                if !opts.opt_present("1") {
+                if !opts.is_present("1") {
                     ensure_nl(ra);
                     print!("{}{}", delim[1], ra);
                 }
@@ -88,7 +88,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, opts: &getopts::Matches) {
                 na = a.read_line(ra);
             }
             Ordering::Greater => {
-                if !opts.opt_present("2") {
+                if !opts.is_present("2") {
                     ensure_nl(rb);
                     print!("{}{}", delim[2], rb);
                 }
@@ -96,7 +96,7 @@ fn comm(a: &mut LineReader, b: &mut LineReader, opts: &getopts::Matches) {
                 nb = b.read_line(rb);
             }
             Ordering::Equal => {
-                if !opts.opt_present("3") {
+                if !opts.is_present("3") {
                     ensure_nl(ra);
                     print!("{}{}", delim[3], ra);
                 }
@@ -122,19 +122,36 @@ fn open_file(name: &str) -> io::Result<LineReader> {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args.collect_str();
 
-    let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
-        .optflag("1", "", "suppress column 1 (lines uniq to FILE1)")
-        .optflag("2", "", "suppress column 2 (lines uniq to FILE2)")
-        .optflag(
-            "3",
-            "",
-            "suppress column 3 (lines that appear in both files)",
+    let matches = App::new(executable!())
+        .about(SUMMARY)
+        .usage(USAGE)
+        .arg(
+            Arg::with_name("1")
+                .short("1")
+                .help("suppress column 1 (lines uniq to FILE1)"),
         )
-        .optopt("", "output-delimiter", "separate columns with STR", "STR")
-        .parse(args);
+        .arg(
+            Arg::with_name("2")
+                .short("2")
+                .help("suppress column 2 (lines uniq to FILE2)"),
+        )
+        .arg(
+            Arg::with_name("3")
+                .short("3")
+                .help("suppress column 3 (lines that appear in both files)"),
+        )
+        .arg(
+            Arg::with_name("output-delimiter")
+                .long("output-delimiter")
+                .value_name("STR")
+                .help("separate columns with STR"),
+        )
+        .arg(Arg::with_name("FILE1").index(1))
+        .arg(Arg::with_name("FILE2").index(2))
+        .get_matches_from(args);
 
-    let mut f1 = open_file(matches.free[0].as_ref()).unwrap();
-    let mut f2 = open_file(matches.free[1].as_ref()).unwrap();
+    let mut f1 = open_file(matches.value_of("FILE1").unwrap_or("-").as_ref()).unwrap();
+    let mut f2 = open_file(matches.value_of("FILE2").unwrap_or("-").as_ref()).unwrap();
 
     comm(&mut f1, &mut f2, &matches);
 
