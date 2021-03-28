@@ -50,7 +50,7 @@ static ARG_FILES: &str = "files";
 
 static DECIMAL_PT: char = '.';
 static THOUSANDS_SEP: char = ',';
-
+#[derive(Eq, Ord, PartialEq, PartialOrd)]
 enum SortMode {
     Numeric,
     HumanNumeric,
@@ -380,6 +380,8 @@ fn exec(files: Vec<String>, settings: &mut Settings) -> i32 {
         } else {
             print_sorted(file_merger, &settings.outfile)
         }
+    } else if settings.unique && settings.mode == SortMode::Numeric {
+        print_sorted(lines.iter().dedup_by(|a, b| { get_leading_number_dedup(a) == get_leading_number_dedup(b) }), &settings.outfile)
     } else if settings.unique {
         print_sorted(lines.iter().dedup(), &settings.outfile)
     } else {
@@ -468,7 +470,7 @@ fn default_compare(a: &str, b: &str) -> Ordering {
     a.cmp(b)
 }
 
-fn obtain_leading_number(a: &str) -> &str {
+fn get_leading_number(a: &str) -> &str {
     let mut s = "";
     if a.is_empty() {
         s = "0"
@@ -481,6 +483,29 @@ fn obtain_leading_number(a: &str) -> &str {
             s = a.trim();
         }
     };
+    return s;
+}
+
+
+//  This is a little
+fn get_leading_number_dedup(a: &str) -> &str {
+    let mut s = "";
+    if a.is_empty() {
+        s = "0" 
+    } else {
+            if !a.trim().chars().nth(0).unwrap_or('\0').is_numeric() {
+                s = "0";
+                return s;
+            } else {
+                for c in a.chars() {
+                    if !c.is_numeric() && !c.eq(&'-') && !c.eq(&' ') && !c.eq(&'.') && !c.eq(&',') {
+                        s = a.trim().split(c).next().unwrap();
+                        break;
+                    }
+                    s = a.trim();
+                }
+            }
+        }
     return s;
 }
 
@@ -499,8 +524,8 @@ fn permissive_f64_parse(a: &str) -> f64 {
 fn numeric_compare(a: &str, b: &str) -> Ordering {
     #![allow(clippy::comparison_chain)]
 
-    let sa = obtain_leading_number(a);
-    let sb = obtain_leading_number(b);
+    let sa = get_leading_number(a);
+    let sb = get_leading_number(b);
 
     let fa = permissive_f64_parse(sa);
     let fb = permissive_f64_parse(sb);
@@ -516,7 +541,7 @@ fn numeric_compare(a: &str, b: &str) -> Ordering {
 }
 
 fn human_numeric_convert(a: &str) -> f64 {
-    let int_str = obtain_leading_number(a);
+    let int_str = get_leading_number(a);
     let (_, s) = a.split_at(int_str.len());
     let int_part = permissive_f64_parse(int_str);
     let suffix: f64 = match s.parse().unwrap_or('\0') {
