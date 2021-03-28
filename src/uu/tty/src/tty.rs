@@ -42,7 +42,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(
             Arg::with_name(options::SILENT)
                 .long(options::SILENT)
-                .alias("quiet")
+                .visible_alias("quiet")
                 .short("s")
                 .help("print nothing, only return an exit status")
                 .required(false),
