@@ -601,4 +601,12 @@ mod tests {
         //test that bad obsoletes are an error
         assert!(arg_outputs("head -123FooBar").is_err());
     }
+    #[test]
+    fn test_arg_iterate_bad_encoding() {
+        let invalid = unsafe { std::str::from_utf8_unchecked(b"\x80\x81") };
+        // this arises from a conversion from OsString to &str
+        assert!(
+            arg_iterate(vec![OsString::from("head"), OsString::from(invalid)].into_iter()).is_err()
+        );
+    }
 }
