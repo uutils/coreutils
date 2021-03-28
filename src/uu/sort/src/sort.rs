@@ -384,7 +384,7 @@ fn exec(files: Vec<String>, settings: &mut Settings) -> i32 {
         print_sorted(
             lines
                 .iter()
-                .dedup_by(|a, b| get_leading_number_dedup(a) == get_leading_number_dedup(b)),
+                .dedup_by(|a, b| num_sort_dedup(a) == num_sort_dedup(b)),
             &settings.outfile,
         )
     } else if settings.unique {
@@ -490,26 +490,17 @@ fn get_leading_number(a: &str) -> &str {
 // Matches GNU behavior, see:
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 // See that specifically *not* the same as sort -n | uniq
-fn get_leading_number_dedup(a: &str) -> &str {
-    let mut s = "";
+fn num_sort_dedup(a: &str) -> &str {
     // Empty lines are dumped
     if a.is_empty() {
-        s = "0"
+        return "0"
     // And lines that don't begin numerically are dumped
     } else if !a.trim().chars().nth(0).unwrap_or('\0').is_numeric() {
-        s = "0";
-        return s;
+        return "0"
     } else {
     // Prepare lines for comparison of only the numerical leading numbers
-        for c in a.chars() {
-            if !c.is_numeric() && !c.eq(&'-') && !c.eq(&' ') && !c.eq(&'.') && !c.eq(&',') {
-                s = a.trim().split(c).next().unwrap();
-                break;
-            };
-            s = a.trim();
-        };
+        return get_leading_number(a)
     };
-    return s;
 }
 
 /// Parse the beginning string into an f64, returning -inf instead of NaN on errors.
