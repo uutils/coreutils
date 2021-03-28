@@ -227,12 +227,19 @@ impl Config {
         // options, but manually whether they have an index that's greater than
         // the other format options. If so, we set the appropriate format.
         if format != Format::Long {
-            let idx = options.indices_of(opt).map(|x| x.max().unwrap()).unwrap_or(0);    
-            if [options::format::LONG_NO_OWNER, options::format::LONG_NO_GROUP, options::format::LONG_NUMERIC_UID_GID]
-                .iter()
-                .flat_map(|opt| options.indices_of(opt))
-                .flatten()
-                .any(|i| i >= idx)
+            let idx = options
+                .indices_of(opt)
+                .map(|x| x.max().unwrap())
+                .unwrap_or(0);
+            if [
+                options::format::LONG_NO_OWNER,
+                options::format::LONG_NO_GROUP,
+                options::format::LONG_NUMERIC_UID_GID,
+            ]
+            .iter()
+            .flat_map(|opt| options.indices_of(opt))
+            .flatten()
+            .any(|i| i >= idx)
             {
                 format = Format::Long;
             } else {
@@ -243,7 +250,6 @@ impl Config {
                 }
             }
         }
-        
 
         let files = if options.is_present(options::files::ALL) {
             Files::All
@@ -659,7 +665,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 file the link references rather than the link itself.",
                 ),
         )
-        
         .arg(
             Arg::with_name(options::REVERSE)
                 .short("r")

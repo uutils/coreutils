@@ -177,7 +177,7 @@ fn test_rm_directory_without_flag() {
     let dir = "test_rm_directory_without_flag_dir";
 
     at.mkdir(dir);
-  
+
     let result = ucmd.arg(dir).fails();
     println!("{}", result.stderr);
     assert!(result
