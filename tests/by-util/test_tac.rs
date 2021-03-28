@@ -52,7 +52,7 @@ fn test_single_non_newline_separator_before() {
 
 #[test]
 fn test_invalid_input() {
-    let (at, mut ucmd) = at_and_ucmd!();
+    let (_, mut ucmd) = at_and_ucmd!();
 
     ucmd.arg("b")
         .fails()
