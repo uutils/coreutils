@@ -24,6 +24,7 @@ Write a random permutation of the input lines to standard output.
 
 With no FILE, or when FILE is -, read standard input.
 "#;
+static TEMPLATE: &str = "Usage: {usage}\nMandatory arguments to long options are mandatory for short options too.\n{unified}";
 
 struct Options {
     head_count: usize,
@@ -54,7 +55,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let matches = App::new(executable!())
         .name(NAME)
         .version(VERSION)
-        .template("Usage: {usage}\nMandatory arguments to long options are mandatory for short options too.\n{unified}")
+        .template(TEMPLATE)
         .usage(USAGE)
         .arg(
             Arg::with_name(options::ECHO)
@@ -75,7 +76,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .takes_value(true)
                 .value_name("LO-HI")
                 .help("treat each number LO through HI as an input line")
-                .conflicts_with(options::FILE)
+                .conflicts_with(options::FILE),
         )
         .arg(
             Arg::with_name(options::HEAD_COUNT)
@@ -137,7 +138,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     return 1;
                 }
             },
-            None => usize::MAX,
+            None => std::usize::MAX,
         },
         output: matches.value_of(options::OUTPUT).map(String::from),
         random_source: matches.value_of(options::RANDOM_SOURCE).map(String::from),
