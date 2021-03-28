@@ -427,15 +427,6 @@ fn wipe_file(
     zero: bool,
     verbose: bool,
 ) {
-    // DEBUG
-    println!("wipe_file: path_str is {}", path_str);
-    println!("wipe_file: n_passes is {}", n_passes);
-    println!("wipe_file: remove is {}", remove);
-    println!("wipe_file: size is {:?}", size);
-    println!("wipe_file: exact is {}", exact);
-    println!("wipe_file: zero is {}", zero);
-    println!("wipe_file: verbose is {}", verbose);
-
     // Get these potential errors out of the way first
     let path: &Path = Path::new(path_str);
     if !path.exists() {
