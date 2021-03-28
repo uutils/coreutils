@@ -54,10 +54,12 @@ fn test_invalid_file() {
     let folder_name = "a".to_string();
     at.mkdir(&folder_name);
 
-    ucmd.arg(&folder_name)
-        .fails()
-        .stderr
-        .contains("cksum: error: 'a'");
+    let result = ucmd.arg(&folder_name).run();
+
+    println!("{:?}", result.stdout);
+    println!("{:?}", result.stdout);
+    assert!(result.stderr.contains("cksum: error: 'a'"));
+    assert!(!result.success);
 }
 
 // Make sure crc is correct for files larger than 32 bytes
