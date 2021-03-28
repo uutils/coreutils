@@ -233,7 +233,7 @@ fn remove(files: Vec<String>, options: Options) -> bool {
                 // (e.g., permission), even rm -f should fail with
                 // outputting the error, but there's no easy eay.
                 if !options.force {
-                    show_error!("no such file or directory '{}'", filename);
+                    show_error!("cannot remove '{}': No such file or directory", filename);
                     true
                 } else {
                     false
@@ -289,7 +289,7 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
         had_err = true;
     } else {
         show_error!(
-            "could not remove directory '{}' (did you mean to pass '-r' or '-R'?)",
+            "cannot remove '{}': Is a directory", // GNU's rm error message does not include help
             path.display()
         );
         had_err = true;
@@ -305,16 +305,34 @@ fn remove_dir(path: &Path, options: &Options) -> bool {
         true
     };
     if response {
-        match fs::remove_dir(path) {
-            Ok(_) => {
-                if options.verbose {
-                    println!("removed '{}'", path.display());
+        if let Ok(mut read_dir) = fs::read_dir(path) {
+            if options.dir || options.recursive {
+                if read_dir.next().is_none() {
+                    match fs::remove_dir(path) {
+                        Ok(_) => {
+                            if options.verbose {
+                                println!("removed directory '{}'", path.display());
+                            }
+                        }
+                        Err(e) => {
+                            show_error!("cannot remove '{}': {}", path.display(), e);
+                            return true;
+                        }
+                    }
+                } else {
+                    // directory can be read but is not empty
+                    show_error!("cannot remove '{}': Directory not empty", path.display());
+                    return true;
                 }
-            }
-            Err(e) => {
-                show_error!("removing '{}': {}", path.display(), e);
+            } else {
+                // called to remove a symlink_dir (windows) without "-r"/"-R" or "-d"
+                show_error!("cannot remove '{}': Is a directory", path.display());
                 return true;
             }
+        } else {
+            // GNU's rm shows this message if directory is empty but not readable
+            show_error!("cannot remove '{}': Directory not empty", path.display());
+            return true;
         }
     }
 
