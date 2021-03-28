@@ -92,7 +92,7 @@ fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) -> i32 {
             match File::open(filename) {
                 Ok(f) => Box::new(f) as Box<dyn Read>,
                 Err(e) => {
-                    show_warning!("failed to open '{}' for reading: {}", filename, e);
+                    show_error!("failed to open '{}' for reading: {}", filename, e);
                     exit_code = 1;
                     continue;
                 }
@@ -101,7 +101,7 @@ fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) -> i32 {
 
         let mut data = Vec::new();
         if let Err(e) = file.read_to_end(&mut data) {
-            show_warning!("failed to read '{}': {}", filename, e);
+            show_error!("failed to read '{}': {}", filename, e);
             exit_code = 1;
             continue;
         };
