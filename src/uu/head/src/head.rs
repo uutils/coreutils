@@ -138,7 +138,7 @@ fn arg_iterate<'a>(
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 struct HeadOptions {
     pub quiet: bool,
     pub verbose: bool,
@@ -552,6 +552,25 @@ mod tests {
         assert_eq!(options("-n 15").unwrap().mode, Modes::Lines(15));
         assert_eq!(options("--bytes 15").unwrap().mode, Modes::Bytes(15));
         assert_eq!(options("-c 15").unwrap().mode, Modes::Bytes(15));
+    }
+    #[test]
+    fn test_options_errors() {
+        assert!(options("-n IsThisTheRealLife?").is_err());
+        assert!(options("-c IsThisJustFantasy").is_err());
+    }
+    #[test]
+    fn test_options_correct_defaults() {
+        let opts = HeadOptions::new();
+        let opts2: HeadOptions = Default::default();
+
+        assert_eq!(opts, opts2);
+
+        assert!(opts.verbose == false);
+        assert!(opts.quiet == false);
+        assert!(opts.zeroed == false);
+        assert!(opts.all_but_last == false);
+        assert_eq!(opts.mode, Modes::Lines(10));
+        assert!(opts.files.is_empty());
     }
     #[test]
     fn test_parse_mode() {
