@@ -16,10 +16,6 @@ use clap::{App, Arg};
 use std::ffi::CStr;
 use uucore::fs::is_stdin_interactive;
 
-extern "C" {
-    fn ttyname(filedesc: libc::c_int) -> *const libc::c_char;
-}
-
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Print the file name of the terminal connected to standard input.";
 
@@ -51,8 +47,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let silent = matches.is_present(options::SILENT);
 
+    // Call libc function ttyname
     let tty = unsafe {
-        let ptr = ttyname(libc::STDIN_FILENO);
+        let ptr = libc::ttyname(libc::STDIN_FILENO);
         if !ptr.is_null() {
             String::from_utf8_lossy(CStr::from_ptr(ptr).to_bytes()).to_string()
         } else {
