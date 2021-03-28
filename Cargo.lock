@@ -1592,10 +1592,10 @@ dependencies = [
 name = "uu_comm"
 version = "0.0.4"
 dependencies = [
- "getopts",
- "libc",
- "uucore",
- "uucore_procs",
+ "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "libc 0.2.85 (registry+https://github.com/rust-lang/crates.io-index)",
+ "uucore 0.0.7",
+ "uucore_procs 0.0.5",
 ]
 
 [[package]]
