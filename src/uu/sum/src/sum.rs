@@ -11,7 +11,6 @@
 extern crate uucore;
 
 use clap::{App, Arg};
-use options::SYSTEM_V_COMPATIBLE;
 use std::fs::File;
 use std::io::{stdin, Read, Result};
 use std::path::Path;
@@ -111,7 +110,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(
             Arg::with_name(options::SYSTEM_V_COMPATIBLE)
                 .short("s")
-                .long(SYSTEM_V_COMPATIBLE)
+                .long(options::SYSTEM_V_COMPATIBLE)
                 .help("use the BSD compatible algorithm (default)"),
         )
         .get_matches_from(args);
@@ -121,7 +120,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         None => vec!["-".to_owned()],
     };
 
-    let sysv = matches.is_present("sysv");
+    let sysv = matches.is_present(options::SYSTEM_V_COMPATIBLE);
 
     let print_names = if sysv {
         files.len() > 1 || files[0] != "-"
