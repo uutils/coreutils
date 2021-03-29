@@ -214,7 +214,7 @@ impl<'a> BytesGenerator<'a> {
 }
 
 static AFTER_HELP: &str =
-"Delete FILE(s) if --remove (-u) is specified.  The default is not to remove\n\
+    "Delete FILE(s) if --remove (-u) is specified.  The default is not to remove\n\
 the files because it is common to operate on device files like /dev/hda,\n\
 and those files usually should not be removed.\n\
 \n\
@@ -266,8 +266,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let matches = App::new("shred")
         .name("shred")
         .version(VERSION_STR)
-        .about("Overwrite the specified FILE(s) repeatedly, in order to make it harder\n\
-for even very expensive hardware probing to recover the data.")
+        .about(
+            "Overwrite the specified FILE(s) repeatedly, in order to make it harder\n\
+for even very expensive hardware probing to recover the data.",
+        )
         .after_help(AFTER_HELP)
         .usage("shred [OPTION]... FILE...")
         .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
@@ -276,7 +278,7 @@ for even very expensive hardware probing to recover the data.")
                 .long(options::ITERATIONS)
                 .short("n")
                 .help("overwrite N times instead of the default (3)")
-                .value_name("NUMBER")
+                .value_name("NUMBER"),
         )
         .arg(
             Arg::with_name(options::SIZE)
@@ -284,32 +286,34 @@ for even very expensive hardware probing to recover the data.")
                 .short("s")
                 .takes_value(true)
                 .value_name("N")
-                .help("shred this many bytes (suffixes like K, M, G accepted)")
+                .help("shred this many bytes (suffixes like K, M, G accepted)"),
         )
         .arg(
             Arg::with_name(options::REMOVE)
                 .short("u")
                 .long(options::REMOVE)
-                .help("truncate and remove file after overwriting;  See below")
+                .help("truncate and remove file after overwriting;  See below"),
         )
         .arg(
             Arg::with_name(options::VERBOSE)
                 .long(options::VERBOSE)
                 .short("v")
-                .help("show progress")
+                .help("show progress"),
         )
         .arg(
             Arg::with_name(options::EXACT)
                 .long(options::EXACT)
                 .short("x")
-                .help("do not round file sizes up to the next full block;\n\
-this is the default for non-regular files")
+                .help(
+                    "do not round file sizes up to the next full block;\n\
+this is the default for non-regular files",
+                ),
         )
         .arg(
             Arg::with_name(options::ZERO)
                 .long(options::ZERO)
                 .short("z")
-                .help("add a final overwrite with zeros to hide shredding")
+                .help("add a final overwrite with zeros to hide shredding"),
         )
         .get_matches_from(args);
 
@@ -327,7 +331,7 @@ this is the default for non-regular files")
         match s.parse::<usize>() {
             Ok(u) => {
                 iterations = u;
-            },
+            }
             Err(_) => errs.push(String::from(format!("invalid number of passes: '{}'", s))),
         }
     }
@@ -338,7 +342,7 @@ this is the default for non-regular files")
     //         - 'wipe' => also first obfuscate bytes in the name.
     //         - 'wipesync' => also sync each obfuscated byte to disk.
     //       The default mode is 'wipesync', but note it can be expensive.
-    
+
     // TODO: implement --random-source
 
     // TODO: implement --force
@@ -346,7 +350,7 @@ this is the default for non-regular files")
     let remove = matches.is_present(options::REMOVE);
     let size_arg = match matches.value_of(options::SIZE) {
         Some(s) => Some(s.to_string()),
-        None => None
+        None => None,
     };
     let size = get_size(size_arg);
     let exact = matches.is_present(options::EXACT) && size.is_none(); // if -s is given, ignore -x
