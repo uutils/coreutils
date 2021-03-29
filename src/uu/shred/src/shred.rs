@@ -326,16 +326,16 @@ this is the default for non-regular files",
         return 0;
     }
 
-    let mut iterations: usize = 0;
-    if matches.is_present(options::ITERATIONS) {
-        let s = matches.value_of(options::ITERATIONS).unwrap();
-        match s.parse::<usize>() {
-            Ok(u) => {
-                iterations = u;
-            }
-            Err(_) => errs.push(String::from(format!("invalid number of passes: '{}'", s))),
-        }
-    }
+    let iterations: usize = match matches.value_of(options::ITERATIONS) {
+        Some(s) => match s.parse::<usize>() {
+            Ok(u) => u,
+            Err(_) => {
+                errs.push(String::from(format!("invalid number of passes: '{}'", s)));
+                0
+            },
+        },
+        None => unreachable!(),
+    };
 
     // TODO: implement --remove HOW
     //       The optional HOW parameter indicates how to remove a directory entry:
