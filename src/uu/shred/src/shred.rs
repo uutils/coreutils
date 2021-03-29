@@ -332,7 +332,7 @@ this is the default for non-regular files",
             Err(_) => {
                 errs.push(String::from(format!("invalid number of passes: '{}'", s)));
                 0
-            },
+            }
         },
         None => unreachable!(),
     };
