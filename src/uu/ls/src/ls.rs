@@ -104,6 +104,14 @@ pub mod options {
         pub static HUMAN_READABLE: &str = "human-readable";
         pub static SI: &str = "si";
     }
+
+    pub mod indicator_style {
+        pub static NONE: &str = "none";
+        pub static SLASH: &str = "slash";
+        pub static FILE_TYPE: &str = "file-type";
+        pub static CLASSIFY: &str = "classify";
+    }
+
     pub static WIDTH: &str = "width";
     pub static AUTHOR: &str = "author";
     pub static NO_GROUP: &str = "no-group";
@@ -113,12 +121,15 @@ pub mod options {
     pub static IGNORE_BACKUPS: &str = "ignore-backups";
     pub static DIRECTORY: &str = "directory";
     pub static CLASSIFY: &str = "classify";
+    pub static FILE_TYPE: &str = "file-type";
+    pub static SLASH: &str = "p";
     pub static INODE: &str = "inode";
     pub static DEREFERENCE: &str = "dereference";
     pub static REVERSE: &str = "reverse";
     pub static RECURSIVE: &str = "recursive";
     pub static COLOR: &str = "color";
     pub static PATHS: &str = "paths";
+    pub static INDICATOR_STYLE: &str = "indicator-style";
 }
 
 #[derive(PartialEq, Eq)]
@@ -157,6 +168,14 @@ enum Time {
     Change,
 }
 
+#[derive(PartialEq, Eq)]
+enum IndicatorStyle {
+    None,
+    Slash,
+    FileType,
+    Classify,
+}
+
 struct Config {
     format: Format,
     files: Files,
@@ -164,7 +183,6 @@ struct Config {
     recursive: bool,
     reverse: bool,
     dereference: bool,
-    classify: bool,
     ignore_backups: bool,
     size_format: SizeFormat,
     directory: bool,
@@ -175,6 +193,7 @@ struct Config {
     color: bool,
     long: LongFormat,
     width: Option<u16>,
+    indicator_style: IndicatorStyle,
 }
 
 // Fields that can be removed or added to the long format
@@ -227,12 +246,19 @@ impl Config {
         // options, but manually whether they have an index that's greater than
         // the other format options. If so, we set the appropriate format.
         if format != Format::Long {
-            let idx = options.indices_of(opt).map(|x| x.max().unwrap()).unwrap_or(0);    
-            if [options::format::LONG_NO_OWNER, options::format::LONG_NO_GROUP, options::format::LONG_NUMERIC_UID_GID]
-                .iter()
-                .flat_map(|opt| options.indices_of(opt))
-                .flatten()
-                .any(|i| i >= idx)
+            let idx = options
+                .indices_of(opt)
+                .map(|x| x.max().unwrap())
+                .unwrap_or(0);
+            if [
+                options::format::LONG_NO_OWNER,
+                options::format::LONG_NO_GROUP,
+                options::format::LONG_NUMERIC_UID_GID,
+            ]
+            .iter()
+            .flat_map(|opt| options.indices_of(opt))
+            .flatten()
+            .any(|i| i >= idx)
             {
                 format = Format::Long;
             } else {
@@ -243,7 +269,6 @@ impl Config {
                 }
             }
         }
-        
 
         let files = if options.is_present(options::files::ALL) {
             Files::All
@@ -334,6 +359,32 @@ impl Config {
             })
             .or_else(|| termsize::get().map(|s| s.cols));
 
+        let indicator_style = if let Some(field) = options.value_of(options::INDICATOR_STYLE) {
+            match field {
+                "none" => IndicatorStyle::None,
+                "file-type" => IndicatorStyle::FileType,
+                "classify" => IndicatorStyle::Classify,
+                "slash" => IndicatorStyle::Slash,
+                &_ => IndicatorStyle::None,
+            }
+        } else if options.is_present(options::indicator_style::NONE) {
+            IndicatorStyle::None
+        } else if options.is_present(options::indicator_style::CLASSIFY)
+            || options.is_present(options::CLASSIFY)
+        {
+            IndicatorStyle::Classify
+        } else if options.is_present(options::indicator_style::SLASH)
+            || options.is_present(options::SLASH)
+        {
+            IndicatorStyle::Slash
+        } else if options.is_present(options::indicator_style::FILE_TYPE)
+            || options.is_present(options::FILE_TYPE)
+        {
+            IndicatorStyle::FileType
+        } else {
+            IndicatorStyle::None
+        };
+
         Config {
             format,
             files,
@@ -341,7 +392,6 @@ impl Config {
             recursive: options.is_present(options::RECURSIVE),
             reverse: options.is_present(options::REVERSE),
             dereference: options.is_present(options::DEREFERENCE),
-            classify: options.is_present(options::CLASSIFY),
             ignore_backups: options.is_present(options::IGNORE_BACKUPS),
             size_format,
             directory: options.is_present(options::DIRECTORY),
@@ -352,6 +402,7 @@ impl Config {
             inode: options.is_present(options::INODE),
             long,
             width,
+            indicator_style,
         }
     }
 }
@@ -624,15 +675,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 ),
         )
         .arg(
-            Arg::with_name(options::CLASSIFY)
-                .short("F")
-                .long(options::CLASSIFY)
-                .help("Append a character to each file name indicating the file type. Also, for \
-                    regular files that are executable, append '*'. The file type indicators are \
-                    '/' for directories, '@' for symbolic links, '|' for FIFOs, '=' for sockets, \
-                    '>' for doors, and nothing for regular files.",
-        ))
-        .arg(
             Arg::with_name(options::size::HUMAN_READABLE)
                 .short("h")
                 .long(options::size::HUMAN_READABLE)
@@ -659,7 +701,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 file the link references rather than the link itself.",
                 ),
         )
-        
         .arg(
             Arg::with_name(options::REVERSE)
                 .short("r")
@@ -689,8 +730,57 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .require_equals(true)
                 .min_values(0),
         )
+        .arg(
+            Arg::with_name(options::INDICATOR_STYLE)
+                .long(options::INDICATOR_STYLE)
+                .help(" append indicator with style WORD to entry names: none (default),  slash\
+                       (-p), file-type (--file-type), classify (-F)")
+                .takes_value(true)
+                .possible_values(&["none", "slash", "file-type", "classify"])
+                .overrides_with_all(&[
+                    options::FILE_TYPE,
+                    options::SLASH,
+                    options::CLASSIFY,
+                    options::INDICATOR_STYLE,
+                ]))
+                .arg(
+            Arg::with_name(options::CLASSIFY)
+                .short("F")
+                .long(options::CLASSIFY)
+                .help("Append a character to each file name indicating the file type. Also, for \
+                       regular files that are executable, append '*'. The file type indicators are \
+                       '/' for directories, '@' for symbolic links, '|' for FIFOs, '=' for sockets, \
+                       '>' for doors, and nothing for regular files.")
+                .overrides_with_all(&[
+                    options::FILE_TYPE,
+                    options::SLASH,
+                    options::CLASSIFY,
+                    options::INDICATOR_STYLE,
+                ])
+        )
+        .arg(
+            Arg::with_name(options::FILE_TYPE)
+                .long(options::FILE_TYPE)
+                .help("Same as --classify, but do not append '*'")
+                .overrides_with_all(&[
+                    options::FILE_TYPE,
+                    options::SLASH,
+                    options::CLASSIFY,
+                    options::INDICATOR_STYLE,
+                ]))
+        .arg(
+            Arg::with_name(options::SLASH)
+                .short(options::SLASH)
+                .help("Append / indicator to directories."
+                )
+                .overrides_with_all(&[
+                    options::FILE_TYPE,
+                    options::SLASH,
+                    options::CLASSIFY,
+                    options::INDICATOR_STYLE,
+                ]))
 
-        // Positional arguments
+    // Positional arguments
         .arg(Arg::with_name(options::PATHS).multiple(true).takes_value(true));
 
     let matches = app.get_matches_from(args);
@@ -1117,15 +1207,24 @@ fn display_file_name(
     config: &Config,
 ) -> Cell {
     let mut name = get_file_name(path, strip);
+    let file_type = metadata.file_type();
 
-    if config.classify {
-        let file_type = metadata.file_type();
-        if file_type.is_dir() {
-            name.push('/');
-        } else if file_type.is_symlink() {
-            name.push('@');
+    match config.indicator_style {
+        IndicatorStyle::Classify | IndicatorStyle::FileType => {
+            if file_type.is_dir() {
+                name.push('/');
+            }
+            if file_type.is_symlink() {
+                name.push('@');
+            }
         }
-    }
+        IndicatorStyle::Slash => {
+            if file_type.is_dir() {
+                name.push('/');
+            }
+        }
+        _ => (),
+    };
 
     if config.format == Format::Long && metadata.file_type().is_symlink() {
         if let Ok(target) = path.read_link() {
@@ -1181,8 +1280,7 @@ fn display_file_name(
     let mut width = UnicodeWidthStr::width(&*name);
 
     let ext;
-
-    if config.color || config.classify {
+    if config.color || config.indicator_style != IndicatorStyle::None {
         let file_type = metadata.file_type();
 
         let (code, sym) = if file_type.is_dir() {
@@ -1235,11 +1333,29 @@ fn display_file_name(
         if config.color {
             name = color_name(name, code);
         }
-        if config.classify {
-            if let Some(s) = sym {
-                name.push(s);
-                width += 1;
+
+        let char_opt = match config.indicator_style {
+            IndicatorStyle::Classify => sym,
+            IndicatorStyle::FileType => {
+                // Don't append an asterisk.
+                match sym {
+                    Some('*') => None,
+                    _ => sym,
+                }
             }
+            IndicatorStyle::Slash => {
+                // Append only a slash.
+                match sym {
+                    Some('/') => Some('/'),
+                    _ => None,
+                }
+            }
+            IndicatorStyle::None => None,
+        };
+
+        if let Some(c) = char_opt {
+            name.push(c);
+            width += 1;
         }
     }
 

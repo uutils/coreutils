@@ -1,3 +1,5 @@
+#[cfg(unix)]
+extern crate unix_socket;
 use crate::common::util::*;
 
 extern crate regex;
@@ -11,7 +13,13 @@ extern crate libc;
 #[cfg(not(windows))]
 use self::libc::umask;
 #[cfg(not(windows))]
+use std::path::PathBuf;
+#[cfg(not(windows))]
 use std::sync::Mutex;
+#[cfg(not(windows))]
+extern crate tempdir;
+#[cfg(not(windows))]
+use self::tempdir::TempDir;
 
 #[cfg(not(windows))]
 lazy_static! {
@@ -811,6 +819,112 @@ fn test_ls_inode() {
     assert!(!result.stdout.contains(inode_long));
 
     assert_eq!(inode_short, inode_long)
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_ls_indicator_style() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Setup: Directory, Symlink, and Pipes.
+    at.mkdir("directory");
+    assert!(at.dir_exists("directory"));
+
+    at.touch(&at.plus_as_string("link-src"));
+    at.symlink_file("link-src", "link-dest.link");
+    assert!(at.is_symlink("link-dest.link"));
+
+    at.mkfifo("named-pipe.fifo");
+    assert!(at.is_fifo("named-pipe.fifo"));
+
+    // Classify, File-Type, and Slash all contain indicators for directories.
+    let options = vec!["classify", "file-type", "slash"];
+    for opt in options {
+        // Verify that classify and file-type both contain indicators for symlinks.
+        let result = scene.ucmd().arg(format!("--indicator-style={}", opt)).run();
+        println!("stdout = {:?}", result.stdout);
+        assert!(result.stdout.contains("/"));
+    }
+
+    // Same test as above, but with the alternate flags.
+    let options = vec!["--classify", "--file-type", "-p"];
+    for opt in options {
+        let result = scene.ucmd().arg(format!("{}", opt)).run();
+        println!("stdout = {:?}", result.stdout);
+        assert!(result.stdout.contains("/"));
+    }
+
+    // Classify and File-Type all contain indicators for pipes and links.
+    let options = vec!["classify", "file-type"];
+    for opt in options {
+        // Verify that classify and file-type both contain indicators for symlinks.
+        let result = scene.ucmd().arg(format!("--indicator-style={}", opt)).run();
+        println!("stdout = {}", result.stdout);
+        assert!(result.stdout.contains("@"));
+        assert!(result.stdout.contains("|"));
+    }
+
+    // Test sockets. Because the canonical way of making sockets to test is with
+    // TempDir, we need a separate test.
+    {
+        use self::unix_socket::UnixListener;
+
+        let dir = TempDir::new("unix_socket").expect("failed to create dir");
+        let socket_path = dir.path().join("sock");
+        let _listener = UnixListener::bind(&socket_path).expect("failed to create socket");
+
+        new_ucmd!()
+            .args(&[
+                PathBuf::from(dir.path().to_str().unwrap()),
+                PathBuf::from("--indicator-style=classify"),
+            ])
+            .succeeds()
+            .stdout_only("sock=\n");
+    }
+}
+
+// Essentially the same test as above, but only test symlinks and directories,
+// not pipes or sockets.
+#[test]
+#[cfg(not(unix))]
+fn test_ls_indicator_style() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Setup: Directory, Symlink.
+    at.mkdir("directory");
+    assert!(at.dir_exists("directory"));
+
+    at.touch(&at.plus_as_string("link-src"));
+    at.symlink_file("link-src", "link-dest.link");
+    assert!(at.is_symlink("link-dest.link"));
+
+    // Classify, File-Type, and Slash all contain indicators for directories.
+    let options = vec!["classify", "file-type", "slash"];
+    for opt in options {
+        // Verify that classify and file-type both contain indicators for symlinks.
+        let result = scene.ucmd().arg(format!("--indicator-style={}", opt)).run();
+        println!("stdout = {:?}", result.stdout);
+        assert!(result.stdout.contains("/"));
+    }
+
+    // Same test as above, but with the alternate flags.
+    let options = vec!["--classify", "--file-type", "-p"];
+    for opt in options {
+        let result = scene.ucmd().arg(format!("{}", opt)).run();
+        println!("stdout = {:?}", result.stdout);
+        assert!(result.stdout.contains("/"));
+    }
+
+    // Classify and File-Type all contain indicators for pipes and links.
+    let options = vec!["classify", "file-type"];
+    for opt in options {
+        // Verify that classify and file-type both contain indicators for symlinks.
+        let result = scene.ucmd().arg(format!("--indicator-style={}", opt)).run();
+        println!("stdout = {}", result.stdout);
+        assert!(result.stdout.contains("@"));
+    }
 }
 
 #[cfg(not(any(target_vendor = "apple", target_os = "windows")))] // Truncate not available on mac or win

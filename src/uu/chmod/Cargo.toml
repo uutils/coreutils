@@ -15,6 +15,7 @@ edition = "2018"
 path = "src/chmod.rs"
 
 [dependencies]
+clap = "2.33.3"
 libc = "0.2.42"
 uucore = { version=">=0.0.7", package="uucore", path="../../uucore", features=["fs", "mode"] }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }

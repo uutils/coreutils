@@ -24,7 +24,6 @@ use std::hash::{Hash, Hasher};
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Lines, Read, Write};
 use std::mem::replace;
 use std::path::Path;
-
 use uucore::fs::is_stdin_interactive; // for Iterator::dedup()
 
 static NAME: &str = "sort";
