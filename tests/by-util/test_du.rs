@@ -71,6 +71,7 @@ fn test_du_basics_bad_name() {
     );
 }
 
+#[cfg(not(target_os = "windows"))]
 #[test]
 fn test_du_soft_link() {
     let ts = TestScenario::new("du");
@@ -99,6 +100,7 @@ fn _du_soft_link(s: String) {
     }
 }
 
+#[cfg(not(target_os = "windows"))]
 #[test]
 fn test_du_hard_link() {
     let ts = TestScenario::new("du");
