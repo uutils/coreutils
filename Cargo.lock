@@ -1318,6 +1318,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "static_assertions"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+
+[[package]]
 name = "strsim"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1325,9 +1331,9 @@ checksum = "8ea5119cdb4c55b55d432abb513a0429384878c15dde60cc77b1c99de1a95a6a"
 
 [[package]]
 name = "syn"
-version = "1.0.65"
+version = "1.0.67"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3a1d708c221c5a612956ef9f75b37e454e88d1f7b899fbd3a18d4252012d663"
+checksum = "6498a9efc342871f91cc2d0d694c674368b4ceb40f62b65a7a08c3792935e702"
 dependencies = [
  "proc-macro2",
  "quote 1.0.9",
@@ -1441,6 +1447,17 @@ checksum = "be4d6b5f19ff7664e8c98d03e2139cb510db9b0a60b55f8e8709b689d939b6bc"
 dependencies = [
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "twox-hash"
+version = "1.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04f8ab788026715fa63b31960869617cba39117e520eb415b0139543e325ab59"
+dependencies = [
+ "cfg-if 0.1.10",
+ "rand 0.7.3",
+ "static_assertions",
 ]
 
 [[package]]
@@ -2200,7 +2217,9 @@ version = "0.0.4"
 dependencies = [
  "clap",
  "itertools 0.8.2",
+ "rand 0.7.3",
  "semver",
+ "twox-hash",
  "uucore",
  "uucore_procs",
 ]
@@ -2250,9 +2269,9 @@ dependencies = [
 name = "uu_sum"
 version = "0.0.4"
 dependencies = [
- "getopts",
- "uucore",
- "uucore_procs",
+ "clap 2.33.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "uucore 0.0.7",
+ "uucore_procs 0.0.5",
 ]
 
 [[package]]
@@ -2334,8 +2353,8 @@ name = "uu_tr"
 version = "0.0.4"
 dependencies = [
  "bit-set",
+ "clap",
  "fnv",
- "getopts",
  "uucore",
  "uucore_procs",
 ]
