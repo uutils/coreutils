@@ -50,6 +50,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         )
         .get_matches_from(args);
 
+    // FixME: fail without panic for now; but `more` should work with no arguments (ie, for piped input)
+    if let None | Some("-") = matches.value_of(options::FILE) {
+        println!("more: incorrect usage");
+        return 1;
+    }
+
     more(matches);
 
     0
@@ -57,7 +63,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 fn setup_term() -> termios::Termios {
-    // FixME: currently panics but `more` should work with no arguments (ie, for piped input)
     let mut term = termios::tcgetattr(0).unwrap();
     // Unset canonical mode, so we get characters immediately
     term.local_flags.remove(LocalFlags::ICANON);
