@@ -26,17 +26,22 @@ extern crate syscall;
 use clap::{App, Arg, ArgMatches};
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
-static USAGE: &str = "more [options] <file>...";
 static ABOUT: &str = "A file perusal filter for CRT viewing.";
 
 mod options {
     pub const FILE: &str = "file";
 }
 
+fn get_usage() -> String {
+    format!("{} [options] <file>...", executable!())
+}
+
 pub fn uumain(args: impl uucore::Args) -> i32 {
+    let usage = get_usage();
+
     let matches = App::new(executable!())
         .version(VERSION)
-        .usage(USAGE)
+        .usage(&usage[..])
         .about(ABOUT)
         .arg(
             Arg::with_name(options::FILE)
