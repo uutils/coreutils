@@ -278,7 +278,8 @@ for even very expensive hardware probing to recover the data.",
                 .long(options::ITERATIONS)
                 .short("n")
                 .help("overwrite N times instead of the default (3)")
-                .value_name("NUMBER"),
+                .value_name("NUMBER")
+                .default_value("3"),
         )
         .arg(
             Arg::with_name(options::SIZE)
@@ -325,7 +326,7 @@ this is the default for non-regular files",
         return 0;
     }
 
-    let mut iterations: usize = 3;
+    let mut iterations: usize = 0;
     if matches.is_present(options::ITERATIONS) {
         let s = matches.value_of(options::ITERATIONS).unwrap();
         match s.parse::<usize>() {
