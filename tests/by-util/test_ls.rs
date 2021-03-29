@@ -1681,3 +1681,57 @@ fn test_ls_deref_command_line_dir() {
 
     assert!(!result.stdout_str().ends_with("sym_dir"));
 }
+
+#[test]
+fn test_ls_sort_extension() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    for filename in &[
+        "file1",
+        "file2",
+        "anotherFile",
+        ".hidden",
+        ".file.1",
+        ".file.2",
+        "file.1",
+        "file.2",
+        "anotherFile.1",
+        "anotherFile.2",
+        "file.ext",
+        "file.debug",
+        "anotherFile.ext",
+        "anotherFile.debug",
+    ] {
+        at.touch(filename);
+    }
+
+    let expected = vec![
+        ".",
+        "..",
+        ".hidden",    
+        "anotherFile",
+        "file1",
+        "file2",
+        ".file.1",
+        "anotherFile.1",
+        "file.1",
+        ".file.2",
+        "anotherFile.2",
+        "file.2",
+        "anotherFile.debug",
+        "file.debug",
+        "anotherFile.ext",
+        "file.ext",
+        "", // because of '\n' at the end of the output
+    ];
+
+    let result = scene.ucmd().arg("-1aX").run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+    assert_eq!(result.stdout.split('\n').collect::<Vec<_>>(), expected,);
+
+    let result = scene.ucmd().arg("-1a").arg("--sort=extension").run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+    assert_eq!(result.stdout.split('\n').collect::<Vec<_>>(), expected,);
+}
