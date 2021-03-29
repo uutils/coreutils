@@ -1,6 +1,7 @@
 //  * This file is part of the uutils coreutils package.
 //  *
 //  * (c) Michael Yin <mikeyin@mikeyin.org>
+//  * (c) Robert Swinford <robert.swinford..AT..gmail.com>
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
@@ -12,13 +13,17 @@ extern crate uucore;
 
 use clap::{App, Arg};
 use itertools::Itertools;
+use rand::distributions::Alphanumeric;
+use rand::{thread_rng, Rng};
 use semver::Version;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::fs::File;
+use std::hash::{Hash, Hasher};
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Lines, Read, Write};
 use std::mem::replace;
 use std::path::Path;
+use twox_hash::XxHash64;
 use uucore::fs::is_stdin_interactive; // for Iterator::dedup()
 
 static NAME: &str = "sort";
@@ -34,16 +39,18 @@ static OPT_DICTIONARY_ORDER: &str = "dictionary-order";
 static OPT_MERGE: &str = "merge";
 static OPT_CHECK: &str = "check";
 static OPT_IGNORE_CASE: &str = "ignore-case";
+static OPT_IGNORE_BLANKS: &str = "ignore-blanks";
 static OPT_OUTPUT: &str = "output";
 static OPT_REVERSE: &str = "reverse";
 static OPT_STABLE: &str = "stable";
 static OPT_UNIQUE: &str = "unique";
+static OPT_RANDOM: &str = "random-sort";
 
 static ARG_FILES: &str = "files";
 
 static DECIMAL_PT: char = '.';
 static THOUSANDS_SEP: char = ',';
-
+#[derive(Eq, Ord, PartialEq, PartialOrd)]
 enum SortMode {
     Numeric,
     HumanNumeric,
@@ -60,8 +67,10 @@ struct Settings {
     stable: bool,
     unique: bool,
     check: bool,
+    random: bool,
     compare_fns: Vec<fn(&str, &str) -> Ordering>,
     transform_fns: Vec<fn(&str) -> String>,
+    salt: String,
 }
 
 impl Default for Settings {
@@ -74,8 +83,10 @@ impl Default for Settings {
             stable: false,
             unique: false,
             check: false,
+            random: false,
             compare_fns: Vec::new(),
             transform_fns: Vec::new(),
+            salt: String::new(),
         }
     }
 }
@@ -155,17 +166,14 @@ impl<'a> Iterator for FileMerger<'a> {
         }
     }
 }
+
 fn get_usage() -> String {
     format!(
         "{0} {1}
-
 Usage:
  {0} [OPTION]... [FILE]...
-
 Write the sorted concatenation of all FILE(s) to standard output.
-
 Mandatory arguments for long options are mandatory for short options too.
-
 With no FILE, or when FILE is -, read standard input.",
         NAME, VERSION
     )
@@ -229,12 +237,24 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("fold lower case to upper case characters"),
         )
         .arg(
+            Arg::with_name(OPT_IGNORE_BLANKS)
+                .short("b")
+                .long(OPT_IGNORE_BLANKS)
+                .help("ignore leading blanks when finding sort keys in each line"),
+        )
+        .arg(
             Arg::with_name(OPT_OUTPUT)
                 .short("o")
                 .long(OPT_OUTPUT)
                 .help("write output to FILENAME instead of stdout")
                 .takes_value(true)
                 .value_name("FILENAME"),
+        )
+        .arg(
+            Arg::with_name(OPT_RANDOM)
+                .short("R")
+                .long(OPT_RANDOM)
+                .help("shuffle in random order"),
         )
         .arg(
             Arg::with_name(OPT_REVERSE)
@@ -285,10 +305,19 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         settings.transform_fns.push(|s| s.to_uppercase());
     }
 
+    if matches.is_present(OPT_IGNORE_BLANKS) {
+        settings.transform_fns.push(|s| s.trim_start().to_string());
+    }
+
     settings.outfile = matches.value_of(OPT_OUTPUT).map(String::from);
     settings.reverse = matches.is_present(OPT_REVERSE);
     settings.stable = matches.is_present(OPT_STABLE);
     settings.unique = matches.is_present(OPT_UNIQUE);
+
+    if matches.is_present(OPT_RANDOM) {
+        settings.random = matches.is_present(OPT_RANDOM);
+        settings.salt = get_rand_string();
+    }
 
     //let mut files = matches.free;
     if files.is_empty() {
@@ -313,10 +342,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     }
 
-    exec(files, &settings)
+    exec(files, &mut settings)
 }
 
-fn exec(files: Vec<String>, settings: &Settings) -> i32 {
+fn exec(files: Vec<String>, settings: &mut Settings) -> i32 {
     let mut lines = Vec::new();
     let mut file_merger = FileMerger::new(&settings);
 
@@ -351,6 +380,13 @@ fn exec(files: Vec<String>, settings: &Settings) -> i32 {
         } else {
             print_sorted(file_merger, &settings.outfile)
         }
+    } else if settings.unique && settings.mode == SortMode::Numeric {
+        print_sorted(
+            lines
+                .iter()
+                .dedup_by(|a, b| num_sort_dedup(a) == num_sort_dedup(b)),
+            &settings.outfile,
+        )
     } else if settings.unique {
         print_sorted(lines.iter().dedup(), &settings.outfile)
     } else {
@@ -419,7 +455,11 @@ fn compare_by(a: &str, b: &str, settings: &Settings) -> Ordering {
     };
 
     for compare_fn in &settings.compare_fns {
-        let cmp = compare_fn(a, b);
+        let cmp: Ordering = if settings.random {
+            random_shuffle(a, b, settings.salt.clone())
+        } else {
+            compare_fn(a, b)
+        };
         if cmp != Ordering::Equal {
             if settings.reverse {
                 return cmp.reverse();
@@ -431,36 +471,60 @@ fn compare_by(a: &str, b: &str, settings: &Settings) -> Ordering {
     Ordering::Equal
 }
 
-/// Parse the beginning string into an f64, returning -inf instead of NaN on errors.
-fn permissive_f64_parse(a: &str) -> f64 {
-    // Maybe should be split on non-digit, but then 10e100 won't parse properly.
-    // On the flip side, this will give NEG_INFINITY for "1,234", which might be OK
-    // because there's no way to handle both CSV and thousands separators without a new flag.
-    // GNU sort treats "1,234" as "1" in numeric, so maybe it's fine.
-    // GNU sort treats "NaN" as non-number in numeric, so it needs special care.
-    match a.split_whitespace().next() {
-        None => std::f64::NEG_INFINITY,
-        Some(sa) => match sa.parse::<f64>() {
-            Ok(a) if a.is_nan() => std::f64::NEG_INFINITY,
-            Ok(a) => a,
-            Err(_) => std::f64::NEG_INFINITY,
-        },
-    }
-}
-
 fn default_compare(a: &str, b: &str) -> Ordering {
     a.cmp(b)
 }
 
-/// Compares two floating point numbers, with errors being assumed to be -inf.
-/// Stops coercing at the first whitespace char, so 1e2 will parse as 100 but
-/// 1,000 will parse as -inf.
+fn get_leading_number(a: &str) -> &str {
+    let mut s = "";
+    for c in a.chars() {
+        if !c.is_numeric() && !c.eq(&'-') && !c.eq(&' ') && !c.eq(&'.') && !c.eq(&',') {
+            s = a.trim().split(c).next().unwrap();
+            break;
+        }
+        s = a.trim();
+    }
+    return s;
+}
+
+// Matches GNU behavior, see:
+// https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
+// Specifically *not* the same as sort -n | uniq
+fn num_sort_dedup(a: &str) -> &str {
+    // Empty lines are dumped
+    if a.is_empty() {
+        return "0"
+    // And lines that don't begin numerically are dumped
+    } else if !a.trim().chars().nth(0).unwrap_or('\0').is_numeric() {
+        return "0"
+    } else {
+    // Prepare lines for comparison of only the numerical leading numbers
+        return get_leading_number(a)
+    };
+}
+
+/// Parse the beginning string into an f64, returning -inf instead of NaN on errors.
+fn permissive_f64_parse(a: &str) -> f64 {
+    // GNU sort treats "NaN" as non-number in numeric, so it needs special care.
+    match a.parse::<f64>() {
+        Ok(a) if a.is_nan() => std::f64::NEG_INFINITY,
+        Ok(a) => a,
+        Err(_) => std::f64::NEG_INFINITY,
+    }
+}
+
+/// Compares two floats, with errors and non-numerics assumed to be -inf.
+/// Stops coercing at the first non-numeric char.
 fn numeric_compare(a: &str, b: &str) -> Ordering {
     #![allow(clippy::comparison_chain)]
-    let fa = permissive_f64_parse(a);
-    let fb = permissive_f64_parse(b);
-    // f64::cmp isn't implemented because NaN messes with it
-    // but we sidestep that with permissive_f64_parse so just fake it
+
+    let sa = get_leading_number(a);
+    let sb = get_leading_number(b);
+
+    let fa = permissive_f64_parse(sa);
+    let fb = permissive_f64_parse(sb);
+
+    // f64::cmp isn't implemented (due to NaN issues); implement directly instead
     if fa > fb {
         Ordering::Greater
     } else if fa < fb {
@@ -471,10 +535,10 @@ fn numeric_compare(a: &str, b: &str) -> Ordering {
 }
 
 fn human_numeric_convert(a: &str) -> f64 {
-    let int_str: String = a.chars().take_while(|c| c.is_numeric()).collect();
-    let suffix = a.chars().find(|c| !c.is_numeric());
-    let int_part = int_str.parse::<f64>().unwrap_or(-1f64) as f64;
-    let suffix: f64 = match suffix.unwrap_or('\0') {
+    let int_str = get_leading_number(a);
+    let (_, s) = a.split_at(int_str.len());
+    let int_part = permissive_f64_parse(int_str);
+    let suffix: f64 = match s.parse().unwrap_or('\0') {
         'K' => 1000f64,
         'M' => 1E6,
         'G' => 1E9,
@@ -499,6 +563,30 @@ fn human_numeric_size_compare(a: &str, b: &str) -> Ordering {
     } else {
         Ordering::Equal
     }
+}
+
+fn random_shuffle(a: &str, b: &str, salt: String) -> Ordering {
+    #![allow(clippy::comparison_chain)]
+    let salt_slice = salt.as_str();
+
+    let da = hash(&[a, salt_slice].concat());
+    let db = hash(&[b, salt_slice].concat());
+
+    da.cmp(&db)
+}
+
+fn get_rand_string() -> String {
+    thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(16)
+        .map(char::from)
+        .collect::<String>()
+}
+
+fn hash<T: Hash>(t: &T) -> u64 {
+    let mut s: XxHash64 = Default::default();
+    t.hash(&mut s);
+    s.finish()
 }
 
 #[derive(Eq, Ord, PartialEq, PartialOrd)]
@@ -604,5 +692,67 @@ fn open(path: &str) -> Option<(Box<dyn Read>, bool)> {
             show_error!("sort: {0}: {1}", path, e.to_string());
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn test_default_compare() {
+        let a = "your own";
+        let b = "your place";
+
+        assert_eq!(Ordering::Less, default_compare(a, b));
+    }
+
+    #[test]
+    fn test_numeric_compare1() {
+        let a = "149:7";
+        let b = "150:5";
+
+        assert_eq!(Ordering::Less, numeric_compare(a, b));
+    }
+
+    #[test]
+    fn test_numeric_compare2() {
+        let a = "-1.02";
+        let b = "1";
+
+        assert_eq!(Ordering::Less, numeric_compare(a, b));
+    }
+
+    #[test]
+    fn test_human_numeric_compare() {
+        let a = "300K";
+        let b = "1M";
+
+        assert_eq!(Ordering::Less, human_numeric_size_compare(a, b));
+    }
+
+    #[test]
+    fn test_month_compare() {
+        let a = "JaN";
+        let b = "OCt";
+
+        assert_eq!(Ordering::Less, month_compare(a, b));
+    }
+    #[test]
+    fn test_version_compare() {
+        let a = "1.2.3-alpha2";
+        let b = "1.4.0";
+
+        assert_eq!(Ordering::Less, version_compare(a, b));
+    }
+
+    #[test]
+    fn test_random_compare() {
+        let a = "9";
+        let b = "9";
+        let c = get_rand_string();
+
+        assert_eq!(Ordering::Equal, random_shuffle(a, b, c));
     }
 }

@@ -12,68 +12,62 @@
 #[macro_use]
 extern crate uucore;
 
+use clap::{App, Arg};
 use std::ffi::CStr;
 use uucore::fs::is_stdin_interactive;
 
-extern "C" {
-    fn ttyname(filedesc: libc::c_int) -> *const libc::c_char;
+static VERSION: &str = env!("CARGO_PKG_VERSION");
+static ABOUT: &str = "Print the file name of the terminal connected to standard input.";
+
+mod options {
+    pub const SILENT: &str = "silent";
 }
 
-static NAME: &str = "tty";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
+fn get_usage() -> String {
+    format!("{0} [OPTION]...", executable!())
+}
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args.collect_str();
+    let usage = get_usage();
 
-    let mut opts = getopts::Options::new();
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .arg(
+            Arg::with_name(options::SILENT)
+                .long(options::SILENT)
+                .visible_alias("quiet")
+                .short("s")
+                .help("print nothing, only return an exit status")
+                .required(false),
+        )
+        .get_matches_from(args);
 
-    opts.optflag("s", "silent", "print nothing, only return an exit status");
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
+    let silent = matches.is_present(options::SILENT);
 
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => crash!(2, "{}", f),
+    // Call libc function ttyname
+    let tty = unsafe {
+        let ptr = libc::ttyname(libc::STDIN_FILENO);
+        if !ptr.is_null() {
+            String::from_utf8_lossy(CStr::from_ptr(ptr).to_bytes()).to_string()
+        } else {
+            "".to_owned()
+        }
     };
 
-    if matches.opt_present("help") {
-        println!("{} {}", NAME, VERSION);
-        println!();
-        println!("Usage:");
-        println!("  {} [OPTION]...", NAME);
-        println!();
-        print!(
-            "{}",
-            opts.usage("Print the file name of the terminal connected to standard input.")
-        );
-    } else if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-    } else {
-        let silent = matches.opt_present("s");
-
-        let tty = unsafe {
-            let ptr = ttyname(libc::STDIN_FILENO);
-            if !ptr.is_null() {
-                String::from_utf8_lossy(CStr::from_ptr(ptr).to_bytes()).to_string()
-            } else {
-                "".to_owned()
-            }
-        };
-
-        if !silent {
-            if !tty.chars().all(|c| c.is_whitespace()) {
-                println!("{}", tty);
-            } else {
-                println!("not a tty");
-            }
-        }
-
-        return if is_stdin_interactive() {
-            libc::EXIT_SUCCESS
+    if !silent {
+        if !tty.chars().all(|c| c.is_whitespace()) {
+            println!("{}", tty);
         } else {
-            libc::EXIT_FAILURE
-        };
+            println!("not a tty");
+        }
     }
 
-    0
+    return if is_stdin_interactive() {
+        libc::EXIT_SUCCESS
+    } else {
+        libc::EXIT_FAILURE
+    };
 }
