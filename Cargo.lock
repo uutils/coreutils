@@ -795,9 +795,9 @@ checksum = "0ee1c47aaa256ecabcaea351eae4a9b01ef39ed810004e298d2511ed284b1525"
 
 [[package]]
 name = "memoffset"
-version = "0.6.2"
+version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc14fc54a812b4472b4113facc3e44d099fbc0ea2ce0551fa5c703f8edfbfd38"
+checksum = "f83fb6581e8ed1f85fd45c116db8405483899489e38406156c25eb743554361d"
 dependencies = [
  "autocfg",
 ]
@@ -2196,7 +2196,7 @@ dependencies = [
 name = "uu_shuf"
 version = "0.0.4"
 dependencies = [
- "getopts",
+ "clap",
  "rand 0.5.6",
  "uucore",
  "uucore_procs",
