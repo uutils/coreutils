@@ -710,7 +710,7 @@ fn version_compare(a: &str, b: &str) -> Ordering {
 }
 
 fn remove_nondictionary_chars(s: &str) -> String {
-    // According to GNU, by default letters and digits are those of ASCII 
+    // According to GNU, by default letters and digits are those of ASCII
     // and a blank is a space or a tab
     s.chars()
         .filter(|c| c.is_ascii_alphanumeric() || c.is_ascii_whitespace())
