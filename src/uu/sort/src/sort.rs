@@ -12,6 +12,7 @@
 extern crate uucore;
 
 use clap::{App, Arg};
+use fnv::FnvHasher;
 use itertools::Itertools;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
@@ -23,7 +24,7 @@ use std::hash::{Hash, Hasher};
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Lines, Read, Write};
 use std::mem::replace;
 use std::path::Path;
-use fnv::FnvHasher;
+
 use uucore::fs::is_stdin_interactive; // for Iterator::dedup()
 
 static NAME: &str = "sort";
@@ -41,6 +42,7 @@ static OPT_MERGE: &str = "merge";
 static OPT_CHECK: &str = "check";
 static OPT_IGNORE_CASE: &str = "ignore-case";
 static OPT_IGNORE_BLANKS: &str = "ignore-blanks";
+static OPT_IGNORE_NONPRINTING: &str = "ignore-nonprinting";
 static OPT_OUTPUT: &str = "output";
 static OPT_REVERSE: &str = "reverse";
 static OPT_STABLE: &str = "stable";
@@ -247,6 +249,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("fold lower case to upper case characters"),
         )
         .arg(
+            Arg::with_name(OPT_IGNORE_NONPRINTING)
+                .short("-i")
+                .long(OPT_IGNORE_NONPRINTING)
+                .help("ignore nonprinting characters"),
+        )
+        .arg(
             Arg::with_name(OPT_IGNORE_BLANKS)
                 .short("b")
                 .long(OPT_IGNORE_BLANKS)
@@ -308,6 +316,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     if matches.is_present(OPT_DICTIONARY_ORDER) {
         settings.transform_fns.push(remove_nondictionary_chars);
+    } else if matches.is_present(OPT_IGNORE_NONPRINTING) {
+        settings.transform_fns.push(remove_nonprinting_chars);
     }
 
     settings.merge = matches.is_present(OPT_MERGE);
@@ -341,7 +351,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     settings.compare_fns.push(match settings.mode {
         SortMode::Numeric => numeric_compare,
-        SortMode::GeneralNumeric => numeric_compare,
+        SortMode::GeneralNumeric => general_numeric_compare,
         SortMode::HumanNumeric => human_numeric_size_compare,
         SortMode::Month => month_compare,
         SortMode::Version => version_compare,
@@ -548,6 +558,7 @@ fn numeric_compare(a: &str, b: &str) -> Ordering {
 
     let ia = permissive_i64_parse(sa);
     let ib = permissive_i64_parse(sb);
+
     ia.cmp(&ib)
 }
 
@@ -583,10 +594,10 @@ fn general_numeric_compare(a: &str, b: &str) -> Ordering {
 }
 
 fn human_numeric_convert(a: &str) -> f64 {
-    let int_str = get_leading_number(a);
-    let (_, s) = a.split_at(int_str.len());
-    let int_part = permissive_f64_parse(int_str);
-    let suffix: f64 = match s.parse().unwrap_or('\0') {
+    let num_str = get_leading_number(a);
+    let (_, suffix) = a.split_at(num_str.len());
+    let num_part = permissive_f64_parse(num_str);
+    let suffix: f64 = match suffix.parse().unwrap_or('\0') {
         'K' => 1000f64,
         'M' => 1E6,
         'G' => 1E9,
@@ -594,7 +605,7 @@ fn human_numeric_convert(a: &str) -> f64 {
         'P' => 1E15,
         _ => 1f64,
     };
-    int_part * suffix
+    num_part * suffix
 }
 
 /// Compare two strings as if they are human readable sizes.
@@ -603,6 +614,7 @@ fn human_numeric_size_compare(a: &str, b: &str) -> Ordering {
     #![allow(clippy::comparison_chain)]
     let fa = human_numeric_convert(a);
     let fb = human_numeric_convert(b);
+
     // f64::cmp isn't implemented (due to NaN issues); implement directly instead
     if fa > fb {
         Ordering::Greater
@@ -698,11 +710,17 @@ fn version_compare(a: &str, b: &str) -> Ordering {
 }
 
 fn remove_nondictionary_chars(s: &str) -> String {
-    // Using 'is_ascii_whitespace()' instead of 'is_whitespace()', because it
-    // uses only symbols compatible with UNIX sort (space, tab, newline).
-    // 'is_whitespace()' uses more symbols as whitespace (e.g. vertical tab).
+    // According to GNU, by default letters and digits are those of ASCII 
+    // and a blank is a space or a tab
     s.chars()
-        .filter(|c| c.is_alphanumeric() || c.is_ascii_whitespace())
+        .filter(|c| c.is_ascii_alphanumeric() || c.is_ascii_whitespace())
+        .collect::<String>()
+}
+
+fn remove_nonprinting_chars(s: &str) -> String {
+    // However, printing chars is more permissive.
+    s.chars()
+        .filter(|c| c.is_alphanumeric() || c.is_whitespace())
         .collect::<String>()
 }
 
