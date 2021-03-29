@@ -54,7 +54,7 @@ fn test_invalid_file() {
     let folder_name = "asdf".to_string();
     at.mkdir(&folder_name);
 
-    let result = ucmd.arg(&folder_name).run();
+    let result = ucmd.arg(&folder_name).fails();
 
     println!("{:?}", result.stdout);
     println!("{:?}", result.stdout);
