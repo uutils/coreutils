@@ -1447,7 +1447,6 @@ checksum = "be4d6b5f19ff7664e8c98d03e2139cb510db9b0a60b55f8e8709b689d939b6bc"
 dependencies = [
  "serde",
  "serde_json",
-<<<<<<< HEAD
 ]
 
 [[package]]
@@ -1459,8 +1458,6 @@ dependencies = [
  "cfg-if 0.1.10",
  "rand 0.7.3",
  "static_assertions",
-=======
->>>>>>> 88d0bb01c01f238a611f24687d089f272ad44f12
 ]
 
 [[package]]
@@ -1610,11 +1607,7 @@ dependencies = [
 name = "uu_comm"
 version = "0.0.4"
 dependencies = [
-<<<<<<< HEAD
- "getopts",
-=======
  "clap",
->>>>>>> 88d0bb01c01f238a611f24687d089f272ad44f12
  "libc",
  "uucore",
  "uucore_procs",
@@ -1945,11 +1938,7 @@ dependencies = [
 name = "uu_mkfifo"
 version = "0.0.4"
 dependencies = [
-<<<<<<< HEAD
- "getopts",
-=======
  "clap",
->>>>>>> 88d0bb01c01f238a611f24687d089f272ad44f12
  "libc",
  "uucore",
  "uucore_procs",
@@ -2207,11 +2196,7 @@ dependencies = [
 name = "uu_shuf"
 version = "0.0.4"
 dependencies = [
-<<<<<<< HEAD
- "getopts",
-=======
  "clap",
->>>>>>> 88d0bb01c01f238a611f24687d089f272ad44f12
  "rand 0.5.6",
  "uucore",
  "uucore_procs",
@@ -2232,13 +2217,9 @@ version = "0.0.4"
 dependencies = [
  "clap",
  "itertools 0.8.2",
-<<<<<<< HEAD
  "rand 0.7.3",
  "semver",
  "twox-hash",
-=======
- "semver",
->>>>>>> 88d0bb01c01f238a611f24687d089f272ad44f12
  "uucore",
  "uucore_procs",
 ]
@@ -2331,10 +2312,7 @@ version = "0.0.4"
 dependencies = [
  "clap",
  "libc",
-<<<<<<< HEAD
-=======
  "retain_mut",
->>>>>>> 88d0bb01c01f238a611f24687d089f272ad44f12
  "uucore",
  "uucore_procs",
 ]
