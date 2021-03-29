@@ -411,6 +411,7 @@ fn exec(files: Vec<String>, settings: &mut Settings) -> i32 {
         print_sorted(
             lines
                 .iter()
+                .filter(|a| number_for_numbered_line(a) != "0" )
                 .dedup_by(|a, b| number_for_numbered_line(a) == number_for_numbered_line(b)),
             &settings.outfile,
         )
@@ -518,10 +519,11 @@ fn get_leading_number(a: &str) -> &str {
 // Specifically *not* the same as sort -n | uniq
 fn number_for_numbered_line(a: &str) -> &str {
     let s = a.trim().chars().nth(0).unwrap_or('\0');
-    // Empty lines are dumped
+    // Empty lines are returned
     if a.is_empty() {
-        return "0";
-    // And lines that don't begin numerically are dumped
+        return a;
+    // GNU states: "An empty number is treated as ‘0’?
+    // But it appears lines that don't begin with a number are set to "0"
     } else if !s.eq(&MINUS_SIGN) && !s.is_numeric() {
         return "0";
     // Prepare lines for comparison of only the numerical leading numbers
