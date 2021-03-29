@@ -51,13 +51,18 @@ fn test_arg_overrides_stdin() {
 fn test_invalid_file() {
     let (at, mut ucmd) = at_and_ucmd!();
 
+    let ls = TestScenario::new("ls");
+    let files = ls.cmd("ls").arg("-l").run();
+    println!("{:?}", files.stdout);
+    println!("{:?}", files.stderr);
+
     let folder_name = "asdf".to_string();
     at.mkdir(&folder_name);
 
     let result = ucmd.arg(&folder_name).fails();
 
     println!("{:?}", result.stdout);
-    println!("{:?}", result.stdout);
+    println!("{:?}", result.stderr);
     assert!(result.stderr.contains("cksum: error: 'asdf'"));
     assert!(!result.success);
 }
