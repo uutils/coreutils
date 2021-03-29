@@ -50,6 +50,8 @@ static ARG_FILES: &str = "files";
 
 static DECIMAL_PT: char = '.';
 static THOUSANDS_SEP: char = ',';
+static MINUS_SIGN: char = '-';
+
 #[derive(Eq, Ord, PartialEq, PartialOrd)]
 enum SortMode {
     Numeric,
@@ -478,7 +480,7 @@ fn default_compare(a: &str, b: &str) -> Ordering {
 fn get_leading_number(a: &str) -> &str {
     let mut s = "";
     for c in a.chars() {
-        if !c.is_numeric() && !c.eq(&'-') && !c.eq(&' ') && !c.eq(&'.') && !c.eq(&',') {
+        if !c.is_numeric() && !c.is_whitespace() && !c.eq(&MINUS_SIGN) && !c.eq(&DECIMAL_PT) && !c.eq(&THOUSANDS_SEP) {
             s = a.trim().split(c).next().unwrap();
             break;
         }
@@ -497,8 +499,8 @@ fn num_sort_dedup(a: &str) -> &str {
     // And lines that don't begin numerically are dumped
     } else if !a.trim().chars().nth(0).unwrap_or('\0').is_numeric() {
         return "0";
+    // Prepare lines for comparison of only the numerical leading numbers
     } else {
-        // Prepare lines for comparison of only the numerical leading numbers
         return get_leading_number(a);
     };
 }
