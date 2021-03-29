@@ -407,7 +407,7 @@ fn exec(files: Vec<String>, settings: &mut Settings) -> i32 {
         print_sorted(
             lines
                 .iter()
-                .dedup_by(|a, b| num_sort_dedup(a) == num_sort_dedup(b)),
+                .dedup_by(|a, b| number_for_numbered_line(a) == number_for_numbered_line(b)),
             &settings.outfile,
         )
     } else if settings.unique {
@@ -518,7 +518,7 @@ fn get_leading_number(a: &str) -> &str {
 // Matches GNU behavior, see:
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 // Specifically *not* the same as sort -n | uniq
-fn num_sort_dedup(a: &str) -> &str {
+fn number_for_numbered_line(a: &str) -> &str {
     let s = a.trim().chars().nth(0).unwrap_or('\0');
     // Empty lines are dumped
     if a.is_empty() {
@@ -564,6 +564,7 @@ fn numeric_compare(a: &str, b: &str) -> Ordering {
 
 /// Parse the beginning string into an f64, returning -inf instead of NaN on errors.
 fn permissive_f64_parse(a: &str) -> f64 {
+
     // GNU sort treats "NaN" as non-number in numeric, so it needs special care.
     match a.parse::<f64>() {
         Ok(a) if a.is_nan() => std::f64::NEG_INFINITY,
@@ -583,6 +584,15 @@ fn general_numeric_compare(a: &str, b: &str) -> Ordering {
     let fa = permissive_f64_parse(sa);
     let fb = permissive_f64_parse(sb);
 
+    // FYI, GNU collating sequence:
+    // 1. Lines that do not start with numbers
+    // 2. NaNs
+    // 3. Minus infinity.
+    // 4. Finite numbers in ascending numeric order (with -0 and +0 equal).
+    // 5. Plus infinity.
+    //
+    // This is the same as the standard Rust behavior.
+
     // f64::cmp isn't implemented (due to NaN issues); implement directly instead
     if fa > fb {
         Ordering::Greater
@@ -591,6 +601,7 @@ fn general_numeric_compare(a: &str, b: &str) -> Ordering {
     } else {
         Ordering::Equal
     }
+
 }
 
 fn human_numeric_convert(a: &str) -> f64 {
