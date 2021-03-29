@@ -4,6 +4,8 @@ use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::sync::Mutex;
 
 extern crate libc;
+use self::chmod::strip_minus_from_mode;
+extern crate chmod;
 use self::libc::umask;
 
 static TEST_FILE: &'static str = "file";
@@ -373,4 +375,33 @@ fn test_chmod_symlink_non_existing_recursive() {
     assert!(result
         .stderr
         .contains("neither symbolic link 'tmp/test-long.link' nor referent has been changed"));
+}
+
+#[test]
+fn test_chmod_strip_minus_from_mode() {
+    let tests = vec![
+        // ( before, after )
+        ("chmod -v -xw -R FILE", "chmod -v xw -R FILE"),
+        ("chmod g=rwx FILE -c", "chmod g=rwx FILE -c"),
+        (
+            "chmod -c -R -w,o+w FILE --preserve-root",
+            "chmod -c -R w,o+w FILE --preserve-root",
+        ),
+        ("chmod -c -R +w FILE ", "chmod -c -R +w FILE "),
+        ("chmod a=r,=xX FILE", "chmod a=r,=xX FILE"),
+        (
+            "chmod -v --reference RFILE -R FILE",
+            "chmod -v --reference RFILE -R FILE",
+        ),
+        ("chmod -Rvc -w-x FILE", "chmod -Rvc w-x FILE"),
+        ("chmod 755 -v FILE", "chmod 755 -v FILE"),
+        ("chmod -v +0004 FILE -R", "chmod -v +0004 FILE -R"),
+        ("chmod -v -0007 FILE -R", "chmod -v 0007 FILE -R"),
+    ];
+
+    for test in tests {
+        let mut args: Vec<String> = test.0.split(" ").map(|v| v.to_string()).collect();
+        let _mode_had_minus_prefix = strip_minus_from_mode(&mut args);
+        assert_eq!(test.1, args.join(" "));
+    }
 }
