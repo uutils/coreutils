@@ -11,7 +11,7 @@
 extern crate uucore;
 
 use std::fs::File;
-use std::io::{stdout, Read, Write};
+use std::io::{stdin, stdout, BufRead, BufReader, Read, Write};
 
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 extern crate nix;
@@ -57,6 +57,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 fn setup_term() -> termios::Termios {
+    // FixME: currently panics but `more` should work with no arguments (ie, for piped input)
     let mut term = termios::tcgetattr(0).unwrap();
     // Unset canonical mode, so we get characters immediately
     term.local_flags.remove(LocalFlags::ICANON);
@@ -106,8 +107,10 @@ fn reset_term(term: &mut redox_termios::Termios) {
 }
 
 fn more(matches: ArgMatches) {
-    // FixME: currently panics but `more` should work with no arguments (ie, for piped input)
-    let mut f = File::open(matches.value_of(options::FILE).unwrap()).unwrap();
+    let mut f: Box<dyn BufRead> = match matches.value_of(options::FILE) {
+        None | Some("-") => Box::new(BufReader::new(stdin())),
+        Some(filename) => Box::new(BufReader::new(File::open(filename).unwrap())),
+    };
     let mut buffer = [0; 1024];
 
     let mut term = setup_term();
