@@ -33,6 +33,7 @@ static VERSION: &str = env!("CARGO_PKG_VERSION");
 static OPT_HUMAN_NUMERIC_SORT: &str = "human-numeric-sort";
 static OPT_MONTH_SORT: &str = "month-sort";
 static OPT_NUMERIC_SORT: &str = "numeric-sort";
+static OPT_GENERAL_NUMERIC_SORT: &str = "general-numeric-sort";
 static OPT_VERSION_SORT: &str = "version-sort";
 
 static OPT_DICTIONARY_ORDER: &str = "dictionary-order";
@@ -56,6 +57,7 @@ static MINUS_SIGN: char = '-';
 enum SortMode {
     Numeric,
     HumanNumeric,
+    GeneralNumeric,
     Month,
     Version,
     Default,
@@ -209,6 +211,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("compare according to string numerical value"),
         )
         .arg(
+            Arg::with_name(OPT_GENERAL_NUMERIC_SORT)
+                .short("g")
+                .long(OPT_GENERAL_NUMERIC_SORT)
+                .help("compare according to string general numerical value"),
+        )
+        .arg(
             Arg::with_name(OPT_VERSION_SORT)
                 .short("V")
                 .long(OPT_VERSION_SORT)
@@ -288,6 +296,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         SortMode::HumanNumeric
     } else if matches.is_present(OPT_MONTH_SORT) {
         SortMode::Month
+    } else if matches.is_present(OPT_GENERAL_NUMERIC_SORT) {
+        SortMode::GeneralNumeric
     } else if matches.is_present(OPT_NUMERIC_SORT) {
         SortMode::Numeric
     } else if matches.is_present(OPT_VERSION_SORT) {
@@ -331,6 +341,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     settings.compare_fns.push(match settings.mode {
         SortMode::Numeric => numeric_compare,
+        SortMode::GeneralNumeric => numeric_compare,
         SortMode::HumanNumeric => human_numeric_size_compare,
         SortMode::Month => month_compare,
         SortMode::Version => version_compare,
@@ -480,7 +491,12 @@ fn default_compare(a: &str, b: &str) -> Ordering {
 fn get_leading_number(a: &str) -> &str {
     let mut s = "";
     for c in a.chars() {
-        if !c.is_numeric() && !c.is_whitespace() && !c.eq(&MINUS_SIGN) && !c.eq(&DECIMAL_PT) && !c.eq(&THOUSANDS_SEP) {
+        if !c.is_numeric()
+            && !c.is_whitespace()
+            && !c.eq(&MINUS_SIGN)
+            && !c.eq(&DECIMAL_PT)
+            && !c.eq(&THOUSANDS_SEP)
+        {
             s = a.trim().split(c).next().unwrap();
             break;
         }
@@ -493,16 +509,50 @@ fn get_leading_number(a: &str) -> &str {
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 // Specifically *not* the same as sort -n | uniq
 fn num_sort_dedup(a: &str) -> &str {
+    let s = a.trim().chars().nth(0).unwrap_or('\0');
     // Empty lines are dumped
     if a.is_empty() {
         return "0";
     // And lines that don't begin numerically are dumped
-    } else if !a.trim().chars().nth(0).unwrap_or('\0').is_numeric() {
+    } else if !s.eq(&MINUS_SIGN) && !s.is_numeric() {
         return "0";
     // Prepare lines for comparison of only the numerical leading numbers
     } else {
         return get_leading_number(a);
     };
+}
+
+/// Parse the beginning string into an f64, returning -inf instead of NaN on errors.
+fn permissive_i64_parse(a: &str) -> i64 {
+    // GNU sort treats "NaN" as non-number in numeric, so it needs special care.
+    match a.parse::<i64>() {
+        Ok(a) => a,
+        Err(_) => match a.parse::<f64>() {
+            Err(_err) => 0i64,
+            Ok(val) => {
+                if val.is_nan() {
+                    0i64
+                } else {
+                    val as i64
+                }
+            }
+        },
+    }
+}
+
+/// Compares two floats, with errors and non-numerics assumed to be -inf.
+/// Stops coercing at the first non-numeric char.
+fn numeric_compare(a: &str, b: &str) -> Ordering {
+    #![allow(clippy::comparison_chain)]
+
+    let sa = get_leading_number(a);
+    let sb = get_leading_number(b);
+
+    let ia = permissive_i64_parse(sa);
+    let ib = permissive_i64_parse(sb);
+
+    // f64::cmp isn't implemented (due to NaN issues); implement directly instead
+    ia.cmp(&ib)
 }
 
 /// Parse the beginning string into an f64, returning -inf instead of NaN on errors.
@@ -517,7 +567,7 @@ fn permissive_f64_parse(a: &str) -> f64 {
 
 /// Compares two floats, with errors and non-numerics assumed to be -inf.
 /// Stops coercing at the first non-numeric char.
-fn numeric_compare(a: &str, b: &str) -> Ordering {
+fn general_numeric_compare(a: &str, b: &str) -> Ordering {
     #![allow(clippy::comparison_chain)]
 
     let sa = get_leading_number(a);
