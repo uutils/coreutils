@@ -23,7 +23,7 @@ use std::hash::{Hash, Hasher};
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Lines, Read, Write};
 use std::mem::replace;
 use std::path::Path;
-use twox_hash::XxHash64;
+use fnv::FnvHasher;
 use uucore::fs::is_stdin_interactive; // for Iterator::dedup()
 
 static NAME: &str = "sort";
@@ -540,8 +540,6 @@ fn permissive_i64_parse(a: &str) -> i64 {
     }
 }
 
-/// Compares two floats, with errors and non-numerics assumed to be -inf.
-/// Stops coercing at the first non-numeric char.
 fn numeric_compare(a: &str, b: &str) -> Ordering {
     #![allow(clippy::comparison_chain)]
 
@@ -550,8 +548,6 @@ fn numeric_compare(a: &str, b: &str) -> Ordering {
 
     let ia = permissive_i64_parse(sa);
     let ib = permissive_i64_parse(sb);
-
-    // f64::cmp isn't implemented (due to NaN issues); implement directly instead
     ia.cmp(&ib)
 }
 
@@ -636,7 +632,7 @@ fn get_rand_string() -> String {
 }
 
 fn hash<T: Hash>(t: &T) -> u64 {
-    let mut s: XxHash64 = Default::default();
+    let mut s: FnvHasher = Default::default();
     t.hash(&mut s);
     s.finish()
 }
