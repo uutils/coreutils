@@ -396,11 +396,6 @@ fn exec(files: Vec<String>, settings: &mut Settings) -> i32 {
 
     sort_by(&mut lines, &settings);
 
-    // Not sure why reverse was in the comp fn section
-    // Reverse only applies to output?
-    // Could muck with the ordering.
-    if settings.reverse { lines.reverse() };
-
     if settings.merge {
         if settings.unique {
             print_sorted(file_merger.dedup(), &settings.outfile)
@@ -411,7 +406,6 @@ fn exec(files: Vec<String>, settings: &mut Settings) -> i32 {
         print_sorted(
             lines
                 .iter()
-                .filter(|a| number_for_numbered_line(a) != "0" )
                 .dedup_by(|a, b| number_for_numbered_line(a) == number_for_numbered_line(b)),
             &settings.outfile,
         )
@@ -488,7 +482,11 @@ fn compare_by(a: &str, b: &str, settings: &Settings) -> Ordering {
         } else {
             compare_fn(a, b)
         };
-        return cmp;
+        if settings.reverse {
+            return cmp.reverse();
+        } else {
+            return cmp;
+        };
     }
     Ordering::Equal
 }
@@ -519,13 +517,15 @@ fn get_leading_number(a: &str) -> &str {
 // Specifically *not* the same as sort -n | uniq
 fn number_for_numbered_line(a: &str) -> &str {
     let s = a.trim().chars().nth(0).unwrap_or('\0');
-    // Empty lines are returned
-    if a.is_empty() {
-        return a;
     // GNU states: "An empty number is treated as ‘0’?
-    // But it appears lines that don't begin with a number are set to "0"
+    // As far as i can tell this means empty lines, non-leading number lines 
+    // and 0s are all made equivalent to an empty string
+    if a.is_empty() {
+        return "";
     } else if !s.eq(&MINUS_SIGN) && !s.is_numeric() {
-        return "0";
+        return "";
+    } else if s.eq(&'0') {
+        return "";
     // Prepare lines for comparison of only the numerical leading numbers
     } else {
         return get_leading_number(a);
