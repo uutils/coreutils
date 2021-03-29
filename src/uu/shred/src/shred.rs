@@ -326,7 +326,7 @@ this is the default for non-regular files",
         return 0;
     }
 
-    let iterations: usize = match matches.value_of(options::ITERATIONS) {
+    let iterations = match matches.value_of(options::ITERATIONS) {
         Some(s) => match s.parse::<usize>() {
             Ok(u) => u,
             Err(_) => {
