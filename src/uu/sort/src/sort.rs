@@ -396,6 +396,11 @@ fn exec(files: Vec<String>, settings: &mut Settings) -> i32 {
 
     sort_by(&mut lines, &settings);
 
+    // Not sure why reverse was in the comp fn section
+    // Reverse only applies to output?
+    // Could muck with the ordering.
+    if settings.reverse { lines.reverse() };
+
     if settings.merge {
         if settings.unique {
             print_sorted(file_merger.dedup(), &settings.outfile)
@@ -482,13 +487,7 @@ fn compare_by(a: &str, b: &str, settings: &Settings) -> Ordering {
         } else {
             compare_fn(a, b)
         };
-        if cmp != Ordering::Equal {
-            if settings.reverse {
-                return cmp.reverse();
-            } else {
-                return cmp;
-            }
-        }
+        return cmp;
     }
     Ordering::Equal
 }
