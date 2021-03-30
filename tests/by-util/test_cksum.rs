@@ -49,7 +49,7 @@ fn test_arg_overrides_stdin() {
 
 #[test]
 fn test_invalid_file() {
-    let (at, mut ucmd) = at_and_ucmd!();
+    let (_, mut ucmd) = at_and_ucmd!();
 
     let ls = TestScenario::new("ls");
     let files = ls.cmd("ls").arg("-l").run();
@@ -57,7 +57,6 @@ fn test_invalid_file() {
     println!("{:?}", files.stderr);
 
     let folder_name = "asdf".to_string();
-    at.mkdir(&folder_name);
 
     let result = ucmd.arg(&folder_name).run();
 
