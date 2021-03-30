@@ -71,6 +71,38 @@ fn test_dictionary_order() {
 }
 
 #[test]
+fn test_non_printing_chars() {
+    for non_printing_chars_param in vec!["--"] {
+        let input = r#"blind\n\bsleading\ack\nthe\nblind\esc"#;
+        new_ucmd!()
+            .arg(non_printing_chars_param)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only("");
+    }
+}
+
+#[test]
+fn test_mixed_floats_ints_chars_numeric() {
+    test_helper("mixed_floats_ints_chars_numeric", "-n");
+}
+
+#[test]
+fn test_mixed_floats_ints_chars_numeric_unique() {
+    test_helper("mixed_floats_ints_chars_numeric_unique", "-nu");
+}
+
+#[test]
+fn test_mixed_floats_ints_chars_numeric_reverse() {
+    test_helper("mixed_floats_ints_chars_numeric_unique_reverse", "-nur");
+}
+
+#[test]
+fn test_mixed_floats_ints_chars_numeric_stable() {
+    test_helper("mixed_floats_ints_chars_numeric_stable", "-ns");
+}
+
+#[test]
 fn test_numeric_floats_and_ints2() {
     for numeric_sort_param in vec!["-n", "--numeric-sort"] {
         let input = "1.444\n8.013\n1\n-8\n1.04\n-1";

@@ -25,6 +25,7 @@ use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Lines, Read, Write};
 use std::mem::replace;
 use std::path::Path;
 use uucore::fs::is_stdin_interactive; // for Iterator::dedup()
+use ascii::AsciiChar;
 
 static NAME: &str = "sort";
 static ABOUT: &str = "Display sorted concatenation of all FILE(s).";
@@ -715,7 +716,7 @@ fn remove_nondictionary_chars(s: &str) -> String {
 fn remove_nonprinting_chars(s: &str) -> String {
     // However, printing chars is more permissive.
     s.chars()
-        .filter(|c| c.is_alphanumeric() || c.is_whitespace())
+        .filter(|c| AsciiChar::new(*c).is_ascii_printable() )
         .collect::<String>()
 }
 
@@ -753,67 +754,5 @@ fn open(path: &str) -> Option<(Box<dyn Read>, bool)> {
             show_error!("sort: {0}: {1}", path, e.to_string());
             None
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-
-    use super::*;
-
-    #[test]
-    fn test_default_compare() {
-        let a = "your own";
-        let b = "your place";
-
-        assert_eq!(Ordering::Less, default_compare(a, b));
-    }
-
-    #[test]
-    fn test_numeric_compare1() {
-        let a = "149:7";
-        let b = "150:5";
-
-        assert_eq!(Ordering::Less, numeric_compare(a, b));
-    }
-
-    #[test]
-    fn test_numeric_compare2() {
-        let a = "-1.02";
-        let b = "1";
-
-        assert_eq!(Ordering::Less, numeric_compare(a, b));
-    }
-
-    #[test]
-    fn test_human_numeric_compare() {
-        let a = "300K";
-        let b = "1M";
-
-        assert_eq!(Ordering::Less, human_numeric_size_compare(a, b));
-    }
-
-    #[test]
-    fn test_month_compare() {
-        let a = "JaN";
-        let b = "OCt";
-
-        assert_eq!(Ordering::Less, month_compare(a, b));
-    }
-    #[test]
-    fn test_version_compare() {
-        let a = "1.2.3-alpha2";
-        let b = "1.4.0";
-
-        assert_eq!(Ordering::Less, version_compare(a, b));
-    }
-
-    #[test]
-    fn test_random_compare() {
-        let a = "9";
-        let b = "9";
-        let c = get_rand_string();
-
-        assert_eq!(Ordering::Equal, random_shuffle(a, b, c));
     }
 }

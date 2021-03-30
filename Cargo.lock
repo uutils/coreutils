@@ -38,6 +38,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "ascii"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbf56136a5198c7b01a49e3afcbef6cf84597273d298f54432926024107b0109"
+
+[[package]]
 name = "atty"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2232,6 +2238,7 @@ dependencies = [
 name = "uu_sort"
 version = "0.0.4"
 dependencies = [
+ "ascii",
  "clap",
  "fnv",
  "itertools 0.8.2",
