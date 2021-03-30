@@ -53,9 +53,10 @@ pub fn is_wsl() -> bool {
     false
 }
 
-fn read_scenario_fixture<S: AsRef<OsStr>>(tmpd: &Option<Rc<TempDir>>, file_rel_path: S) -> String {
+/// Read a test scenario fixture, returning its bytes
+fn read_scenario_fixture<S: AsRef<OsStr>>(tmpd: &Option<Rc<TempDir>>, file_rel_path: S) -> Vec<u8> {
     let tmpdir_path = tmpd.as_ref().unwrap().as_ref().path();
-    AtPath::new(tmpdir_path).read(file_rel_path.as_ref().to_str().unwrap())
+    AtPath::new(tmpdir_path).read_bytes(file_rel_path.as_ref().to_str().unwrap())
 }
 
 /// A command result is the outputs of a command (streams and status code)
@@ -63,19 +64,85 @@ fn read_scenario_fixture<S: AsRef<OsStr>>(tmpd: &Option<Rc<TempDir>>, file_rel_p
 #[derive(Debug)]
 pub struct CmdResult {
     //tmpd is used for convenience functions for asserts against fixtures
-    tmpd: Option<Rc<TempDir>>,
+    pub tmpd: Option<Rc<TempDir>>,
     /// exit status for command (if there is one)
     pub code: Option<i32>,
     /// zero-exit from running the Command?
     /// see [`success`]
     pub success: bool,
-    /// captured utf-8 standard output after running the Command
+    /// captured standard output after running the Command
     pub stdout: String,
-    /// captured utf-8 standard error after running the Command
+    /// captured standard error after running the Command
     pub stderr: String,
 }
 
 impl CmdResult {
+    /// Returns a reference to the program's standard output as a slice of bytes
+    pub fn stdout(&self) -> &[u8] {
+        &self.stdout.as_bytes()
+    }
+
+    /// Returns the program's standard output as a string slice
+    pub fn stdout_str(&self) -> &str {
+        &self.stdout
+    }
+
+    /// Returns the program's standard output as a string
+    /// consumes self
+    pub fn stdout_move_str(self) -> String {
+        self.stdout
+    }
+
+    /// Returns the program's standard output as a vec of bytes
+    /// consumes self
+    pub fn stdout_move_bytes(self) -> Vec<u8> {
+        Vec::from(self.stdout)
+    }
+
+    /// Returns a reference to the program's standard error as a slice of bytes
+    pub fn stderr(&self) -> &[u8] {
+        &self.stderr.as_bytes()
+    }
+
+    /// Returns the program's standard error as a string slice
+    pub fn stderr_str(&self) -> &str {
+        &self.stderr
+    }
+
+    /// Returns the program's standard error as a string
+    /// consumes self
+    pub fn stderr_move_str(self) -> String {
+        self.stderr
+    }
+
+    /// Returns the program's standard error as a vec of bytes
+    /// consumes self
+    pub fn stderr_move_bytes(self) -> Vec<u8> {
+        Vec::from(self.stderr)
+    }
+
+    /// Returns the program's exit code
+    /// Panics if not run
+    pub fn code(&self) -> i32 {
+        self.code.expect("Program must be run first")
+    }
+
+    /// Retunrs the program's TempDir
+    /// Panics if not present
+    pub fn tmpd(&self) -> Rc<TempDir> {
+        match &self.tmpd {
+            Some(ptr) => ptr.clone(),
+            None => {
+                panic!("Command not associated with a TempDir")
+            }
+        }
+    }
+
+    /// Returns whether the program succeeded
+    pub fn succeeded(&self) -> bool {
+        self.success
+    }
+
     /// asserts that the command resulted in a success (zero) status code
     pub fn success(&self) -> Box<&CmdResult> {
         assert!(self.success);
@@ -100,7 +167,7 @@ impl CmdResult {
     /// 1. you can not know exactly what stdout will be
     /// or 2. you know that stdout will also be empty
     pub fn no_stderr(&self) -> Box<&CmdResult> {
-        assert_eq!(self.stderr, "");
+        assert!(self.stderr.is_empty());
         Box::new(self)
     }
 
@@ -111,7 +178,7 @@ impl CmdResult {
     /// 1. you can not know exactly what stderr will be
     /// or 2. you know that stderr will also be empty
     pub fn no_stdout(&self) -> Box<&CmdResult> {
-        assert_eq!(self.stdout, "");
+        assert!(self.stdout.is_empty());
         Box::new(self)
     }
 
@@ -123,10 +190,18 @@ impl CmdResult {
         Box::new(self)
     }
 
+    /// asserts that the command resulted in stdout stream output,
+    /// whose bytes equal those of the passed in slice
+    pub fn stdout_is_bytes<T: AsRef<[u8]>>(&self, msg: T) -> Box<&CmdResult> {
+        assert_eq!(self.stdout.as_bytes(), msg.as_ref());
+        Box::new(self)
+    }
+
+
     /// like stdout_is(...), but expects the contents of the file at the provided relative path
     pub fn stdout_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> Box<&CmdResult> {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
-        self.stdout_is(contents)
+        self.stdout_is_bytes(contents)
     }
 
     /// asserts that the command resulted in stderr stream output that equals the
@@ -140,6 +215,13 @@ impl CmdResult {
         Box::new(self)
     }
 
+    /// asserts that the command resulted in stderr stream output,
+    /// whose bytes equal those of the passed in slice
+    pub fn stderr_is_bytes<T: AsRef<[u8]>>(&self, msg: T) -> Box<&CmdResult> {
+        assert_eq!(self.stderr.as_bytes(), msg.as_ref());
+        Box::new(self)
+    }
+
     /// asserts that
     /// 1. the command resulted in stdout stream output that equals the
     /// passed in value, when both are trimmed of trailing whitespace
@@ -148,10 +230,18 @@ impl CmdResult {
         self.no_stderr().stdout_is(msg)
     }
 
+    /// asserts that
+    /// 1.  the command resulted in a stdout stream whose bytes
+    ///     equal those of the passed in value
+    /// 2.  the command resulted in an empty stderr stream
+    pub fn stdout_only_bytes<T: AsRef<[u8]>>(&self, msg: T) -> Box<&CmdResult> {
+        self.no_stderr().stdout_is_bytes(msg)
+    }
+
     /// like stdout_only(...), but expects the contents of the file at the provided relative path
     pub fn stdout_only_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> Box<&CmdResult> {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
-        self.stdout_only(contents)
+        self.stdout_only_bytes(contents)
     }
 
     /// asserts that
@@ -162,9 +252,27 @@ impl CmdResult {
         self.no_stdout().stderr_is(msg)
     }
 
+    /// asserts that
+    /// 1.  the command resulted in a stderr stream whose bytes equal the ones
+    ///     of the passed value
+    /// 2.  the command resulted in an empty stdout stream
+    pub fn stderr_only_bytes<T: AsRef<[u8]>>(&self, msg: T) -> Box<&CmdResult> {
+        self.no_stderr().stderr_is_bytes(msg)
+    }
+
     pub fn fails_silently(&self) -> Box<&CmdResult> {
         assert!(!self.success);
-        assert_eq!(self.stderr, "");
+        assert!(self.stderr.is_empty());
+        Box::new(self)
+    }
+
+    pub fn stdout_contains<T: AsRef<str>>(&self, cmp: T) -> Box<&CmdResult> {
+        assert!(self.stdout_str().contains(cmp.as_ref()));
+        Box::new(self)
+    }
+
+    pub fn stderr_contains<T: AsRef<str>>(&self, cmp: &T) -> Box<&CmdResult> {
+        assert!(self.stderr_str().contains(cmp.as_ref()));
         Box::new(self)
     }
 }
@@ -255,9 +363,23 @@ impl AtPath {
         contents
     }
 
+    pub fn read_bytes(&self, name: &str) -> Vec<u8> {
+        let mut f = self.open(name);
+        let mut contents = Vec::new();
+        f.read_to_end(&mut contents)
+            .unwrap_or_else(|e| panic!("Couldn't read {}: {}", name, e));
+        contents
+    }
+
     pub fn write(&self, name: &str, contents: &str) {
         log_info("open(write)", self.plus_as_string(name));
         let _ = std::fs::write(self.plus(name), contents);
+    }
+
+    pub fn write_bytes(&self, name: &str, contents: &[u8]) {
+        log_info("open(write)", self.plus_as_string(name));
+        std::fs::write(self.plus(name), contents)
+            .unwrap_or_else(|e| panic!("Couldn't write {}: {}", name, e));
     }
 
     pub fn append(&self, name: &str, contents: &str) {
@@ -268,6 +390,17 @@ impl AtPath {
             .open(self.plus(name))
             .unwrap();
         let _ = f.write(contents.as_bytes());
+    }
+
+    pub fn append_bytes(&self, name: &str, contents: &[u8]) {
+        log_info("open(append)", self.plus_as_string(name));
+        let mut f = OpenOptions::new()
+            .write(true)
+            .append(true)
+            .open(self.plus(name))
+            .unwrap();
+        f.write_all(contents)
+            .unwrap_or_else(|e| panic!("Couldn't append to {}: {}", name, e));
     }
 
     pub fn mkdir(&self, dir: &str) {
