@@ -84,8 +84,8 @@ impl CmdResult {
     /// Returns the programs standard output as a string slice
     /// Panics if not valid UTF8 (use stdout() + from_utf8_lossy)
     /// if you need a String representation
-    pub fn stdout_str(&self) -> String {
-        String::from_utf8(self.stdout.clone()).expect("Program's stdout is not valid UTF8")
+    pub fn stdout_str(&self) -> &str {
+        std::str::from_utf8(&self.stdout).expect("Program's stdout is not valid UTF8")
     }
 
     /// Returns a reference to the program's standard error as a vector of bytes
@@ -96,8 +96,8 @@ impl CmdResult {
     /// Returns the programs standard error as a string slice
     /// Panics if not valid UTF8 (use stderr() + from_utf8_lossy)
     /// if you need a String representation
-    pub fn stderr_str(&self) -> String {
-        String::from_utf8(self.stderr.clone()).expect("Program's stderr is not valid UTF8")
+    pub fn stderr_str(&self) -> &str {
+        std::str::from_utf8(&self.stderr).expect("Program's stderr is not valid UTF8")
     }
 
     /// Returns the programs exit code
