@@ -84,8 +84,8 @@ impl CmdResult {
     /// Returns the programs standard output as a string slice
     /// Panics if not valid UTF8 (use stdout() + from_utf8_lossy)
     /// if you need a String representation
-    pub fn stdout_str(&self) -> &str {
-        std::str::from_utf8(&self.stdout).expect("Program's stdout is not valid UTF8")
+    pub fn stdout_str(&self) -> String {
+        String::from_utf8(self.stdout.clone()).expect("Program's stdout is not valid UTF8")
     }
 
     /// Returns a reference to the program's standard error as a vector of bytes
@@ -96,8 +96,8 @@ impl CmdResult {
     /// Returns the programs standard error as a string slice
     /// Panics if not valid UTF8 (use stderr() + from_utf8_lossy)
     /// if you need a String representation
-    pub fn stderr_str(&self) -> &str {
-        std::str::from_utf8(&self.stderr()).expect("Program's stderr is not valid UTF8")
+    pub fn stderr_str(&self) -> String {
+        String::from_utf8(self.stderr.clone()).expect("Program's stderr is not valid UTF8")
     }
 
     /// Returns the programs exit code
@@ -109,7 +109,14 @@ impl CmdResult {
     /// Retunrs the program's TempDir
     /// Panics if not present
     pub fn tmpd(&self) -> Rc<TempDir> {
-        self.tmpd.expect("Command not associated with a TempDir")
+        match &self.tmpd {
+            Some(ptr) => {
+                ptr.clone()
+            }
+            None => {
+                panic!("Command not associated with a TempDir")
+            }
+        }
     }
 
     /// Returns whether the program succeeded
@@ -182,7 +189,7 @@ impl CmdResult {
     /// stderr_only is a better choice unless stdout may or will be non-empty
     pub fn stderr_is<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
         assert_eq!(
-            String::from_utf8(self.stderr)
+            String::from_utf8(self.stderr.clone())
                 .expect("Bad UTF8; use stderr_bytes for encoding agnostic checking")
                 .trim_end(),
             String::from(msg.as_ref()).trim_end()
