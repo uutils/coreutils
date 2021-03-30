@@ -4,8 +4,8 @@
 #[macro_export]
 macro_rules! assert_empty_stderr(
     ($cond:expr) => (
-        if $cond.stderr.len() > 0 {
-            panic!(format!("stderr: {}", $cond.stderr))
+        if $cond.stderr().len() > 0 {
+            panic!(format!("stderr: {}", String::from_utf8_lossy(&$cond.stderr())))
         }
     );
 );
