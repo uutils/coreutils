@@ -11,13 +11,14 @@
 #[macro_use]
 extern crate uucore;
 
+use ascii::AsciiChar;
 use clap::{App, Arg};
 use fnv::FnvHasher;
 use itertools::Itertools;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use semver::Version;
-use std::{cmp::Ordering};
+use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::fs::File;
 use std::hash::{Hash, Hasher};
@@ -25,7 +26,6 @@ use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Lines, Read, Write};
 use std::mem::replace;
 use std::path::Path;
 use uucore::fs::is_stdin_interactive; // for Iterator::dedup()
-use ascii::AsciiChar;
 
 static NAME: &str = "sort";
 static ABOUT: &str = "Display sorted concatenation of all FILE(s).";
@@ -491,7 +491,7 @@ fn default_compare(a: &str, b: &str, _: &Settings) -> Ordering {
 }
 
 fn last_resort_compare(a: &str, b: &str, x: &Settings) -> Ordering {
-    if x.stable || x.unique { 
+    if x.stable || x.unique {
         Ordering::Equal
     } else {
         default_compare(a, b, x)
@@ -544,7 +544,9 @@ fn permissive_f64_parse(a: &str) -> f64 {
     let mut a = a.replace(THOUSANDS_SEP, "");
 
     // Empty number lines are treated as ‘0’
-    if a.is_empty() { a = "0".to_string() };
+    if a.is_empty() {
+        a = "0".to_string()
+    };
 
     // GNU sort treats "NaN" as non-number in numeric, so it needs special care.
     match a.parse::<f64>() {
@@ -597,7 +599,7 @@ fn human_numeric_convert(a: &str) -> f64 {
 
 /// Compare two strings as if they are human readable sizes.
 /// AKA 1M > 100k
-fn human_numeric_size_compare(a: &str, b: &str, x: &Settings)-> Ordering {
+fn human_numeric_size_compare(a: &str, b: &str, x: &Settings) -> Ordering {
     #![allow(clippy::comparison_chain)]
     let fa = human_numeric_convert(a);
     let fb = human_numeric_convert(b);
@@ -716,7 +718,7 @@ fn remove_nondictionary_chars(s: &str) -> String {
 fn remove_nonprinting_chars(s: &str) -> String {
     // However, printing chars is more permissive.
     s.chars()
-        .filter(|c| AsciiChar::new(*c).is_ascii_printable() )
+        .filter(|c| AsciiChar::new(*c).is_ascii_printable())
         .collect::<String>()
 }
 
