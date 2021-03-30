@@ -59,10 +59,10 @@ fn test_invalid_file() {
     let folder_name = "asdf".to_string();
     at.mkdir(&folder_name);
 
-    let result = ucmd.arg(&folder_name).fails();
+    let result = ucmd.arg(&folder_name).run();
 
-    println!("{:?}", result.stdout);
-    println!("{:?}", result.stderr);
+    println!("stdout: {:?}", result.stdout);
+    println!("stderr: {:?}", result.stderr);
     assert!(result.stderr.contains("cksum: error: 'asdf'"));
     assert!(!result.success);
 }
