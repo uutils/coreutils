@@ -19,7 +19,7 @@ fn test_rm_failed() {
 
     let result = ucmd.arg(file).fails(); // Doesn't exist
 
-    assert!(result.stderr.contains(&format!(
+    assert!(result.stderr_str().contains(&format!(
         "cannot remove '{}': No such file or directory",
         file
     )));
@@ -147,7 +147,7 @@ fn test_rm_non_empty_directory() {
 
     let result = ucmd.arg("-d").arg(dir).fails();
     assert!(result
-        .stderr
+        .stderr_str()
         .contains(&format!("cannot remove '{}': Directory not empty", dir)));
     assert!(at.file_exists(file_a));
     assert!(at.dir_exists(dir));
@@ -179,9 +179,9 @@ fn test_rm_directory_without_flag() {
     at.mkdir(dir);
   
     let result = ucmd.arg(dir).fails();
-    println!("{}", result.stderr);
+    println!("{}", result.stderr_str());
     assert!(result
-        .stderr
+        .stderr_str()
         .contains(&format!("cannot remove '{}': Is a directory", dir)));
 }
 
