@@ -430,6 +430,14 @@ impl TestScenario {
         UCommand::new_from_tmp(bin, self.tmpd.clone(), true)
     }
 
+    /// Returns builder for invoking any uutils command. Paths given are treated
+    /// relative to the environment's unique temporary test directory.
+    pub fn ccmd<S: AsRef<OsStr>>(&self, bin: S) -> UCommand {
+        let mut cmd = self.cmd(&self.bin_path);
+        cmd.arg(bin);
+        cmd
+    }
+
     // different names are used rather than an argument
     // because the need to keep the environment is exceedingly rare.
     pub fn ucmd_keepenv(&self) -> UCommand {
