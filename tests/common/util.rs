@@ -65,17 +65,41 @@ pub struct CmdResult {
     //tmpd is used for convenience functions for asserts against fixtures
     tmpd: Option<Rc<TempDir>>,
     /// exit status for command (if there is one)
-    pub code: Option<i32>,
+    code: Option<i32>,
     /// zero-exit from running the Command?
     /// see [`success`]
-    pub success: bool,
+    success: bool,
     /// captured standard output after running the Command
-    pub stdout: Vec<u8>,
+    stdout: Vec<u8>,
     /// captured standard error after running the Command
-    pub stderr: Vec<u8>,
+    stderr: Vec<u8>,
 }
 
 impl CmdResult {
+    /// Returns a reference to the program's standard output as a vector of bytes
+    pub fn stdout(&self) -> &Vec<u8> {
+        &self.stdout
+    }
+
+    /// Returns the programs standard output as a string slice
+    /// Panics if not valid UTF8 (use stdout() + from_utf8_lossy)
+    /// if you need a String representation
+    pub fn stdout_str(&self) -> &str {
+        std::str::from_utf8(&self.stdout).expect("Program's stdout is not valid UTF8")
+    }
+
+    /// Returns a reference to the program's standard error as a vector of bytes
+    pub fn stderr(&self) -> &Vec<u8> {
+        &self.stderr
+    }
+
+    /// Returns the programs standard error as a string slice
+    /// Panics if not valid UTF8 (use stderr() + from_utf8_lossy)
+    /// if you need a String representation
+    pub fn stderr_str(&self) -> &str {
+        std::str::from_utf8(&self.stderr()).expect("Program's stderr is not valid UTF8")
+    }
+
     /// asserts that the command resulted in a success (zero) status code
     pub fn success(&self) -> Box<&CmdResult> {
         assert!(self.success);
