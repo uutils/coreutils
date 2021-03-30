@@ -24,3 +24,15 @@ if changes are not reflected in the report then run `cargo clean`  and run the a
 If you are using stable version of Rust that doesn't enable code coverage instrumentation by default 
 then add `-Z-Zinstrument-coverage` flag to `RUSTFLAGS` env variable specified above.
 
+
+pre-commit hooks
+----------------
+
+A configuration for `pre-commit` is provided in the repository. It allows automatically checking every git commit you make to ensure it compiles, and passes `clippy` and `rustfmt` without warnings.
+
+To use the provided hook:
+
+1. [Install `pre-commit`](https://pre-commit.com/#install)
+2. Run `pre-commit install` while in the repository directory
+
+Your git commits will then automatically be checked. If a check fails, an error message will explain why, and your commit will be canceled. You can then make the suggested changes, and run `git commit ...` again.
