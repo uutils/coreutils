@@ -13,8 +13,7 @@ fn test_output_is_random_permutation() {
         .pipe_in(input.as_bytes())
         .succeeds()
         .no_stderr()
-        .stdout
-        .clone();
+        .stdout_str();
 
     let mut result_seq: Vec<i32> = result
         .split("\n")
@@ -34,8 +33,7 @@ fn test_zero_termination() {
         .arg("-i1-10")
         .succeeds()
         .no_stderr()
-        .stdout
-        .clone();
+        .stdout_str();
 
     let mut result_seq: Vec<i32> = result
         .split("\0")
@@ -59,8 +57,7 @@ fn test_echo() {
         )
         .succeeds()
         .no_stderr()
-        .stdout
-        .clone();
+        .stdout_str();
 
     let mut result_seq: Vec<i32> = result
         .split("\n")
@@ -86,8 +83,7 @@ fn test_head_count() {
         .pipe_in(input.as_bytes())
         .succeeds()
         .no_stderr()
-        .stdout
-        .clone();
+        .stdout_str();
 
     let mut result_seq: Vec<i32> = result
         .split("\n")
@@ -118,8 +114,7 @@ fn test_repeat() {
         .pipe_in(input.as_bytes())
         .succeeds()
         .no_stderr()
-        .stdout
-        .clone();
+        .stdout_str();
 
     let result_seq: Vec<i32> = result
         .split("\n")
@@ -151,8 +146,7 @@ fn test_file_input() {
         .arg("file_input.txt")
         .succeeds()
         .no_stderr()
-        .stdout
-        .clone();
+        .stdout_str();
 
     let mut result_seq: Vec<i32> = result
         .split("\n")
@@ -165,52 +159,46 @@ fn test_file_input() {
 
 #[test]
 fn test_shuf_echo_and_input_range_not_allowed() {
-    let result = new_ucmd!().args(&["-e", "0", "-i", "0-2"]).run();
+    let result = new_ucmd!().args(&["-e", "0", "-i", "0-2"]).fails();
 
-    assert!(!result.success);
-    assert!(result
-        .stderr
+     assert!(result
+        .stderr_str()
         .contains("The argument '--input-range <LO-HI>' cannot be used with '--echo <ARG>...'"));
 }
 
 #[test]
 fn test_shuf_input_range_and_file_not_allowed() {
-    let result = new_ucmd!().args(&["-i", "0-9", "file"]).run();
+    let result = new_ucmd!().args(&["-i", "0-9", "file"]).fails();
 
-    assert!(!result.success);
     assert!(result
-        .stderr
+        .stderr_str()
         .contains("The argument '<file>' cannot be used with '--input-range <LO-HI>'"));
 }
 
 #[test]
 fn test_shuf_invalid_input_range_one() {
-    let result = new_ucmd!().args(&["-i", "0"]).run();
+    let result = new_ucmd!().args(&["-i", "0"]).fails();
 
-    assert!(!result.success);
-    assert!(result.stderr.contains("invalid input range"));
+    assert!(result.stderr_str().contains("invalid input range"));
 }
 
 #[test]
 fn test_shuf_invalid_input_range_two() {
-    let result = new_ucmd!().args(&["-i", "a-9"]).run();
+    let result = new_ucmd!().args(&["-i", "a-9"]).fails();
 
-    assert!(!result.success);
-    assert!(result.stderr.contains("invalid input range: 'a'"));
+    assert!(result.stderr_str().contains("invalid input range: 'a'"));
 }
 
 #[test]
 fn test_shuf_invalid_input_range_three() {
-    let result = new_ucmd!().args(&["-i", "0-b"]).run();
+    let result = new_ucmd!().args(&["-i", "0-b"]).fails();
 
-    assert!(!result.success);
-    assert!(result.stderr.contains("invalid input range: 'b'"));
+    assert!(result.stderr_str().contains("invalid input range: 'b'"));
 }
 
 #[test]
 fn test_shuf_invalid_input_line_count() {
-    let result = new_ucmd!().args(&["-n", "a"]).run();
+    let result = new_ucmd!().args(&["-n", "a"]).fails();
 
-    assert!(!result.success);
-    assert!(result.stderr.contains("invalid line count: 'a'"));
+    assert!(result.stderr_str().contains("invalid line count: 'a'"));
 }
