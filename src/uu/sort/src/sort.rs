@@ -406,7 +406,7 @@ fn exec(files: Vec<String>, settings: &mut Settings) -> i32 {
         print_sorted(
             lines
                 .iter()
-                .dedup_by(|a, b| number_for_numbered_line(a) == number_for_numbered_line(b)),
+                .dedup_by(|a, b| leading_num_numlines(a) == leading_num_numlines(b)),
             &settings.outfile,
         )
     } else if settings.unique {
@@ -515,12 +515,14 @@ fn get_leading_number(a: &str) -> &str {
 // Matches GNU behavior, see:
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 // Specifically *not* the same as sort -n | uniq
-fn number_for_numbered_line(a: &str) -> &str {
+fn leading_num_numlines(a: &str) -> &str {
     let s = a.trim().chars().nth(0).unwrap_or('\0');
     // GNU states: "An empty number is treated as ‘0’?
-    // As far as i can tell this means empty lines, non-leading number lines 
+    // As far as i can tell this means empty lines, non-leading number lines
     // and 0s are all made equivalent to an empty string
     if a.is_empty() {
+        return "";
+    } else if s.is_whitespace() {
         return "";
     } else if !s.eq(&MINUS_SIGN) && !s.is_numeric() {
         return "";
@@ -533,37 +535,9 @@ fn number_for_numbered_line(a: &str) -> &str {
 }
 
 /// Parse the beginning string into an f64, returning -inf instead of NaN on errors.
-fn permissive_i64_parse(a: &str) -> i64 {
-    // GNU sort treats "NaN" as non-number in numeric, so it needs special care.
-    match a.parse::<i64>() {
-        Ok(a) => a,
-        Err(_) => match a.parse::<f64>() {
-            Err(_err) => 0i64,
-            Ok(val) => {
-                if val.is_nan() {
-                    0i64
-                } else {
-                    val as i64
-                }
-            }
-        },
-    }
-}
-
-fn numeric_compare(a: &str, b: &str) -> Ordering {
-    #![allow(clippy::comparison_chain)]
-
-    let sa = get_leading_number(a);
-    let sb = get_leading_number(b);
-
-    let ia = permissive_i64_parse(sa);
-    let ib = permissive_i64_parse(sb);
-
-    ia.cmp(&ib)
-}
-
-/// Parse the beginning string into an f64, returning -inf instead of NaN on errors.
 fn permissive_f64_parse(a: &str) -> f64 {
+    // Remove thousands seperators
+    let a = a.replace(THOUSANDS_SEP, "");
 
     // GNU sort treats "NaN" as non-number in numeric, so it needs special care.
     match a.parse::<f64>() {
@@ -571,6 +545,11 @@ fn permissive_f64_parse(a: &str) -> f64 {
         Ok(a) => a,
         Err(_) => std::f64::NEG_INFINITY,
     }
+}
+
+fn numeric_compare(a: &str, b: &str) -> Ordering {
+    // Stub for when Rust gets strnumcmp and we can do this with ints
+    general_numeric_compare(a, b)
 }
 
 /// Compares two floats, with errors and non-numerics assumed to be -inf.
@@ -601,7 +580,6 @@ fn general_numeric_compare(a: &str, b: &str) -> Ordering {
     } else {
         Ordering::Equal
     }
-
 }
 
 fn human_numeric_convert(a: &str) -> f64 {
@@ -636,16 +614,6 @@ fn human_numeric_size_compare(a: &str, b: &str) -> Ordering {
     }
 }
 
-fn random_shuffle(a: &str, b: &str, salt: String) -> Ordering {
-    #![allow(clippy::comparison_chain)]
-    let salt_slice = salt.as_str();
-
-    let da = hash(&[a, salt_slice].concat());
-    let db = hash(&[b, salt_slice].concat());
-
-    da.cmp(&db)
-}
-
 fn get_rand_string() -> String {
     thread_rng()
         .sample_iter(&Alphanumeric)
@@ -658,6 +626,16 @@ fn hash<T: Hash>(t: &T) -> u64 {
     let mut s: FnvHasher = Default::default();
     t.hash(&mut s);
     s.finish()
+}
+
+fn random_shuffle(a: &str, b: &str, salt: String) -> Ordering {
+    #![allow(clippy::comparison_chain)]
+    let salt_slice = salt.as_str();
+
+    let da = hash(&[a, salt_slice].concat());
+    let db = hash(&[b, salt_slice].concat());
+
+    da.cmp(&db)
 }
 
 #[derive(Eq, Ord, PartialEq, PartialOrd)]
