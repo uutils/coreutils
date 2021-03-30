@@ -36,11 +36,10 @@ fn test_file() {
     let result = new_ucmd!()
         .arg("--endian=little")
         .arg(file.as_os_str())
-        .run();
+        .succeeds();
 
     assert_empty_stderr!(result);
-    assert!(result.success);
-    assert_eq!(result.stdout, unindent(ALPHA_OUT));
+    assert_eq!(result.stdout_str(), unindent(ALPHA_OUT));
 
     let _ = remove_file(file);
 }
@@ -68,11 +67,10 @@ fn test_2files() {
         .arg("--endian=little")
         .arg(file1.as_os_str())
         .arg(file2.as_os_str())
-        .run();
+        .succeeds();
 
     assert_empty_stderr!(result);
-    assert!(result.success);
-    assert_eq!(result.stdout, unindent(ALPHA_OUT));
+    assert_eq!(result.stdout_str(), unindent(ALPHA_OUT));
 
     let _ = remove_file(file1);
     let _ = remove_file(file2);
@@ -85,9 +83,7 @@ fn test_no_file() {
     let tmpdir = Path::new(&temp);
     let file = tmpdir.join("}surely'none'would'thus'a'file'name");
 
-    let result = new_ucmd!().arg(file.as_os_str()).run();
-
-    assert!(!result.success);
+    let result = new_ucmd!().arg(file.as_os_str()).succeeds();
 }
 
 // Test that od reads from stdin instead of a file
@@ -96,11 +92,10 @@ fn test_from_stdin() {
     let input = "abcdefghijklmnopqrstuvwxyz\n";
     let result = new_ucmd!()
         .arg("--endian=little")
-        .run_piped_stdin(input.as_bytes());
+        .run_piped_stdin(input.as_bytes()).success();
 
     assert_empty_stderr!(result);
-    assert!(result.success);
-    assert_eq!(result.stdout, unindent(ALPHA_OUT));
+    assert_eq!(result.stdout_str(), unindent(ALPHA_OUT));
 }
 
 // Test that od reads from stdin and also from files
@@ -124,11 +119,11 @@ fn test_from_mixed() {
         .arg(file1.as_os_str())
         .arg("-")
         .arg(file3.as_os_str())
-        .run_piped_stdin(data2.as_bytes());
+        .run_piped_stdin(data2.as_bytes())
+        .success();
 
     assert_empty_stderr!(result);
-    assert!(result.success);
-    assert_eq!(result.stdout, unindent(ALPHA_OUT));
+    assert_eq!(result.stdout_str(), unindent(ALPHA_OUT));
 }
 
 #[test]
@@ -137,12 +132,12 @@ fn test_multiple_formats() {
     let result = new_ucmd!()
         .arg("-c")
         .arg("-b")
-        .run_piped_stdin(input.as_bytes());
+        .run_piped_stdin(input.as_bytes())
+        .success();
 
     assert_empty_stderr!(result);
-    assert!(result.success);
     assert_eq!(
-        result.stdout,
+        result.stdout_str(),
         unindent(
             "
             0000000   a   b   c   d   e   f   g   h   i   j   k   l   m   n   o   p
@@ -169,11 +164,11 @@ fn test_dec() {
     let result = new_ucmd!()
         .arg("--endian=little")
         .arg("-s")
-        .run_piped_stdin(&input[..]);
+        .run_piped_stdin(&input[..])
+        .success();
 
     assert_empty_stderr!(result);
-    assert!(result.success);
-    assert_eq!(result.stdout, expected_output);
+    assert_eq!(result.stdout_str(), expected_output);
 }
 
 #[test]
@@ -188,11 +183,11 @@ fn test_hex16() {
     let result = new_ucmd!()
         .arg("--endian=little")
         .arg("-x")
-        .run_piped_stdin(&input[..]);
+        .run_piped_stdin(&input[..])
+        .success();
 
     assert_empty_stderr!(result);
-    assert!(result.success);
-    assert_eq!(result.stdout, expected_output);
+    assert_eq!(result.stdout_str(), expected_output);
 }
 
 #[test]
@@ -207,11 +202,11 @@ fn test_hex32() {
     let result = new_ucmd!()
         .arg("--endian=little")
         .arg("-X")
-        .run_piped_stdin(&input[..]);
+        .run_piped_stdin(&input[..])
+        .success();
 
     assert_empty_stderr!(result);
-    assert!(result.success);
-    assert_eq!(result.stdout, expected_output);
+    assert_eq!(result.stdout_str(), expected_output);
 }
 
 #[test]
@@ -236,11 +231,11 @@ fn test_f16() {
         .arg("--endian=little")
         .arg("-tf2")
         .arg("-w8")
-        .run_piped_stdin(&input[..]);
+        .run_piped_stdin(&input[..])
+        .success();
 
     assert_empty_stderr!(result);
-    assert!(result.success);
-    assert_eq!(result.stdout, expected_output);
+    assert_eq!(result.stdout_str(), expected_output);
 }
 
 #[test]
@@ -264,11 +259,11 @@ fn test_f32() {
     let result = new_ucmd!()
         .arg("--endian=little")
         .arg("-f")
-        .run_piped_stdin(&input[..]);
+        .run_piped_stdin(&input[..])
+        .success();
 
     assert_empty_stderr!(result);
-    assert!(result.success);
-    assert_eq!(result.stdout, expected_output);
+    assert_eq!(result.stdout_str(), expected_output);
 }
 
 #[test]
@@ -294,11 +289,11 @@ fn test_f64() {
     let result = new_ucmd!()
         .arg("--endian=little")
         .arg("-F")
-        .run_piped_stdin(&input[..]);
+        .run_piped_stdin(&input[..])
+        .success();
 
     assert_empty_stderr!(result);
-    assert!(result.success);
-    assert_eq!(result.stdout, expected_output);
+    assert_eq!(result.stdout_str(), expected_output);
 }
 
 #[test]
@@ -306,12 +301,12 @@ fn test_multibyte() {
     let result = new_ucmd!()
         .arg("-c")
         .arg("-w12")
-        .run_piped_stdin("Universität Tübingen \u{1B000}".as_bytes());
+        .run_piped_stdin("Universität Tübingen \u{1B000}".as_bytes())
+        .success();
 
     assert_empty_stderr!(result);
-    assert!(result.success);
     assert_eq!(
-        result.stdout,
+        result.stdout_str(),
         unindent(
             "
             0000000   U   n   i   v   e   r   s   i   t   ä  **   t
@@ -334,11 +329,10 @@ fn test_width() {
             ",
     );
 
-    let result = new_ucmd!().arg("-w4").arg("-v").run_piped_stdin(&input[..]);
+    let result = new_ucmd!().arg("-w4").arg("-v").run_piped_stdin(&input[..]).success();
 
     assert_empty_stderr!(result);
-    assert!(result.success);
-    assert_eq!(result.stdout, expected_output);
+    assert_eq!(result.stdout_str(), expected_output);
 }
 
 #[test]
@@ -352,14 +346,13 @@ fn test_invalid_width() {
             ",
     );
 
-    let result = new_ucmd!().arg("-w5").arg("-v").run_piped_stdin(&input[..]);
+    let result = new_ucmd!().arg("-w5").arg("-v").run_piped_stdin(&input[..]).success();
 
     assert_eq!(
-        result.stderr,
+        result.stderr_str(),
         "od: warning: invalid width 5; using 2 instead\n"
     );
-    assert!(result.success);
-    assert_eq!(result.stdout, expected_output);
+    assert_eq!(result.stdout_str(), expected_output);
 }
 
 #[test]
@@ -373,14 +366,13 @@ fn test_zero_width() {
             ",
     );
 
-    let result = new_ucmd!().arg("-w0").arg("-v").run_piped_stdin(&input[..]);
+    let result = new_ucmd!().arg("-w0").arg("-v").run_piped_stdin(&input[..]).success();
 
     assert_eq!(
-        result.stderr,
+        result.stderr_str(),
         "od: warning: invalid width 0; using 2 instead\n"
     );
-    assert!(result.success);
-    assert_eq!(result.stdout, expected_output);
+    assert_eq!(result.stdout_str(), expected_output);
 }
 
 #[test]
@@ -392,11 +384,10 @@ fn test_width_without_value() {
             0000050
             ");
 
-    let result = new_ucmd!().arg("-w").run_piped_stdin(&input[..]);
+    let result = new_ucmd!().arg("-w").run_piped_stdin(&input[..]).success();
 
     assert_empty_stderr!(result);
-    assert!(result.success);
-    assert_eq!(result.stdout, expected_output);
+    assert_eq!(result.stdout_str(), expected_output);
 }
 
 #[test]
@@ -425,11 +416,11 @@ fn test_suppress_duplicates() {
         .arg("-w4")
         .arg("-O")
         .arg("-x")
-        .run_piped_stdin(&input[..]);
+        .run_piped_stdin(&input[..])
+        .success();
 
     assert_empty_stderr!(result);
-    assert!(result.success);
-    assert_eq!(result.stdout, expected_output);
+    assert_eq!(result.stdout_str(), expected_output);
 }
 
 #[test]
@@ -452,11 +443,11 @@ fn test_big_endian() {
         .arg("-f")
         .arg("-X")
         .arg("-x")
-        .run_piped_stdin(&input[..]);
+        .run_piped_stdin(&input[..])
+        .success();
 
     assert_empty_stderr!(result);
-    assert!(result.success);
-    assert_eq!(result.stdout, expected_output);
+    assert_eq!(result.stdout_str(), expected_output);
 }
 
 #[test]
@@ -479,11 +470,11 @@ fn test_alignment_Xxa() {
         .arg("-X")
         .arg("-x")
         .arg("-a")
-        .run_piped_stdin(&input[..]);
+        .run_piped_stdin(&input[..])
+        .success();
 
     assert_empty_stderr!(result);
-    assert!(result.success);
-    assert_eq!(result.stdout, expected_output);
+    assert_eq!(result.stdout_str(), expected_output);
 }
 
 #[test]
@@ -504,11 +495,11 @@ fn test_alignment_Fx() {
         .arg("--endian=little")
         .arg("-F")
         .arg("-x")
-        .run_piped_stdin(&input[..]);
+        .run_piped_stdin(&input[..])
+        .success();
 
     assert_empty_stderr!(result);
-    assert!(result.success);
-    assert_eq!(result.stdout, expected_output);
+    assert_eq!(result.stdout_str(), expected_output);
 }
 
 #[test]
@@ -533,11 +524,11 @@ fn test_maxuint() {
         .arg("-Oobtu8")
         .arg("-Dd")
         .arg("--format=u1")
-        .run_piped_stdin(&input[..]);
+        .run_piped_stdin(&input[..])
+        .success();
 
     assert_empty_stderr!(result);
-    assert!(result.success);
-    assert_eq!(result.stdout, expected_output);
+    assert_eq!(result.stdout_str(), expected_output);
 }
 
 #[test]
@@ -557,11 +548,11 @@ fn test_hex_offset() {
         .arg("-Ax")
         .arg("-X")
         .arg("-X")
-        .run_piped_stdin(&input[..]);
+        .run_piped_stdin(&input[..])
+        .success();
 
     assert_empty_stderr!(result);
-    assert!(result.success);
-    assert_eq!(result.stdout, expected_output);
+    assert_eq!(result.stdout_str(), expected_output);
 }
 
 #[test]
@@ -581,11 +572,11 @@ fn test_dec_offset() {
         .arg("-Ad")
         .arg("-X")
         .arg("-X")
-        .run_piped_stdin(&input[..]);
+        .run_piped_stdin(&input[..])
+        .success();
 
     assert_empty_stderr!(result);
-    assert!(result.success);
-    assert_eq!(result.stdout, expected_output);
+    assert_eq!(result.stdout_str(), expected_output);
 }
 
 #[test]
@@ -598,18 +589,16 @@ fn test_no_offset() {
         .arg("-An")
         .arg("-X")
         .arg("-X")
-        .run_piped_stdin(&input[..]);
+        .run_piped_stdin(&input[..])
+        .success();
 
     assert_empty_stderr!(result);
-    assert!(result.success);
-    assert_eq!(result.stdout, expected_output);
+    assert_eq!(result.stdout_str(), expected_output);
 }
 
 #[test]
 fn test_invalid_offset() {
-    let result = new_ucmd!().arg("-Ab").run();
-
-    assert!(!result.success);
+    let result = new_ucmd!().arg("-Ab").fails();
 }
 
 #[test]
@@ -618,12 +607,12 @@ fn test_skip_bytes() {
     let result = new_ucmd!()
         .arg("-c")
         .arg("--skip-bytes=5")
-        .run_piped_stdin(input.as_bytes());
+        .run_piped_stdin(input.as_bytes())
+        .success();
 
     assert_empty_stderr!(result);
-    assert!(result.success);
     assert_eq!(
-        result.stdout,
+        result.stdout_str(),
         unindent(
             "
             0000005   f   g   h   i   j   k   l   m   n   o   p   q
@@ -638,9 +627,8 @@ fn test_skip_bytes_error() {
     let input = "12345";
     let result = new_ucmd!()
         .arg("--skip-bytes=10")
-        .run_piped_stdin(input.as_bytes());
-
-    assert!(!result.success);
+        .run_piped_stdin(input.as_bytes())
+        .failure();
 }
 
 #[test]
@@ -649,11 +637,11 @@ fn test_read_bytes() {
     let result = new_ucmd!()
         .arg("--endian=little")
         .arg("--read-bytes=27")
-        .run_piped_stdin(input.as_bytes());
+        .run_piped_stdin(input.as_bytes())
+        .success();
 
     assert_empty_stderr!(result);
-    assert!(result.success);
-    assert_eq!(result.stdout, unindent(ALPHA_OUT));
+    assert_eq!(result.stdout_str(), unindent(ALPHA_OUT));
 }
 
 #[test]
@@ -662,12 +650,11 @@ fn test_ascii_dump() {
         0x00, 0x01, 0x0a, 0x0d, 0x10, 0x1f, 0x20, 0x61, 0x62, 0x63, 0x7d, 0x7e, 0x7f, 0x80, 0x90,
         0xa0, 0xb0, 0xc0, 0xd0, 0xe0, 0xf0, 0xff,
     ];
-    let result = new_ucmd!().arg("-tx1zacz").run_piped_stdin(&input[..]);
+    let result = new_ucmd!().arg("-tx1zacz").run_piped_stdin(&input[..]).success();
 
     assert_empty_stderr!(result);
-    assert!(result.success);
     assert_eq!(
-        result.stdout,
+        result.stdout_str(),
         unindent(
             r"
             0000000  00  01  0a  0d  10  1f  20  61  62  63  7d  7e  7f  80  90  a0  >...... abc}~....<
@@ -694,12 +681,11 @@ fn test_filename_parsing() {
         .arg("x")
         .arg("--")
         .arg("-f")
-        .run();
+        .succeeds();
 
     assert_empty_stderr!(result);
-    assert!(result.success);
     assert_eq!(
-        result.stdout,
+        result.stdout_str(),
         unindent(
             "
             000000   m   i   n   u   s  sp   l   o   w   e   r   c   a   s   e  sp
@@ -716,12 +702,12 @@ fn test_stdin_offset() {
     let result = new_ucmd!()
         .arg("-c")
         .arg("+5")
-        .run_piped_stdin(input.as_bytes());
+        .run_piped_stdin(input.as_bytes())
+        .success();
 
     assert_empty_stderr!(result);
-    assert!(result.success);
     assert_eq!(
-        result.stdout,
+        result.stdout_str(),
         unindent(
             "
             0000005   f   g   h   i   j   k   l   m   n   o   p   q
@@ -733,12 +719,11 @@ fn test_stdin_offset() {
 
 #[test]
 fn test_file_offset() {
-    let result = new_ucmd!().arg("-c").arg("--").arg("-f").arg("10").run();
+    let result = new_ucmd!().arg("-c").arg("--").arg("-f").arg("10").succeeds();
 
     assert_empty_stderr!(result);
-    assert!(result.success);
     assert_eq!(
-        result.stdout,
+        result.stdout_str(),
         unindent(
             r"
             0000010   w   e   r   c   a   s   e       f  \n
@@ -759,12 +744,12 @@ fn test_traditional() {
         .arg("-")
         .arg("10")
         .arg("0")
-        .run_piped_stdin(input.as_bytes());
+        .run_piped_stdin(input.as_bytes())
+        .success();
 
     assert_empty_stderr!(result);
-    assert!(result.success);
     assert_eq!(
-        result.stdout,
+        result.stdout_str(),
         unindent(
             r"
             0000010 (0000000)   i   j   k   l   m   n   o   p   q
@@ -784,12 +769,12 @@ fn test_traditional_with_skip_bytes_override() {
         .arg("--skip-bytes=10")
         .arg("-c")
         .arg("0")
-        .run_piped_stdin(input.as_bytes());
+        .run_piped_stdin(input.as_bytes())
+        .success();
 
     assert_empty_stderr!(result);
-    assert!(result.success);
     assert_eq!(
-        result.stdout,
+        result.stdout_str(),
         unindent(
             r"
             0000000   a   b   c   d   e   f   g   h   i   j   k   l   m   n   o   p
@@ -807,12 +792,12 @@ fn test_traditional_with_skip_bytes_non_override() {
         .arg("--traditional")
         .arg("--skip-bytes=10")
         .arg("-c")
-        .run_piped_stdin(input.as_bytes());
+        .run_piped_stdin(input.as_bytes())
+        .success();
 
     assert_empty_stderr!(result);
-    assert!(result.success);
     assert_eq!(
-        result.stdout,
+        result.stdout_str(),
         unindent(
             r"
             0000012   k   l   m   n   o   p
@@ -831,9 +816,7 @@ fn test_traditional_error() {
         .arg("0")
         .arg("0")
         .arg("0")
-        .run();
-
-    assert!(!result.success);
+        .fails();
 }
 
 #[test]
@@ -847,12 +830,12 @@ fn test_traditional_only_label() {
         .arg("-")
         .arg("10")
         .arg("0x10")
-        .run_piped_stdin(input.as_bytes());
+        .run_piped_stdin(input.as_bytes())
+        .success();
 
     assert_empty_stderr!(result);
-    assert!(result.success);
     assert_eq!(
-        result.stdout,
+        result.stdout_str(),
         unindent(
             r"
             (0000020)   i   j   k   l   m   n   o   p   q   r   s   t   u   v   w   x
