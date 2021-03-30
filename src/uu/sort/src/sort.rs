@@ -409,8 +409,6 @@ fn exec(files: Vec<String>, settings: &mut Settings) -> i32 {
                 .dedup_by(|a, b| leading_num_numlines(a) == leading_num_numlines(b)),
             &settings.outfile,
         )
-    } else if settings.unique {
-        print_sorted(lines.iter().dedup(), &settings.outfile)
     } else {
         print_sorted(lines.iter(), &settings.outfile)
     }
