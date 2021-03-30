@@ -73,7 +73,7 @@ struct Settings {
     unique: bool,
     check: bool,
     random: bool,
-    compare_fns: Vec<fn(&str, &str) -> Ordering>,
+    compare_fns: Vec<fn(&str, &str, &Settings) -> Ordering>,
     transform_fns: Vec<fn(&str) -> String>,
     salt: String,
 }
@@ -477,11 +477,7 @@ fn compare_by(a: &str, b: &str, settings: &Settings) -> Ordering {
     };
 
     for compare_fn in &settings.compare_fns {
-        let cmp: Ordering = if settings.random {
-            random_shuffle(a, b, settings.salt.clone())
-        } else {
-            compare_fn(a, b)
-        };
+        let cmp: Ordering = compare_fn(a, b, settings);
         if settings.reverse {
             return cmp.reverse();
         } else {
@@ -491,8 +487,16 @@ fn compare_by(a: &str, b: &str, settings: &Settings) -> Ordering {
     Ordering::Equal
 }
 
-fn default_compare(a: &str, b: &str) -> Ordering {
+fn default_compare(a: &str, b: &str, x: &Settings) -> Ordering {
     a.cmp(b)
+}
+
+fn last_resort_compare(a: &str, b: &str, x: &Settings) -> Ordering {
+    if x.stable || x.unique { 
+        Ordering::Equal
+    } else {
+        default_compare(a, b, x)
+    }
 }
 
 fn get_leading_number(a: &str) -> &str {
@@ -512,6 +516,7 @@ fn get_leading_number(a: &str) -> &str {
     return s;
 }
 
+// For all dedups
 // Specifically *not* the same as sort | uniq
 // See: https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 fn leading_num_numlines(a: &str) -> &str {
@@ -550,14 +555,14 @@ fn permissive_f64_parse(a: &str) -> f64 {
     }
 }
 
-fn numeric_compare(a: &str, b: &str) -> Ordering {
+fn numeric_compare(a: &str, b: &str, x: &Settings) -> Ordering {
     // Stub for when Rust gets strnumcmp and we can do this with ints
-    general_numeric_compare(a, b)
+    general_numeric_compare(a, b, x)
 }
 
 /// Compares two floats, with errors and non-numerics assumed to be -inf.
 /// Stops coercing at the first non-numeric char.
-fn general_numeric_compare(a: &str, b: &str) -> Ordering {
+fn general_numeric_compare(a: &str, b: &str, x: &Settings) -> Ordering {
     #![allow(clippy::comparison_chain)]
 
     let sa = get_leading_number(a);
@@ -572,13 +577,7 @@ fn general_numeric_compare(a: &str, b: &str) -> Ordering {
     } else if fa < fb {
         Ordering::Less
     } else {
-        // Do a standard compare strings first instead of 
-        // declaring Ordering::Equal. Matches GNU behavior.
-        if fa == 0f64 {
-            default_compare(a, b)
-        } else {
-            Ordering::Equal
-        }
+        last_resort_compare(a, b, x)
     }
 }
 
@@ -599,7 +598,7 @@ fn human_numeric_convert(a: &str) -> f64 {
 
 /// Compare two strings as if they are human readable sizes.
 /// AKA 1M > 100k
-fn human_numeric_size_compare(a: &str, b: &str) -> Ordering {
+fn human_numeric_size_compare(a: &str, b: &str, x: &Settings)-> Ordering {
     #![allow(clippy::comparison_chain)]
     let fa = human_numeric_convert(a);
     let fb = human_numeric_convert(b);
@@ -610,11 +609,7 @@ fn human_numeric_size_compare(a: &str, b: &str) -> Ordering {
     } else if fa < fb {
         Ordering::Less
     } else {
-        if fb == 0f64 {
-            default_compare(a, b)
-        } else {
-            Ordering::Equal
-        }
+        last_resort_compare(a, b, x)
     }
 }
 
@@ -632,9 +627,9 @@ fn hash<T: Hash>(t: &T) -> u64 {
     s.finish()
 }
 
-fn random_shuffle(a: &str, b: &str, salt: String) -> Ordering {
+fn random_shuffle(a: &str, b: &str, x: &Settings) -> Ordering {
     #![allow(clippy::comparison_chain)]
-    let salt_slice = salt.as_str();
+    let salt_slice = x.salt.as_str();
 
     let da = hash(&[a, salt_slice].concat());
     let db = hash(&[b, salt_slice].concat());
@@ -684,11 +679,20 @@ fn month_parse(line: &str) -> Month {
     }
 }
 
-fn month_compare(a: &str, b: &str) -> Ordering {
-    month_parse(a).cmp(&month_parse(b))
+fn month_compare(a: &str, b: &str, x: &Settings) -> Ordering {
+    let ma = month_parse(a);
+    let mb = month_parse(b);
+
+    if ma > mb {
+        Ordering::Greater
+    } else if ma < mb {
+        Ordering::Less
+    } else {
+        last_resort_compare(a, b, x)
+    }
 }
 
-fn version_compare(a: &str, b: &str) -> Ordering {
+fn version_compare(a: &str, b: &str, x: &Settings) -> Ordering {
     #![allow(clippy::comparison_chain)]
     let ver_a = Version::parse(a);
     let ver_b = Version::parse(b);
@@ -698,7 +702,7 @@ fn version_compare(a: &str, b: &str) -> Ordering {
     } else if ver_a < ver_b {
         Ordering::Less
     } else {
-        Ordering::Equal
+        last_resort_compare(a, b, x)
     }
 }
 
