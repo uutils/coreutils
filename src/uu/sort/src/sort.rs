@@ -717,7 +717,9 @@ fn remove_nondictionary_chars(s: &str) -> String {
 fn remove_nonprinting_chars(s: &str) -> String {
     // However, printing chars is more permissive.
     s.chars()
-        .filter(|c| c.is_ascii_punctuation() || c.is_ascii_alphanumeric() || c.is_ascii_whitespace())
+        .filter(|c| {
+            c.is_ascii_punctuation() || c.is_ascii_alphanumeric() || c.is_ascii_whitespace()
+        })
         .collect::<String>()
 }
 
