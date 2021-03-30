@@ -17,7 +17,7 @@ use itertools::Itertools;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use semver::Version;
-use std::{cmp::Ordering, default};
+use std::{cmp::Ordering};
 use std::collections::BinaryHeap;
 use std::fs::File;
 use std::hash::{Hash, Hasher};
@@ -485,7 +485,7 @@ fn compare_by(a: &str, b: &str, settings: &Settings) -> Ordering {
     Ordering::Equal
 }
 
-fn default_compare(a: &str, b: &str, x: &Settings) -> Ordering {
+fn default_compare(a: &str, b: &str, _: &Settings) -> Ordering {
     a.cmp(b)
 }
 
