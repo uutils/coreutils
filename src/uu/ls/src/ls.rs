@@ -1167,7 +1167,7 @@ fn sort_entries(entries: &mut Vec<PathData>, config: &Config) {
         Sort::Extension => entries.sort_by(|a, b| {
             a.extension()
                 .cmp(&b.extension())
-                .then(a.to_string_lossy().cmp(&b.to_string_lossy()))
+                .then(a.file_stem().cmp(&b.file_stem()))
         }),
         Sort::None => {}
     }
