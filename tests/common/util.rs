@@ -161,7 +161,7 @@ impl CmdResult {
 
     /// asserts that the command resulted in stdout stream output,
     /// whose bytes equal those of the passed in slice
-    pub fn stdout_bytes<T: AsRef<[u8]>>(&self, msg: T) -> Box<&CmdResult> {
+    pub fn stdout_is_bytes<T: AsRef<[u8]>>(&self, msg: T) -> Box<&CmdResult> {
         assert_eq!(self.stdout.as_slice(), msg.as_ref());
         Box::new(self)
     }
@@ -169,7 +169,7 @@ impl CmdResult {
     /// like stdout_is(...), but expects the contents of the file at the provided relative path
     pub fn stdout_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> Box<&CmdResult> {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
-        self.stdout_bytes(contents)
+        self.stdout_is_bytes(contents)
     }
 
     /// asserts that the command resulted in stderr stream output that equals the
@@ -187,7 +187,7 @@ impl CmdResult {
 
     /// asserts that the command resulted in stderr stream output,
     /// whose bytes equal those of the passed in slice
-    pub fn stderr_bytes<T: AsRef<[u8]>>(&self, msg: T) -> Box<&CmdResult> {
+    pub fn stderr_is_bytes<T: AsRef<[u8]>>(&self, msg: T) -> Box<&CmdResult> {
         assert_eq!(self.stderr.as_slice(), msg.as_ref());
         Box::new(self)
     }
@@ -205,7 +205,7 @@ impl CmdResult {
     ///     equal those of the passed in value
     /// 2.  the command resulted in an empty stderr stream
     pub fn stdout_only_bytes<T: AsRef<[u8]>>(&self, msg: T) -> Box<&CmdResult> {
-        self.no_stderr().stdout_bytes(msg)
+        self.no_stderr().stdout_is_bytes(msg)
     }
 
     /// like stdout_only(...), but expects the contents of the file at the provided relative path
@@ -227,7 +227,7 @@ impl CmdResult {
     ///     of the passed value
     /// 2.  the command resulted in an empty stdout stream
     pub fn stderr_only_bytes<T: AsRef<[u8]>>(&self, msg: T) -> Box<&CmdResult> {
-        self.no_stderr().stderr_bytes(msg)
+        self.no_stderr().stderr_is_bytes(msg)
     }
 
     pub fn fails_silently(&self) -> Box<&CmdResult> {
