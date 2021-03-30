@@ -3,7 +3,7 @@ use crate::common::util::*;
 #[test]
 fn test_default() {
     //CmdResult.stdout_only(...) trims trailing newlines
-    assert_eq!("hi\n", new_ucmd!().arg("hi").succeeds().no_stderr().stdout);
+    assert_eq!("hi\n", new_ucmd!().arg("hi").succeeds().no_stderr().stdout_str());
 }
 
 #[test]
@@ -16,7 +16,7 @@ fn test_no_trailing_newline() {
             .arg("hi")
             .succeeds()
             .no_stderr()
-            .stdout
+            .stdout_str()
     );
 }
 
@@ -192,7 +192,7 @@ fn test_hyphen_values_inside_string() {
     new_ucmd!()
         .arg("'\"\n'CXXFLAGS=-g -O2'\n\"'")
         .succeeds()
-        .stdout
+        .stdout_str()
         .contains("CXXFLAGS");
 }
 
@@ -203,28 +203,25 @@ fn test_hyphen_values_at_start() {
         .arg("-test")
         .arg("araba")
         .arg("-merci")
-        .run();
+        .succeeds();
 
-    assert!(result.success);
-    assert_eq!(false, result.stdout.contains("-E"));
-    assert_eq!(result.stdout, "-test araba -merci\n");
+    assert_eq!(false, result.stdout_str().contains("-E"));
+    assert_eq!(result.stdout_str(), "-test araba -merci\n");
 }
 
 #[test]
 fn test_hyphen_values_between() {
-    let result = new_ucmd!().arg("test").arg("-E").arg("araba").run();
+    let result = new_ucmd!().arg("test").arg("-E").arg("araba").succeeds();
 
-    assert!(result.success);
-    assert_eq!(result.stdout, "test -E araba\n");
+    assert_eq!(result.stdout_str(), "test -E araba\n");
 
     let result = new_ucmd!()
         .arg("dumdum ")
         .arg("dum dum dum")
         .arg("-e")
         .arg("dum")
-        .run();
+        .succeeds();
 
-    assert!(result.success);
-    assert_eq!(result.stdout, "dumdum  dum dum dum -e dum\n");
-    assert_eq!(true, result.stdout.contains("-e"));
+    assert_eq!(result.stdout_str(), "dumdum  dum dum dum -e dum\n");
+    assert_eq!(true, result.stdout_str().contains("-e"));
 }
