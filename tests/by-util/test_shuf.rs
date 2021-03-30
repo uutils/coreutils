@@ -13,7 +13,8 @@ fn test_output_is_random_permutation() {
         .pipe_in(input.as_bytes())
         .succeeds()
         .no_stderr()
-        .stdout_str();
+        .stdout_str()
+        .to_owned();
 
     let mut result_seq: Vec<i32> = result
         .split("\n")
@@ -33,7 +34,8 @@ fn test_zero_termination() {
         .arg("-i1-10")
         .succeeds()
         .no_stderr()
-        .stdout_str();
+        .stdout_str()
+        .to_owned();
 
     let mut result_seq: Vec<i32> = result
         .split("\0")
@@ -57,7 +59,8 @@ fn test_echo() {
         )
         .succeeds()
         .no_stderr()
-        .stdout_str();
+        .stdout_str()
+        .to_owned();
 
     let mut result_seq: Vec<i32> = result
         .split("\n")
@@ -83,7 +86,8 @@ fn test_head_count() {
         .pipe_in(input.as_bytes())
         .succeeds()
         .no_stderr()
-        .stdout_str();
+        .stdout_str()
+        .to_owned();
 
     let mut result_seq: Vec<i32> = result
         .split("\n")
@@ -94,7 +98,8 @@ fn test_head_count() {
     assert_eq!(result_seq.len(), repeat_limit, "Output is not limited");
     assert!(
         result_seq.iter().all(|x| input_seq.contains(x)),
-        format!("Output includes element not from input: {}", result)
+        "Output includes element not from input: {}",
+        result
     )
 }
 
@@ -114,7 +119,8 @@ fn test_repeat() {
         .pipe_in(input.as_bytes())
         .succeeds()
         .no_stderr()
-        .stdout_str();
+        .stdout_str()
+        .to_owned();
 
     let result_seq: Vec<i32> = result
         .split("\n")
@@ -128,13 +134,12 @@ fn test_repeat() {
     );
     assert!(
         result_seq.iter().all(|x| input_seq.contains(x)),
-        format!(
-            "Output includes element not from input: {:?}",
-            result_seq
-                .iter()
-                .filter(|x| !input_seq.contains(x))
-                .collect::<Vec<&i32>>()
-        )
+        "Output includes element not from input: {:?}",
+        result_seq
+            .iter()
+            .filter(|x| !input_seq.contains(x))
+            .collect::<Vec<&i32>>()
+        
     )
 }
 
@@ -146,7 +151,8 @@ fn test_file_input() {
         .arg("file_input.txt")
         .succeeds()
         .no_stderr()
-        .stdout_str();
+        .stdout_str()
+        .to_owned();
 
     let mut result_seq: Vec<i32> = result
         .split("\n")

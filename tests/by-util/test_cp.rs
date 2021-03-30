@@ -86,7 +86,7 @@ fn test_cp_multiple_files_target_is_file() {
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_EXISTING_FILE)
-        .succeeds();
+        .fails();
 
     assert!(result.stderr_str().contains("not a directory"));
 }
@@ -97,7 +97,7 @@ fn test_cp_directory_not_recursive() {
     let result = ucmd
         .arg(TEST_COPY_TO_FOLDER)
         .arg(TEST_HELLO_WORLD_DEST)
-        .succeeds();
+        .fails();
 
     assert!(result.stderr_str().contains("omitting directory"));
 }
@@ -187,7 +187,7 @@ fn test_cp_arg_no_target_directory() {
         .arg("-v")
         .arg("-T")
         .arg(TEST_COPY_TO_FOLDER)
-        .succeeds();
+        .fails();
 
     assert!(result.stderr_str().contains("cannot overwrite directory"));
 }
@@ -750,7 +750,7 @@ fn test_cp_archive() {
         previous,
     )
     .unwrap();
-    let result = ucmd
+    ucmd
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg("--archive")
         .arg(TEST_HOW_ARE_YOU_SOURCE)
@@ -882,7 +882,7 @@ fn test_cp_preserve_timestamps() {
         previous,
     )
     .unwrap();
-    let result = ucmd
+    ucmd
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg("--preserve=timestamps")
         .arg(TEST_HOW_ARE_YOU_SOURCE)
@@ -918,7 +918,7 @@ fn test_cp_dont_preserve_timestamps() {
     .unwrap();
     sleep(Duration::from_secs(3));
 
-    let result = ucmd
+    ucmd
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg("--no-preserve=timestamps")
         .arg(TEST_HOW_ARE_YOU_SOURCE)
@@ -988,12 +988,11 @@ fn test_cp_one_file_system() {
         .arg("tmpfs")
         .arg(mountpoint_path)
         .succeeds();
-    assert!(Some(0) == Some(0), _r.stderr());
 
     at_src.touch(TEST_MOUNT_OTHER_FILESYSTEM_FILE);
 
     // Begin testing -x flag
-    let result = scene
+    scene
         .ucmd()
         .arg("-rx")
         .arg(TEST_MOUNT_COPY_FROM_FOLDER)

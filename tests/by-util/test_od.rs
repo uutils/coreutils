@@ -33,13 +33,12 @@ fn test_file() {
         }
     }
 
-    let result = new_ucmd!()
+    new_ucmd!()
         .arg("--endian=little")
         .arg(file.as_os_str())
-        .succeeds();
-
-    assert_empty_stderr!(result);
-    assert_eq!(result.stdout_str(), unindent(ALPHA_OUT));
+        .succeeds()
+        .no_stderr()
+        .stdout_is(unindent(ALPHA_OUT));
 
     let _ = remove_file(file);
 }
@@ -63,14 +62,13 @@ fn test_2files() {
         }
     }
 
-    let result = new_ucmd!()
+    new_ucmd!()
         .arg("--endian=little")
         .arg(file1.as_os_str())
         .arg(file2.as_os_str())
-        .succeeds();
-
-    assert_empty_stderr!(result);
-    assert_eq!(result.stdout_str(), unindent(ALPHA_OUT));
+        .succeeds()
+        .no_stderr()
+        .stdout_is(unindent(ALPHA_OUT));
 
     let _ = remove_file(file1);
     let _ = remove_file(file2);
@@ -83,7 +81,7 @@ fn test_no_file() {
     let tmpdir = Path::new(&temp);
     let file = tmpdir.join("}surely'none'would'thus'a'file'name");
 
-    new_ucmd!().arg(file.as_os_str()).succeeds();
+    new_ucmd!().arg(file.as_os_str()).fails();
 }
 
 // Test that od reads from stdin instead of a file
@@ -636,12 +634,12 @@ fn test_ascii_dump() {
             r"
             0000000  00  01  0a  0d  10  1f  20  61  62  63  7d  7e  7f  80  90  a0  >...... abc}~....<
                     nul soh  nl  cr dle  us  sp   a   b   c   }   ~ del nul dle  sp
-                    \0 001  \n  \r 020 037       a   b   c   }   ~ 177  **  **  **  >...... abc}~....<
+                     \0 001  \n  \r 020 037       a   b   c   }   ~ 177  **  **  **  >...... abc}~....<
             0000020  b0  c0  d0  e0  f0  ff                                          >......<
-                    0   @   P   `   p del
-                    ** 300 320 340 360 377                                          >......<
+                      0   @   P   `   p del
+                     ** 300 320 340 360 377                                          >......<
             0000026
-            ",
+            "
         ));
 }
 
@@ -650,47 +648,39 @@ fn test_filename_parsing() {
     // files "a" and "x" both exists, but are no filenames in the commandline below
     // "-f" must be treated as a filename, it contains the text: minus lowercase f
     // so "-f" should not be interpreted as a formatting option.
-    let result = new_ucmd!()
+    new_ucmd!()
         .arg("--format")
         .arg("a")
         .arg("-A")
         .arg("x")
         .arg("--")
         .arg("-f")
-        .succeeds();
-
-    assert_empty_stderr!(result);
-    assert_eq!(
-        result.stdout_str(),
-        unindent(
+        .succeeds()
+        .no_stderr()
+        .stdout_is(unindent(
             "
             000000   m   i   n   u   s  sp   l   o   w   e   r   c   a   s   e  sp
             000010   f  nl
             000012
             "
-        )
-    );
+        ));
 }
 
 #[test]
 fn test_stdin_offset() {
     let input = "abcdefghijklmnopq";
-    let result = new_ucmd!()
+    new_ucmd!()
         .arg("-c")
         .arg("+5")
-        .run_piped_stdin(input.as_bytes());
-    result.success();
-
-    assert_empty_stderr!(result);
-    assert_eq!(
-        result.stdout_str(),
-        unindent(
+        .run_piped_stdin(input.as_bytes())
+        .success()
+        .no_stderr()
+        .stdout_is(unindent(
             "
             0000005   f   g   h   i   j   k   l   m   n   o   p   q
             0000021
             "
-        )
-    );
+        ));
 }
 
 #[test]

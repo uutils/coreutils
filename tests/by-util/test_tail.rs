@@ -227,7 +227,8 @@ fn test_bytes_big() {
         .arg("-c")
         .arg(format!("{}", N_ARG))
         .run()
-        .stdout_str();
+        .stdout_str()
+        .to_owned();
     let expected = at.read(EXPECTED_FILE);
 
     assert_eq!(result.len(), expected.len());

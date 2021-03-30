@@ -161,7 +161,7 @@ fn test_no_such_file_or_directory() {
     assert_eq!(
         true,
         result
-            .stderr
+            .stderr_str()
             .contains("cannot open 'no_such_file.toml' for reading: No such file or directory")
     )
 }

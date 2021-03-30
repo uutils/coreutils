@@ -45,7 +45,7 @@ fn test_echo() {
 
 #[test]
 fn test_file_option() {
-    let out = new_ucmd!().arg("-f").arg("vars.conf.txt").run().stdout_str();
+    let out = new_ucmd!().arg("-f").arg("vars.conf.txt").run().stdout_move_str();
 
     assert_eq!(
         out.lines()
@@ -62,7 +62,7 @@ fn test_combined_file_set() {
         .arg("vars.conf.txt")
         .arg("FOO=bar.alt")
         .run()
-        .stdout_str();
+        .stdout_move_str();
 
     assert_eq!(out.lines().filter(|&line| line == "FOO=bar.alt").count(), 1);
 }
@@ -76,7 +76,7 @@ fn test_combined_file_set_unset() {
         .arg("vars.conf.txt")
         .arg("FOO=bar.alt")
         .run()
-        .stdout_str();
+        .stdout_move_str();
 
     assert_eq!(
         out.lines()
@@ -88,14 +88,14 @@ fn test_combined_file_set_unset() {
 
 #[test]
 fn test_single_name_value_pair() {
-    let out = new_ucmd!().arg("FOO=bar").run().stdout_str();
+    let out = new_ucmd!().arg("FOO=bar").run().stdout_move_str();
 
     assert!(out.lines().any(|line| line == "FOO=bar"));
 }
 
 #[test]
 fn test_multiple_name_value_pairs() {
-    let out = new_ucmd!().arg("FOO=bar").arg("ABC=xyz").run().stdout_str();
+    let out = new_ucmd!().arg("FOO=bar").arg("ABC=xyz").run().stdout_move_str();
 
     assert_eq!(
         out.lines()
@@ -109,11 +109,11 @@ fn test_multiple_name_value_pairs() {
 fn test_ignore_environment() {
     let scene = TestScenario::new(util_name!());
 
-    let out = scene.ucmd().arg("-i").run().stdout_str();
+    let out = scene.ucmd().arg("-i").run().stdout_move_str();
 
     assert_eq!(out, "");
 
-    let out = scene.ucmd().arg("-").run().stdout_str();
+    let out = scene.ucmd().arg("-").run().stdout_move_str();
 
     assert_eq!(out, "");
 }
@@ -126,7 +126,7 @@ fn test_null_delimiter() {
         .arg("FOO=bar")
         .arg("ABC=xyz")
         .run()
-        .stdout_str();
+        .stdout_move_str();
 
     let mut vars: Vec<_> = out.split('\0').collect();
     assert_eq!(vars.len(), 3);
@@ -145,14 +145,14 @@ fn test_unset_variable() {
         .arg("-u")
         .arg("HOME")
         .run()
-        .stdout_str();
+        .stdout_move_str();
 
     assert_eq!(out.lines().any(|line| line.starts_with("HOME=")), false);
 }
 
 #[test]
 fn test_fail_null_with_program() {
-    let out = new_ucmd!().arg("--null").arg("cd").fails().stderr_str();
+    let out = new_ucmd!().arg("--null").arg("cd").fails().stderr_move_str();
     assert!(out.contains("cannot specify --null (-0) with command"));
 }
 
@@ -173,7 +173,7 @@ fn test_change_directory() {
         .arg(&temporary_path)
         .arg(pwd)
         .run()
-        .stdout_str();
+        .stdout_move_str();
     assert_eq!(out.trim(), temporary_path.as_os_str())
 }
 
@@ -193,7 +193,7 @@ fn test_change_directory() {
         .arg("--chdir")
         .arg(&temporary_path)
         .run()
-        .stdout_str();
+        .stdout_move_str();
     assert_eq!(
         out.lines()
             .any(|line| line.ends_with(temporary_path.file_name().unwrap().to_str().unwrap())),
@@ -213,6 +213,6 @@ fn test_fail_change_directory() {
         .arg(some_non_existing_path)
         .arg("pwd")
         .fails()
-        .stderr_str();
+        .stderr_move_str();
     assert!(out.contains("env: cannot change directory to "));
 }

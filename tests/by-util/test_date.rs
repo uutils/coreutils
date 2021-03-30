@@ -8,13 +8,13 @@ use rust_users::*;
 #[test]
 fn test_date_email() {
     let (_, mut ucmd) = at_and_ucmd!();
-    let result = ucmd.arg("--rfc-email").succeeds();
+    ucmd.arg("--rfc-email").succeeds();
 }
 
 #[test]
 fn test_date_email2() {
     let (_, mut ucmd) = at_and_ucmd!();
-    let result = ucmd.arg("-R").succeeds();
+    ucmd.arg("-R").succeeds();
 }
 
 #[test]
@@ -38,25 +38,25 @@ fn test_date_rfc_3339() {
 #[test]
 fn test_date_rfc_8601() {
     let (_, mut ucmd) = at_and_ucmd!();
-    let result = ucmd.arg("--iso-8601=ns").succeeds();
+    ucmd.arg("--iso-8601=ns").succeeds();
 }
 
 #[test]
 fn test_date_rfc_8601_second() {
     let (_, mut ucmd) = at_and_ucmd!();
-    let result = ucmd.arg("--iso-8601=second").succeeds();
+    ucmd.arg("--iso-8601=second").succeeds();
 }
 
 #[test]
 fn test_date_utc() {
     let (_, mut ucmd) = at_and_ucmd!();
-    let result = ucmd.arg("--utc").succeeds();
+    ucmd.arg("--utc").succeeds();
 }
 
 #[test]
 fn test_date_universal() {
     let (_, mut ucmd) = at_and_ucmd!();
-    let result = ucmd.arg("--universal").succeeds();
+   ucmd.arg("--universal").succeeds();
 }
 
 #[test]

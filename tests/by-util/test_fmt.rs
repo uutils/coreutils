@@ -22,7 +22,7 @@ fn test_fmt_q() {
 
 #[test]
 fn test_fmt_w_too_big() {
-    let result = new_ucmd!()
+    new_ucmd!()
         .arg("-w")
         .arg("2501")
         .arg("one-word-per-line.txt")
