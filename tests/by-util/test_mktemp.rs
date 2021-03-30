@@ -119,10 +119,10 @@ fn test_mktemp_mktemp_t() {
         .arg("-t")
         .arg(TEST_TEMPLATE8)
         .fails();
-    println!("stdout {}", result.stdout);
-    println!("stderr {}", result.stderr);
+    println!("stdout {}", result.stdout_str());
+    println!("stderr {}", result.stderr_str());
     assert!(result
-        .stderr
+        .stderr_str()
         .contains("error: suffix cannot contain any path separators"));
 }
 
@@ -391,10 +391,10 @@ fn test_mktemp_tmpdir_one_arg() {
         .arg("--tmpdir")
         .arg("apt-key-gpghome.XXXXXXXXXX")
         .succeeds();
-    println!("stdout {}", result.stdout);
-    println!("stderr {}", result.stderr);
-    assert!(result.stdout.contains("apt-key-gpghome."));
-    assert!(PathBuf::from(result.stdout.trim()).is_file());
+    println!("stdout {}", result.stdout_str());
+    println!("stderr {}", result.stderr_str());
+    assert!(result.stdout_str().contains("apt-key-gpghome."));
+    assert!(PathBuf::from(result.stdout_str().trim()).is_file());
 }
 
 #[test]
@@ -407,8 +407,8 @@ fn test_mktemp_directory_tmpdir() {
         .arg("--tmpdir")
         .arg("apt-key-gpghome.XXXXXXXXXX")
         .succeeds();
-    println!("stdout {}", result.stdout);
-    println!("stderr {}", result.stderr);
-    assert!(result.stdout.contains("apt-key-gpghome."));
-    assert!(PathBuf::from(result.stdout.trim()).is_dir());
+    println!("stdout {}", result.stdout_str());
+    println!("stderr {}", result.stderr_str());
+    assert!(result.stdout_str().contains("apt-key-gpghome."));
+    assert!(PathBuf::from(result.stdout_str().trim()).is_dir());
 }
