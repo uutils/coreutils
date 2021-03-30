@@ -100,6 +100,18 @@ impl CmdResult {
         std::str::from_utf8(&self.stderr()).expect("Program's stderr is not valid UTF8")
     }
 
+    /// Returns the programs exit code
+    /// Panics if not run
+    pub fn code(&self) -> i32 {
+        self.code.expect("Program must be run first")
+    }
+
+    /// Retunrs the program's TempDir
+    /// Panics if not present
+    pub fn tmpd(&self) -> Rc<TempDir> {
+        self.tmpd.expect("Command not associated with a TempDir")
+    }
+
     /// asserts that the command resulted in a success (zero) status code
     pub fn success(&self) -> Box<&CmdResult> {
         assert!(self.success);
