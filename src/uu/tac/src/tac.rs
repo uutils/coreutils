@@ -11,8 +11,8 @@
 extern crate uucore;
 
 use clap::{App, Arg};
-use std::fs::File;
 use std::io::{stdin, stdout, BufReader, Read, Stdout, Write};
+use std::{fs::File, path::Path};
 
 static NAME: &str = "tac";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -89,7 +89,15 @@ fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) -> i32 {
         let mut file = BufReader::new(if filename == "-" {
             Box::new(stdin()) as Box<dyn Read>
         } else {
-            match File::open(filename) {
+            let path = Path::new(filename);
+            if path.is_dir() || !path.metadata().is_ok() {
+                show_error!(
+                    "failed to open '{}' for reading: No such file or directory",
+                    filename
+                );
+                continue;
+            }
+            match File::open(path) {
                 Ok(f) => Box::new(f) as Box<dyn Read>,
                 Err(e) => {
                     show_error!("failed to open '{}' for reading: {}", filename, e);

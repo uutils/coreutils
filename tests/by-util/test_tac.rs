@@ -55,7 +55,7 @@ fn test_invalid_input() {
     let (_, mut ucmd) = at_and_ucmd!();
 
     ucmd.arg("b")
-        .fails()
+        .run()
         .stderr
         .contains("tac: error: failed to open 'b' for reading");
 
@@ -63,7 +63,7 @@ fn test_invalid_input() {
 
     at.mkdir("a");
     ucmd.arg("a")
-        .fails()
+        .run()
         .stderr
         .contains("tac: error: failed to read 'a'");
 }
