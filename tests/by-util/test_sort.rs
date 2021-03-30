@@ -72,13 +72,12 @@ fn test_dictionary_order() {
 
 #[test]
 fn test_non_printing_chars() {
-    for non_printing_chars_param in vec!["--"] {
-        let input = r#"blind\n\bsleading\ack\nthe\nblind\esc"#;
+    for non_printing_chars_param in vec!["-i"] {
         new_ucmd!()
+            .pipe_in("aaaa b\na👦🏻aab\n")
             .arg(non_printing_chars_param)
-            .pipe_in(input)
             .succeeds()
-            .stdout_only("");
+            .stdout_only("aaaa b\na👦🏻aab\n");
     }
 }
 
