@@ -81,11 +81,23 @@ impl CmdResult {
         &self.stdout
     }
 
-    /// Returns the programs standard output as a string slice
+    /// Returns the program's standard output as a string slice
     /// Panics if not valid UTF8 (use stdout() + from_utf8_lossy)
     /// if you need a String representation
     pub fn stdout_str(&self) -> &str {
         std::str::from_utf8(&self.stdout).expect("Program's stdout is not valid UTF8")
+    }
+
+    /// Returns the program's standard output as a string
+    /// consumes self
+    pub fn stdout_move_str(self) -> String {
+        String::from_utf8(self.stdout).expect("Program' stdout is not valid UTF8")
+    }
+
+    /// Returns the program's standard output as a vec of bytes
+    /// consumes self
+    pub fn stdout_move_bytes(self) -> Vec<u8> {
+        self.stdout
     }
 
     /// Returns a reference to the program's standard error as a vector of bytes
@@ -93,14 +105,26 @@ impl CmdResult {
         &self.stderr
     }
 
-    /// Returns the programs standard error as a string slice
+    /// Returns the program's standard error as a string slice
     /// Panics if not valid UTF8 (use stderr() + from_utf8_lossy)
     /// if you need a String representation
     pub fn stderr_str(&self) -> &str {
         std::str::from_utf8(&self.stderr).expect("Program's stderr is not valid UTF8")
     }
 
-    /// Returns the programs exit code
+    /// Returns the program's standard error as a string
+    /// consumes self
+    pub fn stderr_move_str(self) -> String {
+        String::from_utf8(self.stderr).expect("Program' stdout is not valid UTF8")
+    }
+
+    /// Returns the program's standard error as a vec of bytes
+    /// consumes self
+    pub fn stderr_move_bytes(self) -> Vec<u8> {
+        self.stderr
+    }
+
+    /// Returns the program's exit code
     /// Panics if not run
     pub fn code(&self) -> i32 {
         self.code.expect("Program must be run first")
