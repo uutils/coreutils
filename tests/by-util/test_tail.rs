@@ -227,7 +227,7 @@ fn test_bytes_big() {
         .arg("-c")
         .arg(format!("{}", N_ARG))
         .run()
-        .stdout;
+        .stdout_str();
     let expected = at.read(EXPECTED_FILE);
 
     assert_eq!(result.len(), expected.len());
@@ -340,6 +340,6 @@ fn test_negative_indexing() {
 
     let negative_bytes_index = new_ucmd!().arg("-c").arg("-20").arg(FOOBAR_TXT).run();
 
-    assert_eq!(positive_lines_index.stdout, negative_lines_index.stdout);
-    assert_eq!(positive_bytes_index.stdout, negative_bytes_index.stdout);
+    assert_eq!(positive_lines_index.stdout_str(), negative_lines_index.stdout_str());
+    assert_eq!(positive_bytes_index.stdout_str(), negative_bytes_index.stdout_str());
 }
