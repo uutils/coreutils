@@ -17,7 +17,7 @@ use itertools::Itertools;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use semver::Version;
-use std::cmp::Ordering;
+use std::{cmp::Ordering, default};
 use std::collections::BinaryHeap;
 use std::fs::File;
 use std::hash::{Hash, Hasher};
@@ -402,7 +402,7 @@ fn exec(files: Vec<String>, settings: &mut Settings) -> i32 {
         } else {
             print_sorted(file_merger, &settings.outfile)
         }
-    } else if settings.unique && settings.mode == SortMode::Numeric {
+    } else if settings.unique {
         print_sorted(
             lines
                 .iter()
@@ -512,9 +512,8 @@ fn get_leading_number(a: &str) -> &str {
     return s;
 }
 
-// Matches GNU behavior, see:
-// https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
-// Specifically *not* the same as sort -n | uniq
+// Specifically *not* the same as sort | uniq
+// See: https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 fn leading_num_numlines(a: &str) -> &str {
     // Trim and remove any leading zeros
     let s = a.trim().trim_start_matches('0');
@@ -522,7 +521,7 @@ fn leading_num_numlines(a: &str) -> &str {
     // Get first char
     let c = s.chars().nth(0).unwrap_or('\0');
 
-    // Empty, empty number lines, whitespace and are treated as ‘0’ for dedup
+    // Empty, non-number lines, whitespace and are treated as same for dedup
     if s.is_empty() {
         return "";
     } else if c.is_whitespace() {
@@ -541,9 +540,7 @@ fn permissive_f64_parse(a: &str) -> f64 {
     let mut a = a.replace(THOUSANDS_SEP, "");
 
     // Empty number lines are treated as ‘0’
-    if a.is_empty() {
-        a = "0".to_string()
-    };
+    if a.is_empty() { a = "0".to_string() };
 
     // GNU sort treats "NaN" as non-number in numeric, so it needs special care.
     match a.parse::<f64>() {
@@ -569,22 +566,19 @@ fn general_numeric_compare(a: &str, b: &str) -> Ordering {
     let fa = permissive_f64_parse(sa);
     let fb = permissive_f64_parse(sb);
 
-    // FYI, GNU collating sequence:
-    // 1. Lines that do not start with numbers
-    // 2. NaNs
-    // 3. Minus infinity.
-    // 4. Finite numbers in ascending numeric order (with -0 and +0 equal).
-    // 5. Plus infinity.
-    //
-    // This is not the same as the standard Rust behavior?
-
     // f64::cmp isn't implemented (due to NaN issues); implement directly instead
     if fa > fb {
         Ordering::Greater
     } else if fa < fb {
         Ordering::Less
     } else {
-        Ordering::Equal
+        // Do a standard compare strings first instead of 
+        // declaring Ordering::Equal. Matches GNU behavior.
+        if fa == 0f64 {
+            default_compare(a, b)
+        } else {
+            Ordering::Equal
+        }
     }
 }
 
@@ -616,7 +610,11 @@ fn human_numeric_size_compare(a: &str, b: &str) -> Ordering {
     } else if fa < fb {
         Ordering::Less
     } else {
-        Ordering::Equal
+        if fb == 0f64 {
+            default_compare(a, b)
+        } else {
+            Ordering::Equal
+        }
     }
 }
 
