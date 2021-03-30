@@ -32,10 +32,8 @@ fn test_first_100000_integers() {
     }
 
     println!("STDIN='{}'", instring);
-    let result = new_ucmd!().pipe_in(instring.as_bytes()).run();
-    let stdout = result.stdout;
-
-    assert!(result.success);
+    let result = new_ucmd!().pipe_in(instring.as_bytes()).succeeds();
+    let stdout = result.stdout_str();
 
     // `seq 0 100000 | factor | sha1sum` => "4ed2d8403934fa1c76fe4b84c5d4b8850299c359"
     let hash_check = sha1::Sha1::from(stdout.as_bytes()).hexdigest();
