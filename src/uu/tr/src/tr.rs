@@ -225,10 +225,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(Arg::with_name(options::SETS).multiple(true))
         .get_matches_from(args);
 
-    let dflag = matches.is_present(options::DELETE);
-    let cflag = matches.is_present(options::COMPLEMENT);
-    let sflag = matches.is_present(options::SQUEEZE);
-    let tflag = matches.is_present(options::TRUNCATE);
+    let delete_flag = matches.is_present(options::DELETE);
+    let complement_flag = matches.is_present(options::COMPLEMENT);
+    let squeeze_flag = matches.is_present(options::SQUEEZE);
+    let truncate_flag = matches.is_present(options::TRUNCATE);
 
     let sets: Vec<String> = match matches.values_of(options::SETS) {
         Some(v) => v.map(|v| v.to_string()).collect(),
@@ -243,7 +243,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         return 1;
     }
 
-    if !(dflag || sflag) && sets.len() < 2 {
+    if !(delete_flag || squeeze_flag) && sets.len() < 2 {
         show_error!(
             "missing operand after ‘{}’\nTry `{} --help` for more information.",
             sets[0],
@@ -252,7 +252,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         return 1;
     }
 
-    if cflag && !dflag && !sflag {
+    if complement_flag && !delete_flag && !squeeze_flag {
         show_error!("-c is only supported with -d or -s");
         return 1;
     }
@@ -264,21 +264,21 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let mut buffered_stdout = BufWriter::new(locked_stdout);
 
     let set1 = ExpandSet::new(sets[0].as_ref());
-    if dflag {
-        if sflag {
+    if delete_flag {
+        if squeeze_flag {
             let set2 = ExpandSet::new(sets[1].as_ref());
-            let op = DeleteAndSqueezeOperation::new(set1, set2, cflag);
+            let op = DeleteAndSqueezeOperation::new(set1, set2, complement_flag);
             translate_input(&mut locked_stdin, &mut buffered_stdout, op);
         } else {
-            let op = DeleteOperation::new(set1, cflag);
+            let op = DeleteOperation::new(set1, complement_flag);
             translate_input(&mut locked_stdin, &mut buffered_stdout, op);
         }
-    } else if sflag {
-        let op = SqueezeOperation::new(set1, cflag);
+    } else if squeeze_flag {
+        let op = SqueezeOperation::new(set1, complement_flag);
         translate_input(&mut locked_stdin, &mut buffered_stdout, op);
     } else {
         let mut set2 = ExpandSet::new(sets[1].as_ref());
-        let op = TranslateOperation::new(set1, &mut set2, tflag);
+        let op = TranslateOperation::new(set1, &mut set2, truncate_flag);
         translate_input(&mut locked_stdin, &mut buffered_stdout, op)
     }
 
