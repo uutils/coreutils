@@ -482,7 +482,7 @@ fn test_mv_overwrite_nonempty_dir() {
             .arg(dir_b)
             .fails()
             .no_stdout()
-            .stderr
+            .stderr_str()
             .len()
             > 0
     );
@@ -534,7 +534,7 @@ fn test_mv_errors() {
         .arg(file_a)
         .arg(file_b)
         .fails();
-    assert!(result.stderr.contains("cannot be used with"));
+    assert!(result.stderr_str().contains("cannot be used with"));
 
     // $ at.touch file && at.mkdir dir
     // $ mv -T file dir
@@ -553,7 +553,7 @@ fn test_mv_errors() {
     // $ at.mkdir dir && at.touch file
     // $ mv dir file
     // err == mv: cannot overwrite non-directory ‘file’ with directory ‘dir’
-    assert!(scene.ucmd().arg(dir).arg(file_a).fails().stderr.len() > 0);
+    assert!(scene.ucmd().arg(dir).arg(file_a).fails().stderr_str().len() > 0);
 }
 
 #[test]
