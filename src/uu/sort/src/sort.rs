@@ -516,28 +516,34 @@ fn get_leading_number(a: &str) -> &str {
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 // Specifically *not* the same as sort -n | uniq
 fn leading_num_numlines(a: &str) -> &str {
-    let s = a.trim().chars().nth(0).unwrap_or('\0');
-    // GNU states: "An empty number is treated as ‘0’?
-    // As far as i can tell this means empty lines, non-leading number lines
-    // and 0s are all made equivalent to an empty string
-    if a.is_empty() {
+    // Trim and remove any leading zeros
+    let s = a.trim().trim_start_matches('0');
+
+    // Get first char
+    let c = s.chars().nth(0).unwrap_or('\0');
+
+    // Empty, empty number lines, whitespace and are treated as ‘0’ for dedup
+    if s.is_empty() {
         return "";
-    } else if s.is_whitespace() {
+    } else if c.is_whitespace() {
         return "";
-    } else if !s.eq(&MINUS_SIGN) && !s.is_numeric() {
-        return "";
-    } else if s.eq(&'0') {
+    } else if !c.eq(&MINUS_SIGN) && !c.is_numeric() {
         return "";
     // Prepare lines for comparison of only the numerical leading numbers
     } else {
-        return get_leading_number(a);
+        return get_leading_number(s);
     };
 }
 
 /// Parse the beginning string into an f64, returning -inf instead of NaN on errors.
 fn permissive_f64_parse(a: &str) -> f64 {
     // Remove thousands seperators
-    let a = a.replace(THOUSANDS_SEP, "");
+    let mut a = a.replace(THOUSANDS_SEP, "");
+
+    // Empty number lines are treated as ‘0’
+    if a.is_empty() {
+        a = "0".to_string()
+    };
 
     // GNU sort treats "NaN" as non-number in numeric, so it needs special care.
     match a.parse::<f64>() {
@@ -570,7 +576,7 @@ fn general_numeric_compare(a: &str, b: &str) -> Ordering {
     // 4. Finite numbers in ascending numeric order (with -0 and +0 equal).
     // 5. Plus infinity.
     //
-    // This is the same as the standard Rust behavior.
+    // This is not the same as the standard Rust behavior?
 
     // f64::cmp isn't implemented (due to NaN issues); implement directly instead
     if fa > fb {
