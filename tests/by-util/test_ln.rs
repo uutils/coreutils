@@ -302,7 +302,7 @@ fn test_symlink_overwrite_dir_fail() {
     assert!(
         ucmd.args(&["-s", "-T", path_a, path_b])
             .fails()
-            .stderr
+            .stderr_str()
             .len()
             > 0
     );
@@ -358,7 +358,7 @@ fn test_symlink_target_only() {
 
     at.mkdir(dir);
 
-    assert!(ucmd.args(&["-s", "-t", dir]).fails().stderr.len() > 0);
+    assert!(ucmd.args(&["-s", "-t", dir]).fails().stderr_str().len() > 0);
 }
 
 #[test]
@@ -520,10 +520,9 @@ fn test_symlink_no_deref_dir() {
     scene.ucmd().args(&["-sn", dir1, link]).fails();
 
     // Try with the no-deref
-    let result = scene.ucmd().args(&["-sfn", dir1, link]).run();
-    println!("stdout {}", result.stdout);
-    println!("stderr {}", result.stderr);
-    assert!(result.success);
+    let result = scene.ucmd().args(&["-sfn", dir1, link]).succeeds();
+    println!("stdout {}", result.stdout_str());
+    println!("stderr {}", result.stderr_str());
     assert!(at.dir_exists(dir1));
     assert!(at.dir_exists(dir2));
     assert!(at.is_symlink(link));
@@ -566,10 +565,9 @@ fn test_symlink_no_deref_file() {
     scene.ucmd().args(&["-sn", file1, link]).fails();
 
     // Try with the no-deref
-    let result = scene.ucmd().args(&["-sfn", file1, link]).run();
-    println!("stdout {}", result.stdout);
-    println!("stderr {}", result.stderr);
-    assert!(result.success);
+    let result = scene.ucmd().args(&["-sfn", file1, link]).succeeds();
+    println!("stdout {}", result.stdout_str());
+    println!("stderr {}", result.stderr_str());
     assert!(at.file_exists(file1));
     assert!(at.file_exists(file2));
     assert!(at.is_symlink(link));
