@@ -52,7 +52,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     // FixME: fail without panic for now; but `more` should work with no arguments (ie, for piped input)
     if let None | Some("-") = matches.value_of(options::FILE) {
-        println!("more: incorrect usage");
+        println!("{}: incorrect usage", executable!());
         return 1;
     }
 
