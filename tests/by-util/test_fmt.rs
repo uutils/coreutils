@@ -5,7 +5,7 @@ fn test_fmt() {
     let result = new_ucmd!().arg("one-word-per-line.txt").run();
     //.stdout_is_fixture("call_graph.expected");
     assert_eq!(
-        result.stdout.trim(),
+        result.stdout_str().trim(),
         "this is a file with one word per line"
     );
 }
@@ -15,7 +15,7 @@ fn test_fmt_q() {
     let result = new_ucmd!().arg("-q").arg("one-word-per-line.txt").run();
     //.stdout_is_fixture("call_graph.expected");
     assert_eq!(
-        result.stdout.trim(),
+        result.stdout_str().trim(),
         "this is a file with one word per line"
     );
 }
@@ -26,12 +26,9 @@ fn test_fmt_w_too_big() {
         .arg("-w")
         .arg("2501")
         .arg("one-word-per-line.txt")
-        .run();
+        .run()
+        .stderr_is("fmt: error: invalid width: '2501': Numerical result out of range");
     //.stdout_is_fixture("call_graph.expected");
-    assert_eq!(
-        result.stderr.trim(),
-        "fmt: error: invalid width: '2501': Numerical result out of range"
-    );
 }
 /* #[test]
  Fails for now, see https://github.com/uutils/coreutils/issues/1501
