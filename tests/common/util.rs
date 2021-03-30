@@ -64,7 +64,7 @@ fn read_scenario_fixture<S: AsRef<OsStr>>(tmpd: &Option<Rc<TempDir>>, file_rel_p
 #[derive(Debug)]
 pub struct CmdResult {
     //tmpd is used for convenience functions for asserts against fixtures
-    pub tmpd: Option<Rc<TempDir>>,
+    tmpd: Option<Rc<TempDir>>,
     /// exit status for command (if there is one)
     pub code: Option<i32>,
     /// zero-exit from running the Command?
