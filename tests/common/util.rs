@@ -112,6 +112,11 @@ impl CmdResult {
         self.tmpd.expect("Command not associated with a TempDir")
     }
 
+    /// Returns whether the program succeeded
+    pub fn succeeded(&self) -> bool {
+        self.success
+    }
+
     /// asserts that the command resulted in a success (zero) status code
     pub fn success(&self) -> Box<&CmdResult> {
         assert!(self.success);
