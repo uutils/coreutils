@@ -2,6 +2,5 @@ use crate::common::util::*;
 
 #[test]
 fn test_more_no_arg() {
-    let (_, mut ucmd) = at_and_ucmd!();
-    let result = ucmd.fails();
+    new_ucmd!().fails();
  }
