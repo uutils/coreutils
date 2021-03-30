@@ -329,10 +329,9 @@ fn test_chmod_non_existing_file() {
         .arg("-r,a+w")
         .arg("dont-exist")
         .fails();
-    assert_eq!(
-        result.stderr,
-        "chmod: error: no such file or directory 'dont-exist'\n"
-    );
+    assert!(result
+        .stderr
+        .contains("cannot access 'dont-exist': No such file or directory"));
 }
 
 #[test]
@@ -351,30 +350,111 @@ fn test_chmod_preserve_root() {
 
 #[test]
 fn test_chmod_symlink_non_existing_file() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    at.symlink_file("/non-existing", "test-long.link");
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
 
-    let _result = ucmd
-        .arg("-R")
+    let non_existing = "test_chmod_symlink_non_existing_file";
+    let test_symlink = "test_chmod_symlink_non_existing_file_symlink";
+    let expected_stdout = &format!(
+        "failed to change mode of '{}' from 0000 (---------) to 0000 (---------)",
+        test_symlink
+    );
+    let expected_stderr = &format!("cannot operate on dangling symlink '{}'", test_symlink);
+
+    at.symlink_file(non_existing, test_symlink);
+    let mut result;
+
+    // this cannot succeed since the symbolic link dangles
+    result = scene.ucmd().arg("755").arg("-v").arg(test_symlink).fails();
+
+    println!("stdout = {:?}", result.stdout);
+    println!("stderr = {:?}", result.stderr);
+
+    assert!(result.stdout.contains(expected_stdout));
+    assert!(result.stderr.contains(expected_stderr));
+    assert_eq!(result.code, Some(1));
+
+    // this should be the same than with just '-v' but without stderr
+    result = scene
+        .ucmd()
         .arg("755")
         .arg("-v")
-        .arg("test-long.link")
+        .arg("-f")
+        .arg(test_symlink)
         .fails();
+
+    println!("stdout = {:?}", result.stdout);
+    println!("stderr = {:?}", result.stderr);
+
+    assert!(result.stdout.contains(expected_stdout));
+    assert!(result.stderr.is_empty());
+    assert_eq!(result.code, Some(1));
 }
 
 #[test]
-fn test_chmod_symlink_non_existing_recursive() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    at.mkdir("tmp");
-    at.symlink_file("/non-existing", "tmp/test-long.link");
+fn test_chmod_symlink_non_existing_file_recursive() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
 
-    let result = ucmd.arg("-R").arg("755").arg("-v").arg("tmp").succeeds();
-    // it should be a success
-    println!("stderr {}", result.stderr);
-    println!("stdout {}", result.stdout);
-    assert!(result
-        .stderr
-        .contains("neither symbolic link 'tmp/test-long.link' nor referent has been changed"));
+    let non_existing = "test_chmod_symlink_non_existing_file_recursive";
+    let test_symlink = "test_chmod_symlink_non_existing_file_recursive_symlink";
+    let test_directory = "test_chmod_symlink_non_existing_file_directory";
+
+    at.mkdir(test_directory);
+    at.symlink_file(
+        non_existing,
+        &format!("{}/{}", test_directory, test_symlink),
+    );
+    let mut result;
+
+    // this should succeed
+    result = scene
+        .ucmd()
+        .arg("-R")
+        .arg("755")
+        .arg(test_directory)
+        .succeeds();
+    assert_eq!(result.code, Some(0));
+    assert!(result.stdout.is_empty());
+    assert!(result.stderr.is_empty());
+
+    let expected_stdout = &format!(
+        "mode of '{}' retained as 0755 (rwxr-xr-x)\nneither symbolic link '{}/{}' nor referent has been changed",
+        test_directory, test_directory, test_symlink
+    );
+
+    // '-v': this should succeed without stderr
+    result = scene
+        .ucmd()
+        .arg("-R")
+        .arg("-v")
+        .arg("755")
+        .arg(test_directory)
+        .succeeds();
+
+    println!("stdout = {:?}", result.stdout);
+    println!("stderr = {:?}", result.stderr);
+
+    assert!(result.stdout.contains(expected_stdout));
+    assert!(result.stderr.is_empty());
+    assert_eq!(result.code, Some(0));
+
+    // '-vf': this should be the same than with just '-v'
+    result = scene
+        .ucmd()
+        .arg("-R")
+        .arg("-v")
+        .arg("-f")
+        .arg("755")
+        .arg(test_directory)
+        .succeeds();
+
+    println!("stdout = {:?}", result.stdout);
+    println!("stderr = {:?}", result.stderr);
+
+    assert!(result.stdout.contains(expected_stdout));
+    assert!(result.stderr.is_empty());
+    assert_eq!(result.code, Some(0));
 }
 
 #[test]
