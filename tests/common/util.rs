@@ -197,7 +197,6 @@ impl CmdResult {
         Box::new(self)
     }
 
-
     /// like stdout_is(...), but expects the contents of the file at the provided relative path
     pub fn stdout_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> Box<&CmdResult> {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
