@@ -134,9 +134,7 @@ impl CmdResult {
     /// Panics if not present
     pub fn tmpd(&self) -> Rc<TempDir> {
         match &self.tmpd {
-            Some(ptr) => {
-                ptr.clone()
-            }
+            Some(ptr) => ptr.clone(),
             None => {
                 panic!("Command not associated with a TempDir")
             }
