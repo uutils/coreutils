@@ -75,8 +75,8 @@ fn test_tee_no_more_writeable_1() {
         .fails();
 
     assert_eq!(at.read(file_out), content);
-    assert!(result.stdout.contains(&content));
-    assert!(result.stderr.contains("No space left on device"));
+    assert!(result.stdout_str().contains(&content));
+    assert!(result.stderr_str().contains("No space left on device"));
 }
 
 #[test]
