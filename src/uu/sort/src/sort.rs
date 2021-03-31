@@ -506,7 +506,7 @@ fn get_leading_number(a: &str) -> &str {
             && !c.eq(&DECIMAL_PT)
             && !c.eq(&THOUSANDS_SEP)
         {
-            s = a.trim().split(c).next().unwrap();
+            s = a.trim().split(c).next().unwrap_or("");
             break;
         }
         s = a.trim();
