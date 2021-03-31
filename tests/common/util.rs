@@ -653,19 +653,19 @@ impl UCommand {
 
     /// Add a parameter to the invocation. Path arguments are treated relative
     /// to the test environment directory.
-    pub fn arg<S: AsRef<OsStr>>(&mut self, arg: S) -> Box<&mut UCommand> {
+    pub fn arg<S: AsRef<OsStr>>(&mut self, arg: S) -> &mut UCommand {
         if self.has_run {
             panic!(ALREADY_RUN);
         }
         self.comm_string.push_str(" ");
         self.comm_string.push_str(arg.as_ref().to_str().unwrap());
         self.raw.arg(arg.as_ref());
-        Box::new(self)
+        self
     }
 
     /// Add multiple parameters to the invocation. Path arguments are treated relative
     /// to the test environment directory.
-    pub fn args<S: AsRef<OsStr>>(&mut self, args: &[S]) -> Box<&mut UCommand> {
+    pub fn args<S: AsRef<OsStr>>(&mut self, args: &[S]) -> &mut UCommand {
         if self.has_run {
             panic!(MULTIPLE_STDIN_MEANINGLESS);
         }
@@ -675,25 +675,25 @@ impl UCommand {
         }
 
         self.raw.args(args.as_ref());
-        Box::new(self)
+        self
     }
 
     /// provides stdinput to feed in to the command when spawned
-    pub fn pipe_in<T: Into<Vec<u8>>>(&mut self, input: T) -> Box<&mut UCommand> {
+    pub fn pipe_in<T: Into<Vec<u8>>>(&mut self, input: T) -> &mut UCommand {
         if self.stdin.is_some() {
             panic!(MULTIPLE_STDIN_MEANINGLESS);
         }
         self.stdin = Some(input.into());
-        Box::new(self)
+        self
     }
 
     /// like pipe_in(...), but uses the contents of the file at the provided relative path as the piped in data
-    pub fn pipe_in_fixture<S: AsRef<OsStr>>(&mut self, file_rel_path: S) -> Box<&mut UCommand> {
+    pub fn pipe_in_fixture<S: AsRef<OsStr>>(&mut self, file_rel_path: S) -> &mut UCommand {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
         self.pipe_in(contents)
     }
 
-    pub fn env<K, V>(&mut self, key: K, val: V) -> Box<&mut UCommand>
+    pub fn env<K, V>(&mut self, key: K, val: V) -> &mut UCommand
     where
         K: AsRef<OsStr>,
         V: AsRef<OsStr>,
@@ -702,7 +702,7 @@ impl UCommand {
             panic!(ALREADY_RUN);
         }
         self.raw.env(key, val);
-        Box::new(self)
+        self
     }
 
     /// Spawns the command, feeds the stdin if any, and returns the
