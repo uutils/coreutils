@@ -18,7 +18,7 @@ extern crate uucore;
 // last synced with: cat (GNU coreutils) 8.13
 use clap::{App, Arg};
 use std::fs::{metadata, File};
-use std::io::{self, BufWriter, Read, Write};
+use std::io::{self, Read, Write};
 use thiserror::Error;
 use uucore::fs::is_stdin_interactive;
 
@@ -487,7 +487,8 @@ fn write_lines<R: Read>(
     state: &mut OutputState,
 ) -> CatResult<()> {
     let mut in_buf = [0; 1024 * 31];
-    let mut writer = BufWriter::with_capacity(1024 * 64, io::stdout());
+    let stdout = io::stdout();
+    let mut writer = stdout.lock();
     let mut one_blank_kept = false;
 
     while let Ok(n) = handle.reader.read(&mut in_buf) {
