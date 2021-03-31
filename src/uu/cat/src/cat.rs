@@ -52,6 +52,7 @@ enum CatError {
     #[error("{0}")]
     Io(#[from] io::Error),
     /// Wrapper around `nix::Error`
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     #[error("{0}")]
     Nix(#[from] nix::Error),
     /// Unknown file type; it's not a regular file, socket, etc.
