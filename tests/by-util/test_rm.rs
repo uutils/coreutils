@@ -273,6 +273,13 @@ fn test_rm_verbose_slash() {
     at.mkdir(dir);
     at.touch(file_a);
 
+    let separator = if cfg!(windows) {
+        "\\"
+    } else {
+        "/"
+    };
+    let file_a_normalized = &format!("{}{}test_rm_verbose_slash_file_a", dir, separator);
+
     ucmd.arg("-r")
         .arg("-f")
         .arg("-v")
@@ -280,7 +287,7 @@ fn test_rm_verbose_slash() {
         .succeeds()
         .stdout_only(format!(
             "removed '{}'\nremoved directory '{}'\n",
-            file_a, dir
+            file_a_normalized, dir
         ));
 
     assert!(!at.dir_exists(dir));
