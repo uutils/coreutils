@@ -2492,6 +2492,9 @@ name = "uu_wc"
 version = "0.0.4"
 dependencies = [
  "clap",
+ "libc",
+ "nix 0.20.0",
+ "thiserror",
  "uucore",
  "uucore_procs",
 ]

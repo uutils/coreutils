@@ -213,6 +213,14 @@ impl<'a> BytesGenerator<'a> {
     }
 }
 
+static ABOUT: &str = "Overwrite the specified FILE(s) repeatedly, in order to make it harder\n\
+for even very expensive hardware probing to recover the data.
+";
+
+fn get_usage() -> String {
+    format!("{} [OPTION]... FILE...", executable!())
+}
+
 static AFTER_HELP: &str =
     "Delete FILE(s) if --remove (-u) is specified.  The default is not to remove\n\
 the files because it is common to operate on device files like /dev/hda,\n\
@@ -263,16 +271,13 @@ pub mod options {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args.collect_str();
 
-    let matches = App::new("shred")
-        .name("shred")
+    let usage = get_usage();
+
+    let app = App::new(executable!())
         .version(VERSION_STR)
-        .about(
-            "Overwrite the specified FILE(s) repeatedly, in order to make it harder\n\
-for even very expensive hardware probing to recover the data.",
-        )
+        .about(ABOUT)
         .after_help(AFTER_HELP)
-        .usage("shred [OPTION]... FILE...")
-        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
+        .usage(&usage[..])
         .arg(
             Arg::with_name(options::ITERATIONS)
                 .long(options::ITERATIONS)
@@ -316,7 +321,10 @@ this is the default for non-regular files",
                 .short("z")
                 .help("add a final overwrite with zeros to hide shredding"),
         )
-        .get_matches_from(args);
+        // Positional arguments
+        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true));
+
+    let matches = app.get_matches_from(args);
 
     let mut errs: Vec<String> = vec![];
 
