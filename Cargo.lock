@@ -2217,8 +2217,8 @@ dependencies = [
 name = "uu_shred"
 version = "0.0.4"
 dependencies = [
+ "clap",
  "filetime",
- "getopts",
  "libc",
  "rand 0.5.6",
  "time",
