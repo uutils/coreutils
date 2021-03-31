@@ -658,7 +658,7 @@ impl UCommand {
     /// to the test environment directory.
     pub fn arg<S: AsRef<OsStr>>(&mut self, arg: S) -> &mut UCommand {
         if self.has_run {
-            panic!(ALREADY_RUN);
+            panic!("{}", ALREADY_RUN);
         }
         self.comm_string.push_str(" ");
         self.comm_string.push_str(arg.as_ref().to_str().unwrap());
@@ -670,7 +670,7 @@ impl UCommand {
     /// to the test environment directory.
     pub fn args<S: AsRef<OsStr>>(&mut self, args: &[S]) -> &mut UCommand {
         if self.has_run {
-            panic!(MULTIPLE_STDIN_MEANINGLESS);
+            panic!("{}", MULTIPLE_STDIN_MEANINGLESS);
         }
         for s in args {
             self.comm_string.push_str(" ");
@@ -684,7 +684,7 @@ impl UCommand {
     /// provides stdinput to feed in to the command when spawned
     pub fn pipe_in<T: Into<Vec<u8>>>(&mut self, input: T) -> &mut UCommand {
         if self.stdin.is_some() {
-            panic!(MULTIPLE_STDIN_MEANINGLESS);
+            panic!("{}", MULTIPLE_STDIN_MEANINGLESS);
         }
         self.stdin = Some(input.into());
         self
@@ -702,7 +702,7 @@ impl UCommand {
         V: AsRef<OsStr>,
     {
         if self.has_run {
-            panic!(ALREADY_RUN);
+            panic!("{}", ALREADY_RUN);
         }
         self.raw.env(key, val);
         self
@@ -712,7 +712,7 @@ impl UCommand {
     /// child process immediately.
     pub fn run_no_wait(&mut self) -> Child {
         if self.has_run {
-            panic!(ALREADY_RUN);
+            panic!("{}", ALREADY_RUN);
         }
         self.has_run = true;
         log_info("run", &self.comm_string);
