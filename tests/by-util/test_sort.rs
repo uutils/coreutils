@@ -93,6 +93,11 @@ fn test_dictionary_order2() {
 }
 
 #[test]
+fn test_months_dedup() {
+    test_helper("months-dedup", "-Mu");
+}
+
+#[test]
 fn test_mixed_floats_ints_chars_numeric() {
     test_helper("mixed_floats_ints_chars_numeric", "-n");
 }
