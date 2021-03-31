@@ -74,10 +74,21 @@ fn test_dictionary_order() {
 fn test_non_printing_chars() {
     for non_printing_chars_param in vec!["-i"] {
         new_ucmd!()
-            .pipe_in("aaaa b\na👦🏻aab\n")
+            .pipe_in("a👦🏻aa	b\naaaa	b")
             .arg(non_printing_chars_param)
             .succeeds()
-            .stdout_only("aaaa b\na👦🏻aab\n");
+            .stdout_only("aaaa	b\na👦🏻aa	b\n");
+    }
+}
+
+#[test]
+fn test_dictionary_order2() {
+    for non_dictionary_order2_param in vec!["-d"] {
+        new_ucmd!()
+            .pipe_in("a👦🏻aa	b\naaaa	b")
+            .arg(non_dictionary_order2_param)
+            .succeeds()
+            .stdout_only("a👦🏻aa	b\naaaa	b\n");
     }
 }
 
