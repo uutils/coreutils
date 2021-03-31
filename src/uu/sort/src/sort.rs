@@ -502,9 +502,9 @@ fn get_leading_number(a: &str) -> &str {
     for c in a.chars() {
         if !c.is_numeric()
             && !c.is_whitespace()
-            && !c.eq(&MINUS_SIGN)
             && !c.eq(&DECIMAL_PT)
-            && !c.eq(&THOUSANDS_SEP)
+            && !c.eq(&THOUSANDS_SEP) 
+            || a.chars().nth(0).unwrap_or('\0').eq(&MINUS_SIGN)         
         {
             s = a.trim().split(c).next().unwrap_or("");
             break;
