@@ -358,7 +358,8 @@ impl AtPath {
     pub fn read(&self, name: &str) -> String {
         let mut f = self.open(name);
         let mut contents = String::new();
-        let _ = f.read_to_string(&mut contents);
+        f.read_to_string(&mut contents)
+            .unwrap_or_else(|e| panic!("Couldn't read {}: {}", name, e));
         contents
     }
 
@@ -372,7 +373,8 @@ impl AtPath {
 
     pub fn write(&self, name: &str, contents: &str) {
         log_info("open(write)", self.plus_as_string(name));
-        let _ = std::fs::write(self.plus(name), contents);
+        std::fs::write(self.plus(name), contents)
+            .unwrap_or_else(|e| panic!("Couldn't write {}: {}", name, e));
     }
 
     pub fn write_bytes(&self, name: &str, contents: &[u8]) {
@@ -388,7 +390,8 @@ impl AtPath {
             .append(true)
             .open(self.plus(name))
             .unwrap();
-        let _ = f.write(contents.as_bytes());
+        f.write(contents.as_bytes())
+            .unwrap_or_else(|e| panic!("Couldn't write {}: {}", name, e));
     }
 
     pub fn append_bytes(&self, name: &str, contents: &[u8]) {
@@ -781,7 +784,7 @@ pub fn read_size(child: &mut Child, size: usize) -> String {
         .stdout
         .as_mut()
         .unwrap()
-        .read(output.as_mut_slice())
+        .read_exact(output.as_mut_slice())
         .unwrap();
     String::from_utf8(output).unwrap()
 }
