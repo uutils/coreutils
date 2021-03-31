@@ -206,7 +206,17 @@ impl Chmoder {
             let filename = &filename[..];
             let file = Path::new(filename);
             if !file.exists() {
-                show_error!("no such file or directory '{}'", filename);
+                if is_symlink(file) {
+                    println!(
+                        "failed to change mode of '{}' from 0000 (---------) to 0000 (---------)",
+                        filename
+                    );
+                    if !self.quiet {
+                        show_error!("cannot operate on dangling symlink '{}'", filename);
+                    }
+                } else {
+                    show_error!("cannot access '{}': No such file or directory", filename);
+                }
                 return Err(1);
             }
             if self.recursive && self.preserve_root && filename == "/" {
@@ -240,18 +250,16 @@ impl Chmoder {
         let mut fperm = match fs::metadata(file) {
             Ok(meta) => meta.mode() & 0o7777,
             Err(err) => {
-                if !self.quiet {
-                    if is_symlink(file) {
-                        if self.verbose {
-                            show_info!(
-                                "neither symbolic link '{}' nor referent has been changed",
-                                file.display()
-                            );
-                        }
-                        return Ok(());
-                    } else {
-                        show_error!("{}: '{}'", err, file.display());
+                if is_symlink(file) {
+                    if self.verbose {
+                        println!(
+                            "neither symbolic link '{}' nor referent has been changed",
+                            file.display()
+                        );
                     }
+                    return Ok(());
+                } else {
+                    show_error!("{}: '{}'", err, file.display());
                 }
                 return Err(1);
             }
@@ -291,11 +299,11 @@ impl Chmoder {
     fn change_file(&self, fperm: u32, mode: u32, file: &Path) -> Result<(), i32> {
         if fperm == mode {
             if self.verbose && !self.changes {
-                show_info!(
-                    "mode of '{}' retained as {:o} ({})",
+                println!(
+                    "mode of '{}' retained as {:04o} ({})",
                     file.display(),
                     fperm,
-                    display_permissions_unix(fperm)
+                    display_permissions_unix(fperm),
                 );
             }
             Ok(())
