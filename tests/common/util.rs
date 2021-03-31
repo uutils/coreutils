@@ -127,7 +127,7 @@ impl CmdResult {
         self.code.expect("Program must be run first")
     }
 
-    /// Retunrs the program's TempDir
+    /// Returns the program's TempDir
     /// Panics if not present
     pub fn tmpd(&self) -> Rc<TempDir> {
         match &self.tmpd {
@@ -144,21 +144,21 @@ impl CmdResult {
     }
 
     /// asserts that the command resulted in a success (zero) status code
-    pub fn success(&self) -> Box<&CmdResult> {
+    pub fn success(&self) -> &CmdResult {
         assert!(self.success);
-        Box::new(self)
+        self
     }
 
     /// asserts that the command resulted in a failure (non-zero) status code
-    pub fn failure(&self) -> Box<&CmdResult> {
+    pub fn failure(&self) -> &CmdResult {
         assert!(!self.success);
-        Box::new(self)
+        self
     }
 
     /// asserts that the command's exit code is the same as the given one
-    pub fn status_code(&self, code: i32) -> Box<&CmdResult> {
+    pub fn status_code(&self, code: i32) -> &CmdResult {
         assert!(self.code == Some(code));
-        Box::new(self)
+        self
     }
 
     /// asserts that the command resulted in empty (zero-length) stderr stream output
@@ -166,9 +166,9 @@ impl CmdResult {
     /// but you might find yourself using this function if
     /// 1. you can not know exactly what stdout will be
     /// or 2. you know that stdout will also be empty
-    pub fn no_stderr(&self) -> Box<&CmdResult> {
+    pub fn no_stderr(&self) -> &CmdResult {
         assert!(self.stderr.is_empty());
-        Box::new(self)
+        self
     }
 
     /// asserts that the command resulted in empty (zero-length) stderr stream output
@@ -177,28 +177,28 @@ impl CmdResult {
     /// but you might find yourself using this function if
     /// 1. you can not know exactly what stderr will be
     /// or 2. you know that stderr will also be empty
-    pub fn no_stdout(&self) -> Box<&CmdResult> {
+    pub fn no_stdout(&self) -> &CmdResult {
         assert!(self.stdout.is_empty());
-        Box::new(self)
+        self
     }
 
     /// asserts that the command resulted in stdout stream output that equals the
     /// passed in value, trailing whitespace are kept to force strict comparison (#1235)
     /// stdout_only is a better choice unless stderr may or will be non-empty
-    pub fn stdout_is<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
+    pub fn stdout_is<T: AsRef<str>>(&self, msg: T) -> &CmdResult {
         assert_eq!(self.stdout, String::from(msg.as_ref()));
-        Box::new(self)
+        self
     }
 
     /// asserts that the command resulted in stdout stream output,
     /// whose bytes equal those of the passed in slice
-    pub fn stdout_is_bytes<T: AsRef<[u8]>>(&self, msg: T) -> Box<&CmdResult> {
+    pub fn stdout_is_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &CmdResult {
         assert_eq!(self.stdout.as_bytes(), msg.as_ref());
-        Box::new(self)
+        self
     }
 
     /// like stdout_is(...), but expects the contents of the file at the provided relative path
-    pub fn stdout_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> Box<&CmdResult> {
+    pub fn stdout_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &CmdResult {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
         self.stdout_is_bytes(contents)
     }
@@ -206,26 +206,26 @@ impl CmdResult {
     /// asserts that the command resulted in stderr stream output that equals the
     /// passed in value, when both are trimmed of trailing whitespace
     /// stderr_only is a better choice unless stdout may or will be non-empty
-    pub fn stderr_is<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
+    pub fn stderr_is<T: AsRef<str>>(&self, msg: T) -> &CmdResult {
         assert_eq!(
             self.stderr.trim_end(),
             String::from(msg.as_ref()).trim_end()
         );
-        Box::new(self)
+        self
     }
 
     /// asserts that the command resulted in stderr stream output,
     /// whose bytes equal those of the passed in slice
-    pub fn stderr_is_bytes<T: AsRef<[u8]>>(&self, msg: T) -> Box<&CmdResult> {
+    pub fn stderr_is_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &CmdResult {
         assert_eq!(self.stderr.as_bytes(), msg.as_ref());
-        Box::new(self)
+        self
     }
 
     /// asserts that
     /// 1. the command resulted in stdout stream output that equals the
     /// passed in value, when both are trimmed of trailing whitespace
     /// and 2. the command resulted in empty (zero-length) stderr stream output
-    pub fn stdout_only<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
+    pub fn stdout_only<T: AsRef<str>>(&self, msg: T) -> &CmdResult {
         self.no_stderr().stdout_is(msg)
     }
 
@@ -233,12 +233,12 @@ impl CmdResult {
     /// 1.  the command resulted in a stdout stream whose bytes
     ///     equal those of the passed in value
     /// 2.  the command resulted in an empty stderr stream
-    pub fn stdout_only_bytes<T: AsRef<[u8]>>(&self, msg: T) -> Box<&CmdResult> {
+    pub fn stdout_only_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &CmdResult {
         self.no_stderr().stdout_is_bytes(msg)
     }
 
     /// like stdout_only(...), but expects the contents of the file at the provided relative path
-    pub fn stdout_only_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> Box<&CmdResult> {
+    pub fn stdout_only_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &CmdResult {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
         self.stdout_only_bytes(contents)
     }
@@ -247,7 +247,7 @@ impl CmdResult {
     /// 1. the command resulted in stderr stream output that equals the
     /// passed in value, when both are trimmed of trailing whitespace
     /// and 2. the command resulted in empty (zero-length) stdout stream output
-    pub fn stderr_only<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
+    pub fn stderr_only<T: AsRef<str>>(&self, msg: T) -> &CmdResult {
         self.no_stdout().stderr_is(msg)
     }
 
@@ -255,24 +255,24 @@ impl CmdResult {
     /// 1.  the command resulted in a stderr stream whose bytes equal the ones
     ///     of the passed value
     /// 2.  the command resulted in an empty stdout stream
-    pub fn stderr_only_bytes<T: AsRef<[u8]>>(&self, msg: T) -> Box<&CmdResult> {
+    pub fn stderr_only_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &CmdResult {
         self.no_stderr().stderr_is_bytes(msg)
     }
 
-    pub fn fails_silently(&self) -> Box<&CmdResult> {
+    pub fn fails_silently(&self) -> &CmdResult {
         assert!(!self.success);
         assert!(self.stderr.is_empty());
-        Box::new(self)
+        self
     }
 
-    pub fn stdout_contains<T: AsRef<str>>(&self, cmp: T) -> Box<&CmdResult> {
+    pub fn stdout_contains<T: AsRef<str>>(&self, cmp: T) -> &CmdResult {
         assert!(self.stdout_str().contains(cmp.as_ref()));
-        Box::new(self)
+        self
     }
 
-    pub fn stderr_contains<T: AsRef<str>>(&self, cmp: &T) -> Box<&CmdResult> {
+    pub fn stderr_contains<T: AsRef<str>>(&self, cmp: &T) -> &CmdResult {
         assert!(self.stderr_str().contains(cmp.as_ref()));
-        Box::new(self)
+        self
     }
 }
 
