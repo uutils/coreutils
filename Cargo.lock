@@ -1986,7 +1986,7 @@ dependencies = [
 name = "uu_more"
 version = "0.0.4"
 dependencies = [
- "getopts",
+ "clap",
  "nix 0.13.1",
  "redox_syscall 0.1.57",
  "redox_termios",
@@ -2475,6 +2475,9 @@ name = "uu_wc"
 version = "0.0.4"
 dependencies = [
  "clap",
+ "libc",
+ "nix 0.20.0",
+ "thiserror",
  "uucore",
  "uucore_procs",
 ]
