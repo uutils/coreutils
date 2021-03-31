@@ -178,7 +178,7 @@ enum TimeStyle {
     FullIso,
     LongIso,
     Iso,
-    Locale
+    Locale,
 }
 
 #[derive(PartialEq, Eq)]
@@ -234,7 +234,9 @@ impl Config {
                 },
                 options::FORMAT,
             )
-        } else if options.is_present(options::format::LONG) || options.is_present(options::FULL_TIME) {
+        } else if options.is_present(options::format::LONG)
+            || options.is_present(options::FULL_TIME)
+        {
             (Format::Long, options::format::LONG)
         } else if options.is_present(options::format::ACROSS) {
             (Format::Across, options::format::ACROSS)
@@ -417,7 +419,10 @@ impl Config {
                 "long-iso" => TimeStyle::LongIso,
                 "iso" => TimeStyle::Iso,
                 "locale" => TimeStyle::Locale,
-                _ => {show_usage_error!("Invalid TIME_STYLE variable"); std::process::exit(1)},
+                _ => {
+                    show_usage_error!("Invalid TIME_STYLE variable");
+                    std::process::exit(1)
+                }
             }
         } else {
             TimeStyle::Locale
@@ -441,7 +446,7 @@ impl Config {
             long,
             width,
             indicator_style,
-            time_style
+            time_style,
         }
     }
 }
@@ -812,7 +817,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(options::SLASH)
                 .short(options::SLASH)
                 .help("Append / indicator to directories."
-                )    
+                )
                 .overrides_with_all(&[
                     options::FILE_TYPE,
                     options::SLASH,
@@ -847,7 +852,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     // Positional arguments
         .arg(Arg::with_name(options::PATHS).multiple(true).takes_value(true))
-        
+
         .after_help(indoc!(
         "The TIME_STYLE argument can be full-iso, long-iso, iso.
         Also the TIME_STYLE environment variable sets the default style to use.
@@ -1204,23 +1209,26 @@ fn get_time(md: &Metadata, config: &Config) -> Option<chrono::DateTime<chrono::L
     Some(time.into())
 }
 
-fn display_date(metadata: &Metadata, config: &Config) -> String {    
+fn display_date(metadata: &Metadata, config: &Config) -> String {
     match get_time(metadata, config) {
         Some(time) => {
-
             //Date is recent if from past 6 months
             //According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
             //https://github.com/coreutils/coreutils/blob/master/src/ls.c#L4385
-            let recent = time + chrono::Duration::seconds(31556952/2) > chrono::Local::now();
+            let recent = time + chrono::Duration::seconds(31556952 / 2) > chrono::Local::now();
 
             //For reference see https://github.com/coreutils/coreutils/blob/master/src/ls.c#L2416
             match config.time_style {
                 TimeStyle::FullIso => time.format("%Y-%m-%d %H:%M:%S.%N %z"),
                 TimeStyle::LongIso => time.format("%Y-%m-%d %H:%M"),
-                TimeStyle::Iso => time.format(if recent {"%Y-%m-%d %H:%M"} else {"%Y-%m-%d "}),
+                TimeStyle::Iso => time.format(if recent {
+                    "%Y-%m-%d %H:%M"
+                } else {
+                    "%Y-%m-%d "
+                }),
                 TimeStyle::Locale => {
                     //https://github.com/coreutils/coreutils/blob/master/src/ls.c#L759
-                    let fmt =  if recent {"%b %e %H:%M"} else {"%b %e  %Y"};
+                    let fmt = if recent { "%b %e %H:%M" } else { "%b %e  %Y" };
 
                     //In this version of chrono translating can be done
                     //The function is chrono::datetime::DateTime::format_localized
@@ -1230,7 +1238,7 @@ fn display_date(metadata: &Metadata, config: &Config) -> String {
                     time.format(fmt)
                 }
             }.to_string()
-        },
+        }
         None => "???".into(),
     }
 }
