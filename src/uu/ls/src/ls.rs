@@ -33,8 +33,11 @@ use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{cmp::Reverse, process::exit};
 
+use indoc::indoc;
+
+use chrono;
+
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
-use time::{strftime, Timespec};
 #[cfg(unix)]
 use unicode_width::UnicodeWidthStr;
 #[cfg(unix)]
@@ -130,6 +133,8 @@ pub mod options {
     pub static COLOR: &str = "color";
     pub static PATHS: &str = "paths";
     pub static INDICATOR_STYLE: &str = "indicator-style";
+    pub static TIME_STYLE: &str = "time-style";
+    pub static FULL_TIME: &str = "full-time";
 }
 
 #[derive(PartialEq, Eq)]
@@ -169,6 +174,13 @@ enum Time {
     Birth,
 }
 
+enum TimeStyle {
+    FullIso,
+    LongIso,
+    Iso,
+    Locale
+}
+
 #[derive(PartialEq, Eq)]
 enum IndicatorStyle {
     None,
@@ -195,6 +207,7 @@ struct Config {
     long: LongFormat,
     width: Option<u16>,
     indicator_style: IndicatorStyle,
+    time_style: TimeStyle,
 }
 
 // Fields that can be removed or added to the long format
@@ -221,7 +234,7 @@ impl Config {
                 },
                 options::FORMAT,
             )
-        } else if options.is_present(options::format::LONG) {
+        } else if options.is_present(options::format::LONG) || options.is_present(options::FULL_TIME) {
             (Format::Long, options::format::LONG)
         } else if options.is_present(options::format::ACROSS) {
             (Format::Across, options::format::ACROSS)
@@ -387,6 +400,29 @@ impl Config {
             IndicatorStyle::None
         };
 
+        let time_style = if let Some(field) = options.value_of(options::TIME_STYLE) {
+            match field {
+                "full-iso" => TimeStyle::FullIso,
+                "long-iso" => TimeStyle::LongIso,
+                "iso" => TimeStyle::Iso,
+                "locale" => TimeStyle::Locale,
+                // below should never happen as clap already restricts the values.
+                _ => unreachable!("Invalid field for --time-style"),
+            }
+        } else if options.is_present(options::FULL_TIME) {
+            TimeStyle::FullIso
+        } else if std::env::var("TIME_STYLE").is_ok() {
+            match std::env::var("TIME_STYLE").unwrap().as_ref() {
+                "full-iso" => TimeStyle::FullIso,
+                "long-iso" => TimeStyle::LongIso,
+                "iso" => TimeStyle::Iso,
+                "locale" => TimeStyle::Locale,
+                _ => {show_usage_error!("Invalid TIME_STYLE variable"); std::process::exit(1)},
+            }
+        } else {
+            TimeStyle::Locale
+        };
+
         Config {
             format,
             files,
@@ -405,6 +441,7 @@ impl Config {
             long,
             width,
             indicator_style,
+            time_style
         }
     }
 }
@@ -775,16 +812,46 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(options::SLASH)
                 .short(options::SLASH)
                 .help("Append / indicator to directories."
-                )
+                )    
                 .overrides_with_all(&[
                     options::FILE_TYPE,
                     options::SLASH,
                     options::CLASSIFY,
                     options::INDICATOR_STYLE,
                 ]))
+        .arg(
+            //This still needs support for posix-*, +FORMAT
+            Arg::with_name(options::TIME_STYLE)
+                .long(options::TIME_STYLE)
+                .help("time/date format with -l; see TIME_STYLE below")
+                .value_name("TIME_STYLE")
+                .possible_values(&[
+                    "full-iso",
+                    "long-iso",
+                    "iso",
+                    "locale",
+                ])
+                .overrides_with_all(&[
+                    options::TIME_STYLE,
+                ])
+        )
+        .arg(
+            Arg::with_name(options::FULL_TIME)
+            .long(options::FULL_TIME)
+            .help("like -l --time-style=full-iso")
+            .overrides_with_all(&[
+                options::TIME_STYLE,
+                options::format::LONG,
+            ])
+        )
 
     // Positional arguments
-        .arg(Arg::with_name(options::PATHS).multiple(true).takes_value(true));
+        .arg(Arg::with_name(options::PATHS).multiple(true).takes_value(true))
+        
+        .after_help(indoc!(
+        "The TIME_STYLE argument can be full-iso, long-iso, iso.
+        Also the TIME_STYLE environment variable sets the default style to use.
+        "));
 
     let matches = app.get_matches_from(args);
 
@@ -1132,18 +1199,38 @@ fn get_system_time(md: &Metadata, config: &Config) -> Option<SystemTime> {
     }
 }
 
-fn get_time(md: &Metadata, config: &Config) -> Option<time::Tm> {
-    let duration = get_system_time(md, config)?
-        .duration_since(UNIX_EPOCH)
-        .ok()?;
-    let secs = duration.as_secs() as i64;
-    let nsec = duration.subsec_nanos() as i32;
-    Some(time::at(Timespec::new(secs, nsec)))
+fn get_time(md: &Metadata, config: &Config) -> Option<chrono::DateTime<chrono::Local>> {
+    let time = get_system_time(md, config)?;
+    Some(time.into())
 }
 
-fn display_date(metadata: &Metadata, config: &Config) -> String {
+fn display_date(metadata: &Metadata, config: &Config) -> String {    
     match get_time(metadata, config) {
-        Some(time) => strftime("%F %R", &time).unwrap(),
+        Some(time) => {
+
+            //Date is recent if from past 6 months
+            //According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
+            //https://github.com/coreutils/coreutils/blob/master/src/ls.c#L4385
+            let recent = time + chrono::Duration::seconds(31556952/2) > chrono::Local::now();
+
+            //For reference see https://github.com/coreutils/coreutils/blob/master/src/ls.c#L2416
+            match config.time_style {
+                TimeStyle::FullIso => time.format("%Y-%m-%d %H:%M:%S.%N %z"),
+                TimeStyle::LongIso => time.format("%Y-%m-%d %H:%M"),
+                TimeStyle::Iso => time.format(if recent {"%Y-%m-%d %H:%M"} else {"%Y-%m-%d "}),
+                TimeStyle::Locale => {
+                    //https://github.com/coreutils/coreutils/blob/master/src/ls.c#L759
+                    let fmt =  if recent {"%b %e %H:%M"} else {"%b %e  %Y"};
+
+                    //In this version of chrono translating can be done
+                    //The function is chrono::datetime::DateTime::format_localized
+                    //However it's currently still hard to get the current pure-rust-locale
+                    //So it's not yet implemented
+
+                    time.format(fmt)
+                }
+            }.to_string()
+        },
         None => "???".into(),
     }
 }
