@@ -37,10 +37,10 @@ fn run_single_test(test: &TestCase, at: AtPath, mut ucmd: UCommand) {
     mkfile(&at.plus_as_string(TEST_FILE), test.before);
     let perms = at.metadata(TEST_FILE).permissions().mode();
     if perms != test.before {
-        panic!(format!(
+        panic!(
             "{}: expected: {:o} got: {:o}",
             "setting permissions on test files before actual test run failed", test.after, perms
-        ));
+        );
     }
 
     for arg in &test.args {
@@ -49,15 +49,15 @@ fn run_single_test(test: &TestCase, at: AtPath, mut ucmd: UCommand) {
     let r = ucmd.run();
     if !r.success {
         println!("{}", r.stderr);
-        panic!(format!("{:?}: failed", ucmd.raw));
+        panic!("{:?}: failed", ucmd.raw);
     }
 
     let perms = at.metadata(TEST_FILE).permissions().mode();
     if perms != test.after {
-        panic!(format!(
+        panic!(
             "{:?}: expected: {:o} got: {:o}",
             ucmd.raw, test.after, perms
-        ));
+        );
     }
 }
 

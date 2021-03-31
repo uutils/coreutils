@@ -1038,7 +1038,7 @@ fn test_cp_one_file_system() {
         .arg("tmpfs")
         .arg(mountpoint_path)
         .run();
-    assert!(_r.code == Some(0), _r.stderr);
+    assert!(_r.code == Some(0), "{}", _r.stderr);
 
     at_src.touch(TEST_MOUNT_OTHER_FILESYSTEM_FILE);
 
@@ -1052,7 +1052,7 @@ fn test_cp_one_file_system() {
 
     // Ditch the mount before the asserts
     let _r = scene.cmd("umount").arg(mountpoint_path).run();
-    assert!(_r.code == Some(0), _r.stderr);
+    assert!(_r.code == Some(0), "{}", _r.stderr);
 
     assert!(result.success);
     assert!(!at_dst.file_exists(TEST_MOUNT_OTHER_FILESYSTEM_FILE));
