@@ -568,6 +568,21 @@ fn test_ls_long_ctime() {
 }
 
 #[test]
+fn test_ls_order_birthtime() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("test-birthtime-1");
+    at.touch("test-birthtime-2");
+    let result = scene.ucmd().arg("--time=birth").arg("-t").run();
+
+    #[cfg(not(windows))]
+    assert_eq!(result.stdout, "test-birthtime-2\ntest-birthtime-1\n");
+    #[cfg(windows)]
+    assert_eq!(result.stdout, "test-birthtime-2  test-birthtime-1\n");
+}
+
+#[test]
 fn test_ls_order_time() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

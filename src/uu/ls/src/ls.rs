@@ -166,6 +166,7 @@ enum Time {
     Modification,
     Access,
     Change,
+    Birth,
 }
 
 #[derive(PartialEq, Eq)]
@@ -304,6 +305,7 @@ impl Config {
             match field {
                 "ctime" | "status" => Time::Change,
                 "access" | "atime" | "use" => Time::Access,
+                "birth" | "creation" => Time::Birth,
                 // below should never happen as clap already restricts the values.
                 _ => unreachable!("Invalid field for --time"),
             }
@@ -521,10 +523,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(options::TIME)
                 .help("Show time in <field>:\n\
                     \taccess time (-u): atime, access, use;\n\
-                    \tchange time (-t): ctime, status.")
+                    \tchange time (-t): ctime, status.\n\
+                    \tbirth time: birth, creation;")
                 .value_name("field")
                 .takes_value(true)
-                .possible_values(&["atime", "access", "use", "ctime", "status"])
+                .possible_values(&["atime", "access", "use", "ctime", "status", "birth", "creation"])
                 .hide_possible_values(true)
                 .require_equals(true)
                 .overrides_with_all(&[
@@ -1116,6 +1119,7 @@ fn get_system_time(md: &Metadata, config: &Config) -> Option<SystemTime> {
         Time::Change => Some(UNIX_EPOCH + Duration::new(md.ctime() as u64, md.ctime_nsec() as u32)),
         Time::Modification => md.modified().ok(),
         Time::Access => md.accessed().ok(),
+        Time::Birth => md.created().ok(),
     }
 }
 
