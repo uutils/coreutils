@@ -488,6 +488,10 @@ fn copy_file_to_file(file: &PathBuf, target: &PathBuf, b: &Behavior) -> i32 {
 /// If the copy system call fails, we print a verbose error and return an empty error value.
 ///
 fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
+    if b.compare && !need_copy(from, to, b) {
+        return Ok(());
+    }
+
     if from.to_string_lossy() == "/dev/null" {
         /* workaround a limitation of fs::copy
          * https://github.com/rust-lang/rust/issues/79390
@@ -501,13 +505,7 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
             );
             return Err(());
         }
-    }
-
-    if b.compare && !need_copy(from, to, b) {
-        return Ok(());
-    }
-
-    if let Err(err) = fs::copy(from, to) {
+    } else if let Err(err) = fs::copy(from, to) {
         show_error!(
             "cannot install '{}' to '{}': {}",
             from.display(),

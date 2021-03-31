@@ -5,7 +5,7 @@
 macro_rules! assert_empty_stderr(
     ($cond:expr) => (
         if $cond.stderr.len() > 0 {
-            panic!(format!("stderr: {}", $cond.stderr))
+            panic!("stderr: {}", $cond.stderr_str())
         }
     );
 );
@@ -17,7 +17,7 @@ macro_rules! assert_empty_stderr(
 macro_rules! assert_empty_stdout(
     ($cond:expr) => (
         if $cond.stdout.len() > 0 {
-            panic!(format!("stdout: {}", $cond.stdout))
+            panic!("stdout: {}", $cond.stdout_str())
         }
     );
 );
@@ -30,7 +30,7 @@ macro_rules! assert_no_error(
     ($cond:expr) => (
         assert!($cond.success);
         if $cond.stderr.len() > 0 {
-            panic!(format!("stderr: {}", $cond.stderr))
+            panic!("stderr: {}", $cond.stderr_str())
         }
     );
 );

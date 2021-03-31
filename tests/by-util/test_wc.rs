@@ -14,7 +14,7 @@ fn test_utf8() {
         .args(&["-lwmcL"])
         .pipe_in_fixture("UTF_8_test.txt")
         .run()
-        .stdout_is(" 0 0 0 0 0\n");
+        .stdout_is("   300  4969 22781 22213    79\n");
     // GNU returns "  300  2086 22219 22781    79"
     // TODO: we should fix that to match GNU's behavior
 }
@@ -25,7 +25,7 @@ fn test_stdin_line_len_regression() {
         .args(&["-L"])
         .pipe_in("\n123456")
         .run()
-        .stdout_is(" 6\n");
+        .stdout_is("6\n");
 }
 
 #[test]
@@ -34,7 +34,7 @@ fn test_stdin_only_bytes() {
         .args(&["-c"])
         .pipe_in_fixture("lorem_ipsum.txt")
         .run()
-        .stdout_is(" 772\n");
+        .stdout_is("772\n");
 }
 
 #[test]
@@ -59,7 +59,7 @@ fn test_single_only_lines() {
     new_ucmd!()
         .args(&["-l", "moby_dick.txt"])
         .run()
-        .stdout_is("   18 moby_dick.txt\n");
+        .stdout_is("18 moby_dick.txt\n");
 }
 
 #[test]
