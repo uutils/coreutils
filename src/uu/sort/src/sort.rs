@@ -402,6 +402,13 @@ fn exec(files: Vec<String>, settings: &mut Settings) -> i32 {
         } else {
             print_sorted(file_merger, &settings.outfile)
         }
+    } else if settings.mode == SortMode::Month && settings.unique {
+        print_sorted(
+            lines
+                .iter()
+                .dedup_by(|a, b| get_months_dedup(a) == get_months_dedup(b)),
+            &settings.outfile,
+        )
     } else if settings.unique {
         print_sorted(
             lines
@@ -504,7 +511,7 @@ fn get_leading_number(a: &str) -> &str {
             && !c.is_whitespace()
             && !c.eq(&DECIMAL_PT)
             && !c.eq(&THOUSANDS_SEP) 
-            || a.chars().nth(0).unwrap_or('\0').eq(&MINUS_SIGN)         
+            && !a.chars().nth(0).unwrap_or('\0').eq(&MINUS_SIGN)         
         {
             s = a.trim().split(c).next().unwrap_or("");
             break;
@@ -512,6 +519,38 @@ fn get_leading_number(a: &str) -> &str {
         s = a.trim();
     }
     s
+}
+
+fn get_months_dedup(a: &str) -> String {
+    let pattern = if a.trim().len().ge(&3) {
+        // Split a 3 and get first element of tuple ".0"
+        a.split_at(3).0
+    } else {
+        ""
+    };
+    
+    let month = match pattern.to_uppercase().as_ref()
+    {
+        "JAN" => Month::January,
+        "FEB" => Month::February,
+        "MAR" => Month::March,
+        "APR" => Month::April,
+        "MAY" => Month::May,
+        "JUN" => Month::June,
+        "JUL" => Month::July,
+        "AUG" => Month::August,
+        "SEP" => Month::September,
+        "OCT" => Month::October,
+        "NOV" => Month::November,
+        "DEC" => Month::December,
+        _ => Month::Unknown,
+    };
+    
+    if month == Month::Unknown {
+        "".to_string()
+    } else {
+        pattern.to_uppercase().to_string()
+    }
 }
 
 // *For all dedups/uniques must compare leading numbers*
@@ -585,7 +624,7 @@ fn human_numeric_convert(a: &str) -> f64 {
     let (_, suffix) = a.split_at(num_str.len());
     let num_part = permissive_f64_parse(num_str);
     let suffix: f64 = match suffix.parse().unwrap_or('\0') {
-        'K' => 1000f64,
+        'K' => 1E3,
         'M' => 1E6,
         'G' => 1E9,
         'T' => 1E12,
