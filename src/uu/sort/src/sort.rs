@@ -406,7 +406,7 @@ fn exec(files: Vec<String>, settings: &mut Settings) -> i32 {
         print_sorted(
             lines
                 .iter()
-                .dedup_by(|a, b| leading_num_numlines(a) == leading_num_numlines(b)),
+                .dedup_by(|a, b| get_nums_dedup(a) == get_nums_dedup(b)),
             &settings.outfile,
         )
     } else {
@@ -514,17 +514,17 @@ fn get_leading_number(a: &str) -> &str {
     s
 }
 
-// For all dedups
-// Specifically *not* the same as sort | uniq
+// *For all dedups/uniques must compare leading numbers*
+// Numeric compare and unique is specifically *not* the same as sort | uniq
 // See: https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
-fn leading_num_numlines(a: &str) -> &str {
+fn get_nums_dedup(a: &str) -> &str {
     // Trim and remove any leading zeros
     let s = a.trim().trim_start_matches('0');
 
     // Get first char
     let c = s.chars().nth(0).unwrap_or('\0');
 
-    // Empty, non-number lines, whitespace and are treated as same for dedup
+    // Empty, non-number lines, whitespace and are treated as the same for dedup
     if s.is_empty() {
         ""
     } else if c.is_whitespace() {
@@ -542,7 +542,7 @@ fn permissive_f64_parse(a: &str) -> f64 {
     // Remove thousands seperators
     let mut a = a.replace(THOUSANDS_SEP, "");
 
-    // Empty number lines are treated as ‘0’
+    // Empty number lines are to be treated as ‘0’
     if a.is_empty() {
         a = "0".to_string()
     };
@@ -621,7 +621,7 @@ fn get_rand_string() -> String {
         .collect::<String>()
 }
 
-fn hash<T: Hash>(t: &T) -> u64 {
+fn get_hash<T: Hash>(t: &T) -> u64 {
     let mut s: FnvHasher = Default::default();
     t.hash(&mut s);
     s.finish()
@@ -631,8 +631,8 @@ fn random_shuffle(a: &str, b: &str, x: &Settings) -> Ordering {
     #![allow(clippy::comparison_chain)]
     let salt_slice = x.salt.as_str();
 
-    let da = hash(&[a, salt_slice].concat());
-    let db = hash(&[b, salt_slice].concat());
+    let da = get_hash(&[a, salt_slice].concat());
+    let db = get_hash(&[b, salt_slice].concat());
 
     da.cmp(&db)
 }
@@ -657,9 +657,10 @@ enum Month {
 /// Parse the beginning string into a Month, returning Month::Unknown on errors.
 fn month_parse(line: &str) -> Month {
     match line
+        .trim()
         .split_whitespace()
         .next()
-        .unwrap()
+        .unwrap_or("")
         .to_uppercase()
         .as_ref()
     {
@@ -715,7 +716,7 @@ fn remove_nondictionary_chars(s: &str) -> String {
 }
 
 fn remove_nonprinting_chars(s: &str) -> String {
-    // However, printing chars is more permissive.
+    // However, GNU says nonprinting chars is more permissive.  All ASCII except control chars ie, escape, newline
     s.chars()
         .filter(|c| c.is_ascii() && !c.is_ascii_control())
         .collect::<String>()
