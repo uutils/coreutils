@@ -18,7 +18,7 @@ extern crate uucore;
 // last synced with: cat (GNU coreutils) 8.13
 use clap::{App, Arg};
 use std::fs::{metadata, File};
-use std::io::{self, stdin, stdout, BufWriter, Read, Write};
+use std::io::{self, BufWriter, Read, Write};
 use thiserror::Error;
 use uucore::fs::is_stdin_interactive;
 
@@ -298,7 +298,7 @@ fn cat_handle<R: Read>(
 
 fn cat_path(path: &str, options: &OutputOptions, state: &mut OutputState) -> CatResult<()> {
     if path == "-" {
-        let stdin = stdin();
+        let stdin = io::stdin();
         let mut handle = InputHandle {
             #[cfg(any(target_os = "linux", target_os = "android"))]
             file_descriptor: stdin.as_raw_fd(),
@@ -384,30 +384,29 @@ fn get_input_type(path: &str) -> CatResult<InputType> {
     }
 }
 
-/// Writes handle to stdout with no configuration.  This allows a
+/// Writes handle to stdout with no configuration. This allows a
 /// simple memory copy.
 fn write_fast<R: Read>(handle: &mut InputHandle<R>) -> CatResult<()> {
-    let writer = stdout();
-    let mut writer_handle = writer.lock();
-    // If we're on Linux or Android, try to use the splice()
-    // system call for faster writing.
+    let stdout = io::stdout();
+    let mut stdout_lock = stdout.lock();
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
-        match write_fast_using_splice(handle, writer.as_raw_fd()) {
-            Ok(_) => {
-                // Writing fast with splice worked! We don't need
-                // to fall back on slower writing.
-                return Ok(());
-            }
-            _ => {
-                // Ignore any error and fall back to slower
-                // writing below.
-            }
+        // If we're on Linux or Android, try to use the splice() system call
+        // for faster writing. If it works, we're done. Otherwise we ignore
+        // any error and fall back to slower writing below.
+        if write_fast_using_splice(handle, stdout.as_raw_fd()).is_ok() {
+            return Ok(());
         }
     }
     // If we're not on Linux or Android, or the splice() call failed,
     // fall back on slower writing.
-    io::copy(&mut handle.reader, &mut writer_handle)?;
+    let mut buf = [0; 1024 * 64];
+    while let Ok(n) = handle.reader.read(&mut buf) {
+        if n == 0 {
+            break;
+        }
+        stdout_lock.write_all(&buf[..n])?;
+    };
     Ok(())
 }
 
@@ -453,7 +452,7 @@ fn write_lines<R: Read>(
     state: &mut OutputState,
 ) -> CatResult<()> {
     let mut in_buf = [0; 1024 * 31];
-    let mut writer = BufWriter::with_capacity(1024 * 64, stdout());
+    let mut writer = BufWriter::with_capacity(1024 * 64, io::stdout());
     let mut one_blank_kept = false;
 
     while let Ok(n) = handle.reader.read(&mut in_buf) {
