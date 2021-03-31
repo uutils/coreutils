@@ -18,6 +18,11 @@ path = "src/wc.rs"
 clap = "2.33"
 uucore = { version=">=0.0.7", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
+thiserror = "1.0"
+
+[target.'cfg(unix)'.dependencies]
+nix = "0.20"
+libc = "0.2"
 
 [[bin]]
 name = "wc"

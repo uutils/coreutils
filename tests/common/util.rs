@@ -1,5 +1,8 @@
+#![allow(dead_code)]
+
+use libc;
 use std::env;
-use std::ffi::OsStr;
+use std::ffi::{CString, OsStr};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Result, Write};
 #[cfg(unix)]
@@ -27,7 +30,7 @@ static ALREADY_RUN: &str = " you have already run this UCommand, if you want to 
      testing();";
 static MULTIPLE_STDIN_MEANINGLESS: &str = "Ucommand is designed around a typical use case of: provide args and input stream -> spawn process -> block until completion -> return output streams. For verifying that a particular section of the input stream is what causes a particular behavior, use the Command type directly.";
 
-/// Test if the program are running under CI
+/// Test if the program is running under CI
 pub fn is_ci() -> bool {
     std::env::var("CI")
         .unwrap_or(String::from("false"))
@@ -53,14 +56,6 @@ pub fn is_wsl() -> bool {
 fn read_scenario_fixture<S: AsRef<OsStr>>(tmpd: &Option<Rc<TempDir>>, file_rel_path: S) -> String {
     let tmpdir_path = tmpd.as_ref().unwrap().as_ref().path();
     AtPath::new(tmpdir_path).read(file_rel_path.as_ref().to_str().unwrap())
-}
-
-pub fn repeat_str(s: &str, n: u32) -> String {
-    let mut repeated = String::new();
-    for _ in 0..n {
-        repeated.push_str(s);
-    }
-    repeated
 }
 
 /// A command result is the outputs of a command (streams and status code)
@@ -296,6 +291,29 @@ impl AtPath {
         File::create(&self.plus(file)).unwrap();
     }
 
+    #[cfg(not(windows))]
+    pub fn mkfifo(&self, fifo: &str) {
+        let full_path = self.plus_as_string(fifo);
+        log_info("mkfifo", &full_path);
+        unsafe {
+            let fifo_name: CString = CString::new(full_path).expect("CString creation failed.");
+            libc::mkfifo(fifo_name.as_ptr(), libc::S_IWUSR | libc::S_IRUSR);
+        }
+    }
+
+    #[cfg(not(windows))]
+    pub fn is_fifo(&self, fifo: &str) -> bool {
+        unsafe {
+            let name = CString::new(self.plus_as_string(fifo)).unwrap();
+            let mut stat: libc::stat = std::mem::zeroed();
+            if libc::stat(name.as_ptr(), &mut stat) >= 0 {
+                libc::S_IFIFO & stat.st_mode != 0
+            } else {
+                false
+            }
+        }
+    }
+
     pub fn symlink_file(&self, src: &str, dst: &str) {
         log_info(
             "symlink",
@@ -384,8 +402,10 @@ impl AtPath {
 
 /// An environment for running a single uutils test case, serves three functions:
 /// 1. centralizes logic for locating the uutils binary and calling the utility
-/// 2. provides a temporary directory for the test case
+/// 2. provides a unique temporary directory for the test case
 /// 3. copies over fixtures for the utility to the temporary directory
+///
+/// Fixtures can be found under `tests/fixtures/$util_name/`
 pub struct TestScenario {
     bin_path: PathBuf,
     util_name: String,
@@ -420,12 +440,16 @@ impl TestScenario {
         ts
     }
 
+    /// Returns builder for invoking the target uutils binary. Paths given are
+    /// treated relative to the environment's unique temporary test directory.
     pub fn ucmd(&self) -> UCommand {
         let mut cmd = self.cmd(&self.bin_path);
         cmd.arg(&self.util_name);
         cmd
     }
 
+    /// Returns builder for invoking any system command. Paths given are treated
+    /// relative to the environment's unique temporary test directory.
     pub fn cmd<S: AsRef<OsStr>>(&self, bin: S) -> UCommand {
         UCommand::new_from_tmp(bin, self.tmpd.clone(), true)
     }
@@ -503,6 +527,8 @@ impl UCommand {
         ucmd
     }
 
+    /// Add a parameter to the invocation. Path arguments are treated relative
+    /// to the test environment directory.
     pub fn arg<S: AsRef<OsStr>>(&mut self, arg: S) -> Box<&mut UCommand> {
         if self.has_run {
             panic!(ALREADY_RUN);
@@ -513,6 +539,8 @@ impl UCommand {
         Box::new(self)
     }
 
+    /// Add multiple parameters to the invocation. Path arguments are treated relative
+    /// to the test environment directory.
     pub fn args<S: AsRef<OsStr>>(&mut self, args: &[S]) -> Box<&mut UCommand> {
         if self.has_run {
             panic!(MULTIPLE_STDIN_MEANINGLESS);

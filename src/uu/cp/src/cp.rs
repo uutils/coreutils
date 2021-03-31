@@ -112,7 +112,7 @@ macro_rules! or_continue(
     })
 );
 
-/// Prompts the user yes/no and returns `true` they if successfully
+/// Prompts the user yes/no and returns `true` if they successfully
 /// answered yes.
 macro_rules! prompt_yes(
     ($($args:tt)+) => ({

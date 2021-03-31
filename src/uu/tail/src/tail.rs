@@ -80,6 +80,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .short("c")
                 .long(options::BYTES)
                 .takes_value(true)
+                .allow_hyphen_values(true)
                 .help("Number of bytes to print"),
         )
         .arg(
@@ -93,6 +94,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .short("n")
                 .long(options::LINES)
                 .takes_value(true)
+                .allow_hyphen_values(true)
                 .help("Number of lines to print"),
         )
         .arg(
@@ -343,9 +345,9 @@ pub fn parse_size(mut size_slice: &str) -> Result<u64, ParseSizeErr> {
         // sole B is not a valid suffix
         Err(ParseSizeErr::parse_failure(size_slice))
     } else {
-        let value: Option<u64> = size_slice.parse().ok();
+        let value: Option<i64> = size_slice.parse().ok();
         value
-            .map(|v| Ok(multiplier * v))
+            .map(|v| Ok((multiplier as i64 * v.abs()) as u64))
             .unwrap_or_else(|| Err(ParseSizeErr::parse_failure(size_slice)))
     }
 }
@@ -380,7 +382,7 @@ fn follow<T: Read>(readers: &mut [BufReader<T>], filenames: &[String], settings:
                         }
                         print!("{}", datum);
                     }
-                    Err(err) => panic!(err),
+                    Err(err) => panic!("{}", err),
                 }
             }
         }
@@ -507,7 +509,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
                             ringbuf.push_back(datum);
                         }
                     }
-                    Err(err) => panic!(err),
+                    Err(err) => panic!("{}", err),
                 }
             }
             let mut stdout = stdout();
@@ -538,7 +540,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
                             ringbuf.push_back(datum[0]);
                         }
                     }
-                    Err(err) => panic!(err),
+                    Err(err) => panic!("{}", err),
                 }
             }
             let mut stdout = stdout();
