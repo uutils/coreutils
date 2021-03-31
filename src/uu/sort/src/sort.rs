@@ -527,8 +527,6 @@ fn get_nums_dedup(a: &str) -> &str {
     // Empty, non-number lines, whitespace and are treated as the same for dedup
     if s.is_empty() {
         ""
-    } else if c.is_whitespace() {
-        ""
     } else if !c.eq(&MINUS_SIGN) && !c.is_numeric() {
         ""
     // Prepare lines for comparison of only the numerical leading numbers
@@ -556,7 +554,8 @@ fn permissive_f64_parse(a: &str) -> f64 {
 }
 
 fn numeric_compare(a: &str, b: &str, x: &Settings) -> Ordering {
-    // Stub for when Rust gets strnumcmp and we can do this with ints
+    // Stub for when Rust gets strncmp
+    // Still pretty damn fast!
     general_numeric_compare(a, b, x)
 }
 
