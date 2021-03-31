@@ -74,10 +74,10 @@ fn test_crc_for_bigger_than_32_bytes() {
 
     let result = ucmd.arg("chars.txt").run();
 
-    let stdout_splitted: Vec<&str> = result.stdout.split(" ").collect();
+    let mut stdout_splitted = result.stdout.split(" ");
 
-    let cksum: i64 = stdout_splitted[0].parse().unwrap();
-    let bytes_cnt: i64 = stdout_splitted[1].parse().unwrap();
+    let cksum: i64 = stdout_splitted.next().unwrap().parse().unwrap();
+    let bytes_cnt: i64 = stdout_splitted.next().unwrap().parse().unwrap();
 
     assert!(result.success);
     assert_eq!(cksum, 586047089);
@@ -90,10 +90,10 @@ fn test_stdin_larger_than_128_bytes() {
 
     let result = ucmd.arg("larger_than_2056_bytes.txt").run();
 
-    let stdout_splitted: Vec<&str> = result.stdout.split(" ").collect();
+    let mut stdout_splitted = result.stdout.split(" ");
 
-    let cksum: i64 = stdout_splitted[0].parse().unwrap();
-    let bytes_cnt: i64 = stdout_splitted[1].parse().unwrap();
+    let cksum: i64 = stdout_splitted.next().unwrap().parse().unwrap();
+    let bytes_cnt: i64 = stdout_splitted.next().unwrap().parse().unwrap();
 
     assert!(result.success);
     assert_eq!(cksum, 945881979);
