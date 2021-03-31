@@ -16,6 +16,7 @@ use std::str::Chars;
 
 const NAME: &str = "echo";
 const SUMMARY: &str = "display a line of text";
+const USAGE: &str = "[OPTIONS]... [STRING]...";
 const AFTER_HELP: &str = r#"
  Echo the STRING(s) to standard output.
 
@@ -34,6 +35,7 @@ const AFTER_HELP: &str = r#"
  \\0NNN   byte with octal value NNN (1 to 3 digits)
  \\xHH    byte with hexadecimal value HH (1 to 2 digits)
 "#;
+
 
 mod options {
     pub const STRING: &str = "STRING";
@@ -122,6 +124,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .version(crate_version!())
         .about(SUMMARY)
         .after_help(AFTER_HELP)
+        .usage(USAGE)
         .arg(
             Arg::with_name(options::NO_NEWLINE)
                 .short("n")
