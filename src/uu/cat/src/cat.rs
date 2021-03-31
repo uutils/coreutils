@@ -444,7 +444,7 @@ fn write_fast_using_splice<R: Read>(handle: &mut InputHandle<R>, writer: RawFd) 
         }
         Err(err) => {
             match err.as_errno() {
-                Some(Errno::EPERM | Errno::ENOSYS | Errno::EINVAL) => {
+                Some(Errno::EPERM) | Some(Errno::ENOSYS) | Some(Errno::EINVAL) => {
                     // EPERM indicates the call was blocked by seccomp.
                     // ENOSYS indicates we're running on an ancient Kernel.
                     // EINVAL indicates some other failure.
