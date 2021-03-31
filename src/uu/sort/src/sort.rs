@@ -524,7 +524,7 @@ fn get_nums_dedup(a: &str) -> &str {
     // Get first char
     let c = s.chars().nth(0).unwrap_or('\0');
 
-    // Empty, non-number lines, whitespace and are treated as the same for dedup
+    // Empty lines and non-number lines are treated as the same for dedup
     if s.is_empty() {
         ""
     } else if !c.eq(&MINUS_SIGN) && !c.is_numeric() {
