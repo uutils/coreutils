@@ -87,6 +87,7 @@ impl Stat {
 
         #[cfg(windows)]
         let size_on_disk = get_size_on_disk(&path);
+        #[cfg(windows)]
         let inode = get_inode(&path);
         #[cfg(windows)]
         Ok(Stat {
