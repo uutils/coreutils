@@ -52,7 +52,7 @@ static ARG_FILES: &str = "files";
 
 static DECIMAL_PT: char = '.';
 static THOUSANDS_SEP: char = ',';
-static MINUS_SIGN: char = '-';
+static NEGATIVE: char = '-';
 
 #[derive(Eq, Ord, PartialEq, PartialOrd)]
 enum SortMode {
@@ -510,8 +510,8 @@ fn get_leading_number(a: &str) -> &str {
         if !c.is_numeric()
             && !c.is_whitespace()
             && !c.eq(&DECIMAL_PT)
-            && !c.eq(&THOUSANDS_SEP) 
-            && !a.chars().nth(0).unwrap_or('\0').eq(&MINUS_SIGN)         
+            && !c.eq(&THOUSANDS_SEP)
+            && !a.chars().nth(0).unwrap_or('\0').eq(&NEGATIVE)         
         {
             s = a.trim().split(c).next().unwrap_or("");
             break;
@@ -566,7 +566,7 @@ fn get_nums_dedup(a: &str) -> &str {
     // Empty lines and non-number lines are treated as the same for dedup
     if s.is_empty() {
         ""
-    } else if !c.eq(&MINUS_SIGN) && !c.is_numeric() {
+    } else if !c.eq(&NEGATIVE) && !c.is_numeric() {
         ""
     // Prepare lines for comparison of only the numerical leading numbers
     } else {
