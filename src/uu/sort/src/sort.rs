@@ -656,13 +656,15 @@ enum Month {
 
 /// Parse the beginning string into a Month, returning Month::Unknown on errors.
 fn month_parse(line: &str) -> Month {
-    match line
-        .trim()
-        .split_whitespace()
-        .next()
-        .unwrap_or("")
-        .to_uppercase()
-        .as_ref()
+    // GNU splits at any 3 letter match "JUNNNN" is JUN
+    let pattern = if line.trim().len().ge(&3) {
+        // Split a 3 and get first element of tuple ".0"
+        line.split_at(3).0
+    } else {
+        ""
+    };
+    
+    match pattern.to_uppercase().as_ref()
     {
         "JAN" => Month::January,
         "FEB" => Month::February,
