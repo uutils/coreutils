@@ -30,6 +30,8 @@ use std::os::unix::fs::FileTypeExt;
 #[cfg(unix)]
 use unix_socket::UnixStream;
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use nix::errno::Errno;
 /// Linux splice support
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::fcntl::{splice, SpliceFFlags};
@@ -46,9 +48,12 @@ static SUMMARY: &str = "Concatenate FILE(s), or standard input, to standard outp
 
 #[derive(Error, Debug)]
 enum CatError {
-    /// Wrapper around `io::Error` without path context
+    /// Wrapper around `io::Error`
     #[error("{0}")]
     Io(#[from] io::Error),
+    /// Wrapper around `nix::Error`
+    #[error("{0}")]
+    Nix(#[from] nix::Error),
     /// Unknown file type; it's not a regular file, socket, etc.
     #[error("{}: unknown filetype: {}", path, ft_debug)]
     UnknownFiletype {
@@ -392,9 +397,8 @@ fn write_fast<R: Read>(handle: &mut InputHandle<R>) -> CatResult<()> {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         // If we're on Linux or Android, try to use the splice() system call
-        // for faster writing. If it works, we're done. Otherwise we ignore
-        // any error and fall back to slower writing below.
-        if write_fast_using_splice(handle, stdout.as_raw_fd()).is_ok() {
+        // for faster writing. If it works, we're done.
+        if !write_fast_using_splice(handle, stdout.as_raw_fd())? {
             return Ok(());
         }
     }
@@ -406,7 +410,7 @@ fn write_fast<R: Read>(handle: &mut InputHandle<R>) -> CatResult<()> {
             break;
         }
         stdout_lock.write_all(&buf[..n])?;
-    };
+    }
     Ok(())
 }
 
@@ -414,18 +418,49 @@ fn write_fast<R: Read>(handle: &mut InputHandle<R>) -> CatResult<()> {
 /// function `splice()` is used to move data between two file descriptors
 /// without copying between kernel- and userspace. This results in a large
 /// speedup.
+///
+/// The `bool` in the result value indicates if we need to fall back to normal
+/// copying or not. False means we don't have to.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[inline]
-fn write_fast_using_splice<R: Read>(
-    handle: &mut InputHandle<R>,
-    writer: RawFd,
-) -> Result<(), nix::Error> {
+fn write_fast_using_splice<R: Read>(handle: &mut InputHandle<R>, writer: RawFd) -> CatResult<bool> {
     const BUF_SIZE: usize = 1024 * 16;
 
     let (pipe_rd, pipe_wr) = pipe()?;
 
+    // We only fall back if splice fails on the first call.
+    match splice(
+        handle.file_descriptor,
+        None,
+        pipe_wr,
+        None,
+        BUF_SIZE,
+        SpliceFFlags::empty(),
+    ) {
+        Ok(n) => {
+            if n == 0 {
+                return Ok(false);
+            }
+        }
+        Err(err) => {
+            match err.as_errno() {
+                Some(Errno::EPERM | Errno::ENOSYS | Errno::EINVAL) => {
+                    // EPERM indicates the call was blocked by seccomp.
+                    // ENOSYS indicates we're running on an ancient Kernel.
+                    // EINVAL indicates some other failure.
+                    return Ok(true);
+                }
+                _ => {
+                    // Other errors include running out of memory, etc. We
+                    // don't attempt to fall back from these.
+                    return Err(err)?;
+                }
+            }
+        }
+    }
+
     loop {
-        let res = splice(
+        let n = splice(
             handle.file_descriptor,
             None,
             pipe_wr,
@@ -433,15 +468,15 @@ fn write_fast_using_splice<R: Read>(
             BUF_SIZE,
             SpliceFFlags::empty(),
         )?;
-        if res == 0 {
+        if n == 0 {
             // We read 0 bytes from the input,
             // which means we're done copying.
             break;
         }
-        let _ = splice(pipe_rd, None, writer, None, BUF_SIZE, SpliceFFlags::empty())?;
+        splice(pipe_rd, None, writer, None, BUF_SIZE, SpliceFFlags::empty())?;
     }
 
-    Ok(())
+    Ok(false)
 }
 
 /// Outputs file contents to stdout in a line-by-line fashion,
