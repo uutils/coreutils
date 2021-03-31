@@ -511,7 +511,7 @@ fn get_leading_number(a: &str) -> &str {
         }
         s = a.trim();
     }
-    return s;
+    s
 }
 
 // For all dedups
@@ -526,15 +526,15 @@ fn leading_num_numlines(a: &str) -> &str {
 
     // Empty, non-number lines, whitespace and are treated as same for dedup
     if s.is_empty() {
-        return "";
+        ""
     } else if c.is_whitespace() {
-        return "";
+        ""
     } else if !c.eq(&MINUS_SIGN) && !c.is_numeric() {
-        return "";
+        ""
     // Prepare lines for comparison of only the numerical leading numbers
     } else {
-        return get_leading_number(s);
-    };
+        get_leading_number(s)
+    }
 }
 
 /// Parse the beginning string into an f64, returning -inf instead of NaN on errors.
