@@ -9,10 +9,10 @@
 extern crate uucore;
 
 use clap::{App, Arg};
+use retain_mut::RetainMut;
 use std::fs::OpenOptions;
 use std::io::{copy, sink, stdin, stdout, Error, ErrorKind, Read, Result, Write};
 use std::path::{Path, PathBuf};
-use retain_mut::RetainMut;
 
 #[cfg(unix)]
 use uucore::libc;
@@ -98,19 +98,19 @@ fn tee(options: Options) -> Result<()> {
         .files
         .clone()
         .into_iter()
-        .map(|file|
-            NamedWriter {
-                name: file.clone(),
-                inner: open(file, options.append),
-            }
-        )
+        .map(|file| NamedWriter {
+            name: file.clone(),
+            inner: open(file, options.append),
+        })
         .collect();
 
-
-    writers.insert(0, NamedWriter {
-        name: "'standard output'".to_owned(),
-        inner: Box::new(stdout()),
-    });
+    writers.insert(
+        0,
+        NamedWriter {
+            name: "'standard output'".to_owned(),
+            inner: Box::new(stdout()),
+        },
+    );
 
     let mut output = MultiWriter::new(writers);
     let input = &mut NamedReader {
@@ -119,8 +119,7 @@ fn tee(options: Options) -> Result<()> {
 
     // TODO: replaced generic 'copy' call to be able to stop copying
     // if all outputs are closed (due to errors)
-    if copy(input, &mut output).is_err() || output.flush().is_err() ||
-            output.error_occured() {
+    if copy(input, &mut output).is_err() || output.flush().is_err() || output.error_occured() {
         Err(Error::new(ErrorKind::Other, ""))
     } else {
         Ok(())
@@ -150,7 +149,7 @@ struct MultiWriter {
 }
 
 impl MultiWriter {
-    fn new (writers: Vec<NamedWriter>) -> Self {
+    fn new(writers: Vec<NamedWriter>) -> Self {
         Self {
             initial_len: writers.len(),
             writers,
@@ -170,7 +169,7 @@ impl Write for MultiWriter {
                     show_info!("{}: {}", writer.name, f.to_string());
                     false
                 }
-                _ => true
+                _ => true,
             }
         });
         Ok(buf.len())
@@ -184,7 +183,7 @@ impl Write for MultiWriter {
                     show_info!("{}: {}", writer.name, f.to_string());
                     false
                 }
-                _ => true
+                _ => true,
             }
         });
         Ok(())
