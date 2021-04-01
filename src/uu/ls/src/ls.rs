@@ -13,10 +13,12 @@ extern crate lazy_static;
 #[macro_use]
 extern crate uucore;
 
+mod quoting_style;
 mod version_cmp;
 
 use clap::{App, Arg};
 use number_prefix::NumberPrefix;
+use quoting_style::{escape_name, QuotingStyle};
 #[cfg(unix)]
 use std::collections::HashMap;
 use std::fs;
@@ -104,6 +106,12 @@ pub mod options {
         pub static HUMAN_READABLE: &str = "human-readable";
         pub static SI: &str = "si";
     }
+    pub mod quoting {
+        pub static ESCAPE: &str = "escape";
+        pub static LITERAL: &str = "literal";
+        pub static C: &str = "quote-name";
+    }
+    pub static QUOTING_STYLE: &str = "quoting-style";
 
     pub mod indicator_style {
         pub static NONE: &str = "none";
@@ -193,6 +201,7 @@ struct Config {
     color: bool,
     long: LongFormat,
     width: Option<u16>,
+    quoting_style: QuotingStyle,
     indicator_style: IndicatorStyle,
 }
 
@@ -359,6 +368,51 @@ impl Config {
             })
             .or_else(|| termsize::get().map(|s| s.cols));
 
+        let quoting_style = if let Some(style) = options.value_of(options::QUOTING_STYLE) {
+            match style {
+                "literal" => QuotingStyle::Literal,
+                "shell" => QuotingStyle::Shell {
+                    escape: false,
+                    always_quote: false,
+                },
+                "shell-always" => QuotingStyle::Shell {
+                    escape: false,
+                    always_quote: true,
+                },
+                "shell-escape" => QuotingStyle::Shell {
+                    escape: true,
+                    always_quote: false,
+                },
+                "shell-escape-always" => QuotingStyle::Shell {
+                    escape: true,
+                    always_quote: true,
+                },
+                "c" => QuotingStyle::C {
+                    quotes: quoting_style::Quotes::Double,
+                },
+                "escape" => QuotingStyle::C {
+                    quotes: quoting_style::Quotes::None,
+                },
+                _ => unreachable!("Should have been caught by Clap"),
+            }
+        } else if options.is_present(options::quoting::LITERAL) {
+            QuotingStyle::Literal
+        } else if options.is_present(options::quoting::ESCAPE) {
+            QuotingStyle::C {
+                quotes: quoting_style::Quotes::None,
+            }
+        } else if options.is_present(options::quoting::C) {
+            QuotingStyle::C {
+                quotes: quoting_style::Quotes::Double,
+            }
+        } else {
+            // TODO: use environment variable if available
+            QuotingStyle::Shell {
+                escape: true,
+                always_quote: false,
+            }
+        };
+
         let indicator_style = if let Some(field) = options.value_of(options::INDICATOR_STYLE) {
             match field {
                 "none" => IndicatorStyle::None,
@@ -402,6 +456,7 @@ impl Config {
             inode: options.is_present(options::INODE),
             long,
             width,
+            quoting_style,
             indicator_style,
         }
     }
@@ -513,6 +568,57 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(options::format::LONG_NUMERIC_UID_GID)
                 .help("-l with numeric UIDs and GIDs.")
                 .multiple(true)
+        )
+
+        // Quoting style
+        .arg(
+            Arg::with_name(options::QUOTING_STYLE)
+                .long(options::QUOTING_STYLE)
+                .takes_value(true)
+                .help("Set quoting style.")
+                .possible_values(&["literal", "shell", "shell-always", "shell-escape", "shell-escape-always", "c", "escape"])
+                .overrides_with_all(&[
+                    options::QUOTING_STYLE,
+                    options::quoting::LITERAL,
+                    options::quoting::ESCAPE,
+                    options::quoting::C,
+                ])
+        )
+        .arg(
+            Arg::with_name(options::quoting::LITERAL)
+                .short("N")
+                .long(options::quoting::LITERAL)
+                .help("Use literal quoting style. Equivalent to `--quoting-style=literal`")
+                .overrides_with_all(&[
+                    options::QUOTING_STYLE,
+                    options::quoting::LITERAL,
+                    options::quoting::ESCAPE,
+                    options::quoting::C,
+                ])
+        )
+        .arg(
+            Arg::with_name(options::quoting::ESCAPE)
+                .short("b")
+                .long(options::quoting::ESCAPE)
+                .help("Use escape quoting style. Equivalent to `--quoting-style=escape`")
+                .overrides_with_all(&[
+                    options::QUOTING_STYLE,
+                    options::quoting::LITERAL,
+                    options::quoting::ESCAPE,
+                    options::quoting::C,
+                ])
+        )
+        .arg(
+            Arg::with_name(options::quoting::C)
+                .short("Q")
+                .long(options::quoting::C)
+                .help("Use C quoting style. Equivalent to `--quoting-style=c`")
+                .overrides_with_all(&[
+                    options::QUOTING_STYLE,
+                    options::quoting::LITERAL,
+                    options::quoting::ESCAPE,
+                    options::quoting::C,
+                ])
         )
 
         // Time arguments
@@ -1206,7 +1312,7 @@ fn display_file_name(
     metadata: &Metadata,
     config: &Config,
 ) -> Cell {
-    let mut name = get_file_name(path, strip);
+    let mut name = escape_name(get_file_name(path, strip), &config.quoting_style);
     let file_type = metadata.file_type();
 
     match config.indicator_style {
@@ -1273,7 +1379,7 @@ fn display_file_name(
     metadata: &Metadata,
     config: &Config,
 ) -> Cell {
-    let mut name = get_file_name(path, strip);
+    let mut name = escape_name(get_file_name(path, strip), &config.quoting_style);
     if config.format != Format::Long && config.inode {
         name = get_inode(metadata) + " " + &name;
     }
