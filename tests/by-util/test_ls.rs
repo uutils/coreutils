@@ -1,3 +1,5 @@
+#[cfg(unix)]
+extern crate unix_socket;
 use crate::common::util::*;
 
 extern crate regex;
@@ -11,7 +13,13 @@ extern crate libc;
 #[cfg(not(windows))]
 use self::libc::umask;
 #[cfg(not(windows))]
+use std::path::PathBuf;
+#[cfg(not(windows))]
 use std::sync::Mutex;
+#[cfg(not(windows))]
+extern crate tempdir;
+#[cfg(not(windows))]
+use self::tempdir::TempDir;
 
 #[cfg(not(windows))]
 lazy_static! {
@@ -58,11 +66,71 @@ fn test_ls_a() {
 }
 
 #[test]
+fn test_ls_width() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch(&at.plus_as_string("test-width-1"));
+    at.touch(&at.plus_as_string("test-width-2"));
+    at.touch(&at.plus_as_string("test-width-3"));
+    at.touch(&at.plus_as_string("test-width-4"));
+
+    for option in &["-w 100", "-w=100", "--width=100", "--width 100"] {
+        let result = scene
+            .ucmd()
+            .args(&option.split(" ").collect::<Vec<_>>())
+            .run();
+        println!("stderr = {:?}", result.stderr);
+        println!("stdout = {:?}", result.stdout);
+        assert_eq!(
+            result.stdout,
+            "test-width-1  test-width-2  test-width-3  test-width-4\n",
+        )
+    }
+
+    for option in &["-w 50", "-w=50", "--width=50", "--width 50"] {
+        let result = scene
+            .ucmd()
+            .args(&option.split(" ").collect::<Vec<_>>())
+            .run();
+        println!("stderr = {:?}", result.stderr);
+        println!("stdout = {:?}", result.stdout);
+        assert_eq!(
+            result.stdout,
+            "test-width-1  test-width-3\ntest-width-2  test-width-4\n",
+        )
+    }
+
+    for option in &[
+        "-w 25",
+        "-w=25",
+        "--width=25",
+        "--width 25",
+        "-w 0",
+        "-w=0",
+        "--width=0",
+        "--width 0",
+    ] {
+        let result = scene
+            .ucmd()
+            .args(&option.split(" ").collect::<Vec<_>>())
+            .run();
+        println!("stderr = {:?}", result.stderr);
+        println!("stdout = {:?}", result.stdout);
+        assert_eq!(
+            result.stdout,
+            "test-width-1\ntest-width-2\ntest-width-3\ntest-width-4\n",
+        )
+    }
+}
+
+#[test]
 fn test_ls_columns() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.touch(&at.plus_as_string("test-columns-1"));
     at.touch(&at.plus_as_string("test-columns-2"));
+    at.touch(&at.plus_as_string("test-columns-3"));
+    at.touch(&at.plus_as_string("test-columns-4"));
 
     // Columns is the default
     let result = scene.ucmd().run();
@@ -71,9 +139,15 @@ fn test_ls_columns() {
     assert!(result.success);
 
     #[cfg(not(windows))]
-    assert_eq!(result.stdout, "test-columns-1\ntest-columns-2\n");
+    assert_eq!(
+        result.stdout,
+        "test-columns-1\ntest-columns-2\ntest-columns-3\ntest-columns-4\n"
+    );
     #[cfg(windows)]
-    assert_eq!(result.stdout, "test-columns-1  test-columns-2\n");
+    assert_eq!(
+        result.stdout,
+        "test-columns-1  test-columns-2  test-columns-3  test-columns-4\n"
+    );
 
     for option in &["-C", "--format=columns"] {
         let result = scene.ucmd().arg(option).run();
@@ -81,9 +155,107 @@ fn test_ls_columns() {
         println!("stdout = {:?}", result.stdout);
         assert!(result.success);
         #[cfg(not(windows))]
-        assert_eq!(result.stdout, "test-columns-1\ntest-columns-2\n");
+        assert_eq!(
+            result.stdout,
+            "test-columns-1\ntest-columns-2\ntest-columns-3\ntest-columns-4\n"
+        );
         #[cfg(windows)]
-        assert_eq!(result.stdout, "test-columns-1  test-columns-2\n");
+        assert_eq!(
+            result.stdout,
+            "test-columns-1  test-columns-2  test-columns-3  test-columns-4\n"
+        );
+    }
+
+    for option in &["-C", "--format=columns"] {
+        let result = scene.ucmd().arg("-w=40").arg(option).run();
+        println!("stderr = {:?}", result.stderr);
+        println!("stdout = {:?}", result.stdout);
+        assert!(result.success);
+        assert_eq!(
+            result.stdout,
+            "test-columns-1  test-columns-3\ntest-columns-2  test-columns-4\n"
+        );
+    }
+}
+
+#[test]
+fn test_ls_across() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch(&at.plus_as_string("test-across-1"));
+    at.touch(&at.plus_as_string("test-across-2"));
+    at.touch(&at.plus_as_string("test-across-3"));
+    at.touch(&at.plus_as_string("test-across-4"));
+
+    for option in &["-x", "--format=across"] {
+        let result = scene.ucmd().arg(option).succeeds();
+        // Because the test terminal has width 0, this is the same output as
+        // the columns option.
+        println!("stderr = {:?}", result.stderr);
+        println!("stdout = {:?}", result.stdout);
+        if cfg!(unix) {
+            assert_eq!(
+                result.stdout,
+                "test-across-1\ntest-across-2\ntest-across-3\ntest-across-4\n"
+            );
+        } else {
+            assert_eq!(
+                result.stdout,
+                "test-across-1  test-across-2  test-across-3  test-across-4\n"
+            );
+        }
+    }
+
+    for option in &["-x", "--format=across"] {
+        let result = scene.ucmd().arg("-w=30").arg(option).run();
+        // Because the test terminal has width 0, this is the same output as
+        // the columns option.
+        println!("stderr = {:?}", result.stderr);
+        println!("stdout = {:?}", result.stdout);
+        assert_eq!(
+            result.stdout,
+            "test-across-1  test-across-2\ntest-across-3  test-across-4\n"
+        );
+    }
+}
+
+#[test]
+fn test_ls_commas() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch(&at.plus_as_string("test-commas-1"));
+    at.touch(&at.plus_as_string("test-commas-2"));
+    at.touch(&at.plus_as_string("test-commas-3"));
+    at.touch(&at.plus_as_string("test-commas-4"));
+
+    for option in &["-m", "--format=commas"] {
+        let result = scene.ucmd().arg(option).succeeds();
+        if cfg!(unix) {
+            assert_eq!(
+                result.stdout,
+                "test-commas-1,\ntest-commas-2,\ntest-commas-3,\ntest-commas-4\n"
+            );
+        } else {
+            assert_eq!(
+                result.stdout,
+                "test-commas-1, test-commas-2, test-commas-3, test-commas-4\n"
+            );
+        }
+    }
+
+    for option in &["-m", "--format=commas"] {
+        let result = scene.ucmd().arg("-w=30").arg(option).succeeds();
+        assert_eq!(
+            result.stdout,
+            "test-commas-1, test-commas-2,\ntest-commas-3, test-commas-4\n"
+        );
+    }
+    for option in &["-m", "--format=commas"] {
+        let result = scene.ucmd().arg("-w=45").arg(option).succeeds();
+        assert_eq!(
+            result.stdout,
+            "test-commas-1, test-commas-2, test-commas-3,\ntest-commas-4\n"
+        );
     }
 }
 
@@ -133,14 +305,23 @@ fn test_ls_long_formats() {
     // Regex for three names, so all of author, group and owner
     let re_three = Regex::new(r"[xrw-]{9} \d ([-0-9_a-z]+ ){3}0").unwrap();
 
+    #[cfg(unix)]
+    let re_three_num = Regex::new(r"[xrw-]{9} \d (\d+ ){3}0").unwrap();
+
     // Regex for two names, either:
     // - group and owner
     // - author and owner
     // - author and group
     let re_two = Regex::new(r"[xrw-]{9} \d ([-0-9_a-z]+ ){2}0").unwrap();
 
+    #[cfg(unix)]
+    let re_two_num = Regex::new(r"[xrw-]{9} \d (\d+ ){2}0").unwrap();
+
     // Regex for one name: author, group or owner
     let re_one = Regex::new(r"[xrw-]{9} \d [-0-9_a-z]+ 0").unwrap();
+
+    #[cfg(unix)]
+    let re_one_num = Regex::new(r"[xrw-]{9} \d \d+ 0").unwrap();
 
     // Regex for no names
     let re_zero = Regex::new(r"[xrw-]{9} \d 0").unwrap();
@@ -165,6 +346,19 @@ fn test_ls_long_formats() {
     println!("stdout = {:?}", result.stdout);
     assert!(re_three.is_match(&result.stdout));
 
+    #[cfg(unix)]
+    {
+        let result = scene
+            .ucmd()
+            .arg("-n")
+            .arg("--author")
+            .arg("test-long-formats")
+            .succeeds();
+        println!("stderr = {:?}", result.stderr);
+        println!("stdout = {:?}", result.stdout);
+        assert!(re_three_num.is_match(&result.stdout));
+    }
+
     for arg in &[
         "-l",                     // only group and owner
         "-g --author",            // only author and group
@@ -180,6 +374,19 @@ fn test_ls_long_formats() {
         println!("stderr = {:?}", result.stderr);
         println!("stdout = {:?}", result.stdout);
         assert!(re_two.is_match(&result.stdout));
+
+        #[cfg(unix)]
+        {
+            let result = scene
+                .ucmd()
+                .arg("-n")
+                .args(&arg.split(" ").collect::<Vec<_>>())
+                .arg("test-long-formats")
+                .succeeds();
+            println!("stderr = {:?}", result.stderr);
+            println!("stdout = {:?}", result.stdout);
+            assert!(re_two_num.is_match(&result.stdout));
+        }
     }
 
     for arg in &[
@@ -200,6 +407,19 @@ fn test_ls_long_formats() {
         println!("stderr = {:?}", result.stderr);
         println!("stdout = {:?}", result.stdout);
         assert!(re_one.is_match(&result.stdout));
+
+        #[cfg(unix)]
+        {
+            let result = scene
+                .ucmd()
+                .arg("-n")
+                .args(&arg.split(" ").collect::<Vec<_>>())
+                .arg("test-long-formats")
+                .succeeds();
+            println!("stderr = {:?}", result.stderr);
+            println!("stdout = {:?}", result.stdout);
+            assert!(re_one_num.is_match(&result.stdout));
+        }
     }
 
     for arg in &[
@@ -223,6 +443,19 @@ fn test_ls_long_formats() {
         println!("stderr = {:?}", result.stderr);
         println!("stdout = {:?}", result.stdout);
         assert!(re_zero.is_match(&result.stdout));
+
+        #[cfg(unix)]
+        {
+            let result = scene
+                .ucmd()
+                .arg("-n")
+                .args(&arg.split(" ").collect::<Vec<_>>())
+                .arg("test-long-formats")
+                .succeeds();
+            println!("stderr = {:?}", result.stderr);
+            println!("stdout = {:?}", result.stdout);
+            assert!(re_zero.is_match(&result.stdout));
+        }
     }
 }
 
@@ -344,6 +577,7 @@ fn test_ls_order_time() {
     sleep(Duration::from_millis(100));
     at.touch("test-2");
     at.append("test-2", "22");
+
     sleep(Duration::from_millis(100));
     at.touch("test-3");
     at.append("test-3", "333");
@@ -392,13 +626,23 @@ fn test_ls_order_time() {
     println!("stderr = {:?}", result.stderr);
     println!("stdout = {:?}", result.stdout);
     assert!(result.success);
-    #[cfg(not(windows))]
-    assert_eq!(result.stdout, "test-3\ntest-4\ntest-2\ntest-1\n");
-
-    // Access time does not seem to be set on Windows on read call
-    // so the order is 4 3 2 1
-    #[cfg(windows)]
-    assert_eq!(result.stdout, "test-4  test-3  test-2  test-1\n");
+    let file3_access = at.open("test-3").metadata().unwrap().accessed().unwrap();
+    let file4_access = at.open("test-4").metadata().unwrap().accessed().unwrap();
+    if file3_access > file4_access {
+        if cfg!(not(windows)) {
+            assert_eq!(result.stdout, "test-3\ntest-4\ntest-2\ntest-1\n");
+        } else {
+            assert_eq!(result.stdout, "test-3  test-4  test-2  test-1\n");
+        }
+    } else {
+        // Access time does not seem to be set on Windows and some other
+        // systems so the order is 4 3 2 1
+        if cfg!(not(windows)) {
+            assert_eq!(result.stdout, "test-4\ntest-3\ntest-2\ntest-1\n");
+        } else {
+            assert_eq!(result.stdout, "test-4  test-3  test-2  test-1\n");
+        }
+    }
 
     // test-2 had the last ctime change when the permissions were set
     // So the order should be 2 4 3 1
@@ -521,6 +765,8 @@ fn test_ls_ls_color() {
         .arg("--color=always")
         .arg("a/nested_file")
         .succeeds();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
     assert!(result.stdout.contains("a/nested_file\n"));
 
     // No output
@@ -575,6 +821,112 @@ fn test_ls_inode() {
     assert!(!result.stdout.contains(inode_long));
 
     assert_eq!(inode_short, inode_long)
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_ls_indicator_style() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Setup: Directory, Symlink, and Pipes.
+    at.mkdir("directory");
+    assert!(at.dir_exists("directory"));
+
+    at.touch(&at.plus_as_string("link-src"));
+    at.symlink_file("link-src", "link-dest.link");
+    assert!(at.is_symlink("link-dest.link"));
+
+    at.mkfifo("named-pipe.fifo");
+    assert!(at.is_fifo("named-pipe.fifo"));
+
+    // Classify, File-Type, and Slash all contain indicators for directories.
+    let options = vec!["classify", "file-type", "slash"];
+    for opt in options {
+        // Verify that classify and file-type both contain indicators for symlinks.
+        let result = scene.ucmd().arg(format!("--indicator-style={}", opt)).run();
+        println!("stdout = {:?}", result.stdout);
+        assert!(result.stdout.contains("/"));
+    }
+
+    // Same test as above, but with the alternate flags.
+    let options = vec!["--classify", "--file-type", "-p"];
+    for opt in options {
+        let result = scene.ucmd().arg(format!("{}", opt)).run();
+        println!("stdout = {:?}", result.stdout);
+        assert!(result.stdout.contains("/"));
+    }
+
+    // Classify and File-Type all contain indicators for pipes and links.
+    let options = vec!["classify", "file-type"];
+    for opt in options {
+        // Verify that classify and file-type both contain indicators for symlinks.
+        let result = scene.ucmd().arg(format!("--indicator-style={}", opt)).run();
+        println!("stdout = {}", result.stdout);
+        assert!(result.stdout.contains("@"));
+        assert!(result.stdout.contains("|"));
+    }
+
+    // Test sockets. Because the canonical way of making sockets to test is with
+    // TempDir, we need a separate test.
+    {
+        use self::unix_socket::UnixListener;
+
+        let dir = TempDir::new("unix_socket").expect("failed to create dir");
+        let socket_path = dir.path().join("sock");
+        let _listener = UnixListener::bind(&socket_path).expect("failed to create socket");
+
+        new_ucmd!()
+            .args(&[
+                PathBuf::from(dir.path().to_str().unwrap()),
+                PathBuf::from("--indicator-style=classify"),
+            ])
+            .succeeds()
+            .stdout_only("sock=\n");
+    }
+}
+
+// Essentially the same test as above, but only test symlinks and directories,
+// not pipes or sockets.
+#[test]
+#[cfg(not(unix))]
+fn test_ls_indicator_style() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Setup: Directory, Symlink.
+    at.mkdir("directory");
+    assert!(at.dir_exists("directory"));
+
+    at.touch(&at.plus_as_string("link-src"));
+    at.symlink_file("link-src", "link-dest.link");
+    assert!(at.is_symlink("link-dest.link"));
+
+    // Classify, File-Type, and Slash all contain indicators for directories.
+    let options = vec!["classify", "file-type", "slash"];
+    for opt in options {
+        // Verify that classify and file-type both contain indicators for symlinks.
+        let result = scene.ucmd().arg(format!("--indicator-style={}", opt)).run();
+        println!("stdout = {:?}", result.stdout);
+        assert!(result.stdout.contains("/"));
+    }
+
+    // Same test as above, but with the alternate flags.
+    let options = vec!["--classify", "--file-type", "-p"];
+    for opt in options {
+        let result = scene.ucmd().arg(format!("{}", opt)).run();
+        println!("stdout = {:?}", result.stdout);
+        assert!(result.stdout.contains("/"));
+    }
+
+    // Classify and File-Type all contain indicators for pipes and links.
+    let options = vec!["classify", "file-type"];
+    for opt in options {
+        // Verify that classify and file-type both contain indicators for symlinks.
+        let result = scene.ucmd().arg(format!("--indicator-style={}", opt)).run();
+        println!("stdout = {}", result.stdout);
+        assert!(result.stdout.contains("@"));
+    }
 }
 
 #[cfg(not(any(target_vendor = "apple", target_os = "windows")))] // Truncate not available on mac or win
@@ -693,4 +1045,167 @@ fn test_ls_hidden_windows() {
     println!("stdout = {:?}", result.stdout);
     assert!(result.success);
     assert!(result.stdout.contains(file));
+}
+
+#[test]
+fn test_ls_version_sort() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    for filename in &[
+        "a2",
+        "b1",
+        "b20",
+        "a1.4",
+        "a1.40",
+        "b3",
+        "b11",
+        "b20b",
+        "b20a",
+        "a100",
+        "a1.13",
+        "aa",
+        "a1",
+        "aaa",
+        "a1.00000040",
+        "abab",
+        "ab",
+        "a01.40",
+        "a001.001",
+        "a01.0000001",
+        "a01.001",
+        "a001.01",
+    ] {
+        at.touch(filename);
+    }
+
+    let mut expected = vec![
+        "a1",
+        "a001.001",
+        "a001.01",
+        "a01.0000001",
+        "a01.001",
+        "a1.4",
+        "a1.13",
+        "a01.40",
+        "a1.00000040",
+        "a1.40",
+        "a2",
+        "a100",
+        "aa",
+        "aaa",
+        "ab",
+        "abab",
+        "b1",
+        "b3",
+        "b11",
+        "b20",
+        "b20a",
+        "b20b",
+        "", // because of '\n' at the end of the output
+    ];
+
+    let result = scene.ucmd().arg("-1v").run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+
+    assert_eq!(result.stdout.split('\n').collect::<Vec<_>>(), expected);
+
+    let result = scene.ucmd().arg("-1").arg("--sort=version").run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+
+    assert_eq!(result.stdout.split('\n').collect::<Vec<_>>(), expected);
+
+    let result = scene.ucmd().arg("-a1v").run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+
+    expected.insert(0, "..");
+    expected.insert(0, ".");
+    assert_eq!(result.stdout.split('\n').collect::<Vec<_>>(), expected,)
+}
+
+#[test]
+fn test_ls_quoting_style() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("one two");
+    at.touch("one");
+
+    // It seems that windows doesn't allow \n in filenames.
+    #[cfg(unix)]
+    {
+        at.touch("one\ntwo");
+        // Default is shell-escape
+        let result = scene.ucmd().arg("one\ntwo").succeeds();
+        assert_eq!(result.stdout, "'one'$'\\n''two'\n");
+
+        for (arg, correct) in &[
+            ("--quoting-style=literal", "one\ntwo"),
+            ("-N", "one\ntwo"),
+            ("--literal", "one\ntwo"),
+            ("--quoting-style=c", "\"one\\ntwo\""),
+            ("-Q", "\"one\\ntwo\""),
+            ("--quote-name", "\"one\\ntwo\""),
+            ("--quoting-style=escape", "one\\ntwo"),
+            ("-b", "one\\ntwo"),
+            ("--escape", "one\\ntwo"),
+            ("--quoting-style=shell-escape", "'one'$'\\n''two'"),
+            ("--quoting-style=shell-escape-always", "'one'$'\\n''two'"),
+            ("--quoting-style=shell", "one?two"),
+            ("--quoting-style=shell-always", "'one?two'"),
+        ] {
+            let result = scene.ucmd().arg(arg).arg("one\ntwo").run();
+            println!("stderr = {:?}", result.stderr);
+            println!("stdout = {:?}", result.stdout);
+            assert_eq!(result.stdout, format!("{}\n", correct));
+        }
+    }
+
+    let result = scene.ucmd().arg("one two").succeeds();
+    assert_eq!(result.stdout, "'one two'\n");
+
+    for (arg, correct) in &[
+        ("--quoting-style=literal", "one two"),
+        ("-N", "one two"),
+        ("--literal", "one two"),
+        ("--quoting-style=c", "\"one two\""),
+        ("-Q", "\"one two\""),
+        ("--quote-name", "\"one two\""),
+        ("--quoting-style=escape", "one\\ two"),
+        ("-b", "one\\ two"),
+        ("--escape", "one\\ two"),
+        ("--quoting-style=shell-escape", "'one two'"),
+        ("--quoting-style=shell-escape-always", "'one two'"),
+        ("--quoting-style=shell", "'one two'"),
+        ("--quoting-style=shell-always", "'one two'"),
+    ] {
+        let result = scene.ucmd().arg(arg).arg("one two").run();
+        println!("stderr = {:?}", result.stderr);
+        println!("stdout = {:?}", result.stdout);
+        assert_eq!(result.stdout, format!("{}\n", correct));
+    }
+
+    let result = scene.ucmd().arg("one").succeeds();
+    assert_eq!(result.stdout, "one\n");
+
+    for (arg, correct) in &[
+        ("--quoting-style=literal", "one"),
+        ("-N", "one"),
+        ("--quoting-style=c", "\"one\""),
+        ("-Q", "\"one\""),
+        ("--quote-name", "\"one\""),
+        ("--quoting-style=escape", "one"),
+        ("-b", "one"),
+        ("--quoting-style=shell-escape", "one"),
+        ("--quoting-style=shell-escape-always", "'one'"),
+        ("--quoting-style=shell", "one"),
+        ("--quoting-style=shell-always", "'one'"),
+    ] {
+        let result = scene.ucmd().arg(arg).arg("one").run();
+        println!("stderr = {:?}", result.stderr);
+        println!("stdout = {:?}", result.stdout);
+        assert_eq!(result.stdout, format!("{}\n", correct));
+    }
 }

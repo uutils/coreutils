@@ -8,6 +8,7 @@
 
 // spell-checker:ignore (ToDO) NAMESET FILESIZE fstab coeff journaling writeback REiser journaled
 
+use clap::{App, Arg};
 use rand::{Rng, ThreadRng};
 use std::cell::{Cell, RefCell};
 use std::fs;
@@ -213,138 +214,174 @@ impl<'a> BytesGenerator<'a> {
     }
 }
 
+static ABOUT: &str = "Overwrite the specified FILE(s) repeatedly, in order to make it harder\n\
+for even very expensive hardware probing to recover the data.
+";
+
+fn get_usage() -> String {
+    format!("{} [OPTION]... FILE...", executable!())
+}
+
+static AFTER_HELP: &str =
+    "Delete FILE(s) if --remove (-u) is specified.  The default is not to remove\n\
+the files because it is common to operate on device files like /dev/hda,\n\
+and those files usually should not be removed.\n\
+\n\
+CAUTION: Note that shred relies on a very important assumption:\n\
+that the file system overwrites data in place.  This is the traditional\n\
+way to do things, but many modern file system designs do not satisfy this\n\
+assumption.  The following are examples of file systems on which shred is\n\
+not effective, or is not guaranteed to be effective in all file system modes:\n\
+\n\
+* log-structured or journaled file systems, such as those supplied with\n\
+AIX and Solaris (and JFS, ReiserFS, XFS, Ext3, etc.)\n\
+\n\
+* file systems that write redundant data and carry on even if some writes\n\
+fail, such as RAID-based file systems\n\
+\n\
+* file systems that make snapshots, such as Network Appliance's NFS server\n\
+\n\
+* file systems that cache in temporary locations, such as NFS\n\
+version 3 clients\n\
+\n\
+* compressed file systems\n\
+\n\
+In the case of ext3 file systems, the above disclaimer applies\n\
+and shred is thus of limited effectiveness) only in data=journal mode,\n\
+which journals file data in addition to just metadata.  In both the\n\
+data=ordered (default) and data=writeback modes, shred works as usual.\n\
+Ext3 journaling modes can be changed by adding the data=something option\n\
+to the mount options for a particular file system in the /etc/fstab file,\n\
+as documented in the mount man page (man mount).\n\
+\n\
+In addition, file system backups and remote mirrors may contain copies\n\
+of the file that cannot be removed, and that will allow a shredded file\n\
+to be recovered later.\n\
+";
+
+pub mod options {
+    pub const FILE: &str = "file";
+    pub const ITERATIONS: &str = "iterations";
+    pub const SIZE: &str = "size";
+    pub const REMOVE: &str = "remove";
+    pub const VERBOSE: &str = "verbose";
+    pub const EXACT: &str = "exact";
+    pub const ZERO: &str = "zero";
+}
+
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let mut opts = getopts::Options::new();
+    let usage = get_usage();
 
-    // TODO: Add force option
-    opts.optopt(
-        "n",
-        "iterations",
-        "overwrite N times instead of the default (3)",
-        "N",
-    );
-    opts.optopt(
-        "s",
-        "size",
-        "shred this many bytes (suffixes like K, M, G accepted)",
-        "FILESIZE",
-    );
-    opts.optflag(
-        "u",
-        "remove",
-        "truncate and remove the file after overwriting; See below",
-    );
-    opts.optflag("v", "verbose", "show progress");
-    opts.optflag(
-        "x",
-        "exact",
-        "do not round file sizes up to the next full block; \
-         this is the default for non-regular files",
-    );
-    opts.optflag(
-        "z",
-        "zero",
-        "add a final overwrite with zeros to hide shredding",
-    );
-    opts.optflag("", "help", "display this help and exit");
-    opts.optflag("", "version", "output version information and exit");
+    let app = App::new(executable!())
+        .version(VERSION_STR)
+        .about(ABOUT)
+        .after_help(AFTER_HELP)
+        .usage(&usage[..])
+        .arg(
+            Arg::with_name(options::ITERATIONS)
+                .long(options::ITERATIONS)
+                .short("n")
+                .help("overwrite N times instead of the default (3)")
+                .value_name("NUMBER")
+                .default_value("3"),
+        )
+        .arg(
+            Arg::with_name(options::SIZE)
+                .long(options::SIZE)
+                .short("s")
+                .takes_value(true)
+                .value_name("N")
+                .help("shred this many bytes (suffixes like K, M, G accepted)"),
+        )
+        .arg(
+            Arg::with_name(options::REMOVE)
+                .short("u")
+                .long(options::REMOVE)
+                .help("truncate and remove file after overwriting;  See below"),
+        )
+        .arg(
+            Arg::with_name(options::VERBOSE)
+                .long(options::VERBOSE)
+                .short("v")
+                .help("show progress"),
+        )
+        .arg(
+            Arg::with_name(options::EXACT)
+                .long(options::EXACT)
+                .short("x")
+                .help(
+                    "do not round file sizes up to the next full block;\n\
+this is the default for non-regular files",
+                ),
+        )
+        .arg(
+            Arg::with_name(options::ZERO)
+                .long(options::ZERO)
+                .short("z")
+                .help("add a final overwrite with zeros to hide shredding"),
+        )
+        // Positional arguments
+        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true));
 
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(e) => panic!("Invalid options\n{}", e),
+    let matches = app.get_matches_from(args);
+
+    let mut errs: Vec<String> = vec![];
+
+    if !matches.is_present(options::FILE) {
+        show_error!("Missing an argument");
+        show_error!("For help, try '{} --help'", NAME);
+        return 0;
+    }
+
+    let iterations = match matches.value_of(options::ITERATIONS) {
+        Some(s) => match s.parse::<usize>() {
+            Ok(u) => u,
+            Err(_) => {
+                errs.push(String::from(format!("invalid number of passes: '{}'", s)));
+                0
+            }
+        },
+        None => unreachable!(),
     };
 
-    if matches.opt_present("help") {
-        show_help(&opts);
-        return 0;
-    } else if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION_STR);
-        return 0;
-    } else if matches.free.is_empty() {
-        println!("{}: Missing an argument", NAME);
-        println!("For help, try '{} --help'", NAME);
-        return 0;
-    } else {
-        let iterations = match matches.opt_str("iterations") {
-            Some(s) => match s.parse::<usize>() {
-                Ok(u) => u,
-                Err(_) => {
-                    println!("{}: Invalid number of passes", NAME);
-                    return 1;
-                }
-            },
-            None => 3,
-        };
-        let remove = matches.opt_present("remove");
-        let size = get_size(matches.opt_str("size"));
-        let exact = matches.opt_present("exact") && size.is_none(); // if -s is given, ignore -x
-        let zero = matches.opt_present("zero");
-        let verbose = matches.opt_present("verbose");
-        for path_str in matches.free.into_iter() {
-            wipe_file(&path_str, iterations, remove, size, exact, zero, verbose);
+    // TODO: implement --remove HOW
+    //       The optional HOW parameter indicates how to remove a directory entry:
+    //         - 'unlink' => use a standard unlink call.
+    //         - 'wipe' => also first obfuscate bytes in the name.
+    //         - 'wipesync' => also sync each obfuscated byte to disk.
+    //       The default mode is 'wipesync', but note it can be expensive.
+
+    // TODO: implement --random-source
+
+    // TODO: implement --force
+
+    let remove = matches.is_present(options::REMOVE);
+    let size_arg = match matches.value_of(options::SIZE) {
+        Some(s) => Some(s.to_string()),
+        None => None,
+    };
+    let size = get_size(size_arg);
+    let exact = matches.is_present(options::EXACT) && size.is_none(); // if -s is given, ignore -x
+    let zero = matches.is_present(options::ZERO);
+    let verbose = matches.is_present(options::VERBOSE);
+
+    if !errs.is_empty() {
+        show_error!("Invalid arguments supplied.");
+        for message in errs {
+            show_error!("{}", message);
         }
+        return 1;
+    }
+
+    for path_str in matches.values_of(options::FILE).unwrap() {
+        wipe_file(&path_str, iterations, remove, size, exact, zero, verbose);
     }
 
     0
-}
-
-fn show_help(opts: &getopts::Options) {
-    println!("Usage: {} [OPTION]... FILE...", NAME);
-    println!(
-        "Overwrite the specified FILE(s) repeatedly, in order to make it harder \
-         for even very expensive hardware probing to recover the data."
-    );
-    println!("{}", opts.usage(""));
-    println!("Delete FILE(s) if --remove (-u) is specified.  The default is not to remove");
-    println!("the files because it is common to operate on device files like /dev/hda,");
-    println!("and those files usually should not be removed.");
-    println!();
-    println!(
-        "CAUTION: Note that {} relies on a very important assumption:",
-        NAME
-    );
-    println!("that the file system overwrites data in place.  This is the traditional");
-    println!("way to do things, but many modern file system designs do not satisfy this");
-    println!(
-        "assumption.  The following are examples of file systems on which {} is",
-        NAME
-    );
-    println!("not effective, or is not guaranteed to be effective in all file system modes:");
-    println!();
-    println!("* log-structured or journaled file systems, such as those supplied with");
-    println!("AIX and Solaris (and JFS, ReiserFS, XFS, Ext3, etc.)");
-    println!();
-    println!("* file systems that write redundant data and carry on even if some writes");
-    println!("fail, such as RAID-based file systems");
-    println!();
-    println!("* file systems that make snapshots, such as Network Appliance's NFS server");
-    println!();
-    println!("* file systems that cache in temporary locations, such as NFS");
-    println!("version 3 clients");
-    println!();
-    println!("* compressed file systems");
-    println!();
-    println!("In the case of ext3 file systems, the above disclaimer applies");
-    println!(
-        "(and {} is thus of limited effectiveness) only in data=journal mode,",
-        NAME
-    );
-    println!("which journals file data in addition to just metadata.  In both the");
-    println!(
-        "data=ordered (default) and data=writeback modes, {} works as usual.",
-        NAME
-    );
-    println!("Ext3 journaling modes can be changed by adding the data=something option");
-    println!("to the mount options for a particular file system in the /etc/fstab file,");
-    println!("as documented in the mount man page (man mount).");
-    println!();
-    println!("In addition, file system backups and remote mirrors may contain copies");
-    println!("of the file that cannot be removed, and that will allow a shredded file");
-    println!("to be recovered later.");
 }
 
 // TODO: Add support for all postfixes here up to and including EiB

@@ -10,6 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
+use clap::{App, Arg};
 use std::fs::File;
 use std::io::{self, stdin, BufReader, Read};
 use std::path::Path;
@@ -19,9 +20,10 @@ use uucore::InvalidEncodingHandling;
 const CRC_TABLE_LEN: usize = 256;
 const CRC_TABLE: [u32; CRC_TABLE_LEN] = generate_crc_table();
 
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+const NAME: &str = "cksum";
 const SYNTAX: &str = "[OPTIONS] [FILE]...";
 const SUMMARY: &str = "Print CRC and size for each file";
-const LONG_HELP: &str = "";
 
 // this is basically a hack to get "loops" to work on Rust 1.33.  Once we update to Rust 1.46 or
 // greater, we can just use while loops
@@ -139,7 +141,20 @@ fn cksum(fname: &str) -> io::Result<(u32, usize)> {
     let mut rd: Box<dyn Read> = match fname {
         "-" => Box::new(stdin()),
         _ => {
-            file = File::open(&Path::new(fname))?;
+            let path = &Path::new(fname);
+            if path.is_dir() {
+                return Err(std::io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "Is a directory",
+                ));
+            };
+            if !path.metadata().is_ok() {
+                return Err(std::io::Error::new(
+                    io::ErrorKind::NotFound,
+                    "No such file or directory",
+                ));
+            };
+            file = File::open(&path)?;
             Box::new(BufReader::new(file))
         }
     };
@@ -161,13 +176,27 @@ fn cksum(fname: &str) -> io::Result<(u32, usize)> {
     }
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let matches = app!(SYNTAX, SUMMARY, LONG_HELP).parse(
-        args.collect_str(InvalidEncodingHandling::Ignore)
-            .accept_any(),
-    );
+mod options {
+    pub static FILE: &str = "file";
+}
 
-    let files = matches.free;
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
+
+    let matches = App::new(executable!())
+        .name(NAME)
+        .version(VERSION)
+        .about(SUMMARY)
+        .usage(SYNTAX)
+        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
+        .get_matches_from(args);
+
+    let files: Vec<String> = match matches.values_of(options::FILE) {
+        Some(v) => v.clone().map(|v| v.to_owned()).collect(),
+        None => vec![],
+    };
 
     if files.is_empty() {
         match cksum("-") {

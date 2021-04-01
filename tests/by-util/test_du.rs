@@ -45,7 +45,11 @@ fn test_du_basics_subdir() {
 fn _du_basics_subdir(s: String) {
     assert_eq!(s, "4\tsubdir/deeper\n");
 }
-#[cfg(not(target_vendor = "apple"))]
+#[cfg(target_os = "windows")]
+fn _du_basics_subdir(s: String) {
+    assert_eq!(s, "0\tsubdir/deeper\n");
+}
+#[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))]
 fn _du_basics_subdir(s: String) {
     // MS-WSL linux has altered expected output
     if !is_wsl() {
@@ -71,7 +75,7 @@ fn test_du_basics_bad_name() {
 fn test_du_soft_link() {
     let ts = TestScenario::new("du");
 
-    let link = ts.cmd("ln").arg("-s").arg(SUB_FILE).arg(SUB_LINK).run();
+    let link = ts.ccmd("ln").arg("-s").arg(SUB_FILE).arg(SUB_LINK).run();
     assert!(link.success);
 
     let result = ts.ucmd().arg(SUB_DIR_LINKS).run();
@@ -85,7 +89,11 @@ fn _du_soft_link(s: String) {
     // 'macos' host variants may have `du` output variation for soft links
     assert!((s == "12\tsubdir/links\n") || (s == "16\tsubdir/links\n"));
 }
-#[cfg(not(target_vendor = "apple"))]
+#[cfg(target_os = "windows")]
+fn _du_soft_link(s: String) {
+    assert_eq!(s, "8\tsubdir/links\n");
+}
+#[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))]
 fn _du_soft_link(s: String) {
     // MS-WSL linux has altered expected output
     if !is_wsl() {
@@ -99,7 +107,7 @@ fn _du_soft_link(s: String) {
 fn test_du_hard_link() {
     let ts = TestScenario::new("du");
 
-    let link = ts.cmd("ln").arg(SUB_FILE).arg(SUB_LINK).run();
+    let link = ts.ccmd("ln").arg(SUB_FILE).arg(SUB_LINK).run();
     assert!(link.success);
 
     let result = ts.ucmd().arg(SUB_DIR_LINKS).run();
@@ -113,7 +121,11 @@ fn test_du_hard_link() {
 fn _du_hard_link(s: String) {
     assert_eq!(s, "12\tsubdir/links\n")
 }
-#[cfg(not(target_vendor = "apple"))]
+#[cfg(target_os = "windows")]
+fn _du_hard_link(s: String) {
+    assert_eq!(s, "8\tsubdir/links\n")
+}
+#[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))]
 fn _du_hard_link(s: String) {
     // MS-WSL linux has altered expected output
     if !is_wsl() {
@@ -137,7 +149,11 @@ fn test_du_d_flag() {
 fn _du_d_flag(s: String) {
     assert_eq!(s, "16\t./subdir\n20\t./\n");
 }
-#[cfg(not(target_vendor = "apple"))]
+#[cfg(target_os = "windows")]
+fn _du_d_flag(s: String) {
+    assert_eq!(s, "8\t./subdir\n8\t./\n");
+}
+#[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))]
 fn _du_d_flag(s: String) {
     // MS-WSL linux has altered expected output
     if !is_wsl() {

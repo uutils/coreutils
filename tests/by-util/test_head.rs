@@ -87,6 +87,104 @@ fn test_verbose() {
 }
 
 #[test]
+#[ignore]
+fn test_spams_newline() {
+    //this test is does not mirror what GNU does
+    new_ucmd!().pipe_in("a").succeeds().stdout_is("a\n");
+}
+
+#[test]
+fn test_byte_syntax() {
+    new_ucmd!()
+        .args(&["-1c"])
+        .pipe_in("abc")
+        .run()
+        .stdout_is("a");
+}
+
+#[test]
+fn test_line_syntax() {
+    new_ucmd!()
+        .args(&["-n", "2048m"])
+        .pipe_in("a\n")
+        .run()
+        .stdout_is("a\n");
+}
+
+#[test]
+fn test_zero_terminated_syntax() {
+    new_ucmd!()
+        .args(&["-z", "-n", "1"])
+        .pipe_in("x\0y")
+        .run()
+        .stdout_is("x\0");
+}
+
+#[test]
+fn test_zero_terminated_syntax_2() {
+    new_ucmd!()
+        .args(&["-z", "-n", "2"])
+        .pipe_in("x\0y")
+        .run()
+        .stdout_is("x\0y");
+}
+
+#[test]
+fn test_negative_byte_syntax() {
+    new_ucmd!()
+        .args(&["--bytes=-2"])
+        .pipe_in("a\n")
+        .run()
+        .stdout_is("");
+}
+
+#[test]
+fn test_negative_zero_lines() {
+    new_ucmd!()
+        .args(&["--lines=-0"])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_is("a\nb\n");
+}
+#[test]
+fn test_negative_zero_bytes() {
+    new_ucmd!()
+        .args(&["--bytes=-0"])
+        .pipe_in("qwerty")
+        .succeeds()
+        .stdout_is("qwerty");
+}
+#[test]
+fn test_no_such_file_or_directory() {
+    let result = new_ucmd!().arg("no_such_file.toml").run();
+
+    assert_eq!(
+        true,
+        result
+            .stderr
+            .contains("cannot open 'no_such_file.toml' for reading: No such file or directory")
+    )
+}
+
+// there was a bug not caught by previous tests
+// where for negative n > 3, the total amount of lines
+// was correct, but it would eat from the second line
+#[test]
+fn test_sequence_fixture() {
+    new_ucmd!()
+        .args(&["-n", "-10", "sequence"])
+        .run()
+        .stdout_is_fixture("sequence.expected");
+}
+#[test]
+fn test_file_backwards() {
+    new_ucmd!()
+        .args(&["-c", "-10", "lorem_ipsum.txt"])
+        .run()
+        .stdout_is_fixture("lorem_ipsum_backwards_file.expected");
+}
+
+#[test]
 fn test_zero_terminated() {
     new_ucmd!()
         .args(&["-z", "zero_terminated.txt"])
@@ -95,75 +193,10 @@ fn test_zero_terminated() {
 }
 
 #[test]
-#[ignore]
-fn test_spams_newline() {
-    new_ucmd!().pipe_in("a").succeeds().stdout_is("a\n");
-}
-
-#[test]
-#[ignore]
-fn test_unsupported_byte_syntax() {
+fn test_obsolete_extras() {
     new_ucmd!()
-        .args(&["-1c"])
-        .pipe_in("abc")
-        .fails()
-        //GNU head returns "a"
-        .stdout_is("")
-        .stderr_is("head: error: Unrecognized option: \'1\'");
-}
-
-#[test]
-#[ignore]
-fn test_unsupported_line_syntax() {
-    new_ucmd!()
-        .args(&["-n", "2048m"])
-        .pipe_in("a\n")
-        .fails()
-        //.stdout_is("a\n");  What GNU head returns.
-        .stdout_is("")
-        .stderr_is("head: error: invalid line count \'2048m\': invalid digit found in string");
-}
-
-#[test]
-#[ignore]
-fn test_unsupported_zero_terminated_syntax() {
-    new_ucmd!()
-        .args(&["-z -n 1"])
-        .pipe_in("x\0y")
-        .fails()
-        //GNU Head returns "x\0"
-        .stderr_is("head: error: Unrecognized option: \'z\'");
-}
-
-#[test]
-#[ignore]
-fn test_unsupported_zero_terminated_syntax_2() {
-    new_ucmd!()
-        .args(&["-z -n 2"])
-        .pipe_in("x\0y")
-        .fails()
-        //GNU Head returns "x\0y"
-        .stderr_is("head: error: Unrecognized option: \'z\'");
-}
-
-#[test]
-#[ignore]
-fn test_unsupported_negative_byte_syntax() {
-    new_ucmd!()
-        .args(&["--bytes=-2"])
-        .pipe_in("a\n")
-        .fails()
-        //GNU Head returns ""
-        .stderr_is("head: error: invalid byte count \'-2\': invalid digit found in string");
-}
-
-#[test]
-#[ignore]
-fn test_bug_in_negative_zero_lines() {
-    new_ucmd!()
-        .args(&["--lines=-0"])
-        .pipe_in("a\nb\n")
+        .args(&["-5zv"])
+        .pipe_in("1\02\03\04\05\06")
         .succeeds()
-        //GNU Head returns "a\nb\n"
-        .stdout_is("");
+        .stdout_is("==> standard input <==\n1\02\03\04\05\0");
 }

@@ -13,9 +13,12 @@ extern crate lazy_static;
 #[macro_use]
 extern crate uucore;
 
+mod quoting_style;
+mod version_cmp;
+
 use clap::{App, Arg};
 use number_prefix::NumberPrefix;
-use std::cmp::Reverse;
+use quoting_style::{escape_name, QuotingStyle};
 #[cfg(unix)]
 use std::collections::HashMap;
 use std::fs;
@@ -30,6 +33,7 @@ use std::path::{Path, PathBuf};
 #[cfg(unix)]
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::{cmp::Reverse, process::exit};
 
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use time::{strftime, Timespec};
@@ -78,8 +82,11 @@ pub mod options {
         pub static ONELINE: &str = "1";
         pub static LONG: &str = "long";
         pub static COLUMNS: &str = "C";
+        pub static ACROSS: &str = "x";
+        pub static COMMAS: &str = "m";
         pub static LONG_NO_OWNER: &str = "g";
         pub static LONG_NO_GROUP: &str = "o";
+        pub static LONG_NUMERIC_UID_GID: &str = "numeric-uid-gid";
     }
     pub mod files {
         pub static ALL: &str = "all";
@@ -89,6 +96,7 @@ pub mod options {
         pub static SIZE: &str = "S";
         pub static TIME: &str = "t";
         pub static NONE: &str = "U";
+        pub static VERSION: &str = "v";
     }
     pub mod time {
         pub static ACCESS: &str = "u";
@@ -98,6 +106,21 @@ pub mod options {
         pub static HUMAN_READABLE: &str = "human-readable";
         pub static SI: &str = "si";
     }
+    pub mod quoting {
+        pub static ESCAPE: &str = "escape";
+        pub static LITERAL: &str = "literal";
+        pub static C: &str = "quote-name";
+    }
+    pub static QUOTING_STYLE: &str = "quoting-style";
+
+    pub mod indicator_style {
+        pub static NONE: &str = "none";
+        pub static SLASH: &str = "slash";
+        pub static FILE_TYPE: &str = "file-type";
+        pub static CLASSIFY: &str = "classify";
+    }
+
+    pub static WIDTH: &str = "width";
     pub static AUTHOR: &str = "author";
     pub static NO_GROUP: &str = "no-group";
     pub static FORMAT: &str = "format";
@@ -106,13 +129,15 @@ pub mod options {
     pub static IGNORE_BACKUPS: &str = "ignore-backups";
     pub static DIRECTORY: &str = "directory";
     pub static CLASSIFY: &str = "classify";
+    pub static FILE_TYPE: &str = "file-type";
+    pub static SLASH: &str = "p";
     pub static INODE: &str = "inode";
     pub static DEREFERENCE: &str = "dereference";
-    pub static NUMERIC_UID_GID: &str = "numeric-uid-gid";
     pub static REVERSE: &str = "reverse";
     pub static RECURSIVE: &str = "recursive";
     pub static COLOR: &str = "color";
     pub static PATHS: &str = "paths";
+    pub static INDICATOR_STYLE: &str = "indicator-style";
 }
 
 #[derive(PartialEq, Eq)]
@@ -120,6 +145,8 @@ enum Format {
     Columns,
     Long,
     OneLine,
+    Across,
+    Commas,
 }
 
 enum Sort {
@@ -127,6 +154,7 @@ enum Sort {
     Name,
     Size,
     Time,
+    Version,
 }
 
 enum SizeFormat {
@@ -148,6 +176,14 @@ enum Time {
     Change,
 }
 
+#[derive(PartialEq, Eq)]
+enum IndicatorStyle {
+    None,
+    Slash,
+    FileType,
+    Classify,
+}
+
 struct Config {
     format: Format,
     files: Files,
@@ -155,10 +191,8 @@ struct Config {
     recursive: bool,
     reverse: bool,
     dereference: bool,
-    classify: bool,
     ignore_backups: bool,
     size_format: SizeFormat,
-    numeric_uid_gid: bool,
     directory: bool,
     time: Time,
     #[cfg(unix)]
@@ -166,6 +200,9 @@ struct Config {
     #[cfg(unix)]
     color: bool,
     long: LongFormat,
+    width: Option<u16>,
+    quoting_style: QuotingStyle,
+    indicator_style: IndicatorStyle,
 }
 
 // Fields that can be removed or added to the long format
@@ -173,6 +210,8 @@ struct LongFormat {
     author: bool,
     group: bool,
     owner: bool,
+    #[cfg(unix)]
+    numeric_uid_gid: bool,
 }
 
 impl Config {
@@ -183,6 +222,8 @@ impl Config {
                     "long" | "verbose" => Format::Long,
                     "single-column" => Format::OneLine,
                     "columns" | "vertical" => Format::Columns,
+                    "across" | "horizontal" => Format::Across,
+                    "commas" => Format::Commas,
                     // below should never happen as clap already restricts the values.
                     _ => unreachable!("Invalid field for --format"),
                 },
@@ -190,11 +231,15 @@ impl Config {
             )
         } else if options.is_present(options::format::LONG) {
             (Format::Long, options::format::LONG)
+        } else if options.is_present(options::format::ACROSS) {
+            (Format::Across, options::format::ACROSS)
+        } else if options.is_present(options::format::COMMAS) {
+            (Format::Commas, options::format::COMMAS)
         } else {
             (Format::Columns, options::format::COLUMNS)
         };
 
-        // The -o and -g options are tricky. They cannot override with each
+        // The -o, -n and -g options are tricky. They cannot override with each
         // other because it's possible to combine them. For example, the option
         // -og should hide both owner and group. Furthermore, they are not
         // reset if -l or --format=long is used. So these should just show the
@@ -207,37 +252,27 @@ impl Config {
         // which always applies.
         //
         // The idea here is to not let these options override with the other
-        // options, but manually check the last index they occur. If this index
-        // is larger than the index for the other format options, we apply the
-        // long format.
-        match options.indices_of(opt).map(|x| x.max().unwrap()) {
-            None => {
-                if options.is_present(options::format::LONG_NO_GROUP)
-                    || options.is_present(options::format::LONG_NO_OWNER)
-                {
-                    format = Format::Long;
-                } else if options.is_present(options::format::ONELINE) {
-                    format = Format::OneLine;
-                }
-            }
-            Some(mut idx) => {
-                if let Some(indices) = options.indices_of(options::format::LONG_NO_OWNER) {
-                    let i = indices.max().unwrap();
-                    if i > idx {
-                        format = Format::Long;
-                        idx = i;
-                    }
-                }
-                if let Some(indices) = options.indices_of(options::format::LONG_NO_GROUP) {
-                    let i = indices.max().unwrap();
-                    if i > idx {
-                        format = Format::Long;
-                        idx = i;
-                    }
-                }
-                if let Some(indices) = options.indices_of(options::format::ONELINE) {
-                    let i = indices.max().unwrap();
-                    if i > idx && format != Format::Long {
+        // options, but manually whether they have an index that's greater than
+        // the other format options. If so, we set the appropriate format.
+        if format != Format::Long {
+            let idx = options
+                .indices_of(opt)
+                .map(|x| x.max().unwrap())
+                .unwrap_or(0);
+            if [
+                options::format::LONG_NO_OWNER,
+                options::format::LONG_NO_GROUP,
+                options::format::LONG_NUMERIC_UID_GID,
+            ]
+            .iter()
+            .flat_map(|opt| options.indices_of(opt))
+            .flatten()
+            .any(|i| i >= idx)
+            {
+                format = Format::Long;
+            } else {
+                if let Some(mut indices) = options.indices_of(options::format::ONELINE) {
+                    if indices.any(|i| i > idx) {
                         format = Format::OneLine;
                     }
                 }
@@ -258,6 +293,7 @@ impl Config {
                 "name" => Sort::Name,
                 "time" => Sort::Time,
                 "size" => Sort::Size,
+                "version" => Sort::Version,
                 // below should never happen as clap already restricts the values.
                 _ => unreachable!("Invalid field for --sort"),
             }
@@ -267,6 +303,8 @@ impl Config {
             Sort::Size
         } else if options.is_present(options::sort::NONE) {
             Sort::None
+        } else if options.is_present(options::sort::VERSION) {
+            Sort::Version
         } else {
             Sort::Name
         };
@@ -309,11 +347,96 @@ impl Config {
             let group = !options.is_present(options::NO_GROUP)
                 && !options.is_present(options::format::LONG_NO_GROUP);
             let owner = !options.is_present(options::format::LONG_NO_OWNER);
+            #[cfg(unix)]
+            let numeric_uid_gid = options.is_present(options::format::LONG_NUMERIC_UID_GID);
             LongFormat {
                 author,
                 group,
                 owner,
+                #[cfg(unix)]
+                numeric_uid_gid,
             }
+        };
+
+        let width = options
+            .value_of(options::WIDTH)
+            .map(|x| {
+                x.parse::<u16>().unwrap_or_else(|_e| {
+                    show_error!("invalid line width: ‘{}’", x);
+                    exit(2);
+                })
+            })
+            .or_else(|| termsize::get().map(|s| s.cols));
+
+        let quoting_style = if let Some(style) = options.value_of(options::QUOTING_STYLE) {
+            match style {
+                "literal" => QuotingStyle::Literal,
+                "shell" => QuotingStyle::Shell {
+                    escape: false,
+                    always_quote: false,
+                },
+                "shell-always" => QuotingStyle::Shell {
+                    escape: false,
+                    always_quote: true,
+                },
+                "shell-escape" => QuotingStyle::Shell {
+                    escape: true,
+                    always_quote: false,
+                },
+                "shell-escape-always" => QuotingStyle::Shell {
+                    escape: true,
+                    always_quote: true,
+                },
+                "c" => QuotingStyle::C {
+                    quotes: quoting_style::Quotes::Double,
+                },
+                "escape" => QuotingStyle::C {
+                    quotes: quoting_style::Quotes::None,
+                },
+                _ => unreachable!("Should have been caught by Clap"),
+            }
+        } else if options.is_present(options::quoting::LITERAL) {
+            QuotingStyle::Literal
+        } else if options.is_present(options::quoting::ESCAPE) {
+            QuotingStyle::C {
+                quotes: quoting_style::Quotes::None,
+            }
+        } else if options.is_present(options::quoting::C) {
+            QuotingStyle::C {
+                quotes: quoting_style::Quotes::Double,
+            }
+        } else {
+            // TODO: use environment variable if available
+            QuotingStyle::Shell {
+                escape: true,
+                always_quote: false,
+            }
+        };
+
+        let indicator_style = if let Some(field) = options.value_of(options::INDICATOR_STYLE) {
+            match field {
+                "none" => IndicatorStyle::None,
+                "file-type" => IndicatorStyle::FileType,
+                "classify" => IndicatorStyle::Classify,
+                "slash" => IndicatorStyle::Slash,
+                &_ => IndicatorStyle::None,
+            }
+        } else if options.is_present(options::indicator_style::NONE) {
+            IndicatorStyle::None
+        } else if options.is_present(options::indicator_style::CLASSIFY)
+            || options.is_present(options::CLASSIFY)
+        {
+            IndicatorStyle::Classify
+        } else if options.is_present(options::indicator_style::SLASH)
+            || options.is_present(options::SLASH)
+        {
+            IndicatorStyle::Slash
+        } else if options.is_present(options::indicator_style::FILE_TYPE)
+            || options.is_present(options::FILE_TYPE)
+        {
+            IndicatorStyle::FileType
+        } else {
+            IndicatorStyle::None
         };
 
         Config {
@@ -323,10 +446,8 @@ impl Config {
             recursive: options.is_present(options::RECURSIVE),
             reverse: options.is_present(options::REVERSE),
             dereference: options.is_present(options::DEREFERENCE),
-            classify: options.is_present(options::CLASSIFY),
             ignore_backups: options.is_present(options::IGNORE_BACKUPS),
             size_format,
-            numeric_uid_gid: options.is_present(options::NUMERIC_UID_GID),
             directory: options.is_present(options::DIRECTORY),
             time,
             #[cfg(unix)]
@@ -334,6 +455,9 @@ impl Config {
             #[cfg(unix)]
             inode: options.is_present(options::INODE),
             long,
+            width,
+            quoting_style,
+            indicator_style,
         }
     }
 }
@@ -356,13 +480,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(options::FORMAT)
                 .help("Set the display format.")
                 .takes_value(true)
-                .possible_values(&["long", "verbose", "single-column", "columns"])
+                .possible_values(&["long", "verbose", "single-column", "columns", "vertical", "across", "horizontal", "commas"])
                 .hide_possible_values(true)
                 .require_equals(true)
                 .overrides_with_all(&[
                     options::FORMAT,
                     options::format::COLUMNS,
                     options::format::LONG,
+                    options::format::ACROSS,
+                    options::format::COLUMNS,
                 ]),
         )
         .arg(
@@ -373,6 +499,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::FORMAT,
                     options::format::COLUMNS,
                     options::format::LONG,
+                    options::format::ACROSS,
+                    options::format::COLUMNS,
                 ]),
         )
         .arg(
@@ -383,26 +511,116 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .overrides_with_all(&[
                     options::FORMAT,
                     options::format::COLUMNS,
-                    options::format::ONELINE,
                     options::format::LONG,
+                    options::format::ACROSS,
+                    options::format::COLUMNS,
                 ]),
         )
-        // The next three arguments do not override with the other format
+        .arg(
+            Arg::with_name(options::format::ACROSS)
+                .short(options::format::ACROSS)
+                .help("List entries in rows instead of in columns.")
+                .overrides_with_all(&[
+                    options::FORMAT,
+                    options::format::COLUMNS,
+                    options::format::LONG,
+                    options::format::ACROSS,
+                    options::format::COLUMNS,
+                ]),
+        )
+        .arg(
+            Arg::with_name(options::format::COMMAS)
+                .short(options::format::COMMAS)
+                .help("List entries separated by commas.")
+                .overrides_with_all(&[
+                    options::FORMAT,
+                    options::format::COLUMNS,
+                    options::format::LONG,
+                    options::format::ACROSS,
+                    options::format::COLUMNS,
+                ]),
+        )
+        // The next four arguments do not override with the other format
         // options, see the comment in Config::from for the reason.
+        // Ideally, they would use Arg::override_with, with their own name
+        // but that doesn't seem to work in all cases. Example:
+        // ls -1g1
+        // even though `ls -11` and `ls -1 -g -1` work.
         .arg(
             Arg::with_name(options::format::ONELINE)
                 .short(options::format::ONELINE)
                 .help("List one file per line.")
+                .multiple(true)
         )
         .arg(
             Arg::with_name(options::format::LONG_NO_GROUP)
                 .short(options::format::LONG_NO_GROUP)
                 .help("Long format without group information. Identical to --format=long with --no-group.")
+                .multiple(true)
         )
         .arg(
             Arg::with_name(options::format::LONG_NO_OWNER)
                 .short(options::format::LONG_NO_OWNER)
                 .help("Long format without owner information.")
+                .multiple(true)
+        )
+        .arg(
+            Arg::with_name(options::format::LONG_NUMERIC_UID_GID)
+                .short("n")
+                .long(options::format::LONG_NUMERIC_UID_GID)
+                .help("-l with numeric UIDs and GIDs.")
+                .multiple(true)
+        )
+
+        // Quoting style
+        .arg(
+            Arg::with_name(options::QUOTING_STYLE)
+                .long(options::QUOTING_STYLE)
+                .takes_value(true)
+                .help("Set quoting style.")
+                .possible_values(&["literal", "shell", "shell-always", "shell-escape", "shell-escape-always", "c", "escape"])
+                .overrides_with_all(&[
+                    options::QUOTING_STYLE,
+                    options::quoting::LITERAL,
+                    options::quoting::ESCAPE,
+                    options::quoting::C,
+                ])
+        )
+        .arg(
+            Arg::with_name(options::quoting::LITERAL)
+                .short("N")
+                .long(options::quoting::LITERAL)
+                .help("Use literal quoting style. Equivalent to `--quoting-style=literal`")
+                .overrides_with_all(&[
+                    options::QUOTING_STYLE,
+                    options::quoting::LITERAL,
+                    options::quoting::ESCAPE,
+                    options::quoting::C,
+                ])
+        )
+        .arg(
+            Arg::with_name(options::quoting::ESCAPE)
+                .short("b")
+                .long(options::quoting::ESCAPE)
+                .help("Use escape quoting style. Equivalent to `--quoting-style=escape`")
+                .overrides_with_all(&[
+                    options::QUOTING_STYLE,
+                    options::quoting::LITERAL,
+                    options::quoting::ESCAPE,
+                    options::quoting::C,
+                ])
+        )
+        .arg(
+            Arg::with_name(options::quoting::C)
+                .short("Q")
+                .long(options::quoting::C)
+                .help("Use C quoting style. Equivalent to `--quoting-style=c`")
+                .overrides_with_all(&[
+                    options::QUOTING_STYLE,
+                    options::quoting::LITERAL,
+                    options::quoting::ESCAPE,
+                    options::quoting::C,
+                ])
         )
 
         // Time arguments
@@ -457,13 +675,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("Sort by <field>: name, none (-U), time (-t) or size (-S)")
                 .value_name("field")
                 .takes_value(true)
-                .possible_values(&["name", "none", "time", "size"])
+                .possible_values(&["name", "none", "time", "size", "version"])
                 .require_equals(true)
                 .overrides_with_all(&[
                     options::SORT,
                     options::sort::SIZE,
                     options::sort::TIME,
                     options::sort::NONE,
+                    options::sort::VERSION,
                 ])
         )
         .arg(
@@ -475,6 +694,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::sort::SIZE,
                     options::sort::TIME,
                     options::sort::NONE,
+                    options::sort::VERSION,
                 ])
         )
         .arg(
@@ -486,6 +706,19 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::sort::SIZE,
                     options::sort::TIME,
                     options::sort::NONE,
+                    options::sort::VERSION,
+                ])
+        )
+        .arg(
+            Arg::with_name(options::sort::VERSION)
+                .short(options::sort::VERSION)
+                .help("Natural sort of (version) numbers in the filenames.")
+                .overrides_with_all(&[
+                    options::SORT,
+                    options::sort::SIZE,
+                    options::sort::TIME,
+                    options::sort::NONE,
+                    options::sort::VERSION,
                 ])
         )
         .arg(
@@ -499,6 +732,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::sort::SIZE,
                     options::sort::TIME,
                     options::sort::NONE,
+                    options::sort::VERSION,
                 ])
         )
 
@@ -549,15 +783,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 ),
         )
         .arg(
-            Arg::with_name(options::CLASSIFY)
-                .short("F")
-                .long(options::CLASSIFY)
-                .help("Append a character to each file name indicating the file type. Also, for \
-                    regular files that are executable, append '*'. The file type indicators are \
-                    '/' for directories, '@' for symbolic links, '|' for FIFOs, '=' for sockets, \
-                    '>' for doors, and nothing for regular files.",
-        ))
-        .arg(
             Arg::with_name(options::size::HUMAN_READABLE)
                 .short("h")
                 .long(options::size::HUMAN_READABLE)
@@ -585,12 +810,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 ),
         )
         .arg(
-            Arg::with_name(options::NUMERIC_UID_GID)
-                .short("n")
-                .long(options::NUMERIC_UID_GID)
-                .help("-l with numeric UIDs and GIDs."),
-        )
-        .arg(
             Arg::with_name(options::REVERSE)
                 .short("r")
                 .long(options::REVERSE)
@@ -604,6 +823,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("List the contents of all directories recursively."),
         )
         .arg(
+            Arg::with_name(options::WIDTH)
+                .long(options::WIDTH)
+                .short("w")
+                .help("Assume that the terminal is COLS columns wide.")
+                .value_name("COLS")
+                .takes_value(true)
+        )
+        .arg(
             Arg::with_name(options::COLOR)
                 .long(options::COLOR)
                 .help("Color output based on file type.")
@@ -611,8 +838,57 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .require_equals(true)
                 .min_values(0),
         )
+        .arg(
+            Arg::with_name(options::INDICATOR_STYLE)
+                .long(options::INDICATOR_STYLE)
+                .help(" append indicator with style WORD to entry names: none (default),  slash\
+                       (-p), file-type (--file-type), classify (-F)")
+                .takes_value(true)
+                .possible_values(&["none", "slash", "file-type", "classify"])
+                .overrides_with_all(&[
+                    options::FILE_TYPE,
+                    options::SLASH,
+                    options::CLASSIFY,
+                    options::INDICATOR_STYLE,
+                ]))
+                .arg(
+            Arg::with_name(options::CLASSIFY)
+                .short("F")
+                .long(options::CLASSIFY)
+                .help("Append a character to each file name indicating the file type. Also, for \
+                       regular files that are executable, append '*'. The file type indicators are \
+                       '/' for directories, '@' for symbolic links, '|' for FIFOs, '=' for sockets, \
+                       '>' for doors, and nothing for regular files.")
+                .overrides_with_all(&[
+                    options::FILE_TYPE,
+                    options::SLASH,
+                    options::CLASSIFY,
+                    options::INDICATOR_STYLE,
+                ])
+        )
+        .arg(
+            Arg::with_name(options::FILE_TYPE)
+                .long(options::FILE_TYPE)
+                .help("Same as --classify, but do not append '*'")
+                .overrides_with_all(&[
+                    options::FILE_TYPE,
+                    options::SLASH,
+                    options::CLASSIFY,
+                    options::INDICATOR_STYLE,
+                ]))
+        .arg(
+            Arg::with_name(options::SLASH)
+                .short(options::SLASH)
+                .help("Append / indicator to directories."
+                )
+                .overrides_with_all(&[
+                    options::FILE_TYPE,
+                    options::SLASH,
+                    options::CLASSIFY,
+                    options::INDICATOR_STYLE,
+                ]))
 
-        // Positional arguments
+    // Positional arguments
         .arg(Arg::with_name(options::PATHS).multiple(true).takes_value(true));
 
     let matches = app.get_matches_from(args);
@@ -689,6 +965,7 @@ fn sort_entries(entries: &mut Vec<PathBuf>, config: &Config) {
             .sort_by_key(|k| Reverse(get_metadata(k, config).map(|md| md.len()).unwrap_or(0))),
         // The default sort in GNU ls is case insensitive
         Sort::Name => entries.sort_by_key(|k| k.to_string_lossy().to_lowercase()),
+        Sort::Version => entries.sort_by(version_cmp::version_cmp),
         Sort::None => {}
     }
 
@@ -770,7 +1047,7 @@ fn pad_left(string: String, count: usize) -> String {
 }
 
 fn display_items(items: &[PathBuf], strip: Option<&Path>, config: &Config) {
-    if config.format == Format::Long || config.numeric_uid_gid {
+    if config.format == Format::Long {
         let (mut max_links, mut max_size) = (1, 1);
         for item in items {
             let (links, size) = display_dir_entry_size(item, config);
@@ -781,44 +1058,68 @@ fn display_items(items: &[PathBuf], strip: Option<&Path>, config: &Config) {
             display_item_long(item, strip, max_links, max_size, config);
         }
     } else {
-        if config.format != Format::OneLine {
-            let names = items.iter().filter_map(|i| {
-                let md = get_metadata(i, config);
-                match md {
-                    Err(e) => {
-                        let filename = get_file_name(i, strip);
-                        show_error!("'{}': {}", filename, e);
-                        None
-                    }
-                    Ok(md) => Some(display_file_name(&i, strip, &md, config)),
-                }
-            });
-
-            if let Some(size) = termsize::get() {
-                let mut grid = Grid::new(GridOptions {
-                    filling: Filling::Spaces(2),
-                    direction: Direction::TopToBottom,
-                });
-
-                for name in names {
-                    grid.add(name);
-                }
-
-                if let Some(output) = grid.fit_into_width(size.cols as usize) {
-                    print!("{}", output);
-                    return;
-                }
-            }
-        }
-
-        // Couldn't display a grid, either because we don't know
-        // the terminal width or because fit_into_width failed
-        for i in items {
+        let names = items.iter().filter_map(|i| {
             let md = get_metadata(i, config);
-            if let Ok(md) = md {
-                println!("{}", display_file_name(&i, strip, &md, config).contents);
+            match md {
+                Err(e) => {
+                    let filename = get_file_name(i, strip);
+                    show_error!("'{}': {}", filename, e);
+                    None
+                }
+                Ok(md) => Some(display_file_name(&i, strip, &md, config)),
+            }
+        });
+
+        match (&config.format, config.width) {
+            (Format::Columns, Some(width)) => display_grid(names, width, Direction::TopToBottom),
+            (Format::Across, Some(width)) => display_grid(names, width, Direction::LeftToRight),
+            (Format::Commas, width_opt) => {
+                let term_width = width_opt.unwrap_or(1);
+                let mut current_col = 0;
+                let mut names = names;
+                if let Some(name) = names.next() {
+                    print!("{}", name.contents);
+                    current_col = name.width as u16 + 2;
+                }
+                for name in names {
+                    let name_width = name.width as u16;
+                    if current_col + name_width + 1 > term_width {
+                        current_col = name_width + 2;
+                        print!(",\n{}", name.contents);
+                    } else {
+                        current_col += name_width + 2;
+                        print!(", {}", name.contents);
+                    }
+                }
+                // Current col is never zero again if names have been printed.
+                // So we print a newline.
+                if current_col > 0 {
+                    println!();
+                }
+            }
+            _ => {
+                for name in names {
+                    println!("{}", name.contents);
+                }
             }
         }
+    }
+}
+
+fn display_grid(names: impl Iterator<Item = Cell>, width: u16, direction: Direction) {
+    let mut grid = Grid::new(GridOptions {
+        filling: Filling::Spaces(2),
+        direction,
+    });
+
+    for name in names {
+        grid.add(name);
+    }
+
+    match grid.fit_into_width(width as usize) {
+        Some(output) => print!("{}", output),
+        // Width is too small for the grid, so we fit it in one column
+        None => print!("{}", grid.fit_into_columns(1)),
     }
 }
 
@@ -889,7 +1190,7 @@ use uucore::InvalidEncodingHandling;
 
 #[cfg(unix)]
 fn display_uname(metadata: &Metadata, config: &Config) -> String {
-    if config.numeric_uid_gid {
+    if config.long.numeric_uid_gid {
         metadata.uid().to_string()
     } else {
         entries::uid2usr(metadata.uid()).unwrap_or_else(|_| metadata.uid().to_string())
@@ -898,7 +1199,7 @@ fn display_uname(metadata: &Metadata, config: &Config) -> String {
 
 #[cfg(unix)]
 fn display_group(metadata: &Metadata, config: &Config) -> String {
-    if config.numeric_uid_gid {
+    if config.long.numeric_uid_gid {
         metadata.gid().to_string()
     } else {
         entries::gid2grp(metadata.gid()).unwrap_or_else(|_| metadata.gid().to_string())
@@ -1014,16 +1315,25 @@ fn display_file_name(
     metadata: &Metadata,
     config: &Config,
 ) -> Cell {
-    let mut name = get_file_name(path, strip);
+    let mut name = escape_name(get_file_name(path, strip), &config.quoting_style);
+    let file_type = metadata.file_type();
 
-    if config.classify {
-        let file_type = metadata.file_type();
-        if file_type.is_dir() {
-            name.push('/');
-        } else if file_type.is_symlink() {
-            name.push('@');
+    match config.indicator_style {
+        IndicatorStyle::Classify | IndicatorStyle::FileType => {
+            if file_type.is_dir() {
+                name.push('/');
+            }
+            if file_type.is_symlink() {
+                name.push('@');
+            }
         }
-    }
+        IndicatorStyle::Slash => {
+            if file_type.is_dir() {
+                name.push('/');
+            }
+        }
+        _ => (),
+    };
 
     if config.format == Format::Long && metadata.file_type().is_symlink() {
         if let Ok(target) = path.read_link() {
@@ -1072,15 +1382,14 @@ fn display_file_name(
     metadata: &Metadata,
     config: &Config,
 ) -> Cell {
-    let mut name = get_file_name(path, strip);
+    let mut name = escape_name(get_file_name(path, strip), &config.quoting_style);
     if config.format != Format::Long && config.inode {
         name = get_inode(metadata) + " " + &name;
     }
     let mut width = UnicodeWidthStr::width(&*name);
 
     let ext;
-
-    if config.color || config.classify {
+    if config.color || config.indicator_style != IndicatorStyle::None {
         let file_type = metadata.file_type();
 
         let (code, sym) = if file_type.is_dir() {
@@ -1133,11 +1442,29 @@ fn display_file_name(
         if config.color {
             name = color_name(name, code);
         }
-        if config.classify {
-            if let Some(s) = sym {
-                name.push(s);
-                width += 1;
+
+        let char_opt = match config.indicator_style {
+            IndicatorStyle::Classify => sym,
+            IndicatorStyle::FileType => {
+                // Don't append an asterisk.
+                match sym {
+                    Some('*') => None,
+                    _ => sym,
+                }
             }
+            IndicatorStyle::Slash => {
+                // Append only a slash.
+                match sym {
+                    Some('/') => Some('/'),
+                    _ => None,
+                }
+            }
+            IndicatorStyle::None => None,
+        };
+
+        if let Some(c) = char_opt {
+            name.push(c);
+            width += 1;
         }
     }
 

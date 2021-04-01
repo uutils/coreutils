@@ -136,3 +136,22 @@ fn unexpand_spaces_after_fields() {
         .run()
         .stdout_is("\t\tA B C D\t\t    A\t\n");
 }
+
+#[test]
+fn unexpand_read_from_file() {
+    new_ucmd!()
+        .arg("with_spaces.txt")
+        .arg("-t4")
+        .run()
+        .success();
+}
+
+#[test]
+fn unexpand_read_from_two_file() {
+    new_ucmd!()
+        .arg("with_spaces.txt")
+        .arg("with_spaces.txt")
+        .arg("-t4")
+        .run()
+        .success();
+}

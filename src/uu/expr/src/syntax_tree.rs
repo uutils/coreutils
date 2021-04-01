@@ -148,11 +148,11 @@ impl ASTNode {
                         |a: &String, b: &String| Ok(bool_as_string(a >= b)),
                         &operand_values,
                     ),
-                    "|" => infix_operator_or(&operand_values),
-                    "&" => infix_operator_and(&operand_values),
+                    "|" => Ok(infix_operator_or(&operand_values)),
+                    "&" => Ok(infix_operator_and(&operand_values)),
                     ":" | "match" => operator_match(&operand_values),
-                    "length" => prefix_operator_length(&operand_values),
-                    "index" => prefix_operator_index(&operand_values),
+                    "length" => Ok(prefix_operator_length(&operand_values)),
+                    "index" => Ok(prefix_operator_index(&operand_values)),
                     "substr" => prefix_operator_substr(&operand_values),
 
                     _ => Err(format!("operation not implemented: {}", op_type)),
@@ -465,20 +465,20 @@ where
     }
 }
 
-fn infix_operator_or(values: &[String]) -> Result<String, String> {
+fn infix_operator_or(values: &[String]) -> String {
     assert!(values.len() == 2);
     if value_as_bool(&values[0]) {
-        Ok(values[0].clone())
+        values[0].clone()
     } else {
-        Ok(values[1].clone())
+        values[1].clone()
     }
 }
 
-fn infix_operator_and(values: &[String]) -> Result<String, String> {
+fn infix_operator_and(values: &[String]) -> String {
     if value_as_bool(&values[0]) && value_as_bool(&values[1]) {
-        Ok(values[0].clone())
+        values[0].clone()
     } else {
-        Ok(0.to_string())
+        0.to_string()
     }
 }
 
@@ -502,12 +502,12 @@ fn operator_match(values: &[String]) -> Result<String, String> {
     }
 }
 
-fn prefix_operator_length(values: &[String]) -> Result<String, String> {
+fn prefix_operator_length(values: &[String]) -> String {
     assert!(values.len() == 1);
-    Ok(values[0].len().to_string())
+    values[0].len().to_string()
 }
 
-fn prefix_operator_index(values: &[String]) -> Result<String, String> {
+fn prefix_operator_index(values: &[String]) -> String {
     assert!(values.len() == 2);
     let haystack = &values[0];
     let needles = &values[1];
@@ -515,11 +515,11 @@ fn prefix_operator_index(values: &[String]) -> Result<String, String> {
     for (current_idx, ch_h) in haystack.chars().enumerate() {
         for ch_n in needles.chars() {
             if ch_n == ch_h {
-                return Ok(current_idx.to_string());
+                return current_idx.to_string();
             }
         }
     }
-    Ok("0".to_string())
+    "0".to_string()
 }
 
 fn prefix_operator_substr(values: &[String]) -> Result<String, String> {
