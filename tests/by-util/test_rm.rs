@@ -273,11 +273,7 @@ fn test_rm_verbose_slash() {
     at.mkdir(dir);
     at.touch(file_a);
 
-    let separator = if cfg!(windows) {
-        "\\"
-    } else {
-        "/"
-    };
+    let separator = if cfg!(windows) { "\\" } else { "/" };
     let file_a_normalized = &format!("{}{}test_rm_verbose_slash_file_a", dir, separator);
 
     ucmd.arg("-r")
