@@ -249,5 +249,6 @@ mod tests {
         let os_string = OsString::from_wide(&source[..]);
         let os_str = os_string.as_os_str();
         test_invalid_utf8_args_lossy(os_str);
+        test_invalid_utf8_args_ignore(os_str);
     }
 }
