@@ -511,7 +511,7 @@ fn get_leading_number(a: &str) -> &str {
             && !c.is_whitespace()
             && !c.eq(&DECIMAL_PT)
             && !c.eq(&THOUSANDS_SEP)
-            && !a.chars().nth(0).unwrap_or('\0').eq(&NEGATIVE)         
+            && !a.chars().nth(0).unwrap_or('\0').eq(&NEGATIVE)
         {
             s = a.trim().split(c).next().unwrap_or("");
             break;
@@ -528,9 +528,8 @@ fn get_months_dedup(a: &str) -> String {
     } else {
         ""
     };
-    
-    let month = match pattern.to_uppercase().as_ref()
-    {
+
+    let month = match pattern.to_uppercase().as_ref() {
         "JAN" => Month::January,
         "FEB" => Month::February,
         "MAR" => Month::March,
@@ -545,7 +544,7 @@ fn get_months_dedup(a: &str) -> String {
         "DEC" => Month::December,
         _ => Month::Unknown,
     };
-    
+
     if month == Month::Unknown {
         "".to_string()
     } else {
@@ -701,9 +700,8 @@ fn month_parse(line: &str) -> Month {
     } else {
         ""
     };
-    
-    match pattern.to_uppercase().as_ref()
-    {
+
+    match pattern.to_uppercase().as_ref() {
         "JAN" => Month::January,
         "FEB" => Month::February,
         "MAR" => Month::March,
