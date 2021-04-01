@@ -162,3 +162,13 @@ fn _du_d_flag(s: String) {
         assert_eq!(s, "8\t./subdir\n8\t./\n");
     }
 }
+
+#[test]
+fn test_du_h_flag_empty_file() {
+    let ts = TestScenario::new("du");
+
+    let result = ts.ucmd().arg("-h").arg("empty.txt").run();
+    assert!(result.success);
+    assert_eq!(result.stderr, "");
+    assert_eq!(result.stdout, "0\tempty.txt\n");
+}
