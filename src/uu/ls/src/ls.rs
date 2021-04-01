@@ -1312,7 +1312,7 @@ fn display_file_name(
     metadata: &Metadata,
     config: &Config,
 ) -> Cell {
-    let mut name = escape_name(get_file_name(path, strip), &config);
+    let mut name = escape_name(get_file_name(path, strip), &config.quoting_style);
     let file_type = metadata.file_type();
 
     match config.indicator_style {
