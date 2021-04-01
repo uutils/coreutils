@@ -102,6 +102,68 @@ fn test_numeric_unique_ints() {
 }
 
 #[test]
+fn test_keys_open_ended() {
+    let input = "aa bb cc\ndd aa ff\ngg aa cc\n";
+    new_ucmd!()
+        .args(&["-k", "2.2"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only("gg aa cc\ndd aa ff\naa bb cc\n");
+}
+
+#[test]
+fn test_keys_closed_range() {
+    let input = "aa bb cc\ndd aa ff\ngg aa cc\n";
+    new_ucmd!()
+        .args(&["-k", "2.2,2.2"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only("dd aa ff\ngg aa cc\naa bb cc\n");
+}
+
+#[test]
+fn test_keys_multiple_ranges() {
+    let input = "aa bb cc\ndd aa ff\ngg aa cc\n";
+    new_ucmd!()
+        .args(&["-k", "2,2", "-k", "3,3"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only("gg aa cc\ndd aa ff\naa bb cc\n");
+}
+
+#[test]
+fn test_keys_custom_separator() {
+    let input = "aaxbbxcc\nddxaaxff\nggxaaxcc\n";
+    new_ucmd!()
+        .args(&["-k", "2.2,2.2", "-t", "x"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only("ddxaaxff\nggxaaxcc\naaxbbxcc\n");
+}
+
+#[test]
+fn test_keys_invalid_field_letter() {
+    let input = "foo";
+    new_ucmd!()
+        .args(&["-k", "1.1n"])
+        .pipe_in(input)
+        .fails()
+        .stderr_only(
+        "sort: error: failed to parse character index for key `1.1n`: invalid digit found in string",
+    );
+}
+
+#[test]
+fn test_keys_invalid_field_zero() {
+    let input = "foo";
+    new_ucmd!()
+        .args(&["-k", "0.1"])
+        .pipe_in(input)
+        .fails()
+        .stderr_only("sort: error: field index was 0");
+}
+
+#[test]
 fn test_version() {
     test_helper("version", "-V");
 }
