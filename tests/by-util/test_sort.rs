@@ -71,17 +71,6 @@ fn test_dictionary_order() {
 }
 
 #[test]
-fn test_non_printing_chars() {
-    for non_printing_chars_param in vec!["-i"] {
-        new_ucmd!()
-            .pipe_in("a👦🏻aa	b\naaaa	b")
-            .arg(non_printing_chars_param)
-            .succeeds()
-            .stdout_only("aaaa	b\na👦🏻aa	b\n");
-    }
-}
-
-#[test]
 fn test_dictionary_order2() {
     for non_dictionary_order2_param in vec!["-d"] {
         new_ucmd!()
@@ -93,8 +82,24 @@ fn test_dictionary_order2() {
 }
 
 #[test]
+fn test_non_printing_chars() {
+    for non_printing_chars_param in vec!["-i"] {
+        new_ucmd!()
+            .pipe_in("a👦🏻aa	b\naaaa	b")
+            .arg(non_printing_chars_param)
+            .succeeds()
+            .stdout_only("aaaa	b\na👦🏻aa	b\n");
+    }
+}
+
+#[test]
 fn test_months_dedup() {
     test_helper("months-dedup", "-Mu");
+}
+
+#[test]
+fn test_exponents_positive() {
+    test_helper("exponents-positive", "-g");
 }
 
 #[test]

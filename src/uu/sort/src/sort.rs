@@ -53,6 +53,8 @@ static ARG_FILES: &str = "files";
 static DECIMAL_PT: char = '.';
 static THOUSANDS_SEP: char = ',';
 static NEGATIVE: char = '-';
+static POSITIVE: char = '+';
+static EXPONENT: char = 'E';
 
 #[derive(Eq, Ord, PartialEq, PartialOrd)]
 enum SortMode {
@@ -506,24 +508,46 @@ fn last_resort_compare(a: &str, b: &str, x: &Settings) -> Ordering {
 
 fn get_leading_number(a: &str) -> &str {
     let mut s = "";
-    for c in a.chars() {
+    // Strip string
+    for c in a.to_uppercase().chars() {
         if !c.is_numeric()
             && !c.is_whitespace()
             && !c.eq(&DECIMAL_PT)
             && !c.eq(&THOUSANDS_SEP)
+            && !c.eq(&EXPONENT)
             && !a.chars().nth(0).unwrap_or('\0').eq(&NEGATIVE)
+            && !a.chars().nth(0).unwrap_or('\0').eq(&POSITIVE)
         {
             s = a.trim().split(c).next().unwrap_or("");
             break;
         }
         s = a.trim();
     }
+
+    // Cleanup strips
+    let mut p_iter = s.chars().peekable();
+    // Checks next char and avoids borrow after move of for loop
+    while let Some(c) = p_iter.next() {
+        p_iter.next();
+        let next_char_numeric = p_iter.peek().unwrap_or(&'\0').is_numeric();
+        if c.eq(&EXPONENT) && !next_char_numeric {
+            s = a.trim().split(c).next().unwrap_or("");
+            break;
+        } else if c.eq(&POSITIVE) && !next_char_numeric {
+            let mut v: Vec<&str> = s.split(c).collect();
+            v.split_off(1);
+            // Avoids returning a value referencing data owned by the current function
+            let s = &v.join("");
+            break;
+        }
+    }
+
     s
 }
 
 fn get_months_dedup(a: &str) -> String {
     let pattern = if a.trim().len().ge(&3) {
-        // Split a 3 and get first element of tuple ".0"
+        // Split at 3rd char and get first element of tuple ".0"
         a.split_at(3).0
     } else {
         ""
@@ -593,7 +617,10 @@ fn permissive_f64_parse(a: &str) -> f64 {
 
 fn numeric_compare(a: &str, b: &str, x: &Settings) -> Ordering {
     // Stub for when Rust gets strncmp
-    // Still pretty damn fast!
+    // Perhaps not needed, as fast or faster than GNU's -n!
+    // Because of this, I'm not sure we need to make it "bug compatible"
+    // if not needed with GNU sort -n.  For sort -d or -i I can see
+    // someone wanting something specific.  Less so here?
     general_numeric_compare(a, b, x)
 }
 
