@@ -36,7 +36,6 @@ const AFTER_HELP: &str = r#"
  \\xHH    byte with hexadecimal value HH (1 to 2 digits)
 "#;
 
-
 mod options {
     pub const STRING: &str = "STRING";
     pub const NO_NEWLINE: &str = "no_newline";

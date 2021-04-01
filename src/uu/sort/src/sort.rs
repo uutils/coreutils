@@ -493,13 +493,13 @@ fn get_leading_number(a: &str) -> &str {
 fn num_sort_dedup(a: &str) -> &str {
     // Empty lines are dumped
     if a.is_empty() {
-        return "0"
+        return "0";
     // And lines that don't begin numerically are dumped
     } else if !a.trim().chars().nth(0).unwrap_or('\0').is_numeric() {
-        return "0"
+        return "0";
     } else {
-    // Prepare lines for comparison of only the numerical leading numbers
-        return get_leading_number(a)
+        // Prepare lines for comparison of only the numerical leading numbers
+        return get_leading_number(a);
     };
 }
 
