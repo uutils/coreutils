@@ -1,8 +1,11 @@
 #![allow(dead_code)]
 
+#[cfg(not(windows))]
 use libc;
 use std::env;
-use std::ffi::{CString, OsStr};
+#[cfg(not(windows))]
+use std::ffi::CString;
+use std::ffi::OsStr;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Result, Write};
 #[cfg(unix)]
