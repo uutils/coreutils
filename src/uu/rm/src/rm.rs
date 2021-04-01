@@ -311,7 +311,7 @@ fn remove_dir(path: &Path, options: &Options) -> bool {
                     match fs::remove_dir(path) {
                         Ok(_) => {
                             if options.verbose {
-                                println!("removed directory '{}'", unify(path).display());
+                                println!("removed directory '{}'", normalize(path).display());
                             }
                         }
                         Err(e) => {
@@ -349,7 +349,7 @@ fn remove_file(path: &Path, options: &Options) -> bool {
         match fs::remove_file(path) {
             Ok(_) => {
                 if options.verbose {
-                    println!("removed '{}'", unify(path).display());
+                    println!("removed '{}'", normalize(path).display());
                 }
             }
             Err(e) => {
@@ -401,7 +401,7 @@ pub fn normalize_path(path: &Path) -> PathBuf {
     ret
 }
 
-fn unify(path: &Path) -> PathBuf {
+fn normalize(path: &Path) -> PathBuf {
     // copied from https://github.com/rust-lang/cargo/blob/2e4cfc2b7d43328b207879228a2ca7d427d188bb/src/cargo/util/paths.rs#L65-L90
     // both projects are MIT https://github.com/rust-lang/cargo/blob/master/LICENSE-MIT
     // for std impl progress see rfc https://github.com/rust-lang/rfcs/issues/2208
