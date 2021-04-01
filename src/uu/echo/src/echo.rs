@@ -14,10 +14,10 @@ use std::io::{self, Write};
 use std::iter::Peekable;
 use std::str::Chars;
 
-static NAME: &str = "echo";
-static USAGE: &str = "[OPTIONS]... [STRING]...";
-static SUMMARY: &str = "display a line of text";
-static AFTER_HELP: &str = r#"
+const NAME: &str = "echo";
+const SUMMARY: &str = "display a line of text";
+const USAGE: &str = "[OPTIONS]... [STRING]...";
+const AFTER_HELP: &str = r#"
  Echo the STRING(s) to standard output.
 
  If -e is in effect, the following sequences are recognized:
@@ -36,11 +36,12 @@ static AFTER_HELP: &str = r#"
  \\xHH    byte with hexadecimal value HH (1 to 2 digits)
 "#;
 
+
 mod options {
-    pub static STRING: &str = "STRING";
-    pub static NO_NEWLINE: &str = "no_newline";
-    pub static ENABLE_BACKSLASH_ESCAPE: &str = "enable_backslash_escape";
-    pub static DISABLE_BACKSLASH_ESCAPE: &str = "disable_backslash_escape";
+    pub const STRING: &str = "STRING";
+    pub const NO_NEWLINE: &str = "no_newline";
+    pub const ENABLE_BACKSLASH_ESCAPE: &str = "enable_backslash_escape";
+    pub const DISABLE_BACKSLASH_ESCAPE: &str = "disable_backslash_escape";
 }
 
 fn parse_code(
@@ -113,8 +114,6 @@ fn print_escaped(input: &str, mut output: impl Write) -> io::Result<bool> {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
-
     let matches = App::new(executable!())
         .name(NAME)
         // TrailingVarArg specifies the final positional argument is a VarArg
@@ -123,9 +122,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .setting(clap::AppSettings::TrailingVarArg)
         .setting(clap::AppSettings::AllowLeadingHyphen)
         .version(crate_version!())
-        .usage(USAGE)
         .about(SUMMARY)
         .after_help(AFTER_HELP)
+        .usage(USAGE)
         .arg(
             Arg::with_name(options::NO_NEWLINE)
                 .short("n")
@@ -149,7 +148,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         )
         .arg(
             Arg::with_name(options::STRING)
-                .hidden(true)
                 .multiple(true)
                 .allow_hyphen_values(true),
         )
