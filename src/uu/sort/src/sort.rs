@@ -506,7 +506,7 @@ fn last_resort_compare(a: &str, b: &str, x: &Settings) -> Ordering {
     }
 }
 
-fn get_leading_number(a: &str) -> &str {
+fn leading_num_common(a: &str) -> &str {
     let mut s = "";
     // Strip string
     for c in a.to_uppercase().chars() {
@@ -515,18 +515,43 @@ fn get_leading_number(a: &str) -> &str {
             && !c.eq(&DECIMAL_PT)
             && !c.eq(&THOUSANDS_SEP)
             && !c.eq(&EXPONENT)
-            && !a.chars().nth(0).unwrap_or('\0').eq(&NEGATIVE)
             && !a.chars().nth(0).unwrap_or('\0').eq(&POSITIVE)
+            && !a.chars().nth(0).unwrap_or('\0').eq(&NEGATIVE)
         {
             s = a.trim().split(c).next().unwrap_or("");
             break;
         }
         s = a.trim();
     }
+    s
+}
+
+fn get_leading_num(a: &str) -> &str {
+    let mut s = "";
+    let b = leading_num_common(a);
+
+    // Strip string
+    for c in b.chars() {
+        if c.eq(&EXPONENT) && b.chars().nth(0).unwrap_or('\0').eq(&POSITIVE) {
+            s = b.trim().split(c).next().unwrap_or("");
+            break;
+        }
+        s = b.trim();
+    }
+
+    // Empty number lines are to be treated as ‘0’ but only for -n
+    if s.is_empty() {
+        s = "0";
+    };
+    s
+}
+
+fn get_leading_gen(a: &str) -> &str {
+    let mut s = leading_num_common(a);
 
     // Cleanup strips
     let mut p_iter = s.chars().peekable();
-    // Checks next char and avoids borrow after move of for loop
+    // Checks next char and avoids borrow after move of a for loop
     while let Some(c) = p_iter.next() {
         p_iter.next();
         let next_char_numeric = p_iter.peek().unwrap_or(&'\0').is_numeric();
@@ -541,7 +566,6 @@ fn get_leading_number(a: &str) -> &str {
             break;
         }
     }
-
     s
 }
 
@@ -593,19 +617,14 @@ fn get_nums_dedup(a: &str) -> &str {
         ""
     // Prepare lines for comparison of only the numerical leading numbers
     } else {
-        get_leading_number(s)
+        get_leading_num(s)
     }
 }
 
 /// Parse the beginning string into an f64, returning -inf instead of NaN on errors.
 fn permissive_f64_parse(a: &str) -> f64 {
     // Remove thousands seperators
-    let mut a = a.replace(THOUSANDS_SEP, "");
-
-    // Empty number lines are to be treated as ‘0’
-    if a.is_empty() {
-        a = "0".to_string()
-    };
+    let a = a.replace(THOUSANDS_SEP, "");
 
     // GNU sort treats "NaN" as non-number in numeric, so it needs special care.
     match a.parse::<f64>() {
@@ -616,12 +635,22 @@ fn permissive_f64_parse(a: &str) -> f64 {
 }
 
 fn numeric_compare(a: &str, b: &str, x: &Settings) -> Ordering {
-    // Stub for when Rust gets strncmp
-    // Perhaps not needed, as fast or faster than GNU's -n!
-    // Because of this, I'm not sure we need to make it "bug compatible"
-    // if not needed with GNU sort -n.  For sort -d or -i I can see
-    // someone wanting something specific.  Less so here?
-    general_numeric_compare(a, b, x)
+    #![allow(clippy::comparison_chain)]
+
+    let sa = get_leading_num(a);
+    let sb = get_leading_num(b);
+
+    let fa = permissive_f64_parse(sa);
+    let fb = permissive_f64_parse(sb);
+
+    // f64::cmp isn't implemented (due to NaN issues); implement directly instead
+    if fa > fb {
+        Ordering::Greater
+    } else if fa < fb {
+        Ordering::Less
+    } else {
+        last_resort_compare(a, b, x)
+    }
 }
 
 /// Compares two floats, with errors and non-numerics assumed to be -inf.
@@ -629,8 +658,8 @@ fn numeric_compare(a: &str, b: &str, x: &Settings) -> Ordering {
 fn general_numeric_compare(a: &str, b: &str, x: &Settings) -> Ordering {
     #![allow(clippy::comparison_chain)]
 
-    let sa = get_leading_number(a);
-    let sb = get_leading_number(b);
+    let sa = get_leading_gen(a);
+    let sb = get_leading_gen(b);
 
     let fa = permissive_f64_parse(sa);
     let fb = permissive_f64_parse(sb);
@@ -646,7 +675,7 @@ fn general_numeric_compare(a: &str, b: &str, x: &Settings) -> Ordering {
 }
 
 fn human_numeric_convert(a: &str) -> f64 {
-    let num_str = get_leading_number(a);
+    let num_str = get_leading_gen(a);
     let (_, suffix) = a.split_at(num_str.len());
     let num_part = permissive_f64_parse(num_str);
     let suffix: f64 = match suffix.parse().unwrap_or('\0') {
