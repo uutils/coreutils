@@ -7,6 +7,10 @@
 //  * file that was distributed with this source code.
 #![allow(dead_code)]
 
+// Although they don't always seem to decribe reality. Check out the POSIX and GNU specs:
+// https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
+// https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
+
 // spell-checker:ignore (ToDO) outfile nondictionary
 #[macro_use]
 extern crate uucore;
@@ -47,6 +51,7 @@ static OPT_REVERSE: &str = "reverse";
 static OPT_STABLE: &str = "stable";
 static OPT_UNIQUE: &str = "unique";
 static OPT_RANDOM: &str = "random-sort";
+static OPT_ZERO_TERMINATED: &str = "zero-terminated";
 
 static ARG_FILES: &str = "files";
 
@@ -78,6 +83,7 @@ struct Settings {
     compare_fns: Vec<fn(&str, &str, &Settings) -> Ordering>,
     transform_fns: Vec<fn(&str) -> String>,
     salt: String,
+    zero_terminated: bool,
 }
 
 impl Default for Settings {
@@ -94,6 +100,7 @@ impl Default for Settings {
             compare_fns: Vec::new(),
             transform_fns: Vec::new(),
             salt: String::new(),
+            zero_terminated: false,
         }
     }
 }
@@ -293,6 +300,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(OPT_UNIQUE)
                 .help("output only the first of an equal run"),
         )
+        .arg(
+            Arg::with_name(OPT_ZERO_TERMINATED)
+                .short("z")
+                .long(OPT_ZERO_TERMINATED)
+                .help("Delimit items with a zero byte rather than a newline"),
+        )
         .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true))
         .get_matches_from(args);
 
@@ -395,7 +408,6 @@ fn exec(files: Vec<String>, settings: &mut Settings) -> i32 {
             }
         }
     }
-
     sort_by(&mut lines, &settings);
 
     if settings.merge {
@@ -551,6 +563,7 @@ fn get_leading_gen(a: &str) -> &str {
 
     // Cleanup strips
     let mut p_iter = s.chars().peekable();
+
     // Checks next char and avoids borrow after move of a for loop
     while let Some(c) = p_iter.next() {
         p_iter.next();
