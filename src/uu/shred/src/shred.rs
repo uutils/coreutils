@@ -329,8 +329,8 @@ this is the default for non-regular files",
     let mut errs: Vec<String> = vec![];
 
     if !matches.is_present(options::FILE) {
-        eprintln!("{}: Missing an argument", NAME);
-        eprintln!("For help, try '{} --help'", NAME);
+        show_error!("Missing an argument");
+        show_error!("For help, try '{} --help'", NAME);
         return 0;
     }
 
@@ -367,9 +367,9 @@ this is the default for non-regular files",
     let verbose = matches.is_present(options::VERBOSE);
 
     if !errs.is_empty() {
-        eprintln!("Invalid arguments supplied.");
+        show_error!("Invalid arguments supplied.");
         for message in errs {
-            eprintln!("{}", message);
+            show_error!("{}", message);
         }
         return 1;
     }
