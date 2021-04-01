@@ -29,6 +29,7 @@ mod options {
     pub const DIGITS: &str = "digits";
     pub const PREFIX: &str = "prefix";
     pub const KEEP_FILES: &str = "keep-files";
+    pub const SILENT: &str = "silent";
     pub const QUIET: &str = "quiet";
     pub const ELIDE_EMPTY_FILES: &str = "elide-empty-files";
     pub const FILE: &str = "PATTERN";
@@ -47,7 +48,7 @@ pub struct CsplitOptions {
 impl CsplitOptions {
     fn new(matches: &ArgMatches) -> CsplitOptions {
         let keep_files = matches.is_present(options::KEEP_FILES);
-        let quiet = matches.is_present(options::QUIET);
+        let quiet = matches.is_present(options::SILENT) || matches.is_present(options::QUIET);
         let elide_empty_files = matches.is_present(options::ELIDE_EMPTY_FILES);
         let suppress_matched = matches.is_present(options::SUPPRESS_MATCHED);
 
@@ -717,12 +718,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(options::SUFFIX_FORMAT)
                 .short("b")
                 .long(options::SUFFIX_FORMAT)
+                .value_name("FORMAT")
                 .help("use sprintf FORMAT instead of %02d"),
         )
         .arg(
             Arg::with_name(options::PREFIX)
                 .short("f")
                 .long(options::PREFIX)
+                .value_name("PREFIX")
                 .help("use PREFIX instead of 'xx'"),
         )
         .arg(
@@ -740,13 +743,19 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(options::DIGITS)
                 .short("n")
                 .long(options::DIGITS)
+                .value_name("DIGITS")
                 .help("use specified number of digits instead of 2"),
         )
         .arg(
-            Arg::with_name(options::QUIET)
+            Arg::with_name(options::SILENT)
                 .short("s")
-                .long(options::QUIET)
+                .long(options::SILENT)
                 .help("do not print counts of output file sizes"),
+        )
+        .arg(
+            Arg::with_name(options::QUIET)
+                .long(options::QUIET)
+                .help("same as --silent"),
         )
         .arg(
             Arg::with_name(options::ELIDE_EMPTY_FILES)
