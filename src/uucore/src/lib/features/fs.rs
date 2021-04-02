@@ -337,7 +337,7 @@ mod tests {
             let path = Path::new(test.path);
             let normalized = normalize_path(path);
             assert_eq!(
-                test.test.replace("/", std::path::MAIN_SEPARATOR.as_str),
+                test.test.replace("/", std::path::MAIN_SEPARATOR.to_string().as_str()),
                 normalized.to_str().expect("Path is not valid utf-8!")
             );
         }
