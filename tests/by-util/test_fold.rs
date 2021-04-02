@@ -25,9 +25,35 @@ fn test_40_column_word_boundary() {
 }
 
 #[test]
-fn test_default_warp_with_newlines() {
+fn test_default_wrap_with_newlines() {
     new_ucmd!()
         .arg("lorem_ipsum_new_line.txt")
         .run()
         .stdout_is_fixture("lorem_ipsum_new_line_80_column.expected");
+}
+
+#[test]
+fn test_should_preserve_empty_lines() {
+    new_ucmd!().pipe_in("\n").succeeds().stdout_is("\n");
+
+    new_ucmd!()
+        .arg("-w1")
+        .pipe_in("0\n1\n\n2\n\n\n")
+        .succeeds()
+        .stdout_is("0\n1\n\n2\n\n\n");
+}
+
+#[test]
+fn test_word_boundary_split_should_preserve_empty_lines() {
+    new_ucmd!()
+        .arg("-s")
+        .pipe_in("\n")
+        .succeeds()
+        .stdout_is("\n");
+
+    new_ucmd!()
+        .args(&["-w1", "-s"])
+        .pipe_in("0\n1\n\n2\n\n\n")
+        .succeeds()
+        .stdout_is("0\n1\n\n2\n\n\n");
 }
