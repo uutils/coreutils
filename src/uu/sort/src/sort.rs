@@ -526,10 +526,10 @@ fn compare_by(a: &str, b: &str, settings: &Settings) -> Ordering {
 
     for compare_fn in &settings.compare_fns {
         let mut cmp: Ordering = if settings.random {
-                random_shuffle(a, b, settings.salt.clone()) 
-            } else { 
-                compare_fn(a, b) 
-            };
+            random_shuffle(a, b, settings.salt.clone())
+        } else {
+            compare_fn(a, b)
+        };
         // Call "last resort compare" on equal
         if cmp == Ordering::Equal {
             if settings.random || settings.stable || settings.unique {
