@@ -30,7 +30,7 @@ mod options {
     pub const KEEP_FILES: &str = "keep-files";
     pub const QUIET: &str = "quiet";
     pub const ELIDE_EMPTY_FILES: &str = "elide-empty-files";
-    pub const FILE: &str = "PATTERN";
+    pub const FILE: &str = "file";
     pub const PATTERN: &str = "pattern";
 }
 
@@ -762,29 +762,25 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(options::ELIDE_EMPTY_FILES)
                 .help("remove empty output files"),
         )
-        .arg(Arg::with_name(options::FILE).hidden(true))
-        .arg(Arg::with_name(options::PATTERN).hidden(true).multiple(true))
+        .arg(Arg::with_name(options::FILE).hidden(true).required(true))
+        .arg(
+            Arg::with_name(options::PATTERN)
+                .hidden(true)
+                .multiple(true)
+                .required(true),
+        )
         .after_help(LONG_HELP)
         .get_matches_from(args);
 
-    // check for mandatory arguments
-    let file_value = matches.value_of(options::FILE);
-    if file_value.is_none() {
-        show_error!("missing operand");
-        exit!(1);
-    }
-
     // get the file to split
-    let file_name = file_value.unwrap();
-
-    let patterns_values = matches.values_of(options::PATTERN);
-    if patterns_values.is_none() {
-        show_error!("missing operand after '{}'", file_name);
-        exit!(1);
-    }
+    let file_name = matches.value_of(options::FILE).unwrap();
 
     // get the patterns to split on
-    let patterns: Vec<String> = patterns_values.unwrap().map(str::to_string).collect();
+    let patterns: Vec<String> = matches
+        .values_of(options::PATTERN)
+        .unwrap()
+        .map(str::to_string)
+        .collect();
     let patterns = return_if_err!(1, patterns::get_patterns(&patterns[..]));
     let options = CsplitOptions::new(&matches);
     if file_name == "-" {
