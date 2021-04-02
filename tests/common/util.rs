@@ -1,8 +1,11 @@
 #![allow(dead_code)]
 
+#[cfg(not(windows))]
 use libc;
 use std::env;
-use std::ffi::{CString, OsStr};
+#[cfg(not(windows))]
+use std::ffi::CString;
+use std::ffi::OsStr;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Result, Write};
 #[cfg(unix)]
@@ -587,6 +590,14 @@ impl TestScenario {
     /// relative to the environment's unique temporary test directory.
     pub fn cmd<S: AsRef<OsStr>>(&self, bin: S) -> UCommand {
         UCommand::new_from_tmp(bin, self.tmpd.clone(), true)
+    }
+
+    /// Returns builder for invoking any uutils command. Paths given are treated
+    /// relative to the environment's unique temporary test directory.
+    pub fn ccmd<S: AsRef<OsStr>>(&self, bin: S) -> UCommand {
+        let mut cmd = self.cmd(&self.bin_path);
+        cmd.arg(bin);
+        cmd
     }
 
     // different names are used rather than an argument

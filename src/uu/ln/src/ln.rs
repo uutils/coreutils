@@ -223,7 +223,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     } else if matches.is_present(OPT_BACKUP) {
         match matches.value_of(OPT_BACKUP) {
             None => BackupMode::ExistingBackup,
-            Some(mode) => match &mode[..] {
+            Some(mode) => match mode {
                 "simple" | "never" => BackupMode::SimpleBackup,
                 "numbered" | "t" => BackupMode::NumberedBackup,
                 "existing" | "nil" => BackupMode::ExistingBackup,
