@@ -578,7 +578,7 @@ fn get_leading_num(a: &str) -> &str {
     let mut s = "";
     let b = leading_num_common(a);
 
-    // GNU numeric sort does recognize '+' or 'e' notation so we strip
+    // GNU numeric sort doesn't recognize '+' or 'e' notation so we strip
     for c in b.chars() {
         if c.eq(&ENOTATION) || b.chars().nth(0).unwrap_or('\0').eq(&POSITIVE) {
             s = b.split(c).next().unwrap_or("");
