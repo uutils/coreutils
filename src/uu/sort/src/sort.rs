@@ -7,7 +7,7 @@
 //  * file that was distributed with this source code.
 #![allow(dead_code)]
 
-// Although they don't always seem to decribe reality. Check out the POSIX and GNU specs:
+// Although they don't always seem to decribe reality, check out the POSIX and GNU specs:
 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 
@@ -20,6 +20,7 @@ use fnv::FnvHasher;
 use itertools::Itertools;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
+use rayon::prelude::*;
 use semver::Version;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
@@ -59,7 +60,7 @@ static DECIMAL_PT: char = '.';
 static THOUSANDS_SEP: char = ',';
 static NEGATIVE: char = '-';
 static POSITIVE: char = '+';
-static EXPONENT: char = 'E';
+static ENOTATION: char = 'E';
 
 #[derive(Eq, Ord, PartialEq, PartialOrd)]
 enum SortMode {
@@ -304,7 +305,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(OPT_ZERO_TERMINATED)
                 .short("z")
                 .long(OPT_ZERO_TERMINATED)
-                .help("Delimit items with a zero byte rather than a newline"),
+                .help("line delimiter is NUL, not newline"),
         )
         .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true))
         .get_matches_from(args);
@@ -336,6 +337,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     settings.merge = matches.is_present(OPT_MERGE);
     settings.check = matches.is_present(OPT_CHECK);
+    settings.zero_terminated = matches.is_present(OPT_ZERO_TERMINATED);
 
     if matches.is_present(OPT_IGNORE_CASE) {
         settings.transform_fns.push(|s| s.to_uppercase());
@@ -398,6 +400,14 @@ fn exec(files: Vec<String>, settings: &mut Settings) -> i32 {
             file_merger.push_file(buf_reader.lines());
         } else if settings.check {
             return exec_check_file(buf_reader.lines(), &settings);
+        } else if settings.zero_terminated {
+            for line in buf_reader.split(b'\0') {
+                if let Ok(n) = line {
+                    lines.push(std::str::from_utf8(&n).unwrap_or("\0").to_string());
+                } else {
+                    break;
+                }
+            }
         } else {
             for line in buf_reader.lines() {
                 if let Ok(n) = line {
@@ -408,30 +418,31 @@ fn exec(files: Vec<String>, settings: &mut Settings) -> i32 {
             }
         }
     }
+
     sort_by(&mut lines, &settings);
 
     if settings.merge {
         if settings.unique {
-            print_sorted(file_merger.dedup(), &settings.outfile)
+            print_sorted(file_merger.dedup(), &settings)
         } else {
-            print_sorted(file_merger, &settings.outfile)
+            print_sorted(file_merger, &settings)
         }
     } else if settings.mode == SortMode::Month && settings.unique {
         print_sorted(
             lines
                 .iter()
                 .dedup_by(|a, b| get_months_dedup(a) == get_months_dedup(b)),
-            &settings.outfile,
+            &settings,
         )
     } else if settings.unique {
         print_sorted(
             lines
                 .iter()
                 .dedup_by(|a, b| get_nums_dedup(a) == get_nums_dedup(b)),
-            &settings.outfile,
+            &settings,
         )
     } else {
-        print_sorted(lines.iter(), &settings.outfile)
+        print_sorted(lines.iter(), &settings)
     }
 
     0
@@ -481,10 +492,12 @@ fn transform(line: &str, settings: &Settings) -> String {
     transformed
 }
 
+#[inline(always)]
 fn sort_by(lines: &mut Vec<String>, settings: &Settings) {
-    lines.sort_by(|a, b| compare_by(a, b, &settings))
+    lines.par_sort_by(|a, b| compare_by(a, b, &settings))
 }
 
+#[inline]
 fn compare_by(a: &str, b: &str, settings: &Settings) -> Ordering {
     let (a_transformed, b_transformed): (String, String);
     let (a, b) = if !settings.transform_fns.is_empty() {
@@ -506,10 +519,12 @@ fn compare_by(a: &str, b: &str, settings: &Settings) -> Ordering {
     Ordering::Equal
 }
 
+#[inline(always)]
 fn default_compare(a: &str, b: &str, _: &Settings) -> Ordering {
     a.cmp(b)
 }
 
+#[inline(always)]
 fn last_resort_compare(a: &str, b: &str, x: &Settings) -> Ordering {
     if x.stable || x.unique {
         Ordering::Equal
@@ -518,6 +533,7 @@ fn last_resort_compare(a: &str, b: &str, x: &Settings) -> Ordering {
     }
 }
 
+#[inline(always)]
 fn leading_num_common(a: &str) -> &str {
     let mut s = "";
     // Strip string
@@ -526,14 +542,14 @@ fn leading_num_common(a: &str) -> &str {
             && !c.is_whitespace()
             && !c.eq(&DECIMAL_PT)
             && !c.eq(&THOUSANDS_SEP)
-            && !c.eq(&EXPONENT)
+            && !c.eq(&ENOTATION)
             && !a.chars().nth(0).unwrap_or('\0').eq(&POSITIVE)
             && !a.chars().nth(0).unwrap_or('\0').eq(&NEGATIVE)
         {
-            s = a.trim().split(c).next().unwrap_or("");
+            s = a.split(c).next().unwrap_or("");
             break;
         }
-        s = a.trim();
+        s = a;
     }
     s
 }
@@ -542,16 +558,16 @@ fn get_leading_num(a: &str) -> &str {
     let mut s = "";
     let b = leading_num_common(a);
 
-    // Strip string
+    // GNU numeric sort does recognize '+' or 'e' notation so we strip
     for c in b.chars() {
-        if c.eq(&EXPONENT) && b.chars().nth(0).unwrap_or('\0').eq(&POSITIVE) {
-            s = b.trim().split(c).next().unwrap_or("");
+        if c.eq(&ENOTATION) && b.chars().nth(0).unwrap_or('\0').eq(&POSITIVE) {
+            s = b.split(c).next().unwrap_or("");
             break;
         }
-        s = b.trim();
+        s = b;
     }
 
-    // Empty number lines are to be treated as ‘0’ but only for -n
+    // And empty number lines are to be treated as ‘0’ but only for numeric
     if s.is_empty() {
         s = "0";
     };
@@ -563,18 +579,18 @@ fn get_leading_gen(a: &str) -> &str {
 
     // Cleanup strips
     let mut p_iter = s.chars().peekable();
-
-    // Checks next char and avoids borrow after move of a for loop
+    // Checks next char and avoid borrow after move of a for loop
     while let Some(c) = p_iter.next() {
         p_iter.next();
         let next_char_numeric = p_iter.peek().unwrap_or(&'\0').is_numeric();
-        if c.eq(&EXPONENT) && !next_char_numeric {
-            s = a.trim().split(c).next().unwrap_or("");
+        // Only general numeric recognizes e notation and the '+' sign
+        if c.eq(&ENOTATION) || c.eq(&DECIMAL_PT) && !next_char_numeric {
+            s = a.split(c).next().unwrap_or("");
             break;
         } else if c.eq(&POSITIVE) && !next_char_numeric {
             let mut v: Vec<&str> = s.split(c).collect();
             v.split_off(1);
-            // Avoids returning a value referencing data owned by the current function
+            // Let here avoids returning a value referencing data owned by the current function
             let s = &v.join("");
             break;
         }
@@ -635,12 +651,15 @@ fn get_nums_dedup(a: &str) -> &str {
 }
 
 /// Parse the beginning string into an f64, returning -inf instead of NaN on errors.
+#[inline(always)]
 fn permissive_f64_parse(a: &str) -> f64 {
     // Remove thousands seperators
     let a = a.replace(THOUSANDS_SEP, "");
 
     // GNU sort treats "NaN" as non-number in numeric, so it needs special care.
-    match a.parse::<f64>() {
+    // *Keep this trim before parse* despite what POSIX may say about -b and -n
+    // because GNU and BSD both seem to require it to match their behavior
+    match a.trim().parse::<f64>() {
         Ok(a) if a.is_nan() => std::f64::NEG_INFINITY,
         Ok(a) => a,
         Err(_) => std::f64::NEG_INFINITY,
@@ -688,7 +707,7 @@ fn general_numeric_compare(a: &str, b: &str, x: &Settings) -> Ordering {
 }
 
 fn human_numeric_convert(a: &str) -> f64 {
-    let num_str = get_leading_gen(a);
+    let num_str = get_leading_num(a);
     let (_, suffix) = a.split_at(num_str.len());
     let num_part = permissive_f64_parse(num_str);
     let suffix: f64 = match suffix.parse().unwrap_or('\0') {
@@ -829,11 +848,11 @@ fn remove_nonprinting_chars(s: &str) -> String {
         .collect::<String>()
 }
 
-fn print_sorted<S, T: Iterator<Item = S>>(iter: T, outfile: &Option<String>)
+fn print_sorted<S, T: Iterator<Item = S>>(iter: T, settings: &Settings)
 where
     S: std::fmt::Display,
 {
-    let mut file: Box<dyn Write> = match *outfile {
+    let mut file: Box<dyn Write> = match settings.outfile {
         Some(ref filename) => match File::create(Path::new(&filename)) {
             Ok(f) => Box::new(BufWriter::new(f)) as Box<dyn Write>,
             Err(e) => {
@@ -844,9 +863,16 @@ where
         None => Box::new(stdout()) as Box<dyn Write>,
     };
 
-    for line in iter {
-        let str = format!("{}\n", line);
-        crash_if_err!(1, file.write_all(str.as_bytes()))
+    if settings.zero_terminated {
+        for line in iter {
+            let str = format!("{}\0", line);
+            crash_if_err!(1, file.write_all(str.as_bytes()));
+        }
+    } else {
+        for line in iter {
+            let str = format!("{}\n", line);
+            crash_if_err!(1, file.write_all(str.as_bytes()));
+        }
     }
 }
 

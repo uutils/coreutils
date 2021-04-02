@@ -148,14 +148,7 @@ fn test_numeric_floats2() {
 
 #[test]
 fn test_numeric_floats_with_nan2() {
-    for numeric_sort_param in vec!["-n", "--numeric-sort"] {
-        let input = "1.444\n1.0/0.0\n1.58590\n-8.90880\n1.040000000\n-.05";
-        new_ucmd!()
-            .arg(numeric_sort_param)
-            .pipe_in(input)
-            .succeeds()
-            .stdout_only("-8.90880\n-.05\n1.0/0.0\n1.040000000\n1.444\n1.58590\n");
-    }
+    test_helper("numeric-floats-with-nan2", "-n");
 }
 
 #[test]
@@ -201,6 +194,11 @@ fn test_numeric_unique_ints2() {
             .succeeds()
             .stdout_only("1\n8\n9\n");
     }
+}
+
+#[test]
+fn test_zero_terminated() {
+    test_helper("zero-terminated", "-z");
 }
 
 #[test]
