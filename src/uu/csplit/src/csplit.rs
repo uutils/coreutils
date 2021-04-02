@@ -19,7 +19,6 @@ use crate::csplit_error::CsplitError;
 use crate::splitname::SplitName;
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
-static SYNTAX: &str = "[OPTION]... FILE PATTERN...";
 static SUMMARY: &str = "split a file into sections determined by context lines";
 static LONG_HELP: &str = "Output pieces of FILE separated by PATTERN(s) to files 'xx00', 'xx01', ..., and output byte counts of each piece to standard output.";
 
@@ -34,6 +33,10 @@ mod options {
     pub const ELIDE_EMPTY_FILES: &str = "elide-empty-files";
     pub const FILE: &str = "PATTERN";
     pub const PATTERN: &str = "pattern";
+}
+
+fn get_usage() -> String {
+    format!("{0} [OPTION]... FILE PATTERN...", executable!())
 }
 
 /// Command line options for csplit.
@@ -708,12 +711,13 @@ mod tests {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
+    let usage = get_usage();
     let args = args.collect_str();
 
     let matches = App::new(executable!())
         .version(VERSION)
         .about(SUMMARY)
-        .usage(SYNTAX)
+        .usage(&usage[..])
         .arg(
             Arg::with_name(options::SUFFIX_FORMAT)
                 .short("b")
