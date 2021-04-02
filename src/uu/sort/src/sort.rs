@@ -44,6 +44,7 @@ static OPT_VERSION_SORT: &str = "version-sort";
 static OPT_DICTIONARY_ORDER: &str = "dictionary-order";
 static OPT_MERGE: &str = "merge";
 static OPT_CHECK: &str = "check";
+static OPT_CHECK_SILENT: &str = "check-silent";
 static OPT_IGNORE_CASE: &str = "ignore-case";
 static OPT_IGNORE_BLANKS: &str = "ignore-blanks";
 static OPT_IGNORE_NONPRINTING: &str = "ignore-nonprinting";
@@ -51,7 +52,7 @@ static OPT_OUTPUT: &str = "output";
 static OPT_REVERSE: &str = "reverse";
 static OPT_STABLE: &str = "stable";
 static OPT_UNIQUE: &str = "unique";
-static OPT_RANDOM: &str = "random-sort";
+static OPT_RANDOM: &str = "random";
 static OPT_ZERO_TERMINATED: &str = "zero-terminated";
 
 static ARG_FILES: &str = "files";
@@ -80,6 +81,7 @@ struct Settings {
     stable: bool,
     unique: bool,
     check: bool,
+    check_silent: bool,
     random: bool,
     compare_fns: Vec<fn(&str, &str, &Settings) -> Ordering>,
     transform_fns: Vec<fn(&str) -> String>,
@@ -97,6 +99,7 @@ impl Default for Settings {
             stable: false,
             unique: false,
             check: false,
+            check_silent: false,
             random: false,
             compare_fns: Vec::new(),
             transform_fns: Vec::new(),
@@ -252,6 +255,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("check for sorted input; do not sort"),
         )
         .arg(
+            Arg::with_name(OPT_CHECK_SILENT)
+                .short("C")
+                .long(OPT_CHECK_SILENT)
+                .help("exit successfully if the given file is already sorted, and exit with status 1 otherwise. "),
+        )
+        .arg(
             Arg::with_name(OPT_IGNORE_CASE)
                 .short("f")
                 .long(OPT_IGNORE_CASE)
@@ -335,10 +344,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         settings.transform_fns.push(remove_nonprinting_chars);
     }
 
-    settings.merge = matches.is_present(OPT_MERGE);
-    settings.check = matches.is_present(OPT_CHECK);
     settings.zero_terminated = matches.is_present(OPT_ZERO_TERMINATED);
-
+    settings.merge = matches.is_present(OPT_MERGE);
+    
+    settings.check = matches.is_present(OPT_CHECK);
+    if matches.is_present(OPT_CHECK_SILENT) {  
+        settings.check_silent = matches.is_present(OPT_CHECK_SILENT);
+        settings.check = true;
+    };
+    
     if matches.is_present(OPT_IGNORE_CASE) {
         settings.transform_fns.push(|s| s.to_uppercase());
     }
@@ -471,7 +485,9 @@ fn exec_check_file(lines: Lines<BufReader<Box<dyn Read>>>, settings: &Settings) 
         // Check for a second "error", as .coalesce() always returns the last
         // line, no matter what our merging function does.
         if let Some(_last_line_or_next_error) = errors.next() {
-            println!("sort: disorder in line {}", first_error_index);
+            if !settings.check_silent {
+                println!("sort: disorder in line {}", first_error_index);
+            };
             1
         } else {
             // first "error" was actually the last line.
@@ -567,7 +583,7 @@ fn get_leading_num(a: &str) -> &str {
         s = b;
     }
 
-    // And empty number lines are to be treated as ‘0’ but only for numeric
+    // And empty number lines are to be treated as ‘0’ but only for numeric sort
     if s.is_empty() {
         s = "0";
     };
@@ -590,7 +606,7 @@ fn get_leading_gen(a: &str) -> &str {
         } else if c.eq(&POSITIVE) && !next_char_numeric {
             let mut v: Vec<&str> = s.split(c).collect();
             v.split_off(1);
-            // Let here avoids returning a value referencing data owned by the current function
+            // 'Let' here avoids returning a value referencing data owned by the current function
             let s = &v.join("");
             break;
         }

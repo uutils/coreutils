@@ -277,6 +277,15 @@ fn test_check() {
         .stdout_is("");
 }
 
+#[test]
+fn test_check_silent() {
+    new_ucmd!()
+        .arg("-C")
+        .arg("check_fail.txt")
+        .fails()
+        .stdout_is("");
+}
+
 fn test_helper(file_name: &str, args: &str) {
     new_ucmd!()
         .arg(args)
