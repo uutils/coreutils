@@ -2,7 +2,7 @@
 
 #[macro_use]
 extern crate uucore;
-use getopts::Matches;
+use clap::{App, Arg, ArgMatches};
 use regex::Regex;
 use std::cmp::Ordering;
 use std::io::{self, BufReader};
@@ -18,17 +18,25 @@ mod splitname;
 use crate::csplit_error::CsplitError;
 use crate::splitname::SplitName;
 
-static SYNTAX: &str = "[OPTION]... FILE PATTERN...";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 static SUMMARY: &str = "split a file into sections determined by context lines";
 static LONG_HELP: &str = "Output pieces of FILE separated by PATTERN(s) to files 'xx00', 'xx01', ..., and output byte counts of each piece to standard output.";
 
-static SUFFIX_FORMAT_OPT: &str = "suffix-format";
-static SUPPRESS_MATCHED_OPT: &str = "suppress-matched";
-static DIGITS_OPT: &str = "digits";
-static PREFIX_OPT: &str = "prefix";
-static KEEP_FILES_OPT: &str = "keep-files";
-static QUIET_OPT: &str = "quiet";
-static ELIDE_EMPTY_FILES_OPT: &str = "elide-empty-files";
+mod options {
+    pub const SUFFIX_FORMAT: &str = "suffix-format";
+    pub const SUPPRESS_MATCHED: &str = "suppress-matched";
+    pub const DIGITS: &str = "digits";
+    pub const PREFIX: &str = "prefix";
+    pub const KEEP_FILES: &str = "keep-files";
+    pub const QUIET: &str = "quiet";
+    pub const ELIDE_EMPTY_FILES: &str = "elide-empty-files";
+    pub const FILE: &str = "file";
+    pub const PATTERN: &str = "pattern";
+}
+
+fn get_usage() -> String {
+    format!("{0} [OPTION]... FILE PATTERN...", executable!())
+}
 
 /// Command line options for csplit.
 pub struct CsplitOptions {
@@ -40,19 +48,19 @@ pub struct CsplitOptions {
 }
 
 impl CsplitOptions {
-    fn new(matches: &Matches) -> CsplitOptions {
-        let keep_files = matches.opt_present(KEEP_FILES_OPT);
-        let quiet = matches.opt_present(QUIET_OPT);
-        let elide_empty_files = matches.opt_present(ELIDE_EMPTY_FILES_OPT);
-        let suppress_matched = matches.opt_present(SUPPRESS_MATCHED_OPT);
+    fn new(matches: &ArgMatches) -> CsplitOptions {
+        let keep_files = matches.is_present(options::KEEP_FILES);
+        let quiet = matches.is_present(options::QUIET);
+        let elide_empty_files = matches.is_present(options::ELIDE_EMPTY_FILES);
+        let suppress_matched = matches.is_present(options::SUPPRESS_MATCHED);
 
         CsplitOptions {
             split_name: crash_if_err!(
                 1,
                 SplitName::new(
-                    matches.opt_str(PREFIX_OPT),
-                    matches.opt_str(SUFFIX_FORMAT_OPT),
-                    matches.opt_str(DIGITS_OPT)
+                    matches.value_of(options::PREFIX).map(str::to_string),
+                    matches.value_of(options::SUFFIX_FORMAT).map(str::to_string),
+                    matches.value_of(options::DIGITS).map(str::to_string)
                 )
             ),
             keep_files,
@@ -702,45 +710,78 @@ mod tests {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
+    let usage = get_usage();
     let args = args.collect_str();
 
-    let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
-        .optopt(
-            "b",
-            SUFFIX_FORMAT_OPT,
-            "use sprintf FORMAT instead of %02d",
-            "FORMAT",
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(SUMMARY)
+        .usage(&usage[..])
+        .arg(
+            Arg::with_name(options::SUFFIX_FORMAT)
+                .short("b")
+                .long(options::SUFFIX_FORMAT)
+                .value_name("FORMAT")
+                .help("use sprintf FORMAT instead of %02d"),
         )
-        .optopt("f", PREFIX_OPT, "use PREFIX instead of 'xx'", "PREFIX")
-        .optflag("k", KEEP_FILES_OPT, "do not remove output files on errors")
-        .optflag(
-            "",
-            SUPPRESS_MATCHED_OPT,
-            "suppress the lines matching PATTERN",
+        .arg(
+            Arg::with_name(options::PREFIX)
+                .short("f")
+                .long(options::PREFIX)
+                .value_name("PREFIX")
+                .help("use PREFIX instead of 'xx'"),
         )
-        .optopt(
-            "n",
-            DIGITS_OPT,
-            "use specified number of digits instead of 2",
-            "DIGITS",
+        .arg(
+            Arg::with_name(options::KEEP_FILES)
+                .short("k")
+                .long(options::KEEP_FILES)
+                .help("do not remove output files on errors"),
         )
-        .optflag("s", QUIET_OPT, "do not print counts of output file sizes")
-        .optflag("z", ELIDE_EMPTY_FILES_OPT, "remove empty output files")
-        .parse(args);
+        .arg(
+            Arg::with_name(options::SUPPRESS_MATCHED)
+                .long(options::SUPPRESS_MATCHED)
+                .help("suppress the lines matching PATTERN"),
+        )
+        .arg(
+            Arg::with_name(options::DIGITS)
+                .short("n")
+                .long(options::DIGITS)
+                .value_name("DIGITS")
+                .help("use specified number of digits instead of 2"),
+        )
+        .arg(
+            Arg::with_name(options::QUIET)
+                .short("s")
+                .long(options::QUIET)
+                .visible_alias("silent")
+                .help("do not print counts of output file sizes"),
+        )
+        .arg(
+            Arg::with_name(options::ELIDE_EMPTY_FILES)
+                .short("z")
+                .long(options::ELIDE_EMPTY_FILES)
+                .help("remove empty output files"),
+        )
+        .arg(Arg::with_name(options::FILE).hidden(true).required(true))
+        .arg(
+            Arg::with_name(options::PATTERN)
+                .hidden(true)
+                .multiple(true)
+                .required(true),
+        )
+        .after_help(LONG_HELP)
+        .get_matches_from(args);
 
-    // check for mandatory arguments
-    if matches.free.is_empty() {
-        show_error!("missing operand");
-        exit!(1);
-    }
-    if matches.free.len() == 1 {
-        show_error!("missing operand after '{}'", matches.free[0]);
-        exit!(1);
-    }
-    // get the patterns to split on
-    let patterns = return_if_err!(1, patterns::get_patterns(&matches.free[1..]));
     // get the file to split
-    let file_name: &str = &matches.free[0];
+    let file_name = matches.value_of(options::FILE).unwrap();
+
+    // get the patterns to split on
+    let patterns: Vec<String> = matches
+        .values_of(options::PATTERN)
+        .unwrap()
+        .map(str::to_string)
+        .collect();
+    let patterns = return_if_err!(1, patterns::get_patterns(&patterns[..]));
     let options = CsplitOptions::new(&matches);
     if file_name == "-" {
         let stdin = io::stdin();
