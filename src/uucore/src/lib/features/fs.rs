@@ -336,7 +336,10 @@ mod tests {
         for test in NORMALIZE_PATH_TESTS.iter() {
             let path = Path::new(test.path);
             let normalized = normalize_path(path);
-            assert_eq!(test.test, normalized.to_str().expect("Path is not valid utf-8!"));
+            assert_eq!(
+                test.test,
+                normalized.to_str().expect("Path is not valid utf-8!")
+            );
         }
     }
 }
