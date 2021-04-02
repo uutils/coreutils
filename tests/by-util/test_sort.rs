@@ -145,12 +145,10 @@ fn test_keys_custom_separator() {
 fn test_keys_invalid_field_letter() {
     let input = "foo";
     new_ucmd!()
-        .args(&["-k", "1.1n"])
+        .args(&["-k", "1.1x"])
         .pipe_in(input)
         .fails()
-        .stderr_only(
-        "sort: error: failed to parse character index for key `1.1n`: invalid digit found in string",
-    );
+        .stderr_only("sort: error: invalid option for key: `x`");
 }
 
 #[test]
@@ -161,6 +159,82 @@ fn test_keys_invalid_field_zero() {
         .pipe_in(input)
         .fails()
         .stderr_only("sort: error: field index was 0");
+}
+
+#[test]
+fn test_keys_with_options() {
+    let input = "aa 3 cc\ndd 1 ff\ngg 2 cc\n";
+    for param in &[
+        &["-k", "2,2n"][..],
+        &["-k", "2n,2"][..],
+        &["-k", "2,2", "-n"][..],
+    ] {
+        new_ucmd!()
+            .args(param)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only("dd 1 ff\ngg 2 cc\naa 3 cc\n");
+    }
+}
+
+#[test]
+fn test_keys_with_options_blanks_start() {
+    let input = "aa   3 cc\ndd  1 ff\ngg         2 cc\n";
+    for param in &[&["-k", "2b,2"][..], &["-k", "2,2", "-b"][..]] {
+        new_ucmd!()
+            .args(param)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_only("dd  1 ff\ngg         2 cc\naa   3 cc\n");
+    }
+}
+
+#[test]
+fn test_keys_with_options_blanks_end() {
+    let input = "a  b
+a b
+a   b
+";
+    new_ucmd!()
+        .args(&["-k", "1,2.1b", "-s"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(
+            "a   b
+a  b
+a b
+",
+        );
+}
+
+#[test]
+fn test_keys_stable() {
+    let input = "a  b
+a b
+a   b
+";
+    new_ucmd!()
+        .args(&["-k", "1,2.1", "-s"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(
+            "a  b
+a b
+a   b
+",
+        );
+}
+
+#[test]
+fn test_keys_empty_match() {
+    let input = "a a a a
+aaaa
+";
+    new_ucmd!()
+        .args(&["-k", "1,1", "-t", "a"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(input);
 }
 
 #[test]

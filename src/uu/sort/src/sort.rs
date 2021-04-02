@@ -22,6 +22,7 @@ use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Lines, Read, Write};
 use std::mem::replace;
+use std::ops::{Range, RangeInclusive};
 use std::path::Path;
 use twox_hash::XxHash64;
 use uucore::fs::is_stdin_interactive; // for Iterator::dedup()
@@ -30,13 +31,15 @@ static NAME: &str = "sort";
 static ABOUT: &str = "Display sorted concatenation of all FILE(s).";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
-const LONG_HELP_KEYS: &str = "The key format is FIELD[.CHAR][,FIELD[.CHAR]].
+const LONG_HELP_KEYS: &str = "The key format is FIELD[.CHAR][OPTIONS][,FIELD[.CHAR]][OPTIONS].
 
 Fields by default are separated by the first whitespace after a non-whitespace character. Use -t to specify a custom separator.
 In the default case, whitespace is appended at the beginning of each field. Custom separators however are not included in fields.
 
 FIELD and CHAR both start at 1 (i.e. they are 1-indexed). If there is no end specified after a comma, the end will be the end of the line.
-If CHAR is set 0, it means the end of the field. CHAR defaults to 1 for the start position and to 0 for the end position.";
+If CHAR is set 0, it means the end of the field. CHAR defaults to 1 for the start position and to 0 for the end position.
+
+Valid options are: MbdfhnRrV. They override the global options for this key.";
 
 static OPT_HUMAN_NUMERIC_SORT: &str = "human-numeric-sort";
 static OPT_MONTH_SORT: &str = "month-sort";
@@ -60,7 +63,8 @@ static ARG_FILES: &str = "files";
 
 static DECIMAL_PT: char = '.';
 static THOUSANDS_SEP: char = ',';
-#[derive(Eq, Ord, PartialEq, PartialOrd)]
+
+#[derive(Eq, Ord, PartialEq, PartialOrd, Clone)]
 enum SortMode {
     Numeric,
     HumanNumeric,
@@ -69,8 +73,11 @@ enum SortMode {
     Default,
 }
 
-struct Settings {
+struct GlobalSettings {
     mode: SortMode,
+    ignore_blanks: bool,
+    ignore_case: bool,
+    dictionary_order: bool,
     merge: bool,
     reverse: bool,
     outfile: Option<String>,
@@ -78,17 +85,18 @@ struct Settings {
     unique: bool,
     check: bool,
     random: bool,
-    compare_fns: Vec<fn(&str, &str) -> Ordering>,
-    transform_fns: Vec<fn(&str) -> String>,
     salt: String,
     selectors: Vec<FieldSelector>,
     separator: Option<char>,
 }
 
-impl Default for Settings {
-    fn default() -> Settings {
-        Settings {
+impl Default for GlobalSettings {
+    fn default() -> GlobalSettings {
+        GlobalSettings {
             mode: SortMode::Default,
+            ignore_blanks: false,
+            ignore_case: false,
+            dictionary_order: false,
             merge: false,
             reverse: false,
             outfile: None,
@@ -96,8 +104,6 @@ impl Default for Settings {
             unique: false,
             check: false,
             random: false,
-            compare_fns: Vec::new(),
-            transform_fns: Vec::new(),
             salt: String::new(),
             selectors: vec![],
             separator: None,
@@ -105,53 +111,107 @@ impl Default for Settings {
     }
 }
 
-#[derive(PartialEq, Debug)]
-struct Token {
-    // from (inclusive)
-    from: usize,
-    // to (exclusive)
-    to: usize,
+struct KeySettings {
+    mode: SortMode,
+    ignore_blanks: bool,
+    ignore_case: bool,
+    dictionary_order: bool,
+    random: bool,
+    reverse: bool,
+    compare_fns: Vec<fn(&str, &str) -> Ordering>,
+    transform_fns: Vec<fn(&str) -> String>,
 }
 
+impl KeySettings {
+    // initialize transform_fns and compare_fns
+    fn initialize_fns(&mut self) {
+        assert!(self.transform_fns.is_empty());
+        assert!(self.compare_fns.is_empty());
+        if self.ignore_case {
+            self.transform_fns.push(|s| s.to_uppercase());
+        }
+        if self.ignore_blanks {
+            self.transform_fns.push(|s| s.trim_start().to_string());
+        }
+        if self.dictionary_order {
+            self.transform_fns.push(remove_nondictionary_chars);
+        }
+        self.compare_fns.push(match self.mode {
+            SortMode::Numeric => numeric_compare,
+            SortMode::HumanNumeric => human_numeric_size_compare,
+            SortMode::Month => month_compare,
+            SortMode::Version => version_compare,
+            SortMode::Default => default_compare,
+        });
+    }
+}
+
+impl From<&GlobalSettings> for KeySettings {
+    fn from(settings: &GlobalSettings) -> Self {
+        Self {
+            mode: settings.mode.clone(),
+            ignore_blanks: settings.ignore_blanks,
+            ignore_case: settings.ignore_case,
+            random: settings.random,
+            reverse: settings.reverse,
+            dictionary_order: settings.dictionary_order,
+            compare_fns: vec![],
+            transform_fns: vec![],
+        }
+    }
+}
+
+enum Selection {
+    // If we had to transform this selection, we have to store a new string.
+    String(String),
+    // If there was no transformation, we can store an index into the line.
+    ByIndex(Range<usize>),
+}
+
+impl Selection {
+    fn get_str<'a>(&'a self, line: &'a Line) -> &'a str {
+        match self {
+            Selection::String(string) => string.as_str(),
+            Selection::ByIndex(range) => &line.line[range.to_owned()],
+        }
+    }
+}
+
+type Field = Range<usize>;
+
 struct Line {
-    // If None, this line was not transformed and string is still the original
-    original: Option<String>,
-    string: String,
-    tokens: Option<Vec<Token>>,
+    line: String,
+    selections: Vec<Selection>,
 }
 
 impl Line {
-    fn new(input: String, settings: &Settings) -> Self {
-        let tokens = if !settings.selectors.is_empty() {
-            Some(tokenize(&input, settings.separator))
-        } else {
-            // If there are no selectors we will never need tokens, so don't calculate them in this case.
-            None
-        };
-        let transformed = transform(&input, settings);
-        let string;
-        let original;
-        if let Some(transformed) = transformed {
-            original = Some(input);
-            string = transformed;
-        } else {
-            original = None;
-            string = input;
-        };
-        Self {
-            original,
-            string,
-            tokens,
-        }
-    }
+    fn new(line: String, settings: &GlobalSettings) -> Self {
+        let fields = tokenize(&line, settings.separator);
 
-    fn get_original(self) -> String {
-        self.original.unwrap_or(self.string)
+        let selections = settings
+            .selectors
+            .iter()
+            .map(|selector| {
+                if let Some(range) = selector.get_selection(&line, &fields) {
+                    if let Some(transformed) =
+                        transform(&line[range.to_owned()], &selector.settings)
+                    {
+                        Selection::String(transformed)
+                    } else {
+                        Selection::ByIndex(range.start().to_owned()..range.end() + 1)
+                    }
+                } else {
+                    // If there is no match, match the empty string.
+                    Selection::ByIndex(0..0)
+                }
+            })
+            .collect();
+        Self { line, selections }
     }
 }
 
 // Returns None if there's no need to transform.
-fn transform(line: &str, settings: &Settings) -> Option<String> {
+fn transform(line: &str, settings: &KeySettings) -> Option<String> {
     if settings.transform_fns.is_empty() {
         None
     } else {
@@ -165,8 +225,7 @@ fn transform(line: &str, settings: &Settings) -> Option<String> {
 }
 
 // Tokenize a line into fields.
-// By default fields are separated by the first whitespace after non-whitespace.
-fn tokenize(line: &str, separator: Option<char>) -> Vec<Token> {
+fn tokenize(line: &str, separator: Option<char>) -> Vec<Field> {
     if let Some(separator) = separator {
         tokenize_with_separator(line, separator)
     } else {
@@ -174,39 +233,43 @@ fn tokenize(line: &str, separator: Option<char>) -> Vec<Token> {
     }
 }
 
-fn tokenize_default(line: &str) -> Vec<Token> {
-    let mut tokens = vec![Token { from: 0, to: 0 }];
+// By default fields are separated by the first whitespace after non-whitespace.
+// Whitespace is included in fields at the start.
+fn tokenize_default(line: &str) -> Vec<Field> {
+    let mut tokens = vec![0..0];
+    // pretend that there was whitespace in front of the line
     let mut previous_was_whitespace = true;
     for (idx, char) in line.char_indices() {
         if char.is_whitespace() {
             if !previous_was_whitespace {
-                tokens.last_mut().unwrap().to = idx;
-                tokens.push(Token { from: idx, to: 0 });
+                tokens.last_mut().unwrap().end = idx;
+                tokens.push(idx..0);
             }
             previous_was_whitespace = true;
         } else {
             previous_was_whitespace = false;
         }
     }
-    tokens.last_mut().unwrap().to = line.len();
+    tokens.last_mut().unwrap().end = line.len();
     tokens
 }
 
-fn tokenize_with_separator(line: &str, separator: char) -> Vec<Token> {
-    let mut tokens = vec![Token { from: 0, to: 0 }];
+// Split between separators. These separators are not included in fields.
+fn tokenize_with_separator(line: &str, separator: char) -> Vec<Field> {
+    let mut tokens = vec![0..0];
     let mut previous_was_separator = false;
     for (idx, char) in line.char_indices() {
         if previous_was_separator {
-            tokens.push(Token { from: idx, to: 0 });
+            tokens.push(idx..0);
         }
         if char == separator {
-            tokens.last_mut().unwrap().to = idx;
+            tokens.last_mut().unwrap().end = idx;
             previous_was_separator = true;
         } else {
             previous_was_separator = false;
         }
     }
-    tokens.last_mut().unwrap().to = line.len();
+    tokens.last_mut().unwrap().end = line.len();
     tokens
 }
 
@@ -215,42 +278,125 @@ struct KeyPosition {
     field: usize,
     // 1-indexed, 0 is end of field.
     char: usize,
+    ignore_blanks: bool,
+}
+
+impl KeyPosition {
+    fn parse(key: &str, default_char_index: usize, settings: &mut KeySettings) -> Self {
+        let mut field_and_char = key.split('.');
+        let mut field = field_and_char
+            .next()
+            .unwrap_or_else(|| crash!(1, "invalid key `{}`", key));
+        let mut char = field_and_char.next();
+        let value_with_options = char.as_mut().unwrap_or(&mut field);
+
+        let mut ignore_blanks = settings.ignore_blanks;
+        if let Some(options_start) = value_with_options.chars().position(char::is_alphabetic) {
+            for option in value_with_options[options_start..].chars() {
+                // valid options: MbdfghinRrV
+                match option {
+                    'M' => settings.mode = SortMode::Month,
+                    'b' => ignore_blanks = true,
+                    'd' => settings.dictionary_order = true,
+                    'f' => settings.ignore_case = true,
+                    // 'g' (unsupported)
+                    'h' => settings.mode = SortMode::HumanNumeric,
+                    // 'i' (unsupported)
+                    'n' => settings.mode = SortMode::Numeric,
+                    'R' => settings.random = true,
+                    'r' => settings.reverse = true,
+                    'V' => settings.mode = SortMode::Version,
+                    c => {
+                        crash!(1, "invalid option for key: `{}`", c)
+                    }
+                }
+            }
+            *value_with_options = &value_with_options[..options_start];
+        }
+
+        let field = field
+            .parse()
+            .unwrap_or_else(|e| crash!(1, "failed to parse field index for key `{}`: {}", key, e));
+        if field == 0 {
+            crash!(1, "field index was 0");
+        }
+        let char = char.map_or(default_char_index, |char| {
+            char.parse().unwrap_or_else(|e| {
+                crash!(
+                    1,
+                    "failed to parse character index for key `{}`: {}",
+                    key,
+                    e
+                )
+            })
+        });
+        Self {
+            field,
+            char,
+            ignore_blanks,
+        }
+    }
 }
 
 struct FieldSelector {
     from: KeyPosition,
     to: Option<KeyPosition>,
+    settings: KeySettings,
 }
 
 impl FieldSelector {
-    // Look up the slice that corresponds to this selector for the given line
-    fn get_selection<'a>(&self, line: &'a Line) -> &'a str {
-        fn resolve_index(line: &str, tokens: &[Token], position: &KeyPosition) -> Option<usize> {
-            if tokens.len() < position.field {
-                None
+    // Look up the slice that corresponds to this selector for the given line.
+    fn get_selection<'a>(&self, line: &'a str, fields: &[Field]) -> Option<RangeInclusive<usize>> {
+        enum ResolutionErr {
+            TooLow,
+            TooHigh,
+        }
+        fn resolve_index(
+            line: &str,
+            fields: &[Field],
+            position: &KeyPosition,
+        ) -> Result<usize, ResolutionErr> {
+            if fields.len() < position.field {
+                Err(ResolutionErr::TooHigh)
             } else if position.char == 0 {
-                Some(tokens[position.field - 1].to - 1)
-            } else {
-                let idx = tokens[position.field - 1].from + position.char - 1;
-                if idx >= line.len() {
-                    None
+                let end = fields[position.field - 1].end;
+                if end == 0 {
+                    Err(ResolutionErr::TooLow)
                 } else {
-                    Some(idx)
+                    Ok(end - 1)
+                }
+            } else {
+                let mut idx = fields[position.field - 1].start + position.char - 1;
+                if idx >= line.len() {
+                    Err(ResolutionErr::TooHigh)
+                } else {
+                    if position.ignore_blanks {
+                        if let Some(not_whitespace) =
+                            line[idx..].chars().position(|c| !c.is_whitespace())
+                        {
+                            idx += not_whitespace;
+                        } else {
+                            return Err(ResolutionErr::TooHigh);
+                        }
+                    }
+                    Ok(idx)
                 }
             }
         }
 
-        if let Some(from) = resolve_index(&line.string, line.tokens.as_ref().unwrap(), &self.from) {
-            // If there is no match for `to`, match everything until the end of the line.
-            let to = self
-                .to
-                .as_ref()
-                .and_then(|to| resolve_index(&line.string, line.tokens.as_ref().unwrap(), &to))
-                .unwrap_or_else(|| line.string.len() - 1);
-            &line.string[from..=to]
+        if let Ok(from) = resolve_index(line, fields, &self.from) {
+            let to = self.to.as_ref().map(|to| resolve_index(line, fields, &to));
+            match to {
+                Some(Ok(to)) => Some(from..=to),
+                // If `to` was not given or the match would be after the end of the line,
+                // match everything until the end of the line.
+                None | Some(Err(ResolutionErr::TooHigh)) => Some(from..=line.len() - 1),
+                // If `to` is before the start of the line, report no match.
+                // This can happen if the line starts with a separator.
+                Some(Err(ResolutionErr::TooLow)) => None,
+            }
         } else {
-            // If there is no match for `from`, match the empty string.
-            ""
+            None
         }
     }
 }
@@ -258,7 +404,7 @@ impl FieldSelector {
 struct MergeableFile<'a> {
     lines: Lines<BufReader<Box<dyn Read>>>,
     current_line: Line,
-    settings: &'a Settings,
+    settings: &'a GlobalSettings,
 }
 
 // BinaryHeap depends on `Ord`. Note that we want to pop smallest items
@@ -286,11 +432,11 @@ impl<'a> Eq for MergeableFile<'a> {}
 
 struct FileMerger<'a> {
     heap: BinaryHeap<MergeableFile<'a>>,
-    settings: &'a Settings,
+    settings: &'a GlobalSettings,
 }
 
 impl<'a> FileMerger<'a> {
-    fn new(settings: &'a Settings) -> FileMerger<'a> {
+    fn new(settings: &'a GlobalSettings) -> FileMerger<'a> {
         FileMerger {
             heap: BinaryHeap::new(),
             settings,
@@ -320,12 +466,12 @@ impl<'a> Iterator for FileMerger<'a> {
                             Line::new(next_line, &self.settings),
                         );
                         self.heap.push(current);
-                        Some(ret.get_original())
+                        Some(ret.line)
                     }
                     _ => {
                         // Don't put it back in the heap (it's empty/erroring)
                         // but its first line is still valid.
-                        Some(current.current_line.get_original())
+                        Some(current.current_line.line)
                     }
                 }
             }
@@ -349,7 +495,7 @@ With no FILE, or when FILE is -, read standard input.",
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args.collect_str();
     let usage = get_usage();
-    let mut settings: Settings = Default::default();
+    let mut settings: GlobalSettings = Default::default();
 
     let matches = App::new(executable!())
         .version(VERSION)
@@ -477,20 +623,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         SortMode::Default
     };
 
-    if matches.is_present(OPT_DICTIONARY_ORDER) {
-        settings.transform_fns.push(remove_nondictionary_chars);
-    }
+    settings.dictionary_order = matches.is_present(OPT_DICTIONARY_ORDER);
 
     settings.merge = matches.is_present(OPT_MERGE);
     settings.check = matches.is_present(OPT_CHECK);
 
-    if matches.is_present(OPT_IGNORE_CASE) {
-        settings.transform_fns.push(|s| s.to_uppercase());
-    }
+    settings.ignore_case = matches.is_present(OPT_IGNORE_CASE);
 
-    if matches.is_present(OPT_IGNORE_BLANKS) {
-        settings.transform_fns.push(|s| s.trim_start().to_string());
-    }
+    settings.ignore_blanks = matches.is_present(OPT_IGNORE_BLANKS);
 
     settings.outfile = matches.value_of(OPT_OUTPUT).map(String::from);
     settings.reverse = matches.is_present(OPT_REVERSE);
@@ -509,21 +649,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         crash!(1, "extra operand `{}' not allowed with -c", files[1])
     }
 
-    settings.compare_fns.push(match settings.mode {
-        SortMode::Numeric => numeric_compare,
-        SortMode::HumanNumeric => human_numeric_size_compare,
-        SortMode::Month => month_compare,
-        SortMode::Version => version_compare,
-        SortMode::Default => default_compare,
-    });
-
-    if !settings.stable {
-        match settings.mode {
-            SortMode::Default => {}
-            _ => settings.compare_fns.push(default_compare),
-        }
-    }
-
     if let Some(arg) = matches.args.get(OPT_SEPARATOR) {
         let separator = arg.vals[0].to_string_lossy();
         let separator = separator;
@@ -535,49 +660,50 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     if matches.is_present(OPT_KEY) {
         for key in &matches.args[OPT_KEY].vals {
-            fn parse_key(key: &str, default_char: usize) -> KeyPosition {
-                let mut field_char = key.split('.');
-                let field = field_char
-                    .next()
-                    .unwrap_or_else(|| crash!(1, "invalid key `{}`", key))
-                    .parse()
-                    .unwrap_or_else(|e| {
-                        crash!(1, "failed to parse field index for key `{}`: {}", key, e)
-                    });
-                if field == 0 {
-                    crash!(1, "field index was 0");
-                }
-                let char = field_char.next().map_or(default_char, |char| {
-                    char.parse().unwrap_or_else(|e| {
-                        crash!(
-                            1,
-                            "failed to parse character index for key `{}`: {}",
-                            key,
-                            e
-                        )
-                    })
-                });
-                KeyPosition { field, char }
-            }
             let key = key.to_string_lossy();
             let mut from_to = key.split(',');
+            let mut key_settings = KeySettings::from(&settings);
+            let from = KeyPosition::parse(
+                from_to
+                    .next()
+                    .unwrap_or_else(|| crash!(1, "invalid key `{}`", key)),
+                1,
+                &mut key_settings,
+            );
+            let to = from_to
+                .next()
+                .map(|to| KeyPosition::parse(to, 0, &mut key_settings));
+            key_settings.initialize_fns();
             let field_selector = FieldSelector {
-                from: parse_key(
-                    from_to
-                        .next()
-                        .unwrap_or_else(|| crash!(1, "invalid key `{}`", key)),
-                    1,
-                ),
-                to: from_to.next().map(|to| parse_key(to, 0)),
+                from,
+                to,
+                settings: key_settings,
             };
             settings.selectors.push(field_selector);
         }
+    }
+    if !settings.stable || !matches.is_present(OPT_KEY) {
+        // add a default selector matching the whole line
+        let mut key_settings = KeySettings::from(&settings);
+        key_settings.initialize_fns();
+        if !settings.stable && !matches!(settings.mode, SortMode::Default) {
+            key_settings.compare_fns.push(default_compare);
+        }
+        settings.selectors.push(FieldSelector {
+            from: KeyPosition {
+                field: 1,
+                char: 1,
+                ignore_blanks: settings.ignore_blanks,
+            },
+            to: None,
+            settings: key_settings,
+        });
     }
 
     exec(files, &settings)
 }
 
-fn exec(files: Vec<String>, settings: &Settings) -> i32 {
+fn exec(files: Vec<String>, settings: &GlobalSettings) -> i32 {
     let mut lines = Vec::new();
     let mut file_merger = FileMerger::new(&settings);
 
@@ -616,26 +742,23 @@ fn exec(files: Vec<String>, settings: &Settings) -> i32 {
         print_sorted(
             lines
                 .into_iter()
-                .map(|line| line.get_original())
+                .map(|line| line.line)
                 .dedup_by(|a, b| num_sort_dedup(a) == num_sort_dedup(b)),
             &settings.outfile,
         )
     } else if settings.unique {
         print_sorted(
-            lines.into_iter().map(|line| line.get_original()).dedup(),
+            lines.into_iter().map(|line| line.line).dedup(),
             &settings.outfile,
         )
     } else {
-        print_sorted(
-            lines.into_iter().map(|line| line.get_original()),
-            &settings.outfile,
-        )
+        print_sorted(lines.into_iter().map(|line| line.line), &settings.outfile)
     }
 
     0
 }
 
-fn exec_check_file(lines: Lines<BufReader<Box<dyn Read>>>, settings: &Settings) -> i32 {
+fn exec_check_file(lines: Lines<BufReader<Box<dyn Read>>>, settings: &GlobalSettings) -> i32 {
     // errors yields the line before each disorder,
     // plus the last line (quirk of .coalesce())
     let unwrapped_lines = lines.filter_map(|maybe_line| {
@@ -675,47 +798,29 @@ fn exec_check_file(lines: Lines<BufReader<Box<dyn Read>>>, settings: &Settings) 
     }
 }
 
-fn sort_by(lines: &mut Vec<Line>, settings: &Settings) {
+fn sort_by(lines: &mut Vec<Line>, settings: &GlobalSettings) {
     lines.sort_by(|a, b| compare_by(a, b, &settings))
 }
 
-fn compare_by(a: &Line, b: &Line, settings: &Settings) -> Ordering {
-    fn do_comparison(a: &str, b: &str, settings: &Settings) -> Ordering {
-        let mut ordering = Ordering::Equal;
+fn compare_by(a: &Line, b: &Line, global_settings: &GlobalSettings) -> Ordering {
+    for (idx, selector) in global_settings.selectors.iter().enumerate() {
+        let a = a.selections[idx].get_str(a);
+        let b = b.selections[idx].get_str(b);
+        let settings = &selector.settings;
 
         for compare_fn in &settings.compare_fns {
             let cmp: Ordering = if settings.random {
-                random_shuffle(a, b, settings.salt.clone())
+                random_shuffle(a, b, global_settings.salt.clone())
             } else {
                 compare_fn(a, b)
             };
             if cmp != Ordering::Equal {
-                if settings.reverse {
-                    ordering = cmp.reverse();
-                } else {
-                    ordering = cmp;
-                }
-                break;
+                return if settings.reverse { cmp.reverse() } else { cmp };
             }
         }
-
-        ordering
     }
 
-    for selector in &settings.selectors {
-        let a = selector.get_selection(a);
-        let b = selector.get_selection(b);
-        let ordering = do_comparison(a, b, settings);
-        if ordering != Ordering::Equal {
-            return ordering;
-        }
-    }
-
-    if settings.selectors.is_empty() || !settings.stable {
-        do_comparison(&a.string, &b.string, settings)
-    } else {
-        Ordering::Equal
-    }
+    Ordering::Equal
 }
 
 fn default_compare(a: &str, b: &str) -> Ordering {
@@ -1003,29 +1108,13 @@ mod tests {
     #[test]
     fn test_tokenize_fields() {
         let line = "foo bar b    x";
-        assert_eq!(
-            tokenize(line, None),
-            vec![
-                Token { from: 0, to: 3 },
-                Token { from: 3, to: 7 },
-                Token { from: 7, to: 9 },
-                Token { from: 9, to: 14 },
-            ],
-        );
+        assert_eq!(tokenize(line, None), vec![0..3, 3..7, 7..9, 9..14,],);
     }
 
     #[test]
     fn test_tokenize_fields_leading_whitespace() {
         let line = "    foo bar b    x";
-        assert_eq!(
-            tokenize(line, None),
-            vec![
-                Token { from: 0, to: 7 },
-                Token { from: 7, to: 11 },
-                Token { from: 11, to: 13 },
-                Token { from: 13, to: 18 },
-            ]
-        );
+        assert_eq!(tokenize(line, None), vec![0..7, 7..11, 11..13, 13..18,]);
     }
 
     #[test]
@@ -1033,13 +1122,7 @@ mod tests {
         let line = "aaa foo bar b    x";
         assert_eq!(
             tokenize(line, Some('a')),
-            vec![
-                Token { from: 0, to: 0 },
-                Token { from: 1, to: 1 },
-                Token { from: 2, to: 2 },
-                Token { from: 3, to: 9 },
-                Token { from: 10, to: 18 },
-            ]
+            vec![0..0, 1..1, 2..2, 3..9, 10..18,]
         );
     }
 }
