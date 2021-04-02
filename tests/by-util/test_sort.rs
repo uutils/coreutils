@@ -143,20 +143,16 @@ fn test_keys_custom_separator() {
 
 #[test]
 fn test_keys_invalid_field_letter() {
-    let input = "foo";
     new_ucmd!()
         .args(&["-k", "1.1x"])
-        .pipe_in(input)
         .fails()
         .stderr_only("sort: error: invalid option for key: `x`");
 }
 
 #[test]
 fn test_keys_invalid_field_zero() {
-    let input = "foo";
     new_ucmd!()
         .args(&["-k", "0.1"])
-        .pipe_in(input)
         .fails()
         .stderr_only("sort: error: field index was 0");
 }
