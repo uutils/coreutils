@@ -686,7 +686,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         // add a default selector matching the whole line
         let mut key_settings = KeySettings::from(&settings);
         key_settings.initialize_fns();
-        if !settings.stable && !matches!(settings.mode, SortMode::Default) {
+        if !settings.stable && settings.mode != SortMode::Default {
             key_settings.compare_fns.push(default_compare);
         }
         settings.selectors.push(FieldSelector {
