@@ -346,13 +346,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     settings.zero_terminated = matches.is_present(OPT_ZERO_TERMINATED);
     settings.merge = matches.is_present(OPT_MERGE);
-    
+
     settings.check = matches.is_present(OPT_CHECK);
-    if matches.is_present(OPT_CHECK_SILENT) {  
+    if matches.is_present(OPT_CHECK_SILENT) {
         settings.check_silent = matches.is_present(OPT_CHECK_SILENT);
         settings.check = true;
     };
-    
+
     if matches.is_present(OPT_IGNORE_CASE) {
         settings.transform_fns.push(|s| s.to_uppercase());
     }
