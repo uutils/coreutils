@@ -308,7 +308,7 @@ mod tests {
         test: &'a str,
     }
 
-    const NORMALIZE_PATH_TESTS: [NormalizePathTestCase; 5] = [
+    const NORMALIZE_PATH_TESTS: [NormalizePathTestCase; 7] = [
         NormalizePathTestCase {
             path: "./foo/bar.txt",
             test: "foo/bar.txt",
@@ -328,6 +328,14 @@ mod tests {
         NormalizePathTestCase {
             path: "foo//./bar",
             test: "foo/bar",
+        },
+        NormalizePathTestCase {
+            path: "/foo//./bar",
+            test: "/foo/bar",
+        },
+        NormalizePathTestCase {
+            path: "C://foo//./bar",
+            test: "C:/foo/bar",
         },
     ];
 
