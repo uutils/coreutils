@@ -580,7 +580,7 @@ fn get_leading_num(a: &str) -> &str {
 
     // GNU numeric sort does recognize '+' or 'e' notation so we strip
     for c in b.chars() {
-        if c.eq(&ENOTATION) && b.chars().nth(0).unwrap_or('\0').eq(&POSITIVE) {
+        if c.eq(&ENOTATION) || b.chars().nth(0).unwrap_or('\0').eq(&POSITIVE) {
             s = b.split(c).next().unwrap_or("");
             break;
         }
