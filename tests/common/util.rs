@@ -29,8 +29,8 @@ static TESTS_DIR: &str = "tests";
 static FIXTURES_DIR: &str = "fixtures";
 
 static ALREADY_RUN: &str = " you have already run this UCommand, if you want to run \
-     another command in the same test, use TestScenario::new instead of \
-     testing();";
+                            another command in the same test, use TestScenario::new instead of \
+                            testing();";
 static MULTIPLE_STDIN_MEANINGLESS: &str = "Ucommand is designed around a typical use case of: provide args and input stream -> spawn process -> block until completion -> return output streams. For verifying that a particular section of the input stream is what causes a particular behavior, use the Command type directly.";
 
 /// Test if the program is running under CI
@@ -135,9 +135,7 @@ impl CmdResult {
     pub fn tmpd(&self) -> Rc<TempDir> {
         match &self.tmpd {
             Some(ptr) => ptr.clone(),
-            None => {
-                panic!("Command not associated with a TempDir")
-            }
+            None => panic!("Command not associated with a TempDir"),
         }
     }
 

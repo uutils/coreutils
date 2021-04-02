@@ -78,7 +78,7 @@ fn execute(args: impl uucore::Args) -> i32 {
         )
         .arg(Arg::with_name(OPT_SHORT).short("s").long("short").help(
             "Display the short hostname (the portion before the first dot) if \
-                possible",
+             possible",
         ))
         .arg(Arg::with_name(OPT_HOST))
         .get_matches_from(args);

@@ -2181,7 +2181,7 @@ dependencies = [
 name = "uu_relpath"
 version = "0.0.4"
 dependencies = [
- "getopts",
+ "clap",
  "uucore",
  "uucore_procs",
 ]

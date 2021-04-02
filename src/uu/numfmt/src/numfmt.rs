@@ -187,9 +187,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(options::PADDING)
                 .help(
                     "pad the output to N characters; positive N will \
-                    right-align; negative N will left-align; padding is \
-                    ignored if the output is wider than N; the default is \
-                    to automatically pad if a whitespace is found",
+                     right-align; negative N will left-align; padding is \
+                     ignored if the output is wider than N; the default is \
+                     to automatically pad if a whitespace is found",
                 )
                 .value_name("N"),
         )
@@ -198,7 +198,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(options::HEADER)
                 .help(
                     "print (without converting) the first N header lines; \
-                    N defaults to 1 if not specified",
+                     N defaults to 1 if not specified",
                 )
                 .value_name("N")
                 .default_value(options::HEADER_DEFAULT)
