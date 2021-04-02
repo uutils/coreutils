@@ -71,7 +71,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(OPT_SUFFIX)
                 .help(
                     "append SUFF to TEMPLATE; SUFF must not contain a path separator. \
-         This option is implied if TEMPLATE does not end with X.",
+                     This option is implied if TEMPLATE does not end with X.",
                 )
                 .value_name("SUFF"),
         )
@@ -81,15 +81,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(OPT_TMPDIR)
                 .help(
                     "interpret TEMPLATE relative to DIR; if DIR is not specified, use \
-         $TMPDIR if set, else /tmp. With this option, TEMPLATE must not \
-         be an absolute name; unlike with -t, TEMPLATE may contain \
-         slashes, but mktemp creates only the final component",
+                     $TMPDIR if set, else /tmp. With this option, TEMPLATE must not \
+                     be an absolute name; unlike with -t, TEMPLATE may contain \
+                     slashes, but mktemp creates only the final component",
                 )
                 .value_name("DIR"),
         )
         .arg(Arg::with_name(OPT_T).short(OPT_T).help(
             "Generate a template (using the supplied prefix and TMPDIR if set) \
-                               to create a filename template [deprecated]",
+             to create a filename template [deprecated]",
         ))
         .arg(
             Arg::with_name(ARG_TEMPLATE)

@@ -37,7 +37,7 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) ->
     }
     match opts.value_of(options::NUMBER_FORMAT) {
         None => {}
-        Some(val) => match val.as_ref() {
+        Some(val) => match val {
             "ln" => {
                 settings.number_format = crate::NumberFormat::Left;
             }

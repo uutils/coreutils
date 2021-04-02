@@ -18,6 +18,7 @@ path = "src/du.rs"
 time = "0.1.40"
 uucore = { version=">=0.0.7", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
+winapi = { version="0.3", features=[] }
 
 [[bin]]
 name = "du"
