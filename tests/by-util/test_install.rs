@@ -87,20 +87,81 @@ fn test_install_unimplemented_arg() {
 }
 
 #[test]
-fn test_install_component_directories() {
+fn test_install_ancestors_directories() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let component1 = "component1";
-    let component2 = "component2";
-    let component3 = "component3";
+    let ancestor1 = "ancestor1";
+    let ancestor2 = "ancestor1/ancestor2";
+    let target_dir = "ancestor1/ancestor2/target_dir";
     let directories_arg = "-d";
 
-    ucmd.args(&[directories_arg, component1, component2, component3])
+    ucmd.args(&[directories_arg, target_dir])
         .succeeds()
         .no_stderr();
 
-    assert!(at.dir_exists(component1));
-    assert!(at.dir_exists(component2));
-    assert!(at.dir_exists(component3));
+    assert!(at.dir_exists(ancestor1));
+    assert!(at.dir_exists(ancestor2));
+    assert!(at.dir_exists(target_dir));
+}
+
+#[test]
+fn test_install_ancestors_mode_directories() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let ancestor1 = "ancestor1";
+    let ancestor2 = "ancestor1/ancestor2";
+    let target_dir = "ancestor1/ancestor2/target_dir";
+    let directories_arg = "-d";
+    let mode_arg = "--mode=700";
+
+    ucmd.args(&[mode_arg, directories_arg, target_dir])
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.dir_exists(ancestor1));
+    assert!(at.dir_exists(ancestor2));
+    assert!(at.dir_exists(target_dir));
+
+    assert_ne!(0o40700 as u32, at.metadata(ancestor1).permissions().mode());
+    assert_ne!(0o40700 as u32, at.metadata(ancestor2).permissions().mode());
+
+    // Expected mode only on the target_dir.
+    assert_eq!(0o40700 as u32, at.metadata(target_dir).permissions().mode());
+}
+
+#[test]
+fn test_install_parent_directories() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let ancestor1 = "ancestor1";
+    let ancestor2 = "ancestor1/ancestor2";
+    let target_dir = "ancestor1/ancestor2/target_dir";
+    let directories_arg = "-d";
+
+    // Here one of the ancestors already exist and only the target_dir and
+    // its parent must be created.
+    at.mkdir(ancestor1);
+
+    ucmd.args(&[directories_arg, target_dir])
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.dir_exists(ancestor2));
+    assert!(at.dir_exists(target_dir));
+}
+
+#[test]
+fn test_install_several_directories() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir1 = "dir1";
+    let dir2 = "dir2";
+    let dir3 = "dir3";
+    let directories_arg = "-d";
+
+    ucmd.args(&[directories_arg, dir1, dir2, dir3])
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.dir_exists(dir1));
+    assert!(at.dir_exists(dir2));
+    assert!(at.dir_exists(dir3));
 }
 
 #[test]
