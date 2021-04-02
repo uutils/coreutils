@@ -98,7 +98,8 @@ fn test_head_count() {
     assert_eq!(result_seq.len(), repeat_limit, "Output is not limited");
     assert!(
         result_seq.iter().all(|x| input_seq.contains(x)),
-        format!("Output includes element not from input: {}", result)
+        "Output includes element not from input: {}",
+        result
     )
 }
 
@@ -133,13 +134,11 @@ fn test_repeat() {
     );
     assert!(
         result_seq.iter().all(|x| input_seq.contains(x)),
-        format!(
-            "Output includes element not from input: {:?}",
-            result_seq
-                .iter()
-                .filter(|x| !input_seq.contains(x))
-                .collect::<Vec<&i32>>()
-        )
+        "Output includes element not from input: {:?}",
+        result_seq
+            .iter()
+            .filter(|x| !input_seq.contains(x))
+            .collect::<Vec<&i32>>()
     )
 }
 

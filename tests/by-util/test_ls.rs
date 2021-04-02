@@ -765,6 +765,8 @@ fn test_ls_ls_color() {
         .arg("--color=always")
         .arg("a/nested_file")
         .succeeds();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
     assert!(result.stdout.contains("a/nested_file\n"));
 
     // No output
@@ -1121,4 +1123,89 @@ fn test_ls_version_sort() {
     expected.insert(0, "..");
     expected.insert(0, ".");
     assert_eq!(result.stdout.split('\n').collect::<Vec<_>>(), expected,)
+}
+
+#[test]
+fn test_ls_quoting_style() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("one two");
+    at.touch("one");
+
+    // It seems that windows doesn't allow \n in filenames.
+    #[cfg(unix)]
+    {
+        at.touch("one\ntwo");
+        // Default is shell-escape
+        let result = scene.ucmd().arg("one\ntwo").succeeds();
+        assert_eq!(result.stdout, "'one'$'\\n''two'\n");
+
+        for (arg, correct) in &[
+            ("--quoting-style=literal", "one\ntwo"),
+            ("-N", "one\ntwo"),
+            ("--literal", "one\ntwo"),
+            ("--quoting-style=c", "\"one\\ntwo\""),
+            ("-Q", "\"one\\ntwo\""),
+            ("--quote-name", "\"one\\ntwo\""),
+            ("--quoting-style=escape", "one\\ntwo"),
+            ("-b", "one\\ntwo"),
+            ("--escape", "one\\ntwo"),
+            ("--quoting-style=shell-escape", "'one'$'\\n''two'"),
+            ("--quoting-style=shell-escape-always", "'one'$'\\n''two'"),
+            ("--quoting-style=shell", "one?two"),
+            ("--quoting-style=shell-always", "'one?two'"),
+        ] {
+            let result = scene.ucmd().arg(arg).arg("one\ntwo").run();
+            println!("stderr = {:?}", result.stderr);
+            println!("stdout = {:?}", result.stdout);
+            assert_eq!(result.stdout, format!("{}\n", correct));
+        }
+    }
+
+    let result = scene.ucmd().arg("one two").succeeds();
+    assert_eq!(result.stdout, "'one two'\n");
+
+    for (arg, correct) in &[
+        ("--quoting-style=literal", "one two"),
+        ("-N", "one two"),
+        ("--literal", "one two"),
+        ("--quoting-style=c", "\"one two\""),
+        ("-Q", "\"one two\""),
+        ("--quote-name", "\"one two\""),
+        ("--quoting-style=escape", "one\\ two"),
+        ("-b", "one\\ two"),
+        ("--escape", "one\\ two"),
+        ("--quoting-style=shell-escape", "'one two'"),
+        ("--quoting-style=shell-escape-always", "'one two'"),
+        ("--quoting-style=shell", "'one two'"),
+        ("--quoting-style=shell-always", "'one two'"),
+    ] {
+        let result = scene.ucmd().arg(arg).arg("one two").run();
+        println!("stderr = {:?}", result.stderr);
+        println!("stdout = {:?}", result.stdout);
+        assert_eq!(result.stdout, format!("{}\n", correct));
+    }
+
+    let result = scene.ucmd().arg("one").succeeds();
+    assert_eq!(result.stdout, "one\n");
+
+    for (arg, correct) in &[
+        ("--quoting-style=literal", "one"),
+        ("-N", "one"),
+        ("--quoting-style=c", "\"one\""),
+        ("-Q", "\"one\""),
+        ("--quote-name", "\"one\""),
+        ("--quoting-style=escape", "one"),
+        ("-b", "one"),
+        ("--quoting-style=shell-escape", "one"),
+        ("--quoting-style=shell-escape-always", "'one'"),
+        ("--quoting-style=shell", "one"),
+        ("--quoting-style=shell-always", "'one'"),
+    ] {
+        let result = scene.ucmd().arg(arg).arg("one").run();
+        println!("stderr = {:?}", result.stderr);
+        println!("stdout = {:?}", result.stdout);
+        assert_eq!(result.stdout, format!("{}\n", correct));
+    }
 }
