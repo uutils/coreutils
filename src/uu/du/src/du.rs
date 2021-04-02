@@ -305,6 +305,9 @@ fn convert_size_human(size: u64, multiplier: u64, _block_size: u64) -> String {
             return format!("{:.1}{}", (size as f64) / (limit as f64), unit);
         }
     }
+    if size == 0 {
+        return format!("0");
+    }
     format!("{}B", size)
 }
 
