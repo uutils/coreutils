@@ -16,7 +16,7 @@ use std::collections::VecDeque;
 use std::fs;
 use std::io::{stderr, stdin, BufRead, Write};
 use std::ops::BitOr;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 use walkdir::{DirEntry, WalkDir};
 
 #[derive(Eq, PartialEq, Clone, Copy)]
@@ -370,43 +370,12 @@ fn prompt_file(path: &Path, is_dir: bool) -> bool {
     }
 }
 
-// copied from https://github.com/rust-lang/cargo/blob/2e4cfc2b7d43328b207879228a2ca7d427d188bb/src/cargo/util/paths.rs#L65-L90
-// both projects are MIT https://github.com/rust-lang/cargo/blob/master/LICENSE-MIT
-// for std impl progress see rfc https://github.com/rust-lang/rfcs/issues/2208
-// replace this once that lands
-pub fn normalize_path(path: &Path) -> PathBuf {
-    let mut components = path.components().peekable();
-    let mut ret = if let Some(c @ Component::Prefix(..)) = components.peek().cloned() {
-        components.next();
-        PathBuf::from(c.as_os_str())
-    } else {
-        PathBuf::new()
-    };
-
-    for component in components {
-        match component {
-            Component::Prefix(..) => unreachable!(),
-            Component::RootDir => {
-                ret.push(component.as_os_str());
-            }
-            Component::CurDir => {}
-            Component::ParentDir => {
-                ret.pop();
-            }
-            Component::Normal(c) => {
-                ret.push(c);
-            }
-        }
-    }
-    ret
-}
-
 fn normalize(path: &Path) -> PathBuf {
     // copied from https://github.com/rust-lang/cargo/blob/2e4cfc2b7d43328b207879228a2ca7d427d188bb/src/cargo/util/paths.rs#L65-L90
     // both projects are MIT https://github.com/rust-lang/cargo/blob/master/LICENSE-MIT
     // for std impl progress see rfc https://github.com/rust-lang/rfcs/issues/2208
     // TODO: replace this once that lands
-    normalize_path(path)
+    uucore::fs::normalize_path(path)
 }
 
 fn prompt(msg: &str) -> bool {

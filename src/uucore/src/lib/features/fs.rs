@@ -60,6 +60,37 @@ pub enum CanonicalizeMode {
     Missing,
 }
 
+// copied from https://github.com/rust-lang/cargo/blob/2e4cfc2b7d43328b207879228a2ca7d427d188bb/src/cargo/util/paths.rs#L65-L90
+// both projects are MIT https://github.com/rust-lang/cargo/blob/master/LICENSE-MIT
+// for std impl progress see rfc https://github.com/rust-lang/rfcs/issues/2208
+// replace this once that lands
+pub fn normalize_path(path: &Path) -> PathBuf {
+    let mut components = path.components().peekable();
+    let mut ret = if let Some(c @ Component::Prefix(..)) = components.peek().cloned() {
+        components.next();
+        PathBuf::from(c.as_os_str())
+    } else {
+        PathBuf::new()
+    };
+
+    for component in components {
+        match component {
+            Component::Prefix(..) => unreachable!(),
+            Component::RootDir => {
+                ret.push(component.as_os_str());
+            }
+            Component::CurDir => {}
+            Component::ParentDir => {
+                ret.pop();
+            }
+            Component::Normal(c) => {
+                ret.push(c);
+            }
+        }
+    }
+    ret
+}
+
 fn resolve<P: AsRef<Path>>(original: P) -> IOResult<PathBuf> {
     const MAX_LINKS_FOLLOWED: u32 = 255;
     let mut followed = 0;
@@ -265,4 +296,47 @@ pub fn display_permissions_unix(mode: u32) -> String {
     });
 
     result
+}
+
+#[cfg(test)]
+mod tests {
+    // Note this useful idiom: importing names from outer (for mod tests) scope.
+    use super::*;
+
+    struct NormalizePathTestCase<'a> {
+        path: &'a str,
+        test: &'a str,
+    }
+
+    const NORMALIZE_PATH_TESTS: [NormalizePathTestCase; 5] = [
+        NormalizePathTestCase {
+            path: "./foo/bar.txt",
+            test: "foo/bar.txt",
+        },
+        NormalizePathTestCase {
+            path: "bar/../foo/bar.txt",
+            test: "foo/bar.txt",
+        },
+        NormalizePathTestCase {
+            path: "foo///bar.txt",
+            test: "foo/bar.txt",
+        },
+        NormalizePathTestCase {
+            path: "foo///bar",
+            test: "foo/bar",
+        },
+        NormalizePathTestCase {
+            path: "foo//./bar",
+            test: "foo/bar",
+        },
+    ];
+
+    #[test]
+    fn test_normalize_path() {
+        for test in NORMALIZE_PATH_TESTS.iter() {
+            let path = Path::new(test.path);
+            let normalized = normalize_path(path);
+            assert_eq!(test.test, normalized.to_str().expect("Path is not valid utf-8!"));
+        }
+    }
 }
