@@ -4,6 +4,34 @@ extern crate unix_socket;
 use crate::common::util::*;
 
 #[test]
+fn test_no_options() {
+    for fixture in &["empty.txt", "alpha.txt", "nonewline.txt"] {
+        // Give fixture through command line file argument
+        new_ucmd!()
+            .args(&[fixture])
+            .succeeds()
+            .stdout_is_fixture(fixture);
+        // Give fixture through stdin
+        new_ucmd!()
+            .pipe_in_fixture(fixture)
+            .succeeds()
+            .stdout_is_fixture(fixture);
+    }
+}
+
+#[test]
+fn test_no_options_big_input() {
+    let mut data: Vec<u8> = vec![1, 2, 3, 4, 5, 6, 7];
+    while data.len() < 1024 * 128 {
+        new_ucmd!()
+            .pipe_in(data.clone())
+            .succeeds()
+            .stdout_is_bytes(&data);
+        data.extend_from_slice(&data.clone());
+    }
+}
+
+#[test]
 fn test_output_multi_files_print_all_chars() {
     new_ucmd!()
         .args(&["alpha.txt", "256.txt", "-A", "-n"])
