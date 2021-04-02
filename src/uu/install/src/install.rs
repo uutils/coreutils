@@ -364,15 +364,17 @@ fn directory(paths: Vec<String>, b: Behavior) -> i32 {
                 if let Err(e) = fs::create_dir(directory) {
                     show_info!("{}: {}", path.display(), e.to_string());
                     all_successful = false;
+                    continue;
+                }
+
+                if b.verbose {
+                    show_info!("creating directory '{}'", path.display());
                 }
             }
 
             if mode::chmod(&path, b.mode()).is_err() {
                 all_successful = false;
-            }
-
-            if b.verbose {
-                show_info!("creating directory '{}'", path.display());
+                continue;
             }
         }
         if all_successful {
