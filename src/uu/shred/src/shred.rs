@@ -338,7 +338,7 @@ this is the default for non-regular files",
         Some(s) => match s.parse::<usize>() {
             Ok(u) => u,
             Err(_) => {
-                errs.push(String::from(format!("invalid number of passes: '{}'", s)));
+                errs.push(format!("invalid number of passes: '{}'", s));
                 0
             }
         },

@@ -147,7 +147,7 @@ fn cksum(fname: &str) -> io::Result<(u32, usize)> {
                     "Is a directory",
                 ));
             };
-            if !path.metadata().is_ok() {
+            if path.metadata().is_err() {
                 return Err(std::io::Error::new(
                     io::ErrorKind::NotFound,
                     "No such file or directory",

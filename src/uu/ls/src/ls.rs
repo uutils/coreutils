@@ -270,11 +270,9 @@ impl Config {
             .any(|i| i >= idx)
             {
                 format = Format::Long;
-            } else {
-                if let Some(mut indices) = options.indices_of(options::format::ONELINE) {
-                    if indices.any(|i| i > idx) {
-                        format = Format::OneLine;
-                    }
+            } else if let Some(mut indices) = options.indices_of(options::format::ONELINE) {
+                if indices.any(|i| i > idx) {
+                    format = Format::OneLine;
                 }
             }
         }

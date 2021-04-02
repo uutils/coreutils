@@ -26,9 +26,9 @@ use time::Timespec;
 #[cfg(windows)]
 use winapi::shared::minwindef::{DWORD, LPVOID};
 #[cfg(windows)]
-use winapi::um::fileapi::{FILE_STANDARD_INFO, FILE_ID_INFO};
+use winapi::um::fileapi::{FILE_ID_INFO, FILE_STANDARD_INFO};
 #[cfg(windows)]
-use winapi::um::minwinbase::{FileStandardInfo, FileIdInfo};
+use winapi::um::minwinbase::{FileIdInfo, FileStandardInfo};
 #[cfg(windows)]
 use winapi::um::winbase::GetFileInformationByHandleEx;
 #[cfg(windows)]
