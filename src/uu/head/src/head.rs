@@ -10,13 +10,13 @@ const BUF_SIZE: usize = 65536;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const ABOUT: &str = "\
-    Print the first 10 lines of each FILE to standard output.\n\
-    With more than one FILE, precede each with a header giving the file name.\n\
-    \n\
-    With no FILE, or when FILE is -, read standard input.\n\
-    \n\
-    Mandatory arguments to long flags are mandatory for short flags too.\
-    ";
+                     Print the first 10 lines of each FILE to standard output.\n\
+                     With more than one FILE, precede each with a header giving the file name.\n\
+                     \n\
+                     With no FILE, or when FILE is -, read standard input.\n\
+                     \n\
+                     Mandatory arguments to long flags are mandatory for short flags too.\
+                     ";
 const USAGE: &str = "head [FLAG]... [FILE]...";
 
 mod options {
@@ -43,10 +43,10 @@ fn app<'a>() -> App<'a, 'a> {
                 .takes_value(true)
                 .help(
                     "\
-                    print the first NUM bytes of each file;\n\
-                    with the leading '-', print all but the last\n\
-                    NUM bytes of each file\
-                    ",
+                     print the first NUM bytes of each file;\n\
+                     with the leading '-', print all but the last\n\
+                     NUM bytes of each file\
+                     ",
                 )
                 .overrides_with_all(&[options::BYTES_NAME, options::LINES_NAME])
                 .allow_hyphen_values(true),
@@ -59,10 +59,10 @@ fn app<'a>() -> App<'a, 'a> {
                 .takes_value(true)
                 .help(
                     "\
-                    print the first NUM lines instead of the first 10;\n\
-                    with the leading '-', print all but the last\n\
-                    NUM lines of each file\
-                    ",
+                     print the first NUM lines instead of the first 10;\n\
+                     with the leading '-', print all but the last\n\
+                     NUM lines of each file\
+                     ",
                 )
                 .overrides_with_all(&[options::LINES_NAME, options::BYTES_NAME])
                 .allow_hyphen_values(true),

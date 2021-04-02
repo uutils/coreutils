@@ -1,8 +1,11 @@
 #![allow(dead_code)]
 
+#[cfg(not(windows))]
 use libc;
 use std::env;
-use std::ffi::{CString, OsStr};
+#[cfg(not(windows))]
+use std::ffi::CString;
+use std::ffi::OsStr;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Result, Write};
 #[cfg(unix)]
@@ -26,8 +29,8 @@ static TESTS_DIR: &str = "tests";
 static FIXTURES_DIR: &str = "fixtures";
 
 static ALREADY_RUN: &str = " you have already run this UCommand, if you want to run \
-     another command in the same test, use TestScenario::new instead of \
-     testing();";
+                            another command in the same test, use TestScenario::new instead of \
+                            testing();";
 static MULTIPLE_STDIN_MEANINGLESS: &str = "Ucommand is designed around a typical use case of: provide args and input stream -> spawn process -> block until completion -> return output streams. For verifying that a particular section of the input stream is what causes a particular behavior, use the Command type directly.";
 
 /// Test if the program is running under CI
@@ -132,9 +135,7 @@ impl CmdResult {
     pub fn tmpd(&self) -> Rc<TempDir> {
         match &self.tmpd {
             Some(ptr) => ptr.clone(),
-            None => {
-                panic!("Command not associated with a TempDir")
-            }
+            None => panic!("Command not associated with a TempDir"),
         }
     }
 
@@ -587,6 +588,14 @@ impl TestScenario {
     /// relative to the environment's unique temporary test directory.
     pub fn cmd<S: AsRef<OsStr>>(&self, bin: S) -> UCommand {
         UCommand::new_from_tmp(bin, self.tmpd.clone(), true)
+    }
+
+    /// Returns builder for invoking any uutils command. Paths given are treated
+    /// relative to the environment's unique temporary test directory.
+    pub fn ccmd<S: AsRef<OsStr>>(&self, bin: S) -> UCommand {
+        let mut cmd = self.cmd(&self.bin_path);
+        cmd.arg(bin);
+        cmd
     }
 
     // different names are used rather than an argument

@@ -46,7 +46,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(OPT_CANONICALIZE)
                 .help(
                     "canonicalize by following every symlink in every component of the \
-            given name recursively; all but the last component must exist",
+                     given name recursively; all but the last component must exist",
                 ),
         )
         .arg(
@@ -55,7 +55,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long("canonicalize-existing")
                 .help(
                     "canonicalize by following every symlink in every component of the \
-         given name recursively, all components must exist",
+                     given name recursively, all components must exist",
                 ),
         )
         .arg(
@@ -64,7 +64,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(OPT_CANONICALIZE_MISSING)
                 .help(
                     "canonicalize by following every symlink in every component of the \
-         given name recursively, without requirements on components existence",
+                     given name recursively, without requirements on components existence",
                 ),
         )
         .arg(
