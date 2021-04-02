@@ -570,7 +570,6 @@ fn leading_num_common(a: &str) -> &str {
     s
 }
 
-<<<<<<< HEAD
 fn get_leading_num(a: &str) -> &str {
     let mut s = "";
     let b = leading_num_common(a);
@@ -637,21 +636,6 @@ fn get_months_dedup(a: &str) -> String {
         "NOV" => Month::November,
         "DEC" => Month::December,
         _ => Month::Unknown,
-=======
-// Matches GNU behavior, see:
-// https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
-// Specifically *not* the same as sort -n | uniq
-fn num_sort_dedup(a: &str) -> &str {
-    // Empty lines are dumped
-    if a.is_empty() {
-        return "0";
-    // And lines that don't begin numerically are dumped
-    } else if !a.trim().chars().nth(0).unwrap_or('\0').is_numeric() {
-        return "0";
-    } else {
-        // Prepare lines for comparison of only the numerical leading numbers
-        return get_leading_number(a);
->>>>>>> a1b8996ef2d90bf67773e0010e08a39e4e1849c2
     };
 
     if month == Month::Unknown {
