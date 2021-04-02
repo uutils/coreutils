@@ -111,7 +111,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(OPT_BACKUP)
                 .help(
                     "make a backup of each file that would otherwise be overwritten \
-             or removed",
+                     or removed",
                 )
                 .takes_value(true)
                 .possible_value("simple")
@@ -145,7 +145,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(OPT_NO_DEREFERENCE)
                 .help(
                     "treat LINK_executable!() as a normal file if it is a \
-                                                    symbolic link to a directory",
+                     symbolic link to a directory",
                 ),
         )
         // TODO: opts.arg(
