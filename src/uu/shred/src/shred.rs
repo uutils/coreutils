@@ -460,6 +460,7 @@ fn wipe_file(
         return;
     }
 
+    // If force is true, set file permissions to not-readonly.
     if force {
         let metadata = match fs::metadata(path) {
             Ok(m) => m,
