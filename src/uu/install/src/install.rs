@@ -356,13 +356,17 @@ fn directory(paths: Vec<String>, b: Behavior) -> i32 {
     } else {
         let mut all_successful = true;
 
-        for directory in paths.iter() {
-            let path = Path::new(directory);
-
+        for path in paths.iter().map(Path::new) {
             // if the path already exist, don't try to create it again
             if !path.exists() {
-                if let Err(e) = fs::create_dir(directory) {
-                    show_info!("{}: {}", path.display(), e.to_string());
+                // Differently than the primary functionality (MainFunction::Standard), the directory
+                // functionality should create all ancestors (or components) of a directory regardless
+                // of the presence of the "-D" flag.
+                // NOTE: the GNU "install" sets the expected mode only for the target directory. All
+                // created ancestor directories will have the default mode. Hence it is safe to use
+                // fs::create_dir_all and then only modify the target's dir mode.
+                if let Err(e) = fs::create_dir_all(path) {
+                    show_info!("{}: {}", path.display(), e);
                     all_successful = false;
                     continue;
                 }
