@@ -15,7 +15,6 @@ edition = "2018"
 path = "src/sort.rs"
 
 [dependencies]
-libc = "0.2.85"
 rayon = "1.5"
 rand = "0.7"
 clap = "2.33"
