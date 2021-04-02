@@ -372,7 +372,7 @@ fn directory(paths: Vec<String>, b: Behavior) -> i32 {
             }
 
             if b.verbose {
-                show_info!("created directory '{}'", path.display());
+                show_info!("creating directory '{}'", path.display());
             }
         }
         if all_successful {
