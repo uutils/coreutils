@@ -2235,7 +2235,6 @@ dependencies = [
  "clap",
  "fnv",
  "itertools 0.8.2",
- "libc",
  "rand 0.7.3",
  "rayon",
  "semver",
