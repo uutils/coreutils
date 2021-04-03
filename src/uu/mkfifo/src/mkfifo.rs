@@ -11,7 +11,6 @@ extern crate uucore;
 use clap::{App, Arg};
 use libc::mkfifo;
 use std::ffi::CString;
-use std::io::Error;
 use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "mkfifo";

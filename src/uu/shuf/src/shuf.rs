@@ -14,12 +14,11 @@ use clap::{App, Arg};
 use rand::Rng;
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
-use std::usize::MAX as MAX_USIZE;
 use uucore::InvalidEncodingHandling;
 
 enum Mode {
-    Default,
-    Echo,
+    Default(String),
+    Echo(Vec<String>),
     InputRange((usize, usize)),
 }
 
@@ -40,12 +39,6 @@ struct Options {
     random_source: Option<String>,
     repeat: bool,
     sep: u8,
-}
-
-enum Mode {
-    Default(String),
-    Echo(Vec<String>),
-    InputRange((usize, usize)),
 }
 
 mod options {
