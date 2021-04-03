@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (ToDO) filts, minidx, minkey paridx
 
-use std::iter::{Chain, Cycle, Copied};
+use std::iter::{Chain, Copied, Cycle};
 use std::slice::Iter;
 
 /// A lazy Sieve of Eratosthenes.
