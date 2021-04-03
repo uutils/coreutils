@@ -10,28 +10,35 @@
 #[macro_use]
 extern crate uucore;
 
+#[cfg(test)]
+mod test_dd_internal;
+
+mod ddargs;
+
 use std::error::Error;
 use std::fs::File;
 use std::io::{
     self, Read, Write,
-    BufWriter,
 };
 use std::sync::mpsc;
 use std::thread;
+use getopts;
 
 const NAME: &str = "dd";
-const SUMMARY: &str = "Copies, and optionally converts, file system resources.";
+const SUMMARY: &str = "convert and copy a file";
 const LONG_HELP: &str = "TODO: This is where the long help string for dd goes!";
 
 const RTN_SUCCESS: i32 = 0;
 const RTN_FAILURE: i32 = 1;
 
+// ----- Conversion -----
+//
 // Conversion tables are just lookup tables.
 // eg. The ASCII->EBCDIC table stores the EBCDIC code at the index
 // obtained by treating the ASCII representation as a number.
 type ConversionTable = [u8; 256];
 
-const ascii_to_ebcdic: ConversionTable = [
+const ASCII_TO_EBCDIC: ConversionTable = [
     0x00, 0x01, 0x02, 0x03, 0x37, 0x2d, 0x2e, 0x2f, 0x16, 0x05, 0x25, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
     0x10, 0x11, 0x12, 0x13, 0x3c, 0x3d, 0x32, 0x26, 0x18, 0x19, 0x3f, 0x27, 0x1c, 0x1d, 0x1e, 0x1f,
     0x40, 0x5a, 0x7f, 0x7b, 0x5b, 0x6c, 0x50, 0x7d, 0x4d, 0x5d, 0x5c, 0x4e, 0x6b, 0x60, 0x4b, 0x61,
@@ -50,7 +57,7 @@ const ascii_to_ebcdic: ConversionTable = [
     0xdc, 0xdd, 0xde, 0xdf, 0xea, 0xeb, 0xec, 0xed, 0xee, 0xef, 0xfa, 0xfb, 0xfc, 0xfd, 0xfe, 0xff,
 ];
 
-const ascii_to_ibm: ConversionTable = [
+const ASCII_TO_IBM: ConversionTable = [
     0x00, 0x01, 0x02, 0x03, 0x37, 0x2d, 0x2e, 0x2f, 0x16, 0x05, 0x25, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
     0x10, 0x11, 0x12, 0x13, 0x3c, 0x3d, 0x32, 0x26, 0x18, 0x19, 0x3f, 0x27, 0x1c, 0x1d, 0x1e, 0x1f,
     0x40, 0x5a, 0x7f, 0x7b, 0x5b, 0x6c, 0x50, 0x7d, 0x4d, 0x5d, 0x5c, 0x4e, 0x6b, 0x60, 0x4b, 0x61,
@@ -69,7 +76,7 @@ const ascii_to_ibm: ConversionTable = [
     0xdc, 0xdd, 0xde, 0xdf, 0xea, 0xeb, 0xec, 0xed, 0xee, 0xef, 0xfa, 0xfb, 0xfc, 0xfd, 0xfe, 0xff,
 ];
 
-const ebcdic_to_ascii: ConversionTable = [
+const EBCDIC_TO_ASCII: ConversionTable = [
     0x00, 0x01, 0x02, 0x03, 0x9c, 0x09, 0x86, 0x7f, 0x97, 0x8d, 0x8e, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
     0x10, 0x11, 0x12, 0x13, 0x9d, 0x85, 0x08, 0x87, 0x18, 0x19, 0x92, 0x8f, 0x1c, 0x1d, 0x1e, 0x1f,
     0x80, 0x81, 0x82, 0x83, 0x84, 0x0a, 0x17, 0x1b, 0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x05, 0x06, 0x07,
@@ -88,7 +95,7 @@ const ebcdic_to_ascii: ConversionTable = [
     0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0xfa, 0xfb, 0xfc, 0xfd, 0xfe, 0xff,
 ];
 
-const lcase_to_ucase: ConversionTable = [
+const LCASE_TO_UCASE: ConversionTable = [
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
     0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
     0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f,
@@ -108,7 +115,7 @@ const lcase_to_ucase: ConversionTable = [
 
 ];
 
-const ucase_to_lcase: ConversionTable = [
+const UCASE_TO_LCASE: ConversionTable = [
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
     0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
     0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f,
@@ -127,12 +134,28 @@ const ucase_to_lcase: ConversionTable = [
     0xf0, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xf9, 0xfa, 0xfb, 0xfc, 0xfd, 0xfe, 0xff,
 ];
 
-// ----- Datatypes -----
+// ----- Types -----
 enum SrcStat
 {
     Read(usize),
     EOF,
 }
+
+#[derive(Debug)]
+enum InternalError
+{
+    WrongInputType,
+    WrongOutputType,
+}
+
+impl std::fmt::Display for InternalError
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Internal dd error")
+    }
+}
+
+impl Error for InternalError {}
 
 struct Input<R: Read>
 {
@@ -146,6 +169,47 @@ impl<R: Read> Read for Input<R>
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize>
     {
         self.src.read(buf)
+    }
+}
+
+impl Input<io::Stdin>
+{
+    fn new(matches: &getopts::Matches) -> Result<Self, Box<dyn Error>>
+    {
+        let ibs: usize = ddargs::parse_ibs(matches)?;
+        let output_progress = ddargs::parse_progress_level(matches)?;
+
+        Ok(
+            Input {
+                src: io::stdin(),
+                ibs,
+                output_progress,
+            }
+        )
+
+    }
+}
+
+impl Input<File>
+{
+    fn new(matches: &getopts::Matches) -> Result<Self, Box<dyn Error>>
+    {
+        let ibs: usize = ddargs::parse_ibs(matches)?;
+        let output_progress = ddargs::parse_progress_level(matches)?;
+
+        if let Some(fname) = matches.opt_str("if")
+        {
+            Ok(Input {
+                src: File::open(fname)?,
+                ibs,
+                output_progress,
+            })
+        }
+        else
+        {
+            Err(Box::new(InternalError::WrongInputType))
+        }
+
     }
 }
 
@@ -182,6 +246,43 @@ struct Output<W: Write>
     conv_table: Option<ConversionTable>,
 }
 
+impl Output<io::Stdout> {
+    fn new(matches: &getopts::Matches) -> Result<Self, Box<dyn Error>>
+    {
+        let obs: usize = ddargs::parse_obs(matches)?;
+        let conv_table = ddargs::parse_conv_table(matches)?;
+
+        Ok(
+            Output {
+                dst: io::stdout(),
+                obs,
+                conv_table,
+            }
+        )
+    }
+}
+
+impl Output<File> {
+    fn new(matches: &getopts::Matches) -> Result<Self, Box<dyn Error>>
+    {
+        let obs: usize = ddargs::parse_obs(matches)?;
+        let conv_table = ddargs::parse_conv_table(matches)?;
+
+        if let Some(fname) = matches.opt_str("if")
+        {
+            Ok(Output {
+                dst: File::open(fname)?,
+                obs,
+                conv_table,
+            })
+        }
+        else
+        {
+            Err(Box::new(InternalError::WrongOutputType))
+        }
+    }
+}
+
 impl<W: Write> Write for Output<W>
 {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize>
@@ -209,10 +310,9 @@ impl<W: Write> Write for Output<W>
     }
 }
 
-// ----- Implementation -----
 fn gen_prog_updater(rx: mpsc::Receiver<usize>) -> impl Fn() -> ()
 {
-    move || { // LAAAAMBDA!
+    move || {
 
         // TODO: Replace ?? with accurate info
         print!("\rProgress ({}/??)", 0);
@@ -246,7 +346,6 @@ fn dd<R: Read, W: Write>(mut i: Input<R>, mut o: Output<W>) -> Result<(usize, us
         None
     };
 
-
     let mut bytes_in  = 0;
     let mut bytes_out = 0;
 
@@ -278,38 +377,106 @@ fn dd<R: Read, W: Write>(mut i: Input<R>, mut o: Output<W>) -> Result<(usize, us
     Ok((bytes_in, bytes_out))
 }
 
+fn append_dashes_if_not_present(mut acc: Vec<String>, s: &String) -> Vec<String>
+{
+    if Some("--") == s.get(0..=1) {
+        acc
+    } else {
+        acc.push(format!("--{}", s));
+        acc
+    }
+}
+
 pub fn uumain(args: impl uucore::Args) -> i32
 {
-    // TODO: parse args
+    let dashed_args = args.collect_str()
+                          .iter()
+                          .fold(Vec::new(), append_dashes_if_not_present);
 
-    let if_name = "foo.txt";
-    let of_name = "bar.txt";
-    let ibs = 512;
-    let obs = 4096;
+    let syntax = format!(
+        "{0} [OPERAND]...\n{0} OPTION",
+        NAME
+    );
 
-    let in_f = File::open(if_name)
-        .expect("TODO: Handle this error in the project-specific way");
+    let matches = app!(&syntax, SUMMARY, LONG_HELP)
+        .optopt(
+            "",
+            "if",
+            "The input file",
+            "FILE"
+        )
+        .optopt(
+            "",
+            "ibs",
+            "read up to BYTES bytes at a time (default: 512)",
+            "BYTES"
+        )
+        .optopt(
+            "",
+            "of",
+            "The output file",
+            "FILE"
+        )
+        .optopt(
+            "",
+            "obs",
+            "write BYTES bytes at a time (default: 512)",
+            "BYTES"
+        )
+        .optopt(
+            "",
+            "conv",
+            "One or more conversion options as a comma-serparated list",
+            "OPT[,OPT]..."
+        )
+        .parse(dashed_args);
 
-    let out_f = File::open(of_name)
-        .expect("TODO: Handle this error in the project-specific way");
-    let out_f = BufWriter::with_capacity(obs, out_f);
+    let result = match (matches.opt_present("if"), matches.opt_present("of"))
+    {
+        (true, true) =>
+        {
+            let i = Input::<File>::new(&matches)
+                .expect("TODO: Return correct error code");
+            let o = Output::<File>::new(&matches)
+                .expect("TODO: Return correct error code");
 
-    let i = Input {
-        src: in_f,
-        ibs,
-        output_progress: false,
+            dd(i, o)
+        },
+        (true, false) =>
+        {
+            let i = Input::<File>::new(&matches)
+                .expect("TODO: Return correct error code");
+            let o = Output::<io::Stdout>::new(&matches)
+                .expect("TODO: Return correct error code");
+
+            dd(i, o)
+        },
+        (false, true) =>
+        {
+            let i = Input::<io::Stdin>::new(&matches)
+                .expect("TODO: Return correct error code");
+            let o = Output::<File>::new(&matches)
+                .expect("TODO: Return correct error code");
+
+            dd(i, o)
+        },
+        (false, false) =>
+        {
+            let i = Input::<io::Stdin>::new(&matches)
+                .expect("TODO: Return correct error code");
+            let o = Output::<io::Stdout>::new(&matches)
+                .expect("TODO: Return correct error code");
+
+            dd(i, o)
+        },
     };
-    let o = Output {
-        dst: out_f,
-        obs,
-        conv_table: None,
-    };
 
-    match dd(i, o) {
+    match result
+    {
         Ok((b_in, b_out)) =>
         {
-            println!("Completed: Bytes in: {}, Bytes out: {}", b_in, b_out);
-           
+            // TODO: Print output stats, unless noxfer
+
             RTN_SUCCESS
         },
         Err(_) =>
@@ -317,309 +484,3 @@ pub fn uumain(args: impl uucore::Args) -> i32
     }
 }
 
-#[cfg(test)]
-mod test_dd_internal
-{
-    #[allow(unused_imports)]
-    use super::*;
-
-    use std::io::prelude::*;
-    use std::io::BufReader;
-    use std::fs;
-    use md5::{ Md5, Digest, };
-    use hex_literal::hex;
-
-    macro_rules! make_hash_test (
-        ( $test_id:ident, $test_name:expr, $src:expr, $exp:expr ) =>
-        {
-            #[test]
-            fn $test_id()
-            {
-                let tmp_fname = format!("./test-resources/FAILED-{}.test", $test_name);
-
-                let i = Input {
-                    src: $src,
-                    ibs: 256,
-                    output_progress: false,
-                };
-
-                let o = Output {
-                    dst: File::create(&tmp_fname).unwrap(),
-                    obs: 1024,
-                    conv_table: None,
-                };
-
-                dd(i,o).unwrap();
-
-                let res = {
-                    let res = File::open(&tmp_fname).unwrap();
-                    let res = BufReader::new(res);
-
-                    let mut h = Md5::new();
-                    for b in res.bytes()
-                    {
-                        h.update([b.unwrap()]);
-                    }
-
-                    h.finalize()
-                };
-
-                assert_eq!(hex!($exp), res[..]);
-
-                fs::remove_file(&tmp_fname).unwrap();
-            }
-        };
-        ( $test_id:ident, $test_name:expr, $i:expr, $o:expr, $exp:expr ) =>
-        {
-            #[test]
-            fn $test_id()
-            {
-                let tmp_fname = format!("./test-resources/FAILED-{}.test", $test_name);
-
-                let o = Output {
-                    dst: File::create(&tmp_fname).unwrap(),
-                    obs: $o.obs,
-                    conv_table: $o.conv_table,
-                };
-
-                dd($i,o).unwrap();
-
-                let res = {
-                    let res = File::open(&tmp_fname).unwrap();
-                    let res = BufReader::new(res);
-
-                    let mut h = Md5::new();
-                    for b in res.bytes()
-                    {
-                        h.update([b.unwrap()]);
-                    }
-
-                    h.finalize()
-                };
-
-                assert_eq!(hex!($exp), res[..]);
-
-                fs::remove_file(&tmp_fname).unwrap();
-            }
-        };
-    );
-
-    macro_rules! make_spec_test (
-        ( $test_id:ident, $test_name:expr, $i:expr, $o:expr, $spec:expr ) =>
-        {
-            #[test]
-            fn $test_id()
-            {
-                let tmp_fname = format!("./test-resources/FAILED-{}.test", $test_name);
-
-                let o = Output {
-                    dst: File::create(&tmp_fname).unwrap(),
-                    obs: $o.obs,
-                    conv_table: $o.conv_table,
-                };
-
-                dd($i,o).unwrap();
-
-                let res = File::open(&tmp_fname).unwrap();
-                let res = BufReader::new(res);
-
-                let spec = BufReader::new($spec);
-
-                for (b_res, b_spec) in res.bytes().zip(spec.bytes())
-                {
-                    assert_eq!(b_res.unwrap(),
-                               b_spec.unwrap());
-                }
-
-                fs::remove_file(&tmp_fname).unwrap();
-            }
-        };
-    );
-
-    make_hash_test!(
-        empty_file_test,
-        "stdio-empty-file",
-        io::empty(),
-        "d41d8cd98f00b204e9800998ecf8427e"
-    );
-
-    make_hash_test!(
-        zeros_4k_test,
-        "zeros-4k",
-        File::open("./test-resources/zeros-620f0b67a91f7f74151bc5be745b7110.test").unwrap(),
-        "620f0b67a91f7f74151bc5be745b7110"
-    );
-
-    make_hash_test!(
-        ones_4k_test,
-        "ones-4k",
-        File::open("./test-resources/ones-6ae59e64850377ee5470c854761551ea.test").unwrap(),
-        "6ae59e64850377ee5470c854761551ea"
-    );
-
-    make_hash_test!(
-        deadbeef_32k_test,
-        "deadbeef-32k",
-        File::open("./test-resources/deadbeef-18d99661a1de1fc9af21b0ec2cd67ba3.test").unwrap(),
-        "18d99661a1de1fc9af21b0ec2cd67ba3"
-    );
-
-    make_hash_test!(
-        random_73k_test,
-        "random-73k",
-        File::open("./test-resources/random-5828891cb1230748e146f34223bbd3b5.test").unwrap(),
-        "5828891cb1230748e146f34223bbd3b5"
-    );
-
-    make_spec_test!(
-        atoe_conv_spec_test,
-        "atoe-conv-spec-test",
-        Input {
-            src: File::open("./test-resources/seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test").unwrap(),
-            ibs: 512,
-            output_progress: false,
-        },
-        Output {
-            dst: Vec::new(), // unused!
-            obs: 512,
-            conv_table: Some(ascii_to_ebcdic),
-        },
-        File::open("./test-resources/gnudd-conv-atoe-seq-byte-values.spec").unwrap()
-    );
-
-    make_spec_test!(
-        etoa_conv_spec_test,
-        "etoa-conv-spec-test",
-        Input {
-            src: File::open("./test-resources/seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test").unwrap(),
-            ibs: 512,
-            output_progress: false,
-        },
-        Output {
-            dst: Vec::new(), // unused!
-            obs: 512,
-            conv_table: Some(ebcdic_to_ascii),
-        },
-        File::open("./test-resources/gnudd-conv-etoa-seq-byte-values.spec").unwrap()
-    );
-
-    make_spec_test!(
-        atoibm_conv_spec_test,
-        "atoibm-conv-spec-test",
-        Input {
-            src: File::open("./test-resources/seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test").unwrap(),
-            ibs: 512,
-            output_progress: false,
-        },
-        Output {
-            dst: Vec::new(), // unused!
-            obs: 512,
-            conv_table: Some(ascii_to_ibm),
-        },
-        File::open("./test-resources/gnudd-conv-atoibm-seq-byte-values.spec").unwrap()
-    );
-
-    make_spec_test!(
-        lcase_ascii_to_ucase_ascii,
-        "lcase_ascii_to_ucase_ascii",
-        Input {
-            src: File::open("./test-resources/lcase-ascii.test").unwrap(),
-            ibs: 512,
-            output_progress: false,
-        },
-        Output {
-            dst: Vec::new(), // unused!
-            obs: 512,
-            conv_table: Some(lcase_to_ucase),
-        },
-        File::open("./test-resources/ucase-ascii.test").unwrap()
-    );
-
-    make_spec_test!(
-        ucase_ascii_to_lcase_ascii,
-        "ucase_ascii_to_lcase_ascii",
-        Input {
-            src: File::open("./test-resources/ucase-ascii.test").unwrap(),
-            ibs: 512,
-            output_progress: false,
-        },
-        Output {
-            dst: Vec::new(), // unused!
-            obs: 512,
-            conv_table: Some(ucase_to_lcase),
-        },
-        File::open("./test-resources/lcase-ascii.test").unwrap()
-    );
-
-    #[test]
-    fn all_valid_ascii_ebcdic_ascii_roundtrip_conv_test()
-    {
-        // ASCII->EBCDIC
-        let test_name = "all-valid-ascii-to-ebcdic";
-        let tmp_fname_ae = format!("./test-resources/FAILED-{}.test", test_name);
-
-        let i = Input {
-            src: File::open("./test-resources/all-valid-ascii-chars-37eff01866ba3f538421b30b7cbefcac.test").unwrap(),
-            ibs: 256,
-            output_progress: false,
-        };
-
-        let o = Output {
-            dst: File::create(&tmp_fname_ae).unwrap(),
-            obs: 1024,
-            conv_table: Some(ascii_to_ebcdic),
-        };
-
-        dd(i,o).unwrap();
-
-        // EBCDIC->ASCII
-        let test_name = "all-valid-ebcdic-to-ascii";
-        let tmp_fname_ea = format!("./test-resources/FAILED-{}.test", test_name);
-
-        let i = Input {
-            src: File::open(&tmp_fname_ae).unwrap(),
-            ibs: 256,
-            output_progress: false,
-        };
-
-        let o = Output {
-            dst: File::create(&tmp_fname_ea).unwrap(),
-            obs: 1024,
-            conv_table: Some(ebcdic_to_ascii),
-        };
-
-        dd(i,o).unwrap();
-
-        let res = {
-            let res = File::open(&tmp_fname_ea).unwrap();
-            let res = BufReader::new(res);
-
-            let mut h = Md5::new();
-            for b in res.bytes()
-            {
-                h.update([b.unwrap()]);
-            }
-
-            h.finalize()
-        };
-
-        assert_eq!(hex!("37eff01866ba3f538421b30b7cbefcac"), res[..]);
-
-        fs::remove_file(&tmp_fname_ae).unwrap();
-        fs::remove_file(&tmp_fname_ea).unwrap();
-    }
-
-    //use rand::prelude::*;
-    //#[test]
-    //fn make_test_data()
-    //{
-    //    let mut f = File::create("./test-resources/random-walk-through-the-ascii-ranged-forest.test").unwrap();
-    //    // let mut rng = rand::thread_rng();
-
-    //    for _ in 0..65536 {
-    //        f.write(&[c]).unwrap();
-    //    }
-    //}
-
-
-}

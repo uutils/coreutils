@@ -17,6 +17,8 @@ path = "src/dd.rs"
 [dependencies]
 uucore = { version=">=0.0.7", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
+# Probably best to keep this identical to the version of getopts in the uucore crate
+getopts = "<= 0.2.21"
 
 [dev-dependencies]
 md-5 = "0.9"

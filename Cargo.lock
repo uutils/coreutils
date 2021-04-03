@@ -1593,6 +1593,7 @@ dependencies = [
 name = "uu_dd"
 version = "0.0.4"
 dependencies = [
+ "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
  "hex-literal 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "md-5 0.9.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.8.3 (registry+https://github.com/rust-lang/crates.io-index)",
