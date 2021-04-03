@@ -1,6 +1,6 @@
 [package]
 name = "uu_chroot"
-version = "0.0.4"
+version = "0.0.5"
 authors = ["uutils developers"]
 license = "MIT"
 description = "chroot ~ (uutils) run COMMAND under a new root directory"
@@ -16,7 +16,7 @@ path = "src/chroot.rs"
 
 [dependencies]
 clap= "2.33"
-uucore = { version=">=0.0.7", package="uucore", path="../../uucore", features=["entries"] }
+uucore = { version=">=0.0.8", package="uucore", path="../../uucore", features=["entries"] }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]

@@ -1,6 +1,6 @@
 [package]
 name = "uu_cat"
-version = "0.0.4"
+version = "0.0.5"
 authors = ["uutils developers"]
 license = "MIT"
 description = "cat ~ (uutils) concatenate and display input"
@@ -17,7 +17,7 @@ path = "src/cat.rs"
 [dependencies]
 clap = "2.33"
 thiserror = "1.0"
-uucore = { version=">=0.0.7", package="uucore", path="../../uucore", features=["fs"] }
+uucore = { version=">=0.0.8", package="uucore", path="../../uucore", features=["fs"] }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [target.'cfg(unix)'.dependencies]
