@@ -83,7 +83,7 @@ struct Settings {
     check: bool,
     check_silent: bool,
     random: bool,
-    compare_fns: Vec<fn(&str, &str) -> Ordering>,
+    compare_fn: fn(&str, &str) -> Ordering,
     transform_fns: Vec<fn(&str) -> String>,
     salt: String,
     zero_terminated: bool,
@@ -101,7 +101,7 @@ impl Default for Settings {
             check: false,
             check_silent: false,
             random: false,
-            compare_fns: Vec::new(),
+            compare_fn: default_compare,
             transform_fns: Vec::new(),
             salt: String::new(),
             zero_terminated: false,
@@ -379,21 +379,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         crash!(1, "sort: extra operand `{}' not allowed with -c", files[1])
     }
 
-    settings.compare_fns.push(match settings.mode {
+    settings.compare_fn = match settings.mode {
         SortMode::Numeric => numeric_compare,
         SortMode::GeneralNumeric => general_numeric_compare,
         SortMode::HumanNumeric => human_numeric_size_compare,
         SortMode::Month => month_compare,
         SortMode::Version => version_compare,
         SortMode::Default => default_compare,
-    });
+    };
 
-    if !settings.stable {
-        match settings.mode {
-            SortMode::Default => {}
-            _ => settings.compare_fns.push(default_compare),
-        }
-    }
+
 
     exec(files, &mut settings)
 }
@@ -513,7 +508,7 @@ fn sort_by(lines: &mut Vec<String>, settings: &Settings) {
     lines.par_sort_by(|a, b| compare_by(a, b, &settings))
 }
 
-#[inline]
+#[inline(always)]
 fn compare_by(a: &str, b: &str, settings: &Settings) -> Ordering {
     let (a_transformed, b_transformed): (String, String);
     let (a, b) = if !settings.transform_fns.is_empty() {
@@ -524,30 +519,31 @@ fn compare_by(a: &str, b: &str, settings: &Settings) -> Ordering {
         (a, b)
     };
 
-    for compare_fn in &settings.compare_fns {
-        let mut cmp: Ordering = if settings.random {
-            random_shuffle(a, b, settings.salt.clone())
-        } else {
-            compare_fn(a, b)
-        };
-        // Call "last resort compare" on equal
-        if cmp == Ordering::Equal {
-            if settings.random || settings.stable || settings.unique {
-                cmp = Ordering::Equal
-            } else {
-                cmp = default_compare(a, b)
-            };
-        };
+    // 1st Compare 
+    let mut cmp: Ordering = if settings.random {
+        random_shuffle(a, b, settings.salt.clone())
+    } else {
+        (settings.compare_fn)(a, b)
+    };
 
-        if settings.reverse {
-            return cmp.reverse();
+    // Call "last resort compare" on any equal
+    if cmp == Ordering::Equal {
+        if settings.random || settings.stable || settings.unique {
+            cmp = Ordering::Equal
         } else {
-            return cmp;
+            cmp = default_compare(a, b)
         };
+    };
+
+    if settings.reverse {
+        return cmp.reverse()
+    } else {
+        return cmp
     }
-    Ordering::Equal
 }
 
+// Test output against BSDs and GNU with env var 
+// lc_ctype=utf-8 until locales are implemented
 #[inline(always)]
 fn default_compare(a: &str, b: &str) -> Ordering {
     a.cmp(b)
@@ -574,6 +570,7 @@ fn leading_num_common(a: &str) -> &str {
     s
 }
 
+#[inline(always)]
 fn get_leading_num(a: &str) -> &str {
     let mut s = "";
     let b = leading_num_common(a);
