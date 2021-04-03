@@ -430,8 +430,6 @@ fn exec(files: Vec<String>, settings: &mut Settings) -> i32 {
             for line in buf_reader.split(b'\0') {
                 if let Ok(n) = line {
                     lines.push(std::str::from_utf8(&n).unwrap_or("\0").to_string());
-                } else {
-                    break;
                 }
             }
         } else {
@@ -569,7 +567,7 @@ fn default_compare(a: &str, b: &str) -> Ordering {
 #[inline(always)]
 fn leading_num_common(a: &str) -> &str {
     let mut s = "";
-    // Strip string
+    // Strip string of non-numeric trailing chars
     for (idx, c) in a.char_indices() {
         if !c.is_numeric()
             && !c.is_whitespace()
@@ -603,38 +601,39 @@ fn get_leading_num(a: &str) -> &str {
         s = b;
     }
 
-    // And empty number lines are to be treated as ‘0’ but only for numeric sort
+    // And empty number or non-number lines are to be treated as ‘0’ but only for numeric sort
     if s.is_empty() {
         s = "0";
     };
     s
 }
 
-fn get_leading_gen(a: &str) -> &str {
-    let mut s = leading_num_common(a);
+fn get_leading_gen(a: &str) -> String {
 
-    // Make iter peekable to check next char
-    let mut p_iter = s.chars().peekable();
+    // Make this iter peekable to see if next char is numeric
+    let mut p_iter = leading_num_common(a).chars().peekable();
+    let mut r = String::new();
     // Cleanup raw stripped strings
-    while let Some(c) = p_iter.next() {
-        p_iter.next();
+    for c in p_iter.to_owned() {
         let next_char_numeric = p_iter.peek().unwrap_or(&'\0').is_numeric();
         // Only general numeric recognizes e notation and the '+' sign
-        if c.eq(&'e') && !next_char_numeric
-            || c.eq(&'E') && !next_char_numeric
-            || c.eq(&DECIMAL_PT) && !next_char_numeric
+        if (c.eq(&'e') && !next_char_numeric)
+            || (c.eq(&'E') && !next_char_numeric)
+            || (c.eq(&DECIMAL_PT) && !next_char_numeric)
         {
-            s = a.split(c).next().unwrap_or("");
-            break;
+            r = a.split(c).next().unwrap_or("").to_string();
+            break
         } else if c.eq(&POSITIVE) && !next_char_numeric {
-            let mut v: Vec<&str> = s.split(c).collect();
-            v.split_off(1);
+            let mut v: Vec<&str> = a.split(c).collect();
+            let x = v.split_off(1);
             // 'Let' here avoids returning a value referencing data owned by the current function
-            let s = &v.join("");
-            break;
+            r = x.join("");
+            break
+        } else {
+            r = a.to_string();
         }
-    }
-    s
+    };
+    r
 }
 
 fn get_months_dedup(a: &str) -> String {
@@ -732,8 +731,8 @@ fn general_numeric_compare(a: &str, b: &str) -> Ordering {
     let sa = get_leading_gen(a);
     let sb = get_leading_gen(b);
 
-    let fa = permissive_f64_parse(sa);
-    let fb = permissive_f64_parse(sb);
+    let fa = permissive_f64_parse(&sa);
+    let fb = permissive_f64_parse(&sb);
 
     // f64::cmp isn't implemented (due to NaN issues); implement directly instead
     if fa > fb {

@@ -93,13 +93,24 @@ fn test_non_printing_chars() {
 }
 
 #[test]
-fn test_months_dedup() {
-    test_helper("months-dedup", "-Mu");
+fn test_exponents_positive_general_fixed() {
+    for exponents_positive_general_param in vec!["-g"] {
+        new_ucmd!()
+            .pipe_in("100E6\n\n50e10\n+100000\n\n10000K78\n10E\n\n\n1000EDKLD\n\n\n100E6\n\n50e10\n+100000\n\n")
+            .arg(exponents_positive_general_param)
+            .succeeds()
+            .stdout_only("\n\n\n\n\n\n\n\n10000K78\n1000EDKLD\n10E\n+100000\n+100000\n100E6\n100E6\n50e10\n50e10\n");
+    }
 }
 
 #[test]
-fn test_exponents_positive() {
-    test_helper("exponents-positive", "-g");
+fn test_exponents_positive_numeric() {
+    test_helper("exponents-positive-numeric", "-n");
+}
+
+#[test]
+fn test_months_dedup() {
+    test_helper("months-dedup", "-Mu");
 }
 
 #[test]
