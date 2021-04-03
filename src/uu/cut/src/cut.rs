@@ -401,8 +401,13 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> i32 {
         } else {
             let path = Path::new(&filename[..]);
 
-            if !path.exists() {
-                show_error!("{}", msg_args_nonexistent_file!(filename));
+            if path.is_dir() {
+                show_error!("{}: Is a directory", filename);
+                continue;
+            }
+
+            if !path.metadata().is_ok() {
+                show_error!("{}: No such file or directory", filename);
                 continue;
             }
 
