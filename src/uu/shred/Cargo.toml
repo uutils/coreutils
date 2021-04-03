@@ -1,6 +1,6 @@
 [package]
 name = "uu_shred"
-version = "0.0.4"
+version = "0.0.5"
 authors = ["uutils developers"]
 license = "MIT"
 description = "shred ~ (uutils) hide former FILE contents with repeated overwrites"
@@ -15,12 +15,12 @@ edition = "2018"
 path = "src/shred.rs"
 
 [dependencies]
+clap = "2.33"
 filetime = "0.2.1"
-getopts = "0.2.18"
 libc = "0.2.42"
 rand = "0.5"
 time = "0.1.40"
-uucore = { version=">=0.0.7", package="uucore", path="../../uucore" }
+uucore = { version=">=0.0.8", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]

@@ -9,6 +9,7 @@
 extern crate uucore;
 
 use clap::{App, Arg};
+use retain_mut::RetainMut;
 use std::fs::OpenOptions;
 use std::io::{copy, sink, stdin, stdout, Error, ErrorKind, Read, Result, Write};
 use std::path::{Path, PathBuf};
@@ -93,18 +94,32 @@ fn tee(options: Options) -> Result<()> {
     if options.ignore_interrupts {
         ignore_interrupts()?
     }
-    let mut writers: Vec<Box<dyn Write>> = options
+    let mut writers: Vec<NamedWriter> = options
         .files
         .clone()
         .into_iter()
-        .map(|file| open(file, options.append))
+        .map(|file| NamedWriter {
+            name: file.clone(),
+            inner: open(file, options.append),
+        })
         .collect();
-    writers.push(Box::new(stdout()));
-    let output = &mut MultiWriter { writers };
+
+    writers.insert(
+        0,
+        NamedWriter {
+            name: "'standard output'".to_owned(),
+            inner: Box::new(stdout()),
+        },
+    );
+
+    let mut output = MultiWriter::new(writers);
     let input = &mut NamedReader {
         inner: Box::new(stdin()) as Box<dyn Read>,
     };
-    if copy(input, output).is_err() || output.flush().is_err() {
+
+    // TODO: replaced generic 'copy' call to be able to stop copying
+    // if all outputs are closed (due to errors)
+    if copy(input, &mut output).is_err() || output.flush().is_err() || output.error_occured() {
         Err(Error::new(ErrorKind::Other, ""))
     } else {
         Ok(())
@@ -112,7 +127,7 @@ fn tee(options: Options) -> Result<()> {
 }
 
 fn open(name: String, append: bool) -> Box<dyn Write> {
-    let path = PathBuf::from(name);
+    let path = PathBuf::from(name.clone());
     let inner: Box<dyn Write> = {
         let mut options = OpenOptions::new();
         let mode = if append {
@@ -125,55 +140,68 @@ fn open(name: String, append: bool) -> Box<dyn Write> {
             Err(_) => Box::new(sink()),
         }
     };
-    Box::new(NamedWriter { inner, path }) as Box<dyn Write>
+    Box::new(NamedWriter { inner, name }) as Box<dyn Write>
 }
 
 struct MultiWriter {
-    writers: Vec<Box<dyn Write>>,
+    writers: Vec<NamedWriter>,
+    initial_len: usize,
+}
+
+impl MultiWriter {
+    fn new(writers: Vec<NamedWriter>) -> Self {
+        Self {
+            initial_len: writers.len(),
+            writers,
+        }
+    }
+    fn error_occured(&self) -> bool {
+        self.writers.len() != self.initial_len
+    }
 }
 
 impl Write for MultiWriter {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        for writer in &mut self.writers {
-            writer.write_all(buf)?;
-        }
+        self.writers.retain_mut(|writer| {
+            let result = writer.write_all(buf);
+            match result {
+                Err(f) => {
+                    show_info!("{}: {}", writer.name, f.to_string());
+                    false
+                }
+                _ => true,
+            }
+        });
         Ok(buf.len())
     }
 
     fn flush(&mut self) -> Result<()> {
-        for writer in &mut self.writers {
-            writer.flush()?;
-        }
+        self.writers.retain_mut(|writer| {
+            let result = writer.flush();
+            match result {
+                Err(f) => {
+                    show_info!("{}: {}", writer.name, f.to_string());
+                    false
+                }
+                _ => true,
+            }
+        });
         Ok(())
     }
 }
 
 struct NamedWriter {
     inner: Box<dyn Write>,
-    path: PathBuf,
+    pub name: String,
 }
 
 impl Write for NamedWriter {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        match self.inner.write(buf) {
-            Err(f) => {
-                self.inner = Box::new(sink()) as Box<dyn Write>;
-                show_warning!("{}: {}", self.path.display(), f.to_string());
-                Err(f)
-            }
-            okay => okay,
-        }
+        self.inner.write(buf)
     }
 
     fn flush(&mut self) -> Result<()> {
-        match self.inner.flush() {
-            Err(f) => {
-                self.inner = Box::new(sink()) as Box<dyn Write>;
-                show_warning!("{}: {}", self.path.display(), f.to_string());
-                Err(f)
-            }
-            okay => okay,
-        }
+        self.inner.flush()
     }
 }
 
@@ -185,7 +213,7 @@ impl Read for NamedReader {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         match self.inner.read(buf) {
             Err(f) => {
-                show_warning!("{}: {}", Path::new("stdin").display(), f.to_string());
+                show_info!("{}: {}", Path::new("stdin").display(), f.to_string());
                 Err(f)
             }
             okay => okay,

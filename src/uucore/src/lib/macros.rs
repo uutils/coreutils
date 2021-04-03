@@ -5,6 +5,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+/// Deduce the name of the binary from the current source code filename.
+///
+/// e.g.: `src/uu/cp/src/cp.rs` -> `cp`
 #[macro_export]
 macro_rules! executable(
     () => ({
@@ -18,6 +21,7 @@ macro_rules! executable(
     })
 );
 
+/// Show an error to stderr in a silimar style to GNU coreutils.
 #[macro_export]
 macro_rules! show_error(
     ($($args:tt)+) => ({
@@ -26,6 +30,7 @@ macro_rules! show_error(
     })
 );
 
+/// Show a warning to stderr in a silimar style to GNU coreutils.
 #[macro_export]
 macro_rules! show_warning(
     ($($args:tt)+) => ({
@@ -34,6 +39,7 @@ macro_rules! show_warning(
     })
 );
 
+/// Show an info message to stderr in a silimar style to GNU coreutils.
 #[macro_export]
 macro_rules! show_info(
     ($($args:tt)+) => ({
@@ -42,6 +48,7 @@ macro_rules! show_info(
     })
 );
 
+/// Show a bad inocation help message in a similar style to GNU coreutils.
 #[macro_export]
 macro_rules! show_usage_error(
     ($($args:tt)+) => ({
@@ -51,6 +58,7 @@ macro_rules! show_usage_error(
     })
 );
 
+/// Display the provided error message, then `exit()` with the provided exit code
 #[macro_export]
 macro_rules! crash(
     ($exit_code:expr, $($args:tt)+) => ({
@@ -59,6 +67,7 @@ macro_rules! crash(
     })
 );
 
+/// Calls `exit()` with the provided exit code.
 #[macro_export]
 macro_rules! exit(
     ($exit_code:expr) => ({
@@ -66,6 +75,8 @@ macro_rules! exit(
     })
 );
 
+/// Unwraps the Result. Instead of panicking, it exists the program with the
+/// provided exit code.
 #[macro_export]
 macro_rules! crash_if_err(
     ($exit_code:expr, $exp:expr) => (
@@ -76,6 +87,9 @@ macro_rules! crash_if_err(
     )
 );
 
+/// Unwraps the Result. Instead of panicking, it shows the error and then
+/// returns from the function with the provided exit code.
+/// Assumes the current function returns an i32 value.
 #[macro_export]
 macro_rules! return_if_err(
     ($exit_code:expr, $exp:expr) => (
@@ -109,6 +123,8 @@ macro_rules! safe_writeln(
     )
 );
 
+/// Unwraps the Result. Instead of panicking, it exists the program with exit
+/// code 1.
 #[macro_export]
 macro_rules! safe_unwrap(
     ($exp:expr) => (

@@ -67,8 +67,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(options::USERSPEC)
                 .help(
                     "Colon-separated user and group to switch to. \
-             Same as -u USER -g GROUP. \
-             Userspec has higher preference than -u and/or -g",
+                     Same as -u USER -g GROUP. \
+                     Userspec has higher preference than -u and/or -g",
                 )
                 .value_name("USER:GROUP"),
         )

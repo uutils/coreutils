@@ -1,6 +1,9 @@
 use crate::common::util::*;
+use filetime::FileTime;
 use rust_users::*;
 use std::os::unix::fs::PermissionsExt;
+#[cfg(target_os = "linux")]
+use std::thread::sleep;
 
 #[test]
 fn test_install_help() {
@@ -84,20 +87,81 @@ fn test_install_unimplemented_arg() {
 }
 
 #[test]
-fn test_install_component_directories() {
+fn test_install_ancestors_directories() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let component1 = "component1";
-    let component2 = "component2";
-    let component3 = "component3";
+    let ancestor1 = "ancestor1";
+    let ancestor2 = "ancestor1/ancestor2";
+    let target_dir = "ancestor1/ancestor2/target_dir";
     let directories_arg = "-d";
 
-    ucmd.args(&[directories_arg, component1, component2, component3])
+    ucmd.args(&[directories_arg, target_dir])
         .succeeds()
         .no_stderr();
 
-    assert!(at.dir_exists(component1));
-    assert!(at.dir_exists(component2));
-    assert!(at.dir_exists(component3));
+    assert!(at.dir_exists(ancestor1));
+    assert!(at.dir_exists(ancestor2));
+    assert!(at.dir_exists(target_dir));
+}
+
+#[test]
+fn test_install_ancestors_mode_directories() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let ancestor1 = "ancestor1";
+    let ancestor2 = "ancestor1/ancestor2";
+    let target_dir = "ancestor1/ancestor2/target_dir";
+    let directories_arg = "-d";
+    let mode_arg = "--mode=700";
+
+    ucmd.args(&[mode_arg, directories_arg, target_dir])
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.dir_exists(ancestor1));
+    assert!(at.dir_exists(ancestor2));
+    assert!(at.dir_exists(target_dir));
+
+    assert_ne!(0o40700 as u32, at.metadata(ancestor1).permissions().mode());
+    assert_ne!(0o40700 as u32, at.metadata(ancestor2).permissions().mode());
+
+    // Expected mode only on the target_dir.
+    assert_eq!(0o40700 as u32, at.metadata(target_dir).permissions().mode());
+}
+
+#[test]
+fn test_install_parent_directories() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let ancestor1 = "ancestor1";
+    let ancestor2 = "ancestor1/ancestor2";
+    let target_dir = "ancestor1/ancestor2/target_dir";
+    let directories_arg = "-d";
+
+    // Here one of the ancestors already exist and only the target_dir and
+    // its parent must be created.
+    at.mkdir(ancestor1);
+
+    ucmd.args(&[directories_arg, target_dir])
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.dir_exists(ancestor2));
+    assert!(at.dir_exists(target_dir));
+}
+
+#[test]
+fn test_install_several_directories() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir1 = "dir1";
+    let dir2 = "dir2";
+    let dir3 = "dir3";
+    let directories_arg = "-d";
+
+    ucmd.args(&[directories_arg, dir1, dir2, dir3])
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.dir_exists(dir1));
+    assert!(at.dir_exists(dir2));
+    assert!(at.dir_exists(dir3));
 }
 
 #[test]
@@ -351,11 +415,19 @@ fn test_install_copy_file() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_install_target_file_dev_null() {
-    let (at, mut ucmd) = at_and_ucmd!();
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
     let file1 = "/dev/null";
     let file2 = "target_file";
 
-    ucmd.arg(file1).arg(file2).succeeds().no_stderr();
+    let result = scene.ucmd().arg(file1).arg(file2).run();
+
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
+
+    assert!(result.success);
+
     assert!(at.file_exists(file2));
 }
 
@@ -406,4 +478,91 @@ fn test_install_failing_no_such_file() {
     let r = ucmd.arg(file1).arg(file2).arg(dir1).run();
     assert!(r.code == Some(1));
     assert!(r.stderr.contains("No such file or directory"));
+}
+
+#[test]
+fn test_install_copy_then_compare_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let file1 = "test_install_copy_then_compare_file_a1";
+    let file2 = "test_install_copy_then_compare_file_a2";
+
+    at.touch(file1);
+    scene
+        .ucmd()
+        .arg("-C")
+        .arg(file1)
+        .arg(file2)
+        .succeeds()
+        .no_stderr();
+
+    let mut file2_meta = at.metadata(file2);
+    let before = FileTime::from_last_modification_time(&file2_meta);
+
+    scene
+        .ucmd()
+        .arg("-C")
+        .arg(file1)
+        .arg(file2)
+        .succeeds()
+        .no_stderr();
+
+    file2_meta = at.metadata(file2);
+    let after = FileTime::from_last_modification_time(&file2_meta);
+
+    assert!(before == after);
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_install_copy_then_compare_file_with_extra_mode() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    // XXX: can't tests introspect on their own names?
+    let file1 = "test_install_copy_then_compare_file_with_extra_mode_a1";
+    let file2 = "test_install_copy_then_compare_file_with_extra_mode_a2";
+
+    at.touch(file1);
+    scene
+        .ucmd()
+        .arg("-C")
+        .arg(file1)
+        .arg(file2)
+        .succeeds()
+        .no_stderr();
+
+    let mut file2_meta = at.metadata(file2);
+    let before = FileTime::from_last_modification_time(&file2_meta);
+    sleep(std::time::Duration::from_millis(1000));
+
+    scene
+        .ucmd()
+        .arg("-C")
+        .arg(file1)
+        .arg(file2)
+        .arg("-m")
+        .arg("1644")
+        .succeeds()
+        .no_stderr();
+
+    file2_meta = at.metadata(file2);
+    let after_install_sticky = FileTime::from_last_modification_time(&file2_meta);
+
+    assert!(before != after_install_sticky);
+
+    sleep(std::time::Duration::from_millis(1000));
+
+    // dest file still 1644, so need_copy ought to return `true`
+    scene
+        .ucmd()
+        .arg("-C")
+        .arg(file1)
+        .arg(file2)
+        .succeeds()
+        .no_stderr();
+
+    file2_meta = at.metadata(file2);
+    let after_install_sticky_again = FileTime::from_last_modification_time(&file2_meta);
+
+    assert!(after_install_sticky != after_install_sticky_again);
 }

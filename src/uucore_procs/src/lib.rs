@@ -56,10 +56,10 @@ pub fn main(stream: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let mut expr = match expr {
         syn::Expr::Lit(expr_lit) => match expr_lit.lit {
             syn::Lit::Str(ref lit_str) => lit_str.parse::<syn::ExprPath>().unwrap(),
-            _ => panic!(ARG_PANIC_TEXT),
+            _ => panic!("{}", ARG_PANIC_TEXT),
         },
         syn::Expr::Path(expr_path) => expr_path,
-        _ => panic!(ARG_PANIC_TEXT),
+        _ => panic!("{}", ARG_PANIC_TEXT),
     };
     proc_dbg!(&expr);
 

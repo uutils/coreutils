@@ -380,7 +380,7 @@ fn rename(from: &PathBuf, to: &PathBuf, b: &Behavior) -> io::Result<()> {
         match b.overwrite {
             OverwriteMode::NoClobber => return Ok(()),
             OverwriteMode::Interactive => {
-                print!("{}: overwrite ‘{}’? ", executable!(), to.display());
+                println!("{}: overwrite ‘{}’? ", executable!(), to.display());
                 if !read_yes() {
                     return Ok(());
                 }

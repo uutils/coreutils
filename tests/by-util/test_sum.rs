@@ -52,3 +52,23 @@ fn test_sysv_stdin() {
         .succeeds()
         .stdout_only_fixture("sysv_stdin.expected");
 }
+
+#[test]
+fn test_invalid_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("a");
+
+    ucmd.arg("a")
+        .fails()
+        .stderr_is("sum: error: 'a' Is a directory");
+}
+
+#[test]
+fn test_invalid_metadata() {
+    let (_, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("b")
+        .fails()
+        .stderr_is("sum: error: 'b' No such file or directory");
+}

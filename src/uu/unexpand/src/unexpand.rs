@@ -11,7 +11,7 @@
 
 #[macro_use]
 extern crate uucore;
-
+use clap::{App, Arg};
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Stdout, Write};
 use std::str::from_utf8;
@@ -20,6 +20,9 @@ use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "unexpand";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
+static USAGE: &str = "unexpand [OPTION]... [FILE]...";
+static SUMMARY: &str = "Convert blanks in each FILE to tabs, writing to standard output.\n
+                 With no FILE, or when FILE is -, read standard input.";
 
 const DEFAULT_TABSTOP: usize = 8;
 
@@ -47,6 +50,14 @@ fn tabstops_parse(s: String) -> Vec<usize> {
     nums
 }
 
+mod options {
+    pub const FILE: &str = "file";
+    pub const ALL: &str = "all";
+    pub const FIRST_ONLY: &str = "first-only";
+    pub const TABS: &str = "tabs";
+    pub const NO_UTF8: &str = "no-utf8";
+}
+
 struct Options {
     files: Vec<String>,
     tabstops: Vec<usize>,
@@ -55,20 +66,19 @@ struct Options {
 }
 
 impl Options {
-    fn new(matches: getopts::Matches) -> Options {
-        let tabstops = match matches.opt_str("t") {
+    fn new(matches: clap::ArgMatches) -> Options {
+        let tabstops = match matches.value_of(options::TABS) {
             None => vec![DEFAULT_TABSTOP],
-            Some(s) => tabstops_parse(s),
+            Some(s) => tabstops_parse(s.to_string()),
         };
 
-        let aflag = (matches.opt_present("all") || matches.opt_present("tabs"))
-            && !matches.opt_present("first-only");
-        let uflag = !matches.opt_present("U");
+        let aflag = (matches.is_present(options::ALL) || matches.is_present(options::TABS))
+            && !matches.is_present(options::FIRST_ONLY);
+        let uflag = !matches.is_present(options::NO_UTF8);
 
-        let files = if matches.free.is_empty() {
-            vec!["-".to_owned()]
-        } else {
-            matches.free
+        let files = match matches.value_of(options::FILE) {
+            Some(v) => vec![v.to_string()],
+            None => vec!["-".to_owned()],
         };
 
         Options {
@@ -85,60 +95,39 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let mut opts = getopts::Options::new();
-
-    opts.optflag(
-        "a",
-        "all",
-        "convert all blanks, instead of just initial blanks",
-    );
-    opts.optflag(
-        "",
-        "first-only",
-        "convert only leading sequences of blanks (overrides -a)",
-    );
-    opts.optopt(
-        "t",
-        "tabs",
-        "have tabs N characters apart instead of 8 (enables -a)",
-        "N",
-    );
-    opts.optopt(
-        "t",
-        "tabs",
-        "use comma separated LIST of tab positions (enables -a)",
-        "LIST",
-    );
-    opts.optflag(
-        "U",
-        "no-utf8",
-        "interpret input file as 8-bit ASCII rather than UTF-8",
-    );
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => crash!(1, "{}", f),
-    };
-
-    if matches.opt_present("help") {
-        println!("{} {}\n", NAME, VERSION);
-        println!("Usage: {} [OPTION]... [FILE]...\n", NAME);
-        println!(
-            "{}",
-            opts.usage(
-                "Convert blanks in each FILE to tabs, writing to standard output.\n\
-                 With no FILE, or when FILE is -, read standard input."
-            )
-        );
-        return 0;
-    }
-
-    if matches.opt_present("V") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
+    let matches = App::new(executable!())
+        .name(NAME)
+        .version(VERSION)
+        .usage(USAGE)
+        .about(SUMMARY)
+        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
+        .arg(
+            Arg::with_name(options::ALL)
+                .short("a")
+                .long(options::ALL)
+                .help("convert all blanks, instead of just initial blanks")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name(options::FIRST_ONLY)
+                .long(options::FIRST_ONLY)
+                .help("convert only leading sequences of blanks (overrides -a)")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name(options::TABS)
+                .short("t")
+                .long(options::TABS)
+                .long_help("use comma separated LIST of tab positions or have tabs N characters apart instead of 8 (enables -a)")
+                .takes_value(true)
+        )
+        .arg(
+            Arg::with_name(options::NO_UTF8)
+                .short("U")
+                .long(options::NO_UTF8)
+                .takes_value(false)
+                .help("interpret input file as 8-bit ASCII rather than UTF-8"))
+        .get_matches_from(args);
 
     unexpand(Options::new(matches));
 
