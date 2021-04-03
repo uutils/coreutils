@@ -61,7 +61,6 @@ static DECIMAL_PT: char = '.';
 static THOUSANDS_SEP: char = ',';
 static NEGATIVE: char = '-';
 static POSITIVE: char = '+';
-static ENOTATION: char = 'E';
 
 #[derive(Eq, Ord, PartialEq, PartialOrd)]
 enum SortMode {
@@ -388,8 +387,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         SortMode::Default => default_compare,
     };
 
-
-
     exec(files, &mut settings)
 }
 
@@ -519,7 +516,7 @@ fn compare_by(a: &str, b: &str, settings: &Settings) -> Ordering {
         (a, b)
     };
 
-    // 1st Compare 
+    // 1st Compare
     let mut cmp: Ordering = if settings.random {
         random_shuffle(a, b, settings.salt.clone())
     } else {
@@ -536,13 +533,13 @@ fn compare_by(a: &str, b: &str, settings: &Settings) -> Ordering {
     };
 
     if settings.reverse {
-        return cmp.reverse()
+        return cmp.reverse();
     } else {
-        return cmp
+        return cmp;
     }
 }
 
-// Test output against BSDs and GNU with env var 
+// Test output against BSDs and GNU with env var
 // lc_ctype=utf-8 until locales are implemented
 #[inline(always)]
 fn default_compare(a: &str, b: &str) -> Ordering {
@@ -553,16 +550,18 @@ fn default_compare(a: &str, b: &str) -> Ordering {
 fn leading_num_common(a: &str) -> &str {
     let mut s = "";
     // Strip string
-    for c in a.to_uppercase().chars() {
+    for (idx, c) in a.char_indices() {
         if !c.is_numeric()
             && !c.is_whitespace()
             && !c.eq(&DECIMAL_PT)
             && !c.eq(&THOUSANDS_SEP)
-            && !c.eq(&ENOTATION)
+            // check for e notation
+            && !c.eq(&'e')
+            && !c.eq(&'E')
             && !a.chars().nth(0).unwrap_or('\0').eq(&POSITIVE)
             && !a.chars().nth(0).unwrap_or('\0').eq(&NEGATIVE)
         {
-            s = a.split(c).next().unwrap_or("");
+            s = &a[..idx];
             break;
         }
         s = a;
@@ -576,9 +575,9 @@ fn get_leading_num(a: &str) -> &str {
     let b = leading_num_common(a);
 
     // GNU numeric sort doesn't recognize '+' or 'e' notation so we strip
-    for c in b.chars() {
-        if c.eq(&ENOTATION) || b.chars().nth(0).unwrap_or('\0').eq(&POSITIVE) {
-            s = b.split(c).next().unwrap_or("");
+    for (idx, c) in b.char_indices() {
+        if c.eq(&'e') || c.eq(&'E') || b.chars().nth(0).unwrap_or('\0').eq(&POSITIVE) {
+            s = &b[..idx];
             break;
         }
         s = b;
@@ -594,14 +593,17 @@ fn get_leading_num(a: &str) -> &str {
 fn get_leading_gen(a: &str) -> &str {
     let mut s = leading_num_common(a);
 
-    // Cleanup strips
+    // Make iter peekable to check next char
     let mut p_iter = s.chars().peekable();
-    // Checks next char and avoid borrow after move of a for loop
+    // Cleanup raw stripped strings
     while let Some(c) = p_iter.next() {
         p_iter.next();
         let next_char_numeric = p_iter.peek().unwrap_or(&'\0').is_numeric();
         // Only general numeric recognizes e notation and the '+' sign
-        if c.eq(&ENOTATION) || c.eq(&DECIMAL_PT) && !next_char_numeric {
+        if c.eq(&'e') && !next_char_numeric
+            || c.eq(&'E') && !next_char_numeric
+            || c.eq(&DECIMAL_PT) && !next_char_numeric
+        {
             s = a.split(c).next().unwrap_or("");
             break;
         } else if c.eq(&POSITIVE) && !next_char_numeric {
