@@ -494,7 +494,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(options::COMPLEMENT)
                 .help("invert the filter - instead of displaying only the filtered columns, display all but those columns")
                 .takes_value(false)
-                
         )
         .arg(
             Arg::with_name(options::ONLY_DELIMITED)
@@ -524,7 +523,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         )
         .get_matches_from(args);
 
-    let complement = matches.is_present("complement");
+    let complement = matches.is_present(options::COMPLEMENT);
 
     let mode_parse = match (
         matches.value_of(options::BYTES),
@@ -536,7 +535,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 Mode::Bytes(
                     ranges,
                     Options {
-                        out_delim: Some(matches.value_of(options::OUTPUT_DELIMITER).unwrap_or_default().to_owned()),
+                        out_delim: Some(
+                            matches
+                                .value_of(options::OUTPUT_DELIMITER)
+                                .unwrap_or_default()
+                                .to_owned(),
+                        ),
                         zero_terminated: matches.is_present(options::ZERO_TERMINATED),
                     },
                 )
@@ -547,7 +551,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 Mode::Characters(
                     ranges,
                     Options {
-                        out_delim: Some(matches.value_of(options::OUTPUT_DELIMITER).unwrap_or_default().to_owned()),
+                        out_delim: Some(
+                            matches
+                                .value_of(options::OUTPUT_DELIMITER)
+                                .unwrap_or_default()
+                                .to_owned(),
+                        ),
                         zero_terminated: matches.is_present(options::ZERO_TERMINATED),
                     },
                 )
@@ -621,10 +630,18 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let mode_parse = match mode_parse {
         Err(_) => mode_parse,
         Ok(mode) => match mode {
-            Mode::Bytes(_, _) | Mode::Characters(_, _) if matches.is_present("delimiter") => Err(
-                msg_opt_only_usable_if!("printing a sequence of fields", "--delimiter", "-d"),
-            ),
-            Mode::Bytes(_, _) | Mode::Characters(_, _) if matches.is_present("only-delimited") => {
+            Mode::Bytes(_, _) | Mode::Characters(_, _)
+                if matches.is_present(options::DELIMITER) =>
+            {
+                Err(msg_opt_only_usable_if!(
+                    "printing a sequence of fields",
+                    "--delimiter",
+                    "-d"
+                ))
+            }
+            Mode::Bytes(_, _) | Mode::Characters(_, _)
+                if matches.is_present(options::ONLY_DELIMITED) =>
+            {
                 Err(msg_opt_only_usable_if!(
                     "printing a sequence of fields",
                     "--only-delimited",
