@@ -38,12 +38,12 @@ fn test_empty() {
 fn test_arg_overrides_stdin() {
     let (at, mut ucmd) = at_and_ucmd!();
     let input = "foobarfoobar";
+
     at.touch("a");
 
-    ucmd.arg("a")
-        .run_piped_stdin(input.as_bytes())
-        .stdout
-        .ends_with("0 a");
+    let result = ucmd.arg("a").run_piped_stdin(input.as_bytes());
+
+    assert!(stdout.ends_with("0 a"));
 }
 
 #[test]
