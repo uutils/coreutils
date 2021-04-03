@@ -24,6 +24,7 @@ use rayon::prelude::*;
 use semver::Version;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
+use std::env;
 use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Lines, Read, Write};
@@ -54,6 +55,7 @@ static OPT_STABLE: &str = "stable";
 static OPT_UNIQUE: &str = "unique";
 static OPT_RANDOM: &str = "random-sort";
 static OPT_ZERO_TERMINATED: &str = "zero-terminated";
+static OPT_PARALLEL: &str = "parallel";
 
 static ARG_FILES: &str = "files";
 
@@ -84,6 +86,7 @@ struct Settings {
     random: bool,
     compare_fn: fn(&str, &str) -> Ordering,
     transform_fns: Vec<fn(&str) -> String>,
+    threads: String,
     salt: String,
     zero_terminated: bool,
 }
@@ -102,6 +105,7 @@ impl Default for Settings {
             random: false,
             compare_fn: default_compare,
             transform_fns: Vec::new(),
+            threads: String::new(),
             salt: String::new(),
             zero_terminated: false,
         }
@@ -315,6 +319,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(OPT_ZERO_TERMINATED)
                 .help("line delimiter is NUL, not newline"),
         )
+        .arg(
+            Arg::with_name(OPT_PARALLEL)
+                .long(OPT_PARALLEL)
+                .help("change the number of threads running concurrently to N")
+                .takes_value(true)
+                .value_name("NUM_THREADS"),
+        )
         .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true))
         .get_matches_from(args);
 
@@ -336,6 +347,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     } else {
         SortMode::Default
     };
+
+    if matches.is_present(OPT_PARALLEL) {
+        // "0" is default - threads = num of cores
+        settings.threads = matches
+            .value_of(OPT_PARALLEL)
+            .map(String::from)
+            .unwrap_or("0".to_string());
+        env::set_var("RAYON_NUM_THREADS", &settings.threads);
+    }
 
     if matches.is_present(OPT_DICTIONARY_ORDER) {
         settings.transform_fns.push(remove_nondictionary_chars);
