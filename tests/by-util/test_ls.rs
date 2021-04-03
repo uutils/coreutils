@@ -1163,6 +1163,24 @@ fn test_ls_quoting_style() {
         }
 
         for (arg, correct) in &[
+            ("--quoting-style=literal", "one?two"),
+            ("-N", "one?two"),
+            ("--literal", "one?two"),
+            ("--quoting-style=shell", "one?two"),
+            ("--quoting-style=shell-always", "'one?two'"),
+        ] {
+            let result = scene
+                .ucmd()
+                .arg(arg)
+                .arg("--hide-control-chars")
+                .arg("one\ntwo")
+                .run();
+            println!("stderr = {:?}", result.stderr);
+            println!("stdout = {:?}", result.stdout);
+            assert_eq!(result.stdout, format!("{}\n", correct));
+        }
+
+        for (arg, correct) in &[
             ("--quoting-style=literal", "one\ntwo"),
             ("-N", "one\ntwo"),
             ("--literal", "one\ntwo"),
