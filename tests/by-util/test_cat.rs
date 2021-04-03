@@ -1,6 +1,3 @@
-#[cfg(unix)]
-extern crate unix_socket;
-
 use crate::common::util::*;
 
 #[test]
@@ -9,6 +6,56 @@ fn test_output_simple() {
         .args(&["alpha.txt"])
         .succeeds()
         .stdout_only("abcde\nfghij\nklmno\npqrst\nuvwxyz\n");
+}
+
+#[test]
+fn test_no_options() {
+    for fixture in &["empty.txt", "alpha.txt", "nonewline.txt"] {
+        // Give fixture through command line file argument
+        new_ucmd!()
+            .args(&[fixture])
+            .succeeds()
+            .stdout_is_fixture(fixture);
+        // Give fixture through stdin
+        new_ucmd!()
+            .pipe_in_fixture(fixture)
+            .succeeds()
+            .stdout_is_fixture(fixture);
+    }
+}
+
+#[test]
+fn test_no_options_big_input() {
+    fn vec_of_size(n: usize) -> Vec<u8> {
+        let mut result = Vec::new();
+        for _ in 0..n {
+            result.push('a' as u8);
+        }
+        assert_eq!(result.len(), n);
+        result
+    }
+
+    for n in &[
+        0,
+        1,
+        42,
+        16 * 1024 - 7,
+        16 * 1024 - 1,
+        16 * 1024,
+        16 * 1024 + 1,
+        16 * 1024 + 3,
+        32 * 1024,
+        64 * 1024,
+        80 * 1024,
+        96 * 1024,
+        112 * 1024,
+        128 * 1024,
+    ] {
+        let data = vec_of_size(*n);
+        let data2 = data.clone();
+        assert_eq!(data.len(), data2.len());
+        new_ucmd!().pipe_in(data).succeeds().stdout_is_bytes(&data2);
+    }
 }
 
 #[test]
@@ -150,10 +197,10 @@ fn test_squeeze_blank_before_numbering() {
 }
 
 #[test]
-#[cfg(foo)]
+#[cfg(unix)]
 fn test_domain_socket() {
-    use self::tempdir::TempDir;
-    use self::unix_socket::UnixListener;
+    use tempdir::TempDir;
+    use unix_socket::UnixListener;
     use std::io::prelude::*;
     use std::thread;
 
