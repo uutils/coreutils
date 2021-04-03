@@ -75,15 +75,33 @@ pub enum InvalidEncodingHandling {
 
 #[must_use]
 pub enum ConversionResult {
-    FullyDecoded(Vec<String>),
+    Complete(Vec<String>),
     Lossy(Vec<String>),
 }
 
 impl ConversionResult {
     pub fn accept_any(self) -> Vec<String> {
         match self {
-            Self::FullyDecoded(result) => result,
+            Self::Complete(result) => result,
             Self::Lossy(result) => result,
+        }
+    }
+
+    pub fn expect_lossy(self, msg: &str) -> Vec<String> {
+        match self {
+            Self::Lossy(result) => result,
+            Self::Complete(_) => {
+                panic!("{}", msg);
+            }
+        }
+    }
+
+    pub fn expect_complete(self, msg: &str) -> Vec<String> {
+        match self {
+            Self::Complete(result) => result,
+            Self::Lossy(_) => {
+                panic!("{}", msg);
+            }
         }
     }
 }
@@ -125,7 +143,7 @@ pub trait Args: Iterator<Item = OsString> + Sized {
             .collect();
 
         match full_conversion {
-            true => ConversionResult::FullyDecoded(result_vector),
+            true => ConversionResult::Complete(result_vector),
             false => ConversionResult::Lossy(result_vector),
         }
     }
@@ -152,15 +170,25 @@ mod tests {
     use super::*;
     use std::ffi::OsStr;
 
-    fn test_invalid_utf8_args(os_str: &OsStr) {
-        //assert our string is invalid utf8
-        assert!(os_str.to_os_string().into_string().is_err());
-        let test_vec = vec![
+    fn make_os_vec(os_str: &OsStr) -> Vec<OsString> {
+        vec![
             OsString::from("test"),
             OsString::from("สวัสดี"),
             os_str.to_os_string(),
-        ];
-        let collected_to_str = test_vec.clone().into_iter().collect_str();
+        ]
+    }
+
+    fn collect_os_str(vec: Vec<OsString>, handling: InvalidEncodingHandling) -> ConversionResult {
+        vec.into_iter().collect_str(handling)
+    }
+
+    fn test_invalid_utf8_args_lossy(os_str: &OsStr) {
+        //assert our string is invalid utf8
+        assert!(os_str.to_os_string().into_string().is_err());
+        let test_vec = make_os_vec(os_str);
+        let collected_to_str =
+            collect_os_str(test_vec.clone(), InvalidEncodingHandling::ConvertLossy)
+                .expect_lossy("Lossy conversion expected in test");
         //conservation of length
         assert_eq!(collected_to_str.len(), test_vec.len());
         //first indices identical
@@ -170,8 +198,35 @@ mod tests {
                 test_vec.get(index).unwrap().to_str().unwrap()
             );
         }
-        //empty string for illegal utf8
-        assert_eq!(*collected_to_str.get(2).unwrap(), String::new());
+        //lossy conversion string for illegal utf8
+        assert_eq!(
+            *collected_to_str.get(2).unwrap(),
+            os_str.to_os_string().to_string_lossy()
+        );
+    }
+
+    fn test_invalid_utf8_args_ignore(os_str: &OsStr) {
+        //assert our string is invalid utf8
+        assert!(os_str.to_os_string().into_string().is_err());
+        let test_vec = make_os_vec(os_str);
+        let collected_to_str = collect_os_str(test_vec.clone(), InvalidEncodingHandling::Ignore)
+            .expect_lossy("Lossy conversion expected in test");
+        //conservation of length
+        assert_eq!(collected_to_str.len(), test_vec.len() - 1);
+        //first indices identical
+        for index in 0..2 {
+            assert_eq!(
+                collected_to_str.get(index).unwrap(),
+                test_vec.get(index).unwrap().to_str().unwrap()
+            );
+        }
+    }
+
+    #[test]
+    fn valid_utf8_encoding_args() {
+        let test_vec = make_os_vec(&OsString::from("test2"));
+        let _ = collect_os_str(test_vec.clone(), InvalidEncodingHandling::ConvertLossy)
+            .expect_complete("Lossy conversion expected in test");
     }
 
     #[cfg(any(unix, target_os = "redox"))]
@@ -181,7 +236,8 @@ mod tests {
 
         let source = [0x66, 0x6f, 0x80, 0x6f];
         let os_str = OsStr::from_bytes(&source[..]);
-        test_invalid_utf8_args(os_str);
+        test_invalid_utf8_args_lossy(os_str);
+        test_invalid_utf8_args_ignore(os_str);
     }
 
     #[cfg(windows)]
@@ -192,6 +248,7 @@ mod tests {
         let source = [0x0066, 0x006f, 0xD800, 0x006f];
         let os_string = OsString::from_wide(&source[..]);
         let os_str = os_string.as_os_str();
-        test_invalid_utf8_args(os_str);
+        test_invalid_utf8_args_lossy(os_str);
+        test_invalid_utf8_args_ignore(os_str);
     }
 }

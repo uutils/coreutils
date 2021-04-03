@@ -29,11 +29,10 @@ fn get_usage() -> String {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
+    let usage = get_usage();
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
-
-    let usage = get_usage();
 
     let matches = App::new(executable!())
         .version(VERSION)

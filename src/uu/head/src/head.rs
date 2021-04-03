@@ -18,6 +18,7 @@ const ABOUT: &str = "\
                      Mandatory arguments to long flags are mandatory for short flags too.\
                      ";
 const USAGE: &str = "head [FLAG]... [FILE]...";
+use uucore::InvalidEncodingHandling;
 
 mod options {
     pub const BYTES_NAME: &str = "BYTES";

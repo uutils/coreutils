@@ -14,7 +14,14 @@ use clap::{App, Arg};
 use rand::Rng;
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
+use std::usize::MAX as MAX_USIZE;
 use uucore::InvalidEncodingHandling;
+
+enum Mode {
+    Default,
+    Echo,
+    InputRange((usize, usize)),
+}
 
 static NAME: &str = "shuf";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
