@@ -1668,7 +1668,7 @@ dependencies = [
 name = "uu_csplit"
 version = "0.0.4"
 dependencies = [
- "getopts",
+ "clap",
  "glob 0.2.11",
  "regex",
  "thiserror",
