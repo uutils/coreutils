@@ -609,7 +609,6 @@ fn get_leading_num(a: &str) -> &str {
 }
 
 fn get_leading_gen(a: &str) -> String {
-
     // Make this iter peekable to see if next char is numeric
     let mut p_iter = leading_num_common(a).chars().peekable();
     let mut r = String::new();
@@ -622,17 +621,17 @@ fn get_leading_gen(a: &str) -> String {
             || (c.eq(&DECIMAL_PT) && !next_char_numeric)
         {
             r = a.split(c).next().unwrap_or("").to_string();
-            break
+            break;
         } else if c.eq(&POSITIVE) && !next_char_numeric {
             let mut v: Vec<&str> = a.split(c).collect();
             let x = v.split_off(1);
             // 'Let' here avoids returning a value referencing data owned by the current function
             r = x.join("");
-            break
+            break;
         } else {
             r = a.to_string();
         }
-    };
+    }
     r
 }
 
