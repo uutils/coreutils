@@ -41,9 +41,9 @@ fn test_arg_overrides_stdin() {
 
     at.touch("a");
 
-    let result = ucmd.arg("a").run_piped_stdin(input.as_bytes());
+    let result = ucmd.arg("a").pipe_in(input.as_bytes()).run();
 
-    assert!(stdout.ends_with("0 a"));
+    assert!(result.stdout.ends_with("0 a"));
 }
 
 #[test]
