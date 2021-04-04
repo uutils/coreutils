@@ -1679,6 +1679,7 @@ dependencies = [
 name = "uu_cut"
 version = "0.0.6"
 dependencies = [
+ "clap",
  "uucore",
  "uucore_procs",
 ]
