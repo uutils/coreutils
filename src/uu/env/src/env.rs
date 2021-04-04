@@ -200,7 +200,12 @@ fn parse_split_args(arg: &OsString) -> Option<Vec<String>> {
         return None;
     };
 
-    Some(split_arg.split_whitespace().map(|s| s.to_string()).collect())
+    Some(
+        split_arg
+            .split_whitespace()
+            .map(|s| s.to_string())
+            .collect(),
+    )
 }
 
 fn run_env(args: impl uucore::Args) -> Result<(), i32> {
