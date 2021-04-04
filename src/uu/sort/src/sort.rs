@@ -411,19 +411,23 @@ fn exec(files: Vec<String>, settings: &mut Settings) -> i32 {
         let buf_reader = BufReader::new(reader);
 
         if settings.merge {
-            file_merger.push_file(buf_reader);
+            file_merger.push_file(buf_reader.lines());
         } else if settings.check {
-            return exec_check_file(buf_reader, &settings);
+            return exec_check_file(buf_reader.lines(), &settings);
         } else if settings.zero_terminated {
             for line in buf_reader.split(b'\0') {
                 if let Ok(n) = line {
                     lines.push(std::str::from_utf8(&n).unwrap_or("\0").to_string());
+                } else {
+                    break;
                 }
             }
         } else {
             for line in buf_reader.lines() {
                 if let Ok(n) = line {
                     lines.push(n);
+                } else {
+                    break;
                 }
             }
         }
@@ -458,21 +462,7 @@ fn exec(files: Vec<String>, settings: &mut Settings) -> i32 {
     0
 }
 
-fn exec_check_file(buf_reader: BufReader<Box<dyn Read>>, settings: &Settings) -> i32 {
-    let lines = Vec::new();
-    if settings.zero_terminated {
-        for line in buf_reader.split(b'\0') {
-            if let Ok(n) = line {
-                lines.push(std::str::from_utf8(&n).unwrap_or("\0").to_string());
-            }
-        }
-    } else {
-        for line in buf_reader.lines() {
-            if let Ok(n) = line {
-                lines.push(n);
-            }
-        }
-    }
+fn exec_check_file(lines: Lines<BufReader<Box<dyn Read>>>, settings: &Settings) -> i32 {
     // errors yields the line before each disorder,
     // plus the last line (quirk of .coalesce())
     let unwrapped_lines = lines.filter_map(|maybe_line| {
