@@ -1209,3 +1209,83 @@ fn test_ls_quoting_style() {
         assert_eq!(result.stdout, format!("{}\n", correct));
     }
 }
+
+#[test]
+fn test_ls_ignore_hide() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("README.md");
+    at.touch("CONTRIBUTING.md");
+    at.touch("some_other_file");
+    at.touch("READMECAREFULLY.md");
+
+    scene.ucmd().arg("--hide").arg("*").succeeds().stdout_is("");
+
+    scene
+        .ucmd()
+        .arg("--ignore")
+        .arg("*")
+        .succeeds()
+        .stdout_is("");
+
+    scene
+        .ucmd()
+        .arg("--ignore")
+        .arg("irrelevant pattern")
+        .succeeds()
+        .stdout_is("CONTRIBUTING.md\nREADME.md\nREADMECAREFULLY.md\nsome_other_file\n");
+
+    scene
+        .ucmd()
+        .arg("--ignore")
+        .arg("README*.md")
+        .succeeds()
+        .stdout_is("CONTRIBUTING.md\nsome_other_file\n");
+
+    scene
+        .ucmd()
+        .arg("--hide")
+        .arg("README*.md")
+        .succeeds()
+        .stdout_is("CONTRIBUTING.md\nsome_other_file\n");
+
+    scene
+        .ucmd()
+        .arg("--ignore")
+        .arg("*.md")
+        .succeeds()
+        .stdout_is("some_other_file\n");
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("--ignore")
+        .arg("*.md")
+        .succeeds()
+        .stdout_is(".\n..\nsome_other_file\n");
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("--hide")
+        .arg("*.md")
+        .succeeds()
+        .stdout_is(".\n..\nCONTRIBUTING.md\nREADME.md\nREADMECAREFULLY.md\nsome_other_file\n");
+
+    scene
+        .ucmd()
+        .arg("-A")
+        .arg("--ignore")
+        .arg("*.md")
+        .succeeds()
+        .stdout_is("some_other_file\n");
+
+    scene
+        .ucmd()
+        .arg("-A")
+        .arg("--hide")
+        .arg("*.md")
+        .succeeds()
+        .stdout_is("CONTRIBUTING.md\nREADME.md\nREADMECAREFULLY.md\nsome_other_file\n");
+}
