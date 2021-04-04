@@ -17,7 +17,7 @@ mod quoting_style;
 mod version_cmp;
 
 use clap::{App, Arg};
-use glob;
+use globset::{self, Glob, GlobSet, GlobSetBuilder};
 use number_prefix::NumberPrefix;
 use quoting_style::{escape_name, QuotingStyle};
 #[cfg(unix)]
@@ -194,7 +194,7 @@ struct Config {
     recursive: bool,
     reverse: bool,
     dereference: bool,
-    ignore_patterns: Vec<glob::Pattern>,
+    ignore_patterns: GlobSet,
     size_format: SizeFormat,
     directory: bool,
     time: Time,
@@ -440,27 +440,33 @@ impl Config {
             IndicatorStyle::None
         };
 
-        let mut ignore_patterns = Vec::new();
+        let mut ignore_patterns = GlobSetBuilder::new();
         if options.is_present(options::IGNORE_BACKUPS) {
-            ignore_patterns.push(glob::Pattern::new("*~").unwrap());
-            ignore_patterns.push(glob::Pattern::new(".*~").unwrap());
+            ignore_patterns.add(Glob::new("*~").unwrap());
+            ignore_patterns.add(Glob::new(".*~").unwrap());
         }
 
         for pattern in options.values_of(options::IGNORE).into_iter().flatten() {
-            match glob::Pattern::new(pattern) {
-                Ok(p) => ignore_patterns.push(p),
+            match Glob::new(pattern) {
+                Ok(p) => {
+                    ignore_patterns.add(p);
+                }
                 Err(_) => show_warning!("Invalid pattern for ignore: '{}'", pattern),
             }
         }
 
         if files == Files::Normal {
             for pattern in options.values_of(options::HIDE).into_iter().flatten() {
-                match glob::Pattern::new(pattern) {
-                    Ok(p) => ignore_patterns.push(p),
+                match Glob::new(pattern) {
+                    Ok(p) => {
+                        ignore_patterns.add(p);
+                    }
                     Err(_) => show_warning!("Invalid pattern for hide: '{}'", pattern),
                 }
             }
         }
+
+        let ignore_patterns = ignore_patterns.build().unwrap();
 
         Config {
             format,
@@ -1023,13 +1029,12 @@ fn is_hidden(file_path: &DirEntry) -> bool {
 
 fn should_display(entry: &DirEntry, config: &Config) -> bool {
     let ffi_name = entry.file_name();
-    let name = ffi_name.to_string_lossy();
 
     if config.files == Files::Normal && is_hidden(entry) {
         return false;
     }
 
-    if config.ignore_patterns.iter().any(|p| p.matches(&name)) {
+    if config.ignore_patterns.is_match(&ffi_name) {
         return false;
     }
     true
