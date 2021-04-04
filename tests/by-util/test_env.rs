@@ -25,6 +25,19 @@ fn test_env_version() {
 }
 
 #[test]
+fn test_split_string_multiple_args() {
+    // -c is also a flag for `env` but would require an argument.
+    // therefore, if it succeeds the argument was correctly passed to `ls`
+    new_ucmd!().arg("-S").arg("ls").arg("-c").succeeds();
+}
+
+#[test]
+fn test_split_string_one_arg() {
+    // when using env in a shebang, everything is passed as one argument
+    new_ucmd!().arg("-S ls -c").succeeds();
+}
+
+#[test]
 fn test_echo() {
     let result = new_ucmd!().arg("echo").arg("FOO-bar").succeeds();
 

@@ -12,13 +12,15 @@
 #[macro_use]
 extern crate clap;
 
-use clap::{App, AppSettings, Arg};
-use ini::Ini;
 use std::borrow::Cow;
 use std::env;
+use std::ffi::OsString;
 use std::io::{self, Write};
 use std::iter::Iterator;
 use std::process::Command;
+
+use clap::{App, AppSettings, Arg};
+use ini::Ini;
 
 const USAGE: &str = "env [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]";
 const AFTER_HELP: &str = "\
@@ -125,11 +127,6 @@ fn create_app() -> App<'static, 'static> {
         .usage(USAGE)
         .after_help(AFTER_HELP)
         .setting(AppSettings::AllowExternalSubcommands)
-        // without this, `env -S awk -F:` is rejected,
-        // because -F is seen as a (invalid!) flag for env.
-        // however `env awk -F` works without this, because
-        // then awk is seen as a subcommand
-        .setting(AppSettings::AllowLeadingHyphen)
         .arg(Arg::with_name("ignore-environment")
             .short("i")
             .long("ignore-environment")
@@ -173,9 +170,44 @@ fn create_app() -> App<'static, 'static> {
             used to pass multiple arguments on shebang lines"))
 }
 
+fn split_args(args: impl uucore::Args) -> (Vec<OsString>, Vec<String>) {
+    let mut env_args = vec![];
+    let mut split_args = vec![];
+
+    let mut in_split_args = false;
+    for arg in args {
+        if in_split_args {
+            split_args.push(arg.to_string_lossy().to_string());
+        } else if arg == "-S" || arg == "--split-string" {
+            in_split_args = true;
+        } else if let Some(splitted_args) = parse_split_args(&arg) {
+            in_split_args = true;
+            split_args.extend(splitted_args);
+        } else {
+            env_args.push(arg);
+        }
+    }
+    (env_args, split_args)
+}
+
+fn parse_split_args(arg: &OsString) -> Option<Vec<String>> {
+    let str = arg.to_string_lossy();
+    let split_arg = if str.starts_with("-S") {
+        str.trim_start_matches("-S")
+    } else if str.starts_with("--split-args") {
+        str.trim_start_matches("--split-args")
+    } else {
+        return None;
+    };
+
+    Some(split_arg.split_whitespace().map(|s| s.to_string()).collect())
+}
+
 fn run_env(args: impl uucore::Args) -> Result<(), i32> {
+    let (env_args, split_args) = split_args(args);
+
     let app = create_app();
-    let matches = app.get_matches_from(args);
+    let matches = app.get_matches_from(env_args);
 
     let ignore_env = matches.is_present("ignore-environment");
     let null = matches.is_present("null");
@@ -189,11 +221,6 @@ fn run_env(args: impl uucore::Args) -> Result<(), i32> {
         .map(Iterator::collect)
         .unwrap_or_else(|| Vec::with_capacity(0));
 
-    let program = matches
-        .value_of("split-string")
-        .map(|args| args.split_whitespace().collect())
-        .unwrap_or(vec![]);
-
     let mut opts = Options {
         ignore_env,
         null,
@@ -201,7 +228,7 @@ fn run_env(args: impl uucore::Args) -> Result<(), i32> {
         files,
         unsets,
         sets: vec![],
-        program,
+        program: split_args.iter().map(|s| s.as_str()).collect(),
     };
 
     // change directory
@@ -294,5 +321,27 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     match run_env(args) {
         Ok(()) => 0,
         Err(code) => code,
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::ffi::OsString;
+
+    use super::parse_split_args;
+
+    #[test]
+    fn test_split_args() {
+        assert_eq!(None, parse_split_args(&OsString::from("-f test.env")));
+        assert_eq!(None, parse_split_args(&OsString::from("--do-something")));
+        assert_eq!(None, parse_split_args(&OsString::from("")));
+        assert_eq!(
+            Some(vec!["awk".into(), "-f".into(), "test.awk".into()]),
+            parse_split_args(&OsString::from("-S awk -f test.awk"))
+        );
+        assert_eq!(
+            Some(vec!["awk".into(), "-f".into(), "test.awk".into()]),
+            parse_split_args(&OsString::from("--split-args awk -f test.awk"))
+        );
     }
 }
