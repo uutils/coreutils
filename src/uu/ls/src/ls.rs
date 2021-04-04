@@ -449,7 +449,7 @@ impl Config {
         for pattern in options.values_of(options::IGNORE).into_iter().flatten() {
             match glob::Pattern::new(pattern) {
                 Ok(p) => ignore_patterns.push(p),
-                Err(_) => show_error!("Invalid pattern for ignore: '{}'", pattern),
+                Err(_) => show_warning!("Invalid pattern for ignore: '{}'", pattern),
             }
         }
 
@@ -457,7 +457,7 @@ impl Config {
             for pattern in options.values_of(options::HIDE).into_iter().flatten() {
                 match glob::Pattern::new(pattern) {
                     Ok(p) => ignore_patterns.push(p),
-                    Err(_) => show_error!("Invalid pattern for hide: '{}'", pattern),
+                    Err(_) => show_warning!("Invalid pattern for hide: '{}'", pattern),
                 }
             }
         }
