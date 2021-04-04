@@ -125,6 +125,11 @@ fn create_app() -> App<'static, 'static> {
         .usage(USAGE)
         .after_help(AFTER_HELP)
         .setting(AppSettings::AllowExternalSubcommands)
+        // without this, `env -S awk -F:` is rejected,
+        // because -F is seen as a (invalid!) flag for env.
+        // however `env awk -F` works without this, because
+        // then awk is seen as a subcommand
+        .setting(AppSettings::AllowLeadingHyphen)
         .arg(Arg::with_name("ignore-environment")
             .short("i")
             .long("ignore-environment")
@@ -158,6 +163,14 @@ fn create_app() -> App<'static, 'static> {
             .value_name("NAME")
             .multiple(true)
             .help("remove variable from the environment"))
+        .arg(Arg::with_name("split-string")
+            .short("S")
+            .long("split-string")
+            .takes_value(true)
+            .number_of_values(1)
+            .value_name("S")
+            .help("process and split S into separate arguments; \
+            used to pass multiple arguments on shebang lines"))
 }
 
 fn run_env(args: impl uucore::Args) -> Result<(), i32> {
@@ -176,6 +189,11 @@ fn run_env(args: impl uucore::Args) -> Result<(), i32> {
         .map(Iterator::collect)
         .unwrap_or_else(|| Vec::with_capacity(0));
 
+    let program = matches
+        .value_of("split-string")
+        .map(|args| args.split_whitespace().collect())
+        .unwrap_or(vec![]);
+
     let mut opts = Options {
         ignore_env,
         null,
@@ -183,7 +201,7 @@ fn run_env(args: impl uucore::Args) -> Result<(), i32> {
         files,
         unsets,
         sets: vec![],
-        program: vec![],
+        program,
     };
 
     // change directory
