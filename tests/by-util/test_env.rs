@@ -24,6 +24,7 @@ fn test_env_version() {
         .stdout_contains(util_name!());
 }
 
+#[cfg(not(windows))]
 #[test]
 fn test_split_string_multiple_args() {
     // -c is also a flag for `env` but would require an argument.
@@ -31,6 +32,7 @@ fn test_split_string_multiple_args() {
     new_ucmd!().arg("-S").arg("ls").arg("-c").succeeds();
 }
 
+#[cfg(not(windows))]
 #[test]
 fn test_split_string_one_arg() {
     // when using env in a shebang, everything is passed as one argument
