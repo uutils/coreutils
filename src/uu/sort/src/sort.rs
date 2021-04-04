@@ -418,16 +418,12 @@ fn exec(files: Vec<String>, settings: &mut Settings) -> i32 {
             for line in buf_reader.split(b'\0') {
                 if let Ok(n) = line {
                     lines.push(std::str::from_utf8(&n).unwrap_or("\0").to_string());
-                } else {
-                    break;
                 }
             }
         } else {
             for line in buf_reader.lines() {
                 if let Ok(n) = line {
                     lines.push(n);
-                } else {
-                    break;
                 }
             }
         }
