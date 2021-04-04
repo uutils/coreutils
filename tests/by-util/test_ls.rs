@@ -1288,4 +1288,29 @@ fn test_ls_ignore_hide() {
         .arg("*.md")
         .succeeds()
         .stdout_is("CONTRIBUTING.md\nREADME.md\nREADMECAREFULLY.md\nsome_other_file\n");
+
+    // Stacking multiple patterns
+    scene
+        .ucmd()
+        .arg("--ignore")
+        .arg("README*")
+        .arg("--ignore")
+        .arg("CONTRIBUTING*")
+        .succeeds()
+        .stdout_is("some_other_file\n");
+
+    // Invalid patterns
+    scene
+        .ucmd()
+        .arg("--ignore")
+        .arg("READ[ME")
+        .succeeds()
+        .stderr_contains(&"Invalid pattern");
+
+    scene
+        .ucmd()
+        .arg("--ignore")
+        .arg("READ[ME")
+        .succeeds()
+        .stderr_contains(&"Invalid pattern");
 }
