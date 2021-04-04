@@ -1949,6 +1949,7 @@ version = "0.0.6"
 dependencies = [
  "atty",
  "clap",
+ "glob 0.3.0",
  "lazy_static",
  "number_prefix",
  "term_grid",

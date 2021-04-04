@@ -1220,12 +1220,19 @@ fn test_ls_ignore_hide() {
     at.touch("some_other_file");
     at.touch("READMECAREFULLY.md");
 
-    scene.ucmd().arg("--hide").arg("*").succeeds().stdout_is("");
+    scene
+        .ucmd()
+        .arg("--hide")
+        .arg("*")
+        .arg("-1")
+        .succeeds()
+        .stdout_is("");
 
     scene
         .ucmd()
         .arg("--ignore")
         .arg("*")
+        .arg("-1")
         .succeeds()
         .stdout_is("");
 
@@ -1233,6 +1240,7 @@ fn test_ls_ignore_hide() {
         .ucmd()
         .arg("--ignore")
         .arg("irrelevant pattern")
+        .arg("-1")
         .succeeds()
         .stdout_is("CONTRIBUTING.md\nREADME.md\nREADMECAREFULLY.md\nsome_other_file\n");
 
@@ -1240,6 +1248,7 @@ fn test_ls_ignore_hide() {
         .ucmd()
         .arg("--ignore")
         .arg("README*.md")
+        .arg("-1")
         .succeeds()
         .stdout_is("CONTRIBUTING.md\nsome_other_file\n");
 
@@ -1247,6 +1256,7 @@ fn test_ls_ignore_hide() {
         .ucmd()
         .arg("--hide")
         .arg("README*.md")
+        .arg("-1")
         .succeeds()
         .stdout_is("CONTRIBUTING.md\nsome_other_file\n");
 
@@ -1254,6 +1264,7 @@ fn test_ls_ignore_hide() {
         .ucmd()
         .arg("--ignore")
         .arg("*.md")
+        .arg("-1")
         .succeeds()
         .stdout_is("some_other_file\n");
 
@@ -1262,6 +1273,7 @@ fn test_ls_ignore_hide() {
         .arg("-a")
         .arg("--ignore")
         .arg("*.md")
+        .arg("-1")
         .succeeds()
         .stdout_is(".\n..\nsome_other_file\n");
 
@@ -1270,6 +1282,7 @@ fn test_ls_ignore_hide() {
         .arg("-a")
         .arg("--hide")
         .arg("*.md")
+        .arg("-1")
         .succeeds()
         .stdout_is(".\n..\nCONTRIBUTING.md\nREADME.md\nREADMECAREFULLY.md\nsome_other_file\n");
 
@@ -1278,6 +1291,7 @@ fn test_ls_ignore_hide() {
         .arg("-A")
         .arg("--ignore")
         .arg("*.md")
+        .arg("-1")
         .succeeds()
         .stdout_is("some_other_file\n");
 
@@ -1286,6 +1300,7 @@ fn test_ls_ignore_hide() {
         .arg("-A")
         .arg("--hide")
         .arg("*.md")
+        .arg("-1")
         .succeeds()
         .stdout_is("CONTRIBUTING.md\nREADME.md\nREADMECAREFULLY.md\nsome_other_file\n");
 
@@ -1296,6 +1311,7 @@ fn test_ls_ignore_hide() {
         .arg("README*")
         .arg("--ignore")
         .arg("CONTRIBUTING*")
+        .arg("-1")
         .succeeds()
         .stdout_is("some_other_file\n");
 
@@ -1304,6 +1320,7 @@ fn test_ls_ignore_hide() {
         .ucmd()
         .arg("--ignore")
         .arg("READ[ME")
+        .arg("-1")
         .succeeds()
         .stderr_contains(&"Invalid pattern");
 
@@ -1311,6 +1328,7 @@ fn test_ls_ignore_hide() {
         .ucmd()
         .arg("--ignore")
         .arg("READ[ME")
+        .arg("-1")
         .succeeds()
         .stderr_contains(&"Invalid pattern");
 }
