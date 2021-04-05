@@ -20,6 +20,21 @@ use nix::unistd::pipe;
 
 const BUF_SIZE: usize = 16384;
 
+/// Splice wrapper which handles short writes
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[inline]
+fn splice_exact(read_fd: RawFd, write_fd: RawFd, num_bytes: usize) -> nix::Result<()> {
+    let mut left = num_bytes;
+    loop {
+        let written = splice(read_fd, None, write_fd, None, left, SpliceFFlags::empty())?;
+        left -= written;
+        if left == 0 {
+            break;
+        }
+    }
+    Ok(())
+}
+
 /// This is a Linux-specific function to count the number of bytes using the
 /// `splice` system call, which is faster than using `read`.
 #[inline]
@@ -39,7 +54,7 @@ fn count_bytes_using_splice(fd: RawFd) -> nix::Result<usize> {
             break;
         }
         byte_count += res;
-        splice(pipe_rd, None, null, None, res, SpliceFFlags::empty())?;
+        splice_exact(pipe_rd, null, res)?;
     }
 
     Ok(byte_count)

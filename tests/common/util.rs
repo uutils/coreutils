@@ -803,3 +803,12 @@ pub fn read_size(child: &mut Child, size: usize) -> String {
         .unwrap();
     String::from_utf8(output).unwrap()
 }
+
+pub fn vec_of_size(n: usize) -> Vec<u8> {
+    let mut result = Vec::new();
+    for _ in 0..n {
+        result.push('a' as u8);
+    }
+    assert_eq!(result.len(), n);
+    result
+}

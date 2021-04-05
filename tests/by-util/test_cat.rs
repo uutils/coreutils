@@ -1,15 +1,6 @@
 use crate::common::util::*;
 use std::io::Read;
 
-fn vec_of_size(n: usize) -> Vec<u8> {
-    let mut result = Vec::new();
-    for _ in 0..n {
-        result.push('a' as u8);
-    }
-    assert_eq!(result.len(), n);
-    result
-}
-
 #[test]
 fn test_output_simple() {
     new_ucmd!()
@@ -36,7 +27,7 @@ fn test_no_options() {
 
 #[test]
 fn test_no_options_big_input() {
-    for n in &[
+    for &n in &[
         0,
         1,
         42,
@@ -52,7 +43,7 @@ fn test_no_options_big_input() {
         112 * 1024,
         128 * 1024,
     ] {
-        let data = vec_of_size(*n);
+        let data = vec_of_size(n);
         let data2 = data.clone();
         assert_eq!(data.len(), data2.len());
         new_ucmd!().pipe_in(data).succeeds().stdout_is_bytes(&data2);
