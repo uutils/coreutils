@@ -704,6 +704,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         )
         .arg(
             Arg::with_name(options::IGNORE)
+                .short("I")
                 .long(options::IGNORE)
                 .takes_value(true)
                 .multiple(true)
