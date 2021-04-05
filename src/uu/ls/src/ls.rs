@@ -119,7 +119,8 @@ pub mod options {
         pub static FILE_TYPE: &str = "file-type";
         pub static CLASSIFY: &str = "classify";
     }
-
+    pub static HIDE_CONTROL_CHARS: &str = "hide-control-chars";
+    pub static SHOW_CONTROL_CHARS: &str = "show-control-chars";
     pub static WIDTH: &str = "width";
     pub static AUTHOR: &str = "author";
     pub static NO_GROUP: &str = "no-group";
@@ -366,24 +367,36 @@ impl Config {
             })
             .or_else(|| termsize::get().map(|s| s.cols));
 
+        let show_control = if options.is_present(options::HIDE_CONTROL_CHARS) {
+            false
+        } else if options.is_present(options::SHOW_CONTROL_CHARS) {
+            true
+        } else {
+            false // TODO: only if output is a terminal and the program is `ls`
+        };
+
         let quoting_style = if let Some(style) = options.value_of(options::QUOTING_STYLE) {
             match style {
-                "literal" => QuotingStyle::Literal,
+                "literal" => QuotingStyle::Literal { show_control },
                 "shell" => QuotingStyle::Shell {
                     escape: false,
                     always_quote: false,
+                    show_control,
                 },
                 "shell-always" => QuotingStyle::Shell {
                     escape: false,
                     always_quote: true,
+                    show_control,
                 },
                 "shell-escape" => QuotingStyle::Shell {
                     escape: true,
                     always_quote: false,
+                    show_control,
                 },
                 "shell-escape-always" => QuotingStyle::Shell {
                     escape: true,
                     always_quote: true,
+                    show_control,
                 },
                 "c" => QuotingStyle::C {
                     quotes: quoting_style::Quotes::Double,
@@ -394,7 +407,7 @@ impl Config {
                 _ => unreachable!("Should have been caught by Clap"),
             }
         } else if options.is_present(options::quoting::LITERAL) {
-            QuotingStyle::Literal
+            QuotingStyle::Literal { show_control }
         } else if options.is_present(options::quoting::ESCAPE) {
             QuotingStyle::C {
                 quotes: quoting_style::Quotes::None,
@@ -408,6 +421,7 @@ impl Config {
             QuotingStyle::Shell {
                 escape: true,
                 always_quote: false,
+                show_control,
             }
         };
 
@@ -616,6 +630,27 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::quoting::LITERAL,
                     options::quoting::ESCAPE,
                     options::quoting::C,
+                ])
+        )
+
+        // Control characters
+        .arg(
+            Arg::with_name(options::HIDE_CONTROL_CHARS)
+                .short("q")
+                .long(options::HIDE_CONTROL_CHARS)
+                .help("Replace control characters with '?' if they are not escaped.")
+                .overrides_with_all(&[
+                    options::HIDE_CONTROL_CHARS,
+                    options::SHOW_CONTROL_CHARS,
+                ])
+        )
+        .arg(
+            Arg::with_name(options::SHOW_CONTROL_CHARS)
+                .long(options::SHOW_CONTROL_CHARS)
+                .help("Show control characters 'as is' if they are not escaped.")
+                .overrides_with_all(&[
+                    options::HIDE_CONTROL_CHARS,
+                    options::SHOW_CONTROL_CHARS,
                 ])
         )
 
