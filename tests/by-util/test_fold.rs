@@ -405,5 +405,5 @@ fn test_obsolete_syntax() {
         .arg("-s")
         .arg("space_separated_words.txt")
         .succeeds()
-        .stdout_is("test1\n \ntest2\n \ntest3\n \ntest4\n \ntest5\n \ntest6\n \n");
+        .stdout_is("test1\n \ntest2\n \ntest3\n \ntest4\n \ntest5\n \ntest6\n ");
 }
