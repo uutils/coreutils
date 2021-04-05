@@ -1,4 +1,5 @@
 use crate::common::util::*;
+use std::io::Read;
 
 fn vec_of_size(n: usize) -> Vec<u8> {
     let mut result = Vec::new();
@@ -276,6 +277,58 @@ fn test_squeeze_blank_before_numbering() {
             .succeeds()
             .stdout_only("     1\ta\n     2\t\n     3\tb");
     }
+}
+
+/// This tests reading from Unix character devices
+#[test]
+#[cfg(unix)]
+fn test_dev_random() {
+    let mut buf = [0; 2048];
+    let mut proc = new_ucmd!().args(&["/dev/random"]).run_no_wait();
+    let mut proc_stdout = proc.stdout.take().unwrap();
+    proc_stdout.read_exact(&mut buf).unwrap();
+
+    let num_zeroes = buf.iter().fold(0, |mut acc, &n| {
+        if n == 0 {
+            acc += 1;
+        }
+        acc
+    });
+    // The probability of more than 512 zero bytes is essentially zero if the
+    // output is truly random.
+    assert!(num_zeroes < 512);
+    proc.kill().unwrap();
+}
+
+/// Reading from /dev/full should return an infinite amount of zero bytes.
+/// Wikipedia says there is support on Linux, FreeBSD, and NetBSD.
+#[test]
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+fn test_dev_full() {
+    let mut buf = [0; 2048];
+    let mut proc = new_ucmd!().args(&["/dev/full"]).run_no_wait();
+    let mut proc_stdout = proc.stdout.take().unwrap();
+    let expected = [0; 2048];
+    proc_stdout.read_exact(&mut buf).unwrap();
+    assert_eq!(&buf[..], &expected);
+    proc.kill().unwrap();
+}
+
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+fn test_dev_full_show_all() {
+    let mut buf = [0; 2048];
+    let mut proc = new_ucmd!().args(&["-A", "/dev/full"]).run_no_wait();
+    let mut proc_stdout = proc.stdout.take().unwrap();
+    proc_stdout.read_exact(&mut buf).unwrap();
+
+    let expected: Vec<u8> = (0..buf.len())
+        .map(|n| if n & 1 == 0 { b'^' } else { b'@' })
+        .collect();
+
+    assert_eq!(&buf[..], &expected);
+    proc.kill().unwrap();
 }
 
 #[test]
