@@ -1315,6 +1315,26 @@ fn test_ls_ignore_hide() {
         .succeeds()
         .stdout_is("some_other_file\n");
 
+    scene
+        .ucmd()
+        .arg("--hide")
+        .arg("README*")
+        .arg("--ignore")
+        .arg("CONTRIBUTING*")
+        .arg("-1")
+        .succeeds()
+        .stdout_is("some_other_file\n");
+
+    scene
+        .ucmd()
+        .arg("--hide")
+        .arg("README*")
+        .arg("--hide")
+        .arg("CONTRIBUTING*")
+        .arg("-1")
+        .succeeds()
+        .stdout_is("some_other_file\n");
+
     // Invalid patterns
     scene
         .ucmd()
@@ -1326,7 +1346,7 @@ fn test_ls_ignore_hide() {
 
     scene
         .ucmd()
-        .arg("--ignore")
+        .arg("--hide")
         .arg("READ[ME")
         .arg("-1")
         .succeeds()
