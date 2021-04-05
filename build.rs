@@ -44,10 +44,10 @@ pub fn main() {
 
     mf.write_all(
         "type UtilityMap<T> = HashMap<&'static str, fn(T) -> i32>;\n\
-        \n\
-        fn util_map<T: uucore::Args>() -> UtilityMap<T> {\n\
-        \tlet mut map = UtilityMap::new();\n\
-        "
+         \n\
+         fn util_map<T: uucore::Args>() -> UtilityMap<T> {\n\
+         \tlet mut map = UtilityMap::new();\n\
+         "
         .as_bytes(),
     )
     .unwrap();
@@ -97,21 +97,21 @@ pub fn main() {
                 mf.write_all(
                     format!(
                         "\
-                        \tmap.insert(\"{krate}\", {krate}::uumain);\n\
-                        \t\tmap.insert(\"md5sum\", {krate}::uumain);\n\
-                        \t\tmap.insert(\"sha1sum\", {krate}::uumain);\n\
-                        \t\tmap.insert(\"sha224sum\", {krate}::uumain);\n\
-                        \t\tmap.insert(\"sha256sum\", {krate}::uumain);\n\
-                        \t\tmap.insert(\"sha384sum\", {krate}::uumain);\n\
-                        \t\tmap.insert(\"sha512sum\", {krate}::uumain);\n\
-                        \t\tmap.insert(\"sha3sum\", {krate}::uumain);\n\
-                        \t\tmap.insert(\"sha3-224sum\", {krate}::uumain);\n\
-                        \t\tmap.insert(\"sha3-256sum\", {krate}::uumain);\n\
-                        \t\tmap.insert(\"sha3-384sum\", {krate}::uumain);\n\
-                        \t\tmap.insert(\"sha3-512sum\", {krate}::uumain);\n\
-                        \t\tmap.insert(\"shake128sum\", {krate}::uumain);\n\
-                        \t\tmap.insert(\"shake256sum\", {krate}::uumain);\n\
-                        ",
+                         \tmap.insert(\"{krate}\", {krate}::uumain);\n\
+                         \t\tmap.insert(\"md5sum\", {krate}::uumain);\n\
+                         \t\tmap.insert(\"sha1sum\", {krate}::uumain);\n\
+                         \t\tmap.insert(\"sha224sum\", {krate}::uumain);\n\
+                         \t\tmap.insert(\"sha256sum\", {krate}::uumain);\n\
+                         \t\tmap.insert(\"sha384sum\", {krate}::uumain);\n\
+                         \t\tmap.insert(\"sha512sum\", {krate}::uumain);\n\
+                         \t\tmap.insert(\"sha3sum\", {krate}::uumain);\n\
+                         \t\tmap.insert(\"sha3-224sum\", {krate}::uumain);\n\
+                         \t\tmap.insert(\"sha3-256sum\", {krate}::uumain);\n\
+                         \t\tmap.insert(\"sha3-384sum\", {krate}::uumain);\n\
+                         \t\tmap.insert(\"sha3-512sum\", {krate}::uumain);\n\
+                         \t\tmap.insert(\"shake128sum\", {krate}::uumain);\n\
+                         \t\tmap.insert(\"shake256sum\", {krate}::uumain);\n\
+                         ",
                         krate = krate
                     )
                     .as_bytes(),

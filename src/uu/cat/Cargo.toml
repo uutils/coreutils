@@ -16,12 +16,15 @@ path = "src/cat.rs"
 
 [dependencies]
 clap = "2.33"
-quick-error = "1.2.3"
+thiserror = "1.0"
 uucore = { version=">=0.0.7", package="uucore", path="../../uucore", features=["fs"] }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [target.'cfg(unix)'.dependencies]
 unix_socket = "0.5.0"
+
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+nix = "0.20"
 
 [[bin]]
 name = "cat"

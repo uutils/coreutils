@@ -24,6 +24,7 @@ use rayon::prelude::*;
 use semver::Version;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
+use std::env;
 use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Lines, Read, Write};
@@ -52,8 +53,9 @@ static OPT_OUTPUT: &str = "output";
 static OPT_REVERSE: &str = "reverse";
 static OPT_STABLE: &str = "stable";
 static OPT_UNIQUE: &str = "unique";
-static OPT_RANDOM: &str = "random";
+static OPT_RANDOM: &str = "random-sort";
 static OPT_ZERO_TERMINATED: &str = "zero-terminated";
+static OPT_PARALLEL: &str = "parallel";
 
 static ARG_FILES: &str = "files";
 
@@ -61,7 +63,6 @@ static DECIMAL_PT: char = '.';
 static THOUSANDS_SEP: char = ',';
 static NEGATIVE: char = '-';
 static POSITIVE: char = '+';
-static ENOTATION: char = 'E';
 
 #[derive(Eq, Ord, PartialEq, PartialOrd)]
 enum SortMode {
@@ -83,8 +84,9 @@ struct Settings {
     check: bool,
     check_silent: bool,
     random: bool,
-    compare_fns: Vec<fn(&str, &str, &Settings) -> Ordering>,
+    compare_fn: fn(&str, &str) -> Ordering,
     transform_fns: Vec<fn(&str) -> String>,
+    threads: String,
     salt: String,
     zero_terminated: bool,
 }
@@ -101,8 +103,9 @@ impl Default for Settings {
             check: false,
             check_silent: false,
             random: false,
-            compare_fns: Vec::new(),
+            compare_fn: default_compare,
             transform_fns: Vec::new(),
+            threads: String::new(),
             salt: String::new(),
             zero_terminated: false,
         }
@@ -316,6 +319,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(OPT_ZERO_TERMINATED)
                 .help("line delimiter is NUL, not newline"),
         )
+        .arg(
+            Arg::with_name(OPT_PARALLEL)
+                .long(OPT_PARALLEL)
+                .help("change the number of threads running concurrently to N")
+                .takes_value(true)
+                .value_name("NUM_THREADS"),
+        )
         .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true))
         .get_matches_from(args);
 
@@ -337,6 +347,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     } else {
         SortMode::Default
     };
+
+    if matches.is_present(OPT_PARALLEL) {
+        // "0" is default - threads = num of cores
+        settings.threads = matches
+            .value_of(OPT_PARALLEL)
+            .map(String::from)
+            .unwrap_or("0".to_string());
+        env::set_var("RAYON_NUM_THREADS", &settings.threads);
+    }
 
     if matches.is_present(OPT_DICTIONARY_ORDER) {
         settings.transform_fns.push(remove_nondictionary_chars);
@@ -379,21 +398,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         crash!(1, "sort: extra operand `{}' not allowed with -c", files[1])
     }
 
-    settings.compare_fns.push(match settings.mode {
+    settings.compare_fn = match settings.mode {
         SortMode::Numeric => numeric_compare,
         SortMode::GeneralNumeric => general_numeric_compare,
         SortMode::HumanNumeric => human_numeric_size_compare,
         SortMode::Month => month_compare,
         SortMode::Version => version_compare,
         SortMode::Default => default_compare,
-    });
-
-    if !settings.stable {
-        match settings.mode {
-            SortMode::Default => {}
-            _ => settings.compare_fns.push(default_compare),
-        }
-    }
+    };
 
     exec(files, &mut settings)
 }
@@ -509,7 +521,7 @@ fn sort_by(lines: &mut Vec<String>, settings: &Settings) {
     lines.par_sort_by(|a, b| compare_by(a, b, &settings))
 }
 
-#[inline]
+#[inline(always)]
 fn compare_by(a: &str, b: &str, settings: &Settings) -> Ordering {
     let (a_transformed, b_transformed): (String, String);
     let (a, b) = if !settings.transform_fns.is_empty() {
@@ -520,45 +532,52 @@ fn compare_by(a: &str, b: &str, settings: &Settings) -> Ordering {
         (a, b)
     };
 
-    for compare_fn in &settings.compare_fns {
-        let cmp: Ordering = compare_fn(a, b, settings);
-        if settings.reverse {
-            return cmp.reverse();
-        } else {
-            return cmp;
-        };
-    }
-    Ordering::Equal
-}
-
-#[inline(always)]
-fn default_compare(a: &str, b: &str, _: &Settings) -> Ordering {
-    a.cmp(b)
-}
-
-#[inline(always)]
-fn last_resort_compare(a: &str, b: &str, x: &Settings) -> Ordering {
-    if x.stable || x.unique {
-        Ordering::Equal
+    // 1st Compare
+    let mut cmp: Ordering = if settings.random {
+        random_shuffle(a, b, settings.salt.clone())
     } else {
-        default_compare(a, b, x)
+        (settings.compare_fn)(a, b)
+    };
+
+    // Call "last resort compare" on any equal
+    if cmp == Ordering::Equal {
+        if settings.random || settings.stable || settings.unique {
+            cmp = Ordering::Equal
+        } else {
+            cmp = default_compare(a, b)
+        };
+    };
+
+    if settings.reverse {
+        return cmp.reverse();
+    } else {
+        return cmp;
     }
+}
+
+// Test output against BSDs and GNU with env var
+// lc_ctype=utf-8 until locales are implemented
+#[inline(always)]
+fn default_compare(a: &str, b: &str) -> Ordering {
+    a.cmp(b)
 }
 
 #[inline(always)]
 fn leading_num_common(a: &str) -> &str {
     let mut s = "";
-    // Strip string
-    for c in a.to_uppercase().chars() {
+    // Strip string of non-numeric trailing chars
+    for (idx, c) in a.char_indices() {
         if !c.is_numeric()
             && !c.is_whitespace()
             && !c.eq(&DECIMAL_PT)
             && !c.eq(&THOUSANDS_SEP)
-            && !c.eq(&ENOTATION)
+            // check for e notation
+            && !c.eq(&'e')
+            && !c.eq(&'E')
             && !a.chars().nth(0).unwrap_or('\0').eq(&POSITIVE)
             && !a.chars().nth(0).unwrap_or('\0').eq(&NEGATIVE)
         {
-            s = a.split(c).next().unwrap_or("");
+            s = &a[..idx];
             break;
         }
         s = a;
@@ -566,48 +585,52 @@ fn leading_num_common(a: &str) -> &str {
     s
 }
 
+#[inline(always)]
 fn get_leading_num(a: &str) -> &str {
     let mut s = "";
     let b = leading_num_common(a);
 
-    // GNU numeric sort does recognize '+' or 'e' notation so we strip
-    for c in b.chars() {
-        if c.eq(&ENOTATION) && b.chars().nth(0).unwrap_or('\0').eq(&POSITIVE) {
-            s = b.split(c).next().unwrap_or("");
+    // GNU numeric sort doesn't recognize '+' or 'e' notation so we strip
+    for (idx, c) in b.char_indices() {
+        if c.eq(&'e') || c.eq(&'E') || b.chars().nth(0).unwrap_or('\0').eq(&POSITIVE) {
+            s = &b[..idx];
             break;
         }
         s = b;
     }
 
-    // And empty number lines are to be treated as ‘0’ but only for numeric sort
+    // And empty number or non-number lines are to be treated as ‘0’ but only for numeric sort
     if s.is_empty() {
         s = "0";
     };
     s
 }
 
-fn get_leading_gen(a: &str) -> &str {
-    let mut s = leading_num_common(a);
-
-    // Cleanup strips
-    let mut p_iter = s.chars().peekable();
-    // Checks next char and avoid borrow after move of a for loop
-    while let Some(c) = p_iter.next() {
-        p_iter.next();
+fn get_leading_gen(a: &str) -> String {
+    // Make this iter peekable to see if next char is numeric
+    let mut p_iter = leading_num_common(a).chars().peekable();
+    let mut r = String::new();
+    // Cleanup raw stripped strings
+    for c in p_iter.to_owned() {
         let next_char_numeric = p_iter.peek().unwrap_or(&'\0').is_numeric();
         // Only general numeric recognizes e notation and the '+' sign
-        if c.eq(&ENOTATION) || c.eq(&DECIMAL_PT) && !next_char_numeric {
-            s = a.split(c).next().unwrap_or("");
+        if (c.eq(&'e') && !next_char_numeric)
+            || (c.eq(&'E') && !next_char_numeric)
+            || (c.eq(&DECIMAL_PT) && !next_char_numeric)
+        {
+            r = a.split(c).next().unwrap_or("").to_string();
             break;
         } else if c.eq(&POSITIVE) && !next_char_numeric {
-            let mut v: Vec<&str> = s.split(c).collect();
-            v.split_off(1);
+            let mut v: Vec<&str> = a.split(c).collect();
+            let x = v.split_off(1);
             // 'Let' here avoids returning a value referencing data owned by the current function
-            let s = &v.join("");
+            r = x.join("");
             break;
+        } else {
+            r = a.to_string();
         }
     }
-    s
+    r
 }
 
 fn get_months_dedup(a: &str) -> String {
@@ -678,7 +701,7 @@ fn permissive_f64_parse(a: &str) -> f64 {
     }
 }
 
-fn numeric_compare(a: &str, b: &str, x: &Settings) -> Ordering {
+fn numeric_compare(a: &str, b: &str) -> Ordering {
     #![allow(clippy::comparison_chain)]
 
     let sa = get_leading_num(a);
@@ -693,20 +716,20 @@ fn numeric_compare(a: &str, b: &str, x: &Settings) -> Ordering {
     } else if fa < fb {
         Ordering::Less
     } else {
-        last_resort_compare(a, b, x)
+        Ordering::Equal
     }
 }
 
 /// Compares two floats, with errors and non-numerics assumed to be -inf.
 /// Stops coercing at the first non-numeric char.
-fn general_numeric_compare(a: &str, b: &str, x: &Settings) -> Ordering {
+fn general_numeric_compare(a: &str, b: &str) -> Ordering {
     #![allow(clippy::comparison_chain)]
 
     let sa = get_leading_gen(a);
     let sb = get_leading_gen(b);
 
-    let fa = permissive_f64_parse(sa);
-    let fb = permissive_f64_parse(sb);
+    let fa = permissive_f64_parse(&sa);
+    let fb = permissive_f64_parse(&sb);
 
     // f64::cmp isn't implemented (due to NaN issues); implement directly instead
     if fa > fb {
@@ -714,7 +737,7 @@ fn general_numeric_compare(a: &str, b: &str, x: &Settings) -> Ordering {
     } else if fa < fb {
         Ordering::Less
     } else {
-        last_resort_compare(a, b, x)
+        Ordering::Equal
     }
 }
 
@@ -735,7 +758,7 @@ fn human_numeric_convert(a: &str) -> f64 {
 
 /// Compare two strings as if they are human readable sizes.
 /// AKA 1M > 100k
-fn human_numeric_size_compare(a: &str, b: &str, x: &Settings) -> Ordering {
+fn human_numeric_size_compare(a: &str, b: &str) -> Ordering {
     #![allow(clippy::comparison_chain)]
     let fa = human_numeric_convert(a);
     let fb = human_numeric_convert(b);
@@ -746,7 +769,7 @@ fn human_numeric_size_compare(a: &str, b: &str, x: &Settings) -> Ordering {
     } else if fa < fb {
         Ordering::Less
     } else {
-        last_resort_compare(a, b, x)
+        Ordering::Equal
     }
 }
 
@@ -764,9 +787,9 @@ fn get_hash<T: Hash>(t: &T) -> u64 {
     s.finish()
 }
 
-fn random_shuffle(a: &str, b: &str, x: &Settings) -> Ordering {
+fn random_shuffle(a: &str, b: &str, x: String) -> Ordering {
     #![allow(clippy::comparison_chain)]
-    let salt_slice = x.salt.as_str();
+    let salt_slice = x.as_str();
 
     let da = get_hash(&[a, salt_slice].concat());
     let db = get_hash(&[b, salt_slice].concat());
@@ -818,7 +841,7 @@ fn month_parse(line: &str) -> Month {
     }
 }
 
-fn month_compare(a: &str, b: &str, x: &Settings) -> Ordering {
+fn month_compare(a: &str, b: &str) -> Ordering {
     let ma = month_parse(a);
     let mb = month_parse(b);
 
@@ -827,11 +850,11 @@ fn month_compare(a: &str, b: &str, x: &Settings) -> Ordering {
     } else if ma < mb {
         Ordering::Less
     } else {
-        last_resort_compare(a, b, x)
+        Ordering::Equal
     }
 }
 
-fn version_compare(a: &str, b: &str, x: &Settings) -> Ordering {
+fn version_compare(a: &str, b: &str) -> Ordering {
     #![allow(clippy::comparison_chain)]
     let ver_a = Version::parse(a);
     let ver_b = Version::parse(b);
@@ -841,7 +864,7 @@ fn version_compare(a: &str, b: &str, x: &Settings) -> Ordering {
     } else if ver_a < ver_b {
         Ordering::Less
     } else {
-        last_resort_compare(a, b, x)
+        Ordering::Equal
     }
 }
 
