@@ -7,7 +7,7 @@
 //  * file that was distributed with this source code.
 #![allow(dead_code)]
 
-// Although they don't always seem to decribe reality, check out the POSIX and GNU specs:
+// Although they don't always seem to describe reality, check out the POSIX and GNU specs:
 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 
