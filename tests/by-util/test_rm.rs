@@ -263,3 +263,32 @@ fn test_rm_no_operand() {
     ucmd.fails()
         .stderr_is("rm: error: missing an argument\nrm: error: for help, try 'rm --help'\n");
 }
+
+#[test]
+fn test_rm_verbose_slash() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_rm_verbose_slash_directory";
+    let file_a = &format!("{}/test_rm_verbose_slash_file_a", dir);
+
+    at.mkdir(dir);
+    at.touch(file_a);
+
+    let file_a_normalized = &format!(
+        "{}{}test_rm_verbose_slash_file_a",
+        dir,
+        std::path::MAIN_SEPARATOR
+    );
+
+    ucmd.arg("-r")
+        .arg("-f")
+        .arg("-v")
+        .arg(&format!("{}///", dir))
+        .succeeds()
+        .stdout_only(format!(
+            "removed '{}'\nremoved directory '{}'\n",
+            file_a_normalized, dir
+        ));
+
+    assert!(!at.dir_exists(dir));
+    assert!(!at.file_exists(file_a));
+}
