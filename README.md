@@ -226,6 +226,11 @@ If you would prefer to test a select few utilities:
 $ cargo test --features "chmod mv tail" --no-default-features
 ```
 
+If you also want to test the core utilities:
+```bash
+$ cargo test  -p uucore -p coreutils
+```
+
 To debug:
 ```bash
 $ gdb --args target/debug/coreutils ls
