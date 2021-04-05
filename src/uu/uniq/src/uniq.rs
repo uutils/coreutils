@@ -13,6 +13,7 @@ use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Result, Write};
 use std::path::Path;
 use std::str::FromStr;
+use strum_macros::{AsRefStr, EnumString};
 
 static ABOUT: &str = "Report or omit repeated lines.";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -26,14 +27,18 @@ pub mod options {
     pub static SKIP_CHARS: &str = "skip-chars";
     pub static UNIQUE: &str = "unique";
     pub static ZERO_TERMINATED: &str = "zero-terminated";
+    pub static GROUP: &str = "group";
 }
 
 static ARG_FILES: &str = "files";
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone, Copy, AsRefStr, EnumString)]
+#[strum(serialize_all = "snake_case")]
 enum Delimiters {
+    Append,
     Prepend,
     Separate,
+    Both,
     None,
 }
 
@@ -58,22 +63,33 @@ impl Uniq {
     ) {
         let mut lines: Vec<String> = vec![];
         let mut first_line_printed = false;
-        let delimiters = &self.delimiters;
+        let delimiters = self.delimiters;
         let line_terminator = self.get_line_terminator();
+        // Don't print any delimiting lines before, after or between groups if delimiting method is 'none'
+        let no_delimiters = delimiters == Delimiters::None;
+        // The 'prepend' and 'both' delimit methods will cause output to start with delimiter line
+        let prepend_delimiter = delimiters == Delimiters::Prepend || delimiters == Delimiters::Both;
+        // The 'append' and 'both' delimit methods will cause output to end with delimiter line
+        let append_delimiter = delimiters == Delimiters::Append || delimiters == Delimiters::Both;
 
         for line in reader.split(line_terminator).map(get_line_string) {
             if !lines.is_empty() && self.cmp_keys(&lines[0], &line) {
-                let print_delimiter = delimiters == &Delimiters::Prepend
-                    || (delimiters == &Delimiters::Separate && first_line_printed);
+                // Print delimiter if delimit method is not 'none' and any line has been output
+                // before or if we need to start output with delimiter
+                let print_delimiter = !no_delimiters && (prepend_delimiter || first_line_printed);
                 first_line_printed |= self.print_lines(writer, &lines, print_delimiter);
                 lines.truncate(0);
             }
             lines.push(line);
         }
         if !lines.is_empty() {
-            let print_delimiter = delimiters == &Delimiters::Prepend
-                || (delimiters == &Delimiters::Separate && first_line_printed);
-            self.print_lines(writer, &lines, print_delimiter);
+            // Print delimiter if delimit method is not 'none' and any line has been output
+            // before or if we need to start output with delimiter
+            let print_delimiter = !no_delimiters && (prepend_delimiter || first_line_printed);
+            first_line_printed |= self.print_lines(writer, &lines, print_delimiter);
+        }
+        if append_delimiter && first_line_printed {
+            crash_if_err!(1, writer.write_all(&[line_terminator]));
         }
     }
 
@@ -233,10 +249,30 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(options::ALL_REPEATED)
                 .short("D")
                 .long(options::ALL_REPEATED)
-                .possible_values(&["none", "prepend", "separate"])
-                .help("print all duplicate lines. Delimiting is done with blank lines")
+                .possible_values(&[
+                    Delimiters::None.as_ref(), Delimiters::Prepend.as_ref(), Delimiters::Separate.as_ref()
+                ])
+                .help("print all duplicate lines. Delimiting is done with blank lines. [default: none]")
                 .value_name("delimit-method")
-                .default_value("none"),
+                .min_values(0)
+                .max_values(1),
+        )
+        .arg(
+            Arg::with_name(options::GROUP)
+                .long(options::GROUP)
+                .possible_values(&[
+                    Delimiters::Separate.as_ref(), Delimiters::Prepend.as_ref(),
+                    Delimiters::Append.as_ref(), Delimiters::Both.as_ref()
+                ])
+                .help("show all items, separating groups with an empty line. [default: separate]")
+                .value_name("group-method")
+                .min_values(0)
+                .max_values(1)
+                .conflicts_with_all(&[
+                    options::REPEATED,
+                    options::ALL_REPEATED,
+                    options::UNIQUE,
+                ]),
         )
         .arg(
             Arg::with_name(options::CHECK_CHARS)
@@ -314,17 +350,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let uniq = Uniq {
         repeats_only: matches.is_present(options::REPEATED)
-            || matches.occurrences_of(options::ALL_REPEATED) > 0,
+            || matches.is_present(options::ALL_REPEATED),
         uniques_only: matches.is_present(options::UNIQUE),
-        all_repeated: matches.occurrences_of(options::ALL_REPEATED) > 0,
-        delimiters: match matches.value_of(options::ALL_REPEATED).map(String::from) {
-            Some(ref opt_arg) if opt_arg != "none" => match &(*opt_arg.as_str()) {
-                "prepend" => Delimiters::Prepend,
-                "separate" => Delimiters::Separate,
-                _ => crash!(1, "Incorrect argument for all-repeated: {}", opt_arg),
-            },
-            _ => Delimiters::None,
-        },
+        all_repeated: matches.is_present(options::ALL_REPEATED)
+            || matches.is_present(options::GROUP),
+        delimiters: get_delimiter(&matches),
         show_counts: matches.is_present(options::COUNT),
         skip_fields: opt_parsed(options::SKIP_FIELDS, &matches),
         slice_start: opt_parsed(options::SKIP_CHARS, &matches),
@@ -338,6 +368,19 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     );
 
     0
+}
+
+fn get_delimiter(matches: &ArgMatches) -> Delimiters {
+    let value = matches
+        .value_of(options::ALL_REPEATED)
+        .or_else(|| matches.value_of(options::GROUP));
+    if let Some(delimiter_arg) = value {
+        crash_if_err!(1, Delimiters::from_str(delimiter_arg))
+    } else if matches.is_present(options::GROUP) {
+        Delimiters::Separate
+    } else {
+        Delimiters::None
+    }
 }
 
 fn open_input_file(in_file_name: String) -> BufReader<Box<dyn Read + 'static>> {
