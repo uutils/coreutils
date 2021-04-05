@@ -54,14 +54,13 @@ enum CatError {
     #[error("{0}")]
     Nix(#[from] nix::Error),
     /// Unknown file type; it's not a regular file, socket, etc.
-    #[error("{}: unknown filetype: {}", path, ft_debug)]
+    #[error("unknown filetype: {}", ft_debug)]
     UnknownFiletype {
-        path: String,
         /// A debug print of the file type
         ft_debug: String,
     },
-    #[error("{0}: Expected a file, found directory")]
-    IsDirectory(String),
+    #[error("Is a directory")]
+    IsDirectory,
 }
 
 type CatResult<T> = Result<T, CatError>;
@@ -312,7 +311,7 @@ fn cat_path(path: &str, options: &OutputOptions, state: &mut OutputState) -> Cat
         return cat_handle(&mut handle, &options, state);
     }
     match get_input_type(path)? {
-        InputType::Directory => Err(CatError::IsDirectory(path.to_owned())),
+        InputType::Directory => Err(CatError::IsDirectory),
         #[cfg(unix)]
         InputType::Socket => {
             let socket = UnixStream::connect(path)?;
@@ -347,7 +346,7 @@ fn cat_files(files: Vec<String>, options: &OutputOptions) -> Result<(), u32> {
 
     for path in &files {
         if let Err(err) = cat_path(path, &options, &mut state) {
-            show_error!("{}", err);
+            show_info!("{}: {}", path, err);
             error_count += 1;
         }
     }
@@ -382,7 +381,6 @@ fn get_input_type(path: &str) -> CatResult<InputType> {
         ft if ft.is_file() => Ok(InputType::File),
         ft if ft.is_symlink() => Ok(InputType::SymLink),
         _ => Err(CatError::UnknownFiletype {
-            path: path.to_owned(),
             ft_debug: format!("{:?}", ft),
         }),
     }

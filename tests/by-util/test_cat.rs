@@ -93,6 +93,54 @@ fn test_fifo_symlink() {
 }
 
 #[test]
+fn test_directory() {
+    let s = TestScenario::new(util_name!());
+    s.fixtures.mkdir("test_directory");
+    s.ucmd()
+        .args(&["test_directory"])
+        .fails()
+        .stderr_is("cat: test_directory: Is a directory");
+}
+
+#[test]
+fn test_directory_and_file() {
+    let s = TestScenario::new(util_name!());
+    s.fixtures.mkdir("test_directory2");
+    for fixture in &["empty.txt", "alpha.txt", "nonewline.txt"] {
+        s.ucmd()
+            .args(&["test_directory2", fixture])
+            .fails()
+            .stderr_is("cat: test_directory2: Is a directory")
+            .stdout_is_fixture(fixture);
+    }
+}
+
+#[test]
+fn test_three_directories_and_file_and_stdin() {
+    let s = TestScenario::new(util_name!());
+    s.fixtures.mkdir("test_directory3");
+    s.fixtures.mkdir("test_directory3/test_directory4");
+    s.fixtures.mkdir("test_directory3/test_directory5");
+    s.ucmd()
+        .args(&[
+            "test_directory3/test_directory4",
+            "alpha.txt",
+            "-",
+            "filewhichdoesnotexist.txt",
+            "nonewline.txt",
+            "test_directory3/test_directory5",
+            "test_directory3/../test_directory3/test_directory5",
+            "test_directory3",
+        ])
+        .pipe_in("stdout bytes")
+        .fails()
+        .stderr_is_fixture("three_directories_and_file_and_stdin.stderr.expected")
+        .stdout_is_bytes(
+            b"abcde\nfghij\nklmno\npqrst\nuvwxyz\nstdout bytestext without a trailing newline",
+        );
+}
+
+#[test]
 fn test_output_multi_files_print_all_chars() {
     new_ucmd!()
         .args(&["alpha.txt", "256.txt", "-A", "-n"])
