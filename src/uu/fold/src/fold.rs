@@ -70,9 +70,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let bytes = matches.is_present(options::BYTES);
     let spaces = matches.is_present(options::SPACES);
-    let poss_width = match matches.is_present(options::WIDTH) {
-        true => matches.value_of(options::WIDTH).map(|v| v.to_owned()),
-        false => obs_width,
+    let poss_width = match matches.value_of(options::WIDTH) {
+        Some(v) => Some(v.to_owned()),
+        None => obs_width,
     };
 
     let width = match poss_width {

@@ -399,7 +399,7 @@ fn test_bytewise_fold_at_word_boundary_only_whitespace_preserve_final_newline() 
 }
 
 #[test]
-fn test_obsolote_syntax() {
+fn test_obsolete_syntax() {
     new_ucmd!()
         .arg("-5")
         .arg("-s")
