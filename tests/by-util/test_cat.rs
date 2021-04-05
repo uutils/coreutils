@@ -127,8 +127,8 @@ fn test_three_directories_and_file_and_stdin() {
         .pipe_in("stdout bytes")
         .fails()
         .stderr_is_fixture("three_directories_and_file_and_stdin.stderr.expected")
-        .stdout_is_bytes(
-            b"abcde\nfghij\nklmno\npqrst\nuvwxyz\nstdout bytestext without a trailing newline",
+        .stdout_is(
+            "abcde\nfghij\nklmno\npqrst\nuvwxyz\nstdout bytestext without a trailing newline",
         );
 }
 
@@ -301,7 +301,7 @@ fn test_dev_full() {
     let mut proc_stdout = proc.stdout.take().unwrap();
     let expected = [0; 2048];
     proc_stdout.read_exact(&mut buf).unwrap();
-    assert_eq!(&buf[..], &expected);
+    assert_eq!(&buf[..], &expected[..]);
     proc.kill().unwrap();
 }
 
@@ -318,7 +318,7 @@ fn test_dev_full_show_all() {
         .map(|n| if n & 1 == 0 { b'^' } else { b'@' })
         .collect();
 
-    assert_eq!(&buf[..], &expected);
+    assert_eq!(&buf[..], &expected[..]);
     proc.kill().unwrap();
 }
 
