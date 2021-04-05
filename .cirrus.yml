@@ -11,4 +11,4 @@ task:
     - cargo build
   test_script:
     - . $HOME/.cargo/env
-    - cargo test
+    - cargo test -p uucore -p coreutils
