@@ -156,6 +156,15 @@ Set install parent directory (default value is /usr/local):
 $ make PREFIX=/my/path install
 ```
 
+### Gento ###
+
+Available in [dm9pZCAq overlay](https://github.com/gentoo-mirror/dm9pZCAq):
+```sh
+$ sudo eselect repository enable dm9pZCAq
+$ sudo emerge --sync dm9pZCAq
+$ sudo emerge sys-apps/uutils-coreutils::dm9pZCAq
+```
+
 ### NixOS ###
 
 The [standard package set](https://nixos.org/nixpkgs/manual/) of [NixOS](https://nixos.org/)
