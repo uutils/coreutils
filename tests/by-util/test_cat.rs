@@ -1,5 +1,14 @@
 use crate::common::util::*;
 
+fn vec_of_size(n: usize) -> Vec<u8> {
+    let mut result = Vec::new();
+    for _ in 0..n {
+        result.push('a' as u8);
+    }
+    assert_eq!(result.len(), n);
+    result
+}
+
 #[test]
 fn test_output_simple() {
     new_ucmd!()
@@ -26,15 +35,6 @@ fn test_no_options() {
 
 #[test]
 fn test_no_options_big_input() {
-    fn vec_of_size(n: usize) -> Vec<u8> {
-        let mut result = Vec::new();
-        for _ in 0..n {
-            result.push('a' as u8);
-        }
-        assert_eq!(result.len(), n);
-        result
-    }
-
     for n in &[
         0,
         1,
@@ -56,6 +56,40 @@ fn test_no_options_big_input() {
         assert_eq!(data.len(), data2.len());
         new_ucmd!().pipe_in(data).succeeds().stdout_is_bytes(&data2);
     }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_fifo_symlink() {
+    use std::fs::OpenOptions;
+    use std::io::Write;
+    use std::thread;
+
+    let s = TestScenario::new(util_name!());
+    s.fixtures.mkdir("dir");
+    s.fixtures.mkfifo("dir/pipe");
+    assert!(s.fixtures.is_fifo("dir/pipe"));
+
+    // Make cat read the pipe through a symlink
+    s.fixtures.symlink_file("dir/pipe", "sympipe");
+    let proc = s.ucmd().args(&["sympipe"]).run_no_wait();
+
+    let data = vec_of_size(128 * 1024);
+    let data2 = data.clone();
+
+    let pipe_path = s.fixtures.plus("dir/pipe");
+    let thread = thread::spawn(move || {
+        let mut pipe = OpenOptions::new()
+            .write(true)
+            .create(false)
+            .open(pipe_path)
+            .unwrap();
+        pipe.write_all(&data).unwrap();
+    });
+
+    let output = proc.wait_with_output().unwrap();
+    assert_eq!(&output.stdout, &data2);
+    thread.join().unwrap();
 }
 
 #[test]
@@ -199,10 +233,10 @@ fn test_squeeze_blank_before_numbering() {
 #[test]
 #[cfg(unix)]
 fn test_domain_socket() {
-    use tempdir::TempDir;
-    use unix_socket::UnixListener;
     use std::io::prelude::*;
     use std::thread;
+    use tempdir::TempDir;
+    use unix_socket::UnixListener;
 
     let dir = TempDir::new("unix_socket").expect("failed to create dir");
     let socket_path = dir.path().join("sock");
