@@ -555,13 +555,17 @@ fn compare_by(a: &str, b: &str, settings: &Settings) -> Ordering {
     }
 }
 
-// Test output against BSDs and GNU with env var
-// lc_ctype=utf-8 until locales are implemented
+// Test output against BSDs and GNU with their locale
+// env var lc_ctype=utf-8  to enjoy the exact same output.
 #[inline(always)]
 fn default_compare(a: &str, b: &str) -> Ordering {
     a.cmp(b)
 }
 
+// This function does the initial detection of numeric lines.
+// Lines starting with a number or positive or negative sign.
+// It also strips the string of any thing that could never
+// be a number for the purposes of any type of numeric comparison.
 #[inline(always)]
 fn leading_num_common(a: &str) -> &str {
     let mut s = "";
@@ -585,6 +589,11 @@ fn leading_num_common(a: &str) -> &str {
     s
 }
 
+// This function cleans up the initial comparison done by leading_num_common for a numeric compare.
+// GNU sort does its numeric comparison through strnumcmp.  However, we don't have or
+// may not want to use libc.  Instead we emulate the GNU sort numeric compare by ignoring
+// those leading number lines GNU sort would not recognize.  GNU numeric compare would
+// not recognize a positive sign or scientific/E notation so we strip those elements here.
 #[inline(always)]
 fn get_leading_num(a: &str) -> &str {
     let mut s = "";
@@ -600,12 +609,17 @@ fn get_leading_num(a: &str) -> &str {
     }
 
     // And empty number or non-number lines are to be treated as ‘0’ but only for numeric sort
+    // All '0' lines will be sorted later, but only amongst themselves, during the so-called 'last resort comparison.'
     if s.is_empty() {
         s = "0";
     };
     s
 }
 
+// This function cleans up the initial comparison done by leading_num_common for a general numeric compare.
+// GNU general numeric/FP sort *would* recognize positive signs and scientific notation, so
+// we strip those lines only after the end of the following numeric string. 5e10KFD would be
+// 5e10 or 5x10^10 and +10000HFKJFK would become 10000.
 fn get_leading_gen(a: &str) -> String {
     // Make this iter peekable to see if next char is numeric
     let mut p_iter = leading_num_common(a).chars().peekable();
@@ -623,7 +637,6 @@ fn get_leading_gen(a: &str) -> String {
         } else if c.eq(&POSITIVE) && !next_char_numeric {
             let mut v: Vec<&str> = a.split(c).collect();
             let x = v.split_off(1);
-            // 'Let' here avoids returning a value referencing data owned by the current function
             r = x.join("");
             break;
         } else {
@@ -664,8 +677,8 @@ fn get_months_dedup(a: &str) -> String {
     }
 }
 
-// *For all dedups/uniques must compare leading numbers*
-// Numeric compare and unique is specifically *not* the same as sort | uniq
+// *For all dedups/uniques we must compare leading numbers*
+// Also note numeric compare and unique output is specifically *not* the same as a sort | uniq
 // See: https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 fn get_nums_dedup(a: &str) -> &str {
     // Trim and remove any leading zeros
@@ -924,5 +937,74 @@ fn open(path: &str) -> Option<(Box<dyn Read>, bool)> {
             show_error!("sort: {0}: {1}", path, e.to_string());
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn test_get_hash() {
+        let a: String = "Ted".to_string();
+
+        assert_eq!("2646829031758483623", get_hash(&a));
+    }
+
+    #[test]
+    fn test_random_shuffle() {
+        let a = "Ted";
+        let b = "Ted";
+        let c = get_rand_string();
+
+        assert_eq!(Ordering::Equal, random_shuffle(a, b, c));
+    }
+
+    #[test]
+    fn test_default_compare() {
+        let a = "your own";
+        let b = "your place";
+
+        assert_eq!(Ordering::Less, default_compare(a, b));
+    }
+
+    #[test]
+    fn test_numeric_compare1() {
+        let a = "149:7";
+        let b = "150:5";
+
+        assert_eq!(Ordering::Less, numeric_compare(a, b));
+    }
+
+    #[test]
+    fn test_numeric_compare2() {
+        let a = "-1.02";
+        let b = "1";
+
+        assert_eq!(Ordering::Less, numeric_compare(a, b));
+    }
+
+    #[test]
+    fn test_human_numeric_compare() {
+        let a = "300K";
+        let b = "1M";
+
+        assert_eq!(Ordering::Less, human_numeric_size_compare(a, b));
+    }
+
+    #[test]
+    fn test_month_compare() {
+        let a = "JaN";
+        let b = "OCt";
+
+        assert_eq!(Ordering::Less, month_compare(a, b));
+    }
+    #[test]
+    fn test_version_compare() {
+        let a = "1.2.3-alpha2";
+        let b = "1.4.0";
+
+        assert_eq!(Ordering::Less, version_compare(a, b));
     }
 }
