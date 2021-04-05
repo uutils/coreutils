@@ -424,20 +424,20 @@ fn exec(files: Vec<String>, settings: &mut Settings) -> i32 {
 
         if settings.merge {
             file_merger.push_file(buf_reader.lines());
-        } else if settings.check {
-            return exec_check_file(buf_reader.lines(), &settings);
         } else if settings.zero_terminated {
             for line in buf_reader.split(b'\0') {
                 if let Ok(n) = line {
                     lines.push(std::str::from_utf8(&n).unwrap_or("\0").to_string());
                 }
             }
+            if settings.check { return exec_check_file(lines, &settings);}
         } else {
             for line in buf_reader.lines() {
                 if let Ok(n) = line {
                     lines.push(n);
                 }
             }
+            if settings.check { return exec_check_file(lines, &settings);}
         }
     }
 
@@ -470,17 +470,10 @@ fn exec(files: Vec<String>, settings: &mut Settings) -> i32 {
     0
 }
 
-fn exec_check_file(lines: Lines<BufReader<Box<dyn Read>>>, settings: &Settings) -> i32 {
+fn exec_check_file(unwrapped_lines: Vec<String>, settings: &Settings) -> i32 {
     // errors yields the line before each disorder,
     // plus the last line (quirk of .coalesce())
-    let unwrapped_lines = lines.filter_map(|maybe_line| {
-        if let Ok(line) = maybe_line {
-            Some(line)
-        } else {
-            None
-        }
-    });
-    let mut errors = unwrapped_lines
+    let mut errors = unwrapped_lines.iter()
         .enumerate()
         .coalesce(|(last_i, last_line), (i, line)| {
             if compare_by(&last_line, &line, &settings) == Ordering::Greater {

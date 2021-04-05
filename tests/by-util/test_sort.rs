@@ -1,5 +1,25 @@
 use crate::common::util::*;
 
+
+#[test]
+fn test_check_zero_terminated_failure() {
+    new_ucmd!()
+        .arg("-z")
+        .arg("-c")
+        .arg("zero-terminated.txt")
+        .fails()
+        .stdout_is("sort: disorder in line 0\n");
+}
+
+#[test]
+fn test_check_zero_terminated_success() {
+    new_ucmd!()
+        .arg("-z")
+        .arg("-c")
+        .arg("zero-terminated.expected")
+        .succeeds();
+}
+
 #[test]
 fn test_random_shuffle_len() {
     // check whether output is the same length as the input
