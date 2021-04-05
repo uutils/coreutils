@@ -64,14 +64,14 @@ fn test_preference_of_userspec() {
         // As seems to be a configuration issue, ignoring it
         return;
     }
-    println!("result.stdout {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    let username = result.stdout.trim_end();
+    println!("result.stdout = {}", result.stdout_str());
+    println!("result.stderr = {}", result.stderr_str());
+    let username = result.stdout_str().trim_end();
 
     let ts = TestScenario::new("id");
     let result = ts.cmd("id").arg("-g").arg("-n").run();
-    println!("result.stdout {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
+    println!("result.stdout = {}", result.stdout_str());
+    println!("result.stderr = {}", result.stderr_str());
 
     if is_ci() && result.stderr.contains("cannot find name for user ID") {
         // In the CI, some server are failing to return id.
@@ -79,7 +79,7 @@ fn test_preference_of_userspec() {
         return;
     }
 
-    let group_name = result.stdout.trim_end();
+    let group_name = result.stdout_str().trim_end();
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.mkdir("a");
@@ -93,6 +93,6 @@ fn test_preference_of_userspec() {
         .arg(format!("--userspec={}:{}", username, group_name))
         .run();
 
-    println!("result.stdout {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
+    println!("result.stdout = {}", result.stdout_str());
+    println!("result.stderr = {}", result.stderr_str());
 }
