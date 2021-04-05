@@ -430,14 +430,18 @@ fn exec(files: Vec<String>, settings: &mut Settings) -> i32 {
                     lines.push(std::str::from_utf8(&n).unwrap_or("\0").to_string());
                 }
             }
-            if settings.check { return exec_check_file(lines, &settings);}
+            if settings.check {
+                return exec_check_file(lines, &settings);
+            }
         } else {
             for line in buf_reader.lines() {
                 if let Ok(n) = line {
                     lines.push(n);
                 }
             }
-            if settings.check { return exec_check_file(lines, &settings);}
+            if settings.check {
+                return exec_check_file(lines, &settings);
+            }
         }
     }
 
@@ -473,15 +477,17 @@ fn exec(files: Vec<String>, settings: &mut Settings) -> i32 {
 fn exec_check_file(unwrapped_lines: Vec<String>, settings: &Settings) -> i32 {
     // errors yields the line before each disorder,
     // plus the last line (quirk of .coalesce())
-    let mut errors = unwrapped_lines.iter()
-        .enumerate()
-        .coalesce(|(last_i, last_line), (i, line)| {
-            if compare_by(&last_line, &line, &settings) == Ordering::Greater {
-                Err(((last_i, last_line), (i, line)))
-            } else {
-                Ok((i, line))
-            }
-        });
+    let mut errors =
+        unwrapped_lines
+            .iter()
+            .enumerate()
+            .coalesce(|(last_i, last_line), (i, line)| {
+                if compare_by(&last_line, &line, &settings) == Ordering::Greater {
+                    Err(((last_i, last_line), (i, line)))
+                } else {
+                    Ok((i, line))
+                }
+            });
     if let Some((first_error_index, _line)) = errors.next() {
         // Check for a second "error", as .coalesce() always returns the last
         // line, no matter what our merging function does.

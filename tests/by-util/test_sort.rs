@@ -1,6 +1,5 @@
 use crate::common::util::*;
 
-
 #[test]
 fn test_check_zero_terminated_failure() {
     new_ucmd!()
@@ -47,13 +46,13 @@ fn test_random_shuffle_contains_all_lines() {
 
 #[test]
 fn test_random_shuffle_contains_two_runs_not_the_same() {
-    // check to verify that two random shuffles are not equal; this has the 
-    // potential to fail in the unlikely event that random order is the same 
+    // check to verify that two random shuffles are not equal; this has the
+    // potential to fail in the unlikely event that random order is the same
     // as the starting order, or if both random sorts end up having the same order.
     const FILE: &'static str = "default_unsorted_ints.expected";
     let (at, _ucmd) = at_and_ucmd!();
     let result = new_ucmd!().arg("-R").arg(FILE).run().stdout;
-    let expected = at.read(FILE); 
+    let expected = at.read(FILE);
     let unexpected = new_ucmd!().arg("-R").arg(FILE).run().stdout;
 
     assert_ne!(result, expected);
