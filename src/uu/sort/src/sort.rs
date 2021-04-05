@@ -430,22 +430,20 @@ fn exec(files: Vec<String>, settings: &mut Settings) -> i32 {
                     lines.push(std::str::from_utf8(&n).unwrap_or("\0").to_string());
                 }
             }
-            if settings.check {
-                return exec_check_file(lines, &settings);
-            }
         } else {
             for line in buf_reader.lines() {
                 if let Ok(n) = line {
                     lines.push(n);
                 }
             }
-            if settings.check {
-                return exec_check_file(lines, &settings);
-            }
         }
     }
 
-    sort_by(&mut lines, &settings);
+    if settings.check {
+        return exec_check_file(lines, &settings);
+    } else {
+        sort_by(&mut lines, &settings);
+    }
 
     if settings.merge {
         if settings.unique {
