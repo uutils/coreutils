@@ -13,12 +13,7 @@ fn test_shred_remove() {
     at.touch(file_b);
 
     // Shred file_a.
-    scene
-        .ucmd()
-        .arg("-u")
-        .arg(file_a)
-        .pipe_in("n")
-        .succeeds();
+    scene.ucmd().arg("-u").arg(file_a).pipe_in("n").succeeds();
 
     // file_a was deleted, file_b exists.
     assert!(!at.file_exists(file_a));
@@ -29,24 +24,19 @@ fn test_shred_remove() {
 fn test_shred_force() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    
+
     let file = "test_shred_force";
-   
+
     // Create file_a.
     at.touch(file);
     assert!(at.file_exists(file));
-    
+
     // Make file_a readonly.
     at.set_readonly(file);
-    
+
     // Try shred -u.
-    scene
-        .ucmd()
-        .arg("-u")
-        .arg(file)
-        .pipe_in("n")
-        .succeeds();
-        
+    scene.ucmd().arg("-u").arg(file).pipe_in("n").succeeds();
+
     // file_a was not deleted because it is readonly.
     assert!(at.file_exists(file));
 
