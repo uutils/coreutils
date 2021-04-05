@@ -132,12 +132,39 @@ fn test_single_tab_should_not_add_extra_newline() {
 }
 
 #[test]
-fn test_tab_counts_as_8_columns() {
+fn test_initial_tab_counts_as_8_columns() {
     new_ucmd!()
         .arg("-w8")
         .pipe_in("\t1")
         .succeeds()
         .stdout_is("\t\n1");
+}
+
+#[test]
+fn test_tab_should_advance_to_next_tab_stop() {
+    // tab advances the column count to the next tab stop, i.e. the width
+    // of the tab varies based on the leading text
+    new_ucmd!()
+        .args(&["-w8", "tab_stops.input"])
+        .succeeds()
+        .stdout_is_fixture("tab_stops_w8.expected");
+}
+
+#[test]
+fn test_all_tabs_should_advance_to_next_tab_stops() {
+    new_ucmd!()
+        .args(&["-w16", "tab_stops.input"])
+        .succeeds()
+        .stdout_is_fixture("tab_stops_w16.expected");
+}
+
+#[test]
+fn test_fold_before_tab_with_narrow_width() {
+    new_ucmd!()
+        .arg("-w7")
+        .pipe_in("a\t1")
+        .succeeds()
+        .stdout_is("a\n\t\n1");
 }
 
 #[test]
@@ -168,7 +195,34 @@ fn test_fold_at_word_boundary_preserve_final_newline() {
 }
 
 #[test]
+fn test_fold_at_tab() {
+    new_ucmd!()
+        .arg("-w8")
+        .pipe_in("a\tbbb\n")
+        .succeeds()
+        .stdout_is("a\t\nbbb\n");
+}
+
+#[test]
+fn test_fold_after_tab() {
+    new_ucmd!()
+        .arg("-w10")
+        .pipe_in("a\tbbb\n")
+        .succeeds()
+        .stdout_is("a\tbb\nb\n");
+}
+
+#[test]
 fn test_fold_at_tab_as_word_boundary() {
+    new_ucmd!()
+        .args(&["-w8", "-s"])
+        .pipe_in("a\tbbb\n")
+        .succeeds()
+        .stdout_is("a\t\nbbb\n");
+}
+
+#[test]
+fn test_fold_after_tab_as_word_boundary() {
     new_ucmd!()
         .args(&["-w10", "-s"])
         .pipe_in("a\tbbb\n")
@@ -315,6 +369,15 @@ fn test_tab_counts_as_one_byte() {
         .pipe_in("1\t2\n")
         .succeeds()
         .stdout_is("1\t\n2\n");
+}
+
+#[test]
+fn test_bytewise_fold_before_tab_with_narrow_width() {
+    new_ucmd!()
+        .args(&["-w7", "-b"])
+        .pipe_in("a\t1")
+        .succeeds()
+        .stdout_is("a\t1");
 }
 
 #[test]
