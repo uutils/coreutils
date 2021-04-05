@@ -7,7 +7,7 @@
 //  * file that was distributed with this source code.
 #![allow(dead_code)]
 
-// Although they don't always seem to describe reality, check out the POSIX and GNU specs:
+// Although these links don't always seem to describe reality, check out the POSIX and GNU specs:
 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 
@@ -562,7 +562,6 @@ fn default_compare(a: &str, b: &str) -> Ordering {
 #[inline(always)]
 fn leading_num_common(a: &str) -> &str {
     let mut s = "";
-    // Strip string of non-numeric trailing chars
     for (idx, c) in a.char_indices() {
         if !c.is_numeric()
             && !c.is_whitespace()
@@ -574,6 +573,7 @@ fn leading_num_common(a: &str) -> &str {
             && !a.chars().nth(0).unwrap_or('\0').eq(&POSITIVE)
             && !a.chars().nth(0).unwrap_or('\0').eq(&NEGATIVE)
         {
+            // Strip string of non-numeric trailing chars
             s = &a[..idx];
             break;
         }
@@ -610,7 +610,7 @@ fn get_leading_num(a: &str) -> &str {
 }
 
 // This function cleans up the initial comparison done by leading_num_common for a general numeric compare.
-// GNU general numeric/FP sort *would* recognize positive signs and scientific notation, so
+// GNU general numeric/FP sort *should* recognize positive signs and scientific notation, so
 // we strip those lines only after the end of the following numeric string. 5e10KFD would be
 // 5e10 or 5x10^10 and +10000HFKJFK would become 10000.
 fn get_leading_gen(a: &str) -> String {
@@ -671,7 +671,7 @@ fn get_months_dedup(a: &str) -> String {
 }
 
 // *For all dedups/uniques we must compare leading numbers*
-// Also note numeric compare and unique output is specifically *not* the same as a sort | uniq
+// Also note numeric compare and unique output is specifically *not* the same as a "sort | uniq"
 // See: https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 fn get_nums_dedup(a: &str) -> &str {
     // Trim and remove any leading zeros
