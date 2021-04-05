@@ -947,9 +947,9 @@ mod tests {
 
     #[test]
     fn test_get_hash() {
-        let a: String = "Ted".to_string();
+        let a = "Ted".to_string();
 
-        assert_eq!("2646829031758483623", get_hash(&a));
+        assert_eq!(2646829031758483623, get_hash(&a));
     }
 
     #[test]
