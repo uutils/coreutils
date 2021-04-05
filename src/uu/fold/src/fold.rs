@@ -14,6 +14,8 @@ use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
 
+const TAB_WIDTH: usize = 8;
+
 static SYNTAX: &str = "[OPTION]... [FILE]...";
 static SUMMARY: &str = "Writes each file (or standard input if no files are given)
  to standard output whilst breaking long lines";
@@ -220,11 +222,14 @@ fn fold_file<T: Read>(mut file: BufReader<T>, spaces: bool, width: usize) {
 
             match ch {
                 '\t' => {
-                    if col_count + 8 > width && !output.is_empty() {
+                    let next_tab_stop = col_count + TAB_WIDTH - col_count % TAB_WIDTH;
+
+                    if next_tab_stop > width && !output.is_empty() {
                         emit_output!();
                     }
-                    col_count += 8;
-                    last_space = Some(char_count);
+
+                    col_count = next_tab_stop;
+                    last_space = if spaces { Some(char_count) } else { None };
                 }
                 '\x08' => {
                     // FIXME: does not match GNU's handling of backspace
