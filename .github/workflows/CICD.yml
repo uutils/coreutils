@@ -181,6 +181,28 @@ jobs:
         cd tmp/busybox-*/testsuite
         S=$(bindir=$bindir ./runtest) && printf "%s\n" "$S" || { printf "%s\n" "$S" | grep "FAIL:" | sed -e "s/FAIL: /::warning ::Test failure:/g" ; }
 
+  makefile_build:
+    name: Test the build target of the Makefile
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: ubuntu-latest }
+    steps:
+    - uses: actions/checkout@v1
+    - name: Install `rust` toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        default: true
+        profile: minimal # minimal component installation (ie, no documentation)
+    - name: "Run make build"
+      shell: bash
+      run: |
+        sudo apt-get -y update ; sudo apt-get -y install python3-sphinx;
+        make build
+
   build:
     name: Build
     runs-on: ${{ matrix.job.os }}
