@@ -9,19 +9,23 @@
 // spell-checker:ignore (format) MMDDhhmm
 // spell-checker:ignore (ToDO) DATEFILE
 
-extern crate chrono;
-
-extern crate clap;
 #[macro_use]
 extern crate uucore;
 
+use chrono::{DateTime, FixedOffset, Local, Offset, Utc};
+#[cfg(windows)]
+use chrono::{Datelike, Timelike};
 use clap::{App, Arg};
-
-use chrono::offset::Utc;
-use chrono::{DateTime, FixedOffset, Local, Offset};
+#[cfg(all(unix, not(target_os = "macos")))]
+use libc::{clock_settime, timespec, CLOCK_REALTIME};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
+#[cfg(windows)]
+use winapi::{
+    shared::minwindef::WORD,
+    um::{minwinbase::SYSTEMTIME, sysinfoapi::SetSystemTime},
+};
 
 // Options
 const DATE: &str = "date";
@@ -64,6 +68,11 @@ static RFC_3339_HELP_STRING: &str = "output date/time in RFC 3339 format.
  FMT='date', 'seconds', or 'ns'
  for date and time to the indicated precision.
  Example: 2006-08-14 02:34:56-06:00";
+
+#[cfg(not(target_os = "macos"))]
+static OPT_SET_HELP_STRING: &str = "set time described by STRING";
+#[cfg(target_os = "macos")]
+static OPT_SET_HELP_STRING: &str = "set time described by STRING (not available on mac yet)";
 
 /// Settings for this program, parsed from the command line
 struct Settings {
@@ -189,7 +198,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .short("s")
                 .long(OPT_SET)
                 .takes_value(true)
-                .help("set time described by STRING"),
+                .help(OPT_SET_HELP_STRING),
         )
         .arg(
             Arg::with_name(OPT_UNIVERSAL)
@@ -225,18 +234,31 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         DateSource::Now
     };
 
+    let set_to = match matches.value_of(OPT_SET).map(parse_date) {
+        None => None,
+        Some(Err((input, _err))) => {
+            eprintln!("date: invalid date '{}'", input);
+            return 1;
+        }
+        Some(Ok(date)) => Some(date),
+    };
+
     let settings = Settings {
         utc: matches.is_present(OPT_UNIVERSAL),
         format,
         date_source,
-        // TODO: Handle this option:
-        set_to: None,
+        set_to,
     };
 
-    if let Some(_time) = settings.set_to {
-        unimplemented!();
-    // Probably need to use this syscall:
-    // https://doc.rust-lang.org/libc/i686-unknown-linux-gnu/libc/fn.clock_settime.html
+    if let Some(date) = settings.set_to {
+        // All set time functions expect UTC datetimes.
+        let date: DateTime<Utc> = if settings.utc {
+            date.with_timezone(&Utc)
+        } else {
+            date.into()
+        };
+
+        return set_system_datetime(date);
     } else {
         // Declare a file here because it needs to outlive the `dates` iterator.
         let file: File;
@@ -249,15 +271,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             let now = Local::now();
             now.with_timezone(now.offset())
         };
-
-        /// Parse a `String` into a `DateTime`.
-        /// If it fails, return a tuple of the `String` along with its `ParseError`.
-        fn parse_date(
-            s: String,
-        ) -> Result<DateTime<FixedOffset>, (String, chrono::format::ParseError)> {
-            // TODO: The GNU date command can parse a wide variety of inputs.
-            s.parse().map_err(|e| (s, e))
-        }
 
         // Iterate over all dates - whether it's a single date or a file.
         let dates: Box<dyn Iterator<Item = _>> = match settings.date_source {
@@ -315,5 +328,78 @@ fn make_format_string(settings: &Settings) -> &str {
         },
         Format::Custom(ref fmt) => fmt,
         Format::Default => "%c",
+    }
+}
+
+/// Parse a `String` into a `DateTime`.
+/// If it fails, return a tuple of the `String` along with its `ParseError`.
+fn parse_date<S: AsRef<str> + Clone>(
+    s: S,
+) -> Result<DateTime<FixedOffset>, (String, chrono::format::ParseError)> {
+    // TODO: The GNU date command can parse a wide variety of inputs.
+    s.as_ref().parse().map_err(|e| (s.as_ref().into(), e))
+}
+
+#[cfg(not(any(unix, windows)))]
+fn set_system_datetime(_date: DateTime<Utc>) -> i32 {
+    unimplemented!("setting date not implemented (unsupported target)");
+}
+
+#[cfg(target_os = "macos")]
+fn set_system_datetime(_date: DateTime<Utc>) -> i32 {
+    eprintln!("date: setting the date is not supported by macOS");
+    return 1;
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+/// System call to set date (unix).
+/// See here for more:
+/// https://doc.rust-lang.org/libc/i686-unknown-linux-gnu/libc/fn.clock_settime.html
+/// https://linux.die.net/man/3/clock_settime
+/// https://www.gnu.org/software/libc/manual/html_node/Time-Types.html
+fn set_system_datetime(date: DateTime<Utc>) -> i32 {
+    let timespec = timespec {
+        tv_sec: date.timestamp() as _,
+        tv_nsec: date.timestamp_subsec_nanos() as _,
+    };
+
+    let result = unsafe { clock_settime(CLOCK_REALTIME, &timespec) };
+
+    if result != 0 {
+        let error = std::io::Error::last_os_error();
+        eprintln!("date: cannot set date: {}", error);
+        error.raw_os_error().unwrap()
+    } else {
+        0
+    }
+}
+
+#[cfg(windows)]
+/// System call to set date (Windows).
+/// See here for more:
+/// https://docs.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-setsystemtime
+/// https://docs.microsoft.com/en-us/windows/win32/api/minwinbase/ns-minwinbase-systemtime
+fn set_system_datetime(date: DateTime<Utc>) -> i32 {
+    let system_time = SYSTEMTIME {
+        wYear: date.year() as WORD,
+        wMonth: date.month() as WORD,
+        // Ignored
+        wDayOfWeek: 0,
+        wDay: date.day() as WORD,
+        wHour: date.hour() as WORD,
+        wMinute: date.minute() as WORD,
+        wSecond: date.second() as WORD,
+        // TODO: be careful of leap seconds - valid range is [0, 999] - how to handle?
+        wMilliseconds: ((date.nanosecond() / 1_000_000) % 1000) as WORD,
+    };
+
+    let result = unsafe { SetSystemTime(&system_time) };
+
+    if result == 0 {
+        let error = std::io::Error::last_os_error();
+        eprintln!("date: cannot set date: {}", error);
+        error.raw_os_error().unwrap()
+    } else {
+        0
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "uu_base64"
-version = "0.0.1"
+version = "0.0.6"
 authors = ["uutils developers"]
 license = "MIT"
 description = "base64 ~ (uutils) decode/encode input (base64-encoding)"
@@ -15,8 +15,8 @@ edition = "2018"
 path = "src/base64.rs"
 
 [dependencies]
-uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary", features = ["encoding"] }
-uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
+uucore = { version=">=0.0.8", package="uucore", path="../../uucore", features = ["encoding"] }
+uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]
 name = "base64"

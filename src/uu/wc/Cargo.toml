@@ -1,6 +1,6 @@
 [package]
 name = "uu_wc"
-version = "0.0.1"
+version = "0.0.6"
 authors = ["uutils developers"]
 license = "MIT"
 description = "wc ~ (uutils) display newline, word, and byte counts for input"
@@ -15,9 +15,14 @@ edition = "2018"
 path = "src/wc.rs"
 
 [dependencies]
-getopts = "0.2.18"
-uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary" }
-uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
+clap = "2.33"
+uucore = { version=">=0.0.8", package="uucore", path="../../uucore" }
+uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
+thiserror = "1.0"
+
+[target.'cfg(unix)'.dependencies]
+nix = "0.20"
+libc = "0.2"
 
 [[bin]]
 name = "wc"

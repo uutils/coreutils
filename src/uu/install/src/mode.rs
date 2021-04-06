@@ -1,5 +1,3 @@
-extern crate libc;
-
 use std::fs;
 use std::path::Path;
 #[cfg(not(windows))]

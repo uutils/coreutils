@@ -1,6 +1,6 @@
 [package]
 name = "uu_stdbuf_libstdbuf"
-version = "0.0.1"
+version = "0.0.6"
 authors = ["uutils developers"]
 license = "MIT"
 description = "stdbuf/libstdbuf ~ (uutils); dynamic library required for stdbuf"
@@ -17,10 +17,10 @@ path = "src/libstdbuf.rs"
 crate-type = ["cdylib", "rlib"] # XXX: note: the rlib is just to prevent Cargo from spitting out a warning
 
 [dependencies]
-cpp = "0.4"
+cpp = "0.5"
 libc = "0.2"
-uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary" }
-uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
+uucore = { version=">=0.0.8", package="uucore", path="../../../../uucore" }
+uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../../../uucore_procs" }
 
 [build-dependencies]
 cpp_build = "0.4"

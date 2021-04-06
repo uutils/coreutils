@@ -1,6 +1,7 @@
 use crate::common::util::*;
 
 static INPUT: &'static str = "sorted.txt";
+static OUTPUT: &'static str = "sorted-output.txt";
 static SKIP_CHARS: &'static str = "skip-chars.txt";
 static SKIP_FIELDS: &'static str = "skip-fields.txt";
 static SORTED_ZERO_TERMINATED: &'static str = "sorted-zero-terminated.txt";
@@ -19,6 +20,15 @@ fn test_single_default() {
         .arg(INPUT)
         .run()
         .stdout_is_fixture("sorted-simple.expected");
+}
+
+#[test]
+fn test_single_default_output() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let expected = at.read("sorted-simple.expected");
+    ucmd.args(&[INPUT, OUTPUT]).run();
+    let found = at.read(OUTPUT);
+    assert_eq!(found, expected);
 }
 
 #[test]
@@ -127,4 +137,58 @@ fn test_stdin_zero_terminated() {
         .pipe_in_fixture(SORTED_ZERO_TERMINATED)
         .run()
         .stdout_is_fixture("sorted-zero-terminated.expected");
+}
+
+#[test]
+fn test_invalid_utf8() {
+    new_ucmd!()
+        .arg("not-utf8-sequence.txt")
+        .run()
+        .failure()
+        .stderr_only("uniq: error: invalid utf-8 sequence of 1 bytes from index 0");
+}
+
+#[test]
+fn test_group() {
+    new_ucmd!()
+        .args(&["--group"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("group.expected");
+}
+
+#[test]
+fn test_group_prepend() {
+    new_ucmd!()
+        .args(&["--group=prepend"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("group-prepend.expected");
+}
+
+#[test]
+fn test_group_append() {
+    new_ucmd!()
+        .args(&["--group=append"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("group-append.expected");
+}
+
+#[test]
+fn test_group_both() {
+    new_ucmd!()
+        .args(&["--group=both"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("group-both.expected");
+}
+
+#[test]
+fn test_group_separate() {
+    new_ucmd!()
+        .args(&["--group=separate"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("group.expected");
 }

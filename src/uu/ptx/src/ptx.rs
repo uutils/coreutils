@@ -7,16 +7,10 @@
 
 // spell-checker:ignore (ToDOs) corasick memchr Roff trunc oset iset
 
-extern crate aho_corasick;
-extern crate getopts;
-extern crate memchr;
-extern crate regex;
-extern crate regex_syntax;
-
 #[macro_use]
 extern crate uucore;
 
-use getopts::{Matches, Options};
+use clap::{App, Arg};
 use regex::Regex;
 use std::cmp;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -26,6 +20,12 @@ use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 
 static NAME: &str = "ptx";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
+static BRIEF: &str = "Usage: ptx [OPTION]... [INPUT]...   (without -G) or: \
+                 ptx -G [OPTION]... [INPUT [OUTPUT]] \n Output a permuted index, \
+                 including context, of the words in the input files. \n\n Mandatory \
+                 arguments to long options are mandatory for short options too.\n
+                 With no FILE, or when FILE is -, read standard input. \
+                Default is '-F /'.";
 
 #[derive(Debug)]
 enum OutFormat {
@@ -67,8 +67,11 @@ impl Default for Config {
     }
 }
 
-fn read_word_filter_file(matches: &Matches, option: &str) -> HashSet<String> {
-    let filename = matches.opt_str(option).expect("parsing options failed!");
+fn read_word_filter_file(matches: &clap::ArgMatches, option: &str) -> HashSet<String> {
+    let filename = matches
+        .value_of(option)
+        .expect("parsing options failed!")
+        .to_string();
     let reader = BufReader::new(crash_if_err!(1, File::open(filename)));
     let mut words: HashSet<String> = HashSet::new();
     for word in reader.lines() {
@@ -87,26 +90,41 @@ struct WordFilter {
 }
 
 impl WordFilter {
-    fn new(matches: &Matches, config: &Config) -> WordFilter {
-        let (o, oset): (bool, HashSet<String>) = if matches.opt_present("o") {
-            (true, read_word_filter_file(matches, "o"))
+    fn new(matches: &clap::ArgMatches, config: &Config) -> WordFilter {
+        let (o, oset): (bool, HashSet<String>) = if matches.is_present(options::ONLY_FILE) {
+            (true, read_word_filter_file(matches, options::ONLY_FILE))
         } else {
             (false, HashSet::new())
         };
-        let (i, iset): (bool, HashSet<String>) = if matches.opt_present("i") {
-            (true, read_word_filter_file(matches, "i"))
+        let (i, iset): (bool, HashSet<String>) = if matches.is_present(options::IGNORE_FILE) {
+            (true, read_word_filter_file(matches, options::IGNORE_FILE))
         } else {
             (false, HashSet::new())
         };
-        if matches.opt_present("b") {
+        if matches.is_present(options::BREAK_FILE) {
             crash!(1, "-b not implemented yet");
         }
-        let reg = if matches.opt_present("W") {
-            matches.opt_str("W").expect("parsing options failed!")
-        } else if config.gnu_ext {
-            "\\w+".to_owned()
+        // Ignore empty string regex from cmd-line-args
+        let arg_reg: Option<String> = if matches.is_present(options::WORD_REGEXP) {
+            match matches.value_of(options::WORD_REGEXP) {
+                Some(v) => match v.is_empty() {
+                    true => None,
+                    false => Some(v.to_string()),
+                },
+                None => None,
+            }
         } else {
-            "[^ \t\n]+".to_owned()
+            None
+        };
+        let reg = match arg_reg {
+            Some(arg_reg) => arg_reg,
+            None => {
+                if config.gnu_ext {
+                    "\\w+".to_owned()
+                } else {
+                    "[^ \t\n]+".to_owned()
+                }
+            }
         };
         WordFilter {
             only_specified: o,
@@ -128,55 +146,50 @@ struct WordRef {
     filename: String,
 }
 
-fn print_version() {
-    println!("{} {}", NAME, VERSION);
-}
-
-fn print_usage(opts: &Options) {
-    let brief = "Usage: ptx [OPTION]... [INPUT]...   (without -G) or: \
-                 ptx -G [OPTION]... [INPUT [OUTPUT]] \n Output a permuted index, \
-                 including context, of the words in the input files. \n\n Mandatory \
-                 arguments to long options are mandatory for short options too.";
-    let explanation = "With no FILE, or when FILE is -, read standard input. \
-                        Default is '-F /'.";
-    println!("{}\n{}", opts.usage(&brief), explanation);
-}
-
-fn get_config(matches: &Matches) -> Config {
+fn get_config(matches: &clap::ArgMatches) -> Config {
     let mut config: Config = Default::default();
     let err_msg = "parsing options failed";
-    if matches.opt_present("G") {
+    if matches.is_present(options::TRADITIONAL) {
         config.gnu_ext = false;
         config.format = OutFormat::Roff;
         config.context_regex = "[^ \t\n]+".to_owned();
     } else {
         crash!(1, "GNU extensions not implemented yet");
     }
-    if matches.opt_present("S") {
+    if matches.is_present(options::SENTENCE_REGEXP) {
         crash!(1, "-S not implemented yet");
     }
-    config.auto_ref = matches.opt_present("A");
-    config.input_ref = matches.opt_present("r");
-    config.right_ref &= matches.opt_present("R");
-    config.ignore_case = matches.opt_present("f");
-    if matches.opt_present("M") {
-        config.macro_name = matches.opt_str("M").expect(err_msg);
+    config.auto_ref = matches.is_present(options::AUTO_REFERENCE);
+    config.input_ref = matches.is_present(options::REFERENCES);
+    config.right_ref &= matches.is_present(options::RIGHT_SIDE_REFS);
+    config.ignore_case = matches.is_present(options::IGNORE_CASE);
+    if matches.is_present(options::MACRO_NAME) {
+        config.macro_name = matches
+            .value_of(options::MACRO_NAME)
+            .expect(err_msg)
+            .to_string();
     }
-    if matches.opt_present("F") {
-        config.trunc_str = matches.opt_str("F").expect(err_msg);
+    if matches.is_present(options::IGNORE_CASE) {
+        config.trunc_str = matches
+            .value_of(options::IGNORE_CASE)
+            .expect(err_msg)
+            .to_string();
     }
-    if matches.opt_present("w") {
-        let width_str = matches.opt_str("w").expect(err_msg);
+    if matches.is_present(options::WIDTH) {
+        let width_str = matches.value_of(options::WIDTH).expect(err_msg).to_string();
         config.line_width = crash_if_err!(1, usize::from_str_radix(&width_str, 10));
     }
-    if matches.opt_present("g") {
-        let gap_str = matches.opt_str("g").expect(err_msg);
+    if matches.is_present(options::GAP_SIZE) {
+        let gap_str = matches
+            .value_of(options::GAP_SIZE)
+            .expect(err_msg)
+            .to_string();
         config.gap_size = crash_if_err!(1, usize::from_str_radix(&gap_str, 10));
     }
-    if matches.opt_present("O") {
+    if matches.is_present(options::FORMAT_ROFF) {
         config.format = OutFormat::Roff;
     }
-    if matches.opt_present("T") {
+    if matches.is_present(options::FORMAT_TEX) {
         config.format = OutFormat::Tex;
     }
     config
@@ -557,102 +570,167 @@ fn write_traditional_output(
     }
 }
 
+mod options {
+    pub static FILE: &str = "file";
+    pub static AUTO_REFERENCE: &str = "auto-reference";
+    pub static TRADITIONAL: &str = "traditional";
+    pub static FLAG_TRUNCATION: &str = "flag-truncation";
+    pub static MACRO_NAME: &str = "macro-name";
+    pub static FORMAT_ROFF: &str = "format=roff";
+    pub static RIGHT_SIDE_REFS: &str = "right-side-refs";
+    pub static SENTENCE_REGEXP: &str = "sentence-regexp";
+    pub static FORMAT_TEX: &str = "format=tex";
+    pub static WORD_REGEXP: &str = "word-regexp";
+    pub static BREAK_FILE: &str = "break-file";
+    pub static IGNORE_CASE: &str = "ignore-case";
+    pub static GAP_SIZE: &str = "gap-size";
+    pub static IGNORE_FILE: &str = "ignore-file";
+    pub static ONLY_FILE: &str = "only-file";
+    pub static REFERENCES: &str = "references";
+    pub static WIDTH: &str = "width";
+}
+
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args.collect_str();
 
-    let mut opts = Options::new();
-    opts.optflag(
-        "A",
-        "auto-reference",
-        "output automatically generated references",
-    );
-    opts.optflag("G", "traditional", "behave more like System V 'ptx'");
-    opts.optopt(
-        "F",
-        "flag-truncation",
-        "use STRING for flagging line truncations",
-        "STRING",
-    );
-    opts.optopt(
-        "M",
-        "macro-name",
-        "macro name to use instead of 'xx'",
-        "STRING",
-    );
-    opts.optflag("O", "format=roff", "generate output as roff directives");
-    opts.optflag(
-        "R",
-        "right-side-refs",
-        "put references at right, not counted in -w",
-    );
-    opts.optopt(
-        "S",
-        "sentence-regexp",
-        "for end of lines or end of sentences",
-        "REGEXP",
-    );
-    opts.optflag("T", "format=tex", "generate output as TeX directives");
-    opts.optopt(
-        "W",
-        "word-regexp",
-        "use REGEXP to match each keyword",
-        "REGEXP",
-    );
-    opts.optopt(
-        "b",
-        "break-file",
-        "word break characters in this FILE",
-        "FILE",
-    );
-    opts.optflag(
-        "f",
-        "ignore-case",
-        "fold lower case to upper case for sorting",
-    );
-    opts.optopt(
-        "g",
-        "gap-size",
-        "gap size in columns between output fields",
-        "NUMBER",
-    );
-    opts.optopt(
-        "i",
-        "ignore-file",
-        "read ignore word list from FILE",
-        "FILE",
-    );
-    opts.optopt(
-        "o",
-        "only-file",
-        "read only word list from this FILE",
-        "FILE",
-    );
-    opts.optflag("r", "references", "first field of each line is a reference");
-    opts.optopt(
-        "w",
-        "width",
-        "output width in columns, reference excluded",
-        "NUMBER",
-    );
-    opts.optflag("", "help", "display this help and exit");
-    opts.optflag("", "version", "output version information and exit");
+    // let mut opts = Options::new();
+    let matches = App::new(executable!())
+        .name(NAME)
+        .version(VERSION)
+        .usage(BRIEF)
+        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
+        .arg(
+            Arg::with_name(options::AUTO_REFERENCE)
+                .short("A")
+                .long(options::AUTO_REFERENCE)
+                .help("output automatically generated references")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name(options::TRADITIONAL)
+                .short("G")
+                .long(options::TRADITIONAL)
+                .help("behave more like System V 'ptx'"),
+        )
+        .arg(
+            Arg::with_name(options::FLAG_TRUNCATION)
+                .short("F")
+                .long(options::FLAG_TRUNCATION)
+                .help("use STRING for flagging line truncations")
+                .value_name("STRING")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name(options::MACRO_NAME)
+                .short("M")
+                .long(options::MACRO_NAME)
+                .help("macro name to use instead of 'xx'")
+                .value_name("STRING")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name(options::FORMAT_ROFF)
+                .short("O")
+                .long(options::FORMAT_ROFF)
+                .help("generate output as roff directives"),
+        )
+        .arg(
+            Arg::with_name(options::RIGHT_SIDE_REFS)
+                .short("R")
+                .long(options::RIGHT_SIDE_REFS)
+                .help("put references at right, not counted in -w")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name(options::SENTENCE_REGEXP)
+                .short("S")
+                .long(options::SENTENCE_REGEXP)
+                .help("for end of lines or end of sentences")
+                .value_name("REGEXP")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name(options::FORMAT_TEX)
+                .short("T")
+                .long(options::FORMAT_TEX)
+                .help("generate output as TeX directives"),
+        )
+        .arg(
+            Arg::with_name(options::WORD_REGEXP)
+                .short("W")
+                .long(options::WORD_REGEXP)
+                .help("use REGEXP to match each keyword")
+                .value_name("REGEXP")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name(options::BREAK_FILE)
+                .short("b")
+                .long(options::BREAK_FILE)
+                .help("word break characters in this FILE")
+                .value_name("FILE")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name(options::IGNORE_CASE)
+                .short("f")
+                .long(options::IGNORE_CASE)
+                .help("fold lower case to upper case for sorting")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name(options::GAP_SIZE)
+                .short("g")
+                .long(options::GAP_SIZE)
+                .help("gap size in columns between output fields")
+                .value_name("NUMBER")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name(options::IGNORE_FILE)
+                .short("i")
+                .long(options::IGNORE_FILE)
+                .help("read ignore word list from FILE")
+                .value_name("FILE")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name(options::ONLY_FILE)
+                .short("o")
+                .long(options::ONLY_FILE)
+                .help("read only word list from this FILE")
+                .value_name("FILE")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name(options::REFERENCES)
+                .short("r")
+                .long(options::REFERENCES)
+                .help("first field of each line is a reference")
+                .value_name("FILE")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name(options::WIDTH)
+                .short("w")
+                .long(options::WIDTH)
+                .help("output width in columns, reference excluded")
+                .value_name("NUMBER")
+                .takes_value(true),
+        )
+        .get_matches_from(args);
 
-    let matches = return_if_err!(1, opts.parse(&args[1..]));
+    let input_files: Vec<String> = match &matches.values_of(options::FILE) {
+        Some(v) => v.clone().map(|v| v.to_owned()).collect(),
+        None => vec!["-".to_string()],
+    };
 
-    if matches.opt_present("help") {
-        print_usage(&opts);
-        return 0;
-    }
-    if matches.opt_present("version") {
-        print_version();
-        return 0;
-    }
     let config = get_config(&matches);
     let word_filter = WordFilter::new(&matches, &config);
-    let file_map = read_input(&matches.free, &config);
+    let file_map = read_input(&input_files, &config);
     let word_set = create_word_set(&config, &word_filter, &file_map);
-    let output_file = if !config.gnu_ext && matches.free.len() == 2 {
-        matches.free[1].clone()
+    let output_file = if !config.gnu_ext && matches.args.len() == 2 {
+        matches.value_of(options::FILE).unwrap_or("-").to_string()
     } else {
         "-".to_owned()
     };

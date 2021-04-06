@@ -1,6 +1,6 @@
 [package]
 name = "uu_id"
-version = "0.0.1"
+version = "0.0.6"
 authors = ["uutils developers"]
 license = "MIT"
 description = "id ~ (uutils) display user and group information for USER"
@@ -15,8 +15,9 @@ edition = "2018"
 path = "src/id.rs"
 
 [dependencies]
-uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary", features=["entries", "process"] }
-uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
+clap = "2.33"
+uucore = { version=">=0.0.8", package="uucore", path="../../uucore", features=["entries", "process"] }
+uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]
 name = "id"

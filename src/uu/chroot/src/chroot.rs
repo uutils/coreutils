@@ -8,65 +8,83 @@
 
 // spell-checker:ignore (ToDO) NEWROOT Userspec pstatus
 
-extern crate getopts;
-
 #[macro_use]
 extern crate uucore;
+use clap::{App, Arg};
+use std::ffi::CString;
+use std::io::Error;
+use std::path::Path;
+use std::process::Command;
 use uucore::entries;
 use uucore::libc::{self, chroot, setgid, setgroups, setuid};
 
-use std::ffi::CString;
-use std::io::Error;
-use std::iter::FromIterator;
-use std::path::Path;
-use std::process::Command;
-
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 static NAME: &str = "chroot";
+static ABOUT: &str = "Run COMMAND with root directory set to NEWROOT.";
 static SYNTAX: &str = "[OPTION]... NEWROOT [COMMAND [ARG]...]";
-static SUMMARY: &str = "Run COMMAND with root directory set to NEWROOT.";
-static LONG_HELP: &str = "
- If COMMAND is not specified, it defaults to '$(SHELL) -i'.
- If $(SHELL) is not set, /bin/sh is used.
-";
+
+mod options {
+    pub const NEWROOT: &str = "newroot";
+    pub const USER: &str = "user";
+    pub const GROUP: &str = "group";
+    pub const GROUPS: &str = "groups";
+    pub const USERSPEC: &str = "userspec";
+}
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args.collect_str();
 
-    let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
-        .optopt(
-            "u",
-            "user",
-            "User (ID or name) to switch before running the program",
-            "USER",
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(SYNTAX)
+        .arg(Arg::with_name(options::NEWROOT).hidden(true).required(true))
+        .arg(
+            Arg::with_name(options::USER)
+                .short("u")
+                .long(options::USER)
+                .help("User (ID or name) to switch before running the program")
+                .value_name("USER"),
         )
-        .optopt("g", "group", "Group (ID or name) to switch to", "GROUP")
-        .optopt(
-            "G",
-            "groups",
-            "Comma-separated list of groups to switch to",
-            "GROUP1,GROUP2...",
+        .arg(
+            Arg::with_name(options::GROUP)
+                .short("g")
+                .long(options::GROUP)
+                .help("Group (ID or name) to switch to")
+                .value_name("GROUP"),
         )
-        .optopt(
-            "",
-            "userspec",
-            "Colon-separated user and group to switch to. \
-             Same as -u USER -g GROUP. \
-             Userspec has higher preference than -u and/or -g",
-            "USER:GROUP",
+        .arg(
+            Arg::with_name(options::GROUPS)
+                .short("G")
+                .long(options::GROUPS)
+                .help("Comma-separated list of groups to switch to")
+                .value_name("GROUP1,GROUP2..."),
         )
-        .parse(args);
-
-    if matches.free.is_empty() {
-        println!("Missing operand: NEWROOT");
-        println!("Try `{} --help` for more information.", NAME);
-        return 1;
-    }
+        .arg(
+            Arg::with_name(options::USERSPEC)
+                .long(options::USERSPEC)
+                .help(
+                    "Colon-separated user and group to switch to. \
+                     Same as -u USER -g GROUP. \
+                     Userspec has higher preference than -u and/or -g",
+                )
+                .value_name("USER:GROUP"),
+        )
+        .get_matches_from(args);
 
     let default_shell: &'static str = "/bin/sh";
     let default_option: &'static str = "-i";
     let user_shell = std::env::var("SHELL");
 
-    let newroot = Path::new(&matches.free[0][..]);
+    let newroot: &Path = match matches.value_of(options::NEWROOT) {
+        Some(v) => Path::new(v),
+        None => crash!(
+            1,
+            "Missing operand: NEWROOT\nTry '{} --help' for more information.",
+            NAME
+        ),
+    };
+
     if !newroot.is_dir() {
         crash!(
             1,
@@ -75,7 +93,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         );
     }
 
-    let command: Vec<&str> = match matches.free.len() {
+    let command: Vec<&str> = match matches.args.len() {
         1 => {
             let shell: &str = match user_shell {
                 Err(_) => default_shell,
@@ -83,7 +101,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             };
             vec![shell, default_option]
         }
-        _ => matches.free[1..].iter().map(|x| &x[..]).collect(),
+        _ => {
+            let mut vector: Vec<&str> = Vec::new();
+            for (&k, v) in matches.args.iter() {
+                vector.push(k.clone());
+                vector.push(&v.vals[0].to_str().unwrap());
+            }
+            vector
+        }
     };
 
     set_context(&newroot, &matches);
@@ -96,37 +121,30 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if pstatus.success() {
         0
     } else {
-        match pstatus.code() {
-            Some(i) => i,
-            None => -1,
-        }
+        pstatus.code().unwrap_or(-1)
     }
 }
 
-fn set_context(root: &Path, options: &getopts::Matches) {
-    let userspec_str = options.opt_str("userspec");
-    let user_str = options.opt_str("user").unwrap_or_default();
-    let group_str = options.opt_str("group").unwrap_or_default();
-    let groups_str = options.opt_str("groups").unwrap_or_default();
+fn set_context(root: &Path, options: &clap::ArgMatches) {
+    let userspec_str = options.value_of(options::USERSPEC);
+    let user_str = options.value_of(options::USER).unwrap_or_default();
+    let group_str = options.value_of(options::GROUP).unwrap_or_default();
+    let groups_str = options.value_of(options::GROUPS).unwrap_or_default();
     let userspec = match userspec_str {
         Some(ref u) => {
             let s: Vec<&str> = u.split(':').collect();
-            if s.len() != 2 {
+            if s.len() != 2 || s.iter().any(|&spec| spec == "") {
                 crash!(1, "invalid userspec: `{}`", u)
             };
             s
         }
         None => Vec::new(),
     };
-    let user = if userspec.is_empty() {
-        &user_str[..]
+
+    let (user, group) = if userspec.is_empty() {
+        (&user_str[..], &group_str[..])
     } else {
-        &userspec[0][..]
-    };
-    let group = if userspec.is_empty() {
-        &group_str[..]
-    } else {
-        &userspec[1][..]
+        (&userspec[0][..], &userspec[1][..])
     };
 
     enter_chroot(root);
@@ -170,7 +188,7 @@ fn set_main_group(group: &str) {
     }
 }
 
-#[cfg(any(target_os = "macos", target_os = "freebsd"))]
+#[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
 fn set_groups(groups: Vec<libc::gid_t>) -> libc::c_int {
     unsafe { setgroups(groups.len() as libc::c_int, groups.as_ptr()) }
 }
@@ -182,11 +200,13 @@ fn set_groups(groups: Vec<libc::gid_t>) -> libc::c_int {
 
 fn set_groups_from_str(groups: &str) {
     if !groups.is_empty() {
-        let groups_vec: Vec<libc::gid_t> =
-            FromIterator::from_iter(groups.split(',').map(|x| match entries::grp2gid(x) {
+        let groups_vec: Vec<libc::gid_t> = groups
+            .split(',')
+            .map(|x| match entries::grp2gid(x) {
                 Ok(g) => g,
                 _ => crash!(1, "no such group: {}", x),
-            }));
+            })
+            .collect();
         let err = set_groups(groups_vec);
         if err != 0 {
             crash!(1, "cannot set groups: {}", Error::last_os_error())

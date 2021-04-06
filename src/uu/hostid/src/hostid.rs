@@ -7,8 +7,6 @@
 
 // spell-checker:ignore (ToDO) gethostid
 
-extern crate libc;
-
 #[macro_use]
 extern crate uucore;
 

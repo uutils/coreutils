@@ -107,7 +107,7 @@ impl<R: Read> self::Bytes::Select for ByteReader<R> {
             Comp,
             Part,
             Newl,
-        };
+        }
 
         use self::Bytes::Selected::*;
 

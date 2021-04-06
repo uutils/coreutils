@@ -7,7 +7,8 @@
 // * that was distributed with this source code.
 
 use super::*;
-use num_traits::identities::{One, Zero};
+
+use traits::{DoubleInt, Int, One, OverflowingAdd, Zero};
 
 pub(crate) trait Arithmetic: Copy + Sized {
     // The type of integers mod m, in some opaque representation
@@ -72,7 +73,7 @@ impl<T: DoubleInt> Montgomery<T> {
         let Montgomery { a, n } = self;
         let m = T::from_double_width(x).wrapping_mul(a);
         let nm = (n.as_double_width()) * (m.as_double_width());
-        let (xnm, overflow) = x.overflowing_add_(nm); // x + n*m
+        let (xnm, overflow) = x.overflowing_add(&nm); // x + n*m
         debug_assert_eq!(
             xnm % (T::DoubleWidth::one() << T::zero().count_zeros() as usize),
             T::DoubleWidth::zero()
@@ -128,7 +129,7 @@ impl<T: DoubleInt> Arithmetic for Montgomery<T> {
     }
 
     fn add(&self, a: Self::ModInt, b: Self::ModInt) -> Self::ModInt {
-        let (r, overflow) = a.overflowing_add_(b);
+        let (r, overflow) = a.overflowing_add(&b);
 
         // In case of overflow, a+b = 2⁶⁴ + r = (2⁶⁴ - n) + r (working mod n)
         let r = if !overflow {

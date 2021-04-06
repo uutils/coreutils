@@ -85,10 +85,7 @@ impl UnescapedText {
     // to the passed byte_vec
     // in subs_mode change octal behavior
     fn handle_escaped(byte_vec: &mut Vec<u8>, it: &mut PutBackN<Chars>, subs_mode: bool) {
-        let ch = match it.next() {
-            Some(x) => x,
-            None => '\\',
-        };
+        let ch = it.next().unwrap_or('\\');
         match ch {
             '0'..='9' | 'x' => {
                 let min_len = 1;

@@ -163,8 +163,8 @@ impl SubParser {
             'b', 'c', 'd', 'e', 'E', 'f', 'F', 'g', 'G', 'i', 'o', 's', 'u', 'x', 'X',
         ];
         let mut specifiers = vec!['h', 'j', 'l', 'L', 't', 'z'];
-        legal_fields.sort();
-        specifiers.sort();
+        legal_fields.sort_unstable();
+        specifiers.sort_unstable();
 
         // divide substitution from %([0-9]+)?(.[0-9+])?([a-zA-Z])
         // into min_width, second_field, field_char

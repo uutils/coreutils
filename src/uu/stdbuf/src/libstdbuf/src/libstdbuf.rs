@@ -2,7 +2,6 @@
 
 #[macro_use]
 extern crate cpp;
-extern crate libc;
 
 #[macro_use]
 extern crate uucore;

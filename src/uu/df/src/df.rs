@@ -9,17 +9,11 @@
 // spell-checker:ignore (ToDO) mountinfo mtab BLOCKSIZE getmntinfo fobj mptr noatime Iused overmounted
 // spell-checker:ignore (libc/fs) asyncreads asyncwrites autofs bavail bfree bsize charspare cifs debugfs devfs devpts ffree frsize fsid fstypename fusectl inode inodes iosize kernfs mntbufp mntfromname mntonname mqueue namemax pipefs smbfs statfs statvfs subfs syncreads syncwrites sysfs wcslen
 
-extern crate clap;
-extern crate libc;
-extern crate number_prefix;
-
 #[macro_use]
 extern crate uucore;
 
 use clap::{App, Arg};
 
-#[cfg(windows)]
-extern crate winapi;
 #[cfg(windows)]
 use winapi::um::errhandlingapi::GetLastError;
 #[cfg(windows)]
@@ -28,7 +22,7 @@ use winapi::um::fileapi::{
     GetVolumePathNamesForVolumeNameW, QueryDosDeviceW,
 };
 
-use number_prefix::{binary_prefix, decimal_prefix, PrefixNames, Prefixed, Standalone};
+use number_prefix::NumberPrefix;
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -38,15 +32,15 @@ use std::ffi::CString;
 #[cfg(unix)]
 use std::mem;
 
-#[cfg(any(target_os = "macos", target_os = "freebsd"))]
+#[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
 use libc::c_int;
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 use libc::statfs;
-#[cfg(any(target_os = "macos", target_os = "freebsd"))]
+#[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
 use std::ffi::CStr;
-#[cfg(any(target_os = "macos", target_os = "freebsd", target_os = "windows"))]
+#[cfg(any(target_vendor = "apple", target_os = "freebsd", target_os = "windows"))]
 use std::ptr;
-#[cfg(any(target_os = "macos", target_os = "freebsd"))]
+#[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
 use std::slice;
 
 #[cfg(target_os = "freebsd")]
@@ -106,7 +100,6 @@ static OPT_SYNC: &str = "sync";
 static OPT_TYPE: &str = "type";
 static OPT_PRINT_TYPE: &str = "print-type";
 static OPT_EXCLUDE_TYPE: &str = "exclude-type";
-static OPT_VERSION: &str = "version";
 
 static MOUNT_OPT_BIND: &str = "bind";
 
@@ -144,7 +137,7 @@ struct MountInfo {
 
 #[cfg(all(
     target_os = "freebsd",
-    not(all(target_os = "macos", target_arch = "x86_64"))
+    not(all(target_vendor = "apple", target_arch = "x86_64"))
 ))]
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -216,20 +209,20 @@ fn get_usage() -> String {
     format!("{0} [OPTION]... [FILE]...", executable!())
 }
 
-#[cfg(any(target_os = "freebsd", target_os = "macos"))]
+#[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
 extern "C" {
-    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+    #[cfg(all(target_vendor = "apple", target_arch = "x86_64"))]
     #[link_name = "getmntinfo$INODE64"]
     fn getmntinfo(mntbufp: *mut *mut statfs, flags: c_int) -> c_int;
 
-    #[cfg(all(
-        target_os = "freebsd",
-        not(all(target_os = "macos", target_arch = "x86_64"))
+    #[cfg(any(
+        all(target_os = "freebsd"),
+        all(target_vendor = "apple", target_arch = "aarch64")
     ))]
     fn getmntinfo(mntbufp: *mut *mut statfs, flags: c_int) -> c_int;
 }
 
-#[cfg(any(target_os = "freebsd", target_os = "macos"))]
+#[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
 impl From<statfs> for MountInfo {
     fn from(statfs: statfs) -> Self {
         let mut info = MountInfo {
@@ -592,7 +585,7 @@ fn read_fs_list() -> Vec<MountInfo> {
             })
             .collect::<Vec<_>>()
     }
-    #[cfg(any(target_os = "freebsd", target_os = "macos"))]
+    #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
     {
         let mut mptr: *mut statfs = ptr::null_mut();
         let len = unsafe { getmntinfo(&mut mptr, 1 as c_int) };
@@ -676,7 +669,7 @@ fn filter_mount_list(vmi: Vec<MountInfo>, paths: &[String], opt: &Options) -> Ve
                 #[allow(clippy::map_entry)]
                 {
                     if acc.contains_key(&id) {
-                        let seen = acc.get(&id).unwrap().replace(mi.clone());
+                        let seen = acc[&id].replace(mi.clone());
                         let target_nearer_root = seen.mount_dir.len() > mi.mount_dir.len();
                         // With bind mounts, prefer items nearer the root of the source
                         let source_below_root = !seen.mount_root.is_empty()
@@ -694,7 +687,7 @@ fn filter_mount_list(vmi: Vec<MountInfo>, paths: &[String], opt: &Options) -> Ve
                             environments for example.  */
                             || seen.mount_dir != mi.mount_dir)
                         {
-                            acc.get(&id).unwrap().replace(seen);
+                            acc[&id].replace(seen);
                         }
                     } else {
                         acc.insert(id, Cell::new(mi));
@@ -717,14 +710,14 @@ fn human_readable(value: u64, base: i64) -> String {
 
         // ref: [Binary prefix](https://en.wikipedia.org/wiki/Binary_prefix) @@ <https://archive.is/cnwmF>
         // ref: [SI/metric prefix](https://en.wikipedia.org/wiki/Metric_prefix) @@ <https://archive.is/QIuLj>
-        1000 => match decimal_prefix(value as f64) {
-            Standalone(bytes) => bytes.to_string(),
-            Prefixed(prefix, bytes) => format!("{:.1}{}", bytes, prefix.symbol()),
+        1000 => match NumberPrefix::decimal(value as f64) {
+            NumberPrefix::Standalone(bytes) => bytes.to_string(),
+            NumberPrefix::Prefixed(prefix, bytes) => format!("{:.1}{}", bytes, prefix.symbol()),
         },
 
-        1024 => match binary_prefix(value as f64) {
-            Standalone(bytes) => bytes.to_string(),
-            Prefixed(prefix, bytes) => format!("{:.1}{}", bytes, prefix.symbol()),
+        1024 => match NumberPrefix::binary(value as f64) {
+            NumberPrefix::Standalone(bytes) => bytes.to_string(),
+            NumberPrefix::Prefixed(prefix, bytes) => format!("{:.1}{}", bytes, prefix.symbol()),
         },
 
         _ => crash!(EXIT_ERR, "Internal error: Unknown base value {}", base),
@@ -760,7 +753,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .takes_value(true)
                 .help(
                     "scale sizes by SIZE before printing them; e.g.\
-                      '-BM' prints sizes in units of 1,048,576 bytes",
+                     '-BM' prints sizes in units of 1,048,576 bytes",
                 ),
         )
         .arg(
@@ -817,7 +810,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .use_delimiter(true)
                 .help(
                     "use the output format defined by FIELD_LIST,\
-                    or print all fields if FIELD_LIST is omitted.",
+                     or print all fields if FIELD_LIST is omitted.",
                 ),
         )
         .arg(
@@ -854,20 +847,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .use_delimiter(true)
                 .help("limit listing to file systems not of type TYPE"),
         )
-        .arg(
-            Arg::with_name(OPT_VERSION)
-                .short("v")
-                .long("version")
-                .help("output version information and exit"),
-        )
         .arg(Arg::with_name(OPT_PATHS).multiple(true))
         .help("Filesystem(s) to list")
         .get_matches_from(args);
-
-    if matches.is_present(OPT_VERSION) {
-        println!("{} {}", executable!(), VERSION);
-        return EXIT_OK;
-    }
 
     let paths: Vec<String> = matches
         .values_of(OPT_PATHS)

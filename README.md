@@ -1,14 +1,13 @@
 uutils coreutils
 ================
 
+[![Crates.io](https://img.shields.io/crates/v/coreutils.svg)](https://crates.io/crates/coreutils)
 [![Discord](https://img.shields.io/badge/discord-join-7289DA.svg?logo=discord&longCache=true&style=flat)](https://discord.gg/wQVJbvJ)
 [![License](http://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/uutils/coreutils/blob/master/LICENSE)
-[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fuutils%2Fcoreutils.svg?type=shield)](https://app.fossa.io/projects/git%2Bgithub.com%2Fuutils%2Fcoreutils?ref=badge_shield)
 [![LOC](https://tokei.rs/b1/github/uutils/coreutils?category=code)](https://github.com/Aaronepower/tokei)
 [![dependency status](https://deps.rs/repo/github/uutils/coreutils/status.svg)](https://deps.rs/repo/github/uutils/coreutils)
 
 [![Build Status](https://api.travis-ci.org/uutils/coreutils.svg?branch=master)](https://travis-ci.org/uutils/coreutils)
-[![Build Status (Windows)](https://ci.appveyor.com/api/projects/status/787ltcxgy86r20le?svg=true)](https://ci.appveyor.com/project/Arcterus/coreutils)
 [![Build Status (FreeBSD)](https://api.cirrus-ci.com/github/uutils/coreutils.svg)](https://cirrus-ci.com/github/uutils/coreutils/master)
 [![codecov](https://codecov.io/gh/uutils/coreutils/branch/master/graph/badge.svg)](https://codecov.io/gh/uutils/coreutils)
 
@@ -24,9 +23,8 @@ Why?
 Many GNU, Linux and other utilities are useful, and obviously
 [some](http://gnuwin32.sourceforge.net) [effort](http://unxutils.sourceforge.net)
 has been spent in the past to port them to Windows. However, those projects
-are either old and abandoned, are hosted on CVS (which makes it more difficult
-for new contributors to contribute to them), are written in platform-specific C, or
-suffer from other issues.
+are written in platform-specific C, a language considered unsafe compared to Rust, and 
+have other issues.
 
 Rust provides a good, platform-agnostic way of writing systems utilities that are easy
 to compile anywhere, and this is as good a way as any to try and learn it.
@@ -42,7 +40,7 @@ Requirements
 ### Rust Version ###
 
 uutils follows Rust's release channels and is tested against stable, beta and nightly.
-The current oldest supported version of the Rust compiler is `1.32.0`.
+The current oldest supported version of the Rust compiler is `1.40.0`.
 
 On both Windows and Redox, only the nightly version is tested currently.
 
@@ -115,7 +113,7 @@ Installation Instructions
 
 Likewise, installing can simply be done using:
 ```bash
-$ cargo install
+$ cargo install --path .
 ```
 
 This command will install uutils into Cargo's *bin* folder (*e.g.* `$HOME/.cargo/bin`).
@@ -228,6 +226,11 @@ If you would prefer to test a select few utilities:
 $ cargo test --features "chmod mv tail" --no-default-features
 ```
 
+If you also want to test the core utilities:
+```bash
+$ cargo test  -p uucore -p coreutils
+```
+
 To debug:
 ```bash
 $ gdb --args target/debug/coreutils ls
@@ -289,19 +292,20 @@ Utilities
 | Done      | Semi-Done | To Do  |
 |-----------|-----------|--------|
 | arch      | cp        | chcon  |
-| base32    | expr      | csplit |
-| base64    | install   | dd     |
-| basename  | ls        | numfmt |
-| cat       | more      | pr     |
-| chgrp     | od (`--strings` and 128-bit data types missing) | runcon |
-| chmod     | printf    | stty   |
+| base32    | expr      | dd     |
+| base64    | install   | numfmt |
+| basename  | ls        | pr     |
+| cat       | more      | runcon |
+| chgrp     | od (`--strings` and 128-bit data types missing) | stty |
+| chmod     | printf    |        |
 | chown     | sort      |        |
 | chroot    | split     |        |
 | cksum     | tail      |        |
 | comm      | test      |        |
-| cut       | date      |        |
-| dircolors | join      |        |
-| dirname   | df        |        |
+| csplit    | date      |        |
+| cut       | join      |        |
+| dircolors | df        |        |
+| dirname   | tac       |        |
 | du        |           |        |
 | echo      |           |        |
 | env       |           |        |
@@ -354,7 +358,6 @@ Utilities
 | stdbuf    |           |        |
 | sum       |           |        |
 | sync      |           |        |
-| tac       |           |        |
 | tee       |           |        |
 | timeout   |           |        |
 | touch     |           |        |
@@ -374,9 +377,37 @@ Utilities
 | whoami    |           |        |
 | yes       |           |        |
 
+Targets that compile
+-------
+
+This is an auto-generated table showing which binaries compile for each target-triple. Note that this **does not** indicate that they are fully implemented, or that the tests pass.
+
+|######OS######|###ARCH####|arch|base32|base64|basename|cat|chgrp|chmod|chown|chroot|cksum|comm|cp|csplit|cut|date|df|dircolors|dirname|du|echo|env|expand|expr|factor|false|fmt|fold|groups|hashsum|head|hostid|hostname|id|install|join|kill|link|ln|logname|ls|mkdir|mkfifo|mknod|mktemp|more|mv|nice|nl|nohup|nproc|numfmt|od|paste|pathchk|pinky|printenv|printf|ptx|pwd|readlink|realpath|relpath|rm|rmdir|seq|shred|shuf|sleep|sort|split|stat|stdbuf|sum|sync|tac|tail|tee|test|timeout|touch|tr|true|truncate|tsort|tty|uname|unexpand|uniq|unlink|uptime|users|wc|who|whoami|yes|
+|--------------|-----------|----|------|------|--------|---|-----|-----|-----|------|-----|----|--|------|---|----|--|---------|-------|--|----|---|------|----|------|-----|---|----|------|-------|----|------|--------|--|-------|----|----|----|--|-------|--|-----|------|-----|------|----|--|----|--|-----|-----|------|--|-----|-------|-----|--------|------|---|---|--------|--------|-------|--|-----|---|-----|----|-----|----|-----|----|------|---|----|---|----|---|----|-------|-----|--|----|--------|-----|---|-----|--------|----|------|------|-----|--|---|------|---|
+|linux-gnu|aarch64|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y| |y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|
+|linux-gnu|i686|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|
+|linux-gnu|powerpc64|y|y|y|y|y|y|y|y|y|y|y| |y|y|y|y|y|y|y|y|y|y| |y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|
+|linux-gnu|riscv64gc| | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | |
+|linux-gnu|x86_64|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|
+|windows-msvc|aarch64|y|y|y|y|y| | | | |y|y|y|y|y|y|y|y|y| |y|y|y| |y|y|y|y| |y|y|y|y| | |y| |y|y|y| |y| | |y|y|y| |y| |y|y|y|y| | |y|y|y|y|y|y|y|y|y|y|y|y|y|y|y| | |y|y|y|y|y|y| |y|y|y|y|y| |y|y|y| |y| |y| | |y|
+|windows-gnu|i686|y|y|y|y|y| | | | |y|y|y|y|y|y|y|y|y| |y|y|y| |y|y|y|y| |y|y|y|y| | |y| |y|y|y|y|y| | |y|y|y| |y| |y|y|y|y| | |y|y|y|y|y|y|y|y|y|y|y|y|y|y|y| | |y|y|y|y|y|y| |y|y|y|y|y|y|y|y|y| |y| |y| |y|y|
+|windows-msvc|i686|y|y|y|y|y| | | | |y|y|y|y|y|y|y|y|y| |y|y|y| |y|y|y|y| |y|y|y|y| | |y| |y|y|y|y|y| | |y|y|y| |y| |y|y|y|y| | |y|y|y|y|y|y|y|y|y|y|y|y|y|y|y| | |y|y|y|y|y|y| |y|y|y|y|y| |y|y|y| |y| |y| |y|y|
+|windows-gnu|x86_64|y|y|y|y|y| | | | |y|y|y|y|y|y|y|y|y| |y|y|y| |y|y|y|y| |y|y|y|y| | |y| |y|y|y|y|y| | |y|y|y| |y| |y|y|y|y| | |y|y|y|y|y|y|y|y|y|y|y|y|y|y|y| | |y|y|y|y|y|y| |y|y|y|y|y|y|y|y|y| |y| |y| |y|y|
+|windows-msvc|x86_64|y|y|y|y|y| | | | |y|y|y|y|y|y|y|y|y| |y|y|y| |y|y|y|y| |y|y|y|y| | |y| |y|y|y|y|y| | |y|y|y| |y| |y|y|y|y| | |y|y|y|y|y|y|y|y|y|y|y|y|y|y|y| | |y|y|y|y|y|y| |y|y|y|y|y| |y|y|y| |y| |y| |y|y|
+|apple MacOS|x86_64|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y| |y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|
+|freebsd|x86_64|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|
+|netbsd|x86_64|y|y|y|y|y|y|y|y| |y|y|y|y|y|y| |y|y|y|y|y|y| |y|y|y|y|y|y|y|y|y| |y|y| |y|y|y|y|y|y|y|y|y|y|y|y| |y|y|y|y|y| |y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y| |y|y|y|y|y|y| |y|y|y| | |y| |y|y|
+|android|aarch64|y|y|y|y|y|y|y|y| |y|y|y|y|y|y| |y|y|y|y|y|y| |y|y|y|y|y|y|y|y|y| |y|y| |y|y|y|y|y|y|y|y|y|y|y|y| |y|y|y|y|y| |y|y|y|y|y|y|y|y|y|y|y|y|y|y|y| |y|y| |y|y|y|y| |y|y|y|y|y|y| |y|y|y| | |y| |y|y|
+|android|x86_64|y|y|y|y|y|y|y|y| |y|y|y|y|y|y| |y|y|y|y|y|y| |y|y|y|y|y|y|y|y|y| |y|y| |y|y|y|y|y|y|y|y|y|y|y|y| |y|y|y|y|y| |y|y|y|y|y|y|y|y|y|y|y|y|y|y|y| |y|y| |y|y|y|y| |y|y|y|y|y|y| |y|y|y| | |y| |y|y|
+|solaris|x86_64| | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | |
+|wasi|wasm32| | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | |
+|redox|x86_64| | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | |
+|fuchsia|aarch64| | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | |
+|fuchsia|x86_64| | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | |
+
 License
 -------
 
 uutils is licensed under the MIT License - see the `LICENSE` file for details
 
-[![FOSSA Status](https://app.fossa.io/api/projects/git%2Bgithub.com%2Fuutils%2Fcoreutils.svg?type=large)](https://app.fossa.io/projects/git%2Bgithub.com%2Fuutils%2Fcoreutils?ref=badge_large)
+GNU Coreutils is licensed under the GPL 3.0 or later.

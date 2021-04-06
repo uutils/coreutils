@@ -7,10 +7,6 @@
 
 // spell-checker:ignore (ToDO) tstr sigstr cmdname setpgid
 
-extern crate getopts;
-extern crate libc;
-extern crate time;
-
 #[macro_use]
 extern crate uucore;
 

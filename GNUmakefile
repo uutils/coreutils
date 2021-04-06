@@ -30,7 +30,7 @@ ifneq ($(.SHELLSTATUS),0)
 override INSTALLDIR_MAN=$(DESTDIR)$(PREFIX)$(MANDIR)
 endif
 
-#prefix to apply to uutils binary and all tool binaries
+#prefix to apply to coreutils binary and all tool binaries
 PROG_PREFIX ?=
 
 # This won't support any directory with spaces in its name, but you can just
@@ -41,7 +41,7 @@ PKG_BUILDDIR  := $(BUILDDIR)/deps
 DOCSDIR       := $(BASEDIR)/docs
 
 BUSYBOX_ROOT := $(BASEDIR)/tmp
-BUSYBOX_VER  := 1.24.1
+BUSYBOX_VER  := 1.32.1
 BUSYBOX_SRC  := $(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER)
 
 # Possible programs
@@ -53,7 +53,9 @@ PROGS       := \
 	cksum \
 	comm \
 	cp \
+	csplit \
 	cut \
+	date \
 	df \
 	dircolors \
 	dirname \
@@ -160,7 +162,9 @@ TEST_PROGS  := \
 	cksum \
 	comm \
 	cp \
+	csplit \
 	cut \
+	date \
 	dircolors \
 	dirname \
 	echo \
@@ -224,7 +228,7 @@ endif
 
 define TEST_BUSYBOX
 test_busybox_$(1):
-	(cd $(BUSYBOX_SRC)/testsuite && bindir=$(BUILDDIR) ./runtest $(RUNTEST_ARGS) $(1) )
+	-(cd $(BUSYBOX_SRC)/testsuite && bindir=$(BUILDDIR) ./runtest $(RUNTEST_ARGS) $(1))
 endef
 
 # Output names
@@ -233,19 +237,7 @@ EXES        := \
 
 INSTALLEES  := ${EXES}
 ifeq (${MULTICALL}, y)
-INSTALLEES  := ${INSTALLEES} uutils
-endif
-
-# Shared library extension
-SYSTEM := $(shell uname)
-DYLIB_EXT :=
-ifeq ($(SYSTEM),Linux)
-	DYLIB_EXT    := so
-	DYLIB_FLAGS  := -shared
-endif
-ifeq ($(SYSTEM),Darwin)
-	DYLIB_EXT    := dylib
-	DYLIB_FLAGS  := -dynamiclib -undefined dynamic_lookup
+INSTALLEES  := ${INSTALLEES} coreutils
 endif
 
 all: build
@@ -258,13 +250,13 @@ ifneq (${MULTICALL}, y)
 	${CARGO} build ${CARGOFLAGS} ${PROFILE_CMD} $(foreach pkg,$(EXES),-p uu_$(pkg))
 endif
 
-build-uutils:
+build-coreutils:
 	${CARGO} build ${CARGOFLAGS} --features "${EXES}" ${PROFILE_CMD} --no-default-features
 
 build-manpages:
 	cd $(DOCSDIR) && $(MAKE) man
 
-build: build-uutils build-pkgs build-manpages
+build: build-coreutils build-pkgs build-manpages
 
 $(foreach test,$(filter-out $(SKIP_UTILS),$(PROGS)),$(eval $(call TEST_BUSYBOX,$(test))))
 
@@ -283,9 +275,11 @@ $(BUILDDIR)/.config: $(BASEDIR)/.busybox-config
 	cp $< $@
 
 # Test under the busybox testsuite
-$(BUILDDIR)/busybox: busybox-src build-uutils $(BUILDDIR)/.config
-	cp $(BUILDDIR)/uutils $(BUILDDIR)/busybox; \
+$(BUILDDIR)/busybox: busybox-src build-coreutils $(BUILDDIR)/.config
+	cp $(BUILDDIR)/coreutils $(BUILDDIR)/busybox; \
 	chmod +x $@;
+
+prepare-busytest: $(BUILDDIR)/busybox
 
 ifeq ($(EXES),)
 busytest:
@@ -304,10 +298,10 @@ install: build
 	mkdir -p $(INSTALLDIR_BIN)
 	mkdir -p $(INSTALLDIR_MAN)
 ifeq (${MULTICALL}, y)
-	$(INSTALL) $(BUILDDIR)/uutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)uutils
-	cd $(INSTALLDIR_BIN) && $(foreach prog, $(filter-out uutils, $(INSTALLEES)), \
-		ln -fs $(PROG_PREFIX)uutils $(PROG_PREFIX)$(prog) &&) :
-	cat $(DOCSDIR)/_build/man/uutils.1 | gzip > $(INSTALLDIR_MAN)/$(PROG_PREFIX)uutils.1.gz
+	$(INSTALL) $(BUILDDIR)/coreutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)coreutils
+	cd $(INSTALLDIR_BIN) && $(foreach prog, $(filter-out coreutils, $(INSTALLEES)), \
+		ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) &&) :
+	cat $(DOCSDIR)/_build/man/coreutils.1 | gzip > $(INSTALLDIR_MAN)/$(PROG_PREFIX)coreutils.1.gz
 else
 	$(foreach prog, $(INSTALLEES), \
 		$(INSTALL) $(BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog);)
@@ -317,10 +311,10 @@ endif
 
 uninstall:
 ifeq (${MULTICALL}, y)
-	rm -f $(addprefix $(INSTALLDIR_BIN)/,$(PROG_PREFIX)uutils)
+	rm -f $(addprefix $(INSTALLDIR_BIN)/,$(PROG_PREFIX)coreutils)
 endif
-	rm -f $(addprefix $(INSTALLDIR_MAN)/,$(PROG_PREFIX)uutils.1.gz)
+	rm -f $(addprefix $(INSTALLDIR_MAN)/,$(PROG_PREFIX)coreutils.1.gz)
 	rm -f $(addprefix $(INSTALLDIR_BIN)/$(PROG_PREFIX),$(PROGS))
 	rm -f $(addprefix $(INSTALLDIR_MAN)/$(PROG_PREFIX),$(addsuffix .1.gz,$(PROGS)))
 
-.PHONY: all build build-uutils build-pkgs build-docs test distclean clean busytest install uninstall
+.PHONY: all build build-coreutils build-pkgs build-docs test distclean clean busytest install uninstall

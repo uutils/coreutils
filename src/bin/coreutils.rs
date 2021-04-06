@@ -5,9 +5,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-extern crate textwrap;
-extern crate uucore;
-
 use std::cmp;
 use std::collections::hash_map::HashMap;
 use std::ffi::OsString;
@@ -22,10 +19,10 @@ include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 fn usage<T>(utils: &UtilityMap<T>, name: &str) {
     println!("{} {} (multi-call binary)\n", name, VERSION);
     println!("Usage: {} [function [arguments...]]\n", name);
-    println!("Currently defined functions/utilities:\n");
+    println!("Currently defined functions:\n");
     #[allow(clippy::map_clone)]
     let mut utils: Vec<&str> = utils.keys().map(|&s| s).collect();
-    utils.sort();
+    utils.sort_unstable();
     let display_list = utils.join(", ");
     let width = cmp::min(textwrap::termwidth(), 100) - 4 * 2; // (opinion/heuristic) max 100 chars wide with 4 character side indentions
     println!(

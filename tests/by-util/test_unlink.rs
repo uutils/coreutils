@@ -23,7 +23,7 @@ fn test_unlink_multiple_files() {
 
     ucmd.arg(file_a).arg(file_b).fails().stderr_is(
         "unlink: error: extra operand: 'test_unlink_multiple_file_b'\nTry 'unlink --help' \
-                for more information.\n",
+         for more information.\n",
     );
 }
 
@@ -36,7 +36,7 @@ fn test_unlink_directory() {
 
     ucmd.arg(dir).fails().stderr_is(
         "unlink: error: cannot unlink 'test_unlink_empty_directory': Not a regular file \
-                or symlink\n",
+         or symlink\n",
     );
 }
 
@@ -46,6 +46,6 @@ fn test_unlink_nonexistent() {
 
     new_ucmd!().arg(file).fails().stderr_is(
         "unlink: error: Cannot stat 'test_unlink_nonexistent': No such file or directory \
-                (os error 2)\n",
+         (os error 2)\n",
     );
 }

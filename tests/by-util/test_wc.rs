@@ -9,12 +9,32 @@ fn test_stdin_default() {
 }
 
 #[test]
+fn test_utf8() {
+    new_ucmd!()
+        .args(&["-lwmcL"])
+        .pipe_in_fixture("UTF_8_test.txt")
+        .run()
+        .stdout_is("   300  4969 22781 22213    79\n");
+    // GNU returns "  300  2086 22219 22781    79"
+    // TODO: we should fix that to match GNU's behavior
+}
+
+#[test]
+fn test_stdin_line_len_regression() {
+    new_ucmd!()
+        .args(&["-L"])
+        .pipe_in("\n123456")
+        .run()
+        .stdout_is("6\n");
+}
+
+#[test]
 fn test_stdin_only_bytes() {
     new_ucmd!()
         .args(&["-c"])
         .pipe_in_fixture("lorem_ipsum.txt")
         .run()
-        .stdout_is(" 772\n");
+        .stdout_is("772\n");
 }
 
 #[test]
@@ -39,7 +59,7 @@ fn test_single_only_lines() {
     new_ucmd!()
         .args(&["-l", "moby_dick.txt"])
         .run()
-        .stdout_is("   18 moby_dick.txt\n");
+        .stdout_is("18 moby_dick.txt\n");
 }
 
 #[test]
@@ -61,6 +81,6 @@ fn test_multiple_default() {
         .run()
         .stdout_is(
             "   13  109  772 lorem_ipsum.txt\n   18  204 1115 moby_dick.txt\n    5   57  302 \
-                alice_in_wonderland.txt\n   36  370 2189 total\n",
+             alice_in_wonderland.txt\n   36  370 2189 total\n",
         );
 }

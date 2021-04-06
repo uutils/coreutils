@@ -12,7 +12,6 @@
 extern crate uucore;
 use uucore::entries::{get_groups, gid2grp, Locate, Passwd};
 
-extern crate clap;
 use clap::{App, Arg};
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");

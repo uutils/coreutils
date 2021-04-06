@@ -38,10 +38,7 @@ impl<'a, I> InputDecoder<'a, I> {
         peek_length: usize,
         byte_order: ByteOrder,
     ) -> InputDecoder<I> {
-        let mut bytes: Vec<u8> = Vec::with_capacity(normal_length + peek_length);
-        unsafe {
-            bytes.set_len(normal_length + peek_length);
-        } // fast but uninitialized
+        let bytes = vec![0; normal_length + peek_length];
 
         InputDecoder {
             input,

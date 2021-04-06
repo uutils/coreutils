@@ -95,8 +95,8 @@ fn test_follow_stdin() {
         .stdout_is_fixture("follow_stdin.expected");
 }
 
-// FixME: test PASSES for usual windows builds, but fails for coverage testing builds (likely related to the specific RUSTFLAGS '-Zpanic_abort_tests -Cpanic=abort')
-#[cfg(not(windows))]
+// FixME: test PASSES for usual windows builds, but fails for coverage testing builds (likely related to the specific RUSTFLAGS '-Zpanic_abort_tests -Cpanic=abort')  This test also breaks tty settings under bash requiring a 'stty sane' or reset.
+#[cfg(disable_until_fixed)]
 #[test]
 fn test_follow_with_pid() {
     use std::process::{Command, Stdio};
@@ -328,4 +328,18 @@ fn test_multiple_input_quiet_flag_overrides_verbose_flag_for_suppressing_headers
         .arg("-v")
         .run()
         .stdout_is_fixture("foobar_multiple_quiet.expected");
+}
+
+#[test]
+fn test_negative_indexing() {
+    let positive_lines_index = new_ucmd!().arg("-n").arg("5").arg(FOOBAR_TXT).run();
+
+    let negative_lines_index = new_ucmd!().arg("-n").arg("-5").arg(FOOBAR_TXT).run();
+
+    let positive_bytes_index = new_ucmd!().arg("-c").arg("20").arg(FOOBAR_TXT).run();
+
+    let negative_bytes_index = new_ucmd!().arg("-c").arg("-20").arg(FOOBAR_TXT).run();
+
+    assert_eq!(positive_lines_index.stdout, negative_lines_index.stdout);
+    assert_eq!(positive_bytes_index.stdout, negative_bytes_index.stdout);
 }

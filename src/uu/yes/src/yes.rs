@@ -77,8 +77,8 @@ fn prepare_buffer<'a>(input: &'a str, _buffer: &'a mut [u8; BUF_SIZE]) -> &'a [u
 }
 
 pub fn exec(bytes: &[u8]) {
-    let mut stdin_raw = io::stdout();
-    let mut writer = ZeroCopyWriter::with_default(&mut stdin_raw, |stdin| stdin.lock());
+    let mut stdout_raw = io::stdout();
+    let mut writer = ZeroCopyWriter::with_default(&mut stdout_raw, |stdout| stdout.lock());
     loop {
         // TODO: needs to check if pipe fails
         writer.write_all(bytes).unwrap();

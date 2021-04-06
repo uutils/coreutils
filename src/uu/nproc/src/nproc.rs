@@ -7,13 +7,6 @@
 
 // spell-checker:ignore (ToDO) NPROCESSORS nprocs numstr threadstr sysconf
 
-extern crate clap;
-extern crate getopts;
-extern crate num_cpus;
-
-#[cfg(unix)]
-extern crate libc;
-
 #[macro_use]
 extern crate uucore;
 
@@ -22,7 +15,7 @@ use std::env;
 
 #[cfg(target_os = "linux")]
 pub const _SC_NPROCESSORS_CONF: libc::c_int = 83;
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 pub const _SC_NPROCESSORS_CONF: libc::c_int = libc::_SC_NPROCESSORS_CONF;
 #[cfg(target_os = "freebsd")]
 pub const _SC_NPROCESSORS_CONF: libc::c_int = 57;
@@ -48,13 +41,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(
             Arg::with_name(OPT_ALL)
                 .short("")
-                .long("all")
+                .long(OPT_ALL)
                 .help("print the number of cores available to the system"),
         )
         .arg(
             Arg::with_name(OPT_IGNORE)
                 .short("")
-                .long("ignore")
+                .long(OPT_IGNORE)
                 .takes_value(true)
                 .help("ignore up to N cores"),
         )
@@ -74,10 +67,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if !matches.is_present(OPT_ALL) {
         // OMP_NUM_THREADS doesn't have an impact on --all
         ignore += match env::var("OMP_NUM_THREADS") {
-            Ok(threadstr) => match threadstr.parse() {
-                Ok(num) => num,
-                Err(_) => 0,
-            },
+            Ok(threadstr) => threadstr.parse().unwrap_or(0),
             Err(_) => 0,
         };
     }
@@ -99,7 +89,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
 #[cfg(any(
     target_os = "linux",
-    target_os = "macos",
+    target_vendor = "apple",
     target_os = "freebsd",
     target_os = "netbsd"
 ))]
@@ -119,7 +109,7 @@ fn num_cpus_all() -> usize {
 // Other platforms (e.g., windows), num_cpus::get() directly.
 #[cfg(not(any(
     target_os = "linux",
-    target_os = "macos",
+    target_vendor = "apple",
     target_os = "freebsd",
     target_os = "netbsd"
 )))]

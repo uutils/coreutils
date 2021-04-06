@@ -8,7 +8,7 @@ use crate::multifilereader::HasError;
 
 /// When a large number of bytes must be skipped, it will be read into a
 /// dynamically allocated buffer. The buffer will be limited to this size.
-const MAX_SKIP_BUFFER: usize = 64 * 1024;
+const MAX_SKIP_BUFFER: usize = 16 * 1024;
 
 /// Wrapper for `std::io::Read` which can skip bytes at the beginning
 /// of the input, and it can limit the returned bytes to a particular
@@ -31,21 +31,25 @@ impl<R> PartialReader<R> {
 impl<R: Read> Read for PartialReader<R> {
     fn read(&mut self, out: &mut [u8]) -> io::Result<usize> {
         if self.skip > 0 {
-            let buf_size = cmp::min(self.skip, MAX_SKIP_BUFFER);
-            let mut bytes: Vec<u8> = Vec::with_capacity(buf_size);
-            unsafe {
-                bytes.set_len(buf_size);
-            }
+            let mut bytes = [0; MAX_SKIP_BUFFER];
 
             while self.skip > 0 {
-                let skip_count = cmp::min(self.skip, buf_size);
+                let skip_count = cmp::min(self.skip, MAX_SKIP_BUFFER);
 
-                match self.inner.read_exact(&mut bytes[..skip_count]) {
+                match self.inner.read(&mut bytes[..skip_count]) {
+                    Ok(0) => {
+                        // this is an error as we still have more to skip
+                        return Err(io::Error::new(
+                            io::ErrorKind::UnexpectedEof,
+                            "tried to skip past end of input",
+                        ));
+                    }
+                    Ok(n) => self.skip -= n,
                     Err(e) => return Err(e),
-                    Ok(()) => self.skip -= skip_count,
                 }
             }
         }
+
         match self.limit {
             None => self.inner.read(out),
             Some(0) => Ok(0),

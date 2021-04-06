@@ -76,10 +76,13 @@ mod tests {
             gcd(0, a) == a
         }
 
-        fn divisor(a: u64, b: u64) -> bool {
-            // Test that gcd(a, b) divides a and b
+        fn divisor(a: u64, b: u64) -> () {
+            // Test that gcd(a, b) divides a and b, unless a == b == 0
+            if a == 0 && b == 0 { return; }
+
             let g = gcd(a, b);
-            (g != 0 && a % g == 0 && b % g == 0) || (g == 0 && a == 0 && b == 0)
+            assert_eq!(a % g, 0);
+            assert_eq!(b % g, 0);
         }
 
         fn commutative(a: u64, b: u64) -> bool {

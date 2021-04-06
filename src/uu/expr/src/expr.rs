@@ -5,7 +5,6 @@
 //* For the full copyright and license information, please view the LICENSE
 //* file that was distributed with this source code.
 
-extern crate onig;
 #[macro_use]
 extern crate uucore;
 
@@ -41,7 +40,7 @@ fn process_expr(token_strings: &[String]) -> Result<String, String> {
 
 fn print_expr_ok(expr_result: &str) -> i32 {
     println!("{}", expr_result);
-    if expr_result == "0" || expr_result == "" {
+    if expr_result == "0" || expr_result.is_empty() {
         1
     } else {
         0

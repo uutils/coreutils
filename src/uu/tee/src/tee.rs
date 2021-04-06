@@ -5,100 +5,121 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-extern crate getopts;
-
+#[macro_use]
 extern crate uucore;
 
+use clap::{App, Arg};
+use retain_mut::RetainMut;
 use std::fs::OpenOptions;
 use std::io::{copy, sink, stdin, stdout, Error, ErrorKind, Read, Result, Write};
 use std::path::{Path, PathBuf};
 
-static NAME: &str = "tee";
+#[cfg(unix)]
+use uucore::libc;
+
 static VERSION: &str = env!("CARGO_PKG_VERSION");
+static ABOUT: &str = "Copy standard input to each FILE, and also to standard output.";
+
+mod options {
+    pub const APPEND: &str = "append";
+    pub const IGNORE_INTERRUPTS: &str = "ignore-interrupts";
+    pub const FILE: &str = "file";
+}
+
+#[allow(dead_code)]
+struct Options {
+    append: bool,
+    ignore_interrupts: bool,
+    files: Vec<String>,
+}
+
+fn get_usage() -> String {
+    format!("{0} [OPTION]... [FILE]...", executable!())
+}
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let usage = get_usage();
 
-    match options(&args).and_then(exec) {
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .after_help("If a FILE is -, it refers to a file named - .")
+        .arg(
+            Arg::with_name(options::APPEND)
+                .long(options::APPEND)
+                .short("a")
+                .help("append to the given FILEs, do not overwrite"),
+        )
+        .arg(
+            Arg::with_name(options::IGNORE_INTERRUPTS)
+                .long(options::IGNORE_INTERRUPTS)
+                .short("i")
+                .help("ignore interrupt signals (ignored on non-Unix platforms)"),
+        )
+        .arg(Arg::with_name(options::FILE).multiple(true))
+        .get_matches_from(args);
+
+    let options = Options {
+        append: matches.is_present(options::APPEND),
+        ignore_interrupts: matches.is_present(options::IGNORE_INTERRUPTS),
+        files: matches
+            .values_of(options::FILE)
+            .map(|v| v.map(ToString::to_string).collect())
+            .unwrap_or_default(),
+    };
+
+    match tee(options) {
         Ok(_) => 0,
         Err(_) => 1,
     }
 }
 
-#[allow(dead_code)]
-struct Options {
-    program: String,
-    append: bool,
-    ignore_interrupts: bool,
-    print_and_exit: Option<String>,
-    files: Vec<String>,
-}
-
-fn options(args: &[String]) -> Result<Options> {
-    let mut opts = getopts::Options::new();
-
-    opts.optflag("a", "append", "append to the given FILEs, do not overwrite");
-    opts.optflag("i", "ignore-interrupts", "ignore interrupt signals");
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-
-    opts.parse(&args[1..])
-        .map_err(|e| Error::new(ErrorKind::Other, format!("{}", e)))
-        .map(|m| {
-            let version = format!("{} {}", NAME, VERSION);
-            let arguments = "[OPTION]... [FILE]...";
-            let brief = "Copy standard input to each FILE, and also to standard output.";
-            let comment = "If a FILE is -, it refers to a file named - .";
-            let help = format!(
-                "{}\n\nUsage:\n  {} {}\n\n{}\n{}",
-                version,
-                NAME,
-                arguments,
-                opts.usage(brief),
-                comment
-            );
-            let names: Vec<String> = m.free.clone().into_iter().collect();
-            let to_print = if m.opt_present("help") {
-                Some(help)
-            } else if m.opt_present("version") {
-                Some(version)
-            } else {
-                None
-            };
-            Options {
-                program: NAME.to_owned(),
-                append: m.opt_present("append"),
-                ignore_interrupts: m.opt_present("ignore-interrupts"),
-                print_and_exit: to_print,
-                files: names,
-            }
-        })
-        .map_err(|message| warn(format!("{}", message).as_ref()))
-}
-
-fn exec(options: Options) -> Result<()> {
-    match options.print_and_exit {
-        Some(text) => {
-            println!("{}", text);
-            Ok(())
-        }
-        None => tee(options),
+#[cfg(unix)]
+fn ignore_interrupts() -> Result<()> {
+    let ret = unsafe { libc::signal(libc::SIGINT, libc::SIG_IGN) };
+    if ret == libc::SIG_ERR {
+        return Err(Error::new(ErrorKind::Other, ""));
     }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn ignore_interrupts() -> Result<()> {
+    // Do nothing.
+    Ok(())
 }
 
 fn tee(options: Options) -> Result<()> {
-    let mut writers: Vec<Box<dyn Write>> = options
+    if options.ignore_interrupts {
+        ignore_interrupts()?
+    }
+    let mut writers: Vec<NamedWriter> = options
         .files
         .clone()
         .into_iter()
-        .map(|file| open(file, options.append))
+        .map(|file| NamedWriter {
+            name: file.clone(),
+            inner: open(file, options.append),
+        })
         .collect();
-    writers.push(Box::new(stdout()));
-    let output = &mut MultiWriter { writers };
+
+    writers.insert(
+        0,
+        NamedWriter {
+            name: "'standard output'".to_owned(),
+            inner: Box::new(stdout()),
+        },
+    );
+
+    let mut output = MultiWriter::new(writers);
     let input = &mut NamedReader {
         inner: Box::new(stdin()) as Box<dyn Read>,
     };
-    if copy(input, output).is_err() || output.flush().is_err() {
+
+    // TODO: replaced generic 'copy' call to be able to stop copying
+    // if all outputs are closed (due to errors)
+    if copy(input, &mut output).is_err() || output.flush().is_err() || output.error_occured() {
         Err(Error::new(ErrorKind::Other, ""))
     } else {
         Ok(())
@@ -106,7 +127,7 @@ fn tee(options: Options) -> Result<()> {
 }
 
 fn open(name: String, append: bool) -> Box<dyn Write> {
-    let path = PathBuf::from(name);
+    let path = PathBuf::from(name.clone());
     let inner: Box<dyn Write> = {
         let mut options = OpenOptions::new();
         let mode = if append {
@@ -119,55 +140,68 @@ fn open(name: String, append: bool) -> Box<dyn Write> {
             Err(_) => Box::new(sink()),
         }
     };
-    Box::new(NamedWriter { inner, path }) as Box<dyn Write>
+    Box::new(NamedWriter { inner, name }) as Box<dyn Write>
 }
 
 struct MultiWriter {
-    writers: Vec<Box<dyn Write>>,
+    writers: Vec<NamedWriter>,
+    initial_len: usize,
+}
+
+impl MultiWriter {
+    fn new(writers: Vec<NamedWriter>) -> Self {
+        Self {
+            initial_len: writers.len(),
+            writers,
+        }
+    }
+    fn error_occured(&self) -> bool {
+        self.writers.len() != self.initial_len
+    }
 }
 
 impl Write for MultiWriter {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        for writer in &mut self.writers {
-            writer.write_all(buf)?;
-        }
+        self.writers.retain_mut(|writer| {
+            let result = writer.write_all(buf);
+            match result {
+                Err(f) => {
+                    show_info!("{}: {}", writer.name, f.to_string());
+                    false
+                }
+                _ => true,
+            }
+        });
         Ok(buf.len())
     }
 
     fn flush(&mut self) -> Result<()> {
-        for writer in &mut self.writers {
-            writer.flush()?;
-        }
+        self.writers.retain_mut(|writer| {
+            let result = writer.flush();
+            match result {
+                Err(f) => {
+                    show_info!("{}: {}", writer.name, f.to_string());
+                    false
+                }
+                _ => true,
+            }
+        });
         Ok(())
     }
 }
 
 struct NamedWriter {
     inner: Box<dyn Write>,
-    path: PathBuf,
+    pub name: String,
 }
 
 impl Write for NamedWriter {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        match self.inner.write(buf) {
-            Err(f) => {
-                self.inner = Box::new(sink()) as Box<dyn Write>;
-                warn(format!("{}: {}", self.path.display(), f.to_string()).as_ref());
-                Err(f)
-            }
-            okay => okay,
-        }
+        self.inner.write(buf)
     }
 
     fn flush(&mut self) -> Result<()> {
-        match self.inner.flush() {
-            Err(f) => {
-                self.inner = Box::new(sink()) as Box<dyn Write>;
-                warn(format!("{}: {}", self.path.display(), f.to_string()).as_ref());
-                Err(f)
-            }
-            okay => okay,
-        }
+        self.inner.flush()
     }
 }
 
@@ -179,15 +213,10 @@ impl Read for NamedReader {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         match self.inner.read(buf) {
             Err(f) => {
-                warn(format!("{}: {}", Path::new("stdin").display(), f.to_string()).as_ref());
+                show_info!("{}: {}", Path::new("stdin").display(), f.to_string());
                 Err(f)
             }
             okay => okay,
         }
     }
-}
-
-fn warn(message: &str) -> Error {
-    eprintln!("{}: {}", NAME, message);
-    Error::new(ErrorKind::Other, format!("{}: {}", NAME, message))
 }

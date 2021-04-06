@@ -7,13 +7,11 @@
 
 // spell-checker:ignore (ToDO) RFILE refsize rfilename fsize tsize
 
-extern crate getopts;
-
 #[macro_use]
 extern crate uucore;
 
+use clap::{App, Arg};
 use std::fs::{metadata, File, OpenOptions};
-use std::io::Result;
 use std::path::Path;
 
 #[derive(Eq, PartialEq)]
@@ -27,81 +25,99 @@ enum TruncateMode {
     RoundUp,
 }
 
-static NAME: &str = "truncate";
+static ABOUT: &str = "Shrink or extend the size of each file to the specified size.";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
+pub mod options {
+    pub static IO_BLOCKS: &str = "io-blocks";
+    pub static NO_CREATE: &str = "no-create";
+    pub static REFERENCE: &str = "reference";
+    pub static SIZE: &str = "size";
+}
+
+static ARG_FILES: &str = "files";
+
+fn get_usage() -> String {
+    format!("{0} [OPTION]... [FILE]...", executable!())
+}
+
+fn get_long_usage() -> String {
+    String::from(
+        "
+    SIZE is an integer with an optional prefix and optional unit.
+    The available units (K, M, G, T, P, E, Z, and Y) use the following format:
+        'KB' =>           1000 (kilobytes)
+        'K'  =>           1024 (kibibytes)
+        'MB' =>      1000*1000 (megabytes)
+        'M'  =>      1024*1024 (mebibytes)
+        'GB' => 1000*1000*1000 (gigabytes)
+        'G'  => 1024*1024*1024 (gibibytes)
+    SIZE may also be prefixed by one of the following to adjust the size of each
+    file based on its current size:
+        '+'  => extend by
+        '-'  => reduce by
+        '<'  => at most
+        '>'  => at least
+        '/'  => round down to multiple of
+        '%'  => round up to multiple of",
+    )
+}
+
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let usage = get_usage();
+    let long_usage = get_long_usage();
 
-    let mut opts = getopts::Options::new();
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .after_help(&long_usage[..])
+        .arg(
+            Arg::with_name(options::IO_BLOCKS)
+            .short("o")
+            .long(options::IO_BLOCKS)
+            .help("treat SIZE as the number of I/O blocks of the file rather than bytes (NOT IMPLEMENTED)")
+        )
+        .arg(
+            Arg::with_name(options::NO_CREATE)
+            .short("c")
+            .long(options::NO_CREATE)
+            .help("do not create files that do not exist")
+        )
+        .arg(
+            Arg::with_name(options::REFERENCE)
+            .short("r")
+            .long(options::REFERENCE)
+            .help("base the size of each file on the size of RFILE")
+            .value_name("RFILE")
+        )
+        .arg(
+            Arg::with_name(options::SIZE)
+            .short("s")
+            .long("size")
+            .help("set or adjust the size of each file according to SIZE, which is in bytes unless --io-blocks is specified")
+            .value_name("SIZE")
+        )
+        .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true).min_values(1))
+        .get_matches_from(args);
 
-    opts.optflag("c", "no-create", "do not create files that do not exist");
-    opts.optflag(
-        "o",
-        "io-blocks",
-        "treat SIZE as the number of I/O blocks of the file rather than bytes (NOT IMPLEMENTED)",
-    );
-    opts.optopt(
-        "r",
-        "reference",
-        "base the size of each file on the size of RFILE",
-        "RFILE",
-    );
-    opts.optopt("s", "size", "set or adjust the size of each file according to SIZE, which is in bytes unless --io-blocks is specified", "SIZE");
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
+    let files: Vec<String> = matches
+        .values_of(ARG_FILES)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
 
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => crash!(1, "{}", f),
-    };
-
-    if matches.opt_present("help") {
-        println!("{} {}", NAME, VERSION);
-        println!();
-        println!("Usage:");
-        println!("  {} [OPTION]... FILE...", NAME);
-        println!();
-        print!(
-            "{}",
-            opts.usage("Shrink or extend the size of each file to the specified size.")
-        );
-        println!(
-            "
-SIZE is an integer with an optional prefix and optional unit.
-The available units (K, M, G, T, P, E, Z, and Y) use the following format:
-    'KB' =>           1000 (kilobytes)
-    'K'  =>           1024 (kibibytes)
-    'MB' =>      1000*1000 (megabytes)
-    'M'  =>      1024*1024 (mebibytes)
-    'GB' => 1000*1000*1000 (gigabytes)
-    'G'  => 1024*1024*1024 (gibibytes)
-SIZE may also be prefixed by one of the following to adjust the size of each
-file based on its current size:
-    '+'  => extend by
-    '-'  => reduce by
-    '<'  => at most
-    '>'  => at least
-    '/'  => round down to multiple of
-    '%'  => round up to multiple of"
-        );
-    } else if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-    } else if matches.free.is_empty() {
-        show_error!("missing an argument");
+    if files.is_empty() {
+        show_error!("Missing an argument");
         return 1;
     } else {
-        let no_create = matches.opt_present("no-create");
-        let io_blocks = matches.opt_present("io-blocks");
-        let reference = matches.opt_str("reference");
-        let size = matches.opt_str("size");
+        let io_blocks = matches.is_present(options::IO_BLOCKS);
+        let no_create = matches.is_present(options::NO_CREATE);
+        let reference = matches.value_of(options::REFERENCE).map(String::from);
+        let size = matches.value_of(options::SIZE).map(String::from);
         if reference.is_none() && size.is_none() {
             crash!(1, "you must specify either --reference or --size");
         } else {
-            match truncate(no_create, io_blocks, reference, size, matches.free) {
-                Ok(()) => ( /* pass */ ),
-                Err(_) => return 1,
-            }
+            truncate(no_create, io_blocks, reference, size, files);
         }
     }
 
@@ -114,7 +130,7 @@ fn truncate(
     reference: Option<String>,
     size: Option<String>,
     filenames: Vec<String>,
-) -> Result<()> {
+) {
     let (refsize, mode) = match reference {
         Some(rfilename) => {
             let _ = match File::open(Path::new(&rfilename)) {
@@ -173,7 +189,6 @@ fn truncate(
             Err(f) => crash!(1, "{}", f.to_string()),
         }
     }
-    Ok(())
 }
 
 fn parse_size(size: &str) -> (u64, TruncateMode) {

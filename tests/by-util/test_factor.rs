@@ -6,34 +6,64 @@
 // that was distributed with this source code.
 
 use crate::common::util::*;
+use std::time::SystemTime;
 
 #[path = "../../src/uu/factor/sieve.rs"]
 mod sieve;
+
+extern crate conv;
+extern crate rand;
+
+use self::rand::distributions::{Distribution, Uniform};
+use self::rand::{rngs::SmallRng, Rng, SeedableRng};
 use self::sieve::Sieve;
 
-extern crate rand;
-use self::rand::distributions::{Distribution, Uniform};
-use self::rand::{rngs::SmallRng, FromEntropy, Rng};
-
 const NUM_PRIMES: usize = 10000;
-const LOG_PRIMES: f64 = 14.0; // ceil(log2(NUM_PRIMES))
-
 const NUM_TESTS: usize = 100;
 
 #[test]
+fn test_first_100000_integers() {
+    extern crate sha1;
+
+    let n_integers = 100_000;
+    let mut instring = String::new();
+    for i in 0..=n_integers {
+        instring.push_str(&(format!("{} ", i))[..]);
+    }
+
+    println!("STDIN='{}'", instring);
+    let result = new_ucmd!().pipe_in(instring.as_bytes()).run();
+    let stdout = result.stdout;
+
+    assert!(result.success);
+
+    // `seq 0 100000 | factor | sha1sum` => "4ed2d8403934fa1c76fe4b84c5d4b8850299c359"
+    let hash_check = sha1::Sha1::from(stdout.as_bytes()).hexdigest();
+    assert_eq!(hash_check, "4ed2d8403934fa1c76fe4b84c5d4b8850299c359");
+}
+
+#[test]
 fn test_random() {
+    use conv::prelude::*;
+
+    let log_num_primes = f64::value_from(NUM_PRIMES).unwrap().log2().ceil();
     let primes = Sieve::primes().take(NUM_PRIMES).collect::<Vec<u64>>();
 
-    let mut rng = SmallRng::from_entropy();
-    println!("(seed) rng={:?}", rng);
+    let rng_seed = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    println!("rng_seed={:?}", rng_seed);
+    let mut rng = SmallRng::seed_from_u64(rng_seed);
+
     let mut rand_gt = move |min: u64| {
-        let mut product = 1u64;
+        let mut product = 1_u64;
         let mut factors = Vec::new();
         while product < min {
             // log distribution---higher probability for lower numbers
             let factor;
             loop {
-                let next = rng.gen_range(0f64, LOG_PRIMES).exp2().floor() as usize;
+                let next = rng.gen_range(0_f64, log_num_primes).exp2().floor() as usize;
                 if next < NUM_PRIMES {
                     factor = primes[next];
                     break;
@@ -73,9 +103,14 @@ fn test_random() {
 
 #[test]
 fn test_random_big() {
-    let mut rng = SmallRng::from_entropy();
-    println!("(seed) rng={:?}", rng);
-    let bitrange_1 = Uniform::new(14usize, 51);
+    let rng_seed = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    println!("rng_seed={:?}", rng_seed);
+    let mut rng = SmallRng::seed_from_u64(rng_seed);
+
+    let bitrange_1 = Uniform::new(14_usize, 51);
     let mut rand_64 = move || {
         // first, choose a random number of bits for the first factor
         let f_bit_1 = bitrange_1.sample(&mut rng);
@@ -85,11 +120,11 @@ fn test_random_big() {
         // we will have a number of additional factors equal to nfacts + 1
         // where nfacts is in [0, floor(rem/14) )  NOTE half-open interval
         // Each prime factor is at least 14 bits, hence floor(rem/14)
-        let nfacts = Uniform::new(0usize, rem / 14).sample(&mut rng);
+        let nfacts = Uniform::new(0_usize, rem / 14).sample(&mut rng);
         // we have to distribute extrabits among the (nfacts + 1) values
         let extrabits = rem - (nfacts + 1) * 14;
         // (remember, a Range is a half-open interval)
-        let extrarange = Uniform::new(0usize, extrabits + 1);
+        let extrarange = Uniform::new(0_usize, extrabits + 1);
 
         // to generate an even split of this range, generate n-1 random elements
         // in the range, add the desired total value to the end, sort this list,
@@ -116,7 +151,7 @@ fn test_random_big() {
         let f_bits = f_bits;
 
         let mut nbits = 0;
-        let mut product = 1u64;
+        let mut product = 1_u64;
         let mut factors = Vec::new();
         for bit in f_bits {
             assert!(bit < 37);
@@ -161,6 +196,8 @@ fn test_big_primes() {
 }
 
 fn run(instring: &[u8], outstring: &[u8]) {
+    println!("STDIN='{}'", String::from_utf8_lossy(instring));
+    println!("STDOUT(expected)='{}'", String::from_utf8_lossy(outstring));
     // now run factor
     new_ucmd!()
         .pipe_in(instring)

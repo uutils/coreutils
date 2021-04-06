@@ -3,15 +3,12 @@
 // spell-checker:ignore (change!) each's
 // spell-checker:ignore (ToDO) LONGHELP FORMATSTRING templating parameterizing formatstr
 
-extern crate itertools;
-extern crate uucore;
-
 mod cli;
 mod memo;
 mod tokenize;
 
 static NAME: &str = "printf";
-static VERSION: &str = "0.0.1";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 static SHORT_USAGE: &str = "printf: usage: printf [-v var] format [arguments]";
 static LONGHELP_LEAD: &str = "printf
 

@@ -7,31 +7,36 @@
 
 // spell-checker:ignore (ToDO) rwxr sourcepath targetpath
 
-extern crate getopts;
-extern crate libc;
-
 mod mode;
 
 #[macro_use]
 extern crate uucore;
 
+use clap::{App, Arg, ArgMatches};
+use file_diff::diff;
+use filetime::{set_file_times, FileTime};
+use uucore::entries::{grp2gid, usr2uid};
+use uucore::perms::{wrap_chgrp, wrap_chown, Verbosity};
+
+use libc::{getegid, geteuid};
 use std::fs;
+use std::fs::File;
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::result::Result;
 
-static NAME: &str = "install";
-static SUMMARY: &str = "Copy SOURCE to DEST or multiple SOURCE(s) to the existing
- DIRECTORY, while setting permission modes and owner/group";
-static LONG_HELP: &str = "";
-
-const DEFAULT_MODE: u32 = 755;
+const DEFAULT_MODE: u32 = 0o755;
 
 #[allow(dead_code)]
 pub struct Behavior {
     main_function: MainFunction,
     specified_mode: Option<u32>,
     suffix: String,
+    owner: String,
+    group: String,
     verbose: bool,
+    preserve_timestamps: bool,
+    compare: bool,
 }
 
 #[derive(Clone, Eq, PartialEq)]
@@ -52,14 +57,180 @@ impl Behavior {
     }
 }
 
+static ABOUT: &str = "Copy SOURCE to DEST or multiple SOURCE(s) to the existing
+ DIRECTORY, while setting permission modes and owner/group";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
+
+static OPT_COMPARE: &str = "compare";
+static OPT_BACKUP: &str = "backup";
+static OPT_BACKUP_2: &str = "backup2";
+static OPT_DIRECTORY: &str = "directory";
+static OPT_IGNORED: &str = "ignored";
+static OPT_CREATED: &str = "created";
+static OPT_GROUP: &str = "group";
+static OPT_MODE: &str = "mode";
+static OPT_OWNER: &str = "owner";
+static OPT_PRESERVE_TIMESTAMPS: &str = "preserve-timestamps";
+static OPT_STRIP: &str = "strip";
+static OPT_STRIP_PROGRAM: &str = "strip-program";
+static OPT_SUFFIX: &str = "suffix";
+static OPT_TARGET_DIRECTORY: &str = "target-directory";
+static OPT_NO_TARGET_DIRECTORY: &str = "no-target-directory";
+static OPT_VERBOSE: &str = "verbose";
+static OPT_PRESERVE_CONTEXT: &str = "preserve-context";
+static OPT_CONTEXT: &str = "context";
+
+static ARG_FILES: &str = "files";
+
+fn get_usage() -> String {
+    format!("{0} [OPTION]... [FILE]...", executable!())
+}
+
 /// Main install utility function, called from main.rs.
 ///
 /// Returns a program return code.
 ///
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let usage = get_usage();
 
-    let matches = parse_opts(args);
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .arg(
+                Arg::with_name(OPT_BACKUP)
+                .long(OPT_BACKUP)
+                .help("(unimplemented) make a backup of each existing destination file")
+                .value_name("CONTROL")
+        )
+        .arg(
+            // TODO implement flag
+            Arg::with_name(OPT_BACKUP_2)
+            .short("b")
+            .help("(unimplemented) like --backup but does not accept an argument")
+        )
+        .arg(
+            Arg::with_name(OPT_IGNORED)
+            .short("c")
+            .help("ignored")
+        )
+        .arg(
+            Arg::with_name(OPT_COMPARE)
+            .short("C")
+            .long(OPT_COMPARE)
+            .help("compare each pair of source and destination files, and in some cases, do not modify the destination at all")
+        )
+        .arg(
+            Arg::with_name(OPT_DIRECTORY)
+                .short("d")
+                .long(OPT_DIRECTORY)
+                .help("treat all arguments as directory names. create all components of the specified directories")
+        )
+
+        .arg(
+            // TODO implement flag
+            Arg::with_name(OPT_CREATED)
+                .short("D")
+                .help("(unimplemented) create all leading components of DEST except the last, then copy SOURCE to DEST")
+        )
+        .arg(
+            Arg::with_name(OPT_GROUP)
+                .short("g")
+                .long(OPT_GROUP)
+                .help("set group ownership, instead of process's current group")
+                .value_name("GROUP")
+                .takes_value(true)
+        )
+        .arg(
+            Arg::with_name(OPT_MODE)
+                .short("m")
+                .long(OPT_MODE)
+                .help("set permission mode (as in chmod), instead of rwxr-xr-x")
+                .value_name("MODE")
+                .takes_value(true)
+        )
+        .arg(
+            Arg::with_name(OPT_OWNER)
+                .short("o")
+                .long(OPT_OWNER)
+                .help("set ownership (super-user only)")
+                .value_name("OWNER")
+                .takes_value(true)
+        )
+        .arg(
+            Arg::with_name(OPT_PRESERVE_TIMESTAMPS)
+                .short("p")
+                .long(OPT_PRESERVE_TIMESTAMPS)
+                .help("apply access/modification times of SOURCE files to corresponding destination files")
+        )
+        .arg(
+            // TODO implement flag
+            Arg::with_name(OPT_STRIP)
+            .short("s")
+            .long(OPT_STRIP)
+            .help("(unimplemented) strip symbol tables")
+        )
+        .arg(
+            // TODO implement flag
+            Arg::with_name(OPT_STRIP_PROGRAM)
+                .long(OPT_STRIP_PROGRAM)
+                .help("(unimplemented) program used to strip binaries")
+                .value_name("PROGRAM")
+        )
+        .arg(
+            // TODO implement flag
+            Arg::with_name(OPT_SUFFIX)
+                .short("S")
+                .long(OPT_SUFFIX)
+                .help("(unimplemented) override the usual backup suffix")
+                .value_name("SUFFIX")
+                .takes_value(true)
+                .min_values(1)
+        )
+        .arg(
+            // TODO implement flag
+            Arg::with_name(OPT_TARGET_DIRECTORY)
+                .short("t")
+                .long(OPT_TARGET_DIRECTORY)
+                .help("(unimplemented) move all SOURCE arguments into DIRECTORY")
+                .value_name("DIRECTORY")
+        )
+        .arg(
+            // TODO implement flag
+            Arg::with_name(OPT_NO_TARGET_DIRECTORY)
+                .short("T")
+                .long(OPT_NO_TARGET_DIRECTORY)
+                .help("(unimplemented) treat DEST as a normal file")
+
+        )
+        .arg(
+            Arg::with_name(OPT_VERBOSE)
+            .short("v")
+            .long(OPT_VERBOSE)
+            .help("explain what is being done")
+        )
+        .arg(
+            // TODO implement flag
+            Arg::with_name(OPT_PRESERVE_CONTEXT)
+                .short("P")
+                .long(OPT_PRESERVE_CONTEXT)
+                .help("(unimplemented) preserve security context")
+        )
+        .arg(
+            // TODO implement flag
+            Arg::with_name(OPT_CONTEXT)
+                .short("Z")
+                .long(OPT_CONTEXT)
+                .help("(unimplemented) set security context of files and directories")
+                .value_name("CONTEXT")
+        )
+        .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true).min_values(1))
+        .get_matches_from(args);
+
+    let paths: Vec<String> = matches
+        .values_of(ARG_FILES)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
 
     if let Err(s) = check_unimplemented(&matches) {
         show_error!("Unimplemented feature: {}", s);
@@ -73,144 +244,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     };
 
-    let paths: Vec<PathBuf> = {
-        #[allow(clippy::ptr_arg)]
-        fn string_to_path(s: &String) -> &Path {
-            Path::new(s)
-        };
-        let to_owned = |p: &Path| p.to_owned();
-        let arguments = matches.free.iter().map(string_to_path);
-
-        arguments.map(to_owned).collect()
-    };
-
     match behavior.main_function {
-        MainFunction::Directory => directory(&paths[..], behavior),
-        MainFunction::Standard => standard(&paths[..], behavior),
+        MainFunction::Directory => directory(paths, behavior),
+        MainFunction::Standard => standard(paths, behavior),
     }
-}
-
-/// Build a specification of the command line.
-///
-/// Returns a getopts::Options struct.
-///
-fn parse_opts(args: Vec<String>) -> getopts::Matches {
-    let syntax = format!(
-        "SOURCE DEST
- {} SOURCE... DIRECTORY",
-        NAME
-    );
-    app!(&syntax, SUMMARY, LONG_HELP)
-        // TODO implement flag
-        .optflagopt(
-            "",
-            "backup",
-            "(unimplemented) make a backup of each existing destination\n \
-             file",
-            "CONTROL",
-        )
-        // TODO implement flag
-        .optflag(
-            "b",
-            "",
-            "(unimplemented) like --backup but does not accept an argument",
-        )
-        .optflag("c", "", "ignored")
-        // TODO implement flag
-        .optflag(
-            "C",
-            "compare",
-            "(unimplemented) compare each pair of source and destination\n \
-             files, and in some cases, do not modify the destination at all",
-        )
-        .optflag(
-            "d",
-            "directory",
-            "treat all arguments as directory names.\n \
-             create all components of the specified directories",
-        )
-        // TODO implement flag
-        .optflag(
-            "D",
-            "",
-            "(unimplemented) create all leading components of DEST except the\n \
-             last, then copy SOURCE to DEST",
-        )
-        // TODO implement flag
-        .optflagopt(
-            "g",
-            "group",
-            "(unimplemented) set group ownership, instead of process's\n \
-             current group",
-            "GROUP",
-        )
-        .optflagopt(
-            "m",
-            "mode",
-            "set permission mode (as in chmod), instead\n \
-             of rwxr-xr-x",
-            "MODE",
-        )
-        // TODO implement flag
-        .optflagopt(
-            "o",
-            "owner",
-            "(unimplemented) set ownership (super-user only)",
-            "OWNER",
-        )
-        // TODO implement flag
-        .optflag(
-            "p",
-            "preserve-timestamps",
-            "(unimplemented) apply access/modification times\n \
-             of SOURCE files to corresponding destination files",
-        )
-        // TODO implement flag
-        .optflag("s", "strip", "(unimplemented) strip symbol tables")
-        // TODO implement flag
-        .optflagopt(
-            "",
-            "strip-program",
-            "(unimplemented) program used to strip binaries",
-            "PROGRAM",
-        )
-        // TODO implement flag
-        .optopt(
-            "S",
-            "suffix",
-            "(unimplemented) override the usual backup suffix",
-            "SUFFIX",
-        )
-        // TODO implement flag
-        .optopt(
-            "t",
-            "target-directory",
-            "(unimplemented) move all SOURCE arguments into\n \
-             DIRECTORY",
-            "DIRECTORY",
-        )
-        // TODO implement flag
-        .optflag(
-            "T",
-            "no-target-directory",
-            "(unimplemented) treat DEST as a normal file",
-        )
-        .optflag("v", "verbose", "explain what is being done")
-        // TODO implement flag
-        .optflag(
-            "P",
-            "preserve-context",
-            "(unimplemented) preserve security context",
-        )
-        // TODO implement flag
-        .optflagopt(
-            "Z",
-            "context",
-            "(unimplemented) set security context of files and\n \
-             directories",
-            "CONTEXT",
-        )
-        .parse(args)
 }
 
 /// Check for unimplemented command line arguments.
@@ -221,34 +258,27 @@ fn parse_opts(args: Vec<String>) -> getopts::Matches {
 ///
 /// Error datum is a string of the unimplemented argument.
 ///
-fn check_unimplemented(matches: &getopts::Matches) -> Result<(), &str> {
-    if matches.opt_present("backup") {
+///
+fn check_unimplemented<'a>(matches: &ArgMatches) -> Result<(), &'a str> {
+    if matches.is_present(OPT_BACKUP) {
         Err("--backup")
-    } else if matches.opt_present("b") {
+    } else if matches.is_present(OPT_BACKUP_2) {
         Err("-b")
-    } else if matches.opt_present("compare") {
-        Err("--compare, -C")
-    } else if matches.opt_present("D") {
+    } else if matches.is_present(OPT_CREATED) {
         Err("-D")
-    } else if matches.opt_present("group") {
-        Err("--group, -g")
-    } else if matches.opt_present("owner") {
-        Err("--owner, -o")
-    } else if matches.opt_present("preserve-timestamps") {
-        Err("--preserve-timestamps, -p")
-    } else if matches.opt_present("strip") {
+    } else if matches.is_present(OPT_STRIP) {
         Err("--strip, -s")
-    } else if matches.opt_present("strip-program") {
+    } else if matches.is_present(OPT_STRIP_PROGRAM) {
         Err("--strip-program")
-    } else if matches.opt_present("suffix") {
+    } else if matches.is_present(OPT_SUFFIX) {
         Err("--suffix, -S")
-    } else if matches.opt_present("target-directory") {
+    } else if matches.is_present(OPT_TARGET_DIRECTORY) {
         Err("--target-directory, -t")
-    } else if matches.opt_present("no-target-directory") {
+    } else if matches.is_present(OPT_NO_TARGET_DIRECTORY) {
         Err("--no-target-directory, -T")
-    } else if matches.opt_present("preserve-context") {
+    } else if matches.is_present(OPT_PRESERVE_CONTEXT) {
         Err("--preserve-context, -P")
-    } else if matches.opt_present("context") {
+    } else if matches.is_present(OPT_CONTEXT) {
         Err("--context, -Z")
     } else {
         Ok(())
@@ -263,8 +293,8 @@ fn check_unimplemented(matches: &getopts::Matches) -> Result<(), &str> {
 ///
 /// In event of failure, returns an integer intended as a program return code.
 ///
-fn behavior(matches: &getopts::Matches) -> Result<Behavior, i32> {
-    let main_function = if matches.opt_present("directory") {
+fn behavior(matches: &ArgMatches) -> Result<Behavior, i32> {
+    let main_function = if matches.is_present(OPT_DIRECTORY) {
         MainFunction::Directory
     } else {
         MainFunction::Standard
@@ -272,8 +302,8 @@ fn behavior(matches: &getopts::Matches) -> Result<Behavior, i32> {
 
     let considering_dir: bool = MainFunction::Directory == main_function;
 
-    let specified_mode: Option<u32> = if matches.opt_present("mode") {
-        match matches.opt_str("mode") {
+    let specified_mode: Option<u32> = if matches.is_present(OPT_MODE) {
+        match matches.value_of(OPT_MODE) {
             Some(x) => match mode::parse(&x[..], considering_dir) {
                 Ok(y) => Some(y),
                 Err(err) => {
@@ -282,11 +312,6 @@ fn behavior(matches: &getopts::Matches) -> Result<Behavior, i32> {
                 }
             },
             None => {
-                show_error!(
-                    "option '--mode' requires an argument\n \
-                     Try '{} --help' for more information.",
-                    NAME
-                );
                 return Err(1);
             }
         }
@@ -294,27 +319,26 @@ fn behavior(matches: &getopts::Matches) -> Result<Behavior, i32> {
         None
     };
 
-    let backup_suffix = if matches.opt_present("suffix") {
-        match matches.opt_str("suffix") {
+    let backup_suffix = if matches.is_present(OPT_SUFFIX) {
+        match matches.value_of(OPT_SUFFIX) {
             Some(x) => x,
             None => {
-                show_error!(
-                    "option '--suffix' requires an argument\n\
-                     Try '{} --help' for more information.",
-                    NAME
-                );
                 return Err(1);
             }
         }
     } else {
-        "~".to_owned()
+        "~"
     };
 
     Ok(Behavior {
         main_function,
         specified_mode,
-        suffix: backup_suffix,
-        verbose: matches.opt_present("v"),
+        suffix: backup_suffix.to_string(),
+        owner: matches.value_of(OPT_OWNER).unwrap_or("").to_string(),
+        group: matches.value_of(OPT_GROUP).unwrap_or("").to_string(),
+        verbose: matches.is_present(OPT_VERBOSE),
+        preserve_timestamps: matches.is_present(OPT_PRESERVE_TIMESTAMPS),
+        compare: matches.is_present(OPT_COMPARE),
     })
 }
 
@@ -325,32 +349,36 @@ fn behavior(matches: &getopts::Matches) -> Result<Behavior, i32> {
 ///
 /// Returns an integer intended as a program return code.
 ///
-fn directory(paths: &[PathBuf], b: Behavior) -> i32 {
+fn directory(paths: Vec<String>, b: Behavior) -> i32 {
     if paths.is_empty() {
-        println!("{} with -d requires at least one argument.", NAME);
+        println!("{} with -d requires at least one argument.", executable!());
         1
     } else {
         let mut all_successful = true;
 
-        for directory in paths.iter() {
-            let path = directory.as_path();
+        for path in paths.iter().map(Path::new) {
+            // if the path already exist, don't try to create it again
+            if !path.exists() {
+                // Differently than the primary functionality (MainFunction::Standard), the directory
+                // functionality should create all ancestors (or components) of a directory regardless
+                // of the presence of the "-D" flag.
+                // NOTE: the GNU "install" sets the expected mode only for the target directory. All
+                // created ancestor directories will have the default mode. Hence it is safe to use
+                // fs::create_dir_all and then only modify the target's dir mode.
+                if let Err(e) = fs::create_dir_all(path) {
+                    show_info!("{}: {}", path.display(), e);
+                    all_successful = false;
+                    continue;
+                }
 
-            if path.exists() {
-                show_info!("cannot create directory '{}': File exists", path.display());
-                all_successful = false;
-            }
-
-            if let Err(e) = fs::create_dir(directory) {
-                show_info!("{}: {}", path.display(), e.to_string());
-                all_successful = false;
+                if b.verbose {
+                    show_info!("creating directory '{}'", path.display());
+                }
             }
 
             if mode::chmod(&path, b.mode()).is_err() {
                 all_successful = false;
-            }
-
-            if b.verbose {
-                show_info!("created directory '{}'", path.display());
+                continue;
             }
         }
         if all_successful {
@@ -361,29 +389,29 @@ fn directory(paths: &[PathBuf], b: Behavior) -> i32 {
     }
 }
 
-/// Test if the path is a a new file path that can be
+/// Test if the path is a new file path that can be
 /// created immediately
 fn is_new_file_path(path: &Path) -> bool {
-    path.is_file() || !path.exists() && path.parent().map(Path::is_dir).unwrap_or(true)
+    !path.exists()
+        && (path.parent().map(Path::is_dir).unwrap_or(true)
+            || path.parent().unwrap().to_string_lossy().is_empty()) // In case of a simple file
 }
 
 /// Perform an install, given a list of paths and behavior.
 ///
 /// Returns an integer intended as a program return code.
 ///
-fn standard(paths: &[PathBuf], b: Behavior) -> i32 {
-    if paths.len() < 2 {
-        println!("{} requires at least 2 arguments.", NAME);
-        1
-    } else {
-        let sources = &paths[0..paths.len() - 1];
-        let target = &paths[paths.len() - 1];
+fn standard(paths: Vec<String>, b: Behavior) -> i32 {
+    let sources = &paths[0..paths.len() - 1]
+        .iter()
+        .map(PathBuf::from)
+        .collect::<Vec<_>>();
+    let target = Path::new(paths.last().unwrap());
 
-        if (target.is_file() || is_new_file_path(target)) && sources.len() == 1 {
-            copy_file_to_file(&sources[0], target, &b)
-        } else {
-            copy_files_into_dir(sources, target, &b)
-        }
+    if (target.is_file() || is_new_file_path(target)) && sources.len() == 1 {
+        copy_file_to_file(&sources[0], &target.to_path_buf(), &b)
+    } else {
+        copy_files_into_dir(sources, &target.to_path_buf(), &b)
     }
 }
 
@@ -399,24 +427,31 @@ fn standard(paths: &[PathBuf], b: Behavior) -> i32 {
 ///
 fn copy_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behavior) -> i32 {
     if !target_dir.is_dir() {
-        show_error!("target ‘{}’ is not a directory", target_dir.display());
+        show_error!("target '{}' is not a directory", target_dir.display());
         return 1;
     }
 
     let mut all_successful = true;
     for sourcepath in files.iter() {
-        let targetpath = match sourcepath.as_os_str().to_str() {
-            Some(name) => target_dir.join(name),
-            None => {
-                show_error!(
-                    "cannot stat ‘{}’: No such file or directory",
-                    sourcepath.display()
-                );
+        if !sourcepath.exists() {
+            show_info!(
+                "cannot stat '{}': No such file or directory",
+                sourcepath.display()
+            );
 
-                all_successful = false;
-                continue;
-            }
-        };
+            all_successful = false;
+            continue;
+        }
+
+        if sourcepath.is_dir() {
+            show_info!("omitting directory '{}'", sourcepath.display());
+            all_successful = false;
+            continue;
+        }
+
+        let mut targetpath = target_dir.clone().to_path_buf();
+        let filename = sourcepath.components().last().unwrap();
+        targetpath.push(filename);
 
         if copy(sourcepath, &targetpath, b).is_err() {
             all_successful = false;
@@ -459,11 +494,26 @@ fn copy_file_to_file(file: &PathBuf, target: &PathBuf, b: &Behavior) -> i32 {
 /// If the copy system call fails, we print a verbose error and return an empty error value.
 ///
 fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
-    let io_result = fs::copy(from, to);
+    if b.compare && !need_copy(from, to, b) {
+        return Ok(());
+    }
 
-    if let Err(err) = io_result {
+    if from.to_string_lossy() == "/dev/null" {
+        /* workaround a limitation of fs::copy
+         * https://github.com/rust-lang/rust/issues/79390
+         */
+        if let Err(err) = File::create(to) {
+            show_error!(
+                "install: cannot install '{}' to '{}': {}",
+                from.display(),
+                to.display(),
+                err
+            );
+            return Err(());
+        }
+    } else if let Err(err) = fs::copy(from, to) {
         show_error!(
-            "install: cannot install ‘{}’ to ‘{}’: {}",
+            "cannot install '{}' to '{}': {}",
             from.display(),
             to.display(),
             err
@@ -475,9 +525,150 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
         return Err(());
     }
 
+    if !b.owner.is_empty() {
+        let meta = match fs::metadata(to) {
+            Ok(meta) => meta,
+            Err(f) => crash!(1, "{}", f.to_string()),
+        };
+
+        let owner_id = match usr2uid(&b.owner) {
+            Ok(g) => g,
+            _ => crash!(1, "no such user: {}", b.owner),
+        };
+        let gid = meta.gid();
+        match wrap_chown(
+            to.as_path(),
+            &meta,
+            Some(owner_id),
+            Some(gid),
+            false,
+            Verbosity::Normal,
+        ) {
+            Ok(n) => {
+                if !n.is_empty() {
+                    show_info!("{}", n);
+                }
+            }
+            Err(e) => show_info!("{}", e),
+        }
+    }
+
+    if !b.group.is_empty() {
+        let meta = match fs::metadata(to) {
+            Ok(meta) => meta,
+            Err(f) => crash!(1, "{}", f.to_string()),
+        };
+
+        let group_id = match grp2gid(&b.group) {
+            Ok(g) => g,
+            _ => crash!(1, "no such group: {}", b.group),
+        };
+        match wrap_chgrp(to.as_path(), &meta, group_id, false, Verbosity::Normal) {
+            Ok(n) => {
+                if !n.is_empty() {
+                    show_info!("{}", n);
+                }
+            }
+            Err(e) => show_info!("{}", e),
+        }
+    }
+
+    if b.preserve_timestamps {
+        let meta = match fs::metadata(from) {
+            Ok(meta) => meta,
+            Err(f) => crash!(1, "{}", f.to_string()),
+        };
+
+        let modified_time = FileTime::from_last_modification_time(&meta);
+        let accessed_time = FileTime::from_last_access_time(&meta);
+
+        match set_file_times(to.as_path(), accessed_time, modified_time) {
+            Ok(_) => {}
+            Err(e) => show_info!("{}", e),
+        }
+    }
+
     if b.verbose {
         show_info!("'{}' -> '{}'", from.display(), to.display());
     }
 
     Ok(())
+}
+
+/// Return true if a file is necessary to copy. This is the case when:
+/// - _from_ or _to_ is nonexistent;
+/// - either file has a sticky bit or set[ug]id bit, or the user specified one;
+/// - either file isn't a regular file;
+/// - the sizes of _from_ and _to_ differ;
+/// - _to_'s owner differs from intended; or
+/// - the contents of _from_ and _to_ differ.
+///
+/// # Parameters
+///
+/// _from_ and _to_, if existent, must be non-directories.
+///
+/// # Errors
+///
+/// Crashes the program if a nonexistent owner or group is specified in _b_.
+///
+fn need_copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> bool {
+    let from_meta = match fs::metadata(from) {
+        Ok(meta) => meta,
+        Err(_) => return true,
+    };
+    let to_meta = match fs::metadata(to) {
+        Ok(meta) => meta,
+        Err(_) => return true,
+    };
+
+    // setuid || setgid || sticky
+    let extra_mode: u32 = 0o7000;
+
+    if b.specified_mode.unwrap_or(0) & extra_mode != 0
+        || from_meta.mode() & extra_mode != 0
+        || to_meta.mode() & extra_mode != 0
+    {
+        return true;
+    }
+
+    if !from_meta.is_file() || !to_meta.is_file() {
+        return true;
+    }
+
+    if from_meta.len() != to_meta.len() {
+        return true;
+    }
+
+    // TODO: if -P (#1809) and from/to contexts mismatch, return true.
+
+    if !b.owner.is_empty() {
+        let owner_id = match usr2uid(&b.owner) {
+            Ok(id) => id,
+            _ => crash!(1, "no such user: {}", b.owner),
+        };
+        if owner_id != to_meta.uid() {
+            return true;
+        }
+    } else if !b.group.is_empty() {
+        let group_id = match grp2gid(&b.group) {
+            Ok(id) => id,
+            _ => crash!(1, "no such group: {}", b.group),
+        };
+        if group_id != to_meta.gid() {
+            return true;
+        }
+    } else {
+        #[cfg(not(target_os = "windows"))]
+        unsafe {
+            if to_meta.uid() != geteuid() || to_meta.gid() != getegid() {
+                return true;
+            }
+        }
+    }
+
+    if !diff(from.to_str().unwrap(), to.to_str().unwrap()) {
+        return true;
+    }
+
+    false
 }

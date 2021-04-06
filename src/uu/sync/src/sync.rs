@@ -7,29 +7,55 @@
 
 /* Last synced with: sync (GNU coreutils) 8.13 */
 
-extern crate getopts;
 extern crate libc;
 
-#[cfg(windows)]
 #[macro_use]
 extern crate uucore;
 
-#[cfg(not(windows))]
-extern crate uucore;
+use clap::{App, Arg};
+use std::path::Path;
 
-static NAME: &str = "sync";
+static EXIT_ERR: i32 = 1;
+
+static ABOUT: &str = "Synchronize cached writes to persistent storage";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
+pub mod options {
+    pub static FILE_SYSTEM: &str = "file-system";
+    pub static DATA: &str = "data";
+}
+
+static ARG_FILES: &str = "files";
 
 #[cfg(unix)]
 mod platform {
     use super::libc;
-
-    extern "C" {
-        fn sync() -> libc::c_void;
-    }
+    #[cfg(target_os = "linux")]
+    use std::fs::File;
+    #[cfg(target_os = "linux")]
+    use std::os::unix::io::AsRawFd;
 
     pub unsafe fn do_sync() -> isize {
-        sync();
+        libc::sync();
+        0
+    }
+
+    #[cfg(target_os = "linux")]
+    pub unsafe fn do_syncfs(files: Vec<String>) -> isize {
+        for path in files {
+            let f = File::open(&path).unwrap();
+            let fd = f.as_raw_fd();
+            libc::syscall(libc::SYS_syncfs, fd);
+        }
+        0
+    }
+
+    #[cfg(target_os = "linux")]
+    pub unsafe fn do_fdatasync(files: Vec<String>) -> isize {
+        for path in files {
+            let f = File::open(&path).unwrap();
+            let fd = f.as_raw_fd();
+            libc::syscall(libc::SYS_fdatasync, fd);
+        }
         0
     }
 }
@@ -45,6 +71,7 @@ mod platform {
     use std::fs::OpenOptions;
     use std::mem;
     use std::os::windows::prelude::*;
+    use std::path::Path;
     use uucore::wide::{FromWide, ToWide};
 
     unsafe fn flush_volume(name: &str) {
@@ -116,59 +143,84 @@ mod platform {
         }
         0
     }
+
+    pub unsafe fn do_syncfs(files: Vec<String>) -> isize {
+        for path in files {
+            flush_volume(
+                Path::new(&path)
+                    .components()
+                    .next()
+                    .unwrap()
+                    .as_os_str()
+                    .to_str()
+                    .unwrap(),
+            );
+        }
+        0
+    }
+}
+
+fn get_usage() -> String {
+    format!("{0} [OPTION]... FILE...", executable!())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let usage = get_usage();
 
-    let mut opts = getopts::Options::new();
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .arg(
+            Arg::with_name(options::FILE_SYSTEM)
+                .short("f")
+                .long(options::FILE_SYSTEM)
+                .conflicts_with(options::DATA)
+                .help("sync the file systems that contain the files (Linux and Windows only)"),
+        )
+        .arg(
+            Arg::with_name(options::DATA)
+                .short("d")
+                .long(options::DATA)
+                .conflicts_with(options::FILE_SYSTEM)
+                .help("sync only file data, no unneeded metadata (Linux only)"),
+        )
+        .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true))
+        .get_matches_from(args);
 
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
+    let files: Vec<String> = matches
+        .values_of(ARG_FILES)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
 
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        _ => {
-            help(&opts);
-            return 1;
+    for f in &files {
+        if !Path::new(&f).exists() {
+            crash!(EXIT_ERR, "cannot stat '{}': No such file or directory", f);
         }
-    };
-
-    if matches.opt_present("h") {
-        help(&opts);
-        return 0;
     }
 
-    if matches.opt_present("V") {
-        version();
-        return 0;
+    if matches.is_present(options::FILE_SYSTEM) {
+        #[cfg(any(target_os = "linux", target_os = "windows"))]
+        syncfs(files);
+    } else if matches.is_present(options::DATA) {
+        #[cfg(target_os = "linux")]
+        fdatasync(files);
+    } else {
+        sync();
     }
-
-    sync();
     0
-}
-
-fn version() {
-    println!("{} (uutils) {}", NAME, VERSION);
-    println!("The MIT License");
-    println!();
-    println!("Author -- Alexander Fomin.");
-}
-
-fn help(opts: &getopts::Options) {
-    let msg = format!(
-        "{0} {1}
-
-Usage:
-  {0} [OPTION]
-
-Force changed blocks to disk, update the super block.",
-        NAME, VERSION
-    );
-
-    print!("{}", opts.usage(&msg));
 }
 
 fn sync() -> isize {
     unsafe { platform::do_sync() }
+}
+
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+fn syncfs(files: Vec<String>) -> isize {
+    unsafe { platform::do_syncfs(files) }
+}
+
+#[cfg(target_os = "linux")]
+fn fdatasync(files: Vec<String>) -> isize {
+    unsafe { platform::do_fdatasync(files) }
 }

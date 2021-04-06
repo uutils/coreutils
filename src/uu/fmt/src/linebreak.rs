@@ -81,7 +81,7 @@ pub fn break_lines(para: &Paragraph, opts: &FmtOptions, ostream: &mut BufWriter<
     let mut break_args = BreakArgs {
         opts,
         init_len: p_init_len,
-        indent_str: &p_indent[..],
+        indent_str: p_indent,
         indent_len: p_indent_len,
         uniform,
         ostream,

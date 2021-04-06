@@ -5,326 +5,23 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-extern crate getopts;
+#[macro_use]
+extern crate uucore;
 
-use getopts::{Matches, Options};
-use std::fmt;
-use std::io::BufRead;
+use crate::format::format_and_print;
+use crate::options::*;
+use crate::units::{Result, Transform, Unit};
+use clap::{App, AppSettings, Arg, ArgMatches};
+use std::io::{BufRead, Write};
+use uucore::ranges::Range;
 
-static NAME: &str = "numfmt";
+pub mod format;
+mod options;
+mod units;
+
 static VERSION: &str = env!("CARGO_PKG_VERSION");
-
-const IEC_BASES: [f64; 10] = [
-    //premature optimization
-    1.,
-    1_024.,
-    1_048_576.,
-    1_073_741_824.,
-    1_099_511_627_776.,
-    1_125_899_906_842_624.,
-    1_152_921_504_606_846_976.,
-    1_180_591_620_717_411_303_424.,
-    1_208_925_819_614_629_174_706_176.,
-    1_237_940_039_285_380_274_899_124_224.,
-];
-
-type Result<T> = std::result::Result<T, String>;
-
-type WithI = bool;
-
-enum Unit {
-    Auto,
-    Si,
-    Iec(WithI),
-    None,
-}
-
-enum RawSuffix {
-    K,
-    M,
-    G,
-    T,
-    P,
-    E,
-    Z,
-    Y,
-}
-
-type Suffix = (RawSuffix, WithI);
-
-struct DisplayableSuffix(Suffix);
-
-impl fmt::Display for DisplayableSuffix {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let DisplayableSuffix((ref raw_suffix, ref with_i)) = *self;
-        match raw_suffix {
-            RawSuffix::K => write!(f, "K"),
-            RawSuffix::M => write!(f, "M"),
-            RawSuffix::G => write!(f, "G"),
-            RawSuffix::T => write!(f, "T"),
-            RawSuffix::P => write!(f, "P"),
-            RawSuffix::E => write!(f, "E"),
-            RawSuffix::Z => write!(f, "Z"),
-            RawSuffix::Y => write!(f, "Y"),
-        }
-        .and_then(|()| match with_i {
-            true => write!(f, "i"),
-            false => Ok(()),
-        })
-    }
-}
-
-fn parse_suffix(s: String) -> Result<(f64, Option<Suffix>)> {
-    let with_i = s.ends_with('i');
-    let mut iter = s.chars();
-    if with_i {
-        iter.next_back();
-    }
-    let suffix: Option<Suffix> = match iter.next_back() {
-        Some('K') => Ok(Some((RawSuffix::K, with_i))),
-        Some('M') => Ok(Some((RawSuffix::M, with_i))),
-        Some('G') => Ok(Some((RawSuffix::G, with_i))),
-        Some('T') => Ok(Some((RawSuffix::T, with_i))),
-        Some('P') => Ok(Some((RawSuffix::P, with_i))),
-        Some('E') => Ok(Some((RawSuffix::E, with_i))),
-        Some('Z') => Ok(Some((RawSuffix::Z, with_i))),
-        Some('Y') => Ok(Some((RawSuffix::Y, with_i))),
-        Some('0'..='9') => Ok(None),
-        _ => Err("Failed to parse suffix"),
-    }?;
-
-    let suffix_len = match suffix {
-        None => 0,
-        Some((_, false)) => 1,
-        Some((_, true)) => 2,
-    };
-
-    let number = s[..s.len() - suffix_len]
-        .parse::<f64>()
-        .map_err(|err| err.to_string())?;
-
-    Ok((number, suffix))
-}
-
-fn parse_unit(s: String) -> Result<Unit> {
-    match &s[..] {
-        "auto" => Ok(Unit::Auto),
-        "si" => Ok(Unit::Si),
-        "iec" => Ok(Unit::Iec(false)),
-        "iec-i" => Ok(Unit::Iec(true)),
-        "none" => Ok(Unit::None),
-        _ => Err("Unsupported unit is specified".to_owned()),
-    }
-}
-
-struct TransformOptions {
-    from: Transform,
-    to: Transform,
-}
-
-struct Transform {
-    unit: Unit,
-}
-
-struct NumfmtOptions {
-    transform: TransformOptions,
-    padding: isize,
-    header: usize,
-}
-
-fn remove_suffix(i: f64, s: Option<Suffix>, u: &Unit) -> Result<f64> {
-    match (s, u) {
-        (None, _) => Ok(i),
-        (Some((raw_suffix, false)), &Unit::Auto) | (Some((raw_suffix, false)), &Unit::Si) => {
-            match raw_suffix {
-                RawSuffix::K => Ok(i * 1e3),
-                RawSuffix::M => Ok(i * 1e6),
-                RawSuffix::G => Ok(i * 1e9),
-                RawSuffix::T => Ok(i * 1e12),
-                RawSuffix::P => Ok(i * 1e15),
-                RawSuffix::E => Ok(i * 1e18),
-                RawSuffix::Z => Ok(i * 1e21),
-                RawSuffix::Y => Ok(i * 1e24),
-            }
-        }
-        (Some((raw_suffix, false)), &Unit::Iec(false))
-        | (Some((raw_suffix, true)), &Unit::Auto)
-        | (Some((raw_suffix, true)), &Unit::Iec(true)) => match raw_suffix {
-            RawSuffix::K => Ok(i * IEC_BASES[1]),
-            RawSuffix::M => Ok(i * IEC_BASES[2]),
-            RawSuffix::G => Ok(i * IEC_BASES[3]),
-            RawSuffix::T => Ok(i * IEC_BASES[4]),
-            RawSuffix::P => Ok(i * IEC_BASES[5]),
-            RawSuffix::E => Ok(i * IEC_BASES[6]),
-            RawSuffix::Z => Ok(i * IEC_BASES[7]),
-            RawSuffix::Y => Ok(i * IEC_BASES[8]),
-        },
-        (_, _) => Err("This suffix is unsupported for specified unit".to_owned()),
-    }
-}
-
-fn transform_from(s: String, opts: &Transform) -> Result<f64> {
-    let (i, suffix) = parse_suffix(s)?;
-    remove_suffix(i, suffix, &opts.unit).map(|n| n.round())
-}
-
-fn consider_suffix(i: f64, u: &Unit) -> Result<(f64, Option<Suffix>)> {
-    let j = i.abs();
-    match *u {
-        Unit::Si => match j {
-            _ if j < 1e3 => Ok((i, None)),
-            _ if j < 1e6 => Ok((i / 1e3, Some((RawSuffix::K, false)))),
-            _ if j < 1e9 => Ok((i / 1e6, Some((RawSuffix::M, false)))),
-            _ if j < 1e12 => Ok((i / 1e9, Some((RawSuffix::G, false)))),
-            _ if j < 1e15 => Ok((i / 1e12, Some((RawSuffix::T, false)))),
-            _ if j < 1e18 => Ok((i / 1e15, Some((RawSuffix::P, false)))),
-            _ if j < 1e21 => Ok((i / 1e18, Some((RawSuffix::E, false)))),
-            _ if j < 1e24 => Ok((i / 1e21, Some((RawSuffix::Z, false)))),
-            _ if j < 1e27 => Ok((i / 1e24, Some((RawSuffix::Y, false)))),
-            _ => Err("Number is too big and unsupported".to_owned()),
-        },
-        Unit::Iec(with_i) => match j {
-            _ if j < IEC_BASES[1] => Ok((i, None)),
-            _ if j < IEC_BASES[2] => Ok((i / IEC_BASES[1], Some((RawSuffix::K, with_i)))),
-            _ if j < IEC_BASES[3] => Ok((i / IEC_BASES[2], Some((RawSuffix::M, with_i)))),
-            _ if j < IEC_BASES[4] => Ok((i / IEC_BASES[3], Some((RawSuffix::G, with_i)))),
-            _ if j < IEC_BASES[5] => Ok((i / IEC_BASES[4], Some((RawSuffix::T, with_i)))),
-            _ if j < IEC_BASES[6] => Ok((i / IEC_BASES[5], Some((RawSuffix::P, with_i)))),
-            _ if j < IEC_BASES[7] => Ok((i / IEC_BASES[6], Some((RawSuffix::E, with_i)))),
-            _ if j < IEC_BASES[8] => Ok((i / IEC_BASES[7], Some((RawSuffix::Z, with_i)))),
-            _ if j < IEC_BASES[9] => Ok((i / IEC_BASES[8], Some((RawSuffix::Y, with_i)))),
-            _ => Err("Number is too big and unsupported".to_owned()),
-        },
-        Unit::Auto => Err("Unit 'auto' isn't supported with --to options".to_owned()),
-        Unit::None => Ok((i, None)),
-    }
-}
-
-fn transform_to(s: f64, opts: &Transform) -> Result<String> {
-    let (i2, s) = consider_suffix(s, &opts.unit)?;
-    Ok(match s {
-        None => format!("{}", i2),
-        Some(s) => format!("{:.1}{}", i2, DisplayableSuffix(s)),
-    })
-}
-
-fn format_string(source: String, options: &NumfmtOptions) -> Result<String> {
-    let number = transform_to(
-        transform_from(source, &options.transform.from)?,
-        &options.transform.to,
-    )?;
-
-    Ok(match options.padding {
-        p if p == 0 => number,
-        p if p > 0 => format!("{:>padding$}", number, padding = p as usize),
-        p => format!("{:<padding$}", number, padding = p.abs() as usize),
-    })
-}
-
-fn parse_options(args: &Matches) -> Result<NumfmtOptions> {
-    let transform = TransformOptions {
-        from: Transform {
-            unit: args
-                .opt_str("from")
-                .map(parse_unit)
-                .unwrap_or(Ok(Unit::None))?,
-        },
-        to: Transform {
-            unit: args
-                .opt_str("to")
-                .map(parse_unit)
-                .unwrap_or(Ok(Unit::None))?,
-        },
-    };
-
-    let padding = match args.opt_str("padding") {
-        Some(s) => s.parse::<isize>().map_err(|err| err.to_string()),
-        None => Ok(0),
-    }?;
-
-    let header = match args.opt_default("header", "1") {
-        Some(s) => s.parse::<usize>().map_err(|err| err.to_string()),
-        None => Ok(0),
-    }?;
-
-    Ok(NumfmtOptions {
-        transform,
-        padding,
-        header,
-    })
-}
-
-fn handle_args(args: &[String], options: NumfmtOptions) -> Result<()> {
-    for l in args {
-        println!("{}", format_string(l.clone(), &options)?)
-    }
-    Ok(())
-}
-
-fn handle_stdin(options: NumfmtOptions) -> Result<()> {
-    let stdin = std::io::stdin();
-    let locked_stdin = stdin.lock();
-
-    let mut lines = locked_stdin.lines();
-    for l in lines.by_ref().take(options.header) {
-        l.map(|s| println!("{}", s)).map_err(|e| e.to_string())?
-    }
-
-    for l in lines {
-        l.map_err(|e| e.to_string()).and_then(|l| {
-            let l = format_string(l, &options)?;
-            println!("{}", l);
-            Ok(())
-        })?
-    }
-    Ok(())
-}
-
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
-
-    let mut opts = Options::new();
-
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-    opts.optopt(
-        "",
-        "from",
-        "auto-scale input numbers to UNITs; default is 'none'; see UNIT above",
-        "UNIT",
-    );
-    opts.optopt(
-        "",
-        "to",
-        "auto-scale output numbers to UNITs; see Unit above",
-        "UNIT",
-    );
-    opts.optopt(
-        "",
-        "padding",
-        "pad the output to N characters; positive N will right-align; negative N will left-align; padding is ignored if the output is wider than N",
-        "N"
-    );
-    opts.optflagopt(
-        "",
-        "header",
-        "print (without converting) the first N header lines; N defaults to 1 if not specified",
-        "N",
-    );
-
-    let matches = opts.parse(&args[1..]).unwrap();
-    if matches.opt_present("help") {
-        println!("{} {}", NAME, VERSION);
-        println!();
-        println!("Usage:");
-        println!("  {0} [STRING]... [OPTION]...", NAME);
-        println!();
-        print!(
-            "{}",
-            opts.usage("Convert numbers from/to human-readable strings")
-        );
-        println!(
-            "UNIT options:
+static ABOUT: &str = "Convert numbers from/to human-readable strings";
+static LONG_HELP: &str = "UNIT options:
    none   no auto-scaling is done; suffixes will trigger an error
 
    auto   accept optional single/two letter suffix:
@@ -341,23 +38,187 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
    iec-i  accept optional two-letter suffix:
 
-          1Ki = 1024, 1Mi = 1048576, ..."
-        );
+          1Ki = 1024, 1Mi = 1048576, ...
 
-        return 0;
+FIELDS supports cut(1) style field ranges:
+  N    N'th field, counted from 1
+  N-   from N'th field, to end of line
+  N-M  from N'th to M'th field (inclusive)
+  -M   from first to M'th field (inclusive)
+  -    all fields
+Multiple fields/ranges can be separated with commas
+";
+
+fn get_usage() -> String {
+    format!("{0} [OPTION]... [NUMBER]...", executable!())
+}
+
+fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: NumfmtOptions) -> Result<()> {
+    for l in args {
+        format_and_print(l, &options)?;
     }
-    if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
+
+    Ok(())
+}
+
+fn handle_stdin(options: NumfmtOptions) -> Result<()> {
+    let stdin = std::io::stdin();
+    let locked_stdin = stdin.lock();
+
+    let mut lines = locked_stdin.lines();
+    for l in lines.by_ref().take(options.header) {
+        l.map(|s| println!("{}", s)).map_err(|e| e.to_string())?;
     }
 
-    let options = parse_options(&matches).unwrap();
+    for l in lines {
+        l.map_err(|e| e.to_string())
+            .and_then(|l| format_and_print(&l, &options))?;
+    }
 
-    if matches.free.is_empty() {
-        handle_stdin(options).unwrap()
-    } else {
-        handle_args(&matches.free, options).unwrap()
+    Ok(())
+}
+
+fn parse_unit(s: &str) -> Result<Unit> {
+    match s {
+        "auto" => Ok(Unit::Auto),
+        "si" => Ok(Unit::Si),
+        "iec" => Ok(Unit::Iec(false)),
+        "iec-i" => Ok(Unit::Iec(true)),
+        "none" => Ok(Unit::None),
+        _ => Err("Unsupported unit is specified".to_owned()),
+    }
+}
+
+fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
+    let from = parse_unit(args.value_of(options::FROM).unwrap())?;
+    let to = parse_unit(args.value_of(options::TO).unwrap())?;
+
+    let transform = TransformOptions {
+        from: Transform { unit: from },
+        to: Transform { unit: to },
     };
 
-    0
+    let padding = match args.value_of(options::PADDING) {
+        Some(s) => s.parse::<isize>().map_err(|err| err.to_string()),
+        None => Ok(0),
+    }?;
+
+    let header = match args.occurrences_of(options::HEADER) {
+        0 => Ok(0),
+        _ => {
+            let value = args.value_of(options::HEADER).unwrap();
+
+            value
+                .parse::<usize>()
+                .map_err(|_| value)
+                .and_then(|n| match n {
+                    0 => Err(value),
+                    _ => Ok(n),
+                })
+                .map_err(|value| format!("invalid header value ‘{}’", value))
+        }
+    }?;
+
+    let fields = match args.value_of(options::FIELD) {
+        Some("-") => vec![Range {
+            low: 1,
+            high: std::usize::MAX,
+        }],
+        Some(v) => Range::from_list(v)?,
+        None => unreachable!(),
+    };
+
+    let delimiter = args.value_of(options::DELIMITER).map_or(Ok(None), |arg| {
+        if arg.len() == 1 {
+            Ok(Some(arg.to_string()))
+        } else {
+            Err("the delimiter must be a single character".to_string())
+        }
+    })?;
+
+    Ok(NumfmtOptions {
+        transform,
+        padding,
+        header,
+        fields,
+        delimiter,
+    })
+}
+
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let usage = get_usage();
+
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .after_help(LONG_HELP)
+        .setting(AppSettings::AllowNegativeNumbers)
+        .arg(
+            Arg::with_name(options::DELIMITER)
+                .short("d")
+                .long(options::DELIMITER)
+                .value_name("X")
+                .help("use X instead of whitespace for field delimiter"),
+        )
+        .arg(
+            Arg::with_name(options::FIELD)
+                .long(options::FIELD)
+                .help("replace the numbers in these input fields (default=1) see FIELDS below")
+                .value_name("FIELDS")
+                .default_value(options::FIELD_DEFAULT),
+        )
+        .arg(
+            Arg::with_name(options::FROM)
+                .long(options::FROM)
+                .help("auto-scale input numbers to UNITs; see UNIT below")
+                .value_name("UNIT")
+                .default_value(options::FROM_DEFAULT),
+        )
+        .arg(
+            Arg::with_name(options::TO)
+                .long(options::TO)
+                .help("auto-scale output numbers to UNITs; see UNIT below")
+                .value_name("UNIT")
+                .default_value(options::TO_DEFAULT),
+        )
+        .arg(
+            Arg::with_name(options::PADDING)
+                .long(options::PADDING)
+                .help(
+                    "pad the output to N characters; positive N will \
+                     right-align; negative N will left-align; padding is \
+                     ignored if the output is wider than N; the default is \
+                     to automatically pad if a whitespace is found",
+                )
+                .value_name("N"),
+        )
+        .arg(
+            Arg::with_name(options::HEADER)
+                .long(options::HEADER)
+                .help(
+                    "print (without converting) the first N header lines; \
+                     N defaults to 1 if not specified",
+                )
+                .value_name("N")
+                .default_value(options::HEADER_DEFAULT)
+                .hide_default_value(true),
+        )
+        .arg(Arg::with_name(options::NUMBER).hidden(true).multiple(true))
+        .get_matches_from(args);
+
+    let result =
+        parse_options(&matches).and_then(|options| match matches.values_of(options::NUMBER) {
+            Some(values) => handle_args(values, options),
+            None => handle_stdin(options),
+        });
+
+    match result {
+        Err(e) => {
+            std::io::stdout().flush().expect("error flushing stdout");
+            show_info!("{}", e);
+            1
+        }
+        _ => 0,
+    }
 }

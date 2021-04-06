@@ -1,6 +1,6 @@
 [package]
 name = "uu_date"
-version = "0.0.1"
+version = "0.0.6"
 authors = ["uutils developers"]
 license = "MIT"
 description = "date ~ (uutils) display or set the current time"
@@ -16,9 +16,15 @@ path = "src/date.rs"
 
 [dependencies]
 chrono = "0.4.4"
-clap = "2.32"
-uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary" }
-uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
+clap = "2.33"
+uucore = { version=">=0.0.8", package="uucore", path="../../uucore" }
+uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["minwinbase", "sysinfoapi", "minwindef"] }
 
 [[bin]]
 name = "date"

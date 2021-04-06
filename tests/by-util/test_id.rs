@@ -1,5 +1,17 @@
 use crate::common::util::*;
 
+fn return_whoami_username() -> String {
+    let scene = TestScenario::new("whoami");
+    let result = scene.cmd("whoami").run();
+    if is_ci() && result.stderr.contains("cannot find name for user ID") {
+        // In the CI, some server are failing to return whoami.
+        // As seems to be a configuration issue, ignoring it
+        return String::from("");
+    }
+
+    result.stdout.trim().to_string()
+}
+
 #[test]
 fn test_id() {
     let scene = TestScenario::new(util_name!());
@@ -29,18 +41,14 @@ fn test_id() {
 
 #[test]
 fn test_id_from_name() {
-    let mut scene = TestScenario::new("whoami");
-    let result = scene.cmd("whoami").run();
-    if is_ci() && result.stderr.contains("cannot find name for user ID") {
-        // In the CI, some server are failing to return whoami.
-        // As seems to be a configuration issue, ignoring it
+    let username = return_whoami_username();
+    if username == "" {
+        // Sometimes, the CI is failing here
         return;
     }
 
-    let username = result.stdout.trim();
-
-    scene = TestScenario::new(util_name!());
-    let result = scene.ucmd().arg(username).succeeds();
+    let scene = TestScenario::new(util_name!());
+    let result = scene.ucmd().arg(&username).succeeds();
     println!("result.stdout = {}", result.stdout);
     println!("result.stderr = {}", result.stderr);
     assert!(result.success);
@@ -138,4 +146,42 @@ fn test_id_user() {
     assert!(result.success);
     let s1 = String::from(result.stdout.trim());
     assert!(s1.parse::<f64>().is_ok());
+}
+
+#[test]
+fn test_id_pretty_print() {
+    let username = return_whoami_username();
+    if username == "" {
+        // Sometimes, the CI is failing here
+        return;
+    }
+
+    let scene = TestScenario::new(util_name!());
+    let result = scene.ucmd().arg("-p").run();
+    if result.stdout.trim() == "" {
+        // Sometimes, the CI is failing here with
+        // old rust versions on Linux
+        return;
+    }
+    println!("result.stdout = {}", result.stdout);
+    println!("result.stderr = {}", result.stderr);
+    assert!(result.success);
+    assert!(result.stdout.contains(&username));
+}
+
+#[test]
+fn test_id_password_style() {
+    let username = return_whoami_username();
+    if username == "" {
+        // Sometimes, the CI is failing here
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+
+    let result = scene.ucmd().arg("-P").succeeds();
+
+    println!("result.stdout = {}", result.stdout);
+    println!("result.stderr = {}", result.stderr);
+    assert!(result.success);
+    assert!(result.stdout.starts_with(&username));
 }

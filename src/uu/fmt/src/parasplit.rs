@@ -264,6 +264,8 @@ impl<'a> ParagraphStream<'a> {
                     return false;
                 }
 
+                #[allow(clippy::match_like_matches_macro)]
+                // `matches!(...)` macro not stabilized until rust v1.42
                 l_slice[..colon_posn].chars().all(|x| match x as usize {
                     y if y < 33 || y > 126 => false,
                     _ => true,
@@ -539,6 +541,8 @@ impl<'a> WordSplit<'a> {
     }
 
     fn is_punctuation(c: char) -> bool {
+        #[allow(clippy::match_like_matches_macro)]
+        // `matches!(...)` macro not stabilized until rust v1.42
         match c {
             '!' | '.' | '?' => true,
             _ => false,

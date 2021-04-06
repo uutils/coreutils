@@ -7,12 +7,6 @@
 
 // spell-checker:ignore (ToDO) MAKEWORD addrs hashset
 
-extern crate clap;
-extern crate hostname;
-extern crate libc;
-#[cfg(windows)]
-extern crate winapi;
-
 #[macro_use]
 extern crate uucore;
 
@@ -84,7 +78,7 @@ fn execute(args: impl uucore::Args) -> i32 {
         )
         .arg(Arg::with_name(OPT_SHORT).short("s").long("short").help(
             "Display the short hostname (the portion before the first dot) if \
-                possible",
+             possible",
         ))
         .arg(Arg::with_name(OPT_HOST))
         .get_matches_from(args);
@@ -123,7 +117,7 @@ fn display_hostname(matches: &ArgMatches) -> i32 {
                             ip.truncate(len - 2);
                         }
                         output.push_str(&ip);
-                        output.push_str(" ");
+                        output.push(' ');
                         hashset.insert(addr);
                     }
                 }

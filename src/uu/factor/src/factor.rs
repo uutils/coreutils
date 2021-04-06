@@ -5,8 +5,7 @@
 // * For the full copyright and license information, please view the LICENSE file
 // * that was distributed with this source code.
 
-extern crate rand;
-
+use smallvec::SmallVec;
 use std::cell::RefCell;
 use std::fmt;
 
@@ -16,11 +15,16 @@ use crate::{miller_rabin, rho, table};
 type Exponent = u8;
 
 #[derive(Clone, Debug)]
-struct Decomposition(Vec<(u64, Exponent)>);
+struct Decomposition(SmallVec<[(u64, Exponent); NUM_FACTORS_INLINE]>);
+
+// The number of factors to inline directly into a `Decomposition` object.
+// As a consequence of the Erdős–Kac theorem, the average number of prime factors
+// of integers < 10²⁵ ≃ 2⁸³ is 4, so we can use a slightly higher value.
+const NUM_FACTORS_INLINE: usize = 5;
 
 impl Decomposition {
     fn one() -> Decomposition {
-        Decomposition(Vec::new())
+        Decomposition(SmallVec::new())
     }
 
     fn add(&mut self, factor: u64, exp: Exponent) {
@@ -141,10 +145,10 @@ pub fn factor(mut n: u64) -> Factors {
         return factors;
     }
 
-    let z = n.trailing_zeros();
-    if z > 0 {
-        factors.add(2, z as Exponent);
-        n >>= z;
+    let n_zeros = n.trailing_zeros();
+    if n_zeros > 0 {
+        factors.add(2, n_zeros as Exponent);
+        n >>= n_zeros;
     }
 
     if n == 1 {
@@ -162,8 +166,20 @@ pub fn factor(mut n: u64) -> Factors {
 
 #[cfg(test)]
 mod tests {
-    use super::{factor, Factors};
+    use super::{factor, Decomposition, Exponent, Factors};
     use quickcheck::quickcheck;
+    use smallvec::smallvec;
+    use std::cell::RefCell;
+
+    #[test]
+    fn factor_2044854919485649() {
+        let f = Factors(RefCell::new(Decomposition(smallvec![
+            (503, 1),
+            (2423, 1),
+            (40961, 2)
+        ])));
+        assert_eq!(factor(f.product()), f);
+    }
 
     #[test]
     fn factor_recombines_small() {
@@ -182,7 +198,7 @@ mod tests {
     #[test]
     fn factor_recombines_strong_pseudoprime() {
         // This is a strong pseudoprime (wrt. miller_rabin::BASIS)
-        //  and triggered a bug in rho::factor's codepath handling
+        //  and triggered a bug in rho::factor's code path handling
         //  miller_rabbin::Result::Composite
         let pseudoprime = 17179869183;
         for _ in 0..20 {
@@ -197,9 +213,15 @@ mod tests {
             i == 0 || factor(i).product() == i
         }
 
-        fn recombines_factors(f: Factors) -> bool {
+        fn recombines_factors(f: Factors) -> () {
             assert_eq!(factor(f.product()), f);
-            true
+        }
+
+        fn exponentiate_factors(f: Factors, e: Exponent) -> () {
+            if e == 0 { return; }
+            if let Some(fe) = f.product().checked_pow(e.into()) {
+                assert_eq!(factor(fe), f ^ e);
+            }
         }
     }
 }
@@ -213,7 +235,7 @@ impl quickcheck::Arbitrary for Factors {
         let mut n = u64::MAX;
 
         // Adam Kalai's algorithm for generating uniformly-distributed
-        // integers and their factorisation.
+        // integers and their factorization.
         //
         // See Generating Random Factored Numbers, Easily, J. Cryptology (2003)
         'attempt: loop {
@@ -232,5 +254,21 @@ impl quickcheck::Arbitrary for Factors {
 
             return f;
         }
+    }
+}
+
+#[cfg(test)]
+impl std::ops::BitXor<Exponent> for Factors {
+    type Output = Self;
+
+    fn bitxor(self, rhs: Exponent) -> Factors {
+        debug_assert_ne!(rhs, 0);
+        let mut r = Factors::one();
+        for (p, e) in self.0.borrow().0.iter() {
+            r.add(*p, rhs * e);
+        }
+
+        debug_assert_eq!(r.product(), self.product().pow(rhs.into()));
+        return r;
     }
 }

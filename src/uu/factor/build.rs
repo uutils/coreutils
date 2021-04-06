@@ -29,6 +29,7 @@ use miller_rabin::is_prime;
 
 #[path = "src/numeric/modular_inverse.rs"]
 mod modular_inverse;
+#[allow(unused_imports)] // imports there are used, but invisible from build.rs
 #[path = "src/numeric/traits.rs"]
 mod traits;
 use modular_inverse::modular_inverse;

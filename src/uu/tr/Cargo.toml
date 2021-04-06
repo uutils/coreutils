@@ -1,6 +1,6 @@
 [package]
 name = "uu_tr"
-version = "0.0.1"
+version = "0.0.6"
 authors = ["uutils developers"]
 license = "MIT"
 description = "tr ~ (uutils) translate characters within input and display"
@@ -17,9 +17,9 @@ path = "src/tr.rs"
 [dependencies]
 bit-set = "0.5.0"
 fnv = "1.0.5"
-getopts = "0.2.18"
-uucore = { version="0.0.4", package="uucore", git="https://github.com/uutils/uucore.git", branch="canary" }
-uucore_procs = { version="0.0.4", package="uucore_procs", git="https://github.com/uutils/uucore.git", branch="canary" }
+clap = "2.33"
+uucore = { version=">=0.0.8", package="uucore", path="../../uucore" }
+uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]
 name = "tr"

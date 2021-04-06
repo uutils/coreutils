@@ -9,13 +9,10 @@
 
 // spell-checker:ignore (ToDO) lstat
 
-extern crate getopts;
-extern crate libc;
-
 #[macro_use]
 extern crate uucore;
 
-use getopts::Options;
+use clap::{App, Arg};
 use std::fs;
 use std::io::{ErrorKind, Write};
 
@@ -25,107 +22,94 @@ enum Mode {
     Basic,   // check basic compatibility with POSIX
     Extra,   // check for leading dashes and empty names
     Both,    // a combination of `Basic` and `Extra`
-    Help,    // show help
-    Version, // show version information
 }
 
 static NAME: &str = "pathchk";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
+static ABOUT: &str = "Check whether file names are valid or portable";
+
+mod options {
+    pub const POSIX: &str = "posix";
+    pub const POSIX_SPECIAL: &str = "posix-special";
+    pub const PORTABILITY: &str = "portability";
+    pub const PATH: &str = "path";
+}
 
 // a few global constants as used in the GNU implementation
 const POSIX_PATH_MAX: usize = 256;
 const POSIX_NAME_MAX: usize = 14;
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+fn get_usage() -> String {
+    format!("{0} [OPTION]... NAME...", executable!())
+}
 
-    // add options
-    let mut opts = Options::new();
-    opts.optflag("p", "posix", "check for (most) POSIX systems");
-    opts.optflag(
-        "P",
-        "posix-special",
-        "check for empty names and leading \"-\"",
-    );
-    opts.optflag(
-        "",
-        "portability",
-        "check for all POSIX systems (equivalent to -p -P)",
-    );
-    opts.optflag("h", "help", "display this help text and exit");
-    opts.optflag("V", "version", "output version information and exit");
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(e) => crash!(1, "{}", e),
-    };
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let usage = get_usage();
+
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .arg(
+            Arg::with_name(options::POSIX)
+                .short("p")
+                .help("check for most POSIX systems"),
+        )
+        .arg(
+            Arg::with_name(options::POSIX_SPECIAL)
+                .short("P")
+                .help(r#"check for empty names and leading "-""#),
+        )
+        .arg(
+            Arg::with_name(options::PORTABILITY)
+                .long(options::PORTABILITY)
+                .help("check for all POSIX systems (equivalent to -p -P)"),
+        )
+        .arg(Arg::with_name(options::PATH).hidden(true).multiple(true))
+        .get_matches_from(args);
 
     // set working mode
-    let mode = if matches.opt_present("version") {
-        Mode::Version
-    } else if matches.opt_present("help") {
-        Mode::Help
-    } else if (matches.opt_present("posix") && matches.opt_present("posix-special"))
-        || matches.opt_present("portability")
-    {
+    let is_posix = matches.values_of(options::POSIX).is_some();
+    let is_posix_special = matches.values_of(options::POSIX_SPECIAL).is_some();
+    let is_portability = matches.values_of(options::PORTABILITY).is_some();
+
+    let mode = if (is_posix && is_posix_special) || is_portability {
         Mode::Both
-    } else if matches.opt_present("posix") {
+    } else if is_posix {
         Mode::Basic
-    } else if matches.opt_present("posix-special") {
+    } else if is_posix_special {
         Mode::Extra
     } else {
         Mode::Default
     };
 
     // take necessary actions
-    match mode {
-        Mode::Help => {
-            help(opts);
-            0
-        }
-        Mode::Version => {
-            version();
-            0
-        }
-        _ => {
-            let mut res = if matches.free.is_empty() {
-                show_error!("missing operand\nTry {} --help for more information", NAME);
-                false
-            } else {
-                true
-            };
-            // free strings are path operands
-            // FIXME: TCS, seems inefficient and overly verbose (?)
-            for p in matches.free {
-                let mut path = Vec::new();
-                for path_segment in p.split('/') {
-                    path.push(path_segment.to_string());
-                }
-                res &= check_path(&mode, &path);
+    let paths = matches.values_of(options::PATH);
+    let mut res = if paths.is_none() {
+        show_error!("missing operand\nTry {} --help for more information", NAME);
+        false
+    } else {
+        true
+    };
+
+    if res {
+        // free strings are path operands
+        // FIXME: TCS, seems inefficient and overly verbose (?)
+        for p in paths.unwrap() {
+            let mut path = Vec::new();
+            for path_segment in p.split('/') {
+                path.push(path_segment.to_string());
             }
-            // determine error code
-            if res {
-                0
-            } else {
-                1
-            }
+            res &= check_path(&mode, &path);
         }
     }
-}
 
-// print help
-fn help(opts: Options) {
-    let msg = format!(
-        "Usage: {} [OPTION]... NAME...\n\n\
-         Diagnose invalid or unportable file names.",
-        NAME
-    );
-
-    print!("{}", opts.usage(&msg));
-}
-
-// print version information
-fn version() {
-    println!("{} {}", NAME, VERSION);
+    // determine error code
+    if res {
+        0
+    } else {
+        1
+    }
 }
 
 // check a path, given as a slice of it's components and an operating mode

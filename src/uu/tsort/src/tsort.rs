@@ -6,54 +6,38 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-extern crate getopts;
-
 #[macro_use]
 extern crate uucore;
 
+use clap::{App, Arg};
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
 
-static NAME: &str = "tsort";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
+static SUMMARY: &str = "Topological sort the strings in FILE. 
+Strings are defined as any sequence of tokens separated by whitespace (tab, space, or newline). 
+If FILE is not passed in, stdin is used instead.";
+static USAGE: &str = "tsort [OPTIONS] FILE";
+
+mod options {
+    pub const FILE: &str = "file";
+}
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args.collect_str();
 
-    let mut opts = getopts::Options::new();
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .usage(USAGE)
+        .about(SUMMARY)
+        .arg(Arg::with_name(options::FILE).hidden(true))
+        .get_matches_from(args);
 
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => crash!(1, "{}", f),
-    };
-
-    if matches.opt_present("h") {
-        println!("{} {}", NAME, VERSION);
-        println!();
-        println!("Usage:");
-        println!("  {} [OPTIONS] FILE", NAME);
-        println!();
-        println!("{}", opts.usage("Topological sort the strings in FILE. Strings are defined as any sequence of tokens separated by whitespace (tab, space, or newline). If FILE is not passed in, stdin is used instead."));
-        return 0;
-    }
-
-    if matches.opt_present("V") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
-
-    let files = matches.free.clone();
-    let input = if files.len() > 1 {
-        crash!(1, "{}, extra operand '{}'", NAME, matches.free[1]);
-    } else if files.is_empty() {
-        "-".to_owned()
-    } else {
-        files[0].clone()
+    let input = match matches.value_of(options::FILE) {
+        Some(v) => v,
+        None => "-",
     };
 
     let mut stdin_buf;
@@ -131,7 +115,7 @@ impl Graph {
     }
 
     fn has_edge(&self, from: &str, to: &str) -> bool {
-        self.in_edges.get(to).unwrap().contains(from)
+        self.in_edges[to].contains(from)
     }
 
     fn init_node(&mut self, n: &str) {

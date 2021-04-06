@@ -14,6 +14,10 @@ fn test_count_down() {
         .args(&["--", "5", "-1", "1"])
         .run()
         .stdout_is("5\n4\n3\n2\n1\n");
+    new_ucmd!()
+        .args(&["5", "-1", "1"])
+        .run()
+        .stdout_is("5\n4\n3\n2\n1\n");
 }
 
 #[test]
@@ -30,4 +34,14 @@ fn test_equalize_widths() {
         .args(&["-w", "5", "10"])
         .run()
         .stdout_is("05\n06\n07\n08\n09\n10\n");
+}
+
+#[test]
+fn test_seq_wrong_arg() {
+    new_ucmd!().args(&["-w", "5", "10", "33", "32"]).fails();
+}
+
+#[test]
+fn test_zero_step() {
+    new_ucmd!().args(&["10", "0", "32"]).fails();
 }

@@ -7,8 +7,6 @@
 
 // spell-checker:ignore (ToDO) autoformat FILENUM whitespaces pairable unpairable nocheck
 
-extern crate clap;
-
 #[macro_use]
 extern crate uucore;
 
@@ -696,10 +694,7 @@ fn get_field_number(keys: Option<usize>, key: Option<usize>) -> usize {
         return keys;
     }
 
-    match key {
-        Some(key) => key,
-        None => 0,
-    }
+    key.unwrap_or(0)
 }
 
 /// Parse the specified field string as a natural number and return

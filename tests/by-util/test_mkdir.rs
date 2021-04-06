@@ -14,6 +14,16 @@ fn test_mkdir_mkdir() {
 }
 
 #[test]
+fn test_mkdir_verbose() {
+    let expected = "mkdir: created directory 'mkdir_test1'\n";
+    new_ucmd!()
+        .arg(TEST_DIR1)
+        .arg("-v")
+        .run()
+        .stdout_is(expected);
+}
+
+#[test]
 fn test_mkdir_dup_dir() {
     let scene = TestScenario::new(util_name!());
     scene.ucmd().arg(TEST_DIR2).succeeds();
@@ -30,6 +40,8 @@ fn test_mkdir_parent() {
     let scene = TestScenario::new(util_name!());
     scene.ucmd().arg("-p").arg(TEST_DIR4).succeeds();
     scene.ucmd().arg("-p").arg(TEST_DIR4).succeeds();
+    scene.ucmd().arg("--parent").arg(TEST_DIR4).succeeds();
+    scene.ucmd().arg("--parents").arg(TEST_DIR4).succeeds();
 }
 
 #[test]
