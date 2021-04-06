@@ -305,7 +305,6 @@ fn test_dev_full() {
     proc.kill().unwrap();
 }
 
-
 #[test]
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 fn test_dev_full_show_all() {
