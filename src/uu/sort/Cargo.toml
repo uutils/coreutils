@@ -15,6 +15,7 @@ edition = "2018"
 path = "src/sort.rs"
 
 [dependencies]
+cap = "0.1.0"
 rayon = "1.5"
 rand = "0.7"
 clap = "2.33"

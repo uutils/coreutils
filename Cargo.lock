@@ -126,6 +126,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "14c189c53d098945499cdfa7ecc63567cf3886b3332b312a5b4585d8d3a6a610"
 
 [[package]]
+name = "cap"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dfb342bc1e95bfb9b3eb80593701657580f1606df8c5563003e6fc1cd8f09ba1"
+
+[[package]]
 name = "cast"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2235,6 +2241,7 @@ dependencies = [
 name = "uu_sort"
 version = "0.0.6"
 dependencies = [
+ "cap",
  "clap",
  "fnv",
  "itertools 0.8.2",
