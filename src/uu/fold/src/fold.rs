@@ -132,7 +132,7 @@ fn fold_file_bytewise<T: Read>(mut file: BufReader<T>, spaces: bool, width: usiz
             let slice = {
                 let slice = &line[i..i + width];
                 if spaces && i + width < len {
-                    match slice.rfind(char::is_whitespace) {
+                    match slice.rfind(|c: char| c.is_whitespace() && c != '\r') {
                         Some(m) => &slice[..=m],
                         None => slice,
                     }
@@ -175,7 +175,6 @@ fn fold_file<T: Read>(mut file: BufReader<T>, spaces: bool, width: usize) {
     let mut line = String::new();
     let mut output = String::new();
     let mut col_count = 0;
-    let mut char_count = 0;
     let mut last_space = None;
 
     /// Print the output line, resetting the column and character counts.
@@ -192,11 +191,10 @@ fn fold_file<T: Read>(mut file: BufReader<T>, spaces: bool, width: usize) {
 
             println!("{}", &output[..consume]);
             output.replace_range(..consume, "");
-            char_count = output.len();
 
             // we know there are no tabs left in output, so each char counts
             // as 1 column
-            col_count = char_count;
+            col_count = output.len();
 
             last_space = None;
         };
@@ -221,6 +219,7 @@ fn fold_file<T: Read>(mut file: BufReader<T>, spaces: bool, width: usize) {
             }
 
             match ch {
+                '\r' => col_count = 0,
                 '\t' => {
                     let next_tab_stop = col_count + TAB_WIDTH - col_count % TAB_WIDTH;
 
@@ -229,32 +228,24 @@ fn fold_file<T: Read>(mut file: BufReader<T>, spaces: bool, width: usize) {
                     }
 
                     col_count = next_tab_stop;
-                    last_space = if spaces { Some(char_count) } else { None };
+                    last_space = if spaces { Some(output.len()) } else { None };
                 }
                 '\x08' => {
                     if col_count > 0 {
                         col_count -= 1;
                     }
                 }
-                '\r' => {
-                    // FIXME: does not match GNU's handling of carriage return
-                    output.truncate(0);
-                    col_count = 0;
-                    char_count = 0;
-                    continue;
-                }
                 _ if spaces && ch.is_whitespace() => {
-                    last_space = Some(char_count);
-                    col_count += 1
+                    last_space = Some(output.len());
+                    col_count += 1;
                 }
                 _ => col_count += 1,
             };
 
             output.push(ch);
-            char_count += 1;
         }
 
-        if char_count > 0 {
+        if !output.is_empty() {
             print!("{}", output);
             output.truncate(0);
         }

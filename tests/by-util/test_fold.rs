@@ -285,6 +285,34 @@ fn test_backspace_is_not_word_boundary() {
         .stdout_is("foobar\x086789a\nbcdef");
 }
 
+#[test]
+fn test_carriage_return_should_be_preserved() {
+    new_ucmd!().pipe_in("\r").succeeds().stdout_is("\r");
+}
+
+#[test]
+fn test_carriage_return_overwrriten_char_should_be_preserved() {
+    new_ucmd!().pipe_in("x\ry").succeeds().stdout_is("x\ry");
+}
+
+#[test]
+fn test_carriage_return_should_reset_column_count() {
+    new_ucmd!()
+        .arg("-w6")
+        .pipe_in("12345\r123456789abcdef")
+        .succeeds()
+        .stdout_is("12345\r123456\n789abc\ndef");
+}
+
+#[test]
+fn test_carriage_return_is_not_word_boundary() {
+    new_ucmd!()
+        .args(&["-w6", "-s"])
+        .pipe_in("fizz\rbuzz\rfizzbuzz")
+        .succeeds()
+        .stdout_is("fizz\rbuzz\rfizzbu\nzz");
+}
+
 //
 // bytewise tests
 
@@ -469,4 +497,40 @@ fn test_bytewise_backspace_is_not_word_boundary() {
         .pipe_in("foobar\x0889abcdef")
         .succeeds()
         .stdout_is("foobar\x0889a\nbcdef");
+}
+
+#[test]
+fn test_bytewise_carriage_return_should_be_preserved() {
+    new_ucmd!()
+        .arg("-b")
+        .pipe_in("\r")
+        .succeeds()
+        .stdout_is("\r");
+}
+
+#[test]
+fn test_bytewise_carriage_return_overwrriten_char_should_be_preserved() {
+    new_ucmd!()
+        .arg("-b")
+        .pipe_in("x\ry")
+        .succeeds()
+        .stdout_is("x\ry");
+}
+
+#[test]
+fn test_bytewise_carriage_return_should_not_reset_column_count() {
+    new_ucmd!()
+        .args(&["-w6", "-b"])
+        .pipe_in("12345\r123456789abcdef")
+        .succeeds()
+        .stdout_is("12345\r\n123456\n789abc\ndef");
+}
+
+#[test]
+fn test_bytewise_carriage_return_is_not_word_boundary() {
+    new_ucmd!()
+        .args(&["-w6", "-s", "-b"])
+        .pipe_in("fizz\rbuzz\rfizzbuzz")
+        .succeeds()
+        .stdout_is("fizz\rb\nuzz\rfi\nzzbuzz");
 }
