@@ -506,7 +506,7 @@ fn exec_check_file(unwrapped_lines: Vec<String>, settings: &Settings) -> i32 {
 
 #[inline(always)]
 fn transform(line: &str, settings: &Settings) -> String {
-    let mut transformed = line.to_string();
+    let mut transformed = line.to_owned();
     for transform_fn in &settings.transform_fns {
         transformed = transform_fn(&transformed);
     }
@@ -632,7 +632,7 @@ fn get_leading_gen(a: &str) -> String {
             || (c.eq(&'E') && !next_char_numeric)
             || (c.eq(&DECIMAL_PT) && !next_char_numeric)
         {
-            r = a.split(c).next().unwrap_or("").to_string();
+            r = a.split(c).next().unwrap_or("").to_owned();
             break;
         // If positive sign and next char is not numeric, split at postive sign at keep trailing numbers
         // There is a more elegant way to do this in Rust 1.45, std::str::strip_prefix
@@ -643,7 +643,7 @@ fn get_leading_gen(a: &str) -> String {
             break;
         // If no further processing needed to be done, return the line as-is to be sorted
         } else {
-            r = a.to_string();
+            r = a.to_owned();
         }
     }
     r
@@ -674,9 +674,9 @@ fn get_months_dedup(a: &str) -> String {
     };
 
     if month == Month::Unknown {
-        "".to_string()
+        "".to_owned()
     } else {
-        pattern.to_uppercase().to_string()
+        pattern.to_uppercase()
     }
 }
 
