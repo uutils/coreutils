@@ -40,22 +40,6 @@ pub fn is_ci() -> bool {
         .eq_ignore_ascii_case("true")
 }
 
-/// Test if the program is running under WSL
-// ref: <https://github.com/microsoft/WSL/issues/4555> @@ <https://archive.is/dP0bz>
-// ToDO: test on WSL2 which likely doesn't need special handling; plan change to `is_wsl_1()` if WSL2 is less needy
-pub fn is_wsl() -> bool {
-    #[cfg(target_os = "linux")]
-    {
-        if let Ok(b) = std::fs::read("/proc/sys/kernel/osrelease") {
-            if let Ok(s) = std::str::from_utf8(&b) {
-                let a = s.to_ascii_lowercase();
-                return a.contains("microsoft") || a.contains("wsl");
-            }
-        }
-    }
-    false
-}
-
 /// Read a test scenario fixture, returning its bytes
 fn read_scenario_fixture<S: AsRef<OsStr>>(tmpd: &Option<Rc<TempDir>>, file_rel_path: S) -> Vec<u8> {
     let tmpdir_path = tmpd.as_ref().unwrap().as_ref().path();

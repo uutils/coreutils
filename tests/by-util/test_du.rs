@@ -1,4 +1,5 @@
 use crate::common::util::*;
+use uucore;
 
 const SUB_DIR: &str = "subdir/deeper";
 const SUB_DIR_LINKS: &str = "subdir/links";
@@ -52,7 +53,7 @@ fn _du_basics_subdir(s: String) {
 #[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))]
 fn _du_basics_subdir(s: String) {
     // MS-WSL linux has altered expected output
-    if !is_wsl() {
+    if !uucore::os::is_wsl_1() {
         assert_eq!(s, "8\tsubdir/deeper\n");
     } else {
         assert_eq!(s, "0\tsubdir/deeper\n");
@@ -96,7 +97,7 @@ fn _du_soft_link(s: String) {
 #[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))]
 fn _du_soft_link(s: String) {
     // MS-WSL linux has altered expected output
-    if !is_wsl() {
+    if !uucore::os::is_wsl_1() {
         assert_eq!(s, "16\tsubdir/links\n");
     } else {
         assert_eq!(s, "8\tsubdir/links\n");
@@ -128,7 +129,7 @@ fn _du_hard_link(s: String) {
 #[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))]
 fn _du_hard_link(s: String) {
     // MS-WSL linux has altered expected output
-    if !is_wsl() {
+    if !uucore::os::is_wsl_1() {
         assert_eq!(s, "16\tsubdir/links\n");
     } else {
         assert_eq!(s, "8\tsubdir/links\n");
@@ -156,7 +157,7 @@ fn _du_d_flag(s: String) {
 #[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))]
 fn _du_d_flag(s: String) {
     // MS-WSL linux has altered expected output
-    if !is_wsl() {
+    if !uucore::os::is_wsl_1() {
         assert_eq!(s, "28\t./subdir\n36\t./\n");
     } else {
         assert_eq!(s, "8\t./subdir\n8\t./\n");

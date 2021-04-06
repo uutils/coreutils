@@ -4,6 +4,7 @@ use self::regex::Regex;
 use crate::common::util::*;
 #[cfg(all(unix, not(target_os = "macos")))]
 use rust_users::*;
+use uucore;
 
 #[test]
 fn test_date_email() {
@@ -159,7 +160,7 @@ fn test_date_set_invalid() {
 #[test]
 #[cfg(all(unix, not(target_os = "macos")))]
 fn test_date_set_permissions_error() {
-    if !(get_effective_uid() == 0 || is_wsl()) {
+    if !(get_effective_uid() == 0 || uucore::os::is_wsl_1()) {
         let (_, mut ucmd) = at_and_ucmd!();
         let result = ucmd.arg("--set").arg("2020-03-11 21:45:00+08:00").fails();
         let result = result.no_stdout();
