@@ -414,11 +414,7 @@ fn get_output_chunks(
     // end = begin + max length
     let tail_end = cmp::min(all_after.len(), tail_beg + max_tail_size) as usize;
     // in case that falls in the middle of a word, trim away the word.
-    let tail_end = trim_broken_word_right(
-        all_after,
-        tail_beg,
-        cmp::max(tail_end as isize - 1, tail_beg as isize) as usize,
-    );
+    let tail_end = trim_broken_word_right(all_after, tail_beg, tail_end);
 
     // trim away whitespace again.
     let (tail_beg, tail_end) = trim_idx(all_after, tail_beg, tail_end);
