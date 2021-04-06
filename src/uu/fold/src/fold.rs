@@ -232,13 +232,9 @@ fn fold_file<T: Read>(mut file: BufReader<T>, spaces: bool, width: usize) {
                     last_space = if spaces { Some(char_count) } else { None };
                 }
                 '\x08' => {
-                    // FIXME: does not match GNU's handling of backspace
                     if col_count > 0 {
                         col_count -= 1;
-                        char_count -= 1;
-                        output.truncate(char_count);
                     }
-                    continue;
                 }
                 '\r' => {
                     // FIXME: does not match GNU's handling of carriage return
@@ -258,7 +254,7 @@ fn fold_file<T: Read>(mut file: BufReader<T>, spaces: bool, width: usize) {
             char_count += 1;
         }
 
-        if col_count > 0 {
+        if char_count > 0 {
             print!("{}", output);
             output.truncate(0);
         }
