@@ -594,7 +594,6 @@ fn leading_num_common(a: &str) -> &str {
 // may not want to use libc.  Instead we emulate the GNU sort numeric compare by ignoring
 // those leading number lines GNU sort would not recognize.  GNU numeric compare would
 // not recognize a positive sign or scientific/E notation so we strip those elements here.
-#[inline(always)]
 fn get_leading_num(a: &str) -> &str {
     let mut s = "";
     let b = leading_num_common(a);
@@ -758,16 +757,26 @@ fn general_numeric_compare(a: &str, b: &str) -> Ordering {
     }
 }
 
+// GNU/BSD does not handle converting numbers to an equal scale
+// properly.  They simply recognizes that there is a human scale and sorts 
+// those numbers ahead of other number inputs. I think there are limits 
+// to the type of behavior we should emulate, and this might be such a limit.  
+// Properly handling these units seems like a value add to me. And when sorting
+// these types of numbers, we rarely care about pure performance.
 fn human_numeric_convert(a: &str) -> f64 {
     let num_str = get_leading_num(a);
-    let (_, suffix) = a.split_at(num_str.len());
+    let suffix = a.trim_start_matches(num_str);
     let num_part = permissive_f64_parse(num_str);
     let suffix: f64 = match suffix.parse().unwrap_or('\0') {
+        // SI Units
         'K' => 1E3,
         'M' => 1E6,
         'G' => 1E9,
         'T' => 1E12,
         'P' => 1E15,
+        'E'  => 1E18,
+        'Z'  => 1E21,
+        'Y'  => 1E24,
         _ => 1f64,
     };
     num_part * suffix
