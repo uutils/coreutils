@@ -427,7 +427,7 @@ fn exec(files: Vec<String>, settings: &mut Settings) -> i32 {
         } else if settings.zero_terminated {
             for line in buf_reader.split(b'\0') {
                 if let Ok(n) = line {
-                    lines.push(std::str::from_utf8(&n).unwrap_or("\0").to_string());
+                    lines.push(std::str::from_utf8(&n).expect("Could not parse string from zero terminated input.").to_string());
                 }
             }
         } else {
@@ -553,7 +553,7 @@ fn compare_by(a: &str, b: &str, settings: &Settings) -> Ordering {
 }
 
 // Test output against BSDs and GNU with their locale
-// env var lc_ctype=utf-8  to enjoy the exact same output.
+// env var set to lc_ctype=utf-8 to enjoy the exact same output.
 #[inline(always)]
 fn default_compare(a: &str, b: &str) -> Ordering {
     a.cmp(b)
@@ -567,6 +567,7 @@ fn default_compare(a: &str, b: &str) -> Ordering {
 fn leading_num_common(a: &str) -> &str {
     let mut s = "";
     for (idx, c) in a.char_indices() {
+        // check whether char is numeric, whitespace or decimal point or thousand seperator
         if !c.is_numeric()
             && !c.is_whitespace()
             && !c.eq(&DECIMAL_PT)
@@ -574,6 +575,7 @@ fn leading_num_common(a: &str) -> &str {
             // check for e notation
             && !c.eq(&'e')
             && !c.eq(&'E')
+            // check whether first char is + or - 
             && !a.chars().nth(0).unwrap_or('\0').eq(&POSITIVE)
             && !a.chars().nth(0).unwrap_or('\0').eq(&NEGATIVE)
         {
@@ -581,6 +583,7 @@ fn leading_num_common(a: &str) -> &str {
             s = &a[..idx];
             break;
         }
+        // If line is not a number line, return the line as is
         s = a;
     }
     s
@@ -602,11 +605,12 @@ fn get_leading_num(a: &str) -> &str {
             s = &b[..idx];
             break;
         }
+        // If no further processing needed to be done, return the line as-is to be sorted
         s = b;
     }
 
     // And empty number or non-number lines are to be treated as ‘0’ but only for numeric sort
-    // All '0' lines will be sorted later, but only amongst themselves, during the so-called 'last resort comparison.'
+    // All '0'-ed lines will be sorted later, but only amongst themselves, during the so-called 'last resort comparison.'
     if s.is_empty() {
         s = "0";
     };
@@ -614,9 +618,9 @@ fn get_leading_num(a: &str) -> &str {
 }
 
 // This function cleans up the initial comparison done by leading_num_common for a general numeric compare.
-// GNU general numeric/FP sort *should* recognize positive signs and scientific notation, so
-// we strip those lines only after the end of the following numeric string. 5e10KFD would be
-// 5e10 or 5x10^10 and +10000HFKJFK would become 10000.
+// In contrast to numeric compare, GNU general numeric/FP sort *should* recognize positive signs and 
+// scientific notation, so we strip those lines only after the end of the following numeric string. 
+// For example, 5e10KFD would be 5e10 or 5x10^10 and +10000HFKJFK would become 10000.
 fn get_leading_gen(a: &str) -> String {
     // Make this iter peekable to see if next char is numeric
     let mut p_iter = leading_num_common(a).chars().peekable();
@@ -631,11 +635,14 @@ fn get_leading_gen(a: &str) -> String {
         {
             r = a.split(c).next().unwrap_or("").to_string();
             break;
+        // If positive sign and next char is not numeric, split at postive sign at keep trailing numbers
+        // There is a more elegant way to do this in Rust 1.45, std::str::strip_prefix
         } else if c.eq(&POSITIVE) && !next_char_numeric {
             let mut v: Vec<&str> = a.split(c).collect();
             let x = v.split_off(1);
             r = x.join("");
             break;
+        // If no further processing needed to be done, return the line as-is to be sorted
         } else {
             r = a.to_string();
         }
@@ -879,7 +886,7 @@ fn version_compare(a: &str, b: &str) -> Ordering {
 }
 
 fn remove_nondictionary_chars(s: &str) -> String {
-    // According to GNU, by default letters and digits are those of ASCII
+    // According to GNU, dictionary chars are those of ASCII
     // and a blank is a space or a tab
     s.chars()
         .filter(|c| c.is_ascii_alphanumeric() || c.is_ascii_whitespace())
@@ -887,7 +894,8 @@ fn remove_nondictionary_chars(s: &str) -> String {
 }
 
 fn remove_nonprinting_chars(s: &str) -> String {
-    // However, GNU says nonprinting chars is more permissive.  All ASCII except control chars ie, escape, newline
+    // However, GNU says nonprinting chars are more permissive.  
+    // All of ASCII except control chars ie, escape, newline
     s.chars()
         .filter(|c| c.is_ascii() && !c.is_ascii_control())
         .collect::<String>()
