@@ -504,6 +504,7 @@ fn exec_check_file(unwrapped_lines: Vec<String>, settings: &Settings) -> i32 {
     }
 }
 
+#[inline(always)]
 fn transform(line: &str, settings: &Settings) -> String {
     let mut transformed = line.to_string();
     for transform_fn in &settings.transform_fns {
@@ -518,7 +519,6 @@ fn sort_by(lines: &mut Vec<String>, settings: &Settings) {
     lines.par_sort_by(|a, b| compare_by(a, b, &settings))
 }
 
-#[inline(always)]
 fn compare_by(a: &str, b: &str, settings: &Settings) -> Ordering {
     let (a_transformed, b_transformed): (String, String);
     let (a, b) = if !settings.transform_fns.is_empty() {
