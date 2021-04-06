@@ -15,14 +15,12 @@ fn test_rm_one_file() {
 #[test]
 fn test_rm_failed() {
     let (_at, mut ucmd) = at_and_ucmd!();
-    let file = "test_rm_one_file";
+    let file = "test_rm_one_file"; // Doesn't exist
 
-    let result = ucmd.arg(file).fails(); // Doesn't exist
-
-    assert!(result.stderr.contains(&format!(
+    ucmd.arg(file).fails().stderr_contains(&format!(
         "cannot remove '{}': No such file or directory",
         file
-    )));
+    ));
 }
 
 #[test]
@@ -145,10 +143,10 @@ fn test_rm_non_empty_directory() {
     at.mkdir(dir);
     at.touch(file_a);
 
-    let result = ucmd.arg("-d").arg(dir).fails();
-    assert!(result
-        .stderr
-        .contains(&format!("cannot remove '{}': Directory not empty", dir)));
+    ucmd.arg("-d")
+        .arg(dir)
+        .fails()
+        .stderr_contains(&format!("cannot remove '{}': Directory not empty", dir));
     assert!(at.file_exists(file_a));
     assert!(at.dir_exists(dir));
 }
@@ -178,11 +176,9 @@ fn test_rm_directory_without_flag() {
 
     at.mkdir(dir);
 
-    let result = ucmd.arg(dir).fails();
-    println!("{}", result.stderr);
-    assert!(result
-        .stderr
-        .contains(&format!("cannot remove '{}': Is a directory", dir)));
+    ucmd.arg(dir)
+        .fails()
+        .stderr_contains(&format!("cannot remove '{}': Is a directory", dir));
 }
 
 #[test]
@@ -229,10 +225,11 @@ fn test_rm_symlink_dir() {
     at.mkdir(dir);
     at.symlink_dir(dir, link);
 
-    let result = scene.ucmd().arg(link).fails();
-    assert!(result
-        .stderr
-        .contains(&format!("cannot remove '{}': Is a directory", link)));
+    scene
+        .ucmd()
+        .arg(link)
+        .fails()
+        .stderr_contains(&format!("cannot remove '{}': Is a directory", link));
 
     assert!(at.dir_exists(link));
 
