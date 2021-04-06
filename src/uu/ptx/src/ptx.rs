@@ -224,6 +224,9 @@ fn read_input(input_files: &[String], config: &Config) -> FileMap {
             Box::new(file)
         });
         let lines: Vec<String> = reader.lines().map(|x| crash_if_err!(1, x)).collect();
+
+        // Indexing UTF-8 string requires walking from the beginning, which can hurts performance badly when the line is long.
+        // Since we will be jumping around the line a lot, we dump the content into a Vec<char>, which can be indexed in constant time.
         let chars_lines: Vec<Vec<char>> = lines.iter().map(|x| x.chars().collect()).collect();
         let size = lines.len();
         file_map.insert(
@@ -239,6 +242,7 @@ fn read_input(input_files: &[String], config: &Config) -> FileMap {
     file_map
 }
 
+/// Go through every lines in the input files and record each match occurance as a `WordRef`.
 fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> BTreeSet<WordRef> {
     let reg = Regex::new(&filter.word_regex).unwrap();
     let ref_reg = Regex::new(&config.context_regex).unwrap();
@@ -345,6 +349,8 @@ fn get_output_chunks(
     all_after: &[char],
     config: &Config,
 ) -> (String, String, String, String) {
+    // Chunk size logics are mostly copied from the GNU ptx source.
+    // https://github.com/MaiZure/coreutils-8.3/blob/master/src/ptx.c#L1234
     let half_line_size = (config.line_width / 2) as usize;
     let max_before_size = cmp::max(half_line_size as isize - config.gap_size as isize, 0) as usize;
     let max_after_size = cmp::max(
@@ -355,56 +361,92 @@ fn get_output_chunks(
         0,
     ) as usize;
 
+    // Allocate plenty space for all the chunks.
     let mut head = String::with_capacity(half_line_size);
     let mut before = String::with_capacity(half_line_size);
     let mut after = String::with_capacity(half_line_size);
     let mut tail = String::with_capacity(half_line_size);
 
-    // get before
-    let (_, be) = trim_idx(all_before, 0, all_before.len());
-    let mut bb_tmp = cmp::max(be as isize - max_before_size as isize, 0) as usize;
-    bb_tmp = trim_broken_word_left(all_before, bb_tmp, be);
-    let (before_beg, before_end) = trim_idx(all_before, bb_tmp, be);
+    // the before chunk
+
+    // trim whitespace away from all_before to get the index where the before chunk should end.
+    let (_, before_end) = trim_idx(all_before, 0, all_before.len());
+
+    // the minimum possible begin index of the before_chunk is the end index minus the length.
+    let before_beg = cmp::max(before_end as isize - max_before_size as isize, 0) as usize;
+    // in case that falls in the middle of a word, trim away the word.
+    let before_beg = trim_broken_word_left(all_before, before_beg, before_end);
+
+    // trim away white space.
+    let (before_beg, before_end) = trim_idx(all_before, before_beg, before_end);
+
+    // and get the string.
     let before_str: String = all_before[before_beg..before_end].iter().collect();
     before.push_str(&before_str);
     assert!(max_before_size >= before.len());
 
-    // get after
-    let mut ae_tmp = cmp::min(max_after_size, all_after.len());
-    ae_tmp = trim_broken_word_right(all_after, 0, ae_tmp);
-    let (_, after_end) = trim_idx(all_after, 0, ae_tmp);
+    // the after chunk
+
+    // must be no longer than the minimum between the max size and the total available string.
+    let after_end = cmp::min(max_after_size, all_after.len());
+    // in case that falls in the middle of a word, trim away the word.
+    let after_end = trim_broken_word_right(all_after, 0, after_end);
+
+    // trim away white space.
+    let (_, after_end) = trim_idx(all_after, 0, after_end);
+
+    // and get the string
     let after_str: String = all_after[0..after_end].iter().collect();
     after.push_str(&after_str);
     assert!(max_after_size >= after.len());
 
-    // get tail
+    // the tail chunk
+
+    // max size of the tail chunk = max size of left half - space taken by before chunk - gap size.
     let max_tail_size = cmp::max(
         max_before_size as isize - before.len() as isize - config.gap_size as isize,
         0,
     ) as usize;
-    let (tb, _) = trim_idx(all_after, after_end, all_after.len());
-    let mut te_tmp = cmp::min(all_after.len(), tb + max_tail_size) as usize;
-    te_tmp = trim_broken_word_right(
+
+    // the tail chunk takes text starting from where the after chunk ends (with whitespaces trimmed).
+    let (tail_beg, _) = trim_idx(all_after, after_end, all_after.len());
+
+    // end = begin + max length
+    let tail_end = cmp::min(all_after.len(), tail_beg + max_tail_size) as usize;
+    // in case that falls in the middle of a word, trim away the word.
+    let tail_end = trim_broken_word_right(
         all_after,
-        tb,
-        cmp::max(te_tmp as isize - 1, tb as isize) as usize,
+        tail_beg,
+        cmp::max(tail_end as isize - 1, tail_beg as isize) as usize,
     );
-    let (tail_beg, tail_end) = trim_idx(all_after, tb, te_tmp);
+
+    // trim away whitespace again.
+    let (tail_beg, tail_end) = trim_idx(all_after, tail_beg, tail_end);
+
+    // and get the string
     let tail_str: String = all_after[tail_beg..tail_end].iter().collect();
     tail.push_str(&tail_str);
 
-    // get head
+    // the head chunk
+
+    // max size of the head chunk = max size of right half - space taken by after chunk - gap size.
     let max_head_size = cmp::max(
         max_after_size as isize - after.len() as isize - config.gap_size as isize,
         0,
     ) as usize;
-    let (_, he) = trim_idx(all_before, 0, before_beg);
-    let hb_tmp = trim_broken_word_left(
-        all_before,
-        cmp::max(he as isize - max_head_size as isize, 0) as usize,
-        he,
-    );
-    let (head_beg, head_end) = trim_idx(all_before, hb_tmp, he);
+
+    // the head chunk takes text from before the before chunk
+    let (_, head_end) = trim_idx(all_before, 0, before_beg);
+
+    // begin = end - max length
+    let head_beg = cmp::max(head_end as isize - max_head_size as isize, 0) as usize;
+    // in case that falls in the middle of a word, trim away the word.
+    let head_beg = trim_broken_word_left(all_before, head_beg, head_end);
+
+    // trim away white space again.
+    let (head_beg, head_end) = trim_idx(all_before, head_beg, head_end);
+
+    // and get the string.
     let head_str: String = all_before[head_beg..head_end].iter().collect();
     head.push_str(&head_str);
 
@@ -434,6 +476,7 @@ fn tex_mapper(x: char) -> String {
     }
 }
 
+/// Escape special characters for TeX.
 fn format_tex_field(s: &str) -> String {
     let mapped_chunks: Vec<String> = s.chars().map(tex_mapper).collect();
     mapped_chunks.join("")
