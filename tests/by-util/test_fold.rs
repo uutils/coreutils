@@ -397,3 +397,13 @@ fn test_bytewise_fold_at_word_boundary_only_whitespace_preserve_final_newline() 
         .succeeds()
         .stdout_is("  \n  \n");
 }
+
+#[test]
+fn test_obsolete_syntax() {
+    new_ucmd!()
+        .arg("-5")
+        .arg("-s")
+        .arg("space_separated_words.txt")
+        .succeeds()
+        .stdout_is("test1\n \ntest2\n \ntest3\n \ntest4\n \ntest5\n \ntest6\n ");
+}
