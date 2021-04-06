@@ -166,39 +166,30 @@ mod tests {
         let mut input = PeekReader::new(Cursor::new(&data));
         let mut sut = InputDecoder::new(&mut input, 8, 2, ByteOrder::Little);
 
-        match sut.peek_read() {
-            Ok(mut mem) => {
-                assert_eq!(8, mem.length());
+        // Peek normal length
+        let mut mem = sut.peek_read().unwrap();
 
-                assert_eq!(-2.0, mem.read_float(0, 8));
-                assert_eq!(-2.0, mem.read_float(4, 4));
-                assert_eq!(0xc000000000000000, mem.read_uint(0, 8));
-                assert_eq!(0xc0000000, mem.read_uint(4, 4));
-                assert_eq!(0xc000, mem.read_uint(6, 2));
-                assert_eq!(0xc0, mem.read_uint(7, 1));
-                assert_eq!(&[0, 0xc0], mem.get_buffer(6));
-                assert_eq!(&[0, 0xc0, 0xff, 0xff], mem.get_full_buffer(6));
+        assert_eq!(8, mem.length());
 
-                let mut copy: Vec<u8> = Vec::new();
-                mem.clone_buffer(&mut copy);
-                assert_eq!(vec![0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0], copy);
+        assert_eq!(-2.0, mem.read_float(0, 8));
+        assert_eq!(-2.0, mem.read_float(4, 4));
+        assert_eq!(0xc000000000000000, mem.read_uint(0, 8));
+        assert_eq!(0xc0000000, mem.read_uint(4, 4));
+        assert_eq!(0xc000, mem.read_uint(6, 2));
+        assert_eq!(0xc0, mem.read_uint(7, 1));
+        assert_eq!(&[0, 0xc0], mem.get_buffer(6));
+        assert_eq!(&[0, 0xc0, 0xff, 0xff], mem.get_full_buffer(6));
 
-                mem.zero_out_buffer(7, 8);
-                assert_eq!(&[0, 0, 0xff, 0xff], mem.get_full_buffer(6));
-            }
-            Err(e) => {
-                assert!(false, e);
-            }
-        }
+        let mut copy: Vec<u8> = Vec::new();
+        mem.clone_buffer(&mut copy);
+        assert_eq!(vec![0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0], copy);
 
-        match sut.peek_read() {
-            Ok(mem) => {
-                assert_eq!(2, mem.length());
-                assert_eq!(0xffff, mem.read_uint(0, 2));
-            }
-            Err(e) => {
-                assert!(false, e);
-            }
-        }
+        mem.zero_out_buffer(7, 8);
+        assert_eq!(&[0, 0, 0xff, 0xff], mem.get_full_buffer(6));
+
+        // Peek tail
+        let mem = sut.peek_read().unwrap();
+        assert_eq!(2, mem.length());
+        assert_eq!(0xffff, mem.read_uint(0, 2));
     }
 }

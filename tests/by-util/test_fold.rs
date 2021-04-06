@@ -534,3 +534,12 @@ fn test_bytewise_carriage_return_is_not_word_boundary() {
         .succeeds()
         .stdout_is("fizz\rb\nuzz\rfi\nzzbuzz");
 }
+#[test]
+fn test_obsolete_syntax() {
+    new_ucmd!()
+        .arg("-5")
+        .arg("-s")
+        .arg("space_separated_words.txt")
+        .succeeds()
+        .stdout_is("test1\n \ntest2\n \ntest3\n \ntest4\n \ntest5\n \ntest6\n ");
+}
