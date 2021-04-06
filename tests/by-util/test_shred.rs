@@ -13,7 +13,7 @@ fn test_shred_remove() {
     at.touch(file_b);
 
     // Shred file_a.
-    scene.ucmd().arg("-u").arg(file_a).pipe_in("n").succeeds();
+    scene.ucmd().arg("-u").arg(file_a).run();
 
     // file_a was deleted, file_b exists.
     assert!(!at.file_exists(file_a));
@@ -34,8 +34,14 @@ fn test_shred_force() {
     // Make file_a readonly.
     at.set_readonly(file);
 
+    let metadata = at.metadata(file);
+    let permissions = metadata.permissions();
+    println!("test_shred_force: is file readonly: {}", permissions.readonly());
+
     // Try shred -u.
-    scene.ucmd().arg("-u").arg(file).run();
+    let result = scene.ucmd().arg("-u").arg(file).run();
+    println!("stderr = {:?}", result.stderr);
+    println!("stdout = {:?}", result.stdout);
 
     // file_a was not deleted because it is readonly.
     assert!(at.file_exists(file));
