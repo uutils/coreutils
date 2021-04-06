@@ -169,9 +169,9 @@ fn get_config(matches: &clap::ArgMatches) -> Config {
             .expect(err_msg)
             .to_string();
     }
-    if matches.is_present(options::IGNORE_CASE) {
+    if matches.is_present(options::FLAG_TRUNCATION) {
         config.trunc_str = matches
-            .value_of(options::IGNORE_CASE)
+            .value_of(options::FLAG_TRUNCATION)
             .expect(err_msg)
             .to_string();
     }
