@@ -173,14 +173,12 @@ fn test_du_h_flag_empty_file() {
     assert_eq!(result.stdout, "0\tempty.txt\n");
 }
 
-// I don't have touch on windows so I can't run this test
-// if we port touch to windows then we can enable this test on windows
-#[cfg(not(target_os = "windows"))]
+#[cfg(feature = "touch")]
 #[test]
 fn test_du_time() {
     let ts = TestScenario::new("du");
 
-    let touch = ts.cmd("touch").arg("-a").arg("-m").arg("-t").arg("201505150000").arg("date_test").run();
+    let touch = ts.ccmd("touch").arg("-a").arg("-m").arg("-t").arg("201505150000").arg("date_test").run();
     assert!(touch.success);
 
     let result = ts.ucmd().arg("--time").arg("date_test").run();
