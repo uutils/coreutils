@@ -79,11 +79,11 @@ impl Config {
         let foreground = options.is_present(options::FOREGROUND);
 
         let command: String = options.value_of(options::COMMAND).unwrap().to_string();
-        let command_args: Vec<String> = options
-            .values_of(options::ARGS)
-            .unwrap()
-            .map(|x| x.to_owned())
-            .collect();
+
+        let command_args: Vec<String> = match options.values_of(options::ARGS) {
+            Some(values) => values.map(|x| x.to_owned()).collect(),
+            None => vec![],
+        };
 
         Config {
             foreground,
@@ -137,7 +137,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .required(true)
         )
         .arg(
-            Arg::with_name(options::ARGS).required(true).multiple(true)
+            Arg::with_name(options::ARGS).multiple(true)
         )
         .setting(AppSettings::TrailingVarArg);
 
