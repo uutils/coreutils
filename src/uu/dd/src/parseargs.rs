@@ -1,8 +1,11 @@
 use super::*;
 
+use crate::conversion_tables::*;
+
 #[derive(Debug)]
 enum ParseError
 {
+    ConvFlagNoMatch(String),
     MultiplierString(String),
     MultiplierStringWouldOverflow(String),
 }
@@ -15,6 +18,52 @@ impl std::fmt::Display for ParseError
 }
 
 impl Error for ParseError {}
+
+enum ConvFlag
+{
+    Table(ConversionTable),
+    Block,
+    Unblock,
+    UCase,
+    LCase,
+    Sparse,
+    Swab,
+    Sync,
+}
+
+impl std::str::FromStr for ConvFlag
+{
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err>
+    {
+        match s
+        {
+            "ascii" =>
+                Ok(Self::Table(EBCDIC_TO_ASCII)),
+            "ebcdic" =>
+                Ok(Self::Table(ASCII_TO_EBCDIC)),
+            "ibm" =>
+                Ok(Self::Table(ASCII_TO_IBM)),
+            "block" =>
+                Ok(Self::Block),
+            "unblock" =>
+                Ok(Self::Unblock),
+            "lcase" =>
+                Ok(Self::LCase),
+            "ucase" =>
+                Ok(Self::UCase),
+            "sparse" =>
+                Ok(Self::Sparse),
+            "swab" =>
+                Ok(Self::Swab),
+            "sync" =>
+                Ok(Self::Sync),
+            _ =>
+                Err(ParseError::ConvFlagNoMatch(String::from(s)))
+            }
+    }
+}
 
 fn parse_multiplier<'a>(s: &'a str) -> Result<usize, Box<dyn Error>>
 {
@@ -114,17 +163,13 @@ pub fn parse_progress_level(matches: &getopts::Matches) -> Result<bool, Box<dyn 
 
 pub fn parse_obs(matches: &getopts::Matches) -> Result<usize, Box<dyn Error>>
 {
-    if let Some(str_with_prefixes) = matches.opt_str("bs")
+    if let Some(mixed_str) = matches.opt_str("bs")
     {
-        // TODO: Parse a string containing the number with potential k, kB, kiB, ... multiplier
-        // possibly implemented elsewhere, but probably not in exactly the dd style
-        panic!()
+        parse_bytes_with_opt_multiplier(mixed_str)
     }
-    else if let Some(str_with_prefixes) = matches.opt_str("obs")
+    else if let Some(mixed_str) = matches.opt_str("obs")
     {
-        // TODO: Parse a string containing the number with potential k, kB, kiB, ... multiplier
-        // possibly implemented elsewhere, but probably not in exactly the dd style
-        panic!()
+        parse_bytes_with_opt_multiplier(mixed_str)
     }
     else
     {
@@ -132,19 +177,105 @@ pub fn parse_obs(matches: &getopts::Matches) -> Result<usize, Box<dyn Error>>
     }
 }
 
-pub fn parse_conv_table(matches: &getopts::Matches) -> Result<Option<ConversionTable>, Box<dyn Error>>
+/// Parse the options and flags that control the way
+/// the file(s) is(are) copied and converted
+pub fn parse_options(matches: &getopts::Matches) -> Result<Options, Box<dyn Error>>
 {
-    // TODO: Complete this stub fn
-    Ok(None)
+    panic!()
+}
+
+/// Parse Conversion Options that control how the file is converted
+pub fn parse_conv_options(matches: &getopts::Matches) -> Result<ConversionOptions, Box<dyn Error>>
+{
+    let flags = parse_conv_opts(matches)?;
+
+    let mut table = None;
+    let mut block = false;
+    let mut unblock = false;
+    let mut ucase = false;
+    let mut lcase = false;
+    let mut sparse = false;
+    let mut swab = false;
+    let mut sync = false;
+
+    for flag in flags
+    {
+        match flag
+        {
+            ConvFlag::Table(ct) =>
+            {
+                table = Some(ct);
+            },
+            ConvFlag::Block =>
+            {
+                block = true;
+            },
+            ConvFlag::Unblock =>
+            {
+                unblock = true;
+            },
+            ConvFlag::UCase =>
+            {
+                ucase = true;
+            },
+            ConvFlag::LCase =>
+            {
+                lcase = true;
+            },
+            ConvFlag::Sparse =>
+            {
+                sparse = true;
+            },
+            ConvFlag::Swab =>
+            {
+                swab = true;
+            },
+            ConvFlag::Sync =>
+            {
+                sync = true;
+            },
+        }
+    }
+
+    Ok(ConversionOptions
+    {
+        table,
+        block,
+        unblock,
+        ucase,
+        lcase,
+        sparse,
+        swab,
+        sync,
+    })
+}
+
+fn parse_conv_opts(matches: &getopts::Matches) -> Result<Vec<ConvFlag>, Box<dyn Error>>
+{
+    let mut flags = Vec::new();
+
+    if let Some(comma_str) = matches.opt_str("conv")
+    {
+        for s in comma_str.split(",")
+        {
+            let flag = s.parse()?;
+            flags.push(flag);
+        }
+
+    }
+
+    Ok(flags)
 }
 
 #[cfg(test)]
 mod test {
+
     use super::*;
 
     macro_rules! test_byte_parser (
         ( $test_name:ident, $bs_str:expr, $bs:expr ) =>
         {
+            #[allow(non_snake_case)]
             #[test]
             fn $test_name()
             {
@@ -167,9 +298,30 @@ mod test {
     }
 
     #[test]
-    fn test_conv_options_parser()
+    fn test_conv_parser_ibm_conv_table()
     {
-        panic!()
+        let args = vec![
+            String::from("ketchup"),
+            String::from("mustard"),
+            String::from("--conv=ibm"),
+            String::from("relish"),
+        ];
+
+        let matches = build_app!().parse(args);
+
+        assert!(matches.opt_present("conv"));
+
+        if let Some(table) = parse_conv_opts(&matches).unwrap()
+        {
+            for (s, t) in ASCII_TO_IBM.iter().zip(table.iter())
+            {
+                assert_eq!(s, t)
+            }
+        }
+        else
+        {
+            panic!()
+        }
     }
 
     test_byte_parser!(
@@ -293,9 +445,29 @@ mod test {
 
     #[test]
     #[should_panic]
+    #[allow(non_snake_case)]
     fn test_KB_multiplier_error()
     {
+        // KB is not valid (kB, K, and KiB are)
         let bs_str = String::from("2000 KB");
+
+        parse_bytes_with_opt_multiplier(bs_str).unwrap();
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_overflow_panic()
+    {
+        let bs_str = format!("{} KiB", usize::MAX);
+
+        parse_bytes_with_opt_multiplier(bs_str).unwrap();
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_neg_panic()
+    {
+        let bs_str = format!("{} KiB", -1);
 
         parse_bytes_with_opt_multiplier(bs_str).unwrap();
     }
