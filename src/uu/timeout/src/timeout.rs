@@ -12,16 +12,19 @@ extern crate uucore;
 
 extern crate clap;
 
-use clap::{App, Arg, ArgMatches, AppSettings};
+use clap::{App, AppSettings, Arg};
 use std::io::ErrorKind;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 use uucore::process::ChildExt;
-use uucore::signals::{Signal, signal_by_name_or_value};
+use uucore::signals::signal_by_name_or_value;
 
- 
-static NAME: &str = "timeout";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
+static ABOUT: &str = "Start COMMAND, and kill it if still running after DURATION.";
+
+fn get_usage() -> String {
+    format!("{0} [OPTION]... [FILE]...", executable!())
+}
 
 const ERR_EXIT_STATUS: i32 = 125;
 
@@ -40,70 +43,68 @@ pub mod options {
 
 struct Config {
     foreground: bool,
-    kill_after: Option<Duration>,
-    signal: Option<Signal>,
-    version: bool,
+    kill_after: Duration,
+    signal: usize,
     duration: Duration,
-    preserve_status: bool
+    preserve_status: bool,
 
     command: String,
-    command_args: &[String]
+    command_args: Vec<String>,
 }
 
 impl Config {
-    fn from(options: Clap::ArgMatches) -> Config {
-        let timeout_signal = match options.value_of(options::SIGNAL) {
-            Some(signal_) =>
-            {
+    fn from(options: clap::ArgMatches) -> Config {
+        let signal = match options.value_of(options::SIGNAL) {
+            Some(signal_) => {
                 let signal_result = signal_by_name_or_value(&signal_);
-                match signal_result{
+                match signal_result {
                     None => {
-                        show_error!("invalid signal '{}'", signal_);
-                        return ERR_EXIT_STATUS;
-                    },
-                    _ => Some(signal_result)
+                        unreachable!("invalid signal '{}'", signal_);
+                    }
+                    Some(signal_value) => signal_value,
                 }
-            },
-            _ => None
+            }
+            _ => uucore::signals::signal_by_name_or_value("TERM").unwrap(),
         };
 
-        let kill_after: Option<Duration> =
-            match options.value_of(options::KILL_AFTER) {
-                Some(time) => Some(uucore::parse_time::from_str(&time)),
-                None => None
-            };
+        let kill_after: Duration = match options.value_of(options::KILL_AFTER) {
+            Some(time) => uucore::parse_time::from_str(&time).unwrap(),
+            None => Duration::new(0, 0),
+        };
 
-        let duration: Duration = uucore::parse_time::from_str(
-            options.value_of(options::DURATION)
-        );
+        let duration: Duration =
+            uucore::parse_time::from_str(options.value_of(options::DURATION).unwrap()).unwrap();
 
         let preserve_status: bool = options.is_present(options::PRESERVE_STATUS);
+        let foreground = options.is_present(options::FOREGROUND);
 
-        let command: String = options.value_of(options::COMMAND).to_str();
-        let command_args: &[String] = options.values_of(options::ARGS)
-                                             .map(|x| x.as_str());
+        let command: String = options.value_of(options::COMMAND).unwrap().to_string();
+        let command_args: Vec<String> = options
+            .values_of(options::ARGS)
+            .unwrap()
+            .map(|x| x.to_owned())
+            .collect();
 
         Config {
-            foreground: options.is_present(options::FOREGROUND),
+            foreground,
             kill_after,
-            signal: timeout_signal,
+            signal,
             duration,
             preserve_status,
             command,
-            command_args
+            command_args,
         }
     }
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args.collect_str();
+    let usage = get_usage();
 
-    let program = args[0].clone();
-
-    let mut opts = getopts::Options::new();
-
-    let mut app = App::new("timeout")
+    let app = App::new("timeout")
         .version(VERSION)
+        .usage(&usage[..])
+        .about(ABOUT)
         .arg(
             Arg::with_name(options::FOREGROUND)
                 .long(options::FOREGROUND)
@@ -143,13 +144,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let matches = app.get_matches_from(args);
 
     let config = Config::from(matches);
-    timeout(config.command,
-            config.command_args,
-            config.duration,
-            config.signal,
-            config.kill_after,
-            config.foreground,
-            config.preserve_status
+    timeout(
+        &config.command,
+        &config.command_args,
+        config.duration,
+        config.signal,
+        config.kill_after,
+        config.foreground,
+        config.preserve_status,
     )
 }
 
