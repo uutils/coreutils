@@ -1777,7 +1777,7 @@ dependencies = [
 name = "uu_du"
 version = "0.0.6"
 dependencies = [
- "time",
+ "chrono",
  "uucore",
  "uucore_procs",
  "winapi 0.3.9",

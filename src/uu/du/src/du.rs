@@ -10,6 +10,8 @@
 #[macro_use]
 extern crate uucore;
 
+use chrono::prelude::DateTime;
+use chrono::Local;
 use std::collections::HashSet;
 use std::env;
 use std::fs;
@@ -22,7 +24,7 @@ use std::os::windows::fs::MetadataExt;
 #[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
 use std::path::PathBuf;
-use time::Timespec;
+use std::time::{Duration, UNIX_EPOCH};
 #[cfg(windows)]
 use winapi::shared::minwindef::{DWORD, LPVOID};
 #[cfg(windows)]
@@ -118,7 +120,7 @@ impl Stat {
 // https://doc.rust-lang.org/std/os/windows/fs/trait.MetadataExt.html#tymethod.creation_time
 // "The returned 64-bit value [...] which represents the number of 100-nanosecond intervals since January 1, 1601 (UTC)."
 fn windows_time_to_unix_time(win_time: u64) -> u64 {
-    win_time / 10_000 - 11_644_473_600_000
+    win_time / 10_000_000 - 11_644_473_600
 }
 
 #[cfg(windows)]
@@ -555,8 +557,8 @@ Try '{} --help' for more information.",
                     };
                     if matches.opt_present("time") {
                         let tm = {
-                            let (secs, nsecs) = {
-                                let time = match matches.opt_str("time") {
+                            let secs = {
+                                match matches.opt_str("time") {
                                     Some(s) => match &s[..] {
                                         "accessed" => stat.accessed,
                                         "created" => stat.created,
@@ -573,13 +575,12 @@ Try '{} --help' for more information.",
                                         }
                                     },
                                     None => stat.modified,
-                                };
-                                ((time / 1000) as i64, (time % 1000 * 1_000_000) as i32)
+                                }
                             };
-                            time::at(Timespec::new(secs, nsecs))
+                            DateTime::<Local>::from(UNIX_EPOCH + Duration::from_secs(secs))
                         };
                         if !summarize || index == len - 1 {
-                            let time_str = tm.strftime(time_format_str).unwrap();
+                            let time_str = tm.format(time_format_str).to_string();
                             print!(
                                 "{}\t{}\t{}{}",
                                 convert_size(size),
