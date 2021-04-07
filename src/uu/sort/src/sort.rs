@@ -15,7 +15,6 @@
 #[macro_use]
 extern crate uucore;
 
-use cap::Cap;
 use clap::{App, Arg};
 use fnv::FnvHasher;
 use itertools::Itertools;
@@ -23,7 +22,6 @@ use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use rayon::prelude::*;
 use semver::Version;
-use std::alloc;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::env;
@@ -33,9 +31,6 @@ use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Lines, Read, Write};
 use std::mem::replace;
 use std::path::Path;
 use uucore::fs::is_stdin_interactive; // for Iterator::dedup()
-
-#[global_allocator]
-static ALLOCATOR: Cap<alloc::System> = Cap::new(alloc::System, usize::max_value());
 
 static NAME: &str = "sort";
 static ABOUT: &str = "Display sorted concatenation of all FILE(s).";
@@ -61,7 +56,6 @@ static OPT_UNIQUE: &str = "unique";
 static OPT_RANDOM: &str = "random-sort";
 static OPT_ZERO_TERMINATED: &str = "zero-terminated";
 static OPT_PARALLEL: &str = "parallel";
-static OPT_MEM_CAP: &str = "size";
 
 static ARG_FILES: &str = "files";
 
@@ -95,7 +89,6 @@ struct Settings {
     threads: String,
     salt: String,
     zero_terminated: bool,
-    mem_cap: String,
 }
 
 impl Default for Settings {
@@ -115,7 +108,6 @@ impl Default for Settings {
             threads: String::new(),
             salt: String::new(),
             zero_terminated: false,
-            mem_cap: String::new(),
         }
     }
 }
@@ -334,16 +326,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .takes_value(true)
                 .value_name("NUM_THREADS"),
         )
-        .arg(
-            Arg::with_name(OPT_MEM_CAP)
-                .short("S")
-                .long(OPT_MEM_CAP)
-                .help("use SIZE for main memory buffer")
-                .takes_value(true)
-                .value_name("BYTES"),
-        )
         .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true))
         .get_matches_from(args);
+
     let mut files: Vec<String> = matches
         .values_of(ARG_FILES)
         .map(|v| v.map(ToString::to_string).collect())
@@ -370,19 +355,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             .map(String::from)
             .unwrap_or("0".to_string());
         env::set_var("RAYON_NUM_THREADS", &settings.threads);
-    }
-
-    if matches.is_present(OPT_MEM_CAP) {
-        settings.mem_cap = matches
-            .value_of(OPT_MEM_CAP)
-            .map(String::from)
-            .unwrap_or(usize::max_value().to_string());
-        let num_bytes = human_numeric_convert(settings.mem_cap.as_str());
-        if num_bytes >= 16E6f64 {
-            ALLOCATOR.set_limit(num_bytes as usize).unwrap();
-        } else {
-            panic!("sort does not support setting a buffer size smaller than 16 megabytes");
-        };
     }
 
     if matches.is_present(OPT_DICTIONARY_ORDER) {
@@ -455,11 +427,7 @@ fn exec(files: Vec<String>, settings: &mut Settings) -> i32 {
         } else if settings.zero_terminated {
             for line in buf_reader.split(b'\0') {
                 if let Ok(n) = line {
-                    lines.push(
-                        std::str::from_utf8(&n)
-                            .expect("Could not parse string from zero terminated input.")
-                            .to_string(),
-                    );
+                    lines.push(std::str::from_utf8(&n).expect("Could not parse string from zero terminated input.").to_string());
                 }
             }
         } else {
@@ -649,8 +617,8 @@ fn get_leading_num(a: &str) -> &str {
 }
 
 // This function cleans up the initial comparison done by leading_num_common for a general numeric compare.
-// In contrast to numeric compare, GNU general numeric/FP sort *should* recognize positive signs and
-// scientific notation, so we strip those lines only after the end of the following numeric string.
+// In contrast to numeric compare, GNU general numeric/FP sort *should* recognize positive signs and 
+// scientific notation, so we strip those lines only after the end of the following numeric string. 
 // For example, 5e10KFD would be 5e10 or 5x10^10 and +10000HFKJFK would become 10000.
 fn get_leading_gen(a: &str) -> String {
     // Make this iter peekable to see if next char is numeric
@@ -790,9 +758,9 @@ fn general_numeric_compare(a: &str, b: &str) -> Ordering {
 }
 
 // GNU/BSD does not handle converting numbers to an equal scale
-// properly.  They simply recognizes that there is a human scale and sorts
-// those numbers ahead of other number inputs. I think there are limits
-// to the type of behavior we should emulate, and this might be such a limit.
+// properly.  They simply recognizes that there is a human scale and sorts 
+// those numbers ahead of other number inputs. I think there are limits 
+// to the type of behavior we should emulate, and this might be such a limit.  
 // Properly handling these units seems like a value add to me. And when sorting
 // these types of numbers, we rarely care about pure performance.
 fn human_numeric_convert(a: &str) -> f64 {
@@ -806,9 +774,9 @@ fn human_numeric_convert(a: &str) -> f64 {
         'G' => 1E9,
         'T' => 1E12,
         'P' => 1E15,
-        'E' => 1E18,
-        'Z' => 1E21,
-        'Y' => 1E24,
+        'E'  => 1E18,
+        'Z'  => 1E21,
+        'Y'  => 1E24,
         _ => 1f64,
     };
     num_part * suffix
@@ -935,7 +903,7 @@ fn remove_nondictionary_chars(s: &str) -> String {
 }
 
 fn remove_nonprinting_chars(s: &str) -> String {
-    // However, GNU says nonprinting chars are more permissive.
+    // However, GNU says nonprinting chars are more permissive.  
     // All of ASCII except control chars ie, escape, newline
     s.chars()
         .filter(|c| c.is_ascii() && !c.is_ascii_control())
