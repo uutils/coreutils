@@ -353,7 +353,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 if let Ok(n) = line {
                     files.push(
                         std::str::from_utf8(&n)
-                            .expect("Could not parse string from zero terminated input.")
+                            .expect("Could not parse zero terminated string from input.")
                             .to_string(),
                     );
                 }
@@ -664,10 +664,9 @@ fn get_leading_gen(a: &str) -> String {
     // Cleanup raw stripped strings
     for c in p_iter.to_owned() {
         let next_char_numeric = p_iter.peek().unwrap_or(&'\0').is_numeric();
-        // Only general numeric recognizes e notation and the '+' sign
+        // Only general numeric recognizes e notation and, see block below, the '+' sign
         if (c.eq(&'e') && !next_char_numeric)
             || (c.eq(&'E') && !next_char_numeric)
-            || (c.eq(&DECIMAL_PT) && !next_char_numeric)
         {
             r = a.split(c).next().unwrap_or("").to_owned();
             break;
@@ -814,7 +813,7 @@ fn human_numeric_convert(a: &str) -> f64 {
         'E' => 1E18,
         'Z' => 1E21,
         'Y' => 1E24,
-        _ => 1f64,
+         _ => 1f64,
     };
     num_part * suffix
 }
