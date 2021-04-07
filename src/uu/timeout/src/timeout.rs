@@ -10,15 +10,90 @@
 #[macro_use]
 extern crate uucore;
 
+extern crate clap;
+
+use clap::{App, Arg, ArgMatches, AppSettings};
 use std::io::ErrorKind;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 use uucore::process::ChildExt;
+use uucore::signals::{Signal, signal_by_name_or_value};
 
+ 
 static NAME: &str = "timeout";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const ERR_EXIT_STATUS: i32 = 125;
+
+pub mod options {
+    pub static FOREGROUND: &str = "foreground";
+    pub static KILL_AFTER: &str = "kill-after";
+    pub static SIGNAL: &str = "signal";
+    pub static VERSION: &str = "version";
+    pub static PRESERVE_STATUS: &str = "preserve-status";
+
+    // Positional args.
+    pub static DURATION: &str = "duration";
+    pub static COMMAND: &str = "command";
+    pub static ARGS: &str = "args";
+}
+
+struct Config {
+    foreground: bool,
+    kill_after: Option<Duration>,
+    signal: Option<Signal>,
+    version: bool,
+    duration: Duration,
+    preserve_status: bool
+
+    command: String,
+    command_args: &[String]
+}
+
+impl Config {
+    fn from(options: Clap::ArgMatches) -> Config {
+        let timeout_signal = match options.value_of(options::SIGNAL) {
+            Some(signal_) =>
+            {
+                let signal_result = signal_by_name_or_value(&signal_);
+                match signal_result{
+                    None => {
+                        show_error!("invalid signal '{}'", signal_);
+                        return ERR_EXIT_STATUS;
+                    },
+                    _ => Some(signal_result)
+                }
+            },
+            _ => None
+        };
+
+        let kill_after: Option<Duration> =
+            match options.value_of(options::KILL_AFTER) {
+                Some(time) => Some(uucore::parse_time::from_str(&time)),
+                None => None
+            };
+
+        let duration: Duration = uucore::parse_time::from_str(
+            options.value_of(options::DURATION)
+        );
+
+        let preserve_status: bool = options.is_present(options::PRESERVE_STATUS);
+
+        let command: String = options.value_of(options::COMMAND).to_str();
+        let command_args: &[String] = options.values_of(options::ARGS)
+                                             .map(|x| x.as_str());
+
+        Config {
+            foreground: options.is_present(options::FOREGROUND),
+            kill_after,
+            signal: timeout_signal,
+            duration,
+            preserve_status,
+            command,
+            command_args
+        }
+    }
+}
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args.collect_str();
@@ -26,82 +101,60 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let program = args[0].clone();
 
     let mut opts = getopts::Options::new();
-    opts.optflag(
-        "",
-        "preserve-status",
-        "exit with the same status as COMMAND, even when the command times out",
-    );
-    opts.optflag("", "foreground", "when not running timeout directly from a shell prompt, allow COMMAND to read from the TTY and get TTY signals; in this mode, children of COMMAND will not be timed out");
-    opts.optopt("k", "kill-after", "also send a KILL signal if COMMAND is still running this long after the initial signal was sent", "DURATION");
-    opts.optflag("s", "signal", "specify the signal to be sent on timeout; SIGNAL may be a name like 'HUP' or a number; see 'kill -l' for a list of signals");
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => crash!(ERR_EXIT_STATUS, "{}", f),
-    };
-    if matches.opt_present("help") {
-        print!(
-            "{} {}
 
-Usage:
-  {} [OPTION] DURATION COMMAND [ARG]...
+    let mut app = App::new("timeout")
+        .version(VERSION)
+        .arg(
+            Arg::with_name(options::FOREGROUND)
+                .long(options::FOREGROUND)
+                .help("when not running timeout directly from a shell prompt, allow COMMAND to read from the TTY and get TTY signals; in this mode, children of COMMAND will not be timed out")
+        )
+        .arg(
+            Arg::with_name(options::KILL_AFTER)
+                .short("k")
+                .takes_value(true))
+        .arg(
+            Arg::with_name(options::PRESERVE_STATUS)
+                .long(options::PRESERVE_STATUS)
+                .help("exit with the same status as COMMAND, even when the command times out")
+        )
+        .arg(
+            Arg::with_name(options::SIGNAL)
+                .short("s")
+                .long(options::SIGNAL)
+                .help("specify the signal to be sent on timeout; SIGNAL may be a name like 'HUP' or a number; see 'kill -l' for a list of signals")
+                .takes_value(true)
+        )
+        .arg(
+            Arg::with_name(options::DURATION)
+                .index(1)
+                .required(true)
+        )
+        .arg(
+            Arg::with_name(options::COMMAND)
+                .index(2)
+                .required(true)
+        )
+        .arg(
+            Arg::with_name(options::ARGS).required(true).multiple(true)
+        )
+        .setting(AppSettings::TrailingVarArg);
 
-{}",
-            NAME,
-            VERSION,
-            program,
-            &opts.usage("Start COMMAND, and kill it if still running after DURATION.")
-        );
-    } else if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-    } else if matches.free.len() < 2 {
-        show_error!("missing an argument");
-        show_error!("for help, try '{0} --help'", program);
-        return ERR_EXIT_STATUS;
-    } else {
-        let status = matches.opt_present("preserve-status");
-        let foreground = matches.opt_present("foreground");
-        let kill_after = match matches.opt_str("kill-after") {
-            Some(tstr) => match uucore::parse_time::from_str(&tstr) {
-                Ok(time) => time,
-                Err(f) => {
-                    show_error!("{}", f);
-                    return ERR_EXIT_STATUS;
-                }
-            },
-            None => Duration::new(0, 0),
-        };
-        let signal = match matches.opt_str("signal") {
-            Some(sigstr) => match uucore::signals::signal_by_name_or_value(&sigstr) {
-                Some(sig) => sig,
-                None => {
-                    show_error!("invalid signal '{}'", sigstr);
-                    return ERR_EXIT_STATUS;
-                }
-            },
-            None => uucore::signals::signal_by_name_or_value("TERM").unwrap(),
-        };
-        let duration = match uucore::parse_time::from_str(&matches.free[0]) {
-            Ok(time) => time,
-            Err(f) => {
-                show_error!("{}", f);
-                return ERR_EXIT_STATUS;
-            }
-        };
-        return timeout(
-            &matches.free[1],
-            &matches.free[2..],
-            duration,
-            signal,
-            kill_after,
-            foreground,
-            status,
-        );
-    }
+    let matches = app.get_matches_from(args);
 
-    0
+    let config = Config::from(matches);
+    timeout(config.command,
+            config.command_args,
+            config.duration,
+            config.signal,
+            config.kill_after,
+            config.foreground,
+            config.preserve_status
+    )
 }
+
+/// TODO: Improve exit codes, and make them consistent with the GNU Coreutil
+/// exit codes.
 
 fn timeout(
     cmdname: &str,
@@ -126,10 +179,10 @@ fn timeout(
         Err(err) => {
             show_error!("failed to execute process: {}", err);
             if err.kind() == ErrorKind::NotFound {
-                // XXX: not sure which to use
+                // FIXME: not sure which to use
                 return 127;
             } else {
-                // XXX: this may not be 100% correct...
+                // FIXME: this may not be 100% correct...
                 return 126;
             }
         }
