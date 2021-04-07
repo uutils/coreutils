@@ -56,6 +56,7 @@ static OPT_UNIQUE: &str = "unique";
 static OPT_RANDOM: &str = "random-sort";
 static OPT_ZERO_TERMINATED: &str = "zero-terminated";
 static OPT_PARALLEL: &str = "parallel";
+static OPT_FILES0_FROM: &str = "files0-from";
 
 static ARG_FILES: &str = "files";
 
@@ -326,13 +327,45 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .takes_value(true)
                 .value_name("NUM_THREADS"),
         )
+        .arg(
+            Arg::with_name(OPT_FILES0_FROM)
+                .long(OPT_FILES0_FROM)
+                .help("read input from the files specified by NUL-terminated NUL_FILES")
+                .takes_value(true)
+                .value_name("NUL_FILES")
+                .multiple(true),
+        )
         .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true))
         .get_matches_from(args);
 
-    let mut files: Vec<String> = matches
-        .values_of(ARG_FILES)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_default();
+    // check whether user specified a zero terminated list of files for input, otherwise read files from args
+    let mut files: Vec<String> = if matches.is_present(OPT_FILES0_FROM) {
+        let files0_from: Vec<String> = matches
+            .values_of(OPT_FILES0_FROM)
+            .map(|v| v.map(ToString::to_string).collect())
+            .unwrap_or_default();
+
+        let mut files = Vec::new();
+        for path in &files0_from {
+            let (reader, _) = open(path.as_str()).expect("Could not read from file specified.");
+            let buf_reader = BufReader::new(reader);
+            for line in buf_reader.split(b'\0') {
+                if let Ok(n) = line {
+                    files.push(
+                        std::str::from_utf8(&n)
+                            .expect("Could not parse string from zero terminated input.")
+                            .to_string(),
+                    );
+                }
+            }
+        }
+        files
+    } else {
+        matches
+            .values_of(ARG_FILES)
+            .map(|v| v.map(ToString::to_string).collect())
+            .unwrap_or_default()
+    };
 
     settings.mode = if matches.is_present(OPT_HUMAN_NUMERIC_SORT) {
         SortMode::HumanNumeric
@@ -427,7 +460,11 @@ fn exec(files: Vec<String>, settings: &mut Settings) -> i32 {
         } else if settings.zero_terminated {
             for line in buf_reader.split(b'\0') {
                 if let Ok(n) = line {
-                    lines.push(std::str::from_utf8(&n).expect("Could not parse string from zero terminated input.").to_string());
+                    lines.push(
+                        std::str::from_utf8(&n)
+                            .expect("Could not parse string from zero terminated input.")
+                            .to_string(),
+                    );
                 }
             }
         } else {
@@ -617,8 +654,8 @@ fn get_leading_num(a: &str) -> &str {
 }
 
 // This function cleans up the initial comparison done by leading_num_common for a general numeric compare.
-// In contrast to numeric compare, GNU general numeric/FP sort *should* recognize positive signs and 
-// scientific notation, so we strip those lines only after the end of the following numeric string. 
+// In contrast to numeric compare, GNU general numeric/FP sort *should* recognize positive signs and
+// scientific notation, so we strip those lines only after the end of the following numeric string.
 // For example, 5e10KFD would be 5e10 or 5x10^10 and +10000HFKJFK would become 10000.
 fn get_leading_gen(a: &str) -> String {
     // Make this iter peekable to see if next char is numeric
@@ -758,9 +795,9 @@ fn general_numeric_compare(a: &str, b: &str) -> Ordering {
 }
 
 // GNU/BSD does not handle converting numbers to an equal scale
-// properly.  They simply recognizes that there is a human scale and sorts 
-// those numbers ahead of other number inputs. I think there are limits 
-// to the type of behavior we should emulate, and this might be such a limit.  
+// properly.  GNU/BSD simply recognize that there is a human scale and sorts
+// those numbers ahead of other number inputs. There are perhaps limits
+// to the type of behavior we should emulate, and this might be such a limit.
 // Properly handling these units seems like a value add to me. And when sorting
 // these types of numbers, we rarely care about pure performance.
 fn human_numeric_convert(a: &str) -> f64 {
@@ -774,9 +811,9 @@ fn human_numeric_convert(a: &str) -> f64 {
         'G' => 1E9,
         'T' => 1E12,
         'P' => 1E15,
-        'E'  => 1E18,
-        'Z'  => 1E21,
-        'Y'  => 1E24,
+        'E' => 1E18,
+        'Z' => 1E21,
+        'Y' => 1E24,
         _ => 1f64,
     };
     num_part * suffix
@@ -903,7 +940,7 @@ fn remove_nondictionary_chars(s: &str) -> String {
 }
 
 fn remove_nonprinting_chars(s: &str) -> String {
-    // However, GNU says nonprinting chars are more permissive.  
+    // However, GNU says nonprinting chars are more permissive.
     // All of ASCII except control chars ie, escape, newline
     s.chars()
         .filter(|c| c.is_ascii() && !c.is_ascii_control())
