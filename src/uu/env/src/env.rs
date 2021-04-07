@@ -170,26 +170,38 @@ fn create_app() -> App<'static, 'static> {
             used to pass multiple arguments on shebang lines"))
 }
 
-fn split_args(args: impl uucore::Args) -> (Vec<OsString>, Vec<String>) {
+// From all the args passed to env, some are for env itself and some
+// are for the process to be run with env. The arguments are partitioned
+// by -S (or --split-string). For example, in
+// `env -i -S ls -c` `-i` is for env and `-c` is for ls.
+fn partition_args(args: impl uucore::Args) -> (Vec<OsString>, Vec<String>) {
     let mut env_args = vec![];
-    let mut split_args = vec![];
+    let mut command_args = vec![];
 
-    let mut in_split_args = false;
+    let mut in_command_args = false; // are we past -S?
     for arg in args {
-        if in_split_args {
-            split_args.push(arg.to_string_lossy().to_string());
+        if in_command_args {
+            command_args.push(arg.to_string_lossy().to_string());
         } else if arg == "-S" || arg == "--split-string" {
-            in_split_args = true;
+            in_command_args = true;
         } else if let Some(splitted_args) = parse_split_args(&arg) {
-            in_split_args = true;
-            split_args.extend(splitted_args);
+            in_command_args = true;
+            command_args.extend(splitted_args);
         } else {
             env_args.push(arg);
         }
     }
-    (env_args, split_args)
+    (env_args, command_args)
 }
 
+// This function splits multiple arguments in one string into a
+// vector of individual arguments.
+//
+// Use-Case: If env is used in a shebang (eg. `#!/usr/bin/env -S awk -f`)
+// then all arguments are passed as one string and -S must be used to
+// split up that string.
+//
+// Example: assert_eq!(Some(vec!["awk", "-f"]), parse_split_args("-S awk -f"))
 fn parse_split_args(arg: &OsString) -> Option<Vec<String>> {
     let str = arg.to_string_lossy();
     let split_arg = if str.starts_with("-S") {
@@ -209,7 +221,7 @@ fn parse_split_args(arg: &OsString) -> Option<Vec<String>> {
 }
 
 fn run_env(args: impl uucore::Args) -> Result<(), i32> {
-    let (env_args, split_args) = split_args(args);
+    let (env_args, split_args) = partition_args(args);
 
     let app = create_app();
     let matches = app.get_matches_from(env_args);
