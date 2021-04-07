@@ -45,7 +45,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .short("b")
                 .help(
                     "count using bytes rather than columns (meaning control characters \
-             such as newline are not treated specially)",
+                     such as newline are not treated specially)",
                 )
                 .takes_value(false),
         )
