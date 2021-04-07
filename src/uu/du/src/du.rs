@@ -11,7 +11,7 @@
 extern crate uucore;
 
 use chrono::prelude::DateTime;
-use chrono::{Local};
+use chrono::Local;
 use std::collections::HashSet;
 use std::env;
 use std::fs;
@@ -24,7 +24,7 @@ use std::os::windows::fs::MetadataExt;
 #[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
 use std::path::PathBuf;
-use std::time::{UNIX_EPOCH, Duration};
+use std::time::{Duration, UNIX_EPOCH};
 #[cfg(windows)]
 use winapi::shared::minwindef::{DWORD, LPVOID};
 #[cfg(windows)]
