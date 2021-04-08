@@ -13,7 +13,7 @@
 -----------------------------------------------
 
 <!-- markdownlint-disable commands-show-output no-duplicate-heading -->
-<!-- spell-checker:ignore markdownlint ; (jargon) multicall ; (misc) riscv aarch ; (names/acronyms) BusyBox BusyBox's BusyTest MSVC NixOS PowerPC WASI WASM ; (options) DESTDIR RUNTEST -->
+<!-- spell-checker:ignore markdownlint ; (jargon) multicall ; (misc) aarch riscv uutil uutils ; (names/acronyms) BusyBox BusyBox's BusyTest MSVC NixOS PowerPC WASI WASM ; (options) DESTDIR RUNTEST UTILNAME -->
 
 uutils is an attempt at writing universal (as in cross-platform) CLI
 utilities in [Rust](http://www.rust-lang.org). This repository is intended to
@@ -46,11 +46,13 @@ On both Windows and Redox, only the nightly version is tested currently.
 
 ## Build Instructions
 
-There are currently two methods to build uutils: GNU Make and Cargo.  However,
-while there may be two methods, both systems are required to build on Unix
-(only Cargo is required on Windows).
+There are currently two methods to build the uutils binaries: either Cargo
+or GNU Make.
 
-First, for both methods, we need to fetch the repository:
+> Building the full package, including all documentation, requires both Cargo
+> and Gnu Make on a Unix platform.
+
+For either method, we first need to fetch the repository:
 
 ```bash
 $ git clone https://github.com/uutils/coreutils
@@ -63,29 +65,37 @@ Building uutils using Cargo is easy because the process is the same as for
 every other Rust program:
 
 ```bash
-# to keep debug information, compile without --release
 $ cargo build --release
 ```
 
-Because the above command attempts to build utilities that only work on
-Unix-like platforms at the moment, to build on Windows, you must do the
-following:
+This command builds the most portable common core set of uutils into a multicall
+(BusyBox-type) binary, named 'coreutils', on most Rust-supported platforms.
+
+Additional platform-specific uutils are often available. Building these
+expanded sets of uutils for a platform (on that platform) is as simple as
+specifying it as a feature:
 
 ```bash
-# to keep debug information, compile without --release
-$ cargo build --release --no-default-features --features windows
+$ cargo build --release --features macos
+# or ...
+$ cargo build --release --features windows
+# or ...
+$ cargo build --release --features unix
 ```
 
 If you don't want to build every utility available on your platform into the
-multicall binary (the Busybox-esque binary), you can also specify which ones
-you want to build manually.  For example:
+final binary, you can also specify which ones you want to build manually.
+For example:
 
 ```bash
 $ cargo build --features "base32 cat echo rm" --no-default-features
 ```
 
-If you don't even want to build the multicall binary and would prefer to just
-build the utilities as individual binaries, that is possible too.  For example:
+If you don't want to build the multicall binary and would prefer to build
+the utilities as individual binaries, that is also possible. Each utility
+is contained in it's own package within the main repository, named
+"uu_UTILNAME". To build individual utilities, use cargo to build just the
+specific packages (using the `--package` [aka `-p`] option). For example:
 
 ```bash
 $ cargo build -p uu_base32 -p uu_cat -p uu_echo -p uu_rm
