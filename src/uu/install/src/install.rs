@@ -176,7 +176,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(
             Arg::with_name(OPT_STRIP_PROGRAM)
                 .long(OPT_STRIP_PROGRAM)
-                .help("program used to strip binaries")
+                .help("program used to strip binaries (no action Windows)")
                 .value_name("PROGRAM")
         )
         .arg(
@@ -525,7 +525,7 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
         return Err(());
     }
 
-    if b.strip {
+    if b.strip && cfg!(not(windows)) {
         match Command::new(&b.strip_program).arg(to).output() {
             Ok(o) => {
                 if !o.status.success() {
