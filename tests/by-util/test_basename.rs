@@ -105,14 +105,3 @@ fn invalid_utf8_args_unix() {
     let os_str = OsStr::from_bytes(&source[..]);
     test_invalid_utf8_args(os_str);
 }
-
-#[cfg(windows)]
-#[test]
-fn invalid_utf8_args_windows() {
-    use std::os::windows::prelude::*;
-
-    let source = [0x0066, 0x006f, 0xD800, 0x006f];
-    let os_string = OsString::from_wide(&source[..]);
-    let os_str = os_string.as_os_str();
-    test_invalid_utf8_args(os_str);
-}
