@@ -161,14 +161,16 @@ impl From<&GlobalSettings> for KeySettings {
     }
 }
 
+/// Represents the string selected by a FieldSelector.
 enum Selection {
-    // If we had to transform this selection, we have to store a new string.
+    /// If we had to transform this selection, we have to store a new string.
     String(String),
-    // If there was no transformation, we can store an index into the line.
+    /// If there was no transformation, we can store an index into the line.
     ByIndex(Range<usize>),
 }
 
 impl Selection {
+    /// Gets the actual string slice represented by this Selection.
     fn get_str<'a>(&'a self, line: &'a Line) -> &'a str {
         match self {
             Selection::String(string) => string.as_str(),
@@ -219,7 +221,7 @@ impl Line {
     }
 }
 
-// Returns None if there's no need to transform.
+/// Transform this line. Returns None if there's no need to transform.
 fn transform(line: &str, settings: &KeySettings) -> Option<String> {
     if settings.transform_fns.is_empty() {
         None
@@ -233,7 +235,7 @@ fn transform(line: &str, settings: &KeySettings) -> Option<String> {
     }
 }
 
-// Tokenize a line into fields.
+/// Tokenize a line into fields.
 fn tokenize(line: &str, separator: Option<char>) -> Vec<Field> {
     if let Some(separator) = separator {
         tokenize_with_separator(line, separator)
@@ -242,8 +244,8 @@ fn tokenize(line: &str, separator: Option<char>) -> Vec<Field> {
     }
 }
 
-// By default fields are separated by the first whitespace after non-whitespace.
-// Whitespace is included in fields at the start.
+/// By default fields are separated by the first whitespace after non-whitespace.
+/// Whitespace is included in fields at the start.
 fn tokenize_default(line: &str) -> Vec<Field> {
     let mut tokens = vec![0..0];
     // pretend that there was whitespace in front of the line
@@ -263,7 +265,7 @@ fn tokenize_default(line: &str) -> Vec<Field> {
     tokens
 }
 
-// Split between separators. These separators are not included in fields.
+/// Split between separators. These separators are not included in fields.
 fn tokenize_with_separator(line: &str, separator: char) -> Vec<Field> {
     let mut tokens = vec![0..0];
     let mut previous_was_separator = false;
@@ -283,9 +285,9 @@ fn tokenize_with_separator(line: &str, separator: char) -> Vec<Field> {
 }
 
 struct KeyPosition {
-    // 1-indexed, 0 is invalid.
+    /// 1-indexed, 0 is invalid.
     field: usize,
-    // 1-indexed, 0 is end of field.
+    /// 1-indexed, 0 is end of field.
     char: usize,
     ignore_blanks: bool,
 }
@@ -297,6 +299,8 @@ impl KeyPosition {
             .next()
             .unwrap_or_else(|| crash!(1, "invalid key `{}`", key));
         let mut char = field_and_char.next();
+
+        // If there is a char index, we expect options to appear after it. Otherwise we expect them after the field index.
         let value_with_options = char.as_mut().unwrap_or(&mut field);
 
         let mut ignore_blanks = settings.ignore_blanks;
@@ -320,6 +324,7 @@ impl KeyPosition {
                     }
                 }
             }
+            // Strip away option characters from the original value so we can parse it later
             *value_with_options = &value_with_options[..options_start];
         }
 
