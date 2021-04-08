@@ -1,5 +1,4 @@
-uutils coreutils
-================
+# uutils coreutils
 
 [![Crates.io](https://img.shields.io/crates/v/coreutils.svg)](https://crates.io/crates/coreutils)
 [![Discord](https://img.shields.io/badge/discord-join-7289DA.svg?logo=discord&longCache=true&style=flat)](https://discord.gg/wQVJbvJ)
@@ -17,8 +16,7 @@ uutils is an attempt at writing universal (as in cross-platform) CLI
 utilities in [Rust](http://www.rust-lang.org). This repository is intended to
 aggregate GNU coreutils rewrites.
 
-Why?
-----
+## Why?
 
 Many GNU, Linux and other utilities are useful, and obviously
 [some](http://gnuwin32.sourceforge.net) [effort](http://unxutils.sourceforge.net)
@@ -29,23 +27,21 @@ have other issues.
 Rust provides a good, platform-agnostic way of writing systems utilities that are easy
 to compile anywhere, and this is as good a way as any to try and learn it.
 
-Requirements
-------------
+## Requirements
 
 * Rust (`cargo`, `rustc`)
 * GNU Make (required to build documentation)
 * [Sphinx](http://www.sphinx-doc.org/) (for documentation)
 * gzip (for installing documentation)
 
-### Rust Version ###
+### Rust Version
 
 uutils follows Rust's release channels and is tested against stable, beta and nightly.
 The current oldest supported version of the Rust compiler is `1.40.0`.
 
 On both Windows and Redox, only the nightly version is tested currently.
 
-Build Instructions
-------------------
+## Build Instructions
 
 There are currently two methods to build uutils: GNU Make and Cargo.  However,
 while there may be two methods, both systems are required to build on Unix
@@ -57,7 +53,7 @@ $ git clone https://github.com/uutils/coreutils
 $ cd coreutils
 ```
 
-### Cargo ###
+### Cargo
 
 Building uutils using Cargo is easy because the process is the same as for
 every other Rust program:
@@ -87,7 +83,7 @@ build the utilities as individual binaries, that is possible too.  For example:
 $ cargo build -p uu_base32 -p uu_cat -p uu_echo -p uu_rm
 ```
 
-### GNU Make ###
+### GNU Make
 
 Building using `make` is a simple process as well.
 
@@ -106,10 +102,9 @@ To build only a few of the available utilities:
 $ make UTILS='UTILITY_1 UTILITY_2'
 ```
 
-Installation Instructions
--------------------------
+## Installation Instructions
 
-### Cargo ###
+### Cargo
 
 Likewise, installing can simply be done using:
 ```bash
@@ -118,7 +113,7 @@ $ cargo install --path .
 
 This command will install uutils into Cargo's *bin* folder (*e.g.* `$HOME/.cargo/bin`).
 
-### GNU Make ###
+### GNU Make
 
 To install all available utilities:
 ```bash
@@ -156,7 +151,7 @@ Set install parent directory (default value is /usr/local):
 $ make PREFIX=/my/path install
 ```
 
-### NixOS ###
+### NixOS
 
 The [standard package set](https://nixos.org/nixpkgs/manual/) of [NixOS](https://nixos.org/)
 provides this package out of the box since 18.03:
@@ -165,21 +160,20 @@ provides this package out of the box since 18.03:
 nix-env -iA nixos.uutils-coreutils
 ```
 
-Uninstallation Instructions
----------------------------
+## Uninstallation Instructions
 
 Uninstallation differs depending on how you have installed uutils.  If you used
 Cargo to install, use Cargo to uninstall.  If you used GNU Make to install, use
 Make to uninstall.
 
-### Cargo ###
+### Cargo
 
 To uninstall uutils:
 ```bash
 $ cargo uninstall uutils
 ```
 
-### GNU Make ###
+### GNU Make
 
 To uninstall all utilities:
 ```bash
@@ -202,12 +196,11 @@ To uninstall from a custom parent directory:
 $ make PREFIX=/my/path uninstall
 ```
 
-Test Instructions
------------------
+## Test Instructions
 
 Testing can be done using either Cargo or `make`.
 
-### Cargo ###
+### Cargo
 
 Just like with building, we follow the standard procedure for testing using
 Cargo:
@@ -238,7 +231,7 @@ $ gdb --args target/debug/coreutils ls
 (gdb) run
 ```
 
-### GNU Make ###
+### GNU Make
 
 To simply test all available utilities:
 ```bash
@@ -260,8 +253,7 @@ To include tests for unimplemented behavior:
 $ make UTILS='UTILITY_1 UTILITY_2' SPEC=y test
 ```
 
-Run Busybox Tests
------------------
+## Run Busybox Tests
 
 This testing functionality is only available on *nix operating systems and
 requires `make`.
@@ -281,13 +273,11 @@ To pass an argument like "-v" to the busybox test runtime
 $ make UTILS='UTILITY_1 UTILITY_2' RUNTEST_ARGS='-v' busytest
 ```
 
-Contribute
-----------
+## Contribute
 
 To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 
-Utilities
----------
+## Utilities
 
 | Done      | Semi-Done | To Do  |
 |-----------|-----------|--------|
@@ -377,8 +367,7 @@ Utilities
 | whoami    |           |        |
 | yes       |           |        |
 
-Targets that compile
--------
+## Targets that compile
 
 This is an auto-generated table showing which binaries compile for each target-triple. Note that this **does not** indicate that they are fully implemented, or that the tests pass.
 
@@ -405,8 +394,7 @@ This is an auto-generated table showing which binaries compile for each target-t
 |fuchsia|aarch64| | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | |
 |fuchsia|x86_64| | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | |
 
-License
--------
+## License
 
 uutils is licensed under the MIT License - see the `LICENSE` file for details
 
