@@ -8,11 +8,12 @@
 
 [![Build Status](https://api.travis-ci.org/uutils/coreutils.svg?branch=master)](https://travis-ci.org/uutils/coreutils)
 [![Build Status (FreeBSD)](https://api.cirrus-ci.com/github/uutils/coreutils.svg)](https://cirrus-ci.com/github/uutils/coreutils/master)
-[![codecov](https://codecov.io/gh/uutils/coreutils/branch/master/graph/badge.svg)](https://codecov.io/gh/uutils/coreutils)
+[![CodeCov](https://codecov.io/gh/uutils/coreutils/branch/master/graph/badge.svg)](https://codecov.io/gh/uutils/coreutils)
 
 -----------------------------------------------
 
 <!-- markdownlint-disable commands-show-output no-duplicate-heading -->
+<!-- spell-checker:ignore markdownlint ; (jargon) multicall ; (misc) riscv aarch ; (names/acronyms) BusyBox BusyBox's BusyTest MSVC NixOS PowerPC WASI WASM ; (options) DESTDIR RUNTEST -->
 
 uutils is an attempt at writing universal (as in cross-platform) CLI
 utilities in [Rust](http://www.rust-lang.org). This repository is intended to
@@ -178,9 +179,9 @@ provides this package out of the box since 18.03:
 $ nix-env -iA nixos.uutils-coreutils
 ```
 
-## Uninstallation Instructions
+## Un-installation Instructions
 
-Uninstallation differs depending on how you have installed uutils.  If you used
+Un-installation differs depending on how you have installed uutils.  If you used
 Cargo to install, use Cargo to uninstall.  If you used GNU Make to install, use
 Make to uninstall.
 
