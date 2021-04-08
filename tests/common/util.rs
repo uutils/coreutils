@@ -166,8 +166,8 @@ impl CmdResult {
     /// asserts that the command resulted in empty (zero-length) stderr stream output
     /// generally, it's better to use stdout_only() instead,
     /// but you might find yourself using this function if
-    /// 1. you can not know exactly what stdout will be
-    /// or 2. you know that stdout will also be empty
+    /// 1.  you can not know exactly what stdout will be or
+    /// 2.  you know that stdout will also be empty
     pub fn no_stderr(&self) -> &CmdResult {
         assert!(self.stderr.is_empty());
         self
@@ -177,8 +177,8 @@ impl CmdResult {
     /// unless asserting there was neither stdout or stderr, stderr_only is usually a better choice
     /// generally, it's better to use stderr_only() instead,
     /// but you might find yourself using this function if
-    /// 1. you can not know exactly what stderr will be
-    /// or 2. you know that stderr will also be empty
+    /// 1.  you can not know exactly what stderr will be or
+    /// 2.  you know that stderr will also be empty
     pub fn no_stdout(&self) -> &CmdResult {
         assert!(self.stdout.is_empty());
         self
@@ -224,9 +224,9 @@ impl CmdResult {
     }
 
     /// asserts that
-    /// 1. the command resulted in stdout stream output that equals the
-    /// passed in value, when both are trimmed of trailing whitespace
-    /// and 2. the command resulted in empty (zero-length) stderr stream output
+    /// 1.  the command resulted in stdout stream output that equals the
+    ///     passed in value
+    /// 2.  the command resulted in empty (zero-length) stderr stream output
     pub fn stdout_only<T: AsRef<str>>(&self, msg: T) -> &CmdResult {
         self.no_stderr().stdout_is(msg)
     }
@@ -246,9 +246,9 @@ impl CmdResult {
     }
 
     /// asserts that
-    /// 1. the command resulted in stderr stream output that equals the
-    /// passed in value, when both are trimmed of trailing whitespace
-    /// and 2. the command resulted in empty (zero-length) stdout stream output
+    /// 1.  the command resulted in stderr stream output that equals the
+    ///     passed in value, when both are trimmed of trailing whitespace
+    /// 2.  the command resulted in empty (zero-length) stdout stream output
     pub fn stderr_only<T: AsRef<str>>(&self, msg: T) -> &CmdResult {
         self.no_stdout().stderr_is(msg)
     }

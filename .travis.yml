@@ -56,7 +56,7 @@ install:
 
 script:
   - cargo build $CARGO_ARGS --features "$FEATURES"
-  - if [ ! $REDOX ]; then cargo test $CARGO_ARGS --features "$FEATURES" --no-fail-fast; fi
+  - if [ ! $REDOX ]; then cargo test $CARGO_ARGS -p uucore -p coreutils --features "$FEATURES" --no-fail-fast; fi
   - if [ -n "$TEST_INSTALL" ]; then mkdir installdir_test; DESTDIR=installdir_test make install; [ `ls installdir_test/usr/local/bin | wc -l` -gt 0 ]; fi
 
 addons:

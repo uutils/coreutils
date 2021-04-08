@@ -10,6 +10,8 @@
 #[macro_use]
 extern crate uucore;
 
+use chrono::prelude::DateTime;
+use chrono::Local;
 use std::collections::HashSet;
 use std::env;
 use std::fs;
@@ -22,7 +24,7 @@ use std::os::windows::fs::MetadataExt;
 #[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
 use std::path::PathBuf;
-use time::Timespec;
+use std::time::{Duration, UNIX_EPOCH};
 use uucore::InvalidEncodingHandling;
 #[cfg(windows)]
 use winapi::shared::minwindef::{DWORD, LPVOID};
@@ -33,7 +35,7 @@ use winapi::um::minwinbase::{FileIdInfo, FileStandardInfo};
 #[cfg(windows)]
 use winapi::um::winbase::GetFileInformationByHandleEx;
 #[cfg(windows)]
-use winapi::um::winnt::FILE_ID_128;
+use winapi::um::winnt::{FILE_ID_128, ULONGLONG};
 
 const NAME: &str = "du";
 const SUMMARY: &str = "estimate file space usage";
@@ -59,12 +61,18 @@ struct Options {
     separate_dirs: bool,
 }
 
+#[derive(PartialEq, Eq, Hash, Clone, Copy)]
+struct FileInfo {
+    file_id: u128,
+    dev_id: u64,
+}
+
 struct Stat {
     path: PathBuf,
     is_dir: bool,
     size: u64,
     blocks: u64,
-    inode: Option<u128>,
+    inode: Option<FileInfo>,
     created: u64,
     accessed: u64,
     modified: u64,
@@ -75,12 +83,17 @@ impl Stat {
         let metadata = fs::symlink_metadata(&path)?;
 
         #[cfg(not(windows))]
+        let file_info = FileInfo {
+            file_id: metadata.ino() as u128,
+            dev_id: metadata.dev(),
+        };
+        #[cfg(not(windows))]
         return Ok(Stat {
             path,
             is_dir: metadata.is_dir(),
             size: metadata.len(),
             blocks: metadata.blocks() as u64,
-            inode: Some(metadata.ino() as u128),
+            inode: Some(file_info),
             created: metadata.mtime() as u64,
             accessed: metadata.atime() as u64,
             modified: metadata.mtime() as u64,
@@ -89,14 +102,14 @@ impl Stat {
         #[cfg(windows)]
         let size_on_disk = get_size_on_disk(&path);
         #[cfg(windows)]
-        let inode = get_inode(&path);
+        let file_info = get_file_info(&path);
         #[cfg(windows)]
         Ok(Stat {
             path,
             is_dir: metadata.is_dir(),
             size: metadata.len(),
             blocks: size_on_disk / 1024 * 2,
-            inode: inode,
+            inode: file_info,
             created: windows_time_to_unix_time(metadata.creation_time()),
             accessed: windows_time_to_unix_time(metadata.last_access_time()),
             modified: windows_time_to_unix_time(metadata.last_write_time()),
@@ -108,7 +121,7 @@ impl Stat {
 // https://doc.rust-lang.org/std/os/windows/fs/trait.MetadataExt.html#tymethod.creation_time
 // "The returned 64-bit value [...] which represents the number of 100-nanosecond intervals since January 1, 1601 (UTC)."
 fn windows_time_to_unix_time(win_time: u64) -> u64 {
-    win_time / 10_000 - 11_644_473_600_000
+    win_time / 10_000_000 - 11_644_473_600
 }
 
 #[cfg(windows)]
@@ -144,12 +157,12 @@ fn get_size_on_disk(path: &PathBuf) -> u64 {
 }
 
 #[cfg(windows)]
-fn get_inode(path: &PathBuf) -> Option<u128> {
-    let mut inode = None;
+fn get_file_info(path: &PathBuf) -> Option<FileInfo> {
+    let mut result = None;
 
     let file = match fs::File::open(path) {
         Ok(file) => file,
-        Err(_) => return inode,
+        Err(_) => return result,
     };
 
     let handle = file.as_raw_handle();
@@ -166,11 +179,14 @@ fn get_inode(path: &PathBuf) -> Option<u128> {
         );
 
         if success != 0 {
-            inode = Some(std::mem::transmute::<FILE_ID_128, u128>(file_info.FileId));
+            result = Some(FileInfo {
+                file_id: std::mem::transmute::<FILE_ID_128, u128>(file_info.FileId),
+                dev_id: std::mem::transmute::<ULONGLONG, u64>(file_info.VolumeSerialNumber),
+            });
         }
     }
 
-    inode
+    result
 }
 
 fn unit_string_to_number(s: &str) -> Option<u64> {
@@ -240,7 +256,7 @@ fn du(
     mut my_stat: Stat,
     options: &Options,
     depth: usize,
-    inodes: &mut HashSet<u128>,
+    inodes: &mut HashSet<FileInfo>,
 ) -> Box<dyn DoubleEndedIterator<Item = Stat>> {
     let mut stats = vec![];
     let mut futures = vec![];
@@ -529,7 +545,7 @@ Try '{} --help' for more information.",
         let path = PathBuf::from(&path_str);
         match Stat::new(path) {
             Ok(stat) => {
-                let mut inodes: HashSet<u128> = HashSet::new();
+                let mut inodes: HashSet<FileInfo> = HashSet::new();
 
                 let iter = du(stat, &options, 0, &mut inodes);
                 let (_, len) = iter.size_hint();
@@ -544,8 +560,8 @@ Try '{} --help' for more information.",
                     };
                     if matches.opt_present("time") {
                         let tm = {
-                            let (secs, nsecs) = {
-                                let time = match matches.opt_str("time") {
+                            let secs = {
+                                match matches.opt_str("time") {
                                     Some(s) => match &s[..] {
                                         "accessed" => stat.accessed,
                                         "created" => stat.created,
@@ -562,13 +578,12 @@ Try '{} --help' for more information.",
                                         }
                                     },
                                     None => stat.modified,
-                                };
-                                ((time / 1000) as i64, (time % 1000 * 1_000_000) as i32)
+                                }
                             };
-                            time::at(Timespec::new(secs, nsecs))
+                            DateTime::<Local>::from(UNIX_EPOCH + Duration::from_secs(secs))
                         };
                         if !summarize || index == len - 1 {
-                            let time_str = tm.strftime(time_format_str).unwrap();
+                            let time_str = tm.format(time_format_str).to_string();
                             print!(
                                 "{}\t{}\t{}{}",
                                 convert_size(size),
