@@ -2,6 +2,7 @@ use crate::common::util::*;
 use filetime::FileTime;
 use rust_users::*;
 use std::os::unix::fs::PermissionsExt;
+#[cfg(target_os = "linux")]
 use std::process::Command;
 #[cfg(target_os = "linux")]
 use std::thread::sleep;
