@@ -186,13 +186,22 @@ struct Line {
 
 impl Line {
     fn new(line: String, settings: &GlobalSettings) -> Self {
-        let fields = tokenize(&line, settings.separator);
+        let fields = if settings
+            .selectors
+            .iter()
+            .any(|selector| selector.needs_tokens())
+        {
+            // Only tokenize if we will need tokens.
+            Some(tokenize(&line, settings.separator))
+        } else {
+            None
+        };
 
         let selections = settings
             .selectors
             .iter()
             .map(|selector| {
-                if let Some(range) = selector.get_selection(&line, &fields) {
+                if let Some(range) = selector.get_selection(&line, fields.as_deref()) {
                     if let Some(transformed) =
                         transform(&line[range.to_owned()], &selector.settings)
                     {
@@ -345,28 +354,46 @@ struct FieldSelector {
 }
 
 impl FieldSelector {
-    // Look up the slice that corresponds to this selector for the given line.
-    fn get_selection<'a>(&self, line: &'a str, fields: &[Field]) -> Option<RangeInclusive<usize>> {
+    fn needs_tokens(&self) -> bool {
+        self.from.field != 1 || self.from.char == 0 || self.to.is_some()
+    }
+
+    /// Look up the slice that corresponds to this selector for the given line.
+    /// If needs_fields returned false, fields may be None.
+    fn get_selection<'a>(
+        &self,
+        line: &'a str,
+        tokens: Option<&[Field]>,
+    ) -> Option<RangeInclusive<usize>> {
         enum ResolutionErr {
             TooLow,
             TooHigh,
         }
+
+        // Get the index for this line given the KeyPosition
         fn resolve_index(
             line: &str,
-            fields: &[Field],
+            tokens: Option<&[Field]>,
             position: &KeyPosition,
         ) -> Result<usize, ResolutionErr> {
-            if fields.len() < position.field {
+            if tokens.map_or(false, |fields| fields.len() < position.field) {
                 Err(ResolutionErr::TooHigh)
             } else if position.char == 0 {
-                let end = fields[position.field - 1].end;
+                let end = tokens.unwrap()[position.field - 1].end;
                 if end == 0 {
                     Err(ResolutionErr::TooLow)
                 } else {
                     Ok(end - 1)
                 }
             } else {
-                let mut idx = fields[position.field - 1].start + position.char - 1;
+                let mut idx = if position.field == 1 {
+                    // The first field always starts at 0.
+                    // We don't need tokens for this case.
+                    0
+                } else {
+                    tokens.unwrap()[position.field - 1].start
+                } + position.char
+                    - 1;
                 if idx >= line.len() {
                     Err(ResolutionErr::TooHigh)
                 } else {
@@ -384,8 +411,8 @@ impl FieldSelector {
             }
         }
 
-        if let Ok(from) = resolve_index(line, fields, &self.from) {
-            let to = self.to.as_ref().map(|to| resolve_index(line, fields, &to));
+        if let Ok(from) = resolve_index(line, tokens, &self.from) {
+            let to = self.to.as_ref().map(|to| resolve_index(line, tokens, &to));
             match to {
                 Some(Ok(to)) => Some(from..=to),
                 // If `to` was not given or the match would be after the end of the line,
@@ -771,15 +798,17 @@ fn exec_check_file(lines: Lines<BufReader<Box<dyn Read>>>, settings: &GlobalSett
     let mut errors = unwrapped_lines
         .enumerate()
         .coalesce(|(last_i, last_line), (i, line)| {
+            let last_line = Line::new(last_line, &settings);
+            let line = Line::new(line, &settings);
             if compare_by(
-                &Line::new(last_line.clone(), &settings),
-                &Line::new(line.clone(), &settings),
+                &last_line,
+                &line,
                 &settings,
             ) == Ordering::Greater
             {
-                Err(((last_i, last_line), (i, line)))
+                Err(((last_i, last_line.line), (i, line.line)))
             } else {
-                Ok((i, line))
+                Ok((i, line.line))
             }
         });
     if let Some((first_error_index, _line)) = errors.next() {
