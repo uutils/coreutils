@@ -171,7 +171,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(OPT_STRIP)
             .short("s")
             .long(OPT_STRIP)
-            .help("strip symbol tables")
+            .help("strip symbol tables (no action Windows)")
         )
         .arg(
             Arg::with_name(OPT_STRIP_PROGRAM)
