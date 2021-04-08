@@ -48,6 +48,7 @@ while there may be two methods, both systems are required to build on Unix
 (only Cargo is required on Windows).
 
 First, for both methods, we need to fetch the repository:
+
 ```bash
 $ git clone https://github.com/uutils/coreutils
 $ cd coreutils
@@ -57,6 +58,7 @@ $ cd coreutils
 
 Building uutils using Cargo is easy because the process is the same as for
 every other Rust program:
+
 ```bash
 # to keep debug information, compile without --release
 $ cargo build --release
@@ -65,6 +67,7 @@ $ cargo build --release
 Because the above command attempts to build utilities that only work on
 Unix-like platforms at the moment, to build on Windows, you must do the
 following:
+
 ```bash
 # to keep debug information, compile without --release
 $ cargo build --release --no-default-features --features windows
@@ -73,12 +76,14 @@ $ cargo build --release --no-default-features --features windows
 If you don't want to build every utility available on your platform into the
 multicall binary (the Busybox-esque binary), you can also specify which ones
 you want to build manually.  For example:
+
 ```bash
 $ cargo build --features "base32 cat echo rm" --no-default-features
 ```
 
 If you don't even want to build the multicall binary and would prefer to just
 build the utilities as individual binaries, that is possible too.  For example:
+
 ```bash
 $ cargo build -p uu_base32 -p uu_cat -p uu_echo -p uu_rm
 ```
@@ -88,16 +93,19 @@ $ cargo build -p uu_base32 -p uu_cat -p uu_echo -p uu_rm
 Building using `make` is a simple process as well.
 
 To simply build all available utilities:
+
 ```bash
 $ make
 ```
 
 To build all but a few of the available utilities:
+
 ```bash
 $ make SKIP_UTILS='UTILITY_1 UTILITY_2'
 ```
 
 To build only a few of the available utilities:
+
 ```bash
 $ make UTILS='UTILITY_1 UTILITY_2'
 ```
@@ -107,6 +115,7 @@ $ make UTILS='UTILITY_1 UTILITY_2'
 ### Cargo
 
 Likewise, installing can simply be done using:
+
 ```bash
 $ cargo install --path .
 ```
@@ -116,36 +125,43 @@ This command will install uutils into Cargo's *bin* folder (*e.g.* `$HOME/.cargo
 ### GNU Make
 
 To install all available utilities:
+
 ```bash
 $ make install
 ```
 
 To install using `sudo` switch `-E` must be used:
+
 ```bash
 $ sudo -E make install
 ```
 
 To install all but a few of the available utilities:
+
 ```bash
 $ make SKIP_UTILS='UTILITY_1 UTILITY_2' install
 ```
 
 To install only a few of the available utilities:
+
 ```bash
 $ make UTILS='UTILITY_1 UTILITY_2' install
 ```
 
 To install every program with a prefix (e.g. uu-echo uu-cat):
+
 ```bash
 $ make PROG_PREFIX=PREFIX_GOES_HERE install
 ```
 
 To install the multicall binary:
+
 ```bash
 $ make MULTICALL=y install
 ```
 
 Set install parent directory (default value is /usr/local):
+
 ```bash
 # DESTDIR is also supported
 $ make PREFIX=/my/path install
@@ -169,6 +185,7 @@ Make to uninstall.
 ### Cargo
 
 To uninstall uutils:
+
 ```bash
 $ cargo uninstall uutils
 ```
@@ -176,21 +193,25 @@ $ cargo uninstall uutils
 ### GNU Make
 
 To uninstall all utilities:
+
 ```bash
 $ make uninstall
 ```
 
 To uninstall every program with a set prefix:
+
 ```bash
 $ make PROG_PREFIX=PREFIX_GOES_HERE uninstall
 ```
 
 To uninstall the multicall binary:
+
 ```bash
 $ make MULTICALL=y uninstall
 ```
 
 To uninstall from a custom parent directory:
+
 ```bash
 # DESTDIR is also supported
 $ make PREFIX=/my/path uninstall
@@ -204,27 +225,32 @@ Testing can be done using either Cargo or `make`.
 
 Just like with building, we follow the standard procedure for testing using
 Cargo:
+
 ```bash
 $ cargo test
 ```
 
 By default, `cargo test` only runs the common programs. To run also platform
 specific tests, run:
+
 ```bash
 $ cargo test --features unix
 ```
 
 If you would prefer to test a select few utilities:
+
 ```bash
 $ cargo test --features "chmod mv tail" --no-default-features
 ```
 
 If you also want to test the core utilities:
+
 ```bash
 $ cargo test  -p uucore -p coreutils
 ```
 
 To debug:
+
 ```bash
 $ gdb --args target/debug/coreutils ls
 (gdb) b ls.rs:79
@@ -234,21 +260,25 @@ $ gdb --args target/debug/coreutils ls
 ### GNU Make
 
 To simply test all available utilities:
+
 ```bash
 $ make test
 ```
 
 To test all but a few of the available utilities:
+
 ```bash
 $ make SKIP_UTILS='UTILITY_1 UTILITY_2' test
 ```
 
 To test only a few of the available utilities:
+
 ```bash
 $ make UTILS='UTILITY_1 UTILITY_2' test
 ```
 
 To include tests for unimplemented behavior:
+
 ```bash
 $ make UTILS='UTILITY_1 UTILITY_2' SPEC=y test
 ```
@@ -259,16 +289,19 @@ This testing functionality is only available on *nix operating systems and
 requires `make`.
 
 To run busybox's tests for all utilities for which busybox has tests
+
 ```bash
 $ make busytest
 ```
 
 To run busybox's tests for a few of the available utilities
+
 ```bash
 $ make UTILS='UTILITY_1 UTILITY_2' busytest
 ```
 
 To pass an argument like "-v" to the busybox test runtime
+
 ```bash
 $ make UTILS='UTILITY_1 UTILITY_2' RUNTEST_ARGS='-v' busytest
 ```
