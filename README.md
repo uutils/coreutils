@@ -23,7 +23,7 @@ Why?
 Many GNU, Linux and other utilities are useful, and obviously
 [some](http://gnuwin32.sourceforge.net) [effort](http://unxutils.sourceforge.net)
 has been spent in the past to port them to Windows. However, those projects
-are written in platform-specific C, a language considered unsafe compared to Rust, and 
+are written in platform-specific C, a language considered unsafe compared to Rust, and
 have other issues.
 
 Rust provides a good, platform-agnostic way of writing systems utilities that are easy
