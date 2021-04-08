@@ -599,7 +599,6 @@ fn test_install_and_strip() {
         .output()
         .unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
-    println!("stdout: {}", stdout);
     assert!(!stdout.contains("main"));
 
     scene
@@ -618,7 +617,6 @@ fn test_install_and_strip() {
         .output()
         .unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
-    println!("stdout: {}", stdout);
     assert!(!stdout.contains("main"));
 
     scene
