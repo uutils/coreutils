@@ -172,8 +172,8 @@ $ make PREFIX=/my/path install
 The [standard package set](https://nixos.org/nixpkgs/manual/) of [NixOS](https://nixos.org/)
 provides this package out of the box since 18.03:
 
-```
-nix-env -iA nixos.uutils-coreutils
+```shell
+$ nix-env -iA nixos.uutils-coreutils
 ```
 
 ## Uninstallation Instructions
