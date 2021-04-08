@@ -2,7 +2,7 @@ use crate::common::util::*;
 use filetime::FileTime;
 use rust_users::*;
 use std::os::unix::fs::PermissionsExt;
-#[cfg(target_os = "linux")]
+#[cfg(not(windows))]
 use std::process::Command;
 #[cfg(target_os = "linux")]
 use std::thread::sleep;
@@ -570,15 +570,21 @@ fn test_install_copy_then_compare_file_with_extra_mode() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(not(windows))]
 fn test_install_and_strip() {
     const SYMBOL_DUMP_PROGRAM: &str = "objdump";
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    let source_file = "helloworld.o";
-    let target_file = "helloworld_installed.o";
+    let source_file = if cfg!(target_os = "macos") {
+        "helloworld_macos"
+    } else {
+        "helloworld_linux"
+    };
+
+    let target_file = "helloworld_installed";
+
     scene
         .ucmd()
         .arg("-s")
@@ -593,7 +599,8 @@ fn test_install_and_strip() {
         .output()
         .unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(stdout.contains("no symbols"));
+    println!("stdout: {}", stdout);
+    assert!(!stdout.contains("main"));
 
     scene
         .ucmd()
@@ -611,7 +618,8 @@ fn test_install_and_strip() {
         .output()
         .unwrap();
     let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(stdout.contains("no symbols"));
+    println!("stdout: {}", stdout);
+    assert!(!stdout.contains("main"));
 
     scene
         .ucmd()
