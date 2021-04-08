@@ -12,6 +12,8 @@
 
 -----------------------------------------------
 
+<!-- markdownlint-disable commands-show-output no-duplicate-heading -->
+
 uutils is an attempt at writing universal (as in cross-platform) CLI
 utilities in [Rust](http://www.rust-lang.org). This repository is intended to
 aggregate GNU coreutils rewrites.
