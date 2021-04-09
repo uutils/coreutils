@@ -174,6 +174,7 @@ enum Time {
     Birth,
 }
 
+#[derive(Debug)]
 enum TimeStyle {
     FullIso,
     LongIso,
@@ -403,27 +404,25 @@ impl Config {
         };
 
         let time_style = if let Some(field) = options.value_of(options::TIME_STYLE) {
-            match field {
-                "full-iso" => TimeStyle::FullIso,
-                "long-iso" => TimeStyle::LongIso,
-                "iso" => TimeStyle::Iso,
-                "locale" => TimeStyle::Locale,
-                // below should never happen as clap already restricts the values.
-                _ => unreachable!("Invalid field for --time-style"),
+            //If both FULL_TIME and TIME_STYLE are present
+            //The one added last is dominant
+            if options.is_present(options::FULL_TIME)
+                && options.index_of(options::FULL_TIME) > options.index_of(options::TIME_STYLE)
+            {
+                TimeStyle::FullIso
+            } else {
+                //Clap handles the env variable "TIME_STYLE"
+                match field {
+                    "full-iso" => TimeStyle::FullIso,
+                    "long-iso" => TimeStyle::LongIso,
+                    "iso" => TimeStyle::Iso,
+                    "locale" => TimeStyle::Locale,
+                    // below should never happen as clap already restricts the values.
+                    _ => unreachable!("Invalid field for --time-style"),
+                }
             }
         } else if options.is_present(options::FULL_TIME) {
             TimeStyle::FullIso
-        } else if std::env::var("TIME_STYLE").is_ok() {
-            match std::env::var("TIME_STYLE").unwrap().as_ref() {
-                "full-iso" => TimeStyle::FullIso,
-                "long-iso" => TimeStyle::LongIso,
-                "iso" => TimeStyle::Iso,
-                "locale" => TimeStyle::Locale,
-                _ => {
-                    show_usage_error!("Invalid TIME_STYLE variable");
-                    std::process::exit(1)
-                }
-            }
         } else {
             TimeStyle::Locale
         };
@@ -830,6 +829,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(options::TIME_STYLE)
                 .help("time/date format with -l; see TIME_STYLE below")
                 .value_name("TIME_STYLE")
+                .env("TIME_STYLE")
                 .possible_values(&[
                     "full-iso",
                     "long-iso",
@@ -837,17 +837,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     "locale",
                 ])
                 .overrides_with_all(&[
-                    options::TIME_STYLE,
+                    options::TIME_STYLE
                 ])
         )
         .arg(
             Arg::with_name(options::FULL_TIME)
             .long(options::FULL_TIME)
             .help("like -l --time-style=full-iso")
-            .overrides_with_all(&[
-                options::TIME_STYLE,
-                options::format::LONG,
-            ])
         )
 
     // Positional arguments
@@ -1214,20 +1210,13 @@ fn display_date(metadata: &Metadata, config: &Config) -> String {
         Some(time) => {
             //Date is recent if from past 6 months
             //According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
-            //https://github.com/coreutils/coreutils/blob/master/src/ls.c#L4385
             let recent = time + chrono::Duration::seconds(31556952 / 2) > chrono::Local::now();
 
-            //For reference see https://github.com/coreutils/coreutils/blob/master/src/ls.c#L2416
             match config.time_style {
-                TimeStyle::FullIso => time.format("%Y-%m-%d %H:%M:%S.%N %z"),
+                TimeStyle::FullIso => time.format("%Y-%m-%d %H:%M:%S.%f %z"),
                 TimeStyle::LongIso => time.format("%Y-%m-%d %H:%M"),
-                TimeStyle::Iso => time.format(if recent {
-                    "%Y-%m-%d %H:%M"
-                } else {
-                    "%Y-%m-%d "
-                }),
+                TimeStyle::Iso => time.format(if recent { "%m-%d %H:%M" } else { "%Y-%m-%d " }),
                 TimeStyle::Locale => {
-                    //https://github.com/coreutils/coreutils/blob/master/src/ls.c#L759
                     let fmt = if recent { "%b %e %H:%M" } else { "%b %e  %Y" };
 
                     //In this version of chrono translating can be done
@@ -1237,7 +1226,8 @@ fn display_date(metadata: &Metadata, config: &Config) -> String {
 
                     time.format(fmt)
                 }
-            }.to_string()
+            }
+            .to_string()
         }
         None => "???".into(),
     }
