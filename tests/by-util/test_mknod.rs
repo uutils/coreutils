@@ -1,1 +1,78 @@
-// ToDO: add tests
+use crate::common::util::*;
+
+#[cfg(not(windows))]
+#[test]
+fn test_mknod_help() {
+    assert!(new_ucmd!()
+        .arg("--help")
+        .succeeds()
+        .no_stderr()
+        .stdout
+        .contains("Usage:"));
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_mknod_version() {
+    assert!(new_ucmd!()
+        .arg("--version")
+        .succeeds()
+        .no_stderr()
+        .stdout
+        .starts_with("mknod"));
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_mknod_fifo_default_writable() {
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd().arg("test_file").arg("p").succeeds();
+    assert!(ts.fixtures.is_fifo("test_file"));
+    assert!(!ts.fixtures.metadata("test_file").permissions().readonly());
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_mknod_fifo_read_only() {
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd().arg("-m").arg("a=r").arg("test_file").arg("p").succeeds();
+    assert!(ts.fixtures.is_fifo("test_file"));
+    assert!(ts.fixtures.metadata("test_file").permissions().readonly());
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_mknod_fifo_invalid_extra_operand() {
+    assert!(new_ucmd!()
+        .arg("test_file")
+        .arg("p")
+        .arg("1")
+        .arg("2")
+        .fails()
+        .stderr
+        .contains("Fifos do not have major and minor device numbers"));
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_mknod_() {
+    assert!(new_ucmd!()
+        .arg("test_file")
+        .arg("p")
+        .arg("1")
+        .arg("2")
+        .fails()
+        .stderr
+        .contains("Fifos do not have major and minor device numbers"));
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_mknod_invalid_arg() {
+    assert!(new_ucmd!()
+        .arg("--foo")
+        .fails()
+        .no_stdout()
+        .stderr
+        .contains("Unrecognized option: 'foo'"));
+}
