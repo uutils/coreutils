@@ -691,14 +691,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         for path in &files0_from {
             let (reader, _) = open(path.as_str()).expect("Could not read from file specified.");
             let buf_reader = BufReader::new(reader);
-            for line in buf_reader.split(b'\0') {
-                if let Ok(n) = line {
-                    files.push(
-                        std::str::from_utf8(&n)
-                            .expect("Could not parse zero terminated string from input.")
-                            .to_string(),
-                    );
-                }
+            for line in buf_reader.split(b'\0').flatten() {
+                files.push(
+                    std::str::from_utf8(&line)
+                        .expect("Could not parse zero terminated string from input.")
+                        .to_string(),
+                );
             }
         }
         files
@@ -730,7 +728,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         settings.threads = matches
             .value_of(OPT_PARALLEL)
             .map(String::from)
-            .unwrap_or("0".to_string());
+            .unwrap_or_else(|| "0".to_string());
         env::set_var("RAYON_NUM_THREADS", &settings.threads);
     }
 
@@ -799,7 +797,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     if !settings.stable || !matches.is_present(OPT_KEY) {
         // add a default selector matching the whole line
-        let mut key_settings = KeySettings::from(&settings);
+        let key_settings = KeySettings::from(&settings);
         settings.selectors.push(FieldSelector {
             from: KeyPosition {
                 field: 1,
@@ -829,15 +827,13 @@ fn exec(files: Vec<String>, settings: &GlobalSettings) -> i32 {
         if settings.merge {
             file_merger.push_file(buf_reader.lines());
         } else if settings.zero_terminated {
-            for line in buf_reader.split(b'\0') {
-                if let Ok(n) = line {
-                    lines.push(Line::new(
-                        std::str::from_utf8(&n)
-                            .expect("Could not parse string from zero terminated input.")
-                            .to_string(),
-                        &settings,
-                    ));
-                }
+            for line in buf_reader.split(b'\0').flatten() {
+                lines.push(Line::new(
+                    std::str::from_utf8(&line)
+                        .expect("Could not parse string from zero terminated input.")
+                        .to_string(),
+                    &settings,
+                ));
             }
         } else {
             for line in buf_reader.lines() {
@@ -953,9 +949,9 @@ fn compare_by(a: &Line, b: &Line, global_settings: &GlobalSettings) -> Ordering 
         };
 
     if global_settings.reverse {
-        return cmp.reverse();
+        cmp.reverse()
     } else {
-        return cmp;
+        cmp
     }
 }
 
@@ -983,8 +979,8 @@ fn leading_num_common(a: &str) -> &str {
             && !c.eq(&'e')
             && !c.eq(&'E')
             // check whether first char is + or - 
-            && !a.chars().nth(0).unwrap_or('\0').eq(&POSITIVE)
-            && !a.chars().nth(0).unwrap_or('\0').eq(&NEGATIVE)
+            && !a.chars().next().unwrap_or('\0').eq(&POSITIVE)
+            && !a.chars().next().unwrap_or('\0').eq(&NEGATIVE)
         {
             // Strip string of non-numeric trailing chars
             s = &a[..idx];
@@ -1007,7 +1003,7 @@ fn get_leading_num(a: &str) -> &str {
 
     // GNU numeric sort doesn't recognize '+' or 'e' notation so we strip
     for (idx, c) in b.char_indices() {
-        if c.eq(&'e') || c.eq(&'E') || b.chars().nth(0).unwrap_or('\0').eq(&POSITIVE) {
+        if c.eq(&'e') || c.eq(&'E') || b.chars().next().unwrap_or('\0').eq(&POSITIVE) {
             s = &b[..idx];
             break;
         }
@@ -1035,7 +1031,7 @@ fn get_leading_gen(a: &str) -> String {
     for c in p_iter.to_owned() {
         let next_char_numeric = p_iter.peek().unwrap_or(&'\0').is_numeric();
         // Only general numeric recognizes e notation and, see block below, the '+' sign
-        if (c.eq(&'e') && !next_char_numeric) || (c.eq(&'E') && !next_char_numeric) {
+        if (c.eq(&'e') || c.eq(&'E')) && !next_char_numeric {
             r = a.split(c).next().unwrap_or("").to_owned();
             break;
         // If positive sign and next char is not numeric, split at postive sign at keep trailing numbers
@@ -1092,14 +1088,12 @@ fn get_nums_dedup(a: &str) -> &str {
     let s = a.trim().trim_start_matches('0');
 
     // Get first char
-    let c = s.chars().nth(0).unwrap_or('\0');
+    let c = s.chars().next().unwrap_or('\0');
 
     // Empty lines and non-number lines are treated as the same for dedup
-    if s.is_empty() {
-        ""
-    } else if !c.eq(&NEGATIVE) && !c.is_numeric() {
-        ""
     // Prepare lines for comparison of only the numerical leading numbers
+    if s.is_empty() || (!c.eq(&NEGATIVE) && !c.is_numeric()) {
+        ""
     } else {
         get_leading_num(s)
     }
@@ -1275,6 +1269,7 @@ fn month_compare(a: &str, b: &str) -> Ordering {
     let ma = month_parse(a);
     let mb = month_parse(b);
 
+    #[allow(clippy::comparison_chain)]
     if ma > mb {
         Ordering::Greater
     } else if ma < mb {
