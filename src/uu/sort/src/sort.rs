@@ -607,7 +607,7 @@ fn default_compare(a: &str, b: &str) -> Ordering {
 fn leading_num_common(a: &str) -> &str {
     let mut s = "";
 
-    // check whether char is numeric, whitespace or decimal point or thousand seperator
+    // check whether char is numeric, whitespace or decimal point or thousand separator
     for (idx, c) in a.char_indices() {
         if !c.is_numeric()
             && !c.is_whitespace()
