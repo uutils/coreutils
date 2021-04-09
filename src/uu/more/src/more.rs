@@ -10,9 +10,8 @@
 #[macro_use]
 extern crate uucore;
 
-use getopts::Options;
 use std::fs::File;
-use std::io::{stdout, Read, Write};
+use std::io::{stdin, stdout, BufRead, BufReader, Read, Write};
 
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 extern crate nix;
@@ -24,68 +23,50 @@ extern crate redox_termios;
 #[cfg(target_os = "redox")]
 extern crate syscall;
 
-#[derive(Clone, Eq, PartialEq)]
-pub enum Mode {
-    More,
-    Help,
-    Version,
+use clap::{App, Arg, ArgMatches};
+
+static VERSION: &str = env!("CARGO_PKG_VERSION");
+static ABOUT: &str = "A file perusal filter for CRT viewing.";
+
+mod options {
+    pub const FILE: &str = "file";
 }
 
-static NAME: &str = "more";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
+fn get_usage() -> String {
+    format!("{} [options] <file>...", executable!())
+}
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let usage = get_usage();
 
-    let mut opts = Options::new();
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .usage(usage.as_str())
+        .about(ABOUT)
+        .arg(
+            Arg::with_name(options::FILE)
+                .number_of_values(1)
+                .multiple(true),
+        )
+        .get_matches_from(args);
 
     // FixME: fail without panic for now; but `more` should work with no arguments (ie, for piped input)
-    if args.len() < 2 {
-        println!("{}: incorrect usage", args[0]);
+    if let None | Some("-") = matches.value_of(options::FILE) {
+        show_usage_error!("Reading from stdin isn't supported yet.");
         return 1;
     }
 
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("v", "version", "output version information and exit");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(e) => {
-            show_error!("{}", e);
-            panic!()
+    if let Some(x) = matches.value_of(options::FILE) {
+        let path = std::path::Path::new(x);
+        if path.is_dir() {
+            show_usage_error!("'{}' is a directory.", x);
+            return 1;
         }
-    };
-    let usage = opts.usage("more TARGET.");
-    let mode = if matches.opt_present("version") {
-        Mode::Version
-    } else if matches.opt_present("help") {
-        Mode::Help
-    } else {
-        Mode::More
-    };
-
-    match mode {
-        Mode::More => more(matches),
-        Mode::Help => help(&usage),
-        Mode::Version => version(),
     }
 
+    more(matches);
+
     0
-}
-
-fn version() {
-    println!("{} {}", NAME, VERSION);
-}
-
-fn help(usage: &str) {
-    let msg = format!(
-        "{0} {1}\n\n\
-         Usage: {0} TARGET\n  \
-         \n\
-         {2}",
-        NAME, VERSION, usage
-    );
-    println!("{}", msg);
 }
 
 #[cfg(all(unix, not(target_os = "fuchsia")))]
@@ -138,9 +119,11 @@ fn reset_term(term: &mut redox_termios::Termios) {
     let _ = syscall::close(fd);
 }
 
-fn more(matches: getopts::Matches) {
-    let files = matches.free;
-    let mut f = File::open(files.first().unwrap()).unwrap();
+fn more(matches: ArgMatches) {
+    let mut f: Box<dyn BufRead> = match matches.value_of(options::FILE) {
+        None | Some("-") => Box::new(BufReader::new(stdin())),
+        Some(filename) => Box::new(BufReader::new(File::open(filename).unwrap())),
+    };
     let mut buffer = [0; 1024];
 
     let mut term = setup_term();

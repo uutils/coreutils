@@ -1,6 +1,6 @@
 [package]
 name = "uu_ptx"
-version = "0.0.4"
+version = "0.0.6"
 authors = ["uutils developers"]
 license = "MIT"
 description = "ptx ~ (uutils) display a permuted index of input"
@@ -17,12 +17,11 @@ path = "src/ptx.rs"
 [dependencies]
 clap = "2.33"
 aho-corasick = "0.7.3"
-getopts = "0.2.18"
 libc = "0.2.42"
 memchr = "2.2.0"
 regex = "1.0.1"
 regex-syntax = "0.6.7"
-uucore = { version=">=0.0.7", package="uucore", path="../../uucore" }
+uucore = { version=">=0.0.8", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]

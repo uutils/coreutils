@@ -139,3 +139,21 @@ fn test_zero_terminated_only_delimited() {
         .succeeds()
         .stdout_only("82\n7\0");
 }
+
+#[test]
+fn test_directory_and_no_such_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("some");
+
+    ucmd.arg("-b1")
+        .arg("some")
+        .run()
+        .stderr_is("cut: error: some: Is a directory\n");
+
+    new_ucmd!()
+        .arg("-b1")
+        .arg("some")
+        .run()
+        .stderr_is("cut: error: some: No such file or directory\n");
+}

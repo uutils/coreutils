@@ -1,6 +1,10 @@
 #![allow(dead_code)]
 
+#[cfg(not(windows))]
+use libc;
 use std::env;
+#[cfg(not(windows))]
+use std::ffi::CString;
 use std::ffi::OsStr;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Result, Write};
@@ -25,8 +29,8 @@ static TESTS_DIR: &str = "tests";
 static FIXTURES_DIR: &str = "fixtures";
 
 static ALREADY_RUN: &str = " you have already run this UCommand, if you want to run \
-     another command in the same test, use TestScenario::new instead of \
-     testing();";
+                            another command in the same test, use TestScenario::new instead of \
+                            testing();";
 static MULTIPLE_STDIN_MEANINGLESS: &str = "Ucommand is designed around a typical use case of: provide args and input stream -> spawn process -> block until completion -> return output streams. For verifying that a particular section of the input stream is what causes a particular behavior, use the Command type directly.";
 
 /// Test if the program is running under CI
@@ -52,9 +56,10 @@ pub fn is_wsl() -> bool {
     false
 }
 
-fn read_scenario_fixture<S: AsRef<OsStr>>(tmpd: &Option<Rc<TempDir>>, file_rel_path: S) -> String {
+/// Read a test scenario fixture, returning its bytes
+fn read_scenario_fixture<S: AsRef<OsStr>>(tmpd: &Option<Rc<TempDir>>, file_rel_path: S) -> Vec<u8> {
     let tmpdir_path = tmpd.as_ref().unwrap().as_ref().path();
-    AtPath::new(tmpdir_path).read(file_rel_path.as_ref().to_str().unwrap())
+    AtPath::new(tmpdir_path).read_bytes(file_rel_path.as_ref().to_str().unwrap())
 }
 
 /// A command result is the outputs of a command (streams and status code)
@@ -68,64 +73,135 @@ pub struct CmdResult {
     /// zero-exit from running the Command?
     /// see [`success`]
     pub success: bool,
-    /// captured utf-8 standard output after running the Command
+    /// captured standard output after running the Command
     pub stdout: String,
-    /// captured utf-8 standard error after running the Command
+    /// captured standard error after running the Command
     pub stderr: String,
 }
 
 impl CmdResult {
+    /// Returns a reference to the program's standard output as a slice of bytes
+    pub fn stdout(&self) -> &[u8] {
+        &self.stdout.as_bytes()
+    }
+
+    /// Returns the program's standard output as a string slice
+    pub fn stdout_str(&self) -> &str {
+        &self.stdout
+    }
+
+    /// Returns the program's standard output as a string
+    /// consumes self
+    pub fn stdout_move_str(self) -> String {
+        self.stdout
+    }
+
+    /// Returns the program's standard output as a vec of bytes
+    /// consumes self
+    pub fn stdout_move_bytes(self) -> Vec<u8> {
+        Vec::from(self.stdout)
+    }
+
+    /// Returns a reference to the program's standard error as a slice of bytes
+    pub fn stderr(&self) -> &[u8] {
+        &self.stderr.as_bytes()
+    }
+
+    /// Returns the program's standard error as a string slice
+    pub fn stderr_str(&self) -> &str {
+        &self.stderr
+    }
+
+    /// Returns the program's standard error as a string
+    /// consumes self
+    pub fn stderr_move_str(self) -> String {
+        self.stderr
+    }
+
+    /// Returns the program's standard error as a vec of bytes
+    /// consumes self
+    pub fn stderr_move_bytes(self) -> Vec<u8> {
+        Vec::from(self.stderr)
+    }
+
+    /// Returns the program's exit code
+    /// Panics if not run
+    pub fn code(&self) -> i32 {
+        self.code.expect("Program must be run first")
+    }
+
+    /// Returns the program's TempDir
+    /// Panics if not present
+    pub fn tmpd(&self) -> Rc<TempDir> {
+        match &self.tmpd {
+            Some(ptr) => ptr.clone(),
+            None => panic!("Command not associated with a TempDir"),
+        }
+    }
+
+    /// Returns whether the program succeeded
+    pub fn succeeded(&self) -> bool {
+        self.success
+    }
+
     /// asserts that the command resulted in a success (zero) status code
-    pub fn success(&self) -> Box<&CmdResult> {
+    pub fn success(&self) -> &CmdResult {
         assert!(self.success);
-        Box::new(self)
+        self
     }
 
     /// asserts that the command resulted in a failure (non-zero) status code
-    pub fn failure(&self) -> Box<&CmdResult> {
+    pub fn failure(&self) -> &CmdResult {
         assert!(!self.success);
-        Box::new(self)
+        self
     }
 
     /// asserts that the command's exit code is the same as the given one
-    pub fn status_code(&self, code: i32) -> Box<&CmdResult> {
+    pub fn status_code(&self, code: i32) -> &CmdResult {
         assert!(self.code == Some(code));
-        Box::new(self)
+        self
     }
 
     /// asserts that the command resulted in empty (zero-length) stderr stream output
     /// generally, it's better to use stdout_only() instead,
     /// but you might find yourself using this function if
-    /// 1. you can not know exactly what stdout will be
-    /// or 2. you know that stdout will also be empty
-    pub fn no_stderr(&self) -> Box<&CmdResult> {
-        assert_eq!(self.stderr, "");
-        Box::new(self)
+    /// 1.  you can not know exactly what stdout will be or
+    /// 2.  you know that stdout will also be empty
+    pub fn no_stderr(&self) -> &CmdResult {
+        assert!(self.stderr.is_empty());
+        self
     }
 
     /// asserts that the command resulted in empty (zero-length) stderr stream output
     /// unless asserting there was neither stdout or stderr, stderr_only is usually a better choice
     /// generally, it's better to use stderr_only() instead,
     /// but you might find yourself using this function if
-    /// 1. you can not know exactly what stderr will be
-    /// or 2. you know that stderr will also be empty
-    pub fn no_stdout(&self) -> Box<&CmdResult> {
-        assert_eq!(self.stdout, "");
-        Box::new(self)
+    /// 1.  you can not know exactly what stderr will be or
+    /// 2.  you know that stderr will also be empty
+    pub fn no_stdout(&self) -> &CmdResult {
+        assert!(self.stdout.is_empty());
+        self
     }
 
     /// asserts that the command resulted in stdout stream output that equals the
     /// passed in value, trailing whitespace are kept to force strict comparison (#1235)
     /// stdout_only is a better choice unless stderr may or will be non-empty
-    pub fn stdout_is<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
+    pub fn stdout_is<T: AsRef<str>>(&self, msg: T) -> &CmdResult {
         assert_eq!(self.stdout, String::from(msg.as_ref()));
-        Box::new(self)
+        self
+    }
+
+    /// asserts that the command resulted in stdout stream output,
+    /// whose bytes equal those of the passed in slice
+    pub fn stdout_is_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &CmdResult {
+        assert_eq!(self.stdout.as_bytes(), msg.as_ref());
+        self
     }
 
     /// like stdout_is(...), but expects the contents of the file at the provided relative path
-    pub fn stdout_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> Box<&CmdResult> {
+    pub fn stdout_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &CmdResult {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
-        self.stdout_is(contents)
+        self.stdout_is_bytes(contents)
     }
     /// like stdout_is_fixture(...), but replaces the data in fixture file based on values provided in template_vars
     /// command output
@@ -140,40 +216,73 @@ impl CmdResult {
     /// asserts that the command resulted in stderr stream output that equals the
     /// passed in value, when both are trimmed of trailing whitespace
     /// stderr_only is a better choice unless stdout may or will be non-empty
-    pub fn stderr_is<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
+    pub fn stderr_is<T: AsRef<str>>(&self, msg: T) -> &CmdResult {
         assert_eq!(
             self.stderr.trim_end(),
             String::from(msg.as_ref()).trim_end()
         );
-        Box::new(self)
+        self
+    }
+
+    /// asserts that the command resulted in stderr stream output,
+    /// whose bytes equal those of the passed in slice
+    pub fn stderr_is_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &CmdResult {
+        assert_eq!(self.stderr.as_bytes(), msg.as_ref());
+        self
     }
 
     /// asserts that
-    /// 1. the command resulted in stdout stream output that equals the
-    /// passed in value, when both are trimmed of trailing whitespace
-    /// and 2. the command resulted in empty (zero-length) stderr stream output
-    pub fn stdout_only<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
+    /// 1.  the command resulted in stdout stream output that equals the
+    ///     passed in value
+    /// 2.  the command resulted in empty (zero-length) stderr stream output
+    pub fn stdout_only<T: AsRef<str>>(&self, msg: T) -> &CmdResult {
         self.no_stderr().stdout_is(msg)
     }
 
+    /// asserts that
+    /// 1.  the command resulted in a stdout stream whose bytes
+    ///     equal those of the passed in value
+    /// 2.  the command resulted in an empty stderr stream
+    pub fn stdout_only_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &CmdResult {
+        self.no_stderr().stdout_is_bytes(msg)
+    }
+
     /// like stdout_only(...), but expects the contents of the file at the provided relative path
-    pub fn stdout_only_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> Box<&CmdResult> {
+    pub fn stdout_only_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &CmdResult {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
-        self.stdout_only(contents)
+        self.stdout_only_bytes(contents)
     }
 
     /// asserts that
-    /// 1. the command resulted in stderr stream output that equals the
-    /// passed in value, when both are trimmed of trailing whitespace
-    /// and 2. the command resulted in empty (zero-length) stdout stream output
-    pub fn stderr_only<T: AsRef<str>>(&self, msg: T) -> Box<&CmdResult> {
+    /// 1.  the command resulted in stderr stream output that equals the
+    ///     passed in value, when both are trimmed of trailing whitespace
+    /// 2.  the command resulted in empty (zero-length) stdout stream output
+    pub fn stderr_only<T: AsRef<str>>(&self, msg: T) -> &CmdResult {
         self.no_stdout().stderr_is(msg)
     }
 
-    pub fn fails_silently(&self) -> Box<&CmdResult> {
+    /// asserts that
+    /// 1.  the command resulted in a stderr stream whose bytes equal the ones
+    ///     of the passed value
+    /// 2.  the command resulted in an empty stdout stream
+    pub fn stderr_only_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &CmdResult {
+        self.no_stderr().stderr_is_bytes(msg)
+    }
+
+    pub fn fails_silently(&self) -> &CmdResult {
         assert!(!self.success);
-        assert_eq!(self.stderr, "");
-        Box::new(self)
+        assert!(self.stderr.is_empty());
+        self
+    }
+
+    pub fn stdout_contains<T: AsRef<str>>(&self, cmp: T) -> &CmdResult {
+        assert!(self.stdout_str().contains(cmp.as_ref()));
+        self
+    }
+
+    pub fn stderr_contains<T: AsRef<str>>(&self, cmp: &T) -> &CmdResult {
+        assert!(self.stderr_str().contains(cmp.as_ref()));
+        self
     }
 }
 
@@ -259,13 +368,29 @@ impl AtPath {
     pub fn read(&self, name: &str) -> String {
         let mut f = self.open(name);
         let mut contents = String::new();
-        let _ = f.read_to_string(&mut contents);
+        f.read_to_string(&mut contents)
+            .unwrap_or_else(|e| panic!("Couldn't read {}: {}", name, e));
+        contents
+    }
+
+    pub fn read_bytes(&self, name: &str) -> Vec<u8> {
+        let mut f = self.open(name);
+        let mut contents = Vec::new();
+        f.read_to_end(&mut contents)
+            .unwrap_or_else(|e| panic!("Couldn't read {}: {}", name, e));
         contents
     }
 
     pub fn write(&self, name: &str, contents: &str) {
         log_info("open(write)", self.plus_as_string(name));
-        let _ = std::fs::write(self.plus(name), contents);
+        std::fs::write(self.plus(name), contents)
+            .unwrap_or_else(|e| panic!("Couldn't write {}: {}", name, e));
+    }
+
+    pub fn write_bytes(&self, name: &str, contents: &[u8]) {
+        log_info("open(write)", self.plus_as_string(name));
+        std::fs::write(self.plus(name), contents)
+            .unwrap_or_else(|e| panic!("Couldn't write {}: {}", name, e));
     }
 
     pub fn append(&self, name: &str, contents: &str) {
@@ -275,7 +400,19 @@ impl AtPath {
             .append(true)
             .open(self.plus(name))
             .unwrap();
-        let _ = f.write(contents.as_bytes());
+        f.write(contents.as_bytes())
+            .unwrap_or_else(|e| panic!("Couldn't write {}: {}", name, e));
+    }
+
+    pub fn append_bytes(&self, name: &str, contents: &[u8]) {
+        log_info("open(append)", self.plus_as_string(name));
+        let mut f = OpenOptions::new()
+            .write(true)
+            .append(true)
+            .open(self.plus(name))
+            .unwrap();
+        f.write_all(contents)
+            .unwrap_or_else(|e| panic!("Couldn't append to {}: {}", name, e));
     }
 
     pub fn mkdir(&self, dir: &str) {
@@ -297,6 +434,29 @@ impl AtPath {
     pub fn touch(&self, file: &str) {
         log_info("touch", self.plus_as_string(file));
         File::create(&self.plus(file)).unwrap();
+    }
+
+    #[cfg(not(windows))]
+    pub fn mkfifo(&self, fifo: &str) {
+        let full_path = self.plus_as_string(fifo);
+        log_info("mkfifo", &full_path);
+        unsafe {
+            let fifo_name: CString = CString::new(full_path).expect("CString creation failed.");
+            libc::mkfifo(fifo_name.as_ptr(), libc::S_IWUSR | libc::S_IRUSR);
+        }
+    }
+
+    #[cfg(not(windows))]
+    pub fn is_fifo(&self, fifo: &str) -> bool {
+        unsafe {
+            let name = CString::new(self.plus_as_string(fifo)).unwrap();
+            let mut stat: libc::stat = std::mem::zeroed();
+            if libc::stat(name.as_ptr(), &mut stat) >= 0 {
+                libc::S_IFIFO & stat.st_mode != 0
+            } else {
+                false
+            }
+        }
     }
 
     pub fn symlink_file(&self, src: &str, dst: &str) {
@@ -439,6 +599,14 @@ impl TestScenario {
         UCommand::new_from_tmp(bin, self.tmpd.clone(), true)
     }
 
+    /// Returns builder for invoking any uutils command. Paths given are treated
+    /// relative to the environment's unique temporary test directory.
+    pub fn ccmd<S: AsRef<OsStr>>(&self, bin: S) -> UCommand {
+        let mut cmd = self.cmd(&self.bin_path);
+        cmd.arg(bin);
+        cmd
+    }
+
     // different names are used rather than an argument
     // because the need to keep the environment is exceedingly rare.
     pub fn ucmd_keepenv(&self) -> UCommand {
@@ -506,21 +674,21 @@ impl UCommand {
 
     /// Add a parameter to the invocation. Path arguments are treated relative
     /// to the test environment directory.
-    pub fn arg<S: AsRef<OsStr>>(&mut self, arg: S) -> Box<&mut UCommand> {
+    pub fn arg<S: AsRef<OsStr>>(&mut self, arg: S) -> &mut UCommand {
         if self.has_run {
-            panic!(ALREADY_RUN);
+            panic!("{}", ALREADY_RUN);
         }
         self.comm_string.push_str(" ");
         self.comm_string.push_str(arg.as_ref().to_str().unwrap());
         self.raw.arg(arg.as_ref());
-        Box::new(self)
+        self
     }
 
     /// Add multiple parameters to the invocation. Path arguments are treated relative
     /// to the test environment directory.
-    pub fn args<S: AsRef<OsStr>>(&mut self, args: &[S]) -> Box<&mut UCommand> {
+    pub fn args<S: AsRef<OsStr>>(&mut self, args: &[S]) -> &mut UCommand {
         if self.has_run {
-            panic!(MULTIPLE_STDIN_MEANINGLESS);
+            panic!("{}", MULTIPLE_STDIN_MEANINGLESS);
         }
         for s in args {
             self.comm_string.push_str(" ");
@@ -528,41 +696,41 @@ impl UCommand {
         }
 
         self.raw.args(args.as_ref());
-        Box::new(self)
+        self
     }
 
     /// provides stdinput to feed in to the command when spawned
-    pub fn pipe_in<T: Into<Vec<u8>>>(&mut self, input: T) -> Box<&mut UCommand> {
+    pub fn pipe_in<T: Into<Vec<u8>>>(&mut self, input: T) -> &mut UCommand {
         if self.stdin.is_some() {
-            panic!(MULTIPLE_STDIN_MEANINGLESS);
+            panic!("{}", MULTIPLE_STDIN_MEANINGLESS);
         }
         self.stdin = Some(input.into());
-        Box::new(self)
+        self
     }
 
     /// like pipe_in(...), but uses the contents of the file at the provided relative path as the piped in data
-    pub fn pipe_in_fixture<S: AsRef<OsStr>>(&mut self, file_rel_path: S) -> Box<&mut UCommand> {
+    pub fn pipe_in_fixture<S: AsRef<OsStr>>(&mut self, file_rel_path: S) -> &mut UCommand {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
         self.pipe_in(contents)
     }
 
-    pub fn env<K, V>(&mut self, key: K, val: V) -> Box<&mut UCommand>
+    pub fn env<K, V>(&mut self, key: K, val: V) -> &mut UCommand
     where
         K: AsRef<OsStr>,
         V: AsRef<OsStr>,
     {
         if self.has_run {
-            panic!(ALREADY_RUN);
+            panic!("{}", ALREADY_RUN);
         }
         self.raw.env(key, val);
-        Box::new(self)
+        self
     }
 
     /// Spawns the command, feeds the stdin if any, and returns the
     /// child process immediately.
     pub fn run_no_wait(&mut self) -> Child {
         if self.has_run {
-            panic!(ALREADY_RUN);
+            panic!("{}", ALREADY_RUN);
         }
         self.has_run = true;
         log_info("run", &self.comm_string);
@@ -639,7 +807,7 @@ pub fn read_size(child: &mut Child, size: usize) -> String {
         .stdout
         .as_mut()
         .unwrap()
-        .read(output.as_mut_slice())
+        .read_exact(output.as_mut_slice())
         .unwrap();
     String::from_utf8(output).unwrap()
 }

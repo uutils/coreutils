@@ -10,14 +10,31 @@
 #[macro_use]
 extern crate uucore;
 
+use chrono::prelude::DateTime;
+use chrono::Local;
 use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::io::{stderr, Result, Write};
 use std::iter;
+#[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
+#[cfg(windows)]
+use std::os::windows::fs::MetadataExt;
+#[cfg(windows)]
+use std::os::windows::io::AsRawHandle;
 use std::path::PathBuf;
-use time::Timespec;
+use std::time::{Duration, UNIX_EPOCH};
+#[cfg(windows)]
+use winapi::shared::minwindef::{DWORD, LPVOID};
+#[cfg(windows)]
+use winapi::um::fileapi::{FILE_ID_INFO, FILE_STANDARD_INFO};
+#[cfg(windows)]
+use winapi::um::minwinbase::{FileIdInfo, FileStandardInfo};
+#[cfg(windows)]
+use winapi::um::winbase::GetFileInformationByHandleEx;
+#[cfg(windows)]
+use winapi::um::winnt::{FILE_ID_128, ULONGLONG};
 
 const NAME: &str = "du";
 const SUMMARY: &str = "estimate file space usage";
@@ -43,12 +60,18 @@ struct Options {
     separate_dirs: bool,
 }
 
+#[derive(PartialEq, Eq, Hash, Clone, Copy)]
+struct FileInfo {
+    file_id: u128,
+    dev_id: u64,
+}
+
 struct Stat {
     path: PathBuf,
     is_dir: bool,
     size: u64,
     blocks: u64,
-    inode: u64,
+    inode: Option<FileInfo>,
     created: u64,
     accessed: u64,
     modified: u64,
@@ -57,17 +80,112 @@ struct Stat {
 impl Stat {
     fn new(path: PathBuf) -> Result<Stat> {
         let metadata = fs::symlink_metadata(&path)?;
-        Ok(Stat {
+
+        #[cfg(not(windows))]
+        let file_info = FileInfo {
+            file_id: metadata.ino() as u128,
+            dev_id: metadata.dev(),
+        };
+        #[cfg(not(windows))]
+        return Ok(Stat {
             path,
             is_dir: metadata.is_dir(),
             size: metadata.len(),
             blocks: metadata.blocks() as u64,
-            inode: metadata.ino() as u64,
+            inode: Some(file_info),
             created: metadata.mtime() as u64,
             accessed: metadata.atime() as u64,
             modified: metadata.mtime() as u64,
+        });
+
+        #[cfg(windows)]
+        let size_on_disk = get_size_on_disk(&path);
+        #[cfg(windows)]
+        let file_info = get_file_info(&path);
+        #[cfg(windows)]
+        Ok(Stat {
+            path,
+            is_dir: metadata.is_dir(),
+            size: metadata.len(),
+            blocks: size_on_disk / 1024 * 2,
+            inode: file_info,
+            created: windows_time_to_unix_time(metadata.creation_time()),
+            accessed: windows_time_to_unix_time(metadata.last_access_time()),
+            modified: windows_time_to_unix_time(metadata.last_write_time()),
         })
     }
+}
+
+#[cfg(windows)]
+// https://doc.rust-lang.org/std/os/windows/fs/trait.MetadataExt.html#tymethod.creation_time
+// "The returned 64-bit value [...] which represents the number of 100-nanosecond intervals since January 1, 1601 (UTC)."
+fn windows_time_to_unix_time(win_time: u64) -> u64 {
+    win_time / 10_000_000 - 11_644_473_600
+}
+
+#[cfg(windows)]
+fn get_size_on_disk(path: &PathBuf) -> u64 {
+    let mut size_on_disk = 0;
+
+    // bind file so it stays in scope until end of function
+    // if it goes out of scope the handle below becomes invalid
+    let file = match fs::File::open(path) {
+        Ok(file) => file,
+        Err(_) => return size_on_disk, // opening directories will fail
+    };
+
+    let handle = file.as_raw_handle();
+
+    unsafe {
+        let mut file_info: FILE_STANDARD_INFO = core::mem::zeroed();
+        let file_info_ptr: *mut FILE_STANDARD_INFO = &mut file_info;
+
+        let success = GetFileInformationByHandleEx(
+            handle,
+            FileStandardInfo,
+            file_info_ptr as LPVOID,
+            std::mem::size_of::<FILE_STANDARD_INFO>() as DWORD,
+        );
+
+        if success != 0 {
+            size_on_disk = *file_info.AllocationSize.QuadPart() as u64;
+        }
+    }
+
+    size_on_disk
+}
+
+#[cfg(windows)]
+fn get_file_info(path: &PathBuf) -> Option<FileInfo> {
+    let mut result = None;
+
+    let file = match fs::File::open(path) {
+        Ok(file) => file,
+        Err(_) => return result,
+    };
+
+    let handle = file.as_raw_handle();
+
+    unsafe {
+        let mut file_info: FILE_ID_INFO = core::mem::zeroed();
+        let file_info_ptr: *mut FILE_ID_INFO = &mut file_info;
+
+        let success = GetFileInformationByHandleEx(
+            handle,
+            FileIdInfo,
+            file_info_ptr as LPVOID,
+            std::mem::size_of::<FILE_ID_INFO>() as DWORD,
+        );
+
+        if success != 0 {
+            result = Some(FileInfo {
+                file_id: std::mem::transmute::<FILE_ID_128, u128>(file_info.FileId),
+                dev_id: std::mem::transmute::<ULONGLONG, u64>(file_info.VolumeSerialNumber),
+            });
+        }
+    }
+
+    result
 }
 
 fn unit_string_to_number(s: &str) -> Option<u64> {
@@ -137,7 +255,7 @@ fn du(
     mut my_stat: Stat,
     options: &Options,
     depth: usize,
-    inodes: &mut HashSet<u64>,
+    inodes: &mut HashSet<FileInfo>,
 ) -> Box<dyn DoubleEndedIterator<Item = Stat>> {
     let mut stats = vec![];
     let mut futures = vec![];
@@ -164,10 +282,13 @@ fn du(
                         if this_stat.is_dir {
                             futures.push(du(this_stat, options, depth + 1, inodes));
                         } else {
-                            if inodes.contains(&this_stat.inode) {
-                                continue;
+                            if this_stat.inode.is_some() {
+                                let inode = this_stat.inode.unwrap();
+                                if inodes.contains(&inode) {
+                                    continue;
+                                }
+                                inodes.insert(inode);
                             }
-                            inodes.insert(this_stat.inode);
                             my_stat.size += this_stat.size;
                             my_stat.blocks += this_stat.blocks;
                             if options.all {
@@ -199,6 +320,9 @@ fn convert_size_human(size: u64, multiplier: u64, _block_size: u64) -> String {
         if size >= limit {
             return format!("{:.1}{}", (size as f64) / (limit as f64), unit);
         }
+    }
+    if size == 0 {
+        return format!("0");
     }
     format!("{}B", size)
 }
@@ -418,7 +542,7 @@ Try '{} --help' for more information.",
         let path = PathBuf::from(&path_str);
         match Stat::new(path) {
             Ok(stat) => {
-                let mut inodes: HashSet<u64> = HashSet::new();
+                let mut inodes: HashSet<FileInfo> = HashSet::new();
 
                 let iter = du(stat, &options, 0, &mut inodes);
                 let (_, len) = iter.size_hint();
@@ -433,8 +557,8 @@ Try '{} --help' for more information.",
                     };
                     if matches.opt_present("time") {
                         let tm = {
-                            let (secs, nsecs) = {
-                                let time = match matches.opt_str("time") {
+                            let secs = {
+                                match matches.opt_str("time") {
                                     Some(s) => match &s[..] {
                                         "accessed" => stat.accessed,
                                         "created" => stat.created,
@@ -451,13 +575,12 @@ Try '{} --help' for more information.",
                                         }
                                     },
                                     None => stat.modified,
-                                };
-                                ((time / 1000) as i64, (time % 1000 * 1_000_000) as i32)
+                                }
                             };
-                            time::at(Timespec::new(secs, nsecs))
+                            DateTime::<Local>::from(UNIX_EPOCH + Duration::from_secs(secs))
                         };
                         if !summarize || index == len - 1 {
-                            let time_str = tm.strftime(time_format_str).unwrap();
+                            let time_str = tm.format(time_format_str).to_string();
                             print!(
                                 "{}\t{}\t{}{}",
                                 convert_size(size),
