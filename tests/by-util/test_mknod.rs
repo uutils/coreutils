@@ -55,15 +55,14 @@ fn test_mknod_fifo_invalid_extra_operand() {
 
 #[test]
 #[cfg(not(windows))]
-fn test_mknod_() {
+fn test_mknod_character_device_requires_major_and_minor() {
     assert!(new_ucmd!()
+        .ucmd()
         .arg("test_file")
-        .arg("p")
-        .arg("1")
-        .arg("2")
+        .arg("c")
         .fails()
         .stderr
-        .contains("Fifos do not have major and minor device numbers"));
+        .contains("Missing operand after c"));
 }
 
 #[test]
