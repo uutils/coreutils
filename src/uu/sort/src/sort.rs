@@ -2,6 +2,7 @@
 //  *
 //  * (c) Michael Yin <mikeyin@mikeyin.org>
 //  * (c) Robert Swinford <robert.swinford..AT..gmail.com>
+//  * (c) Michael Debertol <michael.debertol..AT..gmail.com>
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
