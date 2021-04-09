@@ -4,6 +4,14 @@ extern crate unix_socket;
 use crate::common::util::*;
 
 #[test]
+fn test_output_simple() {
+    new_ucmd!()
+        .args(&["alpha.txt"])
+        .succeeds()
+        .stdout_only("abcde\nfghij\nklmno\npqrst\nuvwxyz\n");
+}
+
+#[test]
 fn test_output_multi_files_print_all_chars() {
     new_ucmd!()
         .args(&["alpha.txt", "256.txt", "-A", "-n"])

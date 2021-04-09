@@ -16,7 +16,7 @@ use std::collections::VecDeque;
 use std::fs;
 use std::io::{stderr, stdin, BufRead, Write};
 use std::ops::BitOr;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use walkdir::{DirEntry, WalkDir};
 
 #[derive(Eq, PartialEq, Clone, Copy)]
@@ -251,7 +251,7 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
 
     let is_root = path.has_root() && path.parent().is_none();
     if options.recursive && (!is_root || !options.preserve_root) {
-        if options.interactive != InteractiveMode::Always {
+        if options.interactive != InteractiveMode::Always && !options.verbose {
             // we need the extra crate because apparently fs::remove_dir_all() does not function
             // correctly on Windows
             if let Err(e) = remove_dir_all(path) {
@@ -311,7 +311,7 @@ fn remove_dir(path: &Path, options: &Options) -> bool {
                     match fs::remove_dir(path) {
                         Ok(_) => {
                             if options.verbose {
-                                println!("removed directory '{}'", path.display());
+                                println!("removed directory '{}'", normalize(path).display());
                             }
                         }
                         Err(e) => {
@@ -349,7 +349,7 @@ fn remove_file(path: &Path, options: &Options) -> bool {
         match fs::remove_file(path) {
             Ok(_) => {
                 if options.verbose {
-                    println!("removed '{}'", path.display());
+                    println!("removed '{}'", normalize(path).display());
                 }
             }
             Err(e) => {
@@ -368,6 +368,14 @@ fn prompt_file(path: &Path, is_dir: bool) -> bool {
     } else {
         prompt(&(format!("rm: remove file '{}'? ", path.display())))
     }
+}
+
+fn normalize(path: &Path) -> PathBuf {
+    // copied from https://github.com/rust-lang/cargo/blob/2e4cfc2b7d43328b207879228a2ca7d427d188bb/src/cargo/util/paths.rs#L65-L90
+    // both projects are MIT https://github.com/rust-lang/cargo/blob/master/LICENSE-MIT
+    // for std impl progress see rfc https://github.com/rust-lang/rfcs/issues/2208
+    // TODO: replace this once that lands
+    uucore::fs::normalize_path(path)
 }
 
 fn prompt(msg: &str) -> bool {

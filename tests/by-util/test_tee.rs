@@ -68,15 +68,14 @@ fn test_tee_no_more_writeable_1() {
         .collect::<String>();
     let file_out = "tee_file_out";
 
-    let result = ucmd
-        .arg("/dev/full")
+    ucmd.arg("/dev/full")
         .arg(file_out)
         .pipe_in(&content[..])
-        .fails();
+        .fails()
+        .stdout_contains(&content)
+        .stderr_contains(&"No space left on device");
 
     assert_eq!(at.read(file_out), content);
-    assert!(result.stdout.contains(&content));
-    assert!(result.stderr.contains("No space left on device"));
 }
 
 #[test]

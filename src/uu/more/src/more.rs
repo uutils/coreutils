@@ -41,7 +41,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let matches = App::new(executable!())
         .version(VERSION)
-        .usage(&usage[..])
+        .usage(usage.as_str())
         .about(ABOUT)
         .arg(
             Arg::with_name(options::FILE)
@@ -52,8 +52,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     // FixME: fail without panic for now; but `more` should work with no arguments (ie, for piped input)
     if let None | Some("-") = matches.value_of(options::FILE) {
-        println!("{}: incorrect usage", executable!());
+        show_usage_error!("Reading from stdin isn't supported yet.");
         return 1;
+    }
+
+    if let Some(x) = matches.value_of(options::FILE) {
+        let path = std::path::Path::new(x);
+        if path.is_dir() {
+            show_usage_error!("'{}' is a directory.", x);
+            return 1;
+        }
     }
 
     more(matches);
