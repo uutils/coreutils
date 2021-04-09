@@ -947,13 +947,13 @@ fn compare_by(a: &Line, b: &Line, global_settings: &GlobalSettings) -> Ordering 
         }
     }
 
-    let cmp =
-        // Call "last resort compare" on any equal
-        if global_settings.random || global_settings.stable || global_settings.unique {
-           Ordering::Equal
-        } else {
-           default_compare(&a.line, &b.line)
-        };
+    // Call "last resort compare" if all selectors returned Equal
+
+    let cmp = if global_settings.random || global_settings.stable || global_settings.unique {
+        Ordering::Equal
+    } else {
+        default_compare(&a.line, &b.line)
+    };
 
     if global_settings.reverse {
         cmp.reverse()

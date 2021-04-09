@@ -297,6 +297,26 @@ fn test_keys_multiple_ranges() {
 }
 
 #[test]
+fn test_keys_no_field_match() {
+    let input = "aa aa aa aa\naa bb cc\ndd aa ff\n";
+    new_ucmd!()
+        .args(&["-k", "4,4"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only("aa bb cc\ndd aa ff\naa aa aa aa\n");
+}
+
+#[test]
+fn test_keys_no_char_match() {
+    let input = "aaa\nba\nc\n";
+    new_ucmd!()
+        .args(&["-k", "1.2"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only("c\nba\naaa\n");
+}
+
+#[test]
 fn test_keys_custom_separator() {
     let input = "aaxbbxcc\nddxaaxff\nggxaaxcc\n";
     new_ucmd!()
@@ -307,7 +327,15 @@ fn test_keys_custom_separator() {
 }
 
 #[test]
-fn test_keys_invalid_field_letter() {
+fn test_keys_invalid_field() {
+    new_ucmd!()
+        .args(&["-k", "1."])
+        .fails()
+        .stderr_only("sort: error: failed to parse character index for key `1.`: cannot parse integer from empty string");
+}
+
+#[test]
+fn test_keys_invalid_field_option() {
     new_ucmd!()
         .args(&["-k", "1.1x"])
         .fails()
