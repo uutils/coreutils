@@ -35,6 +35,7 @@ fn test_empty() {
 }
 
 #[test]
+#[ignore]
 fn test_arg_overrides_stdin() {
     let (at, mut ucmd) = at_and_ucmd!();
     let input = "foobarfoobar";
