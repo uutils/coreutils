@@ -107,10 +107,14 @@ impl ConversionResult {
 }
 
 pub trait Args: Iterator<Item = OsString> + Sized {
-    /// Converts each iterator to a String and collects these into a vector
-    /// On failure, the result will may be lossy or incomplete
+    /// Converts each iterator item to a String and collects these into a vector
+    /// On invalid encoding, the result will depend on the argument. This method allows to either drop entries with illegal encoding
+    /// completely (```InvalidEncodingHandling::Ignore```), convert them using lossy-conversion (```InvalidEncodingHandling::Lossy```) which will
+    /// result in strange strings or can chosen to panic (```InvalidEncodingHandling::Panic```).
     /// # Arguments
-    /// * `handling` - This switch allows to define the behavior, when invalid encoding is encountered
+    /// * `handling` - This switch allows to switch the behavior, when invalid encoding is encountered
+    /// # Panics
+    /// * Occurs, when invalid encoding is encountered and handling is set to ```InvalidEncodingHandling::Panic```
     fn collect_str(self, handling: InvalidEncodingHandling) -> ConversionResult {
         let mut full_conversion = true;
         let result_vector: Vec<String> = self
@@ -188,8 +192,8 @@ mod tests {
         let test_vec = make_os_vec(os_str);
         let collected_to_str =
             collect_os_str(test_vec.clone(), InvalidEncodingHandling::ConvertLossy)
-                .expect_lossy("Lossy conversion expected in test");
-        //conservation of length
+                .expect_lossy("Lossy conversion expected in this test: bad encoding entries should be converted as good as possible");
+        //conservation of length - when accepting lossy conversion no arguments may be dropped
         assert_eq!(collected_to_str.len(), test_vec.len());
         //first indices identical
         for index in 0..2 {
@@ -198,7 +202,7 @@ mod tests {
                 test_vec.get(index).unwrap().to_str().unwrap()
             );
         }
-        //lossy conversion string for illegal utf8
+        //lossy conversion for string with illegal encoding is done
         assert_eq!(
             *collected_to_str.get(2).unwrap(),
             os_str.to_os_string().to_string_lossy()
@@ -210,10 +214,12 @@ mod tests {
         assert!(os_str.to_os_string().into_string().is_err());
         let test_vec = make_os_vec(os_str);
         let collected_to_str = collect_os_str(test_vec.clone(), InvalidEncodingHandling::Ignore)
-            .expect_lossy("Lossy conversion expected in test");
-        //conservation of length
+            .expect_lossy(
+                "Lossy conversion expected in this test: bad encoding entries should be filtered",
+            );
+        //assert that the broken entry is filtered out
         assert_eq!(collected_to_str.len(), test_vec.len() - 1);
-        //first indices identical
+        //assert that the unbroken indices are converted as expected
         for index in 0..2 {
             assert_eq!(
                 collected_to_str.get(index).unwrap(),
@@ -224,9 +230,11 @@ mod tests {
 
     #[test]
     fn valid_utf8_encoding_args() {
+        //create a vector containing only correct encoding
         let test_vec = make_os_vec(&OsString::from("test2"));
+        //expect complete conversion without losses, even when lossy conversion is accepted
         let _ = collect_os_str(test_vec.clone(), InvalidEncodingHandling::ConvertLossy)
-            .expect_complete("Lossy conversion expected in test");
+            .expect_complete("Lossy conversion not expected in this test");
     }
 
     #[cfg(any(unix, target_os = "redox"))]
