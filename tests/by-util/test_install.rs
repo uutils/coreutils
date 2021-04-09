@@ -619,7 +619,18 @@ fn test_install_and_strip() {
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(!stdout.contains("main"));
 
-    scene
+    let stderr = scene
+        .ucmd()
+        .arg("-s")
+        .arg("--strip-program")
+        .arg("/bin/date")
+        .arg(source_file)
+        .arg(target_file)
+        .fails()
+        .stderr;
+    assert!(stderr.contains("strip program failed"));
+
+    let stderr = scene
         .ucmd()
         .arg("-s")
         .arg("--strip-program")
@@ -627,6 +638,6 @@ fn test_install_and_strip() {
         .arg(source_file)
         .arg(target_file)
         .fails()
-        .stderr
-        .contains("No such file or directory");
+        .stderr;
+    assert!(stderr.contains("No such file or directory"));
 }
