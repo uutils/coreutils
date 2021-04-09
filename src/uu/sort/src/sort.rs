@@ -1273,10 +1273,10 @@ fn month_parse(line: &str) -> Month {
 }
 
 fn month_compare(a: &str, b: &str) -> Ordering {
+    #![allow(clippy::comparison_chain)]
     let ma = month_parse(a);
     let mb = month_parse(b);
 
-    #[allow(clippy::comparison_chain)]
     if ma > mb {
         Ordering::Greater
     } else if ma < mb {
