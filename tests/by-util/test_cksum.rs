@@ -35,14 +35,19 @@ fn test_empty() {
 }
 
 #[test]
-#[ignore]
 fn test_arg_overrides_stdin() {
     let (at, mut ucmd) = at_and_ucmd!();
     let input = "foobarfoobar";
 
     at.touch("a");
 
-    let result = ucmd.arg("a").pipe_in(input.as_bytes()).run();
+    let result = ucmd
+        .arg("a")
+        .pipe_in(input.as_bytes())
+        // the command might have exited before all bytes have been pipe in.
+        // in that case, we don't care about the error (broken pipe)
+        .ignore_stdin_write_error()
+        .run();
 
     println!("{}, {}", result.stdout, result.stderr);
 
