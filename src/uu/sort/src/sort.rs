@@ -1309,10 +1309,7 @@ fn remove_nonprinting_chars(s: &str) -> String {
         .collect::<String>()
 }
 
-fn print_sorted<S, T: Iterator<Item = S>>(iter: T, settings: &GlobalSettings)
-where
-    S: std::fmt::Display,
-{
+fn print_sorted<T: Iterator<Item = String>>(iter: T, settings: &GlobalSettings) {
     let mut file: Box<dyn Write> = match settings.outfile {
         Some(ref filename) => match File::create(Path::new(&filename)) {
             Ok(f) => Box::new(BufWriter::new(f)) as Box<dyn Write>,
@@ -1321,20 +1318,20 @@ where
                 panic!("Could not open output file");
             }
         },
-        None => Box::new(stdout()) as Box<dyn Write>,
+        None => Box::new(BufWriter::new(stdout())) as Box<dyn Write>,
     };
-
     if settings.zero_terminated {
         for line in iter {
-            let str = format!("{}\0", line);
-            crash_if_err!(1, file.write_all(str.as_bytes()));
+            crash_if_err!(1, file.write_all(line.as_bytes()));
+            crash_if_err!(1, file.write_all("\0".as_bytes()));
         }
     } else {
         for line in iter {
-            let str = format!("{}\n", line);
-            crash_if_err!(1, file.write_all(str.as_bytes()));
+            crash_if_err!(1, file.write_all(line.as_bytes()));
+            crash_if_err!(1, file.write_all("\n".as_bytes()));
         }
     }
+    crash_if_err!(1, file.flush());
 }
 
 // from cat.rs
