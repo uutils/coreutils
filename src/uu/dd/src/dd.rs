@@ -17,7 +17,6 @@ mod parseargs;
 mod conversion_tables;
 
 use conversion_tables::*;
-use parseargs::*;
 
 use std::error::Error;
 use std::fs::File;
@@ -32,6 +31,8 @@ const SYNTAX: &str = "dd [OPERAND]...\ndd OPTION";
 const SUMMARY: &str = "convert, and optionally copy, a file";
 const LONG_HELP: &str = "";
 
+const DEFAULT_FILL_BYTE: u8 = 0xDD;
+
 const RTN_SUCCESS: i32 = 0;
 const RTN_FAILURE: i32 = 1;
 
@@ -40,6 +41,39 @@ enum SrcStat
 {
     Read(usize),
     EOF,
+}
+
+/// Captures all Conv Flags that apply to the input
+pub struct ConvFlagInput
+{
+    ctable: Option<ConversionTable>,
+    block: bool,
+    unblock: bool,
+    swab: bool,
+    sync: bool,
+    noerror: bool,
+}
+
+/// Captures all Conv Flags that apply to the output
+#[derive(Debug, PartialEq)]
+pub struct ConvFlagOutput
+{
+    sparse: bool,
+    excl: bool,
+    nocreat: bool,
+    notrunc: bool,
+    fdatasync: bool,
+    fsync: bool,
+}
+
+/// The value of the status cl-option.
+/// Controls printing of transfer stats
+#[derive(PartialEq)]
+pub enum StatusLevel
+{
+    Progress,
+    Noxfer,
+    None,
 }
 
 #[derive(Debug)]
@@ -62,13 +96,25 @@ struct Input<R: Read>
 {
     src: R,
     ibs: usize,
+    xfer_stats: StatusLevel,
+    cf: ConvFlagInput,
 }
 
 impl<R: Read> Read for Input<R>
 {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize>
+    fn read(&mut self, mut buf: &mut [u8]) -> io::Result<usize>
     {
-        self.src.read(buf)
+        let len = self.src.read(&mut buf)?;
+
+        if let Some(ct) = self.cf.ctable
+        {
+            for idx in 0..len
+            {
+                buf[idx] = ct[buf[idx] as usize];
+            }
+        }
+
+        Ok(len)
     }
 }
 
@@ -76,12 +122,16 @@ impl Input<io::Stdin>
 {
     fn new(matches: &getopts::Matches) -> Result<Self, Box<dyn Error>>
     {
-        let ibs: usize = parseargs::parse_ibs(matches)?;
+        let ibs = parseargs::parse_ibs(matches)?;
+        let xfer_stats = parseargs::parse_status_level(matches)?;
+        let cf = parseargs::parse_conv_flag_input(matches)?;
 
         Ok(
             Input {
                 src: io::stdin(),
                 ibs,
+                xfer_stats,
+                cf,
             }
         )
 
@@ -92,13 +142,17 @@ impl Input<File>
 {
     fn new(matches: &getopts::Matches) -> Result<Self, Box<dyn Error>>
     {
-        let ibs: usize = parseargs::parse_ibs(matches)?;
+        let ibs = parseargs::parse_ibs(matches)?;
+        let xfer_stats = parseargs::parse_status_level(matches)?;
+        let cf = parseargs::parse_conv_flag_input(matches)?;
 
         if let Some(fname) = matches.opt_str("if")
         {
             Ok(Input {
                 src: File::open(fname)?,
                 ibs,
+                xfer_stats,
+                cf,
             })
         }
         else
@@ -139,17 +193,20 @@ struct Output<W: Write>
 {
     dst: W,
     obs: usize,
+    cf: ConvFlagOutput,
 }
 
 impl Output<io::Stdout> {
     fn new(matches: &getopts::Matches) -> Result<Self, Box<dyn Error>>
     {
-        let obs: usize = parseargs::parse_obs(matches)?;
+        let obs = parseargs::parse_obs(matches)?;
+        let cf = parseargs::parse_conv_flag_output(matches)?;
 
         Ok(
             Output {
                 dst: io::stdout(),
                 obs,
+                cf,
             }
         )
     }
@@ -158,13 +215,15 @@ impl Output<io::Stdout> {
 impl Output<File> {
     fn new(matches: &getopts::Matches) -> Result<Self, Box<dyn Error>>
     {
-        let obs: usize = parseargs::parse_obs(matches)?;
+        let obs = parseargs::parse_obs(matches)?;
+        let cf = parseargs::parse_conv_flag_output(matches)?;
 
         if let Some(fname) = matches.opt_str("if")
         {
             Ok(Output {
                 dst: File::open(fname)?,
                 obs,
+                cf,
             })
         }
         else
@@ -178,54 +237,13 @@ impl<W: Write> Write for Output<W>
 {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize>
     {
-        if let Some(ct) = self.conv_table
-        {
-            let mut cbuf = vec![0; buf.len()];
-           
-            for (idx, byte) in buf.iter().enumerate()
-            {
-                cbuf[idx] = ct[*byte as usize]
-            }
-
-            self.dst.write(&cbuf)
-        }
-        else
-        {
             self.dst.write(buf)
-        }
     }
 
     fn flush(&mut self) -> io::Result<()>
     {
         self.dst.flush()
     }
-}
-
-struct Options
-{
-    conv: Option<ConversionOptions>,
-    status_level: StatusLevel,
-    // ...
-}
-
-struct ConversionOptions
-{
-    table: Option<ConversionTable>,
-    block: bool,
-    unblock: bool,
-    lcase: bool,
-    ucase: bool,
-    sparse: bool,
-    swab: bool,
-    sync: bool,
-}
-
-#[derive(PartialEq)]
-enum StatusLevel
-{
-    Progress,
-    Noxfer,
-    None,
 }
 
 fn gen_prog_updater(rx: mpsc::Receiver<usize>) -> impl Fn() -> ()
@@ -251,9 +269,9 @@ fn gen_prog_updater(rx: mpsc::Receiver<usize>) -> impl Fn() -> ()
     }
 }
 
-fn dd<R: Read, W: Write>(mut i: Input<R>, mut o: Output<W>, opts: Options) -> Result<(usize, usize), Box<dyn Error>>
+fn dd<R: Read, W: Write>(mut i: Input<R>, mut o: Output<W>) -> Result<(usize, usize), Box<dyn Error>>
 {
-    let prog_tx = if opts.status_level == StatusLevel::Progress
+    let prog_tx = if i.xfer_stats == StatusLevel::Progress
     {
         let (prog_tx, prog_rx) = mpsc::channel();
 
@@ -271,7 +289,7 @@ fn dd<R: Read, W: Write>(mut i: Input<R>, mut o: Output<W>, opts: Options) -> Re
 
     loop
     {
-        let mut buf = vec![0xDD; o.obs];
+        let mut buf = vec![DEFAULT_FILL_BYTE; o.obs];
         let r_len =
             match i.fill_n(&mut buf, o.obs)? {
                 SrcStat::Read(len) =>
@@ -355,9 +373,6 @@ pub fn uumain(args: impl uucore::Args) -> i32
 
     let matches = build_app!().parse(dashed_args);
 
-    let opts = parse_options(&matches)
-        .expect("TODO: Return correct error code");
-
     let result = match (matches.opt_present("if"), matches.opt_present("of"))
     {
         (true, true) =>
@@ -367,7 +382,7 @@ pub fn uumain(args: impl uucore::Args) -> i32
             let o = Output::<File>::new(&matches)
                 .expect("TODO: Return correct error code");
 
-            dd(i, o, opts)
+            dd(i,o)
         },
         (true, false) =>
         {
@@ -376,7 +391,7 @@ pub fn uumain(args: impl uucore::Args) -> i32
             let o = Output::<io::Stdout>::new(&matches)
                 .expect("TODO: Return correct error code");
 
-            dd(i, o, opts)
+            dd(i,o)
         },
         (false, true) =>
         {
@@ -385,7 +400,7 @@ pub fn uumain(args: impl uucore::Args) -> i32
             let o = Output::<File>::new(&matches)
                 .expect("TODO: Return correct error code");
 
-            dd(i, o, opts)
+            dd(i,o)
         },
         (false, false) =>
         {
@@ -394,7 +409,7 @@ pub fn uumain(args: impl uucore::Args) -> i32
             let o = Output::<io::Stdout>::new(&matches)
                 .expect("TODO: Return correct error code");
 
-            dd(i, o, opts)
+            dd(i,o)
         },
     };
 
