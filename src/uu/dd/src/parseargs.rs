@@ -26,7 +26,6 @@ impl Error for ParseError {}
 
 /// Some flags specified as part of a conv=CONV[,CONV]... block
 /// relate to the input file, others to the output file.
-/// They are separated here.
 enum ConvFlag
 {
     // Input
@@ -512,82 +511,82 @@ mod test {
 
     test_byte_parser!(
         test_bytes_MB,
-        "1MB",
-        1000*1000
+        "2MB",
+        2*1000*1000
     );
     test_byte_parser!(
         test_bytes_M,
-        "1M",
-        1024*1024
+        "2M",
+        2*1024*1024
     );
     test_byte_parser!(
         test_bytes_Mi,
-        "1MiB",
-        1024*1024
+        "2MiB",
+        2*1024*1024
     );
 
     test_byte_parser!(
         test_bytes_GB,
-        "1GB",
-        1000*1000*1000
+        "3GB",
+        3*1000*1000*1000
     );
     test_byte_parser!(
         test_bytes_G,
-        "1G",
-        1024*1024*1024
+        "3G",
+        3*1024*1024*1024
     );
     test_byte_parser!(
         test_bytes_Gi,
-        "1GiB",
-        1024*1024*1024
+        "3GiB",
+        3*1024*1024*1024
     );
 
     test_byte_parser!(
         test_bytes_TB,
-        "1TB",
-        1000*1000*1000*1000
+        "4TB",
+        4*1000*1000*1000*1000
     );
     test_byte_parser!(
         test_bytes_T,
-        "1T",
-        1024*1024*1024*1024
+        "4T",
+        4*1024*1024*1024*1024
     );
     test_byte_parser!(
         test_bytes_Ti,
-        "1TiB",
-        1024*1024*1024*1024
+        "4TiB",
+        4*1024*1024*1024*1024
     );
 
     test_byte_parser!(
         test_bytes_PB,
-        "1PB",
-        1000*1000*1000*1000*1000
+        "5PB",
+        5*1000*1000*1000*1000*1000
     );
     test_byte_parser!(
         test_bytes_P,
-        "1P",
-        1024*1024*1024*1024*1024
+        "5P",
+        5*1024*1024*1024*1024*1024
     );
     test_byte_parser!(
         test_bytes_Pi,
-        "1PiB",
-        1024*1024*1024*1024*1024
+        "5PiB",
+        5*1024*1024*1024*1024*1024
     );
 
     test_byte_parser!(
         test_bytes_EB,
-        "1EB",
-        1000*1000*1000*1000*1000*1000
+        "6EB",
+        6*1000*1000*1000*1000*1000*1000
     );
     test_byte_parser!(
         test_bytes_E,
-        "1E",
-        1024*1024*1024*1024*1024*1024
+        "6E",
+        6*1024*1024*1024*1024*1024*1024
     );
     test_byte_parser!(
         test_bytes_Ei,
-        "1EiB",
-        1024*1024*1024*1024*1024*1024
+        "6EiB",
+        6*1024*1024*1024*1024*1024*1024
     );
 
     #[test]
