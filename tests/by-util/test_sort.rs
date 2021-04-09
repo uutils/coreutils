@@ -398,6 +398,7 @@ aaaa
         .stdout_only(input);
 }
 
+#[test]
 fn test_zero_terminated() {
     test_helper("zero-terminated", "-z");
 }
