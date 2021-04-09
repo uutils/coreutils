@@ -665,9 +665,7 @@ fn get_leading_gen(a: &str) -> String {
     for c in p_iter.to_owned() {
         let next_char_numeric = p_iter.peek().unwrap_or(&'\0').is_numeric();
         // Only general numeric recognizes e notation and, see block below, the '+' sign
-        if (c.eq(&'e') && !next_char_numeric)
-            || (c.eq(&'E') && !next_char_numeric)
-        {
+        if (c.eq(&'e') && !next_char_numeric) || (c.eq(&'E') && !next_char_numeric) {
             r = a.split(c).next().unwrap_or("").to_owned();
             break;
         // If positive sign and next char is not numeric, split at postive sign at keep trailing numbers
@@ -813,7 +811,7 @@ fn human_numeric_convert(a: &str) -> f64 {
         'E' => 1E18,
         'Z' => 1E21,
         'Y' => 1E24,
-         _ => 1f64,
+        _ => 1f64,
     };
     num_part * suffix
 }
