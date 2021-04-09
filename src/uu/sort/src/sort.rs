@@ -140,6 +140,7 @@ struct KeySettings {
     ignore_blanks: bool,
     ignore_case: bool,
     dictionary_order: bool,
+    ignore_non_printing: bool,
     random: bool,
     reverse: bool,
 }
@@ -150,6 +151,7 @@ impl From<&GlobalSettings> for KeySettings {
             mode: settings.mode.clone(),
             ignore_blanks: settings.ignore_blanks,
             ignore_case: settings.ignore_case,
+            ignore_non_printing: settings.ignore_non_printing,
             random: settings.random,
             reverse: settings.reverse,
             dictionary_order: settings.dictionary_order,
@@ -237,6 +239,11 @@ fn transform(line: &str, settings: &KeySettings) -> Option<String> {
             transformed.as_deref().unwrap_or(line),
         ));
     }
+    if settings.ignore_non_printing {
+        transformed = Some(remove_nonprinting_chars(
+            transformed.as_deref().unwrap_or(line),
+        ));
+    }
     transformed
 }
 
@@ -317,9 +324,9 @@ impl KeyPosition {
                     'b' => ignore_blanks = true,
                     'd' => settings.dictionary_order = true,
                     'f' => settings.ignore_case = true,
-                    // 'g' (unsupported)
+                    'g' => settings.mode = SortMode::GeneralNumeric,
                     'h' => settings.mode = SortMode::HumanNumeric,
-                    // 'i' (unsupported)
+                    'i' => settings.ignore_non_printing = true,
                     'n' => settings.mode = SortMode::Numeric,
                     'R' => settings.random = true,
                     'r' => settings.reverse = true,

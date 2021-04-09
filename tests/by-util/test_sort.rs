@@ -144,10 +144,10 @@ fn test_dictionary_order2() {
 fn test_non_printing_chars() {
     for non_printing_chars_param in vec!["-i"] {
         new_ucmd!()
-            .pipe_in("a👦🏻aa	b\naaaa	b")
+            .pipe_in("a👦🏻aa\naaaa")
             .arg(non_printing_chars_param)
             .succeeds()
-            .stdout_only("aaaa	b\na👦🏻aa	b\n");
+            .stdout_only("a👦🏻aa\naaaa\n");
     }
 }
 
