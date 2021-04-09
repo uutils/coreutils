@@ -33,6 +33,14 @@ fn test_mknod_fifo_default_writable() {
 
 #[test]
 #[cfg(not(windows))]
+fn test_mknod_fifo_mnemonic_usage() {
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd().arg("test_file").arg("pipe").succeeds();
+    assert!(ts.fixtures.is_fifo("test_file"));
+}
+
+#[test]
+#[cfg(not(windows))]
 fn test_mknod_fifo_read_only() {
     let ts = TestScenario::new(util_name!());
     ts.ucmd().arg("-m").arg("a=r").arg("test_file").arg("p").succeeds();

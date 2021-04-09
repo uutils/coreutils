@@ -10,6 +10,8 @@
 #[macro_use]
 extern crate uucore;
 
+use clap::{App, Arg, ArgMatches};
+
 use libc::{dev_t, mode_t};
 use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
 
@@ -19,6 +21,27 @@ use std::ffi::CString;
 
 static NAME: &str = "mknod";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
+static USAGE: &str = "
+Usage: {0} [OPTION]... NAME TYPE [MAJOR MINOR]
+
+Mandatory arguments to long options are mandatory for short options too.
+-m, --mode=MODE    set file permission bits to MODE, not a=rw - umask
+--help     display this help and exit
+--version  output version information and exit
+
+Both MAJOR and MINOR must be specified when TYPE is b, c, or u, and they
+must be omitted when TYPE is p.  If MAJOR or MINOR begins with 0x or 0X,
+it is interpreted as hexadecimal; otherwise, if it begins with 0, as octal;
+otherwise, as decimal.  TYPE may be:
+
+b      create a block (buffered) special file
+c, u   create a character (unbuffered) special file
+p      create a FIFO
+
+NOTE: your shell may have its own version of mknod, which usually supersedes
+the version described here.  Please refer to your shell's documentation
+for details about the options it supports.
+";
 
 const MODE_RW_UGO: mode_t = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
 
@@ -38,65 +61,72 @@ fn _makenod(path: CString, mode: mode_t, dev: dev_t) -> i32 {
     unsafe { libc::mknod(path.as_ptr(), mode, dev) }
 }
 
+fn valid_type(tpe: String) -> Result<(), String> {
+    let first_char = tpe.chars()[0];
+    if vec!['b', 'c', 'u', 'p'].contains(first_char) {
+        Ok(())
+    } else {
+        Err(format!("invalid device type ‘{}’", tpe));
+    }
+}
+
+fn valid_u64(tpe: &str, num: String) -> Result<(), String> {
+    num
+        .parse::<u64>()
+        .map(|_| ())
+        .map_err(|_| format!("invalid {} device number ‘{}’", tpe, num))
+}
+
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
-
-    let mut opts = Options::new();
 
     // Linux-specific options, not implemented
     // opts.optflag("Z", "", "set the SELinux security context to default type");
     // opts.optopt("", "context", "like -Z, or if CTX is specified then set the SELinux or SMACK security context to CTX");
-    opts.optopt(
-        "m",
-        "mode",
-        "set file permission bits to MODE, not a=rw - umask",
-        "MODE",
-    );
 
-    opts.optflag("", "help", "display this help and exit");
-    opts.optflag("", "version", "output version information and exit");
+    let matches = App::new(executable!())
+        .version(VERSION)
+        // FIXME: are both needed?
+        .usage(USAGE)
+        .help(USAGE)
+        .arg(
+            Arg::with_name("mode")
+                .short("m")
+                .long("mode")
+                .value_name("MODE")
+                .help("set file permission bits to MODE, not a=rw - umask"),
+        )
+        .arg(
+            Arg::with_name("name")
+                .value_name("NAME")
+                .required(true)
+                .index(1)
+        )
+        .arg(
+            Arg::with_name("type")
+                .value_name("TYPE")
+                .required(true)
+                .validator(valid_type)
+                .index(2)
+        )
+        .arg(
+            Arg::default()
+                .value_name("MAJOR")
+                .validator(|m| valid_u64("major", m))
+                .index(3)
+        )
+        .arg(
+            Arg::default()
+                .value_name("MINOR")
+                .validator(|m| valid_u64("minor", m))
+                .index(4)
+        )
+        .get_matches_from(args);
 
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => crash!(1, "{}\nTry '{} --help' for more information.", f, NAME),
-    };
-
-    if matches.opt_present("help") {
-        println!(
-            "Usage: {0} [OPTION]... NAME TYPE [MAJOR MINOR]
-
-Mandatory arguments to long options are mandatory for short options too.
-  -m, --mode=MODE    set file permission bits to MODE, not a=rw - umask
-      --help     display this help and exit
-      --version  output version information and exit
-
-Both MAJOR and MINOR must be specified when TYPE is b, c, or u, and they
-must be omitted when TYPE is p.  If MAJOR or MINOR begins with 0x or 0X,
-it is interpreted as hexadecimal; otherwise, if it begins with 0, as octal;
-otherwise, as decimal.  TYPE may be:
-
-  b      create a block (buffered) special file
-  c, u   create a character (unbuffered) special file
-  p      create a FIFO
-
-NOTE: your shell may have its own version of mknod, which usually supersedes
-the version described here.  Please refer to your shell's documentation
-for details about the options it supports.",
-            NAME
-        );
-        return 0;
-    }
-
-    if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
 
     let mut last_umask: mode_t = 0;
-    let mut newmode: mode_t = MODE_RW_UGO;
-    if matches.opt_present("mode") {
-        match uucore::mode::parse_mode(matches.opt_str("mode")) {
+    let newmode = if let Some(mode) = matches.value_of("mode") {
+        match uucore::mode::parse_mode(mode) {
             Ok(parsed) => {
                 if parsed > 0o777 {
                     show_info!("mode must specify only file permission bits");
@@ -112,7 +142,9 @@ for details about the options it supports.",
         unsafe {
             last_umask = libc::umask(0);
         }
-    }
+    } else {
+        MODE_RW_UGO
+    };
 
     let mut ret = 0i32;
     match matches.free.len() {
@@ -120,60 +152,50 @@ for details about the options it supports.",
         1 => show_usage_error!("missing operand after ‘{}’", matches.free[0]),
         _ => {
             let args = &matches.free;
-            let c_str = CString::new(args[0].as_str()).expect("Failed to convert to CString");
+            let name = matches
+                .value_of("name")
+                .unwrap(); // required arg
+            let c_str = CString::new(&name).expect("Failed to convert to CString");
 
             // Only check the first character, to allow mnemonic usage like
             // 'mknod /dev/rst0 character 18 0'.
-            let ch = args[1]
+            let ch = matches.value_of("type")
+                .unwrap() // required arg
                 .chars()
                 .next()
                 .expect("Failed to get the first char");
 
             if ch == 'p' {
-                if args.len() > 2 {
-                    show_info!("{}: extra operand ‘{}’", NAME, args[2]);
-                    if args.len() == 4 {
-                        eprintln!("Fifos do not have major and minor device numbers.");
-                    }
+                if matches.is_present("major") || matches.is_present("minor") {
+                    eprintln!("Fifos do not have major and minor device numbers.");
                     eprintln!("Try '{} --help' for more information.", NAME);
                     return 1;
                 }
 
                 ret = _makenod(c_str, S_IFIFO | newmode, 0);
             } else {
-                if args.len() < 4 {
-                    show_info!("missing operand after ‘{}’", args[args.len() - 1]);
-                    if args.len() == 2 {
-                        eprintln!("Special files require major and minor device numbers.");
+                match (matches.value_of("major"), matches.value_of("minor")) {
+                    (None, None) | (_, None) | (None, _) => {
+                        show_info!("missing operand after ‘{}’", args[args.len() - 1]);
+                        if args.len() == 2 {
+                            eprintln!("Special files require major and minor device numbers.");
+                        }
+                        eprintln!("Try '{} --help' for more information.", NAME);
+                        return 1;
                     }
-                    eprintln!("Try '{} --help' for more information.", NAME);
-                    return 1;
-                } else if args.len() > 4 {
-                    show_usage_error!("extra operand ‘{}’", args[4]);
-                    return 1;
-                } else if !"bcu".contains(ch) {
-                    show_usage_error!("invalid device type ‘{}’", args[1]);
-                    return 1;
-                }
+                    (Some(major), Some(minor)) => {
+                        let major = major.parse::<u64>().unwrap(); // validator above
+                        let minor = minor.parse::<u64>().unwrap(); // validator above
 
-                let maj = args[2].parse::<u64>();
-                let min = args[3].parse::<u64>();
-                if maj.is_err() {
-                    show_info!("invalid major device number ‘{}’", args[2]);
-                    return 1;
-                } else if min.is_err() {
-                    show_info!("invalid minor device number ‘{}’", args[3]);
-                    return 1;
-                }
-
-                let (maj, min) = (maj.unwrap(), min.unwrap());
-                let dev = makedev(maj, min);
-                if ch == 'b' {
-                    // block special file
-                    ret = _makenod(c_str, S_IFBLK | newmode, dev);
-                } else {
-                    // char special file
-                    ret = _makenod(c_str, S_IFCHR | newmode, dev);
+                        let dev = makedev(major, minor);
+                        if ch == 'b' {
+                            // block special file
+                            ret = _makenod(c_str, S_IFBLK | newmode, dev);
+                        } else {
+                            // char special file
+                            ret = _makenod(c_str, S_IFCHR | newmode, dev);
+                        }
+                    }
                 }
             }
         }
