@@ -2,14 +2,22 @@ use std::char::from_digit;
 
 const SPECIAL_SHELL_CHARS: &str = "~`#$&*()\\|[]{};'\"<>?! ";
 
-pub(crate) enum QuotingStyle {
-    Shell { escape: bool, always_quote: bool },
-    C { quotes: Quotes },
-    Literal,
+pub(super) enum QuotingStyle {
+    Shell {
+        escape: bool,
+        always_quote: bool,
+        show_control: bool,
+    },
+    C {
+        quotes: Quotes,
+    },
+    Literal {
+        show_control: bool,
+    },
 }
 
 #[derive(Clone, Copy)]
-pub(crate) enum Quotes {
+pub(super) enum Quotes {
     None,
     Single,
     Double,
@@ -81,6 +89,12 @@ impl EscapeOctal {
 }
 
 impl EscapedChar {
+    fn new_literal(c: char) -> Self {
+        Self {
+            state: EscapeState::Char(c),
+        }
+    }
+
     fn new_c(c: char, quotes: Quotes) -> Self {
         use EscapeState::*;
         let init_state = match c {
@@ -110,27 +124,10 @@ impl EscapedChar {
         Self { state: init_state }
     }
 
-    // fn new_shell(c: char, quotes: Quotes) -> Self {
-    //     use EscapeState::*;
-    //     let init_state = match c {
-    //         // If the string is single quoted, the single quote should be escaped
-    //         '\'' => match quotes {
-    //             Quotes::Single => Backslash('\''),
-    //             _ => Char('\''),
-    //         },
-    //         // All control characters should be rendered as ?:
-    //         _ if c.is_ascii_control() => Char('?'),
-    //         // Special shell characters must be escaped:
-    //         _ if SPECIAL_SHELL_CHARS.contains(c) => ForceQuote(c),
-    //         _ => Char(c),
-    //     };
-    //     Self { state: init_state }
-    // }
-
     fn new_shell(c: char, escape: bool, quotes: Quotes) -> Self {
         use EscapeState::*;
         let init_state = match c {
-            _ if !escape && c.is_control() => Char('?'),
+            _ if !escape && c.is_control() => Char(c),
             '\x07' => Backslash('a'),
             '\x08' => Backslash('b'),
             '\t' => Backslash('t'),
@@ -148,6 +145,15 @@ impl EscapedChar {
             _ => Char(c),
         };
         Self { state: init_state }
+    }
+
+    fn hide_control(self) -> Self {
+        match self.state {
+            EscapeState::Char(c) if c.is_control() => Self {
+                state: EscapeState::Char('?'),
+            },
+            _ => self,
+        }
     }
 }
 
@@ -170,12 +176,20 @@ impl Iterator for EscapedChar {
     }
 }
 
-fn shell_without_escape(name: String, quotes: Quotes) -> (String, bool) {
+fn shell_without_escape(name: String, quotes: Quotes, show_control_chars: bool) -> (String, bool) {
     let mut must_quote = false;
     let mut escaped_str = String::with_capacity(name.len());
 
     for c in name.chars() {
-        let escaped = EscapedChar::new_shell(c, false, quotes);
+        let escaped = {
+            let ec = EscapedChar::new_shell(c, false, quotes);
+            if show_control_chars {
+                ec
+            } else {
+                ec.hide_control()
+            }
+        };
+
         match escaped.state {
             EscapeState::Backslash('\'') => escaped_str.push_str("'\\''"),
             EscapeState::ForceQuote(x) => {
@@ -242,7 +256,15 @@ fn shell_with_escape(name: String, quotes: Quotes) -> (String, bool) {
 
 pub(super) fn escape_name(name: String, style: &QuotingStyle) -> String {
     match style {
-        QuotingStyle::Literal => name,
+        QuotingStyle::Literal { show_control } => {
+            if !show_control {
+                name.chars()
+                    .flat_map(|c| EscapedChar::new_literal(c).hide_control())
+                    .collect()
+            } else {
+                name
+            }
+        }
         QuotingStyle::C { quotes } => {
             let escaped_str: String = name
                 .chars()
@@ -258,6 +280,7 @@ pub(super) fn escape_name(name: String, style: &QuotingStyle) -> String {
         QuotingStyle::Shell {
             escape,
             always_quote,
+            show_control,
         } => {
             let (quotes, must_quote) = if name.contains('"') {
                 (Quotes::Single, true)
@@ -272,7 +295,7 @@ pub(super) fn escape_name(name: String, style: &QuotingStyle) -> String {
             let (escaped_str, contains_quote_chars) = if *escape {
                 shell_with_escape(name, quotes)
             } else {
-                shell_without_escape(name, quotes)
+                shell_without_escape(name, quotes, *show_control)
             };
 
             match (must_quote | contains_quote_chars, quotes) {
@@ -289,7 +312,10 @@ mod tests {
     use crate::quoting_style::{escape_name, Quotes, QuotingStyle};
     fn get_style(s: &str) -> QuotingStyle {
         match s {
-            "literal" => QuotingStyle::Literal,
+            "literal" => QuotingStyle::Literal {
+                show_control: false,
+            },
+            "literal-show" => QuotingStyle::Literal { show_control: true },
             "escape" => QuotingStyle::C {
                 quotes: Quotes::None,
             },
@@ -299,18 +325,32 @@ mod tests {
             "shell" => QuotingStyle::Shell {
                 escape: false,
                 always_quote: false,
+                show_control: false,
+            },
+            "shell-show" => QuotingStyle::Shell {
+                escape: false,
+                always_quote: false,
+                show_control: true,
             },
             "shell-always" => QuotingStyle::Shell {
                 escape: false,
                 always_quote: true,
+                show_control: false,
+            },
+            "shell-always-show" => QuotingStyle::Shell {
+                escape: false,
+                always_quote: true,
+                show_control: true,
             },
             "shell-escape" => QuotingStyle::Shell {
                 escape: true,
                 always_quote: false,
+                show_control: false,
             },
             "shell-escape-always" => QuotingStyle::Shell {
                 escape: true,
                 always_quote: true,
+                show_control: false,
             },
             _ => panic!("Invalid name!"),
         }
@@ -333,10 +373,13 @@ mod tests {
             "one_two",
             vec![
                 ("one_two", "literal"),
+                ("one_two", "literal-show"),
                 ("one_two", "escape"),
                 ("\"one_two\"", "c"),
                 ("one_two", "shell"),
+                ("one_two", "shell-show"),
                 ("\'one_two\'", "shell-always"),
+                ("\'one_two\'", "shell-always-show"),
                 ("one_two", "shell-escape"),
                 ("\'one_two\'", "shell-escape-always"),
             ],
@@ -349,10 +392,13 @@ mod tests {
             "one two",
             vec![
                 ("one two", "literal"),
+                ("one two", "literal-show"),
                 ("one\\ two", "escape"),
                 ("\"one two\"", "c"),
                 ("\'one two\'", "shell"),
+                ("\'one two\'", "shell-show"),
                 ("\'one two\'", "shell-always"),
+                ("\'one two\'", "shell-always-show"),
                 ("\'one two\'", "shell-escape"),
                 ("\'one two\'", "shell-escape-always"),
             ],
@@ -362,10 +408,13 @@ mod tests {
             " one",
             vec![
                 (" one", "literal"),
+                (" one", "literal-show"),
                 ("\\ one", "escape"),
                 ("\" one\"", "c"),
                 ("' one'", "shell"),
+                ("' one'", "shell-show"),
                 ("' one'", "shell-always"),
+                ("' one'", "shell-always-show"),
                 ("' one'", "shell-escape"),
                 ("' one'", "shell-escape-always"),
             ],
@@ -379,10 +428,13 @@ mod tests {
             "one\"two",
             vec![
                 ("one\"two", "literal"),
+                ("one\"two", "literal-show"),
                 ("one\"two", "escape"),
                 ("\"one\\\"two\"", "c"),
                 ("'one\"two'", "shell"),
+                ("'one\"two'", "shell-show"),
                 ("'one\"two'", "shell-always"),
+                ("'one\"two'", "shell-always-show"),
                 ("'one\"two'", "shell-escape"),
                 ("'one\"two'", "shell-escape-always"),
             ],
@@ -393,10 +445,13 @@ mod tests {
             "one\'two",
             vec![
                 ("one'two", "literal"),
+                ("one'two", "literal-show"),
                 ("one'two", "escape"),
                 ("\"one'two\"", "c"),
                 ("\"one'two\"", "shell"),
+                ("\"one'two\"", "shell-show"),
                 ("\"one'two\"", "shell-always"),
+                ("\"one'two\"", "shell-always-show"),
                 ("\"one'two\"", "shell-escape"),
                 ("\"one'two\"", "shell-escape-always"),
             ],
@@ -407,10 +462,13 @@ mod tests {
             "one'two\"three",
             vec![
                 ("one'two\"three", "literal"),
+                ("one'two\"three", "literal-show"),
                 ("one'two\"three", "escape"),
                 ("\"one'two\\\"three\"", "c"),
                 ("'one'\\''two\"three'", "shell"),
+                ("'one'\\''two\"three'", "shell-show"),
                 ("'one'\\''two\"three'", "shell-always"),
+                ("'one'\\''two\"three'", "shell-always-show"),
                 ("'one'\\''two\"three'", "shell-escape"),
                 ("'one'\\''two\"three'", "shell-escape-always"),
             ],
@@ -421,10 +479,13 @@ mod tests {
             "one''two\"\"three",
             vec![
                 ("one''two\"\"three", "literal"),
+                ("one''two\"\"three", "literal-show"),
                 ("one''two\"\"three", "escape"),
                 ("\"one''two\\\"\\\"three\"", "c"),
                 ("'one'\\'''\\''two\"\"three'", "shell"),
+                ("'one'\\'''\\''two\"\"three'", "shell-show"),
                 ("'one'\\'''\\''two\"\"three'", "shell-always"),
+                ("'one'\\'''\\''two\"\"three'", "shell-always-show"),
                 ("'one'\\'''\\''two\"\"three'", "shell-escape"),
                 ("'one'\\'''\\''two\"\"three'", "shell-escape-always"),
             ],
@@ -437,11 +498,14 @@ mod tests {
         check_names(
             "one\ntwo",
             vec![
-                ("one\ntwo", "literal"),
+                ("one?two", "literal"),
+                ("one\ntwo", "literal-show"),
                 ("one\\ntwo", "escape"),
                 ("\"one\\ntwo\"", "c"),
                 ("one?two", "shell"),
+                ("one\ntwo", "shell-show"),
                 ("'one?two'", "shell-always"),
+                ("'one\ntwo'", "shell-always-show"),
                 ("'one'$'\\n''two'", "shell-escape"),
                 ("'one'$'\\n''two'", "shell-escape-always"),
             ],
@@ -452,9 +516,10 @@ mod tests {
         check_names(
             "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F",
             vec![
+                ("????????????????", "literal"),
                 (
                     "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F",
-                    "literal",
+                    "literal-show",
                 ),
                 (
                     "\\000\\001\\002\\003\\004\\005\\006\\a\\b\\t\\n\\v\\f\\r\\016\\017",
@@ -465,7 +530,15 @@ mod tests {
                     "c",
                 ),
                 ("????????????????", "shell"),
+                (
+                    "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F",
+                    "shell-show",
+                ),
                 ("'????????????????'", "shell-always"),
+                (
+                    "'\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0A\x0B\x0C\x0D\x0E\x0F'",
+                    "shell-always-show",
+                ),
                 (
                     "''$'\\000\\001\\002\\003\\004\\005\\006\\a\\b\\t\\n\\v\\f\\r\\016\\017'",
                     "shell-escape",
@@ -481,9 +554,10 @@ mod tests {
         check_names(
             "\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F",
             vec![
+                ("????????????????", "literal"),
                 (
                     "\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F",
-                    "literal",
+                    "literal-show",
                 ),
                 (
                     "\\020\\021\\022\\023\\024\\025\\026\\027\\030\\031\\032\\033\\034\\035\\036\\037",
@@ -494,7 +568,15 @@ mod tests {
                     "c",
                 ),
                 ("????????????????", "shell"),
+                (
+                    "\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F",
+                    "shell-show",
+                ),
                 ("'????????????????'", "shell-always"),
+                (
+                    "'\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1A\x1B\x1C\x1D\x1E\x1F'",
+                    "shell-always-show",
+                ),
                 (
                     "''$'\\020\\021\\022\\023\\024\\025\\026\\027\\030\\031\\032\\033\\034\\035\\036\\037'",
                     "shell-escape",
@@ -510,11 +592,14 @@ mod tests {
         check_names(
             "\x7F",
             vec![
-                ("\x7F", "literal"),
+                ("?", "literal"),
+                ("\x7F", "literal-show"),
                 ("\\177", "escape"),
                 ("\"\\177\"", "c"),
                 ("?", "shell"),
+                ("\x7F", "shell-show"),
                 ("'?'", "shell-always"),
+                ("'\x7F'", "shell-always-show"),
                 ("''$'\\177'", "shell-escape"),
                 ("''$'\\177'", "shell-escape-always"),
             ],
@@ -530,10 +615,13 @@ mod tests {
             "one?two",
             vec![
                 ("one?two", "literal"),
+                ("one?two", "literal-show"),
                 ("one?two", "escape"),
                 ("\"one?two\"", "c"),
                 ("'one?two'", "shell"),
+                ("'one?two'", "shell-show"),
                 ("'one?two'", "shell-always"),
+                ("'one?two'", "shell-always-show"),
                 ("'one?two'", "shell-escape"),
                 ("'one?two'", "shell-escape-always"),
             ],

@@ -43,26 +43,22 @@ fn test_ls_a() {
     let at = &scene.fixtures;
     at.touch(".test-1");
 
-    let result = scene.ucmd().run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert!(result.success);
-    assert!(!result.stdout.contains(".test-1"));
-    assert!(!result.stdout.contains(".."));
+    let result = scene.ucmd().succeeds();
+    let stdout = result.stdout_str();
+    assert!(!stdout.contains(".test-1"));
+    assert!(!stdout.contains(".."));
 
-    let result = scene.ucmd().arg("-a").run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert!(result.success);
-    assert!(result.stdout.contains(".test-1"));
-    assert!(result.stdout.contains(".."));
+    scene
+        .ucmd()
+        .arg("-a")
+        .succeeds()
+        .stdout_contains(&".test-1")
+        .stdout_contains(&"..");
 
-    let result = scene.ucmd().arg("-A").run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert!(result.success);
-    assert!(result.stdout.contains(".test-1"));
-    assert!(!result.stdout.contains(".."));
+    let result = scene.ucmd().arg("-A").succeeds();
+    result.stdout_contains(".test-1");
+    let stdout = result.stdout_str();
+    assert!(!stdout.contains(".."));
 }
 
 #[test]
@@ -75,29 +71,19 @@ fn test_ls_width() {
     at.touch(&at.plus_as_string("test-width-4"));
 
     for option in &["-w 100", "-w=100", "--width=100", "--width 100"] {
-        let result = scene
+        scene
             .ucmd()
             .args(&option.split(" ").collect::<Vec<_>>())
-            .run();
-        println!("stderr = {:?}", result.stderr);
-        println!("stdout = {:?}", result.stdout);
-        assert_eq!(
-            result.stdout,
-            "test-width-1  test-width-2  test-width-3  test-width-4\n",
-        )
+            .succeeds()
+            .stdout_only("test-width-1  test-width-2  test-width-3  test-width-4\n");
     }
 
     for option in &["-w 50", "-w=50", "--width=50", "--width 50"] {
-        let result = scene
+        scene
             .ucmd()
             .args(&option.split(" ").collect::<Vec<_>>())
-            .run();
-        println!("stderr = {:?}", result.stderr);
-        println!("stdout = {:?}", result.stdout);
-        assert_eq!(
-            result.stdout,
-            "test-width-1  test-width-3\ntest-width-2  test-width-4\n",
-        )
+            .succeeds()
+            .stdout_only("test-width-1  test-width-3\ntest-width-2  test-width-4\n");
     }
 
     for option in &[
@@ -110,16 +96,11 @@ fn test_ls_width() {
         "--width=0",
         "--width 0",
     ] {
-        let result = scene
+        scene
             .ucmd()
             .args(&option.split(" ").collect::<Vec<_>>())
-            .run();
-        println!("stderr = {:?}", result.stderr);
-        println!("stdout = {:?}", result.stdout);
-        assert_eq!(
-            result.stdout,
-            "test-width-1\ntest-width-2\ntest-width-3\ntest-width-4\n",
-        )
+            .succeeds()
+            .stdout_only("test-width-1\ntest-width-2\ntest-width-3\ntest-width-4\n");
     }
 }
 
@@ -133,48 +114,28 @@ fn test_ls_columns() {
     at.touch(&at.plus_as_string("test-columns-4"));
 
     // Columns is the default
-    let result = scene.ucmd().run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert!(result.success);
+    let result = scene.ucmd().succeeds();
 
     #[cfg(not(windows))]
-    assert_eq!(
-        result.stdout,
-        "test-columns-1\ntest-columns-2\ntest-columns-3\ntest-columns-4\n"
-    );
+    result.stdout_only("test-columns-1\ntest-columns-2\ntest-columns-3\ntest-columns-4\n");
     #[cfg(windows)]
-    assert_eq!(
-        result.stdout,
-        "test-columns-1  test-columns-2  test-columns-3  test-columns-4\n"
-    );
+    result.stdout_only("test-columns-1  test-columns-2  test-columns-3  test-columns-4\n");
 
     for option in &["-C", "--format=columns"] {
-        let result = scene.ucmd().arg(option).run();
-        println!("stderr = {:?}", result.stderr);
-        println!("stdout = {:?}", result.stdout);
-        assert!(result.success);
+        let result = scene.ucmd().arg(option).succeeds();
         #[cfg(not(windows))]
-        assert_eq!(
-            result.stdout,
-            "test-columns-1\ntest-columns-2\ntest-columns-3\ntest-columns-4\n"
-        );
+        result.stdout_only("test-columns-1\ntest-columns-2\ntest-columns-3\ntest-columns-4\n");
         #[cfg(windows)]
-        assert_eq!(
-            result.stdout,
-            "test-columns-1  test-columns-2  test-columns-3  test-columns-4\n"
-        );
+        result.stdout_only("test-columns-1  test-columns-2  test-columns-3  test-columns-4\n");
     }
 
     for option in &["-C", "--format=columns"] {
-        let result = scene.ucmd().arg("-w=40").arg(option).run();
-        println!("stderr = {:?}", result.stderr);
-        println!("stdout = {:?}", result.stdout);
-        assert!(result.success);
-        assert_eq!(
-            result.stdout,
-            "test-columns-1  test-columns-3\ntest-columns-2  test-columns-4\n"
-        );
+        scene
+            .ucmd()
+            .arg("-w=40")
+            .arg(option)
+            .succeeds()
+            .stdout_only("test-columns-1  test-columns-3\ntest-columns-2  test-columns-4\n");
     }
 }
 
@@ -191,31 +152,22 @@ fn test_ls_across() {
         let result = scene.ucmd().arg(option).succeeds();
         // Because the test terminal has width 0, this is the same output as
         // the columns option.
-        println!("stderr = {:?}", result.stderr);
-        println!("stdout = {:?}", result.stdout);
         if cfg!(unix) {
-            assert_eq!(
-                result.stdout,
-                "test-across-1\ntest-across-2\ntest-across-3\ntest-across-4\n"
-            );
+            result.stdout_only("test-across-1\ntest-across-2\ntest-across-3\ntest-across-4\n");
         } else {
-            assert_eq!(
-                result.stdout,
-                "test-across-1  test-across-2  test-across-3  test-across-4\n"
-            );
+            result.stdout_only("test-across-1  test-across-2  test-across-3  test-across-4\n");
         }
     }
 
     for option in &["-x", "--format=across"] {
-        let result = scene.ucmd().arg("-w=30").arg(option).run();
         // Because the test terminal has width 0, this is the same output as
         // the columns option.
-        println!("stderr = {:?}", result.stderr);
-        println!("stdout = {:?}", result.stdout);
-        assert_eq!(
-            result.stdout,
-            "test-across-1  test-across-2\ntest-across-3  test-across-4\n"
-        );
+        scene
+            .ucmd()
+            .arg("-w=30")
+            .arg(option)
+            .succeeds()
+            .stdout_only("test-across-1  test-across-2\ntest-across-3  test-across-4\n");
     }
 }
 
@@ -231,31 +183,27 @@ fn test_ls_commas() {
     for option in &["-m", "--format=commas"] {
         let result = scene.ucmd().arg(option).succeeds();
         if cfg!(unix) {
-            assert_eq!(
-                result.stdout,
-                "test-commas-1,\ntest-commas-2,\ntest-commas-3,\ntest-commas-4\n"
-            );
+            result.stdout_only("test-commas-1,\ntest-commas-2,\ntest-commas-3,\ntest-commas-4\n");
         } else {
-            assert_eq!(
-                result.stdout,
-                "test-commas-1, test-commas-2, test-commas-3, test-commas-4\n"
-            );
+            result.stdout_only("test-commas-1, test-commas-2, test-commas-3, test-commas-4\n");
         }
     }
 
     for option in &["-m", "--format=commas"] {
-        let result = scene.ucmd().arg("-w=30").arg(option).succeeds();
-        assert_eq!(
-            result.stdout,
-            "test-commas-1, test-commas-2,\ntest-commas-3, test-commas-4\n"
-        );
+        scene
+            .ucmd()
+            .arg("-w=30")
+            .arg(option)
+            .succeeds()
+            .stdout_only("test-commas-1, test-commas-2,\ntest-commas-3, test-commas-4\n");
     }
     for option in &["-m", "--format=commas"] {
-        let result = scene.ucmd().arg("-w=45").arg(option).succeeds();
-        assert_eq!(
-            result.stdout,
-            "test-commas-1, test-commas-2, test-commas-3,\ntest-commas-4\n"
-        );
+        scene
+            .ucmd()
+            .arg("-w=45")
+            .arg(option)
+            .succeeds()
+            .stdout_only("test-commas-1, test-commas-2, test-commas-3,\ntest-commas-4\n");
     }
 }
 
@@ -279,13 +227,11 @@ fn test_ls_long() {
 
     for arg in &["-l", "--long", "--format=long", "--format=verbose"] {
         let result = scene.ucmd().arg(arg).arg("test-long").succeeds();
-        println!("stderr = {:?}", result.stderr);
-        println!("stdout = {:?}", result.stdout);
         #[cfg(not(windows))]
-        assert!(result.stdout.contains("-rw-rw-r--"));
+        result.stdout_contains("-rw-rw-r--");
 
         #[cfg(windows)]
-        assert!(result.stdout.contains("---------- 1 somebody somegroup"));
+        result.stdout_contains("---------- 1 somebody somegroup");
     }
 
     #[cfg(not(windows))]
@@ -331,20 +277,16 @@ fn test_ls_long_formats() {
         .arg("-l")
         .arg("--author")
         .arg("test-long-formats")
-        .run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert!(re_three.is_match(&result.stdout));
+        .succeeds();
+    assert!(re_three.is_match(result.stdout_str()));
 
     let result = scene
         .ucmd()
         .arg("-l1")
         .arg("--author")
         .arg("test-long-formats")
-        .run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert!(re_three.is_match(&result.stdout));
+        .succeeds();
+    assert!(re_three.is_match(&result.stdout_str()));
 
     #[cfg(unix)]
     {
@@ -354,9 +296,7 @@ fn test_ls_long_formats() {
             .arg("--author")
             .arg("test-long-formats")
             .succeeds();
-        println!("stderr = {:?}", result.stderr);
-        println!("stdout = {:?}", result.stdout);
-        assert!(re_three_num.is_match(&result.stdout));
+        assert!(re_three_num.is_match(result.stdout_str()));
     }
 
     for arg in &[
@@ -371,9 +311,7 @@ fn test_ls_long_formats() {
             .args(&arg.split(" ").collect::<Vec<_>>())
             .arg("test-long-formats")
             .succeeds();
-        println!("stderr = {:?}", result.stderr);
-        println!("stdout = {:?}", result.stdout);
-        assert!(re_two.is_match(&result.stdout));
+        assert!(re_two.is_match(result.stdout_str()));
 
         #[cfg(unix)]
         {
@@ -383,9 +321,7 @@ fn test_ls_long_formats() {
                 .args(&arg.split(" ").collect::<Vec<_>>())
                 .arg("test-long-formats")
                 .succeeds();
-            println!("stderr = {:?}", result.stderr);
-            println!("stdout = {:?}", result.stdout);
-            assert!(re_two_num.is_match(&result.stdout));
+            assert!(re_two_num.is_match(result.stdout_str()));
         }
     }
 
@@ -404,9 +340,7 @@ fn test_ls_long_formats() {
             .args(&arg.split(" ").collect::<Vec<_>>())
             .arg("test-long-formats")
             .succeeds();
-        println!("stderr = {:?}", result.stderr);
-        println!("stdout = {:?}", result.stdout);
-        assert!(re_one.is_match(&result.stdout));
+        assert!(re_one.is_match(result.stdout_str()));
 
         #[cfg(unix)]
         {
@@ -416,9 +350,7 @@ fn test_ls_long_formats() {
                 .args(&arg.split(" ").collect::<Vec<_>>())
                 .arg("test-long-formats")
                 .succeeds();
-            println!("stderr = {:?}", result.stderr);
-            println!("stdout = {:?}", result.stdout);
-            assert!(re_one_num.is_match(&result.stdout));
+            assert!(re_one_num.is_match(result.stdout_str()));
         }
     }
 
@@ -440,9 +372,7 @@ fn test_ls_long_formats() {
             .args(&arg.split(" ").collect::<Vec<_>>())
             .arg("test-long-formats")
             .succeeds();
-        println!("stderr = {:?}", result.stderr);
-        println!("stdout = {:?}", result.stdout);
-        assert!(re_zero.is_match(&result.stdout));
+        assert!(re_zero.is_match(result.stdout_str()));
 
         #[cfg(unix)]
         {
@@ -452,9 +382,7 @@ fn test_ls_long_formats() {
                 .args(&arg.split(" ").collect::<Vec<_>>())
                 .arg("test-long-formats")
                 .succeeds();
-            println!("stderr = {:?}", result.stderr);
-            println!("stdout = {:?}", result.stdout);
-            assert!(re_zero.is_match(&result.stdout));
+            assert!(re_zero.is_match(result.stdout_str()));
         }
     }
 }
@@ -469,11 +397,11 @@ fn test_ls_oneline() {
     // Bit of a weird situation: in the tests oneline and columns have the same output,
     // except on Windows.
     for option in &["-1", "--format=single-column"] {
-        let result = scene.ucmd().arg(option).run();
-        println!("stderr = {:?}", result.stderr);
-        println!("stdout = {:?}", result.stdout);
-        assert!(result.success);
-        assert_eq!(result.stdout, "test-oneline-1\ntest-oneline-2\n");
+        scene
+            .ucmd()
+            .arg(option)
+            .succeeds()
+            .stdout_only("test-oneline-1\ntest-oneline-2\n");
     }
 }
 
@@ -494,11 +422,8 @@ fn test_ls_deref() {
         .arg("--color=never")
         .arg("test-long")
         .arg("test-long.link")
-        .run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert!(result.success);
-    assert!(re.is_match(&result.stdout.trim()));
+        .succeeds();
+    assert!(re.is_match(result.stdout_str().trim()));
 
     let result = scene
         .ucmd()
@@ -506,11 +431,8 @@ fn test_ls_deref() {
         .arg("--color=never")
         .arg("test-long")
         .arg("test-long.link")
-        .run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert!(result.success);
-    assert!(!re.is_match(&result.stdout.trim()));
+        .succeeds();
+    assert!(!re.is_match(result.stdout_str().trim()));
 }
 
 #[test]
@@ -528,28 +450,19 @@ fn test_ls_order_size() {
     at.touch("test-4");
     at.append("test-4", "4444");
 
-    let result = scene.ucmd().arg("-al").run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert!(result.success);
+    scene.ucmd().arg("-al").succeeds();
 
-    let result = scene.ucmd().arg("-S").run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert!(result.success);
+    let result = scene.ucmd().arg("-S").succeeds();
     #[cfg(not(windows))]
-    assert_eq!(result.stdout, "test-4\ntest-3\ntest-2\ntest-1\n");
+    result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
     #[cfg(windows)]
-    assert_eq!(result.stdout, "test-4  test-3  test-2  test-1\n");
+    result.stdout_only("test-4  test-3  test-2  test-1\n");
 
-    let result = scene.ucmd().arg("-S").arg("-r").run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert!(result.success);
+    let result = scene.ucmd().arg("-S").arg("-r").succeeds();
     #[cfg(not(windows))]
-    assert_eq!(result.stdout, "test-1\ntest-2\ntest-3\ntest-4\n");
+    result.stdout_only("test-1\ntest-2\ntest-3\ntest-4\n");
     #[cfg(windows)]
-    assert_eq!(result.stdout, "test-1  test-2  test-3  test-4\n");
+    result.stdout_only("test-1  test-2  test-3  test-4\n");
 }
 
 #[test]
@@ -562,9 +475,9 @@ fn test_ls_long_ctime() {
 
     // Should show the time on Unix, but question marks on windows.
     #[cfg(unix)]
-    assert!(result.stdout.contains(":"));
+    result.stdout_contains(":");
     #[cfg(not(unix))]
-    assert!(result.stdout.contains("???"));
+    result.stdout_contains("???");
 }
 
 #[test]
@@ -596,51 +509,41 @@ fn test_ls_order_time() {
     )
     .unwrap();
 
-    let result = scene.ucmd().arg("-al").run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert!(result.success);
+    scene.ucmd().arg("-al").succeeds();
 
     // ctime was changed at write, so the order is 4 3 2 1
-    let result = scene.ucmd().arg("-t").run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert!(result.success);
+    let result = scene.ucmd().arg("-t").succeeds();
     #[cfg(not(windows))]
-    assert_eq!(result.stdout, "test-4\ntest-3\ntest-2\ntest-1\n");
+    result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
     #[cfg(windows)]
-    assert_eq!(result.stdout, "test-4  test-3  test-2  test-1\n");
+    result.stdout_only("test-4  test-3  test-2  test-1\n");
 
-    let result = scene.ucmd().arg("-tr").run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert!(result.success);
+    let result = scene.ucmd().arg("-tr").succeeds();
     #[cfg(not(windows))]
-    assert_eq!(result.stdout, "test-1\ntest-2\ntest-3\ntest-4\n");
+    result.stdout_only("test-1\ntest-2\ntest-3\ntest-4\n");
     #[cfg(windows)]
-    assert_eq!(result.stdout, "test-1  test-2  test-3  test-4\n");
+    result.stdout_only("test-1  test-2  test-3  test-4\n");
 
     // 3 was accessed last in the read
     // So the order should be 2 3 4 1
-    let result = scene.ucmd().arg("-tu").run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert!(result.success);
+    let result = scene.ucmd().arg("-tu").succeeds();
     let file3_access = at.open("test-3").metadata().unwrap().accessed().unwrap();
     let file4_access = at.open("test-4").metadata().unwrap().accessed().unwrap();
+
+    // It seems to be dependent on the platform whether the access time is actually set
     if file3_access > file4_access {
         if cfg!(not(windows)) {
-            assert_eq!(result.stdout, "test-3\ntest-4\ntest-2\ntest-1\n");
+            result.stdout_only("test-3\ntest-4\ntest-2\ntest-1\n");
         } else {
-            assert_eq!(result.stdout, "test-3  test-4  test-2  test-1\n");
+            result.stdout_only("test-3  test-4  test-2  test-1\n");
         }
     } else {
         // Access time does not seem to be set on Windows and some other
         // systems so the order is 4 3 2 1
         if cfg!(not(windows)) {
-            assert_eq!(result.stdout, "test-4\ntest-3\ntest-2\ntest-1\n");
+            result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
         } else {
-            assert_eq!(result.stdout, "test-4  test-3  test-2  test-1\n");
+            result.stdout_only("test-4  test-3  test-2  test-1\n");
         }
     }
 
@@ -648,11 +551,8 @@ fn test_ls_order_time() {
     // So the order should be 2 4 3 1
     #[cfg(unix)]
     {
-        let result = scene.ucmd().arg("-tc").run();
-        println!("stderr = {:?}", result.stderr);
-        println!("stdout = {:?}", result.stdout);
-        assert!(result.success);
-        assert_eq!(result.stdout, "test-2\ntest-4\ntest-3\ntest-1\n");
+        let result = scene.ucmd().arg("-tc").succeeds();
+        result.stdout_only("test-2\ntest-4\ntest-3\ntest-1\n");
     }
 }
 
@@ -676,18 +576,21 @@ fn test_ls_files_dirs() {
     scene.ucmd().arg("a/a").succeeds();
     scene.ucmd().arg("a").arg("z").succeeds();
 
-    let result = scene.ucmd().arg("doesntexist").fails();
     // Doesn't exist
-    assert!(result
-        .stderr
-        .contains("error: 'doesntexist': No such file or directory"));
+    scene
+        .ucmd()
+        .arg("doesntexist")
+        .fails()
+        .stderr_contains(&"error: 'doesntexist': No such file or directory");
 
-    let result = scene.ucmd().arg("a").arg("doesntexist").fails();
     // One exists, the other doesn't
-    assert!(result
-        .stderr
-        .contains("error: 'doesntexist': No such file or directory"));
-    assert!(result.stdout.contains("a:"));
+    scene
+        .ucmd()
+        .arg("a")
+        .arg("doesntexist")
+        .fails()
+        .stderr_contains(&"error: 'doesntexist': No such file or directory")
+        .stdout_contains(&"a:");
 }
 
 #[test]
@@ -711,13 +614,10 @@ fn test_ls_recursive() {
         .arg("z")
         .succeeds();
 
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert!(result.success);
     #[cfg(not(windows))]
-    assert!(result.stdout.contains("a/b:\nb"));
+    result.stdout_contains(&"a/b:\nb");
     #[cfg(windows)]
-    assert!(result.stdout.contains("a\\b:\nb"));
+    result.stdout_contains(&"a\\b:\nb");
 }
 
 #[cfg(unix)]
@@ -737,41 +637,53 @@ fn test_ls_ls_color() {
 
     // Color is disabled by default
     let result = scene.ucmd().succeeds();
-    assert!(!result.stdout.contains(a_with_colors));
-    assert!(!result.stdout.contains(z_with_colors));
+    assert!(!result.stdout_str().contains(a_with_colors));
+    assert!(!result.stdout_str().contains(z_with_colors));
 
     // Color should be enabled
-    let result = scene.ucmd().arg("--color").succeeds();
-    assert!(result.stdout.contains(a_with_colors));
-    assert!(result.stdout.contains(z_with_colors));
+    scene
+        .ucmd()
+        .arg("--color")
+        .succeeds()
+        .stdout_contains(a_with_colors)
+        .stdout_contains(z_with_colors);
 
     // Color should be enabled
-    let result = scene.ucmd().arg("--color=always").succeeds();
-    assert!(result.stdout.contains(a_with_colors));
-    assert!(result.stdout.contains(z_with_colors));
+    scene
+        .ucmd()
+        .arg("--color=always")
+        .succeeds()
+        .stdout_contains(a_with_colors)
+        .stdout_contains(z_with_colors);
 
     // Color should be disabled
     let result = scene.ucmd().arg("--color=never").succeeds();
-    assert!(!result.stdout.contains(a_with_colors));
-    assert!(!result.stdout.contains(z_with_colors));
+    assert!(!result.stdout_str().contains(a_with_colors));
+    assert!(!result.stdout_str().contains(z_with_colors));
 
     // Nested dir should be shown and colored
-    let result = scene.ucmd().arg("--color").arg("a").succeeds();
-    assert!(result.stdout.contains(nested_dir_with_colors));
+    scene
+        .ucmd()
+        .arg("--color")
+        .arg("a")
+        .succeeds()
+        .stdout_contains(nested_dir_with_colors);
 
     // Color has no effect
-    let result = scene
+    scene
         .ucmd()
         .arg("--color=always")
         .arg("a/nested_file")
-        .succeeds();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert!(result.stdout.contains("a/nested_file\n"));
+        .succeeds()
+        .stdout_contains("a/nested_file\n");
 
     // No output
-    let result = scene.ucmd().arg("--color=never").arg("z").succeeds();
-    assert_eq!(result.stdout, "");
+    scene
+        .ucmd()
+        .arg("--color=never")
+        .arg("z")
+        .succeeds()
+        .stdout_only("");
 }
 
 #[cfg(unix)]
@@ -786,39 +698,31 @@ fn test_ls_inode() {
     let re_short = Regex::new(r" *(\d+) test_inode").unwrap();
     let re_long = Regex::new(r" *(\d+) [xrw-]{10} \d .+ test_inode").unwrap();
 
-    let result = scene.ucmd().arg("test_inode").arg("-i").run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert!(re_short.is_match(&result.stdout));
+    let result = scene.ucmd().arg("test_inode").arg("-i").succeeds();
+    assert!(re_short.is_match(result.stdout_str()));
     let inode_short = re_short
-        .captures(&result.stdout)
+        .captures(result.stdout_str())
         .unwrap()
         .get(1)
         .unwrap()
         .as_str();
 
-    let result = scene.ucmd().arg("test_inode").run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert!(!re_short.is_match(&result.stdout));
-    assert!(!result.stdout.contains(inode_short));
+    let result = scene.ucmd().arg("test_inode").succeeds();
+    assert!(!re_short.is_match(result.stdout_str()));
+    assert!(!result.stdout_str().contains(inode_short));
 
-    let result = scene.ucmd().arg("-li").arg("test_inode").run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert!(re_long.is_match(&result.stdout));
+    let result = scene.ucmd().arg("-li").arg("test_inode").succeeds();
+    assert!(re_long.is_match(result.stdout_str()));
     let inode_long = re_long
-        .captures(&result.stdout)
+        .captures(result.stdout_str())
         .unwrap()
         .get(1)
         .unwrap()
         .as_str();
 
-    let result = scene.ucmd().arg("-l").arg("test_inode").run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert!(!re_long.is_match(&result.stdout));
-    assert!(!result.stdout.contains(inode_long));
+    let result = scene.ucmd().arg("-l").arg("test_inode").succeeds();
+    assert!(!re_long.is_match(result.stdout_str()));
+    assert!(!result.stdout_str().contains(inode_long));
 
     assert_eq!(inode_short, inode_long)
 }
@@ -844,27 +748,33 @@ fn test_ls_indicator_style() {
     let options = vec!["classify", "file-type", "slash"];
     for opt in options {
         // Verify that classify and file-type both contain indicators for symlinks.
-        let result = scene.ucmd().arg(format!("--indicator-style={}", opt)).run();
-        println!("stdout = {:?}", result.stdout);
-        assert!(result.stdout.contains("/"));
+        scene
+            .ucmd()
+            .arg(format!("--indicator-style={}", opt))
+            .succeeds()
+            .stdout_contains(&"/");
     }
 
     // Same test as above, but with the alternate flags.
     let options = vec!["--classify", "--file-type", "-p"];
     for opt in options {
-        let result = scene.ucmd().arg(format!("{}", opt)).run();
-        println!("stdout = {:?}", result.stdout);
-        assert!(result.stdout.contains("/"));
+        scene
+            .ucmd()
+            .arg(format!("{}", opt))
+            .succeeds()
+            .stdout_contains(&"/");
     }
 
     // Classify and File-Type all contain indicators for pipes and links.
     let options = vec!["classify", "file-type"];
     for opt in options {
         // Verify that classify and file-type both contain indicators for symlinks.
-        let result = scene.ucmd().arg(format!("--indicator-style={}", opt)).run();
-        println!("stdout = {}", result.stdout);
-        assert!(result.stdout.contains("@"));
-        assert!(result.stdout.contains("|"));
+        scene
+            .ucmd()
+            .arg(format!("--indicator-style={}", opt))
+            .succeeds()
+            .stdout_contains(&"@")
+            .stdout_contains(&"|");
     }
 
     // Test sockets. Because the canonical way of making sockets to test is with
@@ -906,26 +816,32 @@ fn test_ls_indicator_style() {
     let options = vec!["classify", "file-type", "slash"];
     for opt in options {
         // Verify that classify and file-type both contain indicators for symlinks.
-        let result = scene.ucmd().arg(format!("--indicator-style={}", opt)).run();
-        println!("stdout = {:?}", result.stdout);
-        assert!(result.stdout.contains("/"));
+        let result = scene
+            .ucmd()
+            .arg(format!("--indicator-style={}", opt))
+            .succeeds()
+            .stdout_contains(&"/");
     }
 
     // Same test as above, but with the alternate flags.
     let options = vec!["--classify", "--file-type", "-p"];
     for opt in options {
-        let result = scene.ucmd().arg(format!("{}", opt)).run();
-        println!("stdout = {:?}", result.stdout);
-        assert!(result.stdout.contains("/"));
+        let result = scene
+            .ucmd()
+            .arg(format!("{}", opt))
+            .succeeds()
+            .stdout_contains(&"/");
     }
 
     // Classify and File-Type all contain indicators for pipes and links.
     let options = vec!["classify", "file-type"];
     for opt in options {
         // Verify that classify and file-type both contain indicators for symlinks.
-        let result = scene.ucmd().arg(format!("--indicator-style={}", opt)).run();
-        println!("stdout = {}", result.stdout);
-        assert!(result.stdout.contains("@"));
+        let result = scene
+            .ucmd()
+            .arg(format!("--indicator-style={}", opt))
+            .succeeds()
+            .stdout_contains(&"@");
     }
 }
 
@@ -934,26 +850,27 @@ fn test_ls_indicator_style() {
 fn test_ls_human_si() {
     let scene = TestScenario::new(util_name!());
     let file1 = "test_human-1";
-    let result = scene
+    scene
         .cmd("truncate")
         .arg("-s")
         .arg("+1000")
         .arg(file1)
-        .run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
+        .succeeds();
 
-    let result = scene.ucmd().arg("-hl").arg(file1).run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert!(result.success);
-    assert!(result.stdout.contains(" 1000 "));
+    scene
+        .ucmd()
+        .arg("-hl")
+        .arg(file1)
+        .succeeds()
+        .stdout_contains(" 1000 ");
 
-    let result = scene.ucmd().arg("-l").arg("--si").arg(file1).run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert!(result.success);
-    assert!(result.stdout.contains(" 1.0k "));
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--si")
+        .arg(file1)
+        .succeeds()
+        .stdout_contains(" 1.0k ");
 
     scene
         .cmd("truncate")
@@ -962,63 +879,68 @@ fn test_ls_human_si() {
         .arg(file1)
         .run();
 
-    let result = scene.ucmd().arg("-hl").arg(file1).run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert!(result.success);
-    assert!(result.stdout.contains(" 1001K "));
+    scene
+        .ucmd()
+        .arg("-hl")
+        .arg(file1)
+        .succeeds()
+        .stdout_contains(" 1001K ");
 
-    let result = scene.ucmd().arg("-l").arg("--si").arg(file1).run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert!(result.success);
-    assert!(result.stdout.contains(" 1.1M "));
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--si")
+        .arg(file1)
+        .succeeds()
+        .stdout_contains(" 1.1M ");
 
     let file2 = "test-human-2";
-    let result = scene
+    scene
         .cmd("truncate")
         .arg("-s")
         .arg("+12300k")
         .arg(file2)
-        .run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert!(result.success);
-    let result = scene.ucmd().arg("-hl").arg(file2).run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert!(result.success);
-    // GNU rounds up, so we must too.
-    assert!(result.stdout.contains(" 13M "));
+        .succeeds();
 
-    let result = scene.ucmd().arg("-l").arg("--si").arg(file2).run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
     // GNU rounds up, so we must too.
-    assert!(result.stdout.contains(" 13M "));
+    scene
+        .ucmd()
+        .arg("-hl")
+        .arg(file2)
+        .succeeds()
+        .stdout_contains(" 13M ");
+
+    // GNU rounds up, so we must too.
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--si")
+        .arg(file2)
+        .succeeds()
+        .stdout_contains(" 13M ");
 
     let file3 = "test-human-3";
-    let result = scene
+    scene
         .cmd("truncate")
         .arg("-s")
         .arg("+9999")
         .arg(file3)
-        .run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert!(result.success);
+        .succeeds();
 
-    let result = scene.ucmd().arg("-hl").arg(file3).run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert!(result.success);
-    assert!(result.stdout.contains(" 9.8K "));
+    scene
+        .ucmd()
+        .arg("-hl")
+        .arg(file3)
+        .succeeds()
+        .stdout_contains(" 9.8K ");
 
-    let result = scene.ucmd().arg("-l").arg("--si").arg(file3).run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert!(result.success);
-    assert!(result.stdout.contains(" 10k "));
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--si")
+        .arg(file3)
+        .succeeds()
+        .stdout_contains(" 10k ");
 }
 
 #[cfg(windows)]
@@ -1035,16 +957,11 @@ fn test_ls_hidden_windows() {
         .arg("+S")
         .arg("+r")
         .arg(file)
-        .run();
-    let result = scene.ucmd().run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert!(result.success);
-    let result = scene.ucmd().arg("-a").run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert!(result.success);
-    assert!(result.stdout.contains(file));
+        .succeeds();
+
+    let result = scene.ucmd().succeeds();
+    assert!(!result.stdout_str().contains(file));
+    let result = scene.ucmd().arg("-a").succeeds().stdout_contains(file);
 }
 
 #[test]
@@ -1104,25 +1021,25 @@ fn test_ls_version_sort() {
         "", // because of '\n' at the end of the output
     ];
 
-    let result = scene.ucmd().arg("-1v").run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
+    let result = scene.ucmd().arg("-1v").succeeds();
+    assert_eq!(
+        result.stdout_str().split('\n').collect::<Vec<_>>(),
+        expected
+    );
 
-    assert_eq!(result.stdout.split('\n').collect::<Vec<_>>(), expected);
+    let result = scene.ucmd().arg("-1").arg("--sort=version").succeeds();
+    assert_eq!(
+        result.stdout_str().split('\n').collect::<Vec<_>>(),
+        expected
+    );
 
-    let result = scene.ucmd().arg("-1").arg("--sort=version").run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-
-    assert_eq!(result.stdout.split('\n').collect::<Vec<_>>(), expected);
-
-    let result = scene.ucmd().arg("-a1v").run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-
+    let result = scene.ucmd().arg("-a1v").succeeds();
     expected.insert(0, "..");
     expected.insert(0, ".");
-    assert_eq!(result.stdout.split('\n').collect::<Vec<_>>(), expected,)
+    assert_eq!(
+        result.stdout_str().split('\n').collect::<Vec<_>>(),
+        expected,
+    )
 }
 
 #[test]
@@ -1138,13 +1055,16 @@ fn test_ls_quoting_style() {
     {
         at.touch("one\ntwo");
         // Default is shell-escape
-        let result = scene.ucmd().arg("one\ntwo").succeeds();
-        assert_eq!(result.stdout, "'one'$'\\n''two'\n");
+        scene
+            .ucmd()
+            .arg("one\ntwo")
+            .succeeds()
+            .stdout_only("'one'$'\\n''two'\n");
 
         for (arg, correct) in &[
-            ("--quoting-style=literal", "one\ntwo"),
-            ("-N", "one\ntwo"),
-            ("--literal", "one\ntwo"),
+            ("--quoting-style=literal", "one?two"),
+            ("-N", "one?two"),
+            ("--literal", "one?two"),
             ("--quoting-style=c", "\"one\\ntwo\""),
             ("-Q", "\"one\\ntwo\""),
             ("--quote-name", "\"one\\ntwo\""),
@@ -1156,15 +1076,52 @@ fn test_ls_quoting_style() {
             ("--quoting-style=shell", "one?two"),
             ("--quoting-style=shell-always", "'one?two'"),
         ] {
-            let result = scene.ucmd().arg(arg).arg("one\ntwo").run();
-            println!("stderr = {:?}", result.stderr);
-            println!("stdout = {:?}", result.stdout);
-            assert_eq!(result.stdout, format!("{}\n", correct));
+            scene
+                .ucmd()
+                .arg(arg)
+                .arg("one\ntwo")
+                .succeeds()
+                .stdout_only(format!("{}\n", correct));
+        }
+
+        for (arg, correct) in &[
+            ("--quoting-style=literal", "one?two"),
+            ("-N", "one?two"),
+            ("--literal", "one?two"),
+            ("--quoting-style=shell", "one?two"),
+            ("--quoting-style=shell-always", "'one?two'"),
+        ] {
+            scene
+                .ucmd()
+                .arg(arg)
+                .arg("--hide-control-chars")
+                .arg("one\ntwo")
+                .succeeds()
+                .stdout_only(format!("{}\n", correct));
+        }
+
+        for (arg, correct) in &[
+            ("--quoting-style=literal", "one\ntwo"),
+            ("-N", "one\ntwo"),
+            ("--literal", "one\ntwo"),
+            ("--quoting-style=shell", "one\ntwo"),
+            ("--quoting-style=shell-always", "'one\ntwo'"),
+        ] {
+            scene
+                .ucmd()
+                .arg(arg)
+                .arg("--show-control-chars")
+                .arg("one\ntwo")
+                .succeeds()
+                .stdout_only(format!("{}\n", correct));
         }
     }
 
-    let result = scene.ucmd().arg("one two").succeeds();
-    assert_eq!(result.stdout, "'one two'\n");
+    scene
+        .ucmd()
+        .arg("one two")
+        .succeeds()
+        .stdout_only("'one two'\n");
 
     for (arg, correct) in &[
         ("--quoting-style=literal", "one two"),
@@ -1181,14 +1138,15 @@ fn test_ls_quoting_style() {
         ("--quoting-style=shell", "'one two'"),
         ("--quoting-style=shell-always", "'one two'"),
     ] {
-        let result = scene.ucmd().arg(arg).arg("one two").run();
-        println!("stderr = {:?}", result.stderr);
-        println!("stdout = {:?}", result.stdout);
-        assert_eq!(result.stdout, format!("{}\n", correct));
+        scene
+            .ucmd()
+            .arg(arg)
+            .arg("one two")
+            .succeeds()
+            .stdout_only(format!("{}\n", correct));
     }
 
-    let result = scene.ucmd().arg("one").succeeds();
-    assert_eq!(result.stdout, "one\n");
+    scene.ucmd().arg("one").succeeds().stdout_only("one\n");
 
     for (arg, correct) in &[
         ("--quoting-style=literal", "one"),
@@ -1203,9 +1161,156 @@ fn test_ls_quoting_style() {
         ("--quoting-style=shell", "one"),
         ("--quoting-style=shell-always", "'one'"),
     ] {
-        let result = scene.ucmd().arg(arg).arg("one").run();
-        println!("stderr = {:?}", result.stderr);
-        println!("stdout = {:?}", result.stdout);
-        assert_eq!(result.stdout, format!("{}\n", correct));
+        scene
+            .ucmd()
+            .arg(arg)
+            .arg("one")
+            .succeeds()
+            .stdout_only(format!("{}\n", correct));
     }
+}
+
+#[test]
+fn test_ls_ignore_hide() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("README.md");
+    at.touch("CONTRIBUTING.md");
+    at.touch("some_other_file");
+    at.touch("READMECAREFULLY.md");
+
+    scene
+        .ucmd()
+        .arg("--hide")
+        .arg("*")
+        .arg("-1")
+        .succeeds()
+        .stdout_only("");
+
+    scene
+        .ucmd()
+        .arg("--ignore")
+        .arg("*")
+        .arg("-1")
+        .succeeds()
+        .stdout_only("");
+
+    scene
+        .ucmd()
+        .arg("--ignore")
+        .arg("irrelevant pattern")
+        .arg("-1")
+        .succeeds()
+        .stdout_only("CONTRIBUTING.md\nREADME.md\nREADMECAREFULLY.md\nsome_other_file\n");
+
+    scene
+        .ucmd()
+        .arg("--ignore")
+        .arg("README*.md")
+        .arg("-1")
+        .succeeds()
+        .stdout_only("CONTRIBUTING.md\nsome_other_file\n");
+
+    scene
+        .ucmd()
+        .arg("--hide")
+        .arg("README*.md")
+        .arg("-1")
+        .succeeds()
+        .stdout_only("CONTRIBUTING.md\nsome_other_file\n");
+
+    scene
+        .ucmd()
+        .arg("--ignore")
+        .arg("*.md")
+        .arg("-1")
+        .succeeds()
+        .stdout_only("some_other_file\n");
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("--ignore")
+        .arg("*.md")
+        .arg("-1")
+        .succeeds()
+        .stdout_only(".\n..\nsome_other_file\n");
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("--hide")
+        .arg("*.md")
+        .arg("-1")
+        .succeeds()
+        .stdout_only(".\n..\nCONTRIBUTING.md\nREADME.md\nREADMECAREFULLY.md\nsome_other_file\n");
+
+    scene
+        .ucmd()
+        .arg("-A")
+        .arg("--ignore")
+        .arg("*.md")
+        .arg("-1")
+        .succeeds()
+        .stdout_only("some_other_file\n");
+
+    scene
+        .ucmd()
+        .arg("-A")
+        .arg("--hide")
+        .arg("*.md")
+        .arg("-1")
+        .succeeds()
+        .stdout_only("CONTRIBUTING.md\nREADME.md\nREADMECAREFULLY.md\nsome_other_file\n");
+
+    // Stacking multiple patterns
+    scene
+        .ucmd()
+        .arg("--ignore")
+        .arg("README*")
+        .arg("--ignore")
+        .arg("CONTRIBUTING*")
+        .arg("-1")
+        .succeeds()
+        .stdout_only("some_other_file\n");
+
+    scene
+        .ucmd()
+        .arg("--hide")
+        .arg("README*")
+        .arg("--ignore")
+        .arg("CONTRIBUTING*")
+        .arg("-1")
+        .succeeds()
+        .stdout_only("some_other_file\n");
+
+    scene
+        .ucmd()
+        .arg("--hide")
+        .arg("README*")
+        .arg("--hide")
+        .arg("CONTRIBUTING*")
+        .arg("-1")
+        .succeeds()
+        .stdout_only("some_other_file\n");
+
+    // Invalid patterns
+    scene
+        .ucmd()
+        .arg("--ignore")
+        .arg("READ[ME")
+        .arg("-1")
+        .succeeds()
+        .stderr_contains(&"Invalid pattern")
+        .stdout_is("CONTRIBUTING.md\nREADME.md\nREADMECAREFULLY.md\nsome_other_file\n");
+
+    scene
+        .ucmd()
+        .arg("--hide")
+        .arg("READ[ME")
+        .arg("-1")
+        .succeeds()
+        .stderr_contains(&"Invalid pattern")
+        .stdout_is("CONTRIBUTING.md\nREADME.md\nREADMECAREFULLY.md\nsome_other_file\n");
 }

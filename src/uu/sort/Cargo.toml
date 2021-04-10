@@ -1,6 +1,6 @@
 [package]
 name = "uu_sort"
-version = "0.0.4"
+version = "0.0.6"
 authors = ["uutils developers"]
 license = "MIT"
 description = "sort ~ (uutils) sort input lines"
@@ -15,12 +15,14 @@ edition = "2018"
 path = "src/sort.rs"
 
 [dependencies]
+rayon = "1.5"
 rand = "0.7"
 clap = "2.33"
-twox-hash = "1.6.0"
+fnv = "1.0.7"
 itertools = "0.8.0"
 semver = "0.9.0"
-uucore = { version=">=0.0.7", package="uucore", path="../../uucore", features=["fs"] }
+smallvec = "1.6.1"
+uucore = { version=">=0.0.8", package="uucore", path="../../uucore", features=["fs"] }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]

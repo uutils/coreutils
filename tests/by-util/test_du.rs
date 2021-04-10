@@ -172,3 +172,21 @@ fn test_du_h_flag_empty_file() {
     assert_eq!(result.stderr, "");
     assert_eq!(result.stdout, "0\tempty.txt\n");
 }
+
+#[cfg(feature = "touch")]
+#[test]
+fn test_du_time() {
+    let ts = TestScenario::new("du");
+
+    let touch = ts.ccmd("touch").arg("-a").arg("-m").arg("-t").arg("201505150000").arg("date_test").run();
+    assert!(touch.success);
+
+    let result = ts.ucmd().arg("--time").arg("date_test").run();
+
+    // cleanup by removing test file
+    ts.cmd("rm").arg("date_test").run();
+
+    assert!(result.success);
+    assert_eq!(result.stderr, "");
+    assert_eq!(result.stdout, "0\t2015-05-15 00:00\tdate_test\n");
+}
