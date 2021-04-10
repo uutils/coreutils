@@ -351,6 +351,13 @@ impl AtPath {
         String::from(self.minus(name).to_str().unwrap())
     }
 
+    pub fn set_readonly(&self, name: &str) {
+        let metadata = fs::metadata(self.plus(name)).unwrap();
+        let mut permissions = metadata.permissions();
+        permissions.set_readonly(true);
+        fs::set_permissions(self.plus(name), permissions).unwrap();
+    }
+
     pub fn open(&self, name: &str) -> File {
         log_info("open", self.plus_as_string(name));
         File::open(self.plus(name)).unwrap()

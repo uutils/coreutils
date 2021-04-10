@@ -23,9 +23,11 @@ use std::fs;
 use std::fs::File;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::result::Result;
 
 const DEFAULT_MODE: u32 = 0o755;
+const DEFAULT_STRIP_PROGRAM: &str = "strip";
 
 #[allow(dead_code)]
 pub struct Behavior {
@@ -37,6 +39,8 @@ pub struct Behavior {
     verbose: bool,
     preserve_timestamps: bool,
     compare: bool,
+    strip: bool,
+    strip_program: String,
 }
 
 #[derive(Clone, Eq, PartialEq)]
@@ -164,17 +168,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("apply access/modification times of SOURCE files to corresponding destination files")
         )
         .arg(
-            // TODO implement flag
             Arg::with_name(OPT_STRIP)
             .short("s")
             .long(OPT_STRIP)
-            .help("(unimplemented) strip symbol tables")
+            .help("strip symbol tables (no action Windows)")
         )
         .arg(
-            // TODO implement flag
             Arg::with_name(OPT_STRIP_PROGRAM)
                 .long(OPT_STRIP_PROGRAM)
-                .help("(unimplemented) program used to strip binaries")
+                .help("program used to strip binaries (no action Windows)")
                 .value_name("PROGRAM")
         )
         .arg(
@@ -266,10 +268,6 @@ fn check_unimplemented<'a>(matches: &ArgMatches) -> Result<(), &'a str> {
         Err("-b")
     } else if matches.is_present(OPT_CREATED) {
         Err("-D")
-    } else if matches.is_present(OPT_STRIP) {
-        Err("--strip, -s")
-    } else if matches.is_present(OPT_STRIP_PROGRAM) {
-        Err("--strip-program")
     } else if matches.is_present(OPT_SUFFIX) {
         Err("--suffix, -S")
     } else if matches.is_present(OPT_TARGET_DIRECTORY) {
@@ -339,6 +337,12 @@ fn behavior(matches: &ArgMatches) -> Result<Behavior, i32> {
         verbose: matches.is_present(OPT_VERBOSE),
         preserve_timestamps: matches.is_present(OPT_PRESERVE_TIMESTAMPS),
         compare: matches.is_present(OPT_COMPARE),
+        strip: matches.is_present(OPT_STRIP),
+        strip_program: String::from(
+            matches
+                .value_of(OPT_STRIP_PROGRAM)
+                .unwrap_or(DEFAULT_STRIP_PROGRAM),
+        ),
     })
 }
 
@@ -519,6 +523,21 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
             err
         );
         return Err(());
+    }
+
+    if b.strip && cfg!(not(windows)) {
+        match Command::new(&b.strip_program).arg(to).output() {
+            Ok(o) => {
+                if !o.status.success() {
+                    crash!(
+                        1,
+                        "strip program failed: {}",
+                        String::from_utf8(o.stderr).unwrap_or_default()
+                    );
+                }
+            }
+            Err(e) => crash!(1, "strip program execution failed: {}", e),
+        }
     }
 
     if mode::chmod(&to, b.mode()).is_err() {
