@@ -162,6 +162,7 @@ impl From<&GlobalSettings> for KeySettings {
 }
 
 /// Represents the string selected by a FieldSelector.
+#[derive(Debug)]
 enum Selection {
     /// If we had to transform this selection, we have to store a new string.
     String(String),
@@ -181,6 +182,7 @@ impl Selection {
 
 type Field = Range<usize>;
 
+#[derive(Debug)]
 struct Line {
     line: String,
     // The common case is not to specify fields. Let's make this fast.
@@ -868,22 +870,12 @@ fn exec(files: Vec<String>, settings: &GlobalSettings) -> i32 {
         } else {
             print_sorted(file_merger, &settings)
         }
-    } else if settings.mode == SortMode::Default && settings.unique {
-        print_sorted(lines.into_iter().map(|line| line.line).dedup(), &settings)
-    } else if settings.mode == SortMode::Month && settings.unique {
-        print_sorted(
-            lines
-                .into_iter()
-                .map(|line| line.line)
-                .dedup_by(|a, b| get_months_dedup(a) == get_months_dedup(b)),
-            &settings,
-        )
     } else if settings.unique {
         print_sorted(
             lines
                 .into_iter()
-                .map(|line| line.line)
-                .dedup_by(|a, b| get_num_dedup(a, settings) == get_num_dedup(b, settings)),
+                .dedup_by(|a, b| compare_by(a, b, settings) == Ordering::Equal)
+                .map(|line| line.line),
             &settings,
         )
     } else {
@@ -1060,63 +1052,6 @@ fn get_leading_gen(a: &str) -> &str {
         result = a;
     }
     result
-}
-
-fn get_months_dedup(a: &str) -> String {
-    let pattern = if a.trim().len().ge(&3) {
-        // Split at 3rd char and get first element of tuple ".0"
-        a.split_at(3).0
-    } else {
-        ""
-    };
-
-    let month = match pattern.to_uppercase().as_ref() {
-        "JAN" => Month::January,
-        "FEB" => Month::February,
-        "MAR" => Month::March,
-        "APR" => Month::April,
-        "MAY" => Month::May,
-        "JUN" => Month::June,
-        "JUL" => Month::July,
-        "AUG" => Month::August,
-        "SEP" => Month::September,
-        "OCT" => Month::October,
-        "NOV" => Month::November,
-        "DEC" => Month::December,
-        _ => Month::Unknown,
-    };
-
-    if month == Month::Unknown {
-        "".to_owned()
-    } else {
-        pattern.to_uppercase()
-    }
-}
-
-// *For all dedups/uniques expect default we must compare leading numbers*
-// Also note numeric compare and unique output is specifically *not* the same as a "sort | uniq"
-// See: https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
-fn get_num_dedup<'a>(a: &'a str, settings: &GlobalSettings) -> &'a str {
-    // Trim and remove any leading zeros
-    let s = a.trim().trim_start_matches('0');
-
-    // Get first char
-    let c = s.chars().next().unwrap_or('\0');
-
-    // Empty lines and non-number lines are treated as the same for dedup
-    // Prepare lines for comparison of only the numerical leading numbers
-    if s.is_empty() || (!c.eq(&NEGATIVE) && !c.is_numeric()) {
-        ""
-    } else {
-        let result = match settings.mode {
-            SortMode::Numeric => get_leading_num(s),
-            SortMode::GeneralNumeric => get_leading_gen(s),
-            SortMode::HumanNumeric => get_leading_num(s),
-            SortMode::Version => get_leading_num(s),
-            _ => s,
-        };
-        result
-    }
 }
 
 #[inline(always)]
