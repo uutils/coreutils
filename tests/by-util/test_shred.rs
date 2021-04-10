@@ -20,6 +20,7 @@ fn test_shred_remove() {
     assert!(at.file_exists(file_b));
 }
 
+#[cfg(not(target_os = "freebsd"))]
 #[test]
 fn test_shred_force() {
     let scene = TestScenario::new(util_name!());
@@ -33,10 +34,6 @@ fn test_shred_force() {
 
     // Make file_a readonly.
     at.set_readonly(file);
-
-    let metadata = at.metadata(file);
-    let permissions = metadata.permissions();
-    println!("test_shred_force: is file readonly: {}", permissions.readonly());
 
     // Try shred -u.
     let result = scene.ucmd().arg("-u").arg(file).run();
