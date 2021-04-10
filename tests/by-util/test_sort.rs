@@ -9,6 +9,11 @@ fn test_helper(file_name: &str, args: &str) {
 }
 
 #[test]
+fn test_months_whitespace() {
+    test_helper("months-whitespace", "-M");
+}
+
+#[test]
 fn test_multiple_decimals_general() {
     new_ucmd!()
         .arg("-g")
