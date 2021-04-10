@@ -10,7 +10,8 @@
 #[macro_use]
 extern crate uucore;
 
-use getopts::{Matches, Options};
+use clap::{App, AppSettings, Arg, ArgMatches};
+use std::convert::TryFrom;
 use std::fs::File;
 use std::io::{self, Write};
 use std::os::unix::process::ExitStatusExt;
@@ -19,8 +20,35 @@ use std::process::Command;
 use tempfile::tempdir;
 use tempfile::TempDir;
 
-static NAME: &str = "stdbuf";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
+static ABOUT: &str =
+    "Run COMMAND, with modified buffering operations for its standard streams.\n\n\
+                      Mandatory arguments to long options are mandatory for short options too.";
+static LONG_HELP: &str = "If MODE is 'L' the corresponding stream will be line buffered.\n\
+                          This option is invalid with standard input.\n\n\
+                          If MODE is '0' the corresponding stream will be unbuffered.\n\n\
+                          Otherwise MODE is a number which may be followed by one of the following:\n\n\
+                          KB 1000, K 1024, MB 1000*1000, M 1024*1024, and so on for G, T, P, E, Z, Y.\n\
+                          In this case the corresponding stream will be fully buffered with the buffer size set to \
+                          MODE bytes.\n\n\
+                          NOTE: If COMMAND adjusts the buffering of its standard streams ('tee' does for e.g.) then \
+                          that will override corresponding settings changed by 'stdbuf'.\n\
+                          Also some filters (like 'dd' and 'cat' etc.) don't use streams for I/O, \
+                          and are thus unaffected by 'stdbuf' settings.\n";
+
+mod options {
+    pub const INPUT: &str = "input";
+    pub const INPUT_SHORT: &str = "i";
+    pub const OUTPUT: &str = "output";
+    pub const OUTPUT_SHORT: &str = "o";
+    pub const ERROR: &str = "error";
+    pub const ERROR_SHORT: &str = "e";
+    pub const COMMAND: &str = "command";
+}
+
+fn get_usage() -> String {
+    format!("{0} OPTION... COMMAND", executable!())
+}
 
 const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.so"));
 
@@ -36,16 +64,19 @@ struct ProgramOptions {
     stderr: BufferType,
 }
 
-enum ErrMsg {
-    Retry,
-    Fatal,
+impl<'a> TryFrom<&ArgMatches<'a>> for ProgramOptions {
+    type Error = ProgramOptionsError;
+
+    fn try_from(matches: &ArgMatches) -> Result<Self, Self::Error> {
+        Ok(ProgramOptions {
+            stdin: check_option(&matches, options::INPUT)?,
+            stdout: check_option(&matches, options::OUTPUT)?,
+            stderr: check_option(&matches, options::ERROR)?,
+        })
+    }
 }
 
-enum OkMsg {
-    Buffering,
-    Help,
-    Version,
-}
+struct ProgramOptionsError(String);
 
 #[cfg(any(
     target_os = "linux",
@@ -71,31 +102,6 @@ fn preload_strings() -> (&'static str, &'static str) {
 )))]
 fn preload_strings() -> (&'static str, &'static str) {
     crash!(1, "Command not supported for this operating system!")
-}
-
-fn print_version() {
-    println!("{} {}", NAME, VERSION);
-}
-
-fn print_usage(opts: &Options) {
-    let brief = "Run COMMAND, with modified buffering operations for its standard streams\n \
-                 Mandatory arguments to long options are mandatory for short options too.";
-    let explanation = "If MODE is 'L' the corresponding stream will be line buffered.\n \
-         This option is invalid with standard input.\n\n \
-         If MODE is '0' the corresponding stream will be unbuffered.\n\n \
-         Otherwise MODE is a number which may be followed by one of the following:\n\n \
-         KB 1000, K 1024, MB 1000*1000, M 1024*1024, and so on for G, T, P, E, Z, Y.\n \
-         In this case the corresponding stream will be fully buffered with the buffer size set to \
-         MODE bytes.\n\n \
-         NOTE: If COMMAND adjusts the buffering of its standard streams ('tee' does for e.g.) then \
-         that will override corresponding settings changed by 'stdbuf'.\n \
-         Also some filters (like 'dd' and 'cat' etc.) don't use streams for I/O, \
-         and are thus unaffected by 'stdbuf' settings.\n";
-    println!("{} {}", NAME, VERSION);
-    println!();
-    println!("Usage: stdbuf OPTION... COMMAND");
-    println!();
-    println!("{}\n{}", opts.usage(brief), explanation);
 }
 
 fn parse_size(size: &str) -> Option<u64> {
@@ -133,63 +139,28 @@ fn parse_size(size: &str) -> Option<u64> {
     Some(buf_size * base.pow(power))
 }
 
-fn check_option(matches: &Matches, name: &str, modified: &mut bool) -> Option<BufferType> {
-    match matches.opt_str(name) {
-        Some(value) => {
-            *modified = true;
-            match &value[..] {
-                "L" => {
-                    if name == "input" {
-                        show_info!("line buffering stdin is meaningless");
-                        None
-                    } else {
-                        Some(BufferType::Line)
-                    }
-                }
-                x => {
-                    let size = match parse_size(x) {
-                        Some(m) => m,
-                        None => {
-                            show_error!("Invalid mode {}", x);
-                            return None;
-                        }
-                    };
-                    Some(BufferType::Size(size))
+fn check_option(matches: &ArgMatches, name: &str) -> Result<BufferType, ProgramOptionsError> {
+    match matches.value_of(name) {
+        Some(value) => match &value[..] {
+            "L" => {
+                if name == options::INPUT {
+                    Err(ProgramOptionsError(format!(
+                        "line buffering stdin is meaningless"
+                    )))
+                } else {
+                    Ok(BufferType::Line)
                 }
             }
-        }
-        None => Some(BufferType::Default),
+            x => {
+                let size = match parse_size(x) {
+                    Some(m) => m,
+                    None => return Err(ProgramOptionsError(format!("invalid mode {}", x))),
+                };
+                Ok(BufferType::Size(size))
+            }
+        },
+        None => Ok(BufferType::Default),
     }
-}
-
-fn parse_options(
-    args: &[String],
-    options: &mut ProgramOptions,
-    optgrps: &Options,
-) -> Result<OkMsg, ErrMsg> {
-    let matches = match optgrps.parse(args) {
-        Ok(m) => m,
-        Err(_) => return Err(ErrMsg::Retry),
-    };
-    if matches.opt_present("help") {
-        return Ok(OkMsg::Help);
-    }
-    if matches.opt_present("version") {
-        return Ok(OkMsg::Version);
-    }
-    let mut modified = false;
-    options.stdin = check_option(&matches, "input", &mut modified).ok_or(ErrMsg::Fatal)?;
-    options.stdout = check_option(&matches, "output", &mut modified).ok_or(ErrMsg::Fatal)?;
-    options.stderr = check_option(&matches, "error", &mut modified).ok_or(ErrMsg::Fatal)?;
-
-    if matches.free.len() != 1 {
-        return Err(ErrMsg::Retry);
-    }
-    if !modified {
-        show_error!("you must specify a buffering mode option");
-        return Err(ErrMsg::Fatal);
-    }
-    Ok(OkMsg::Buffering)
 }
 
 fn set_command_env(command: &mut Command, buffer_name: &str, buffer_type: BufferType) {
@@ -215,72 +186,62 @@ fn get_preload_env(tmp_dir: &mut TempDir) -> io::Result<(String, PathBuf)> {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let usage = get_usage();
 
-    let mut opts = Options::new();
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .after_help(LONG_HELP)
+        .setting(AppSettings::TrailingVarArg)
+        .arg(
+            Arg::with_name(options::INPUT)
+                .long(options::INPUT)
+                .short(options::INPUT_SHORT)
+                .help("adjust standard input stream buffering")
+                .value_name("MODE")
+                .required_unless_one(&[options::OUTPUT, options::ERROR]),
+        )
+        .arg(
+            Arg::with_name(options::OUTPUT)
+                .long(options::OUTPUT)
+                .short(options::OUTPUT_SHORT)
+                .help("adjust standard output stream buffering")
+                .value_name("MODE")
+                .required_unless_one(&[options::INPUT, options::ERROR]),
+        )
+        .arg(
+            Arg::with_name(options::ERROR)
+                .long(options::ERROR)
+                .short(options::ERROR_SHORT)
+                .help("adjust standard error stream buffering")
+                .value_name("MODE")
+                .required_unless_one(&[options::INPUT, options::OUTPUT]),
+        )
+        .arg(
+            Arg::with_name(options::COMMAND)
+                .multiple(true)
+                .takes_value(true)
+                .hidden(true)
+                .required(true),
+        )
+        .get_matches_from(args);
 
-    opts.optopt(
-        "i",
-        "input",
-        "adjust standard input stream buffering",
-        "MODE",
-    );
-    opts.optopt(
-        "o",
-        "output",
-        "adjust standard output stream buffering",
-        "MODE",
-    );
-    opts.optopt(
-        "e",
-        "error",
-        "adjust standard error stream buffering",
-        "MODE",
-    );
-    opts.optflag("", "help", "display this help and exit");
-    opts.optflag("", "version", "output version information and exit");
+    let options = ProgramOptions::try_from(&matches)
+        .unwrap_or_else(|e| crash!(125, "{}\nTry 'stdbuf --help' for more information.", e.0));
 
-    let mut options = ProgramOptions {
-        stdin: BufferType::Default,
-        stdout: BufferType::Default,
-        stderr: BufferType::Default,
-    };
-    let mut command_idx: i32 = -1;
-    for i in 1..=args.len() {
-        match parse_options(&args[1..i], &mut options, &opts) {
-            Ok(OkMsg::Buffering) => {
-                command_idx = (i as i32) - 1;
-                break;
-            }
-            Ok(OkMsg::Help) => {
-                print_usage(&opts);
-                return 0;
-            }
-            Ok(OkMsg::Version) => {
-                print_version();
-                return 0;
-            }
-            Err(ErrMsg::Fatal) => break,
-            Err(ErrMsg::Retry) => continue,
-        }
-    }
-    if command_idx == -1 {
-        crash!(
-            125,
-            "Invalid options\nTry 'stdbuf --help' for more information."
-        );
-    }
-    let command_name = &args[command_idx as usize];
-    let mut command = Command::new(command_name);
+    let mut command_values = matches.values_of::<&str>(options::COMMAND).unwrap();
+    let mut command = Command::new(command_values.next().unwrap());
+    let command_params: Vec<&str> = command_values.collect();
 
     let mut tmp_dir = tempdir().unwrap();
     let (preload_env, libstdbuf) = return_if_err!(1, get_preload_env(&mut tmp_dir));
-    command
-        .args(&args[(command_idx as usize) + 1..])
-        .env(preload_env, libstdbuf);
+    command.env(preload_env, libstdbuf);
     set_command_env(&mut command, "_STDBUF_I", options.stdin);
     set_command_env(&mut command, "_STDBUF_O", options.stdout);
     set_command_env(&mut command, "_STDBUF_E", options.stderr);
+    command.args(command_params);
+
     let mut process = match command.spawn() {
         Ok(p) => p,
         Err(e) => crash!(1, "failed to execute process: {}", e),

@@ -2316,7 +2316,7 @@ dependencies = [
 name = "uu_stdbuf"
 version = "0.0.6"
 dependencies = [
- "getopts",
+ "clap",
  "tempfile",
  "uu_stdbuf_libstdbuf",
  "uucore",
@@ -2500,7 +2500,7 @@ dependencies = [
 name = "uu_unlink"
 version = "0.0.6"
 dependencies = [
- "getopts",
+ "clap",
  "libc",
  "uucore",
  "uucore_procs",

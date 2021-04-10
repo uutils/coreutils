@@ -1,5 +1,31 @@
 use crate::common::util::*;
 
+fn test_helper(file_name: &str, args: &str) {
+    new_ucmd!()
+        .arg(args)
+        .arg(format!("{}.txt", file_name))
+        .succeeds()
+        .stdout_is_fixture(format!("{}.expected", file_name));
+}
+
+#[test]
+fn test_multiple_decimals_general() {
+    new_ucmd!()
+        .arg("-g")
+        .arg("multiple_decimals_general.txt")
+        .succeeds()
+        .stdout_is("\n\n\n\n\n\n\n\nCARAvan\n-2028789030\n-896689\n-8.90880\n-1\n-.05\n000\n00000001\n1\n1.040000000\n1.444\n1.58590\n8.013\n45\n46.89\n576,446.88800000\n576,446.890\n               4567.\n4567.1\n4567.34\n\t\t\t\t\t\t\t\t\t\t4567..457\n\t\t\t\t37800\n\t\t\t\t\t\t45670.89079.098\n\t\t\t\t\t\t45670.89079.1\n4798908.340000000000\n4798908.45\n4798908.8909800\n");
+}
+
+#[test]
+fn test_multiple_decimals_numeric() {
+    new_ucmd!()
+        .arg("-n")
+        .arg("multiple_decimals_numeric.txt")
+        .succeeds()
+        .stdout_is("-2028789030\n-896689\n-8.90880\n-1\n-.05\n\n\n\n\n\n\n\n\n000\nCARAvan\n00000001\n1\n1.040000000\n1.444\n1.58590\n8.013\n45\n46.89\n               4567.\n4567.1\n4567.34\n\t\t\t\t\t\t\t\t\t\t4567..457\n\t\t\t\t37800\n\t\t\t\t\t\t45670.89079.098\n\t\t\t\t\t\t45670.89079.1\n576,446.88800000\n576,446.890\n4798908.340000000000\n4798908.45\n4798908.8909800\n");
+}
+
 #[test]
 fn test_check_zero_terminated_failure() {
     new_ucmd!()
@@ -42,6 +68,21 @@ fn test_random_shuffle_contains_all_lines() {
 
     assert_ne!(result, expected);
     assert_eq!(result_sorted, expected);
+}
+
+#[test]
+fn test_random_shuffle_two_runs_not_the_same() {
+    // check to verify that two random shuffles are not equal; this has the
+    // potential to fail in the very unlikely event that the random order is the same
+    // as the starting order, or if both random sorts end up having the same order.
+    const FILE: &'static str = "default_unsorted_ints.expected";
+    let (at, _ucmd) = at_and_ucmd!();
+    let result = new_ucmd!().arg("-R").arg(FILE).run().stdout;
+    let expected = at.read(FILE);
+    let unexpected = new_ucmd!().arg("-R").arg(FILE).run().stdout;
+
+    assert_ne!(result, expected);
+    assert_ne!(result, unexpected);
 }
 
 #[test]
@@ -514,12 +555,4 @@ fn test_check_silent() {
         .arg("check_fail.txt")
         .fails()
         .stdout_is("");
-}
-
-fn test_helper(file_name: &str, args: &str) {
-    new_ucmd!()
-        .arg(args)
-        .arg(format!("{}{}", file_name, ".txt"))
-        .succeeds()
-        .stdout_is_fixture(format!("{}{}", file_name, ".expected"));
 }
