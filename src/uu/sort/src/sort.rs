@@ -1291,7 +1291,7 @@ fn month_parse(line: &str) -> Month {
     // GNU splits at any 3 letter match "JUNNNN" is JUN
     let pattern = if line.trim().len().ge(&3) {
         // Split a 3 and get first element of tuple ".0"
-        line.split_at(3).0
+        line.trim().split_at(3).0
     } else {
         ""
     };
