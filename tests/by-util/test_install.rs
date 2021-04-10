@@ -2,6 +2,8 @@ use crate::common::util::*;
 use filetime::FileTime;
 use rust_users::*;
 use std::os::unix::fs::PermissionsExt;
+#[cfg(not(windows))]
+use std::process::Command;
 #[cfg(target_os = "linux")]
 use std::thread::sleep;
 
@@ -565,4 +567,98 @@ fn test_install_copy_then_compare_file_with_extra_mode() {
     let after_install_sticky_again = FileTime::from_last_modification_time(&file2_meta);
 
     assert!(after_install_sticky != after_install_sticky_again);
+}
+
+const STRIP_TARGET_FILE: &str = "helloworld_installed";
+const SYMBOL_DUMP_PROGRAM: &str = "objdump";
+const STRIP_SOURCE_FILE_SYMBOL: &str = "main";
+
+fn strip_source_file() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "helloworld_macos"
+    } else {
+        "helloworld_linux"
+    }
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_install_and_strip() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    scene
+        .ucmd()
+        .arg("-s")
+        .arg(strip_source_file())
+        .arg(STRIP_TARGET_FILE)
+        .succeeds()
+        .no_stderr();
+
+    let output = Command::new(SYMBOL_DUMP_PROGRAM)
+        .arg("-t")
+        .arg(at.plus(STRIP_TARGET_FILE))
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(!stdout.contains(STRIP_SOURCE_FILE_SYMBOL));
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_install_and_strip_with_program() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    scene
+        .ucmd()
+        .arg("-s")
+        .arg("--strip-program")
+        .arg("/usr/bin/strip")
+        .arg(strip_source_file())
+        .arg(STRIP_TARGET_FILE)
+        .succeeds()
+        .no_stderr();
+
+    let output = Command::new(SYMBOL_DUMP_PROGRAM)
+        .arg("-t")
+        .arg(at.plus(STRIP_TARGET_FILE))
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(!stdout.contains(STRIP_SOURCE_FILE_SYMBOL));
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_install_and_strip_with_invalid_program() {
+    let scene = TestScenario::new(util_name!());
+
+    let stderr = scene
+        .ucmd()
+        .arg("-s")
+        .arg("--strip-program")
+        .arg("/bin/date")
+        .arg(strip_source_file())
+        .arg(STRIP_TARGET_FILE)
+        .fails()
+        .stderr;
+    assert!(stderr.contains("strip program failed"));
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_install_and_strip_with_non_existent_program() {
+    let scene = TestScenario::new(util_name!());
+
+    let stderr = scene
+        .ucmd()
+        .arg("-s")
+        .arg("--strip-program")
+        .arg("/usr/bin/non_existent_program")
+        .arg(strip_source_file())
+        .arg(STRIP_TARGET_FILE)
+        .fails()
+        .stderr;
+    assert!(stderr.contains("No such file or directory"));
 }
