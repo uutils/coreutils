@@ -1262,10 +1262,21 @@ fn month_compare(a: &str, b: &str) -> Ordering {
     }
 }
 
+fn version_parse(a: &str) -> Version {
+    let result = Version::parse(a);
+
+    match result {
+        Ok(vers_a) => vers_a,
+        // Non-version lines parse to 0.0.0
+        Err(_e) => Version::parse("0.0.0").unwrap(),
+    }
+}
+
 fn version_compare(a: &str, b: &str) -> Ordering {
     #![allow(clippy::comparison_chain)]
-    let ver_a = Version::parse(a);
-    let ver_b = Version::parse(b);
+    let ver_a = version_parse(a);
+    let ver_b = version_parse(b);
+
     // Version::cmp is not implemented; implement comparison directly
     if ver_a > ver_b {
         Ordering::Greater
