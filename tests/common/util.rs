@@ -222,6 +222,12 @@ impl CmdResult {
         self
     }
 
+    /// Like stdout_is_fixture, but for stderr
+    pub fn stderr_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &CmdResult {
+        let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
+        self.stderr_is_bytes(contents)
+    }
+
     /// asserts that
     /// 1.  the command resulted in stdout stream output that equals the
     ///     passed in value
@@ -803,4 +809,13 @@ pub fn read_size(child: &mut Child, size: usize) -> String {
         .read_exact(output.as_mut_slice())
         .unwrap();
     String::from_utf8(output).unwrap()
+}
+
+pub fn vec_of_size(n: usize) -> Vec<u8> {
+    let mut result = Vec::new();
+    for _ in 0..n {
+        result.push('a' as u8);
+    }
+    assert_eq!(result.len(), n);
+    result
 }
