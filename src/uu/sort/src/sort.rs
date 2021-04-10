@@ -677,7 +677,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(
             Arg::with_name(OPT_PARALLEL)
                 .long(OPT_PARALLEL)
-                .help("change the number of threads running concurrently to N")
+                .help("change the number of threads running concurrently to NUM_THREADS")
                 .takes_value(true)
                 .value_name("NUM_THREADS"),
         )
