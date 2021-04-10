@@ -162,7 +162,7 @@ impl CmdResult {
 
     /// asserts that the command's exit code is the same as the given one
     pub fn status_code(&self, code: i32) -> &CmdResult {
-        assert!(self.code == Some(code));
+        assert_eq!(self.code, Some(code));
         self
     }
 

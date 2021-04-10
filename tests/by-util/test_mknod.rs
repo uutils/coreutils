@@ -3,12 +3,7 @@ use crate::common::util::*;
 #[cfg(not(windows))]
 #[test]
 fn test_mknod_help() {
-    assert!(new_ucmd!()
-        .arg("--help")
-        .succeeds()
-        .no_stderr()
-        .stdout
-        .contains("Usage:"));
+    new_ucmd!().arg("--help").succeeds().no_stderr().stdout_contains("Usage: ");
 }
 
 #[test]
@@ -51,35 +46,80 @@ fn test_mknod_fifo_read_only() {
 #[test]
 #[cfg(not(windows))]
 fn test_mknod_fifo_invalid_extra_operand() {
-    assert!(new_ucmd!()
+    new_ucmd!()
         .arg("test_file")
         .arg("p")
         .arg("1")
         .arg("2")
         .fails()
-        .stderr
-        .contains("Fifos do not have major and minor device numbers"));
+        .stderr_contains(&"Fifos do not have major and minor device numbers");
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_mknod_reset_umask() {
+    let umask_before = unsafe { libc::umask(0) };
+    println!("umask_before: {}", umask_before);
+    new_ucmd!().arg("-m").arg("a=r").arg("test_file").arg("p").succeeds();
+    let umask_after = unsafe { libc::umask(umask_before) };
+    assert_eq!(umask_before, umask_after);
 }
 
 #[test]
 #[cfg(not(windows))]
 fn test_mknod_character_device_requires_major_and_minor() {
-    assert!(new_ucmd!()
-        .ucmd()
+    new_ucmd!()
         .arg("test_file")
         .arg("c")
         .fails()
-        .stderr
-        .contains("Missing operand after c"));
+        .status_code(1)
+        .stderr_contains(&"Special files require major and minor device numbers.");
+    new_ucmd!()
+        .arg("test_file")
+        .arg("c")
+        .arg("1")
+        .fails()
+        .status_code(1)
+        .stderr_contains(&"Special files require major and minor device numbers.");
+    new_ucmd!()
+        .arg("test_file")
+        .arg("c")
+        .arg("1")
+        .arg("c")
+        .fails()
+        .status_code(1)
+        .stderr_contains(&"Invalid value for '<MINOR>'");
+    new_ucmd!()
+        .arg("test_file")
+        .arg("c")
+        .arg("c")
+        .arg("1")
+        .fails()
+        .status_code(1)
+        .stderr_contains(&"Invalid value for '<MAJOR>'");
 }
 
 #[test]
 #[cfg(not(windows))]
 fn test_mknod_invalid_arg() {
-    assert!(new_ucmd!()
+    new_ucmd!()
         .arg("--foo")
         .fails()
+        .status_code(1)
         .no_stdout()
-        .stderr
-        .contains("Unrecognized option: 'foo'"));
+        .stderr_contains(&"Found argument '--foo' which wasn't expected");
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_mknod_invalid_mode() {
+    new_ucmd!()
+        .arg("--mode")
+        .arg("rw")
+        .arg("test_file")
+        .arg("p")
+        .fails()
+        .no_stdout()
+        .status_code(1)
+        .stderr_contains(&"invalid mode");
 }
