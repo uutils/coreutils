@@ -22,6 +22,7 @@ use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use rayon::prelude::*;
 use semver::Version;
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::env;
@@ -262,7 +263,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(OPT_CHECK_SILENT)
                 .short("C")
                 .long(OPT_CHECK_SILENT)
-                .help("exit successfully if the given file is already sorted, and exit with status 1 otherwise. "),
+                .help("exit successfully if the given file is already sorted, and exit with status 1 otherwise."),
         )
         .arg(
             Arg::with_name(OPT_IGNORE_CASE)
@@ -353,7 +354,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 if let Ok(n) = line {
                     files.push(
                         std::str::from_utf8(&n)
-                            .expect("Could not parse zero terminated string from input.")
+                            .expect("Could not parse string from zero terminated input.")
                             .to_string(),
                     );
                 }
@@ -488,6 +489,8 @@ fn exec(files: Vec<String>, settings: &mut Settings) -> i32 {
         } else {
             print_sorted(file_merger, &settings)
         }
+    } else if settings.mode == SortMode::Default && settings.unique {
+        print_sorted(lines.iter().dedup(), &settings)
     } else if settings.mode == SortMode::Month && settings.unique {
         print_sorted(
             lines
@@ -499,7 +502,7 @@ fn exec(files: Vec<String>, settings: &mut Settings) -> i32 {
         print_sorted(
             lines
                 .iter()
-                .dedup_by(|a, b| get_nums_dedup(a) == get_nums_dedup(b)),
+                .dedup_by(|a, b| get_num_dedup(a, &settings) == get_num_dedup(b, &settings)),
             &settings,
         )
     } else {
@@ -603,12 +606,13 @@ fn default_compare(a: &str, b: &str) -> Ordering {
 #[inline(always)]
 fn leading_num_common(a: &str) -> &str {
     let mut s = "";
+
+    // check whether char is numeric, whitespace or decimal point or thousand separator
     for (idx, c) in a.char_indices() {
-        // check whether char is numeric, whitespace or decimal point or thousand seperator
         if !c.is_numeric()
             && !c.is_whitespace()
-            && !c.eq(&DECIMAL_PT)
             && !c.eq(&THOUSANDS_SEP)
+            && !c.eq(&DECIMAL_PT)
             // check for e notation
             && !c.eq(&'e')
             && !c.eq(&'E')
@@ -621,7 +625,7 @@ fn leading_num_common(a: &str) -> &str {
             break;
         }
         // If line is not a number line, return the line as is
-        s = a;
+        s = &a;
     }
     s
 }
@@ -633,16 +637,17 @@ fn leading_num_common(a: &str) -> &str {
 // not recognize a positive sign or scientific/E notation so we strip those elements here.
 fn get_leading_num(a: &str) -> &str {
     let mut s = "";
-    let b = leading_num_common(a);
 
-    // GNU numeric sort doesn't recognize '+' or 'e' notation so we strip
-    for (idx, c) in b.char_indices() {
-        if c.eq(&'e') || c.eq(&'E') || b.chars().nth(0).unwrap_or('\0').eq(&POSITIVE) {
-            s = &b[..idx];
+    let a = leading_num_common(a);
+
+    // GNU numeric sort doesn't recognize '+' or 'e' notation so we strip trailing chars
+    for (idx, c) in a.char_indices() {
+        if c.eq(&'e') || c.eq(&'E') || a.chars().nth(0).unwrap_or('\0').eq(&POSITIVE) {
+            s = &a[..idx];
             break;
         }
         // If no further processing needed to be done, return the line as-is to be sorted
-        s = b;
+        s = &a;
     }
 
     // And empty number or non-number lines are to be treated as ‘0’ but only for numeric sort
@@ -657,30 +662,32 @@ fn get_leading_num(a: &str) -> &str {
 // In contrast to numeric compare, GNU general numeric/FP sort *should* recognize positive signs and
 // scientific notation, so we strip those lines only after the end of the following numeric string.
 // For example, 5e10KFD would be 5e10 or 5x10^10 and +10000HFKJFK would become 10000.
-fn get_leading_gen(a: &str) -> String {
+fn get_leading_gen(a: &str) -> &str {
     // Make this iter peekable to see if next char is numeric
-    let mut p_iter = leading_num_common(a).chars().peekable();
-    let mut r = String::new();
+    let raw_leading_num = leading_num_common(a);
+    let mut p_iter = raw_leading_num.chars().peekable();
+    let mut result = "";
     // Cleanup raw stripped strings
     for c in p_iter.to_owned() {
         let next_char_numeric = p_iter.peek().unwrap_or(&'\0').is_numeric();
-        // Only general numeric recognizes e notation and, see block below, the '+' sign
-        if (c.eq(&'e') && !next_char_numeric) || (c.eq(&'E') && !next_char_numeric) {
-            r = a.split(c).next().unwrap_or("").to_owned();
+        // Only general numeric recognizes e notation and the '+' sign
+        if (c.eq(&'e') && !next_char_numeric)
+            || (c.eq(&'E') && !next_char_numeric)
+            // Only GNU (non-general) numeric recognize thousands seperators, takes only leading #
+            || c.eq(&THOUSANDS_SEP)
+        {
+            result = a.split(c).next().unwrap_or("");
             break;
         // If positive sign and next char is not numeric, split at postive sign at keep trailing numbers
         // There is a more elegant way to do this in Rust 1.45, std::str::strip_prefix
         } else if c.eq(&POSITIVE) && !next_char_numeric {
-            let mut v: Vec<&str> = a.split(c).collect();
-            let x = v.split_off(1);
-            r = x.join("");
+            result = a.trim().trim_start_matches('+');
             break;
-        // If no further processing needed to be done, return the line as-is to be sorted
-        } else {
-            r = a.to_owned();
         }
+        // If no further processing needed to be done, return the line as-is to be sorted
+        result = a;
     }
-    r
+    result
 }
 
 fn get_months_dedup(a: &str) -> String {
@@ -714,10 +721,10 @@ fn get_months_dedup(a: &str) -> String {
     }
 }
 
-// *For all dedups/uniques we must compare leading numbers*
+// *For all dedups/uniques expect default we must compare leading numbers*
 // Also note numeric compare and unique output is specifically *not* the same as a "sort | uniq"
 // See: https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
-fn get_nums_dedup(a: &str) -> &str {
+fn get_num_dedup<'a>(a: &'a str, settings: &&mut Settings) -> &'a str {
     // Trim and remove any leading zeros
     let s = a.trim().trim_start_matches('0');
 
@@ -731,20 +738,50 @@ fn get_nums_dedup(a: &str) -> &str {
         ""
     // Prepare lines for comparison of only the numerical leading numbers
     } else {
-        get_leading_num(s)
+        let result = match settings.mode {
+            SortMode::Numeric => get_leading_num(s),
+            SortMode::GeneralNumeric => get_leading_gen(s),
+            SortMode::HumanNumeric => get_leading_num(s),
+            SortMode::Version => get_leading_num(s),
+            _ => s,
+        };
+        result
+    }
+}
+
+#[inline(always)]
+fn remove_thousands_sep<'a, S: Into<Cow<'a, str>>>(input: S) -> Cow<'a, str> {
+    let input = input.into();
+    if input.contains(THOUSANDS_SEP) {
+        let output = input.replace(THOUSANDS_SEP, "");
+        Cow::Owned(output)
+    } else {
+        input
+    }
+}
+
+#[inline(always)]
+fn remove_trailing_dec<'a, S: Into<Cow<'a, str>>>(input: S) -> Cow<'a, str> {
+    let input = input.into();
+    if let Some(s) = input.find(DECIMAL_PT) {
+        let (leading, trailing) = input.split_at(s);
+        let output = [leading, ".", trailing.replace(DECIMAL_PT, "").as_str()].concat();
+        Cow::Owned(output)
+    } else {
+        input
     }
 }
 
 /// Parse the beginning string into an f64, returning -inf instead of NaN on errors.
 #[inline(always)]
 fn permissive_f64_parse(a: &str) -> f64 {
-    // Remove thousands seperators
-    let a = a.replace(THOUSANDS_SEP, "");
-
     // GNU sort treats "NaN" as non-number in numeric, so it needs special care.
     // *Keep this trim before parse* despite what POSIX may say about -b and -n
     // because GNU and BSD both seem to require it to match their behavior
-    match a.trim().parse::<f64>() {
+    //
+    // Remove any trailing decimals, ie 4568..890... becomes 4568.890
+    // Then, we trim whitespace and parse
+    match remove_trailing_dec(a).trim().parse::<f64>() {
         Ok(a) if a.is_nan() => std::f64::NEG_INFINITY,
         Ok(a) => a,
         Err(_) => std::f64::NEG_INFINITY,
@@ -757,8 +794,13 @@ fn numeric_compare(a: &str, b: &str) -> Ordering {
     let sa = get_leading_num(a);
     let sb = get_leading_num(b);
 
-    let fa = permissive_f64_parse(sa);
-    let fb = permissive_f64_parse(sb);
+    // Avoids a string alloc for every line to remove thousands seperators here 
+    // instead of inside the get_leading_num function, which is a HUGE performance benefit
+    let ta = remove_thousands_sep(sa);
+    let tb = remove_thousands_sep(sb);
+
+    let fa = permissive_f64_parse(&ta);
+    let fb = permissive_f64_parse(&tb);
 
     // f64::cmp isn't implemented (due to NaN issues); implement directly instead
     if fa > fb {
@@ -799,8 +841,8 @@ fn general_numeric_compare(a: &str, b: &str) -> Ordering {
 // these types of numbers, we rarely care about pure performance.
 fn human_numeric_convert(a: &str) -> f64 {
     let num_str = get_leading_num(a);
-    let suffix = a.trim_start_matches(num_str);
-    let num_part = permissive_f64_parse(num_str);
+    let suffix = a.trim_start_matches(&num_str);
+    let num_part = permissive_f64_parse(&num_str);
     let suffix: f64 = match suffix.parse().unwrap_or('\0') {
         // SI Units
         'K' => 1E3,
