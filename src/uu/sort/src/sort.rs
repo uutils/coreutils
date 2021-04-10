@@ -1042,9 +1042,8 @@ fn get_leading_gen(a: &str) -> &str {
     for c in p_iter.to_owned() {
         let next_char_numeric = p_iter.peek().unwrap_or(&'\0').is_numeric();
         // Only general numeric recognizes e notation and, see block below, the '+' sign
-        if (c.eq(&'e') || c.eq(&'E')) && !next_char_numeric ||// Only GNU (non-general) numeric recognize thousands seperators, takes only leading #
-         c.eq(&THOUSANDS_SEP)
-        {
+        // Only GNU (non-general) numeric recognize thousands seperators, takes only leading #
+        if (c.eq(&'e') || c.eq(&'E')) && !next_char_numeric || c.eq(&THOUSANDS_SEP) {
             result = a.split(c).next().unwrap_or("");
             break;
         // If positive sign and next char is not numeric, split at postive sign at keep trailing numbers
