@@ -130,6 +130,11 @@ impl CmdResult {
         self.code.expect("Program must be run first")
     }
 
+    pub fn code_is(&self, expected_code: i32) -> &CmdResult {
+        assert_eq!(self.code(), expected_code);
+        self
+    }
+
     /// Returns the program's TempDir
     /// Panics if not present
     pub fn tmpd(&self) -> Rc<TempDir> {
@@ -146,13 +151,25 @@ impl CmdResult {
 
     /// asserts that the command resulted in a success (zero) status code
     pub fn success(&self) -> &CmdResult {
-        assert!(self.success);
+        if !self.success {
+            panic!(
+                "Command was expected to succeed.\nstdout = {}\n stderr = {}",
+                self.stdout_str(),
+                self.stderr_str()
+            );
+        }
         self
     }
 
     /// asserts that the command resulted in a failure (non-zero) status code
     pub fn failure(&self) -> &CmdResult {
-        assert!(!self.success);
+        if self.success {
+            panic!(
+                "Command was expected to fail.\nstdout = {}\n stderr = {}",
+                self.stdout_str(),
+                self.stderr_str()
+            );
+        }
         self
     }
 
@@ -168,7 +185,12 @@ impl CmdResult {
     /// 1.  you can not know exactly what stdout will be or
     /// 2.  you know that stdout will also be empty
     pub fn no_stderr(&self) -> &CmdResult {
-        assert!(self.stderr.is_empty());
+        if !self.stderr.is_empty() {
+            panic!(
+                "Expected stderr to be empty, but it's:\n{}",
+                self.stderr_str()
+            );
+        }
         self
     }
 
@@ -179,7 +201,12 @@ impl CmdResult {
     /// 1.  you can not know exactly what stderr will be or
     /// 2.  you know that stderr will also be empty
     pub fn no_stdout(&self) -> &CmdResult {
-        assert!(self.stdout.is_empty());
+        if !self.stdout.is_empty() {
+            panic!(
+                "Expected stdout to be empty, but it's:\n{}",
+                self.stderr_str()
+            );
+        }
         self
     }
 
@@ -279,6 +306,30 @@ impl CmdResult {
 
     pub fn stderr_contains<T: AsRef<str>>(&self, cmp: &T) -> &CmdResult {
         assert!(self.stderr_str().contains(cmp.as_ref()));
+        self
+    }
+
+    pub fn stdout_does_not_contain<T: AsRef<str>>(&self, cmp: T) -> &CmdResult {
+        assert!(!self.stdout_str().contains(cmp.as_ref()));
+        self
+    }
+
+    pub fn stderr_does_not_contain<T: AsRef<str>>(&self, cmp: &T) -> &CmdResult {
+        assert!(!self.stderr_str().contains(cmp.as_ref()));
+        self
+    }
+
+    pub fn stdout_matches(&self, regex: &regex::Regex) -> &CmdResult {
+        if !regex.is_match(self.stdout_str()) {
+            panic!("Stdout does not match regex:\n{}", self.stdout_str())
+        }
+        self
+    }
+
+    pub fn stdout_does_not_match(&self, regex: &regex::Regex) -> &CmdResult {
+        if regex.is_match(self.stdout_str()) {
+            panic!("Stdout matches regex:\n{}", self.stdout_str())
+        }
         self
     }
 }
