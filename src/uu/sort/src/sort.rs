@@ -22,6 +22,7 @@ use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use rayon::prelude::*;
 use semver::Version;
+use smallvec::SmallVec;
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
@@ -182,7 +183,8 @@ type Field = Range<usize>;
 
 struct Line {
     line: String,
-    selections: Vec<Selection>,
+    // The common case is not to specify fields. Let's make this fast.
+    selections: SmallVec<[Selection; 1]>,
 }
 
 impl Line {
