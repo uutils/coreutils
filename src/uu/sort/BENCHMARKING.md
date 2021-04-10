@@ -14,6 +14,10 @@ Run `cargo build --release` before benchmarking after you make a change!
 - Shuffle the wordlist by running `sort -R /usr/share/dict/american-english > shuffled_wordlist.txt`.
 - Benchmark sorting the wordlist with hyperfine: `hyperfine "target/release/coreutils sort shuffled_wordlist.txt -o output.txt"`.
 
+## Sorting a wordlist with ignore_case
+- Same wordlist as above
+- Benchmark sorting the wordlist ignoring the case with hyperfine: `hyperfine "target/release/coreutils sort shuffled_wordlist.txt -f -o output.txt"`.
+
 ## Sorting numbers
 - Generate a list of numbers: `seq 0 100000 | sort -R > shuffled_numbers.txt`.
 - Benchmark numeric sorting with hyperfine: `hyperfine "target/release/coreutils sort shuffled_numbers.txt -n -o output.txt"`.
