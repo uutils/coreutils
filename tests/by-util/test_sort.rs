@@ -224,6 +224,16 @@ fn test_mixed_floats_ints_chars_numeric_unique() {
 }
 
 #[test]
+fn test_words_unique() {
+    test_helper("words_unique", "-u");
+}
+
+#[test]
+fn test_numeric_unique() {
+    test_helper("numeric_unique", "-nu");
+}
+
+#[test]
 fn test_mixed_floats_ints_chars_numeric_reverse() {
     test_helper("mixed_floats_ints_chars_numeric_unique_reverse", "-nur");
 }
