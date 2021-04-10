@@ -1011,6 +1011,8 @@ fn leading_num_common(a: &str) -> &str {
 fn get_leading_num(a: &str) -> &str {
     let mut s = "";
 
+    let a = leading_num_common(a);
+
     // GNU numeric sort doesn't recognize '+' or 'e' notation so we strip
     for (idx, c) in a.char_indices() {
         if c.eq(&'e') || c.eq(&'E') || a.chars().next().unwrap_or('\0').eq(&POSITIVE) {
