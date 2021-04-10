@@ -2293,7 +2293,7 @@ version = "0.0.6"
 dependencies = [
  "clap",
  "fnv",
- "itertools 0.8.2",
+ "itertools 0.10.0",
  "rand 0.7.3",
  "rayon",
  "semver",
