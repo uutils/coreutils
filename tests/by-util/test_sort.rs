@@ -14,6 +14,11 @@ fn test_months_whitespace() {
 }
 
 #[test]
+fn test_human_numeric_whitespace() {
+    test_helper("human-numeric-whitespace", "-h");
+}
+
+#[test]
 fn test_multiple_decimals_general() {
     new_ucmd!()
         .arg("-g")
