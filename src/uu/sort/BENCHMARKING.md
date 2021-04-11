@@ -25,6 +25,11 @@ Run `cargo build --release` before benchmarking after you make a change!
 -   Generate a list of numbers: `seq 0 100000 | sort -R > shuffled_numbers.txt`.
 -   Benchmark numeric sorting with hyperfine: `hyperfine "target/release/coreutils sort shuffled_numbers.txt -n -o output.txt"`.
 
+## Sorting numbers with -g
+
+-   Same list of numbers as above.
+-   Benchmark numeric sorting with hyperfine: `hyperfine "target/release/coreutils sort shuffled_numbers.txt -g -o output.txt"`.
+
 ## Sorting numbers with SI prefixes
 
 -   Generate a list of numbers:
@@ -57,6 +62,7 @@ Run `cargo build --release` before benchmarking after you make a change!
     ```
 
     ## running
+
     `cargo run > shuffled_numbers_si.txt`
 
     </details>
@@ -75,7 +81,6 @@ Example: `hyperfine "target/release/coreutils sort shuffled_numbers.txt -n -o ou
 `hyperfine "cat shuffled_numbers.txt | target/release/coreutils sort -n > output.txt`
 
 -   Check that performance is similar to the original benchmark.
-
 
 ## Comparing with GNU sort
 

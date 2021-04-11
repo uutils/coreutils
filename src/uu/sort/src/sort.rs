@@ -165,7 +165,6 @@ impl From<&GlobalSettings> for KeySettings {
 }
 
 /// Represents the string selected by a FieldSelector.
-#[derive(Debug)]
 enum SelectionRange {
     /// If we had to transform this selection, we have to store a new string.
     String(String),
@@ -196,10 +195,30 @@ impl SelectionRange {
     }
 }
 
-#[derive(Debug)]
+enum NumCache {
+    AsF64(f64),
+    WithInfo(NumInfo),
+    None,
+}
+
+impl NumCache {
+    fn as_f64(&self) -> f64 {
+        match self {
+            NumCache::AsF64(n) => *n,
+            _ => unreachable!(),
+        }
+    }
+    fn as_num_info(&self) -> &NumInfo {
+        match self {
+            NumCache::WithInfo(n) => n,
+            _ => unreachable!(),
+        }
+    }
+}
+
 struct Selection {
     range: SelectionRange,
-    num_info: Option<NumInfo>,
+    num_cache: NumCache,
 }
 
 impl Selection {
@@ -211,7 +230,6 @@ impl Selection {
 
 type Field = Range<usize>;
 
-#[derive(Debug)]
 struct Line {
     line: String,
     // The common case is not to specify fields. Let's make this fast.
@@ -248,7 +266,7 @@ impl Line {
                         // If there is no match, match the empty string.
                         SelectionRange::ByIndex(0..0)
                     };
-                let num_info = if selector.settings.mode == SortMode::Numeric
+                let num_cache = if selector.settings.mode == SortMode::Numeric
                     || selector.settings.mode == SortMode::HumanNumeric
                 {
                     let (info, num_range) = NumInfo::parse(
@@ -260,11 +278,13 @@ impl Line {
                         },
                     );
                     range.shorten(num_range);
-                    Some(info)
+                    NumCache::WithInfo(info)
+                } else if selector.settings.mode == SortMode::GeneralNumeric {
+                    NumCache::AsF64(permissive_f64_parse(get_leading_gen(range.get_str(&line))))
                 } else {
-                    None
+                    NumCache::None
                 };
-                Selection { range, num_info }
+                Selection { range, num_cache }
             })
             .collect();
         Self { line, selections }
@@ -981,10 +1001,13 @@ fn compare_by(a: &Line, b: &Line, global_settings: &GlobalSettings) -> Ordering 
         } else {
             match settings.mode {
                 SortMode::Numeric | SortMode::HumanNumeric => numeric_str_cmp(
-                    (a_str, a_selection.num_info.as_ref().unwrap()),
-                    (b_str, b_selection.num_info.as_ref().unwrap()),
+                    (a_str, a_selection.num_cache.as_num_info()),
+                    (b_str, b_selection.num_cache.as_num_info()),
                 ),
-                SortMode::GeneralNumeric => general_numeric_compare(a_str, b_str),
+                SortMode::GeneralNumeric => general_numeric_compare(
+                    a_selection.num_cache.as_f64(),
+                    b_selection.num_cache.as_f64(),
+                ),
                 SortMode::Month => month_compare(a_str, b_str),
                 SortMode::Version => version_compare(a_str, b_str),
                 SortMode::Default => default_compare(a_str, b_str),
@@ -1107,19 +1130,12 @@ fn permissive_f64_parse(a: &str) -> f64 {
 /// Compares two floats, with errors and non-numerics assumed to be -inf.
 /// Stops coercing at the first non-numeric char.
 /// We explicitly need to convert to f64 in this case.
-fn general_numeric_compare(a: &str, b: &str) -> Ordering {
+fn general_numeric_compare(a: f64, b: f64) -> Ordering {
     #![allow(clippy::comparison_chain)]
-
-    let sa = get_leading_gen(a);
-    let sb = get_leading_gen(b);
-
-    let fa = permissive_f64_parse(&sa);
-    let fb = permissive_f64_parse(&sb);
-
     // f64::cmp isn't implemented (due to NaN issues); implement directly instead
-    if fa > fb {
+    if a > b {
         Ordering::Greater
-    } else if fa < fb {
+    } else if a < b {
         Ordering::Less
     } else {
         Ordering::Equal
