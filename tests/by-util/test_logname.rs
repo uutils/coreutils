@@ -1,6 +1,5 @@
 use crate::common::util::*;
 use std::env;
-use uucore;
 
 #[test]
 fn test_normal() {

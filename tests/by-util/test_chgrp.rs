@@ -1,6 +1,5 @@
 use crate::common::util::*;
 use rust_users::*;
-use uucore;
 
 #[test]
 fn test_invalid_option() {

@@ -4,7 +4,6 @@ use self::regex::Regex;
 use crate::common::util::*;
 #[cfg(all(unix, not(target_os = "macos")))]
 use rust_users::*;
-use uucore;
 
 #[test]
 fn test_date_email() {

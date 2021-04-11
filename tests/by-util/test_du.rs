@@ -1,5 +1,4 @@
 use crate::common::util::*;
-use uucore;
 
 const SUB_DIR: &str = "subdir/deeper";
 const SUB_DIR_LINKS: &str = "subdir/links";
