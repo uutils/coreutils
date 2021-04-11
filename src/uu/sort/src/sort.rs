@@ -15,9 +15,12 @@
 #[macro_use]
 extern crate uucore;
 
+mod numeric_str_cmp;
+
 use clap::{App, Arg};
 use fnv::FnvHasher;
 use itertools::Itertools;
+use numeric_str_cmp::{numeric_str_cmp, NumInfo, NumInfoParseSettings};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use rayon::prelude::*;
@@ -163,20 +166,46 @@ impl From<&GlobalSettings> for KeySettings {
 
 /// Represents the string selected by a FieldSelector.
 #[derive(Debug)]
-enum Selection {
+enum SelectionRange {
     /// If we had to transform this selection, we have to store a new string.
     String(String),
     /// If there was no transformation, we can store an index into the line.
     ByIndex(Range<usize>),
 }
 
+impl SelectionRange {
+    /// Gets the actual string slice represented by this Selection.
+    fn get_str<'a>(&'a self, line: &'a str) -> &'a str {
+        match self {
+            SelectionRange::String(string) => string.as_str(),
+            SelectionRange::ByIndex(range) => &line[range.to_owned()],
+        }
+    }
+
+    fn shorten(&mut self, new_range: Range<usize>) {
+        match self {
+            SelectionRange::String(string) => {
+                string.drain(new_range.end..);
+                string.drain(..new_range.start);
+            }
+            SelectionRange::ByIndex(range) => {
+                range.end = range.start + new_range.end;
+                range.start += new_range.start;
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+struct Selection {
+    range: SelectionRange,
+    num_info: Option<NumInfo>,
+}
+
 impl Selection {
     /// Gets the actual string slice represented by this Selection.
     fn get_str<'a>(&'a self, line: &'a Line) -> &'a str {
-        match self {
-            Selection::String(string) => string.as_str(),
-            Selection::ByIndex(range) => &line.line[range.to_owned()],
-        }
+        self.range.get_str(&line.line)
     }
 }
 
@@ -206,18 +235,36 @@ impl Line {
             .selectors
             .iter()
             .map(|selector| {
-                if let Some(range) = selector.get_selection(&line, fields.as_deref()) {
-                    if let Some(transformed) =
-                        transform(&line[range.to_owned()], &selector.settings)
-                    {
-                        Selection::String(transformed)
+                let mut range =
+                    if let Some(range) = selector.get_selection(&line, fields.as_deref()) {
+                        if let Some(transformed) =
+                            transform(&line[range.to_owned()], &selector.settings)
+                        {
+                            SelectionRange::String(transformed)
+                        } else {
+                            SelectionRange::ByIndex(range.start().to_owned()..range.end() + 1)
+                        }
                     } else {
-                        Selection::ByIndex(range.start().to_owned()..range.end() + 1)
-                    }
+                        // If there is no match, match the empty string.
+                        SelectionRange::ByIndex(0..0)
+                    };
+                let num_info = if selector.settings.mode == SortMode::Numeric
+                    || selector.settings.mode == SortMode::HumanNumeric
+                {
+                    let (info, num_range) = NumInfo::parse(
+                        range.get_str(&line),
+                        NumInfoParseSettings {
+                            accept_si_units: selector.settings.mode == SortMode::HumanNumeric,
+                            thousands_separator: Some(THOUSANDS_SEP),
+                            decimal_pt: Some(DECIMAL_PT),
+                        },
+                    );
+                    range.shorten(num_range);
+                    Some(info)
                 } else {
-                    // If there is no match, match the empty string.
-                    Selection::ByIndex(0..0)
-                }
+                    None
+                };
+                Selection { range, num_info }
             })
             .collect();
         Self { line, selections }
@@ -923,21 +970,25 @@ fn sort_by(lines: &mut Vec<Line>, settings: &GlobalSettings) {
 
 fn compare_by(a: &Line, b: &Line, global_settings: &GlobalSettings) -> Ordering {
     for (idx, selector) in global_settings.selectors.iter().enumerate() {
-        let a = a.selections[idx].get_str(a);
-        let b = b.selections[idx].get_str(b);
+        let a_selection = &a.selections[idx];
+        let b_selection = &b.selections[idx];
+        let a_str = a_selection.get_str(a);
+        let b_str = b_selection.get_str(b);
         let settings = &selector.settings;
 
         let cmp: Ordering = if settings.random {
-            random_shuffle(a, b, global_settings.salt.clone())
+            random_shuffle(a_str, b_str, global_settings.salt.clone())
         } else {
-            (match settings.mode {
-                SortMode::Numeric => numeric_compare,
-                SortMode::GeneralNumeric => general_numeric_compare,
-                SortMode::HumanNumeric => human_numeric_size_compare,
-                SortMode::Month => month_compare,
-                SortMode::Version => version_compare,
-                SortMode::Default => default_compare,
-            })(a, b)
+            match settings.mode {
+                SortMode::Numeric | SortMode::HumanNumeric => numeric_str_cmp(
+                    (a_str, a_selection.num_info.as_ref().unwrap()),
+                    (b_str, b_selection.num_info.as_ref().unwrap()),
+                ),
+                SortMode::GeneralNumeric => general_numeric_compare(a_str, b_str),
+                SortMode::Month => month_compare(a_str, b_str),
+                SortMode::Version => version_compare(a_str, b_str),
+                SortMode::Default => default_compare(a_str, b_str),
+            }
         };
         if cmp != Ordering::Equal {
             return if settings.reverse { cmp.reverse() } else { cmp };
@@ -945,7 +996,6 @@ fn compare_by(a: &Line, b: &Line, global_settings: &GlobalSettings) -> Ordering 
     }
 
     // Call "last resort compare" if all selectors returned Equal
-
     let cmp = if global_settings.random || global_settings.stable || global_settings.unique {
         Ordering::Equal
     } else {
@@ -997,34 +1047,6 @@ fn leading_num_common(a: &str) -> &str {
     s
 }
 
-// This function cleans up the initial comparison done by leading_num_common for a numeric compare.
-// GNU sort does its numeric comparison through strnumcmp.  However, we don't have or
-// may not want to use libc.  Instead we emulate the GNU sort numeric compare by ignoring
-// those leading number lines GNU sort would not recognize.  GNU numeric compare would
-// not recognize a positive sign or scientific/E notation so we strip those elements here.
-fn get_leading_num(a: &str) -> &str {
-    let mut s = "";
-
-    let a = leading_num_common(a);
-
-    // GNU numeric sort doesn't recognize '+' or 'e' notation so we strip
-    for (idx, c) in a.char_indices() {
-        if c.eq(&'e') || c.eq(&'E') || a.chars().next().unwrap_or('\0').eq(&POSITIVE) {
-            s = &a[..idx];
-            break;
-        }
-        // If no further processing needed to be done, return the line as-is to be sorted
-        s = &a;
-    }
-
-    // And empty number or non-number lines are to be treated as ‘0’ but only for numeric sort
-    // All '0'-ed lines will be sorted later, but only amongst themselves, during the so-called 'last resort comparison.'
-    if s.is_empty() {
-        s = "0";
-    };
-    s
-}
-
 // This function cleans up the initial comparison done by leading_num_common for a general numeric compare.
 // In contrast to numeric compare, GNU general numeric/FP sort *should* recognize positive signs and
 // scientific notation, so we strip those lines only after the end of the following numeric string.
@@ -1055,17 +1077,6 @@ fn get_leading_gen(a: &str) -> &str {
 }
 
 #[inline(always)]
-fn remove_thousands_sep<'a, S: Into<Cow<'a, str>>>(input: S) -> Cow<'a, str> {
-    let input = input.into();
-    if input.contains(THOUSANDS_SEP) {
-        let output = input.replace(THOUSANDS_SEP, "");
-        Cow::Owned(output)
-    } else {
-        input
-    }
-}
-
-#[inline(always)]
 fn remove_trailing_dec<'a, S: Into<Cow<'a, str>>>(input: S) -> Cow<'a, str> {
     let input = input.into();
     if let Some(s) = input.find(DECIMAL_PT) {
@@ -1093,32 +1104,9 @@ fn permissive_f64_parse(a: &str) -> f64 {
     }
 }
 
-fn numeric_compare(a: &str, b: &str) -> Ordering {
-    #![allow(clippy::comparison_chain)]
-
-    let sa = get_leading_num(a);
-    let sb = get_leading_num(b);
-
-    // Avoids a string alloc for every line to remove thousands seperators here
-    // instead of inside the get_leading_num function, which is a HUGE performance benefit
-    let ta = remove_thousands_sep(sa);
-    let tb = remove_thousands_sep(sb);
-
-    let fa = permissive_f64_parse(&ta);
-    let fb = permissive_f64_parse(&tb);
-
-    // f64::cmp isn't implemented (due to NaN issues); implement directly instead
-    if fa > fb {
-        Ordering::Greater
-    } else if fa < fb {
-        Ordering::Less
-    } else {
-        Ordering::Equal
-    }
-}
-
 /// Compares two floats, with errors and non-numerics assumed to be -inf.
 /// Stops coercing at the first non-numeric char.
+/// We explicitly need to convert to f64 in this case.
 fn general_numeric_compare(a: &str, b: &str) -> Ordering {
     #![allow(clippy::comparison_chain)]
 
@@ -1127,48 +1115,6 @@ fn general_numeric_compare(a: &str, b: &str) -> Ordering {
 
     let fa = permissive_f64_parse(&sa);
     let fb = permissive_f64_parse(&sb);
-
-    // f64::cmp isn't implemented (due to NaN issues); implement directly instead
-    if fa > fb {
-        Ordering::Greater
-    } else if fa < fb {
-        Ordering::Less
-    } else {
-        Ordering::Equal
-    }
-}
-
-// GNU/BSD does not handle converting numbers to an equal scale
-// properly.  GNU/BSD simply recognize that there is a human scale and sorts
-// those numbers ahead of other number inputs. There are perhaps limits
-// to the type of behavior we should emulate, and this might be such a limit.
-// Properly handling these units seems like a value add to me. And when sorting
-// these types of numbers, we rarely care about pure performance.
-fn human_numeric_convert(a: &str) -> f64 {
-    let num_str = get_leading_num(a);
-    let suffix = a.trim_start_matches(&num_str);
-    let num_part = permissive_f64_parse(&num_str);
-    let suffix: f64 = match suffix.parse().unwrap_or('\0') {
-        // SI Units
-        'K' => 1E3,
-        'M' => 1E6,
-        'G' => 1E9,
-        'T' => 1E12,
-        'P' => 1E15,
-        'E' => 1E18,
-        'Z' => 1E21,
-        'Y' => 1E24,
-        _ => 1f64,
-    };
-    num_part * suffix
-}
-
-/// Compare two strings as if they are human readable sizes.
-/// AKA 1M > 100k
-fn human_numeric_size_compare(a: &str, b: &str) -> Ordering {
-    #![allow(clippy::comparison_chain)]
-    let fa = human_numeric_convert(a);
-    let fb = human_numeric_convert(b);
 
     // f64::cmp isn't implemented (due to NaN issues); implement directly instead
     if fa > fb {
@@ -1360,30 +1306,6 @@ mod tests {
         let b = "your place";
 
         assert_eq!(Ordering::Less, default_compare(a, b));
-    }
-
-    #[test]
-    fn test_numeric_compare1() {
-        let a = "149:7";
-        let b = "150:5";
-
-        assert_eq!(Ordering::Less, numeric_compare(a, b));
-    }
-
-    #[test]
-    fn test_numeric_compare2() {
-        let a = "-1.02";
-        let b = "1";
-
-        assert_eq!(Ordering::Less, numeric_compare(a, b));
-    }
-
-    #[test]
-    fn test_human_numeric_compare() {
-        let a = "300K";
-        let b = "1M";
-
-        assert_eq!(Ordering::Less, human_numeric_size_compare(a, b));
     }
 
     #[test]
