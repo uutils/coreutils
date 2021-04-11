@@ -547,14 +547,13 @@ impl FromStr for Attribute {
 }
 
 fn add_all_attributes() -> Vec<Attribute> {
-    let mut attr = Vec::new();
+    use Attribute::*;
+
+    let mut attr = vec![Ownership, Timestamps, Context, Xattr, Links];
+
     #[cfg(unix)]
-    attr.push(Attribute::Mode);
-    attr.push(Attribute::Ownership);
-    attr.push(Attribute::Timestamps);
-    attr.push(Attribute::Context);
-    attr.push(Attribute::Xattr);
-    attr.push(Attribute::Links);
+    attr.insert(0, Mode);
+
     attr
 }
 
@@ -714,7 +713,7 @@ fn parse_path_args(path_args: &[String], options: &Options) -> CopyResult<(Vec<S
 
 fn preserve_hardlinks(
     hard_links: &mut Vec<(String, u64)>,
-    source: &std::path::PathBuf,
+    source: &std::path::Path,
     dest: std::path::PathBuf,
     found_hard_link: &mut bool,
 ) -> CopyResult<()> {
@@ -1068,6 +1067,7 @@ fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResu
 }
 
 #[cfg(not(windows))]
+#[allow(clippy::unnecessary_wraps)] // needed for windows version
 fn symlink_file(source: &Path, dest: &Path, context: &str) -> CopyResult<()> {
     match std::os::unix::fs::symlink(source, dest).context(context) {
         Ok(_) => Ok(()),

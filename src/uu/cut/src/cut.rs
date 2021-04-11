@@ -406,7 +406,7 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> i32 {
                 continue;
             }
 
-            if !path.metadata().is_ok() {
+            if path.metadata().is_err() {
                 show_error!("{}: No such file or directory", filename);
                 continue;
             }
@@ -487,7 +487,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("filter field columns from the input source")
                 .takes_value(true)
                 .allow_hyphen_values(true)
-                .value_name("LIST")                
+                .value_name("LIST")
                 .display_order(4),
         )
         .arg(
@@ -535,40 +535,36 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         matches.value_of(options::CHARACTERS),
         matches.value_of(options::FIELDS),
     ) {
-        (Some(byte_ranges), None, None) => {
-            list_to_ranges(&byte_ranges[..], complement).map(|ranges| {
-                Mode::Bytes(
-                    ranges,
-                    Options {
-                        out_delim: Some(
-                            matches
-                                .value_of(options::OUTPUT_DELIMITER)
-                                .unwrap_or_default()
-                                .to_owned(),
-                        ),
-                        zero_terminated: matches.is_present(options::ZERO_TERMINATED),
-                    },
-                )
-            })
-        }
-        (None, Some(char_ranges), None) => {
-            list_to_ranges(&char_ranges[..], complement).map(|ranges| {
-                Mode::Characters(
-                    ranges,
-                    Options {
-                        out_delim: Some(
-                            matches
-                                .value_of(options::OUTPUT_DELIMITER)
-                                .unwrap_or_default()
-                                .to_owned(),
-                        ),
-                        zero_terminated: matches.is_present(options::ZERO_TERMINATED),
-                    },
-                )
-            })
-        }
+        (Some(byte_ranges), None, None) => list_to_ranges(byte_ranges, complement).map(|ranges| {
+            Mode::Bytes(
+                ranges,
+                Options {
+                    out_delim: Some(
+                        matches
+                            .value_of(options::OUTPUT_DELIMITER)
+                            .unwrap_or_default()
+                            .to_owned(),
+                    ),
+                    zero_terminated: matches.is_present(options::ZERO_TERMINATED),
+                },
+            )
+        }),
+        (None, Some(char_ranges), None) => list_to_ranges(char_ranges, complement).map(|ranges| {
+            Mode::Characters(
+                ranges,
+                Options {
+                    out_delim: Some(
+                        matches
+                            .value_of(options::OUTPUT_DELIMITER)
+                            .unwrap_or_default()
+                            .to_owned(),
+                    ),
+                    zero_terminated: matches.is_present(options::ZERO_TERMINATED),
+                },
+            )
+        }),
         (None, None, Some(field_ranges)) => {
-            list_to_ranges(&field_ranges[..], complement).and_then(|ranges| {
+            list_to_ranges(field_ranges, complement).and_then(|ranges| {
                 let out_delim = match matches.value_of(options::OUTPUT_DELIMITER) {
                     Some(s) => {
                         if s.is_empty() {

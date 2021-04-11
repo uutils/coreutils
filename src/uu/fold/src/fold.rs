@@ -66,7 +66,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .takes_value(true),
         )
         .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
-        .get_matches_from(args.clone());
+        .get_matches_from(args);
 
     let bytes = matches.is_present(options::BYTES);
     let spaces = matches.is_present(options::SPACES);

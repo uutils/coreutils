@@ -267,7 +267,7 @@ impl<'a> ParagraphStream<'a> {
                 #[allow(clippy::match_like_matches_macro)]
                 // `matches!(...)` macro not stabilized until rust v1.42
                 l_slice[..colon_posn].chars().all(|x| match x as usize {
-                    y if y < 33 || y > 126 => false,
+                    y if !(33..=126).contains(&y) => false,
                     _ => true,
                 })
             }

@@ -322,7 +322,7 @@ fn convert_size_human(size: u64, multiplier: u64, _block_size: u64) -> String {
         }
     }
     if size == 0 {
-        return format!("0");
+        return "0".to_string();
     }
     format!("{}B", size)
 }

@@ -439,6 +439,7 @@ fn pass_name(pass_type: PassType) -> String {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn wipe_file(
     path_str: &str,
     n_passes: usize,
@@ -472,12 +473,9 @@ fn wipe_file(
 
         let mut perms = metadata.permissions();
         perms.set_readonly(false);
-        match fs::set_permissions(path, perms) {
-            Err(e) => {
-                show_error!("{}", e);
-                return;
-            }
-            _ => {}
+        if let Err(e) = fs::set_permissions(path, perms) {
+            show_error!("{}", e);
+            return;
         }
     }
 
