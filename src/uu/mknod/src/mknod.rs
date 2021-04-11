@@ -67,7 +67,9 @@ fn _makenod(file_name: &str, mode: mode_t, dev: dev_t) -> i32 {
         let errno = libc::mknod(c_str.as_ptr(), mode, dev);
 
         // set umask back to original value
-        if set_umask { libc::umask(last_umask); }
+        if set_umask {
+            libc::umask(last_umask);
+        }
 
         if errno == -1 {
             let c_str = CString::new(NAME).expect("Failed to convert to CString");
