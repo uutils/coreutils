@@ -56,16 +56,18 @@ fn _makenod(file_name: &str, mode: mode_t, dev: dev_t) -> i32 {
 #[cfg(unix)]
 fn _makenod(file_name: &str, mode: mode_t, dev: dev_t) -> i32 {
     let c_str = CString::new(file_name).expect("Failed to convert to CString");
-    let set_umask = mode != MODE_RW_UGO;
+
+    // the user supplied a mode
+    let set_umask = mode & MODE_RW_UGO != MODE_RW_UGO;
 
     unsafe {
         // store prev umask
-        let last_umask = if set_umask { libc::umask(mode) } else { 0 };
+        let last_umask = if set_umask { libc::umask(0) } else { 0 };
+
         let errno = libc::mknod(c_str.as_ptr(), mode, dev);
+
         // set umask back to original value
-        if set_umask {
-            libc::umask(last_umask);
-        }
+        if set_umask { libc::umask(last_umask); }
 
         if errno == -1 {
             let c_str = CString::new(NAME).expect("Failed to convert to CString");
@@ -160,11 +162,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 if ch == 'b' {
                     // block special file
                     _makenod(file_name, S_IFBLK | mode, dev)
-                } else if ch == 'c' {
+                } else if ch == 'c' || ch == 'u' {
                     // char special file
                     _makenod(file_name, S_IFCHR | mode, dev)
                 } else {
-                    unreachable!("{} was validated to be only b or c", ch);
+                    unreachable!("{} was validated to be only b, c or u", ch);
                 }
             }
         }

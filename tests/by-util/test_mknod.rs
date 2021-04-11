@@ -57,16 +57,6 @@ fn test_mknod_fifo_invalid_extra_operand() {
 
 #[test]
 #[cfg(not(windows))]
-fn test_mknod_reset_umask() {
-    let umask_before = unsafe { libc::umask(0) };
-    println!("umask_before: {}", umask_before);
-    new_ucmd!().arg("-m").arg("a=r").arg("test_file").arg("p").succeeds();
-    let umask_after = unsafe { libc::umask(umask_before) };
-    assert_eq!(umask_before, umask_after);
-}
-
-#[test]
-#[cfg(not(windows))]
 fn test_mknod_character_device_requires_major_and_minor() {
     new_ucmd!()
         .arg("test_file")
