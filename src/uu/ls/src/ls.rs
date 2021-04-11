@@ -1042,7 +1042,7 @@ fn sort_entries(entries: &mut Vec<PathBuf>, config: &Config) {
             .sort_by_key(|k| Reverse(get_metadata(k, config).map(|md| md.len()).unwrap_or(0))),
         // The default sort in GNU ls is case insensitive
         Sort::Name => entries.sort_by_key(|k| k.to_string_lossy().to_lowercase()),
-        Sort::Version => entries.sort_by(version_cmp::version_cmp),
+        Sort::Version => entries.sort_by(|a, b| version_cmp::version_cmp(a, b)),
         Sort::None => {}
     }
 
