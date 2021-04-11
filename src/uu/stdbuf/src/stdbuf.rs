@@ -141,12 +141,10 @@ fn parse_size(size: &str) -> Option<u64> {
 
 fn check_option(matches: &ArgMatches, name: &str) -> Result<BufferType, ProgramOptionsError> {
     match matches.value_of(name) {
-        Some(value) => match &value[..] {
+        Some(value) => match value {
             "L" => {
                 if name == options::INPUT {
-                    Err(ProgramOptionsError(format!(
-                        "line buffering stdin is meaningless"
-                    )))
+                    Err(ProgramOptionsError("line buffering stdin is meaningless".to_string()))
                 } else {
                     Ok(BufferType::Line)
                 }

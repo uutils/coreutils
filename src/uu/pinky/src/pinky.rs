@@ -15,7 +15,6 @@ use uucore::utmpx::{self, time, Utmpx};
 
 use std::io::prelude::*;
 use std::io::BufReader;
-use std::io::Result as IOResult;
 
 use std::fs::File;
 use std::os::unix::fs::MetadataExt;
@@ -136,12 +135,8 @@ The utmp file will be {}",
     };
 
     if do_short_format {
-        if let Err(e) = pk.short_pinky() {
-            show_usage_error!("{}", e);
-            1
-        } else {
-            0
-        }
+        pk.short_pinky();
+        0
     } else {
         pk.long_pinky()
     }
@@ -282,7 +277,7 @@ impl Pinky {
         println!();
     }
 
-    fn short_pinky(&self) -> IOResult<()> {
+    fn short_pinky(&self) {
         if self.include_heading {
             self.print_heading();
         }
@@ -295,7 +290,6 @@ impl Pinky {
                 }
             }
         }
-        Ok(())
     }
 
     fn long_pinky(&self) -> i32 {

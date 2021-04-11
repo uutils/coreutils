@@ -31,9 +31,9 @@ fn chgrp<P: AsRef<Path>>(path: P, dgid: gid_t, follow: bool) -> IOResult<()> {
     let s = CString::new(path.as_os_str().as_bytes()).unwrap();
     let ret = unsafe {
         if follow {
-            libc::chown(s.as_ptr(), (0 as gid_t).wrapping_sub(1), dgid)
+            libc::chown(s.as_ptr(), 0_u32.wrapping_sub(1), dgid)
         } else {
-            lchown(s.as_ptr(), (0 as gid_t).wrapping_sub(1), dgid)
+            lchown(s.as_ptr(), 0_u32.wrapping_sub(1), dgid)
         }
     };
     if ret == 0 {

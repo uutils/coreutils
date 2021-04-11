@@ -370,6 +370,7 @@ impl Config {
             })
             .or_else(|| termsize::get().map(|s| s.cols));
 
+        #[allow(clippy::needless_bool)]
         let show_control = if options.is_present(options::HIDE_CONTROL_CHARS) {
             false
         } else if options.is_present(options::SHOW_CONTROL_CHARS) {
