@@ -1144,24 +1144,30 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
 }
 
 fn enter_directory(dir: &Path, config: &Config) {
-    let mut entries: Vec<_> = safe_unwrap!(fs::read_dir(dir).and_then(Iterator::collect));
-
-    entries.retain(|e| should_display(e, config));
-
-    let mut entries: Vec<_> = entries.iter().map(DirEntry::path).collect();
-    sort_entries(&mut entries, config);
-
-    if config.files == Files::All {
-        let mut display_entries = entries.clone();
-        display_entries.insert(0, dir.join(".."));
-        display_entries.insert(0, dir.join("."));
-        display_items(&display_entries, Some(dir), config, false);
+    let mut entries: Vec<_> = if config.files == Files::All {
+        vec![dir.join("."), dir.join("..")]
     } else {
-        display_items(&entries, Some(dir), config, false);
-    }
+        vec![]
+    };
+
+    let mut temp: Vec<_> = safe_unwrap!(fs::read_dir(dir))
+        .map(|res| safe_unwrap!(res))
+        .filter(|e| should_display(e, config))
+        .map(|e| DirEntry::path(&e))
+        .collect();
+
+    sort_entries(&mut temp, config);
+
+    entries.append(&mut temp);
+
+    display_items(&entries, Some(dir), config, false);
 
     if config.recursive {
-        for e in entries.iter().filter(|p| p.is_dir()) {
+        for e in entries
+            .iter()
+            .skip(if config.files == Files::All { 2 } else { 0 })
+            .filter(|p| p.is_dir())
+        {
             println!("\n{}:", e.to_string_lossy());
             enter_directory(&e, config);
         }
