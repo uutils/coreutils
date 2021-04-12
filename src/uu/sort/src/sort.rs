@@ -20,7 +20,6 @@ use fnv::FnvHasher;
 use itertools::Itertools;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
-use rayon::prelude::*;
 use semver::Version;
 use smallvec::SmallVec;
 use std::borrow::Cow;
@@ -34,6 +33,14 @@ use std::mem::replace;
 use std::ops::{Range, RangeInclusive};
 use std::path::Path;
 use uucore::fs::is_stdin_interactive; // for Iterator::dedup()
+use extsort::*;
+use std::str;
+use serde::{Serialize, Deserialize};
+use std::ffi::OsString;
+use std::usize;
+use std::path::PathBuf;
+use std::string::*;
+use serde_json::Result;
 
 static NAME: &str = "sort";
 static ABOUT: &str = "Display sorted concatenation of all FILE(s).";
@@ -72,6 +79,8 @@ static OPT_RANDOM: &str = "random-sort";
 static OPT_ZERO_TERMINATED: &str = "zero-terminated";
 static OPT_PARALLEL: &str = "parallel";
 static OPT_FILES0_FROM: &str = "files0-from";
+static OPT_BUF_SIZE: &str = "buffer-size";
+static OPT_TMP_DIR: &str = "temporary-directory";
 
 static ARG_FILES: &str = "files";
 
@@ -110,6 +119,8 @@ struct GlobalSettings {
     separator: Option<char>,
     threads: String,
     zero_terminated: bool,
+    buffer_size: usize,
+    tmp_dir: PathBuf,
 }
 
 impl Default for GlobalSettings {
@@ -133,6 +144,8 @@ impl Default for GlobalSettings {
             separator: None,
             threads: String::new(),
             zero_terminated: false,
+            buffer_size: 10000000usize,
+            tmp_dir: PathBuf::from(r"/tmp"),
         }
     }
 }
@@ -162,7 +175,7 @@ impl From<&GlobalSettings> for KeySettings {
 }
 
 /// Represents the string selected by a FieldSelector.
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 enum Selection {
     /// If we had to transform this selection, we have to store a new string.
     String(String),
@@ -182,11 +195,27 @@ impl Selection {
 
 type Field = Range<usize>;
 
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct Line {
     line: String,
     // The common case is not to specify fields. Let's make this fast.
     selections: SmallVec<[Selection; 1]>,
+}
+
+impl Sortable for Line {
+    fn encode<W: Write>(&self, write: &mut W) {
+        let line = Line { line: self.line.clone(), selections: self.selections.clone() } ;
+        let serialized = serde_json::to_string(&line).unwrap();
+        write.write_all(serialized.as_bytes()).unwrap();
+    }
+
+    fn decode<R: Read>(read: &mut R) -> Option<Line> {
+        let mut buf = String::new();
+        read.read_to_string(&mut buf).ok();
+        let line: Option<Line> = buf;
+        println!("deserialized = {:?}", line);
+        line
+    }
 }
 
 impl Line {
@@ -682,6 +711,20 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .value_name("NUM_THREADS"),
         )
         .arg(
+            Arg::with_name(OPT_BUF_SIZE)
+                .long(OPT_BUF_SIZE)
+                .help("sets the maximum SIZE of each segment in number of sorted items")
+                .takes_value(true)
+                .value_name("SIZE"),
+        )
+        .arg(
+            Arg::with_name(OPT_TMP_DIR)
+                .long(OPT_TMP_DIR)
+                .help("use DIR for temporaries, not $TMPDIR or /tmp")
+                .takes_value(true)
+                .value_name("DIR"),
+        )
+        .arg(
             Arg::with_name(OPT_FILES0_FROM)
                 .long(OPT_FILES0_FROM)
                 .help("read input from the files specified by NUL-terminated NUL_FILES")
@@ -742,6 +785,32 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             .map(String::from)
             .unwrap_or_else(|| "0".to_string());
         env::set_var("RAYON_NUM_THREADS", &settings.threads);
+    }
+
+    if matches.is_present(OPT_BUF_SIZE) {
+        // 10000 is the default extsort buffer, but it's too small
+        settings.buffer_size = matches
+            .value_of(OPT_BUF_SIZE)
+            .map(String::from)
+            .unwrap_or( format! ( "{}", 10000000usize ) )
+            .parse::<usize>()
+            .unwrap_or(10000000usize);
+    }
+
+    if matches.is_present(OPT_TMP_DIR) {
+        let result = matches
+            .value_of(OPT_TMP_DIR)
+            .map(String::from)
+            .unwrap_or("/tmp".to_owned() );
+        settings.tmp_dir = PathBuf::from(format!(r"{}", result));
+    } else {
+        for (key, value) in env::vars_os() {
+            if key == OsString::from("TMPDIR") {
+                settings.tmp_dir = PathBuf::from(format!(r"{}", value.into_string().unwrap_or("/tmp".to_owned())));
+                break 
+            }
+            settings.tmp_dir = PathBuf::from(r"/tmp");
+        }
     }
 
     settings.zero_terminated = matches.is_present(OPT_ZERO_TERMINATED);
@@ -860,9 +929,9 @@ fn exec(files: Vec<String>, settings: &GlobalSettings) -> i32 {
 
     if settings.check {
         return exec_check_file(&lines, &settings);
-    } else {
-        sort_by(&mut lines, &settings);
     }
+    
+    lines = sort_by(lines, &settings);
 
     if settings.merge {
         if settings.unique {
@@ -917,8 +986,9 @@ fn exec_check_file(unwrapped_lines: &[Line], settings: &GlobalSettings) -> i32 {
     }
 }
 
-fn sort_by(lines: &mut Vec<Line>, settings: &GlobalSettings) {
-    lines.par_sort_by(|a, b| compare_by(a, b, &settings))
+fn sort_by(lines: Vec<Line>, settings: &GlobalSettings) -> Vec<Line> {
+    let sorter = ExternalSorter::new().with_segment_size(settings.buffer_size).with_sort_dir(settings.tmp_dir.clone()).with_parallel_sort();
+    sorter.sort_by(lines.into_iter(), |a, b| compare_by(a, b, &settings)).unwrap().collect()
 }
 
 fn compare_by(a: &Line, b: &Line, global_settings: &GlobalSettings) -> Ordering {
@@ -1004,7 +1074,6 @@ fn leading_num_common(a: &str) -> &str {
 // not recognize a positive sign or scientific/E notation so we strip those elements here.
 fn get_leading_num(a: &str) -> &str {
     let mut s = "";
-
     let a = leading_num_common(a);
 
     // GNU numeric sort doesn't recognize '+' or 'e' notation so we strip
@@ -1019,9 +1088,7 @@ fn get_leading_num(a: &str) -> &str {
 
     // And empty number or non-number lines are to be treated as ‘0’ but only for numeric sort
     // All '0'-ed lines will be sorted later, but only amongst themselves, during the so-called 'last resort comparison.'
-    if s.is_empty() {
-        s = "0";
-    };
+    if s.is_empty() { s = "0"; };
     s
 }
 
@@ -1087,8 +1154,8 @@ fn permissive_f64_parse(a: &str) -> f64 {
     // Remove any trailing decimals, ie 4568..890... becomes 4568.890
     // Then, we trim whitespace and parse
     match remove_trailing_dec(a).trim().parse::<f64>() {
-        Ok(a) if a.is_nan() => std::f64::NEG_INFINITY,
-        Ok(a) => a,
+        Ok(val) if val.is_nan() => std::f64::NEG_INFINITY,
+        Ok(val) => val,
         Err(_) => std::f64::NEG_INFINITY,
     }
 }
@@ -1107,7 +1174,6 @@ fn numeric_compare(a: &str, b: &str) -> Ordering {
     let fa = permissive_f64_parse(&ta);
     let fb = permissive_f64_parse(&tb);
 
-    // f64::cmp isn't implemented (due to NaN issues); implement directly instead
     if fa > fb {
         Ordering::Greater
     } else if fa < fb {
@@ -1150,6 +1216,7 @@ fn human_numeric_convert(a: &str) -> f64 {
     let num_part = permissive_f64_parse(&num_str);
     let suffix: f64 = match suffix.parse().unwrap_or('\0') {
         // SI Units
+        'b' => 1f64,
         'K' => 1E3,
         'M' => 1E6,
         'G' => 1E9,
@@ -1262,6 +1329,7 @@ fn month_compare(a: &str, b: &str) -> Ordering {
     }
 }
 
+#[inline(always)]
 fn version_parse(a: &str) -> Version {
     let result = Version::parse(a);
 
