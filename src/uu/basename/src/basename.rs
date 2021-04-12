@@ -113,8 +113,12 @@ fn basename(fullname: &str, suffix: &str) -> String {
 
 fn strip_suffix(name: &str, suffix: &str) -> String {
     if name == suffix {
-        name.to_owned()
-    } else {
-        name.strip_suffix(suffix).unwrap_or(name).to_owned()
+        return name.to_owned();
     }
+
+    if name.ends_with(suffix) {
+        return name[..name.len() - suffix.len()].to_owned();
+    }
+
+    name.to_owned()
 }
