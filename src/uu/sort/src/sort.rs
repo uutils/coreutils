@@ -40,7 +40,6 @@ use std::ffi::OsString;
 use std::usize;
 use std::path::PathBuf;
 use std::string::*;
-use serde_json::Result;
 
 static NAME: &str = "sort";
 static ABOUT: &str = "Display sorted concatenation of all FILE(s).";
@@ -195,7 +194,7 @@ impl Selection {
 
 type Field = Range<usize>;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct Line {
     line: String,
     // The common case is not to specify fields. Let's make this fast.
@@ -203,18 +202,22 @@ struct Line {
 }
 
 impl Sortable for Line {
+
     fn encode<W: Write>(&self, write: &mut W) {
-        let line = Line { line: self.line.clone(), selections: self.selections.clone() } ;
-        let serialized = serde_json::to_string(&line).unwrap();
-        write.write_all(serialized.as_bytes()).unwrap();
+        let line = Line {line: self.line.clone(), selections: self.selections.clone()};
+        let serialized = serde_json::ser::to_string(&line).unwrap();
+        write.write_all(format!("{}{}", serialized, "\n").as_bytes()).unwrap();
     }
 
     fn decode<R: Read>(read: &mut R) -> Option<Line> {
-        let mut buf = String::new();
-        read.read_to_string(&mut buf).ok();
-        let line: Option<Line> = buf;
-        println!("deserialized = {:?}", line);
-        line
+        let buf_reader = BufReader::new(read);
+        
+        let mut result: Option<Line> = None;
+        for line in buf_reader.lines() {
+            let line_as_str: Line = serde_json::de::from_str(&line.unwrap()).unwrap();
+            result = Some( Line {line: line_as_str.line, selections: line_as_str.selections} );
+        }
+        result
     }
 }
 
@@ -235,7 +238,7 @@ impl Line {
             .selectors
             .iter()
             .map(|selector| {
-                if let Some(range) = selector.get_selection(&line, fields.as_deref()) {
+                if let Some(range) = selector.get_field_selection(&line, fields.as_deref()) {
                     if let Some(transformed) =
                         transform(&line[range.to_owned()], &selector.settings)
                     {
@@ -411,7 +414,7 @@ impl FieldSelector {
 
     /// Look up the slice that corresponds to this selector for the given line.
     /// If needs_fields returned false, fields may be None.
-    fn get_selection<'a>(
+    fn get_field_selection<'a>(
         &self,
         line: &'a str,
         tokens: Option<&[Field]>,
