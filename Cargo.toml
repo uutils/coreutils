@@ -22,6 +22,7 @@ default = [ "feat_common_core" ]
 ## OS feature shortcodes
 macos = [ "feat_os_macos" ]
 unix = [ "feat_os_unix" ]
+linux = [ "feat_os_linux" ]
 windows = [ "feat_os_windows" ]
 ## project-specific feature shortcodes
 nightly = []
@@ -112,6 +113,12 @@ feat_Tier1 = [
 feat_os_macos = [
     "feat_os_unix", ## == a modern/usual *nix platform
 ]
+# "feat_os_linux" == set of utilities which can be built/run on Linux platforms
+feat_os_linux = [
+    "feat_os_unix", ## == a modern/usual *nix platform
+    #
+    "feat_require_linux",
+]
 # "feat_os_unix" == set of utilities which can be built/run on modern/usual *nix platforms
 feat_os_unix = [
     "feat_Tier1",
@@ -177,6 +184,10 @@ feat_require_unix_utmpx = [
     "users",
     "who",
 ]
+# "feat_require_linux" == set of utilities requiring support which is only available on Linux
+feat_require_linux = [
+    "chcon",
+]
 ## (alternate/newer/smaller platforms) feature sets
 # "feat_os_unix_fuchsia" == set of utilities which can be built/run on the "Fuchsia" OS (refs: <https://fuchsia.dev>; <https://en.wikipedia.org/wiki/Google_Fuchsia>)
 feat_os_unix_fuchsia = [
@@ -237,6 +248,7 @@ base32   = { optional=true, version="0.0.7", package="uu_base32", path="src/uu/b
 base64   = { optional=true, version="0.0.7", package="uu_base64", path="src/uu/base64" }
 basename = { optional=true, version="0.0.7", package="uu_basename", path="src/uu/basename" }
 cat      = { optional=true, version="0.0.7", package="uu_cat", path="src/uu/cat" }
+chcon    = { optional=true, version="0.0.7", package="uu_chcon", path="src/uu/chcon" }
 chgrp    = { optional=true, version="0.0.7", package="uu_chgrp", path="src/uu/chgrp" }
 chmod    = { optional=true, version="0.0.7", package="uu_chmod", path="src/uu/chmod" }
 chown    = { optional=true, version="0.0.7", package="uu_chown", path="src/uu/chown" }
@@ -359,6 +371,8 @@ rlimit = "0.4.0"
 rust-users = { version="0.10", package="users" }
 unix_socket = "0.5.0"
 
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dev-dependencies]
+selinux-sys = { version = "0.4" }
 
 [[bin]]
 name = "coreutils"

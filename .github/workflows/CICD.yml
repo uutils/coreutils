@@ -361,6 +361,20 @@ jobs:
           *-pc-windows-msvc) STRIP="" ;;
         esac;
         outputs STRIP
+    - name: Install/setup libselinux
+      shell: bash
+      run: |
+        ## Install/setup libselinux
+        case '${{ matrix.job.target }}' in
+          aarch64-*) DPKG_ARCH=arm64 ;;
+          arm-*-*hf) DPKG_ARCH=armhf ;;
+          i586-*) DPKG_ARCH=i386 ;;
+          i686-*) DPKG_ARCH=i386 ;;
+          x86_64-*) DPKG_ARCH=amd64 ;;
+        esac;
+        case '${{ matrix.job.os }}' in
+          ubuntu-*) sudo dpkg --add-architecture "$DPKG_ARCH" ; sudo apt-get -y update ; sudo apt-get -y install "libselinux1-dev:$DPKG_ARCH" ;;
+        esac
     - name: Create all needed build/work directories
       shell: bash
       run: |
@@ -538,6 +552,7 @@ jobs:
         ## Install/setup prerequisites
         case '${{ matrix.job.os }}' in
           macos-latest) brew install coreutils ;; # needed for testing
+          ubuntu-*) sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev ;;
         esac
     # - name: Reattach HEAD ## may be needed for accurate code coverage info
     #   run: git checkout ${{ github.head_ref }}

@@ -370,18 +370,19 @@ To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 | base64    | df        | runcon |
 | basename  | expr      | stty   |
 | cat       | install   |        |
-| chgrp     | join      |        |
-| chmod     | ls        |        |
-| chown     | more      |        |
-| chroot    | numfmt    |        |
-| cksum     | od (`--strings` and 128-bit data types missing) | |
-| comm      | pr        |        |
-| csplit    | printf    |        |
-| cut       | sort      |        |
-| dircolors | split     |        |
-| dirname   | tac       |        |
-| du        | tail      |        |
-| echo      | test      |        |
+| chcon     | join      |        |
+| chgrp     | ls        |        |
+| chmod     | more      |        |
+| chown     | numfmt    |        |
+| chroot    | od (`--strings` and 128-bit data types missing) | |
+| cksum     | pr        |        |
+| comm      | printf    |        |
+| csplit    | sort      |        |
+| cut       | split     |        |
+| dircolors | tac       |        |
+| dirname   | tail      |        |
+| du        | test      |        |
+| echo      |           |        |
 | env       |           |        |
 | expand    |           |        |
 | factor    |           |        |

@@ -147,8 +147,15 @@ UNIX_PROGS := \
 	users \
 	who
 
+LINUX_PROGS := \
+	chcon
+
 ifneq ($(OS),Windows_NT)
 	PROGS    := $(PROGS) $(UNIX_PROGS)
+endif
+
+ifneq ($(findstring Linux,$(shell uname -o)),)
+	PROGS := $(PROGS) $(LINUX_PROGS)
 endif
 
 UTILS ?= $(PROGS)
@@ -159,6 +166,7 @@ TEST_PROGS  := \
 	base64 \
 	basename \
 	cat \
+	chcon \
 	chgrp \
 	chmod \
 	chown \
