@@ -218,7 +218,7 @@ pub fn get_primitive_dec(
     // assign 0
     let (mut first_segment_raw, second_segment_raw) = match analysis.decimal_pos {
         Some(pos) => (&str_in[..pos], &str_in[pos + 1..]),
-        None => (&str_in[..], "0"),
+        None => (str_in, "0"),
     };
     if first_segment_raw.is_empty() {
         first_segment_raw = "0";

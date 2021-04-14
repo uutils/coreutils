@@ -13,10 +13,13 @@ extern crate lazy_static;
 #[macro_use]
 extern crate uucore;
 
+mod quoting_style;
 mod version_cmp;
 
 use clap::{App, Arg};
+use globset::{self, Glob, GlobSet, GlobSetBuilder};
 use number_prefix::NumberPrefix;
+use quoting_style::{escape_name, QuotingStyle};
 #[cfg(unix)]
 use std::collections::HashMap;
 use std::fs;
@@ -107,6 +110,12 @@ pub mod options {
         pub static HUMAN_READABLE: &str = "human-readable";
         pub static SI: &str = "si";
     }
+    pub mod quoting {
+        pub static ESCAPE: &str = "escape";
+        pub static LITERAL: &str = "literal";
+        pub static C: &str = "quote-name";
+    }
+    pub static QUOTING_STYLE: &str = "quoting-style";
 
     pub mod indicator_style {
         pub static NONE: &str = "none";
@@ -114,7 +123,8 @@ pub mod options {
         pub static FILE_TYPE: &str = "file-type";
         pub static CLASSIFY: &str = "classify";
     }
-
+    pub static HIDE_CONTROL_CHARS: &str = "hide-control-chars";
+    pub static SHOW_CONTROL_CHARS: &str = "show-control-chars";
     pub static WIDTH: &str = "width";
     pub static AUTHOR: &str = "author";
     pub static NO_GROUP: &str = "no-group";
@@ -135,6 +145,8 @@ pub mod options {
     pub static INDICATOR_STYLE: &str = "indicator-style";
     pub static TIME_STYLE: &str = "time-style";
     pub static FULL_TIME: &str = "full-time";
+    pub static HIDE: &str = "hide";
+    pub static IGNORE: &str = "ignore";
 }
 
 #[derive(PartialEq, Eq)]
@@ -197,7 +209,7 @@ struct Config {
     recursive: bool,
     reverse: bool,
     dereference: bool,
-    ignore_backups: bool,
+    ignore_patterns: GlobSet,
     size_format: SizeFormat,
     directory: bool,
     time: Time,
@@ -207,6 +219,7 @@ struct Config {
     color: bool,
     long: LongFormat,
     width: Option<u16>,
+    quoting_style: QuotingStyle,
     indicator_style: IndicatorStyle,
     time_style: TimeStyle,
 }
@@ -278,11 +291,9 @@ impl Config {
             .any(|i| i >= idx)
             {
                 format = Format::Long;
-            } else {
-                if let Some(mut indices) = options.indices_of(options::format::ONELINE) {
-                    if indices.any(|i| i > idx) {
-                        format = Format::OneLine;
-                    }
+            } else if let Some(mut indices) = options.indices_of(options::format::ONELINE) {
+                if indices.any(|i| i > idx) {
+                    format = Format::OneLine;
                 }
             }
         }
@@ -377,6 +388,64 @@ impl Config {
             })
             .or_else(|| termsize::get().map(|s| s.cols));
 
+        let show_control = if options.is_present(options::HIDE_CONTROL_CHARS) {
+            false
+        } else if options.is_present(options::SHOW_CONTROL_CHARS) {
+            true
+        } else {
+            false // TODO: only if output is a terminal and the program is `ls`
+        };
+
+        let quoting_style = if let Some(style) = options.value_of(options::QUOTING_STYLE) {
+            match style {
+                "literal" => QuotingStyle::Literal { show_control },
+                "shell" => QuotingStyle::Shell {
+                    escape: false,
+                    always_quote: false,
+                    show_control,
+                },
+                "shell-always" => QuotingStyle::Shell {
+                    escape: false,
+                    always_quote: true,
+                    show_control,
+                },
+                "shell-escape" => QuotingStyle::Shell {
+                    escape: true,
+                    always_quote: false,
+                    show_control,
+                },
+                "shell-escape-always" => QuotingStyle::Shell {
+                    escape: true,
+                    always_quote: true,
+                    show_control,
+                },
+                "c" => QuotingStyle::C {
+                    quotes: quoting_style::Quotes::Double,
+                },
+                "escape" => QuotingStyle::C {
+                    quotes: quoting_style::Quotes::None,
+                },
+                _ => unreachable!("Should have been caught by Clap"),
+            }
+        } else if options.is_present(options::quoting::LITERAL) {
+            QuotingStyle::Literal { show_control }
+        } else if options.is_present(options::quoting::ESCAPE) {
+            QuotingStyle::C {
+                quotes: quoting_style::Quotes::None,
+            }
+        } else if options.is_present(options::quoting::C) {
+            QuotingStyle::C {
+                quotes: quoting_style::Quotes::Double,
+            }
+        } else {
+            // TODO: use environment variable if available
+            QuotingStyle::Shell {
+                escape: true,
+                always_quote: false,
+                show_control,
+            }
+        };
+
         let indicator_style = if let Some(field) = options.value_of(options::INDICATOR_STYLE) {
             match field {
                 "none" => IndicatorStyle::None,
@@ -426,6 +495,33 @@ impl Config {
         } else {
             TimeStyle::Locale
         };
+        let mut ignore_patterns = GlobSetBuilder::new();
+        if options.is_present(options::IGNORE_BACKUPS) {
+            ignore_patterns.add(Glob::new("*~").unwrap());
+            ignore_patterns.add(Glob::new(".*~").unwrap());
+        }
+
+        for pattern in options.values_of(options::IGNORE).into_iter().flatten() {
+            match Glob::new(pattern) {
+                Ok(p) => {
+                    ignore_patterns.add(p);
+                }
+                Err(_) => show_warning!("Invalid pattern for ignore: '{}'", pattern),
+            }
+        }
+
+        if files == Files::Normal {
+            for pattern in options.values_of(options::HIDE).into_iter().flatten() {
+                match Glob::new(pattern) {
+                    Ok(p) => {
+                        ignore_patterns.add(p);
+                    }
+                    Err(_) => show_warning!("Invalid pattern for hide: '{}'", pattern),
+                }
+            }
+        }
+
+        let ignore_patterns = ignore_patterns.build().unwrap();
 
         Config {
             format,
@@ -434,7 +530,7 @@ impl Config {
             recursive: options.is_present(options::RECURSIVE),
             reverse: options.is_present(options::REVERSE),
             dereference: options.is_present(options::DEREFERENCE),
-            ignore_backups: options.is_present(options::IGNORE_BACKUPS),
+            ignore_patterns,
             size_format,
             directory: options.is_present(options::DIRECTORY),
             time,
@@ -444,6 +540,7 @@ impl Config {
             inode: options.is_present(options::INODE),
             long,
             width,
+            quoting_style,
             indicator_style,
             time_style,
         }
@@ -558,6 +655,78 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .multiple(true)
         )
 
+        // Quoting style
+        .arg(
+            Arg::with_name(options::QUOTING_STYLE)
+                .long(options::QUOTING_STYLE)
+                .takes_value(true)
+                .help("Set quoting style.")
+                .possible_values(&["literal", "shell", "shell-always", "shell-escape", "shell-escape-always", "c", "escape"])
+                .overrides_with_all(&[
+                    options::QUOTING_STYLE,
+                    options::quoting::LITERAL,
+                    options::quoting::ESCAPE,
+                    options::quoting::C,
+                ])
+        )
+        .arg(
+            Arg::with_name(options::quoting::LITERAL)
+                .short("N")
+                .long(options::quoting::LITERAL)
+                .help("Use literal quoting style. Equivalent to `--quoting-style=literal`")
+                .overrides_with_all(&[
+                    options::QUOTING_STYLE,
+                    options::quoting::LITERAL,
+                    options::quoting::ESCAPE,
+                    options::quoting::C,
+                ])
+        )
+        .arg(
+            Arg::with_name(options::quoting::ESCAPE)
+                .short("b")
+                .long(options::quoting::ESCAPE)
+                .help("Use escape quoting style. Equivalent to `--quoting-style=escape`")
+                .overrides_with_all(&[
+                    options::QUOTING_STYLE,
+                    options::quoting::LITERAL,
+                    options::quoting::ESCAPE,
+                    options::quoting::C,
+                ])
+        )
+        .arg(
+            Arg::with_name(options::quoting::C)
+                .short("Q")
+                .long(options::quoting::C)
+                .help("Use C quoting style. Equivalent to `--quoting-style=c`")
+                .overrides_with_all(&[
+                    options::QUOTING_STYLE,
+                    options::quoting::LITERAL,
+                    options::quoting::ESCAPE,
+                    options::quoting::C,
+                ])
+        )
+
+        // Control characters
+        .arg(
+            Arg::with_name(options::HIDE_CONTROL_CHARS)
+                .short("q")
+                .long(options::HIDE_CONTROL_CHARS)
+                .help("Replace control characters with '?' if they are not escaped.")
+                .overrides_with_all(&[
+                    options::HIDE_CONTROL_CHARS,
+                    options::SHOW_CONTROL_CHARS,
+                ])
+        )
+        .arg(
+            Arg::with_name(options::SHOW_CONTROL_CHARS)
+                .long(options::SHOW_CONTROL_CHARS)
+                .help("Show control characters 'as is' if they are not escaped.")
+                .overrides_with_all(&[
+                    options::HIDE_CONTROL_CHARS,
+                    options::SHOW_CONTROL_CHARS,
+                ])
+        )
+
         // Time arguments
         .arg(
             Arg::with_name(options::TIME)
@@ -602,6 +771,27 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::time::ACCESS,
                     options::time::CHANGE,
                 ])
+        )
+
+        // Hide and ignore
+        .arg(
+            Arg::with_name(options::HIDE)
+                .long(options::HIDE)
+                .takes_value(true)
+                .multiple(true)
+        )
+        .arg(
+            Arg::with_name(options::IGNORE)
+                .short("I")
+                .long(options::IGNORE)
+                .takes_value(true)
+                .multiple(true)
+        )
+        .arg(
+            Arg::with_name(options::IGNORE_BACKUPS)
+                .short("B")
+                .long(options::IGNORE_BACKUPS)
+                .help("Ignore entries which end with ~."),
         )
 
         // Sort arguments
@@ -700,12 +890,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 "In a directory, do not ignore all file names that start with '.', only ignore \
                 '.' and '..'.",
             ),
-        )
-        .arg(
-            Arg::with_name(options::IGNORE_BACKUPS)
-                .short("B")
-                .long(options::IGNORE_BACKUPS)
-                .help("Ignore entries which end with ~."),
         )
         .arg(
             Arg::with_name(options::DIRECTORY)
@@ -951,11 +1135,12 @@ fn is_hidden(file_path: &DirEntry) -> bool {
 
 fn should_display(entry: &DirEntry, config: &Config) -> bool {
     let ffi_name = entry.file_name();
-    let name = ffi_name.to_string_lossy();
+
     if config.files == Files::Normal && is_hidden(entry) {
         return false;
     }
-    if config.ignore_backups && name.ends_with('~') {
+
+    if config.ignore_patterns.is_match(&ffi_name) {
         return false;
     }
     true
@@ -1295,7 +1480,7 @@ fn display_file_name(
     metadata: &Metadata,
     config: &Config,
 ) -> Cell {
-    let mut name = get_file_name(path, strip);
+    let mut name = escape_name(get_file_name(path, strip), &config.quoting_style);
     let file_type = metadata.file_type();
 
     match config.indicator_style {
@@ -1362,7 +1547,7 @@ fn display_file_name(
     metadata: &Metadata,
     config: &Config,
 ) -> Cell {
-    let mut name = get_file_name(path, strip);
+    let mut name = escape_name(get_file_name(path, strip), &config.quoting_style);
     if config.format != Format::Long && config.inode {
         name = get_inode(metadata) + " " + &name;
     }

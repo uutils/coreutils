@@ -108,7 +108,7 @@ macro_rules! safe_write(
     ($fd:expr, $($args:tt)+) => (
         match write!($fd, $($args)+) {
             Ok(_) => {}
-            Err(f) => panic!(f.to_string())
+            Err(f) => panic!("{}", f)
         }
     )
 );
@@ -118,7 +118,7 @@ macro_rules! safe_writeln(
     ($fd:expr, $($args:tt)+) => (
         match writeln!($fd, $($args)+) {
             Ok(_) => {}
-            Err(f) => panic!(f.to_string())
+            Err(f) => panic!("{}", f)
         }
     )
 );

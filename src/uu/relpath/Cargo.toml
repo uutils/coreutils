@@ -1,6 +1,6 @@
 [package]
 name = "uu_relpath"
-version = "0.0.4"
+version = "0.0.6"
 authors = ["uutils developers"]
 license = "MIT"
 description = "relpath ~ (uutils) display relative path of PATHNAME_TO from PATHNAME_FROM"
@@ -15,8 +15,8 @@ edition = "2018"
 path = "src/relpath.rs"
 
 [dependencies]
-getopts = "0.2.18"
-uucore = { version=">=0.0.7", package="uucore", path="../../uucore", features=["fs"] }
+clap = "2.33.3"
+uucore = { version=">=0.0.8", package="uucore", path="../../uucore", features=["fs"] }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]

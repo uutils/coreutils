@@ -147,3 +147,48 @@ fn test_invalid_utf8() {
         .failure()
         .stderr_only("uniq: error: invalid utf-8 sequence of 1 bytes from index 0");
 }
+
+#[test]
+fn test_group() {
+    new_ucmd!()
+        .args(&["--group"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("group.expected");
+}
+
+#[test]
+fn test_group_prepend() {
+    new_ucmd!()
+        .args(&["--group=prepend"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("group-prepend.expected");
+}
+
+#[test]
+fn test_group_append() {
+    new_ucmd!()
+        .args(&["--group=append"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("group-append.expected");
+}
+
+#[test]
+fn test_group_both() {
+    new_ucmd!()
+        .args(&["--group=both"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("group-both.expected");
+}
+
+#[test]
+fn test_group_separate() {
+    new_ucmd!()
+        .args(&["--group=separate"])
+        .pipe_in_fixture(INPUT)
+        .run()
+        .stdout_is_fixture("group.expected");
+}

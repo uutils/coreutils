@@ -23,9 +23,11 @@ use std::fs;
 use std::fs::File;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::result::Result;
 
 const DEFAULT_MODE: u32 = 0o755;
+const DEFAULT_STRIP_PROGRAM: &str = "strip";
 
 #[allow(dead_code)]
 pub struct Behavior {
@@ -37,6 +39,8 @@ pub struct Behavior {
     verbose: bool,
     preserve_timestamps: bool,
     compare: bool,
+    strip: bool,
+    strip_program: String,
 }
 
 #[derive(Clone, Eq, PartialEq)]
@@ -164,17 +168,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("apply access/modification times of SOURCE files to corresponding destination files")
         )
         .arg(
-            // TODO implement flag
             Arg::with_name(OPT_STRIP)
             .short("s")
             .long(OPT_STRIP)
-            .help("(unimplemented) strip symbol tables")
+            .help("strip symbol tables (no action Windows)")
         )
         .arg(
-            // TODO implement flag
             Arg::with_name(OPT_STRIP_PROGRAM)
                 .long(OPT_STRIP_PROGRAM)
-                .help("(unimplemented) program used to strip binaries")
+                .help("program used to strip binaries (no action Windows)")
                 .value_name("PROGRAM")
         )
         .arg(
@@ -266,10 +268,6 @@ fn check_unimplemented<'a>(matches: &ArgMatches) -> Result<(), &'a str> {
         Err("-b")
     } else if matches.is_present(OPT_CREATED) {
         Err("-D")
-    } else if matches.is_present(OPT_STRIP) {
-        Err("--strip, -s")
-    } else if matches.is_present(OPT_STRIP_PROGRAM) {
-        Err("--strip-program")
     } else if matches.is_present(OPT_SUFFIX) {
         Err("--suffix, -S")
     } else if matches.is_present(OPT_TARGET_DIRECTORY) {
@@ -339,6 +337,12 @@ fn behavior(matches: &ArgMatches) -> Result<Behavior, i32> {
         verbose: matches.is_present(OPT_VERBOSE),
         preserve_timestamps: matches.is_present(OPT_PRESERVE_TIMESTAMPS),
         compare: matches.is_present(OPT_COMPARE),
+        strip: matches.is_present(OPT_STRIP),
+        strip_program: String::from(
+            matches
+                .value_of(OPT_STRIP_PROGRAM)
+                .unwrap_or(DEFAULT_STRIP_PROGRAM),
+        ),
     })
 }
 
@@ -356,23 +360,29 @@ fn directory(paths: Vec<String>, b: Behavior) -> i32 {
     } else {
         let mut all_successful = true;
 
-        for directory in paths.iter() {
-            let path = Path::new(directory);
-
+        for path in paths.iter().map(Path::new) {
             // if the path already exist, don't try to create it again
             if !path.exists() {
-                if let Err(e) = fs::create_dir(directory) {
-                    show_info!("{}: {}", path.display(), e.to_string());
+                // Differently than the primary functionality (MainFunction::Standard), the directory
+                // functionality should create all ancestors (or components) of a directory regardless
+                // of the presence of the "-D" flag.
+                // NOTE: the GNU "install" sets the expected mode only for the target directory. All
+                // created ancestor directories will have the default mode. Hence it is safe to use
+                // fs::create_dir_all and then only modify the target's dir mode.
+                if let Err(e) = fs::create_dir_all(path) {
+                    show_info!("{}: {}", path.display(), e);
                     all_successful = false;
+                    continue;
+                }
+
+                if b.verbose {
+                    show_info!("creating directory '{}'", path.display());
                 }
             }
 
             if mode::chmod(&path, b.mode()).is_err() {
                 all_successful = false;
-            }
-
-            if b.verbose {
-                show_info!("created directory '{}'", path.display());
+                continue;
             }
         }
         if all_successful {
@@ -513,6 +523,21 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
             err
         );
         return Err(());
+    }
+
+    if b.strip && cfg!(not(windows)) {
+        match Command::new(&b.strip_program).arg(to).output() {
+            Ok(o) => {
+                if !o.status.success() {
+                    crash!(
+                        1,
+                        "strip program failed: {}",
+                        String::from_utf8(o.stderr).unwrap_or_default()
+                    );
+                }
+            }
+            Err(e) => crash!(1, "strip program execution failed: {}", e),
+        }
     }
 
     if mode::chmod(&to, b.mode()).is_err() {
