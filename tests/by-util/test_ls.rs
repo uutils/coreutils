@@ -1355,10 +1355,24 @@ fn test_ls_deref_command_line() {
 
     scene
         .ucmd()
+        .arg("sym_file")
+        .succeeds()
+        .stdout_is("sym_file\n");
+
+    // -l changes the default to no dereferencing
+    scene
+        .ucmd()
         .arg("-l")
         .arg("sym_file")
         .succeeds()
         .stdout_contains("sym_file ->");
+
+    scene
+        .ucmd()
+        .arg("--dereference-command-line-symlink-to-dir")
+        .arg("sym_file")
+        .succeeds()
+        .stdout_is("sym_file\n");
 
     scene
         .ucmd()
@@ -1367,6 +1381,13 @@ fn test_ls_deref_command_line() {
         .arg("sym_file")
         .succeeds()
         .stdout_contains("sym_file ->");
+
+    scene
+        .ucmd()
+        .arg("--dereference-command-line")
+        .arg("sym_file")
+        .succeeds()
+        .stdout_is("sym_file\n");
 
     let result = scene
         .ucmd()
@@ -1402,7 +1423,20 @@ fn test_ls_deref_command_line_dir() {
 
     scene
         .ucmd()
+        .arg("sym_dir")
+        .succeeds()
+        .stdout_contains("nested_file");
+
+    scene
+        .ucmd()
         .arg("-l")
+        .arg("sym_dir")
+        .succeeds()
+        .stdout_contains("sym_dir ->");
+
+    scene
+        .ucmd()
+        .arg("--dereference-command-line-symlink-to-dir")
         .arg("sym_dir")
         .succeeds()
         .stdout_contains("nested_file");
@@ -1411,6 +1445,13 @@ fn test_ls_deref_command_line_dir() {
         .ucmd()
         .arg("-l")
         .arg("--dereference-command-line-symlink-to-dir")
+        .arg("sym_dir")
+        .succeeds()
+        .stdout_contains("nested_file");
+
+    scene
+        .ucmd()
+        .arg("--dereference-command-line")
         .arg("sym_dir")
         .succeeds()
         .stdout_contains("nested_file");
@@ -1452,6 +1493,25 @@ fn test_ls_deref_command_line_dir() {
         .stdout_contains("sym_dir ->");
 
     // --directory does not dereference anything by default
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--directory")
+        .arg("sym_dir")
+        .succeeds()
+        .stdout_contains("sym_dir ->");
+
+    let result = scene
+        .ucmd()
+        .arg("-l")
+        .arg("--directory")
+        .arg("--dereference-command-line-symlink-to-dir")
+        .arg("sym_dir")
+        .succeeds();
+
+    assert!(!result.stdout_str().ends_with("sym_dir"));
+
+    // --classify does not dereference anything by default
     scene
         .ucmd()
         .arg("-l")

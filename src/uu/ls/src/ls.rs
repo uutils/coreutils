@@ -501,6 +501,7 @@ impl Config {
             Dereference::DirArgs
         } else if options.is_present(options::DIRECTORY)
             || indicator_style == IndicatorStyle::Classify
+            || format == Format::Long
         {
             Dereference::None
         } else {
