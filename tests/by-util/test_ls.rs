@@ -564,16 +564,20 @@ fn test_ls_styles() {
         .succeeds();
     assert!(re_full.is_match(&result.stdout));
 
-    /*
-
-    This doesn't work yet, due to limitations with clap --full-time is currently dominant over all short
-    format flags and will always result in the long format
+    let result = scene
+        .ucmd()
+        .arg("--full-time")
+        .arg("-x")
+        .arg("-l")
+        .succeeds();
+    assert!(re_full.is_match(&result.stdout));
 
     at.touch("test2");
     let result = scene.ucmd().arg("--full-time").arg("-x").succeeds();
-    println!("{:?}", result.stdout);
-    assert_eq!(result.stdout, "test2  test\n");
-    */
+    #[cfg(not(windows))]
+    assert_eq!(result.stdout, "test\ntest2\n");
+    #[cfg(windows)]
+    assert_eq!(result.stdout, "test  test2\n");
 }
 
 #[test]

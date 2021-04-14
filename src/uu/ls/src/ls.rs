@@ -248,9 +248,7 @@ impl Config {
                 },
                 options::FORMAT,
             )
-        } else if options.is_present(options::format::LONG)
-            || options.is_present(options::FULL_TIME)
-        {
+        } else if options.is_present(options::format::LONG) {
             (Format::Long, options::format::LONG)
         } else if options.is_present(options::format::ACROSS) {
             (Format::Across, options::format::ACROSS)
@@ -284,6 +282,7 @@ impl Config {
                 options::format::LONG_NO_OWNER,
                 options::format::LONG_NO_GROUP,
                 options::format::LONG_NUMERIC_UID_GID,
+                options::FULL_TIME,
             ]
             .iter()
             .flat_map(|opt| options.indices_of(opt))
