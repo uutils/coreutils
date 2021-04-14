@@ -476,7 +476,8 @@ impl Config {
             //If both FULL_TIME and TIME_STYLE are present
             //The one added last is dominant
             if options.is_present(options::FULL_TIME)
-                && options.index_of(options::FULL_TIME) > options.index_of(options::TIME_STYLE)
+                && options.indices_of(options::FULL_TIME).unwrap().last()
+                    > options.indices_of(options::TIME_STYLE).unwrap().last()
             {
                 TimeStyle::FullIso
             } else {
@@ -1027,6 +1028,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(
             Arg::with_name(options::FULL_TIME)
             .long(options::FULL_TIME)
+            .overrides_with(options::FULL_TIME)
             .help("like -l --time-style=full-iso")
         )
 

@@ -487,12 +487,93 @@ fn test_ls_order_birthtime() {
 
     at.touch("test-birthtime-1");
     at.touch("test-birthtime-2");
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    at.touch("test-birthtime-1");
+
     let result = scene.ucmd().arg("--time=birth").arg("-t").run();
 
     #[cfg(not(windows))]
     assert_eq!(result.stdout, "test-birthtime-2\ntest-birthtime-1\n");
     #[cfg(windows)]
     assert_eq!(result.stdout, "test-birthtime-2  test-birthtime-1\n");
+}
+
+#[test]
+fn test_ls_styles() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("test");
+
+    let re_full = Regex::new(
+        r"[a-z-]* \d* \w* \w* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d* \+\d{4} test\n",
+    )
+    .unwrap();
+    let re_long =
+        Regex::new(r"[a-z-]* \d* \w* \w* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2} test\n").unwrap();
+    let re_iso = Regex::new(r"[a-z-]* \d* \w* \w* \d* \d{2}-\d{2} \d{2}:\d{2} test\n").unwrap();
+    let re_locale =
+        Regex::new(r"[a-z-]* \d* \w* \w* \d* [A-Z][a-z]{2} \d{2} \d{2}:\d{2} test\n").unwrap();
+
+    //full-iso
+    let result = scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=full-iso")
+        .succeeds();
+    assert!(re_full.is_match(&result.stdout));
+    //long-iso
+    let result = scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=long-iso")
+        .succeeds();
+    assert!(re_long.is_match(&result.stdout));
+    //iso
+    let result = scene.ucmd().arg("-l").arg("--time-style=iso").succeeds();
+    assert!(re_iso.is_match(&result.stdout));
+    //locale
+    let result = scene.ucmd().arg("-l").arg("--time-style=locale").succeeds();
+    assert!(re_locale.is_match(&result.stdout));
+
+    //Overwrite options tests
+    let result = scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=long-iso")
+        .arg("--time-style=iso")
+        .succeeds();
+    assert!(re_iso.is_match(&result.stdout));
+    let result = scene
+        .ucmd()
+        .arg("--time-style=iso")
+        .arg("--full-time")
+        .succeeds();
+    assert!(re_full.is_match(&result.stdout));
+    let result = scene
+        .ucmd()
+        .arg("--full-time")
+        .arg("--time-style=iso")
+        .succeeds();
+    assert!(re_iso.is_match(&result.stdout));
+
+    let result = scene
+        .ucmd()
+        .arg("--full-time")
+        .arg("--time-style=iso")
+        .arg("--full-time")
+        .succeeds();
+    assert!(re_full.is_match(&result.stdout));
+
+    /*
+
+    This doesn't work yet, due to limitations with clap --full-time is currently dominant over all short
+    format flags and will always result in the long format
+
+    at.touch("test2");
+    let result = scene.ucmd().arg("--full-time").arg("-x").succeeds();
+    println!("{:?}", result.stdout);
+    assert_eq!(result.stdout, "test2  test\n");
+    */
 }
 
 #[test]
