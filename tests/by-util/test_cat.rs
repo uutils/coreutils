@@ -109,6 +109,7 @@ fn test_directory_and_file() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_three_directories_and_file_and_stdin() {
     let s = TestScenario::new(util_name!());
     s.fixtures.mkdir("test_directory3");
