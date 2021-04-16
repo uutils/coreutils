@@ -26,6 +26,7 @@ fn test_no_options() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_no_options_big_input() {
     for &n in &[
         0,
