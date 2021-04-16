@@ -9,9 +9,9 @@
 //!
 //! To be able to short-circuit when comparing, [NumInfo] must be passed along with each number
 //! to [numeric_str_cmp]. [NumInfo] is generally obtained by calling [NumInfo::parse] and should be cached.
-//! It is allowed to arbitrarily modify len afterwards, which is equivalent to shifting the decimal point.
+//! It is allowed to arbitrarily modify the exponent afterwards, which is equivalent to shifting the decimal point.
 //!
-//! More specifically, len can be understood as an exponent so that the original number is in (1..10)*10^len.
+//! More specifically, exponent can be understood so that the original number is in (1..10)*10^exponent.
 //! From that follows the constraints of this algorithm: It is able to compare numbers in ±(1*10^[i64::MIN]..10*10^[i64::MAX]).
 
 use std::{cmp::Ordering, ops::Range};
@@ -24,7 +24,7 @@ enum Sign {
 
 #[derive(Debug, PartialEq)]
 pub struct NumInfo {
-    len: i64,
+    exponent: i64,
     sign: Sign,
 }
 
@@ -53,7 +53,7 @@ impl NumInfo {
             .skip_while(|&(_, c)| c.is_whitespace())
             .filter(|&(_, c)| parse_settings.thousands_separator != Some(c));
 
-        let mut len = -1;
+        let mut exponent = -1;
         let mut had_decimal_pt = false;
         let mut had_nonzero_digit = false;
         let mut start = None;
@@ -86,7 +86,7 @@ impl NumInfo {
                 };
                 return (
                     NumInfo {
-                        len: len + si_unit,
+                        exponent: exponent + si_unit,
                         sign,
                     },
                     start.unwrap_or(0)..idx,
@@ -98,14 +98,14 @@ impl NumInfo {
             if !had_nonzero_digit && char == '0' {
                 if had_decimal_pt {
                     // We're parsing a number whose first nonzero digit is after the decimal point.
-                    len -= 1;
+                    exponent -= 1;
                 } else {
                     // Skip leading zeroes
                     continue;
                 }
             }
             if !had_decimal_pt {
-                len += 1;
+                exponent += 1;
             }
             if !had_nonzero_digit && char != '0' {
                 start = Some(idx);
@@ -114,9 +114,9 @@ impl NumInfo {
             had_nonzero_digit = had_nonzero_digit || char != '0';
         }
         if let Some(start) = start {
-            (NumInfo { len, sign }, start..num.len())
+            (NumInfo { exponent, sign }, start..num.len())
         } else {
-            (NumInfo { len, sign }, 0..0)
+            (NumInfo { exponent, sign }, 0..0)
         }
     }
 
@@ -147,9 +147,9 @@ pub fn numeric_str_cmp((a, a_info): (&str, &NumInfo), (b, b_info): (&str, &NumIn
         return a_info.sign.cmp(&b_info.sign);
     }
 
-    // check for a difference in the length
-    let ordering = if a_info.len != b_info.len && !a.is_empty() && !b.is_empty() {
-        a_info.len.cmp(&b_info.len)
+    // check for a difference in the exponent
+    let ordering = if a_info.exponent != b_info.exponent && !a.is_empty() && !b.is_empty() {
+        a_info.exponent.cmp(&b_info.exponent)
     } else {
         // walk the characters from the front until we find a difference
         let mut a_chars = a
@@ -201,13 +201,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_len() {
+    fn parses_exp() {
         let n = "1";
         assert_eq!(
             NumInfo::parse(n, Default::default()),
             (
                 NumInfo {
-                    len: 0,
+                    exponent: 0,
                     sign: Sign::Positive
                 },
                 0..1
@@ -218,7 +218,7 @@ mod tests {
             NumInfo::parse(n, Default::default()),
             (
                 NumInfo {
-                    len: 2,
+                    exponent: 2,
                     sign: Sign::Positive
                 },
                 0..3
@@ -235,7 +235,7 @@ mod tests {
             ),
             (
                 NumInfo {
-                    len: 3,
+                    exponent: 3,
                     sign: Sign::Positive
                 },
                 0..5
@@ -246,7 +246,7 @@ mod tests {
             NumInfo::parse(n, Default::default()),
             (
                 NumInfo {
-                    len: 0,
+                    exponent: 0,
                     sign: Sign::Positive
                 },
                 0..1
@@ -257,7 +257,7 @@ mod tests {
             NumInfo::parse(n, Default::default()),
             (
                 NumInfo {
-                    len: 3,
+                    exponent: 3,
                     sign: Sign::Positive
                 },
                 0..7
@@ -265,13 +265,13 @@ mod tests {
         );
     }
     #[test]
-    fn parses_negative_len() {
+    fn parses_negative_exp() {
         let n = "0.00005";
         assert_eq!(
             NumInfo::parse(n, Default::default()),
             (
                 NumInfo {
-                    len: -5,
+                    exponent: -5,
                     sign: Sign::Positive
                 },
                 6..7
@@ -282,7 +282,7 @@ mod tests {
             NumInfo::parse(n, Default::default()),
             (
                 NumInfo {
-                    len: -5,
+                    exponent: -5,
                     sign: Sign::Positive
                 },
                 10..11
@@ -297,7 +297,7 @@ mod tests {
             NumInfo::parse(n, Default::default()),
             (
                 NumInfo {
-                    len: 0,
+                    exponent: 0,
                     sign: Sign::Positive
                 },
                 0..1
@@ -308,7 +308,7 @@ mod tests {
             NumInfo::parse(n, Default::default()),
             (
                 NumInfo {
-                    len: 0,
+                    exponent: 0,
                     sign: Sign::Negative
                 },
                 1..2
@@ -319,7 +319,7 @@ mod tests {
             NumInfo::parse(n, Default::default()),
             (
                 NumInfo {
-                    len: 0,
+                    exponent: 0,
                     sign: Sign::Negative
                 },
                 5..6
