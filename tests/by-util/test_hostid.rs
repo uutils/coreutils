@@ -9,5 +9,5 @@ fn test_normal() {
 
     assert!(result.success);
     let re = Regex::new(r"^[0-9a-f]{8}").unwrap();
-    assert!(re.is_match(&result.stdout.trim()));
+    assert!(re.is_match(&result.stdout_str()));
 }
