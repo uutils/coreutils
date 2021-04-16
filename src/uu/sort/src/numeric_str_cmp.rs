@@ -51,11 +51,15 @@ impl NumInfo {
         let chars = num
             .char_indices()
             .skip_while(|&(_, c)| c.is_whitespace())
-            .filter(|&(_, c)| parse_settings.thousands_separator != Some(c));
+            .filter(|&(_, c)| {
+                parse_settings
+                    .thousands_separator
+                    .map_or(false, |sep| sep == c)
+            });
 
         let mut exponent = -1;
         let mut had_decimal_pt = false;
-        let mut had_nonzero_digit = false;
+        let mut had_digit = false;
         let mut start = None;
         let mut sign = Sign::Positive;
 
@@ -64,6 +68,7 @@ impl NumInfo {
         for (idx, char) in chars {
             if first_char && char == '-' {
                 sign = Sign::Negative;
+                first_char = false;
                 continue;
             }
             first_char = false;
@@ -84,18 +89,29 @@ impl NumInfo {
                 } else {
                     0
                 };
-                return (
-                    NumInfo {
-                        exponent: exponent + si_unit,
-                        sign,
-                    },
-                    start.unwrap_or(0)..idx,
-                );
+                return if let Some(start) = start {
+                    (
+                        NumInfo {
+                            exponent: exponent + si_unit,
+                            sign,
+                        },
+                        start..idx,
+                    )
+                } else {
+                    (
+                        NumInfo {
+                            sign: if had_digit { sign } else { Sign::Positive },
+                            exponent: 0,
+                        },
+                        0..0,
+                    )
+                };
             }
             if Some(char) == parse_settings.decimal_pt {
                 continue;
             }
-            if !had_nonzero_digit && char == '0' {
+            had_digit = true;
+            if start.is_none() && char == '0' {
                 if had_decimal_pt {
                     // We're parsing a number whose first nonzero digit is after the decimal point.
                     exponent -= 1;
@@ -107,16 +123,20 @@ impl NumInfo {
             if !had_decimal_pt {
                 exponent += 1;
             }
-            if !had_nonzero_digit && char != '0' {
+            if start.is_none() && char != '0' {
                 start = Some(idx);
-                had_nonzero_digit = true;
             }
-            had_nonzero_digit = had_nonzero_digit || char != '0';
         }
         if let Some(start) = start {
             (NumInfo { exponent, sign }, start..num.len())
         } else {
-            (NumInfo { exponent, sign }, 0..0)
+            (
+                NumInfo {
+                    sign: if had_digit { sign } else { Sign::Positive },
+                    exponent: 0,
+                },
+                0..0,
+            )
         }
     }
 
@@ -396,5 +416,44 @@ mod tests {
     fn minus_zero() {
         // This matches GNU sort behavior.
         test_helper("-0", "0", Ordering::Less);
+        test_helper("-0x", "0", Ordering::Less);
+    }
+    #[test]
+    fn double_minus() {
+        test_helper("--1", "0", Ordering::Equal);
+    }
+    #[test]
+    fn single_minus() {
+        let info = NumInfo::parse("-", Default::default());
+        assert_eq!(
+            info,
+            (
+                NumInfo {
+                    exponent: 0,
+                    sign: Sign::Positive
+                },
+                0..0
+            )
+        );
+    }
+    #[test]
+    fn invalid_with_unit() {
+        let info = NumInfo::parse(
+            "-K",
+            NumInfoParseSettings {
+                accept_si_units: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            info,
+            (
+                NumInfo {
+                    exponent: 0,
+                    sign: Sign::Positive
+                },
+                0..0
+            )
+        );
     }
 }
