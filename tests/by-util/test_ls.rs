@@ -5,6 +5,7 @@ use crate::common::util::*;
 extern crate regex;
 use self::regex::Regex;
 
+use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -1323,7 +1324,7 @@ fn test_ls_directory() {
     at.mkdir("some_dir");
     at.symlink_dir("some_dir", "sym_dir");
 
-    at.touch("some_dir/nested_file");
+    at.touch(Path::new("some_dir").join("nested_file").to_str().unwrap());
 
     scene
         .ucmd()
@@ -1419,7 +1420,7 @@ fn test_ls_deref_command_line_dir() {
     at.mkdir("some_dir");
     at.symlink_dir("some_dir", "sym_dir");
 
-    at.touch("some_dir/nested_file");
+    at.touch(Path::new("some_dir").join("nested_file").to_str().unwrap());
 
     scene
         .ucmd()
