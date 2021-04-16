@@ -50,7 +50,7 @@ impl NumInfo {
     pub fn parse(num: &str, parse_settings: NumInfoParseSettings) -> (Self, Range<usize>) {
         let chars = num
             .char_indices()
-            .skip_while(|&(_, c)| c == '0' || c.is_whitespace())
+            .skip_while(|&(_, c)| c.is_whitespace())
             .filter(|&(_, c)| parse_settings.thousands_separator != Some(c));
 
         let mut len = -1;
@@ -95,12 +95,17 @@ impl NumInfo {
             if Some(char) == parse_settings.decimal_pt {
                 continue;
             }
+            if !had_nonzero_digit && char == '0' {
+                if had_decimal_pt {
+                    // We're parsing a number whose first nonzero digit is after the decimal point.
+                    len -= 1;
+                } else {
+                    // Skip leading zeroes
+                    continue;
+                }
+            }
             if !had_decimal_pt {
                 len += 1;
-            }
-            if !had_nonzero_digit && had_decimal_pt && char == '0' {
-                // We're parsing a number wose first nonzero digit is after the decimal point.
-                len -= 1;
             }
             if !had_nonzero_digit && char != '0' {
                 start = Some(idx);
@@ -384,6 +389,7 @@ mod tests {
     fn test_leading_zeroes() {
         test_helper("000000.0", ".0", Ordering::Equal);
         test_helper("0.1", "0000000000000.0", Ordering::Greater);
+        test_helper("-01", "-2", Ordering::Greater);
     }
 
     #[test]
