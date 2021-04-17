@@ -5,6 +5,7 @@ use crate::common::util::*;
 extern crate regex;
 use self::regex::Regex;
 
+use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -1313,4 +1314,220 @@ fn test_ls_ignore_hide() {
         .succeeds()
         .stderr_contains(&"Invalid pattern")
         .stdout_is("CONTRIBUTING.md\nREADME.md\nREADMECAREFULLY.md\nsome_other_file\n");
+}
+
+#[test]
+fn test_ls_directory() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("some_dir");
+    at.symlink_dir("some_dir", "sym_dir");
+
+    at.touch(Path::new("some_dir").join("nested_file").to_str().unwrap());
+
+    scene
+        .ucmd()
+        .arg("some_dir")
+        .succeeds()
+        .stdout_is("nested_file\n");
+
+    scene
+        .ucmd()
+        .arg("--directory")
+        .arg("some_dir")
+        .succeeds()
+        .stdout_is("some_dir\n");
+
+    scene
+        .ucmd()
+        .arg("sym_dir")
+        .succeeds()
+        .stdout_is("nested_file\n");
+}
+
+#[test]
+fn test_ls_deref_command_line() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("some_file");
+    at.symlink_file("some_file", "sym_file");
+
+    scene
+        .ucmd()
+        .arg("sym_file")
+        .succeeds()
+        .stdout_is("sym_file\n");
+
+    // -l changes the default to no dereferencing
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("sym_file")
+        .succeeds()
+        .stdout_contains("sym_file ->");
+
+    scene
+        .ucmd()
+        .arg("--dereference-command-line-symlink-to-dir")
+        .arg("sym_file")
+        .succeeds()
+        .stdout_is("sym_file\n");
+
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--dereference-command-line-symlink-to-dir")
+        .arg("sym_file")
+        .succeeds()
+        .stdout_contains("sym_file ->");
+
+    scene
+        .ucmd()
+        .arg("--dereference-command-line")
+        .arg("sym_file")
+        .succeeds()
+        .stdout_is("sym_file\n");
+
+    let result = scene
+        .ucmd()
+        .arg("-l")
+        .arg("--dereference-command-line")
+        .arg("sym_file")
+        .succeeds();
+
+    assert!(!result.stdout_str().contains("->"));
+
+    let result = scene.ucmd().arg("-lH").arg("sym_file").succeeds();
+
+    assert!(!result.stdout_str().contains("sym_file ->"));
+
+    // If the symlink is not a command line argument, it must be shown normally
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--dereference-command-line")
+        .succeeds()
+        .stdout_contains("sym_file ->");
+}
+
+#[test]
+fn test_ls_deref_command_line_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("some_dir");
+    at.symlink_dir("some_dir", "sym_dir");
+
+    at.touch(Path::new("some_dir").join("nested_file").to_str().unwrap());
+
+    scene
+        .ucmd()
+        .arg("sym_dir")
+        .succeeds()
+        .stdout_contains("nested_file");
+
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("sym_dir")
+        .succeeds()
+        .stdout_contains("sym_dir ->");
+
+    scene
+        .ucmd()
+        .arg("--dereference-command-line-symlink-to-dir")
+        .arg("sym_dir")
+        .succeeds()
+        .stdout_contains("nested_file");
+
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--dereference-command-line-symlink-to-dir")
+        .arg("sym_dir")
+        .succeeds()
+        .stdout_contains("nested_file");
+
+    scene
+        .ucmd()
+        .arg("--dereference-command-line")
+        .arg("sym_dir")
+        .succeeds()
+        .stdout_contains("nested_file");
+
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--dereference-command-line")
+        .arg("sym_dir")
+        .succeeds()
+        .stdout_contains("nested_file");
+
+    scene
+        .ucmd()
+        .arg("-lH")
+        .arg("sym_dir")
+        .succeeds()
+        .stdout_contains("nested_file");
+
+    // If the symlink is not a command line argument, it must be shown normally
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--dereference-command-line")
+        .succeeds()
+        .stdout_contains("sym_dir ->");
+
+    scene
+        .ucmd()
+        .arg("-lH")
+        .succeeds()
+        .stdout_contains("sym_dir ->");
+
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--dereference-command-line-symlink-to-dir")
+        .succeeds()
+        .stdout_contains("sym_dir ->");
+
+    // --directory does not dereference anything by default
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--directory")
+        .arg("sym_dir")
+        .succeeds()
+        .stdout_contains("sym_dir ->");
+
+    let result = scene
+        .ucmd()
+        .arg("-l")
+        .arg("--directory")
+        .arg("--dereference-command-line-symlink-to-dir")
+        .arg("sym_dir")
+        .succeeds();
+
+    assert!(!result.stdout_str().ends_with("sym_dir"));
+
+    // --classify does not dereference anything by default
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--directory")
+        .arg("sym_dir")
+        .succeeds()
+        .stdout_contains("sym_dir ->");
+
+    let result = scene
+        .ucmd()
+        .arg("-l")
+        .arg("--directory")
+        .arg("--dereference-command-line-symlink-to-dir")
+        .arg("sym_dir")
+        .succeeds();
+
+    assert!(!result.stdout_str().ends_with("sym_dir"));
 }

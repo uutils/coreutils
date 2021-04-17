@@ -120,6 +120,11 @@ pub mod options {
         pub static FILE_TYPE: &str = "file-type";
         pub static CLASSIFY: &str = "classify";
     }
+    pub mod dereference {
+        pub static ALL: &str = "dereference";
+        pub static ARGS: &str = "dereference-command-line";
+        pub static DIR_ARGS: &str = "dereference-command-line-symlink-to-dir";
+    }
     pub static HIDE_CONTROL_CHARS: &str = "hide-control-chars";
     pub static SHOW_CONTROL_CHARS: &str = "show-control-chars";
     pub static WIDTH: &str = "width";
@@ -134,7 +139,6 @@ pub mod options {
     pub static FILE_TYPE: &str = "file-type";
     pub static SLASH: &str = "p";
     pub static INODE: &str = "inode";
-    pub static DEREFERENCE: &str = "dereference";
     pub static REVERSE: &str = "reverse";
     pub static RECURSIVE: &str = "recursive";
     pub static COLOR: &str = "color";
@@ -180,6 +184,13 @@ enum Time {
     Change,
 }
 
+enum Dereference {
+    None,
+    DirArgs,
+    Args,
+    All,
+}
+
 #[derive(PartialEq, Eq)]
 enum IndicatorStyle {
     None,
@@ -194,7 +205,7 @@ struct Config {
     sort: Sort,
     recursive: bool,
     reverse: bool,
-    dereference: bool,
+    dereference: Dereference,
     ignore_patterns: GlobSet,
     size_format: SizeFormat,
     directory: bool,
@@ -483,13 +494,28 @@ impl Config {
 
         let ignore_patterns = ignore_patterns.build().unwrap();
 
+        let dereference = if options.is_present(options::dereference::ALL) {
+            Dereference::All
+        } else if options.is_present(options::dereference::ARGS) {
+            Dereference::Args
+        } else if options.is_present(options::dereference::DIR_ARGS) {
+            Dereference::DirArgs
+        } else if options.is_present(options::DIRECTORY)
+            || indicator_style == IndicatorStyle::Classify
+            || format == Format::Long
+        {
+            Dereference::None
+        } else {
+            Dereference::DirArgs
+        };
+
         Config {
             format,
             files,
             sort,
             recursive: options.is_present(options::RECURSIVE),
             reverse: options.is_present(options::REVERSE),
-            dereference: options.is_present(options::DEREFERENCE),
+            dereference,
             ignore_patterns,
             size_format,
             directory: options.is_present(options::DIRECTORY),
@@ -820,6 +846,48 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 ])
         )
 
+        // Dereferencing
+        .arg(
+            Arg::with_name(options::dereference::ALL)
+                .short("L")
+                .long(options::dereference::ALL)
+                .help(
+                    "When showing file information for a symbolic link, show information for the \
+                file the link references rather than the link itself.",
+                )
+                .overrides_with_all(&[
+                    options::dereference::ALL,
+                    options::dereference::DIR_ARGS,
+                    options::dereference::ARGS,
+                ])
+        )
+        .arg(
+            Arg::with_name(options::dereference::DIR_ARGS)
+                .long(options::dereference::DIR_ARGS)
+                .help(
+                    "Do not dereference symlinks except when they link to directories and are \
+                    given as command line arguments.",
+                )
+                .overrides_with_all(&[
+                    options::dereference::ALL,
+                    options::dereference::DIR_ARGS,
+                    options::dereference::ARGS,
+                ])
+        )
+        .arg(
+            Arg::with_name(options::dereference::ARGS)
+                .short("H")
+                .long(options::dereference::ARGS)
+                .help(
+                    "Do not dereference symlinks except when given as command line arguments.",
+                )
+                .overrides_with_all(&[
+                    options::dereference::ALL,
+                    options::dereference::DIR_ARGS,
+                    options::dereference::ARGS,
+                ])
+        )
+
         // Long format options
         .arg(
             Arg::with_name(options::NO_GROUP)
@@ -877,15 +945,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .short("i")
                 .long(options::INODE)
                 .help("print the index number of each file"),
-        )
-        .arg(
-            Arg::with_name(options::DEREFERENCE)
-                .short("L")
-                .long(options::DEREFERENCE)
-                .help(
-                    "When showing file information for a symbolic link, show information for the \
-                file the link references rather than the link itself.",
-                ),
         )
         .arg(
             Arg::with_name(options::REVERSE)
@@ -994,26 +1053,32 @@ fn list(locs: Vec<String>, config: Config) -> i32 {
             has_failed = true;
             continue;
         }
-        let mut dir = false;
 
-        if p.is_dir() && !config.directory {
-            dir = true;
-            if config.format == Format::Long && !config.dereference {
-                if let Ok(md) = p.symlink_metadata() {
-                    if md.file_type().is_symlink() && !p.ends_with("/") {
-                        dir = false;
+        let show_dir_contents = if !config.directory {
+            match config.dereference {
+                Dereference::None => {
+                    if let Ok(md) = p.symlink_metadata() {
+                        md.is_dir()
+                    } else {
+                        show_error!("'{}': {}", &loc, "No such file or directory");
+                        has_failed = true;
+                        continue;
                     }
                 }
+                _ => p.is_dir(),
             }
-        }
-        if dir {
+        } else {
+            false
+        };
+
+        if show_dir_contents {
             dirs.push(p);
         } else {
             files.push(p);
         }
     }
     sort_entries(&mut files, &config);
-    display_items(&files, None, &config);
+    display_items(&files, None, &config, true);
 
     sort_entries(&mut dirs, &config);
     for dir in dirs {
@@ -1033,14 +1098,15 @@ fn sort_entries(entries: &mut Vec<PathBuf>, config: &Config) {
     match config.sort {
         Sort::Time => entries.sort_by_key(|k| {
             Reverse(
-                get_metadata(k, config)
+                get_metadata(k, false)
                     .ok()
                     .and_then(|md| get_system_time(&md, config))
                     .unwrap_or(UNIX_EPOCH),
             )
         }),
-        Sort::Size => entries
-            .sort_by_key(|k| Reverse(get_metadata(k, config).map(|md| md.len()).unwrap_or(0))),
+        Sort::Size => {
+            entries.sort_by_key(|k| Reverse(get_metadata(k, false).map(|md| md.len()).unwrap_or(0)))
+        }
         // The default sort in GNU ls is case insensitive
         Sort::Name => entries.sort_by_key(|k| k.to_string_lossy().to_lowercase()),
         Sort::Version => entries.sort_by(|a, b| version_cmp::version_cmp(a, b)),
@@ -1089,9 +1155,9 @@ fn enter_directory(dir: &Path, config: &Config) {
         let mut display_entries = entries.clone();
         display_entries.insert(0, dir.join(".."));
         display_entries.insert(0, dir.join("."));
-        display_items(&display_entries, Some(dir), config);
+        display_items(&display_entries, Some(dir), config, false);
     } else {
-        display_items(&entries, Some(dir), config);
+        display_items(&entries, Some(dir), config, false);
     }
 
     if config.recursive {
@@ -1102,8 +1168,8 @@ fn enter_directory(dir: &Path, config: &Config) {
     }
 }
 
-fn get_metadata(entry: &Path, config: &Config) -> std::io::Result<Metadata> {
-    if config.dereference {
+fn get_metadata(entry: &Path, dereference: bool) -> std::io::Result<Metadata> {
+    if dereference {
         entry.metadata().or_else(|_| entry.symlink_metadata())
     } else {
         entry.symlink_metadata()
@@ -1111,7 +1177,7 @@ fn get_metadata(entry: &Path, config: &Config) -> std::io::Result<Metadata> {
 }
 
 fn display_dir_entry_size(entry: &Path, config: &Config) -> (usize, usize) {
-    if let Ok(md) = get_metadata(entry, config) {
+    if let Ok(md) = get_metadata(entry, false) {
         (
             display_symlink_count(&md).len(),
             display_file_size(&md, config).len(),
@@ -1125,7 +1191,7 @@ fn pad_left(string: String, count: usize) -> String {
     format!("{:>width$}", string, width = count)
 }
 
-fn display_items(items: &[PathBuf], strip: Option<&Path>, config: &Config) {
+fn display_items(items: &[PathBuf], strip: Option<&Path>, config: &Config, command_line: bool) {
     if config.format == Format::Long {
         let (mut max_links, mut max_size) = (1, 1);
         for item in items {
@@ -1134,11 +1200,11 @@ fn display_items(items: &[PathBuf], strip: Option<&Path>, config: &Config) {
             max_size = size.max(max_size);
         }
         for item in items {
-            display_item_long(item, strip, max_links, max_size, config);
+            display_item_long(item, strip, max_links, max_size, config, command_line);
         }
     } else {
         let names = items.iter().filter_map(|i| {
-            let md = get_metadata(i, config);
+            let md = get_metadata(i, false);
             match md {
                 Err(e) => {
                     let filename = get_file_name(i, strip);
@@ -1210,8 +1276,26 @@ fn display_item_long(
     max_links: usize,
     max_size: usize,
     config: &Config,
+    command_line: bool,
 ) {
-    let md = match get_metadata(item, config) {
+    let dereference = match &config.dereference {
+        Dereference::All => true,
+        Dereference::Args => command_line,
+        Dereference::DirArgs => {
+            if command_line {
+                if let Ok(md) = item.metadata() {
+                    md.is_dir()
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        }
+        Dereference::None => false,
+    };
+
+    let md = match get_metadata(item, dereference) {
         Err(e) => {
             let filename = get_file_name(&item, strip);
             show_error!("{}: {}", filename, e);
