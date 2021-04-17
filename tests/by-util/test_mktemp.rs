@@ -388,8 +388,7 @@ fn test_mktemp_tmpdir_one_arg() {
         .arg("--tmpdir")
         .arg("apt-key-gpghome.XXXXXXXXXX")
         .succeeds();
-    result.no_stderr()
-          .stdout_contains("apt-key-gpghome.");
+    result.no_stderr().stdout_contains("apt-key-gpghome.");
     assert!(PathBuf::from(result.stdout_str().trim()).is_file());
 }
 

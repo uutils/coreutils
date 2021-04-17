@@ -62,14 +62,16 @@ fn test_invalid_file() {
     let folder_name = "asdf";
 
     // First check when file doesn't exist
-    ts.ucmd().arg(folder_name)
+    ts.ucmd()
+        .arg(folder_name)
         .fails()
         .no_stdout()
         .stderr_contains("cksum: error: 'asdf' No such file or directory");
-    
+
     // Then check when the file is of an invalid type
     at.mkdir(folder_name);
-    ts.ucmd().arg(folder_name)
+    ts.ucmd()
+        .arg(folder_name)
         .fails()
         .no_stdout()
         .stderr_contains("cksum: error: 'asdf' Is a directory");
