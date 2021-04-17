@@ -220,6 +220,13 @@ impl CmdResult {
         self
     }
 
+    /// Like `stdout_is` but newlines are normalized to `\n`.
+    pub fn normalized_newlines_stdout_is<T: AsRef<str>>(&self, msg: T) -> &CmdResult {
+        let msg = msg.as_ref().replace("\r\n", "\n");
+        assert_eq!(self.stdout.replace("\r\n", "\n"), msg);
+        self
+    }
+
     /// asserts that the command resulted in stdout stream output,
     /// whose bytes equal those of the passed in slice
     pub fn stdout_is_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &CmdResult {
@@ -1095,5 +1102,34 @@ mod tests {
         let positive = regex::Regex::new(".*likely.*").unwrap();
 
         res.stdout_does_not_match(&positive);
+    }
+
+    #[test]
+    fn test_normalized_newlines_stdout_is() {
+        let res = CmdResult {
+            tmpd: None,
+            code: None,
+            success: true,
+            stdout: "A\r\nB\nC".into(),
+            stderr: "".into(),
+        };
+
+        res.normalized_newlines_stdout_is("A\r\nB\nC");
+        res.normalized_newlines_stdout_is("A\nB\nC");
+        res.normalized_newlines_stdout_is("A\nB\r\nC");
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_normalized_newlines_stdout_is_fail() {
+        let res = CmdResult {
+            tmpd: None,
+            code: None,
+            success: true,
+            stdout: "A\r\nB\nC".into(),
+            stderr: "".into(),
+        };
+
+        res.normalized_newlines_stdout_is("A\r\nB\nC\n");
     }
 }
