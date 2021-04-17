@@ -1363,10 +1363,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "static_assertions"
-version = "1.1.0"
+name = "smallvec"
+version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+checksum = "fe0f37c9e8f3c5a4a66ad655a93c74daac4ad00c441533bf5c6e7990bb42604e"
 
 [[package]]
 name = "strsim"
@@ -1394,9 +1394,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "1.0.68"
+version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ce15dd3ed8aa2f8eeac4716d6ef5ab58b6b9256db41d7e1a0224c2788e8fd87"
+checksum = "48fe99c6bd8b1cc636890bcc071842de909d902c81ac7dab53ba33c421ab8ffb"
 dependencies = [
  "proc-macro2",
  "quote 1.0.9",
@@ -1523,17 +1523,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "twox-hash"
-version = "1.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04f8ab788026715fa63b31960869617cba39117e520eb415b0139543e325ab59"
-dependencies = [
- "cfg-if 0.1.10",
- "rand 0.7.3",
- "static_assertions",
-]
-
-[[package]]
 name = "typenum"
 version = "1.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1627,7 +1616,8 @@ name = "uu_cat"
 version = "0.0.6"
 dependencies = [
  "clap",
- "quick-error",
+ "nix 0.20.0",
+ "thiserror",
  "unix_socket",
  "uucore",
  "uucore_procs",
@@ -1777,7 +1767,7 @@ dependencies = [
 name = "uu_du"
 version = "0.0.6"
 dependencies = [
- "time",
+ "chrono",
  "uucore",
  "uucore_procs",
  "winapi 0.3.9",
@@ -1833,7 +1823,7 @@ dependencies = [
  "quickcheck",
  "rand 0.7.3",
  "rand_chacha",
- "smallvec",
+ "smallvec 0.6.14",
  "uucore",
  "uucore_procs",
 ]
@@ -1861,6 +1851,7 @@ dependencies = [
 name = "uu_fold"
 version = "0.0.6"
 dependencies = [
+ "clap",
  "uucore",
  "uucore_procs",
 ]
@@ -2300,10 +2291,12 @@ name = "uu_sort"
 version = "0.0.6"
 dependencies = [
  "clap",
- "itertools 0.8.2",
+ "fnv",
+ "itertools 0.10.0",
  "rand 0.7.3",
+ "rayon",
  "semver",
- "twox-hash",
+ "smallvec 1.6.1",
  "uucore",
  "uucore_procs",
 ]
@@ -2331,7 +2324,7 @@ dependencies = [
 name = "uu_stdbuf"
 version = "0.0.6"
 dependencies = [
- "getopts",
+ "clap",
  "tempfile",
  "uu_stdbuf_libstdbuf",
  "uucore",
@@ -2415,6 +2408,7 @@ dependencies = [
 name = "uu_timeout"
 version = "0.0.6"
 dependencies = [
+ "clap",
  "getopts",
  "libc",
  "uucore",
@@ -2514,7 +2508,7 @@ dependencies = [
 name = "uu_unlink"
 version = "0.0.6"
 dependencies = [
- "getopts",
+ "clap",
  "libc",
  "uucore",
  "uucore_procs",

@@ -20,6 +20,21 @@ use nix::unistd::pipe;
 
 const BUF_SIZE: usize = 16384;
 
+/// Splice wrapper which handles short writes
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[inline]
+fn splice_exact(read_fd: RawFd, write_fd: RawFd, num_bytes: usize) -> nix::Result<()> {
+    let mut left = num_bytes;
+    loop {
+        let written = splice(read_fd, None, write_fd, None, left, SpliceFFlags::empty())?;
+        left -= written;
+        if left == 0 {
+            break;
+        }
+    }
+    Ok(())
+}
+
 /// This is a Linux-specific function to count the number of bytes using the
 /// `splice` system call, which is faster than using `read`.
 #[inline]
@@ -39,7 +54,7 @@ fn count_bytes_using_splice(fd: RawFd) -> nix::Result<usize> {
             break;
         }
         byte_count += res;
-        splice(pipe_rd, None, null, None, res, SpliceFFlags::empty())?;
+        splice_exact(pipe_rd, null, res)?;
     }
 
     Ok(byte_count)
@@ -57,30 +72,27 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> WcResult<usi
     #[cfg(unix)]
     {
         let fd = handle.as_raw_fd();
-        match fstat(fd) {
-            Ok(stat) => {
-                // If the file is regular, then the `st_size` should hold
-                // the file's size in bytes.
-                if (stat.st_mode & S_IFREG) != 0 {
-                    return Ok(stat.st_size as usize);
-                }
-                #[cfg(any(target_os = "linux", target_os = "android"))]
-                {
-                    // Else, if we're on Linux and our file is a FIFO pipe
-                    // (or stdin), we use splice to count the number of bytes.
-                    if (stat.st_mode & S_IFIFO) != 0 {
-                        if let Ok(n) = count_bytes_using_splice(fd) {
-                            return Ok(n);
-                        }
+        if let Ok(stat) = fstat(fd) {
+            // If the file is regular, then the `st_size` should hold
+            // the file's size in bytes.
+            if (stat.st_mode & S_IFREG) != 0 {
+                return Ok(stat.st_size as usize);
+            }
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            {
+                // Else, if we're on Linux and our file is a FIFO pipe
+                // (or stdin), we use splice to count the number of bytes.
+                if (stat.st_mode & S_IFIFO) != 0 {
+                    if let Ok(n) = count_bytes_using_splice(fd) {
+                        return Ok(n);
                     }
                 }
             }
-            _ => {}
         }
     }
 
     // Fall back on `read`, but without the overhead of counting words and lines.
-    let mut buf = [0 as u8; BUF_SIZE];
+    let mut buf = [0_u8; BUF_SIZE];
     let mut byte_count = 0;
     loop {
         match handle.read(&mut buf) {

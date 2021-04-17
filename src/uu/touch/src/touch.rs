@@ -18,6 +18,7 @@ use filetime::*;
 use std::fs::{self, File};
 use std::io::Error;
 use std::path::Path;
+use std::process;
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Update the access and modification times of each FILE to the current time.";
@@ -137,7 +138,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let (mut atime, mut mtime) = if matches.is_present(options::sources::REFERENCE) {
         stat(
-            &matches.value_of(options::sources::REFERENCE).unwrap()[..],
+            matches.value_of(options::sources::REFERENCE).unwrap(),
             !matches.is_present(options::NO_DEREF),
         )
     } else if matches.is_present(options::sources::DATE)
@@ -261,7 +262,27 @@ fn parse_timestamp(s: &str) -> FileTime {
     };
 
     match time::strptime(&ts, format) {
-        Ok(tm) => local_tm_to_filetime(to_local(tm)),
+        Ok(tm) => {
+            let mut local = to_local(tm);
+            local.tm_isdst = -1;
+            let ft = local_tm_to_filetime(local);
+
+            // We have to check that ft is valid time. Due to daylight saving
+            // time switch, local time can jump from 1:59 AM to 3:00 AM,
+            // in which case any time between 2:00 AM and 2:59 AM is not valid.
+            // Convert back to local time and see if we got the same value back.
+            let ts = time::Timespec {
+                sec: ft.unix_seconds(),
+                nsec: 0,
+            };
+            let tm2 = time::at(ts);
+            if tm.tm_hour != tm2.tm_hour {
+                show_error!("invalid date format {}", s);
+                process::exit(1);
+            }
+
+            ft
+        }
         Err(e) => panic!("Unable to parse timestamp\n{}", e),
     }
 }

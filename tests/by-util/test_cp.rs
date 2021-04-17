@@ -275,8 +275,8 @@ fn test_cp_arg_no_clobber_twice() {
         .arg("dest.txt")
         .run();
 
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
+    println!("stderr = {:?}", result.stderr_str());
+    println!("stdout = {:?}", result.stdout_str());
     assert!(result.success);
     assert!(result.stderr.is_empty());
     assert_eq!(at.read("source.txt"), "");
@@ -317,8 +317,8 @@ fn test_cp_arg_force() {
         .arg(TEST_HELLO_WORLD_DEST)
         .run();
 
-    println!("{:?}", result.stderr);
-    println!("{:?}", result.stdout);
+    println!("{:?}", result.stderr_str());
+    println!("{:?}", result.stdout_str());
 
     assert!(result.success);
     assert_eq!(at.read(TEST_HELLO_WORLD_DEST), "Hello, World!\n");
@@ -602,7 +602,7 @@ fn test_cp_deref_folder_to_folder() {
         .arg(TEST_COPY_FROM_FOLDER)
         .arg(TEST_COPY_TO_FOLDER_NEW)
         .run();
-    println!("cp output {}", result.stdout);
+    println!("cp output {}", result.stdout_str());
 
     // Check that the exit code represents a successful copy.
     assert!(result.success);
@@ -611,12 +611,12 @@ fn test_cp_deref_folder_to_folder() {
     {
         let scene2 = TestScenario::new("ls");
         let result = scene2.cmd("ls").arg("-al").arg(path_to_new_symlink).run();
-        println!("ls source {}", result.stdout);
+        println!("ls source {}", result.stdout_str());
 
         let path_to_new_symlink = at.subdir.join(TEST_COPY_TO_FOLDER_NEW);
 
         let result = scene2.cmd("ls").arg("-al").arg(path_to_new_symlink).run();
-        println!("ls dest {}", result.stdout);
+        println!("ls dest {}", result.stdout_str());
     }
 
     #[cfg(windows)]
@@ -706,7 +706,7 @@ fn test_cp_no_deref_folder_to_folder() {
         .arg(TEST_COPY_FROM_FOLDER)
         .arg(TEST_COPY_TO_FOLDER_NEW)
         .run();
-    println!("cp output {}", result.stdout);
+    println!("cp output {}", result.stdout_str());
 
     // Check that the exit code represents a successful copy.
     assert!(result.success);
@@ -715,12 +715,12 @@ fn test_cp_no_deref_folder_to_folder() {
     {
         let scene2 = TestScenario::new("ls");
         let result = scene2.cmd("ls").arg("-al").arg(path_to_new_symlink).run();
-        println!("ls source {}", result.stdout);
+        println!("ls source {}", result.stdout_str());
 
         let path_to_new_symlink = at.subdir.join(TEST_COPY_TO_FOLDER_NEW);
 
         let result = scene2.cmd("ls").arg("-al").arg(path_to_new_symlink).run();
-        println!("ls dest {}", result.stdout);
+        println!("ls dest {}", result.stdout_str());
     }
 
     #[cfg(windows)]
@@ -809,7 +809,7 @@ fn test_cp_archive() {
     let scene2 = TestScenario::new("ls");
     let result = scene2.cmd("ls").arg("-al").arg(at.subdir).run();
 
-    println!("ls dest {}", result.stdout);
+    println!("ls dest {}", result.stdout_str());
     assert_eq!(creation, creation2);
     assert!(result.success);
 }
@@ -863,7 +863,7 @@ fn test_cp_archive_recursive() {
         .arg(&at.subdir.join(TEST_COPY_TO_FOLDER))
         .run();
 
-    println!("ls dest {}", result.stdout);
+    println!("ls dest {}", result.stdout_str());
 
     let scene2 = TestScenario::new("ls");
     let result = scene2
@@ -872,7 +872,7 @@ fn test_cp_archive_recursive() {
         .arg(&at.subdir.join(TEST_COPY_TO_FOLDER_NEW))
         .run();
 
-    println!("ls dest {}", result.stdout);
+    println!("ls dest {}", result.stdout_str());
     assert!(at.file_exists(
         &at.subdir
             .join(TEST_COPY_TO_FOLDER_NEW)
@@ -946,7 +946,7 @@ fn test_cp_preserve_timestamps() {
     let scene2 = TestScenario::new("ls");
     let result = scene2.cmd("ls").arg("-al").arg(at.subdir).run();
 
-    println!("ls dest {}", result.stdout);
+    println!("ls dest {}", result.stdout_str());
     assert_eq!(creation, creation2);
     assert!(result.success);
 }
@@ -984,7 +984,7 @@ fn test_cp_dont_preserve_timestamps() {
     let scene2 = TestScenario::new("ls");
     let result = scene2.cmd("ls").arg("-al").arg(at.subdir).run();
 
-    println!("ls dest {}", result.stdout);
+    println!("ls dest {}", result.stdout_str());
     println!("creation {:?} / {:?}", creation, creation2);
 
     assert_ne!(creation, creation2);

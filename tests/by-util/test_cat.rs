@@ -1,7 +1,5 @@
-#[cfg(unix)]
-extern crate unix_socket;
-
 use crate::common::util::*;
+use std::io::Read;
 
 #[test]
 fn test_output_simple() {
@@ -9,6 +7,131 @@ fn test_output_simple() {
         .args(&["alpha.txt"])
         .succeeds()
         .stdout_only("abcde\nfghij\nklmno\npqrst\nuvwxyz\n");
+}
+
+#[test]
+fn test_no_options() {
+    for fixture in &["empty.txt", "alpha.txt", "nonewline.txt"] {
+        // Give fixture through command line file argument
+        new_ucmd!()
+            .args(&[fixture])
+            .succeeds()
+            .stdout_is_fixture(fixture);
+        // Give fixture through stdin
+        new_ucmd!()
+            .pipe_in_fixture(fixture)
+            .succeeds()
+            .stdout_is_fixture(fixture);
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_no_options_big_input() {
+    for &n in &[
+        0,
+        1,
+        42,
+        16 * 1024 - 7,
+        16 * 1024 - 1,
+        16 * 1024,
+        16 * 1024 + 1,
+        16 * 1024 + 3,
+        32 * 1024,
+        64 * 1024,
+        80 * 1024,
+        96 * 1024,
+        112 * 1024,
+        128 * 1024,
+    ] {
+        let data = vec_of_size(n);
+        let data2 = data.clone();
+        assert_eq!(data.len(), data2.len());
+        new_ucmd!().pipe_in(data).succeeds().stdout_is_bytes(&data2);
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_fifo_symlink() {
+    use std::fs::OpenOptions;
+    use std::io::Write;
+    use std::thread;
+
+    let s = TestScenario::new(util_name!());
+    s.fixtures.mkdir("dir");
+    s.fixtures.mkfifo("dir/pipe");
+    assert!(s.fixtures.is_fifo("dir/pipe"));
+
+    // Make cat read the pipe through a symlink
+    s.fixtures.symlink_file("dir/pipe", "sympipe");
+    let proc = s.ucmd().args(&["sympipe"]).run_no_wait();
+
+    let data = vec_of_size(128 * 1024);
+    let data2 = data.clone();
+
+    let pipe_path = s.fixtures.plus("dir/pipe");
+    let thread = thread::spawn(move || {
+        let mut pipe = OpenOptions::new()
+            .write(true)
+            .create(false)
+            .open(pipe_path)
+            .unwrap();
+        pipe.write_all(&data).unwrap();
+    });
+
+    let output = proc.wait_with_output().unwrap();
+    assert_eq!(&output.stdout, &data2);
+    thread.join().unwrap();
+}
+
+#[test]
+fn test_directory() {
+    let s = TestScenario::new(util_name!());
+    s.fixtures.mkdir("test_directory");
+    s.ucmd()
+        .args(&["test_directory"])
+        .fails()
+        .stderr_is("cat: test_directory: Is a directory");
+}
+
+#[test]
+fn test_directory_and_file() {
+    let s = TestScenario::new(util_name!());
+    s.fixtures.mkdir("test_directory2");
+    for fixture in &["empty.txt", "alpha.txt", "nonewline.txt"] {
+        s.ucmd()
+            .args(&["test_directory2", fixture])
+            .fails()
+            .stderr_is("cat: test_directory2: Is a directory")
+            .stdout_is_fixture(fixture);
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_three_directories_and_file_and_stdin() {
+    let s = TestScenario::new(util_name!());
+    s.fixtures.mkdir("test_directory3");
+    s.fixtures.mkdir("test_directory3/test_directory4");
+    s.fixtures.mkdir("test_directory3/test_directory5");
+    s.ucmd()
+        .args(&[
+            "test_directory3/test_directory4",
+            "alpha.txt",
+            "-",
+            "filewhichdoesnotexist.txt",
+            "nonewline.txt",
+            "test_directory3/test_directory5",
+            "test_directory3/../test_directory3/test_directory5",
+            "test_directory3",
+        ])
+        .pipe_in("stdout bytes")
+        .fails()
+        .stderr_is_fixture("three_directories_and_file_and_stdin.stderr.expected")
+        .stdout_is(
+            "abcde\nfghij\nklmno\npqrst\nuvwxyz\nstdout bytestext without a trailing newline",
+        );
 }
 
 #[test]
@@ -149,13 +272,64 @@ fn test_squeeze_blank_before_numbering() {
     }
 }
 
+/// This tests reading from Unix character devices
 #[test]
-#[cfg(foo)]
+#[cfg(unix)]
+fn test_dev_random() {
+    let mut buf = [0; 2048];
+    let mut proc = new_ucmd!().args(&["/dev/random"]).run_no_wait();
+    let mut proc_stdout = proc.stdout.take().unwrap();
+    proc_stdout.read_exact(&mut buf).unwrap();
+
+    let num_zeroes = buf.iter().fold(0, |mut acc, &n| {
+        if n == 0 {
+            acc += 1;
+        }
+        acc
+    });
+    // The probability of more than 512 zero bytes is essentially zero if the
+    // output is truly random.
+    assert!(num_zeroes < 512);
+    proc.kill().unwrap();
+}
+
+/// Reading from /dev/full should return an infinite amount of zero bytes.
+/// Wikipedia says there is support on Linux, FreeBSD, and NetBSD.
+#[test]
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+fn test_dev_full() {
+    let mut buf = [0; 2048];
+    let mut proc = new_ucmd!().args(&["/dev/full"]).run_no_wait();
+    let mut proc_stdout = proc.stdout.take().unwrap();
+    let expected = [0; 2048];
+    proc_stdout.read_exact(&mut buf).unwrap();
+    assert_eq!(&buf[..], &expected[..]);
+    proc.kill().unwrap();
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+fn test_dev_full_show_all() {
+    let mut buf = [0; 2048];
+    let mut proc = new_ucmd!().args(&["-A", "/dev/full"]).run_no_wait();
+    let mut proc_stdout = proc.stdout.take().unwrap();
+    proc_stdout.read_exact(&mut buf).unwrap();
+
+    let expected: Vec<u8> = (0..buf.len())
+        .map(|n| if n & 1 == 0 { b'^' } else { b'@' })
+        .collect();
+
+    assert_eq!(&buf[..], &expected[..]);
+    proc.kill().unwrap();
+}
+
+#[test]
+#[cfg(unix)]
 fn test_domain_socket() {
-    use self::tempdir::TempDir;
-    use self::unix_socket::UnixListener;
     use std::io::prelude::*;
     use std::thread;
+    use tempdir::TempDir;
+    use unix_socket::UnixListener;
 
     let dir = TempDir::new("unix_socket").expect("failed to create dir");
     let socket_path = dir.path().join("sock");

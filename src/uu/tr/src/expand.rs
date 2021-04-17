@@ -24,7 +24,7 @@ use std::ops::RangeInclusive;
 fn parse_sequence(s: &str) -> (char, usize) {
     let c = s.chars().next().expect("invalid escape: empty string");
 
-    if '0' <= c && c <= '7' {
+    if ('0'..='7').contains(&c) {
         let mut v = c.to_digit(8).unwrap();
         let mut consumed = 1;
         let bits_per_digit = 3;

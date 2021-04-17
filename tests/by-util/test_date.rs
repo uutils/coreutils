@@ -28,13 +28,13 @@ fn test_date_rfc_3339() {
     // Check that the output matches the regexp
     let rfc_regexp = r"(\d+)-(0[1-9]|1[012])-(0[1-9]|[12]\d|3[01])\s([01]\d|2[0-3]):([0-5]\d):([0-5]\d|60)(\.\d+)?(([Zz])|([\+|\-]([01]\d|2[0-3])))";
     let re = Regex::new(rfc_regexp).unwrap();
-    assert!(re.is_match(&result.stdout.trim()));
+    assert!(re.is_match(&result.stdout_str().trim()));
 
     result = scene.ucmd().arg("--rfc-3339=seconds").succeeds();
 
     // Check that the output matches the regexp
     let re = Regex::new(rfc_regexp).unwrap();
-    assert!(re.is_match(&result.stdout.trim()));
+    assert!(re.is_match(&result.stdout_str().trim()));
 }
 
 #[test]
@@ -73,13 +73,13 @@ fn test_date_format_y() {
 
     assert!(result.success);
     let mut re = Regex::new(r"^\d{4}$").unwrap();
-    assert!(re.is_match(&result.stdout.trim()));
+    assert!(re.is_match(&result.stdout_str().trim()));
 
     result = scene.ucmd().arg("+%y").succeeds();
 
     assert!(result.success);
     re = Regex::new(r"^\d{2}$").unwrap();
-    assert!(re.is_match(&result.stdout.trim()));
+    assert!(re.is_match(&result.stdout_str().trim()));
 }
 
 #[test]
@@ -90,13 +90,13 @@ fn test_date_format_m() {
 
     assert!(result.success);
     let mut re = Regex::new(r"\S+").unwrap();
-    assert!(re.is_match(&result.stdout.trim()));
+    assert!(re.is_match(&result.stdout_str().trim()));
 
     result = scene.ucmd().arg("+%m").succeeds();
 
     assert!(result.success);
     re = Regex::new(r"^\d{2}$").unwrap();
-    assert!(re.is_match(&result.stdout.trim()));
+    assert!(re.is_match(&result.stdout_str().trim()));
 }
 
 #[test]
@@ -107,20 +107,20 @@ fn test_date_format_day() {
 
     assert!(result.success);
     let mut re = Regex::new(r"\S+").unwrap();
-    assert!(re.is_match(&result.stdout.trim()));
+    assert!(re.is_match(&result.stdout_str().trim()));
 
     result = scene.ucmd().arg("+%A").succeeds();
 
     assert!(result.success);
 
     re = Regex::new(r"\S+").unwrap();
-    assert!(re.is_match(&result.stdout.trim()));
+    assert!(re.is_match(&result.stdout_str().trim()));
 
     result = scene.ucmd().arg("+%u").succeeds();
 
     assert!(result.success);
     re = Regex::new(r"^\d{1}$").unwrap();
-    assert!(re.is_match(&result.stdout.trim()));
+    assert!(re.is_match(&result.stdout_str().trim()));
 }
 
 #[test]
@@ -131,7 +131,7 @@ fn test_date_format_full_day() {
 
     assert!(result.success);
     let re = Regex::new(r"\S+ \d{4}-\d{2}-\d{2}").unwrap();
-    assert!(re.is_match(&result.stdout.trim()));
+    assert!(re.is_match(&result.stdout_str().trim()));
 }
 
 #[test]

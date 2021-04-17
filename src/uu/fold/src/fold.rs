@@ -10,48 +10,71 @@
 #[macro_use]
 extern crate uucore;
 
+use clap::{App, Arg};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
 
 const TAB_WIDTH: usize = 8;
 
+static NAME: &str = "fold";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
 static SYNTAX: &str = "[OPTION]... [FILE]...";
 static SUMMARY: &str = "Writes each file (or standard input if no files are given)
  to standard output whilst breaking long lines";
-static LONG_HELP: &str = "";
+
+mod options {
+    pub const BYTES: &str = "bytes";
+    pub const SPACES: &str = "spaces";
+    pub const WIDTH: &str = "width";
+    pub const FILE: &str = "file";
+}
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args.collect_str();
 
     let (args, obs_width) = handle_obsolete(&args[..]);
-    let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
-        .optflag(
-            "b",
-            "bytes",
-            "count using bytes rather than columns (meaning control characters \
-             such as newline are not treated specially)",
+    let matches = App::new(executable!())
+        .name(NAME)
+        .version(VERSION)
+        .usage(SYNTAX)
+        .about(SUMMARY)
+        .arg(
+            Arg::with_name(options::BYTES)
+                .long(options::BYTES)
+                .short("b")
+                .help(
+                    "count using bytes rather than columns (meaning control characters \
+                     such as newline are not treated specially)",
+                )
+                .takes_value(false),
         )
-        .optflag(
-            "s",
-            "spaces",
-            "break lines at word boundaries rather than a hard cut-off",
+        .arg(
+            Arg::with_name(options::SPACES)
+                .long(options::SPACES)
+                .short("s")
+                .help("break lines at word boundaries rather than a hard cut-off")
+                .takes_value(false),
         )
-        .optopt(
-            "w",
-            "width",
-            "set WIDTH as the maximum line width rather than 80",
-            "WIDTH",
+        .arg(
+            Arg::with_name(options::WIDTH)
+                .long(options::WIDTH)
+                .short("w")
+                .help("set WIDTH as the maximum line width rather than 80")
+                .value_name("WIDTH")
+                .allow_hyphen_values(true)
+                .takes_value(true),
         )
-        .parse(args);
+        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
+        .get_matches_from(args);
 
-    let bytes = matches.opt_present("b");
-    let spaces = matches.opt_present("s");
-    let poss_width = if matches.opt_present("w") {
-        matches.opt_str("w")
-    } else {
-        obs_width
+    let bytes = matches.is_present(options::BYTES);
+    let spaces = matches.is_present(options::SPACES);
+    let poss_width = match matches.value_of(options::WIDTH) {
+        Some(v) => Some(v.to_owned()),
+        None => obs_width,
     };
+
     let width = match poss_width {
         Some(inp_width) => match inp_width.parse::<usize>() {
             Ok(width) => width,
@@ -59,11 +82,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         },
         None => 80,
     };
-    let files = if matches.free.is_empty() {
-        vec!["-".to_owned()]
-    } else {
-        matches.free
+
+    let files = match matches.values_of(options::FILE) {
+        Some(v) => v.map(|v| v.to_owned()).collect(),
+        None => vec!["-".to_owned()],
     };
+
     fold(files, bytes, spaces, width);
 
     0
@@ -132,7 +156,7 @@ fn fold_file_bytewise<T: Read>(mut file: BufReader<T>, spaces: bool, width: usiz
             let slice = {
                 let slice = &line[i..i + width];
                 if spaces && i + width < len {
-                    match slice.rfind(char::is_whitespace) {
+                    match slice.rfind(|c: char| c.is_whitespace() && c != '\r') {
                         Some(m) => &slice[..=m],
                         None => slice,
                     }
@@ -175,7 +199,6 @@ fn fold_file<T: Read>(mut file: BufReader<T>, spaces: bool, width: usize) {
     let mut line = String::new();
     let mut output = String::new();
     let mut col_count = 0;
-    let mut char_count = 0;
     let mut last_space = None;
 
     /// Print the output line, resetting the column and character counts.
@@ -192,11 +215,10 @@ fn fold_file<T: Read>(mut file: BufReader<T>, spaces: bool, width: usize) {
 
             println!("{}", &output[..consume]);
             output.replace_range(..consume, "");
-            char_count = output.len();
 
             // we know there are no tabs left in output, so each char counts
             // as 1 column
-            col_count = char_count;
+            col_count = output.len();
 
             last_space = None;
         };
@@ -221,6 +243,7 @@ fn fold_file<T: Read>(mut file: BufReader<T>, spaces: bool, width: usize) {
             }
 
             match ch {
+                '\r' => col_count = 0,
                 '\t' => {
                     let next_tab_stop = col_count + TAB_WIDTH - col_count % TAB_WIDTH;
 
@@ -229,36 +252,24 @@ fn fold_file<T: Read>(mut file: BufReader<T>, spaces: bool, width: usize) {
                     }
 
                     col_count = next_tab_stop;
-                    last_space = if spaces { Some(char_count) } else { None };
+                    last_space = if spaces { Some(output.len()) } else { None };
                 }
                 '\x08' => {
-                    // FIXME: does not match GNU's handling of backspace
                     if col_count > 0 {
                         col_count -= 1;
-                        char_count -= 1;
-                        output.truncate(char_count);
                     }
-                    continue;
-                }
-                '\r' => {
-                    // FIXME: does not match GNU's handling of carriage return
-                    output.truncate(0);
-                    col_count = 0;
-                    char_count = 0;
-                    continue;
                 }
                 _ if spaces && ch.is_whitespace() => {
-                    last_space = Some(char_count);
-                    col_count += 1
+                    last_space = Some(output.len());
+                    col_count += 1;
                 }
                 _ => col_count += 1,
             };
 
             output.push(ch);
-            char_count += 1;
         }
 
-        if col_count > 0 {
+        if !output.is_empty() {
             print!("{}", output);
             output.truncate(0);
         }

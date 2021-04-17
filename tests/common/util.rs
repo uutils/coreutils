@@ -33,6 +33,8 @@ static ALREADY_RUN: &str = " you have already run this UCommand, if you want to 
                             testing();";
 static MULTIPLE_STDIN_MEANINGLESS: &str = "Ucommand is designed around a typical use case of: provide args and input stream -> spawn process -> block until completion -> return output streams. For verifying that a particular section of the input stream is what causes a particular behavior, use the Command type directly.";
 
+static NO_STDIN_MEANINGLESS: &str = "Setting this flag has no effect if there is no stdin";
+
 /// Test if the program is running under CI
 pub fn is_ci() -> bool {
     std::env::var("CI")
@@ -48,7 +50,7 @@ fn read_scenario_fixture<S: AsRef<OsStr>>(tmpd: &Option<Rc<TempDir>>, file_rel_p
 
 /// A command result is the outputs of a command (streams and status code)
 /// within a struct which has convenience assertion functions about those outputs
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CmdResult {
     //tmpd is used for convenience functions for asserts against fixtures
     tmpd: Option<Rc<TempDir>>,
@@ -114,6 +116,11 @@ impl CmdResult {
         self.code.expect("Program must be run first")
     }
 
+    pub fn code_is(&self, expected_code: i32) -> &CmdResult {
+        assert_eq!(self.code(), expected_code);
+        self
+    }
+
     /// Returns the program's TempDir
     /// Panics if not present
     pub fn tmpd(&self) -> Rc<TempDir> {
@@ -130,13 +137,25 @@ impl CmdResult {
 
     /// asserts that the command resulted in a success (zero) status code
     pub fn success(&self) -> &CmdResult {
-        assert!(self.success);
+        if !self.success {
+            panic!(
+                "Command was expected to succeed.\nstdout = {}\n stderr = {}",
+                self.stdout_str(),
+                self.stderr_str()
+            );
+        }
         self
     }
 
     /// asserts that the command resulted in a failure (non-zero) status code
     pub fn failure(&self) -> &CmdResult {
-        assert!(!self.success);
+        if self.success {
+            panic!(
+                "Command was expected to fail.\nstdout = {}\n stderr = {}",
+                self.stdout_str(),
+                self.stderr_str()
+            );
+        }
         self
     }
 
@@ -149,10 +168,15 @@ impl CmdResult {
     /// asserts that the command resulted in empty (zero-length) stderr stream output
     /// generally, it's better to use stdout_only() instead,
     /// but you might find yourself using this function if
-    /// 1. you can not know exactly what stdout will be
-    /// or 2. you know that stdout will also be empty
+    /// 1.  you can not know exactly what stdout will be or
+    /// 2.  you know that stdout will also be empty
     pub fn no_stderr(&self) -> &CmdResult {
-        assert!(self.stderr.is_empty());
+        if !self.stderr.is_empty() {
+            panic!(
+                "Expected stderr to be empty, but it's:\n{}",
+                self.stderr_str()
+            );
+        }
         self
     }
 
@@ -160,10 +184,15 @@ impl CmdResult {
     /// unless asserting there was neither stdout or stderr, stderr_only is usually a better choice
     /// generally, it's better to use stderr_only() instead,
     /// but you might find yourself using this function if
-    /// 1. you can not know exactly what stderr will be
-    /// or 2. you know that stderr will also be empty
+    /// 1.  you can not know exactly what stderr will be or
+    /// 2.  you know that stderr will also be empty
     pub fn no_stdout(&self) -> &CmdResult {
-        assert!(self.stdout.is_empty());
+        if !self.stdout.is_empty() {
+            panic!(
+                "Expected stdout to be empty, but it's:\n{}",
+                self.stderr_str()
+            );
+        }
         self
     }
 
@@ -206,10 +235,16 @@ impl CmdResult {
         self
     }
 
+    /// Like stdout_is_fixture, but for stderr
+    pub fn stderr_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &CmdResult {
+        let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
+        self.stderr_is_bytes(contents)
+    }
+
     /// asserts that
-    /// 1. the command resulted in stdout stream output that equals the
-    /// passed in value, when both are trimmed of trailing whitespace
-    /// and 2. the command resulted in empty (zero-length) stderr stream output
+    /// 1.  the command resulted in stdout stream output that equals the
+    ///     passed in value
+    /// 2.  the command resulted in empty (zero-length) stderr stream output
     pub fn stdout_only<T: AsRef<str>>(&self, msg: T) -> &CmdResult {
         self.no_stderr().stdout_is(msg)
     }
@@ -229,9 +264,9 @@ impl CmdResult {
     }
 
     /// asserts that
-    /// 1. the command resulted in stderr stream output that equals the
-    /// passed in value, when both are trimmed of trailing whitespace
-    /// and 2. the command resulted in empty (zero-length) stdout stream output
+    /// 1.  the command resulted in stderr stream output that equals the
+    ///     passed in value, when both are trimmed of trailing whitespace
+    /// 2.  the command resulted in empty (zero-length) stdout stream output
     pub fn stderr_only<T: AsRef<str>>(&self, msg: T) -> &CmdResult {
         self.no_stdout().stderr_is(msg)
     }
@@ -255,8 +290,32 @@ impl CmdResult {
         self
     }
 
-    pub fn stderr_contains<T: AsRef<str>>(&self, cmp: &T) -> &CmdResult {
+    pub fn stderr_contains<T: AsRef<str>>(&self, cmp: T) -> &CmdResult {
         assert!(self.stderr_str().contains(cmp.as_ref()));
+        self
+    }
+
+    pub fn stdout_does_not_contain<T: AsRef<str>>(&self, cmp: T) -> &CmdResult {
+        assert!(!self.stdout_str().contains(cmp.as_ref()));
+        self
+    }
+
+    pub fn stderr_does_not_contain<T: AsRef<str>>(&self, cmp: T) -> &CmdResult {
+        assert!(!self.stderr_str().contains(cmp.as_ref()));
+        self
+    }
+
+    pub fn stdout_matches(&self, regex: &regex::Regex) -> &CmdResult {
+        if !regex.is_match(self.stdout_str()) {
+            panic!("Stdout does not match regex:\n{}", self.stdout_str())
+        }
+        self
+    }
+
+    pub fn stdout_does_not_match(&self, regex: &regex::Regex) -> &CmdResult {
+        if regex.is_match(self.stdout_str()) {
+            panic!("Stdout matches regex:\n{}", self.stdout_str())
+        }
         self
     }
 }
@@ -333,6 +392,13 @@ impl AtPath {
 
     pub fn minus_as_string(&self, name: &str) -> String {
         String::from(self.minus(name).to_str().unwrap())
+    }
+
+    pub fn set_readonly(&self, name: &str) {
+        let metadata = fs::metadata(self.plus(name)).unwrap();
+        let mut permissions = metadata.permissions();
+        permissions.set_readonly(true);
+        fs::set_permissions(self.plus(name), permissions).unwrap();
     }
 
     pub fn open(&self, name: &str) -> File {
@@ -608,6 +674,7 @@ pub struct UCommand {
     tmpd: Option<Rc<TempDir>>,
     has_run: bool,
     stdin: Option<Vec<u8>>,
+    ignore_stdin_write_error: bool,
 }
 
 impl UCommand {
@@ -637,6 +704,7 @@ impl UCommand {
             },
             comm_string: String::from(arg.as_ref().to_str().unwrap()),
             stdin: None,
+            ignore_stdin_write_error: false,
         }
     }
 
@@ -689,6 +757,17 @@ impl UCommand {
         self.pipe_in(contents)
     }
 
+    /// Ignores error caused by feeding stdin to the command.
+    /// This is typically useful to test non-standard workflows
+    /// like feeding something to a command that does not read it
+    pub fn ignore_stdin_write_error(&mut self) -> &mut UCommand {
+        if self.stdin.is_none() {
+            panic!("{}", NO_STDIN_MEANINGLESS);
+        }
+        self.ignore_stdin_write_error = true;
+        self
+    }
+
     pub fn env<K, V>(&mut self, key: K, val: V) -> &mut UCommand
     where
         K: AsRef<OsStr>,
@@ -709,7 +788,7 @@ impl UCommand {
         }
         self.has_run = true;
         log_info("run", &self.comm_string);
-        let mut result = self
+        let mut child = self
             .raw
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -718,15 +797,19 @@ impl UCommand {
             .unwrap();
 
         if let Some(ref input) = self.stdin {
-            result
+            let write_result = child
                 .stdin
                 .take()
                 .unwrap_or_else(|| panic!("Could not take child process stdin"))
-                .write_all(input)
-                .unwrap_or_else(|e| panic!("{}", e));
+                .write_all(input);
+            if !self.ignore_stdin_write_error {
+                if let Err(e) = write_result {
+                    panic!("failed to write to stdin of child: {}", e)
+                }
+            }
         }
 
-        result
+        child
     }
 
     /// Spawns the command, feeds the stdin if any, waits for the result
@@ -780,4 +863,221 @@ pub fn read_size(child: &mut Child, size: usize) -> String {
         .read_exact(output.as_mut_slice())
         .unwrap();
     String::from_utf8(output).unwrap()
+}
+
+pub fn vec_of_size(n: usize) -> Vec<u8> {
+    let mut result = Vec::new();
+    for _ in 0..n {
+        result.push('a' as u8);
+    }
+    assert_eq!(result.len(), n);
+    result
+}
+
+/// Sanity checks for test utils
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_code_is() {
+        let res = CmdResult {
+            tmpd: None,
+            code: Some(32),
+            success: false,
+            stdout: "".into(),
+            stderr: "".into(),
+        };
+        res.code_is(32);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_code_is_fail() {
+        let res = CmdResult {
+            tmpd: None,
+            code: Some(32),
+            success: false,
+            stdout: "".into(),
+            stderr: "".into(),
+        };
+        res.code_is(1);
+    }
+
+    #[test]
+    fn test_failure() {
+        let res = CmdResult {
+            tmpd: None,
+            code: None,
+            success: false,
+            stdout: "".into(),
+            stderr: "".into(),
+        };
+        res.failure();
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_failure_fail() {
+        let res = CmdResult {
+            tmpd: None,
+            code: None,
+            success: true,
+            stdout: "".into(),
+            stderr: "".into(),
+        };
+        res.failure();
+    }
+
+    #[test]
+    fn test_success() {
+        let res = CmdResult {
+            tmpd: None,
+            code: None,
+            success: true,
+            stdout: "".into(),
+            stderr: "".into(),
+        };
+        res.success();
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_success_fail() {
+        let res = CmdResult {
+            tmpd: None,
+            code: None,
+            success: false,
+            stdout: "".into(),
+            stderr: "".into(),
+        };
+        res.success();
+    }
+
+    #[test]
+    fn test_no_std_errout() {
+        let res = CmdResult {
+            tmpd: None,
+            code: None,
+            success: true,
+            stdout: "".into(),
+            stderr: "".into(),
+        };
+        res.no_stderr();
+        res.no_stdout();
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_no_stderr_fail() {
+        let res = CmdResult {
+            tmpd: None,
+            code: None,
+            success: true,
+            stdout: "".into(),
+            stderr: "asdfsadfa".into(),
+        };
+
+        res.no_stderr();
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_no_stdout_fail() {
+        let res = CmdResult {
+            tmpd: None,
+            code: None,
+            success: true,
+            stdout: "asdfsadfa".into(),
+            stderr: "".into(),
+        };
+
+        res.no_stdout();
+    }
+
+    #[test]
+    fn test_std_does_not_contain() {
+        let res = CmdResult {
+            tmpd: None,
+            code: None,
+            success: true,
+            stdout: "This is a likely error message\n".into(),
+            stderr: "This is a likely error message\n".into(),
+        };
+        res.stdout_does_not_contain("unlikely");
+        res.stderr_does_not_contain("unlikely");
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_stdout_does_not_contain_fail() {
+        let res = CmdResult {
+            tmpd: None,
+            code: None,
+            success: true,
+            stdout: "This is a likely error message\n".into(),
+            stderr: "".into(),
+        };
+
+        res.stdout_does_not_contain("likely");
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_stderr_does_not_contain_fail() {
+        let res = CmdResult {
+            tmpd: None,
+            code: None,
+            success: true,
+            stdout: "".into(),
+            stderr: "This is a likely error message\n".into(),
+        };
+
+        res.stderr_does_not_contain("likely");
+    }
+
+    #[test]
+    fn test_stdout_matches() {
+        let res = CmdResult {
+            tmpd: None,
+            code: None,
+            success: true,
+            stdout: "This is a likely error message\n".into(),
+            stderr: "This is a likely error message\n".into(),
+        };
+        let positive = regex::Regex::new(".*likely.*").unwrap();
+        let negative = regex::Regex::new(".*unlikely.*").unwrap();
+        res.stdout_matches(&positive);
+        res.stdout_does_not_match(&negative);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_stdout_matches_fail() {
+        let res = CmdResult {
+            tmpd: None,
+            code: None,
+            success: true,
+            stdout: "This is a likely error message\n".into(),
+            stderr: "This is a likely error message\n".into(),
+        };
+        let negative = regex::Regex::new(".*unlikely.*").unwrap();
+
+        res.stdout_matches(&negative);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_stdout_not_matches_fail() {
+        let res = CmdResult {
+            tmpd: None,
+            code: None,
+            success: true,
+            stdout: "This is a likely error message\n".into(),
+            stderr: "This is a likely error message\n".into(),
+        };
+        let positive = regex::Regex::new(".*likely.*").unwrap();
+
+        res.stdout_does_not_match(&positive);
+    }
 }

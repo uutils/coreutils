@@ -48,7 +48,7 @@ fn run_single_test(test: &TestCase, at: AtPath, mut ucmd: UCommand) {
     }
     let r = ucmd.run();
     if !r.success {
-        println!("{}", r.stderr);
+        println!("{}", r.stderr_str());
         panic!("{:?}: failed", ucmd.raw);
     }
 
@@ -297,13 +297,14 @@ fn test_chmod_recursive() {
     mkfile(&at.plus_as_string("a/b/c/c"), 0o100444);
     mkfile(&at.plus_as_string("z/y"), 0o100444);
 
-    let result = ucmd
-        .arg("-R")
+    ucmd.arg("-R")
         .arg("--verbose")
         .arg("-r,a+w")
         .arg("a")
         .arg("z")
-        .succeeds();
+        .succeeds()
+        .stderr_contains(&"to 333 (-wx-wx-wx)")
+        .stderr_contains(&"to 222 (-w--w--w-)");
 
     assert_eq!(at.metadata("z/y").permissions().mode(), 0o100222);
     assert_eq!(at.metadata("a/a").permissions().mode(), 0o100222);
@@ -312,8 +313,6 @@ fn test_chmod_recursive() {
     println!("mode {:o}", at.metadata("a").permissions().mode());
     assert_eq!(at.metadata("a").permissions().mode(), 0o40333);
     assert_eq!(at.metadata("z").permissions().mode(), 0o40333);
-    assert!(result.stderr.contains("to 333 (-wx-wx-wx)"));
-    assert!(result.stderr.contains("to 222 (-w--w--w-)"));
 
     unsafe {
         umask(original_umask);
@@ -322,30 +321,24 @@ fn test_chmod_recursive() {
 
 #[test]
 fn test_chmod_non_existing_file() {
-    let (_at, mut ucmd) = at_and_ucmd!();
-    let result = ucmd
+    new_ucmd!()
         .arg("-R")
         .arg("--verbose")
         .arg("-r,a+w")
         .arg("dont-exist")
-        .fails();
-    assert!(result
-        .stderr
-        .contains("cannot access 'dont-exist': No such file or directory"));
+        .fails()
+        .stderr_contains(&"cannot access 'dont-exist': No such file or directory");
 }
 
 #[test]
 fn test_chmod_preserve_root() {
-    let (_at, mut ucmd) = at_and_ucmd!();
-    let result = ucmd
+    new_ucmd!()
         .arg("-R")
         .arg("--preserve-root")
         .arg("755")
         .arg("/")
-        .fails();
-    assert!(result
-        .stderr
-        .contains("chmod: error: it is dangerous to operate recursively on '/'"));
+        .fails()
+        .stderr_contains(&"chmod: error: it is dangerous to operate recursively on '/'");
 }
 
 #[test]
@@ -362,33 +355,27 @@ fn test_chmod_symlink_non_existing_file() {
     let expected_stderr = &format!("cannot operate on dangling symlink '{}'", test_symlink);
 
     at.symlink_file(non_existing, test_symlink);
-    let mut result;
 
     // this cannot succeed since the symbolic link dangles
-    result = scene.ucmd().arg("755").arg("-v").arg(test_symlink).fails();
-
-    println!("stdout = {:?}", result.stdout);
-    println!("stderr = {:?}", result.stderr);
-
-    assert!(result.stdout.contains(expected_stdout));
-    assert!(result.stderr.contains(expected_stderr));
-    assert_eq!(result.code, Some(1));
+    scene.ucmd()
+        .arg("755")
+        .arg("-v")
+        .arg(test_symlink)
+        .fails()
+        .code_is(1)
+        .stdout_contains(expected_stdout)
+        .stderr_contains(expected_stderr);
 
     // this should be the same than with just '-v' but without stderr
-    result = scene
-        .ucmd()
+    scene.ucmd()
         .arg("755")
         .arg("-v")
         .arg("-f")
         .arg(test_symlink)
-        .fails();
-
-    println!("stdout = {:?}", result.stdout);
-    println!("stderr = {:?}", result.stderr);
-
-    assert!(result.stdout.contains(expected_stdout));
-    assert!(result.stderr.is_empty());
-    assert_eq!(result.code, Some(1));
+        .run()
+        .code_is(1)
+        .no_stderr()
+        .stdout_contains(expected_stdout);
 }
 
 #[test]
@@ -405,18 +392,15 @@ fn test_chmod_symlink_non_existing_file_recursive() {
         non_existing,
         &format!("{}/{}", test_directory, test_symlink),
     );
-    let mut result;
 
     // this should succeed
-    result = scene
-        .ucmd()
+    scene.ucmd()
         .arg("-R")
         .arg("755")
         .arg(test_directory)
-        .succeeds();
-    assert_eq!(result.code, Some(0));
-    assert!(result.stdout.is_empty());
-    assert!(result.stderr.is_empty());
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
 
     let expected_stdout = &format!(
         "mode of '{}' retained as 0755 (rwxr-xr-x)\nneither symbolic link '{}/{}' nor referent has been changed",
@@ -424,37 +408,25 @@ fn test_chmod_symlink_non_existing_file_recursive() {
     );
 
     // '-v': this should succeed without stderr
-    result = scene
-        .ucmd()
+    scene.ucmd()
         .arg("-R")
         .arg("-v")
         .arg("755")
         .arg(test_directory)
-        .succeeds();
-
-    println!("stdout = {:?}", result.stdout);
-    println!("stderr = {:?}", result.stderr);
-
-    assert!(result.stdout.contains(expected_stdout));
-    assert!(result.stderr.is_empty());
-    assert_eq!(result.code, Some(0));
+        .succeeds()
+        .stdout_contains(expected_stdout)
+        .no_stderr();
 
     // '-vf': this should be the same than with just '-v'
-    result = scene
-        .ucmd()
+    scene.ucmd()
         .arg("-R")
         .arg("-v")
         .arg("-f")
         .arg("755")
         .arg(test_directory)
-        .succeeds();
-
-    println!("stdout = {:?}", result.stdout);
-    println!("stderr = {:?}", result.stderr);
-
-    assert!(result.stdout.contains(expected_stdout));
-    assert!(result.stderr.is_empty());
-    assert_eq!(result.code, Some(0));
+        .succeeds()
+        .stdout_contains(expected_stdout)
+        .no_stderr();
 }
 
 #[test]

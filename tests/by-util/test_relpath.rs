@@ -70,10 +70,10 @@ fn convert_path<'a>(path: &'a str) -> Cow<'a, str> {
 
 #[test]
 fn test_relpath_with_from_no_d() {
-    for test in TESTS.iter() {
-        let scene = TestScenario::new(util_name!());
-        let at = &scene.fixtures;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
 
+    for test in TESTS.iter() {
         let from: &str = &convert_path(test.from);
         let to: &str = &convert_path(test.to);
         let expected: &str = &convert_path(test.expected);
@@ -92,10 +92,10 @@ fn test_relpath_with_from_no_d() {
 
 #[test]
 fn test_relpath_with_from_with_d() {
-    for test in TESTS.iter() {
-        let scene = TestScenario::new(util_name!());
-        let at = &scene.fixtures;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
 
+    for test in TESTS.iter() {
         let from: &str = &convert_path(test.from);
         let to: &str = &convert_path(test.to);
         let pwd = at.as_string();
@@ -103,63 +103,75 @@ fn test_relpath_with_from_with_d() {
         at.mkdir_all(from);
 
         // d is part of subpath -> expect relative path
-        let mut result = scene
+        let mut result_stdout = scene
             .ucmd()
             .arg(to)
             .arg(from)
             .arg(&format!("-d{}", pwd))
-            .run();
-        assert!(result.success);
+            .succeeds()
+            .stdout_move_str();
         // relax rules for windows test environment
         #[cfg(not(windows))]
-        assert!(Path::new(&result.stdout).is_relative());
+        assert!(Path::new(&result_stdout).is_relative());
 
         // d is not part of subpath -> expect absolut path
-        result = scene.ucmd().arg(to).arg(from).arg("-dnon_existing").run();
-        assert!(result.success);
-        assert!(Path::new(&result.stdout).is_absolute());
+        result_stdout = scene
+            .ucmd()
+            .arg(to)
+            .arg(from)
+            .arg("-dnon_existing")
+            .succeeds()
+            .stdout_move_str();
+        assert!(Path::new(&result_stdout).is_absolute());
     }
 }
 
 #[test]
 fn test_relpath_no_from_no_d() {
-    for test in TESTS.iter() {
-        let scene = TestScenario::new(util_name!());
-        let at = &scene.fixtures;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
 
+    for test in TESTS.iter() {
         let to: &str = &convert_path(test.to);
         at.mkdir_all(to);
 
-        let result = scene.ucmd().arg(to).run();
-        assert!(result.success);
+        let result_stdout = scene.ucmd().arg(to).succeeds().stdout_move_str();
         #[cfg(not(windows))]
-        assert_eq!(result.stdout, format!("{}\n", to));
+        assert_eq!(result_stdout, format!("{}\n", to));
         // relax rules for windows test environment
         #[cfg(windows)]
-        assert!(result.stdout.ends_with(&format!("{}\n", to)));
+        assert!(result_stdout.ends_with(&format!("{}\n", to)));
     }
 }
 
 #[test]
 fn test_relpath_no_from_with_d() {
-    for test in TESTS.iter() {
-        let scene = TestScenario::new(util_name!());
-        let at = &scene.fixtures;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
 
+    for test in TESTS.iter() {
         let to: &str = &convert_path(test.to);
         let pwd = at.as_string();
         at.mkdir_all(to);
 
         // d is part of subpath -> expect relative path
-        let mut result = scene.ucmd().arg(to).arg(&format!("-d{}", pwd)).run();
-        assert!(result.success);
+        let mut result_stdout = scene
+            .ucmd()
+            .arg(to)
+            .arg(&format!("-d{}", pwd))
+            .succeeds()
+            .stdout_move_str();
         // relax rules for windows test environment
         #[cfg(not(windows))]
-        assert!(Path::new(&result.stdout).is_relative());
+        assert!(Path::new(&result_stdout).is_relative());
 
         // d is not part of subpath -> expect absolut path
-        result = scene.ucmd().arg(to).arg("-dnon_existing").run();
-        assert!(result.success);
-        assert!(Path::new(&result.stdout).is_absolute());
+        result_stdout = scene
+            .ucmd()
+            .arg(to)
+            .arg("-dnon_existing")
+            .succeeds()
+            .stdout_move_str();
+        assert!(Path::new(&result_stdout).is_absolute());
     }
 }

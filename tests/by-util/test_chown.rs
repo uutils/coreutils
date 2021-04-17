@@ -53,22 +53,22 @@ fn test_chown_myself() {
     // test chown username file.txt
     let scene = TestScenario::new(util_name!());
     let result = scene.cmd("whoami").run();
-    if is_ci() && result.stderr.contains("No such user/group") {
+    if is_ci() && result.stderr_str().contains("No such user/group") {
         // In the CI, some server are failing to return whoami.
         // As seems to be a configuration issue, ignoring it
         return;
     }
-    println!("results {}", result.stdout);
-    let username = result.stdout.trim_end();
+    println!("results {}", result.stdout_str());
+    let username = result.stdout_str().trim_end();
 
     let (at, mut ucmd) = at_and_ucmd!();
     let file1 = "test_install_target_dir_file_a1";
 
     at.touch(file1);
     let result = ucmd.arg(username).arg(file1).run();
-    println!("results stdout {}", result.stdout);
-    println!("results stderr {}", result.stderr);
-    if is_ci() && result.stderr.contains("invalid user") {
+    println!("results stdout {}", result.stdout_str());
+    println!("results stderr {}", result.stderr_str());
+    if is_ci() && result.stderr_str().contains("invalid user") {
         // In the CI, some server are failing to return id.
         // As seems to be a configuration issue, ignoring it
         return;
@@ -81,24 +81,24 @@ fn test_chown_myself_second() {
     // test chown username: file.txt
     let scene = TestScenario::new(util_name!());
     let result = scene.cmd("whoami").run();
-    if is_ci() && result.stderr.contains("No such user/group") {
+    if is_ci() && result.stderr_str().contains("No such user/group") {
         // In the CI, some server are failing to return whoami.
         // As seems to be a configuration issue, ignoring it
         return;
     }
-    println!("results {}", result.stdout);
+    println!("results {}", result.stdout_str());
 
     let (at, mut ucmd) = at_and_ucmd!();
     let file1 = "test_install_target_dir_file_a1";
 
     at.touch(file1);
     let result = ucmd
-        .arg(result.stdout.trim_end().to_owned() + ":")
+        .arg(result.stdout_str().trim_end().to_owned() + ":")
         .arg(file1)
         .run();
 
-    println!("result.stdout = {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
+    println!("result.stdout = {}", result.stdout_str());
+    println!("result.stderr = {}", result.stderr_str());
     assert!(result.success);
 }
 
@@ -107,31 +107,31 @@ fn test_chown_myself_group() {
     // test chown username:group file.txt
     let scene = TestScenario::new(util_name!());
     let result = scene.cmd("whoami").run();
-    if is_ci() && result.stderr.contains("No such user/group") {
+    if is_ci() && result.stderr_str().contains("No such user/group") {
         // In the CI, some server are failing to return whoami.
         // As seems to be a configuration issue, ignoring it
         return;
     }
-    println!("user name = {}", result.stdout);
-    let username = result.stdout.trim_end();
+    println!("user name = {}", result.stdout_str());
+    let username = result.stdout_str().trim_end();
 
     let result = scene.cmd("id").arg("-gn").run();
-    if is_ci() && result.stderr.contains("No such user/group") {
+    if is_ci() && result.stderr_str().contains("No such user/group") {
         // In the CI, some server are failing to return whoami.
         // As seems to be a configuration issue, ignoring it
         return;
     }
-    println!("group name = {}", result.stdout);
-    let group = result.stdout.trim_end();
+    println!("group name = {}", result.stdout_str());
+    let group = result.stdout_str().trim_end();
 
     let (at, mut ucmd) = at_and_ucmd!();
     let file1 = "test_install_target_dir_file_a1";
     let perm = username.to_owned() + ":" + group;
     at.touch(file1);
     let result = ucmd.arg(perm).arg(file1).run();
-    println!("result.stdout = {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    if is_ci() && result.stderr.contains("chown: invalid group:") {
+    println!("result.stdout = {}", result.stdout_str());
+    println!("result.stderr = {}", result.stderr_str());
+    if is_ci() && result.stderr_str().contains("chown: invalid group:") {
         // With some Ubuntu into the CI, we can get this answer
         return;
     }
@@ -143,27 +143,27 @@ fn test_chown_only_group() {
     // test chown :group file.txt
     let scene = TestScenario::new(util_name!());
     let result = scene.cmd("whoami").run();
-    if is_ci() && result.stderr.contains("No such user/group") {
+    if is_ci() && result.stderr_str().contains("No such user/group") {
         // In the CI, some server are failing to return whoami.
         // As seems to be a configuration issue, ignoring it
         return;
     }
-    println!("results {}", result.stdout);
+    println!("results {}", result.stdout_str());
 
     let (at, mut ucmd) = at_and_ucmd!();
     let file1 = "test_install_target_dir_file_a1";
-    let perm = ":".to_owned() + result.stdout.trim_end();
+    let perm = ":".to_owned() + result.stdout_str().trim_end();
     at.touch(file1);
     let result = ucmd.arg(perm).arg(file1).run();
 
-    println!("result.stdout = {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
+    println!("result.stdout = {}", result.stdout_str());
+    println!("result.stderr = {}", result.stderr_str());
 
-    if is_ci() && result.stderr.contains("Operation not permitted") {
+    if is_ci() && result.stderr_str().contains("Operation not permitted") {
         // With ubuntu with old Rust in the CI, we can get an error
         return;
     }
-    if is_ci() && result.stderr.contains("chown: invalid group:") {
+    if is_ci() && result.stderr_str().contains("chown: invalid group:") {
         // With mac into the CI, we can get this answer
         return;
     }
@@ -174,14 +174,14 @@ fn test_chown_only_group() {
 fn test_chown_only_id() {
     // test chown 1111 file.txt
     let result = TestScenario::new("id").ucmd_keepenv().arg("-u").run();
-    if is_ci() && result.stderr.contains("No such user/group") {
+    if is_ci() && result.stderr_str().contains("No such user/group") {
         // In the CI, some server are failing to return whoami.
         // As seems to be a configuration issue, ignoring it
         return;
     }
-    println!("result.stdout = {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    let id = String::from(result.stdout.trim());
+    println!("result.stdout = {}", result.stdout_str());
+    println!("result.stderr = {}", result.stderr_str());
+    let id = String::from(result.stdout_str().trim());
 
     let (at, mut ucmd) = at_and_ucmd!();
     let file1 = "test_install_target_dir_file_a1";
@@ -189,9 +189,9 @@ fn test_chown_only_id() {
     at.touch(file1);
     let result = ucmd.arg(id).arg(file1).run();
 
-    println!("result.stdout = {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    if is_ci() && result.stderr.contains("chown: invalid user:") {
+    println!("result.stdout = {}", result.stdout_str());
+    println!("result.stderr = {}", result.stderr_str());
+    if is_ci() && result.stderr_str().contains("chown: invalid user:") {
         // With some Ubuntu into the CI, we can get this answer
         return;
     }
@@ -202,14 +202,14 @@ fn test_chown_only_id() {
 fn test_chown_only_group_id() {
     // test chown :1111 file.txt
     let result = TestScenario::new("id").ucmd_keepenv().arg("-g").run();
-    if is_ci() && result.stderr.contains("No such user/group") {
+    if is_ci() && result.stderr_str().contains("No such user/group") {
         // In the CI, some server are failing to return whoami.
         // As seems to be a configuration issue, ignoring it
         return;
     }
-    println!("result.stdout {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    let id = String::from(result.stdout.trim());
+    println!("result.stdout = {}", result.stdout_str());
+    println!("result.stderr = {}", result.stderr_str());
+    let id = String::from(result.stdout_str().trim());
 
     let (at, mut ucmd) = at_and_ucmd!();
     let file1 = "test_install_target_dir_file_a1";
@@ -219,9 +219,9 @@ fn test_chown_only_group_id() {
 
     let result = ucmd.arg(perm).arg(file1).run();
 
-    println!("result.stdout = {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    if is_ci() && result.stderr.contains("chown: invalid group:") {
+    println!("result.stdout = {}", result.stdout_str());
+    println!("result.stderr = {}", result.stderr_str());
+    if is_ci() && result.stderr_str().contains("chown: invalid group:") {
         // With mac into the CI, we can get this answer
         return;
     }
@@ -232,24 +232,24 @@ fn test_chown_only_group_id() {
 fn test_chown_both_id() {
     // test chown 1111:1111 file.txt
     let result = TestScenario::new("id").ucmd_keepenv().arg("-u").run();
-    if is_ci() && result.stderr.contains("No such user/group") {
+    if is_ci() && result.stderr_str().contains("No such user/group") {
         // In the CI, some server are failing to return whoami.
         // As seems to be a configuration issue, ignoring it
         return;
     }
-    println!("result.stdout {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    let id_user = String::from(result.stdout.trim());
+    println!("result.stdout = {}", result.stdout_str());
+    println!("result.stderr = {}", result.stderr_str());
+    let id_user = String::from(result.stdout_str().trim());
 
     let result = TestScenario::new("id").ucmd_keepenv().arg("-g").run();
-    if is_ci() && result.stderr.contains("No such user/group") {
+    if is_ci() && result.stderr_str().contains("No such user/group") {
         // In the CI, some server are failing to return whoami.
         // As seems to be a configuration issue, ignoring it
         return;
     }
-    println!("result.stdout {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    let id_group = String::from(result.stdout.trim());
+    println!("result.stdout = {}", result.stdout_str());
+    println!("result.stderr = {}", result.stderr_str());
+    let id_group = String::from(result.stdout_str().trim());
 
     let (at, mut ucmd) = at_and_ucmd!();
     let file1 = "test_install_target_dir_file_a1";
@@ -258,10 +258,10 @@ fn test_chown_both_id() {
     let perm = id_user + &":".to_owned() + &id_group;
 
     let result = ucmd.arg(perm).arg(file1).run();
-    println!("result.stdout {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
+    println!("result.stdout = {}", result.stdout_str());
+    println!("result.stderr = {}", result.stderr_str());
 
-    if is_ci() && result.stderr.contains("invalid user") {
+    if is_ci() && result.stderr_str().contains("invalid user") {
         // In the CI, some server are failing to return id.
         // As seems to be a configuration issue, ignoring it
         return;
@@ -274,24 +274,24 @@ fn test_chown_both_id() {
 fn test_chown_both_mix() {
     // test chown 1111:1111 file.txt
     let result = TestScenario::new("id").ucmd_keepenv().arg("-u").run();
-    if is_ci() && result.stderr.contains("No such user/group") {
+    if is_ci() && result.stderr_str().contains("No such user/group") {
         // In the CI, some server are failing to return whoami.
         // As seems to be a configuration issue, ignoring it
         return;
     }
-    println!("result.stdout {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    let id_user = String::from(result.stdout.trim());
+    println!("result.stdout = {}", result.stdout_str());
+    println!("result.stderr = {}", result.stderr_str());
+    let id_user = String::from(result.stdout_str().trim());
 
     let result = TestScenario::new("id").ucmd_keepenv().arg("-gn").run();
-    if is_ci() && result.stderr.contains("No such user/group") {
+    if is_ci() && result.stderr_str().contains("No such user/group") {
         // In the CI, some server are failing to return whoami.
         // As seems to be a configuration issue, ignoring it
         return;
     }
-    println!("result.stdout {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    let group_name = String::from(result.stdout.trim());
+    println!("result.stdout = {}", result.stdout_str());
+    println!("result.stderr = {}", result.stderr_str());
+    let group_name = String::from(result.stdout_str().trim());
 
     let (at, mut ucmd) = at_and_ucmd!();
     let file1 = "test_install_target_dir_file_a1";
@@ -301,7 +301,7 @@ fn test_chown_both_mix() {
 
     let result = ucmd.arg(perm).arg(file1).run();
 
-    if is_ci() && result.stderr.contains("invalid user") {
+    if is_ci() && result.stderr_str().contains("invalid user") {
         // In the CI, some server are failing to return id.
         // As seems to be a configuration issue, ignoring it
         return;
@@ -313,14 +313,14 @@ fn test_chown_both_mix() {
 fn test_chown_recursive() {
     let scene = TestScenario::new(util_name!());
     let result = scene.cmd("whoami").run();
-    if is_ci() && result.stderr.contains("No such user/group") {
+    if is_ci() && result.stderr_str().contains("No such user/group") {
         // In the CI, some server are failing to return whoami.
         // As seems to be a configuration issue, ignoring it
         return;
     }
-    println!("result.stdout {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    let username = result.stdout.trim_end();
+    println!("result.stdout = {}", result.stdout_str());
+    println!("result.stderr = {}", result.stderr_str());
+    let username = result.stdout_str().trim_end();
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("a");
@@ -339,31 +339,32 @@ fn test_chown_recursive() {
         .arg("a")
         .arg("z")
         .run();
-    println!("result.stdout {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    if is_ci() && result.stderr.contains("invalid user") {
+    println!("result.stdout = {}", result.stdout_str());
+    println!("result.stderr = {}", result.stderr_str());
+    if is_ci() && result.stderr_str().contains("invalid user") {
         // In the CI, some server are failing to return id.
         // As seems to be a configuration issue, ignoring it
         return;
     }
 
-    assert!(result.stderr.contains("ownership of 'a/a' retained as"));
-    assert!(result.stderr.contains("ownership of 'z/y' retained as"));
-    assert!(result.success);
+    result
+        .stderr_contains(&"ownership of 'a/a' retained as")
+        .stderr_contains(&"ownership of 'z/y' retained as")
+        .success();
 }
 
 #[test]
 fn test_root_preserve() {
     let scene = TestScenario::new(util_name!());
     let result = scene.cmd("whoami").run();
-    if is_ci() && result.stderr.contains("No such user/group") {
+    if is_ci() && result.stderr_str().contains("No such user/group") {
         // In the CI, some server are failing to return whoami.
         // As seems to be a configuration issue, ignoring it
         return;
     }
-    println!("result.stdout {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    let username = result.stdout.trim_end();
+    println!("result.stdout = {}", result.stdout_str());
+    println!("result.stderr = {}", result.stderr_str());
+    let username = result.stdout_str().trim_end();
 
     let result = new_ucmd!()
         .arg("--preserve-root")
@@ -371,9 +372,9 @@ fn test_root_preserve() {
         .arg(username)
         .arg("/")
         .fails();
-    println!("result.stdout {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    if is_ci() && result.stderr.contains("invalid user") {
+    println!("result.stdout = {}", result.stdout_str());
+    println!("result.stderr = {}", result.stderr_str());
+    if is_ci() && result.stderr_str().contains("invalid user") {
         // In the CI, some server are failing to return id.
         // As seems to be a configuration issue, ignoring it
         return;

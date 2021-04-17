@@ -303,7 +303,7 @@ fn exec(files: &[PathBuf], settings: &Settings) -> i32 {
     }
 }
 
-fn link_files_in_dir(files: &[PathBuf], target_dir: &PathBuf, settings: &Settings) -> i32 {
+fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) -> i32 {
     if !target_dir.is_dir() {
         show_error!("target '{}' is not a directory", target_dir.display());
         return 1;
@@ -329,7 +329,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &PathBuf, settings: &Setting
                     };
                 }
             }
-            target_dir.clone()
+            target_dir.to_path_buf()
         } else {
             match srcpath.as_os_str().to_str() {
                 Some(name) => {
@@ -370,7 +370,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &PathBuf, settings: &Setting
     }
 }
 
-fn relative_path<'a>(src: &PathBuf, dst: &PathBuf) -> Result<Cow<'a, Path>> {
+fn relative_path<'a>(src: &Path, dst: &Path) -> Result<Cow<'a, Path>> {
     let abssrc = canonicalize(src, CanonicalizeMode::Normal)?;
     let absdst = canonicalize(dst, CanonicalizeMode::Normal)?;
     let suffix_pos = abssrc
@@ -390,7 +390,7 @@ fn relative_path<'a>(src: &PathBuf, dst: &PathBuf) -> Result<Cow<'a, Path>> {
     Ok(result.into())
 }
 
-fn link(src: &PathBuf, dst: &PathBuf, settings: &Settings) -> Result<()> {
+fn link(src: &Path, dst: &Path, settings: &Settings) -> Result<()> {
     let mut backup_path = None;
     let source: Cow<'_, Path> = if settings.relative {
         relative_path(&src, dst)?
@@ -453,13 +453,13 @@ fn read_yes() -> bool {
     }
 }
 
-fn simple_backup_path(path: &PathBuf, suffix: &str) -> PathBuf {
+fn simple_backup_path(path: &Path, suffix: &str) -> PathBuf {
     let mut p = path.as_os_str().to_str().unwrap().to_owned();
     p.push_str(suffix);
     PathBuf::from(p)
 }
 
-fn numbered_backup_path(path: &PathBuf) -> PathBuf {
+fn numbered_backup_path(path: &Path) -> PathBuf {
     let mut i: u64 = 1;
     loop {
         let new_path = simple_backup_path(path, &format!(".~{}~", i));
@@ -470,7 +470,7 @@ fn numbered_backup_path(path: &PathBuf) -> PathBuf {
     }
 }
 
-fn existing_backup_path(path: &PathBuf, suffix: &str) -> PathBuf {
+fn existing_backup_path(path: &Path, suffix: &str) -> PathBuf {
     let test_path = simple_backup_path(path, &".~1~".to_owned());
     if test_path.exists() {
         return numbered_backup_path(path);
