@@ -17,10 +17,10 @@ use onig::{Regex, RegexOptions, Syntax};
 use crate::tokens::Token;
 
 type TokenStack = Vec<(usize, Token)>;
-pub type OperandsList = Vec<Box<ASTNode>>;
+pub type OperandsList = Vec<Box<AstNode>>;
 
 #[derive(Debug)]
-pub enum ASTNode {
+pub enum AstNode {
     Leaf {
         token_idx: usize,
         value: String,
@@ -31,7 +31,7 @@ pub enum ASTNode {
         operands: OperandsList,
     },
 }
-impl ASTNode {
+impl AstNode {
     fn debug_dump(&self) {
         self.debug_dump_impl(1);
     }
@@ -40,7 +40,7 @@ impl ASTNode {
             print!("\t",);
         }
         match *self {
-            ASTNode::Leaf {
+            AstNode::Leaf {
                 ref token_idx,
                 ref value,
             } => println!(
@@ -49,7 +49,7 @@ impl ASTNode {
                 token_idx,
                 self.evaluate()
             ),
-            ASTNode::Node {
+            AstNode::Node {
                 ref token_idx,
                 ref op_type,
                 ref operands,
@@ -67,23 +67,23 @@ impl ASTNode {
         }
     }
 
-    fn new_node(token_idx: usize, op_type: &str, operands: OperandsList) -> Box<ASTNode> {
-        Box::new(ASTNode::Node {
+    fn new_node(token_idx: usize, op_type: &str, operands: OperandsList) -> Box<AstNode> {
+        Box::new(AstNode::Node {
             token_idx,
             op_type: op_type.into(),
             operands,
         })
     }
-    fn new_leaf(token_idx: usize, value: &str) -> Box<ASTNode> {
-        Box::new(ASTNode::Leaf {
+    fn new_leaf(token_idx: usize, value: &str) -> Box<AstNode> {
+        Box::new(AstNode::Leaf {
             token_idx,
             value: value.into(),
         })
     }
     pub fn evaluate(&self) -> Result<String, String> {
         match *self {
-            ASTNode::Leaf { ref value, .. } => Ok(value.clone()),
-            ASTNode::Node { ref op_type, .. } => match self.operand_values() {
+            AstNode::Leaf { ref value, .. } => Ok(value.clone()),
+            AstNode::Node { ref op_type, .. } => match self.operand_values() {
                 Err(reason) => Err(reason),
                 Ok(operand_values) => match op_type.as_ref() {
                     "+" => infix_operator_two_ints(
@@ -161,7 +161,7 @@ impl ASTNode {
         }
     }
     pub fn operand_values(&self) -> Result<Vec<String>, String> {
-        if let ASTNode::Node { ref operands, .. } = *self {
+        if let AstNode::Node { ref operands, .. } = *self {
             let mut out = Vec::with_capacity(operands.len());
             for operand in operands {
                 match operand.evaluate() {
@@ -178,7 +178,7 @@ impl ASTNode {
 
 pub fn tokens_to_ast(
     maybe_tokens: Result<Vec<(usize, Token)>, String>,
-) -> Result<Box<ASTNode>, String> {
+) -> Result<Box<AstNode>, String> {
     if maybe_tokens.is_err() {
         Err(maybe_tokens.err().unwrap())
     } else {
@@ -212,7 +212,7 @@ pub fn tokens_to_ast(
     }
 }
 
-fn maybe_dump_ast(result: &Result<Box<ASTNode>, String>) {
+fn maybe_dump_ast(result: &Result<Box<AstNode>, String>) {
     use std::env;
     if let Ok(debug_var) = env::var("EXPR_DEBUG_AST") {
         if debug_var == "1" {
@@ -238,11 +238,11 @@ fn maybe_dump_rpn(rpn: &TokenStack) {
     }
 }
 
-fn ast_from_rpn(rpn: &mut TokenStack) -> Result<Box<ASTNode>, String> {
+fn ast_from_rpn(rpn: &mut TokenStack) -> Result<Box<AstNode>, String> {
     match rpn.pop() {
         None => Err("syntax error (premature end of expression)".to_owned()),
 
-        Some((token_idx, Token::Value { value })) => Ok(ASTNode::new_leaf(token_idx, &value)),
+        Some((token_idx, Token::Value { value })) => Ok(AstNode::new_leaf(token_idx, &value)),
 
         Some((token_idx, Token::InfixOp { value, .. })) => {
             maybe_ast_node(token_idx, &value, 2, rpn)
@@ -262,7 +262,7 @@ fn maybe_ast_node(
     op_type: &str,
     arity: usize,
     rpn: &mut TokenStack,
-) -> Result<Box<ASTNode>, String> {
+) -> Result<Box<AstNode>, String> {
     let mut operands = Vec::with_capacity(arity);
     for _ in 0..arity {
         match ast_from_rpn(rpn) {
@@ -271,7 +271,7 @@ fn maybe_ast_node(
         }
     }
     operands.reverse();
-    Ok(ASTNode::new_node(token_idx, op_type, operands))
+    Ok(AstNode::new_node(token_idx, op_type, operands))
 }
 
 fn move_rest_of_ops_to_out(

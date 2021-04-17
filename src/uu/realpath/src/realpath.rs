@@ -12,7 +12,7 @@ extern crate uucore;
 
 use clap::{App, Arg};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use uucore::fs::{canonicalize, CanonicalizeMode};
 
 static ABOUT: &str = "print the resolved path";
@@ -82,7 +82,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     retcode
 }
 
-fn resolve_path(p: &PathBuf, strip: bool, zero: bool, quiet: bool) -> bool {
+fn resolve_path(p: &Path, strip: bool, zero: bool, quiet: bool) -> bool {
     let abs = canonicalize(p, CanonicalizeMode::Normal).unwrap();
 
     if strip {

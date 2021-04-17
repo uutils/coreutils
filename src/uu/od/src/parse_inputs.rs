@@ -63,7 +63,7 @@ pub fn parse_inputs(matches: &dyn CommandLineOpts) -> Result<CommandLineInputs, 
                 }
                 if input_strings.len() == 2 {
                     return Ok(CommandLineInputs::FileAndOffset((
-                        input_strings[0].clone().to_owned(),
+                        input_strings[0].to_string(),
                         n,
                         None,
                     )));
@@ -106,7 +106,7 @@ pub fn parse_inputs_traditional(input_strings: Vec<&str>) -> Result<CommandLineI
                     Some(m),
                 ))),
                 (_, Ok(m)) => Ok(CommandLineInputs::FileAndOffset((
-                    input_strings[0].clone().to_owned(),
+                    input_strings[0].to_string(),
                     m,
                     None,
                 ))),
@@ -118,7 +118,7 @@ pub fn parse_inputs_traditional(input_strings: Vec<&str>) -> Result<CommandLineI
             let label = parse_offset_operand(&input_strings[2]);
             match (offset, label) {
                 (Ok(n), Ok(m)) => Ok(CommandLineInputs::FileAndOffset((
-                    input_strings[0].clone().to_owned(),
+                    input_strings[0].to_string(),
                     n,
                     Some(m),
                 ))),

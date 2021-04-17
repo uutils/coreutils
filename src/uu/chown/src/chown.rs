@@ -391,7 +391,7 @@ impl Chowner {
                 self.verbosity.clone(),
             ) {
                 Ok(n) => {
-                    if n != "" {
+                    if !n.is_empty() {
                         show_info!("{}", n);
                     }
                     0
@@ -446,7 +446,7 @@ impl Chowner {
                 self.verbosity.clone(),
             ) {
                 Ok(n) => {
-                    if n != "" {
+                    if !n.is_empty() {
                         show_info!("{}", n);
                     }
                     0

@@ -75,7 +75,7 @@ fn open(name: &str) -> Result<Box<dyn Read>> {
                     "Is a directory",
                 ));
             };
-            if !path.metadata().is_ok() {
+            if path.metadata().is_err() {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::NotFound,
                     "No such file or directory",

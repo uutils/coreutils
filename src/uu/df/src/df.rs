@@ -116,7 +116,6 @@ struct Options {
     show_listed_fs: bool,
     show_fs_type: bool,
     show_inode_instead: bool,
-    print_grand_total: bool,
     // block_size: usize,
     human_readable_base: i64,
     fs_selector: FsSelector,
@@ -286,7 +285,6 @@ impl Options {
             show_listed_fs: false,
             show_fs_type: false,
             show_inode_instead: false,
-            print_grand_total: false,
             // block_size: match env::var("BLOCKSIZE") {
             //     Ok(size) => size.parse().unwrap(),
             //     Err(_) => 512,
@@ -870,9 +868,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
     if matches.is_present(OPT_ALL) {
         opt.show_all_fs = true;
-    }
-    if matches.is_present(OPT_TOTAL) {
-        opt.print_grand_total = true;
     }
     if matches.is_present(OPT_INODES) {
         opt.show_inode_instead = true;
