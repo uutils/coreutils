@@ -7,9 +7,7 @@ const SUB_LINK: &str = "subdir/links/sublink.txt";
 
 #[test]
 fn test_du_basics() {
-    new_ucmd!()
-        .succeeds()
-        .no_stderr();
+    new_ucmd!().succeeds().no_stderr();
 }
 #[cfg(target_vendor = "apple")]
 fn _du_basics(s: String) {
@@ -178,7 +176,14 @@ fn test_du_h_flag_empty_file() {
 fn test_du_time() {
     let ts = TestScenario::new("du");
 
-    let touch = ts.ccmd("touch").arg("-a").arg("-m").arg("-t").arg("201505150000").arg("date_test").run();
+    let touch = ts
+        .ccmd("touch")
+        .arg("-a")
+        .arg("-m")
+        .arg("-t")
+        .arg("201505150000")
+        .arg("date_test")
+        .run();
     assert!(touch.success);
 
     let result = ts.ucmd().arg("--time").arg("date_test").run();

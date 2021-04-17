@@ -150,7 +150,7 @@ fn next_tabstop(tabstops: &[usize], col: usize) -> Option<usize> {
     } else {
         // find next larger tab
         // if there isn't one in the list, tab becomes a single space
-        tabstops.iter().find(|&&t| t > col).map(|t| t-col)
+        tabstops.iter().find(|&&t| t > col).map(|t| t - col)
     }
 }
 
