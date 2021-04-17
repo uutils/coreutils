@@ -43,11 +43,9 @@ fn test_short_format_i() {
     let actual = TestScenario::new(util_name!())
         .ucmd()
         .args(&args)
-        .run()
-        .stdout;
+        .succeeds()
+        .stdout_move_str();
     let expect = expected_result(&args);
-    println!("actual: {:?}", actual);
-    println!("expect: {:?}", expect);
     let v_actual: Vec<&str> = actual.split_whitespace().collect();
     let v_expect: Vec<&str> = expect.split_whitespace().collect();
     assert_eq!(v_actual, v_expect);
@@ -62,11 +60,9 @@ fn test_short_format_q() {
     let actual = TestScenario::new(util_name!())
         .ucmd()
         .args(&args)
-        .run()
-        .stdout;
+        .succeeds()
+        .stdout_move_str();
     let expect = expected_result(&args);
-    println!("actual: {:?}", actual);
-    println!("expect: {:?}", expect);
     let v_actual: Vec<&str> = actual.split_whitespace().collect();
     let v_expect: Vec<&str> = expect.split_whitespace().collect();
     assert_eq!(v_actual, v_expect);

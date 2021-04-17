@@ -1029,7 +1029,7 @@ fn test_cp_one_file_system() {
     at_src.mkdir(TEST_MOUNT_MOUNTPOINT);
     let mountpoint_path = &at_src.plus_as_string(TEST_MOUNT_MOUNTPOINT);
 
-    let _r = scene
+    scene
         .cmd("mount")
         .arg("-t")
         .arg("tmpfs")
@@ -1037,8 +1037,7 @@ fn test_cp_one_file_system() {
         .arg("size=640k") // ought to be enough
         .arg("tmpfs")
         .arg(mountpoint_path)
-        .run();
-    assert!(_r.code == Some(0), "{}", _r.stderr);
+        .succeeds();
 
     at_src.touch(TEST_MOUNT_OTHER_FILESYSTEM_FILE);
 
@@ -1051,8 +1050,7 @@ fn test_cp_one_file_system() {
         .run();
 
     // Ditch the mount before the asserts
-    let _r = scene.cmd("umount").arg(mountpoint_path).run();
-    assert!(_r.code == Some(0), "{}", _r.stderr);
+    scene.cmd("umount").arg(mountpoint_path).succeeds();
 
     assert!(result.success);
     assert!(!at_dst.file_exists(TEST_MOUNT_OTHER_FILESYSTEM_FILE));

@@ -36,9 +36,7 @@ fn test_shred_force() {
     at.set_readonly(file);
 
     // Try shred -u.
-    let result = scene.ucmd().arg("-u").arg(file).run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
+    scene.ucmd().arg("-u").arg(file).run();
 
     // file_a was not deleted because it is readonly.
     assert!(at.file_exists(file));
