@@ -381,6 +381,7 @@ impl Config {
             })
             .or_else(|| termsize::get().map(|s| s.cols));
 
+        #[allow(clippy::needless_bool)]
         let show_control = if options.is_present(options::HIDE_CONTROL_CHARS) {
             false
         } else if options.is_present(options::SHOW_CONTROL_CHARS) {
@@ -1108,7 +1109,7 @@ fn sort_entries(entries: &mut Vec<PathBuf>, config: &Config) {
         }
         // The default sort in GNU ls is case insensitive
         Sort::Name => entries.sort_by_key(|k| k.to_string_lossy().to_lowercase()),
-        Sort::Version => entries.sort_by(version_cmp::version_cmp),
+        Sort::Version => entries.sort_by(|a, b| version_cmp::version_cmp(a, b)),
         Sort::None => {}
     }
 
@@ -1142,7 +1143,7 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
     true
 }
 
-fn enter_directory(dir: &PathBuf, config: &Config) {
+fn enter_directory(dir: &Path, config: &Config) {
     let mut entries: Vec<_> = safe_unwrap!(fs::read_dir(dir).and_then(Iterator::collect));
 
     entries.retain(|e| should_display(e, config));
@@ -1167,7 +1168,7 @@ fn enter_directory(dir: &PathBuf, config: &Config) {
     }
 }
 
-fn get_metadata(entry: &PathBuf, dereference: bool) -> std::io::Result<Metadata> {
+fn get_metadata(entry: &Path, dereference: bool) -> std::io::Result<Metadata> {
     if dereference {
         entry.metadata().or_else(|_| entry.symlink_metadata())
     } else {
@@ -1175,7 +1176,7 @@ fn get_metadata(entry: &PathBuf, dereference: bool) -> std::io::Result<Metadata>
     }
 }
 
-fn display_dir_entry_size(entry: &PathBuf, config: &Config) -> (usize, usize) {
+fn display_dir_entry_size(entry: &Path, config: &Config) -> (usize, usize) {
     if let Ok(md) = get_metadata(entry, false) {
         (
             display_symlink_count(&md).len(),
@@ -1270,7 +1271,7 @@ fn display_grid(names: impl Iterator<Item = Cell>, width: u16, direction: Direct
 use uucore::fs::display_permissions;
 
 fn display_item_long(
-    item: &PathBuf,
+    item: &Path,
     strip: Option<&Path>,
     max_links: usize,
     max_size: usize,

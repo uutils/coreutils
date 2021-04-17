@@ -132,7 +132,9 @@ macro_rules! prompt_yes(
 
 pub type CopyResult<T> = Result<T, Error>;
 pub type Source = PathBuf;
+pub type SourceSlice = Path;
 pub type Target = PathBuf;
+pub type TargetSlice = Path;
 
 /// Specifies whether when overwrite files
 #[derive(Clone, Eq, PartialEq)]
@@ -547,14 +549,13 @@ impl FromStr for Attribute {
 }
 
 fn add_all_attributes() -> Vec<Attribute> {
-    let mut attr = Vec::new();
+    use Attribute::*;
+
+    let mut attr = vec![Ownership, Timestamps, Context, Xattr, Links];
+
     #[cfg(unix)]
-    attr.push(Attribute::Mode);
-    attr.push(Attribute::Ownership);
-    attr.push(Attribute::Timestamps);
-    attr.push(Attribute::Context);
-    attr.push(Attribute::Xattr);
-    attr.push(Attribute::Links);
+    attr.insert(0, Mode);
+
     attr
 }
 
@@ -665,7 +666,7 @@ impl TargetType {
     ///
     /// Treat target as a dir if we have multiple sources or the target
     /// exists and already is a directory
-    fn determine(sources: &[Source], target: &Target) -> TargetType {
+    fn determine(sources: &[Source], target: &TargetSlice) -> TargetType {
         if sources.len() > 1 || target.is_dir() {
             TargetType::Directory
         } else {
@@ -714,7 +715,7 @@ fn parse_path_args(path_args: &[String], options: &Options) -> CopyResult<(Vec<S
 
 fn preserve_hardlinks(
     hard_links: &mut Vec<(String, u64)>,
-    source: &std::path::PathBuf,
+    source: &std::path::Path,
     dest: std::path::PathBuf,
     found_hard_link: &mut bool,
 ) -> CopyResult<()> {
@@ -788,7 +789,7 @@ fn preserve_hardlinks(
 /// Behavior depends on `options`, see [`Options`] for details.
 ///
 /// [`Options`]: ./struct.Options.html
-fn copy(sources: &[Source], target: &Target, options: &Options) -> CopyResult<()> {
+fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResult<()> {
     let target_type = TargetType::determine(sources, target);
     verify_target_type(target, &target_type)?;
 
@@ -840,7 +841,7 @@ fn copy(sources: &[Source], target: &Target, options: &Options) -> CopyResult<()
 
 fn construct_dest_path(
     source_path: &Path,
-    target: &Target,
+    target: &TargetSlice,
     target_type: &TargetType,
     options: &Options,
 ) -> CopyResult<PathBuf> {
@@ -870,8 +871,8 @@ fn construct_dest_path(
 }
 
 fn copy_source(
-    source: &Source,
-    target: &Target,
+    source: &SourceSlice,
+    target: &TargetSlice,
     target_type: &TargetType,
     options: &Options,
 ) -> CopyResult<()> {
@@ -912,7 +913,7 @@ fn adjust_canonicalization(p: &Path) -> Cow<Path> {
 ///
 /// Any errors encountered copying files in the tree will be logged but
 /// will not cause a short-circuit.
-fn copy_directory(root: &Path, target: &Target, options: &Options) -> CopyResult<()> {
+fn copy_directory(root: &Path, target: &TargetSlice, options: &Options) -> CopyResult<()> {
     if !options.recursive {
         return Err(format!("omitting directory '{}'", root.display()).into());
     }
@@ -1068,6 +1069,7 @@ fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResu
 }
 
 #[cfg(not(windows))]
+#[allow(clippy::unnecessary_wraps)] // needed for windows version
 fn symlink_file(source: &Path, dest: &Path, context: &str) -> CopyResult<()> {
     match std::os::unix::fs::symlink(source, dest).context(context) {
         Ok(_) => Ok(()),

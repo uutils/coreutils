@@ -149,7 +149,7 @@ fn test_big_h() {
                 .arg("bin")
                 .arg("/proc/self/fd")
                 .fails()
-                .stderr
+                .stderr_str()
                 .lines()
                 .fold(0, |acc, _| acc + 1)
                 > 1
