@@ -75,5 +75,5 @@ fn expected_result(args: &[&str]) -> String {
         .env("LANGUAGE", "C")
         .args(args)
         .run()
-        .stdout
+        .stdout_move_str()
 }
