@@ -90,3 +90,43 @@ duplicate the string you passed to hyperfine but remove the `target/release/core
 Example: `hyperfine "target/release/coreutils sort shuffled_numbers_si.txt -h -o output.txt"` becomes
 `hyperfine "target/release/coreutils sort shuffled_numbers_si.txt -h -o output.txt" "sort shuffled_numbers_si.txt -h -o output.txt"`
 (This assumes GNU sort is installed as `sort`)
+
+## Memory and CPU usage
+
+The above benchmarks use hyperfine to measure the speed of sorting. There are however other useful metrics to determine overall
+resource usage. One way to measure them is the `time` command. This is not to be confused with the `time` that is built in to the bash shell.
+You may have to install `time` first, then you have to run it with `/bin/time -v` to give it precedence over the built in `time`.
+
+<details>
+      <summary>Example output</summary>
+
+      Command being timed: "target/release/coreutils sort shuffled_numbers.txt"
+      User time (seconds): 0.10
+      System time (seconds): 0.00
+      Percent of CPU this job got: 365%
+      Elapsed (wall clock) time (h:mm:ss or m:ss): 0:00.02
+      Average shared text size (kbytes): 0
+      Average unshared data size (kbytes): 0
+      Average stack size (kbytes): 0
+      Average total size (kbytes): 0
+      Maximum resident set size (kbytes): 25360
+      Average resident set size (kbytes): 0
+      Major (requiring I/O) page faults: 0
+      Minor (reclaiming a frame) page faults: 5802
+      Voluntary context switches: 462
+      Involuntary context switches: 73
+      Swaps: 0
+      File system inputs: 1184
+      File system outputs: 0
+      Socket messages sent: 0
+      Socket messages received: 0
+      Signals delivered: 0
+      Page size (bytes): 4096
+      Exit status: 0
+
+</details>
+
+Useful metrics to look at could be:
+
+-   Percent of CPUt his job got
+-   Maximum resident set size
