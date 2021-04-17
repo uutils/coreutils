@@ -16,6 +16,7 @@ extern crate uucore;
 mod quoting_style;
 mod version_cmp;
 
+use cached::proc_macro::cached;
 use clap::{App, Arg};
 use globset::{self, Glob, GlobSet, GlobSetBuilder};
 use number_prefix::NumberPrefix;
@@ -1041,6 +1042,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 struct PathData {
     md: std::io::Result<Metadata>,
     lossy_string: String,
+    name: String,
     p_buf: PathBuf,
 }
 
@@ -1048,10 +1050,13 @@ impl PathData {
     fn new(p_buf: PathBuf, config: &Config, command_line: bool) -> Self {
         let md = get_metadata(&p_buf, config, command_line);
         let lossy_string = p_buf.to_string_lossy().into_owned();
-        // let path_name: String =
+        let name = p_buf
+            .file_name()
+            .map_or(String::new(), |s| s.to_string_lossy().into_owned());
         Self {
             md,
             lossy_string,
+            name,
             p_buf,
         }
     }
@@ -1120,7 +1125,7 @@ fn sort_entries(entries: &mut Vec<PathData>, config: &Config) {
             entries.sort_by_key(|k| Reverse(k.md.as_ref().map(|md| md.len()).unwrap_or(0)))
         }
         // The default sort in GNU ls is case insensitive
-        Sort::Name => entries.sort_by_key(|k| k.lossy_string.to_lowercase()),
+        Sort::Name => entries.sort_by_key(|k| k.name.to_lowercase()),
         Sort::Version => entries.sort_by(|k, j| version_cmp::version_cmp(&k.p_buf, &j.p_buf)),
         Sort::None => {}
     }
@@ -1370,12 +1375,24 @@ fn get_inode(metadata: &Metadata) -> String {
 use uucore::entries;
 
 #[cfg(unix)]
+#[cached]
+fn cached_uid2usr(uid: u32) -> String {
+    entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string())
+}
+
+#[cfg(unix)]
 fn display_uname(metadata: &Metadata, config: &Config) -> String {
     if config.long.numeric_uid_gid {
         metadata.uid().to_string()
     } else {
-        entries::uid2usr(metadata.uid()).unwrap_or_else(|_| metadata.uid().to_string())
+        cached_uid2usr(metadata.uid())
     }
+}
+
+#[cfg(unix)]
+#[cached]
+fn cached_gid2grp(gid: u32) -> String {
+    entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string())
 }
 
 #[cfg(unix)]
@@ -1383,7 +1400,7 @@ fn display_group(metadata: &Metadata, config: &Config) -> String {
     if config.long.numeric_uid_gid {
         metadata.gid().to_string()
     } else {
-        entries::gid2grp(metadata.gid()).unwrap_or_else(|_| metadata.gid().to_string())
+        cached_gid2grp(metadata.gid())
     }
 }
 
