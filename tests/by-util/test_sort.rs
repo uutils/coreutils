@@ -9,6 +9,25 @@ fn test_helper(file_name: &str, args: &str) {
 }
 
 #[test]
+fn test_months_whitespace() {
+    test_helper("months-whitespace", "-M");
+}
+
+#[test]
+fn test_version_empty_lines() {
+    new_ucmd!()
+    .arg("-V")
+    .arg("version-empty-lines.txt")
+    .succeeds()
+    .stdout_is("\n\n\n\n\n\n\n1.2.3-alpha\n1.2.3-alpha2\n\t\t\t1.12.4\n11.2.3\n");
+}
+
+#[test]
+fn test_human_numeric_whitespace() {
+    test_helper("human-numeric-whitespace", "-h");
+}
+
+#[test]
 fn test_multiple_decimals_general() {
     new_ucmd!()
         .arg("-g")
