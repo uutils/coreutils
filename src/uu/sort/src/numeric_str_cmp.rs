@@ -68,7 +68,10 @@ impl NumInfo {
             }
             first_char = false;
 
-            if parse_settings.thousands_separator.map_or(false, |c| c == char) {
+            if parse_settings
+                .thousands_separator
+                .map_or(false, |c| c == char)
+            {
                 continue;
             }
 
