@@ -677,7 +677,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(
             Arg::with_name(OPT_PARALLEL)
                 .long(OPT_PARALLEL)
-                .help("change the number of threads running concurrently to N")
+                .help("change the number of threads running concurrently to NUM_THREADS")
                 .takes_value(true)
                 .value_name("NUM_THREADS"),
         )
@@ -1226,7 +1226,7 @@ fn month_parse(line: &str) -> Month {
     // GNU splits at any 3 letter match "JUNNNN" is JUN
     let pattern = if line.trim().len().ge(&3) {
         // Split a 3 and get first element of tuple ".0"
-        line.split_at(3).0
+        line.trim().split_at(3).0
     } else {
         ""
     };
@@ -1262,10 +1262,21 @@ fn month_compare(a: &str, b: &str) -> Ordering {
     }
 }
 
+fn version_parse(a: &str) -> Version {
+    let result = Version::parse(a);
+
+    match result {
+        Ok(vers_a) => vers_a,
+        // Non-version lines parse to 0.0.0
+        Err(_e) => Version::parse("0.0.0").unwrap(),
+    }
+}
+
 fn version_compare(a: &str, b: &str) -> Ordering {
     #![allow(clippy::comparison_chain)]
-    let ver_a = Version::parse(a);
-    let ver_b = Version::parse(b);
+    let ver_a = version_parse(a);
+    let ver_b = version_parse(b);
+
     // Version::cmp is not implemented; implement comparison directly
     if ver_a > ver_b {
         Ordering::Greater

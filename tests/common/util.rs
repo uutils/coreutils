@@ -33,6 +33,8 @@ static ALREADY_RUN: &str = " you have already run this UCommand, if you want to 
                             testing();";
 static MULTIPLE_STDIN_MEANINGLESS: &str = "Ucommand is designed around a typical use case of: provide args and input stream -> spawn process -> block until completion -> return output streams. For verifying that a particular section of the input stream is what causes a particular behavior, use the Command type directly.";
 
+static NO_STDIN_MEANINGLESS: &str = "Setting this flag has no effect if there is no stdin";
+
 /// Test if the program is running under CI
 pub fn is_ci() -> bool {
     std::env::var("CI")
@@ -688,6 +690,7 @@ pub struct UCommand {
     tmpd: Option<Rc<TempDir>>,
     has_run: bool,
     stdin: Option<Vec<u8>>,
+    ignore_stdin_write_error: bool,
 }
 
 impl UCommand {
@@ -717,6 +720,7 @@ impl UCommand {
             },
             comm_string: String::from(arg.as_ref().to_str().unwrap()),
             stdin: None,
+            ignore_stdin_write_error: false,
         }
     }
 
@@ -769,6 +773,17 @@ impl UCommand {
         self.pipe_in(contents)
     }
 
+    /// Ignores error caused by feeding stdin to the command.
+    /// This is typically useful to test non-standard workflows
+    /// like feeding something to a command that does not read it
+    pub fn ignore_stdin_write_error(&mut self) -> &mut UCommand {
+        if self.stdin.is_none() {
+            panic!("{}", NO_STDIN_MEANINGLESS);
+        }
+        self.ignore_stdin_write_error = true;
+        self
+    }
+
     pub fn env<K, V>(&mut self, key: K, val: V) -> &mut UCommand
     where
         K: AsRef<OsStr>,
@@ -789,7 +804,7 @@ impl UCommand {
         }
         self.has_run = true;
         log_info("run", &self.comm_string);
-        let mut result = self
+        let mut child = self
             .raw
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -798,15 +813,19 @@ impl UCommand {
             .unwrap();
 
         if let Some(ref input) = self.stdin {
-            result
+            let write_result = child
                 .stdin
                 .take()
                 .unwrap_or_else(|| panic!("Could not take child process stdin"))
-                .write_all(input)
-                .unwrap_or_else(|e| panic!("{}", e));
+                .write_all(input);
+            if !self.ignore_stdin_write_error {
+                if let Err(e) = write_result {
+                    panic!("failed to write to stdin of child: {}", e)
+                }
+            }
         }
 
-        result
+        child
     }
 
     /// Spawns the command, feeds the stdin if any, waits for the result

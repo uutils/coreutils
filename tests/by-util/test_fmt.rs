@@ -5,7 +5,7 @@ fn test_fmt() {
     let result = new_ucmd!().arg("one-word-per-line.txt").run();
     //.stdout_is_fixture("call_graph.expected");
     assert_eq!(
-        result.stdout.trim(),
+        result.stdout_str().trim(),
         "this is a file with one word per line"
     );
 }
@@ -15,7 +15,7 @@ fn test_fmt_q() {
     let result = new_ucmd!().arg("-q").arg("one-word-per-line.txt").run();
     //.stdout_is_fixture("call_graph.expected");
     assert_eq!(
-        result.stdout.trim(),
+        result.stdout_str().trim(),
         "this is a file with one word per line"
     );
 }
@@ -42,7 +42,7 @@ fn test_fmt_w() {
         .arg("one-word-per-line.txt")
         .run();
         //.stdout_is_fixture("call_graph.expected");
-    assert_eq!(result.stdout.trim(), "this is a file with one word per line");
+    assert_eq!(result.stdout_str().trim(), "this is a file with one word per line");
 }
 
 

@@ -102,7 +102,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let mut largest_dec = 0;
     let mut padding = 0;
     let first = if numbers.len() > 1 {
-        let slice = &numbers[0][..];
+        let slice = numbers[0];
         let len = slice.len();
         let dec = slice.find('.').unwrap_or(len);
         largest_dec = len - dec;
@@ -118,7 +118,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         1.0
     };
     let increment = if numbers.len() > 2 {
-        let slice = &numbers[1][..];
+        let slice = numbers[1];
         let len = slice.len();
         let dec = slice.find('.').unwrap_or(len);
         largest_dec = cmp::max(largest_dec, len - dec);
@@ -134,11 +134,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         1.0
     };
     if increment == 0.0 {
-        show_error!("increment value: '{}'", &numbers[1][..]);
+        show_error!("increment value: '{}'", numbers[1]);
         return 1;
     }
     let last = {
-        let slice = &numbers[numbers.len() - 1][..];
+        let slice = numbers[numbers.len() - 1];
         padding = cmp::max(padding, slice.find('.').unwrap_or_else(|| slice.len()));
         match parse_float(slice) {
             Ok(n) => n,

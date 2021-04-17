@@ -2,22 +2,20 @@ use crate::common::util::*;
 
 #[test]
 fn test_default() {
-    //CmdResult.stdout_only(...) trims trailing newlines
-    assert_eq!("hi\n", new_ucmd!().arg("hi").succeeds().no_stderr().stdout);
+    new_ucmd!()
+        .arg("hi")
+        .succeeds()
+        .stdout_only("hi\n");
 }
 
 #[test]
 fn test_no_trailing_newline() {
-    //CmdResult.stdout_only(...) trims trailing newlines
-    assert_eq!(
-        "hi",
-        new_ucmd!()
-            .arg("-n")
-            .arg("hi")
-            .succeeds()
-            .no_stderr()
-            .stdout
-    );
+    new_ucmd!()
+        .arg("-n")
+        .arg("hi")
+        .succeeds()
+        .no_stderr()
+        .stdout_only("hi");
 }
 
 #[test]
@@ -192,39 +190,38 @@ fn test_hyphen_values_inside_string() {
     new_ucmd!()
         .arg("'\"\n'CXXFLAGS=-g -O2'\n\"'")
         .succeeds()
-        .stdout
-        .contains("CXXFLAGS");
+        .stdout_contains("CXXFLAGS");
 }
 
 #[test]
 fn test_hyphen_values_at_start() {
-    let result = new_ucmd!()
+    new_ucmd!()
         .arg("-E")
         .arg("-test")
         .arg("araba")
         .arg("-merci")
-        .run();
-
-    assert!(result.success);
-    assert_eq!(false, result.stdout.contains("-E"));
-    assert_eq!(result.stdout, "-test araba -merci\n");
+        .run()
+        .success()
+        .stdout_does_not_contain("-E")
+        .stdout_is("-test araba -merci\n");
 }
 
 #[test]
 fn test_hyphen_values_between() {
-    let result = new_ucmd!().arg("test").arg("-E").arg("araba").run();
+    new_ucmd!()
+        .arg("test")
+        .arg("-E")
+        .arg("araba")
+        .run()
+        .success()
+        .stdout_is("test -E araba\n");
 
-    assert!(result.success);
-    assert_eq!(result.stdout, "test -E araba\n");
-
-    let result = new_ucmd!()
+    new_ucmd!()
         .arg("dumdum ")
         .arg("dum dum dum")
         .arg("-e")
         .arg("dum")
-        .run();
-
-    assert!(result.success);
-    assert_eq!(result.stdout, "dumdum  dum dum dum -e dum\n");
-    assert_eq!(true, result.stdout.contains("-e"));
+        .run()
+        .success()
+        .stdout_is("dumdum  dum dum dum -e dum\n");
 }
