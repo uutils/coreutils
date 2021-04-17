@@ -190,3 +190,33 @@ fn test_du_time() {
     assert_eq!(result.stderr, "");
     assert_eq!(result.stdout, "0\t2015-05-15 00:00\tdate_test\n");
 }
+
+#[cfg(not(target_os = "windows"))]
+#[cfg(feature = "chmod")]
+#[test]
+fn test_du_no_permission() {
+    let ts = TestScenario::new("du");
+
+    let chmod = ts.ccmd("chmod").arg("-r").arg(SUB_DIR_LINKS).run();
+    println!("chmod output: {:?}", chmod);
+    assert!(chmod.success);
+    let result = ts.ucmd().arg(SUB_DIR_LINKS).run();
+
+    ts.ccmd("chmod").arg("+r").arg(SUB_DIR_LINKS).run();
+
+    assert!(result.success);
+    assert_eq!(
+        result.stderr,
+        "du: cannot read directory ‘subdir/links‘: Permission denied (os error 13)\n"
+    );
+    _du_no_permission(result.stdout);
+}
+
+#[cfg(target_vendor = "apple")]
+fn _du_no_permission(s: String) {
+    assert_eq!(s, "0\tsubdir/links\n");
+}
+#[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))]
+fn _du_no_permission(s: String) {
+    assert_eq!(s, "4\tsubdir/links\n");
+}
