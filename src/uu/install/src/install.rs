@@ -302,7 +302,7 @@ fn behavior(matches: &ArgMatches) -> Result<Behavior, i32> {
 
     let specified_mode: Option<u32> = if matches.is_present(OPT_MODE) {
         match matches.value_of(OPT_MODE) {
-            Some(x) => match mode::parse(&x[..], considering_dir) {
+            Some(x) => match mode::parse(x, considering_dir) {
                 Ok(y) => Some(y),
                 Err(err) => {
                     show_error!("Invalid mode string: {}", err);
@@ -429,7 +429,7 @@ fn standard(paths: Vec<String>, b: Behavior) -> i32 {
 /// _files_ must all exist as non-directories.
 /// _target_dir_ must be a directory.
 ///
-fn copy_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behavior) -> i32 {
+fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> i32 {
     if !target_dir.is_dir() {
         show_error!("target '{}' is not a directory", target_dir.display());
         return 1;
@@ -453,7 +453,7 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behavior) ->
             continue;
         }
 
-        let mut targetpath = target_dir.clone().to_path_buf();
+        let mut targetpath = target_dir.to_path_buf();
         let filename = sourcepath.components().last().unwrap();
         targetpath.push(filename);
 
@@ -478,7 +478,7 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behavior) ->
 /// _file_ must exist as a non-directory.
 /// _target_ must be a non-directory
 ///
-fn copy_file_to_file(file: &PathBuf, target: &PathBuf, b: &Behavior) -> i32 {
+fn copy_file_to_file(file: &Path, target: &Path, b: &Behavior) -> i32 {
     if copy(file, &target, b).is_err() {
         1
     } else {
@@ -497,7 +497,7 @@ fn copy_file_to_file(file: &PathBuf, target: &PathBuf, b: &Behavior) -> i32 {
 ///
 /// If the copy system call fails, we print a verbose error and return an empty error value.
 ///
-fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
+fn copy(from: &Path, to: &Path, b: &Behavior) -> Result<(), ()> {
     if b.compare && !need_copy(from, to, b) {
         return Ok(());
     }
@@ -556,7 +556,7 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
         };
         let gid = meta.gid();
         match wrap_chown(
-            to.as_path(),
+            to,
             &meta,
             Some(owner_id),
             Some(gid),
@@ -582,7 +582,7 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
             Ok(g) => g,
             _ => crash!(1, "no such group: {}", b.group),
         };
-        match wrap_chgrp(to.as_path(), &meta, group_id, false, Verbosity::Normal) {
+        match wrap_chgrp(to, &meta, group_id, false, Verbosity::Normal) {
             Ok(n) => {
                 if !n.is_empty() {
                     show_info!("{}", n);
@@ -601,7 +601,7 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
         let modified_time = FileTime::from_last_modification_time(&meta);
         let accessed_time = FileTime::from_last_access_time(&meta);
 
-        match set_file_times(to.as_path(), accessed_time, modified_time) {
+        match set_file_times(to, accessed_time, modified_time) {
             Ok(_) => {}
             Err(e) => show_info!("{}", e),
         }
@@ -630,7 +630,7 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
 ///
 /// Crashes the program if a nonexistent owner or group is specified in _b_.
 ///
-fn need_copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> bool {
+fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
     let from_meta = match fs::metadata(from) {
         Ok(meta) => meta,
         Err(_) => return true,

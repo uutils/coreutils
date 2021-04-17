@@ -118,7 +118,7 @@ struct OdOptions {
 }
 
 impl OdOptions {
-    fn new<'a>(matches: ArgMatches<'a>, args: Vec<String>) -> Result<OdOptions, String> {
+    fn new(matches: ArgMatches, args: Vec<String>) -> Result<OdOptions, String> {
         let byte_order = match matches.value_of(options::ENDIAN) {
             None => ByteOrder::Native,
             Some("little") => ByteOrder::Little,

@@ -335,7 +335,7 @@ fn exec(files: &[PathBuf], b: Behavior) -> i32 {
     0
 }
 
-fn move_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behavior) -> i32 {
+fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> i32 {
     if !target_dir.is_dir() {
         show_error!("target ‘{}’ is not a directory", target_dir.display());
         return 1;
@@ -373,7 +373,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behavior) ->
     }
 }
 
-fn rename(from: &PathBuf, to: &PathBuf, b: &Behavior) -> io::Result<()> {
+fn rename(from: &Path, to: &Path, b: &Behavior) -> io::Result<()> {
     let mut backup_path = None;
 
     if to.exists() {
@@ -429,7 +429,7 @@ fn rename(from: &PathBuf, to: &PathBuf, b: &Behavior) -> io::Result<()> {
 
 /// A wrapper around `fs::rename`, so that if it fails, we try falling back on
 /// copying and removing.
-fn rename_with_fallback(from: &PathBuf, to: &PathBuf) -> io::Result<()> {
+fn rename_with_fallback(from: &Path, to: &Path) -> io::Result<()> {
     if fs::rename(from, to).is_err() {
         // Get metadata without following symlinks
         let metadata = from.symlink_metadata()?;
@@ -464,7 +464,7 @@ fn rename_with_fallback(from: &PathBuf, to: &PathBuf) -> io::Result<()> {
 /// Move the given symlink to the given destination. On Windows, dangling
 /// symlinks return an error.
 #[inline]
-fn rename_symlink_fallback(from: &PathBuf, to: &PathBuf) -> io::Result<()> {
+fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     let path_symlink_points_to = fs::read_link(from)?;
     #[cfg(unix)]
     {
@@ -507,20 +507,20 @@ fn read_yes() -> bool {
     }
 }
 
-fn simple_backup_path(path: &PathBuf, suffix: &str) -> PathBuf {
+fn simple_backup_path(path: &Path, suffix: &str) -> PathBuf {
     let mut p = path.to_string_lossy().into_owned();
     p.push_str(suffix);
     PathBuf::from(p)
 }
 
-fn numbered_backup_path(path: &PathBuf) -> PathBuf {
+fn numbered_backup_path(path: &Path) -> PathBuf {
     (1_u64..)
         .map(|i| path.with_extension(format!("~{}~", i)))
         .find(|p| !p.exists())
         .expect("cannot create backup")
 }
 
-fn existing_backup_path(path: &PathBuf, suffix: &str) -> PathBuf {
+fn existing_backup_path(path: &Path, suffix: &str) -> PathBuf {
     let test_path = path.with_extension("~1~");
     if test_path.exists() {
         numbered_backup_path(path)
@@ -529,7 +529,7 @@ fn existing_backup_path(path: &PathBuf, suffix: &str) -> PathBuf {
     }
 }
 
-fn is_empty_dir(path: &PathBuf) -> bool {
+fn is_empty_dir(path: &Path) -> bool {
     match fs::read_dir(path) {
         Ok(contents) => contents.peekable().peek().is_none(),
         Err(_e) => false,

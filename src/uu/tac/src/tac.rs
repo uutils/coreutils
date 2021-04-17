@@ -90,7 +90,7 @@ fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) -> i32 {
             Box::new(stdin()) as Box<dyn Read>
         } else {
             let path = Path::new(filename);
-            if path.is_dir() || !path.metadata().is_ok() {
+            if path.is_dir() || path.metadata().is_err() {
                 show_error!(
                     "failed to open '{}' for reading: No such file or directory",
                     filename
