@@ -2,10 +2,7 @@ use crate::common::util::*;
 
 #[test]
 fn test_default() {
-    new_ucmd!()
-        .arg("hi")
-        .succeeds()
-        .stdout_only("hi\n");
+    new_ucmd!().arg("hi").succeeds().stdout_only("hi\n");
 }
 
 #[test]

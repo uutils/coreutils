@@ -25,6 +25,8 @@ fn test_hostname_full() {
     let ls_short_res = new_ucmd!().arg("-s").succeeds();
     assert!(!ls_short_res.stdout_str().trim().is_empty());
 
-    new_ucmd!().arg("-f").succeeds()
+    new_ucmd!()
+        .arg("-f")
+        .succeeds()
         .stdout_contains(ls_short_res.stdout_str().trim());
 }

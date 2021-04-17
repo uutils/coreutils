@@ -46,7 +46,8 @@ fn test_id_from_name() {
     let result = new_ucmd!().arg(&username).succeeds();
     let uid = result.stdout_str().trim();
 
-    new_ucmd!().succeeds()
+    new_ucmd!()
+        .succeeds()
         // Verify that the id found by --user/-u exists in the list
         .stdout_contains(uid)
         // Verify that the username found by whoami exists in the list
@@ -65,10 +66,7 @@ fn test_id_name_from_id() {
         return;
     }
 
-    let username_id = result
-        .success()
-        .stdout_str()
-        .trim();
+    let username_id = result.success().stdout_str().trim();
 
     let scene = TestScenario::new("whoami");
     let result = scene.cmd("whoami").succeeds();
