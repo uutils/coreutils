@@ -28,8 +28,7 @@ pub fn arrnum_int_mult(arr_num: &[u8], basenum: u8, base_ten_int_fact: u8) -> Ve
             }
         }
     }
-    #[allow(clippy::map_clone)]
-    let ret: Vec<u8> = ret_rev.iter().rev().map(|x| *x).collect();
+    let ret: Vec<u8> = ret_rev.into_iter().rev().collect();
     ret
 }
 
@@ -193,8 +192,7 @@ pub fn arrnum_int_add(arrnum: &[u8], basenum: u8, base_ten_int_term: u8) -> Vec<
             }
         }
     }
-    #[allow(clippy::map_clone)]
-    let ret: Vec<u8> = ret_rev.iter().rev().map(|x| *x).collect();
+    let ret: Vec<u8> = ret_rev.into_iter().rev().collect();
     ret
 }
 
@@ -220,8 +218,7 @@ pub fn unsigned_to_arrnum(src: u16) -> Vec<u8> {
 }
 
 // temporary needs-improvement-function
-#[allow(unused_variables)]
-pub fn base_conv_float(src: &[u8], radix_src: u8, radix_dest: u8) -> f64 {
+pub fn base_conv_float(src: &[u8], radix_src: u8, _radix_dest: u8) -> f64 {
     // it would require a lot of addl code
     // to implement this for arbitrary string input.
     // until then, the below operates as an outline
@@ -269,7 +266,6 @@ pub fn arrnum_to_str(src: &[u8], radix_def_dest: &dyn RadixDef) -> String {
     str_out
 }
 
-#[allow(unused_variables)]
 pub fn base_conv_str(
     src: &str,
     radix_def_src: &dyn RadixDef,
