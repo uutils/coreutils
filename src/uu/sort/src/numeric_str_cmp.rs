@@ -48,15 +48,6 @@ impl NumInfo {
     /// Parse NumInfo for this number.
     /// Also returns the range of num that should be passed to numeric_str_cmp later
     pub fn parse(num: &str, parse_settings: NumInfoParseSettings) -> (Self, Range<usize>) {
-        let chars = num
-            .char_indices()
-            .skip_while(|&(_, c)| c.is_whitespace())
-            .filter(|&(_, c)| {
-                parse_settings
-                    .thousands_separator
-                    .map_or(false, |sep| sep == c)
-            });
-
         let mut exponent = -1;
         let mut had_decimal_pt = false;
         let mut had_digit = false;
@@ -65,13 +56,21 @@ impl NumInfo {
 
         let mut first_char = true;
 
-        for (idx, char) in chars {
+        for (idx, char) in num.char_indices() {
+            if first_char && char.is_whitespace() {
+                continue;
+            }
+
             if first_char && char == '-' {
                 sign = Sign::Negative;
                 first_char = false;
                 continue;
             }
             first_char = false;
+
+            if parse_settings.thousands_separator.map_or(false, |c| c == char) {
+                continue;
+            }
 
             if Self::is_invalid_char(char, &mut had_decimal_pt, &parse_settings) {
                 let si_unit = if parse_settings.accept_si_units {
