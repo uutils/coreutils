@@ -443,9 +443,12 @@ fn test_install_failing_omitting_directory() {
     at.mkdir(dir2);
     at.touch(file1);
 
-    let r = ucmd.arg(dir1).arg(file1).arg(dir2).run();
-    assert!(r.code == Some(1));
-    assert!(r.stderr.contains("omitting directory"));
+    ucmd.arg(dir1)
+        .arg(file1)
+        .arg(dir2)
+        .fails()
+        .code_is(1)
+        .stderr_contains("omitting directory");
 }
 
 #[test]
@@ -458,9 +461,12 @@ fn test_install_failing_no_such_file() {
     at.mkdir(dir1);
     at.touch(file1);
 
-    let r = ucmd.arg(file1).arg(file2).arg(dir1).run();
-    assert!(r.code == Some(1));
-    assert!(r.stderr.contains("No such file or directory"));
+    ucmd.arg(file1)
+        .arg(file2)
+        .arg(dir1)
+        .fails()
+        .code_is(1)
+        .stderr_contains("No such file or directory");
 }
 
 #[test]

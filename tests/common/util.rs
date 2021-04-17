@@ -71,7 +71,7 @@ pub struct CmdResult {
     //tmpd is used for convenience functions for asserts against fixtures
     tmpd: Option<Rc<TempDir>>,
     /// exit status for command (if there is one)
-    pub code: Option<i32>,
+    code: Option<i32>,
     /// zero-exit from running the Command?
     /// see [`success`]
     pub success: bool,
