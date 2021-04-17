@@ -129,5 +129,5 @@ You may have to install `time` first, then you have to run it with `/bin/time -v
 Useful metrics to look at could be:
 
 -   User time
--   Percent of CPUt his job got
+-   Percent of CPU this job got
 -   Maximum resident set size
