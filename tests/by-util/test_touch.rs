@@ -29,6 +29,7 @@ fn set_file_times(at: &AtPath, path: &str, atime: FileTime, mtime: FileTime) {
 fn str_to_filetime(format: &str, s: &str) -> FileTime {
     let mut tm = time::strptime(s, format).unwrap();
     tm.tm_utcoff = time::now().tm_utcoff;
+    tm.tm_isdst = -1; // Unknown flag DST
     let ts = tm.to_timespec();
     FileTime::from_unix_time(ts.sec as i64, ts.nsec as u32)
 }
@@ -351,4 +352,22 @@ fn test_touch_set_date() {
     assert_eq!(atime, mtime);
     assert_eq!(atime, start_of_year);
     assert_eq!(mtime, start_of_year);
+}
+
+#[test]
+fn test_touch_mtime_dst_succeeds() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_set_mtime_dst_succeeds";
+
+    ucmd.args(&["-m", "-t", "202103140300", file])
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file));
+
+    let target_time = str_to_filetime("%Y%m%d%H%M", "202103140300");
+    let (_, mtime) = get_file_times(&at, file);
+    eprintln!("target_time: {:?}", target_time);
+    eprintln!("mtime: {:?}", mtime);
+    assert!(target_time == mtime);
 }

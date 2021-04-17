@@ -199,8 +199,7 @@ pub fn arrnum_int_add(arrnum: &[u8], basenum: u8, base_ten_int_term: u8) -> Vec<
 }
 
 pub fn base_conv_vec(src: &[u8], radix_src: u8, radix_dest: u8) -> Vec<u8> {
-    let mut result: Vec<u8> = Vec::new();
-    result.push(0);
+    let mut result = vec![0];
     for i in src {
         result = arrnum_int_mult(&result, radix_dest, radix_src);
         result = arrnum_int_add(&result, radix_dest, *i);
@@ -226,8 +225,7 @@ pub fn base_conv_float(src: &[u8], radix_src: u8, radix_dest: u8) -> f64 {
     // to implement this for arbitrary string input.
     // until then, the below operates as an outline
     // of how it would work.
-    let mut result: Vec<u8> = Vec::new();
-    result.push(0);
+    let result: Vec<u8> = vec![0];
     let mut factor: f64 = 1_f64;
     let radix_src_float: f64 = f64::from(radix_src);
     let mut r: f64 = 0_f64;

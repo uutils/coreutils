@@ -25,19 +25,15 @@ fn test_stdbuf_line_buffered_stdout() {
 #[cfg(not(target_os = "windows"))]
 #[test]
 fn test_stdbuf_no_buffer_option_fails() {
-    new_ucmd!()
-        .args(&["head"])
-        .pipe_in("The quick brown fox jumps over the lazy dog.")
-        .fails()
-        .stderr_is(
-            "error: The following required arguments were not provided:\n    \
+    new_ucmd!().args(&["head"]).fails().stderr_is(
+        "error: The following required arguments were not provided:\n    \
             --error <MODE>\n    \
             --input <MODE>\n    \
             --output <MODE>\n\n\
             USAGE:\n    \
             stdbuf OPTION... COMMAND\n\n\
             For more information try --help",
-        );
+    );
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -55,7 +51,6 @@ fn test_stdbuf_trailing_var_arg() {
 fn test_stdbuf_line_buffering_stdin_fails() {
     new_ucmd!()
         .args(&["-i", "L", "head"])
-        .pipe_in("The quick brown fox jumps over the lazy dog.")
         .fails()
         .stderr_is("stdbuf: error: line buffering stdin is meaningless\nTry 'stdbuf --help' for more information.");
 }
@@ -65,7 +60,6 @@ fn test_stdbuf_line_buffering_stdin_fails() {
 fn test_stdbuf_invalid_mode_fails() {
     new_ucmd!()
         .args(&["-i", "1024R", "head"])
-        .pipe_in("The quick brown fox jumps over the lazy dog.")
         .fails()
         .stderr_is("stdbuf: error: invalid mode 1024R\nTry 'stdbuf --help' for more information.");
 }

@@ -176,7 +176,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 } else if matches.is_present(OPT_PROMPT_MORE) {
                     InteractiveMode::Once
                 } else if matches.is_present(OPT_INTERACTIVE) {
-                    match &matches.value_of(OPT_INTERACTIVE).unwrap()[..] {
+                    match matches.value_of(OPT_INTERACTIVE).unwrap() {
                         "none" => InteractiveMode::None,
                         "once" => InteractiveMode::Once,
                         "always" => InteractiveMode::Always,

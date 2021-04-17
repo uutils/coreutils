@@ -9,33 +9,29 @@ fn return_whoami_username() -> String {
         return String::from("");
     }
 
-    result.stdout.trim().to_string()
+    result.stdout_str().trim().to_string()
 }
 
 #[test]
 fn test_id() {
-    let scene = TestScenario::new(util_name!());
-
-    let mut result = scene.ucmd().arg("-u").run();
+    let result = new_ucmd!().arg("-u").run();
     if result.stderr.contains("cannot find name for user ID") {
         // In the CI, some server are failing to return whoami.
         // As seems to be a configuration issue, ignoring it
         return;
     }
-    assert!(result.success);
 
-    let uid = String::from(result.stdout.trim());
-    result = scene.ucmd().run();
+    let uid = result.success().stdout_str().trim();
+    let result = new_ucmd!().run();
     if is_ci() && result.stderr.contains("cannot find name for user ID") {
         // In the CI, some server are failing to return whoami.
         // As seems to be a configuration issue, ignoring it
         return;
     }
-    println!("result.stdout = {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    if !result.stderr.contains("Could not find uid") {
+
+    if !result.stderr_str().contains("Could not find uid") {
         // Verify that the id found by --user/-u exists in the list
-        assert!(result.stdout.contains(&uid));
+        result.success().stdout_contains(&uid);
     }
 }
 
@@ -47,88 +43,62 @@ fn test_id_from_name() {
         return;
     }
 
-    let scene = TestScenario::new(util_name!());
-    let result = scene.ucmd().arg(&username).succeeds();
-    println!("result.stdout = {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    assert!(result.success);
-    let uid = String::from(result.stdout.trim());
-    let result = scene.ucmd().succeeds();
-    println!("result.stdout = {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    // Verify that the id found by --user/-u exists in the list
-    assert!(result.stdout.contains(&uid));
-    // Verify that the username found by whoami exists in the list
-    assert!(result.stdout.contains(&username));
+    let result = new_ucmd!().arg(&username).succeeds();
+    let uid = result.stdout_str().trim();
+
+    new_ucmd!()
+        .succeeds()
+        // Verify that the id found by --user/-u exists in the list
+        .stdout_contains(uid)
+        // Verify that the username found by whoami exists in the list
+        .stdout_contains(username);
 }
 
 #[test]
 fn test_id_name_from_id() {
-    let mut scene = TestScenario::new(util_name!());
-    let result = scene.ucmd().arg("-u").run();
-    println!("result.stdout = {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    assert!(result.success);
-    let uid = String::from(result.stdout.trim());
+    let result = new_ucmd!().arg("-u").succeeds();
+    let uid = result.stdout_str().trim();
 
-    scene = TestScenario::new(util_name!());
-    let result = scene.ucmd().arg("-nu").arg(uid).run();
+    let result = new_ucmd!().arg("-nu").arg(uid).run();
     if is_ci() && result.stderr.contains("No such user/group") {
         // In the CI, some server are failing to return whoami.
         // As seems to be a configuration issue, ignoring it
         return;
     }
-    println!("result.stdout = {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    assert!(result.success);
 
-    let username_id = String::from(result.stdout.trim());
+    let username_id = result.success().stdout_str().trim();
 
-    scene = TestScenario::new("whoami");
-    let result = scene.cmd("whoami").run();
+    let scene = TestScenario::new("whoami");
+    let result = scene.cmd("whoami").succeeds();
 
-    let username_whoami = result.stdout.trim();
+    let username_whoami = result.stdout_str().trim();
 
     assert_eq!(username_id, username_whoami);
 }
 
 #[test]
 fn test_id_group() {
-    let scene = TestScenario::new(util_name!());
-
-    let mut result = scene.ucmd().arg("-g").succeeds();
-    println!("result.stdout = {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    assert!(result.success);
-    let s1 = String::from(result.stdout.trim());
+    let mut result = new_ucmd!().arg("-g").succeeds();
+    let s1 = result.stdout_str().trim();
     assert!(s1.parse::<f64>().is_ok());
 
-    result = scene.ucmd().arg("--group").succeeds();
-    println!("result.stdout = {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    assert!(result.success);
-    let s1 = String::from(result.stdout.trim());
+    result = new_ucmd!().arg("--group").succeeds();
+    let s1 = result.stdout_str().trim();
     assert!(s1.parse::<f64>().is_ok());
 }
 
 #[test]
 fn test_id_groups() {
-    let scene = TestScenario::new(util_name!());
-
-    let result = scene.ucmd().arg("-G").succeeds();
-    println!("result.stdout = {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
+    let result = new_ucmd!().arg("-G").succeeds();
     assert!(result.success);
-    let groups = result.stdout.trim().split_whitespace();
+    let groups = result.stdout_str().trim().split_whitespace();
     for s in groups {
         assert!(s.parse::<f64>().is_ok());
     }
 
-    let result = scene.ucmd().arg("--groups").succeeds();
-    println!("result.stdout = {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
+    let result = new_ucmd!().arg("--groups").succeeds();
     assert!(result.success);
-    let groups = result.stdout.trim().split_whitespace();
+    let groups = result.stdout_str().trim().split_whitespace();
     for s in groups {
         assert!(s.parse::<f64>().is_ok());
     }
@@ -136,15 +106,12 @@ fn test_id_groups() {
 
 #[test]
 fn test_id_user() {
-    let scene = TestScenario::new(util_name!());
-
-    let mut result = scene.ucmd().arg("-u").succeeds();
-    assert!(result.success);
-    let s1 = String::from(result.stdout.trim());
+    let mut result = new_ucmd!().arg("-u").succeeds();
+    let s1 = result.stdout_str().trim();
     assert!(s1.parse::<f64>().is_ok());
-    result = scene.ucmd().arg("--user").succeeds();
-    assert!(result.success);
-    let s1 = String::from(result.stdout.trim());
+
+    result = new_ucmd!().arg("--user").succeeds();
+    let s1 = result.stdout_str().trim();
     assert!(s1.parse::<f64>().is_ok());
 }
 
@@ -156,17 +123,13 @@ fn test_id_pretty_print() {
         return;
     }
 
-    let scene = TestScenario::new(util_name!());
-    let result = scene.ucmd().arg("-p").run();
-    if result.stdout.trim() == "" {
+    let result = new_ucmd!().arg("-p").run();
+    if result.stdout_str().trim() == "" {
         // Sometimes, the CI is failing here with
         // old rust versions on Linux
         return;
     }
-    println!("result.stdout = {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    assert!(result.success);
-    assert!(result.stdout.contains(&username));
+    result.success().stdout_contains(username);
 }
 
 #[test]
@@ -176,12 +139,7 @@ fn test_id_password_style() {
         // Sometimes, the CI is failing here
         return;
     }
-    let scene = TestScenario::new(util_name!());
 
-    let result = scene.ucmd().arg("-P").succeeds();
-
-    println!("result.stdout = {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    assert!(result.success);
-    assert!(result.stdout.starts_with(&username));
+    let result = new_ucmd!().arg("-P").succeeds();
+    assert!(result.stdout_str().starts_with(&username));
 }

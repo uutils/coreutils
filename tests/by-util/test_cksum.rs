@@ -31,41 +31,48 @@ fn test_empty() {
 
     at.touch("a");
 
-    ucmd.arg("a").succeeds().stdout.ends_with("0 a");
+    ucmd.arg("a")
+        .succeeds()
+        .no_stderr()
+        .normalized_newlines_stdout_is("4294967295 0 a\n");
 }
 
 #[test]
-#[ignore]
 fn test_arg_overrides_stdin() {
     let (at, mut ucmd) = at_and_ucmd!();
     let input = "foobarfoobar";
 
     at.touch("a");
 
-    let result = ucmd.arg("a").pipe_in(input.as_bytes()).run();
-
-    println!("{}, {}", result.stdout, result.stderr);
-
-    assert!(result.stdout.ends_with("0 a\n"))
+    ucmd.arg("a")
+        .pipe_in(input.as_bytes())
+        // the command might have exited before all bytes have been pipe in.
+        // in that case, we don't care about the error (broken pipe)
+        .ignore_stdin_write_error()
+        .succeeds()
+        .no_stderr()
+        .normalized_newlines_stdout_is("4294967295 0 a\n");
 }
 
 #[test]
 fn test_invalid_file() {
-    let (_, mut ucmd) = at_and_ucmd!();
+    let ts = TestScenario::new(util_name!());
+    let at = ts.fixtures.clone();
 
-    let ls = TestScenario::new("ls");
-    let files = ls.cmd("ls").arg("-l").run();
-    println!("{:?}", files.stdout);
-    println!("{:?}", files.stderr);
+    let folder_name = "asdf";
 
-    let folder_name = "asdf".to_string();
-
-    let result = ucmd.arg(&folder_name).run();
-
-    println!("stdout: {:?}", result.stdout);
-    println!("stderr: {:?}", result.stderr);
-    assert!(result.stderr.contains("cksum: error: 'asdf'"));
-    assert!(!result.success);
+    // First check when file doesn't exist
+    ts.ucmd().arg(folder_name)
+        .fails()
+        .no_stdout()
+        .stderr_contains("cksum: error: 'asdf' No such file or directory");
+    
+    // Then check when the file is of an invalid type
+    at.mkdir(folder_name);
+    ts.ucmd().arg(folder_name)
+        .fails()
+        .no_stdout()
+        .stderr_contains("cksum: error: 'asdf' Is a directory");
 }
 
 // Make sure crc is correct for files larger than 32 bytes
@@ -74,14 +81,13 @@ fn test_invalid_file() {
 fn test_crc_for_bigger_than_32_bytes() {
     let (_, mut ucmd) = at_and_ucmd!();
 
-    let result = ucmd.arg("chars.txt").run();
+    let result = ucmd.arg("chars.txt").succeeds();
 
-    let mut stdout_splitted = result.stdout.split(" ");
+    let mut stdout_splitted = result.stdout_str().split(" ");
 
     let cksum: i64 = stdout_splitted.next().unwrap().parse().unwrap();
     let bytes_cnt: i64 = stdout_splitted.next().unwrap().parse().unwrap();
 
-    assert!(result.success);
     assert_eq!(cksum, 586047089);
     assert_eq!(bytes_cnt, 16);
 }
@@ -90,14 +96,13 @@ fn test_crc_for_bigger_than_32_bytes() {
 fn test_stdin_larger_than_128_bytes() {
     let (_, mut ucmd) = at_and_ucmd!();
 
-    let result = ucmd.arg("larger_than_2056_bytes.txt").run();
+    let result = ucmd.arg("larger_than_2056_bytes.txt").succeeds();
 
-    let mut stdout_splitted = result.stdout.split(" ");
+    let mut stdout_splitted = result.stdout_str().split(" ");
 
     let cksum: i64 = stdout_splitted.next().unwrap().parse().unwrap();
     let bytes_cnt: i64 = stdout_splitted.next().unwrap().parse().unwrap();
 
-    assert!(result.success);
     assert_eq!(cksum, 945881979);
     assert_eq!(bytes_cnt, 2058);
 }

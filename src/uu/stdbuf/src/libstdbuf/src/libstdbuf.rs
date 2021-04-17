@@ -35,8 +35,8 @@ extern "C" {
 
 fn set_buffer(stream: *mut FILE, value: &str) {
     let (mode, size): (c_int, size_t) = match value {
-        "0" => (_IONBF, 0 as size_t),
-        "L" => (_IOLBF, 0 as size_t),
+        "0" => (_IONBF, 0_usize),
+        "L" => (_IOLBF, 0_usize),
         input => {
             let buff_size: usize = match input.parse() {
                 Ok(num) => num,
