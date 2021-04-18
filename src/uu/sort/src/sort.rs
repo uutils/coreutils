@@ -257,14 +257,14 @@ impl Sortable for Line {
     fn encode<W: Write>(&self, write: &mut W) {
         let line = Line {line: self.line.to_owned(), selections: self.selections.to_owned() };
         let serialized = serde_json::ser::to_string(&line).unwrap();
-        // Valid JSON needs to be seperated by something, so here we use a newline
+        // Each instance of valid JSON needs to be seperated by something, so here we use a newline
         write.write_all(format!("{}{}", serialized, "\n").as_bytes()).unwrap();
     }
 
-    // This crate asks us to write one line at a time, but returns multiple lines(?).
+    // This crate asks us to write one Line at a time, but returns multiple Lines to us(?).
     // However, this crate also expects us to return a result of Option<Line>, 
-    // so we concat the these lines into a single Option<Line>.  So, this may be broken, 
-    // and needs to be tested more thoroughly.  Perhaps we need to rethink our struct or rewrite a
+    // so we concat the these lines into a single Option<Line>.  So, it's possible this is broken, 
+    // and/or needs to be tested more thoroughly.  Perhaps we need to rethink our Line struct or rewrite a
     // ext sorter ourselves.  
     fn decode<R: Read>(read: &mut R) -> Option<Line> {
         let buf_reader = BufReader::new(read);
@@ -274,6 +274,7 @@ impl Sortable for Line {
             for line in buf_reader.lines() {
                 let mut deserialized_line: Line = serde_json::de::from_str(&line.unwrap()).unwrap();
                 line_joined = format!("{}\n{}", line_joined, deserialized_line.line);
+                // I think we've done our sorting already and these are irrelevant? @miDeb what's your sense?
                 selections_joined.append(&mut deserialized_line.selections);
                 selections_joined.dedup();
             }
@@ -873,13 +874,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     if matches.is_present(OPT_BUF_SIZE) {
-        // 10000 is the default extsort buffer, but it's too small
-        settings.buffer_size = matches
+        // 10K is the default extsort buffer, but that's too small, so we set at 10M
+        // Although the "default" is never used unless extsort options are given 
+        settings.buffer_size = { 
+            let input = matches
             .value_of(OPT_BUF_SIZE)
             .map(String::from)
-            .unwrap_or( format! ( "{}", DEFAULT_BUF_SIZE ) )
-            .parse::<usize>()
-            .unwrap_or( DEFAULT_BUF_SIZE );
+            .unwrap_or( format! ( "{}", DEFAULT_BUF_SIZE ) );
+        
+            human_numeric_convert(&input)
+        }
     }
 
     if matches.is_present(OPT_TMP_DIR) {
@@ -1131,6 +1135,26 @@ fn compare_by(a: &Line, b: &Line, global_settings: &GlobalSettings) -> Ordering 
     } else {
         cmp
     }
+}
+
+// Brought back! Probably want to do through numstrcmp somehow now
+fn human_numeric_convert(a: &str) -> usize {
+    let num_part = leading_num_common(a);
+    let (_, s) = a.split_at(num_part.len());
+    let num_part = permissive_f64_parse(num_part);
+    let suffix = match s.parse().unwrap_or('\0') {
+        // SI Units
+        'K' => 1E3,
+        'M' => 1E6,
+        'G' => 1E9,
+        'T' => 1E12,
+        'P' => 1E15,
+        'E' => 1E18,
+        'Z' => 1E21,
+        'Y' => 1E24,
+        _ => 1f64,
+    };
+    num_part as usize * suffix as usize
 }
 
 // Test output against BSDs and GNU with their locale
