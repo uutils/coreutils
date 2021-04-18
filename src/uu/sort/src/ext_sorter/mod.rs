@@ -12,7 +12,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
+//
 // This file has been modified for use in the uutils' coreutils subproject, sort.
 
 use rayon::prelude::*;
@@ -267,65 +267,5 @@ impl<T: Sortable, F: Fn(&T, &T) -> Ordering> Iterator for SortedIterator<T, F> {
             self.next_values[idx] = T::decode(file);
             value
         })
-    }
-}
-
-#[cfg(test)]
-pub mod test {
-    use super::*;
-
-    use byteorder::{ReadBytesExt, WriteBytesExt};
-
-    #[test]
-    fn test_smaller_than_segment() {
-        let sorter = ExternalSorter::new();
-        let data: Vec<u32> = (0..100u32).collect();
-        let data_rev: Vec<u32> = data.iter().rev().cloned().collect();
-
-        let sorted_iter = sorter.sort(data_rev.into_iter()).unwrap();
-
-        // should not have used any segments (all in memory)
-        assert_eq!(sorted_iter.segments_file.len(), 0);
-        let sorted_data: Vec<u32> = sorted_iter.collect();
-
-        assert_eq!(data, sorted_data);
-    }
-
-    #[test]
-    fn test_multiple_segments() {
-        let sorter = ExternalSorter::new().with_segment_size(100);
-        let data: Vec<u32> = (0..1000u32).collect();
-
-        let data_rev: Vec<u32> = data.iter().rev().cloned().collect();
-        let sorted_iter = sorter.sort(data_rev.into_iter()).unwrap();
-        assert_eq!(sorted_iter.segments_file.len(), 10);
-
-        let sorted_data: Vec<u32> = sorted_iter.collect();
-        assert_eq!(data, sorted_data);
-    }
-
-    #[test]
-    fn test_parallel() {
-        let sorter = ExternalSorter::new()
-            .with_segment_size(100)
-            .with_parallel_sort();
-        let data: Vec<u32> = (0..1000u32).collect();
-
-        let data_rev: Vec<u32> = data.iter().rev().cloned().collect();
-        let sorted_iter = sorter.sort(data_rev.into_iter()).unwrap();
-        assert_eq!(sorted_iter.segments_file.len(), 10);
-
-        let sorted_data: Vec<u32> = sorted_iter.collect();
-        assert_eq!(data, sorted_data);
-    }
-
-    impl Sortable for u32 {
-        fn encode<W: Write>(&self, writer: &mut W) {
-            writer.write_u32::<byteorder::LittleEndian>(*self).unwrap();
-        }
-
-        fn decode<R: Read>(reader: &mut R) -> Option<u32> {
-            reader.read_u32::<byteorder::LittleEndian>().ok()
-        }
     }
 }

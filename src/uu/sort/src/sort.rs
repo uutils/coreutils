@@ -256,7 +256,7 @@ impl Sortable for Line {
             line: self.line.to_owned(),
             selections: self.selections.to_owned(),
         };
-        let serialized = serde_json::ser::to_string(&line).unwrap();
+        let serialized = serde_json::to_string(&line).unwrap();
         // Each instance of valid JSON needs to be seperated by something, so here we use a newline
         write
             .write_all(format!("{}{}", serialized, "\n").as_bytes())
@@ -275,7 +275,7 @@ impl Sortable for Line {
             let mut selections_joined = SmallVec::new();
             let p_iter = buf_reader.lines().peekable();
             for line in p_iter {
-                let mut deserialized_line: Line = serde_json::de::from_str(&line.unwrap()).unwrap();
+                let mut deserialized_line: Line = serde_json::from_str(&line.unwrap()).unwrap();
                 line_joined = format!("{}\n{}\n", line_joined, deserialized_line.line);
                 // I think we've done our sorting already and these are irrelevant?
                 // @miDeb what's your sense? Could we just return an empty vec?
