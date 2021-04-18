@@ -18,6 +18,7 @@ extern crate uucore;
 mod ext_sorter;
 mod numeric_str_cmp;
 
+use rayon::prelude::*;
 use clap::{App, Arg};
 use fnv::FnvHasher;
 use itertools::Itertools;
@@ -1031,8 +1032,15 @@ fn exec(files: Vec<String>, settings: &GlobalSettings) -> i32 {
         return exec_check_file(&lines, &settings);
     }
 
-    lines = sort_by(lines, &settings);
-
+    // Only use ext_sorter when we need to.
+    // Probably faster that we don't create 
+    // an owned value each run
+    if settings.buffer_size != DEFAULT_BUF_SIZE {
+        lines = ext_sort_by(lines, &settings);
+    } else {
+        sort_by(&mut lines, &settings);
+    }
+    
     if settings.merge {
         if settings.unique {
             print_sorted(file_merger.dedup(), &settings)
@@ -1086,7 +1094,7 @@ fn exec_check_file(unwrapped_lines: &[Line], settings: &GlobalSettings) -> i32 {
     }
 }
 
-fn sort_by(lines: Vec<Line>, settings: &GlobalSettings) -> Vec<Line> {
+fn ext_sort_by(lines: Vec<Line>, settings: &GlobalSettings) -> Vec<Line> {
     let sorter = ExternalSorter::new()
         .with_segment_size(settings.buffer_size)
         .with_sort_dir(settings.tmp_dir.clone())
@@ -1096,6 +1104,10 @@ fn sort_by(lines: Vec<Line>, settings: &GlobalSettings) -> Vec<Line> {
         .unwrap()
         .collect();
     result
+}
+
+fn sort_by(lines: &mut Vec<Line>, settings: &GlobalSettings) {
+    lines.par_sort_by(|a, b| compare_by(a, b, &settings))
 }
 
 fn compare_by(a: &Line, b: &Line, global_settings: &GlobalSettings) -> Ordering {
