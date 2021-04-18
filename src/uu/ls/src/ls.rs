@@ -1039,10 +1039,17 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     list(locs, Config::from(matches))
 }
 
+/// Represents a Path along with it's associated data
+/// Any data that will be reused several times makes sense to be added to this structure
+/// Caching data here helps eliminate redundant syscalls to fetch same information
 struct PathData {
+    // Result<MetaData> got from symlink_metadata() or metadata() based on config
     md: std::io::Result<Metadata>,
+    // String formed from get_lossy_string() for the path
     lossy_string: String,
-    name: String,
+    // Name of the file - will be empty for . or ..
+    file_name: String,
+    // PathBuf that all above data corresponds to
     p_buf: PathBuf,
 }
 
@@ -1056,7 +1063,7 @@ impl PathData {
         Self {
             md,
             lossy_string,
-            name,
+            file_name: name,
             p_buf,
         }
     }
@@ -1125,7 +1132,7 @@ fn sort_entries(entries: &mut Vec<PathData>, config: &Config) {
             entries.sort_by_key(|k| Reverse(k.md.as_ref().map(|md| md.len()).unwrap_or(0)))
         }
         // The default sort in GNU ls is case insensitive
-        Sort::Name => entries.sort_by_key(|k| k.name.to_lowercase()),
+        Sort::Name => entries.sort_by_key(|k| k.file_name.to_lowercase()),
         Sort::Version => entries.sort_by(|k, j| version_cmp::version_cmp(&k.p_buf, &j.p_buf)),
         Sort::None => {}
     }
