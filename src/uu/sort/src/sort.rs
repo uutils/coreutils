@@ -127,6 +127,29 @@ struct GlobalSettings {
     tmp_dir: PathBuf,
 }
 
+impl GlobalSettings { 
+    // It's back to do conversions for command line opts! 
+    // Probably want to do through numstrcmp somehow now?
+    fn human_numeric_convert(a: &str) -> usize {
+        let num_part = leading_num_common(a);
+        let (_, s) = a.split_at(num_part.len());
+        let num_part = permissive_f64_parse(num_part);
+        let suffix = match s.parse().unwrap_or('\0') {
+            // SI Units
+            'K' | 'k' => 1E3,
+            'M' => 1E6,
+            'G' => 1E9,
+            'T' => 1E12,
+            'P' => 1E15,
+            'E' => 1E18,
+            'Z' => 1E21,
+            'Y' => 1E24,
+            _ => 1f64,
+        };
+        num_part as usize * suffix as usize
+    }
+}
+
 impl Default for GlobalSettings {
     fn default() -> GlobalSettings {
         GlobalSettings {
@@ -893,7 +916,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .map(String::from)
                 .unwrap_or(format!("{}", DEFAULT_BUF_SIZE));
 
-            human_numeric_convert(&input)
+            GlobalSettings::human_numeric_convert(&input)
         }
     }
 
@@ -1154,26 +1177,6 @@ fn compare_by(a: &Line, b: &Line, global_settings: &GlobalSettings) -> Ordering 
     } else {
         cmp
     }
-}
-
-// It's back to do conversions for command options! Probably want to do through numstrcmp somehow now
-fn human_numeric_convert(a: &str) -> usize {
-    let num_part = leading_num_common(a);
-    let (_, s) = a.split_at(num_part.len());
-    let num_part = permissive_f64_parse(num_part);
-    let suffix = match s.parse().unwrap_or('\0') {
-        // SI Units
-        'K' | 'k' => 1E3,
-        'M' => 1E6,
-        'G' => 1E9,
-        'T' => 1E12,
-        'P' => 1E15,
-        'E' => 1E18,
-        'Z' => 1E21,
-        'Y' => 1E24,
-        _ => 1f64,
-    };
-    num_part as usize * suffix as usize
 }
 
 // Test output against BSDs and GNU with their locale
