@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This file has been modified for use in the uutils project.
+// This file has been modified for use in the uutils' coreutils subproject, sort.
 
 use rayon::prelude::*;
 use std::{
