@@ -908,7 +908,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     if matches.is_present(OPT_BUF_SIZE) {
-        // 10K is the default extsort buffer, but that's too small, so we set at 100M
+        // 16G is the default in memory buffer.
         // Although the "default" is never used unless extsort options are given
         settings.buffer_size = {
             let input = matches
