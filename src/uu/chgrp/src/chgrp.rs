@@ -286,7 +286,7 @@ impl Chgrper {
 
             ret = match wrap_chgrp(path, &meta, self.dest_gid, follow, self.verbosity.clone()) {
                 Ok(n) => {
-                    if n != "" {
+                    if !n.is_empty() {
                         show_info!("{}", n);
                     }
                     0

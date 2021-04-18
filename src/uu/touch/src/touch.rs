@@ -138,7 +138,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let (mut atime, mut mtime) = if matches.is_present(options::sources::REFERENCE) {
         stat(
-            &matches.value_of(options::sources::REFERENCE).unwrap()[..],
+            matches.value_of(options::sources::REFERENCE).unwrap(),
             !matches.is_present(options::NO_DEREF),
         )
     } else if matches.is_present(options::sources::DATE)

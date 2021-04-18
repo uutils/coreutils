@@ -13,7 +13,7 @@ extern crate uucore;
 use clap::{App, Arg};
 use std::fs;
 use std::io::{stdout, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use uucore::fs::{canonicalize, CanonicalizeMode};
 
 const NAME: &str = "readlink";
@@ -160,8 +160,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     0
 }
 
-fn show(path: &PathBuf, no_newline: bool, use_zero: bool) {
-    let path = path.as_path().to_str().unwrap();
+fn show(path: &Path, no_newline: bool, use_zero: bool) {
+    let path = path.to_str().unwrap();
     if use_zero {
         print!("{}\0", path);
     } else if no_newline {

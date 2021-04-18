@@ -263,9 +263,5 @@ pub fn num_format(field: &FormatField, in_str_opt: Option<&String>) -> Option<St
         };
     // if we have a formatPrimitive, print its results
     // according to the field-char appropriate Formatter
-    if let Some(prim) = prim_opt {
-        Some(fmtr.primitive_to_str(&prim, field.clone()))
-    } else {
-        None
-    }
+    prim_opt.map(|prim| fmtr.primitive_to_str(&prim, field.clone()))
 }

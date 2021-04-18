@@ -195,12 +195,8 @@ fn test_install_mode_numeric() {
     let mode_arg = "-m 0333";
     at.mkdir(dir2);
 
-    let result = scene.ucmd().arg(mode_arg).arg(file).arg(dir2).run();
+    scene.ucmd().arg(mode_arg).arg(file).arg(dir2).succeeds();
 
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-
-    assert!(result.success);
     let dest_file = &format!("{}/{}", dir2, file);
     assert!(at.file_exists(file));
     assert!(at.file_exists(dest_file));
@@ -313,16 +309,13 @@ fn test_install_target_new_file_with_group() {
         .arg(format!("{}/{}", dir, file))
         .run();
 
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-
-    if is_ci() && result.stderr.contains("error: no such group:") {
+    if is_ci() && result.stderr_str().contains("error: no such group:") {
         // In the CI, some server are failing to return the group.
         // As seems to be a configuration issue, ignoring it
         return;
     }
 
-    assert!(result.success);
+    result.success();
     assert!(at.file_exists(file));
     assert!(at.file_exists(&format!("{}/{}", dir, file)));
 }
@@ -343,16 +336,13 @@ fn test_install_target_new_file_with_owner() {
         .arg(format!("{}/{}", dir, file))
         .run();
 
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-
     if is_ci() && result.stderr.contains("error: no such user:") {
         // In the CI, some server are failing to return the user id.
         // As seems to be a configuration issue, ignoring it
         return;
     }
 
-    assert!(result.success);
+    result.success();
     assert!(at.file_exists(file));
     assert!(at.file_exists(&format!("{}/{}", dir, file)));
 }
@@ -366,13 +356,10 @@ fn test_install_target_new_file_failing_nonexistent_parent() {
 
     at.touch(file1);
 
-    let err = ucmd
-        .arg(file1)
+    ucmd.arg(file1)
         .arg(format!("{}/{}", dir, file2))
         .fails()
-        .stderr;
-
-    assert!(err.contains("not a directory"))
+        .stderr_contains(&"not a directory");
 }
 
 #[test]
@@ -417,18 +404,12 @@ fn test_install_copy_file() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_install_target_file_dev_null() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
 
     let file1 = "/dev/null";
     let file2 = "target_file";
 
-    let result = scene.ucmd().arg(file1).arg(file2).run();
-
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-
-    assert!(result.success);
+    ucmd.arg(file1).arg(file2).succeeds();
 
     assert!(at.file_exists(file2));
 }
@@ -462,9 +443,12 @@ fn test_install_failing_omitting_directory() {
     at.mkdir(dir2);
     at.touch(file1);
 
-    let r = ucmd.arg(dir1).arg(file1).arg(dir2).run();
-    assert!(r.code == Some(1));
-    assert!(r.stderr.contains("omitting directory"));
+    ucmd.arg(dir1)
+        .arg(file1)
+        .arg(dir2)
+        .fails()
+        .code_is(1)
+        .stderr_contains("omitting directory");
 }
 
 #[test]
@@ -477,9 +461,12 @@ fn test_install_failing_no_such_file() {
     at.mkdir(dir1);
     at.touch(file1);
 
-    let r = ucmd.arg(file1).arg(file2).arg(dir1).run();
-    assert!(r.code == Some(1));
-    assert!(r.stderr.contains("No such file or directory"));
+    ucmd.arg(file1)
+        .arg(file2)
+        .arg(dir1)
+        .fails()
+        .code_is(1)
+        .stderr_contains("No such file or directory");
 }
 
 #[test]
