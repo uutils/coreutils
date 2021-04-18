@@ -127,8 +127,8 @@ struct GlobalSettings {
     tmp_dir: PathBuf,
 }
 
-impl GlobalSettings { 
-    // It's back to do conversions for command line opts! 
+impl GlobalSettings {
+    // It's back to do conversions for command line opts!
     // Probably want to do through numstrcmp somehow now?
     fn human_numeric_convert(a: &str) -> usize {
         let num_part = leading_num_common(a);
