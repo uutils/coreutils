@@ -176,6 +176,7 @@ impl From<&GlobalSettings> for KeySettings {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
 /// Represents the string selected by a FieldSelector.
 enum SelectionRange {
     /// If we had to transform this selection, we have to store a new string.
@@ -206,7 +207,7 @@ impl SelectionRange {
         }
     }
 }
-
+#[derive(Debug, Serialize, Deserialize, Clone)]
 enum NumCache {
     AsF64(f64),
     WithInfo(NumInfo),
@@ -227,7 +228,7 @@ impl NumCache {
         }
     }
 }
-
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct Selection {
     range: SelectionRange,
     num_cache: NumCache,
@@ -241,7 +242,7 @@ impl Selection {
 }
 
 type Field = Range<usize>;
-
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct Line {
     line: String,
     // The common case is not to specify fields. Let's make this fast.
@@ -251,7 +252,7 @@ struct Line {
 impl Sortable for Line {
 
     fn encode<W: Write>(&self, write: &mut W) {
-        let line = Line {line: self.line.clone(), selections: self.selections.clone()};
+        let line = Line {line: self.line.to_owned(), selections: self.selections.to_owned() };
         let serialized = serde_json::ser::to_string(&line).unwrap();
         write.write_all(format!("{}{}", serialized, "\n").as_bytes()).unwrap();
     }
@@ -259,11 +260,17 @@ impl Sortable for Line {
     fn decode<R: Read>(read: &mut R) -> Option<Line> {
         let buf_reader = BufReader::new(read);
         
-        let mut result: Option<Line> = None;
-        for line in buf_reader.lines() {
-            let line_as_str: Line = serde_json::de::from_str(&line.unwrap()).unwrap();
-            result = Some( Line {line: line_as_str.line, selections: line_as_str.selections} );
-        }
+        let result = {
+            let mut line_joined= String::new();
+            let mut selections_joined= SmallVec::new();
+            for line in buf_reader.lines() {
+                let mut deserialized_line: Line = serde_json::de::from_str(&line.unwrap()).unwrap();
+                line_joined = format!("{}\n{}", line_joined, deserialized_line.line);
+                selections_joined.append(&mut deserialized_line.selections);
+                selections_joined.dedup();
+            }
+            Some( Line {line: line_joined, selections: selections_joined} )
+        };
         result
     }
 }
@@ -286,7 +293,7 @@ impl Line {
             .iter()
             .map(|selector| {
                 let mut range =
-                    if let Some(range) = selector.get_selection(&line, fields.as_deref()) {
+                    if let Some(range) = selector.get_field_selection(&line, fields.as_deref()) {
                         if let Some(transformed) =
                             transform(&line[range.to_owned()], &selector.settings)
                         {
