@@ -1227,7 +1227,7 @@ fn get_leading_gen(a: &str) -> &str {
     let mut p_iter = raw_leading_num.chars().peekable();
     let mut result = "";
     // Cleanup raw stripped strings
-    for c in p_iter.to_owned() {
+    while let Some(c) = p_iter.next() {
         let next_char_numeric = p_iter.peek().unwrap_or(&'\0').is_numeric();
         // Only general numeric recognizes e notation and, see block below, the '+' sign
         // Only GNU (non-general) numeric recognize thousands seperators, takes only leading #
