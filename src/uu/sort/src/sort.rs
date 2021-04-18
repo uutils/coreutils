@@ -90,7 +90,7 @@ static NEGATIVE: char = '-';
 static POSITIVE: char = '+';
 
 static DEFAULT_TMPDIR: &str = r"/tmp";
-// 16GB buffer for Vec<Lines> before we dump to disk
+// 16GB buffer for Vec<Line> before we dump to disk
 static DEFAULT_BUF_SIZE: usize = 16000000000;
 
 #[derive(Eq, Ord, PartialEq, PartialOrd, Clone)]
@@ -890,11 +890,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .map(String::from)
                 .unwrap_or(format!("{}", DEFAULT_BUF_SIZE));
 
-            if human_numeric_convert(&input) < 128000 {
-                panic!("sort will not operate with less than 128K of memory.");
-            } else {
                 human_numeric_convert(&input)
-            }
         }
     }
 
