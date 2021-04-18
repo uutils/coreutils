@@ -28,7 +28,7 @@ fn test_version_flag() {
     let version_short = new_ucmd!().arg("-V").run();
     let version_long = new_ucmd!().arg("--version").run();
 
-    assert_eq!(version_short.stdout, version_long.stdout);
+    assert_eq!(version_short.stdout(), version_long.stdout());
 }
 
 #[test]
@@ -36,7 +36,7 @@ fn test_help_flag() {
     let help_short = new_ucmd!().arg("-h").run();
     let help_long = new_ucmd!().arg("--help").run();
 
-    assert_eq!(help_short.stdout, help_long.stdout);
+    assert_eq!(help_short.stdout(), help_long.stdout());
 }
 
 #[test]

@@ -3,14 +3,11 @@ use std::env;
 
 #[test]
 fn test_users_noarg() {
-    let (_, mut ucmd) = at_and_ucmd!();
-    let result = ucmd.run();
-    assert!(result.success);
+    new_ucmd!().succeeds();
 }
 #[test]
 fn test_users_check_name() {
-    let result = TestScenario::new(util_name!()).ucmd_keepenv().run();
-    assert!(result.success);
+    let result = TestScenario::new(util_name!()).ucmd_keepenv().succeeds();
 
     // Expectation: USER is often set
     let key = "USER";
@@ -21,9 +18,9 @@ fn test_users_check_name() {
         // Check if "users" contains the name of the user
         {
             println!("username found {}", &username);
-            println!("result.stdout {}", &result.stdout);
-            if !&result.stdout.is_empty() {
-                assert!(result.stdout.contains(&username))
+            // println!("result.stdout {}", &result.stdout);
+            if !result.stdout_str().is_empty() {
+                result.stdout_contains(&username);
             }
         }
     }
