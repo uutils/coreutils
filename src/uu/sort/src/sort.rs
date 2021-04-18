@@ -264,11 +264,8 @@ impl Sortable for Line {
             .unwrap();
     }
 
-    // This crate asks us to write one Line at a time, but returns multiple Lines to us(?).
-    // However, this crate also expects us to return a result of Option<Line>,
-    // so we concat the these lines into a single Option<Line>.  So, it's possible this is broken,
-    // and/or needs to be tested more thoroughly.  Perhaps we need to rethink our Line struct or rewrite a
-    // ext sorter ourselves.
+    // This crate asks us to write one Line struct at a time, but then returns multiple Lines to us at once.
+    // We concatanate them and return them as one big Line here.
     fn decode<R: Read>(read: &mut R) -> Option<Line> {
         let buf_reader = BufReader::new(read);
         let result = {
@@ -278,7 +275,7 @@ impl Sortable for Line {
             for line in p_iter {
                 let mut deserialized_line: Line = serde_json::from_str(&line.unwrap()).unwrap();
                 line_joined = format!("{}\n{}\n", line_joined, deserialized_line.line);
-                // I think we've done our sorting already and these are irrelevant?
+                // I think we've done our sorting already and these selctions are irrelevant?
                 // @miDeb what's your sense? Could we just return an empty vec?
                 selections_joined.append(&mut deserialized_line.selections);
             }
