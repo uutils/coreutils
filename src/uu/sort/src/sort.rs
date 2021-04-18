@@ -16,6 +16,8 @@
 extern crate uucore;
 
 mod numeric_str_cmp;
+pub mod ext_sorter;
+pub use ext_sorter::{ExternalSorter, Sortable, SortedIterator};
 
 use clap::{App, Arg};
 use fnv::FnvHasher;
@@ -24,26 +26,20 @@ use numeric_str_cmp::{numeric_str_cmp, NumInfo, NumInfoParseSettings};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use semver::Version;
+use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::env;
+use std::ffi::OsString;
 use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Lines, Read, Write};
 use std::mem::replace;
 use std::ops::{Range, RangeInclusive};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use uucore::fs::is_stdin_interactive; // for Iterator::dedup()
-use extsort::*;
-use std::str;
-use serde::{Serialize, Deserialize};
-use std::ffi::OsString;
-use std::usize;
-use std::path::PathBuf;
-use std::string::*;
-use rayon::prelude::*;
 
 static NAME: &str = "sort";
 static ABOUT: &str = "Display sorted concatenation of all FILE(s).";
@@ -255,30 +251,39 @@ struct Line {
 
 impl Sortable for Line {
     fn encode<W: Write>(&self, write: &mut W) {
-        let line = Line {line: self.line.to_owned(), selections: self.selections.to_owned() };
+        let line = Line {
+            line: self.line.to_owned(),
+            selections: self.selections.to_owned(),
+        };
         let serialized = serde_json::ser::to_string(&line).unwrap();
         // Each instance of valid JSON needs to be seperated by something, so here we use a newline
-        write.write_all(format!("{}{}", serialized, "\n").as_bytes()).unwrap();
+        write
+            .write_all(format!("{}{}", serialized, "\n").as_bytes())
+            .unwrap();
     }
 
     // This crate asks us to write one Line at a time, but returns multiple Lines to us(?).
-    // However, this crate also expects us to return a result of Option<Line>, 
-    // so we concat the these lines into a single Option<Line>.  So, it's possible this is broken, 
+    // However, this crate also expects us to return a result of Option<Line>,
+    // so we concat the these lines into a single Option<Line>.  So, it's possible this is broken,
     // and/or needs to be tested more thoroughly.  Perhaps we need to rethink our Line struct or rewrite a
-    // ext sorter ourselves.  
+    // ext sorter ourselves.
     fn decode<R: Read>(read: &mut R) -> Option<Line> {
         let buf_reader = BufReader::new(read);
         let result = {
-            let mut line_joined= String::new();
-            let mut selections_joined= SmallVec::new();
-            for line in buf_reader.lines() {
+            let mut line_joined = String::new();
+            let mut selections_joined = SmallVec::new();
+            let p_iter = buf_reader.lines().peekable();
+            for line in p_iter {
                 let mut deserialized_line: Line = serde_json::de::from_str(&line.unwrap()).unwrap();
-                line_joined = format!("{}\n{}", line_joined, deserialized_line.line);
-                // I think we've done our sorting already and these are irrelevant? @miDeb what's your sense?
+                line_joined = format!("{}\n{}\n", line_joined, deserialized_line.line);
+                // I think we've done our sorting already and these are irrelevant?
+                // @miDeb what's your sense? Could we just return an empty vec?
                 selections_joined.append(&mut deserialized_line.selections);
-                selections_joined.dedup();
             }
-            Some( Line {line: line_joined, selections: selections_joined} )
+            Some(Line {
+                line: line_joined.strip_suffix("\n").unwrap().to_owned(),
+                selections: selections_joined,
+            })
         };
         result
     }
@@ -798,6 +803,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         )
         .arg(
             Arg::with_name(OPT_BUF_SIZE)
+                .short("S")
                 .long(OPT_BUF_SIZE)
                 .help("sets the maximum SIZE of each segment in number of sorted items")
                 .takes_value(true)
@@ -805,6 +811,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         )
         .arg(
             Arg::with_name(OPT_TMP_DIR)
+                .short("T")
                 .long(OPT_TMP_DIR)
                 .help("use DIR for temporaries, not $TMPDIR or /tmp")
                 .takes_value(true)
@@ -875,13 +882,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     if matches.is_present(OPT_BUF_SIZE) {
         // 10K is the default extsort buffer, but that's too small, so we set at 10M
-        // Although the "default" is never used unless extsort options are given 
-        settings.buffer_size = { 
+        // Although the "default" is never used unless extsort options are given
+        settings.buffer_size = {
             let input = matches
-            .value_of(OPT_BUF_SIZE)
-            .map(String::from)
-            .unwrap_or( format! ( "{}", DEFAULT_BUF_SIZE ) );
-        
+                .value_of(OPT_BUF_SIZE)
+                .map(String::from)
+                .unwrap_or(format!("{}", DEFAULT_BUF_SIZE));
+
             human_numeric_convert(&input)
         }
     }
@@ -890,13 +897,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         let result = matches
             .value_of(OPT_TMP_DIR)
             .map(String::from)
-            .unwrap_or(DEFAULT_TMPDIR.to_owned() );
+            .unwrap_or(DEFAULT_TMPDIR.to_owned());
         settings.tmp_dir = PathBuf::from(format!(r"{}", result));
     } else {
         for (key, value) in env::vars_os() {
             if key == OsString::from("TMPDIR") {
-                settings.tmp_dir = PathBuf::from(format!(r"{}", value.into_string().unwrap_or("/tmp".to_owned())));
-                break 
+                settings.tmp_dir = PathBuf::from(format!(
+                    r"{}",
+                    value.into_string().unwrap_or("/tmp".to_owned())
+                ));
+                break;
             }
             settings.tmp_dir = PathBuf::from(DEFAULT_TMPDIR);
         }
@@ -1019,12 +1029,9 @@ fn exec(files: Vec<String>, settings: &GlobalSettings) -> i32 {
     if settings.check {
         return exec_check_file(&lines, &settings);
     }
-    
-    if ( settings.buffer_size != DEFAULT_BUF_SIZE ) || ( settings.tmp_dir.as_os_str() != DEFAULT_TMPDIR ) { 
-        lines = ext_sort_by(lines, &settings);
-    } else {
-        sort_by(&mut lines, &settings);
-    }
+
+
+    lines = sort_by(lines, &settings);
 
     if settings.merge {
         if settings.unique {
@@ -1079,18 +1086,16 @@ fn exec_check_file(unwrapped_lines: &[Line], settings: &GlobalSettings) -> i32 {
     }
 }
 
-fn ext_sort_by(lines: Vec<Line>, settings: &GlobalSettings) -> Vec<Line> {
-    let sorter = ExternalSorter::new().with_segment_size(settings.buffer_size).with_sort_dir(settings.tmp_dir.clone()).with_parallel_sort();
-    let result = sorter.sort_by(lines.into_iter(), |a, b| compare_by(a, b, &settings)).unwrap().collect();
+fn sort_by(lines: Vec<Line>, settings: &GlobalSettings) -> Vec<Line> {
+    let sorter = ExternalSorter::new()
+        .with_segment_size(settings.buffer_size)
+        .with_sort_dir(settings.tmp_dir.clone())
+        .with_parallel_sort();
+    let result = sorter
+        .sort_by(lines.into_iter(), |a, b| compare_by(a, b, &settings))
+        .unwrap()
+        .collect();
     result
-}
-
-fn sort_by(lines: &mut Vec<Line>, settings: &GlobalSettings) {
-    if settings.stable || settings.unique {
-        lines.par_sort_by(|a, b| compare_by(a, b, &settings))
-    } else {
-        lines.par_sort_unstable_by(|a, b| compare_by(a, b, &settings))
-    }
 }
 
 fn compare_by(a: &Line, b: &Line, global_settings: &GlobalSettings) -> Ordering {
@@ -1137,14 +1142,14 @@ fn compare_by(a: &Line, b: &Line, global_settings: &GlobalSettings) -> Ordering 
     }
 }
 
-// Brought back! Probably want to do through numstrcmp somehow now
+// It's back to do conversions for command options! Probably want to do through numstrcmp somehow now
 fn human_numeric_convert(a: &str) -> usize {
     let num_part = leading_num_common(a);
     let (_, s) = a.split_at(num_part.len());
     let num_part = permissive_f64_parse(num_part);
     let suffix = match s.parse().unwrap_or('\0') {
         // SI Units
-        'K' => 1E3,
+        'K' | 'k' => 1E3,
         'M' => 1E6,
         'G' => 1E9,
         'T' => 1E12,
@@ -1164,7 +1169,7 @@ fn default_compare(a: &str, b: &str) -> Ordering {
     a.cmp(b)
 }
 
-// This function does the initial detection of numeric lines.
+/// This function does the initial detection of numeric lines for FP compares.
 // Lines starting with a number or positive or negative sign.
 // It also strips the string of any thing that could never
 // be a number for the purposes of any type of numeric comparison.
@@ -1195,7 +1200,7 @@ fn leading_num_common(a: &str) -> &str {
     s
 }
 
-// This function cleans up the initial comparison done by leading_num_common for a general numeric compare.
+/// This function cleans up the initial comparison done by leading_num_common for a general numeric compare.
 // In contrast to numeric compare, GNU general numeric/FP sort *should* recognize positive signs and
 // scientific notation, so we strip those lines only after the end of the following numeric string.
 // For example, 5e10KFD would be 5e10 or 5x10^10 and +10000HFKJFK would become 10000.
@@ -1318,7 +1323,7 @@ fn month_parse(line: &str) -> Month {
         ""
     };
 
-    match pattern.to_uppercase().as_ref() {
+    let result = match pattern.to_uppercase().as_ref() {
         "JAN" => Month::January,
         "FEB" => Month::February,
         "MAR" => Month::March,
@@ -1332,7 +1337,8 @@ fn month_parse(line: &str) -> Month {
         "NOV" => Month::November,
         "DEC" => Month::December,
         _ => Month::Unknown,
-    }
+    };
+    result
 }
 
 fn month_compare(a: &str, b: &str) -> Ordering {
