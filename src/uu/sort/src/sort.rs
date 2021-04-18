@@ -18,14 +18,14 @@ extern crate uucore;
 mod ext_sorter;
 mod numeric_str_cmp;
 
-use rayon::prelude::*;
 use clap::{App, Arg};
+use ext_sorter::{ExternalSorter, Sortable};
 use fnv::FnvHasher;
 use itertools::Itertools;
 use numeric_str_cmp::{numeric_str_cmp, NumInfo, NumInfoParseSettings};
-use ext_sorter::{ExternalSorter, Sortable};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
+use rayon::prelude::*;
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
@@ -271,16 +271,21 @@ impl Sortable for Line {
         let result = {
             let mut line_joined = String::new();
             let mut selections_joined = SmallVec::new();
-            let p_iter = buf_reader.lines().peekable();
-            for line in p_iter {
-                let mut deserialized_line: Line = serde_json::from_str(&line.unwrap()).unwrap();
-                line_joined = format!("{}\n{}\n", line_joined, deserialized_line.line);
+            let mut p_iter = buf_reader.lines().peekable();
+            while let Some(line) = p_iter.next() {
+                let mut deserialized_line: Line =
+                    serde_json::from_str(&line.as_ref().unwrap()).unwrap();
+                if let Some(_next_line) = p_iter.peek() {
+                    line_joined = format!("{}\n{}\n", line_joined, deserialized_line.line)
+                } else {
+                    line_joined = format!("{}\n{}", line_joined, deserialized_line.line)
+                }
                 // I think we've done our sorting already and these selctions are irrelevant?
                 // @miDeb what's your sense? Could we just return an empty vec?
                 selections_joined.append(&mut deserialized_line.selections);
             }
             Some(Line {
-                line: line_joined.strip_suffix("\n").unwrap_or("").to_owned(),
+                line: line_joined,
                 selections: selections_joined,
             })
         };
@@ -888,7 +893,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .map(String::from)
                 .unwrap_or(format!("{}", DEFAULT_BUF_SIZE));
 
-                human_numeric_convert(&input)
+            human_numeric_convert(&input)
         }
     }
 
@@ -1030,14 +1035,14 @@ fn exec(files: Vec<String>, settings: &GlobalSettings) -> i32 {
     }
 
     // Only use ext_sorter when we need to.
-    // Probably faster that we don't create 
+    // Probably faster that we don't create
     // an owned value each run
     if settings.buffer_size != DEFAULT_BUF_SIZE {
         lines = ext_sort_by(lines, &settings);
     } else {
         sort_by(&mut lines, &settings);
     }
-    
+
     if settings.merge {
         if settings.unique {
             print_sorted(file_merger.dedup(), &settings)

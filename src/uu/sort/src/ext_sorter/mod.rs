@@ -75,7 +75,7 @@ impl ExternalSorter {
         self.parallel = true;
         self
     }
-    
+
     /// Sorts a given iterator with a comparator function, returning a new iterator with items
     pub fn sort_by<T, I, F>(&self, iterator: I, cmp: F) -> Result<SortedIterator<T, F>, Error>
     where
