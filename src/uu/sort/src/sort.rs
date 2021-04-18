@@ -180,7 +180,7 @@ impl From<&GlobalSettings> for KeySettings {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 /// Represents the string selected by a FieldSelector.
 enum SelectionRange {
     /// If we had to transform this selection, we have to store a new string.
@@ -211,7 +211,7 @@ impl SelectionRange {
         }
     }
 }
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 enum NumCache {
     AsF64(f64),
     WithInfo(NumInfo),
@@ -232,7 +232,7 @@ impl NumCache {
         }
     }
 }
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 struct Selection {
     range: SelectionRange,
     num_cache: NumCache,
@@ -275,6 +275,7 @@ impl Sortable for Line {
                 let mut deserialized_line: Line = serde_json::de::from_str(&line.unwrap()).unwrap();
                 line_joined = format!("{}\n{}", line_joined, deserialized_line.line);
                 selections_joined.append(&mut deserialized_line.selections);
+                selections_joined.dedup();
             }
             Some( Line {line: line_joined, selections: selections_joined} )
         };
