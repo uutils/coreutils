@@ -75,18 +75,6 @@ impl ExternalSorter {
         self.parallel = true;
         self
     }
-
-    /// Sorts a given iterator, returning a new iterator with items
-    pub fn sort<T, I>(
-        &self,
-        iterator: I,
-    ) -> Result<SortedIterator<T, impl Fn(&T, &T) -> Ordering + Send + Sync>, Error>
-    where
-        T: Sortable + Ord,
-        I: Iterator<Item = T>,
-    {
-        self.sort_by(iterator, |a, b| a.cmp(b))
-    }
     
     /// Sorts a given iterator with a comparator function, returning a new iterator with items
     pub fn sort_by<T, I, F>(&self, iterator: I, cmp: F) -> Result<SortedIterator<T, F>, Error>
@@ -98,12 +86,10 @@ impl ExternalSorter {
         let mut tempdir: Option<tempfile::TempDir> = None;
         let mut sort_dir: Option<PathBuf> = None;
 
-        let mut count = 0;
         let mut segments_file: Vec<File> = Vec::new();
         let size_of_items = std::mem::size_of::<T>();
         let mut buffer: Vec<T> = Vec::with_capacity(self.segment_size / size_of_items);
         for next_item in iterator {
-            count += 1;
             buffer.push(next_item);
             if buffer.len() > self.segment_size {
                 let sort_dir = self.lazy_create_dir(&mut tempdir, &mut sort_dir)?;
@@ -122,7 +108,7 @@ impl ExternalSorter {
             Some(VecDeque::from(buffer))
         };
 
-        SortedIterator::new(tempdir, pass_through_queue, segments_file, count, cmp)
+        SortedIterator::new(tempdir, pass_through_queue, segments_file, cmp)
     }
 
     /// We only want to create directory if it's needed (i.e. if the dataset
@@ -199,7 +185,6 @@ pub struct SortedIterator<T: Sortable, F> {
     pass_through_queue: Option<VecDeque<T>>,
     segments_file: Vec<BufReader<File>>,
     next_values: Vec<Option<T>>,
-    count: u64,
     cmp: F,
 }
 
@@ -208,7 +193,6 @@ impl<T: Sortable, F: Fn(&T, &T) -> Ordering + Send + Sync> SortedIterator<T, F> 
         tempdir: Option<tempfile::TempDir>,
         pass_through_queue: Option<VecDeque<T>>,
         mut segments_file: Vec<File>,
-        count: u64,
         cmp: F,
     ) -> Result<SortedIterator<T, F>, Error> {
         for segment in &mut segments_file {
@@ -227,7 +211,6 @@ impl<T: Sortable, F: Fn(&T, &T) -> Ordering + Send + Sync> SortedIterator<T, F> 
             pass_through_queue,
             segments_file: segments_file_buffered,
             next_values,
-            count,
             cmp,
         })
     }
