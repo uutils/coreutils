@@ -15,8 +15,6 @@ edition = "2018"
 path = "src/sort.rs"
 
 [dependencies]
-byteorder = "1.4.3"
-extsort = "0.4.2"
 serde_json = { version = "1.0.64", default-features = false, features = ["alloc"] }
 serde = { version = "1.0", features = ["derive"] }
 rayon = "1.5"
