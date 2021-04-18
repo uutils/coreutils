@@ -43,6 +43,7 @@ use std::ffi::OsString;
 use std::usize;
 use std::path::PathBuf;
 use std::string::*;
+use rayon::prelude::*;
 
 static NAME: &str = "sort";
 static ABOUT: &str = "Display sorted concatenation of all FILE(s).";
@@ -91,6 +92,9 @@ static THOUSANDS_SEP: char = ',';
 
 static NEGATIVE: char = '-';
 static POSITIVE: char = '+';
+
+static DEFAULT_TMPDIR: &str = r"/tmp";
+static DEFAULT_BUF_SIZE: usize = 10000000usize;
 
 #[derive(Eq, Ord, PartialEq, PartialOrd, Clone)]
 enum SortMode {
@@ -146,8 +150,8 @@ impl Default for GlobalSettings {
             separator: None,
             threads: String::new(),
             zero_terminated: false,
-            buffer_size: 10000000usize,
-            tmp_dir: PathBuf::from(r"/tmp"),
+            buffer_size: DEFAULT_BUF_SIZE,
+            tmp_dir: PathBuf::from(DEFAULT_TMPDIR),
         }
     }
 }
@@ -242,7 +246,7 @@ impl Selection {
 }
 
 type Field = Range<usize>;
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize)]
 struct Line {
     line: String,
     // The common case is not to specify fields. Let's make this fast.
@@ -250,16 +254,20 @@ struct Line {
 }
 
 impl Sortable for Line {
-
     fn encode<W: Write>(&self, write: &mut W) {
         let line = Line {line: self.line.to_owned(), selections: self.selections.to_owned() };
         let serialized = serde_json::ser::to_string(&line).unwrap();
+        // Valid JSON needs to be seperated by something, so here we use a newline
         write.write_all(format!("{}{}", serialized, "\n").as_bytes()).unwrap();
     }
 
+    // This crate asks us to write one line at a time, but returns multiple lines(?).
+    // However, this crate also expects us to return a result of Option<Line>, 
+    // so we concat the these lines into a single Option<Line>.  So, this may be broken, 
+    // and needs to be tested more thoroughly.  Perhaps we need to rethink our struct or rewrite a
+    // ext sorter ourselves.  
     fn decode<R: Read>(read: &mut R) -> Option<Line> {
         let buf_reader = BufReader::new(read);
-        
         let result = {
             let mut line_joined= String::new();
             let mut selections_joined= SmallVec::new();
@@ -267,7 +275,6 @@ impl Sortable for Line {
                 let mut deserialized_line: Line = serde_json::de::from_str(&line.unwrap()).unwrap();
                 line_joined = format!("{}\n{}", line_joined, deserialized_line.line);
                 selections_joined.append(&mut deserialized_line.selections);
-                selections_joined.dedup();
             }
             Some( Line {line: line_joined, selections: selections_joined} )
         };
@@ -869,16 +876,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         settings.buffer_size = matches
             .value_of(OPT_BUF_SIZE)
             .map(String::from)
-            .unwrap_or( format! ( "{}", 10000000usize ) )
+            .unwrap_or( format! ( "{}", DEFAULT_BUF_SIZE ) )
             .parse::<usize>()
-            .unwrap_or(10000000usize);
+            .unwrap_or( DEFAULT_BUF_SIZE );
     }
 
     if matches.is_present(OPT_TMP_DIR) {
         let result = matches
             .value_of(OPT_TMP_DIR)
             .map(String::from)
-            .unwrap_or("/tmp".to_owned() );
+            .unwrap_or(DEFAULT_TMPDIR.to_owned() );
         settings.tmp_dir = PathBuf::from(format!(r"{}", result));
     } else {
         for (key, value) in env::vars_os() {
@@ -886,7 +893,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 settings.tmp_dir = PathBuf::from(format!(r"{}", value.into_string().unwrap_or("/tmp".to_owned())));
                 break 
             }
-            settings.tmp_dir = PathBuf::from(r"/tmp");
+            settings.tmp_dir = PathBuf::from(DEFAULT_TMPDIR);
         }
     }
 
@@ -1008,7 +1015,11 @@ fn exec(files: Vec<String>, settings: &GlobalSettings) -> i32 {
         return exec_check_file(&lines, &settings);
     }
     
-    lines = sort_by(lines, &settings);
+    if ( settings.buffer_size != DEFAULT_BUF_SIZE ) || ( settings.tmp_dir.as_os_str() != DEFAULT_TMPDIR ) { 
+        lines = ext_sort_by(lines, &settings);
+    } else {
+        sort_by(&mut lines, &settings);
+    }
 
     if settings.merge {
         if settings.unique {
@@ -1063,9 +1074,18 @@ fn exec_check_file(unwrapped_lines: &[Line], settings: &GlobalSettings) -> i32 {
     }
 }
 
-fn sort_by(lines: Vec<Line>, settings: &GlobalSettings) -> Vec<Line> {
+fn ext_sort_by(lines: Vec<Line>, settings: &GlobalSettings) -> Vec<Line> {
     let sorter = ExternalSorter::new().with_segment_size(settings.buffer_size).with_sort_dir(settings.tmp_dir.clone()).with_parallel_sort();
-    sorter.sort_by(lines.into_iter(), |a, b| compare_by(a, b, &settings)).unwrap().collect()
+    let result = sorter.sort_by(lines.into_iter(), |a, b| compare_by(a, b, &settings)).unwrap().collect();
+    result
+}
+
+fn sort_by(lines: &mut Vec<Line>, settings: &GlobalSettings) {
+    if settings.stable || settings.unique {
+        lines.par_sort_by(|a, b| compare_by(a, b, &settings))
+    } else {
+        lines.par_sort_unstable_by(|a, b| compare_by(a, b, &settings))
+    }
 }
 
 fn compare_by(a: &Line, b: &Line, global_settings: &GlobalSettings) -> Ordering {
