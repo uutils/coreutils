@@ -15,14 +15,14 @@
 #[macro_use]
 extern crate uucore;
 
+mod ext_sorter;
 mod numeric_str_cmp;
-pub mod ext_sorter;
-pub use ext_sorter::{ExternalSorter, Sortable, SortedIterator};
 
 use clap::{App, Arg};
 use fnv::FnvHasher;
 use itertools::Itertools;
 use numeric_str_cmp::{numeric_str_cmp, NumInfo, NumInfoParseSettings};
+use ext_sorter::{ExternalSorter, Sortable};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use semver::Version;
@@ -39,7 +39,7 @@ use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Lines, Read, Write};
 use std::mem::replace;
 use std::ops::{Range, RangeInclusive};
 use std::path::{Path, PathBuf};
-use uucore::fs::is_stdin_interactive; // for Iterator::dedup()
+use uucore::fs::is_stdin_interactive; // for Iterator::dedup();
 
 static NAME: &str = "sort";
 static ABOUT: &str = "Display sorted concatenation of all FILE(s).";
@@ -90,7 +90,8 @@ static NEGATIVE: char = '-';
 static POSITIVE: char = '+';
 
 static DEFAULT_TMPDIR: &str = r"/tmp";
-static DEFAULT_BUF_SIZE: usize = 10000000usize;
+// 16GB buffer for Vec<Lines> before we dump to disk
+static DEFAULT_BUF_SIZE: usize = 16000000000;
 
 #[derive(Eq, Ord, PartialEq, PartialOrd, Clone)]
 enum SortMode {
@@ -281,7 +282,7 @@ impl Sortable for Line {
                 selections_joined.append(&mut deserialized_line.selections);
             }
             Some(Line {
-                line: line_joined.strip_suffix("\n").unwrap().to_owned(),
+                line: line_joined.strip_suffix("\n").unwrap_or("").to_owned(),
                 selections: selections_joined,
             })
         };
@@ -881,7 +882,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     if matches.is_present(OPT_BUF_SIZE) {
-        // 10K is the default extsort buffer, but that's too small, so we set at 10M
+        // 10K is the default extsort buffer, but that's too small, so we set at 100M
         // Although the "default" is never used unless extsort options are given
         settings.buffer_size = {
             let input = matches
@@ -889,7 +890,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .map(String::from)
                 .unwrap_or(format!("{}", DEFAULT_BUF_SIZE));
 
-            human_numeric_convert(&input)
+            if human_numeric_convert(&input) < 128000 {
+                panic!("sort will not operate with less than 128K of memory.");
+            } else {
+                human_numeric_convert(&input)
+            }
         }
     }
 
@@ -1029,7 +1034,6 @@ fn exec(files: Vec<String>, settings: &GlobalSettings) -> i32 {
     if settings.check {
         return exec_check_file(&lines, &settings);
     }
-
 
     lines = sort_by(lines, &settings);
 

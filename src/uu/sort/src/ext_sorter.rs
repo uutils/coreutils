@@ -1,4 +1,5 @@
 // Copyright 2018 Andre-Philippe Paquet
+// Copyright 2021 Robert Swinford
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -38,7 +39,7 @@ pub struct ExternalSorter {
 impl ExternalSorter {
     pub fn new() -> ExternalSorter {
         ExternalSorter {
-            segment_size: 10000000,
+            segment_size: 16000000000,
             sort_dir: None,
             parallel: false,
         }
@@ -71,18 +72,6 @@ impl ExternalSorter {
     pub fn with_parallel_sort(mut self) -> Self {
         self.parallel = true;
         self
-    }
-
-    /// Sorts a given iterator, returning a new iterator with items
-    pub fn sort<T, I>(
-        &self,
-        iterator: I,
-    ) -> Result<SortedIterator<T, impl Fn(&T, &T) -> Ordering + Send + Sync>, Error>
-    where
-        T: Sortable + Ord,
-        I: Iterator<Item = T>,
-    {
-        self.sort_by(iterator, |a, b| a.cmp(b))
     }
 
     /// Sorts a given iterator with a comparator function, returning a new iterator with items
@@ -120,21 +109,6 @@ impl ExternalSorter {
         };
 
         SortedIterator::new(tempdir, pass_through_queue, segments_file, count, cmp)
-    }
-
-    /// Sorts a given iterator with a key extraction function, returning a new iterator with items
-    pub fn sort_by_key<T, I, F, K>(
-        &self,
-        iterator: I,
-        f: F,
-    ) -> Result<SortedIterator<T, impl Fn(&T, &T) -> Ordering + Send + Sync>, Error>
-    where
-        T: Sortable,
-        I: Iterator<Item = T>,
-        F: Fn(&T) -> K + Send + Sync,
-        K: Ord,
-    {
-        self.sort_by(iterator, move |a, b| f(a).cmp(&f(b)))
     }
 
     /// We only want to create directory if it's needed (i.e. if the dataset
@@ -243,10 +217,6 @@ impl<T: Sortable, F: Fn(&T, &T) -> Ordering + Send + Sync> SortedIterator<T, F> 
             cmp,
         })
     }
-
-    pub fn sorted_count(&self) -> u64 {
-        self.count
-    }
 }
 
 impl<T: Sortable, F: Fn(&T, &T) -> Ordering> Iterator for SortedIterator<T, F> {
@@ -283,65 +253,5 @@ impl<T: Sortable, F: Fn(&T, &T) -> Ordering> Iterator for SortedIterator<T, F> {
             self.next_values[idx] = T::decode(file);
             value
         })
-    }
-}
-
-#[cfg(test)]
-pub mod test {
-    use super::*;
-
-    use byteorder::{ReadBytesExt, WriteBytesExt};
-
-    #[test]
-    fn test_smaller_than_segment() {
-        let sorter = ExternalSorter::new();
-        let data: Vec<u32> = (0..100u32).collect();
-        let data_rev: Vec<u32> = data.iter().rev().cloned().collect();
-
-        let sorted_iter = sorter.sort(data_rev.into_iter()).unwrap();
-
-        // should not have used any segments (all in memory)
-        assert_eq!(sorted_iter.segments_file.len(), 0);
-        let sorted_data: Vec<u32> = sorted_iter.collect();
-
-        assert_eq!(data, sorted_data);
-    }
-
-    #[test]
-    fn test_multiple_segments() {
-        let sorter = ExternalSorter::new().with_segment_size(100);
-        let data: Vec<u32> = (0..1000u32).collect();
-
-        let data_rev: Vec<u32> = data.iter().rev().cloned().collect();
-        let sorted_iter = sorter.sort(data_rev.into_iter()).unwrap();
-        assert_eq!(sorted_iter.segments_file.len(), 10);
-
-        let sorted_data: Vec<u32> = sorted_iter.collect();
-        assert_eq!(data, sorted_data);
-    }
-
-    #[test]
-    fn test_parallel() {
-        let sorter = ExternalSorter::new()
-            .with_segment_size(100)
-            .with_parallel_sort();
-        let data: Vec<u32> = (0..1000u32).collect();
-
-        let data_rev: Vec<u32> = data.iter().rev().cloned().collect();
-        let sorted_iter = sorter.sort(data_rev.into_iter()).unwrap();
-        assert_eq!(sorted_iter.segments_file.len(), 10);
-
-        let sorted_data: Vec<u32> = sorted_iter.collect();
-        assert_eq!(data, sorted_data);
-    }
-
-    impl Sortable for u32 {
-        fn encode<W: Write>(&self, writer: &mut W) {
-            writer.write_u32::<byteorder::LittleEndian>(*self).unwrap();
-        }
-
-        fn decode<R: Read>(reader: &mut R) -> Option<u32> {
-            reader.read_u32::<byteorder::LittleEndian>().ok()
-        }
     }
 }
