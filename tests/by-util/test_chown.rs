@@ -9,9 +9,15 @@ extern crate chown;
 // considered okay. If we are not inside the CI this calls assert!(result.success).
 //
 // From the Logs: "Build (ubuntu-18.04, x86_64-unknown-linux-gnu, feat_os_unix, use-cross)"
+//
 // stderr: "whoami: cannot find name for user ID 1001"
-// Maybe: "adduser --uid 1001 username" can put things right?
+// TODO: Maybe `adduser --uid 1001 username` can put things right?
+//
 // stderr: "id: cannot find name for group ID 116"
+// stderr: "thread 'main' panicked at 'called `Result::unwrap()` on an `Err`
+//     value: Custom { kind: NotFound, error: "No such id: 1001" }',
+//     /project/src/uucore/src/lib/features/perms.rs:176:44"
+//
 fn skipping_test_is_okay(result: &CmdResult, needle: &str) -> bool {
     if !result.succeeded() {
         println!("result.stdout = {}", result.stdout_str());
@@ -128,26 +134,50 @@ fn test_chown_only_owner_colon() {
         .arg(format!("{}:", user_name))
         .arg("--verbose")
         .arg(file1)
-        .run();
+        .succeeds()
+        .stderr_contains(&"retained as");
 
-    // scene // TODO: uncomment once #2060 is fixed
-    //     .ucmd()
-    //     .arg("root:")
-    //     .arg("--verbose")
-    //     .arg(file1)
-    //     .fails()
-    //     .stderr_contains(&"failed to change");
+    scene
+        .ucmd()
+        .arg("root:")
+        .arg("--verbose")
+        .arg(file1)
+        .fails()
+        .stderr_contains(&"failed to change");
 }
 
 #[test]
 fn test_chown_only_colon() {
     // test chown : file.txt
 
-    // TODO: implement once #2060 is fixed
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file1 = "test_chown_file1";
+    at.touch(file1);
+
     // expected:
     // $ chown -v : file.txt 2>out_err ; echo $? ; cat out_err
     // ownership of 'file.txt' retained
     // 0
+    let result = scene.ucmd().arg(":").arg("--verbose").arg(file1).run();
+    if skipping_test_is_okay(&result, "No such id") {
+        return;
+    }
+    result.stderr_contains(&"retained as"); // TODO: verbose is not printed to stderr in GNU chown
+
+    // test chown : file.txt
+    // expected:
+    // $ chown -v :: file.txt 2>out_err ; echo $? ; cat out_err
+    // 1
+    // chown: invalid group: ‘::’
+    scene
+        .ucmd()
+        .arg("::")
+        .arg("--verbose")
+        .arg(file1)
+        .fails()
+        .stderr_contains(&"invalid group: ‘::’");
 }
 
 #[test]
@@ -479,8 +509,8 @@ fn test_big_p() {
             .arg("bin")
             .arg("/proc/self/cwd")
             .fails()
-            .stderr_is(
-                "chown: changing ownership of '/proc/self/cwd': Operation not permitted (os error 1)\n",
+            .stderr_contains(
+                "chown: changing ownership of '/proc/self/cwd': Operation not permitted (os error 1)",
             );
     }
 }
