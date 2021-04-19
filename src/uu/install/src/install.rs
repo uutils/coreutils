@@ -433,7 +433,10 @@ fn standard(paths: Vec<String>, b: Behavior) -> i32 {
         if target.is_file() || is_new_file_path(target) {
             copy_file_to_file(&sources[0], &target.to_path_buf(), &b)
         } else {
-            show_error!("invalid target {}: No such file or directory", target.display());
+            show_error!(
+                "invalid target {}: No such file or directory",
+                target.display()
+            );
             1
         }
     }

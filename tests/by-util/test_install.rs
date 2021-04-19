@@ -660,5 +660,11 @@ fn test_install_creating_leading_dirs() {
 
     at.touch(source);
 
-    scene.ucmd().arg("-D").arg(source).arg(at.plus(target)).succeeds().no_stderr();
+    scene
+        .ucmd()
+        .arg("-D")
+        .arg(source)
+        .arg(at.plus(target))
+        .succeeds()
+        .no_stderr();
 }
