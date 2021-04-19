@@ -27,3 +27,8 @@ Example: `hyperfine --warmup 2 "target/release/coreutils ls -al -R tree > /dev/n
 (This assumes GNU sort is installed as `sort`)
 
 This can also be used to compare with version of ls built before your changes to ensure your change does not regress this
+
+## Checking system call count
+
+- Another thing to look at would be system calls count using strace (on linux) or equivalent on other operating systems.
+- Example: `strace -c target/release/coreutils ls -al -R tree`
