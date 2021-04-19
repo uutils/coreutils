@@ -16,6 +16,7 @@ extern crate uucore;
 mod quoting_style;
 mod version_cmp;
 
+#[cfg(unix)]
 use cached::proc_macro::cached;
 use clap::{App, Arg};
 use globset::{self, Glob, GlobSet, GlobSetBuilder};
