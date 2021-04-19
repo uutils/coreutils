@@ -26,7 +26,7 @@ fn test_no_options() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
 fn test_no_options_big_input() {
     for &n in &[
         0,
