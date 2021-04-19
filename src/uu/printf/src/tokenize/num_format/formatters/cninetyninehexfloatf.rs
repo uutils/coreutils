@@ -52,34 +52,6 @@ fn get_primitive_hex(
 ) -> FormatPrimitive {
     let prefix = Some(String::from(if inprefix.sign == -1 { "-0x" } else { "0x" }));
 
-    // assign the digits before and after the decimal points
-    // to separate slices. If no digits after decimal point,
-    // assign 0
-    //let (mut first_segment_raw, second_segment_raw) = match analysis.decimal_pos {
-        //Some(pos) => (&str_in[..pos], &str_in[pos + 1..]),
-        //None => (str_in, "0"),
-    //};
-    //if first_segment_raw.is_empty() {
-        //first_segment_raw = "0";
-    //}
-    // convert to string, hexifying if input is in dec.
-    // let (first_segment, second_segment) =
-    // match inprefix.radix_in {
-    // Base::Ten => {
-    // (to_hex(first_segment_raw, true),
-    // to_hex(second_segment_raw, false))
-    // }
-    // _ => {
-    // (String::from(first_segment_raw),
-    // String::from(second_segment_raw))
-    // }
-    // };
-    //
-    //
-    // f.pre_decimal = Some(first_segment);
-    // f.post_decimal = Some(second_segment);
-    //
-
     // TODO actual conversion, make sure to get back mantissa.
     // for hex to hex, it's really just a matter of moving the
     // decimal point and calculating the mantissa by its initial
