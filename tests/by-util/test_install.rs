@@ -359,7 +359,7 @@ fn test_install_target_new_file_failing_nonexistent_parent() {
     ucmd.arg(file1)
         .arg(format!("{}/{}", dir, file2))
         .fails()
-        .stderr_contains(&"not a directory");
+        .stderr_contains(&"No such file or directory");
 }
 
 #[test]
@@ -648,4 +648,43 @@ fn test_install_and_strip_with_non_existent_program() {
         .fails()
         .stderr;
     assert!(stderr.contains("No such file or directory"));
+}
+
+#[test]
+fn test_install_creating_leading_dirs() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let source = "create_leading_test_file";
+    let target = "dir1/dir2/dir3/test_file";
+
+    at.touch(source);
+
+    scene
+        .ucmd()
+        .arg("-D")
+        .arg(source)
+        .arg(at.plus(target))
+        .succeeds()
+        .no_stderr();
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_install_creating_leading_dir_fails_on_long_name() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let source = "create_leading_test_file";
+    let target = format!("{}/test_file", "d".repeat(libc::PATH_MAX as usize + 1));
+
+    at.touch(source);
+
+    scene
+        .ucmd()
+        .arg("-D")
+        .arg(source)
+        .arg(at.plus(target.as_str()))
+        .fails()
+        .stderr_contains("failed to create");
 }
