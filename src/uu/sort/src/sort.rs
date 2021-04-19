@@ -924,15 +924,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         let result = matches
             .value_of(OPT_TMP_DIR)
             .map(String::from)
-            .unwrap_or(DEFAULT_TMPDIR.to_owned());
-        settings.tmp_dir = PathBuf::from(format!(r"{}", result));
+            .unwrap_or_else(|| DEFAULT_TMPDIR.to_owned());
+        settings.tmp_dir = PathBuf::from(result);
     } else {
         for (key, value) in env::vars_os() {
             if key == OsString::from("TMPDIR") {
-                settings.tmp_dir = PathBuf::from(format!(
-                    r"{}",
-                    value.into_string().unwrap_or("/tmp".to_owned())
-                ));
+                settings.tmp_dir = PathBuf::from(value);
                 break;
             }
             settings.tmp_dir = PathBuf::from(DEFAULT_TMPDIR);
@@ -1124,11 +1121,10 @@ fn ext_sort_by(lines: Vec<Line>, settings: &GlobalSettings) -> Vec<Line> {
         .with_segment_size(settings.buffer_size)
         .with_sort_dir(settings.tmp_dir.clone())
         .with_parallel_sort();
-    let result = sorter
+    sorter
         .sort_by(lines.into_iter(), |a, b| compare_by(a, b, &settings))
         .unwrap()
-        .collect();
-    result
+        .collect()
 }
 
 fn sort_by(lines: &mut Vec<Line>, settings: &GlobalSettings) {

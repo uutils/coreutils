@@ -86,14 +86,24 @@ impl ExternalSorter {
         let mut tempdir: Option<tempfile::TempDir> = None;
         let mut sort_dir: Option<PathBuf> = None;
 
+        let mut count = 0;
         let mut segments_file: Vec<File> = Vec::new();
+        // FYI, the initialization size of struct Line is 96 bytes, but below works for all <T>
         let size_of_items = std::mem::size_of::<T>();
-        let mut buffer: Vec<T> = Vec::with_capacity(self.segment_size / size_of_items);
+        let initial_capacity = 
+        if self.segment_size / size_of_items >= 2 {
+            self.segment_size / size_of_items
+        } else { 2 };
+        let mut buffer: Vec<T> = Vec::with_capacity(initial_capacity);
         for next_item in iterator {
+            count += 1;
             buffer.push(next_item);
-            if buffer.len() > self.segment_size {
+            // if after push, number of elements in vector > initial capacity
+            if buffer.len() > initial_capacity {
                 let sort_dir = self.lazy_create_dir(&mut tempdir, &mut sort_dir)?;
                 self.sort_and_write_segment(sort_dir, &mut segments_file, &mut buffer, &cmp)?;
+                // Resize buffer after write out
+                // buffer.shrink_to_fit();
             }
         }
 
@@ -108,7 +118,7 @@ impl ExternalSorter {
             Some(VecDeque::from(buffer))
         };
 
-        SortedIterator::new(tempdir, pass_through_queue, segments_file, cmp)
+        SortedIterator::new(tempdir, pass_through_queue, segments_file, count, cmp)
     }
 
     /// We only want to create directory if it's needed (i.e. if the dataset
@@ -158,7 +168,10 @@ impl ExternalSorter {
             .open(&segment_path)?;
         let mut buf_writer = BufWriter::new(segment_file);
 
-        for item in buffer.drain(0..) {
+        // Possible panic here.  
+        // Why use drain here, if we want to dump the entire buffer?
+        // Was "buffer.drain(0..)"
+        for item in buffer {
             item.encode(&mut buf_writer);
         }
 
@@ -185,6 +198,7 @@ pub struct SortedIterator<T: Sortable, F> {
     pass_through_queue: Option<VecDeque<T>>,
     segments_file: Vec<BufReader<File>>,
     next_values: Vec<Option<T>>,
+    count: u64,
     cmp: F,
 }
 
@@ -193,6 +207,7 @@ impl<T: Sortable, F: Fn(&T, &T) -> Ordering + Send + Sync> SortedIterator<T, F> 
         tempdir: Option<tempfile::TempDir>,
         pass_through_queue: Option<VecDeque<T>>,
         mut segments_file: Vec<File>,
+        count: u64,
         cmp: F,
     ) -> Result<SortedIterator<T, F>, Error> {
         for segment in &mut segments_file {
@@ -211,8 +226,13 @@ impl<T: Sortable, F: Fn(&T, &T) -> Ordering + Send + Sync> SortedIterator<T, F> 
             pass_through_queue,
             segments_file: segments_file_buffered,
             next_values,
+            count,
             cmp,
         })
+    }
+
+    pub fn sorted_count(&self) -> u64 {
+        self.count
     }
 }
 
