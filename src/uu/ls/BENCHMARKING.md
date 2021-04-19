@@ -17,14 +17,14 @@ Run `cargo build --release` before benchmarking after you make a change!
 -   Same tree as above
 -   Benchmark recursive ls with -al -R options with hyperfine: `hyperfine --warmup 2 "target/release/coreutils ls -al -R tree > /dev/null"`.
 
-## Comparing with GNU sort
+## Comparing with GNU ls
 
-Hyperfine accepts multiple commands to run and will compare them. To compare performance with GNU sort
+Hyperfine accepts multiple commands to run and will compare them. To compare performance with GNU ls
 duplicate the string you passed to hyperfine but remove the `target/release/coreutils` bit from it.
 
 Example: `hyperfine --warmup 2 "target/release/coreutils ls -al -R tree > /dev/null"` becomes
 `hyperfine --warmup 2 "target/release/coreutils ls -al -R tree > /dev/null" "ls -al -R tree > /dev/null"`
-(This assumes GNU sort is installed as `sort`)
+(This assumes GNU ls is installed as `ls`)
 
 This can also be used to compare with version of ls built before your changes to ensure your change does not regress this
 
