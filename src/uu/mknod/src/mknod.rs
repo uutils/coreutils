@@ -18,10 +18,9 @@ use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOT
 
 static NAME: &str = "mknod";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
-static USAGE: &str = "
-Usage: mknod [OPTION]... NAME TYPE [MAJOR MINOR]
-
-Mandatory arguments to long options are mandatory for short options too.
+static ABOUT: &str = "Create the special file NAME of the given TYPE.";
+static USAGE: &str = "mknod [OPTION]... NAME TYPE [MAJOR MINOR]";
+static LONG_HELP: &str = "Mandatory arguments to long options are mandatory for short options too.
 -m, --mode=MODE    set file permission bits to MODE, not a=rw - umask
 --help     display this help and exit
 --version  output version information and exit
@@ -87,7 +86,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let matches = App::new(executable!())
         .version(VERSION)
-        .help(USAGE)
+        .usage(USAGE)
+        .after_help(LONG_HELP)
+        .about(ABOUT)
         .arg(
             Arg::with_name("mode")
                 .short("m")
@@ -98,12 +99,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(
             Arg::with_name("name")
                 .value_name("NAME")
+                .help("name of the new file")
                 .required(true)
                 .index(1),
         )
         .arg(
             Arg::with_name("type")
                 .value_name("TYPE")
+                .help("type of the new file (b, c, u or p)")
                 .required(true)
                 .validator(valid_type)
                 .index(2),
@@ -111,12 +114,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(
             Arg::with_name("major")
                 .value_name("MAJOR")
+                .help("major file type")
                 .validator(valid_u64)
                 .index(3),
         )
         .arg(
             Arg::with_name("minor")
                 .value_name("MINOR")
+                .help("minor file type")
                 .validator(valid_u64)
                 .index(4),
         )
