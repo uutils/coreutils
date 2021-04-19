@@ -3,7 +3,11 @@ use crate::common::util::*;
 #[cfg(not(windows))]
 #[test]
 fn test_mknod_help() {
-    new_ucmd!().arg("--help").succeeds().no_stderr().stdout_contains("Usage: ");
+    new_ucmd!()
+        .arg("--help")
+        .succeeds()
+        .no_stderr()
+        .stdout_contains("Usage: ");
 }
 
 #[test]
@@ -38,7 +42,12 @@ fn test_mknod_fifo_mnemonic_usage() {
 #[cfg(not(windows))]
 fn test_mknod_fifo_read_only() {
     let ts = TestScenario::new(util_name!());
-    ts.ucmd().arg("-m").arg("a=r").arg("test_file").arg("p").succeeds();
+    ts.ucmd()
+        .arg("-m")
+        .arg("a=r")
+        .arg("test_file")
+        .arg("p")
+        .succeeds();
     assert!(ts.fixtures.is_fifo("test_file"));
     assert!(ts.fixtures.metadata("test_file").permissions().readonly());
 }
