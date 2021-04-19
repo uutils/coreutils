@@ -668,3 +668,23 @@ fn test_install_creating_leading_dirs() {
         .succeeds()
         .no_stderr();
 }
+
+#[test]
+#[cfg(not(windows))]
+fn test_install_creating_leading_dir_fails_on_long_name() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let source = "create_leading_test_file";
+    let target = format!("{}/test_file", "d".repeat(libc::PATH_MAX as usize + 1));
+
+    at.touch(source);
+
+    scene
+        .ucmd()
+        .arg("-D")
+        .arg(source)
+        .arg(at.plus(target.as_str()))
+        .fails()
+        .stderr_contains("failed to create");
+}
