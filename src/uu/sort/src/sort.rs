@@ -293,10 +293,11 @@ impl Sortable for Line {
         let buf_reader = BufReader::new(read);
         let result = {
             let mut line_joined = String::new();
-            let mut selections_joined = SmallVec::new();
+            // Return an empty vec for selections
+            let selections_joined = SmallVec::new();
             let mut p_iter = buf_reader.lines().peekable();
             while let Some(line) = p_iter.next() {
-                let mut deserialized_line: Line =
+                let deserialized_line: Line =
                     serde_json::from_str(&line.as_ref().unwrap()).unwrap();
                 if let Some(_next_line) = p_iter.peek() {
                     line_joined = format!("{}\n{}\n", line_joined, deserialized_line.line)
@@ -305,7 +306,7 @@ impl Sortable for Line {
                 }
                 // I think we've done our sorting already and these selctions are irrelevant?
                 // @miDeb what's your sense? Could we just return an empty vec?
-                selections_joined.append(&mut deserialized_line.selections);
+                //selections_joined.append(&mut deserialized_line.selections);
             }
             Some(Line {
                 line: line_joined,
@@ -909,13 +910,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     if matches.is_present(OPT_BUF_SIZE) {
         // 16G is the default in memory buffer.
-        // Although the "default" is never used unless extsort options are given
+        // Although the "default" is never used
         settings.buffer_size = {
             let input = matches
                 .value_of(OPT_BUF_SIZE)
                 .map(String::from)
                 .unwrap_or(format!("{}", DEFAULT_BUF_SIZE));
-
+        
             GlobalSettings::human_numeric_convert(&input)
         }
     }

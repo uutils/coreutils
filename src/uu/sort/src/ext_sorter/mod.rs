@@ -41,6 +41,8 @@ pub struct ExternalSorter {
 impl ExternalSorter {
     pub fn new() -> ExternalSorter {
         ExternalSorter {
+            // Default is 16G - But we never use it, 
+            // because we always set or ignore
             segment_size: 16000000000,
             sort_dir: None,
             parallel: false,
@@ -88,13 +90,14 @@ impl ExternalSorter {
 
         let mut count = 0;
         let mut segments_file: Vec<File> = Vec::new();
-        // FYI, the initialization size of struct Line is 96 bytes, but below works for all <T>
+        
         let size_of_items = std::mem::size_of::<T>();
-        let initial_capacity = 
-        if self.segment_size / size_of_items >= 2 {
-            self.segment_size / size_of_items
-        } else { 2 };
+        // Get size of iterator
+        let (_, upper_bound) = iterator.size_hint();
+        // Buffer size specified + minimum overhead of struct / size of items
+        let initial_capacity =  (self.segment_size + (upper_bound.unwrap() * size_of_items)) / size_of_items;
         let mut buffer: Vec<T> = Vec::with_capacity(initial_capacity);
+
         for next_item in iterator {
             count += 1;
             buffer.push(next_item);
@@ -102,8 +105,8 @@ impl ExternalSorter {
             if buffer.len() > initial_capacity {
                 let sort_dir = self.lazy_create_dir(&mut tempdir, &mut sort_dir)?;
                 self.sort_and_write_segment(sort_dir, &mut segments_file, &mut buffer, &cmp)?;
-                // Resize buffer after write out
-                // buffer.shrink_to_fit();
+                // Truncate buffer back to initial capacity
+                buffer.truncate(initial_capacity);
             }
         }
 

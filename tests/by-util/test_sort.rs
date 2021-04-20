@@ -8,14 +8,28 @@ fn test_helper(file_name: &str, args: &str) {
         .stdout_is_fixture(format!("{}.expected", file_name));
 }
 
+// FYI, the initialization size of our Line struct is 96 bytes.
+//  
+// At very small buffer sizes, with that overhead we are certainly going 
+// to overrun our buffer way, way, way too quickly because of these excess 
+// bytes for the struct.
+//
+// For instance, seq 0..20000 > ...text = 108894 bytes
+// But overhead is 1920000 + 108894 = 2028894 bytes
+//
+// Or kjvbible-random.txt = 4332506 bytes, but minimum size of its 
+// 99817 lines in memory * 96 bytes = 9582432 bytes
+//
+// Here, we test 108894 bytes with a 50K buffer
+//
 #[test]
 fn test_larger_than_specified_segment() {
     new_ucmd!()
         .arg("-n")
-        .arg("-S 100")
-        .arg("numeric_unsorted_ints.txt")
+        .arg("-S 50K")
+        .arg("ext_sort.txt")
         .succeeds()
-        .stdout_is_fixture(format!("{}", "numeric_unsorted_ints.expected"));
+        .stdout_is_fixture(format!("{}", "ext_sort.expected"));
 }
 
 #[test]
@@ -199,17 +213,6 @@ fn test_non_printing_chars() {
             .arg(non_printing_chars_param)
             .succeeds()
             .stdout_only("a👦🏻aa\naaaa\n");
-    }
-}
-
-#[test]
-fn test_exponents_positive_general_fixed() {
-    for exponents_positive_general_param in vec!["-g"] {
-        new_ucmd!()
-            .pipe_in("100E6\n\n50e10\n+100000\n\n10000K78\n10E\n\n\n1000EDKLD\n\n\n100E6\n\n50e10\n+100000\n\n")
-            .arg(exponents_positive_general_param)
-            .succeeds()
-            .stdout_only("\n\n\n\n\n\n\n\n10000K78\n1000EDKLD\n10E\n+100000\n+100000\n100E6\n100E6\n50e10\n50e10\n");
     }
 }
 
