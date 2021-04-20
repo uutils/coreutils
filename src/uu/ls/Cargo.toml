@@ -15,7 +15,6 @@ edition = "2018"
 path = "src/ls.rs"
 
 [dependencies]
-cached = "0.23.0"
 clap = "2.33"
 lazy_static = "1.0.1"
 number_prefix = "0.4"

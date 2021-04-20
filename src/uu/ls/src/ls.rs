@@ -16,8 +16,6 @@ extern crate uucore;
 mod quoting_style;
 mod version_cmp;
 
-#[cfg(unix)]
-use cached::proc_macro::cached;
 use clap::{App, Arg};
 use globset::{self, Glob, GlobSet, GlobSetBuilder};
 use number_prefix::NumberPrefix;
@@ -1380,12 +1378,25 @@ fn get_inode(metadata: &Metadata) -> String {
 // Currently getpwuid is `linux` target only. If it's broken out into
 // a posix-compliant attribute this can be updated...
 #[cfg(unix)]
+use std::sync::Mutex;
+#[cfg(unix)]
 use uucore::entries;
 
 #[cfg(unix)]
-#[cached]
 fn cached_uid2usr(uid: u32) -> String {
-    entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string())
+    lazy_static! {
+        static ref UID_CACHE: Mutex<HashMap<u32, String>> = Mutex::new(HashMap::new());
+    }
+
+    let mut uid_cache = UID_CACHE.lock().unwrap();
+    match uid_cache.get(&uid) {
+        Some(usr) => usr.clone(),
+        None => {
+            let usr = entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string());
+            uid_cache.insert(uid, usr.clone());
+            usr
+        }
+    }
 }
 
 #[cfg(unix)]
@@ -1398,9 +1409,20 @@ fn display_uname(metadata: &Metadata, config: &Config) -> String {
 }
 
 #[cfg(unix)]
-#[cached]
 fn cached_gid2grp(gid: u32) -> String {
-    entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string())
+    lazy_static! {
+        static ref GID_CACHE: Mutex<HashMap<u32, String>> = Mutex::new(HashMap::new());
+    }
+
+    let mut gid_cache = GID_CACHE.lock().unwrap();
+    match gid_cache.get(&gid) {
+        Some(grp) => grp.clone(),
+        None => {
+            let grp = entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string());
+            gid_cache.insert(gid, grp.clone());
+            grp
+        }
+    }
 }
 
 #[cfg(unix)]
