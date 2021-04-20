@@ -1192,7 +1192,7 @@ fn enter_directory(dir: &PathData, config: &Config) {
         for e in entries
             .iter()
             .skip(if config.files == Files::All { 2 } else { 0 })
-            .filter(|p| p.md.as_ref().map_or(false, |md| md.is_dir()))
+            .filter(|p| p.md.as_ref().map(|md| md.is_dir()).unwrap_or(false))
         {
             println!("\n{}:", e.lossy_string);
             enter_directory(&e, config);
