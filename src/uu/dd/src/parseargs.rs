@@ -1,8 +1,16 @@
-use super::*;
+#[cfg(test)]
+mod test;
 
 use crate::conversion_tables::*;
+use crate::{
+    ConvFlagInput, ConvFlagOutput,
+    StatusLevel,
+};
 
-/// Parser Errors indicate erroneous cl-args
+use std::error::Error;
+
+
+/// Parser Errors describe errors with input
 #[derive(Debug)]
 pub enum ParseError
 {
@@ -26,6 +34,7 @@ impl Error for ParseError {}
 
 /// Some flags specified as part of a conv=CONV[,CONV]... block
 /// relate to the input file, others to the output file.
+#[derive(Debug, PartialEq)]
 enum ConvFlag
 {
     // Input
@@ -64,9 +73,9 @@ impl std::str::FromStr for ConvFlag
             "ibm" =>
                 Ok(Self::FmtAtoI),
             "lcase" =>
-                Ok(Self::UCase),
-            "ucase" =>
                 Ok(Self::LCase),
+            "ucase" =>
+                Ok(Self::UCase),
             "block" =>
                 Ok(Self::Block),
             "unblock" =>
@@ -213,7 +222,7 @@ pub fn parse_obs(matches: &getopts::Matches) -> Result<usize, ParseError>
     }
 }
 
-fn parse_ctable(fmt: Option<ConvFlag>, case: Option<ConvFlag>) -> Option<ConversionTable>
+fn parse_ctable(fmt: Option<ConvFlag>, case: Option<ConvFlag>) -> Option<&'static ConversionTable>
 {
     match (fmt, case)
     {
@@ -222,17 +231,17 @@ fn parse_ctable(fmt: Option<ConvFlag>, case: Option<ConvFlag>) -> Option<Convers
             match (fmt, case)
             {
                 (ConvFlag::FmtAtoE, ConvFlag::UCase) =>
-                    Some(ASCII_TO_EBCDIC_LCASE_TO_UCASE),
+                    Some(&ASCII_TO_EBCDIC_LCASE_TO_UCASE),
                 (ConvFlag::FmtAtoE, ConvFlag::LCase) =>
-                    Some(ASCII_TO_EBCDIC_UCASE_TO_LCASE),
+                    Some(&ASCII_TO_EBCDIC_UCASE_TO_LCASE),
                 (ConvFlag::FmtEtoA, ConvFlag::UCase) =>
-                    Some(EBCDIC_TO_ASCII_LCASE_TO_UCASE),
+                    Some(&EBCDIC_TO_ASCII_LCASE_TO_UCASE),
                 (ConvFlag::FmtEtoA, ConvFlag::LCase) =>
-                    Some(EBCDIC_TO_ASCII_UCASE_TO_LCASE),
+                    Some(&EBCDIC_TO_ASCII_UCASE_TO_LCASE),
                 (ConvFlag::FmtAtoI, ConvFlag::UCase) =>
-                    Some(ASCII_TO_IBM_UCASE_TO_LCASE),
+                    Some(&ASCII_TO_IBM_UCASE_TO_LCASE),
                 (ConvFlag::FmtAtoI, ConvFlag::LCase) =>
-                    Some(ASCII_TO_IBM_LCASE_TO_UCASE),
+                    Some(&ASCII_TO_IBM_LCASE_TO_UCASE),
                 (_, _) =>
                     None,
             },
@@ -241,19 +250,19 @@ fn parse_ctable(fmt: Option<ConvFlag>, case: Option<ConvFlag>) -> Option<Convers
             match fmt
             {
                 ConvFlag::FmtAtoE =>
-                    Some(ASCII_TO_EBCDIC),
+                    Some(&ASCII_TO_EBCDIC),
                 ConvFlag::FmtEtoA =>
-                    Some(EBCDIC_TO_ASCII),
+                    Some(&EBCDIC_TO_ASCII),
                 ConvFlag::FmtAtoI =>
-                    Some(ASCII_TO_IBM),
+                    Some(&ASCII_TO_IBM),
                 _ =>
                     None,
             },
         // Only one of {ucase, lcase} specified
         (None, Some(ConvFlag::UCase)) =>
-            Some(ASCII_LCASE_TO_UCASE),
+            Some(&ASCII_LCASE_TO_UCASE),
         (None, Some(ConvFlag::LCase)) =>
-            Some(ASCII_UCASE_TO_LCASE),
+            Some(&ASCII_UCASE_TO_LCASE),
         (_, _) =>
             None,
    }
@@ -265,12 +274,13 @@ fn parse_conv_opts(matches: &getopts::Matches) -> Result<Vec<ConvFlag>, ParseErr
 
     if let Some(comma_str) = matches.opt_str("conv")
     {
+        println!("Parsing conv: {}", comma_str);
         for s in comma_str.split(",")
         {
             let flag = s.parse()?;
+            println!("found flag: {:?}", &flag);
             flags.push(flag);
         }
-
     }
 
     Ok(flags)
@@ -420,202 +430,4 @@ pub fn parse_conv_flag_output(matches: &getopts::Matches) -> Result<ConvFlagOutp
         fdatasync,
         fsync,
     })
-}
-
-#[cfg(test)]
-mod test {
-
-    use super::*;
-
-    // ----- ConvFlagInput/Output -----
-
-    #[test]
-    fn build_cfi()
-    {
-        let cfi_expd = ConvFlagInput {
-            ctable: Some(ASCII_TO_IBM),
-            block: false,
-            unblock: false,
-            swab: false,
-            sync: false,
-            noerror: false,
-        };
-
-        let args = vec![
-            String::from("ketchup"),
-            String::from("mustard"),
-            String::from("--conv=ibm"),
-            String::from("relish"),
-        ];
-
-        let matches = build_app!().parse(args);
-
-        let cfi_parsed = parse_conv_flag_input(&matches).unwrap();
-
-        unimplemented!()
-        // assert_eq!(cfi_expd, cfi_parsed);
-    }
-
-    // ----- Multiplier Strings etc. -----
-    macro_rules! test_byte_parser (
-        ( $test_name:ident, $bs_str:expr, $bs:expr ) =>
-        {
-            #[allow(non_snake_case)]
-            #[test]
-            fn $test_name()
-            {
-                let bs_str = String::from($bs_str);
-                assert_eq!($bs, parse_bytes_with_opt_multiplier(bs_str).unwrap())
-            }
-        }
-    );
-
-   test_byte_parser!(
-        test_bytes_n,
-        "765",
-        765
-    );
-    test_byte_parser!(
-        test_bytes_c,
-        "13c",
-        13
-    );
-
-    test_byte_parser!(
-        test_bytes_w,
-        "1w",
-        2
-    );
-
-    test_byte_parser!(
-        test_bytes_b,
-        "1b",
-        512
-    );
-
-    test_byte_parser!(
-        test_bytes_k,
-        "1kB",
-        1000
-    );
-    test_byte_parser!(
-        test_bytes_K,
-        "1K",
-        1024
-    );
-    test_byte_parser!(
-        test_bytes_Ki,
-        "1KiB",
-        1024
-    );
-
-    test_byte_parser!(
-        test_bytes_MB,
-        "2MB",
-        2*1000*1000
-    );
-    test_byte_parser!(
-        test_bytes_M,
-        "2M",
-        2*1024*1024
-    );
-    test_byte_parser!(
-        test_bytes_Mi,
-        "2MiB",
-        2*1024*1024
-    );
-
-    test_byte_parser!(
-        test_bytes_GB,
-        "3GB",
-        3*1000*1000*1000
-    );
-    test_byte_parser!(
-        test_bytes_G,
-        "3G",
-        3*1024*1024*1024
-    );
-    test_byte_parser!(
-        test_bytes_Gi,
-        "3GiB",
-        3*1024*1024*1024
-    );
-
-    test_byte_parser!(
-        test_bytes_TB,
-        "4TB",
-        4*1000*1000*1000*1000
-    );
-    test_byte_parser!(
-        test_bytes_T,
-        "4T",
-        4*1024*1024*1024*1024
-    );
-    test_byte_parser!(
-        test_bytes_Ti,
-        "4TiB",
-        4*1024*1024*1024*1024
-    );
-
-    test_byte_parser!(
-        test_bytes_PB,
-        "5PB",
-        5*1000*1000*1000*1000*1000
-    );
-    test_byte_parser!(
-        test_bytes_P,
-        "5P",
-        5*1024*1024*1024*1024*1024
-    );
-    test_byte_parser!(
-        test_bytes_Pi,
-        "5PiB",
-        5*1024*1024*1024*1024*1024
-    );
-
-    test_byte_parser!(
-        test_bytes_EB,
-        "6EB",
-        6*1000*1000*1000*1000*1000*1000
-    );
-    test_byte_parser!(
-        test_bytes_E,
-        "6E",
-        6*1024*1024*1024*1024*1024*1024
-    );
-    test_byte_parser!(
-        test_bytes_Ei,
-        "6EiB",
-        6*1024*1024*1024*1024*1024*1024
-    );
-
-    #[test]
-    #[should_panic]
-    #[allow(non_snake_case)]
-    fn test_KB_multiplier_error()
-    {
-        // KB is not valid (kB, K, and KiB are)
-        let bs_str = String::from("2000KB");
-
-        parse_bytes_with_opt_multiplier(bs_str).unwrap();
-    }
-
-    #[test]
-    #[should_panic]
-    fn test_overflow_panic()
-    {
-        let bs_str = format!("{}KiB", usize::MAX);
-
-        parse_bytes_with_opt_multiplier(bs_str).unwrap();
-    }
-
-    #[test]
-    #[should_panic]
-    fn test_neg_panic()
-    {
-        let bs_str = format!("{}KiB", -1);
-
-        parse_bytes_with_opt_multiplier(bs_str).unwrap();
-    }
-
 }

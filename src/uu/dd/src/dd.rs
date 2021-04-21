@@ -11,11 +11,11 @@
 extern crate uucore;
 
 #[cfg(test)]
-mod test_dd_internal;
+mod dd_test;
 
 mod parseargs;
-mod conversion_tables;
 
+mod conversion_tables;
 use conversion_tables::*;
 
 use std::error::Error;
@@ -46,7 +46,7 @@ enum SrcStat
 /// Captures all Conv Flags that apply to the input
 pub struct ConvFlagInput
 {
-    ctable: Option<ConversionTable>,
+    ctable: Option<&'static ConversionTable>,
     block: bool,
     unblock: bool,
     swab: bool,

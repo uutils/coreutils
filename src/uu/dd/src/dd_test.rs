@@ -135,7 +135,7 @@ make_spec_test!(
     atoe_conv_spec_test,
     "atoe-conv-spec-test",
     File::open("./test-resources/seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test").unwrap(),
-    Some(ASCII_TO_EBCDIC),
+    Some(&ASCII_TO_EBCDIC),
     File::open("./test-resources/gnudd-conv-atoe-seq-byte-values.spec").unwrap()
 );
 
@@ -143,7 +143,7 @@ make_spec_test!(
     etoa_conv_spec_test,
     "etoa-conv-spec-test",
     File::open("./test-resources/seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test").unwrap(),
-    Some(EBCDIC_TO_ASCII),
+    Some(&EBCDIC_TO_ASCII),
     File::open("./test-resources/gnudd-conv-etoa-seq-byte-values.spec").unwrap()
 );
 
@@ -151,7 +151,7 @@ make_spec_test!(
     atoibm_conv_spec_test,
     "atoibm-conv-spec-test",
     File::open("./test-resources/seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test").unwrap(),
-    Some(ASCII_TO_IBM),
+    Some(&ASCII_TO_IBM),
     File::open("./test-resources/gnudd-conv-atoibm-seq-byte-values.spec").unwrap()
 );
 
@@ -159,7 +159,7 @@ make_spec_test!(
     lcase_ascii_to_ucase_ascii,
     "lcase_ascii_to_ucase_ascii",
     File::open("./test-resources/lcase-ascii.test").unwrap(),
-    Some(ASCII_LCASE_TO_UCASE),
+    Some(&ASCII_LCASE_TO_UCASE),
     File::open("./test-resources/ucase-ascii.test").unwrap()
 );
 
@@ -167,56 +167,16 @@ make_spec_test!(
     ucase_ascii_to_lcase_ascii,
     "ucase_ascii_to_lcase_ascii",
     File::open("./test-resources/ucase-ascii.test").unwrap(),
-    Some(ASCII_UCASE_TO_LCASE),
+    Some(&ASCII_UCASE_TO_LCASE),
     File::open("./test-resources/lcase-ascii.test").unwrap()
 );
-
-// // ***
-// make_spec_test!(
-//     lcase_ebcdic_to_ucase_ebcdic,
-//     "lcase_ebcdic_to_ucase_ebcdic",
-//     File::open("./test-resources/lcase-ebcdic.test").unwrap(),
-//     None,
-//     Some(EBCDIC_LCASE_TO_UCASE),
-//     File::open("./test-resources/ucase-ebcdic.test").unwrap()
-// );
-//
-// // ***
-// make_spec_test!(
-//     ucase_ebcdic_to_lcase_ebcdic,
-//     "ucase_ebcdic_to_lcase_ebcdic",
-//     File::open("./test-resources/ucase-ebcdic.test").unwrap(),
-//     None,
-//     Some(EBCDIC_UCASE_TO_LCASE),
-//     File::open("./test-resources/lcase-ebcdic.test").unwrap()
-// );
-//
-// // ***
-// make_spec_test!(
-//     lcase_ibm_to_ucase_ibm,
-//     "lcase_ibm_to_ucase_ibm",
-//     File::open("./test-resources/lcase-ibm.test").unwrap(),
-//     None,
-//     Some(IBM_LCASE_TO_UCASE),
-//     File::open("./test-resources/ucase-ibm.test").unwrap()
-// );
-//
-// // ***
-// make_spec_test!(
-//     ucase_ibm_to_lcase_ibm,
-//     "ucase_ibm_to_lcase_ibm",
-//     File::open("./test-resources/ucase-ibm.test").unwrap(),
-//     None,
-//     Some(IBM_UCASE_TO_LCASE),
-//     File::open("./test-resources/lcase-ibm.test").unwrap()
-// );
 
 make_spec_test!(
     // conv=ebcdic,ucase
     atoe_and_ucase_conv_spec_test,
     "atoe-and-ucase-conv-spec-test",
     File::open("./test-resources/seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test").unwrap(),
-    Some(ASCII_TO_EBCDIC_LCASE_TO_UCASE),
+    Some(&ASCII_TO_EBCDIC_LCASE_TO_UCASE),
     File::open("./test-resources/ucase-ebcdic.test").unwrap()
 );
 
@@ -225,7 +185,7 @@ make_spec_test!(
     atoe_and_lcase_conv_spec_test,
     "atoe-and-lcase-conv-spec-test",
     File::open("./test-resources/seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test").unwrap(),
-    Some(ASCII_TO_EBCDIC_UCASE_TO_LCASE),
+    Some(&ASCII_TO_EBCDIC_UCASE_TO_LCASE),
     File::open("./test-resources/lcase-ebcdic.test").unwrap()
 );
 
@@ -234,7 +194,7 @@ make_spec_test!(
     atoibm_and_ucase_conv_spec_test,
     "atoibm-and-ucase-conv-spec-test",
     File::open("./test-resources/seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test").unwrap(),
-    Some(ASCII_TO_IBM_UCASE_TO_LCASE),
+    Some(&ASCII_TO_IBM_UCASE_TO_LCASE),
     File::open("./test-resources/lcase-ibm.test").unwrap()
 );
 
@@ -243,7 +203,7 @@ make_spec_test!(
     atoibm_and_lcase_conv_spec_test,
     "atoibm-and-lcase-conv-spec-test",
     File::open("./test-resources/seq-byte-values-b632a992d3aed5d8d1a59cc5a5a455ba.test").unwrap(),
-    Some(ASCII_TO_IBM_LCASE_TO_UCASE),
+    Some(&ASCII_TO_IBM_LCASE_TO_UCASE),
     File::open("./test-resources/ucase-ibm.test").unwrap()
 );
 
@@ -258,7 +218,7 @@ fn all_valid_ascii_ebcdic_ascii_roundtrip_conv_test()
         src: File::open("./test-resources/all-valid-ascii-chars-37eff01866ba3f538421b30b7cbefcac.test").unwrap(),
         ibs: 256,
         xfer_stats: StatusLevel::None,
-        cf: cfi!(Some(ASCII_TO_EBCDIC)),
+        cf: cfi!(Some(&ASCII_TO_EBCDIC)),
     };
 
     let o = Output {
@@ -277,7 +237,7 @@ fn all_valid_ascii_ebcdic_ascii_roundtrip_conv_test()
         src: File::open(&tmp_fname_ae).unwrap(),
         ibs: 256,
         xfer_stats: StatusLevel::None,
-        cf: cfi!(Some(EBCDIC_TO_ASCII)),
+        cf: cfi!(Some(&EBCDIC_TO_ASCII)),
     };
 
     let o = Output {
