@@ -35,7 +35,7 @@ use std::{cmp::Reverse, process::exit};
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use time::{strftime, Timespec};
 #[cfg(unix)]
-use uucore::libc::{mode_t, S_IXGRP, S_IXOTH, S_IXUSR};
+use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "
@@ -1444,10 +1444,13 @@ fn get_file_name(name: &Path, strip: Option<&Path>) -> String {
 }
 
 #[cfg(unix)]
-macro_rules! has {
-    ($mode:expr, $perm:expr) => {
-        $mode & ($perm as mode_t) != 0
-    };
+fn file_is_executable(md: &Metadata) -> bool {
+    // Mode always returns u32, but the flags might not be, based on the platform
+    // e.g. linux has u32, mac has u16.
+    // S_IXUSR -> user has execute permission
+    // S_IXGRP -> group has execute persmission
+    // S_IXOTH -> other users have execute permission
+    md.mode() & ((S_IXUSR | S_IXGRP | S_IXOTH) as u32) != 0
 }
 
 #[allow(clippy::clippy::collapsible_else_if)]
@@ -1465,7 +1468,7 @@ fn classify_file(md: &Metadata) -> Option<char> {
                 Some('=')
             } else if file_type.is_fifo() {
                 Some('|')
-            } else if file_type.is_file() || has!(md.mode(), S_IXUSR | S_IXGRP | S_IXOTH) {
+            } else if file_type.is_file() && file_is_executable(&md) {
                 Some('*')
             } else {
                 None
