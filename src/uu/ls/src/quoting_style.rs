@@ -650,9 +650,9 @@ mod tests {
                 ("one\\two", "literal-show"),
                 ("one\\\\two", "escape"),
                 ("\"one\\\\two\"", "c"),
-                ("one\\two", "shell"),
+                ("'one\\two'", "shell"),
                 ("\'one\\two\'", "shell-always"),
-                ("one\\two", "shell-escape"),
+                ("'one\\two'", "shell-escape"),
                 ("'one\\two'", "shell-escape-always"),
             ],
         );
