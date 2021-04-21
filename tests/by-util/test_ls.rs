@@ -621,20 +621,27 @@ fn test_ls_recursive() {
     result.stdout_contains(&"a\\b:\nb");
 }
 
-#[cfg(unix)]
 #[test]
 fn test_ls_ls_color() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.mkdir("a");
-    at.mkdir("a/nested_dir");
+    let nested_dir = Path::new("a")
+        .join("nested_dir")
+        .to_string_lossy()
+        .to_string();
+    at.mkdir(&nested_dir);
     at.mkdir("z");
-    at.touch(&at.plus_as_string("a/nested_file"));
+    let nested_file = Path::new("a")
+        .join("nested_file")
+        .to_string_lossy()
+        .to_string();
+    at.touch(&nested_file);
     at.touch("test-color");
 
-    let a_with_colors = "\x1b[01;34ma\x1b[0m";
-    let z_with_colors = "\x1b[01;34mz\x1b[0m";
-    let nested_dir_with_colors = "\x1b[01;34mnested_dir\x1b[0m";
+    let a_with_colors = "\x1b[1;34ma\x1b[0m";
+    let z_with_colors = "\x1b[1;34mz\x1b[0m";
+    let nested_dir_with_colors = "\x1b[1;34mnested_dir\x1b[0m";
 
     // Color is disabled by default
     let result = scene.ucmd().succeeds();
@@ -669,14 +676,6 @@ fn test_ls_ls_color() {
         .arg("a")
         .succeeds()
         .stdout_contains(nested_dir_with_colors);
-
-    // Color has no effect
-    scene
-        .ucmd()
-        .arg("--color=always")
-        .arg("a/nested_file")
-        .succeeds()
-        .stdout_contains("a/nested_file\n");
 
     // No output
     scene
