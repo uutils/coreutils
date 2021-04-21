@@ -424,7 +424,7 @@ impl KeyPosition {
                             | SortMode::GeneralNumeric
                             | SortMode::Month => SortMode::Default,
                             // Only SortMode::Default and SortMode::Version work with dictionary_order and ignore_non_printing
-                            m @ (SortMode::Default | SortMode::Version) => m,
+                            m @ SortMode::Default | m @ SortMode::Version => m,
                         }
                     }
                     _ => {}
