@@ -1450,10 +1450,10 @@ macro_rules! has {
     };
 }
 
+#[allow(clippy::clippy::collapsible_else_if)]
 fn classify_file(md: &Metadata) -> Option<char> {
     let file_type = md.file_type();
 
-    #[allow(clippy::clippy::collapsible_else_if)]
     if file_type.is_dir() {
         Some('/')
     } else if file_type.is_symlink() {
@@ -1485,8 +1485,10 @@ fn display_file_name(
     let mut name = escape_name(get_file_name(path, strip), &config.quoting_style);
 
     #[cfg(unix)]
-    if config.format != Format::Long && config.inode {
-        name = get_inode(metadata) + " " + &name;
+    {
+        if config.format != Format::Long && config.inode {
+            name = get_inode(metadata) + " " + &name;
+        }
     }
 
     if let Some(ls_colors) = &config.color {
