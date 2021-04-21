@@ -2297,6 +2297,7 @@ dependencies = [
  "rayon",
  "semver",
  "smallvec 1.6.1",
+ "unicode-width",
  "uucore",
  "uucore_procs",
 ]
