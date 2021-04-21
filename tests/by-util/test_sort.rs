@@ -63,7 +63,7 @@ fn test_check_zero_terminated_success() {
 #[test]
 fn test_random_shuffle_len() {
     // check whether output is the same length as the input
-    const FILE: &'static str = "default_unsorted_ints.expected";
+    const FILE: &str = "default_unsorted_ints.expected";
     let (at, _ucmd) = at_and_ucmd!();
     let result = new_ucmd!().arg("-R").arg(FILE).run().stdout_move_str();
     let expected = at.read(FILE);
@@ -75,7 +75,7 @@ fn test_random_shuffle_len() {
 #[test]
 fn test_random_shuffle_contains_all_lines() {
     // check whether lines of input are all in output
-    const FILE: &'static str = "default_unsorted_ints.expected";
+    const FILE: &str = "default_unsorted_ints.expected";
     let (at, _ucmd) = at_and_ucmd!();
     let result = new_ucmd!().arg("-R").arg(FILE).run().stdout_move_str();
     let expected = at.read(FILE);
@@ -90,7 +90,7 @@ fn test_random_shuffle_two_runs_not_the_same() {
     // check to verify that two random shuffles are not equal; this has the
     // potential to fail in the very unlikely event that the random order is the same
     // as the starting order, or if both random sorts end up having the same order.
-    const FILE: &'static str = "default_unsorted_ints.expected";
+    const FILE: &str = "default_unsorted_ints.expected";
     let (at, _ucmd) = at_and_ucmd!();
     let result = new_ucmd!().arg("-R").arg(FILE).run().stdout_move_str();
     let expected = at.read(FILE);
@@ -105,7 +105,7 @@ fn test_random_shuffle_contains_two_runs_not_the_same() {
     // check to verify that two random shuffles are not equal; this has the
     // potential to fail in the unlikely event that random order is the same
     // as the starting order, or if both random sorts end up having the same order.
-    const FILE: &'static str = "default_unsorted_ints.expected";
+    const FILE: &str = "default_unsorted_ints.expected";
     let (at, _ucmd) = at_and_ucmd!();
     let result = new_ucmd!().arg("-R").arg(FILE).run().stdout_move_str();
     let expected = at.read(FILE);
