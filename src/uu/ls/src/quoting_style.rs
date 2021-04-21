@@ -1,6 +1,6 @@
 use std::char::from_digit;
 
-const SPECIAL_SHELL_CHARS: &str = "~`#$&*()\\|[]{};'\"<>?! ";
+const SPECIAL_SHELL_CHARS: &str = "~`#$&*()|[]{};'\"<>?! ";
 
 pub(super) enum QuotingStyle {
     Shell {
@@ -135,7 +135,6 @@ impl EscapedChar {
             '\x0B' => Backslash('v'),
             '\x0C' => Backslash('f'),
             '\r' => Backslash('r'),
-            '\\' => Backslash('\\'),
             '\x00'..='\x1F' | '\x7F' => Octal(EscapeOctal::from(c)),
             '\'' => match quotes {
                 Quotes::Single => Backslash('\''),
@@ -624,6 +623,24 @@ mod tests {
                 ("'one?two'", "shell-always-show"),
                 ("'one?two'", "shell-escape"),
                 ("'one?two'", "shell-escape-always"),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_backslash() {
+        // Escaped in C-style, but not in Shell-style escaping
+        check_names(
+            "one\\two",
+            vec![
+                ("one\\two", "literal"),
+                ("one\\two", "literal-show"),
+                ("one\\\\two", "escape"),
+                ("\"one\\\\two\"", "c"),
+                ("one\\two", "shell"),
+                ("\'one\\two\'", "shell-always"),
+                ("one\\two", "shell-escape"),
+                ("'one\\two'", "shell-escape-always"),
             ],
         );
     }

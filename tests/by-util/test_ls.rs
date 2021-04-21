@@ -1049,6 +1049,7 @@ fn test_ls_quoting_style() {
 
     at.touch("one two");
     at.touch("one");
+    at.touch("one\\two");
 
     // It seems that windows doesn't allow \n in filenames.
     #[cfg(unix)]
@@ -1165,6 +1166,27 @@ fn test_ls_quoting_style() {
             .ucmd()
             .arg(arg)
             .arg("one")
+            .succeeds()
+            .stdout_only(format!("{}\n", correct));
+    }
+
+    for (arg, correct) in &[
+        ("--quoting-style=literal", "one\\two"),
+        ("-N", "one\\two"),
+        ("--quoting-style=c", "\"one\\\\two\""),
+        ("-Q", "\"one\\\\two\""),
+        ("--quote-name", "\"one\\\\two\""),
+        ("--quoting-style=escape", "one\\\\two"),
+        ("-b", "one\\\\two"),
+        ("--quoting-style=shell-escape", "one\\two"),
+        ("--quoting-style=shell-escape-always", "'one\\two'"),
+        ("--quoting-style=shell", "one\\two"),
+        ("--quoting-style=shell-always", "'one\\two'"),
+    ] {
+        scene
+            .ucmd()
+            .arg(arg)
+            .arg("one\\two")
             .succeeds()
             .stdout_only(format!("{}\n", correct));
     }
