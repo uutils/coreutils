@@ -1,4 +1,7 @@
 use crate::common::util::*;
+#[cfg(unix)]
+use std::fs::OpenOptions;
+#[cfg(unix)]
 use std::io::Read;
 
 #[test]
@@ -54,7 +57,6 @@ fn test_no_options_big_input() {
 #[test]
 #[cfg(unix)]
 fn test_fifo_symlink() {
-    use std::fs::OpenOptions;
     use std::io::Write;
     use std::thread;
 
@@ -83,6 +85,74 @@ fn test_fifo_symlink() {
     let output = proc.wait_with_output().unwrap();
     assert_eq!(&output.stdout, &data2);
     thread.join().unwrap();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_piped_to_regular_file() {
+    use std::fs::read_to_string;
+
+    for &append in &[true, false] {
+        let s = TestScenario::new(util_name!());
+        let file_path = s.fixtures.plus("file.txt");
+
+        {
+            let file = OpenOptions::new()
+                .create_new(true)
+                .write(true)
+                .append(append)
+                .open(&file_path)
+                .unwrap();
+
+            s.ucmd()
+                .set_stdout(file)
+                .pipe_in_fixture("alpha.txt")
+                .succeeds();
+        }
+        let contents = read_to_string(&file_path).unwrap();
+        assert_eq!(contents, "abcde\nfghij\nklmno\npqrst\nuvwxyz\n");
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_piped_to_dev_null() {
+    for &append in &[true, false] {
+        let s = TestScenario::new(util_name!());
+        {
+            let dev_null = OpenOptions::new()
+                .write(true)
+                .append(append)
+                .open("/dev/null")
+                .unwrap();
+
+            s.ucmd()
+                .set_stdout(dev_null)
+                .pipe_in_fixture("alpha.txt")
+                .succeeds();
+        }
+    }
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+fn test_piped_to_dev_full() {
+    for &append in &[true, false] {
+        let s = TestScenario::new(util_name!());
+        {
+            let dev_full = OpenOptions::new()
+                .write(true)
+                .append(append)
+                .open("/dev/full")
+                .unwrap();
+
+            s.ucmd()
+                .set_stdout(dev_full)
+                .pipe_in_fixture("alpha.txt")
+                .fails()
+                .stderr_contains(&"No space left on device".to_owned());
+        }
+    }
 }
 
 #[test]

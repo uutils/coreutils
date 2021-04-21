@@ -22,6 +22,12 @@ use std::io::{self, Read, Write};
 use thiserror::Error;
 use uucore::fs::is_stdin_interactive;
 
+/// Linux splice support
+#[cfg(any(target_os = "linux", target_os = "android"))]
+mod splice;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use std::os::unix::io::{AsRawFd, RawFd};
+
 /// Unix domain socket support
 #[cfg(unix)]
 use std::net::Shutdown;
@@ -29,14 +35,6 @@ use std::net::Shutdown;
 use std::os::unix::fs::FileTypeExt;
 #[cfg(unix)]
 use unix_socket::UnixStream;
-
-/// Linux splice support
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::fcntl::{splice, SpliceFFlags};
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::unistd::pipe;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use std::os::unix::io::{AsRawFd, RawFd};
 
 static NAME: &str = "cat";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -395,7 +393,7 @@ fn write_fast<R: Read>(handle: &mut InputHandle<R>) -> CatResult<()> {
     {
         // If we're on Linux or Android, try to use the splice() system call
         // for faster writing. If it works, we're done.
-        if !write_fast_using_splice(handle, stdout_lock.as_raw_fd())? {
+        if !splice::write_fast_using_splice(handle, stdout_lock.as_raw_fd())? {
             return Ok(());
         }
     }
@@ -407,75 +405,6 @@ fn write_fast<R: Read>(handle: &mut InputHandle<R>) -> CatResult<()> {
             break;
         }
         stdout_lock.write_all(&buf[..n])?;
-    }
-    Ok(())
-}
-
-/// This function is called from `write_fast()` on Linux and Android. The
-/// function `splice()` is used to move data between two file descriptors
-/// without copying between kernel- and userspace. This results in a large
-/// speedup.
-///
-/// The `bool` in the result value indicates if we need to fall back to normal
-/// copying or not. False means we don't have to.
-#[cfg(any(target_os = "linux", target_os = "android"))]
-#[inline]
-fn write_fast_using_splice<R: Read>(handle: &mut InputHandle<R>, writer: RawFd) -> CatResult<bool> {
-    const BUF_SIZE: usize = 1024 * 16;
-
-    let (pipe_rd, pipe_wr) = pipe()?;
-
-    // We only fall back if splice fails on the first call.
-    match splice(
-        handle.file_descriptor,
-        None,
-        pipe_wr,
-        None,
-        BUF_SIZE,
-        SpliceFFlags::empty(),
-    ) {
-        Ok(n) => {
-            if n == 0 {
-                return Ok(false);
-            }
-            splice_exact(pipe_rd, writer, n)?;
-        }
-        Err(_) => {
-            return Ok(true);
-        }
-    }
-
-    loop {
-        let n = splice(
-            handle.file_descriptor,
-            None,
-            pipe_wr,
-            None,
-            BUF_SIZE,
-            SpliceFFlags::empty(),
-        )?;
-        if n == 0 {
-            // We read 0 bytes from the input,
-            // which means we're done copying.
-            break;
-        }
-        splice_exact(pipe_rd, writer, n)?;
-    }
-
-    Ok(false)
-}
-
-/// Splice wrapper which handles short writes
-#[cfg(any(target_os = "linux", target_os = "android"))]
-#[inline]
-fn splice_exact(read_fd: RawFd, write_fd: RawFd, num_bytes: usize) -> nix::Result<()> {
-    let mut left = num_bytes;
-    loop {
-        let written = splice(read_fd, None, write_fd, None, left, SpliceFFlags::empty())?;
-        left -= written;
-        if left == 0 {
-            break;
-        }
     }
     Ok(())
 }
