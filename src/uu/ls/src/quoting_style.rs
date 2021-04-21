@@ -27,12 +27,10 @@ pub(super) enum Quotes {
 // This implementation is heavily inspired by the std::char::EscapeDefault implementation
 // in the Rust standard library. This custom implementation is needed because the
 // characters \a, \b, \e, \f & \v are not recognized by Rust.
-#[derive(Clone, Debug)]
 struct EscapedChar {
     state: EscapeState,
 }
 
-#[derive(Clone, Debug)]
 enum EscapeState {
     Done,
     Char(char),
@@ -41,14 +39,12 @@ enum EscapeState {
     Octal(EscapeOctal),
 }
 
-#[derive(Clone, Debug)]
 struct EscapeOctal {
     c: char,
     state: EscapeOctalState,
     idx: usize,
 }
 
-#[derive(Clone, Debug)]
 enum EscapeOctalState {
     Done,
     Backslash,
@@ -507,6 +503,23 @@ mod tests {
                 ("'one\ntwo'", "shell-always-show"),
                 ("'one'$'\\n''two'", "shell-escape"),
                 ("'one'$'\\n''two'", "shell-escape-always"),
+            ],
+        );
+
+        // A control character followed by a special shell character
+        check_names(
+            "one\n&two",
+            vec![
+                ("one?&two", "literal"),
+                ("one\n&two", "literal-show"),
+                ("one\\n&two", "escape"),
+                ("\"one\\n&two\"", "c"),
+                ("'one?&two'", "shell"),
+                ("'one\n&two'", "shell-show"),
+                ("'one?&two'", "shell-always"),
+                ("'one\n&two'", "shell-always-show"),
+                ("'one'$'\\n''&two'", "shell-escape"),
+                ("'one'$'\\n''&two'", "shell-escape-always"),
             ],
         );
 

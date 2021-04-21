@@ -1190,6 +1190,21 @@ fn test_ls_quoting_style() {
             .succeeds()
             .stdout_only(format!("{}\n", correct));
     }
+
+    // Tests for a character that forces quotation in shell-style escaping
+    // after a character in a dollar expression
+    at.touch("one\n&two");
+    for (arg, correct) in &[
+        ("--quoting-style=shell-escape", "'one'$'\\n''&two'"),
+        ("--quoting-style=shell-escape-always", "'one'$'\\n''&two'"),
+    ] {
+        scene
+            .ucmd()
+            .arg(arg)
+            .arg("one\n&two")
+            .succeeds()
+            .stdout_only(format!("{}\n", correct));
+    }
 }
 
 #[test]
