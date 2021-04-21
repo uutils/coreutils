@@ -65,9 +65,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     }
 
-    return if is_stdin_interactive() {
+    if is_stdin_interactive() {
         libc::EXIT_SUCCESS
     } else {
         libc::EXIT_FAILURE
-    };
+    }
 }

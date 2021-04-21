@@ -138,11 +138,8 @@ impl AddAssign for WordCount {
 }
 
 impl WordCount {
-    fn with_title<'a>(self, title: &'a str) -> TitledWordCount<'a> {
-        return TitledWordCount {
-            title: title,
-            count: self,
-        };
+    fn with_title(self, title: &str) -> TitledWordCount {
+        TitledWordCount { title, count: self }
     }
 }
 
@@ -251,7 +248,7 @@ fn is_word_separator(byte: u8) -> bool {
 fn word_count_from_reader<T: WordCountable>(
     mut reader: T,
     settings: &Settings,
-    path: &String,
+    path: &str,
 ) -> WcResult<WordCount> {
     let only_count_bytes = settings.show_bytes
         && (!(settings.show_chars
@@ -333,18 +330,18 @@ fn word_count_from_reader<T: WordCountable>(
     })
 }
 
-fn word_count_from_path(path: &String, settings: &Settings) -> WcResult<WordCount> {
+fn word_count_from_path(path: &str, settings: &Settings) -> WcResult<WordCount> {
     if path == "-" {
         let stdin = io::stdin();
         let stdin_lock = stdin.lock();
-        return Ok(word_count_from_reader(stdin_lock, settings, path)?);
+        word_count_from_reader(stdin_lock, settings, path)
     } else {
         let path_obj = Path::new(path);
         if path_obj.is_dir() {
-            return Err(WcError::IsDirectory(path.clone()));
+            Err(WcError::IsDirectory(path.to_owned()))
         } else {
             let file = File::open(path)?;
-            return Ok(word_count_from_reader(file, settings, path)?);
+            word_count_from_reader(file, settings, path)
         }
     }
 }
@@ -425,7 +422,7 @@ fn print_stats(
     }
 
     if result.title == "-" {
-        writeln!(stdout_lock, "")?;
+        writeln!(stdout_lock)?;
     } else {
         writeln!(stdout_lock, " {}", result.title)?;
     }

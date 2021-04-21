@@ -26,17 +26,18 @@ fn test_env_version() {
 
 #[test]
 fn test_echo() {
-    let result = new_ucmd!()
-        .arg("echo")
-        .arg("FOO-bar")
-        .succeeds();
+    let result = new_ucmd!().arg("echo").arg("FOO-bar").succeeds();
 
     assert_eq!(result.stdout_str().trim(), "FOO-bar");
 }
 
 #[test]
 fn test_file_option() {
-    let out = new_ucmd!().arg("-f").arg("vars.conf.txt").run().stdout_move_str();
+    let out = new_ucmd!()
+        .arg("-f")
+        .arg("vars.conf.txt")
+        .run()
+        .stdout_move_str();
 
     assert_eq!(
         out.lines()
@@ -89,7 +90,8 @@ fn test_multiple_name_value_pairs() {
     let out = new_ucmd!().arg("FOO=bar").arg("ABC=xyz").run();
 
     assert_eq!(
-        out.stdout_str().lines()
+        out.stdout_str()
+            .lines()
             .filter(|&line| line == "FOO=bar" || line == "ABC=xyz")
             .count(),
         2

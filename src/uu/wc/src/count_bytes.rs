@@ -72,30 +72,27 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> WcResult<usi
     #[cfg(unix)]
     {
         let fd = handle.as_raw_fd();
-        match fstat(fd) {
-            Ok(stat) => {
-                // If the file is regular, then the `st_size` should hold
-                // the file's size in bytes.
-                if (stat.st_mode & S_IFREG) != 0 {
-                    return Ok(stat.st_size as usize);
-                }
-                #[cfg(any(target_os = "linux", target_os = "android"))]
-                {
-                    // Else, if we're on Linux and our file is a FIFO pipe
-                    // (or stdin), we use splice to count the number of bytes.
-                    if (stat.st_mode & S_IFIFO) != 0 {
-                        if let Ok(n) = count_bytes_using_splice(fd) {
-                            return Ok(n);
-                        }
+        if let Ok(stat) = fstat(fd) {
+            // If the file is regular, then the `st_size` should hold
+            // the file's size in bytes.
+            if (stat.st_mode & S_IFREG) != 0 {
+                return Ok(stat.st_size as usize);
+            }
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            {
+                // Else, if we're on Linux and our file is a FIFO pipe
+                // (or stdin), we use splice to count the number of bytes.
+                if (stat.st_mode & S_IFIFO) != 0 {
+                    if let Ok(n) = count_bytes_using_splice(fd) {
+                        return Ok(n);
                     }
                 }
             }
-            _ => {}
         }
     }
 
     // Fall back on `read`, but without the overhead of counting words and lines.
-    let mut buf = [0 as u8; BUF_SIZE];
+    let mut buf = [0_u8; BUF_SIZE];
     let mut byte_count = 0;
     loop {
         match handle.read(&mut buf) {
