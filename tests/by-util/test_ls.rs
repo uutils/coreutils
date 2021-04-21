@@ -622,7 +622,7 @@ fn test_ls_recursive() {
 }
 
 #[test]
-fn test_ls_ls_color() {
+fn test_ls_color() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.mkdir("a");

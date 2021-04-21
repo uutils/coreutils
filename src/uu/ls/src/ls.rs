@@ -35,8 +35,6 @@ use std::{cmp::Reverse, process::exit};
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use time::{strftime, Timespec};
 #[cfg(unix)]
-use unicode_width::UnicodeWidthStr;
-#[cfg(unix)]
 use uucore::libc::{mode_t, S_IXGRP, S_IXOTH, S_IXUSR};
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -1445,45 +1443,6 @@ fn get_file_name(name: &Path, strip: Option<&Path>) -> String {
     name.to_string_lossy().into_owned()
 }
 
-// #[cfg(not(unix))]
-// fn display_file_name(
-//     path: &Path,
-//     strip: Option<&Path>,
-//     metadata: &Metadata,
-//     config: &Config,
-// ) -> Cell {
-//     let mut name = escape_name(get_file_name(path, strip), &config.quoting_style);
-//     let file_type = metadata.file_type();
-
-//     match config.indicator_style {
-//         IndicatorStyle::Classify | IndicatorStyle::FileType => {
-//             if file_type.is_dir() {
-//                 name.push('/');
-//             }
-//             if file_type.is_symlink() {
-//                 name.push('@');
-//             }
-//         }
-//         IndicatorStyle::Slash => {
-//             if file_type.is_dir() {
-//                 name.push('/');
-//             }
-//         }
-//         _ => (),
-//     };
-
-//     if config.format == Format::Long && metadata.file_type().is_symlink() {
-//         if let Ok(target) = path.read_link() {
-//             // We don't bother updating width here because it's not used for long listings
-//             let target_name = target.to_string_lossy().to_string();
-//             name.push_str(" -> ");
-//             name.push_str(&target_name);
-//         }
-//     }
-
-//     name.into()
-// }
-
 #[cfg(unix)]
 macro_rules! has {
     ($mode:expr, $perm:expr) => {
@@ -1491,42 +1450,32 @@ macro_rules! has {
     };
 }
 
-#[cfg(unix)]
 fn classify_file(md: &Metadata) -> Option<char> {
     let file_type = md.file_type();
+
+    #[allow(clippy::clippy::collapsible_else_if)]
     if file_type.is_dir() {
         Some('/')
     } else if file_type.is_symlink() {
         Some('@')
-    } else if file_type.is_socket() {
-        Some('=')
-    } else if file_type.is_fifo() {
-        Some('|')
-    } else if file_type.is_file() {
-        let mode = md.mode() as mode_t;
-        if has!(mode, S_IXUSR | S_IXGRP | S_IXOTH) {
-            Some('*')
-        } else {
-            None
+    } else {
+        #[cfg(unix)]
+        {
+            if file_type.is_socket() {
+                Some('=')
+            } else if file_type.is_fifo() {
+                Some('|')
+            } else if file_type.is_file() || has!(md.mode(), S_IXUSR | S_IXGRP | S_IXOTH) {
+                Some('*')
+            } else {
+                None
+            }
         }
-    } else {
+        #[cfg(not(unix))]
         None
     }
 }
 
-#[cfg(not(unix))]
-fn classify_file(md: &Metadata) -> Option<char> {
-    let file_type = md.file_type();
-    if file_type.is_dir() {
-        Some('/')
-    } else if file_type.is_symlink() {
-        Some('@')
-    } else {
-        None
-    }
-}
-
-#[allow(clippy::cognitive_complexity)]
 fn display_file_name(
     path: &Path,
     strip: Option<&Path>,
@@ -1541,7 +1490,7 @@ fn display_file_name(
     }
 
     if let Some(ls_colors) = &config.color {
-        name = color_name(&ls_colors, path, name, metadata).to_string();
+        name = color_name(&ls_colors, path, name, metadata);
     }
 
     if config.indicator_style != IndicatorStyle::None {
@@ -1589,11 +1538,8 @@ fn display_file_name(
 
 fn color_name(ls_colors: &LsColors, path: &Path, name: String, md: &Metadata) -> String {
     match ls_colors.style_for_path_with_metadata(path, Some(&md)) {
-        Some(style) => {
-            dbg!(style);
-            style.to_ansi_term_style().paint(name).to_string()
-        }
-        None => dbg!(name),
+        Some(style) => style.to_ansi_term_style().paint(name).to_string(),
+        None => name,
     }
 }
 
