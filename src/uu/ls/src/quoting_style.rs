@@ -1,6 +1,6 @@
 use std::char::from_digit;
 
-const SPECIAL_SHELL_CHARS: &str = "~`#$&*()|[]{};'\"<>?! ";
+const SPECIAL_SHELL_CHARS: &str = "~`#$&*()|[]{};\\'\"<>?! ";
 
 pub(super) enum QuotingStyle {
     Shell {
