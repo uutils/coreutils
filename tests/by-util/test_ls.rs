@@ -816,7 +816,7 @@ fn test_ls_indicator_style() {
     let options = vec!["classify", "file-type", "slash"];
     for opt in options {
         // Verify that classify and file-type both contain indicators for symlinks.
-        let result = scene
+        scene
             .ucmd()
             .arg(format!("--indicator-style={}", opt))
             .succeeds()
@@ -826,7 +826,7 @@ fn test_ls_indicator_style() {
     // Same test as above, but with the alternate flags.
     let options = vec!["--classify", "--file-type", "-p"];
     for opt in options {
-        let result = scene
+        scene
             .ucmd()
             .arg(format!("{}", opt))
             .succeeds()
@@ -837,7 +837,7 @@ fn test_ls_indicator_style() {
     let options = vec!["classify", "file-type"];
     for opt in options {
         // Verify that classify and file-type both contain indicators for symlinks.
-        let result = scene
+        scene
             .ucmd()
             .arg(format!("--indicator-style={}", opt))
             .succeeds()
@@ -961,7 +961,7 @@ fn test_ls_hidden_windows() {
 
     let result = scene.ucmd().succeeds();
     assert!(!result.stdout_str().contains(file));
-    let result = scene.ucmd().arg("-a").succeeds().stdout_contains(file);
+    scene.ucmd().arg("-a").succeeds().stdout_contains(file);
 }
 
 #[test]
