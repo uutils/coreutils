@@ -581,3 +581,30 @@ fn test_check_silent() {
         .fails()
         .stdout_is("");
 }
+
+#[test]
+fn test_dictionary_and_nonprinting_conflicts() {
+    let conflicting_args = ["n", "h", "g", "M"];
+    for restricted_arg in &["d", "i"] {
+        for conflicting_arg in &conflicting_args {
+            new_ucmd!()
+                .arg(&format!("-{}{}", restricted_arg, conflicting_arg))
+                .fails();
+        }
+        for conflicting_arg in &conflicting_args {
+            new_ucmd!()
+                .args(&[
+                    format!("-{}", restricted_arg).as_str(),
+                    "-k",
+                    &format!("1,1{}", conflicting_arg),
+                ])
+                .succeeds();
+        }
+        for conflicting_arg in &conflicting_args {
+            // FIXME: this should ideally fail.
+            new_ucmd!()
+                .args(&["-k", &format!("1{},1{}", restricted_arg, conflicting_arg)])
+                .succeeds();
+        }
+    }
+}
