@@ -109,6 +109,14 @@ fn test_ls_width() {
         .arg("-w=bad")
         .fails()
         .stderr_contains("invalid line width");
+
+    for option in &["-w 1a", "-w=1a", "--width=1a", "--width 1a"] {
+        scene
+            .ucmd()
+            .args(&option.split(" ").collect::<Vec<_>>())
+            .fails()
+            .stderr_only("ls: error: invalid line width: ‘1a’");
+    }
 }
 
 #[test]
