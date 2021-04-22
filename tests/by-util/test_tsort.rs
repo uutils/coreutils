@@ -18,33 +18,35 @@ fn test_sort_self_loop() {
 
 #[test]
 fn test_no_such_file() {
-    let result = new_ucmd!().arg("invalid_file_txt").run();
-
-    assert_eq!(true, result.stderr.contains("No such file or directory"));
+    new_ucmd!()
+        .arg("invalid_file_txt")
+        .fails()
+        .stderr_contains("No such file or directory");
 }
 
 #[test]
 fn test_version_flag() {
-    let version_short = new_ucmd!().arg("-V").run();
-    let version_long = new_ucmd!().arg("--version").run();
+    let version_short = new_ucmd!().arg("-V").succeeds();
+    let version_long = new_ucmd!().arg("--version").succeeds();
 
-    assert_eq!(version_short.stdout(), version_long.stdout());
+    assert_eq!(version_short.stdout_str(), version_long.stdout_str());
 }
 
 #[test]
 fn test_help_flag() {
-    let help_short = new_ucmd!().arg("-h").run();
-    let help_long = new_ucmd!().arg("--help").run();
+    let help_short = new_ucmd!().arg("-h").succeeds();
+    let help_long = new_ucmd!().arg("--help").succeeds();
 
-    assert_eq!(help_short.stdout(), help_long.stdout());
+    assert_eq!(help_short.stdout_str(), help_long.stdout_str());
 }
 
 #[test]
 fn test_multiple_arguments() {
-    let result = new_ucmd!()
+    new_ucmd!()
         .arg("call_graph.txt")
-        .arg("invalid_file.txt")
-        .run();
-
-    assert_eq!(true, result.stderr.contains("error: Found argument 'invalid_file.txt' which wasn't expected, or isn't valid in this context"))
+        .arg("invalid_file")
+        .fails()
+        .stderr_contains(
+            "Found argument 'invalid_file' which wasn't expected, or isn't valid in this context",
+        );
 }

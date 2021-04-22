@@ -74,11 +74,11 @@ pub struct CmdResult {
     code: Option<i32>,
     /// zero-exit from running the Command?
     /// see [`success`]
-    pub success: bool,
+    success: bool,
     /// captured standard output after running the Command
-    pub stdout: String,
+    stdout: String,
     /// captured standard error after running the Command
-    pub stderr: String,
+    stderr: String,
 }
 
 impl CmdResult {
@@ -329,14 +329,14 @@ impl CmdResult {
     }
 
     pub fn stdout_matches(&self, regex: &regex::Regex) -> &CmdResult {
-        if !regex.is_match(self.stdout_str()) {
+        if !regex.is_match(self.stdout_str().trim()) {
             panic!("Stdout does not match regex:\n{}", self.stdout_str())
         }
         self
     }
 
     pub fn stdout_does_not_match(&self, regex: &regex::Regex) -> &CmdResult {
-        if regex.is_match(self.stdout_str()) {
+        if regex.is_match(self.stdout_str().trim()) {
             panic!("Stdout matches regex:\n{}", self.stdout_str())
         }
         self
@@ -696,8 +696,11 @@ pub struct UCommand {
     comm_string: String,
     tmpd: Option<Rc<TempDir>>,
     has_run: bool,
-    stdin: Option<Vec<u8>>,
     ignore_stdin_write_error: bool,
+    stdin: Option<Stdio>,
+    stdout: Option<Stdio>,
+    stderr: Option<Stdio>,
+    bytes_into_stdin: Option<Vec<u8>>,
 }
 
 impl UCommand {
@@ -726,8 +729,11 @@ impl UCommand {
                 cmd
             },
             comm_string: String::from(arg.as_ref().to_str().unwrap()),
-            stdin: None,
             ignore_stdin_write_error: false,
+            bytes_into_stdin: None,
+            stdin: None,
+            stdout: None,
+            stderr: None,
         }
     }
 
@@ -736,6 +742,21 @@ impl UCommand {
         let mut ucmd: UCommand = UCommand::new(arg.as_ref(), tmpd_path_buf, env_clear);
         ucmd.tmpd = Some(tmpd);
         ucmd
+    }
+
+    pub fn set_stdin<T: Into<Stdio>>(&mut self, stdin: T) -> &mut UCommand {
+        self.stdin = Some(stdin.into());
+        self
+    }
+
+    pub fn set_stdout<T: Into<Stdio>>(&mut self, stdout: T) -> &mut UCommand {
+        self.stdout = Some(stdout.into());
+        self
+    }
+
+    pub fn set_stderr<T: Into<Stdio>>(&mut self, stderr: T) -> &mut UCommand {
+        self.stderr = Some(stderr.into());
+        self
     }
 
     /// Add a parameter to the invocation. Path arguments are treated relative
@@ -767,10 +788,10 @@ impl UCommand {
 
     /// provides stdinput to feed in to the command when spawned
     pub fn pipe_in<T: Into<Vec<u8>>>(&mut self, input: T) -> &mut UCommand {
-        if self.stdin.is_some() {
+        if self.bytes_into_stdin.is_some() {
             panic!("{}", MULTIPLE_STDIN_MEANINGLESS);
         }
-        self.stdin = Some(input.into());
+        self.bytes_into_stdin = Some(input.into());
         self
     }
 
@@ -784,7 +805,7 @@ impl UCommand {
     /// This is typically useful to test non-standard workflows
     /// like feeding something to a command that does not read it
     pub fn ignore_stdin_write_error(&mut self) -> &mut UCommand {
-        if self.stdin.is_none() {
+        if self.bytes_into_stdin.is_none() {
             panic!("{}", NO_STDIN_MEANINGLESS);
         }
         self.ignore_stdin_write_error = true;
@@ -813,13 +834,13 @@ impl UCommand {
         log_info("run", &self.comm_string);
         let mut child = self
             .raw
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
+            .stdin(self.stdin.take().unwrap_or_else(|| Stdio::piped()))
+            .stdout(self.stdout.take().unwrap_or_else(|| Stdio::piped()))
+            .stderr(self.stderr.take().unwrap_or_else(|| Stdio::piped()))
             .spawn()
             .unwrap();
 
-        if let Some(ref input) = self.stdin {
+        if let Some(ref input) = self.bytes_into_stdin {
             let write_result = child
                 .stdin
                 .take()
