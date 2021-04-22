@@ -1038,12 +1038,43 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     list(locs, Config::from(matches))
 }
 
+/// Represents a Path along with it's associated data
+/// Any data that will be reused several times makes sense to be added to this structure
+/// Caching data here helps eliminate redundant syscalls to fetch same information
+struct PathData {
+    // Result<MetaData> got from symlink_metadata() or metadata() based on config
+    md: std::io::Result<Metadata>,
+    // String formed from get_lossy_string() for the path
+    lossy_string: String,
+    // Name of the file - will be empty for . or ..
+    file_name: String,
+    // PathBuf that all above data corresponds to
+    p_buf: PathBuf,
+}
+
+impl PathData {
+    fn new(p_buf: PathBuf, config: &Config, command_line: bool) -> Self {
+        let md = get_metadata(&p_buf, config, command_line);
+        let lossy_string = p_buf.to_string_lossy().into_owned();
+        let name = p_buf
+            .file_name()
+            .map_or(String::new(), |s| s.to_string_lossy().into_owned());
+        Self {
+            md,
+            lossy_string,
+            file_name: name,
+            p_buf,
+        }
+    }
+}
+
 fn list(locs: Vec<String>, config: Config) -> i32 {
     let number_of_locs = locs.len();
 
-    let mut files = Vec::<PathBuf>::new();
-    let mut dirs = Vec::<PathBuf>::new();
+    let mut files = Vec::<PathData>::new();
+    let mut dirs = Vec::<PathData>::new();
     let mut has_failed = false;
+
     for loc in locs {
         let p = PathBuf::from(&loc);
         if !p.exists() {
@@ -1054,36 +1085,28 @@ fn list(locs: Vec<String>, config: Config) -> i32 {
             continue;
         }
 
-        let show_dir_contents = if !config.directory {
-            match config.dereference {
-                Dereference::None => {
-                    if let Ok(md) = p.symlink_metadata() {
-                        md.is_dir()
-                    } else {
-                        show_error!("'{}': {}", &loc, "No such file or directory");
-                        has_failed = true;
-                        continue;
-                    }
-                }
-                _ => p.is_dir(),
-            }
+        let path_data = PathData::new(p, &config, true);
+
+        let show_dir_contents = if let Ok(md) = path_data.md.as_ref() {
+            !config.directory && md.is_dir()
         } else {
+            has_failed = true;
             false
         };
 
         if show_dir_contents {
-            dirs.push(p);
+            dirs.push(path_data);
         } else {
-            files.push(p);
+            files.push(path_data);
         }
     }
     sort_entries(&mut files, &config);
-    display_items(&files, None, &config, true);
+    display_items(&files, None, &config);
 
     sort_entries(&mut dirs, &config);
     for dir in dirs {
         if number_of_locs > 1 {
-            println!("\n{}:", dir.to_string_lossy());
+            println!("\n{}:", dir.lossy_string);
         }
         enter_directory(&dir, &config);
     }
@@ -1094,22 +1117,22 @@ fn list(locs: Vec<String>, config: Config) -> i32 {
     }
 }
 
-fn sort_entries(entries: &mut Vec<PathBuf>, config: &Config) {
+fn sort_entries(entries: &mut Vec<PathData>, config: &Config) {
     match config.sort {
         Sort::Time => entries.sort_by_key(|k| {
             Reverse(
-                get_metadata(k, false)
+                k.md.as_ref()
                     .ok()
                     .and_then(|md| get_system_time(&md, config))
                     .unwrap_or(UNIX_EPOCH),
             )
         }),
         Sort::Size => {
-            entries.sort_by_key(|k| Reverse(get_metadata(k, false).map(|md| md.len()).unwrap_or(0)))
+            entries.sort_by_key(|k| Reverse(k.md.as_ref().map(|md| md.len()).unwrap_or(0)))
         }
         // The default sort in GNU ls is case insensitive
-        Sort::Name => entries.sort_by_key(|k| k.to_string_lossy().to_lowercase()),
-        Sort::Version => entries.sort_by(|a, b| version_cmp::version_cmp(a, b)),
+        Sort::Name => entries.sort_by_key(|k| k.file_name.to_lowercase()),
+        Sort::Version => entries.sort_by(|k, j| version_cmp::version_cmp(&k.p_buf, &j.p_buf)),
         Sort::None => {}
     }
 
@@ -1143,32 +1166,57 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
     true
 }
 
-fn enter_directory(dir: &Path, config: &Config) {
-    let mut entries: Vec<_> = safe_unwrap!(fs::read_dir(dir).and_then(Iterator::collect));
-
-    entries.retain(|e| should_display(e, config));
-
-    let mut entries: Vec<_> = entries.iter().map(DirEntry::path).collect();
-    sort_entries(&mut entries, config);
-
-    if config.files == Files::All {
-        let mut display_entries = entries.clone();
-        display_entries.insert(0, dir.join(".."));
-        display_entries.insert(0, dir.join("."));
-        display_items(&display_entries, Some(dir), config, false);
+fn enter_directory(dir: &PathData, config: &Config) {
+    let mut entries: Vec<_> = if config.files == Files::All {
+        vec![
+            PathData::new(dir.p_buf.join("."), config, false),
+            PathData::new(dir.p_buf.join(".."), config, false),
+        ]
     } else {
-        display_items(&entries, Some(dir), config, false);
-    }
+        vec![]
+    };
+
+    let mut temp: Vec<_> = safe_unwrap!(fs::read_dir(&dir.p_buf))
+        .map(|res| safe_unwrap!(res))
+        .filter(|e| should_display(e, config))
+        .map(|e| PathData::new(DirEntry::path(&e), config, false))
+        .collect();
+
+    sort_entries(&mut temp, config);
+
+    entries.append(&mut temp);
+
+    display_items(&entries, Some(&dir.p_buf), config);
 
     if config.recursive {
-        for e in entries.iter().filter(|p| p.is_dir()) {
-            println!("\n{}:", e.to_string_lossy());
+        for e in entries
+            .iter()
+            .skip(if config.files == Files::All { 2 } else { 0 })
+            .filter(|p| p.md.as_ref().map(|md| md.is_dir()).unwrap_or(false))
+        {
+            println!("\n{}:", e.lossy_string);
             enter_directory(&e, config);
         }
     }
 }
 
-fn get_metadata(entry: &Path, dereference: bool) -> std::io::Result<Metadata> {
+fn get_metadata(entry: &Path, config: &Config, command_line: bool) -> std::io::Result<Metadata> {
+    let dereference = match &config.dereference {
+        Dereference::All => true,
+        Dereference::Args => command_line,
+        Dereference::DirArgs => {
+            if command_line {
+                if let Ok(md) = entry.metadata() {
+                    md.is_dir()
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        }
+        Dereference::None => false,
+    };
     if dereference {
         entry.metadata().or_else(|_| entry.symlink_metadata())
     } else {
@@ -1176,8 +1224,8 @@ fn get_metadata(entry: &Path, dereference: bool) -> std::io::Result<Metadata> {
     }
 }
 
-fn display_dir_entry_size(entry: &Path, config: &Config) -> (usize, usize) {
-    if let Ok(md) = get_metadata(entry, false) {
+fn display_dir_entry_size(entry: &PathData, config: &Config) -> (usize, usize) {
+    if let Ok(md) = entry.md.as_ref() {
         (
             display_symlink_count(&md).len(),
             display_file_size(&md, config).len(),
@@ -1191,7 +1239,7 @@ fn pad_left(string: String, count: usize) -> String {
     format!("{:>width$}", string, width = count)
 }
 
-fn display_items(items: &[PathBuf], strip: Option<&Path>, config: &Config, command_line: bool) {
+fn display_items(items: &[PathData], strip: Option<&Path>, config: &Config) {
     if config.format == Format::Long {
         let (mut max_links, mut max_size) = (1, 1);
         for item in items {
@@ -1200,18 +1248,18 @@ fn display_items(items: &[PathBuf], strip: Option<&Path>, config: &Config, comma
             max_size = size.max(max_size);
         }
         for item in items {
-            display_item_long(item, strip, max_links, max_size, config, command_line);
+            display_item_long(item, strip, max_links, max_size, config);
         }
     } else {
         let names = items.iter().filter_map(|i| {
-            let md = get_metadata(i, false);
+            let md = i.md.as_ref();
             match md {
                 Err(e) => {
-                    let filename = get_file_name(i, strip);
+                    let filename = get_file_name(&i.p_buf, strip);
                     show_error!("'{}': {}", filename, e);
                     None
                 }
-                Ok(md) => Some(display_file_name(&i, strip, &md, config)),
+                Ok(md) => Some(display_file_name(&i.p_buf, strip, &md, config)),
             }
         });
 
@@ -1271,33 +1319,15 @@ fn display_grid(names: impl Iterator<Item = Cell>, width: u16, direction: Direct
 use uucore::fs::display_permissions;
 
 fn display_item_long(
-    item: &Path,
+    item: &PathData,
     strip: Option<&Path>,
     max_links: usize,
     max_size: usize,
     config: &Config,
-    command_line: bool,
 ) {
-    let dereference = match &config.dereference {
-        Dereference::All => true,
-        Dereference::Args => command_line,
-        Dereference::DirArgs => {
-            if command_line {
-                if let Ok(md) = item.metadata() {
-                    md.is_dir()
-                } else {
-                    false
-                }
-            } else {
-                false
-            }
-        }
-        Dereference::None => false,
-    };
-
-    let md = match get_metadata(item, dereference) {
+    let md = match &item.md {
         Err(e) => {
-            let filename = get_file_name(&item, strip);
+            let filename = get_file_name(&item.p_buf, strip);
             show_error!("{}: {}", filename, e);
             return;
         }
@@ -1336,7 +1366,7 @@ fn display_item_long(
         " {} {} {}",
         pad_left(display_file_size(&md, config), max_size),
         display_date(&md, config),
-        display_file_name(&item, strip, &md, config).contents,
+        display_file_name(&item.p_buf, strip, &md, config).contents,
     );
 }
 
@@ -1348,14 +1378,50 @@ fn get_inode(metadata: &Metadata) -> String {
 // Currently getpwuid is `linux` target only. If it's broken out into
 // a posix-compliant attribute this can be updated...
 #[cfg(unix)]
+use std::sync::Mutex;
+#[cfg(unix)]
 use uucore::entries;
+
+#[cfg(unix)]
+fn cached_uid2usr(uid: u32) -> String {
+    lazy_static! {
+        static ref UID_CACHE: Mutex<HashMap<u32, String>> = Mutex::new(HashMap::new());
+    }
+
+    let mut uid_cache = UID_CACHE.lock().unwrap();
+    match uid_cache.get(&uid) {
+        Some(usr) => usr.clone(),
+        None => {
+            let usr = entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string());
+            uid_cache.insert(uid, usr.clone());
+            usr
+        }
+    }
+}
 
 #[cfg(unix)]
 fn display_uname(metadata: &Metadata, config: &Config) -> String {
     if config.long.numeric_uid_gid {
         metadata.uid().to_string()
     } else {
-        entries::uid2usr(metadata.uid()).unwrap_or_else(|_| metadata.uid().to_string())
+        cached_uid2usr(metadata.uid())
+    }
+}
+
+#[cfg(unix)]
+fn cached_gid2grp(gid: u32) -> String {
+    lazy_static! {
+        static ref GID_CACHE: Mutex<HashMap<u32, String>> = Mutex::new(HashMap::new());
+    }
+
+    let mut gid_cache = GID_CACHE.lock().unwrap();
+    match gid_cache.get(&gid) {
+        Some(grp) => grp.clone(),
+        None => {
+            let grp = entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string());
+            gid_cache.insert(gid, grp.clone());
+            grp
+        }
     }
 }
 
@@ -1364,7 +1430,7 @@ fn display_group(metadata: &Metadata, config: &Config) -> String {
     if config.long.numeric_uid_gid {
         metadata.gid().to_string()
     } else {
-        entries::gid2grp(metadata.gid()).unwrap_or_else(|_| metadata.gid().to_string())
+        cached_gid2grp(metadata.gid())
     }
 }
 
