@@ -9,6 +9,9 @@
 
 #[macro_use]
 extern crate uucore;
+#[cfg(unix)]
+#[macro_use]
+extern crate lazy_static;
 
 mod quoting_style;
 mod version_cmp;
@@ -18,12 +21,11 @@ use globset::{self, Glob, GlobSet, GlobSetBuilder};
 use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use quoting_style::{escape_name, QuotingStyle};
-use std::fs;
-use std::fs::{DirEntry, FileType, Metadata};
 #[cfg(unix)]
-use std::os::unix::fs::FileTypeExt;
+use std::collections::HashMap;
+use std::fs::{self, DirEntry, FileType, Metadata};
 #[cfg(any(unix, target_os = "redox"))]
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf};

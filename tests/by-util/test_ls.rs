@@ -647,18 +647,14 @@ fn test_ls_color() {
     at.touch(&nested_file);
     at.touch("test-color");
 
-    at.symlink_file(&nested_file, "link");
-
     let a_with_colors = "\x1b[1;34ma\x1b[0m";
     let z_with_colors = "\x1b[1;34mz\x1b[0m";
     let nested_dir_with_colors = "\x1b[1;34mnested_dir\x1b[0m";
-    let link_with_color = "\x1b[1;36mlink\x1b[0m";
 
     // Color is disabled by default
     let result = scene.ucmd().succeeds();
     assert!(!result.stdout_str().contains(a_with_colors));
     assert!(!result.stdout_str().contains(z_with_colors));
-    assert!(!result.stdout_str().contains(link_with_color));
 
     // Color should be enabled
     scene
@@ -666,8 +662,7 @@ fn test_ls_color() {
         .arg("--color")
         .succeeds()
         .stdout_contains(a_with_colors)
-        .stdout_contains(z_with_colors)
-        .stdout_contains(link_with_color);
+        .stdout_contains(z_with_colors);
 
     // Color should be enabled
     scene
@@ -675,14 +670,12 @@ fn test_ls_color() {
         .arg("--color=always")
         .succeeds()
         .stdout_contains(a_with_colors)
-        .stdout_contains(z_with_colors)
-        .stdout_contains(link_with_color);
+        .stdout_contains(z_with_colors);
 
     // Color should be disabled
     let result = scene.ucmd().arg("--color=never").succeeds();
     assert!(!result.stdout_str().contains(a_with_colors));
     assert!(!result.stdout_str().contains(z_with_colors));
-    assert!(!result.stdout_str().contains(link_with_color));
 
     // Nested dir should be shown and colored
     scene

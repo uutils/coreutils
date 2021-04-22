@@ -26,6 +26,9 @@ uucore = { version=">=0.0.8", package="uucore", path="../../uucore", features=["
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 atty = "0.2"
 
+[target.'cfg(unix)'.dependencies]
+lazy_static = "1.4.0"
+
 [[bin]]
 name = "ls"
 path = "src/main.rs"
