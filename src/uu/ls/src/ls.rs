@@ -1528,13 +1528,8 @@ fn display_file_name(
     if config.format == Format::Long && metadata.file_type().is_symlink() {
         if let Ok(target) = path.read_link() {
             // We don't bother updating width here because it's not used for long
-            let mut target_name = target.to_string_lossy().to_string();
-            if let Some(ls_colors) = &config.color {
-                target_name = color_name(&ls_colors, &target, target_name, metadata);
-            }
             name.push_str(" -> ");
-
-            name.push_str(&target_name);
+            name.push_str(&target.to_string_lossy());
         }
     }
 
