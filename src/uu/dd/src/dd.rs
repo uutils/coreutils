@@ -345,14 +345,20 @@ fn dd<R: Read, W: Write>(mut i: Input<R>, mut o: Output<W>) -> Result<(usize, us
         let mut buf = vec![DEFAULT_FILL_BYTE; o.obs];
 
         // Read
-        let r_len = match i.fill_n(&mut buf, o.obs)? {
-            SrcStat::Read(len) =>
+        let r_len = match i.fill_n(&mut buf, o.obs) {
+            Ok(SrcStat::Read(len)) =>
             {
                 bytes_in += len;
                 len
             },
-            SrcStat::EOF =>
+            Ok(SrcStat::EOF) =>
                 break,
+            Err(e) =>
+                if !i.cf.noerror {
+                    return Err(e);
+                } else {
+                    continue
+                },
         };
 
         // Write
