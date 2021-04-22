@@ -18,14 +18,18 @@ mod parseargs;
 mod conversion_tables;
 use conversion_tables::*;
 
+use std::convert::TryInto;
 use std::error::Error;
-use std::fs::File;
+use std::fs::{
+    File, OpenOptions,
+};
+use getopts;
 use std::io::{
     self, Read, Write,
+    Seek,
 };
 use std::sync::mpsc;
 use std::thread;
-use getopts;
 
 const SYNTAX: &str = "dd [OPERAND]...\ndd OPTION";
 const SUMMARY: &str = "convert, and optionally copy, a file";
@@ -218,10 +222,16 @@ impl Output<File> {
         let obs = parseargs::parse_obs(matches)?;
         let cf = parseargs::parse_conv_flag_output(matches)?;
 
-        if let Some(fname) = matches.opt_str("if")
+        if let Some(fname) = matches.opt_str("of")
         {
+            let dst = OpenOptions::new()
+                .write(true)
+                .create(!cf.nocreat)
+                .truncate(!cf.notrunc)
+                .open(fname)?;
+
             Ok(Output {
-                dst: File::open(fname)?,
+                dst,
                 obs,
                 cf,
             })
@@ -232,6 +242,32 @@ impl Output<File> {
         }
     }
 }
+
+impl<W: Write> Seek for Output<W>
+{
+    fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64>
+    {
+        unimplemented!()
+    }
+}
+
+// impl Seek for Output<io::Stdout>
+// {
+//     fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64>
+//     {
+//         // Default method. Called when output dst not backed by a traditional file and
+//         // should not be seeked (eg. stdout)
+//         Ok(0)
+//     }
+// }
+//
+// impl Seek for Output<File>
+// {
+//     fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64>
+//     {
+//         self.dst.seek(pos)
+//     }
+// }
 
 impl<W: Write> Write for Output<W>
 {
@@ -244,6 +280,11 @@ impl<W: Write> Write for Output<W>
     {
         self.dst.flush()
     }
+}
+
+fn is_sparse(buf: &[u8]) -> bool
+{
+    buf.iter().all(| &e | e == 0)
 }
 
 fn gen_prog_updater(rx: mpsc::Receiver<usize>) -> impl Fn() -> ()
@@ -290,28 +331,44 @@ fn dd<R: Read, W: Write>(mut i: Input<R>, mut o: Output<W>) -> Result<(usize, us
     loop
     {
         let mut buf = vec![DEFAULT_FILL_BYTE; o.obs];
-        let r_len =
-            match i.fill_n(&mut buf, o.obs)? {
-                SrcStat::Read(len) =>
-                {
-                    bytes_in += len;
-                    len
-                },
-                SrcStat::EOF =>
-                    break,
+
+        // Read
+        let r_len = match i.fill_n(&mut buf, o.obs)? {
+            SrcStat::Read(len) =>
+            {
+                bytes_in += len;
+                len
+            },
+            SrcStat::EOF =>
+                break,
         };
 
-        let w_len = o.write(&buf[..r_len])?;
+        // Write
+        let w_len = if o.cf.sparse && is_sparse(&buf)
+        {
+            let seek_amt: i64 = r_len.try_into()?;
+            o.seek(io::SeekFrom::Current(seek_amt))?;
+            r_len
+        }
+        else
+        {
+            o.write(&buf[..r_len])?
+        };
 
-        // TODO: Some flag (sync?) controls this behaviour
-        // o.flush()?;
-
+        // Prog
         bytes_out += w_len;
 
         if let Some(prog_tx) = &prog_tx
         {
             prog_tx.send(bytes_out)?;
         }
+    }
+
+    // TODO: Also ensure file metadata is written when fsync option is specified. When _wouldn't_ this happen?
+    // See fs::File::sync_all && fs::File::sync_data methods!
+    if o.cf.fsync || o.cf.fdatasync
+    {
+        o.flush()?;
     }
 
     Ok((bytes_in, bytes_out))

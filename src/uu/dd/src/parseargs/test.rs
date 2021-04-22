@@ -77,6 +77,20 @@ fn cfi_block_error()
 }
 
 #[test]
+#[should_panic]
+fn cfi_creat_error()
+{
+    let args = vec![
+        String::from("dd"),
+        String::from("--conv=excl,nocreat"),
+    ];
+
+    let matches = build_app!().parse(args);
+
+    let cfi_parsed = parse_conv_flag_output(&matches).unwrap();
+}
+
+#[test]
 fn parse_cfi_token_ibm()
 {
     let exp = vec![

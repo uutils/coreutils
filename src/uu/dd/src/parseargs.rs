@@ -17,6 +17,7 @@ pub enum ParseError
     MultipleFmtTable,
     MultipleUCaseLCase,
     MultipleBlockUnblock,
+    MultipleExclNoCreat,
     ConvFlagNoMatch(String),
     NoMatchingMultiplier(String),
     MultiplierStringContainsNoValue(String),
@@ -274,11 +275,9 @@ fn parse_conv_opts(matches: &getopts::Matches) -> Result<Vec<ConvFlag>, ParseErr
 
     if let Some(comma_str) = matches.opt_str("conv")
     {
-        println!("Parsing conv: {}", comma_str);
         for s in comma_str.split(",")
         {
             let flag = s.parse()?;
-            println!("found flag: {:?}", &flag);
             flags.push(flag);
         }
     }
@@ -409,9 +408,23 @@ pub fn parse_conv_flag_output(matches: &getopts::Matches) -> Result<ConvFlagOutp
             ConvFlag::Sparse =>
                 sparse = true,
             ConvFlag::Excl =>
-                excl = true,
+                if !nocreat
+                {
+                    excl = true;
+                }
+                else
+                {
+                    return Err(ParseError::MultipleExclNoCreat);
+                },
             ConvFlag::NoCreat =>
-                nocreat = true,
+                if !excl
+                {
+                    nocreat = true;
+                }
+                else
+                {
+                    return Err(ParseError::MultipleExclNoCreat);
+                },
             ConvFlag::NoTrunc =>
                 notrunc = true,
             ConvFlag::FDataSync =>
