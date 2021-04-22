@@ -118,6 +118,18 @@ impl<R: Read> Read for Input<R>
             }
         }
 
+        if self.cf.swab
+        {
+            let mut tmp = DEFAULT_FILL_BYTE;
+
+            for base in (1..len).step_by(2)
+            {
+                tmp = buf[base];
+                buf[base] = buf[base-1];
+                buf[base-1] = tmp;
+            }
+        }
+
         Ok(len)
     }
 }
