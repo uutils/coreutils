@@ -492,7 +492,7 @@ impl Config {
             }
         }
 
-        if files != Files::Normal {
+        if files == Files::Normal {
             ignore_patterns.add(Glob::new(".*").unwrap());
         }
 
@@ -1185,25 +1185,21 @@ fn sort_entries(entries: &mut Vec<PathData>, config: &Config) {
 fn is_hidden(file_path: &DirEntry) -> bool {
     let metadata = fs::metadata(file_path.path()).unwrap();
     let attr = metadata.file_attributes();
-    ((attr & 0x2) > 0) || file_path.file_name().to_string_lossy().starts_with('.')
-}
-
-#[cfg(unix)]
-fn is_hidden(file_path: &DirEntry) -> bool {
-    file_path.file_name().to_string_lossy().starts_with('.')
+    ((attr & 0x2) > 0)
 }
 
 fn should_display(entry: &DirEntry, config: &Config) -> bool {
     let ffi_name = entry.file_name();
 
-    if config.files == Files::Normal && is_hidden(entry) {
-        return false;
+    // For unix, the hidden files are already included in the ignore pattern
+    #[cfg(windows)]
+    {
+        if config.files == Files::Normal && is_hidden(entry) {
+            return false;
+        }
     }
 
-    if config.ignore_patterns.is_match(&ffi_name) {
-        return false;
-    }
-    true
+    !config.ignore_patterns.is_match(&ffi_name)
 }
 
 fn enter_directory(dir: &PathData, config: &Config) {
