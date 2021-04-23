@@ -1095,13 +1095,10 @@ fn test_cp_reflink_always() {
 #[cfg(target_os = "linux")]
 fn test_cp_reflink_auto() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let result = ucmd
-        .arg("--reflink=auto")
+    ucmd.arg("--reflink=auto")
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_EXISTING_FILE)
-        .run();
-
-    assert!(result.success);
+        .succeeds();
 
     // Check the content of the destination file
     assert_eq!(at.read(TEST_EXISTING_FILE), "Hello, World!\n");
@@ -1111,13 +1108,10 @@ fn test_cp_reflink_auto() {
 #[cfg(target_os = "linux")]
 fn test_cp_reflink_never() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let result = ucmd
-        .arg("--reflink=never")
+    ucmd.arg("--reflink=never")
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_EXISTING_FILE)
-        .run();
-
-    assert!(result.success);
+        .succeeds();
 
     // Check the content of the destination file
     assert_eq!(at.read(TEST_EXISTING_FILE), "Hello, World!\n");
@@ -1131,8 +1125,6 @@ fn test_cp_reflink_bad() {
         .arg("--reflink=bad")
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_EXISTING_FILE)
-        .run();
-
-    assert!(!result.success);
-    assert!(result.stderr.contains("invalid argument"));
+        .fails()
+        .stderr_contains("invalid argument");
 }
