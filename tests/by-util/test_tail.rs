@@ -346,9 +346,5 @@ fn test_negative_indexing() {
 
 #[test]
 fn test_sleep_interval() {
-    new_ucmd!()
-        .arg("-s")
-        .arg("10")
-        .arg(FOOBAR_TXT)
-        .succeeds();
+    new_ucmd!().arg("-s").arg("10").arg(FOOBAR_TXT).succeeds();
 }

@@ -397,10 +397,10 @@ fn test_dev_full_show_all() {
 #[cfg(unix)]
 fn test_domain_socket() {
     use std::io::prelude::*;
+    use std::sync::{Arc, Barrier};
     use std::thread;
     use tempdir::TempDir;
     use unix_socket::UnixListener;
-    use std::sync::{Barrier, Arc};
 
     let dir = TempDir::new("unix_socket").expect("failed to create dir");
     let socket_path = dir.path().join("sock");
