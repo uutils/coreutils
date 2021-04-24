@@ -221,6 +221,7 @@ dependencies = [
  "lazy_static",
  "libc",
  "nix 0.20.0",
+ "pretty_assertions",
  "rand 0.7.3",
  "regex",
  "sha1",
@@ -527,6 +528,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ctor"
+version = "0.1.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5e98e2ad1a782e33928b96fc3948e7c355e5af34ba4de7670fe8bac2a3b2006d"
+dependencies = [
+ "quote 1.0.9",
+ "syn",
+]
+
+[[package]]
 name = "custom_derive"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -537,6 +548,12 @@ name = "data-encoding"
 version = "2.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f4f47ca1860a761136924ddd2422ba77b2ea54fe8cc75b9040804a0d9d32ad97"
+
+[[package]]
+name = "diff"
+version = "0.1.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e25ea47919b1560c4e3b7fe0aaab9becf5b84a10325ddf7db0f0ba5e1026499"
 
 [[package]]
 name = "digest"
@@ -950,6 +967,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ab1bc2a289d34bd04a330323ac98a1b4bc82c9d9fcb1e66b63caa84da26b575"
 
 [[package]]
+name = "output_vt100"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "53cdc5b785b7a58c5aad8216b3dfa114df64b0b06ae6e1501cef91df2fbdf8f9"
+dependencies = [
+ "winapi 0.3.9",
+]
+
+[[package]]
 name = "paste"
 version = "0.1.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1017,6 +1043,18 @@ name = "ppv-lite86"
 version = "0.2.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac74c624d6b2d21f425f752262f42188365d7b8ff1aff74c82e45136510a4857"
+
+[[package]]
+name = "pretty_assertions"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1cab0e7c02cf376875e9335e0ba1da535775beb5450d21e1dffca068818ed98b"
+dependencies = [
+ "ansi_term 0.12.1",
+ "ctor",
+ "diff",
+ "output_vt100",
+]
 
 [[package]]
 name = "proc-macro-hack"
