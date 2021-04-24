@@ -92,10 +92,8 @@ pub mod options {
         pub static C: &str = "quote-name";
     }
     pub static QUOTING_STYLE: &str = "quoting-style";
-
     pub mod indicator_style {
-        pub static NONE: &str = "none";
-        pub static SLASH: &str = "slash";
+        pub static SLASH: &str = "p";
         pub static FILE_TYPE: &str = "file-type";
         pub static CLASSIFY: &str = "classify";
     }
@@ -114,9 +112,6 @@ pub mod options {
     pub static TIME: &str = "time";
     pub static IGNORE_BACKUPS: &str = "ignore-backups";
     pub static DIRECTORY: &str = "directory";
-    pub static CLASSIFY: &str = "classify";
-    pub static FILE_TYPE: &str = "file-type";
-    pub static SLASH: &str = "p";
     pub static INODE: &str = "inode";
     pub static REVERSE: &str = "reverse";
     pub static RECURSIVE: &str = "recursive";
@@ -431,19 +426,11 @@ impl Config {
                 "slash" => IndicatorStyle::Slash,
                 &_ => IndicatorStyle::None,
             }
-        } else if options.is_present(options::indicator_style::NONE) {
-            IndicatorStyle::None
-        } else if options.is_present(options::indicator_style::CLASSIFY)
-            || options.is_present(options::CLASSIFY)
-        {
+        } else if options.is_present(options::indicator_style::CLASSIFY) {
             IndicatorStyle::Classify
-        } else if options.is_present(options::indicator_style::SLASH)
-            || options.is_present(options::SLASH)
-        {
+        } else if options.is_present(options::indicator_style::SLASH) {
             IndicatorStyle::Slash
-        } else if options.is_present(options::indicator_style::FILE_TYPE)
-            || options.is_present(options::FILE_TYPE)
-        {
+        } else if options.is_present(options::indicator_style::FILE_TYPE) {
             IndicatorStyle::FileType
         } else {
             IndicatorStyle::None
@@ -969,45 +956,45 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .takes_value(true)
                 .possible_values(&["none", "slash", "file-type", "classify"])
                 .overrides_with_all(&[
-                    options::FILE_TYPE,
-                    options::SLASH,
-                    options::CLASSIFY,
+                    options::indicator_style::FILE_TYPE,
+                    options::indicator_style::SLASH,
+                    options::indicator_style::CLASSIFY,
                     options::INDICATOR_STYLE,
                 ]))
                 .arg(
-            Arg::with_name(options::CLASSIFY)
+            Arg::with_name(options::indicator_style::CLASSIFY)
                 .short("F")
-                .long(options::CLASSIFY)
+                .long(options::indicator_style::CLASSIFY)
                 .help("Append a character to each file name indicating the file type. Also, for \
                        regular files that are executable, append '*'. The file type indicators are \
                        '/' for directories, '@' for symbolic links, '|' for FIFOs, '=' for sockets, \
                        '>' for doors, and nothing for regular files.")
                 .overrides_with_all(&[
-                    options::FILE_TYPE,
-                    options::SLASH,
-                    options::CLASSIFY,
+                    options::indicator_style::FILE_TYPE,
+                    options::indicator_style::SLASH,
+                    options::indicator_style::CLASSIFY,
                     options::INDICATOR_STYLE,
                 ])
         )
         .arg(
-            Arg::with_name(options::FILE_TYPE)
-                .long(options::FILE_TYPE)
+            Arg::with_name(options::indicator_style::FILE_TYPE)
+                .long(options::indicator_style::FILE_TYPE)
                 .help("Same as --classify, but do not append '*'")
                 .overrides_with_all(&[
-                    options::FILE_TYPE,
-                    options::SLASH,
-                    options::CLASSIFY,
+                    options::indicator_style::FILE_TYPE,
+                    options::indicator_style::SLASH,
+                    options::indicator_style::CLASSIFY,
                     options::INDICATOR_STYLE,
                 ]))
         .arg(
-            Arg::with_name(options::SLASH)
-                .short(options::SLASH)
+            Arg::with_name(options::indicator_style::SLASH)
+                .short(options::indicator_style::SLASH)
                 .help("Append / indicator to directories."
                 )
                 .overrides_with_all(&[
-                    options::FILE_TYPE,
-                    options::SLASH,
-                    options::CLASSIFY,
+                    options::indicator_style::FILE_TYPE,
+                    options::indicator_style::SLASH,
+                    options::indicator_style::CLASSIFY,
                     options::INDICATOR_STYLE,
                 ]))
 
@@ -1409,14 +1396,10 @@ fn cached_uid2usr(uid: u32) -> String {
     }
 
     let mut uid_cache = UID_CACHE.lock().unwrap();
-    match uid_cache.get(&uid) {
-        Some(usr) => usr.clone(),
-        None => {
-            let usr = entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string());
-            uid_cache.insert(uid, usr.clone());
-            usr
-        }
-    }
+    uid_cache
+        .entry(uid)
+        .or_insert_with(|| entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()))
+        .clone()
 }
 
 #[cfg(unix)]
@@ -1435,14 +1418,10 @@ fn cached_gid2grp(gid: u32) -> String {
     }
 
     let mut gid_cache = GID_CACHE.lock().unwrap();
-    match gid_cache.get(&gid) {
-        Some(grp) => grp.clone(),
-        None => {
-            let grp = entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string());
-            gid_cache.insert(gid, grp.clone());
-            grp
-        }
-    }
+    gid_cache
+        .entry(gid)
+        .or_insert_with(|| entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()))
+        .clone()
 }
 
 #[cfg(unix)]
@@ -1460,7 +1439,6 @@ fn display_uname(_metadata: &Metadata, _config: &Config) -> String {
 }
 
 #[cfg(not(unix))]
-#[allow(unused_variables)]
 fn display_group(_metadata: &Metadata, _config: &Config) -> String {
     "somegroup".to_string()
 }
@@ -1535,13 +1513,13 @@ fn display_file_size(metadata: &Metadata, config: &Config) -> String {
     }
 }
 
-fn display_file_type(file_type: FileType) -> String {
+fn display_file_type(file_type: FileType) -> char {
     if file_type.is_dir() {
-        "d".to_string()
+        'd'
     } else if file_type.is_symlink() {
-        "l".to_string()
+        'l'
     } else {
-        "-".to_string()
+        '-'
     }
 }
 
