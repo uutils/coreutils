@@ -79,3 +79,63 @@ fn test_failed_incorrect_arg() {
     let (_at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-s", "+5A", TFILE1]).fails();
 }
+
+#[test]
+fn test_at_most_shrinks() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut file = at.make_file(TFILE2);
+    file.write_all(b"1234567890").unwrap();
+    ucmd.args(&["--size", "<4", TFILE2]).succeeds();
+    file.seek(SeekFrom::End(0)).unwrap();
+    assert!(file.seek(SeekFrom::Current(0)).unwrap() == 4);
+}
+
+#[test]
+fn test_at_most_no_change() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut file = at.make_file(TFILE2);
+    file.write_all(b"1234567890").unwrap();
+    ucmd.args(&["--size", "<40", TFILE2]).succeeds();
+    file.seek(SeekFrom::End(0)).unwrap();
+    assert!(file.seek(SeekFrom::Current(0)).unwrap() == 10);
+}
+
+#[test]
+fn test_at_least_grows() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut file = at.make_file(TFILE2);
+    file.write_all(b"1234567890").unwrap();
+    ucmd.args(&["--size", ">15", TFILE2]).succeeds();
+    file.seek(SeekFrom::End(0)).unwrap();
+    assert!(file.seek(SeekFrom::Current(0)).unwrap() == 15);
+}
+
+#[test]
+fn test_at_least_no_change() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut file = at.make_file(TFILE2);
+    file.write_all(b"1234567890").unwrap();
+    ucmd.args(&["--size", ">4", TFILE2]).succeeds();
+    file.seek(SeekFrom::End(0)).unwrap();
+    assert!(file.seek(SeekFrom::Current(0)).unwrap() == 10);
+}
+
+#[test]
+fn test_round_down() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut file = at.make_file(TFILE2);
+    file.write_all(b"1234567890").unwrap();
+    ucmd.args(&["--size", "/4", TFILE2]).succeeds();
+    file.seek(SeekFrom::End(0)).unwrap();
+    assert!(file.seek(SeekFrom::Current(0)).unwrap() == 8);
+}
+
+#[test]
+fn test_round_up() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut file = at.make_file(TFILE2);
+    file.write_all(b"1234567890").unwrap();
+    ucmd.args(&["--size", "*4", TFILE2]).succeeds();
+    file.seek(SeekFrom::End(0)).unwrap();
+    assert!(file.seek(SeekFrom::Current(0)).unwrap() == 12);
+}
