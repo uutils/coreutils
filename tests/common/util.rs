@@ -2,6 +2,7 @@
 
 #[cfg(not(windows))]
 use libc;
+use pretty_assertions::assert_eq;
 use std::env;
 #[cfg(not(windows))]
 use std::ffi::CString;
@@ -221,7 +222,7 @@ impl CmdResult {
     /// like stdout_is(...), but expects the contents of the file at the provided relative path
     pub fn stdout_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &CmdResult {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
-        self.stdout_is_bytes(contents)
+        self.stdout_is(String::from_utf8(contents).unwrap())
     }
 
     /// asserts that the command resulted in stderr stream output that equals the
@@ -245,7 +246,7 @@ impl CmdResult {
     /// Like stdout_is_fixture, but for stderr
     pub fn stderr_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &CmdResult {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
-        self.stderr_is_bytes(contents)
+        self.stderr_is(String::from_utf8(contents).unwrap())
     }
 
     /// asserts that
@@ -619,7 +620,7 @@ impl TestScenario {
             },
             util_name: String::from(util_name),
             fixtures: AtPath::new(tmpd.as_ref().path()),
-            tmpd: tmpd,
+            tmpd,
         };
         let mut fixture_path_builder = env::current_dir().unwrap();
         fixture_path_builder.push(TESTS_DIR);
