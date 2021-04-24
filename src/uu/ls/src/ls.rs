@@ -1606,7 +1606,6 @@ fn display_file_name(path: &PathData, strip: Option<&Path>, config: &Config) -> 
 
     if config.format == Format::Long && path.file_type()?.is_symlink() {
         if let Ok(target) = path.p_buf.read_link() {
-            // We don't bother updating width here because it's not used for long listings
             name.push_str(" -> ");
             name.push_str(&target.to_string_lossy());
         }
