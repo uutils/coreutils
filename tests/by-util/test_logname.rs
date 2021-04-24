@@ -9,7 +9,7 @@ fn test_normal() {
     for (key, value) in env::vars() {
         println!("{}: {}", key, value);
     }
-    if (is_ci() || is_wsl()) && result.stderr_str().contains("error: no login name") {
+    if (is_ci() || uucore::os::is_wsl_1()) && result.stderr_str().contains("error: no login name") {
         // ToDO: investigate WSL failure
         // In the CI, some server are failing to return logname.
         // As seems to be a configuration issue, ignoring it

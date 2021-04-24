@@ -104,7 +104,7 @@ fn test_reference() {
     // skip for root or MS-WSL
     // * MS-WSL is bugged (as of 2019-12-25), allowing non-root accounts su-level privileges for `chgrp`
     // * for MS-WSL, succeeds and stdout == 'group of /etc retained as root'
-    if !(get_effective_gid() == 0 || is_wsl()) {
+    if !(get_effective_gid() == 0 || uucore::os::is_wsl_1()) {
         new_ucmd!()
             .arg("-v")
             .arg("--reference=/etc/passwd")

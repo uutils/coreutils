@@ -128,7 +128,7 @@ fn test_date_set_invalid() {
 #[test]
 #[cfg(all(unix, not(target_os = "macos")))]
 fn test_date_set_permissions_error() {
-    if !(get_effective_uid() == 0 || is_wsl()) {
+    if !(get_effective_uid() == 0 || uucore::os::is_wsl_1()) {
         let result = new_ucmd!()
             .arg("--set")
             .arg("2020-03-11 21:45:00+08:00")

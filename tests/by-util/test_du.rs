@@ -56,7 +56,7 @@ fn _du_basics_subdir(s: &str) {
 #[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))]
 fn _du_basics_subdir(s: &str) {
     // MS-WSL linux has altered expected output
-    if !is_wsl() {
+    if !uucore::os::is_wsl_1() {
         assert_eq!(s, "8\tsubdir/deeper\n");
     } else {
         assert_eq!(s, "0\tsubdir/deeper\n");
@@ -103,7 +103,7 @@ fn _du_soft_link(s: &str) {
 #[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))]
 fn _du_soft_link(s: &str) {
     // MS-WSL linux has altered expected output
-    if !is_wsl() {
+    if !uucore::os::is_wsl_1() {
         assert_eq!(s, "16\tsubdir/links\n");
     } else {
         assert_eq!(s, "8\tsubdir/links\n");
@@ -144,7 +144,7 @@ fn _du_hard_link(s: &str) {
 #[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))]
 fn _du_hard_link(s: &str) {
     // MS-WSL linux has altered expected output
-    if !is_wsl() {
+    if !uucore::os::is_wsl_1() {
         assert_eq!(s, "16\tsubdir/links\n");
     } else {
         assert_eq!(s, "8\tsubdir/links\n");
@@ -184,7 +184,7 @@ fn _du_d_flag(s: &str) {
 #[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))]
 fn _du_d_flag(s: &str) {
     // MS-WSL linux has altered expected output
-    if !is_wsl() {
+    if !uucore::os::is_wsl_1() {
         assert_eq!(s, "28\t./subdir\n36\t./\n");
     } else {
         assert_eq!(s, "8\t./subdir\n8\t./\n");
