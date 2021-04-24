@@ -272,16 +272,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 fn parse_spec(spec: &str) -> Result<(Option<u32>, Option<u32>), String> {
-    let args = spec.split(':').collect::<Vec<_>>();
-    let usr_only = args.len() == 1;
-    let grp_only = args.len() == 2 && args[0].is_empty() && !args[1].is_empty();
+    let args = spec.split_terminator(':').collect::<Vec<_>>();
+    let usr_only = args.len() == 1 && !args[0].is_empty();
+    let grp_only = args.len() == 2 && args[0].is_empty();
     let usr_grp = args.len() == 2 && !args[0].is_empty() && !args[1].is_empty();
 
     if usr_only {
         Ok((
             Some(match Passwd::locate(args[0]) {
                 Ok(v) => v.uid(),
-                _ => return Err(format!("invalid user: '{}'", spec)),
+                _ => return Err(format!("invalid user: ‘{}’", spec)),
             }),
             None,
         ))
@@ -290,18 +290,18 @@ fn parse_spec(spec: &str) -> Result<(Option<u32>, Option<u32>), String> {
             None,
             Some(match Group::locate(args[1]) {
                 Ok(v) => v.gid(),
-                _ => return Err(format!("invalid group: '{}'", spec)),
+                _ => return Err(format!("invalid group: ‘{}’", spec)),
             }),
         ))
     } else if usr_grp {
         Ok((
             Some(match Passwd::locate(args[0]) {
                 Ok(v) => v.uid(),
-                _ => return Err(format!("invalid user: '{}'", spec)),
+                _ => return Err(format!("invalid user: ‘{}’", spec)),
             }),
             Some(match Group::locate(args[1]) {
                 Ok(v) => v.gid(),
-                _ => return Err(format!("invalid group: '{}'", spec)),
+                _ => return Err(format!("invalid group: ‘{}’", spec)),
             }),
         ))
     } else {
@@ -391,7 +391,7 @@ impl Chowner {
                 self.verbosity.clone(),
             ) {
                 Ok(n) => {
-                    if n != "" {
+                    if !n.is_empty() {
                         show_info!("{}", n);
                     }
                     0
@@ -446,7 +446,7 @@ impl Chowner {
                 self.verbosity.clone(),
             ) {
                 Ok(n) => {
-                    if n != "" {
+                    if !n.is_empty() {
                         show_info!("{}", n);
                     }
                     0

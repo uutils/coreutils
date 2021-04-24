@@ -51,7 +51,7 @@ fn print_expr_error(expr_error: &str) -> ! {
     crash!(2, "{}", expr_error)
 }
 
-fn evaluate_ast(maybe_ast: Result<Box<syntax_tree::ASTNode>, String>) -> Result<String, String> {
+fn evaluate_ast(maybe_ast: Result<Box<syntax_tree::AstNode>, String>) -> Result<String, String> {
     if maybe_ast.is_err() {
         Err(maybe_ast.err().unwrap())
     } else {

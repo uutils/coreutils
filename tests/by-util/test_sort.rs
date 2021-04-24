@@ -2,28 +2,46 @@ use crate::common::util::*;
 
 fn test_helper(file_name: &str, args: &str) {
     new_ucmd!()
-        .arg(args)
         .arg(format!("{}.txt", file_name))
+        .args(&args.split(' ').collect::<Vec<&str>>())
         .succeeds()
         .stdout_is_fixture(format!("{}.expected", file_name));
+
+    new_ucmd!()
+        .arg(format!("{}.txt", file_name))
+        .arg("--debug")
+        .args(&args.split(' ').collect::<Vec<&str>>())
+        .succeeds()
+        .stdout_is_fixture(format!("{}.expected.debug", file_name));
+}
+
+#[test]
+fn test_months_whitespace() {
+    test_helper("months-whitespace", "-M");
+}
+
+#[test]
+fn test_version_empty_lines() {
+    new_ucmd!()
+        .arg("-V")
+        .arg("version-empty-lines.txt")
+        .succeeds()
+        .stdout_is("\n\n\n\n\n\n\n1.2.3-alpha\n1.2.3-alpha2\n\t\t\t1.12.4\n11.2.3\n");
+}
+
+#[test]
+fn test_human_numeric_whitespace() {
+    test_helper("human-numeric-whitespace", "-h");
 }
 
 #[test]
 fn test_multiple_decimals_general() {
-    new_ucmd!()
-        .arg("-g")
-        .arg("multiple_decimals_general.txt")
-        .succeeds()
-        .stdout_is("\n\n\n\n\n\n\n\nCARAvan\n-2028789030\n-896689\n-8.90880\n-1\n-.05\n000\n00000001\n1\n1.040000000\n1.444\n1.58590\n8.013\n45\n46.89\n576,446.88800000\n576,446.890\n               4567.\n4567.1\n4567.34\n\t\t\t\t\t\t\t\t\t\t4567..457\n\t\t\t\t37800\n\t\t\t\t\t\t45670.89079.098\n\t\t\t\t\t\t45670.89079.1\n4798908.340000000000\n4798908.45\n4798908.8909800\n");
+    test_helper("multiple_decimals_general", "-g")
 }
 
 #[test]
 fn test_multiple_decimals_numeric() {
-    new_ucmd!()
-        .arg("-n")
-        .arg("multiple_decimals_numeric.txt")
-        .succeeds()
-        .stdout_is("-2028789030\n-896689\n-8.90880\n-1\n-.05\n\n\n\n\n\n\n\n\n000\nCARAvan\n00000001\n1\n1.040000000\n1.444\n1.58590\n8.013\n45\n46.89\n               4567.\n4567.1\n4567.34\n\t\t\t\t\t\t\t\t\t\t4567..457\n\t\t\t\t37800\n\t\t\t\t\t\t45670.89079.098\n\t\t\t\t\t\t45670.89079.1\n576,446.88800000\n576,446.890\n4798908.340000000000\n4798908.45\n4798908.8909800\n");
+    test_helper("multiple_decimals_numeric", "-n")
 }
 
 #[test]
@@ -48,9 +66,9 @@ fn test_check_zero_terminated_success() {
 #[test]
 fn test_random_shuffle_len() {
     // check whether output is the same length as the input
-    const FILE: &'static str = "default_unsorted_ints.expected";
+    const FILE: &str = "default_unsorted_ints.expected";
     let (at, _ucmd) = at_and_ucmd!();
-    let result = new_ucmd!().arg("-R").arg(FILE).run().stdout;
+    let result = new_ucmd!().arg("-R").arg(FILE).run().stdout_move_str();
     let expected = at.read(FILE);
 
     assert_ne!(result, expected);
@@ -60,11 +78,11 @@ fn test_random_shuffle_len() {
 #[test]
 fn test_random_shuffle_contains_all_lines() {
     // check whether lines of input are all in output
-    const FILE: &'static str = "default_unsorted_ints.expected";
+    const FILE: &str = "default_unsorted_ints.expected";
     let (at, _ucmd) = at_and_ucmd!();
-    let result = new_ucmd!().arg("-R").arg(FILE).run().stdout;
+    let result = new_ucmd!().arg("-R").arg(FILE).run().stdout_move_str();
     let expected = at.read(FILE);
-    let result_sorted = new_ucmd!().pipe_in(result.clone()).run().stdout;
+    let result_sorted = new_ucmd!().pipe_in(result.clone()).run().stdout_move_str();
 
     assert_ne!(result, expected);
     assert_eq!(result_sorted, expected);
@@ -75,11 +93,11 @@ fn test_random_shuffle_two_runs_not_the_same() {
     // check to verify that two random shuffles are not equal; this has the
     // potential to fail in the very unlikely event that the random order is the same
     // as the starting order, or if both random sorts end up having the same order.
-    const FILE: &'static str = "default_unsorted_ints.expected";
+    const FILE: &str = "default_unsorted_ints.expected";
     let (at, _ucmd) = at_and_ucmd!();
-    let result = new_ucmd!().arg("-R").arg(FILE).run().stdout;
+    let result = new_ucmd!().arg("-R").arg(FILE).run().stdout_move_str();
     let expected = at.read(FILE);
-    let unexpected = new_ucmd!().arg("-R").arg(FILE).run().stdout;
+    let unexpected = new_ucmd!().arg("-R").arg(FILE).run().stdout_move_str();
 
     assert_ne!(result, expected);
     assert_ne!(result, unexpected);
@@ -90,11 +108,11 @@ fn test_random_shuffle_contains_two_runs_not_the_same() {
     // check to verify that two random shuffles are not equal; this has the
     // potential to fail in the unlikely event that random order is the same
     // as the starting order, or if both random sorts end up having the same order.
-    const FILE: &'static str = "default_unsorted_ints.expected";
+    const FILE: &str = "default_unsorted_ints.expected";
     let (at, _ucmd) = at_and_ucmd!();
-    let result = new_ucmd!().arg("-R").arg(FILE).run().stdout;
+    let result = new_ucmd!().arg("-R").arg(FILE).run().stdout_move_str();
     let expected = at.read(FILE);
-    let unexpected = new_ucmd!().arg("-R").arg(FILE).run().stdout;
+    let unexpected = new_ucmd!().arg("-R").arg(FILE).run().stdout_move_str();
 
     assert_ne!(result, expected);
     assert_ne!(result, unexpected);
@@ -194,13 +212,7 @@ fn test_non_printing_chars() {
 
 #[test]
 fn test_exponents_positive_general_fixed() {
-    for exponents_positive_general_param in vec!["-g"] {
-        new_ucmd!()
-            .pipe_in("100E6\n\n50e10\n+100000\n\n10000K78\n10E\n\n\n1000EDKLD\n\n\n100E6\n\n50e10\n+100000\n\n")
-            .arg(exponents_positive_general_param)
-            .succeeds()
-            .stdout_only("\n\n\n\n\n\n\n\n10000K78\n1000EDKLD\n10E\n+100000\n+100000\n100E6\n100E6\n50e10\n50e10\n");
-    }
+    test_helper("exponents_general", "-g");
 }
 
 #[test]
@@ -319,62 +331,32 @@ fn test_numeric_unique_ints2() {
 
 #[test]
 fn test_keys_open_ended() {
-    let input = "aa bb cc\ndd aa ff\ngg aa cc\n";
-    new_ucmd!()
-        .args(&["-k", "2.2"])
-        .pipe_in(input)
-        .succeeds()
-        .stdout_only("gg aa cc\ndd aa ff\naa bb cc\n");
+    test_helper("keys_open_ended", "-k 2.3");
 }
 
 #[test]
 fn test_keys_closed_range() {
-    let input = "aa bb cc\ndd aa ff\ngg aa cc\n";
-    new_ucmd!()
-        .args(&["-k", "2.2,2.2"])
-        .pipe_in(input)
-        .succeeds()
-        .stdout_only("dd aa ff\ngg aa cc\naa bb cc\n");
+    test_helper("keys_closed_range", "-k 2.2,2.2");
 }
 
 #[test]
 fn test_keys_multiple_ranges() {
-    let input = "aa bb cc\ndd aa ff\ngg aa cc\n";
-    new_ucmd!()
-        .args(&["-k", "2,2", "-k", "3,3"])
-        .pipe_in(input)
-        .succeeds()
-        .stdout_only("gg aa cc\ndd aa ff\naa bb cc\n");
+    test_helper("keys_multiple_ranges", "-k 2,2 -k 3,3");
 }
 
 #[test]
 fn test_keys_no_field_match() {
-    let input = "aa aa aa aa\naa bb cc\ndd aa ff\n";
-    new_ucmd!()
-        .args(&["-k", "4,4"])
-        .pipe_in(input)
-        .succeeds()
-        .stdout_only("aa bb cc\ndd aa ff\naa aa aa aa\n");
+    test_helper("keys_no_field_match", "-k 4,4");
 }
 
 #[test]
 fn test_keys_no_char_match() {
-    let input = "aaa\nba\nc\n";
-    new_ucmd!()
-        .args(&["-k", "1.2"])
-        .pipe_in(input)
-        .succeeds()
-        .stdout_only("c\nba\naaa\n");
+    test_helper("keys_no_char_match", "-k 1.2");
 }
 
 #[test]
 fn test_keys_custom_separator() {
-    let input = "aaxbbxcc\nddxaaxff\nggxaaxcc\n";
-    new_ucmd!()
-        .args(&["-k", "2.2,2.2", "-t", "x"])
-        .pipe_in(input)
-        .succeeds()
-        .stdout_only("ddxaaxff\nggxaaxcc\naaxbbxcc\n");
+    test_helper("keys_custom_separator", "-k 2.2,2.2 -t x");
 }
 
 #[test]
@@ -399,6 +381,13 @@ fn test_keys_invalid_field_zero() {
         .args(&["-k", "0.1"])
         .fails()
         .stderr_only("sort: error: field index was 0");
+}
+
+#[test]
+fn test_keys_invalid_char_zero() {
+    new_ucmd!().args(&["-k", "1.0"]).fails().stderr_only(
+        "sort: error: invalid character index 0 in `1.0` for the start position of a field",
+    );
 }
 
 #[test]
@@ -565,4 +554,40 @@ fn test_check_silent() {
         .arg("check_fail.txt")
         .fails()
         .stdout_is("");
+}
+
+#[test]
+fn test_dictionary_and_nonprinting_conflicts() {
+    let conflicting_args = ["n", "h", "g", "M"];
+    for restricted_arg in &["d", "i"] {
+        for conflicting_arg in &conflicting_args {
+            new_ucmd!()
+                .arg(&format!("-{}{}", restricted_arg, conflicting_arg))
+                .fails();
+        }
+        for conflicting_arg in &conflicting_args {
+            new_ucmd!()
+                .args(&[
+                    format!("-{}", restricted_arg).as_str(),
+                    "-k",
+                    &format!("1,1{}", conflicting_arg),
+                ])
+                .succeeds();
+        }
+        for conflicting_arg in &conflicting_args {
+            // FIXME: this should ideally fail.
+            new_ucmd!()
+                .args(&["-k", &format!("1{},1{}", restricted_arg, conflicting_arg)])
+                .succeeds();
+        }
+    }
+}
+
+#[test]
+fn test_trailing_separator() {
+    new_ucmd!()
+        .args(&["-t", "x", "-k", "1,1"])
+        .pipe_in("aax\naaa\n")
+        .succeeds()
+        .stdout_is("aax\naaa\n");
 }

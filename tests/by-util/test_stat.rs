@@ -194,7 +194,7 @@ fn test_terse_normal_format() {
     // note: contains birth/creation date which increases test fragility
     // * results may vary due to built-in `stat` limitations as well as linux kernel and rust version capability variations
     let args = ["-t", "/"];
-    let actual = new_ucmd!().args(&args).run().stdout;
+    let actual = new_ucmd!().args(&args).succeeds().stdout_move_str();
     let expect = expected_result(&args);
     println!("actual: {:?}", actual);
     println!("expect: {:?}", expect);
@@ -216,7 +216,7 @@ fn test_terse_normal_format() {
 #[cfg(target_os = "linux")]
 fn test_format_created_time() {
     let args = ["-c", "%w", "/boot"];
-    let actual = new_ucmd!().args(&args).run().stdout;
+    let actual = new_ucmd!().args(&args).succeeds().stdout_move_str();
     let expect = expected_result(&args);
     println!("actual: {:?}", actual);
     println!("expect: {:?}", expect);
@@ -240,7 +240,7 @@ fn test_format_created_time() {
 #[cfg(target_os = "linux")]
 fn test_format_created_seconds() {
     let args = ["-c", "%W", "/boot"];
-    let actual = new_ucmd!().args(&args).run().stdout;
+    let actual = new_ucmd!().args(&args).succeeds().stdout_move_str();
     let expect = expected_result(&args);
     println!("actual: {:?}", actual);
     println!("expect: {:?}", expect);
@@ -337,5 +337,5 @@ fn expected_result(args: &[&str]) -> String {
         .env("LANGUAGE", "C")
         .args(args)
         .run()
-        .stdout
+        .stdout_move_str()
 }

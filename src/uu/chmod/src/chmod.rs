@@ -171,13 +171,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 // of a prefix '-' if it's associated with MODE
 // e.g. "chmod -v -xw -R FILE" -> "chmod -v xw -R FILE"
 pub fn strip_minus_from_mode(args: &mut Vec<String>) -> bool {
-    for i in 0..args.len() {
-        if args[i].starts_with("-") {
-            if let Some(second) = args[i].chars().nth(1) {
+    for arg in args {
+        if arg.starts_with('-') {
+            if let Some(second) = arg.chars().nth(1) {
                 match second {
                     'r' | 'w' | 'x' | 'X' | 's' | 't' | 'u' | 'g' | 'o' | '0'..='7' => {
                         // TODO: use strip_prefix() once minimum rust version reaches 1.45.0
-                        args[i] = args[i][1..args[i].len()].to_string();
+                        *arg = arg[1..arg.len()].to_string();
                         return true;
                     }
                     _ => {}
