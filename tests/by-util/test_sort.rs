@@ -581,3 +581,12 @@ fn test_check_silent() {
         .fails()
         .stdout_is("");
 }
+
+#[test]
+fn test_trailing_separator() {
+    new_ucmd!()
+    .args(&["-t", "x", "-k", "1,1"])
+    .pipe_in("aax\naaa\n")
+    .succeeds()
+    .stdout_is("aax\naaa\n");
+}

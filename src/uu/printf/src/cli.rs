@@ -18,18 +18,15 @@ pub fn err_msg(msg: &str) {
 
 // by default stdout only flushes
 // to console when a newline is passed.
-#[allow(unused_must_use)]
 pub fn flush_char(c: char) {
     print!("{}", c);
-    stdout().flush();
+    let _ = stdout().flush();
 }
-#[allow(unused_must_use)]
 pub fn flush_str(s: &str) {
     print!("{}", s);
-    stdout().flush();
+    let _ = stdout().flush();
 }
-#[allow(unused_must_use)]
 pub fn flush_bytes(bslice: &[u8]) {
-    stdout().write(bslice);
-    stdout().flush();
+    let _ = stdout().write(bslice);
+    let _ = stdout().flush();
 }

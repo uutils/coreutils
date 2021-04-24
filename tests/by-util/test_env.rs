@@ -140,8 +140,11 @@ fn test_unset_variable() {
 
 #[test]
 fn test_fail_null_with_program() {
-    let out = new_ucmd!().arg("--null").arg("cd").fails().stderr;
-    assert!(out.contains("cannot specify --null (-0) with command"));
+    new_ucmd!()
+        .arg("--null")
+        .arg("cd")
+        .fails()
+        .stderr_contains("cannot specify --null (-0) with command");
 }
 
 #[cfg(not(windows))]

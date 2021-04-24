@@ -476,16 +476,9 @@ fn test_mv_overwrite_nonempty_dir() {
     // GNU:     "mv: cannot move ‘a’ to ‘b’: Directory not empty"
 
     // Verbose output for the move should not be shown on failure
-    assert!(
-        ucmd.arg("-vT")
-            .arg(dir_a)
-            .arg(dir_b)
-            .fails()
-            .no_stdout()
-            .stderr
-            .len()
-            > 0
-    );
+    let result = ucmd.arg("-vT").arg(dir_a).arg(dir_b).fails();
+    result.no_stdout();
+    assert!(!result.stderr_str().is_empty());
 
     assert!(at.dir_exists(dir_a));
     assert!(at.dir_exists(dir_b));
@@ -526,15 +519,15 @@ fn test_mv_errors() {
 
     // $ mv -T -t a b
     // mv: cannot combine --target-directory (-t) and --no-target-directory (-T)
-    let result = scene
+    scene
         .ucmd()
         .arg("-T")
         .arg("-t")
         .arg(dir)
         .arg(file_a)
         .arg(file_b)
-        .fails();
-    assert!(result.stderr.contains("cannot be used with"));
+        .fails()
+        .stderr_contains("cannot be used with");
 
     // $ at.touch file && at.mkdir dir
     // $ mv -T file dir
@@ -553,7 +546,13 @@ fn test_mv_errors() {
     // $ at.mkdir dir && at.touch file
     // $ mv dir file
     // err == mv: cannot overwrite non-directory ‘file’ with directory ‘dir’
-    assert!(scene.ucmd().arg(dir).arg(file_a).fails().stderr.len() > 0);
+    assert!(!scene
+        .ucmd()
+        .arg(dir)
+        .arg(file_a)
+        .fails()
+        .stderr_str()
+        .is_empty());
 }
 
 #[test]

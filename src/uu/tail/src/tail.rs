@@ -117,6 +117,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(
             Arg::with_name(options::SLEEP_INT)
                 .short("s")
+                .takes_value(true)
                 .long(options::SLEEP_INT)
                 .help("Number or seconds to sleep between polling the file when running with -f"),
         )

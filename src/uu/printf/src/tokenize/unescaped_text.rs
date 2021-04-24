@@ -242,18 +242,16 @@ impl UnescapedText {
         }
     }
 }
-#[allow(unused_variables)]
 impl token::Tokenizer for UnescapedText {
     fn from_it(
         it: &mut PutBackN<Chars>,
-        args: &mut Peekable<Iter<String>>,
+        _: &mut Peekable<Iter<String>>,
     ) -> Option<Box<dyn token::Token>> {
         UnescapedText::from_it_core(it, false)
     }
 }
-#[allow(unused_variables)]
 impl token::Token for UnescapedText {
-    fn print(&self, pf_args_it: &mut Peekable<Iter<String>>) {
+    fn print(&self, _: &mut Peekable<Iter<String>>) {
         cli::flush_bytes(&self.0[..]);
     }
 }

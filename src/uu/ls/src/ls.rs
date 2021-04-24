@@ -7,27 +7,26 @@
 
 // spell-checker:ignore (ToDO) cpio svgz webm somegroup nlink rmvb xspf
 
+#[macro_use]
+extern crate uucore;
 #[cfg(unix)]
 #[macro_use]
 extern crate lazy_static;
-#[macro_use]
-extern crate uucore;
 
 mod quoting_style;
 mod version_cmp;
 
 use clap::{App, Arg};
 use globset::{self, Glob, GlobSet, GlobSetBuilder};
+use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use once_cell::unsync::OnceCell;
 use quoting_style::{escape_name, QuotingStyle};
 #[cfg(unix)]
 use std::collections::HashMap;
 use std::fs::{self, DirEntry, FileType, Metadata};
-#[cfg(unix)]
-use std::os::unix::fs::FileTypeExt;
 #[cfg(any(unix, target_os = "redox"))]
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf};
@@ -39,9 +38,7 @@ use std::{cmp::Reverse, process::exit};
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use time::{strftime, Timespec};
 #[cfg(unix)]
-use unicode_width::UnicodeWidthStr;
-#[cfg(unix)]
-use uucore::libc::{mode_t, S_ISGID, S_ISUID, S_ISVTX, S_IWOTH, S_IXGRP, S_IXOTH, S_IXUSR};
+use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "
@@ -52,30 +49,6 @@ static ABOUT: &str = "
 
 fn get_usage() -> String {
     format!("{0} [OPTION]... [FILE]...", executable!())
-}
-
-#[cfg(unix)]
-static DEFAULT_COLORS: &str = "rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.Z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.jpg=01;35:*.jpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:";
-
-#[cfg(unix)]
-lazy_static! {
-    static ref LS_COLORS: String =
-        std::env::var("LS_COLORS").unwrap_or_else(|_| DEFAULT_COLORS.to_string());
-    static ref COLOR_MAP: HashMap<&'static str, &'static str> = {
-        let codes = LS_COLORS.split(':');
-        let mut map = HashMap::new();
-        for c in codes {
-            let p: Vec<_> = c.splitn(2, '=').collect();
-            if p.len() == 2 {
-                map.insert(p[0], p[1]);
-            }
-        }
-        map
-    };
-    static ref RESET_CODE: &'static str = COLOR_MAP.get("rs").unwrap_or(&"0");
-    static ref LEFT_CODE: &'static str = COLOR_MAP.get("lc").unwrap_or(&"\x1b[");
-    static ref RIGHT_CODE: &'static str = COLOR_MAP.get("rc").unwrap_or(&"m");
-    static ref END_CODE: &'static str = COLOR_MAP.get("ec").unwrap_or(&"");
 }
 
 pub mod options {
@@ -212,8 +185,7 @@ struct Config {
     time: Time,
     #[cfg(unix)]
     inode: bool,
-    #[cfg(unix)]
-    color: bool,
+    color: Option<LsColors>,
     long: LongFormat,
     width: Option<u16>,
     quoting_style: QuotingStyle,
@@ -337,14 +309,19 @@ impl Config {
             Time::Modification
         };
 
-        #[cfg(unix)]
-        let color = match options.value_of(options::COLOR) {
+        let needs_color = match options.value_of(options::COLOR) {
             None => options.is_present(options::COLOR),
             Some(val) => match val {
                 "" | "always" | "yes" | "force" => true,
                 "auto" | "tty" | "if-tty" => atty::is(atty::Stream::Stdout),
                 /* "never" | "no" | "none" | */ _ => false,
             },
+        };
+
+        let color = if needs_color {
+            Some(LsColors::from_env().unwrap_or_default())
+        } else {
+            None
         };
 
         let size_format = if options.is_present(options::size::HUMAN_READABLE) {
@@ -524,7 +501,6 @@ impl Config {
             size_format,
             directory: options.is_present(options::DIRECTORY),
             time,
-            #[cfg(unix)]
             color,
             #[cfg(unix)]
             inode: options.is_present(options::INODE),
@@ -1551,131 +1527,58 @@ fn get_file_name(name: &Path, strip: Option<&Path>) -> String {
     name.to_string_lossy().into_owned()
 }
 
-#[cfg(not(unix))]
-fn display_file_name(path: &PathData, strip: Option<&Path>, config: &Config) -> Option<Cell> {
-    let mut name = escape_name(get_file_name(&path.p_buf, strip), &config.quoting_style);
+#[cfg(unix)]
+fn file_is_executable(md: &Metadata) -> bool {
+    // Mode always returns u32, but the flags might not be, based on the platform
+    // e.g. linux has u32, mac has u16.
+    // S_IXUSR -> user has execute permission
+    // S_IXGRP -> group has execute persmission
+    // S_IXOTH -> other users have execute permission
+    md.mode() & ((S_IXUSR | S_IXGRP | S_IXOTH) as u32) != 0
+}
+
+#[allow(clippy::clippy::collapsible_else_if)]
+fn classify_file(path: &PathData) -> Option<char> {
     let file_type = path.file_type()?;
 
-    match config.indicator_style {
-        IndicatorStyle::Classify | IndicatorStyle::FileType => {
-            if file_type.is_dir() {
-                name.push('/');
-            }
-            if file_type.is_symlink() {
-                name.push('@');
-            }
-        }
-        IndicatorStyle::Slash => {
-            if file_type.is_dir() {
-                name.push('/');
-            }
-        }
-        _ => (),
-    };
-
-    if config.format == Format::Long && path.file_type()?.is_symlink() {
-        if let Ok(target) = path.p_buf.read_link() {
-            // We don't bother updating width here because it's not used for long listings
-            let target_name = target.to_string_lossy().to_string();
-            name.push_str(" -> ");
-            name.push_str(&target_name);
-        }
-    }
-
-    Some(name.into())
-}
-
-#[cfg(unix)]
-fn color_name(name: String, typ: &str) -> String {
-    let mut typ = typ;
-    if !COLOR_MAP.contains_key(typ) {
-        if typ == "or" {
-            typ = "ln";
-        } else if typ == "mi" {
-            typ = "fi";
-        }
-    };
-    if let Some(code) = COLOR_MAP.get(typ) {
-        format!(
-            "{}{}{}{}{}{}{}{}",
-            *LEFT_CODE, code, *RIGHT_CODE, name, *END_CODE, *LEFT_CODE, *RESET_CODE, *RIGHT_CODE,
-        )
+    if file_type.is_dir() {
+        Some('/')
+    } else if file_type.is_symlink() {
+        Some('@')
     } else {
-        name
-    }
-}
-
-#[cfg(unix)]
-macro_rules! has {
-    ($mode:expr, $perm:expr) => {
-        $mode & ($perm as mode_t) != 0
-    };
-}
-
-#[cfg(unix)]
-#[allow(clippy::cognitive_complexity)]
-fn display_file_name(path: &PathData, strip: Option<&Path>, config: &Config) -> Option<Cell> {
-    let mut name = escape_name(get_file_name(&path.p_buf, strip), &config.quoting_style);
-    if config.format != Format::Long && config.inode {
-        name = get_inode(path.md()?) + " " + &name;
-    }
-    let mut width = UnicodeWidthStr::width(&*name);
-
-    let ext;
-    if config.color || config.indicator_style != IndicatorStyle::None {
-        let metadata = path.md()?;
-        let file_type = path.file_type()?;
-
-        let (code, sym) = if file_type.is_dir() {
-            ("di", Some('/'))
-        } else if file_type.is_symlink() {
-            if path.p_buf.exists() {
-                ("ln", Some('@'))
-            } else {
-                ("or", Some('@'))
-            }
-        } else if file_type.is_socket() {
-            ("so", Some('='))
-        } else if file_type.is_fifo() {
-            ("pi", Some('|'))
-        } else if file_type.is_block_device() {
-            ("bd", None)
-        } else if file_type.is_char_device() {
-            ("cd", None)
-        } else if file_type.is_file() {
-            let mode = metadata.mode() as mode_t;
-            let sym = if has!(mode, S_IXUSR | S_IXGRP | S_IXOTH) {
+        #[cfg(unix)]
+        {
+            if file_type.is_socket() {
+                Some('=')
+            } else if file_type.is_fifo() {
+                Some('|')
+            } else if file_type.is_file() && file_is_executable(path.md()?) {
                 Some('*')
             } else {
                 None
-            };
-            if has!(mode, S_ISUID) {
-                ("su", sym)
-            } else if has!(mode, S_ISGID) {
-                ("sg", sym)
-            } else if has!(mode, S_ISVTX) && has!(mode, S_IWOTH) {
-                ("tw", sym)
-            } else if has!(mode, S_ISVTX) {
-                ("st", sym)
-            } else if has!(mode, S_IWOTH) {
-                ("ow", sym)
-            } else if has!(mode, S_IXUSR | S_IXGRP | S_IXOTH) {
-                ("ex", sym)
-            } else if metadata.nlink() > 1 {
-                ("mh", sym)
-            } else if let Some(e) = path.p_buf.extension() {
-                ext = format!("*.{}", e.to_string_lossy());
-                (ext.as_str(), None)
-            } else {
-                ("fi", None)
             }
-        } else {
-            ("", None)
-        };
-
-        if config.color {
-            name = color_name(name, code);
         }
+        #[cfg(not(unix))]
+        None
+    }
+}
+
+fn display_file_name(path: &PathData, strip: Option<&Path>, config: &Config) -> Option<Cell> {
+    let mut name = escape_name(get_file_name(&path.p_buf, strip), &config.quoting_style);
+
+    #[cfg(unix)]
+    {
+        if config.format != Format::Long && config.inode {
+            name = get_inode(path.md()?) + " " + &name;
+        }
+    }
+
+    if let Some(ls_colors) = &config.color {
+        name = color_name(&ls_colors, &path.p_buf, name, path.md()?);
+    }
+
+    if config.indicator_style != IndicatorStyle::None {
+        let sym = classify_file(path);
 
         let char_opt = match config.indicator_style {
             IndicatorStyle::Classify => sym,
@@ -1698,24 +1601,25 @@ fn display_file_name(path: &PathData, strip: Option<&Path>, config: &Config) -> 
 
         if let Some(c) = char_opt {
             name.push(c);
-            width += 1;
         }
     }
 
     if config.format == Format::Long && path.file_type()?.is_symlink() {
         if let Ok(target) = path.p_buf.read_link() {
             // We don't bother updating width here because it's not used for long listings
-            let code = if target.exists() { "fi" } else { "mi" };
-            let target_name = color_name(target.to_string_lossy().to_string(), code);
             name.push_str(" -> ");
-            name.push_str(&target_name);
+            name.push_str(&target.to_string_lossy());
         }
     }
 
-    Some(Cell {
-        contents: name,
-        width,
-    })
+    Some(name.into())
+}
+
+fn color_name(ls_colors: &LsColors, path: &Path, name: String, md: &Metadata) -> String {
+    match ls_colors.style_for_path_with_metadata(path, Some(&md)) {
+        Some(style) => style.to_ansi_term_style().paint(name).to_string(),
+        None => name,
+    }
 }
 
 #[cfg(not(unix))]
