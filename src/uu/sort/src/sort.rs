@@ -121,7 +121,7 @@ impl Default for GlobalSettings {
     fn default() -> GlobalSettings {
         GlobalSettings {
             mode: SortMode::Default,
-            debug: true,
+            debug: false,
             ignore_blanks: false,
             ignore_case: false,
             dictionary_order: false,
