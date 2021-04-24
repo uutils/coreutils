@@ -965,3 +965,59 @@ fn test_cp_one_file_system() {
         }
     }
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_reflink_always() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let result = ucmd
+        .arg("--reflink=always")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_EXISTING_FILE)
+        .run();
+
+    if result.succeeded() {
+        // Check the content of the destination file
+        assert_eq!(at.read(TEST_EXISTING_FILE), "Hello, World!\n");
+    } else {
+        // Older Linux versions do not support cloning.
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_reflink_auto() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("--reflink=auto")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_EXISTING_FILE)
+        .succeeds();
+
+    // Check the content of the destination file
+    assert_eq!(at.read(TEST_EXISTING_FILE), "Hello, World!\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_reflink_never() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("--reflink=never")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_EXISTING_FILE)
+        .succeeds();
+
+    // Check the content of the destination file
+    assert_eq!(at.read(TEST_EXISTING_FILE), "Hello, World!\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_reflink_bad() {
+    let (_, mut ucmd) = at_and_ucmd!();
+    let _result = ucmd
+        .arg("--reflink=bad")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_EXISTING_FILE)
+        .fails()
+        .stderr_contains("invalid argument");
+}

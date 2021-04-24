@@ -1,6 +1,6 @@
 use std::char::from_digit;
 
-const SPECIAL_SHELL_CHARS: &str = "~`#$&*()\\|[]{};'\"<>?! ";
+const SPECIAL_SHELL_CHARS: &str = "~`#$&*()|[]{};\\'\"<>?! ";
 
 pub(super) enum QuotingStyle {
     Shell {
@@ -27,12 +27,10 @@ pub(super) enum Quotes {
 // This implementation is heavily inspired by the std::char::EscapeDefault implementation
 // in the Rust standard library. This custom implementation is needed because the
 // characters \a, \b, \e, \f & \v are not recognized by Rust.
-#[derive(Clone, Debug)]
 struct EscapedChar {
     state: EscapeState,
 }
 
-#[derive(Clone, Debug)]
 enum EscapeState {
     Done,
     Char(char),
@@ -41,14 +39,12 @@ enum EscapeState {
     Octal(EscapeOctal),
 }
 
-#[derive(Clone, Debug)]
 struct EscapeOctal {
     c: char,
     state: EscapeOctalState,
     idx: usize,
 }
 
-#[derive(Clone, Debug)]
 enum EscapeOctalState {
     Done,
     Backslash,
@@ -135,7 +131,6 @@ impl EscapedChar {
             '\x0B' => Backslash('v'),
             '\x0C' => Backslash('f'),
             '\r' => Backslash('r'),
-            '\\' => Backslash('\\'),
             '\x00'..='\x1F' | '\x7F' => Octal(EscapeOctal::from(c)),
             '\'' => match quotes {
                 Quotes::Single => Backslash('\''),
@@ -511,6 +506,23 @@ mod tests {
             ],
         );
 
+        // A control character followed by a special shell character
+        check_names(
+            "one\n&two",
+            vec![
+                ("one?&two", "literal"),
+                ("one\n&two", "literal-show"),
+                ("one\\n&two", "escape"),
+                ("\"one\\n&two\"", "c"),
+                ("'one?&two'", "shell"),
+                ("'one\n&two'", "shell-show"),
+                ("'one?&two'", "shell-always"),
+                ("'one\n&two'", "shell-always-show"),
+                ("'one'$'\\n''&two'", "shell-escape"),
+                ("'one'$'\\n''&two'", "shell-escape-always"),
+            ],
+        );
+
         // The first 16 control characters. NUL is also included, even though it is of
         // no importance for file names.
         check_names(
@@ -624,6 +636,24 @@ mod tests {
                 ("'one?two'", "shell-always-show"),
                 ("'one?two'", "shell-escape"),
                 ("'one?two'", "shell-escape-always"),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_backslash() {
+        // Escaped in C-style, but not in Shell-style escaping
+        check_names(
+            "one\\two",
+            vec![
+                ("one\\two", "literal"),
+                ("one\\two", "literal-show"),
+                ("one\\\\two", "escape"),
+                ("\"one\\\\two\"", "c"),
+                ("'one\\two'", "shell"),
+                ("\'one\\two\'", "shell-always"),
+                ("'one\\two'", "shell-escape"),
+                ("'one\\two'", "shell-escape-always"),
             ],
         );
     }

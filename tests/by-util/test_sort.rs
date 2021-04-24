@@ -612,8 +612,8 @@ fn test_dictionary_and_nonprinting_conflicts() {
 #[test]
 fn test_trailing_separator() {
     new_ucmd!()
-    .args(&["-t", "x", "-k", "1,1"])
-    .pipe_in("aax\naaa\n")
-    .succeeds()
-    .stdout_is("aax\naaa\n");
+        .args(&["-t", "x", "-k", "1,1"])
+        .pipe_in("aax\naaa\n")
+        .succeeds()
+        .stdout_is("aax\naaa\n");
 }

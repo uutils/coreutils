@@ -79,4 +79,3 @@ fn test_failed_incorrect_arg() {
     let (_at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-s", "+5A", TFILE1]).fails();
 }
-
