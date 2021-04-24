@@ -144,7 +144,9 @@ fn check_option(matches: &ArgMatches, name: &str) -> Result<BufferType, ProgramO
         Some(value) => match value {
             "L" => {
                 if name == options::INPUT {
-                    Err(ProgramOptionsError("line buffering stdin is meaningless".to_string()))
+                    Err(ProgramOptionsError(
+                        "line buffering stdin is meaningless".to_string(),
+                    ))
                 } else {
                     Ok(BufferType::Line)
                 }

@@ -14,9 +14,7 @@ fn test_hostname() {
 #[cfg(not(target_vendor = "apple"))]
 #[test]
 fn test_hostname_ip() {
-    let result = new_ucmd!().arg("-i").run();
-    println!("{:#?}", result);
-    assert!(result.success);
+    let result = new_ucmd!().arg("-i").succeeds();
     assert!(!result.stdout_str().trim().is_empty());
 }
 
@@ -25,6 +23,8 @@ fn test_hostname_full() {
     let ls_short_res = new_ucmd!().arg("-s").succeeds();
     assert!(!ls_short_res.stdout_str().trim().is_empty());
 
-    new_ucmd!().arg("-f").succeeds()
+    new_ucmd!()
+        .arg("-f")
+        .succeeds()
         .stdout_contains(ls_short_res.stdout_str().trim());
 }

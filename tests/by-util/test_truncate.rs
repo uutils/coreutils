@@ -54,6 +54,16 @@ fn test_decrease_file_size() {
 }
 
 #[test]
+fn test_space_in_size() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut file = at.make_file(TFILE2);
+    file.write_all(b"1234567890").unwrap();
+    ucmd.args(&["--size", " 4", TFILE2]).succeeds();
+    file.seek(SeekFrom::End(0)).unwrap();
+    assert!(file.seek(SeekFrom::Current(0)).unwrap() == 4);
+}
+
+#[test]
 fn test_failed() {
     new_ucmd!().fails();
 }
@@ -69,3 +79,4 @@ fn test_failed_incorrect_arg() {
     let (_at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-s", "+5A", TFILE1]).fails();
 }
+

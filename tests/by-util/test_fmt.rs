@@ -29,7 +29,7 @@ fn test_fmt_w_too_big() {
         .run();
     //.stdout_is_fixture("call_graph.expected");
     assert_eq!(
-        result.stderr.trim(),
+        result.stderr_str().trim(),
         "fmt: error: invalid width: '2501': Numerical result out of range"
     );
 }

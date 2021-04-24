@@ -4,14 +4,11 @@ use crate::common::util::*;
 fn test_missing_operand() {
     let result = new_ucmd!().run();
 
-    assert_eq!(
-        true,
-        result
-            .stderr
-            .starts_with("error: The following required arguments were not provided")
-    );
+    assert!(result
+        .stderr_str()
+        .starts_with("error: The following required arguments were not provided"));
 
-    assert_eq!(true, result.stderr.contains("<newroot>"));
+    assert!(result.stderr_str().contains("<newroot>"));
 }
 
 #[test]
@@ -20,14 +17,11 @@ fn test_enter_chroot_fails() {
 
     at.mkdir("jail");
 
-    let result = ucmd.arg("jail").run();
+    let result = ucmd.arg("jail").fails();
 
-    assert_eq!(
-        true,
-        result.stderr.starts_with(
-            "chroot: error: cannot chroot to jail: Operation not permitted (os error 1)"
-        )
-    )
+    assert!(result
+        .stderr_str()
+        .starts_with("chroot: error: cannot chroot to jail: Operation not permitted (os error 1)"));
 }
 
 #[test]
@@ -47,19 +41,18 @@ fn test_invalid_user_spec() {
 
     at.mkdir("a");
 
-    let result = ucmd.arg("a").arg("--userspec=ARABA:").run();
+    let result = ucmd.arg("a").arg("--userspec=ARABA:").fails();
 
-    assert_eq!(
-        true,
-        result.stderr.starts_with("chroot: error: invalid userspec")
-    );
+    assert!(result
+        .stderr_str()
+        .starts_with("chroot: error: invalid userspec"));
 }
 
 #[test]
 fn test_preference_of_userspec() {
     let scene = TestScenario::new(util_name!());
     let result = scene.cmd("whoami").run();
-    if is_ci() && result.stderr.contains("No such user/group") {
+    if is_ci() && result.stderr_str().contains("No such user/group") {
         // In the CI, some server are failing to return whoami.
         // As seems to be a configuration issue, ignoring it
         return;
@@ -73,7 +66,7 @@ fn test_preference_of_userspec() {
     println!("result.stdout = {}", result.stdout_str());
     println!("result.stderr = {}", result.stderr_str());
 
-    if is_ci() && result.stderr.contains("cannot find name for user ID") {
+    if is_ci() && result.stderr_str().contains("cannot find name for user ID") {
         // In the CI, some server are failing to return id.
         // As seems to be a configuration issue, ignoring it
         return;

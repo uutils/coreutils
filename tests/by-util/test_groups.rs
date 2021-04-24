@@ -10,7 +10,7 @@ fn test_groups() {
         // As seems to be a configuration issue, ignoring it
         return;
     }
-    assert!(result.success);
+    result.success();
     assert!(!result.stdout_str().trim().is_empty());
 }
 
@@ -30,16 +30,12 @@ fn test_groups_arg() {
 
     println!("result.stdout = {}", result.stdout_str());
     println!("result.stderr = {}", result.stderr_str());
-    assert!(result.success);
+    result.success();
     assert!(!result.stdout_str().is_empty());
     let username = result.stdout_str().trim();
 
     // call groups with the user name to check that we
     // are getting something
-    let (_, mut ucmd) = at_and_ucmd!();
-    let result = ucmd.arg(username).run();
-    println!("result.stdout = {}", result.stdout_str());
-    println!("result.stderr = {}", result.stderr_str());
-    assert!(result.success);
+    new_ucmd!().arg(username).succeeds();
     assert!(!result.stdout_str().is_empty());
 }

@@ -47,7 +47,7 @@ fn run_single_test(test: &TestCase, at: AtPath, mut ucmd: UCommand) {
         ucmd.arg(arg);
     }
     let r = ucmd.run();
-    if !r.success {
+    if !r.succeeded() {
         println!("{}", r.stderr_str());
         panic!("{:?}: failed", ucmd.raw);
     }
@@ -357,7 +357,8 @@ fn test_chmod_symlink_non_existing_file() {
     at.symlink_file(non_existing, test_symlink);
 
     // this cannot succeed since the symbolic link dangles
-    scene.ucmd()
+    scene
+        .ucmd()
         .arg("755")
         .arg("-v")
         .arg(test_symlink)
@@ -367,7 +368,8 @@ fn test_chmod_symlink_non_existing_file() {
         .stderr_contains(expected_stderr);
 
     // this should be the same than with just '-v' but without stderr
-    scene.ucmd()
+    scene
+        .ucmd()
         .arg("755")
         .arg("-v")
         .arg("-f")
@@ -394,7 +396,8 @@ fn test_chmod_symlink_non_existing_file_recursive() {
     );
 
     // this should succeed
-    scene.ucmd()
+    scene
+        .ucmd()
         .arg("-R")
         .arg("755")
         .arg(test_directory)
@@ -408,7 +411,8 @@ fn test_chmod_symlink_non_existing_file_recursive() {
     );
 
     // '-v': this should succeed without stderr
-    scene.ucmd()
+    scene
+        .ucmd()
         .arg("-R")
         .arg("-v")
         .arg("755")
@@ -418,7 +422,8 @@ fn test_chmod_symlink_non_existing_file_recursive() {
         .no_stderr();
 
     // '-vf': this should be the same than with just '-v'
-    scene.ucmd()
+    scene
+        .ucmd()
         .arg("-R")
         .arg("-v")
         .arg("-f")

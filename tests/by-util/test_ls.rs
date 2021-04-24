@@ -5,6 +5,7 @@ use crate::common::util::*;
 extern crate regex;
 use self::regex::Regex;
 
+use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -101,6 +102,20 @@ fn test_ls_width() {
             .args(&option.split(" ").collect::<Vec<_>>())
             .succeeds()
             .stdout_only("test-width-1\ntest-width-2\ntest-width-3\ntest-width-4\n");
+    }
+
+    scene
+        .ucmd()
+        .arg("-w=bad")
+        .fails()
+        .stderr_contains("invalid line width");
+
+    for option in &["-w 1a", "-w=1a", "--width=1a", "--width 1a"] {
+        scene
+            .ucmd()
+            .args(&option.split(" ").collect::<Vec<_>>())
+            .fails()
+            .stderr_only("ls: error: invalid line width: ‘1a’");
     }
 }
 
@@ -436,6 +451,39 @@ fn test_ls_deref() {
 }
 
 #[test]
+fn test_ls_sort_none() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("test-3");
+    at.touch("test-1");
+    at.touch("test-2");
+
+    // Order is not specified so we just check that it doesn't
+    // give any errors.
+    scene.ucmd().arg("--sort=none").succeeds();
+    scene.ucmd().arg("-U").succeeds();
+}
+
+#[test]
+fn test_ls_sort_name() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("test-3");
+    at.touch("test-1");
+    at.touch("test-2");
+
+    let sep = if cfg!(unix) { "\n" } else { "  " };
+
+    scene
+        .ucmd()
+        .arg("--sort=name")
+        .succeeds()
+        .stdout_is(["test-1", "test-2", "test-3\n"].join(sep));
+}
+
+#[test]
 fn test_ls_order_size() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -463,6 +511,18 @@ fn test_ls_order_size() {
     result.stdout_only("test-1\ntest-2\ntest-3\ntest-4\n");
     #[cfg(windows)]
     result.stdout_only("test-1  test-2  test-3  test-4\n");
+
+    let result = scene.ucmd().arg("--sort=size").succeeds();
+    #[cfg(not(windows))]
+    result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
+    #[cfg(windows)]
+    result.stdout_only("test-4  test-3  test-2  test-1\n");
+
+    let result = scene.ucmd().arg("--sort=size").arg("-r").succeeds();
+    #[cfg(not(windows))]
+    result.stdout_only("test-1\ntest-2\ntest-3\ntest-4\n");
+    #[cfg(windows)]
+    result.stdout_only("test-1  test-2  test-3  test-4\n");
 }
 
 #[test]
@@ -471,13 +531,16 @@ fn test_ls_long_ctime() {
     let at = &scene.fixtures;
 
     at.touch("test-long-ctime-1");
-    let result = scene.ucmd().arg("-lc").succeeds();
 
-    // Should show the time on Unix, but question marks on windows.
-    #[cfg(unix)]
-    result.stdout_contains(":");
-    #[cfg(not(unix))]
-    result.stdout_contains("???");
+    for arg in &["-c", "--time=ctime", "--time=status"] {
+        let result = scene.ucmd().arg("-l").arg(arg).succeeds();
+
+        // Should show the time on Unix, but question marks on windows.
+        #[cfg(unix)]
+        result.stdout_contains(":");
+        #[cfg(not(unix))]
+        result.stdout_contains("???");
+    }
 }
 
 #[test]
@@ -518,7 +581,19 @@ fn test_ls_order_time() {
     #[cfg(windows)]
     result.stdout_only("test-4  test-3  test-2  test-1\n");
 
+    let result = scene.ucmd().arg("--sort=time").succeeds();
+    #[cfg(not(windows))]
+    result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
+    #[cfg(windows)]
+    result.stdout_only("test-4  test-3  test-2  test-1\n");
+
     let result = scene.ucmd().arg("-tr").succeeds();
+    #[cfg(not(windows))]
+    result.stdout_only("test-1\ntest-2\ntest-3\ntest-4\n");
+    #[cfg(windows)]
+    result.stdout_only("test-1  test-2  test-3  test-4\n");
+
+    let result = scene.ucmd().arg("--sort=time").arg("-r").succeeds();
     #[cfg(not(windows))]
     result.stdout_only("test-1\ntest-2\ntest-3\ntest-4\n");
     #[cfg(windows)]
@@ -526,24 +601,26 @@ fn test_ls_order_time() {
 
     // 3 was accessed last in the read
     // So the order should be 2 3 4 1
-    let result = scene.ucmd().arg("-tu").succeeds();
-    let file3_access = at.open("test-3").metadata().unwrap().accessed().unwrap();
-    let file4_access = at.open("test-4").metadata().unwrap().accessed().unwrap();
+    for arg in &["-u", "--time=atime", "--time=access", "--time=use"] {
+        let result = scene.ucmd().arg("-t").arg(arg).succeeds();
+        let file3_access = at.open("test-3").metadata().unwrap().accessed().unwrap();
+        let file4_access = at.open("test-4").metadata().unwrap().accessed().unwrap();
 
-    // It seems to be dependent on the platform whether the access time is actually set
-    if file3_access > file4_access {
-        if cfg!(not(windows)) {
-            result.stdout_only("test-3\ntest-4\ntest-2\ntest-1\n");
+        // It seems to be dependent on the platform whether the access time is actually set
+        if file3_access > file4_access {
+            if cfg!(not(windows)) {
+                result.stdout_only("test-3\ntest-4\ntest-2\ntest-1\n");
+            } else {
+                result.stdout_only("test-3  test-4  test-2  test-1\n");
+            }
         } else {
-            result.stdout_only("test-3  test-4  test-2  test-1\n");
-        }
-    } else {
-        // Access time does not seem to be set on Windows and some other
-        // systems so the order is 4 3 2 1
-        if cfg!(not(windows)) {
-            result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
-        } else {
-            result.stdout_only("test-4  test-3  test-2  test-1\n");
+            // Access time does not seem to be set on Windows and some other
+            // systems so the order is 4 3 2 1
+            if cfg!(not(windows)) {
+                result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
+            } else {
+                result.stdout_only("test-4  test-3  test-2  test-1\n");
+            }
         }
     }
 
@@ -620,20 +697,27 @@ fn test_ls_recursive() {
     result.stdout_contains(&"a\\b:\nb");
 }
 
-#[cfg(unix)]
 #[test]
-fn test_ls_ls_color() {
+fn test_ls_color() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.mkdir("a");
-    at.mkdir("a/nested_dir");
+    let nested_dir = Path::new("a")
+        .join("nested_dir")
+        .to_string_lossy()
+        .to_string();
+    at.mkdir(&nested_dir);
     at.mkdir("z");
-    at.touch(&at.plus_as_string("a/nested_file"));
+    let nested_file = Path::new("a")
+        .join("nested_file")
+        .to_string_lossy()
+        .to_string();
+    at.touch(&nested_file);
     at.touch("test-color");
 
-    let a_with_colors = "\x1b[01;34ma\x1b[0m";
-    let z_with_colors = "\x1b[01;34mz\x1b[0m";
-    let nested_dir_with_colors = "\x1b[01;34mnested_dir\x1b[0m";
+    let a_with_colors = "\x1b[1;34ma\x1b[0m";
+    let z_with_colors = "\x1b[1;34mz\x1b[0m";
+    let nested_dir_with_colors = "\x1b[1;34mnested_dir\x1b[0m";
 
     // Color is disabled by default
     let result = scene.ucmd().succeeds();
@@ -668,14 +752,6 @@ fn test_ls_ls_color() {
         .arg("a")
         .succeeds()
         .stdout_contains(nested_dir_with_colors);
-
-    // Color has no effect
-    scene
-        .ucmd()
-        .arg("--color=always")
-        .arg("a/nested_file")
-        .succeeds()
-        .stdout_contains("a/nested_file\n");
 
     // No output
     scene
@@ -816,7 +892,7 @@ fn test_ls_indicator_style() {
     let options = vec!["classify", "file-type", "slash"];
     for opt in options {
         // Verify that classify and file-type both contain indicators for symlinks.
-        let result = scene
+        scene
             .ucmd()
             .arg(format!("--indicator-style={}", opt))
             .succeeds()
@@ -826,7 +902,7 @@ fn test_ls_indicator_style() {
     // Same test as above, but with the alternate flags.
     let options = vec!["--classify", "--file-type", "-p"];
     for opt in options {
-        let result = scene
+        scene
             .ucmd()
             .arg(format!("{}", opt))
             .succeeds()
@@ -837,7 +913,7 @@ fn test_ls_indicator_style() {
     let options = vec!["classify", "file-type"];
     for opt in options {
         // Verify that classify and file-type both contain indicators for symlinks.
-        let result = scene
+        scene
             .ucmd()
             .arg(format!("--indicator-style={}", opt))
             .succeeds()
@@ -961,7 +1037,7 @@ fn test_ls_hidden_windows() {
 
     let result = scene.ucmd().succeeds();
     assert!(!result.stdout_str().contains(file));
-    let result = scene.ucmd().arg("-a").succeeds().stdout_contains(file);
+    scene.ucmd().arg("-a").succeeds().stdout_contains(file);
 }
 
 #[test]
@@ -1051,9 +1127,11 @@ fn test_ls_quoting_style() {
     at.touch("one");
 
     // It seems that windows doesn't allow \n in filenames.
+    // And it also doesn't like \, of course.
     #[cfg(unix)]
     {
         at.touch("one\ntwo");
+        at.touch("one\\two");
         // Default is shell-escape
         scene
             .ucmd()
@@ -1112,6 +1190,42 @@ fn test_ls_quoting_style() {
                 .arg(arg)
                 .arg("--show-control-chars")
                 .arg("one\ntwo")
+                .succeeds()
+                .stdout_only(format!("{}\n", correct));
+        }
+
+        for (arg, correct) in &[
+            ("--quoting-style=literal", "one\\two"),
+            ("-N", "one\\two"),
+            ("--quoting-style=c", "\"one\\\\two\""),
+            ("-Q", "\"one\\\\two\""),
+            ("--quote-name", "\"one\\\\two\""),
+            ("--quoting-style=escape", "one\\\\two"),
+            ("-b", "one\\\\two"),
+            ("--quoting-style=shell-escape", "'one\\two'"),
+            ("--quoting-style=shell-escape-always", "'one\\two'"),
+            ("--quoting-style=shell", "'one\\two'"),
+            ("--quoting-style=shell-always", "'one\\two'"),
+        ] {
+            scene
+                .ucmd()
+                .arg(arg)
+                .arg("one\\two")
+                .succeeds()
+                .stdout_only(format!("{}\n", correct));
+        }
+
+        // Tests for a character that forces quotation in shell-style escaping
+        // after a character in a dollar expression
+        at.touch("one\n&two");
+        for (arg, correct) in &[
+            ("--quoting-style=shell-escape", "'one'$'\\n''&two'"),
+            ("--quoting-style=shell-escape-always", "'one'$'\\n''&two'"),
+        ] {
+            scene
+                .ucmd()
+                .arg(arg)
+                .arg("one\n&two")
                 .succeeds()
                 .stdout_only(format!("{}\n", correct));
         }
@@ -1313,4 +1427,257 @@ fn test_ls_ignore_hide() {
         .succeeds()
         .stderr_contains(&"Invalid pattern")
         .stdout_is("CONTRIBUTING.md\nREADME.md\nREADMECAREFULLY.md\nsome_other_file\n");
+}
+
+#[test]
+fn test_ls_ignore_backups() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("somefile");
+    at.touch("somebackup~");
+    at.touch(".somehiddenfile");
+    at.touch(".somehiddenbackup~");
+
+    scene.ucmd().arg("-B").succeeds().stdout_is("somefile\n");
+    scene
+        .ucmd()
+        .arg("--ignore-backups")
+        .succeeds()
+        .stdout_is("somefile\n");
+
+    scene
+        .ucmd()
+        .arg("-aB")
+        .succeeds()
+        .stdout_contains(".somehiddenfile")
+        .stdout_contains("somefile")
+        .stdout_does_not_contain("somebackup")
+        .stdout_does_not_contain(".somehiddenbackup~");
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("--ignore-backups")
+        .succeeds()
+        .stdout_contains(".somehiddenfile")
+        .stdout_contains("somefile")
+        .stdout_does_not_contain("somebackup")
+        .stdout_does_not_contain(".somehiddenbackup~");
+}
+
+#[test]
+fn test_ls_directory() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("some_dir");
+    at.symlink_dir("some_dir", "sym_dir");
+
+    at.touch(Path::new("some_dir").join("nested_file").to_str().unwrap());
+
+    scene
+        .ucmd()
+        .arg("some_dir")
+        .succeeds()
+        .stdout_is("nested_file\n");
+
+    scene
+        .ucmd()
+        .arg("--directory")
+        .arg("some_dir")
+        .succeeds()
+        .stdout_is("some_dir\n");
+
+    scene
+        .ucmd()
+        .arg("sym_dir")
+        .succeeds()
+        .stdout_is("nested_file\n");
+}
+
+#[test]
+fn test_ls_deref_command_line() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("some_file");
+    at.symlink_file("some_file", "sym_file");
+
+    scene
+        .ucmd()
+        .arg("sym_file")
+        .succeeds()
+        .stdout_is("sym_file\n");
+
+    // -l changes the default to no dereferencing
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("sym_file")
+        .succeeds()
+        .stdout_contains("sym_file ->");
+
+    scene
+        .ucmd()
+        .arg("--dereference-command-line-symlink-to-dir")
+        .arg("sym_file")
+        .succeeds()
+        .stdout_is("sym_file\n");
+
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--dereference-command-line-symlink-to-dir")
+        .arg("sym_file")
+        .succeeds()
+        .stdout_contains("sym_file ->");
+
+    scene
+        .ucmd()
+        .arg("--dereference-command-line")
+        .arg("sym_file")
+        .succeeds()
+        .stdout_is("sym_file\n");
+
+    let result = scene
+        .ucmd()
+        .arg("-l")
+        .arg("--dereference-command-line")
+        .arg("sym_file")
+        .succeeds();
+
+    assert!(!result.stdout_str().contains("->"));
+
+    let result = scene.ucmd().arg("-lH").arg("sym_file").succeeds();
+
+    assert!(!result.stdout_str().contains("sym_file ->"));
+
+    // If the symlink is not a command line argument, it must be shown normally
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--dereference-command-line")
+        .succeeds()
+        .stdout_contains("sym_file ->");
+}
+
+#[test]
+fn test_ls_deref_command_line_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("some_dir");
+    at.symlink_dir("some_dir", "sym_dir");
+
+    at.touch(Path::new("some_dir").join("nested_file").to_str().unwrap());
+
+    scene
+        .ucmd()
+        .arg("sym_dir")
+        .succeeds()
+        .stdout_contains("nested_file");
+
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("sym_dir")
+        .succeeds()
+        .stdout_contains("sym_dir ->");
+
+    scene
+        .ucmd()
+        .arg("--dereference-command-line-symlink-to-dir")
+        .arg("sym_dir")
+        .succeeds()
+        .stdout_contains("nested_file");
+
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--dereference-command-line-symlink-to-dir")
+        .arg("sym_dir")
+        .succeeds()
+        .stdout_contains("nested_file");
+
+    scene
+        .ucmd()
+        .arg("--dereference-command-line")
+        .arg("sym_dir")
+        .succeeds()
+        .stdout_contains("nested_file");
+
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--dereference-command-line")
+        .arg("sym_dir")
+        .succeeds()
+        .stdout_contains("nested_file");
+
+    scene
+        .ucmd()
+        .arg("-lH")
+        .arg("sym_dir")
+        .succeeds()
+        .stdout_contains("nested_file");
+
+    // If the symlink is not a command line argument, it must be shown normally
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--dereference-command-line")
+        .succeeds()
+        .stdout_contains("sym_dir ->");
+
+    scene
+        .ucmd()
+        .arg("-lH")
+        .succeeds()
+        .stdout_contains("sym_dir ->");
+
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--dereference-command-line-symlink-to-dir")
+        .succeeds()
+        .stdout_contains("sym_dir ->");
+
+    // --directory does not dereference anything by default
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--directory")
+        .arg("sym_dir")
+        .succeeds()
+        .stdout_contains("sym_dir ->");
+
+    let result = scene
+        .ucmd()
+        .arg("-l")
+        .arg("--directory")
+        .arg("--dereference-command-line-symlink-to-dir")
+        .arg("sym_dir")
+        .succeeds();
+
+    assert!(!result.stdout_str().ends_with("sym_dir"));
+
+    // --classify does not dereference anything by default
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("--directory")
+        .arg("sym_dir")
+        .succeeds()
+        .stdout_contains("sym_dir ->");
+
+    let result = scene
+        .ucmd()
+        .arg("-l")
+        .arg("--directory")
+        .arg("--dereference-command-line-symlink-to-dir")
+        .arg("sym_dir")
+        .succeeds();
+
+    assert!(!result.stdout_str().ends_with("sym_dir"));
 }

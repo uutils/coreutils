@@ -15,7 +15,7 @@ use chrono::Local;
 use std::collections::HashSet;
 use std::env;
 use std::fs;
-use std::io::{stderr, Result, Write};
+use std::io::{stderr, ErrorKind, Result, Write};
 use std::iter;
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
@@ -296,7 +296,21 @@ fn du(
                             }
                         }
                     }
-                    Err(error) => show_error!("{}", error),
+                    Err(error) => match error.kind() {
+                        ErrorKind::PermissionDenied => {
+                            let description = format!(
+                                "cannot access '{}'",
+                                entry
+                                    .path()
+                                    .as_os_str()
+                                    .to_str()
+                                    .unwrap_or("<Un-printable path>")
+                            );
+                            let error_message = "Permission denied";
+                            show_error_custom_description!(description, "{}", error_message)
+                        }
+                        _ => show_error!("{}", error),
+                    },
                 },
                 Err(error) => show_error!("{}", error),
             }
@@ -486,7 +500,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     };
 
     let strs = if matches.free.is_empty() {
-        vec!["./".to_owned()]
+        vec!["./".to_owned()] // TODO: gnu `du` doesn't use trailing "/" here
     } else {
         matches.free.clone()
     };
