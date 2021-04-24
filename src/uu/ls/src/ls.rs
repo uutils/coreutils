@@ -1185,7 +1185,7 @@ fn sort_entries(entries: &mut Vec<PathData>, config: &Config) {
 fn is_hidden(file_path: &DirEntry) -> bool {
     let metadata = fs::metadata(file_path.path()).unwrap();
     let attr = metadata.file_attributes();
-    ((attr & 0x2) > 0)
+    (attr & 0x2) > 0
 }
 
 fn should_display(entry: &DirEntry, config: &Config) -> bool {
