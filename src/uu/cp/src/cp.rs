@@ -210,7 +210,6 @@ pub struct Options {
     overwrite: OverwriteMode,
     parents: bool,
     strip_trailing_slashes: bool,
-    reflink: bool,
     reflink_mode: ReflinkMode,
     preserve_attributes: Vec<Attribute>,
     recursive: bool,
@@ -633,12 +632,12 @@ impl Options {
             update: matches.is_present(OPT_UPDATE),
             verbose: matches.is_present(OPT_VERBOSE),
             strip_trailing_slashes: matches.is_present(OPT_STRIP_TRAILING_SLASHES),
-            reflink: matches.is_present(OPT_REFLINK),
             reflink_mode: {
                 if let Some(reflink) = matches.value_of(OPT_REFLINK) {
                     match reflink {
                         "always" => ReflinkMode::Always,
                         "auto" => ReflinkMode::Auto,
+                        "never" => ReflinkMode::Never,
                         value => {
                             return Err(Error::InvalidArgument(format!(
                                 "invalid argument '{}' for \'reflink\'",
@@ -1196,7 +1195,7 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
 ///Copy the file from `source` to `dest` either using the normal `fs::copy` or the
 ///`FICLONE` ioctl if --reflink is specified and the filesystem supports it.
 fn copy_helper(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
-    if options.reflink {
+    if options.reflink_mode != ReflinkMode::Never {
         #[cfg(not(target_os = "linux"))]
         return Err("--reflink is only supported on linux".to_string().into());
 
