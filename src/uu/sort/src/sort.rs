@@ -84,7 +84,7 @@ static THOUSANDS_SEP: char = ',';
 static NEGATIVE: char = '-';
 static POSITIVE: char = '+';
 
-#[derive(Eq, Ord, PartialEq, PartialOrd, Clone)]
+#[derive(Eq, Ord, PartialEq, PartialOrd, Clone, Copy)]
 enum SortMode {
     Numeric,
     HumanNumeric,
@@ -153,7 +153,7 @@ struct KeySettings {
 impl From<&GlobalSettings> for KeySettings {
     fn from(settings: &GlobalSettings) -> Self {
         Self {
-            mode: settings.mode.clone(),
+            mode: settings.mode,
             ignore_blanks: settings.ignore_blanks,
             ignore_case: settings.ignore_case,
             ignore_non_printing: settings.ignore_non_printing,
@@ -405,6 +405,28 @@ impl KeyPosition {
                         crash!(1, "invalid option for key: `{}`", c)
                     }
                 }
+                // All numeric sorts and month sort conflict with dictionary_order and ignore_non_printing.
+                // Instad of reporting an error, let them overwrite each other.
+
+                // FIXME: This should only override if the overridden flag is a global flag.
+                // If conflicting flags are attached to the key, GNU sort crashes and we should probably too.
+                match option {
+                    'h' | 'n' | 'g' | 'M' => {
+                        settings.dictionary_order = false;
+                        settings.ignore_non_printing = false;
+                    }
+                    'd' | 'i' => {
+                        settings.mode = match settings.mode {
+                            SortMode::Numeric
+                            | SortMode::HumanNumeric
+                            | SortMode::GeneralNumeric
+                            | SortMode::Month => SortMode::Default,
+                            // Only SortMode::Default and SortMode::Version work with dictionary_order and ignore_non_printing
+                            m @ SortMode::Default | m @ SortMode::Version => m,
+                        }
+                    }
+                    _ => {}
+                }
             }
             // Strip away option characters from the original value so we can parse it later
             *value_with_options = &value_with_options[..options_start];
@@ -649,7 +671,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(OPT_DICTIONARY_ORDER)
                 .short("d")
                 .long(OPT_DICTIONARY_ORDER)
-                .help("consider only blanks and alphanumeric characters"),
+                .help("consider only blanks and alphanumeric characters")
+                .conflicts_with_all(&[OPT_NUMERIC_SORT, OPT_GENERAL_NUMERIC_SORT, OPT_HUMAN_NUMERIC_SORT, OPT_MONTH_SORT]),
         )
         .arg(
             Arg::with_name(OPT_MERGE)
@@ -677,9 +700,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         )
         .arg(
             Arg::with_name(OPT_IGNORE_NONPRINTING)
-                .short("-i")
+                .short("i")
                 .long(OPT_IGNORE_NONPRINTING)
-                .help("ignore nonprinting characters"),
+                .help("ignore nonprinting characters")
+                .conflicts_with_all(&[OPT_NUMERIC_SORT, OPT_GENERAL_NUMERIC_SORT, OPT_HUMAN_NUMERIC_SORT, OPT_MONTH_SORT]),
         )
         .arg(
             Arg::with_name(OPT_IGNORE_BLANKS)

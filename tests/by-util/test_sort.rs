@@ -63,7 +63,7 @@ fn test_check_zero_terminated_success() {
 #[test]
 fn test_random_shuffle_len() {
     // check whether output is the same length as the input
-    const FILE: &'static str = "default_unsorted_ints.expected";
+    const FILE: &str = "default_unsorted_ints.expected";
     let (at, _ucmd) = at_and_ucmd!();
     let result = new_ucmd!().arg("-R").arg(FILE).run().stdout_move_str();
     let expected = at.read(FILE);
@@ -75,7 +75,7 @@ fn test_random_shuffle_len() {
 #[test]
 fn test_random_shuffle_contains_all_lines() {
     // check whether lines of input are all in output
-    const FILE: &'static str = "default_unsorted_ints.expected";
+    const FILE: &str = "default_unsorted_ints.expected";
     let (at, _ucmd) = at_and_ucmd!();
     let result = new_ucmd!().arg("-R").arg(FILE).run().stdout_move_str();
     let expected = at.read(FILE);
@@ -90,7 +90,7 @@ fn test_random_shuffle_two_runs_not_the_same() {
     // check to verify that two random shuffles are not equal; this has the
     // potential to fail in the very unlikely event that the random order is the same
     // as the starting order, or if both random sorts end up having the same order.
-    const FILE: &'static str = "default_unsorted_ints.expected";
+    const FILE: &str = "default_unsorted_ints.expected";
     let (at, _ucmd) = at_and_ucmd!();
     let result = new_ucmd!().arg("-R").arg(FILE).run().stdout_move_str();
     let expected = at.read(FILE);
@@ -105,7 +105,7 @@ fn test_random_shuffle_contains_two_runs_not_the_same() {
     // check to verify that two random shuffles are not equal; this has the
     // potential to fail in the unlikely event that random order is the same
     // as the starting order, or if both random sorts end up having the same order.
-    const FILE: &'static str = "default_unsorted_ints.expected";
+    const FILE: &str = "default_unsorted_ints.expected";
     let (at, _ucmd) = at_and_ucmd!();
     let result = new_ucmd!().arg("-R").arg(FILE).run().stdout_move_str();
     let expected = at.read(FILE);
@@ -580,6 +580,33 @@ fn test_check_silent() {
         .arg("check_fail.txt")
         .fails()
         .stdout_is("");
+}
+
+#[test]
+fn test_dictionary_and_nonprinting_conflicts() {
+    let conflicting_args = ["n", "h", "g", "M"];
+    for restricted_arg in &["d", "i"] {
+        for conflicting_arg in &conflicting_args {
+            new_ucmd!()
+                .arg(&format!("-{}{}", restricted_arg, conflicting_arg))
+                .fails();
+        }
+        for conflicting_arg in &conflicting_args {
+            new_ucmd!()
+                .args(&[
+                    format!("-{}", restricted_arg).as_str(),
+                    "-k",
+                    &format!("1,1{}", conflicting_arg),
+                ])
+                .succeeds();
+        }
+        for conflicting_arg in &conflicting_args {
+            // FIXME: this should ideally fail.
+            new_ucmd!()
+                .args(&["-k", &format!("1{},1{}", restricted_arg, conflicting_arg)])
+                .succeeds();
+        }
+    }
 }
 
 #[test]
