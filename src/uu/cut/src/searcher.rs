@@ -5,7 +5,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-#[derive(Clone)]
+use memchr::memchr;
+
 pub struct Searcher<'a> {
     haystack: &'a [u8],
     needle: &'a [u8],
@@ -14,6 +15,7 @@ pub struct Searcher<'a> {
 
 impl<'a> Searcher<'a> {
     pub fn new(haystack: &'a [u8], needle: &'a [u8]) -> Searcher<'a> {
+        assert!(!needle.is_empty());
         Searcher {
             haystack,
             needle,
@@ -23,30 +25,81 @@ impl<'a> Searcher<'a> {
 }
 
 impl<'a> Iterator for Searcher<'a> {
-    type Item = (usize, usize);
+    type Item = usize;
 
-    fn next(&mut self) -> Option<(usize, usize)> {
-        if self.needle.len() == 1 {
-            for offset in self.position..self.haystack.len() {
-                if self.haystack[offset] == self.needle[0] {
-                    self.position = offset + 1;
-                    return Some((offset, offset + 1));
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            if let Some(match_idx) = memchr(self.needle[0], self.haystack) {
+                if self.needle.len() == 1
+                    || self.haystack[match_idx + 1..].starts_with(&self.needle[1..])
+                {
+                    let skip = match_idx + self.needle.len();
+                    self.haystack = &self.haystack[skip..];
+                    let match_pos = self.position + match_idx;
+                    self.position += skip;
+                    return Some(match_pos);
+                } else {
+                    let skip = match_idx + 1;
+                    self.haystack = &self.haystack[skip..];
+                    self.position += skip;
+                    // continue
                 }
-            }
-
-            self.position = self.haystack.len();
-            return None;
-        }
-
-        while self.position + self.needle.len() <= self.haystack.len() {
-            if &self.haystack[self.position..self.position + self.needle.len()] == self.needle {
-                let match_pos = self.position;
-                self.position += self.needle.len();
-                return Some((match_pos, match_pos + self.needle.len()));
             } else {
-                self.position += 1;
+                return None;
             }
         }
-        None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    const NEEDLE: &[u8] = "ab".as_bytes();
+
+    #[test]
+    fn test_normal() {
+        let iter = Searcher::new("a.a.a".as_bytes(), "a".as_bytes());
+        let items: Vec<usize> = iter.collect();
+        assert_eq!(vec![0, 2, 4], items);
+    }
+
+    #[test]
+    fn test_empty() {
+        let iter = Searcher::new("".as_bytes(), "a".as_bytes());
+        let items: Vec<usize> = iter.collect();
+        assert_eq!(vec![] as Vec<usize>, items);
+    }
+
+    fn test_multibyte(line: &[u8], expected: Vec<usize>) {
+        let iter = Searcher::new(line, NEEDLE);
+        let items: Vec<usize> = iter.collect();
+        assert_eq!(expected, items);
+    }
+
+    #[test]
+    fn test_multibyte_normal() {
+        test_multibyte("...ab...ab...".as_bytes(), vec![3, 8]);
+    }
+
+    #[test]
+    fn test_multibyte_needle_head_at_end() {
+        test_multibyte("a".as_bytes(), vec![]);
+    }
+
+    #[test]
+    fn test_multibyte_starting_needle() {
+        test_multibyte("ab...ab...".as_bytes(), vec![0, 5]);
+    }
+
+    #[test]
+    fn test_multibyte_trailing_needle() {
+        test_multibyte("...ab...ab".as_bytes(), vec![3, 8]);
+    }
+
+    #[test]
+    fn test_multibyte_first_byte_false_match() {
+        test_multibyte("aA..aCaC..ab..aD".as_bytes(), vec![10]);
     }
 }

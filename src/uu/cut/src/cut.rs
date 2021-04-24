@@ -10,15 +10,16 @@
 #[macro_use]
 extern crate uucore;
 
+use bstr::io::BufReadExt;
 use clap::{App, Arg};
 use std::fs::File;
-use std::io::{stdin, stdout, BufRead, BufReader, Read, Stdout, Write};
+use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 
 use self::searcher::Searcher;
+use uucore::fs::is_stdout_interactive;
 use uucore::ranges::Range;
 
-mod buffer;
 mod searcher;
 
 static NAME: &str = "cut";
@@ -125,6 +126,14 @@ enum Mode {
     Fields(Vec<Range>, FieldOptions),
 }
 
+fn stdout_writer() -> Box<dyn Write> {
+    if is_stdout_interactive() {
+        Box::new(stdout())
+    } else {
+        Box::new(BufWriter::new(stdout())) as Box<dyn Write>
+    }
+}
+
 fn list_to_ranges(list: &str, complement: bool) -> Result<Vec<Range>, String> {
     if complement {
         Range::from_list(list).map(|r| uucore::ranges::complement(&r))
@@ -134,72 +143,35 @@ fn list_to_ranges(list: &str, complement: bool) -> Result<Vec<Range>, String> {
 }
 
 fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> i32 {
-    use self::buffer::Bytes::Select;
-    use self::buffer::Bytes::Selected::*;
-
     let newline_char = if opts.zero_terminated { b'\0' } else { b'\n' };
-    let mut buf_read = buffer::ByteReader::new(reader, newline_char);
-    let mut out = stdout();
+    let buf_in = BufReader::new(reader);
+    let mut out = stdout_writer();
+    let delim = opts
+        .out_delim
+        .as_ref()
+        .map_or("", String::as_str)
+        .as_bytes();
 
-    'newline: loop {
-        let mut cur_pos = 1;
+    let res = buf_in.for_byte_record(newline_char, |line| {
         let mut print_delim = false;
-
-        for &Range { low, high } in ranges.iter() {
-            // skip up to low
-            let orig_pos = cur_pos;
-            loop {
-                match buf_read.select(low - cur_pos, None::<&mut Stdout>) {
-                    NewlineFound => {
-                        crash_if_err!(1, out.write_all(&[newline_char]));
-                        continue 'newline;
-                    }
-                    Complete(len) => {
-                        cur_pos += len;
-                        break;
-                    }
-                    Partial(len) => cur_pos += len,
-                    EndOfFile => {
-                        if orig_pos != cur_pos {
-                            crash_if_err!(1, out.write_all(&[newline_char]));
-                        }
-
-                        break 'newline;
-                    }
-                }
+        for &Range { low, high } in ranges {
+            if low > line.len() {
+                break;
             }
-
-            if let Some(ref delim) = opts.out_delim {
-                if print_delim {
-                    crash_if_err!(1, out.write_all(delim.as_bytes()));
-                }
+            if print_delim {
+                out.write_all(delim)?;
+            } else if opts.out_delim.is_some() {
                 print_delim = true;
             }
-
-            // write out from low to high
-            loop {
-                match buf_read.select(high - cur_pos + 1, Some(&mut out)) {
-                    NewlineFound => continue 'newline,
-                    Partial(len) => cur_pos += len,
-                    Complete(_) => {
-                        cur_pos = high + 1;
-                        break;
-                    }
-                    EndOfFile => {
-                        if cur_pos != low || low == high {
-                            crash_if_err!(1, out.write_all(&[newline_char]));
-                        }
-
-                        break 'newline;
-                    }
-                }
-            }
+            // change `low` from 1-indexed value to 0-index value
+            let low = low - 1;
+            let high = high.min(line.len());
+            out.write_all(&line[low..high])?;
         }
-
-        buf_read.consume_line();
-        crash_if_err!(1, out.write_all(&[newline_char]));
-    }
-
+        out.write_all(&[newline_char])?;
+        Ok(true)
+    });
+    crash_if_err!(1, res);
     0
 }
 
@@ -212,23 +184,11 @@ fn cut_fields_delimiter<R: Read>(
     newline_char: u8,
     out_delim: &str,
 ) -> i32 {
-    let mut buf_in = BufReader::new(reader);
-    let mut out = stdout();
-    let mut buffer = Vec::new();
+    let buf_in = BufReader::new(reader);
+    let mut out = stdout_writer();
+    let input_delim_len = delim.len();
 
-    'newline: loop {
-        buffer.clear();
-        match buf_in.read_until(newline_char, &mut buffer) {
-            Ok(n) if n == 0 => break,
-            Err(e) => {
-                if buffer.is_empty() {
-                    crash!(1, "read error: {}", e);
-                }
-            }
-            _ => (),
-        }
-
-        let line = &buffer[..];
+    let result = buf_in.for_byte_record_with_terminator(newline_char, |line| {
         let mut fields_pos = 1;
         let mut low_idx = 0;
         let mut delim_search = Searcher::new(line, delim.as_bytes()).peekable();
@@ -236,46 +196,46 @@ fn cut_fields_delimiter<R: Read>(
 
         if delim_search.peek().is_none() {
             if !only_delimited {
-                crash_if_err!(1, out.write_all(line));
+                out.write_all(line)?;
                 if line[line.len() - 1] != newline_char {
-                    crash_if_err!(1, out.write_all(&[newline_char]));
+                    out.write_all(&[newline_char])?;
                 }
             }
 
-            continue;
+            return Ok(true);
         }
 
         for &Range { low, high } in ranges.iter() {
             if low - fields_pos > 0 {
                 low_idx = match delim_search.nth(low - fields_pos - 1) {
-                    Some((_, beyond_delim)) => beyond_delim,
+                    Some(index) => index + input_delim_len,
                     None => break,
                 };
             }
 
             for _ in 0..=high - low {
                 if print_delim {
-                    crash_if_err!(1, out.write_all(out_delim.as_bytes()));
+                    out.write_all(out_delim.as_bytes())?;
+                } else {
+                    print_delim = true;
                 }
 
                 match delim_search.next() {
-                    Some((high_idx, next_low_idx)) => {
+                    Some(high_idx) => {
                         let segment = &line[low_idx..high_idx];
 
-                        crash_if_err!(1, out.write_all(segment));
+                        out.write_all(segment)?;
 
-                        print_delim = true;
-
-                        low_idx = next_low_idx;
+                        low_idx = high_idx + input_delim_len;
                         fields_pos = high + 1;
                     }
                     None => {
                         let segment = &line[low_idx..];
 
-                        crash_if_err!(1, out.write_all(segment));
+                        out.write_all(segment)?;
 
                         if line[line.len() - 1] == newline_char {
-                            continue 'newline;
+                            return Ok(true);
                         }
                         break;
                     }
@@ -283,9 +243,10 @@ fn cut_fields_delimiter<R: Read>(
             }
         }
 
-        crash_if_err!(1, out.write_all(&[newline_char]));
-    }
-
+        out.write_all(&[newline_char])?;
+        Ok(true)
+    });
+    crash_if_err!(1, result);
     0
 }
 
@@ -303,23 +264,11 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> i32 
         );
     }
 
-    let mut buf_in = BufReader::new(reader);
-    let mut out = stdout();
-    let mut buffer = Vec::new();
+    let buf_in = BufReader::new(reader);
+    let mut out = stdout_writer();
+    let delim_len = opts.delimiter.len();
 
-    'newline: loop {
-        buffer.clear();
-        match buf_in.read_until(newline_char, &mut buffer) {
-            Ok(n) if n == 0 => break,
-            Err(e) => {
-                if buffer.is_empty() {
-                    crash!(1, "read error: {}", e);
-                }
-            }
-            _ => (),
-        }
-
-        let line = &buffer[..];
+    let result = buf_in.for_byte_record_with_terminator(newline_char, |line| {
         let mut fields_pos = 1;
         let mut low_idx = 0;
         let mut delim_search = Searcher::new(line, opts.delimiter.as_bytes()).peekable();
@@ -327,53 +276,54 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> i32 
 
         if delim_search.peek().is_none() {
             if !opts.only_delimited {
-                crash_if_err!(1, out.write_all(line));
+                out.write_all(line)?;
                 if line[line.len() - 1] != newline_char {
-                    crash_if_err!(1, out.write_all(&[newline_char]));
+                    out.write_all(&[newline_char])?;
                 }
             }
 
-            continue;
+            return Ok(true);
         }
 
-        for &Range { low, high } in ranges.iter() {
+        for &Range { low, high } in ranges {
             if low - fields_pos > 0 {
-                low_idx = match delim_search.nth(low - fields_pos - 1) {
-                    Some((_, beyond_delim)) => beyond_delim,
-                    None => break,
-                };
-            }
-
-            if print_delim && low_idx >= opts.delimiter.as_bytes().len() {
-                low_idx -= opts.delimiter.as_bytes().len();
+                if let Some(delim_pos) = delim_search.nth(low - fields_pos - 1) {
+                    low_idx = if print_delim {
+                        delim_pos
+                    } else {
+                        delim_pos + delim_len
+                    }
+                } else {
+                    break;
+                }
             }
 
             match delim_search.nth(high - low) {
-                Some((high_idx, next_low_idx)) => {
+                Some(high_idx) => {
                     let segment = &line[low_idx..high_idx];
 
-                    crash_if_err!(1, out.write_all(segment));
+                    out.write_all(segment)?;
 
                     print_delim = true;
-                    low_idx = next_low_idx;
+                    low_idx = high_idx;
                     fields_pos = high + 1;
                 }
                 None => {
                     let segment = &line[low_idx..line.len()];
 
-                    crash_if_err!(1, out.write_all(segment));
+                    out.write_all(segment)?;
 
                     if line[line.len() - 1] == newline_char {
-                        continue 'newline;
+                        return Ok(true);
                     }
                     break;
                 }
             }
         }
-
-        crash_if_err!(1, out.write_all(&[newline_char]));
-    }
-
+        out.write_all(&[newline_char])?;
+        Ok(true)
+    });
+    crash_if_err!(1, result);
     0
 }
 
