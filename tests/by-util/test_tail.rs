@@ -343,3 +343,12 @@ fn test_negative_indexing() {
     assert_eq!(positive_lines_index.stdout(), negative_lines_index.stdout());
     assert_eq!(positive_bytes_index.stdout(), negative_bytes_index.stdout());
 }
+
+#[test]
+fn test_sleep_interval() {
+    new_ucmd!()
+        .arg("-s")
+        .arg("10")
+        .arg(FOOBAR_TXT)
+        .succeeds();
+}
