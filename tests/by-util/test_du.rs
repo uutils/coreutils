@@ -220,26 +220,36 @@ fn test_du_time() {
         .arg("date_test")
         .succeeds()
         .stdout_only("0\t2015-05-15 00:00\tdate_test\n");
-
-    // cleanup by removing test file
-    scene.cmd("rm").arg("date_test").succeeds(); // TODO: is this necessary?
 }
 
 #[cfg(not(target_os = "windows"))]
 #[cfg(feature = "chmod")]
 #[test]
 fn test_du_no_permission() {
-    let ts = TestScenario::new(util_name!());
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
 
-    let _chmod = ts.ccmd("chmod").arg("-r").arg(SUB_DIR_LINKS).succeeds();
-    let result = ts.ucmd().arg(SUB_DIR_LINKS).succeeds();
+    at.mkdir_all(SUB_DIR_LINKS);
 
-    ts.ccmd("chmod").arg("+r").arg(SUB_DIR_LINKS).run();
+    scene.ccmd("chmod").arg("-r").arg(SUB_DIR_LINKS).succeeds();
 
-    assert_eq!(
-        result.stderr_str(),
-        "du: cannot read directory ‘subdir/links‘: Permission denied (os error 13)\n"
+    let result = scene.ucmd().arg(SUB_DIR_LINKS).run(); // TODO: replace with ".fails()" once `du` is fixed
+    result.stderr_contains(
+        "du: cannot read directory ‘subdir/links‘: Permission denied (os error 13)",
     );
+
+    #[cfg(target_os = "linux")]
+    {
+        let result_reference = scene.cmd("du").arg(SUB_DIR_LINKS).fails();
+        if result_reference
+            .stderr_str()
+            .contains("du: cannot read directory 'subdir/links': Permission denied")
+        {
+            assert_eq!(result.stdout_str(), result_reference.stdout_str());
+            return;
+        }
+    }
+
     _du_no_permission(result.stdout_str());
 }
 
