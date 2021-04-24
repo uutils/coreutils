@@ -24,16 +24,22 @@ use once_cell::unsync::OnceCell;
 use quoting_style::{escape_name, QuotingStyle};
 #[cfg(unix)]
 use std::collections::HashMap;
-use std::fs::{self, DirEntry, FileType, Metadata};
 #[cfg(any(unix, target_os = "redox"))]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
-use std::path::{Path, PathBuf};
 #[cfg(unix)]
 use std::time::Duration;
-use std::time::{SystemTime, UNIX_EPOCH};
 use std::{cmp::Reverse, process::exit};
+use std::{
+    fs::{self, DirEntry, FileType, Metadata},
+    io::{stdout, BufWriter, Write},
+    path::{Path, PathBuf},
+};
+use std::{
+    io::Stdout,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use time::{strftime, Timespec};
@@ -1092,6 +1098,8 @@ fn list(locs: Vec<String>, config: Config) -> i32 {
     let mut dirs = Vec::<PathData>::new();
     let mut has_failed = false;
 
+    let mut out = BufWriter::new(stdout());
+
     for loc in locs {
         let p = PathBuf::from(&loc);
         if !p.exists() {
@@ -1118,14 +1126,14 @@ fn list(locs: Vec<String>, config: Config) -> i32 {
         }
     }
     sort_entries(&mut files, &config);
-    display_items(&files, None, &config);
+    display_items(&files, None, &config, &mut out);
 
     sort_entries(&mut dirs, &config);
     for dir in dirs {
         if number_of_locs > 1 {
-            println!("\n{}:", dir.p_buf.display());
+            let _ = writeln!(out, "\n{}:", dir.p_buf.display());
         }
-        enter_directory(&dir, &config);
+        enter_directory(&dir, &config, &mut out);
     }
     if has_failed {
         1
@@ -1178,7 +1186,7 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
     !config.ignore_patterns.is_match(&ffi_name)
 }
 
-fn enter_directory(dir: &PathData, config: &Config) {
+fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>) {
     let mut entries: Vec<_> = if config.files == Files::All {
         vec![
             PathData::new(dir.p_buf.join("."), None, config, false),
@@ -1198,7 +1206,7 @@ fn enter_directory(dir: &PathData, config: &Config) {
 
     entries.append(&mut temp);
 
-    display_items(&entries, Some(&dir.p_buf), config);
+    display_items(&entries, Some(&dir.p_buf), config, out);
 
     if config.recursive {
         for e in entries
@@ -1206,8 +1214,8 @@ fn enter_directory(dir: &PathData, config: &Config) {
             .skip(if config.files == Files::All { 2 } else { 0 })
             .filter(|p| p.file_type().map(|ft| ft.is_dir()).unwrap_or(false))
         {
-            println!("\n{}:", e.p_buf.display());
-            enter_directory(&e, config);
+            let _ = writeln!(out, "\n{}:", e.p_buf.display());
+            enter_directory(&e, config, out);
         }
     }
 }
@@ -1235,7 +1243,12 @@ fn pad_left(string: String, count: usize) -> String {
     format!("{:>width$}", string, width = count)
 }
 
-fn display_items(items: &[PathData], strip: Option<&Path>, config: &Config) {
+fn display_items(
+    items: &[PathData],
+    strip: Option<&Path>,
+    config: &Config,
+    out: &mut BufWriter<Stdout>,
+) {
     if config.format == Format::Long {
         let (mut max_links, mut max_size) = (1, 1);
         for item in items {
@@ -1244,7 +1257,7 @@ fn display_items(items: &[PathData], strip: Option<&Path>, config: &Config) {
             max_size = size.max(max_size);
         }
         for item in items {
-            display_item_long(item, strip, max_links, max_size, config);
+            display_item_long(item, strip, max_links, max_size, config, out);
         }
     } else {
         let names = items
@@ -1252,42 +1265,51 @@ fn display_items(items: &[PathData], strip: Option<&Path>, config: &Config) {
             .filter_map(|i| display_file_name(&i, strip, config));
 
         match (&config.format, config.width) {
-            (Format::Columns, Some(width)) => display_grid(names, width, Direction::TopToBottom),
-            (Format::Across, Some(width)) => display_grid(names, width, Direction::LeftToRight),
+            (Format::Columns, Some(width)) => {
+                display_grid(names, width, Direction::TopToBottom, out)
+            }
+            (Format::Across, Some(width)) => {
+                display_grid(names, width, Direction::LeftToRight, out)
+            }
             (Format::Commas, width_opt) => {
                 let term_width = width_opt.unwrap_or(1);
                 let mut current_col = 0;
                 let mut names = names;
                 if let Some(name) = names.next() {
-                    print!("{}", name.contents);
+                    let _ = write!(out, "{}", name.contents);
                     current_col = name.width as u16 + 2;
                 }
                 for name in names {
                     let name_width = name.width as u16;
                     if current_col + name_width + 1 > term_width {
                         current_col = name_width + 2;
-                        print!(",\n{}", name.contents);
+                        let _ = write!(out, ",\n{}", name.contents);
                     } else {
                         current_col += name_width + 2;
-                        print!(", {}", name.contents);
+                        let _ = write!(out, ", {}", name.contents);
                     }
                 }
                 // Current col is never zero again if names have been printed.
                 // So we print a newline.
                 if current_col > 0 {
-                    println!();
+                    let _ = writeln!(out,);
                 }
             }
             _ => {
                 for name in names {
-                    println!("{}", name.contents);
+                    let _ = writeln!(out, "{}", name.contents);
                 }
             }
         }
     }
 }
 
-fn display_grid(names: impl Iterator<Item = Cell>, width: u16, direction: Direction) {
+fn display_grid(
+    names: impl Iterator<Item = Cell>,
+    width: u16,
+    direction: Direction,
+    out: &mut BufWriter<Stdout>,
+) {
     let mut grid = Grid::new(GridOptions {
         filling: Filling::Spaces(2),
         direction,
@@ -1298,9 +1320,13 @@ fn display_grid(names: impl Iterator<Item = Cell>, width: u16, direction: Direct
     }
 
     match grid.fit_into_width(width as usize) {
-        Some(output) => print!("{}", output),
+        Some(output) => {
+            let _ = write!(out, "{}", output);
+        }
         // Width is too small for the grid, so we fit it in one column
-        None => print!("{}", grid.fit_into_columns(1)),
+        None => {
+            let _ = write!(out, "{}", grid.fit_into_columns(1));
+        }
     }
 }
 
@@ -1312,6 +1338,7 @@ fn display_item_long(
     max_links: usize,
     max_size: usize,
     config: &Config,
+    out: &mut BufWriter<Stdout>,
 ) {
     let md = match item.md() {
         None => {
@@ -1325,11 +1352,12 @@ fn display_item_long(
     #[cfg(unix)]
     {
         if config.inode {
-            print!("{} ", get_inode(&md));
+            let _ = write!(out, "{} ", get_inode(&md));
         }
     }
 
-    print!(
+    let _ = write!(
+        out,
         "{}{} {}",
         display_file_type(md.file_type()),
         display_permissions(&md),
@@ -1337,20 +1365,21 @@ fn display_item_long(
     );
 
     if config.long.owner {
-        print!(" {}", display_uname(&md, config));
+        let _ = write!(out, " {}", display_uname(&md, config));
     }
 
     if config.long.group {
-        print!(" {}", display_group(&md, config));
+        let _ = write!(out, " {}", display_group(&md, config));
     }
 
     // Author is only different from owner on GNU/Hurd, so we reuse
     // the owner, since GNU/Hurd is not currently supported by Rust.
     if config.long.author {
-        print!(" {}", display_uname(&md, config));
+        let _ = write!(out, " {}", display_uname(&md, config));
     }
 
-    println!(
+    let _ = writeln!(
+        out,
         " {} {} {}",
         pad_left(display_file_size(&md, config), max_size),
         display_date(&md, config),
