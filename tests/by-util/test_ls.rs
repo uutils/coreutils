@@ -486,8 +486,8 @@ fn test_ls_order_birthtime() {
     let at = &scene.fixtures;
 
     at.touch("test-birthtime-1");
+    std::thread::sleep(std::time::Duration::from_millis(1));
     at.touch("test-birthtime-2");
-    std::thread::sleep(std::time::Duration::from_millis(100));
     at.touch("test-birthtime-1");
 
     let result = scene.ucmd().arg("--time=birth").arg("-t").run();
