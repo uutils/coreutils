@@ -976,7 +976,7 @@ fn test_cp_reflink_always() {
         .arg(TEST_EXISTING_FILE)
         .run();
 
-    if result.success {
+    if result.succeeded() {
         // Check the content of the destination file
         assert_eq!(at.read(TEST_EXISTING_FILE), "Hello, World!\n");
     } else {
@@ -1014,7 +1014,7 @@ fn test_cp_reflink_never() {
 #[cfg(target_os = "linux")]
 fn test_cp_reflink_bad() {
     let (_, mut ucmd) = at_and_ucmd!();
-    let result = ucmd
+    let _result = ucmd
         .arg("--reflink=bad")
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_EXISTING_FILE)
