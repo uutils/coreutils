@@ -74,11 +74,11 @@ pub struct CmdResult {
     code: Option<i32>,
     /// zero-exit from running the Command?
     /// see [`success`]
-    pub success: bool,
+    success: bool,
     /// captured standard output after running the Command
-    pub stdout: String,
+    stdout: String,
     /// captured standard error after running the Command
-    pub stderr: String,
+    stderr: String,
 }
 
 impl CmdResult {
@@ -329,14 +329,14 @@ impl CmdResult {
     }
 
     pub fn stdout_matches(&self, regex: &regex::Regex) -> &CmdResult {
-        if !regex.is_match(self.stdout_str()) {
+        if !regex.is_match(self.stdout_str().trim()) {
             panic!("Stdout does not match regex:\n{}", self.stdout_str())
         }
         self
     }
 
     pub fn stdout_does_not_match(&self, regex: &regex::Regex) -> &CmdResult {
-        if regex.is_match(self.stdout_str()) {
+        if regex.is_match(self.stdout_str().trim()) {
             panic!("Stdout matches regex:\n{}", self.stdout_str())
         }
         self

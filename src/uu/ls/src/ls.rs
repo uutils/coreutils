@@ -7,27 +7,25 @@
 
 // spell-checker:ignore (ToDO) cpio svgz webm somegroup nlink rmvb xspf
 
+#[macro_use]
+extern crate uucore;
 #[cfg(unix)]
 #[macro_use]
 extern crate lazy_static;
-#[macro_use]
-extern crate uucore;
 
 mod quoting_style;
 mod version_cmp;
 
 use clap::{App, Arg};
 use globset::{self, Glob, GlobSet, GlobSetBuilder};
+use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use quoting_style::{escape_name, QuotingStyle};
 #[cfg(unix)]
 use std::collections::HashMap;
-use std::fs;
-use std::fs::{DirEntry, FileType, Metadata};
-#[cfg(unix)]
-use std::os::unix::fs::FileTypeExt;
+use std::fs::{self, DirEntry, FileType, Metadata};
 #[cfg(any(unix, target_os = "redox"))]
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf};
@@ -39,9 +37,7 @@ use std::{cmp::Reverse, process::exit};
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use time::{strftime, Timespec};
 #[cfg(unix)]
-use unicode_width::UnicodeWidthStr;
-#[cfg(unix)]
-use uucore::libc::{mode_t, S_ISGID, S_ISUID, S_ISVTX, S_IWOTH, S_IXGRP, S_IXOTH, S_IXUSR};
+use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "
@@ -52,30 +48,6 @@ static ABOUT: &str = "
 
 fn get_usage() -> String {
     format!("{0} [OPTION]... [FILE]...", executable!())
-}
-
-#[cfg(unix)]
-static DEFAULT_COLORS: &str = "rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32:*.tar=01;31:*.tgz=01;31:*.arc=01;31:*.arj=01;31:*.taz=01;31:*.lha=01;31:*.lz4=01;31:*.lzh=01;31:*.lzma=01;31:*.tlz=01;31:*.txz=01;31:*.tzo=01;31:*.t7z=01;31:*.zip=01;31:*.z=01;31:*.Z=01;31:*.dz=01;31:*.gz=01;31:*.lrz=01;31:*.lz=01;31:*.lzo=01;31:*.xz=01;31:*.bz2=01;31:*.bz=01;31:*.tbz=01;31:*.tbz2=01;31:*.tz=01;31:*.deb=01;31:*.rpm=01;31:*.jar=01;31:*.war=01;31:*.ear=01;31:*.sar=01;31:*.rar=01;31:*.alz=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.cab=01;31:*.jpg=01;35:*.jpeg=01;35:*.gif=01;35:*.bmp=01;35:*.pbm=01;35:*.pgm=01;35:*.ppm=01;35:*.tga=01;35:*.xbm=01;35:*.xpm=01;35:*.tif=01;35:*.tiff=01;35:*.png=01;35:*.svg=01;35:*.svgz=01;35:*.mng=01;35:*.pcx=01;35:*.mov=01;35:*.mpg=01;35:*.mpeg=01;35:*.m2v=01;35:*.mkv=01;35:*.webm=01;35:*.ogm=01;35:*.mp4=01;35:*.m4v=01;35:*.mp4v=01;35:*.vob=01;35:*.qt=01;35:*.nuv=01;35:*.wmv=01;35:*.asf=01;35:*.rm=01;35:*.rmvb=01;35:*.flc=01;35:*.avi=01;35:*.fli=01;35:*.flv=01;35:*.gl=01;35:*.dl=01;35:*.xcf=01;35:*.xwd=01;35:*.yuv=01;35:*.cgm=01;35:*.emf=01;35:*.ogv=01;35:*.ogx=01;35:*.aac=00;36:*.au=00;36:*.flac=00;36:*.m4a=00;36:*.mid=00;36:*.midi=00;36:*.mka=00;36:*.mp3=00;36:*.mpc=00;36:*.ogg=00;36:*.ra=00;36:*.wav=00;36:*.oga=00;36:*.opus=00;36:*.spx=00;36:*.xspf=00;36:";
-
-#[cfg(unix)]
-lazy_static! {
-    static ref LS_COLORS: String =
-        std::env::var("LS_COLORS").unwrap_or_else(|_| DEFAULT_COLORS.to_string());
-    static ref COLOR_MAP: HashMap<&'static str, &'static str> = {
-        let codes = LS_COLORS.split(':');
-        let mut map = HashMap::new();
-        for c in codes {
-            let p: Vec<_> = c.splitn(2, '=').collect();
-            if p.len() == 2 {
-                map.insert(p[0], p[1]);
-            }
-        }
-        map
-    };
-    static ref RESET_CODE: &'static str = COLOR_MAP.get("rs").unwrap_or(&"0");
-    static ref LEFT_CODE: &'static str = COLOR_MAP.get("lc").unwrap_or(&"\x1b[");
-    static ref RIGHT_CODE: &'static str = COLOR_MAP.get("rc").unwrap_or(&"m");
-    static ref END_CODE: &'static str = COLOR_MAP.get("ec").unwrap_or(&"");
 }
 
 pub mod options {
@@ -212,8 +184,7 @@ struct Config {
     time: Time,
     #[cfg(unix)]
     inode: bool,
-    #[cfg(unix)]
-    color: bool,
+    color: Option<LsColors>,
     long: LongFormat,
     width: Option<u16>,
     quoting_style: QuotingStyle,
@@ -337,14 +308,19 @@ impl Config {
             Time::Modification
         };
 
-        #[cfg(unix)]
-        let color = match options.value_of(options::COLOR) {
+        let needs_color = match options.value_of(options::COLOR) {
             None => options.is_present(options::COLOR),
             Some(val) => match val {
                 "" | "always" | "yes" | "force" => true,
                 "auto" | "tty" | "if-tty" => atty::is(atty::Stream::Stdout),
                 /* "never" | "no" | "none" | */ _ => false,
             },
+        };
+
+        let color = if needs_color {
+            Some(LsColors::from_env().unwrap_or_default())
+        } else {
+            None
         };
 
         let size_format = if options.is_present(options::size::HUMAN_READABLE) {
@@ -520,7 +496,6 @@ impl Config {
             size_format,
             directory: options.is_present(options::DIRECTORY),
             time,
-            #[cfg(unix)]
             color,
             #[cfg(unix)]
             inode: options.is_present(options::INODE),
@@ -1038,12 +1013,43 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     list(locs, Config::from(matches))
 }
 
+/// Represents a Path along with it's associated data
+/// Any data that will be reused several times makes sense to be added to this structure
+/// Caching data here helps eliminate redundant syscalls to fetch same information
+struct PathData {
+    // Result<MetaData> got from symlink_metadata() or metadata() based on config
+    md: std::io::Result<Metadata>,
+    // String formed from get_lossy_string() for the path
+    lossy_string: String,
+    // Name of the file - will be empty for . or ..
+    file_name: String,
+    // PathBuf that all above data corresponds to
+    p_buf: PathBuf,
+}
+
+impl PathData {
+    fn new(p_buf: PathBuf, config: &Config, command_line: bool) -> Self {
+        let md = get_metadata(&p_buf, config, command_line);
+        let lossy_string = p_buf.to_string_lossy().into_owned();
+        let name = p_buf
+            .file_name()
+            .map_or(String::new(), |s| s.to_string_lossy().into_owned());
+        Self {
+            md,
+            lossy_string,
+            file_name: name,
+            p_buf,
+        }
+    }
+}
+
 fn list(locs: Vec<String>, config: Config) -> i32 {
     let number_of_locs = locs.len();
 
-    let mut files = Vec::<PathBuf>::new();
-    let mut dirs = Vec::<PathBuf>::new();
+    let mut files = Vec::<PathData>::new();
+    let mut dirs = Vec::<PathData>::new();
     let mut has_failed = false;
+
     for loc in locs {
         let p = PathBuf::from(&loc);
         if !p.exists() {
@@ -1054,36 +1060,28 @@ fn list(locs: Vec<String>, config: Config) -> i32 {
             continue;
         }
 
-        let show_dir_contents = if !config.directory {
-            match config.dereference {
-                Dereference::None => {
-                    if let Ok(md) = p.symlink_metadata() {
-                        md.is_dir()
-                    } else {
-                        show_error!("'{}': {}", &loc, "No such file or directory");
-                        has_failed = true;
-                        continue;
-                    }
-                }
-                _ => p.is_dir(),
-            }
+        let path_data = PathData::new(p, &config, true);
+
+        let show_dir_contents = if let Ok(md) = path_data.md.as_ref() {
+            !config.directory && md.is_dir()
         } else {
+            has_failed = true;
             false
         };
 
         if show_dir_contents {
-            dirs.push(p);
+            dirs.push(path_data);
         } else {
-            files.push(p);
+            files.push(path_data);
         }
     }
     sort_entries(&mut files, &config);
-    display_items(&files, None, &config, true);
+    display_items(&files, None, &config);
 
     sort_entries(&mut dirs, &config);
     for dir in dirs {
         if number_of_locs > 1 {
-            println!("\n{}:", dir.to_string_lossy());
+            println!("\n{}:", dir.lossy_string);
         }
         enter_directory(&dir, &config);
     }
@@ -1094,22 +1092,22 @@ fn list(locs: Vec<String>, config: Config) -> i32 {
     }
 }
 
-fn sort_entries(entries: &mut Vec<PathBuf>, config: &Config) {
+fn sort_entries(entries: &mut Vec<PathData>, config: &Config) {
     match config.sort {
         Sort::Time => entries.sort_by_key(|k| {
             Reverse(
-                get_metadata(k, false)
+                k.md.as_ref()
                     .ok()
                     .and_then(|md| get_system_time(&md, config))
                     .unwrap_or(UNIX_EPOCH),
             )
         }),
         Sort::Size => {
-            entries.sort_by_key(|k| Reverse(get_metadata(k, false).map(|md| md.len()).unwrap_or(0)))
+            entries.sort_by_key(|k| Reverse(k.md.as_ref().map(|md| md.len()).unwrap_or(0)))
         }
         // The default sort in GNU ls is case insensitive
-        Sort::Name => entries.sort_by_key(|k| k.to_string_lossy().to_lowercase()),
-        Sort::Version => entries.sort_by(|a, b| version_cmp::version_cmp(a, b)),
+        Sort::Name => entries.sort_by_key(|k| k.file_name.to_lowercase()),
+        Sort::Version => entries.sort_by(|k, j| version_cmp::version_cmp(&k.p_buf, &j.p_buf)),
         Sort::None => {}
     }
 
@@ -1143,32 +1141,57 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
     true
 }
 
-fn enter_directory(dir: &Path, config: &Config) {
-    let mut entries: Vec<_> = safe_unwrap!(fs::read_dir(dir).and_then(Iterator::collect));
-
-    entries.retain(|e| should_display(e, config));
-
-    let mut entries: Vec<_> = entries.iter().map(DirEntry::path).collect();
-    sort_entries(&mut entries, config);
-
-    if config.files == Files::All {
-        let mut display_entries = entries.clone();
-        display_entries.insert(0, dir.join(".."));
-        display_entries.insert(0, dir.join("."));
-        display_items(&display_entries, Some(dir), config, false);
+fn enter_directory(dir: &PathData, config: &Config) {
+    let mut entries: Vec<_> = if config.files == Files::All {
+        vec![
+            PathData::new(dir.p_buf.join("."), config, false),
+            PathData::new(dir.p_buf.join(".."), config, false),
+        ]
     } else {
-        display_items(&entries, Some(dir), config, false);
-    }
+        vec![]
+    };
+
+    let mut temp: Vec<_> = safe_unwrap!(fs::read_dir(&dir.p_buf))
+        .map(|res| safe_unwrap!(res))
+        .filter(|e| should_display(e, config))
+        .map(|e| PathData::new(DirEntry::path(&e), config, false))
+        .collect();
+
+    sort_entries(&mut temp, config);
+
+    entries.append(&mut temp);
+
+    display_items(&entries, Some(&dir.p_buf), config);
 
     if config.recursive {
-        for e in entries.iter().filter(|p| p.is_dir()) {
-            println!("\n{}:", e.to_string_lossy());
+        for e in entries
+            .iter()
+            .skip(if config.files == Files::All { 2 } else { 0 })
+            .filter(|p| p.md.as_ref().map(|md| md.is_dir()).unwrap_or(false))
+        {
+            println!("\n{}:", e.lossy_string);
             enter_directory(&e, config);
         }
     }
 }
 
-fn get_metadata(entry: &Path, dereference: bool) -> std::io::Result<Metadata> {
+fn get_metadata(entry: &Path, config: &Config, command_line: bool) -> std::io::Result<Metadata> {
+    let dereference = match &config.dereference {
+        Dereference::All => true,
+        Dereference::Args => command_line,
+        Dereference::DirArgs => {
+            if command_line {
+                if let Ok(md) = entry.metadata() {
+                    md.is_dir()
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        }
+        Dereference::None => false,
+    };
     if dereference {
         entry.metadata().or_else(|_| entry.symlink_metadata())
     } else {
@@ -1176,8 +1199,8 @@ fn get_metadata(entry: &Path, dereference: bool) -> std::io::Result<Metadata> {
     }
 }
 
-fn display_dir_entry_size(entry: &Path, config: &Config) -> (usize, usize) {
-    if let Ok(md) = get_metadata(entry, false) {
+fn display_dir_entry_size(entry: &PathData, config: &Config) -> (usize, usize) {
+    if let Ok(md) = entry.md.as_ref() {
         (
             display_symlink_count(&md).len(),
             display_file_size(&md, config).len(),
@@ -1191,7 +1214,7 @@ fn pad_left(string: String, count: usize) -> String {
     format!("{:>width$}", string, width = count)
 }
 
-fn display_items(items: &[PathBuf], strip: Option<&Path>, config: &Config, command_line: bool) {
+fn display_items(items: &[PathData], strip: Option<&Path>, config: &Config) {
     if config.format == Format::Long {
         let (mut max_links, mut max_size) = (1, 1);
         for item in items {
@@ -1200,18 +1223,18 @@ fn display_items(items: &[PathBuf], strip: Option<&Path>, config: &Config, comma
             max_size = size.max(max_size);
         }
         for item in items {
-            display_item_long(item, strip, max_links, max_size, config, command_line);
+            display_item_long(item, strip, max_links, max_size, config);
         }
     } else {
         let names = items.iter().filter_map(|i| {
-            let md = get_metadata(i, false);
+            let md = i.md.as_ref();
             match md {
                 Err(e) => {
-                    let filename = get_file_name(i, strip);
+                    let filename = get_file_name(&i.p_buf, strip);
                     show_error!("'{}': {}", filename, e);
                     None
                 }
-                Ok(md) => Some(display_file_name(&i, strip, &md, config)),
+                Ok(md) => Some(display_file_name(&i.p_buf, strip, &md, config)),
             }
         });
 
@@ -1271,33 +1294,15 @@ fn display_grid(names: impl Iterator<Item = Cell>, width: u16, direction: Direct
 use uucore::fs::display_permissions;
 
 fn display_item_long(
-    item: &Path,
+    item: &PathData,
     strip: Option<&Path>,
     max_links: usize,
     max_size: usize,
     config: &Config,
-    command_line: bool,
 ) {
-    let dereference = match &config.dereference {
-        Dereference::All => true,
-        Dereference::Args => command_line,
-        Dereference::DirArgs => {
-            if command_line {
-                if let Ok(md) = item.metadata() {
-                    md.is_dir()
-                } else {
-                    false
-                }
-            } else {
-                false
-            }
-        }
-        Dereference::None => false,
-    };
-
-    let md = match get_metadata(item, dereference) {
+    let md = match &item.md {
         Err(e) => {
-            let filename = get_file_name(&item, strip);
+            let filename = get_file_name(&item.p_buf, strip);
             show_error!("{}: {}", filename, e);
             return;
         }
@@ -1336,7 +1341,7 @@ fn display_item_long(
         " {} {} {}",
         pad_left(display_file_size(&md, config), max_size),
         display_date(&md, config),
-        display_file_name(&item, strip, &md, config).contents,
+        display_file_name(&item.p_buf, strip, &md, config).contents,
     );
 }
 
@@ -1348,14 +1353,50 @@ fn get_inode(metadata: &Metadata) -> String {
 // Currently getpwuid is `linux` target only. If it's broken out into
 // a posix-compliant attribute this can be updated...
 #[cfg(unix)]
+use std::sync::Mutex;
+#[cfg(unix)]
 use uucore::entries;
+
+#[cfg(unix)]
+fn cached_uid2usr(uid: u32) -> String {
+    lazy_static! {
+        static ref UID_CACHE: Mutex<HashMap<u32, String>> = Mutex::new(HashMap::new());
+    }
+
+    let mut uid_cache = UID_CACHE.lock().unwrap();
+    match uid_cache.get(&uid) {
+        Some(usr) => usr.clone(),
+        None => {
+            let usr = entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string());
+            uid_cache.insert(uid, usr.clone());
+            usr
+        }
+    }
+}
 
 #[cfg(unix)]
 fn display_uname(metadata: &Metadata, config: &Config) -> String {
     if config.long.numeric_uid_gid {
         metadata.uid().to_string()
     } else {
-        entries::uid2usr(metadata.uid()).unwrap_or_else(|_| metadata.uid().to_string())
+        cached_uid2usr(metadata.uid())
+    }
+}
+
+#[cfg(unix)]
+fn cached_gid2grp(gid: u32) -> String {
+    lazy_static! {
+        static ref GID_CACHE: Mutex<HashMap<u32, String>> = Mutex::new(HashMap::new());
+    }
+
+    let mut gid_cache = GID_CACHE.lock().unwrap();
+    match gid_cache.get(&gid) {
+        Some(grp) => grp.clone(),
+        None => {
+            let grp = entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string());
+            gid_cache.insert(gid, grp.clone());
+            grp
+        }
     }
 }
 
@@ -1364,7 +1405,7 @@ fn display_group(metadata: &Metadata, config: &Config) -> String {
     if config.long.numeric_uid_gid {
         metadata.gid().to_string()
     } else {
-        entries::gid2grp(metadata.gid()).unwrap_or_else(|_| metadata.gid().to_string())
+        cached_gid2grp(metadata.gid())
     }
 }
 
@@ -1470,140 +1511,63 @@ fn get_file_name(name: &Path, strip: Option<&Path>) -> String {
     name.to_string_lossy().into_owned()
 }
 
-#[cfg(not(unix))]
-fn display_file_name(
-    path: &Path,
-    strip: Option<&Path>,
-    metadata: &Metadata,
-    config: &Config,
-) -> Cell {
-    let mut name = escape_name(get_file_name(path, strip), &config.quoting_style);
-    let file_type = metadata.file_type();
-
-    match config.indicator_style {
-        IndicatorStyle::Classify | IndicatorStyle::FileType => {
-            if file_type.is_dir() {
-                name.push('/');
-            }
-            if file_type.is_symlink() {
-                name.push('@');
-            }
-        }
-        IndicatorStyle::Slash => {
-            if file_type.is_dir() {
-                name.push('/');
-            }
-        }
-        _ => (),
-    };
-
-    if config.format == Format::Long && metadata.file_type().is_symlink() {
-        if let Ok(target) = path.read_link() {
-            // We don't bother updating width here because it's not used for long listings
-            let target_name = target.to_string_lossy().to_string();
-            name.push_str(" -> ");
-            name.push_str(&target_name);
-        }
-    }
-
-    name.into()
+#[cfg(unix)]
+fn file_is_executable(md: &Metadata) -> bool {
+    // Mode always returns u32, but the flags might not be, based on the platform
+    // e.g. linux has u32, mac has u16.
+    // S_IXUSR -> user has execute permission
+    // S_IXGRP -> group has execute persmission
+    // S_IXOTH -> other users have execute permission
+    md.mode() & ((S_IXUSR | S_IXGRP | S_IXOTH) as u32) != 0
 }
 
-#[cfg(unix)]
-fn color_name(name: String, typ: &str) -> String {
-    let mut typ = typ;
-    if !COLOR_MAP.contains_key(typ) {
-        if typ == "or" {
-            typ = "ln";
-        } else if typ == "mi" {
-            typ = "fi";
-        }
-    };
-    if let Some(code) = COLOR_MAP.get(typ) {
-        format!(
-            "{}{}{}{}{}{}{}{}",
-            *LEFT_CODE, code, *RIGHT_CODE, name, *END_CODE, *LEFT_CODE, *RESET_CODE, *RIGHT_CODE,
-        )
+#[allow(clippy::clippy::collapsible_else_if)]
+fn classify_file(md: &Metadata) -> Option<char> {
+    let file_type = md.file_type();
+
+    if file_type.is_dir() {
+        Some('/')
+    } else if file_type.is_symlink() {
+        Some('@')
     } else {
-        name
-    }
-}
-
-#[cfg(unix)]
-macro_rules! has {
-    ($mode:expr, $perm:expr) => {
-        $mode & ($perm as mode_t) != 0
-    };
-}
-
-#[cfg(unix)]
-#[allow(clippy::cognitive_complexity)]
-fn display_file_name(
-    path: &Path,
-    strip: Option<&Path>,
-    metadata: &Metadata,
-    config: &Config,
-) -> Cell {
-    let mut name = escape_name(get_file_name(path, strip), &config.quoting_style);
-    if config.format != Format::Long && config.inode {
-        name = get_inode(metadata) + " " + &name;
-    }
-    let mut width = UnicodeWidthStr::width(&*name);
-
-    let ext;
-    if config.color || config.indicator_style != IndicatorStyle::None {
-        let file_type = metadata.file_type();
-
-        let (code, sym) = if file_type.is_dir() {
-            ("di", Some('/'))
-        } else if file_type.is_symlink() {
-            if path.exists() {
-                ("ln", Some('@'))
-            } else {
-                ("or", Some('@'))
-            }
-        } else if file_type.is_socket() {
-            ("so", Some('='))
-        } else if file_type.is_fifo() {
-            ("pi", Some('|'))
-        } else if file_type.is_block_device() {
-            ("bd", None)
-        } else if file_type.is_char_device() {
-            ("cd", None)
-        } else if file_type.is_file() {
-            let mode = metadata.mode() as mode_t;
-            let sym = if has!(mode, S_IXUSR | S_IXGRP | S_IXOTH) {
+        #[cfg(unix)]
+        {
+            if file_type.is_socket() {
+                Some('=')
+            } else if file_type.is_fifo() {
+                Some('|')
+            } else if file_type.is_file() && file_is_executable(&md) {
                 Some('*')
             } else {
                 None
-            };
-            if has!(mode, S_ISUID) {
-                ("su", sym)
-            } else if has!(mode, S_ISGID) {
-                ("sg", sym)
-            } else if has!(mode, S_ISVTX) && has!(mode, S_IWOTH) {
-                ("tw", sym)
-            } else if has!(mode, S_ISVTX) {
-                ("st", sym)
-            } else if has!(mode, S_IWOTH) {
-                ("ow", sym)
-            } else if has!(mode, S_IXUSR | S_IXGRP | S_IXOTH) {
-                ("ex", sym)
-            } else if metadata.nlink() > 1 {
-                ("mh", sym)
-            } else if let Some(e) = path.extension() {
-                ext = format!("*.{}", e.to_string_lossy());
-                (ext.as_str(), None)
-            } else {
-                ("fi", None)
             }
-        } else {
-            ("", None)
-        };
-
-        if config.color {
-            name = color_name(name, code);
         }
+        #[cfg(not(unix))]
+        None
+    }
+}
+
+fn display_file_name(
+    path: &Path,
+    strip: Option<&Path>,
+    metadata: &Metadata,
+    config: &Config,
+) -> Cell {
+    let mut name = escape_name(get_file_name(path, strip), &config.quoting_style);
+
+    #[cfg(unix)]
+    {
+        if config.format != Format::Long && config.inode {
+            name = get_inode(metadata) + " " + &name;
+        }
+    }
+
+    if let Some(ls_colors) = &config.color {
+        name = color_name(&ls_colors, path, name, metadata);
+    }
+
+    if config.indicator_style != IndicatorStyle::None {
+        let sym = classify_file(metadata);
 
         let char_opt = match config.indicator_style {
             IndicatorStyle::Classify => sym,
@@ -1626,23 +1590,24 @@ fn display_file_name(
 
         if let Some(c) = char_opt {
             name.push(c);
-            width += 1;
         }
     }
 
     if config.format == Format::Long && metadata.file_type().is_symlink() {
         if let Ok(target) = path.read_link() {
-            // We don't bother updating width here because it's not used for long listings
-            let code = if target.exists() { "fi" } else { "mi" };
-            let target_name = color_name(target.to_string_lossy().to_string(), code);
+            // We don't bother updating width here because it's not used for long
             name.push_str(" -> ");
-            name.push_str(&target_name);
+            name.push_str(&target.to_string_lossy());
         }
     }
 
-    Cell {
-        contents: name,
-        width,
+    name.into()
+}
+
+fn color_name(ls_colors: &LsColors, path: &Path, name: String, md: &Metadata) -> String {
+    match ls_colors.style_for_path_with_metadata(path, Some(&md)) {
+        Some(style) => style.to_ansi_term_style().paint(name).to_string(),
+        None => name,
     }
 }
 

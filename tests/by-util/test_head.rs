@@ -156,14 +156,10 @@ fn test_negative_zero_bytes() {
 }
 #[test]
 fn test_no_such_file_or_directory() {
-    let result = new_ucmd!().arg("no_such_file.toml").run();
-
-    assert_eq!(
-        true,
-        result
-            .stderr
-            .contains("cannot open 'no_such_file.toml' for reading: No such file or directory")
-    )
+    new_ucmd!()
+        .arg("no_such_file.toml")
+        .fails()
+        .stderr_contains("cannot open 'no_such_file.toml' for reading: No such file or directory");
 }
 
 // there was a bug not caught by previous tests

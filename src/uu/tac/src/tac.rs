@@ -91,10 +91,15 @@ fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) -> i32 {
         } else {
             let path = Path::new(filename);
             if path.is_dir() || path.metadata().is_err() {
-                show_error!(
-                    "failed to open '{}' for reading: No such file or directory",
-                    filename
-                );
+                if path.is_dir() {
+                    show_error!("dir: read error: Invalid argument");
+                } else {
+                    show_error!(
+                        "failed to open '{}' for reading: No such file or directory",
+                        filename
+                    );
+                }
+                exit_code = 1;
                 continue;
             }
             match File::open(path) {

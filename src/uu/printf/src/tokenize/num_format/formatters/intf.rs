@@ -11,7 +11,7 @@ use std::i64;
 use std::u64;
 
 pub struct Intf {
-    a: u32,
+    _a: u32,
 }
 
 // see the Intf::analyze() function below
@@ -24,7 +24,7 @@ struct IntAnalysis {
 
 impl Intf {
     pub fn new() -> Intf {
-        Intf { a: 0 }
+        Intf { _a: 0 }
     }
     // take a ref to argument string, and basic information
     // about prefix (offset, radix, sign), and analyze string

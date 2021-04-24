@@ -400,22 +400,29 @@ fn test_domain_socket() {
     use std::thread;
     use tempdir::TempDir;
     use unix_socket::UnixListener;
+    use std::sync::{Barrier, Arc};
 
     let dir = TempDir::new("unix_socket").expect("failed to create dir");
     let socket_path = dir.path().join("sock");
     let listener = UnixListener::bind(&socket_path).expect("failed to create socket");
 
+    // use a barrier to ensure we don't run cat before the listener is setup
+    let barrier = Arc::new(Barrier::new(2));
+    let barrier2 = Arc::clone(&barrier);
+
     let thread = thread::spawn(move || {
         let mut stream = listener.accept().expect("failed to accept connection").0;
+        barrier2.wait();
         stream
             .write_all(b"a\tb")
             .expect("failed to write test data");
     });
 
-    new_ucmd!()
-        .args(&[socket_path])
-        .succeeds()
-        .stdout_only("a\tb");
+    let child = new_ucmd!().args(&[socket_path]).run_no_wait();
+    barrier.wait();
+    let stdout = &child.wait_with_output().unwrap().stdout.clone();
+    let output = String::from_utf8_lossy(&stdout);
+    assert_eq!("a\tb", output);
 
     thread.join().unwrap();
 }

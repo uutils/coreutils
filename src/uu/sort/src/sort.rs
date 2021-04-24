@@ -351,20 +351,18 @@ fn tokenize_default(line: &str) -> Vec<Field> {
 
 /// Split between separators. These separators are not included in fields.
 fn tokenize_with_separator(line: &str, separator: char) -> Vec<Field> {
-    let mut tokens = vec![0..0];
-    let mut previous_was_separator = false;
-    for (idx, char) in line.char_indices() {
-        if previous_was_separator {
-            tokens.push(idx..0);
-        }
-        if char == separator {
-            tokens.last_mut().unwrap().end = idx;
-            previous_was_separator = true;
-        } else {
-            previous_was_separator = false;
-        }
+    let mut tokens = vec![];
+    let separator_indices =
+        line.char_indices()
+            .filter_map(|(i, c)| if c == separator { Some(i) } else { None });
+    let mut start = 0;
+    for sep_idx in separator_indices {
+        tokens.push(start..sep_idx);
+        start = sep_idx + 1;
     }
-    tokens.last_mut().unwrap().end = line.len();
+    if start < line.len() {
+        tokens.push(start..line.len());
+    }
     tokens
 }
 
@@ -1406,5 +1404,15 @@ mod tests {
             tokenize(line, Some('a')),
             vec![0..0, 1..1, 2..2, 3..9, 10..18,]
         );
+    }
+
+    #[test]
+    fn test_tokenize_fields_trailing_custom_separator() {
+        let line = "a";
+        assert_eq!(tokenize(line, Some('a')), vec![0..0]);
+        let line = "aa";
+        assert_eq!(tokenize(line, Some('a')), vec![0..0, 1..1]);
+        let line = "..a..a";
+        assert_eq!(tokenize(line, Some('a')), vec![0..2, 3..5]);
     }
 }

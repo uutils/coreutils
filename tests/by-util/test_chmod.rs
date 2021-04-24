@@ -47,7 +47,7 @@ fn run_single_test(test: &TestCase, at: AtPath, mut ucmd: UCommand) {
         ucmd.arg(arg);
     }
     let r = ucmd.run();
-    if !r.success {
+    if !r.succeeded() {
         println!("{}", r.stderr_str());
         panic!("{:?}: failed", ucmd.raw);
     }
