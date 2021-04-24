@@ -1,5 +1,4 @@
 #![allow(dead_code)]
-
 // spell-checker:ignore (change!) each's
 // spell-checker:ignore (ToDO) LONGHELP FORMATSTRING templating parameterizing formatstr
 
@@ -9,7 +8,6 @@ mod tokenize;
 
 static NAME: &str = "printf";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
-static SHORT_USAGE: &str = "printf: usage: printf [-v var] format [arguments]";
 static LONGHELP_LEAD: &str = "printf
 
  USAGE: printf FORMATSTRING [ARGUMENT]...
