@@ -155,7 +155,8 @@ pub enum OverwriteMode {
     NoClobber,
 }
 
-#[derive(Clone, Eq, PartialEq)]
+/// Possible arguments for `--reflink`.
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub enum ReflinkMode {
     Always,
     Auto,
@@ -1200,39 +1201,7 @@ fn copy_helper(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> 
         return Err("--reflink is only supported on linux".to_string().into());
 
         #[cfg(target_os = "linux")]
-        {
-            let src_file = File::open(source).unwrap().into_raw_fd();
-            let dst_file = OpenOptions::new()
-                .write(true)
-                .truncate(false)
-                .create(true)
-                .open(dest)
-                .unwrap()
-                .into_raw_fd();
-            match options.reflink_mode {
-                ReflinkMode::Always => unsafe {
-                    let result = ficlone(dst_file, src_file as *const i32);
-                    if result != 0 {
-                        return Err(format!(
-                            "failed to clone {:?} from {:?}: {}",
-                            source,
-                            dest,
-                            std::io::Error::last_os_error()
-                        )
-                        .into());
-                    } else {
-                        return Ok(());
-                    }
-                },
-                ReflinkMode::Auto => unsafe {
-                    let result = ficlone(dst_file, src_file as *const i32);
-                    if result != 0 {
-                        fs::copy(source, dest).context(&*context_for(source, dest))?;
-                    }
-                },
-                ReflinkMode::Never => {}
-            }
-        }
+        copy_on_write_linux(source, dest, options.reflink_mode)?;
     } else if options.no_dereference && fs::symlink_metadata(&source)?.file_type().is_symlink() {
         // Here, we will copy the symlink itself (actually, just recreate it)
         let link = fs::read_link(&source)?;
@@ -1260,6 +1229,46 @@ fn copy_helper(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> 
             fs::create_dir_all(parent)?;
         }
         fs::copy(source, dest).context(&*context_for(source, dest))?;
+    }
+
+    Ok(())
+}
+
+/// Copies `source` to `dest` using copy-on-write if possible.
+#[cfg(target_os = "linux")]
+fn copy_on_write_linux(source: &Path, dest: &Path, mode: ReflinkMode) -> CopyResult<()> {
+    debug_assert!(mode != ReflinkMode::Never);
+
+    let src_file = File::open(source).unwrap().into_raw_fd();
+    let dst_file = OpenOptions::new()
+        .write(true)
+        .truncate(false)
+        .create(true)
+        .open(dest)
+        .unwrap()
+        .into_raw_fd();
+    match mode {
+        ReflinkMode::Always => unsafe {
+            let result = ficlone(dst_file, src_file as *const i32);
+            if result != 0 {
+                return Err(format!(
+                    "failed to clone {:?} from {:?}: {}",
+                    source,
+                    dest,
+                    std::io::Error::last_os_error()
+                )
+                .into());
+            } else {
+                return Ok(());
+            }
+        },
+        ReflinkMode::Auto => unsafe {
+            let result = ficlone(dst_file, src_file as *const i32);
+            if result != 0 {
+                fs::copy(source, dest).context(&*context_for(source, dest))?;
+            }
+        },
+        ReflinkMode::Never => unreachable!(),
     }
 
     Ok(())
