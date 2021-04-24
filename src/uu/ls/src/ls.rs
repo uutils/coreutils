@@ -20,6 +20,7 @@ use clap::{App, Arg};
 use globset::{self, Glob, GlobSet, GlobSetBuilder};
 use lscolors::LsColors;
 use number_prefix::NumberPrefix;
+use once_cell::unsync::OnceCell;
 use quoting_style::{escape_name, QuotingStyle};
 #[cfg(unix)]
 use std::collections::HashMap;
@@ -466,6 +467,10 @@ impl Config {
                     Err(_) => show_warning!("Invalid pattern for hide: '{}'", pattern),
                 }
             }
+        }
+
+        if files == Files::Normal {
+            ignore_patterns.add(Glob::new(".*").unwrap());
         }
 
         let ignore_patterns = ignore_patterns.build().unwrap();
@@ -1018,28 +1023,65 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 /// Caching data here helps eliminate redundant syscalls to fetch same information
 struct PathData {
     // Result<MetaData> got from symlink_metadata() or metadata() based on config
-    md: std::io::Result<Metadata>,
-    // String formed from get_lossy_string() for the path
-    lossy_string: String,
+    md: OnceCell<Option<Metadata>>,
+    ft: OnceCell<Option<FileType>>,
     // Name of the file - will be empty for . or ..
     file_name: String,
     // PathBuf that all above data corresponds to
     p_buf: PathBuf,
+    must_dereference: bool,
 }
 
 impl PathData {
-    fn new(p_buf: PathBuf, config: &Config, command_line: bool) -> Self {
-        let md = get_metadata(&p_buf, config, command_line);
-        let lossy_string = p_buf.to_string_lossy().into_owned();
+    fn new(
+        p_buf: PathBuf,
+        file_type: Option<std::io::Result<FileType>>,
+        config: &Config,
+        command_line: bool,
+    ) -> Self {
         let name = p_buf
             .file_name()
             .map_or(String::new(), |s| s.to_string_lossy().into_owned());
+        let must_dereference = match &config.dereference {
+            Dereference::All => true,
+            Dereference::Args => command_line,
+            Dereference::DirArgs => {
+                if command_line {
+                    if let Ok(md) = p_buf.metadata() {
+                        md.is_dir()
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            }
+            Dereference::None => false,
+        };
+        let ft = match file_type {
+            Some(ft) => OnceCell::from(ft.ok()),
+            None => OnceCell::new(),
+        };
+
         Self {
-            md,
-            lossy_string,
+            md: OnceCell::new(),
+            ft,
             file_name: name,
             p_buf,
+            must_dereference,
         }
+    }
+
+    fn md(&self) -> Option<&Metadata> {
+        self.md
+            .get_or_init(|| get_metadata(&self.p_buf, self.must_dereference).ok())
+            .as_ref()
+    }
+
+    fn file_type(&self) -> Option<&FileType> {
+        self.ft
+            .get_or_init(|| self.md().map(|md| md.file_type()))
+            .as_ref()
     }
 }
 
@@ -1060,10 +1102,10 @@ fn list(locs: Vec<String>, config: Config) -> i32 {
             continue;
         }
 
-        let path_data = PathData::new(p, &config, true);
+        let path_data = PathData::new(p, None, &config, true);
 
-        let show_dir_contents = if let Ok(md) = path_data.md.as_ref() {
-            !config.directory && md.is_dir()
+        let show_dir_contents = if let Some(ft) = path_data.file_type() {
+            !config.directory && ft.is_dir()
         } else {
             has_failed = true;
             false
@@ -1081,7 +1123,7 @@ fn list(locs: Vec<String>, config: Config) -> i32 {
     sort_entries(&mut dirs, &config);
     for dir in dirs {
         if number_of_locs > 1 {
-            println!("\n{}:", dir.lossy_string);
+            println!("\n{}:", dir.p_buf.display());
         }
         enter_directory(&dir, &config);
     }
@@ -1096,14 +1138,13 @@ fn sort_entries(entries: &mut Vec<PathData>, config: &Config) {
     match config.sort {
         Sort::Time => entries.sort_by_key(|k| {
             Reverse(
-                k.md.as_ref()
-                    .ok()
+                k.md()
                     .and_then(|md| get_system_time(&md, config))
                     .unwrap_or(UNIX_EPOCH),
             )
         }),
         Sort::Size => {
-            entries.sort_by_key(|k| Reverse(k.md.as_ref().map(|md| md.len()).unwrap_or(0)))
+            entries.sort_by_key(|k| Reverse(k.md().as_ref().map(|md| md.len()).unwrap_or(0)))
         }
         // The default sort in GNU ls is case insensitive
         Sort::Name => entries.sort_by_key(|k| k.file_name.to_lowercase()),
@@ -1120,32 +1161,28 @@ fn sort_entries(entries: &mut Vec<PathData>, config: &Config) {
 fn is_hidden(file_path: &DirEntry) -> bool {
     let metadata = fs::metadata(file_path.path()).unwrap();
     let attr = metadata.file_attributes();
-    ((attr & 0x2) > 0) || file_path.file_name().to_string_lossy().starts_with('.')
-}
-
-#[cfg(unix)]
-fn is_hidden(file_path: &DirEntry) -> bool {
-    file_path.file_name().to_string_lossy().starts_with('.')
+    (attr & 0x2) > 0
 }
 
 fn should_display(entry: &DirEntry, config: &Config) -> bool {
     let ffi_name = entry.file_name();
 
-    if config.files == Files::Normal && is_hidden(entry) {
-        return false;
+    // For unix, the hidden files are already included in the ignore pattern
+    #[cfg(windows)]
+    {
+        if config.files == Files::Normal && is_hidden(entry) {
+            return false;
+        }
     }
 
-    if config.ignore_patterns.is_match(&ffi_name) {
-        return false;
-    }
-    true
+    !config.ignore_patterns.is_match(&ffi_name)
 }
 
 fn enter_directory(dir: &PathData, config: &Config) {
     let mut entries: Vec<_> = if config.files == Files::All {
         vec![
-            PathData::new(dir.p_buf.join("."), config, false),
-            PathData::new(dir.p_buf.join(".."), config, false),
+            PathData::new(dir.p_buf.join("."), None, config, false),
+            PathData::new(dir.p_buf.join(".."), None, config, false),
         ]
     } else {
         vec![]
@@ -1154,7 +1191,7 @@ fn enter_directory(dir: &PathData, config: &Config) {
     let mut temp: Vec<_> = safe_unwrap!(fs::read_dir(&dir.p_buf))
         .map(|res| safe_unwrap!(res))
         .filter(|e| should_display(e, config))
-        .map(|e| PathData::new(DirEntry::path(&e), config, false))
+        .map(|e| PathData::new(DirEntry::path(&e), Some(e.file_type()), config, false))
         .collect();
 
     sort_entries(&mut temp, config);
@@ -1167,31 +1204,15 @@ fn enter_directory(dir: &PathData, config: &Config) {
         for e in entries
             .iter()
             .skip(if config.files == Files::All { 2 } else { 0 })
-            .filter(|p| p.md.as_ref().map(|md| md.is_dir()).unwrap_or(false))
+            .filter(|p| p.file_type().map(|ft| ft.is_dir()).unwrap_or(false))
         {
-            println!("\n{}:", e.lossy_string);
+            println!("\n{}:", e.p_buf.display());
             enter_directory(&e, config);
         }
     }
 }
 
-fn get_metadata(entry: &Path, config: &Config, command_line: bool) -> std::io::Result<Metadata> {
-    let dereference = match &config.dereference {
-        Dereference::All => true,
-        Dereference::Args => command_line,
-        Dereference::DirArgs => {
-            if command_line {
-                if let Ok(md) = entry.metadata() {
-                    md.is_dir()
-                } else {
-                    false
-                }
-            } else {
-                false
-            }
-        }
-        Dereference::None => false,
-    };
+fn get_metadata(entry: &Path, dereference: bool) -> std::io::Result<Metadata> {
     if dereference {
         entry.metadata().or_else(|_| entry.symlink_metadata())
     } else {
@@ -1200,7 +1221,7 @@ fn get_metadata(entry: &Path, config: &Config, command_line: bool) -> std::io::R
 }
 
 fn display_dir_entry_size(entry: &PathData, config: &Config) -> (usize, usize) {
-    if let Ok(md) = entry.md.as_ref() {
+    if let Some(md) = entry.md() {
         (
             display_symlink_count(&md).len(),
             display_file_size(&md, config).len(),
@@ -1226,17 +1247,9 @@ fn display_items(items: &[PathData], strip: Option<&Path>, config: &Config) {
             display_item_long(item, strip, max_links, max_size, config);
         }
     } else {
-        let names = items.iter().filter_map(|i| {
-            let md = i.md.as_ref();
-            match md {
-                Err(e) => {
-                    let filename = get_file_name(&i.p_buf, strip);
-                    show_error!("'{}': {}", filename, e);
-                    None
-                }
-                Ok(md) => Some(display_file_name(&i.p_buf, strip, &md, config)),
-            }
-        });
+        let names = items
+            .iter()
+            .filter_map(|i| display_file_name(&i, strip, config));
 
         match (&config.format, config.width) {
             (Format::Columns, Some(width)) => display_grid(names, width, Direction::TopToBottom),
@@ -1300,13 +1313,13 @@ fn display_item_long(
     max_size: usize,
     config: &Config,
 ) {
-    let md = match &item.md {
-        Err(e) => {
+    let md = match item.md() {
+        None => {
             let filename = get_file_name(&item.p_buf, strip);
-            show_error!("{}: {}", filename, e);
+            show_error!("could not show file: {}", filename);
             return;
         }
-        Ok(md) => md,
+        Some(md) => md,
     };
 
     #[cfg(unix)]
@@ -1341,7 +1354,10 @@ fn display_item_long(
         " {} {} {}",
         pad_left(display_file_size(&md, config), max_size),
         display_date(&md, config),
-        display_file_name(&item.p_buf, strip, &md, config).contents,
+        // unwrap is fine because it fails when metadata is not available
+        // but we already know that it is because it's checked at the
+        // start of the function.
+        display_file_name(&item, strip, config).unwrap().contents,
     );
 }
 
@@ -1522,8 +1538,8 @@ fn file_is_executable(md: &Metadata) -> bool {
 }
 
 #[allow(clippy::clippy::collapsible_else_if)]
-fn classify_file(md: &Metadata) -> Option<char> {
-    let file_type = md.file_type();
+fn classify_file(path: &PathData) -> Option<char> {
+    let file_type = path.file_type()?;
 
     if file_type.is_dir() {
         Some('/')
@@ -1536,7 +1552,7 @@ fn classify_file(md: &Metadata) -> Option<char> {
                 Some('=')
             } else if file_type.is_fifo() {
                 Some('|')
-            } else if file_type.is_file() && file_is_executable(&md) {
+            } else if file_type.is_file() && file_is_executable(path.md()?) {
                 Some('*')
             } else {
                 None
@@ -1547,27 +1563,22 @@ fn classify_file(md: &Metadata) -> Option<char> {
     }
 }
 
-fn display_file_name(
-    path: &Path,
-    strip: Option<&Path>,
-    metadata: &Metadata,
-    config: &Config,
-) -> Cell {
-    let mut name = escape_name(get_file_name(path, strip), &config.quoting_style);
+fn display_file_name(path: &PathData, strip: Option<&Path>, config: &Config) -> Option<Cell> {
+    let mut name = escape_name(get_file_name(&path.p_buf, strip), &config.quoting_style);
 
     #[cfg(unix)]
     {
         if config.format != Format::Long && config.inode {
-            name = get_inode(metadata) + " " + &name;
+            name = get_inode(path.md()?) + " " + &name;
         }
     }
 
     if let Some(ls_colors) = &config.color {
-        name = color_name(&ls_colors, path, name, metadata);
+        name = color_name(&ls_colors, &path.p_buf, name, path.md()?);
     }
 
     if config.indicator_style != IndicatorStyle::None {
-        let sym = classify_file(metadata);
+        let sym = classify_file(path);
 
         let char_opt = match config.indicator_style {
             IndicatorStyle::Classify => sym,
@@ -1593,15 +1604,14 @@ fn display_file_name(
         }
     }
 
-    if config.format == Format::Long && metadata.file_type().is_symlink() {
-        if let Ok(target) = path.read_link() {
-            // We don't bother updating width here because it's not used for long
+    if config.format == Format::Long && path.file_type()?.is_symlink() {
+        if let Ok(target) = path.p_buf.read_link() {
             name.push_str(" -> ");
             name.push_str(&target.to_string_lossy());
         }
     }
 
-    name.into()
+    Some(name.into())
 }
 
 fn color_name(ls_colors: &LsColors, path: &Path, name: String, md: &Metadata) -> String {
