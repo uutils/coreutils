@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 use std::error::Error;
 use std::fs::{File, OpenOptions};
 use std::io::SeekFrom::Start;
-use std::io::{BufRead, BufReader, Seek, Write};
+use std::io::{BufRead, BufReader, BufWriter, Seek, Write};
 use std::marker::PhantomData;
 use std::path::PathBuf;
 
@@ -232,12 +232,14 @@ where
     }
 
     fn write_chunk(&self, file: &PathBuf, chunk: &mut Vec<Line>) -> Result<(), Box<dyn Error>> {
-        let mut new_file = OpenOptions::new().create(true).append(true).open(file)?;
+        let new_file = OpenOptions::new().create(true).append(true).open(file)?;
+        let mut buf_write = Box::new(BufWriter::new(new_file)) as Box<dyn Write>;
         for s in chunk {
             let mut serialized = serde_json::to_string(&s).expect("JSON write error: ");
             serialized.push_str("\n");
-            new_file.write_all(serialized.as_bytes())?;
+            buf_write.write(serialized.as_bytes())?;
         }
+        buf_write.flush()?;
 
         Ok(())
     }
