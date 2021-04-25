@@ -59,8 +59,8 @@ fn test_human_numeric_whitespace() {
     test_helper("human-numeric-whitespace", "-h");
 }
 
-// This doesn't test the ext sort feature as such, just this codepath where
-// ext sort can fail when reading back JSON if it finds a null value
+// This tests the ext sort feature, but it also tests where
+// serde might fail when reading back JSON if it finds a null value
 #[test]
 fn test_extsort_as64_bailout() {
     new_ucmd!()
