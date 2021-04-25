@@ -141,13 +141,12 @@ impl GlobalSettings {
             .expect("Error parsing buffer size: ");
         let suf_usize: usize = match suf_str.to_uppercase().as_str() {
             // SI Units
-            "K" => 1000usize,
-            "M" => 1000000usize,
-            "G" => 1000000000usize,
-            "T" => 1000000000000usize,
-            "P" => 1000000000000000usize,
-            "E" => 1000000000000000000usize,
-            _ => 1usize,
+            "K" => 1024usize,
+            "M" => 1024000usize,
+            "G" => 1024000000usize,
+            "T" => 1024000000000usize,
+            // GNU regards empty human numeric value as 1024 bytes
+            _ => 1024usize,
         };
         num_usize * suf_usize
     }

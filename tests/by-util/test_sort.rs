@@ -59,13 +59,13 @@ fn test_human_numeric_whitespace() {
     test_helper("human-numeric-whitespace", "-h");
 }
 
-// This tests the ext sort feature, but it also tests where
-// serde might fail when reading back JSON if it finds a null value
+// This tests where serde often fails when reading back JSON 
+// if it finds a null value
 #[test]
 fn test_extsort_as64_bailout() {
     new_ucmd!()
         .arg("-g")
-        .arg("-S 10K")
+        .arg("-S 5K")
         .arg("multiple_decimals_general.txt")
         .succeeds()
         .stdout_is_fixture("multiple_decimals_general.expected");

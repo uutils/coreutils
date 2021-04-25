@@ -174,13 +174,23 @@ where
         {
             let mut total_read = 0;
             let mut chunk = Vec::new();
+            // Initial buffer is specified by user
+            let mut adjusted_buffer_size = self.buffer_bytes;
 
             // make the initial chunks on disk
             for seq in unsorted {
-                total_read += seq.get_size();
+                let seq_size = seq.get_size();
+                total_read += seq_size;
+                // Grow buffer size for a Line larger than buffer
+                adjusted_buffer_size = 
+                    if adjusted_buffer_size < seq_size {
+                        seq_size
+                    } else {
+                        adjusted_buffer_size
+                    };
                 chunk.push(seq);
 
-                if total_read >= self.buffer_bytes {
+                if total_read >= adjusted_buffer_size {
                     super::sort_by(&mut chunk, &self.settings);
                     self.write_chunk(
                         &iter.tmp_dir.path().join(iter.chunks.to_string()),
@@ -247,10 +257,7 @@ where
         let line_s = line?;
         bytes_read += line_s.len() + 1;
         // This is where the bad stuff happens usually
-        let deserialized: Line = match serde_json::from_str(&line_s) {
-            Ok(x) => x,
-            Err(err) => panic!("JSON read error: {}", err),
-        };
+        let deserialized: Line = serde_json::from_str(&line_s).expect("JSON read error: ");
         total_read += deserialized.get_size();
         vec.push_back(deserialized);
         if total_read > max_bytes {
