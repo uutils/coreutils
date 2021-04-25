@@ -22,19 +22,22 @@ use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use once_cell::unsync::OnceCell;
 use quoting_style::{escape_name, QuotingStyle};
-#[cfg(unix)]
-use std::collections::HashMap;
-use std::fs::{self, DirEntry, FileType, Metadata};
-#[cfg(any(unix, target_os = "redox"))]
-use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
-use std::path::{Path, PathBuf};
+use std::{
+    cmp::Reverse,
+    fs::{self, DirEntry, FileType, Metadata},
+    io::{stdout, BufWriter, Stdout, Write},
+    path::{Path, PathBuf},
+    process::exit,
+    time::{SystemTime, UNIX_EPOCH},
+};
 #[cfg(unix)]
-use std::time::Duration;
-use std::time::{SystemTime, UNIX_EPOCH};
-use std::{cmp::Reverse, process::exit};
-
+use std::{
+    collections::HashMap,
+    os::unix::fs::{FileTypeExt, MetadataExt},
+    time::Duration,
+};
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use time::{strftime, Timespec};
 #[cfg(unix)]
@@ -86,10 +89,8 @@ pub mod options {
         pub static C: &str = "quote-name";
     }
     pub static QUOTING_STYLE: &str = "quoting-style";
-
     pub mod indicator_style {
-        pub static NONE: &str = "none";
-        pub static SLASH: &str = "slash";
+        pub static SLASH: &str = "p";
         pub static FILE_TYPE: &str = "file-type";
         pub static CLASSIFY: &str = "classify";
     }
@@ -108,9 +109,6 @@ pub mod options {
     pub static TIME: &str = "time";
     pub static IGNORE_BACKUPS: &str = "ignore-backups";
     pub static DIRECTORY: &str = "directory";
-    pub static CLASSIFY: &str = "classify";
-    pub static FILE_TYPE: &str = "file-type";
-    pub static SLASH: &str = "p";
     pub static INODE: &str = "inode";
     pub static REVERSE: &str = "reverse";
     pub static RECURSIVE: &str = "recursive";
@@ -425,19 +423,11 @@ impl Config {
                 "slash" => IndicatorStyle::Slash,
                 &_ => IndicatorStyle::None,
             }
-        } else if options.is_present(options::indicator_style::NONE) {
-            IndicatorStyle::None
-        } else if options.is_present(options::indicator_style::CLASSIFY)
-            || options.is_present(options::CLASSIFY)
-        {
+        } else if options.is_present(options::indicator_style::CLASSIFY) {
             IndicatorStyle::Classify
-        } else if options.is_present(options::indicator_style::SLASH)
-            || options.is_present(options::SLASH)
-        {
+        } else if options.is_present(options::indicator_style::SLASH) {
             IndicatorStyle::Slash
-        } else if options.is_present(options::indicator_style::FILE_TYPE)
-            || options.is_present(options::FILE_TYPE)
-        {
+        } else if options.is_present(options::indicator_style::FILE_TYPE) {
             IndicatorStyle::FileType
         } else {
             IndicatorStyle::None
@@ -963,45 +953,45 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .takes_value(true)
                 .possible_values(&["none", "slash", "file-type", "classify"])
                 .overrides_with_all(&[
-                    options::FILE_TYPE,
-                    options::SLASH,
-                    options::CLASSIFY,
+                    options::indicator_style::FILE_TYPE,
+                    options::indicator_style::SLASH,
+                    options::indicator_style::CLASSIFY,
                     options::INDICATOR_STYLE,
                 ]))
                 .arg(
-            Arg::with_name(options::CLASSIFY)
+            Arg::with_name(options::indicator_style::CLASSIFY)
                 .short("F")
-                .long(options::CLASSIFY)
+                .long(options::indicator_style::CLASSIFY)
                 .help("Append a character to each file name indicating the file type. Also, for \
                        regular files that are executable, append '*'. The file type indicators are \
                        '/' for directories, '@' for symbolic links, '|' for FIFOs, '=' for sockets, \
                        '>' for doors, and nothing for regular files.")
                 .overrides_with_all(&[
-                    options::FILE_TYPE,
-                    options::SLASH,
-                    options::CLASSIFY,
+                    options::indicator_style::FILE_TYPE,
+                    options::indicator_style::SLASH,
+                    options::indicator_style::CLASSIFY,
                     options::INDICATOR_STYLE,
                 ])
         )
         .arg(
-            Arg::with_name(options::FILE_TYPE)
-                .long(options::FILE_TYPE)
+            Arg::with_name(options::indicator_style::FILE_TYPE)
+                .long(options::indicator_style::FILE_TYPE)
                 .help("Same as --classify, but do not append '*'")
                 .overrides_with_all(&[
-                    options::FILE_TYPE,
-                    options::SLASH,
-                    options::CLASSIFY,
+                    options::indicator_style::FILE_TYPE,
+                    options::indicator_style::SLASH,
+                    options::indicator_style::CLASSIFY,
                     options::INDICATOR_STYLE,
                 ]))
         .arg(
-            Arg::with_name(options::SLASH)
-                .short(options::SLASH)
+            Arg::with_name(options::indicator_style::SLASH)
+                .short(options::indicator_style::SLASH)
                 .help("Append / indicator to directories."
                 )
                 .overrides_with_all(&[
-                    options::FILE_TYPE,
-                    options::SLASH,
-                    options::CLASSIFY,
+                    options::indicator_style::FILE_TYPE,
+                    options::indicator_style::SLASH,
+                    options::indicator_style::CLASSIFY,
                     options::INDICATOR_STYLE,
                 ]))
 
@@ -1092,6 +1082,8 @@ fn list(locs: Vec<String>, config: Config) -> i32 {
     let mut dirs = Vec::<PathData>::new();
     let mut has_failed = false;
 
+    let mut out = BufWriter::new(stdout());
+
     for loc in locs {
         let p = PathBuf::from(&loc);
         if !p.exists() {
@@ -1118,14 +1110,14 @@ fn list(locs: Vec<String>, config: Config) -> i32 {
         }
     }
     sort_entries(&mut files, &config);
-    display_items(&files, None, &config);
+    display_items(&files, None, &config, &mut out);
 
     sort_entries(&mut dirs, &config);
     for dir in dirs {
         if number_of_locs > 1 {
-            println!("\n{}:", dir.p_buf.display());
+            let _ = writeln!(out, "\n{}:", dir.p_buf.display());
         }
-        enter_directory(&dir, &config);
+        enter_directory(&dir, &config, &mut out);
     }
     if has_failed {
         1
@@ -1178,7 +1170,7 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
     !config.ignore_patterns.is_match(&ffi_name)
 }
 
-fn enter_directory(dir: &PathData, config: &Config) {
+fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>) {
     let mut entries: Vec<_> = if config.files == Files::All {
         vec![
             PathData::new(dir.p_buf.join("."), None, config, false),
@@ -1198,7 +1190,7 @@ fn enter_directory(dir: &PathData, config: &Config) {
 
     entries.append(&mut temp);
 
-    display_items(&entries, Some(&dir.p_buf), config);
+    display_items(&entries, Some(&dir.p_buf), config, out);
 
     if config.recursive {
         for e in entries
@@ -1206,8 +1198,8 @@ fn enter_directory(dir: &PathData, config: &Config) {
             .skip(if config.files == Files::All { 2 } else { 0 })
             .filter(|p| p.file_type().map(|ft| ft.is_dir()).unwrap_or(false))
         {
-            println!("\n{}:", e.p_buf.display());
-            enter_directory(&e, config);
+            let _ = writeln!(out, "\n{}:", e.p_buf.display());
+            enter_directory(&e, config, out);
         }
     }
 }
@@ -1235,7 +1227,12 @@ fn pad_left(string: String, count: usize) -> String {
     format!("{:>width$}", string, width = count)
 }
 
-fn display_items(items: &[PathData], strip: Option<&Path>, config: &Config) {
+fn display_items(
+    items: &[PathData],
+    strip: Option<&Path>,
+    config: &Config,
+    out: &mut BufWriter<Stdout>,
+) {
     if config.format == Format::Long {
         let (mut max_links, mut max_size) = (1, 1);
         for item in items {
@@ -1244,7 +1241,7 @@ fn display_items(items: &[PathData], strip: Option<&Path>, config: &Config) {
             max_size = size.max(max_size);
         }
         for item in items {
-            display_item_long(item, strip, max_links, max_size, config);
+            display_item_long(item, strip, max_links, max_size, config, out);
         }
     } else {
         let names = items
@@ -1252,42 +1249,51 @@ fn display_items(items: &[PathData], strip: Option<&Path>, config: &Config) {
             .filter_map(|i| display_file_name(&i, strip, config));
 
         match (&config.format, config.width) {
-            (Format::Columns, Some(width)) => display_grid(names, width, Direction::TopToBottom),
-            (Format::Across, Some(width)) => display_grid(names, width, Direction::LeftToRight),
+            (Format::Columns, Some(width)) => {
+                display_grid(names, width, Direction::TopToBottom, out)
+            }
+            (Format::Across, Some(width)) => {
+                display_grid(names, width, Direction::LeftToRight, out)
+            }
             (Format::Commas, width_opt) => {
                 let term_width = width_opt.unwrap_or(1);
                 let mut current_col = 0;
                 let mut names = names;
                 if let Some(name) = names.next() {
-                    print!("{}", name.contents);
+                    let _ = write!(out, "{}", name.contents);
                     current_col = name.width as u16 + 2;
                 }
                 for name in names {
                     let name_width = name.width as u16;
                     if current_col + name_width + 1 > term_width {
                         current_col = name_width + 2;
-                        print!(",\n{}", name.contents);
+                        let _ = write!(out, ",\n{}", name.contents);
                     } else {
                         current_col += name_width + 2;
-                        print!(", {}", name.contents);
+                        let _ = write!(out, ", {}", name.contents);
                     }
                 }
                 // Current col is never zero again if names have been printed.
                 // So we print a newline.
                 if current_col > 0 {
-                    println!();
+                    let _ = writeln!(out,);
                 }
             }
             _ => {
                 for name in names {
-                    println!("{}", name.contents);
+                    let _ = writeln!(out, "{}", name.contents);
                 }
             }
         }
     }
 }
 
-fn display_grid(names: impl Iterator<Item = Cell>, width: u16, direction: Direction) {
+fn display_grid(
+    names: impl Iterator<Item = Cell>,
+    width: u16,
+    direction: Direction,
+    out: &mut BufWriter<Stdout>,
+) {
     let mut grid = Grid::new(GridOptions {
         filling: Filling::Spaces(2),
         direction,
@@ -1298,9 +1304,13 @@ fn display_grid(names: impl Iterator<Item = Cell>, width: u16, direction: Direct
     }
 
     match grid.fit_into_width(width as usize) {
-        Some(output) => print!("{}", output),
+        Some(output) => {
+            let _ = write!(out, "{}", output);
+        }
         // Width is too small for the grid, so we fit it in one column
-        None => print!("{}", grid.fit_into_columns(1)),
+        None => {
+            let _ = write!(out, "{}", grid.fit_into_columns(1));
+        }
     }
 }
 
@@ -1312,6 +1322,7 @@ fn display_item_long(
     max_links: usize,
     max_size: usize,
     config: &Config,
+    out: &mut BufWriter<Stdout>,
 ) {
     let md = match item.md() {
         None => {
@@ -1325,11 +1336,12 @@ fn display_item_long(
     #[cfg(unix)]
     {
         if config.inode {
-            print!("{} ", get_inode(&md));
+            let _ = write!(out, "{} ", get_inode(&md));
         }
     }
 
-    print!(
+    let _ = write!(
+        out,
         "{}{} {}",
         display_file_type(md.file_type()),
         display_permissions(&md),
@@ -1337,20 +1349,21 @@ fn display_item_long(
     );
 
     if config.long.owner {
-        print!(" {}", display_uname(&md, config));
+        let _ = write!(out, " {}", display_uname(&md, config));
     }
 
     if config.long.group {
-        print!(" {}", display_group(&md, config));
+        let _ = write!(out, " {}", display_group(&md, config));
     }
 
     // Author is only different from owner on GNU/Hurd, so we reuse
     // the owner, since GNU/Hurd is not currently supported by Rust.
     if config.long.author {
-        print!(" {}", display_uname(&md, config));
+        let _ = write!(out, " {}", display_uname(&md, config));
     }
 
-    println!(
+    let _ = writeln!(
+        out,
         " {} {} {}",
         pad_left(display_file_size(&md, config), max_size),
         display_date(&md, config),
@@ -1380,14 +1393,10 @@ fn cached_uid2usr(uid: u32) -> String {
     }
 
     let mut uid_cache = UID_CACHE.lock().unwrap();
-    match uid_cache.get(&uid) {
-        Some(usr) => usr.clone(),
-        None => {
-            let usr = entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string());
-            uid_cache.insert(uid, usr.clone());
-            usr
-        }
-    }
+    uid_cache
+        .entry(uid)
+        .or_insert_with(|| entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()))
+        .clone()
 }
 
 #[cfg(unix)]
@@ -1406,14 +1415,10 @@ fn cached_gid2grp(gid: u32) -> String {
     }
 
     let mut gid_cache = GID_CACHE.lock().unwrap();
-    match gid_cache.get(&gid) {
-        Some(grp) => grp.clone(),
-        None => {
-            let grp = entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string());
-            gid_cache.insert(gid, grp.clone());
-            grp
-        }
-    }
+    gid_cache
+        .entry(gid)
+        .or_insert_with(|| entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()))
+        .clone()
 }
 
 #[cfg(unix)]
@@ -1431,7 +1436,6 @@ fn display_uname(_metadata: &Metadata, _config: &Config) -> String {
 }
 
 #[cfg(not(unix))]
-#[allow(unused_variables)]
 fn display_group(_metadata: &Metadata, _config: &Config) -> String {
     "somegroup".to_string()
 }
@@ -1506,13 +1510,13 @@ fn display_file_size(metadata: &Metadata, config: &Config) -> String {
     }
 }
 
-fn display_file_type(file_type: FileType) -> String {
+fn display_file_type(file_type: FileType) -> char {
     if file_type.is_dir() {
-        "d".to_string()
+        'd'
     } else if file_type.is_symlink() {
-        "l".to_string()
+        'l'
     } else {
-        "-".to_string()
+        '-'
     }
 }
 
