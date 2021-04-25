@@ -192,7 +192,8 @@ fn truncate(
 }
 
 fn parse_size(size: &str) -> (u64, TruncateMode) {
-    let mode = match size.chars().next().unwrap() {
+    let clean_size = size.replace(" ", "");
+    let mode = match clean_size.chars().next().unwrap() {
         '+' => TruncateMode::Extend,
         '-' => TruncateMode::Reduce,
         '<' => TruncateMode::AtMost,
@@ -203,9 +204,9 @@ fn parse_size(size: &str) -> (u64, TruncateMode) {
     };
     let bytes = {
         let mut slice = if mode == TruncateMode::Reference {
-            size
+            &clean_size
         } else {
-            &size[1..]
+            &clean_size[1..]
         };
         if slice.chars().last().unwrap().is_alphabetic() {
             slice = &slice[..slice.len() - 1];
@@ -220,11 +221,11 @@ fn parse_size(size: &str) -> (u64, TruncateMode) {
         Ok(num) => num,
         Err(e) => crash!(1, "'{}' is not a valid number: {}", size, e),
     };
-    if size.chars().last().unwrap().is_alphabetic() {
-        number *= match size.chars().last().unwrap().to_ascii_uppercase() {
-            'B' => match size
+    if clean_size.chars().last().unwrap().is_alphabetic() {
+        number *= match clean_size.chars().last().unwrap().to_ascii_uppercase() {
+            'B' => match clean_size
                 .chars()
-                .nth(size.len() - 2)
+                .nth(clean_size.len() - 2)
                 .unwrap()
                 .to_ascii_uppercase()
             {

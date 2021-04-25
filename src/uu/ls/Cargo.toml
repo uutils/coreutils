@@ -16,18 +16,19 @@ path = "src/ls.rs"
 
 [dependencies]
 clap = "2.33"
-lazy_static = "1.0.1"
 number_prefix = "0.4"
 term_grid = "0.1.5"
 termsize = "0.1.6"
 time = "0.1.40"
-unicode-width = "0.1.5"
 globset = "0.4.6"
+lscolors = { version="0.7.1", features=["ansi_term"] }
 uucore = { version=">=0.0.8", package="uucore", path="../../uucore", features=["entries", "fs"] }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
+once_cell = "1.7.2"
+atty = "0.2"
 
 [target.'cfg(unix)'.dependencies]
-atty = "0.2"
+lazy_static = "1.4.0"
 
 [[bin]]
 name = "ls"

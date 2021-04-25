@@ -225,7 +225,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         need_runlevel,
         need_users,
         my_line_only,
-        has_records: false,
         args: matches.free,
     };
 
@@ -250,7 +249,6 @@ struct Who {
     need_runlevel: bool,
     need_users: bool,
     my_line_only: bool,
-    has_records: bool,
     args: Vec<String>,
 }
 
@@ -324,8 +322,7 @@ impl Who {
             println!("{}", users.join(" "));
             println!("# users={}", users.len());
         } else {
-            let mut records = Utmpx::iter_all_records().read_from(f).peekable();
-            self.has_records = records.peek().is_some();
+            let records = Utmpx::iter_all_records().read_from(f).peekable();
 
             if self.include_heading {
                 self.print_heading()

@@ -7,8 +7,6 @@
 
 // spell-checker:ignore (ToDO) parsemode makedev sysmacros makenod newmode perror IFBLK IFCHR IFIFO
 
-mod parsemode;
-
 #[macro_use]
 extern crate uucore;
 
@@ -101,7 +99,7 @@ for details about the options it supports.",
     let mut last_umask: mode_t = 0;
     let mut newmode: mode_t = MODE_RW_UGO;
     if matches.opt_present("mode") {
-        match parsemode::parse_mode(matches.opt_str("mode")) {
+        match uucore::mode::parse_mode(matches.opt_str("mode")) {
             Ok(parsed) => {
                 if parsed > 0o777 {
                     show_info!("mode must specify only file permission bits");

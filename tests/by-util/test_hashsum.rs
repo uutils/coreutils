@@ -17,14 +17,14 @@ macro_rules! test_digest {
         fn test_single_file() {
             let ts = TestScenario::new("hashsum");
             assert_eq!(ts.fixtures.read(EXPECTED_FILE),
-                       get_hash!(ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).arg("input.txt").succeeds().no_stderr().stdout));
+                       get_hash!(ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).arg("input.txt").succeeds().no_stderr().stdout_str()));
         }
 
         #[test]
         fn test_stdin() {
             let ts = TestScenario::new("hashsum");
             assert_eq!(ts.fixtures.read(EXPECTED_FILE),
-                       get_hash!(ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).pipe_in_fixture("input.txt").succeeds().no_stderr().stdout));
+                       get_hash!(ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).pipe_in_fixture("input.txt").succeeds().no_stderr().stdout_str()));
         }
     }
     )*)

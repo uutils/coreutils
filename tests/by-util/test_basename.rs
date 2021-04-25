@@ -67,7 +67,7 @@ fn test_zero_param() {
 }
 
 fn expect_error(input: Vec<&str>) {
-    assert!(new_ucmd!().args(&input).fails().no_stdout().stderr.len() > 0);
+    assert!(new_ucmd!().args(&input).fails().no_stdout().stderr().len() > 0);
 }
 
 #[test]

@@ -28,8 +28,7 @@ pub fn arrnum_int_mult(arr_num: &[u8], basenum: u8, base_ten_int_fact: u8) -> Ve
             }
         }
     }
-    #[allow(clippy::map_clone)]
-    let ret: Vec<u8> = ret_rev.iter().rev().map(|x| *x).collect();
+    let ret: Vec<u8> = ret_rev.into_iter().rev().collect();
     ret
 }
 
@@ -102,70 +101,6 @@ pub fn arrnum_int_div_step(
         remainder: rem_out,
     }
 }
-// pub struct ArrFloat {
-// pub leading_zeros: u8,
-// pub values: Vec<u8>,
-// pub basenum: u8
-// }
-//
-// pub struct ArrFloatDivOut {
-// pub quotient: u8,
-// pub remainder: ArrFloat
-// }
-//
-// pub fn arrfloat_int_div(
-// arrfloat_in : &ArrFloat,
-// base_ten_int_divisor : u8,
-// precision : u16
-// ) -> DivOut  {
-//
-// let mut remainder = ArrFloat {
-// basenum: arrfloat_in.basenum,
-// leading_zeros: arrfloat_in.leading_zeroes,
-// values: Vec<u8>::new()
-// }
-// let mut quotient = 0;
-//
-// let mut bufferval : u16 = 0;
-// let base : u16 = arrfloat_in.basenum as u16;
-// let divisor : u16 = base_ten_int_divisor as u16;
-//
-// let mut it_f = arrfloat_in.values.iter();
-// let mut position = 0 + arrfloat_in.leading_zeroes as u16;
-// let mut at_end = false;
-// while position< precision {
-// let next_digit = match it_f.next() {
-// Some(c) => {}
-// None => { 0 }
-// }
-// match u_cur {
-// Some(u) => {
-// bufferval += u.clone() as u16;
-// if bufferval > divisor {
-// while bufferval >= divisor {
-// quotient+=1;
-// bufferval -= divisor;
-// }
-// if bufferval == 0 {
-// rem_out.position +=1;
-// } else {
-// rem_out.replace = Some(bufferval as u8);
-// }
-// break;
-// } else {
-// bufferval *= base;
-// }
-// },
-// None => {
-// break;
-// }
-// }
-// u_cur = it_f.next().clone();
-// rem_out.position+=1;
-// }
-// ArrFloatDivOut { quotient: quotient, remainder: remainder }
-// }
-//
 pub fn arrnum_int_add(arrnum: &[u8], basenum: u8, base_ten_int_term: u8) -> Vec<u8> {
     let mut carry: u16 = u16::from(base_ten_int_term);
     let mut rem: u16;
@@ -193,14 +128,12 @@ pub fn arrnum_int_add(arrnum: &[u8], basenum: u8, base_ten_int_term: u8) -> Vec<
             }
         }
     }
-    #[allow(clippy::map_clone)]
-    let ret: Vec<u8> = ret_rev.iter().rev().map(|x| *x).collect();
+    let ret: Vec<u8> = ret_rev.into_iter().rev().collect();
     ret
 }
 
 pub fn base_conv_vec(src: &[u8], radix_src: u8, radix_dest: u8) -> Vec<u8> {
-    let mut result: Vec<u8> = Vec::new();
-    result.push(0);
+    let mut result = vec![0];
     for i in src {
         result = arrnum_int_mult(&result, radix_dest, radix_src);
         result = arrnum_int_add(&result, radix_dest, *i);
@@ -220,14 +153,12 @@ pub fn unsigned_to_arrnum(src: u16) -> Vec<u8> {
 }
 
 // temporary needs-improvement-function
-#[allow(unused_variables)]
-pub fn base_conv_float(src: &[u8], radix_src: u8, radix_dest: u8) -> f64 {
+pub fn base_conv_float(src: &[u8], radix_src: u8, _radix_dest: u8) -> f64 {
     // it would require a lot of addl code
     // to implement this for arbitrary string input.
     // until then, the below operates as an outline
     // of how it would work.
-    let mut result: Vec<u8> = Vec::new();
-    result.push(0);
+    let result: Vec<u8> = vec![0];
     let mut factor: f64 = 1_f64;
     let radix_src_float: f64 = f64::from(radix_src);
     let mut r: f64 = 0_f64;
@@ -269,7 +200,6 @@ pub fn arrnum_to_str(src: &[u8], radix_def_dest: &dyn RadixDef) -> String {
     str_out
 }
 
-#[allow(unused_variables)]
 pub fn base_conv_str(
     src: &str,
     radix_def_src: &dyn RadixDef,

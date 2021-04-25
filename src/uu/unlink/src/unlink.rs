@@ -12,62 +12,56 @@
 #[macro_use]
 extern crate uucore;
 
-use getopts::Options;
+use clap::{App, Arg};
 use libc::{lstat, stat, unlink};
 use libc::{S_IFLNK, S_IFMT, S_IFREG};
 use std::ffi::CString;
 use std::io::{Error, ErrorKind};
 use uucore::InvalidEncodingHandling;
 
-static NAME: &str = "unlink";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
+static ABOUT: &str = "Unlink the file at [FILE].";
+static OPT_PATH: &str = "FILE";
+
+fn get_usage() -> String {
+    format!("{} [OPTION]... FILE", executable!())
+}
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let mut opts = Options::new();
+    let usage = get_usage();
 
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .arg(Arg::with_name(OPT_PATH).hidden(true).multiple(true))
+        .get_matches_from(args);
 
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => crash!(1, "invalid options\n{}", f),
-    };
+    let paths: Vec<String> = matches
+        .values_of(OPT_PATH)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
 
-    if matches.opt_present("help") {
-        println!("{} {}", NAME, VERSION);
-        println!();
-        println!("Usage:");
-        println!("  {} [FILE]... [OPTION]...", NAME);
-        println!();
-        println!("{}", opts.usage("Unlink the file at [FILE]."));
-        return 0;
-    }
-
-    if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
-
-    if matches.free.is_empty() {
+    if paths.is_empty() {
         crash!(
             1,
             "missing operand\nTry '{0} --help' for more information.",
-            NAME
+            executable!()
         );
-    } else if matches.free.len() > 1 {
+    } else if paths.len() > 1 {
         crash!(
             1,
             "extra operand: '{1}'\nTry '{0} --help' for more information.",
-            NAME,
-            matches.free[1]
+            executable!(),
+            paths[1]
         );
     }
 
-    let c_string = CString::new(matches.free[0].clone()).unwrap(); // unwrap() cannot fail, the string comes from argv so it cannot contain a \0.
+    let c_string = CString::new(paths[0].clone()).unwrap(); // unwrap() cannot fail, the string comes from argv so it cannot contain a \0.
 
     let st_mode = {
         #[allow(deprecated)]
@@ -75,12 +69,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         let result = unsafe { lstat(c_string.as_ptr(), &mut buf as *mut stat) };
 
         if result < 0 {
-            crash!(
-                1,
-                "Cannot stat '{}': {}",
-                matches.free[0],
-                Error::last_os_error()
-            );
+            crash!(1, "Cannot stat '{}': {}", paths[0], Error::last_os_error());
         }
 
         buf.st_mode & S_IFMT
@@ -104,7 +93,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     match result {
         Ok(_) => (),
         Err(e) => {
-            crash!(1, "cannot unlink '{0}': {1}", matches.free[0], e);
+            crash!(1, "cannot unlink '{0}': {1}", paths[0], e);
         }
     }
 

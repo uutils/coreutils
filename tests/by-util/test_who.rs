@@ -23,7 +23,7 @@ fn test_heading() {
     for opt in vec!["-H"] {
         // allow whitespace variation
         // * minor whitespace differences occur between platform built-in outputs; specifically number of TABs between "TIME" and "COMMENT" may be variant
-        let actual = new_ucmd!().arg(opt).run().stdout;
+        let actual = new_ucmd!().arg(opt).run().stdout_move_str();
         let expect = expected_result(opt);
         println!("actual: {:?}", actual);
         println!("expect: {:?}", expect);
@@ -80,5 +80,5 @@ fn expected_result(arg: &str) -> String {
         .env("LANGUAGE", "C")
         .args(&[arg])
         .run()
-        .stdout
+        .stdout_move_str()
 }

@@ -132,7 +132,9 @@ macro_rules! prompt_yes(
 
 pub type CopyResult<T> = Result<T, Error>;
 pub type Source = PathBuf;
+pub type SourceSlice = Path;
 pub type Target = PathBuf;
+pub type TargetSlice = Path;
 
 /// Specifies whether when overwrite files
 #[derive(Clone, Eq, PartialEq)]
@@ -153,7 +155,8 @@ pub enum OverwriteMode {
     NoClobber,
 }
 
-#[derive(Clone, Eq, PartialEq)]
+/// Possible arguments for `--reflink`.
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub enum ReflinkMode {
     Always,
     Auto,
@@ -208,7 +211,6 @@ pub struct Options {
     overwrite: OverwriteMode,
     parents: bool,
     strip_trailing_slashes: bool,
-    reflink: bool,
     reflink_mode: ReflinkMode,
     preserve_attributes: Vec<Attribute>,
     recursive: bool,
@@ -547,14 +549,13 @@ impl FromStr for Attribute {
 }
 
 fn add_all_attributes() -> Vec<Attribute> {
-    let mut attr = Vec::new();
+    use Attribute::*;
+
+    let mut attr = vec![Ownership, Timestamps, Context, Xattr, Links];
+
     #[cfg(unix)]
-    attr.push(Attribute::Mode);
-    attr.push(Attribute::Ownership);
-    attr.push(Attribute::Timestamps);
-    attr.push(Attribute::Context);
-    attr.push(Attribute::Xattr);
-    attr.push(Attribute::Links);
+    attr.insert(0, Mode);
+
     attr
 }
 
@@ -632,12 +633,12 @@ impl Options {
             update: matches.is_present(OPT_UPDATE),
             verbose: matches.is_present(OPT_VERBOSE),
             strip_trailing_slashes: matches.is_present(OPT_STRIP_TRAILING_SLASHES),
-            reflink: matches.is_present(OPT_REFLINK),
             reflink_mode: {
                 if let Some(reflink) = matches.value_of(OPT_REFLINK) {
                     match reflink {
                         "always" => ReflinkMode::Always,
                         "auto" => ReflinkMode::Auto,
+                        "never" => ReflinkMode::Never,
                         value => {
                             return Err(Error::InvalidArgument(format!(
                                 "invalid argument '{}' for \'reflink\'",
@@ -665,7 +666,7 @@ impl TargetType {
     ///
     /// Treat target as a dir if we have multiple sources or the target
     /// exists and already is a directory
-    fn determine(sources: &[Source], target: &Target) -> TargetType {
+    fn determine(sources: &[Source], target: &TargetSlice) -> TargetType {
         if sources.len() > 1 || target.is_dir() {
             TargetType::Directory
         } else {
@@ -714,7 +715,7 @@ fn parse_path_args(path_args: &[String], options: &Options) -> CopyResult<(Vec<S
 
 fn preserve_hardlinks(
     hard_links: &mut Vec<(String, u64)>,
-    source: &std::path::PathBuf,
+    source: &std::path::Path,
     dest: std::path::PathBuf,
     found_hard_link: &mut bool,
 ) -> CopyResult<()> {
@@ -788,7 +789,7 @@ fn preserve_hardlinks(
 /// Behavior depends on `options`, see [`Options`] for details.
 ///
 /// [`Options`]: ./struct.Options.html
-fn copy(sources: &[Source], target: &Target, options: &Options) -> CopyResult<()> {
+fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResult<()> {
     let target_type = TargetType::determine(sources, target);
     verify_target_type(target, &target_type)?;
 
@@ -840,7 +841,7 @@ fn copy(sources: &[Source], target: &Target, options: &Options) -> CopyResult<()
 
 fn construct_dest_path(
     source_path: &Path,
-    target: &Target,
+    target: &TargetSlice,
     target_type: &TargetType,
     options: &Options,
 ) -> CopyResult<PathBuf> {
@@ -870,8 +871,8 @@ fn construct_dest_path(
 }
 
 fn copy_source(
-    source: &Source,
-    target: &Target,
+    source: &SourceSlice,
+    target: &TargetSlice,
     target_type: &TargetType,
     options: &Options,
 ) -> CopyResult<()> {
@@ -912,7 +913,7 @@ fn adjust_canonicalization(p: &Path) -> Cow<Path> {
 ///
 /// Any errors encountered copying files in the tree will be logged but
 /// will not cause a short-circuit.
-fn copy_directory(root: &Path, target: &Target, options: &Options) -> CopyResult<()> {
+fn copy_directory(root: &Path, target: &TargetSlice, options: &Options) -> CopyResult<()> {
     if !options.recursive {
         return Err(format!("omitting directory '{}'", root.display()).into());
     }
@@ -1068,6 +1069,7 @@ fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResu
 }
 
 #[cfg(not(windows))]
+#[allow(clippy::unnecessary_wraps)] // needed for windows version
 fn symlink_file(source: &Path, dest: &Path, context: &str) -> CopyResult<()> {
     match std::os::unix::fs::symlink(source, dest).context(context) {
         Ok(_) => Ok(()),
@@ -1191,47 +1193,20 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
     Ok(())
 }
 
-///Copy the file from `source` to `dest` either using the normal `fs::copy` or the
-///`FICLONE` ioctl if --reflink is specified and the filesystem supports it.
+/// Copy the file from `source` to `dest` either using the normal `fs::copy` or a
+/// copy-on-write scheme if --reflink is specified and the filesystem supports it.
 fn copy_helper(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
-    if options.reflink {
-        #[cfg(not(target_os = "linux"))]
-        return Err("--reflink is only supported on linux".to_string().into());
+    if options.reflink_mode != ReflinkMode::Never {
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        return Err("--reflink is only supported on linux and macOS"
+            .to_string()
+            .into());
+
+        #[cfg(target_os = "macos")]
+        copy_on_write_macos(source, dest, options.reflink_mode)?;
 
         #[cfg(target_os = "linux")]
-        {
-            let src_file = File::open(source).unwrap().into_raw_fd();
-            let dst_file = OpenOptions::new()
-                .write(true)
-                .truncate(false)
-                .create(true)
-                .open(dest)
-                .unwrap()
-                .into_raw_fd();
-            match options.reflink_mode {
-                ReflinkMode::Always => unsafe {
-                    let result = ficlone(dst_file, src_file as *const i32);
-                    if result != 0 {
-                        return Err(format!(
-                            "failed to clone {:?} from {:?}: {}",
-                            source,
-                            dest,
-                            std::io::Error::last_os_error()
-                        )
-                        .into());
-                    } else {
-                        return Ok(());
-                    }
-                },
-                ReflinkMode::Auto => unsafe {
-                    let result = ficlone(dst_file, src_file as *const i32);
-                    if result != 0 {
-                        fs::copy(source, dest).context(&*context_for(source, dest))?;
-                    }
-                },
-                ReflinkMode::Never => {}
-            }
-        }
+        copy_on_write_linux(source, dest, options.reflink_mode)?;
     } else if options.no_dereference && fs::symlink_metadata(&source)?.file_type().is_symlink() {
         // Here, we will copy the symlink itself (actually, just recreate it)
         let link = fs::read_link(&source)?;
@@ -1259,6 +1234,101 @@ fn copy_helper(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> 
             fs::create_dir_all(parent)?;
         }
         fs::copy(source, dest).context(&*context_for(source, dest))?;
+    }
+
+    Ok(())
+}
+
+/// Copies `source` to `dest` using copy-on-write if possible.
+#[cfg(target_os = "linux")]
+fn copy_on_write_linux(source: &Path, dest: &Path, mode: ReflinkMode) -> CopyResult<()> {
+    debug_assert!(mode != ReflinkMode::Never);
+
+    let src_file = File::open(source).unwrap().into_raw_fd();
+    let dst_file = OpenOptions::new()
+        .write(true)
+        .truncate(false)
+        .create(true)
+        .open(dest)
+        .unwrap()
+        .into_raw_fd();
+    match mode {
+        ReflinkMode::Always => unsafe {
+            let result = ficlone(dst_file, src_file as *const i32);
+            if result != 0 {
+                return Err(format!(
+                    "failed to clone {:?} from {:?}: {}",
+                    source,
+                    dest,
+                    std::io::Error::last_os_error()
+                )
+                .into());
+            } else {
+                return Ok(());
+            }
+        },
+        ReflinkMode::Auto => unsafe {
+            let result = ficlone(dst_file, src_file as *const i32);
+            if result != 0 {
+                fs::copy(source, dest).context(&*context_for(source, dest))?;
+            }
+        },
+        ReflinkMode::Never => unreachable!(),
+    }
+
+    Ok(())
+}
+
+/// Copies `source` to `dest` using copy-on-write if possible.
+#[cfg(target_os = "macos")]
+fn copy_on_write_macos(source: &Path, dest: &Path, mode: ReflinkMode) -> CopyResult<()> {
+    debug_assert!(mode != ReflinkMode::Never);
+
+    // Extract paths in a form suitable to be passed to a syscall.
+    // The unwrap() is safe because they come from the command-line and so contain non nul
+    // character.
+    use std::os::unix::ffi::OsStrExt;
+    let src = CString::new(source.as_os_str().as_bytes()).unwrap();
+    let dst = CString::new(dest.as_os_str().as_bytes()).unwrap();
+
+    // clonefile(2) was introduced in macOS 10.12 so we cannot statically link against it
+    // for backward compatibility.
+    let clonefile = CString::new("clonefile").unwrap();
+    let raw_pfn = unsafe { libc::dlsym(libc::RTLD_NEXT, clonefile.as_ptr()) };
+
+    let mut error = 0;
+    if !raw_pfn.is_null() {
+        // Call clonefile(2).
+        // Safety: Casting a C function pointer to a rust function value is one of the few
+        // blessed uses of `transmute()`.
+        unsafe {
+            let pfn: extern "C" fn(
+                src: *const libc::c_char,
+                dst: *const libc::c_char,
+                flags: u32,
+            ) -> libc::c_int = std::mem::transmute(raw_pfn);
+            error = pfn(src.as_ptr(), dst.as_ptr(), 0);
+            if std::io::Error::last_os_error().kind() == std::io::ErrorKind::AlreadyExists {
+                // clonefile(2) fails if the destination exists.  Remove it and try again.  Do not
+                // bother to check if removal worked because we're going to try to clone again.
+                let _ = fs::remove_file(dest);
+                error = pfn(src.as_ptr(), dst.as_ptr(), 0);
+            }
+        }
+    }
+
+    if raw_pfn.is_null() || error != 0 {
+        // clonefile(2) is not supported or it error'ed out (possibly because the FS does not
+        // support COW).
+        match mode {
+            ReflinkMode::Always => {
+                return Err(
+                    format!("failed to clone {:?} from {:?}: {}", source, dest, error).into(),
+                )
+            }
+            ReflinkMode::Auto => fs::copy(source, dest).context(&*context_for(source, dest))?,
+            ReflinkMode::Never => unreachable!(),
+        };
     }
 
     Ok(())

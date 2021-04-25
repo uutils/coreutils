@@ -260,6 +260,7 @@ static AFTER_HELP: &str =
      ";
 
 pub mod options {
+    pub const FORCE: &str = "force";
     pub const FILE: &str = "file";
     pub const ITERATIONS: &str = "iterations";
     pub const SIZE: &str = "size";
@@ -281,6 +282,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .about(ABOUT)
         .after_help(AFTER_HELP)
         .usage(&usage[..])
+        .arg(
+            Arg::with_name(options::FORCE)
+                .long(options::FORCE)
+                .short("f")
+                .help("change permissions to allow writing if necessary"),
+        )
         .arg(
             Arg::with_name(options::ITERATIONS)
                 .long(options::ITERATIONS)
@@ -357,13 +364,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     // TODO: implement --random-source
 
-    // TODO: implement --force
-
+    let force = matches.is_present(options::FORCE);
     let remove = matches.is_present(options::REMOVE);
-    let size_arg = match matches.value_of(options::SIZE) {
-        Some(s) => Some(s.to_string()),
-        None => None,
-    };
+    let size_arg = matches.value_of(options::SIZE).map(|s| s.to_string());
     let size = get_size(size_arg);
     let exact = matches.is_present(options::EXACT) && size.is_none(); // if -s is given, ignore -x
     let zero = matches.is_present(options::ZERO);
@@ -378,7 +381,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     for path_str in matches.values_of(options::FILE).unwrap() {
-        wipe_file(&path_str, iterations, remove, size, exact, zero, verbose);
+        wipe_file(
+            &path_str, iterations, remove, size, exact, zero, verbose, force,
+        );
     }
 
     0
@@ -434,6 +439,7 @@ fn pass_name(pass_type: PassType) -> String {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn wipe_file(
     path_str: &str,
     n_passes: usize,
@@ -442,16 +448,35 @@ fn wipe_file(
     exact: bool,
     zero: bool,
     verbose: bool,
+    force: bool,
 ) {
     // Get these potential errors out of the way first
     let path: &Path = Path::new(path_str);
     if !path.exists() {
-        println!("{}: {}: No such file or directory", NAME, path.display());
+        show_error!("{}: No such file or directory", path.display());
         return;
     }
     if !path.is_file() {
-        println!("{}: {}: Not a file", NAME, path.display());
+        show_error!("{}: Not a file", path.display());
         return;
+    }
+
+    // If force is true, set file permissions to not-readonly.
+    if force {
+        let metadata = match fs::metadata(path) {
+            Ok(m) => m,
+            Err(e) => {
+                show_error!("{}", e);
+                return;
+            }
+        };
+
+        let mut perms = metadata.permissions();
+        perms.set_readonly(false);
+        if let Err(e) = fs::set_permissions(path, perms) {
+            show_error!("{}", e);
+            return;
+        }
     }
 
     // Fill up our pass sequence
@@ -492,11 +517,13 @@ fn wipe_file(
 
     {
         let total_passes: usize = pass_sequence.len();
-        let mut file: File = OpenOptions::new()
-            .write(true)
-            .truncate(false)
-            .open(path)
-            .expect("Failed to open file for writing");
+        let mut file: File = match OpenOptions::new().write(true).truncate(false).open(path) {
+            Ok(f) => f,
+            Err(e) => {
+                show_error!("{}: failed to open for writing: {}", path.display(), e);
+                return;
+            }
+        };
 
         // NOTE: it does not really matter what we set for total_bytes and gen_type here, so just
         //       use bogus values
@@ -526,14 +553,23 @@ fn wipe_file(
                 }
             }
             // size is an optional argument for exactly how many bytes we want to shred
-            do_pass(&mut file, path, &mut generator, *pass_type, size)
-                .expect("File write pass failed");
+            match do_pass(&mut file, path, &mut generator, *pass_type, size) {
+                Ok(_) => {}
+                Err(e) => {
+                    show_error!("{}: File write pass failed: {}", path.display(), e);
+                }
+            }
             // Ignore failed writes; just keep trying
         }
     }
 
     if remove {
-        do_remove(path, path_str, verbose).expect("Failed to remove file");
+        match do_remove(path, path_str, verbose) {
+            Ok(_) => {}
+            Err(e) => {
+                show_error!("{}: failed to remove file: {}", path.display(), e);
+            }
+        }
     }
 }
 

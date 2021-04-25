@@ -29,6 +29,7 @@ fn set_file_times(at: &AtPath, path: &str, atime: FileTime, mtime: FileTime) {
 fn str_to_filetime(format: &str, s: &str) -> FileTime {
     let mut tm = time::strptime(s, format).unwrap();
     tm.tm_utcoff = time::now().tm_utcoff;
+    tm.tm_isdst = -1; // Unknown flag DST
     let ts = tm.to_timespec();
     FileTime::from_unix_time(ts.sec as i64, ts.nsec as u32)
 }
@@ -351,4 +352,73 @@ fn test_touch_set_date() {
     assert_eq!(atime, mtime);
     assert_eq!(atime, start_of_year);
     assert_eq!(mtime, start_of_year);
+}
+
+#[test]
+fn test_touch_mtime_dst_succeeds() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_set_mtime_dst_succeeds";
+
+    ucmd.args(&["-m", "-t", "202103140300", file])
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file));
+
+    let target_time = str_to_filetime("%Y%m%d%H%M", "202103140300");
+    let (_, mtime) = get_file_times(&at, file);
+    assert!(target_time == mtime);
+}
+
+// is_dst_switch_hour returns true if timespec ts is just before the switch
+// to Daylight Saving Time.
+// For example, in EST (UTC-5), Timespec { sec: 1583647200, nsec: 0 }
+// for March 8 2020 01:00:00 AM
+// is just before the switch because on that day clock jumps by 1 hour,
+// so 1 minute after 01:59:00 is 03:00:00.
+fn is_dst_switch_hour(ts: time::Timespec) -> bool {
+    let ts_after = ts + time::Duration::hours(1);
+    let tm = time::at(ts);
+    let tm_after = time::at(ts_after);
+    tm_after.tm_hour == tm.tm_hour + 2
+}
+
+// get_dstswitch_hour returns date string for which touch -m -t fails.
+// For example, in EST (UTC-5), that will be "202003080200" so
+// touch -m -t 202003080200 somefile
+// fails (that date/time does not exist).
+// In other locales it will be a different date/time, and in some locales
+// it doesn't exist at all, in which case this function will return None.
+fn get_dstswitch_hour() -> Option<String> {
+    let now = time::now();
+    // Start from January 1, 2020, 00:00.
+    let mut tm = time::strptime("20200101-0000", "%Y%m%d-%H%M").unwrap();
+    tm.tm_isdst = -1;
+    tm.tm_utcoff = now.tm_utcoff;
+    let mut ts = tm.to_timespec();
+    // Loop through all hours in year 2020 until we find the hour just
+    // before the switch to DST.
+    for _i in 0..(366 * 24) {
+        if is_dst_switch_hour(ts) {
+            let mut tm = time::at(ts);
+            tm.tm_hour = tm.tm_hour + 1;
+            let s = time::strftime("%Y%m%d%H%M", &tm).unwrap().to_string();
+            return Some(s);
+        }
+        ts = ts + time::Duration::hours(1);
+    }
+    None
+}
+
+#[test]
+fn test_touch_mtime_dst_fails() {
+    let (_at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_set_mtime_dst_fails";
+
+    match get_dstswitch_hour() {
+        Some(s) => {
+            ucmd.args(&["-m", "-t", &s, file]).fails();
+        }
+        None => (),
+    }
 }
