@@ -500,7 +500,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     };
 
     let strs = if matches.free.is_empty() {
-        vec!["./".to_owned()]
+        vec!["./".to_owned()] // TODO: gnu `du` doesn't use trailing "/" here
     } else {
         matches.free.clone()
     };

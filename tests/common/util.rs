@@ -2,6 +2,7 @@
 
 #[cfg(not(windows))]
 use libc;
+use pretty_assertions::assert_eq;
 use std::env;
 #[cfg(not(windows))]
 use std::ffi::CString;
@@ -42,22 +43,6 @@ pub fn is_ci() -> bool {
         .eq_ignore_ascii_case("true")
 }
 
-/// Test if the program is running under WSL
-// ref: <https://github.com/microsoft/WSL/issues/4555> @@ <https://archive.is/dP0bz>
-// ToDO: test on WSL2 which likely doesn't need special handling; plan change to `is_wsl_1()` if WSL2 is less needy
-pub fn is_wsl() -> bool {
-    #[cfg(target_os = "linux")]
-    {
-        if let Ok(b) = std::fs::read("/proc/sys/kernel/osrelease") {
-            if let Ok(s) = std::str::from_utf8(&b) {
-                let a = s.to_ascii_lowercase();
-                return a.contains("microsoft") || a.contains("wsl");
-            }
-        }
-    }
-    false
-}
-
 /// Read a test scenario fixture, returning its bytes
 fn read_scenario_fixture<S: AsRef<OsStr>>(tmpd: &Option<Rc<TempDir>>, file_rel_path: S) -> Vec<u8> {
     let tmpdir_path = tmpd.as_ref().unwrap().as_ref().path();
@@ -74,11 +59,11 @@ pub struct CmdResult {
     code: Option<i32>,
     /// zero-exit from running the Command?
     /// see [`success`]
-    pub success: bool,
+    success: bool,
     /// captured standard output after running the Command
-    pub stdout: String,
+    stdout: String,
     /// captured standard error after running the Command
-    pub stderr: String,
+    stderr: String,
 }
 
 impl CmdResult {
@@ -237,7 +222,7 @@ impl CmdResult {
     /// like stdout_is(...), but expects the contents of the file at the provided relative path
     pub fn stdout_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &CmdResult {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
-        self.stdout_is_bytes(contents)
+        self.stdout_is(String::from_utf8(contents).unwrap())
     }
 
     /// asserts that the command resulted in stderr stream output that equals the
@@ -261,7 +246,7 @@ impl CmdResult {
     /// Like stdout_is_fixture, but for stderr
     pub fn stderr_is_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T) -> &CmdResult {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
-        self.stderr_is_bytes(contents)
+        self.stderr_is(String::from_utf8(contents).unwrap())
     }
 
     /// asserts that
@@ -329,14 +314,14 @@ impl CmdResult {
     }
 
     pub fn stdout_matches(&self, regex: &regex::Regex) -> &CmdResult {
-        if !regex.is_match(self.stdout_str()) {
+        if !regex.is_match(self.stdout_str().trim()) {
             panic!("Stdout does not match regex:\n{}", self.stdout_str())
         }
         self
     }
 
     pub fn stdout_does_not_match(&self, regex: &regex::Regex) -> &CmdResult {
-        if regex.is_match(self.stdout_str()) {
+        if regex.is_match(self.stdout_str().trim()) {
             panic!("Stdout matches regex:\n{}", self.stdout_str())
         }
         self
@@ -635,7 +620,7 @@ impl TestScenario {
             },
             util_name: String::from(util_name),
             fixtures: AtPath::new(tmpd.as_ref().path()),
-            tmpd: tmpd,
+            tmpd,
         };
         let mut fixture_path_builder = env::current_dir().unwrap();
         fixture_path_builder.push(TESTS_DIR);
@@ -696,8 +681,11 @@ pub struct UCommand {
     comm_string: String,
     tmpd: Option<Rc<TempDir>>,
     has_run: bool,
-    stdin: Option<Vec<u8>>,
     ignore_stdin_write_error: bool,
+    stdin: Option<Stdio>,
+    stdout: Option<Stdio>,
+    stderr: Option<Stdio>,
+    bytes_into_stdin: Option<Vec<u8>>,
 }
 
 impl UCommand {
@@ -726,8 +714,11 @@ impl UCommand {
                 cmd
             },
             comm_string: String::from(arg.as_ref().to_str().unwrap()),
-            stdin: None,
             ignore_stdin_write_error: false,
+            bytes_into_stdin: None,
+            stdin: None,
+            stdout: None,
+            stderr: None,
         }
     }
 
@@ -736,6 +727,21 @@ impl UCommand {
         let mut ucmd: UCommand = UCommand::new(arg.as_ref(), tmpd_path_buf, env_clear);
         ucmd.tmpd = Some(tmpd);
         ucmd
+    }
+
+    pub fn set_stdin<T: Into<Stdio>>(&mut self, stdin: T) -> &mut UCommand {
+        self.stdin = Some(stdin.into());
+        self
+    }
+
+    pub fn set_stdout<T: Into<Stdio>>(&mut self, stdout: T) -> &mut UCommand {
+        self.stdout = Some(stdout.into());
+        self
+    }
+
+    pub fn set_stderr<T: Into<Stdio>>(&mut self, stderr: T) -> &mut UCommand {
+        self.stderr = Some(stderr.into());
+        self
     }
 
     /// Add a parameter to the invocation. Path arguments are treated relative
@@ -767,10 +773,10 @@ impl UCommand {
 
     /// provides stdinput to feed in to the command when spawned
     pub fn pipe_in<T: Into<Vec<u8>>>(&mut self, input: T) -> &mut UCommand {
-        if self.stdin.is_some() {
+        if self.bytes_into_stdin.is_some() {
             panic!("{}", MULTIPLE_STDIN_MEANINGLESS);
         }
-        self.stdin = Some(input.into());
+        self.bytes_into_stdin = Some(input.into());
         self
     }
 
@@ -784,7 +790,7 @@ impl UCommand {
     /// This is typically useful to test non-standard workflows
     /// like feeding something to a command that does not read it
     pub fn ignore_stdin_write_error(&mut self) -> &mut UCommand {
-        if self.stdin.is_none() {
+        if self.bytes_into_stdin.is_none() {
             panic!("{}", NO_STDIN_MEANINGLESS);
         }
         self.ignore_stdin_write_error = true;
@@ -813,13 +819,13 @@ impl UCommand {
         log_info("run", &self.comm_string);
         let mut child = self
             .raw
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
+            .stdin(self.stdin.take().unwrap_or_else(|| Stdio::piped()))
+            .stdout(self.stdout.take().unwrap_or_else(|| Stdio::piped()))
+            .stderr(self.stderr.take().unwrap_or_else(|| Stdio::piped()))
             .spawn()
             .unwrap();
 
-        if let Some(ref input) = self.stdin {
+        if let Some(ref input) = self.bytes_into_stdin {
             let write_result = child
                 .stdin
                 .take()

@@ -52,18 +52,19 @@ fn test_single_non_newline_separator_before() {
 
 #[test]
 fn test_invalid_input() {
-    let (_, mut ucmd) = at_and_ucmd!();
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
 
-    ucmd.arg("b")
-        .run()
-        .stderr
-        .contains("tac: error: failed to open 'b' for reading");
-
-    let (at, mut ucmd) = at_and_ucmd!();
+    scene
+        .ucmd()
+        .arg("b")
+        .fails()
+        .stderr_contains("failed to open 'b' for reading: No such file or directory");
 
     at.mkdir("a");
-    ucmd.arg("a")
-        .run()
-        .stderr
-        .contains("tac: error: failed to read 'a'");
+    scene
+        .ucmd()
+        .arg("a")
+        .fails()
+        .stderr_contains("dir: read error: Invalid argument");
 }

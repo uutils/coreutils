@@ -29,7 +29,6 @@ use rayon::prelude::*;
 use semver::Version;
 use serde::{Deserializer, Deserialize, Serialize};
 use smallvec::SmallVec;
-use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::env;
@@ -38,9 +37,10 @@ use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Lines, Read, Write};
 use std::mem::replace;
-use std::ops::{Range, RangeInclusive};
-use std::path::{Path, PathBuf};
-use uucore::fs::is_stdin_interactive; // for Iterator::dedup();
+use std::ops::Range;
+use std::path::Path;
+use unicode_width::UnicodeWidthStr;
+use uucore::fs::is_stdin_interactive; // for Iterator::dedup()
 
 static NAME: &str = "sort";
 static ABOUT: &str = "Display sorted concatenation of all FILE(s).";
@@ -66,6 +66,7 @@ static OPT_DICTIONARY_ORDER: &str = "dictionary-order";
 static OPT_MERGE: &str = "merge";
 static OPT_CHECK: &str = "check";
 static OPT_CHECK_SILENT: &str = "check-silent";
+static OPT_DEBUG: &str = "debug";
 static OPT_IGNORE_CASE: &str = "ignore-case";
 static OPT_IGNORE_BLANKS: &str = "ignore-blanks";
 static OPT_IGNORE_NONPRINTING: &str = "ignore-nonprinting";
@@ -94,7 +95,7 @@ static DEFAULT_TMPDIR: &str = r"/tmp";
 // 16GB buffer for Vec<Line> before we dump to disk, never used
 static DEFAULT_BUF_SIZE: usize = 16000000000;
 
-#[derive(Eq, Ord, PartialEq, PartialOrd, Clone)]
+#[derive(Eq, Ord, PartialEq, PartialOrd, Clone, Copy)]
 enum SortMode {
     Numeric,
     HumanNumeric,
@@ -106,6 +107,7 @@ enum SortMode {
 #[derive(Clone)]
 struct GlobalSettings {
     mode: SortMode,
+    debug: bool,
     ignore_blanks: bool,
     ignore_case: bool,
     dictionary_order: bool,
@@ -154,6 +156,7 @@ impl Default for GlobalSettings {
     fn default() -> GlobalSettings {
         GlobalSettings {
             mode: SortMode::Default,
+            debug: false,
             ignore_blanks: false,
             ignore_case: false,
             dictionary_order: false,
@@ -190,7 +193,7 @@ struct KeySettings {
 impl From<&GlobalSettings> for KeySettings {
     fn from(settings: &GlobalSettings) -> Self {
         Self {
-            mode: settings.mode.clone(),
+            mode: settings.mode,
             ignore_blanks: settings.ignore_blanks,
             ignore_case: settings.ignore_case,
             ignore_non_printing: settings.ignore_non_printing,
@@ -236,7 +239,7 @@ impl SelectionRange {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 enum NumCache {
     #[serde(deserialize_with="bailout_parse_f64")]
-    AsF64(f64),
+    AsF64(GeneralF64ParseResult),
     WithInfo(NumInfo),
     None,
 }
@@ -250,7 +253,7 @@ fn bailout_parse_f64<'de, D>(d: D) -> Result<f64, D::Error> where D: Deserialize
 }
 
 impl NumCache {
-    fn as_f64(&self) -> f64 {
+    fn as_f64(&self) -> GeneralF64ParseResult {
         match self {
             NumCache::AsF64(n) => *n,
             _ => unreachable!(),
@@ -309,19 +312,14 @@ impl Line {
             .selectors
             .iter()
             .map(|selector| {
-                let mut range =
-                    if let Some(range) = selector.get_field_selection(&line, fields.as_deref()) {
-                        if let Some(transformed) =
-                            transform(&line[range.to_owned()], &selector.settings)
-                        {
-                            SelectionRange::String(transformed)
-                        } else {
-                            SelectionRange::ByIndex(range.start().to_owned()..range.end() + 1)
-                        }
-                    } else {
-                        // If there is no match, match the empty string.
-                        SelectionRange::ByIndex(0..0)
-                    };
+                let range = selector.get_selection(&line, fields.as_deref());
+                let mut range = if let Some(transformed) =
+                    transform(&line[range.to_owned()], &selector.settings)
+                {
+                    SelectionRange::String(transformed)
+                } else {
+                    SelectionRange::ByIndex(range)
+                };
                 let num_cache = if selector.settings.mode == SortMode::Numeric
                     || selector.settings.mode == SortMode::HumanNumeric
                 {
@@ -336,7 +334,8 @@ impl Line {
                     range.shorten(num_range);
                     NumCache::WithInfo(info)
                 } else if selector.settings.mode == SortMode::GeneralNumeric && settings.buffer_size == DEFAULT_BUF_SIZE {
-                    NumCache::AsF64(permissive_f64_parse(get_leading_gen(range.get_str(&line))))
+                    let str = range.get_str(&line);
+                    NumCache::AsF64(general_f64_parse(&str[get_leading_gen(str)]))
                 } else {
                     NumCache::None
                 };
@@ -344,6 +343,129 @@ impl Line {
             })
             .collect();
         Self { line, selections }
+    }
+
+    /// Writes indicators for the selections this line matched. The original line content is NOT expected
+    /// to be already printed.
+    fn print_debug(
+        &self,
+        settings: &GlobalSettings,
+        writer: &mut dyn Write,
+    ) -> std::io::Result<()> {
+        // We do not consider this function performance critical, as debug output is only useful for small files,
+        // which are not a performance problem in any case. Therefore there aren't any special performance
+        // optimizations here.
+
+        let line = self.line.replace('\t', ">");
+        writeln!(writer, "{}", line)?;
+
+        let fields = tokenize(&self.line, settings.separator);
+        for selector in settings.selectors.iter() {
+            let mut selection = selector.get_selection(&self.line, Some(&fields));
+            match selector.settings.mode {
+                SortMode::Numeric | SortMode::HumanNumeric => {
+                    // find out which range is used for numeric comparisons
+                    let (_, num_range) = NumInfo::parse(
+                        &self.line[selection.clone()],
+                        NumInfoParseSettings {
+                            accept_si_units: selector.settings.mode == SortMode::HumanNumeric,
+                            thousands_separator: Some(THOUSANDS_SEP),
+                            decimal_pt: Some(DECIMAL_PT),
+                        },
+                    );
+                    let initial_selection = selection.clone();
+
+                    // Shorten selection to num_range.
+                    selection.start += num_range.start;
+                    selection.end = selection.start + num_range.len();
+
+                    // include a trailing si unit
+                    if selector.settings.mode == SortMode::HumanNumeric
+                        && self.line[selection.end..initial_selection.end]
+                            .starts_with(&['k', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'][..])
+                    {
+                        selection.end += 1;
+                    }
+
+                    // include leading zeroes, a leading minus or a leading decimal point
+                    while self.line[initial_selection.start..selection.start]
+                        .ends_with(&['-', '0', '.'][..])
+                    {
+                        selection.start -= 1;
+                    }
+                }
+                SortMode::GeneralNumeric => {
+                    let initial_selection = &self.line[selection.clone()];
+
+                    let leading = get_leading_gen(initial_selection);
+
+                    // Shorten selection to leading.
+                    selection.start += leading.start;
+                    selection.end = selection.start + leading.len();
+                }
+                SortMode::Month => {
+                    let initial_selection = &self.line[selection.clone()];
+
+                    let month = if month_parse(initial_selection) == Month::Unknown {
+                        // We failed to parse a month, which is equivalent to matching nothing.
+                        0..0
+                    } else {
+                        // We parsed a month. Match the three first non-whitespace characters, which must be the month we parsed.
+                        let mut chars = initial_selection
+                            .char_indices()
+                            .skip_while(|(_, c)| c.is_whitespace());
+                        chars.next().unwrap().0
+                            ..chars.nth(2).map_or(initial_selection.len(), |(idx, _)| idx)
+                    };
+
+                    // Shorten selection to month.
+                    selection.start += month.start;
+                    selection.end = selection.start + month.len();
+                }
+                _ => {}
+            }
+
+            write!(
+                writer,
+                "{}",
+                " ".repeat(UnicodeWidthStr::width(&line[..selection.start]))
+            )?;
+
+            // TODO: Once our minimum supported rust version is at least 1.47, use selection.is_empty() instead.
+            #[allow(clippy::len_zero)]
+            {
+                if selection.len() == 0 {
+                    writeln!(writer, "^ no match for key")?;
+                } else {
+                    writeln!(
+                        writer,
+                        "{}",
+                        "_".repeat(UnicodeWidthStr::width(&line[selection]))
+                    )?;
+                }
+            }
+        }
+        if !(settings.random
+            || settings.stable
+            || settings.unique
+            || !(settings.dictionary_order
+                || settings.ignore_blanks
+                || settings.ignore_case
+                || settings.ignore_non_printing
+                || settings.mode != SortMode::Default))
+        {
+            // A last resort comparator is in use, underline the whole line.
+            if self.line.is_empty() {
+                writeln!(writer, "^ no match for key")?;
+            } else {
+                writeln!(
+                    writer,
+                    "{}",
+                    "_".repeat(UnicodeWidthStr::width(line.as_str()))
+                )?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -407,20 +529,18 @@ fn tokenize_default(line: &str) -> Vec<Field> {
 
 /// Split between separators. These separators are not included in fields.
 fn tokenize_with_separator(line: &str, separator: char) -> Vec<Field> {
-    let mut tokens = vec![0..0];
-    let mut previous_was_separator = false;
-    for (idx, char) in line.char_indices() {
-        if previous_was_separator {
-            tokens.push(idx..0);
-        }
-        if char == separator {
-            tokens.last_mut().unwrap().end = idx;
-            previous_was_separator = true;
-        } else {
-            previous_was_separator = false;
-        }
+    let mut tokens = vec![];
+    let separator_indices =
+        line.char_indices()
+            .filter_map(|(i, c)| if c == separator { Some(i) } else { None });
+    let mut start = 0;
+    for sep_idx in separator_indices {
+        tokens.push(start..sep_idx);
+        start = sep_idx + 1;
     }
-    tokens.last_mut().unwrap().end = line.len();
+    if start < line.len() {
+        tokens.push(start..line.len());
+    }
     tokens
 }
 
@@ -464,6 +584,28 @@ impl KeyPosition {
                         crash!(1, "invalid option for key: `{}`", c)
                     }
                 }
+                // All numeric sorts and month sort conflict with dictionary_order and ignore_non_printing.
+                // Instad of reporting an error, let them overwrite each other.
+
+                // FIXME: This should only override if the overridden flag is a global flag.
+                // If conflicting flags are attached to the key, GNU sort crashes and we should probably too.
+                match option {
+                    'h' | 'n' | 'g' | 'M' => {
+                        settings.dictionary_order = false;
+                        settings.ignore_non_printing = false;
+                    }
+                    'd' | 'i' => {
+                        settings.mode = match settings.mode {
+                            SortMode::Numeric
+                            | SortMode::HumanNumeric
+                            | SortMode::GeneralNumeric
+                            | SortMode::Month => SortMode::Default,
+                            // Only SortMode::Default and SortMode::Version work with dictionary_order and ignore_non_printing
+                            m @ SortMode::Default | m @ SortMode::Version => m,
+                        }
+                    }
+                    _ => {}
+                }
             }
             // Strip away option characters from the original value so we can parse it later
             *value_with_options = &value_with_options[..options_start];
@@ -506,13 +648,16 @@ impl FieldSelector {
 
     /// Look up the slice that corresponds to this selector for the given line.
     /// If needs_fields returned false, fields may be None.
-    fn get_field_selection<'a>(
-        &self,
-        line: &'a str,
-        tokens: Option<&[Field]>,
-    ) -> Option<RangeInclusive<usize>> {
-        enum ResolutionErr {
+    fn get_selection<'a>(&self, line: &'a str, tokens: Option<&[Field]>) -> Range<usize> {
+        enum Resolution {
+            // The start index of the resolved character, inclusive
+            StartOfChar(usize),
+            // The end index of the resolved character, exclusive.
+            // This is only returned if the character index is 0.
+            EndOfChar(usize),
+            // The resolved character would be in front of the first character
             TooLow,
+            // The resolved character would be after the last character
             TooHigh,
         }
 
@@ -521,15 +666,15 @@ impl FieldSelector {
             line: &str,
             tokens: Option<&[Field]>,
             position: &KeyPosition,
-        ) -> Result<usize, ResolutionErr> {
+        ) -> Resolution {
             if tokens.map_or(false, |fields| fields.len() < position.field) {
-                Err(ResolutionErr::TooHigh)
+                Resolution::TooHigh
             } else if position.char == 0 {
                 let end = tokens.unwrap()[position.field - 1].end;
                 if end == 0 {
-                    Err(ResolutionErr::TooLow)
+                    Resolution::TooLow
                 } else {
-                    Ok(end - 1)
+                    Resolution::EndOfChar(end)
                 }
             } else {
                 let mut idx = if position.field == 1 {
@@ -538,38 +683,52 @@ impl FieldSelector {
                     0
                 } else {
                     tokens.unwrap()[position.field - 1].start
-                } + position.char
-                    - 1;
+                };
+                idx += line[idx..]
+                    .char_indices()
+                    .nth(position.char - 1)
+                    .map_or(line.len(), |(idx, _)| idx);
                 if idx >= line.len() {
-                    Err(ResolutionErr::TooHigh)
+                    Resolution::TooHigh
                 } else {
                     if position.ignore_blanks {
-                        if let Some(not_whitespace) =
-                            line[idx..].chars().position(|c| !c.is_whitespace())
+                        if let Some((not_whitespace, _)) =
+                            line[idx..].char_indices().find(|(_, c)| !c.is_whitespace())
                         {
                             idx += not_whitespace;
                         } else {
-                            return Err(ResolutionErr::TooHigh);
+                            return Resolution::TooHigh;
                         }
                     }
-                    Ok(idx)
+                    Resolution::StartOfChar(idx)
                 }
             }
         }
 
-        if let Ok(from) = resolve_index(line, tokens, &self.from) {
-            let to = self.to.as_ref().map(|to| resolve_index(line, tokens, &to));
-            match to {
-                Some(Ok(to)) => Some(from..=to),
-                // If `to` was not given or the match would be after the end of the line,
-                // match everything until the end of the line.
-                None | Some(Err(ResolutionErr::TooHigh)) => Some(from..=line.len() - 1),
-                // If `to` is before the start of the line, report no match.
-                // This can happen if the line starts with a separator.
-                Some(Err(ResolutionErr::TooLow)) => None,
+        match resolve_index(line, tokens, &self.from) {
+            Resolution::StartOfChar(from) => {
+                let to = self.to.as_ref().map(|to| resolve_index(line, tokens, &to));
+
+                match to {
+                    Some(Resolution::StartOfChar(mut to)) => {
+                        to += line[to..].chars().next().map_or(1, |c| c.len_utf8());
+                        from..to
+                    }
+                    Some(Resolution::EndOfChar(to)) => from..to,
+                    // If `to` was not given or the match would be after the end of the line,
+                    // match everything until the end of the line.
+                    None | Some(Resolution::TooHigh) => from..line.len(),
+                    // If `to` is before the start of the line, report no match.
+                    // This can happen if the line starts with a separator.
+                    Some(Resolution::TooLow) => 0..0,
+                }
             }
-        } else {
-            None
+            Resolution::TooLow | Resolution::EndOfChar(_) => {
+                unreachable!("This should only happen if the field start index is 0, but that should already have caused an error.")
+            }
+            // While for comparisons it's only important that this is an empty slice,
+            // to produce accurate debug output we need to match an empty slice at the end of the line.
+            Resolution::TooHigh => line.len()..line.len(),
         }
     }
 }
@@ -597,7 +756,7 @@ impl<'a> PartialOrd for MergeableFile<'a> {
 
 impl<'a> PartialEq for MergeableFile<'a> {
     fn eq(&self, other: &MergeableFile) -> bool {
-        Ordering::Equal == compare_by(&self.current_line, &other.current_line, self.settings)
+        Ordering::Equal == self.cmp(other)
     }
 }
 
@@ -628,8 +787,8 @@ impl<'a> FileMerger<'a> {
 }
 
 impl<'a> Iterator for FileMerger<'a> {
-    type Item = String;
-    fn next(&mut self) -> Option<String> {
+    type Item = Line;
+    fn next(&mut self) -> Option<Line> {
         match self.heap.pop() {
             Some(mut current) => {
                 match current.lines.next() {
@@ -639,12 +798,12 @@ impl<'a> Iterator for FileMerger<'a> {
                             Line::new(next_line, &self.settings),
                         );
                         self.heap.push(current);
-                        Some(ret.line)
+                        Some(ret)
                     }
                     _ => {
                         // Don't put it back in the heap (it's empty/erroring)
                         // but its first line is still valid.
-                        Some(current.current_line.line)
+                        Some(current.current_line)
                     }
                 }
             }
@@ -708,7 +867,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(OPT_DICTIONARY_ORDER)
                 .short("d")
                 .long(OPT_DICTIONARY_ORDER)
-                .help("consider only blanks and alphanumeric characters"),
+                .help("consider only blanks and alphanumeric characters")
+                .conflicts_with_all(&[OPT_NUMERIC_SORT, OPT_GENERAL_NUMERIC_SORT, OPT_HUMAN_NUMERIC_SORT, OPT_MONTH_SORT]),
         )
         .arg(
             Arg::with_name(OPT_MERGE)
@@ -736,9 +896,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         )
         .arg(
             Arg::with_name(OPT_IGNORE_NONPRINTING)
-                .short("-i")
+                .short("i")
                 .long(OPT_IGNORE_NONPRINTING)
-                .help("ignore nonprinting characters"),
+                .help("ignore nonprinting characters")
+                .conflicts_with_all(&[OPT_NUMERIC_SORT, OPT_GENERAL_NUMERIC_SORT, OPT_HUMAN_NUMERIC_SORT, OPT_MONTH_SORT]),
         )
         .arg(
             Arg::with_name(OPT_IGNORE_BLANKS)
@@ -829,8 +990,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .value_name("NUL_FILES")
                 .multiple(true),
         )
+        .arg(
+            Arg::with_name(OPT_DEBUG)
+                .long(OPT_DEBUG)
+                .help("underline the parts of the line that are actually used for sorting"),
+        )
         .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true))
         .get_matches_from(args);
+
+    settings.debug = matches.is_present(OPT_DEBUG);
 
     // check whether user specified a zero terminated list of files for input, otherwise read files from args
     let mut files: Vec<String> = if matches.is_present(OPT_FILES0_FROM) {
@@ -964,6 +1132,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 1,
                 &mut key_settings,
             );
+            if from.char == 0 {
+                crash!(
+                    1,
+                    "invalid character index 0 in `{}` for the start position of a field",
+                    key
+                )
+            }
             let to = from_to
                 .next()
                 .map(|to| KeyPosition::parse(to, 0, &mut key_settings));
@@ -1042,7 +1217,10 @@ fn exec(files: Vec<String>, settings: GlobalSettings) -> i32 {
 
     if settings.merge {
         if settings.unique {
-            print_sorted(file_merger.dedup(), &settings)
+            print_sorted(
+                file_merger.dedup_by(|a, b| compare_by(a, b, settings) == Ordering::Equal),
+                &settings,
+            )
         } else {
             print_sorted(file_merger, &settings)
         }
@@ -1050,12 +1228,11 @@ fn exec(files: Vec<String>, settings: GlobalSettings) -> i32 {
         print_sorted(
             lines
                 .into_iter()
-                .dedup_by(|a, b| compare_by(a, b, &settings) == Ordering::Equal)
-                .map(|line| line.line),
+                .dedup_by(|a, b| compare_by(a, b, settings) == Ordering::Equal),
             &settings,
         )
     } else {
-        print_sorted(lines.into_iter().map(|line| line.line), &settings)
+        print_sorted(lines.into_iter(), &settings)
     }
 
     0
@@ -1163,107 +1340,80 @@ fn default_compare(a: &str, b: &str) -> Ordering {
     a.cmp(b)
 }
 
-/// This function does the initial detection of numeric lines for FP compares.
-// Lines starting with a number or positive or negative sign.
-// It also strips the string of any thing that could never
-// be a number for the purposes of any type of numeric comparison.
-#[inline(always)]
-fn leading_num_common(a: &str) -> &str {
-    let mut s = "";
-
-    // check whether char is numeric, whitespace or decimal point or thousand separator
-    for (idx, c) in a.char_indices() {
-        if !c.is_numeric()
-            && !c.is_whitespace()
-            && !c.eq(&THOUSANDS_SEP)
-            && !c.eq(&DECIMAL_PT)
-            // check for e notation
-            && !c.eq(&'e')
-            && !c.eq(&'E')
-            // check whether first char is + or - 
-            && !a.chars().next().unwrap_or('\0').eq(&POSITIVE)
-            && !a.chars().next().unwrap_or('\0').eq(&NEGATIVE)
-        {
-            // Strip string of non-numeric trailing chars
-            s = &a[..idx];
-            break;
-        }
-        // If line is not a number line, return the line as is
-        s = &a;
-    }
-    s
-}
-
-/// This function cleans up the initial comparison done by leading_num_common for a general numeric compare.
+// This function cleans up the initial comparison done by leading_num_common for a general numeric compare.
 // In contrast to numeric compare, GNU general numeric/FP sort *should* recognize positive signs and
 // scientific notation, so we strip those lines only after the end of the following numeric string.
 // For example, 5e10KFD would be 5e10 or 5x10^10 and +10000HFKJFK would become 10000.
-fn get_leading_gen(a: &str) -> &str {
-    // Make this iter peekable to see if next char is numeric
-    let raw_leading_num = leading_num_common(a);
-    let mut p_iter = raw_leading_num.chars().peekable();
-    let mut result = "";
-    // Cleanup raw stripped strings
-    while let Some(c) = p_iter.next() {
-        let next_char_numeric = p_iter.peek().unwrap_or(&'\0').is_numeric();
-        // Only general numeric recognizes e notation and, see block below, the '+' sign
-        // Only GNU (non-general) numeric recognize thousands seperators, takes only leading #
-        if (c.eq(&'e') || c.eq(&'E')) && !next_char_numeric || c.eq(&THOUSANDS_SEP) {
-            result = a.split(c).next().unwrap_or("");
-            break;
-        // If positive sign and next char is not numeric, split at postive sign at keep trailing numbers
-        // There is a more elegant way to do this in Rust 1.45, std::str::strip_prefix
-        } else if c.eq(&POSITIVE) && !next_char_numeric {
-            result = a.trim().trim_start_matches('+');
-            break;
+fn get_leading_gen(input: &str) -> Range<usize> {
+    let trimmed = input.trim_start();
+    let leading_whitespace_len = input.len() - trimmed.len();
+    for allowed_prefix in &["inf", "-inf", "nan"] {
+        if trimmed.is_char_boundary(allowed_prefix.len())
+            && trimmed[..allowed_prefix.len()].eq_ignore_ascii_case(allowed_prefix)
+        {
+            return leading_whitespace_len..(leading_whitespace_len + allowed_prefix.len());
         }
-        // If no further processing needed to be done, return the line as-is to be sorted
-        result = a;
     }
-    result
+    // Make this iter peekable to see if next char is numeric
+    let mut char_indices = trimmed.char_indices().peekable();
+
+    let first = char_indices.peek();
+
+    if first.map_or(false, |&(_, c)| c == NEGATIVE || c == POSITIVE) {
+        char_indices.next();
+    }
+
+    let mut had_e_notation = false;
+    let mut had_decimal_pt = false;
+    while let Some((idx, c)) = char_indices.next() {
+        if c.is_ascii_digit() {
+            continue;
+        }
+        if c == DECIMAL_PT && !had_decimal_pt {
+            had_decimal_pt = true;
+            continue;
+        }
+        let next_char_numeric = char_indices
+            .peek()
+            .map_or(false, |(_, c)| c.is_ascii_digit());
+        if (c == 'e' || c == 'E') && !had_e_notation && next_char_numeric {
+            had_e_notation = true;
+            continue;
+        }
+        return leading_whitespace_len..(leading_whitespace_len + idx);
+    }
+    leading_whitespace_len..input.len()
 }
 
-#[inline(always)]
-fn remove_trailing_dec<'a, S: Into<Cow<'a, str>>>(input: S) -> Cow<'a, str> {
-    let input = input.into();
-    if let Some(s) = input.find(DECIMAL_PT) {
-        let (leading, trailing) = input.split_at(s);
-        let output = [leading, ".", trailing.replace(DECIMAL_PT, "").as_str()].concat();
-        Cow::Owned(output)
-    } else {
-        input
-    }
+#[derive(Copy, Clone, PartialEq, PartialOrd)]
+enum GeneralF64ParseResult {
+    Invalid,
+    NaN,
+    NegInfinity,
+    Number(f64),
+    Infinity,
 }
 
 /// Parse the beginning string into an f64, returning -inf instead of NaN on errors.
 #[inline(always)]
-fn permissive_f64_parse(a: &str) -> f64 {
-    // GNU sort treats "NaN" as non-number in numeric, so it needs special care.
-    // *Keep this trim before parse* despite what POSIX may say about -b and -n
-    // because GNU and BSD both seem to require it to match their behavior
-    //
-    // Remove any trailing decimals, ie 4568..890... becomes 4568.890
-    // Then, we trim whitespace and parse
-    match remove_trailing_dec(a).trim().parse::<f64>() {
-        Ok(val) if val.is_nan() => std::f64::NEG_INFINITY,
-        Ok(val) => val,
-        Err(_) => std::f64::NEG_INFINITY,
+fn general_f64_parse(a: &str) -> GeneralF64ParseResult {
+    // The actual behavior here relies on Rust's implementation of parsing floating points.
+    // For example "nan", "inf" (ignoring the case) and "infinity" are only parsed to floats starting from 1.53.
+    // TODO: Once our minimum supported Rust version is 1.53 or above, we should add tests for those cases.
+    match a.parse::<f64>() {
+        Ok(a) if a.is_nan() => GeneralF64ParseResult::NaN,
+        Ok(a) if a == std::f64::NEG_INFINITY => GeneralF64ParseResult::NegInfinity,
+        Ok(a) if a == std::f64::INFINITY => GeneralF64ParseResult::Infinity,
+        Ok(a) => GeneralF64ParseResult::Number(a),
+        Err(_) => GeneralF64ParseResult::Invalid,
     }
 }
 
 /// Compares two floats, with errors and non-numerics assumed to be -inf.
 /// Stops coercing at the first non-numeric char.
 /// We explicitly need to convert to f64 in this case.
-fn general_numeric_compare(a: f64, b: f64) -> Ordering {
-    #![allow(clippy::comparison_chain)]
-    // f64::cmp isn't implemented (due to NaN issues); implement directly instead
-    if a > b {
-        Ordering::Greater
-    } else if a < b {
-        Ordering::Less
-    } else {
-        Ordering::Equal
-    }
+fn general_numeric_compare(a: GeneralF64ParseResult, b: GeneralF64ParseResult) -> Ordering {
+    a.partial_cmp(&b).unwrap()
 }
 
 fn get_rand_string() -> String {
@@ -1290,7 +1440,7 @@ fn random_shuffle(a: &str, b: &str, x: String) -> Ordering {
     da.cmp(&db)
 }
 
-#[derive(Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Eq, Ord, PartialEq, PartialOrd, Clone, Copy)]
 enum Month {
     Unknown,
     January,
@@ -1309,30 +1459,32 @@ enum Month {
 
 /// Parse the beginning string into a Month, returning Month::Unknown on errors.
 fn month_parse(line: &str) -> Month {
-    // GNU splits at any 3 letter match "JUNNNN" is JUN
-    let pattern = if line.trim().len().ge(&3) {
-        // Split a 3 and get first element of tuple ".0"
-        line.trim().split_at(3).0
-    } else {
-        ""
-    };
+    let line = line.trim();
 
-    let result = match pattern.to_uppercase().as_ref() {
-        "JAN" => Month::January,
-        "FEB" => Month::February,
-        "MAR" => Month::March,
-        "APR" => Month::April,
-        "MAY" => Month::May,
-        "JUN" => Month::June,
-        "JUL" => Month::July,
-        "AUG" => Month::August,
-        "SEP" => Month::September,
-        "OCT" => Month::October,
-        "NOV" => Month::November,
-        "DEC" => Month::December,
-        _ => Month::Unknown,
-    };
-    result
+    const MONTHS: [(&str, Month); 12] = [
+        ("JAN", Month::January),
+        ("FEB", Month::February),
+        ("MAR", Month::March),
+        ("APR", Month::April),
+        ("MAY", Month::May),
+        ("JUN", Month::June),
+        ("JUL", Month::July),
+        ("AUG", Month::August),
+        ("SEP", Month::September),
+        ("OCT", Month::October),
+        ("NOV", Month::November),
+        ("DEC", Month::December),
+    ];
+
+    for (month_str, month) in &MONTHS {
+        if line.is_char_boundary(month_str.len())
+            && line[..month_str.len()].eq_ignore_ascii_case(month_str)
+        {
+            return *month;
+        }
+    }
+
+    Month::Unknown
 }
 
 fn month_compare(a: &str, b: &str) -> Ordering {
@@ -1390,7 +1542,7 @@ fn remove_nonprinting_chars(s: &str) -> String {
         .collect::<String>()
 }
 
-fn print_sorted<T: Iterator<Item = String>>(iter: T, settings: &GlobalSettings) {
+fn print_sorted<T: Iterator<Item = Line>>(iter: T, settings: &GlobalSettings) {
     let mut file: Box<dyn Write> = match settings.outfile {
         Some(ref filename) => match File::create(Path::new(&filename)) {
             Ok(f) => Box::new(BufWriter::new(f)) as Box<dyn Write>,
@@ -1401,15 +1553,19 @@ fn print_sorted<T: Iterator<Item = String>>(iter: T, settings: &GlobalSettings) 
         },
         None => Box::new(BufWriter::new(stdout())) as Box<dyn Write>,
     };
-    if settings.zero_terminated {
+    if settings.zero_terminated && !settings.debug {
         for line in iter {
-            crash_if_err!(1, file.write_all(line.as_bytes()));
+            crash_if_err!(1, file.write_all(line.line.as_bytes()));
             crash_if_err!(1, file.write_all("\0".as_bytes()));
         }
     } else {
         for line in iter {
-            crash_if_err!(1, file.write_all(line.as_bytes()));
-            crash_if_err!(1, file.write_all("\n".as_bytes()));
+            if !settings.debug {
+                crash_if_err!(1, file.write_all(line.line.as_bytes()));
+                crash_if_err!(1, file.write_all("\n".as_bytes()));
+            } else {
+                crash_if_err!(1, line.print_debug(settings, &mut file));
+            }
         }
     }
     crash_if_err!(1, file.flush());
@@ -1503,5 +1659,15 @@ mod tests {
             tokenize(line, Some('a')),
             vec![0..0, 1..1, 2..2, 3..9, 10..18,]
         );
+    }
+
+    #[test]
+    fn test_tokenize_fields_trailing_custom_separator() {
+        let line = "a";
+        assert_eq!(tokenize(line, Some('a')), vec![0..0]);
+        let line = "aa";
+        assert_eq!(tokenize(line, Some('a')), vec![0..0, 1..1]);
+        let line = "..a..a";
+        assert_eq!(tokenize(line, Some('a')), vec![0..2, 3..5]);
     }
 }

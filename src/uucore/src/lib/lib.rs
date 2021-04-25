@@ -26,6 +26,7 @@ mod mods; // core cross-platform modules
 
 // * cross-platform modules
 pub use crate::mods::coreopts;
+pub use crate::mods::os;
 pub use crate::mods::panic;
 pub use crate::mods::ranges;
 

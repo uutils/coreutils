@@ -41,6 +41,7 @@ pub struct Behavior {
     compare: bool,
     strip: bool,
     strip_program: String,
+    create_leading: bool,
 }
 
 #[derive(Clone, Eq, PartialEq)]
@@ -70,7 +71,7 @@ static OPT_BACKUP: &str = "backup";
 static OPT_BACKUP_2: &str = "backup2";
 static OPT_DIRECTORY: &str = "directory";
 static OPT_IGNORED: &str = "ignored";
-static OPT_CREATED: &str = "created";
+static OPT_CREATE_LEADING: &str = "create-leading";
 static OPT_GROUP: &str = "group";
 static OPT_MODE: &str = "mode";
 static OPT_OWNER: &str = "owner";
@@ -133,9 +134,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
         .arg(
             // TODO implement flag
-            Arg::with_name(OPT_CREATED)
+            Arg::with_name(OPT_CREATE_LEADING)
                 .short("D")
-                .help("(unimplemented) create all leading components of DEST except the last, then copy SOURCE to DEST")
+                .help("create all leading components of DEST except the last, then copy SOURCE to DEST")
         )
         .arg(
             Arg::with_name(OPT_GROUP)
@@ -266,8 +267,6 @@ fn check_unimplemented<'a>(matches: &ArgMatches) -> Result<(), &'a str> {
         Err("--backup")
     } else if matches.is_present(OPT_BACKUP_2) {
         Err("-b")
-    } else if matches.is_present(OPT_CREATED) {
-        Err("-D")
     } else if matches.is_present(OPT_SUFFIX) {
         Err("--suffix, -S")
     } else if matches.is_present(OPT_TARGET_DIRECTORY) {
@@ -343,6 +342,7 @@ fn behavior(matches: &ArgMatches) -> Result<Behavior, i32> {
                 .value_of(OPT_STRIP_PROGRAM)
                 .unwrap_or(DEFAULT_STRIP_PROGRAM),
         ),
+        create_leading: matches.is_present(OPT_CREATE_LEADING),
     })
 }
 
@@ -410,12 +410,35 @@ fn standard(paths: Vec<String>, b: Behavior) -> i32 {
         .iter()
         .map(PathBuf::from)
         .collect::<Vec<_>>();
+
     let target = Path::new(paths.last().unwrap());
 
-    if (target.is_file() || is_new_file_path(target)) && sources.len() == 1 {
-        copy_file_to_file(&sources[0], &target.to_path_buf(), &b)
-    } else {
+    if sources.len() > 1 || (target.exists() && target.is_dir()) {
         copy_files_into_dir(sources, &target.to_path_buf(), &b)
+    } else {
+        if let Some(parent) = target.parent() {
+            if !parent.exists() && b.create_leading {
+                if let Err(e) = fs::create_dir_all(parent) {
+                    show_error!("failed to create {}: {}", parent.display(), e);
+                    return 1;
+                }
+
+                if mode::chmod(&parent, b.mode()).is_err() {
+                    show_error!("failed to chmod {}", parent.display());
+                    return 1;
+                }
+            }
+        }
+
+        if target.is_file() || is_new_file_path(target) {
+            copy_file_to_file(&sources[0], &target.to_path_buf(), &b)
+        } else {
+            show_error!(
+                "invalid target {}: No such file or directory",
+                target.display()
+            );
+            1
+        }
     }
 }
 

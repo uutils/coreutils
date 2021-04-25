@@ -138,7 +138,15 @@ impl NumInfo {
                     sign: if had_digit { sign } else { Sign::Positive },
                     exponent: 0,
                 },
-                0..0,
+                if had_digit {
+                    // In this case there were only zeroes.
+                    // For debug output to work properly, we have to claim to match the end of the number.
+                    num.len()..num.len()
+                } else {
+                    // This was no number at all.
+                    // For debug output to work properly, we have to claim to match the start of the number.
+                    0..0
+                },
             )
         }
     }

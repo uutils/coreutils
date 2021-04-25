@@ -19,8 +19,7 @@ fn test_create_one_fifo_with_invalid_mode() {
         .arg("-m")
         .arg("invalid")
         .fails()
-        .stderr
-        .contains("invalid mode");
+        .stderr_contains("invalid mode");
 }
 
 #[test]

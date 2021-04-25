@@ -11,12 +11,10 @@ use std::thread::sleep;
 fn test_install_help() {
     let (_, mut ucmd) = at_and_ucmd!();
 
-    assert!(ucmd
-        .arg("--help")
+    ucmd.arg("--help")
         .succeeds()
         .no_stderr()
-        .stdout
-        .contains("FLAGS:"));
+        .stdout_contains("FLAGS:");
 }
 
 #[test]
@@ -59,13 +57,11 @@ fn test_install_failing_not_dir() {
     at.touch(file1);
     at.touch(file2);
     at.touch(file3);
-    assert!(ucmd
-        .arg(file1)
+    ucmd.arg(file1)
         .arg(file2)
         .arg(file3)
         .fails()
-        .stderr
-        .contains("not a directory"));
+        .stderr_contains("not a directory");
 }
 
 #[test]
@@ -77,13 +73,11 @@ fn test_install_unimplemented_arg() {
 
     at.touch(file);
     at.mkdir(dir);
-    assert!(ucmd
-        .arg(context_arg)
+    ucmd.arg(context_arg)
         .arg(file)
         .arg(dir)
         .fails()
-        .stderr
-        .contains("Unimplemented"));
+        .stderr_contains("Unimplemented");
 
     assert!(!at.file_exists(&format!("{}/{}", dir, file)));
 }
@@ -231,13 +225,11 @@ fn test_install_mode_failing() {
 
     at.touch(file);
     at.mkdir(dir);
-    assert!(ucmd
-        .arg(file)
+    ucmd.arg(file)
         .arg(dir)
         .arg(mode_arg)
         .fails()
-        .stderr
-        .contains("Invalid mode string: invalid digit found in string"));
+        .stderr_contains("Invalid mode string: invalid digit found in string");
 
     let dest_file = &format!("{}/{}", dir, file);
     assert!(at.file_exists(file));
@@ -336,7 +328,7 @@ fn test_install_target_new_file_with_owner() {
         .arg(format!("{}/{}", dir, file))
         .run();
 
-    if is_ci() && result.stderr.contains("error: no such user:") {
+    if is_ci() && result.stderr_str().contains("error: no such user:") {
         // In the CI, some server are failing to return the user id.
         // As seems to be a configuration issue, ignoring it
         return;
@@ -359,7 +351,7 @@ fn test_install_target_new_file_failing_nonexistent_parent() {
     ucmd.arg(file1)
         .arg(format!("{}/{}", dir, file2))
         .fails()
-        .stderr_contains(&"not a directory");
+        .stderr_contains(&"No such file or directory");
 }
 
 #[test]
@@ -619,33 +611,64 @@ fn test_install_and_strip_with_program() {
 #[test]
 #[cfg(not(windows))]
 fn test_install_and_strip_with_invalid_program() {
-    let scene = TestScenario::new(util_name!());
-
-    let stderr = scene
-        .ucmd()
+    new_ucmd!()
         .arg("-s")
         .arg("--strip-program")
         .arg("/bin/date")
         .arg(strip_source_file())
         .arg(STRIP_TARGET_FILE)
         .fails()
-        .stderr;
-    assert!(stderr.contains("strip program failed"));
+        .stderr_contains("strip program failed");
 }
 
 #[test]
 #[cfg(not(windows))]
 fn test_install_and_strip_with_non_existent_program() {
-    let scene = TestScenario::new(util_name!());
-
-    let stderr = scene
-        .ucmd()
+    new_ucmd!()
         .arg("-s")
         .arg("--strip-program")
         .arg("/usr/bin/non_existent_program")
         .arg(strip_source_file())
         .arg(STRIP_TARGET_FILE)
         .fails()
-        .stderr;
-    assert!(stderr.contains("No such file or directory"));
+        .stderr_contains("No such file or directory");
+}
+
+#[test]
+fn test_install_creating_leading_dirs() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let source = "create_leading_test_file";
+    let target = "dir1/dir2/dir3/test_file";
+
+    at.touch(source);
+
+    scene
+        .ucmd()
+        .arg("-D")
+        .arg(source)
+        .arg(at.plus(target))
+        .succeeds()
+        .no_stderr();
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_install_creating_leading_dir_fails_on_long_name() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let source = "create_leading_test_file";
+    let target = format!("{}/test_file", "d".repeat(libc::PATH_MAX as usize + 1));
+
+    at.touch(source);
+
+    scene
+        .ucmd()
+        .arg("-D")
+        .arg(source)
+        .arg(at.plus(target.as_str()))
+        .fails()
+        .stderr_contains("failed to create");
 }
