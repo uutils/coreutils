@@ -33,7 +33,7 @@ fn test_helper(file_name: &str, args: &str) {
 fn test_larger_than_specified_segment() {
     new_ucmd!()
         .arg("-n")
-        .arg("-S 50K")
+        .arg("-S 50M")
         .arg("ext_sort.txt")
         .succeeds()
         .stdout_is_fixture(format!("{}", "ext_sort.expected"));
@@ -67,7 +67,7 @@ fn test_extsort_as64_bailout() {
         .arg("-S 10K")
         .arg("multiple_decimals_general.txt")
         .succeeds()
-        .stdout_is("\n\n\n\n\n\n\n\nCARAvan\n-2028789030\n-896689\n-8.90880\n-1\n-.05\n000\n00000001\n1\n1.040000000\n1.444\n1.58590\n8.013\n45\n46.89\n576,446.88800000\n576,446.890\n               4567.\n4567.1\n4567.34\n\t\t\t\t\t\t\t\t\t\t4567..457\n\t\t\t\t37800\n\t\t\t\t\t\t45670.89079.098\n\t\t\t\t\t\t45670.89079.1\n4798908.340000000000\n4798908.45\n4798908.8909800\n");
+        .stdout_is_fixture("multiple_decimals_general.expected");
 }
 
 #[test]

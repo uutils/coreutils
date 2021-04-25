@@ -27,7 +27,7 @@ use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use rayon::prelude::*;
 use semver::Version;
-use serde::{Deserializer, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
@@ -41,6 +41,7 @@ use std::ops::Range;
 use std::path::Path;
 use unicode_width::UnicodeWidthStr;
 use uucore::fs::is_stdin_interactive; // for Iterator::dedup()
+use std::path::PathBuf;
 
 static NAME: &str = "sort";
 static ABOUT: &str = "Display sorted concatenation of all FILE(s).";
@@ -133,22 +134,20 @@ impl GlobalSettings {
     // It's back to do conversions for command line opts!
     // Probably want to do through numstrcmp somehow now?
     fn human_numeric_convert(a: &str) -> usize {
-        let num_part = leading_num_common(a);
-        let (_, s) = a.split_at(num_part.len());
-        let num_part = permissive_f64_parse(num_part);
-        let suffix = match s.parse().unwrap_or('\0') {
+        let num_str = &a[get_leading_gen(a)];
+        let (_, suf_str) = a.split_at(num_str.len());
+        let num_usize = num_str.parse::<usize>().expect("Error parsing buffer size: ");
+        let suf_usize: usize = match suf_str.to_uppercase().as_str() {
             // SI Units
-            'K' | 'k' => 1E3,
-            'M' => 1E6,
-            'G' => 1E9,
-            'T' => 1E12,
-            'P' => 1E15,
-            'E' => 1E18,
-            'Z' => 1E21,
-            'Y' => 1E24,
-            _ => 1f64,
+            "K" => 1000usize,
+            "M" => 1000000usize,
+            "G" => 1000000000usize,
+            "T" => 1000000000000usize,
+            "P" => 1000000000000000usize,
+            "E" => 1000000000000000000usize,
+            _ => 1usize,
         };
-        num_part as usize * suffix as usize
+        num_usize * suf_usize
     }
 }
 
@@ -236,20 +235,11 @@ impl SelectionRange {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 enum NumCache {
-    #[serde(deserialize_with="bailout_parse_f64")]
     AsF64(GeneralF64ParseResult),
     WithInfo(NumInfo),
     None,
-}
-
-// Only used when serde can't parse a null value
-fn bailout_parse_f64<'de, D>(d: D) -> Result<f64, D::Error> where D: Deserializer<'de> {
-    Deserialize::deserialize(d)
-        .map(|x: Option<_>| {
-            x.unwrap_or(0f64)
-        })
 }
 
 impl NumCache {
@@ -266,7 +256,7 @@ impl NumCache {
         }
     }
 }
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 struct Selection {
     range: SelectionRange,
     num_cache: NumCache,
@@ -1218,7 +1208,7 @@ fn exec(files: Vec<String>, settings: GlobalSettings) -> i32 {
     if settings.merge {
         if settings.unique {
             print_sorted(
-                file_merger.dedup_by(|a, b| compare_by(a, b, settings) == Ordering::Equal),
+                file_merger.dedup_by(|a, b| compare_by(a, b, &settings) == Ordering::Equal),
                 &settings,
             )
         } else {
@@ -1228,7 +1218,7 @@ fn exec(files: Vec<String>, settings: GlobalSettings) -> i32 {
         print_sorted(
             lines
                 .into_iter()
-                .dedup_by(|a, b| compare_by(a, b, settings) == Ordering::Equal),
+                .dedup_by(|a, b| compare_by(a, b, &settings) == Ordering::Equal),
             &settings,
         )
     } else {
@@ -1303,11 +1293,15 @@ fn compare_by(a: &Line, b: &Line, global_settings: &GlobalSettings) -> Ordering 
                 // serde JSON has issues with f64 null values, so caching them won't work for us with ext sort
                 SortMode::GeneralNumeric => 
                     if global_settings.buffer_size == DEFAULT_BUF_SIZE {
-                        general_numeric_compare(a_selection.num_cache.as_f64(),
-                        b_selection.num_cache.as_f64())
+                        general_numeric_compare(
+                            a_selection.num_cache.as_f64(),
+                        b_selection.num_cache.as_f64()
+                    )
                     } else {
-                        general_numeric_compare(permissive_f64_parse(get_leading_gen(a_str)), 
-                        permissive_f64_parse(get_leading_gen(b_str)))
+                        general_numeric_compare(
+                            general_f64_parse(&a_str[get_leading_gen(a_str)]),
+                            general_f64_parse(&b_str[get_leading_gen(b_str)])
+                    )
                     },
                 SortMode::Month => month_compare(a_str, b_str),
                 SortMode::Version => version_compare(a_str, b_str),
@@ -1385,7 +1379,7 @@ fn get_leading_gen(input: &str) -> Range<usize> {
     leading_whitespace_len..input.len()
 }
 
-#[derive(Copy, Clone, PartialEq, PartialOrd)]
+#[derive(Serialize, Deserialize, Copy, Clone, PartialEq, PartialOrd)]
 enum GeneralF64ParseResult {
     Invalid,
     NaN,
