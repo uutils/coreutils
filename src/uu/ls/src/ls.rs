@@ -22,25 +22,22 @@ use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use once_cell::unsync::OnceCell;
 use quoting_style::{escape_name, QuotingStyle};
-#[cfg(unix)]
-use std::collections::HashMap;
-#[cfg(any(unix, target_os = "redox"))]
-use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
-#[cfg(unix)]
-use std::time::Duration;
-use std::{cmp::Reverse, process::exit};
 use std::{
+    cmp::Reverse,
     fs::{self, DirEntry, FileType, Metadata},
-    io::{stdout, BufWriter, Write},
+    io::{stdout, BufWriter, Stdout, Write},
     path::{Path, PathBuf},
-};
-use std::{
-    io::Stdout,
+    process::exit,
     time::{SystemTime, UNIX_EPOCH},
 };
-
+#[cfg(unix)]
+use std::{
+    collections::HashMap,
+    os::unix::fs::{FileTypeExt, MetadataExt},
+    time::Duration,
+};
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use time::{strftime, Timespec};
 #[cfg(unix)]
