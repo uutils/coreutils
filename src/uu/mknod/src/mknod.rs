@@ -135,13 +135,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     };
 
-    let file_name = matches.value_of("name").expect("required by clap");
+    let file_name = matches.value_of("name").expect("Missing argument 'NAME'");
 
     // Only check the first character, to allow mnemonic usage like
     // 'mknod /dev/rst0 character 18 0'.
     let ch = matches
         .value_of("type")
-        .expect("required by clap")
+        .expect("Missing argument 'TYPE'")
         .chars()
         .next()
         .expect("Failed to get the first char");
