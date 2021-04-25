@@ -181,7 +181,7 @@ where
             for seq in unsorted {
                 let seq_size = seq.get_size();
                 total_read += seq_size;
-                // Grow buffer size for a Line larger than buffer
+                // Grow buffer size for a struct/Line larger than buffer
                 adjusted_buffer_size = 
                     if adjusted_buffer_size < seq_size {
                         seq_size
@@ -212,10 +212,9 @@ where
             }
 
             // initialize buffers for each chunk
-            iter.max_per_chunk = self
-                .buffer_bytes
+            iter.max_per_chunk = adjusted_buffer_size
                 .checked_div(iter.chunks)
-                .unwrap_or(self.buffer_bytes);
+                .unwrap_or(adjusted_buffer_size);
             iter.buffers = vec![VecDeque::new(); iter.chunks as usize];
             iter.chunk_offsets = vec![0 as u64; iter.chunks as usize];
             for chunk_num in 0..iter.chunks {
