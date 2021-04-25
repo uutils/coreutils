@@ -1063,7 +1063,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         let result = matches
             .value_of(OPT_TMP_DIR)
             .map(String::from)
-            .unwrap_or_else(|| DEFAULT_TMPDIR.to_owned());
+            .unwrap_or(DEFAULT_TMPDIR.to_owned());
         settings.tmp_dir = PathBuf::from(result);
     } else {
         for (key, value) in env::vars_os() {
