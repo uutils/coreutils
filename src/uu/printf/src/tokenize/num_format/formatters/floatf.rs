@@ -5,12 +5,10 @@ use super::super::format_field::FormatField;
 use super::super::formatter::{FormatPrimitive, Formatter, InPrefix};
 use super::float_common::{get_primitive_dec, primitive_to_str_common, FloatAnalysis};
 
-pub struct Floatf {
-    as_num: f64,
-}
+pub struct Floatf;
 impl Floatf {
     pub fn new() -> Floatf {
-        Floatf { as_num: 0.0 }
+        Floatf
     }
 }
 impl Formatter for Floatf {

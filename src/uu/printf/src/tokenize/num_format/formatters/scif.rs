@@ -5,12 +5,11 @@ use super::super::format_field::FormatField;
 use super::super::formatter::{FormatPrimitive, Formatter, InPrefix};
 use super::float_common::{get_primitive_dec, primitive_to_str_common, FloatAnalysis};
 
-pub struct Scif {
-    as_num: f64,
-}
+pub struct Scif;
+
 impl Scif {
     pub fn new() -> Scif {
-        Scif { as_num: 0.0 }
+        Scif
     }
 }
 impl Formatter for Scif {

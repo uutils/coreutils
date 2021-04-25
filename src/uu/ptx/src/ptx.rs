@@ -178,14 +178,14 @@ fn get_config(matches: &clap::ArgMatches) -> Config {
     }
     if matches.is_present(options::WIDTH) {
         let width_str = matches.value_of(options::WIDTH).expect(err_msg).to_string();
-        config.line_width = crash_if_err!(1, usize::from_str_radix(&width_str, 10));
+        config.line_width = crash_if_err!(1, (&width_str).parse::<usize>());
     }
     if matches.is_present(options::GAP_SIZE) {
         let gap_str = matches
             .value_of(options::GAP_SIZE)
             .expect(err_msg)
             .to_string();
-        config.gap_size = crash_if_err!(1, usize::from_str_radix(&gap_str, 10));
+        config.gap_size = crash_if_err!(1, (&gap_str).parse::<usize>());
     }
     if matches.is_present(options::FORMAT_ROFF) {
         config.format = OutFormat::Roff;

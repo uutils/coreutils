@@ -2,6 +2,8 @@ use crate::common::util::*;
 use filetime::FileTime;
 use rust_users::*;
 use std::os::unix::fs::PermissionsExt;
+#[cfg(not(windows))]
+use std::process::Command;
 #[cfg(target_os = "linux")]
 use std::thread::sleep;
 
@@ -9,12 +11,10 @@ use std::thread::sleep;
 fn test_install_help() {
     let (_, mut ucmd) = at_and_ucmd!();
 
-    assert!(ucmd
-        .arg("--help")
+    ucmd.arg("--help")
         .succeeds()
         .no_stderr()
-        .stdout
-        .contains("FLAGS:"));
+        .stdout_contains("FLAGS:");
 }
 
 #[test]
@@ -57,13 +57,11 @@ fn test_install_failing_not_dir() {
     at.touch(file1);
     at.touch(file2);
     at.touch(file3);
-    assert!(ucmd
-        .arg(file1)
+    ucmd.arg(file1)
         .arg(file2)
         .arg(file3)
         .fails()
-        .stderr
-        .contains("not a directory"));
+        .stderr_contains("not a directory");
 }
 
 #[test]
@@ -75,13 +73,11 @@ fn test_install_unimplemented_arg() {
 
     at.touch(file);
     at.mkdir(dir);
-    assert!(ucmd
-        .arg(context_arg)
+    ucmd.arg(context_arg)
         .arg(file)
         .arg(dir)
         .fails()
-        .stderr
-        .contains("Unimplemented"));
+        .stderr_contains("Unimplemented");
 
     assert!(!at.file_exists(&format!("{}/{}", dir, file)));
 }
@@ -193,12 +189,8 @@ fn test_install_mode_numeric() {
     let mode_arg = "-m 0333";
     at.mkdir(dir2);
 
-    let result = scene.ucmd().arg(mode_arg).arg(file).arg(dir2).run();
+    scene.ucmd().arg(mode_arg).arg(file).arg(dir2).succeeds();
 
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-
-    assert!(result.success);
     let dest_file = &format!("{}/{}", dir2, file);
     assert!(at.file_exists(file));
     assert!(at.file_exists(dest_file));
@@ -233,13 +225,11 @@ fn test_install_mode_failing() {
 
     at.touch(file);
     at.mkdir(dir);
-    assert!(ucmd
-        .arg(file)
+    ucmd.arg(file)
         .arg(dir)
         .arg(mode_arg)
         .fails()
-        .stderr
-        .contains("Invalid mode string: invalid digit found in string"));
+        .stderr_contains("Invalid mode string: invalid digit found in string");
 
     let dest_file = &format!("{}/{}", dir, file);
     assert!(at.file_exists(file));
@@ -311,16 +301,13 @@ fn test_install_target_new_file_with_group() {
         .arg(format!("{}/{}", dir, file))
         .run();
 
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-
-    if is_ci() && result.stderr.contains("error: no such group:") {
+    if is_ci() && result.stderr_str().contains("error: no such group:") {
         // In the CI, some server are failing to return the group.
         // As seems to be a configuration issue, ignoring it
         return;
     }
 
-    assert!(result.success);
+    result.success();
     assert!(at.file_exists(file));
     assert!(at.file_exists(&format!("{}/{}", dir, file)));
 }
@@ -341,16 +328,13 @@ fn test_install_target_new_file_with_owner() {
         .arg(format!("{}/{}", dir, file))
         .run();
 
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-
-    if is_ci() && result.stderr.contains("error: no such user:") {
+    if is_ci() && result.stderr_str().contains("error: no such user:") {
         // In the CI, some server are failing to return the user id.
         // As seems to be a configuration issue, ignoring it
         return;
     }
 
-    assert!(result.success);
+    result.success();
     assert!(at.file_exists(file));
     assert!(at.file_exists(&format!("{}/{}", dir, file)));
 }
@@ -364,13 +348,10 @@ fn test_install_target_new_file_failing_nonexistent_parent() {
 
     at.touch(file1);
 
-    let err = ucmd
-        .arg(file1)
+    ucmd.arg(file1)
         .arg(format!("{}/{}", dir, file2))
         .fails()
-        .stderr;
-
-    assert!(err.contains("not a directory"))
+        .stderr_contains(&"No such file or directory");
 }
 
 #[test]
@@ -415,18 +396,12 @@ fn test_install_copy_file() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_install_target_file_dev_null() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
 
     let file1 = "/dev/null";
     let file2 = "target_file";
 
-    let result = scene.ucmd().arg(file1).arg(file2).run();
-
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-
-    assert!(result.success);
+    ucmd.arg(file1).arg(file2).succeeds();
 
     assert!(at.file_exists(file2));
 }
@@ -460,9 +435,12 @@ fn test_install_failing_omitting_directory() {
     at.mkdir(dir2);
     at.touch(file1);
 
-    let r = ucmd.arg(dir1).arg(file1).arg(dir2).run();
-    assert!(r.code == Some(1));
-    assert!(r.stderr.contains("omitting directory"));
+    ucmd.arg(dir1)
+        .arg(file1)
+        .arg(dir2)
+        .fails()
+        .code_is(1)
+        .stderr_contains("omitting directory");
 }
 
 #[test]
@@ -475,9 +453,12 @@ fn test_install_failing_no_such_file() {
     at.mkdir(dir1);
     at.touch(file1);
 
-    let r = ucmd.arg(file1).arg(file2).arg(dir1).run();
-    assert!(r.code == Some(1));
-    assert!(r.stderr.contains("No such file or directory"));
+    ucmd.arg(file1)
+        .arg(file2)
+        .arg(dir1)
+        .fails()
+        .code_is(1)
+        .stderr_contains("No such file or directory");
 }
 
 #[test]
@@ -565,4 +546,129 @@ fn test_install_copy_then_compare_file_with_extra_mode() {
     let after_install_sticky_again = FileTime::from_last_modification_time(&file2_meta);
 
     assert!(after_install_sticky != after_install_sticky_again);
+}
+
+const STRIP_TARGET_FILE: &str = "helloworld_installed";
+const SYMBOL_DUMP_PROGRAM: &str = "objdump";
+const STRIP_SOURCE_FILE_SYMBOL: &str = "main";
+
+fn strip_source_file() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "helloworld_macos"
+    } else {
+        "helloworld_linux"
+    }
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_install_and_strip() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    scene
+        .ucmd()
+        .arg("-s")
+        .arg(strip_source_file())
+        .arg(STRIP_TARGET_FILE)
+        .succeeds()
+        .no_stderr();
+
+    let output = Command::new(SYMBOL_DUMP_PROGRAM)
+        .arg("-t")
+        .arg(at.plus(STRIP_TARGET_FILE))
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(!stdout.contains(STRIP_SOURCE_FILE_SYMBOL));
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_install_and_strip_with_program() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    scene
+        .ucmd()
+        .arg("-s")
+        .arg("--strip-program")
+        .arg("/usr/bin/strip")
+        .arg(strip_source_file())
+        .arg(STRIP_TARGET_FILE)
+        .succeeds()
+        .no_stderr();
+
+    let output = Command::new(SYMBOL_DUMP_PROGRAM)
+        .arg("-t")
+        .arg(at.plus(STRIP_TARGET_FILE))
+        .output()
+        .unwrap();
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(!stdout.contains(STRIP_SOURCE_FILE_SYMBOL));
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_install_and_strip_with_invalid_program() {
+    new_ucmd!()
+        .arg("-s")
+        .arg("--strip-program")
+        .arg("/bin/date")
+        .arg(strip_source_file())
+        .arg(STRIP_TARGET_FILE)
+        .fails()
+        .stderr_contains("strip program failed");
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_install_and_strip_with_non_existent_program() {
+    new_ucmd!()
+        .arg("-s")
+        .arg("--strip-program")
+        .arg("/usr/bin/non_existent_program")
+        .arg(strip_source_file())
+        .arg(STRIP_TARGET_FILE)
+        .fails()
+        .stderr_contains("No such file or directory");
+}
+
+#[test]
+fn test_install_creating_leading_dirs() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let source = "create_leading_test_file";
+    let target = "dir1/dir2/dir3/test_file";
+
+    at.touch(source);
+
+    scene
+        .ucmd()
+        .arg("-D")
+        .arg(source)
+        .arg(at.plus(target))
+        .succeeds()
+        .no_stderr();
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_install_creating_leading_dir_fails_on_long_name() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let source = "create_leading_test_file";
+    let target = format!("{}/test_file", "d".repeat(libc::PATH_MAX as usize + 1));
+
+    at.touch(source);
+
+    scene
+        .ucmd()
+        .arg("-D")
+        .arg(source)
+        .arg(at.plus(target.as_str()))
+        .fails()
+        .stderr_contains("failed to create");
 }

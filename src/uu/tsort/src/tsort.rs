@@ -17,8 +17,8 @@ use std::path::Path;
 use uucore::InvalidEncodingHandling;
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
-static SUMMARY: &str = "Topological sort the strings in FILE. 
-Strings are defined as any sequence of tokens separated by whitespace (tab, space, or newline). 
+static SUMMARY: &str = "Topological sort the strings in FILE.
+Strings are defined as any sequence of tokens separated by whitespace (tab, space, or newline).
 If FILE is not passed in, stdin is used instead.";
 static USAGE: &str = "tsort [OPTIONS] FILE";
 
@@ -35,13 +35,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .version(VERSION)
         .usage(USAGE)
         .about(SUMMARY)
-        .arg(Arg::with_name(options::FILE).hidden(true))
+        .arg(
+            Arg::with_name(options::FILE)
+                .default_value("-")
+                .hidden(true),
+        )
         .get_matches_from(args);
 
-    let input = match matches.value_of(options::FILE) {
-        Some(v) => v,
-        None => "-",
-    };
+    let input = matches
+        .value_of(options::FILE)
+        .expect("Value is required by clap");
 
     let mut stdin_buf;
     let mut file_buf;

@@ -22,12 +22,11 @@ fn get_len_fprim(fprim: &FormatPrimitive) -> usize {
     len
 }
 
-pub struct Decf {
-    as_num: f64,
-}
+pub struct Decf;
+
 impl Decf {
     pub fn new() -> Decf {
-        Decf { as_num: 0.0 }
+        Decf
     }
 }
 impl Formatter for Decf {
