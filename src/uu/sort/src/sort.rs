@@ -37,6 +37,7 @@ use std::ops::Range;
 use std::path::Path;
 use unicode_width::UnicodeWidthStr;
 use uucore::fs::is_stdin_interactive; // for Iterator::dedup()
+use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "sort";
 static ABOUT: &str = "Display sorted concatenation of all FILE(s).";
@@ -768,7 +769,9 @@ With no FILE, or when FILE is -, read standard input.",
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
     let usage = get_usage();
     let mut settings: GlobalSettings = Default::default();
 

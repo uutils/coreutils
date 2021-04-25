@@ -16,6 +16,7 @@ use std::borrow::Cow;
 use std::ffi::CStr;
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
+use uucore::InvalidEncodingHandling;
 
 static SYNTAX: &str = "[OPTION]... [ FILE | ARG1 ARG2 ]";
 static SUMMARY: &str = "Print information about users who are currently logged in.";
@@ -44,7 +45,9 @@ If ARG1 ARG2 given, -m presumed: 'am i' or 'mom likes' are usual.
 ";
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
 
     let mut opts = app!(SYNTAX, SUMMARY, LONG_HELP);
     opts.optflag("a", "all", "same as -b -d --login -p -r -t -T -u");

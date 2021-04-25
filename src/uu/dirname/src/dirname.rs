@@ -10,6 +10,7 @@ extern crate uucore;
 
 use clap::{App, Arg};
 use std::path::Path;
+use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "dirname";
 static SYNTAX: &str = "[OPTION] NAME...";
@@ -27,7 +28,9 @@ mod options {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     let matches = App::new(executable!())
         .name(NAME)

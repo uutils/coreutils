@@ -15,6 +15,7 @@ extern crate uucore;
 use clap::{App, Arg};
 use std::fs;
 use std::io::{ErrorKind, Write};
+use uucore::InvalidEncodingHandling;
 
 // operating mode
 enum Mode {
@@ -45,6 +46,9 @@ fn get_usage() -> String {
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     let matches = App::new(executable!())
         .version(VERSION)

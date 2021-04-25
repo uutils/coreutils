@@ -16,6 +16,7 @@ use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Stdout, Write};
 use std::str::from_utf8;
 use unicode_width::UnicodeWidthChar;
+use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "unexpand";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -90,7 +91,9 @@ impl Options {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
 
     let matches = App::new(executable!())
         .name(NAME)

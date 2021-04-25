@@ -2,6 +2,8 @@
 // spell-checker:ignore (change!) each's
 // spell-checker:ignore (ToDO) LONGHELP FORMATSTRING templating parameterizing formatstr
 
+use uucore::InvalidEncodingHandling;
+
 mod cli;
 mod memo;
 mod tokenize;
@@ -271,7 +273,9 @@ COPYRIGHT :
 ";
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
 
     let location = &args[0];
     if args.len() <= 1 {
