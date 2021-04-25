@@ -1141,7 +1141,7 @@ fn sort_entries(entries: &mut Vec<PathData>, config: &Config) {
         // The default sort in GNU ls is case insensitive
         Sort::Name => entries.sort_by_cached_key(|k| {
             let has_dot: bool = k.file_name.starts_with('.');
-            let filename_nodot: &str = &k.file_name[if has_dot {1} else {0}..];
+            let filename_nodot: &str = &k.file_name[if has_dot { 1 } else { 0 }..];
             // We want hidden files to appear before regular files of the same
             // name, so we need to negate the "has_dot" variable.
             (filename_nodot.to_lowercase(), !has_dot)
