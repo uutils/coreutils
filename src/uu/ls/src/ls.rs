@@ -1165,9 +1165,10 @@ fn sort_entries(entries: &mut Vec<PathData>, config: &Config) {
         Sort::Name => entries.sort_by_cached_key(|k| k.file_name.to_lowercase()),
         Sort::Version => entries.sort_by(|k, j| version_cmp::version_cmp(&k.p_buf, &j.p_buf)),
         Sort::Extension => entries.sort_by(|a, b| {
-            a.extension()
-                .cmp(&b.extension())
-                .then(a.file_stem().cmp(&b.file_stem()))
+            a.p_buf
+                .extension()
+                .cmp(&b.p_buf.extension())
+                .then(a.p_buf.file_stem().cmp(&b.p_buf.file_stem()))
         }),
         Sort::None => {}
     }
