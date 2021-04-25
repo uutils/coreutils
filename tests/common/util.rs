@@ -294,12 +294,22 @@ impl CmdResult {
     }
 
     pub fn stdout_contains<T: AsRef<str>>(&self, cmp: T) -> &CmdResult {
-        assert!(self.stdout_str().contains(cmp.as_ref()));
+        assert!(
+            self.stdout_str().contains(cmp.as_ref()),
+            "'{}' does not contain '{}'",
+            self.stdout_str(),
+            cmp.as_ref()
+        );
         self
     }
 
     pub fn stderr_contains<T: AsRef<str>>(&self, cmp: T) -> &CmdResult {
-        assert!(self.stderr_str().contains(cmp.as_ref()));
+        assert!(
+            self.stderr_str().contains(cmp.as_ref()),
+            "'{}' does not contain '{}'",
+            self.stderr_str(),
+            cmp.as_ref()
+        );
         self
     }
 

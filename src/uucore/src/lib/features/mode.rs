@@ -136,9 +136,9 @@ pub fn parse_mode(mode: &str) -> Result<mode_t, String> {
     let fperm = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
     let arr: &[char] = &['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
     let result = if mode.contains(arr) {
-        parse_numeric(fperm as u32, mode.as_str())
+        parse_numeric(fperm as u32, mode)
     } else {
-        parse_symbolic(fperm as u32, mode.as_str(), true)
+        parse_symbolic(fperm as u32, mode, true)
     };
     result.map(|mode| mode as mode_t)
 }

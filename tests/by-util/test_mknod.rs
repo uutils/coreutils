@@ -7,7 +7,7 @@ fn test_mknod_help() {
         .arg("--help")
         .succeeds()
         .no_stderr()
-        .stdout_contains("Usage: ");
+        .stdout_contains("USAGE:");
 }
 
 #[test]
@@ -17,7 +17,7 @@ fn test_mknod_version() {
         .arg("--version")
         .succeeds()
         .no_stderr()
-        .stdout
+        .stdout_str()
         .starts_with("mknod"));
 }
 
