@@ -1726,12 +1726,8 @@ fn test_ls_sort_extension() {
     ];
 
     let result = scene.ucmd().arg("-1aX").run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert_eq!(result.stdout.split('\n').collect::<Vec<_>>(), expected,);
+    assert_eq!(result.stdout_str().split('\n').collect::<Vec<_>>(), expected,);
 
     let result = scene.ucmd().arg("-1a").arg("--sort=extension").run();
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert_eq!(result.stdout.split('\n').collect::<Vec<_>>(), expected,);
+    assert_eq!(result.stdout_str().split('\n').collect::<Vec<_>>(), expected,);
 }
