@@ -93,8 +93,8 @@ static NEGATIVE: char = '-';
 static POSITIVE: char = '+';
 
 static DEFAULT_TMPDIR: &str = r"/tmp";
-// 16GB buffer for Vec<Line> before we dump to disk, never used
-static DEFAULT_BUF_SIZE: usize = 16000000000;
+// 4GB buffer for Vec<Line> before we dump to disk, never used
+static DEFAULT_BUF_SIZE: usize = 4000000000;
 
 #[derive(Eq, Ord, PartialEq, PartialOrd, Clone, Copy)]
 enum SortMode {
@@ -141,10 +141,10 @@ impl GlobalSettings {
             .expect("Error parsing buffer size: ");
         let suf_usize: usize = match suf_str.to_uppercase().as_str() {
             // SI Units
+            "B" => 1usize,
             "K" => 1024usize,
             "M" => 1024000usize,
             "G" => 1024000000usize,
-            "T" => 1024000000000usize,
             // GNU regards empty human numeric value as 1024 bytes
             _ => 1024usize,
         };
@@ -1046,8 +1046,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     if matches.is_present(OPT_BUF_SIZE) {
-        // 16G is the default in memory buffer.
-        // Although the "default" is never used
         settings.buffer_size = {
             let input = matches
                 .value_of(OPT_BUF_SIZE)
@@ -1277,11 +1275,11 @@ fn ext_sort_by(unsorted: Vec<Line>, settings: GlobalSettings) -> Vec<Line> {
     iter
 }
 
-fn sort_by(lines: &mut Vec<Line>, settings: &GlobalSettings) {
+fn sort_by(unsorted: &mut Vec<Line>, settings: &GlobalSettings) {
     if settings.stable || settings.unique {
-        lines.par_sort_by(|a, b| compare_by(a, b, &settings))
+        unsorted.par_sort_by(|a, b| compare_by(a, b, &settings))
     } else {
-        lines.par_sort_unstable_by(|a, b| compare_by(a, b, &settings))
+        unsorted.par_sort_unstable_by(|a, b| compare_by(a, b, &settings))
     }
 }
 
