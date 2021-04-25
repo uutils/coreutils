@@ -91,7 +91,7 @@ static NEGATIVE: char = '-';
 static POSITIVE: char = '+';
 
 static DEFAULT_TMPDIR: &str = r"/tmp";
-// 16GB buffer for Vec<Line> before we dump to disk
+// 16GB buffer for Vec<Line> before we dump to disk, never used
 static DEFAULT_BUF_SIZE: usize = 16000000000;
 
 #[derive(Eq, Ord, PartialEq, PartialOrd, Clone)]
@@ -292,14 +292,6 @@ impl ExternallySortable for Line {
     }
 }
 
-impl PartialEq for Line {
-    fn eq(&self, other: &Self) -> bool {
-        self.line == other.line
-    }
-}
-
-impl Eq for Line {}
-
 impl Line {
     fn new(line: String, settings: &GlobalSettings) -> Self {
         let fields = if settings
@@ -343,7 +335,7 @@ impl Line {
                     );
                     range.shorten(num_range);
                     NumCache::WithInfo(info)
-                } else if selector.settings.mode == SortMode::GeneralNumeric {
+                } else if selector.settings.mode == SortMode::GeneralNumeric && settings.buffer_size == DEFAULT_BUF_SIZE {
                     NumCache::AsF64(permissive_f64_parse(get_leading_gen(range.get_str(&line))))
                 } else {
                     NumCache::None
@@ -1103,11 +1095,12 @@ fn exec_check_file(unwrapped_lines: &[Line], settings: &GlobalSettings) -> i32 {
 
 fn ext_sort_by(unsorted: Vec<Line>, settings: GlobalSettings) -> Vec<Line> {
     let external_sorter = ExternalSorter::new(settings.buffer_size as u64, Some(settings.tmp_dir.clone()), settings.clone());
-    let iter = external_sorter.sort_by(unsorted.into_iter(), settings.clone()).unwrap();
-    let vec = iter.filter(|x| x.is_ok() )
-                            .map(|x| x.unwrap())
-                            .collect::<Vec<Line>>();
-    vec                         
+    let iter = external_sorter
+        .sort_by(unsorted.into_iter(), settings.clone())
+        .unwrap()
+        .map(|x| x.unwrap())
+        .collect::<Vec<Line>>();
+    iter                         
 }
 
 fn sort_by(lines: &mut Vec<Line>, settings: &GlobalSettings) {
@@ -1130,10 +1123,15 @@ fn compare_by(a: &Line, b: &Line, global_settings: &GlobalSettings) -> Ordering 
                     (a_str, a_selection.num_cache.as_num_info()),
                     (b_str, b_selection.num_cache.as_num_info()),
                 ),
-                SortMode::GeneralNumeric => general_numeric_compare(
-                    a_selection.num_cache.as_f64(),
-                    b_selection.num_cache.as_f64(),
-                ),
+                // serde JSON has issues with f64 null values, so caching them won't work for us with ext sort
+                SortMode::GeneralNumeric => 
+                    if global_settings.buffer_size == DEFAULT_BUF_SIZE {
+                        general_numeric_compare(a_selection.num_cache.as_f64(),
+                        b_selection.num_cache.as_f64())
+                    } else {
+                        general_numeric_compare(permissive_f64_parse(get_leading_gen(a_str)), 
+                        permissive_f64_parse(get_leading_gen(b_str)))
+                    },
                 SortMode::Month => month_compare(a_str, b_str),
                 SortMode::Version => version_compare(a_str, b_str),
                 SortMode::Default => default_compare(a_str, b_str),

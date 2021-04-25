@@ -51,6 +51,18 @@ fn test_human_numeric_whitespace() {
     test_helper("human-numeric-whitespace", "-h");
 }
 
+// This doesn't test the ext sort feature as such, just this codepath where
+// ext sort can fail when reading back JSON if it finds a null value
+#[test]
+fn test_extsort_as64_bailout() {
+    new_ucmd!()
+        .arg("-g")
+        .arg("-S 10K")
+        .arg("multiple_decimals_general.txt")
+        .succeeds()
+        .stdout_is("\n\n\n\n\n\n\n\nCARAvan\n-2028789030\n-896689\n-8.90880\n-1\n-.05\n000\n00000001\n1\n1.040000000\n1.444\n1.58590\n8.013\n45\n46.89\n576,446.88800000\n576,446.890\n               4567.\n4567.1\n4567.34\n\t\t\t\t\t\t\t\t\t\t4567..457\n\t\t\t\t37800\n\t\t\t\t\t\t45670.89079.098\n\t\t\t\t\t\t45670.89079.1\n4798908.340000000000\n4798908.45\n4798908.8909800\n");
+}
+
 #[test]
 fn test_multiple_decimals_general() {
     new_ucmd!()
