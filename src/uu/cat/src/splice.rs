@@ -81,7 +81,7 @@ fn copy_exact(read_fd: RawFd, write_fd: RawFd, num_bytes: usize) -> nix::Result<
     let mut buf = [0; BUF_SIZE];
     loop {
         let read = unistd::read(read_fd, &mut buf[..left])?;
-        let written = unistd::write(write_fd, &buf[..read])?;
+        let written = unistd::write(write_fd, &mut buf[..read])?;
         left -= written;
         if left == 0 {
             break;
