@@ -1278,7 +1278,11 @@ fn ext_sort_by(unsorted: Vec<Line>, settings: GlobalSettings) -> Vec<Line> {
 }
 
 fn sort_by(lines: &mut Vec<Line>, settings: &GlobalSettings) {
-    lines.par_sort_by(|a, b| compare_by(a, b, &settings))
+    if settings.stable || settings.unique {
+        lines.par_sort_by(|a, b| compare_by(a, b, &settings))
+    } else {
+        lines.par_sort_unstable_by(|a, b| compare_by(a, b, &settings))
+    }
 }
 
 fn compare_by(a: &Line, b: &Line, global_settings: &GlobalSettings) -> Ordering {
