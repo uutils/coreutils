@@ -1,4 +1,4 @@
-use std::{clone::Clone};
+use std::clone::Clone;
 use std::cmp::Ordering::Less;
 use std::collections::VecDeque;
 use std::error::Error;
@@ -92,10 +92,11 @@ where
         let mut idx = 0;
         for chunk_num in 0..self.chunks as usize {
             if !self.buffers[chunk_num].is_empty() {
-                if self.buffers[idx].is_empty() || (super::compare_by)(
+                if self.buffers[idx].is_empty()
+                    || (super::compare_by)(
                         self.buffers[chunk_num].front().unwrap(),
                         self.buffers[idx].front().unwrap(),
-                        &self.settings
+                        &self.settings,
                     ) == Less
                 {
                     idx = chunk_num;
@@ -106,7 +107,7 @@ where
         // unwrap due to checks above
         let r = self.buffers[idx].pop_front().unwrap();
         Some(Ok(r))
-     }
+    }
 }
 
 /// Perform an external sort on an unsorted stream of incoming data
@@ -126,7 +127,11 @@ where
 {
     /// Create a new `ExternalSorter` with a specified memory buffer and
     /// temporary directory
-    pub fn new(buffer_bytes: u64, tmp_dir: Option<PathBuf>, settings: GlobalSettings) -> ExternalSorter<Line> {
+    pub fn new(
+        buffer_bytes: u64,
+        tmp_dir: Option<PathBuf>,
+        settings: GlobalSettings,
+    ) -> ExternalSorter<Line> {
         ExternalSorter {
             buffer_bytes,
             tmp_dir,
@@ -142,7 +147,11 @@ where
     ///
     /// This method can fail due to issues writing intermediate sorted chunks
     /// to disk, or due to serde serialization issues
-    pub fn sort_by<I>(&self, unsorted: I, settings: GlobalSettings) -> Result<ExtSortedIterator<Line>, Box<dyn Error>>
+    pub fn sort_by<I>(
+        &self,
+        unsorted: I,
+        settings: GlobalSettings,
+    ) -> Result<ExtSortedIterator<Line>, Box<dyn Error>>
     where
         I: Iterator<Item = Line>,
     {
@@ -193,7 +202,10 @@ where
             }
 
             // initialize buffers for each chunk
-            iter.max_per_chunk = self.buffer_bytes.checked_div(iter.chunks).unwrap_or(self.buffer_bytes);
+            iter.max_per_chunk = self
+                .buffer_bytes
+                .checked_div(iter.chunks)
+                .unwrap_or(self.buffer_bytes);
             iter.buffers = vec![VecDeque::new(); iter.chunks as usize];
             iter.chunk_offsets = vec![0 as u64; iter.chunks as usize];
             for chunk_num in 0..iter.chunks {
@@ -221,7 +233,11 @@ where
     }
 }
 
-fn fill_buff<Line>(vec: &mut VecDeque<Line>, file: File, max_bytes: u64) -> Result<u64, Box<dyn Error>>
+fn fill_buff<Line>(
+    vec: &mut VecDeque<Line>,
+    file: File,
+    max_bytes: u64,
+) -> Result<u64, Box<dyn Error>>
 where
     Line: ExternallySortable,
 {

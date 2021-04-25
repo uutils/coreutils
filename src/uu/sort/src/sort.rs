@@ -15,11 +15,11 @@
 #[macro_use]
 extern crate uucore;
 
-mod numeric_str_cmp;
 mod external_sort;
+mod numeric_str_cmp;
 
-use external_sort::{ExternalSorter, ExternallySortable};
 use clap::{App, Arg};
+use external_sort::{ExternalSorter, ExternallySortable};
 use fnv::FnvHasher;
 use itertools::Itertools;
 use numeric_str_cmp::{numeric_str_cmp, NumInfo, NumInfoParseSettings};
@@ -39,9 +39,9 @@ use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Lines, Read, Write};
 use std::mem::replace;
 use std::ops::Range;
 use std::path::Path;
+use std::path::PathBuf;
 use unicode_width::UnicodeWidthStr;
 use uucore::fs::is_stdin_interactive; // for Iterator::dedup()
-use std::path::PathBuf;
 
 static NAME: &str = "sort";
 static ABOUT: &str = "Display sorted concatenation of all FILE(s).";
@@ -136,7 +136,9 @@ impl GlobalSettings {
     fn human_numeric_convert(a: &str) -> usize {
         let num_str = &a[get_leading_gen(a)];
         let (_, suf_str) = a.split_at(num_str.len());
-        let num_usize = num_str.parse::<usize>().expect("Error parsing buffer size: ");
+        let num_usize = num_str
+            .parse::<usize>()
+            .expect("Error parsing buffer size: ");
         let suf_usize: usize = match suf_str.to_uppercase().as_str() {
             // SI Units
             "K" => 1000usize,
@@ -323,7 +325,9 @@ impl Line {
                     );
                     range.shorten(num_range);
                     NumCache::WithInfo(info)
-                } else if selector.settings.mode == SortMode::GeneralNumeric && settings.buffer_size == DEFAULT_BUF_SIZE {
+                } else if selector.settings.mode == SortMode::GeneralNumeric
+                    && settings.buffer_size == DEFAULT_BUF_SIZE
+                {
                     let str = range.get_str(&line);
                     NumCache::AsF64(general_f64_parse(&str[get_leading_gen(str)]))
                 } else {
@@ -1050,7 +1054,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .value_of(OPT_BUF_SIZE)
                 .map(String::from)
                 .unwrap_or(format!("{}", DEFAULT_BUF_SIZE));
-        
+
             GlobalSettings::human_numeric_convert(&input)
         }
     }
@@ -1261,13 +1265,17 @@ fn exec_check_file(unwrapped_lines: &[Line], settings: &GlobalSettings) -> i32 {
 }
 
 fn ext_sort_by(unsorted: Vec<Line>, settings: GlobalSettings) -> Vec<Line> {
-    let external_sorter = ExternalSorter::new(settings.buffer_size as u64, Some(settings.tmp_dir.clone()), settings.clone());
+    let external_sorter = ExternalSorter::new(
+        settings.buffer_size as u64,
+        Some(settings.tmp_dir.clone()),
+        settings.clone(),
+    );
     let iter = external_sorter
         .sort_by(unsorted.into_iter(), settings.clone())
         .unwrap()
         .map(|x| x.unwrap())
         .collect::<Vec<Line>>();
-    iter                         
+    iter
 }
 
 fn sort_by(lines: &mut Vec<Line>, settings: &GlobalSettings) {
@@ -1291,18 +1299,19 @@ fn compare_by(a: &Line, b: &Line, global_settings: &GlobalSettings) -> Ordering 
                     (b_str, b_selection.num_cache.as_num_info()),
                 ),
                 // serde JSON has issues with f64 null values, so caching them won't work for us with ext sort
-                SortMode::GeneralNumeric => 
+                SortMode::GeneralNumeric => {
                     if global_settings.buffer_size == DEFAULT_BUF_SIZE {
                         general_numeric_compare(
                             a_selection.num_cache.as_f64(),
-                        b_selection.num_cache.as_f64()
-                    )
+                            b_selection.num_cache.as_f64(),
+                        )
                     } else {
                         general_numeric_compare(
                             general_f64_parse(&a_str[get_leading_gen(a_str)]),
-                            general_f64_parse(&b_str[get_leading_gen(b_str)])
-                    )
-                    },
+                            general_f64_parse(&b_str[get_leading_gen(b_str)]),
+                        )
+                    }
+                }
                 SortMode::Month => month_compare(a_str, b_str),
                 SortMode::Version => version_compare(a_str, b_str),
                 SortMode::Default => default_compare(a_str, b_str),

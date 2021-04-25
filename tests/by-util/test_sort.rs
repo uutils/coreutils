@@ -33,7 +33,8 @@ fn test_helper(file_name: &str, args: &str) {
 fn test_larger_than_specified_segment() {
     new_ucmd!()
         .arg("-n")
-        .arg("-S 50M")
+        .arg("-S")
+        .arg("50K")
         .arg("ext_sort.txt")
         .succeeds()
         .stdout_is_fixture(format!("{}", "ext_sort.expected"));
