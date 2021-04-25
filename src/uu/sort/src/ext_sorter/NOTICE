@@ -1,9 +1,0 @@
-ext_sorter
-Copyright 2018 Andre-Philippe Paquet
-Modifications copyright 2021 Robert Swinford
-
-This ext_sorter module includes software developed by Andre-Philippe Paquet as extsort.
-
-The sorter.rs file was copied and modified for use in the uutils' coreutils subproject, sort. 
-
-sort is licensed according to the term of the LICENSE file found in root directory of the uutils' coreutils project. 

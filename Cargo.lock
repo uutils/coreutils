@@ -2305,7 +2305,7 @@ dependencies = [
  "serde",
  "serde_json",
  "smallvec 1.6.1",
- "tempfile",
+ "tempdir",
  "uucore",
  "uucore_procs",
 ]

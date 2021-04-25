@@ -15,11 +15,11 @@
 #[macro_use]
 extern crate uucore;
 
-mod ext_sorter;
 mod numeric_str_cmp;
+mod external_sort;
 
+use external_sort::{ExternalSorter, ExternallySortable};
 use clap::{App, Arg};
-use ext_sorter::{ExternalSorter, Sortable};
 use fnv::FnvHasher;
 use itertools::Itertools;
 use numeric_str_cmp::{numeric_str_cmp, NumInfo, NumInfoParseSettings};
@@ -27,7 +27,7 @@ use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use rayon::prelude::*;
 use semver::Version;
-use serde::{Deserialize, Serialize};
+use serde::{Deserializer, Deserialize, Serialize};
 use smallvec::SmallVec;
 use std::borrow::Cow;
 use std::cmp::Ordering;
@@ -103,7 +103,7 @@ enum SortMode {
     Version,
     Default,
 }
-
+#[derive(Clone)]
 struct GlobalSettings {
     mode: SortMode,
     ignore_blanks: bool,
@@ -176,7 +176,7 @@ impl Default for GlobalSettings {
         }
     }
 }
-
+#[derive(Clone)]
 struct KeySettings {
     mode: SortMode,
     ignore_blanks: bool,
@@ -201,7 +201,7 @@ impl From<&GlobalSettings> for KeySettings {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 /// Represents the string selected by a FieldSelector.
 enum SelectionRange {
     /// If we had to transform this selection, we have to store a new string.
@@ -232,11 +232,21 @@ impl SelectionRange {
         }
     }
 }
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 enum NumCache {
+    #[serde(deserialize_with="bailout_parse_f64")]
     AsF64(f64),
     WithInfo(NumInfo),
     None,
+}
+
+// Only used when serde can't parse a null value
+fn bailout_parse_f64<'de, D>(d: D) -> Result<f64, D::Error> where D: Deserializer<'de> {
+    Deserialize::deserialize(d)
+        .map(|x: Option<_>| {
+            x.unwrap_or(0f64)
+        })
 }
 
 impl NumCache {
@@ -253,7 +263,7 @@ impl NumCache {
         }
     }
 }
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct Selection {
     range: SelectionRange,
     num_cache: NumCache,
@@ -267,55 +277,28 @@ impl Selection {
 }
 
 type Field = Range<usize>;
-#[derive(Debug, Serialize, Deserialize)]
+
+#[derive(Serialize, Deserialize, Clone)]
 struct Line {
     line: String,
     // The common case is not to specify fields. Let's make this fast.
     selections: SmallVec<[Selection; 1]>,
 }
 
-impl Sortable for Line {
-    fn encode<W: Write>(&self, write: &mut W) {
-        let line = Line {
-            line: self.line.to_owned(),
-            selections: self.selections.to_owned(),
-        };
-        let serialized = serde_json::to_string(&line).unwrap();
-        // Each instance of valid JSON needs to be seperated by something, so here we use a newline
-        write
-            .write_all(format!("{}{}", serialized, "\n").as_bytes())
-            .unwrap();
-    }
-
-    // This crate asks us to write one Line struct at a time, but then returns multiple Lines to us at once.
-    // We concatanate them and return them as one big Line here.
-    fn decode<R: Read>(read: &mut R) -> Option<Line> {
-        let buf_reader = BufReader::new(read);
-        let result = {
-            let mut line_joined = String::new();
-            // Return an empty vec for selections
-            let selections_joined = SmallVec::new();
-            let mut p_iter = buf_reader.lines().peekable();
-            while let Some(line) = p_iter.next() {
-                let deserialized_line: Line =
-                    serde_json::from_str(&line.as_ref().unwrap()).unwrap();
-                if let Some(_next_line) = p_iter.peek() {
-                    line_joined = format!("{}\n{}\n", line_joined, deserialized_line.line)
-                } else {
-                    line_joined = format!("{}\n{}", line_joined, deserialized_line.line)
-                }
-                // I think we've done our sorting already and these selctions are irrelevant?
-                // @miDeb what's your sense? Could we just return an empty vec?
-                //selections_joined.append(&mut deserialized_line.selections);
-            }
-            Some(Line {
-                line: line_joined,
-                selections: selections_joined,
-            })
-        };
-        result
+impl ExternallySortable for Line {
+    fn get_size(&self) -> u64 {
+        // Currently 96 bytes, but that could change, so we get that size here
+        std::mem::size_of::<Line>() as u64
     }
 }
+
+impl PartialEq for Line {
+    fn eq(&self, other: &Self) -> bool {
+        self.line == other.line
+    }
+}
+
+impl Eq for Line {}
 
 impl Line {
     fn new(line: String, settings: &GlobalSettings) -> Self {
@@ -449,6 +432,7 @@ fn tokenize_with_separator(line: &str, separator: char) -> Vec<Field> {
     tokens
 }
 
+#[derive(Clone)]
 struct KeyPosition {
     /// 1-indexed, 0 is invalid.
     field: usize,
@@ -516,7 +500,7 @@ impl KeyPosition {
         }
     }
 }
-
+#[derive(Clone)]
 struct FieldSelector {
     from: KeyPosition,
     to: Option<KeyPosition>,
@@ -1014,10 +998,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         });
     }
 
-    exec(files, &settings)
+    exec(files, settings)
 }
 
-fn exec(files: Vec<String>, settings: &GlobalSettings) -> i32 {
+fn exec(files: Vec<String>, settings: GlobalSettings) -> i32 {
     let mut lines = Vec::new();
     let mut file_merger = FileMerger::new(&settings);
 
@@ -1059,7 +1043,7 @@ fn exec(files: Vec<String>, settings: &GlobalSettings) -> i32 {
     // Probably faster that we don't create
     // an owned value each run
     if settings.buffer_size != DEFAULT_BUF_SIZE {
-        lines = ext_sort_by(lines, &settings);
+        lines = ext_sort_by(lines, settings.clone());
     } else {
         sort_by(&mut lines, &settings);
     }
@@ -1074,7 +1058,7 @@ fn exec(files: Vec<String>, settings: &GlobalSettings) -> i32 {
         print_sorted(
             lines
                 .into_iter()
-                .dedup_by(|a, b| compare_by(a, b, settings) == Ordering::Equal)
+                .dedup_by(|a, b| compare_by(a, b, &settings) == Ordering::Equal)
                 .map(|line| line.line),
             &settings,
         )
@@ -1117,15 +1101,13 @@ fn exec_check_file(unwrapped_lines: &[Line], settings: &GlobalSettings) -> i32 {
     }
 }
 
-fn ext_sort_by(lines: Vec<Line>, settings: &GlobalSettings) -> Vec<Line> {
-    let sorter = ExternalSorter::new()
-        .with_segment_size(settings.buffer_size)
-        .with_sort_dir(settings.tmp_dir.clone())
-        .with_parallel_sort();
-    sorter
-        .sort_by(lines.into_iter(), |a, b| compare_by(a, b, &settings))
-        .unwrap()
-        .collect()
+fn ext_sort_by(unsorted: Vec<Line>, settings: GlobalSettings) -> Vec<Line> {
+    let external_sorter = ExternalSorter::new(settings.buffer_size as u64, Some(settings.tmp_dir.clone()), settings.clone());
+    let iter = external_sorter.sort_by(unsorted.into_iter(), settings.clone()).unwrap();
+    let vec = iter.filter(|x| x.is_ok() )
+                            .map(|x| x.unwrap())
+                            .collect::<Vec<Line>>();
+    vec                         
 }
 
 fn sort_by(lines: &mut Vec<Line>, settings: &GlobalSettings) {
