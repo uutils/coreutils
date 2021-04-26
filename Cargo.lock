@@ -2058,6 +2058,7 @@ dependencies = [
  "term_grid",
  "termsize",
  "time",
+ "unicode-width",
  "uucore",
  "uucore_procs",
 ]

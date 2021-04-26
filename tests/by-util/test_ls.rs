@@ -775,6 +775,18 @@ fn test_ls_color() {
         .arg("z")
         .succeeds()
         .stdout_only("");
+
+    // The colors must not mess up the grid layout
+    at.touch("b");
+    scene
+        .ucmd()
+        .arg("--color")
+        .arg("-w=15")
+        .succeeds()
+        .stdout_only(format!(
+            "{}  test-color\nb  {}\n",
+            a_with_colors, z_with_colors
+        ));
 }
 
 #[cfg(unix)]
@@ -1723,7 +1735,7 @@ fn test_ls_sort_extension() {
     let expected = vec![
         ".",
         "..",
-        ".hidden",    
+        ".hidden",
         "anotherFile",
         "file1",
         "file2",
@@ -1741,8 +1753,14 @@ fn test_ls_sort_extension() {
     ];
 
     let result = scene.ucmd().arg("-1aX").run();
-    assert_eq!(result.stdout_str().split('\n').collect::<Vec<_>>(), expected,);
+    assert_eq!(
+        result.stdout_str().split('\n').collect::<Vec<_>>(),
+        expected,
+    );
 
     let result = scene.ucmd().arg("-1a").arg("--sort=extension").run();
-    assert_eq!(result.stdout_str().split('\n').collect::<Vec<_>>(), expected,);
+    assert_eq!(
+        result.stdout_str().split('\n').collect::<Vec<_>>(),
+        expected,
+    );
 }
