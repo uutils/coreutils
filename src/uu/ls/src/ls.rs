@@ -74,6 +74,7 @@ pub mod options {
         pub static TIME: &str = "t";
         pub static NONE: &str = "U";
         pub static VERSION: &str = "v";
+        pub static EXTENSION: &str = "X";
     }
     pub mod time {
         pub static ACCESS: &str = "u";
@@ -134,6 +135,7 @@ enum Sort {
     Size,
     Time,
     Version,
+    Extension,
 }
 
 enum SizeFormat {
@@ -277,6 +279,7 @@ impl Config {
                 "time" => Sort::Time,
                 "size" => Sort::Size,
                 "version" => Sort::Version,
+                "extension" => Sort::Extension,
                 // below should never happen as clap already restricts the values.
                 _ => unreachable!("Invalid field for --sort"),
             }
@@ -288,6 +291,8 @@ impl Config {
             Sort::None
         } else if options.is_present(options::sort::VERSION) {
             Sort::Version
+        } else if options.is_present(options::sort::EXTENSION) {
+            Sort::Extension
         } else {
             Sort::Name
         };
@@ -754,10 +759,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(
             Arg::with_name(options::SORT)
                 .long(options::SORT)
-                .help("Sort by <field>: name, none (-U), time (-t) or size (-S)")
+                .help("Sort by <field>: name, none (-U), time (-t), size (-S) or extension (-X)")
                 .value_name("field")
                 .takes_value(true)
-                .possible_values(&["name", "none", "time", "size", "version"])
+                .possible_values(&["name", "none", "time", "size", "version", "extension"])
                 .require_equals(true)
                 .overrides_with_all(&[
                     options::SORT,
@@ -765,6 +770,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::sort::TIME,
                     options::sort::NONE,
                     options::sort::VERSION,
+                    options::sort::EXTENSION,
                 ])
         )
         .arg(
@@ -777,6 +783,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::sort::TIME,
                     options::sort::NONE,
                     options::sort::VERSION,
+                    options::sort::EXTENSION,
                 ])
         )
         .arg(
@@ -789,6 +796,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::sort::TIME,
                     options::sort::NONE,
                     options::sort::VERSION,
+                    options::sort::EXTENSION,
                 ])
         )
         .arg(
@@ -801,6 +809,20 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::sort::TIME,
                     options::sort::NONE,
                     options::sort::VERSION,
+                    options::sort::EXTENSION,
+                ])
+        )
+        .arg(
+            Arg::with_name(options::sort::EXTENSION)
+                .short(options::sort::EXTENSION)
+                .help("Sort alphabetically by entry extension.")
+                .overrides_with_all(&[
+                    options::SORT,
+                    options::sort::SIZE,
+                    options::sort::TIME,
+                    options::sort::NONE,
+                    options::sort::VERSION,
+                    options::sort::EXTENSION,
                 ])
         )
         .arg(
@@ -815,6 +837,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::sort::TIME,
                     options::sort::NONE,
                     options::sort::VERSION,
+                    options::sort::EXTENSION,
                 ])
         )
 
@@ -1149,6 +1172,12 @@ fn sort_entries(entries: &mut Vec<PathData>, config: &Config) {
             (filename_nodot.to_lowercase(), !has_dot)
         }),
         Sort::Version => entries.sort_by(|k, j| version_cmp::version_cmp(&k.p_buf, &j.p_buf)),
+        Sort::Extension => entries.sort_by(|a, b| {
+            a.p_buf
+                .extension()
+                .cmp(&b.p_buf.extension())
+                .then(a.p_buf.file_stem().cmp(&b.p_buf.file_stem()))
+        }),
         Sort::None => {}
     }
 
