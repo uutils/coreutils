@@ -40,6 +40,7 @@ use std::{
 };
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use time::{strftime, Timespec};
+use unicode_width::UnicodeWidthStr;
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 
@@ -1617,7 +1618,7 @@ fn display_file_name(path: &PathData, strip: Option<&Path>, config: &Config) -> 
 
     // We need to keep track of the width ourselfs instead of letting term_grid
     // infer it because the color codes mess up term_grid's width calculation.
-    let mut width = name.len();
+    let mut width = name.width();
 
     if let Some(ls_colors) = &config.color {
         name = color_name(&ls_colors, &path.p_buf, name, path.md()?);
