@@ -17,6 +17,7 @@ mod splitname;
 
 use crate::csplit_error::CsplitError;
 use crate::splitname::SplitName;
+use uucore::InvalidEncodingHandling;
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static SUMMARY: &str = "split a file into sections determined by context lines";
@@ -711,7 +712,9 @@ mod tests {
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
 
     let matches = App::new(executable!())
         .version(VERSION)

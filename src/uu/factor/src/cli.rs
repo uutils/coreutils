@@ -14,6 +14,7 @@ use std::io::{self, stdin, stdout, BufRead, Write};
 
 mod factor;
 pub(crate) use factor::*;
+use uucore::InvalidEncodingHandling;
 
 mod miller_rabin;
 pub mod numeric;
@@ -33,7 +34,10 @@ fn print_factors_str(num_str: &str, w: &mut impl io::Write) -> Result<(), Box<dy
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let matches = app!(SYNTAX, SUMMARY, LONG_HELP).parse(args.collect_str());
+    let matches = app!(SYNTAX, SUMMARY, LONG_HELP).parse(
+        args.collect_str(InvalidEncodingHandling::Ignore)
+            .accept_any(),
+    );
     let stdout = stdout();
     let mut w = io::BufWriter::new(stdout.lock());
 

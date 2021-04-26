@@ -17,6 +17,7 @@ use std::path::Path;
 
 use self::searcher::Searcher;
 use uucore::ranges::Range;
+use uucore::InvalidEncodingHandling;
 
 mod buffer;
 mod searcher;
@@ -443,7 +444,9 @@ mod options {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
 
     let matches = App::new(executable!())
         .name(NAME)

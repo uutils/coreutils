@@ -13,6 +13,7 @@ extern crate uucore;
 use libc::{c_int, pid_t};
 use std::io::Error;
 use uucore::signals::ALL_SIGNALS;
+use uucore::InvalidEncodingHandling;
 
 static SYNTAX: &str = "[options] <pid> [...]";
 static SUMMARY: &str = "";
@@ -29,7 +30,9 @@ pub enum Mode {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
 
     let (args, obs_signal) = handle_obsolete(args);
     let matches = app!(SYNTAX, SUMMARY, LONG_HELP)

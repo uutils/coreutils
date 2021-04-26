@@ -9,6 +9,7 @@
 #[macro_use]
 extern crate uucore;
 use uucore::encoding::Format;
+use uucore::InvalidEncodingHandling;
 
 mod base_common;
 
@@ -26,7 +27,8 @@ static LONG_HELP: &str = "
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     base_common::execute(
-        args.collect_str(),
+        args.collect_str(InvalidEncodingHandling::Ignore)
+            .accept_any(),
         SYNTAX,
         SUMMARY,
         LONG_HELP,

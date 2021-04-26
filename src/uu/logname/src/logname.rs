@@ -13,6 +13,7 @@
 extern crate uucore;
 
 use std::ffi::CStr;
+use uucore::InvalidEncodingHandling;
 
 extern "C" {
     // POSIX requires using getlogin (or equivalent code)
@@ -35,7 +36,10 @@ static SUMMARY: &str = "Print user's login name";
 static LONG_HELP: &str = "";
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    app!(SYNTAX, SUMMARY, LONG_HELP).parse(args.collect_str());
+    app!(SYNTAX, SUMMARY, LONG_HELP).parse(
+        args.collect_str(InvalidEncodingHandling::ConvertLossy)
+            .accept_any(),
+    );
 
     match get_userlogin() {
         Some(userlogin) => println!("{}", userlogin),

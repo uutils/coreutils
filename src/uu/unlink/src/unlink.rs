@@ -17,6 +17,7 @@ use libc::{lstat, stat, unlink};
 use libc::{S_IFLNK, S_IFMT, S_IFREG};
 use std::ffi::CString;
 use std::io::{Error, ErrorKind};
+use uucore::InvalidEncodingHandling;
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Unlink the file at [FILE].";
@@ -27,7 +28,9 @@ fn get_usage() -> String {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     let usage = get_usage();
 

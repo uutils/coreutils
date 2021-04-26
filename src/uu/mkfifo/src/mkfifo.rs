@@ -11,6 +11,7 @@ extern crate uucore;
 use clap::{App, Arg};
 use libc::mkfifo;
 use std::ffi::CString;
+use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "mkfifo";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -25,7 +26,9 @@ mod options {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
 
     let matches = App::new(executable!())
         .name(NAME)

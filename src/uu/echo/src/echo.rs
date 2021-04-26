@@ -13,6 +13,7 @@ use clap::{crate_version, App, Arg};
 use std::io::{self, Write};
 use std::iter::Peekable;
 use std::str::Chars;
+use uucore::InvalidEncodingHandling;
 
 const NAME: &str = "echo";
 const SUMMARY: &str = "display a line of text";
@@ -113,6 +114,9 @@ fn print_escaped(input: &str, mut output: impl Write) -> io::Result<bool> {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
     let matches = App::new(executable!())
         .name(NAME)
         // TrailingVarArg specifies the final positional argument is a VarArg

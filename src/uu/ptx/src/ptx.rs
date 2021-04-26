@@ -17,6 +17,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::default::Default;
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
+use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "ptx";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -630,7 +631,9 @@ mod options {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
 
     // let mut opts = Options::new();
     let matches = App::new(executable!())

@@ -21,6 +21,7 @@ use fnv::FnvHashMap;
 use std::io::{stdin, stdout, BufRead, BufWriter, Write};
 
 use crate::expand::ExpandSet;
+use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "tr";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -187,6 +188,9 @@ fn get_usage() -> String {
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     let matches = App::new(executable!())
         .version(VERSION)

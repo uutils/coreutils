@@ -25,6 +25,7 @@ use std::os::windows::fs::MetadataExt;
 use std::os::windows::io::AsRawHandle;
 use std::path::PathBuf;
 use std::time::{Duration, UNIX_EPOCH};
+use uucore::InvalidEncodingHandling;
 #[cfg(windows)]
 use winapi::shared::minwindef::{DWORD, LPVOID};
 #[cfg(windows)]
@@ -362,7 +363,9 @@ fn convert_size_other(size: u64, _multiplier: u64, block_size: u64) -> String {
 
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
 
     let syntax = format!(
         "[OPTION]... [FILE]...
