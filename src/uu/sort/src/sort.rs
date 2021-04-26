@@ -32,7 +32,6 @@ use smallvec::SmallVec;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::env;
-use std::ffi::OsString;
 use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Lines, Read, Write};
@@ -98,7 +97,7 @@ static DEFAULT_TMPDIR: &str = r"%USERPROFILE%\AppData\Local\Temp";
 #[cfg(not(any(target_os = "windows",)))]
 static DEFAULT_TMPDIR: &str = r"/tmp";
 
-static DEFAULT_BUF_SIZE: usize = usize::MAX;
+static DEFAULT_BUF_SIZE: usize = std::usize::MAX;
 
 #[derive(Eq, Ord, PartialEq, PartialOrd, Clone, Copy)]
 enum SortMode {
@@ -132,6 +131,7 @@ struct GlobalSettings {
     zero_terminated: bool,
     buffer_size: usize,
     tmp_dir: PathBuf,
+    ext_sort: bool,
 }
 
 impl GlobalSettings {
@@ -180,6 +180,7 @@ impl Default for GlobalSettings {
             zero_terminated: false,
             buffer_size: DEFAULT_BUF_SIZE,
             tmp_dir: PathBuf::from(DEFAULT_TMPDIR),
+            ext_sort: false,
         }
     }
 }
@@ -328,9 +329,7 @@ impl Line {
                     );
                     range.shorten(num_range);
                     NumCache::WithInfo(info)
-                } else if selector.settings.mode == SortMode::GeneralNumeric
-                    && settings.buffer_size == DEFAULT_BUF_SIZE
-                {
+                } else if selector.settings.mode == SortMode::GeneralNumeric {
                     let str = range.get_str(&line);
                     NumCache::AsF64(general_f64_parse(&str[get_leading_gen(str)]))
                 } else {
@@ -1057,7 +1056,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .unwrap_or(format!("{}", DEFAULT_BUF_SIZE));
 
             GlobalSettings::human_numeric_convert(&input)
-        }
+        };
+        settings.ext_sort = true;
     }
 
     if matches.is_present(OPT_TMP_DIR) {
@@ -1066,17 +1066,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             .map(String::from)
             .unwrap_or(DEFAULT_TMPDIR.to_owned());
         settings.tmp_dir = PathBuf::from(result);
+        settings.ext_sort = true;
     } else {
-        for (key, value) in env::vars_os() {
-            if key == OsString::from("TMPDIR")
-                || key == OsString::from("TEMP")
-                || key == OsString::from("TMP")
-            {
-                settings.tmp_dir = PathBuf::from(value);
-                break;
-            }
-            settings.tmp_dir = PathBuf::from(DEFAULT_TMPDIR);
-        }
+        settings.tmp_dir = env::temp_dir();
     }
 
     settings.zero_terminated = matches.is_present(OPT_ZERO_TERMINATED);
@@ -1207,7 +1199,7 @@ fn exec(files: Vec<String>, settings: GlobalSettings) -> i32 {
     // Only use ext_sorter when we need to.
     // Probably faster that we don't create
     // an owned value each run
-    if settings.buffer_size != DEFAULT_BUF_SIZE {
+    if settings.ext_sort {
         lines = ext_sort_by(lines, settings.clone());
     } else {
         sort_by(&mut lines, &settings);
