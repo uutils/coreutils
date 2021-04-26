@@ -1135,7 +1135,7 @@ fn list(locs: Vec<String>, config: Config) -> i32 {
         }
     }
     sort_entries(&mut files, &config);
-    display_items(&files, None, &config, &mut out);
+    display_items(&files, &config, &mut out);
 
     sort_entries(&mut dirs, &config);
     for dir in dirs {
@@ -1227,7 +1227,7 @@ fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>)
 
     entries.append(&mut temp);
 
-    display_items(&entries, Some(&dir.p_buf), config, out);
+    display_items(&entries, config, out);
 
     if config.recursive {
         for e in entries
@@ -1264,12 +1264,7 @@ fn pad_left(string: String, count: usize) -> String {
     format!("{:>width$}", string, width = count)
 }
 
-fn display_items(
-    items: &[PathData],
-    strip: Option<&Path>,
-    config: &Config,
-    out: &mut BufWriter<Stdout>,
-) {
+fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) {
     if config.format == Format::Long {
         let (mut max_links, mut max_size) = (1, 1);
         for item in items {
@@ -1278,12 +1273,10 @@ fn display_items(
             max_size = size.max(max_size);
         }
         for item in items {
-            display_item_long(item, strip, max_links, max_size, config, out);
+            display_item_long(item, max_links, max_size, config, out);
         }
     } else {
-        let names = items
-            .iter()
-            .filter_map(|i| display_file_name(&i, strip, config));
+        let names = items.iter().filter_map(|i| display_file_name(&i, config));
 
         match (&config.format, config.width) {
             (Format::Columns, Some(width)) => {
@@ -1355,7 +1348,6 @@ use uucore::fs::display_permissions;
 
 fn display_item_long(
     item: &PathData,
-    strip: Option<&Path>,
     max_links: usize,
     max_size: usize,
     config: &Config,
@@ -1363,7 +1355,7 @@ fn display_item_long(
 ) {
     let md = match item.md() {
         None => {
-            let filename = get_file_name(&item.p_buf, strip);
+            let filename = get_file_name(&item.p_buf);
             show_error!("could not show file: {}", filename);
             return;
         }
@@ -1407,7 +1399,7 @@ fn display_item_long(
         // unwrap is fine because it fails when metadata is not available
         // but we already know that it is because it's checked at the
         // start of the function.
-        display_file_name(&item, strip, config).unwrap().contents,
+        display_file_name(&item, config).unwrap().contents,
     );
 }
 
@@ -1558,15 +1550,11 @@ fn display_file_type(file_type: FileType) -> char {
     }
 }
 
-fn get_file_name(name: &Path, strip: Option<&Path>) -> String {
-    let mut name = match strip {
-        Some(prefix) => name.strip_prefix(prefix).unwrap_or(name),
-        None => name,
-    };
-    if name.as_os_str().is_empty() {
-        name = Path::new(".");
-    }
-    name.to_string_lossy().into_owned()
+fn get_file_name(name: &Path) -> String {
+    name.file_name()
+        .unwrap_or(name.iter().last().unwrap())
+        .to_string_lossy()
+        .into()
 }
 
 #[cfg(unix)]
@@ -1605,8 +1593,8 @@ fn classify_file(path: &PathData) -> Option<char> {
     }
 }
 
-fn display_file_name(path: &PathData, strip: Option<&Path>, config: &Config) -> Option<Cell> {
-    let mut name = escape_name(get_file_name(&path.p_buf, strip), &config.quoting_style);
+fn display_file_name(path: &PathData, config: &Config) -> Option<Cell> {
+    let mut name = escape_name(get_file_name(&path.p_buf), &config.quoting_style);
 
     #[cfg(unix)]
     {
