@@ -93,8 +93,7 @@ static NEGATIVE: char = '-';
 static POSITIVE: char = '+';
 
 static DEFAULT_TMPDIR: &str = r"/tmp";
-// 4GB buffer for Vec<Line> before we dump to disk, never used
-static DEFAULT_BUF_SIZE: usize = 4000000000;
+static DEFAULT_BUF_SIZE: usize = usize::MAX;
 
 #[derive(Eq, Ord, PartialEq, PartialOrd, Clone, Copy)]
 enum SortMode {
@@ -142,11 +141,11 @@ impl GlobalSettings {
         let suf_usize: usize = match suf_str.to_uppercase().as_str() {
             // SI Units
             "B" => 1usize,
-            "K" => 1024usize,
-            "M" => 1024000usize,
-            "G" => 1024000000usize,
-            // GNU regards empty human numeric value as 1024 bytes
-            _ => 1024usize,
+            "K" => 1000usize,
+            "M" => 1000000usize,
+            "G" => 1000000000usize,
+            // GNU regards empty human numeric values as K by default
+            _ => 1000usize,
         };
         num_usize * suf_usize
     }
