@@ -92,7 +92,17 @@ static THOUSANDS_SEP: char = ',';
 static NEGATIVE: char = '-';
 static POSITIVE: char = '+';
 
+#[cfg(any(
+    target_os = "windows",
+))]
+static DEFAULT_TMPDIR: &str = r"%USERPROFILE%\AppData\Local\Temp";
+
+#[cfg(not(any(
+    target_os = "windows",
+)))]
 static DEFAULT_TMPDIR: &str = r"/tmp";
+
+
 static DEFAULT_BUF_SIZE: usize = usize::MAX;
 
 #[derive(Eq, Ord, PartialEq, PartialOrd, Clone, Copy)]
