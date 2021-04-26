@@ -22,24 +22,30 @@ use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use once_cell::unsync::OnceCell;
 use quoting_style::{escape_name, QuotingStyle};
-#[cfg(unix)]
-use std::collections::HashMap;
-use std::fs::{self, DirEntry, FileType, Metadata};
-#[cfg(any(unix, target_os = "redox"))]
-use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
-use std::path::{Path, PathBuf};
+use std::{
+    cmp::Reverse,
+    fs::{self, DirEntry, FileType, Metadata},
+    io::{stdout, BufWriter, Stdout, Write},
+    path::{Path, PathBuf},
+    process::exit,
+    time::{SystemTime, UNIX_EPOCH},
+};
 #[cfg(unix)]
-use std::time::Duration;
-use std::time::{SystemTime, UNIX_EPOCH};
-use std::{cmp::Reverse, process::exit};
+use std::{
+    collections::HashMap,
+    os::unix::fs::{FileTypeExt, MetadataExt},
+    time::Duration,
+};
 
 use indoc::indoc;
 
 use chrono;
 
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
+
+use unicode_width::UnicodeWidthStr;
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 
@@ -74,6 +80,7 @@ pub mod options {
         pub static TIME: &str = "t";
         pub static NONE: &str = "U";
         pub static VERSION: &str = "v";
+        pub static EXTENSION: &str = "X";
     }
     pub mod time {
         pub static ACCESS: &str = "u";
@@ -89,10 +96,8 @@ pub mod options {
         pub static C: &str = "quote-name";
     }
     pub static QUOTING_STYLE: &str = "quoting-style";
-
     pub mod indicator_style {
-        pub static NONE: &str = "none";
-        pub static SLASH: &str = "slash";
+        pub static SLASH: &str = "p";
         pub static FILE_TYPE: &str = "file-type";
         pub static CLASSIFY: &str = "classify";
     }
@@ -111,9 +116,6 @@ pub mod options {
     pub static TIME: &str = "time";
     pub static IGNORE_BACKUPS: &str = "ignore-backups";
     pub static DIRECTORY: &str = "directory";
-    pub static CLASSIFY: &str = "classify";
-    pub static FILE_TYPE: &str = "file-type";
-    pub static SLASH: &str = "p";
     pub static INODE: &str = "inode";
     pub static REVERSE: &str = "reverse";
     pub static RECURSIVE: &str = "recursive";
@@ -141,6 +143,7 @@ enum Sort {
     Size,
     Time,
     Version,
+    Extension,
 }
 
 enum SizeFormat {
@@ -295,6 +298,7 @@ impl Config {
                 "time" => Sort::Time,
                 "size" => Sort::Size,
                 "version" => Sort::Version,
+                "extension" => Sort::Extension,
                 // below should never happen as clap already restricts the values.
                 _ => unreachable!("Invalid field for --sort"),
             }
@@ -306,6 +310,8 @@ impl Config {
             Sort::None
         } else if options.is_present(options::sort::VERSION) {
             Sort::Version
+        } else if options.is_present(options::sort::EXTENSION) {
+            Sort::Extension
         } else {
             Sort::Name
         };
@@ -442,19 +448,11 @@ impl Config {
                 "slash" => IndicatorStyle::Slash,
                 &_ => IndicatorStyle::None,
             }
-        } else if options.is_present(options::indicator_style::NONE) {
-            IndicatorStyle::None
-        } else if options.is_present(options::indicator_style::CLASSIFY)
-            || options.is_present(options::CLASSIFY)
-        {
+        } else if options.is_present(options::indicator_style::CLASSIFY) {
             IndicatorStyle::Classify
-        } else if options.is_present(options::indicator_style::SLASH)
-            || options.is_present(options::SLASH)
-        {
+        } else if options.is_present(options::indicator_style::SLASH) {
             IndicatorStyle::Slash
-        } else if options.is_present(options::indicator_style::FILE_TYPE)
-            || options.is_present(options::FILE_TYPE)
-        {
+        } else if options.is_present(options::indicator_style::FILE_TYPE) {
             IndicatorStyle::FileType
         } else {
             IndicatorStyle::None
@@ -555,7 +553,9 @@ impl Config {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
 
     let usage = get_usage();
 
@@ -805,10 +805,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(
             Arg::with_name(options::SORT)
                 .long(options::SORT)
-                .help("Sort by <field>: name, none (-U), time (-t) or size (-S)")
+                .help("Sort by <field>: name, none (-U), time (-t), size (-S) or extension (-X)")
                 .value_name("field")
                 .takes_value(true)
-                .possible_values(&["name", "none", "time", "size", "version"])
+                .possible_values(&["name", "none", "time", "size", "version", "extension"])
                 .require_equals(true)
                 .overrides_with_all(&[
                     options::SORT,
@@ -816,6 +816,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::sort::TIME,
                     options::sort::NONE,
                     options::sort::VERSION,
+                    options::sort::EXTENSION,
                 ])
         )
         .arg(
@@ -828,6 +829,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::sort::TIME,
                     options::sort::NONE,
                     options::sort::VERSION,
+                    options::sort::EXTENSION,
                 ])
         )
         .arg(
@@ -840,6 +842,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::sort::TIME,
                     options::sort::NONE,
                     options::sort::VERSION,
+                    options::sort::EXTENSION,
                 ])
         )
         .arg(
@@ -852,6 +855,20 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::sort::TIME,
                     options::sort::NONE,
                     options::sort::VERSION,
+                    options::sort::EXTENSION,
+                ])
+        )
+        .arg(
+            Arg::with_name(options::sort::EXTENSION)
+                .short(options::sort::EXTENSION)
+                .help("Sort alphabetically by entry extension.")
+                .overrides_with_all(&[
+                    options::SORT,
+                    options::sort::SIZE,
+                    options::sort::TIME,
+                    options::sort::NONE,
+                    options::sort::VERSION,
+                    options::sort::EXTENSION,
                 ])
         )
         .arg(
@@ -866,6 +883,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::sort::TIME,
                     options::sort::NONE,
                     options::sort::VERSION,
+                    options::sort::EXTENSION,
                 ])
         )
 
@@ -1006,45 +1024,45 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .takes_value(true)
                 .possible_values(&["none", "slash", "file-type", "classify"])
                 .overrides_with_all(&[
-                    options::FILE_TYPE,
-                    options::SLASH,
-                    options::CLASSIFY,
+                    options::indicator_style::FILE_TYPE,
+                    options::indicator_style::SLASH,
+                    options::indicator_style::CLASSIFY,
                     options::INDICATOR_STYLE,
                 ]))
                 .arg(
-            Arg::with_name(options::CLASSIFY)
+            Arg::with_name(options::indicator_style::CLASSIFY)
                 .short("F")
-                .long(options::CLASSIFY)
+                .long(options::indicator_style::CLASSIFY)
                 .help("Append a character to each file name indicating the file type. Also, for \
                        regular files that are executable, append '*'. The file type indicators are \
                        '/' for directories, '@' for symbolic links, '|' for FIFOs, '=' for sockets, \
                        '>' for doors, and nothing for regular files.")
                 .overrides_with_all(&[
-                    options::FILE_TYPE,
-                    options::SLASH,
-                    options::CLASSIFY,
+                    options::indicator_style::FILE_TYPE,
+                    options::indicator_style::SLASH,
+                    options::indicator_style::CLASSIFY,
                     options::INDICATOR_STYLE,
                 ])
         )
         .arg(
-            Arg::with_name(options::FILE_TYPE)
-                .long(options::FILE_TYPE)
+            Arg::with_name(options::indicator_style::FILE_TYPE)
+                .long(options::indicator_style::FILE_TYPE)
                 .help("Same as --classify, but do not append '*'")
                 .overrides_with_all(&[
-                    options::FILE_TYPE,
-                    options::SLASH,
-                    options::CLASSIFY,
+                    options::indicator_style::FILE_TYPE,
+                    options::indicator_style::SLASH,
+                    options::indicator_style::CLASSIFY,
                     options::INDICATOR_STYLE,
                 ]))
         .arg(
-            Arg::with_name(options::SLASH)
-                .short(options::SLASH)
+            Arg::with_name(options::indicator_style::SLASH)
+                .short(options::indicator_style::SLASH)
                 .help("Append / indicator to directories."
                 )
                 .overrides_with_all(&[
-                    options::FILE_TYPE,
-                    options::SLASH,
-                    options::CLASSIFY,
+                    options::indicator_style::FILE_TYPE,
+                    options::indicator_style::SLASH,
+                    options::indicator_style::CLASSIFY,
                     options::INDICATOR_STYLE,
                 ]))
         .arg(
@@ -1112,7 +1130,9 @@ impl PathData {
     ) -> Self {
         let name = p_buf
             .file_name()
-            .map_or(String::new(), |s| s.to_string_lossy().into_owned());
+            .unwrap_or_else(|| p_buf.iter().next_back().unwrap())
+            .to_string_lossy()
+            .into_owned();
         let must_dereference = match &config.dereference {
             Dereference::All => true,
             Dereference::Args => command_line,
@@ -1163,6 +1183,8 @@ fn list(locs: Vec<String>, config: Config) -> i32 {
     let mut dirs = Vec::<PathData>::new();
     let mut has_failed = false;
 
+    let mut out = BufWriter::new(stdout());
+
     for loc in locs {
         let p = PathBuf::from(&loc);
         if !p.exists() {
@@ -1189,14 +1211,14 @@ fn list(locs: Vec<String>, config: Config) -> i32 {
         }
     }
     sort_entries(&mut files, &config);
-    display_items(&files, None, &config);
+    display_items(&files, &config, &mut out);
 
     sort_entries(&mut dirs, &config);
     for dir in dirs {
         if number_of_locs > 1 {
-            println!("\n{}:", dir.p_buf.display());
+            let _ = writeln!(out, "\n{}:", dir.p_buf.display());
         }
-        enter_directory(&dir, &config);
+        enter_directory(&dir, &config, &mut out);
     }
     if has_failed {
         1
@@ -1218,8 +1240,20 @@ fn sort_entries(entries: &mut Vec<PathData>, config: &Config) {
             entries.sort_by_key(|k| Reverse(k.md().as_ref().map(|md| md.len()).unwrap_or(0)))
         }
         // The default sort in GNU ls is case insensitive
-        Sort::Name => entries.sort_by_key(|k| k.file_name.to_lowercase()),
+        Sort::Name => entries.sort_by_cached_key(|k| {
+            let has_dot: bool = k.file_name.starts_with('.');
+            let filename_nodot: &str = &k.file_name[if has_dot { 1 } else { 0 }..];
+            // We want hidden files to appear before regular files of the same
+            // name, so we need to negate the "has_dot" variable.
+            (filename_nodot.to_lowercase(), !has_dot)
+        }),
         Sort::Version => entries.sort_by(|k, j| version_cmp::version_cmp(&k.p_buf, &j.p_buf)),
+        Sort::Extension => entries.sort_by(|a, b| {
+            a.p_buf
+                .extension()
+                .cmp(&b.p_buf.extension())
+                .then(a.p_buf.file_stem().cmp(&b.p_buf.file_stem()))
+        }),
         Sort::None => {}
     }
 
@@ -1249,7 +1283,7 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
     !config.ignore_patterns.is_match(&ffi_name)
 }
 
-fn enter_directory(dir: &PathData, config: &Config) {
+fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>) {
     let mut entries: Vec<_> = if config.files == Files::All {
         vec![
             PathData::new(dir.p_buf.join("."), None, config, false),
@@ -1269,7 +1303,7 @@ fn enter_directory(dir: &PathData, config: &Config) {
 
     entries.append(&mut temp);
 
-    display_items(&entries, Some(&dir.p_buf), config);
+    display_items(&entries, config, out);
 
     if config.recursive {
         for e in entries
@@ -1277,8 +1311,8 @@ fn enter_directory(dir: &PathData, config: &Config) {
             .skip(if config.files == Files::All { 2 } else { 0 })
             .filter(|p| p.file_type().map(|ft| ft.is_dir()).unwrap_or(false))
         {
-            println!("\n{}:", e.p_buf.display());
-            enter_directory(&e, config);
+            let _ = writeln!(out, "\n{}:", e.p_buf.display());
+            enter_directory(&e, config, out);
         }
     }
 }
@@ -1306,7 +1340,7 @@ fn pad_left(string: String, count: usize) -> String {
     format!("{:>width$}", string, width = count)
 }
 
-fn display_items(items: &[PathData], strip: Option<&Path>, config: &Config) {
+fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) {
     if config.format == Format::Long {
         let (mut max_links, mut max_size) = (1, 1);
         for item in items {
@@ -1315,50 +1349,57 @@ fn display_items(items: &[PathData], strip: Option<&Path>, config: &Config) {
             max_size = size.max(max_size);
         }
         for item in items {
-            display_item_long(item, strip, max_links, max_size, config);
+            display_item_long(item, max_links, max_size, config, out);
         }
     } else {
-        let names = items
-            .iter()
-            .filter_map(|i| display_file_name(&i, strip, config));
+        let names = items.iter().filter_map(|i| display_file_name(&i, config));
 
         match (&config.format, config.width) {
-            (Format::Columns, Some(width)) => display_grid(names, width, Direction::TopToBottom),
-            (Format::Across, Some(width)) => display_grid(names, width, Direction::LeftToRight),
+            (Format::Columns, Some(width)) => {
+                display_grid(names, width, Direction::TopToBottom, out)
+            }
+            (Format::Across, Some(width)) => {
+                display_grid(names, width, Direction::LeftToRight, out)
+            }
             (Format::Commas, width_opt) => {
                 let term_width = width_opt.unwrap_or(1);
                 let mut current_col = 0;
                 let mut names = names;
                 if let Some(name) = names.next() {
-                    print!("{}", name.contents);
+                    let _ = write!(out, "{}", name.contents);
                     current_col = name.width as u16 + 2;
                 }
                 for name in names {
                     let name_width = name.width as u16;
                     if current_col + name_width + 1 > term_width {
                         current_col = name_width + 2;
-                        print!(",\n{}", name.contents);
+                        let _ = write!(out, ",\n{}", name.contents);
                     } else {
                         current_col += name_width + 2;
-                        print!(", {}", name.contents);
+                        let _ = write!(out, ", {}", name.contents);
                     }
                 }
                 // Current col is never zero again if names have been printed.
                 // So we print a newline.
                 if current_col > 0 {
-                    println!();
+                    let _ = writeln!(out,);
                 }
             }
             _ => {
                 for name in names {
-                    println!("{}", name.contents);
+                    let _ = writeln!(out, "{}", name.contents);
                 }
             }
         }
     }
 }
 
-fn display_grid(names: impl Iterator<Item = Cell>, width: u16, direction: Direction) {
+fn display_grid(
+    names: impl Iterator<Item = Cell>,
+    width: u16,
+    direction: Direction,
+    out: &mut BufWriter<Stdout>,
+) {
     let mut grid = Grid::new(GridOptions {
         filling: Filling::Spaces(2),
         direction,
@@ -1369,9 +1410,13 @@ fn display_grid(names: impl Iterator<Item = Cell>, width: u16, direction: Direct
     }
 
     match grid.fit_into_width(width as usize) {
-        Some(output) => print!("{}", output),
+        Some(output) => {
+            let _ = write!(out, "{}", output);
+        }
         // Width is too small for the grid, so we fit it in one column
-        None => print!("{}", grid.fit_into_columns(1)),
+        None => {
+            let _ = write!(out, "{}", grid.fit_into_columns(1));
+        }
     }
 }
 
@@ -1379,15 +1424,14 @@ use uucore::fs::display_permissions;
 
 fn display_item_long(
     item: &PathData,
-    strip: Option<&Path>,
     max_links: usize,
     max_size: usize,
     config: &Config,
+    out: &mut BufWriter<Stdout>,
 ) {
     let md = match item.md() {
         None => {
-            let filename = get_file_name(&item.p_buf, strip);
-            show_error!("could not show file: {}", filename);
+            show_error!("could not show file: {}", &item.p_buf.display());
             return;
         }
         Some(md) => md,
@@ -1396,11 +1440,12 @@ fn display_item_long(
     #[cfg(unix)]
     {
         if config.inode {
-            print!("{} ", get_inode(&md));
+            let _ = write!(out, "{} ", get_inode(&md));
         }
     }
 
-    print!(
+    let _ = write!(
+        out,
         "{}{} {}",
         display_file_type(md.file_type()),
         display_permissions(&md),
@@ -1408,27 +1453,28 @@ fn display_item_long(
     );
 
     if config.long.owner {
-        print!(" {}", display_uname(&md, config));
+        let _ = write!(out, " {}", display_uname(&md, config));
     }
 
     if config.long.group {
-        print!(" {}", display_group(&md, config));
+        let _ = write!(out, " {}", display_group(&md, config));
     }
 
     // Author is only different from owner on GNU/Hurd, so we reuse
     // the owner, since GNU/Hurd is not currently supported by Rust.
     if config.long.author {
-        print!(" {}", display_uname(&md, config));
+        let _ = write!(out, " {}", display_uname(&md, config));
     }
 
-    println!(
+    let _ = writeln!(
+        out,
         " {} {} {}",
         pad_left(display_file_size(&md, config), max_size),
         display_date(&md, config),
         // unwrap is fine because it fails when metadata is not available
         // but we already know that it is because it's checked at the
         // start of the function.
-        display_file_name(&item, strip, config).unwrap().contents,
+        display_file_name(&item, config).unwrap().contents,
     );
 }
 
@@ -1443,6 +1489,7 @@ fn get_inode(metadata: &Metadata) -> String {
 use std::sync::Mutex;
 #[cfg(unix)]
 use uucore::entries;
+use uucore::InvalidEncodingHandling;
 
 #[cfg(unix)]
 fn cached_uid2usr(uid: u32) -> String {
@@ -1451,14 +1498,10 @@ fn cached_uid2usr(uid: u32) -> String {
     }
 
     let mut uid_cache = UID_CACHE.lock().unwrap();
-    match uid_cache.get(&uid) {
-        Some(usr) => usr.clone(),
-        None => {
-            let usr = entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string());
-            uid_cache.insert(uid, usr.clone());
-            usr
-        }
-    }
+    uid_cache
+        .entry(uid)
+        .or_insert_with(|| entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()))
+        .clone()
 }
 
 #[cfg(unix)]
@@ -1477,14 +1520,10 @@ fn cached_gid2grp(gid: u32) -> String {
     }
 
     let mut gid_cache = GID_CACHE.lock().unwrap();
-    match gid_cache.get(&gid) {
-        Some(grp) => grp.clone(),
-        None => {
-            let grp = entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string());
-            gid_cache.insert(gid, grp.clone());
-            grp
-        }
-    }
+    gid_cache
+        .entry(gid)
+        .or_insert_with(|| entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string()))
+        .clone()
 }
 
 #[cfg(unix)]
@@ -1502,7 +1541,6 @@ fn display_uname(_metadata: &Metadata, _config: &Config) -> String {
 }
 
 #[cfg(not(unix))]
-#[allow(unused_variables)]
 fn display_group(_metadata: &Metadata, _config: &Config) -> String {
     "somegroup".to_string()
 }
@@ -1595,25 +1633,14 @@ fn display_file_size(metadata: &Metadata, config: &Config) -> String {
     }
 }
 
-fn display_file_type(file_type: FileType) -> String {
+fn display_file_type(file_type: FileType) -> char {
     if file_type.is_dir() {
-        "d".to_string()
+        'd'
     } else if file_type.is_symlink() {
-        "l".to_string()
+        'l'
     } else {
-        "-".to_string()
+        '-'
     }
-}
-
-fn get_file_name(name: &Path, strip: Option<&Path>) -> String {
-    let mut name = match strip {
-        Some(prefix) => name.strip_prefix(prefix).unwrap_or(name),
-        None => name,
-    };
-    if name.as_os_str().is_empty() {
-        name = Path::new(".");
-    }
-    name.to_string_lossy().into_owned()
 }
 
 #[cfg(unix)]
@@ -1652,8 +1679,8 @@ fn classify_file(path: &PathData) -> Option<char> {
     }
 }
 
-fn display_file_name(path: &PathData, strip: Option<&Path>, config: &Config) -> Option<Cell> {
-    let mut name = escape_name(get_file_name(&path.p_buf, strip), &config.quoting_style);
+fn display_file_name(path: &PathData, config: &Config) -> Option<Cell> {
+    let mut name = escape_name(&path.file_name, &config.quoting_style);
 
     #[cfg(unix)]
     {
@@ -1661,6 +1688,10 @@ fn display_file_name(path: &PathData, strip: Option<&Path>, config: &Config) -> 
             name = get_inode(path.md()?) + " " + &name;
         }
     }
+
+    // We need to keep track of the width ourselves instead of letting term_grid
+    // infer it because the color codes mess up term_grid's width calculation.
+    let mut width = name.width();
 
     if let Some(ls_colors) = &config.color {
         name = color_name(&ls_colors, &path.p_buf, name, path.md()?);
@@ -1690,6 +1721,7 @@ fn display_file_name(path: &PathData, strip: Option<&Path>, config: &Config) -> 
 
         if let Some(c) = char_opt {
             name.push(c);
+            width += 1;
         }
     }
 
@@ -1700,7 +1732,10 @@ fn display_file_name(path: &PathData, strip: Option<&Path>, config: &Config) -> 
         }
     }
 
-    Some(name.into())
+    Some(Cell {
+        contents: name,
+        width,
+    })
 }
 
 fn color_name(ls_colors: &LsColors, path: &Path, name: String, md: &Metadata) -> String {

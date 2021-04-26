@@ -171,7 +171,7 @@ impl Iterator for EscapedChar {
     }
 }
 
-fn shell_without_escape(name: String, quotes: Quotes, show_control_chars: bool) -> (String, bool) {
+fn shell_without_escape(name: &str, quotes: Quotes, show_control_chars: bool) -> (String, bool) {
     let mut must_quote = false;
     let mut escaped_str = String::with_capacity(name.len());
 
@@ -201,7 +201,7 @@ fn shell_without_escape(name: String, quotes: Quotes, show_control_chars: bool) 
     (escaped_str, must_quote)
 }
 
-fn shell_with_escape(name: String, quotes: Quotes) -> (String, bool) {
+fn shell_with_escape(name: &str, quotes: Quotes) -> (String, bool) {
     // We need to keep track of whether we are in a dollar expression
     // because e.g. \b\n is escaped as $'\b\n' and not like $'b'$'n'
     let mut in_dollar = false;
@@ -249,7 +249,7 @@ fn shell_with_escape(name: String, quotes: Quotes) -> (String, bool) {
     (escaped_str, must_quote)
 }
 
-pub(super) fn escape_name(name: String, style: &QuotingStyle) -> String {
+pub(super) fn escape_name(name: &str, style: &QuotingStyle) -> String {
     match style {
         QuotingStyle::Literal { show_control } => {
             if !show_control {
@@ -257,7 +257,7 @@ pub(super) fn escape_name(name: String, style: &QuotingStyle) -> String {
                     .flat_map(|c| EscapedChar::new_literal(c).hide_control())
                     .collect()
             } else {
-                name
+                name.into()
             }
         }
         QuotingStyle::C { quotes } => {
@@ -354,7 +354,7 @@ mod tests {
     fn check_names(name: &str, map: Vec<(&str, &str)>) {
         assert_eq!(
             map.iter()
-                .map(|(_, style)| escape_name(name.to_string(), &get_style(style)))
+                .map(|(_, style)| escape_name(name, &get_style(style)))
                 .collect::<Vec<String>>(),
             map.iter()
                 .map(|(correct, _)| correct.to_string())

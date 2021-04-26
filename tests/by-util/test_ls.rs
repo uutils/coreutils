@@ -481,6 +481,21 @@ fn test_ls_sort_name() {
         .arg("--sort=name")
         .succeeds()
         .stdout_is(["test-1", "test-2", "test-3\n"].join(sep));
+
+    // Order of a named sort ignores leading dots.
+    let scene_dot = TestScenario::new(util_name!());
+    let at = &scene_dot.fixtures;
+    at.touch(".a");
+    at.touch("a");
+    at.touch(".b");
+    at.touch("b");
+
+    scene_dot
+        .ucmd()
+        .arg("--sort=name")
+        .arg("-A")
+        .succeeds()
+        .stdout_is([".a", "a", ".b", "b\n"].join(sep));
 }
 
 #[test]
@@ -860,6 +875,18 @@ fn test_ls_color() {
         .arg("z")
         .succeeds()
         .stdout_only("");
+
+    // The colors must not mess up the grid layout
+    at.touch("b");
+    scene
+        .ucmd()
+        .arg("--color")
+        .arg("-w=15")
+        .succeeds()
+        .stdout_only(format!(
+            "{}  test-color\nb  {}\n",
+            a_with_colors, z_with_colors
+        ));
 }
 
 #[cfg(unix)]
@@ -1780,4 +1807,60 @@ fn test_ls_deref_command_line_dir() {
         .succeeds();
 
     assert!(!result.stdout_str().ends_with("sym_dir"));
+}
+
+#[test]
+fn test_ls_sort_extension() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    for filename in &[
+        "file1",
+        "file2",
+        "anotherFile",
+        ".hidden",
+        ".file.1",
+        ".file.2",
+        "file.1",
+        "file.2",
+        "anotherFile.1",
+        "anotherFile.2",
+        "file.ext",
+        "file.debug",
+        "anotherFile.ext",
+        "anotherFile.debug",
+    ] {
+        at.touch(filename);
+    }
+
+    let expected = vec![
+        ".",
+        "..",
+        ".hidden",
+        "anotherFile",
+        "file1",
+        "file2",
+        ".file.1",
+        "anotherFile.1",
+        "file.1",
+        ".file.2",
+        "anotherFile.2",
+        "file.2",
+        "anotherFile.debug",
+        "file.debug",
+        "anotherFile.ext",
+        "file.ext",
+        "", // because of '\n' at the end of the output
+    ];
+
+    let result = scene.ucmd().arg("-1aX").run();
+    assert_eq!(
+        result.stdout_str().split('\n').collect::<Vec<_>>(),
+        expected,
+    );
+
+    let result = scene.ucmd().arg("-1a").arg("--sort=extension").run();
+    assert_eq!(
+        result.stdout_str().split('\n').collect::<Vec<_>>(),
+        expected,
+    );
 }

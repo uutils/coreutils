@@ -170,7 +170,6 @@ dependencies = [
  "libc",
  "num-integer",
  "num-traits",
- "pure-rust-locales",
  "time",
  "winapi 0.3.9",
 ]
@@ -1091,12 +1090,6 @@ checksum = "a152013215dca273577e18d2bf00fa862b89b24169fb78c4c95aeb07992c9cec"
 dependencies = [
  "unicode-xid 0.2.1",
 ]
-
-[[package]]
-name = "pure-rust-locales"
-version = "0.5.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3eb81e527b237b54f32eee2dd4cff98527c4a4f6368f0a87aa9b513027abae3e"
 
 [[package]]
 name = "quick-error"
@@ -2077,8 +2070,8 @@ dependencies = [
  "atty",
  "chrono",
  "clap",
- "indoc",
  "globset",
+ "indoc",
  "lazy_static",
  "locale",
  "lscolors",
@@ -2086,6 +2079,7 @@ dependencies = [
  "once_cell",
  "term_grid",
  "termsize",
+ "unicode-width",
  "uucore",
  "uucore_procs",
 ]

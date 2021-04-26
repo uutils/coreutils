@@ -26,9 +26,32 @@ Example: `hyperfine --warmup 2 "target/release/coreutils ls -al -R tree > /dev/n
 `hyperfine --warmup 2 "target/release/coreutils ls -al -R tree > /dev/null" "ls -al -R tree > /dev/null"`
 (This assumes GNU ls is installed as `ls`)
 
-This can also be used to compare with version of ls built before your changes to ensure your change does not regress this
+This can also be used to compare with version of ls built before your changes to ensure your change does not regress this.
+
+Here is a `bash` script for doing this comparison:
+```bash
+#!/bin/bash
+cargo build --no-default-features --features ls --release
+args="$@"
+hyperfine "ls $args" "target/release/coreutils ls $args"
+```
 
 ## Checking system call count
 
 - Another thing to look at would be system calls count using strace (on linux) or equivalent on other operating systems.
 - Example: `strace -c target/release/coreutils ls -al -R tree`
+
+## Cargo Flamegraph
+
+With Cargo Flamegraph you can easily make a flamegraph of `ls`:
+```bash
+cargo flamegraph --cmd coreutils -- ls [additional parameters]
+```
+
+However, if the `-R` option is given, the output becomes pretty much useless due to recursion. We can fix this by merging all the direct recursive calls with `uniq`, below is a `bash` script that does this.
+```bash
+#!/bin/bash
+cargo build --release --no-default-features --features ls
+perf record target/release/coreutils ls "$@"
+perf script | uniq | inferno-collapse-perf | inferno-flamegraph > flamegraph.svg 
+```

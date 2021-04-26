@@ -14,6 +14,13 @@ use clap::{App, Arg};
 use rand::Rng;
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
+use uucore::InvalidEncodingHandling;
+
+enum Mode {
+    Default(String),
+    Echo(Vec<String>),
+    InputRange((usize, usize)),
+}
 
 static NAME: &str = "shuf";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -34,12 +41,6 @@ struct Options {
     sep: u8,
 }
 
-enum Mode {
-    Default(String),
-    Echo(Vec<String>),
-    InputRange((usize, usize)),
-}
-
 mod options {
     pub static ECHO: &str = "echo";
     pub static INPUT_RANGE: &str = "input-range";
@@ -52,6 +53,10 @@ mod options {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
+
     let matches = App::new(executable!())
         .name(NAME)
         .version(VERSION)

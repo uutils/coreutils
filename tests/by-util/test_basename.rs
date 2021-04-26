@@ -1,4 +1,5 @@
 use crate::common::util::*;
+use std::ffi::OsStr;
 
 #[test]
 fn test_directory() {
@@ -83,4 +84,19 @@ fn test_no_args() {
 #[test]
 fn test_too_many_args() {
     expect_error(vec!["a", "b", "c"]);
+}
+
+fn test_invalid_utf8_args(os_str: &OsStr) {
+    let test_vec = vec![os_str.to_os_string()];
+    new_ucmd!().args(&test_vec).succeeds().stdout_is("fo�o\n");
+}
+
+#[cfg(any(unix, target_os = "redox"))]
+#[test]
+fn invalid_utf8_args_unix() {
+    use std::os::unix::ffi::OsStrExt;
+
+    let source = [0x66, 0x6f, 0x80, 0x6f];
+    let os_str = OsStr::from_bytes(&source[..]);
+    test_invalid_utf8_args(os_str);
 }
