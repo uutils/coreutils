@@ -1064,7 +1064,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         settings.tmp_dir = PathBuf::from(result);
     } else {
         for (key, value) in env::vars_os() {
-            if key == OsString::from("TMPDIR") {
+            if key == OsString::from("TMPDIR") 
+            || key == OsString::from("TEMP") 
+            || key == OsString::from("TMP") 
+            {
                 settings.tmp_dir = PathBuf::from(value);
                 break;
             }
