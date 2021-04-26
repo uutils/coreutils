@@ -92,16 +92,11 @@ static THOUSANDS_SEP: char = ',';
 static NEGATIVE: char = '-';
 static POSITIVE: char = '+';
 
-#[cfg(any(
-    target_os = "windows",
-))]
+#[cfg(any(target_os = "windows",))]
 static DEFAULT_TMPDIR: &str = r"%USERPROFILE%\AppData\Local\Temp";
 
-#[cfg(not(any(
-    target_os = "windows",
-)))]
+#[cfg(not(any(target_os = "windows",)))]
 static DEFAULT_TMPDIR: &str = r"/tmp";
-
 
 static DEFAULT_BUF_SIZE: usize = usize::MAX;
 
@@ -1073,9 +1068,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         settings.tmp_dir = PathBuf::from(result);
     } else {
         for (key, value) in env::vars_os() {
-            if key == OsString::from("TMPDIR") 
-            || key == OsString::from("TEMP") 
-            || key == OsString::from("TMP") 
+            if key == OsString::from("TMPDIR")
+                || key == OsString::from("TEMP")
+                || key == OsString::from("TMP")
             {
                 settings.tmp_dir = PathBuf::from(value);
                 break;
@@ -1311,11 +1306,10 @@ fn compare_by(a: &Line, b: &Line, global_settings: &GlobalSettings) -> Ordering 
                     (a_str, a_selection.num_cache.as_num_info()),
                     (b_str, b_selection.num_cache.as_num_info()),
                 ),
-                SortMode::GeneralNumeric => {
-                         general_numeric_compare(
-                             general_f64_parse(&a_str[get_leading_gen(a_str)]),
-                             general_f64_parse(&b_str[get_leading_gen(b_str)]),)
-                }
+                SortMode::GeneralNumeric => general_numeric_compare(
+                    general_f64_parse(&a_str[get_leading_gen(a_str)]),
+                    general_f64_parse(&b_str[get_leading_gen(b_str)]),
+                ),
                 SortMode::Month => month_compare(a_str, b_str),
                 SortMode::Version => version_compare(a_str, b_str),
                 SortMode::Default => default_compare(a_str, b_str),

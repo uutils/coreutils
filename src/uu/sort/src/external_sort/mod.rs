@@ -183,16 +183,16 @@ where
                 let seq_size = seq.get_size();
                 total_read += seq_size;
 
-                // GNU minimum is 16 * (sizeof struct + 2), but GNU uses about 
-                // 1/10 the memory that we do.  And GNU even says in the code it may 
+                // GNU minimum is 16 * (sizeof struct + 2), but GNU uses about
+                // 1/10 the memory that we do.  And GNU even says in the code it may
                 // not work on small buffer sizes.
-                // 
-                // The following seems to work pretty well, and has about the same max 
+                //
+                // The following seems to work pretty well, and has about the same max
                 // RSS as lower minimum values.
-                // 
+                //
                 let minimum_buffer_size: u64 = iter_size as u64 * seq_size / 8;
-                
-                adjusted_buffer_size = 
+
+                adjusted_buffer_size =
                     // Grow buffer size for a struct/Line larger than buffer
                     if adjusted_buffer_size < seq_size {
                         seq_size
@@ -233,14 +233,13 @@ where
             //
             const MINIMUM_READBACK_BUFFER: u64 = 8200;
             let right_sized_buffer = adjusted_buffer_size
-                   .checked_div(iter.chunks)
-                   .unwrap_or(adjusted_buffer_size);
-            iter.max_per_chunk = 
-                if right_sized_buffer > MINIMUM_READBACK_BUFFER {
-                    right_sized_buffer
-                } else {
-                    MINIMUM_READBACK_BUFFER 
-                };
+                .checked_div(iter.chunks)
+                .unwrap_or(adjusted_buffer_size);
+            iter.max_per_chunk = if right_sized_buffer > MINIMUM_READBACK_BUFFER {
+                right_sized_buffer
+            } else {
+                MINIMUM_READBACK_BUFFER
+            };
             iter.buffers = vec![VecDeque::new(); iter.chunks as usize];
             iter.chunk_offsets = vec![0 as u64; iter.chunks as usize];
             for chunk_num in 0..iter.chunks {
