@@ -176,15 +176,28 @@ where
             let mut chunk = Vec::new();
             // Initial buffer is specified by user
             let mut adjusted_buffer_size = self.buffer_bytes;
+            let (iter_size, _) = unsorted.size_hint();
 
             // make the initial chunks on disk
             for seq in unsorted {
                 let seq_size = seq.get_size();
                 total_read += seq_size;
-                // Grow buffer size for a struct/Line larger than buffer
+
+                // GNU minimum is 16 * (sizeof struct + 2), but GNU uses about 
+                // 1/10 the memory that we do.  And GNU even says in the code it may 
+                // not work on small buffer sizes.
+                // 
+                // The following seems to work pretty well, and has about the same max 
+                // RSS as lower minimum values.
+                // 
+                let minimum_buffer_size: u64 = iter_size as u64 * seq_size / 8;
+                
                 adjusted_buffer_size = 
+                    // Grow buffer size for a struct/Line larger than buffer
                     if adjusted_buffer_size < seq_size {
                         seq_size
+                    } else if adjusted_buffer_size < minimum_buffer_size {
+                        minimum_buffer_size
                     } else {
                         adjusted_buffer_size
                     };
