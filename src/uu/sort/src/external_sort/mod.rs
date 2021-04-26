@@ -212,13 +212,22 @@ where
             }
 
             // initialize buffers for each chunk
-            // iter.max_per_chunk = adjusted_buffer_size
-            //       .checked_div(iter.chunks)
-            //       .unwrap_or(adjusted_buffer_size);
             //
-            // 
+            // Having a right sized buffer for each chunk for smallish values seems silly to me?
             //
-            iter.max_per_chunk = adjusted_buffer_size;
+            // We will have to have the entire iter in memory sometime right?
+            // Set minimum to the size of the writer buffer, ~8K
+            //
+            const MINIMUM_READBACK_BUFFER: u64 = 8200;
+            let right_sized_buffer = adjusted_buffer_size
+                   .checked_div(iter.chunks)
+                   .unwrap_or(adjusted_buffer_size);
+            iter.max_per_chunk = 
+                if right_sized_buffer > MINIMUM_READBACK_BUFFER {
+                    right_sized_buffer
+                } else {
+                    MINIMUM_READBACK_BUFFER 
+                };
             iter.buffers = vec![VecDeque::new(); iter.chunks as usize];
             iter.chunk_offsets = vec![0 as u64; iter.chunks as usize];
             for chunk_num in 0..iter.chunks {
