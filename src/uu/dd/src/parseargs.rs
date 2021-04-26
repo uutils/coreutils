@@ -3,12 +3,14 @@ mod test;
 
 use crate::conversion_tables::*;
 use crate::{
-    ConvFlagInput, ConvFlagOutput,
+    IConvFlags, OConvFlags,
     StatusLevel,
+};
+use crate::{
+    IFlags, OFlags,
 };
 
 use std::error::Error;
-
 
 /// Parser Errors describe errors with input
 #[derive(Debug)]
@@ -18,6 +20,7 @@ pub enum ParseError
     MultipleUCaseLCase,
     MultipleBlockUnblock,
     MultipleExclNoCreat,
+    FlagNoMatch(String),
     ConvFlagNoMatch(String),
     NoMatchingMultiplier(String),
     MultiplierStringContainsNoValue(String),
@@ -103,6 +106,84 @@ impl std::str::FromStr for ConvFlag
             _ =>
                 Err(ParseError::ConvFlagNoMatch(String::from(s)))
             }
+    }
+}
+
+enum Flag
+{
+    // Input only
+    FullBlock,
+    CountBytes,
+    SkipBytes,
+    // Either
+    Cio,
+    Direct,
+    Directory,
+    Dsync,
+    Sync,
+    NoCache,
+    NonBlock,
+    NoATime,
+    NoCtty,
+    NoFollow,
+    NoLinks,
+    Binary,
+    Text,
+    // Output only
+    Append,
+    SeekBytes,
+}
+
+impl std::str::FromStr for Flag
+{
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err>
+    {
+        match s
+        {
+            // Input only
+            "fullblock" =>
+                Ok(Self::FullBlock),
+            "count_bytes" =>
+                Ok(Self::CountBytes),
+            "skip_bytes" =>
+                Ok(Self::SkipBytes),
+            // Either
+            "cio" =>
+                Ok(Self::Cio),
+            "direct" =>
+                Ok(Self::Direct),
+            "directory" =>
+                Ok(Self::Directory),
+            "dsync" =>
+                Ok(Self::Dsync),
+            "sync" =>
+                Ok(Self::Sync),
+            "nocache" =>
+                Ok(Self::NoCache),
+            "nonblock" =>
+                Ok(Self::NonBlock),
+            "noatime" =>
+                Ok(Self::NoATime),
+            "noctty" =>
+                Ok(Self::NoCtty),
+            "nofollow" =>
+                Ok(Self::NoFollow),
+            "nolinks" =>
+                Ok(Self::NoLinks),
+            "binary" =>
+                Ok(Self::Binary),
+            "text" =>
+                Ok(Self::Text),
+            // Output only
+            "append" =>
+                Ok(Self::Append),
+            "seek_bytes" =>
+                Ok(Self::SeekBytes),
+            _ =>
+                Err(ParseError::FlagNoMatch(String::from(s))),
+        }
     }
 }
 
@@ -269,11 +350,11 @@ fn parse_ctable(fmt: Option<ConvFlag>, case: Option<ConvFlag>) -> Option<&'stati
    }
 }
 
-fn parse_conv_opts(matches: &getopts::Matches) -> Result<Vec<ConvFlag>, ParseError>
+fn parse_flag_list<T: std::str::FromStr<Err = ParseError>>(tag: &str, matches: &getopts::Matches) -> Result<Vec<T>, ParseError>
 {
     let mut flags = Vec::new();
 
-    if let Some(comma_str) = matches.opt_str("conv")
+    if let Some(comma_str) = matches.opt_str(tag)
     {
         for s in comma_str.split(",")
         {
@@ -286,10 +367,10 @@ fn parse_conv_opts(matches: &getopts::Matches) -> Result<Vec<ConvFlag>, ParseErr
 }
 
 /// Parse Conversion Options (Input Variety)
-/// Construct and validate a ConvFlagInput
-pub fn parse_conv_flag_input(matches: &getopts::Matches) -> Result<ConvFlagInput, ParseError>
+/// Construct and validate a IConvFlags
+pub fn parse_conv_flag_input(matches: &getopts::Matches) -> Result<IConvFlags, ParseError>
 {
-    let flags = parse_conv_opts(matches)?;
+    let flags = parse_flag_list("conv", matches)?;
 
     let mut fmt = None;
     let mut case = None;
@@ -378,7 +459,7 @@ pub fn parse_conv_flag_input(matches: &getopts::Matches) -> Result<ConvFlagInput
 
     let ctable = parse_ctable(fmt, case);
 
-    Ok(ConvFlagInput {
+    Ok(IConvFlags {
         ctable,
         block,
         unblock,
@@ -389,10 +470,10 @@ pub fn parse_conv_flag_input(matches: &getopts::Matches) -> Result<ConvFlagInput
 }
 
 /// Parse Conversion Options (Output Variety)
-/// Construct and validate a ConvFlagOutput
-pub fn parse_conv_flag_output(matches: &getopts::Matches) -> Result<ConvFlagOutput, ParseError>
+/// Construct and validate a OConvFlags
+pub fn parse_conv_flag_output(matches: &getopts::Matches) -> Result<OConvFlags, ParseError>
 {
-    let flags = parse_conv_opts(matches)?;
+    let flags = parse_flag_list("conv", matches)?;
 
     let mut sparse = false;
     let mut excl = false;
@@ -435,7 +516,7 @@ pub fn parse_conv_flag_output(matches: &getopts::Matches) -> Result<ConvFlagOutp
        }
     }
 
-    Ok(ConvFlagOutput {
+    Ok(OConvFlags {
         sparse,
         excl,
         nocreat,
@@ -443,4 +524,194 @@ pub fn parse_conv_flag_output(matches: &getopts::Matches) -> Result<ConvFlagOutp
         fdatasync,
         fsync,
     })
+}
+
+/// Parse IFlags struct from CL-input
+pub fn parse_iflags(matches: &getopts::Matches) -> Result<IFlags, ParseError>
+{
+    let mut cio = false;
+    let mut direct = false;
+    let mut directory = false;
+    let mut dsync = false;
+    let mut sync = false;
+    let mut nocache = false;
+    let mut nonblock = false;
+    let mut noatime = false;
+    let mut noctty = false;
+    let mut nofollow = false;
+    let mut nolinks = false;
+    let mut binary = false;
+    let mut text = false;
+    let mut fullblock = false;
+    let mut count_bytes = false;
+    let mut skip_bytes = false;
+
+    let flags = parse_flag_list("iflag", matches)?;
+
+    for flag in flags
+    {
+        match flag
+        {
+            Flag::Cio =>
+                cio = true,
+            Flag::Direct =>
+                direct = true,
+            Flag::Directory =>
+                directory = true,
+            Flag::Dsync =>
+                dsync = true,
+            Flag::Sync =>
+                sync = true,
+            Flag::NoCache =>
+                nocache = true,
+            Flag::NoCache =>
+                nocache = true,
+            Flag::NonBlock =>
+                nonblock = true,
+            Flag::NoATime =>
+                noatime = true,
+            Flag::NoCtty =>
+                noctty = true,
+            Flag::NoFollow =>
+                nofollow = true,
+            Flag::NoLinks =>
+                nolinks = true,
+            Flag::Binary =>
+                binary = true,
+            Flag::Text =>
+                text = true,
+            Flag::FullBlock =>
+                fullblock = true,
+            Flag::CountBytes =>
+                count_bytes = true,
+            Flag::SkipBytes =>
+                skip_bytes = true,
+            _ => {},
+        }
+    }
+
+    Ok(IFlags{
+        cio,
+        direct,
+        directory,
+        dsync,
+        sync,
+        nocache,
+        nonblock,
+        noatime,
+        noctty,
+        nofollow,
+        nolinks,
+        binary,
+        text,
+        fullblock,
+        count_bytes,
+        skip_bytes,
+    })
+}
+
+/// Parse OFlags struct from CL-input
+pub fn parse_oflags(matches: &getopts::Matches) -> Result<OFlags, ParseError>
+{
+    let mut append = false;
+    let mut cio = false;
+    let mut direct = false;
+    let mut directory = false;
+    let mut dsync = false;
+    let mut sync = false;
+    let mut nocache = false;
+    let mut nonblock = false;
+    let mut noatime = false;
+    let mut noctty = false;
+    let mut nofollow = false;
+    let mut nolinks = false;
+    let mut binary = false;
+    let mut text = false;
+    let mut seek_bytes = false;
+
+    let flags = parse_flag_list("oflag", matches)?;
+
+    for flag in flags
+    {
+        match flag
+        {
+            Flag::Append =>
+                append = true,
+            Flag::Cio =>
+                cio = true,
+            Flag::Direct =>
+                direct = true,
+            Flag::Directory =>
+                directory = true,
+            Flag::Dsync =>
+                dsync = true,
+            Flag::Sync =>
+                sync = true,
+            Flag::NoCache =>
+                nocache = true,
+            Flag::NoCache =>
+                nocache = true,
+            Flag::NonBlock =>
+                nonblock = true,
+            Flag::NoATime =>
+                noatime = true,
+            Flag::NoCtty =>
+                noctty = true,
+            Flag::NoFollow =>
+                nofollow = true,
+            Flag::NoLinks =>
+                nolinks = true,
+            Flag::Binary =>
+                binary = true,
+            Flag::Text =>
+                text = true,
+            Flag::SeekBytes =>
+                seek_bytes = true,
+            _ => {},
+        }
+    }
+
+    Ok(OFlags {
+        append,
+        cio,
+        direct,
+        directory,
+        dsync,
+        sync,
+        nocache,
+        nonblock,
+        noatime,
+        noctty,
+        nofollow,
+        nolinks,
+        binary,
+        text,
+        seek_bytes,
+    })
+}
+
+/// Parse the amount of the input file to skip.
+pub fn parse_skip_amt(matches: &getopts::Matches) -> Result<Option<usize>, ParseError>
+{
+    if let Some(skip_amt) = matches.opt_str("skip")
+    {
+        unimplemented!()
+    }
+    else
+    {
+        Ok(None)
+    }
+}
+
+/// Parse the amount of the output file to seek.
+pub fn parse_seek_amt(matches: &getopts::Matches) -> Result<Option<u64>, ParseError>
+{
+    if let Some(seek_amt) = matches.opt_str("seek")
+    {
+        unimplemented!()
+    }
+    else
+    {
+        Ok(None)
+    }
 }

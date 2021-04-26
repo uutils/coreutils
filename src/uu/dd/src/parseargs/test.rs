@@ -3,16 +3,16 @@ use super::*;
 use crate::{
     build_app,
     SYNTAX, SUMMARY, LONG_HELP,
-    ConvFlagInput, ConvFlagOutput,
+    IConvFlags, OConvFlags,
     StatusLevel,
 };
 
-// ----- ConvFlagInput/Output -----
+// ----- IConvFlags/Output -----
 
 #[test]
-fn build_cfi()
+fn build_icf()
 {
-    let cfi_expd = ConvFlagInput {
+    let icf_expd = IConvFlags {
         ctable: Some(&ASCII_TO_IBM),
         block: false,
         unblock: false,
@@ -28,15 +28,15 @@ fn build_cfi()
 
     let matches = build_app!().parse(args);
 
-    let cfi_parsed = parse_conv_flag_input(&matches).unwrap();
+    let icf_parsed = parse_conv_flag_input(&matches).unwrap();
 
     unimplemented!()
-    // assert_eq!(cfi_expd, cfi_parsed);
+    // assert_eq!(icf_expd, icf_parsed);
 }
 
 #[test]
 #[should_panic]
-fn cfi_ctable_error()
+fn icf_ctable_error()
 {
     let args = vec![
         String::from("dd"),
@@ -45,12 +45,12 @@ fn cfi_ctable_error()
 
     let matches = build_app!().parse(args);
 
-    let cfi_parsed = parse_conv_flag_input(&matches).unwrap();
+    let icf_parsed = parse_conv_flag_input(&matches).unwrap();
 }
 
 #[test]
 #[should_panic]
-fn cfi_case_error()
+fn icf_case_error()
 {
     let args = vec![
         String::from("dd"),
@@ -59,12 +59,12 @@ fn cfi_case_error()
 
     let matches = build_app!().parse(args);
 
-    let cfi_parsed = parse_conv_flag_input(&matches).unwrap();
+    let icf_parsed = parse_conv_flag_input(&matches).unwrap();
 }
 
 #[test]
 #[should_panic]
-fn cfi_block_error()
+fn icf_block_error()
 {
     let args = vec![
         String::from("dd"),
@@ -73,12 +73,12 @@ fn cfi_block_error()
 
     let matches = build_app!().parse(args);
 
-    let cfi_parsed = parse_conv_flag_input(&matches).unwrap();
+    let icf_parsed = parse_conv_flag_input(&matches).unwrap();
 }
 
 #[test]
 #[should_panic]
-fn cfi_creat_error()
+fn icf_creat_error()
 {
     let args = vec![
         String::from("dd"),
@@ -87,11 +87,11 @@ fn cfi_creat_error()
 
     let matches = build_app!().parse(args);
 
-    let cfi_parsed = parse_conv_flag_output(&matches).unwrap();
+    let icf_parsed = parse_conv_flag_output(&matches).unwrap();
 }
 
 #[test]
-fn parse_cfi_token_ibm()
+fn parse_icf_token_ibm()
 {
     let exp = vec![
         ConvFlag::FmtAtoI,
@@ -113,7 +113,7 @@ fn parse_cfi_token_ibm()
 }
 
 #[test]
-fn parse_cfi_tokens_elu()
+fn parse_icf_tokens_elu()
 {
     let exp = vec![
         ConvFlag::FmtEtoA,
@@ -136,7 +136,7 @@ fn parse_cfi_tokens_elu()
 }
 
 #[test]
-fn parse_cfi_tokens_remaining()
+fn parse_icf_tokens_remaining()
 {
     let exp = vec![
         ConvFlag::FmtAtoE,

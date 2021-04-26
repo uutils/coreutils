@@ -47,8 +47,8 @@ enum SrcStat
     EOF,
 }
 
-/// Captures all Conv Flags that apply to the input
-pub struct ConvFlagInput
+/// Stores all Conv Flags that apply to the input
+pub struct IConvFlags
 {
     ctable: Option<&'static ConversionTable>,
     block: bool,
@@ -58,9 +58,9 @@ pub struct ConvFlagInput
     noerror: bool,
 }
 
-/// Captures all Conv Flags that apply to the output
+/// Stores all Conv Flags that apply to the output
 #[derive(Debug, PartialEq)]
-pub struct ConvFlagOutput
+pub struct OConvFlags
 {
     sparse: bool,
     excl: bool,
@@ -68,6 +68,47 @@ pub struct ConvFlagOutput
     notrunc: bool,
     fdatasync: bool,
     fsync: bool,
+}
+
+/// Stores all Flags that apply to the input
+pub struct IFlags
+{
+    cio: bool,
+    direct: bool,
+    directory: bool,
+    dsync: bool,
+    sync: bool,
+    nocache: bool,
+    nonblock: bool,
+    noatime: bool,
+    noctty: bool,
+    nofollow: bool,
+    nolinks: bool,
+    binary: bool,
+    text: bool,
+    fullblock: bool,
+    count_bytes: bool,
+    skip_bytes: bool,
+}
+
+/// Stores all Flags that apply to the output
+pub struct OFlags
+{
+    append: bool,
+    cio: bool,
+    direct: bool,
+    directory: bool,
+    dsync: bool,
+    sync: bool,
+    nocache: bool,
+    nonblock: bool,
+    noatime: bool,
+    noctty: bool,
+    nofollow: bool,
+    nolinks: bool,
+    binary: bool,
+    text: bool,
+    seek_bytes: bool,
 }
 
 /// The value of the status cl-option.
@@ -101,7 +142,8 @@ struct Input<R: Read>
     src: R,
     ibs: usize,
     xfer_stats: StatusLevel,
-    cf: ConvFlagInput,
+    cflags: IConvFlags,
+    iflags: IFlags,
 }
 
 impl<R: Read> Read for Input<R>
@@ -110,7 +152,7 @@ impl<R: Read> Read for Input<R>
     {
         let len = self.src.read(&mut buf)?;
 
-        if let Some(ct) = self.cf.ctable
+        if let Some(ct) = self.cflags.ctable
         {
             for idx in 0..len
             {
@@ -118,7 +160,7 @@ impl<R: Read> Read for Input<R>
             }
         }
 
-        if self.cf.swab
+        if self.cflags.swab
         {
             let mut tmp = DEFAULT_FILL_BYTE;
 
@@ -140,17 +182,25 @@ impl Input<io::Stdin>
     {
         let ibs = parseargs::parse_ibs(matches)?;
         let xfer_stats = parseargs::parse_status_level(matches)?;
-        let cf = parseargs::parse_conv_flag_input(matches)?;
+        let cflags = parseargs::parse_conv_flag_input(matches)?;
+        let iflags = parseargs::parse_iflags(matches)?;
+        let skip = parseargs::parse_skip_amt(matches)?;
 
-        Ok(
-            Input {
-                src: io::stdin(),
-                ibs,
-                xfer_stats,
-                cf,
-            }
-        )
+        let mut i = Input {
+            src: io::stdin(),
+            ibs,
+            xfer_stats,
+            cflags,
+            iflags,
+        };
 
+        if let Some(skip_amt) = skip
+        {
+            let mut buf = vec![DEFAULT_FILL_BYTE; skip_amt];
+            i.read(&mut buf)?;
+        }
+
+        Ok(i)
     }
 }
 
@@ -160,16 +210,29 @@ impl Input<File>
     {
         let ibs = parseargs::parse_ibs(matches)?;
         let xfer_stats = parseargs::parse_status_level(matches)?;
-        let cf = parseargs::parse_conv_flag_input(matches)?;
+        let cflags = parseargs::parse_conv_flag_input(matches)?;
+        let iflags = parseargs::parse_iflags(matches)?;
+        let skip = parseargs::parse_skip_amt(matches)?;
 
         if let Some(fname) = matches.opt_str("if")
         {
-            Ok(Input {
-                src: File::open(fname)?,
+            let mut src = File::open(fname)?;
+
+            if let Some(skip_amt) = skip
+            {
+                let skip_amt: u64 = skip_amt.try_into()?;
+                src.seek(io::SeekFrom::Start(skip_amt))?;
+            }
+
+            let i = Input {
+                src,
                 ibs,
                 xfer_stats,
-                cf,
-            })
+                cflags,
+                iflags,
+            };
+
+            Ok(i)
         }
         else
         {
@@ -209,22 +272,23 @@ struct Output<W: Write>
 {
     dst: W,
     obs: usize,
-    cf: ConvFlagOutput,
+    cflags: OConvFlags,
+    oflags: OFlags,
 }
 
 impl Output<io::Stdout> {
     fn new(matches: &getopts::Matches) -> Result<Self, Box<dyn Error>>
     {
         let obs = parseargs::parse_obs(matches)?;
-        let cf = parseargs::parse_conv_flag_output(matches)?;
+        let cflags = parseargs::parse_conv_flag_output(matches)?;
+        let oflags = parseargs::parse_oflags(matches)?;
 
-        Ok(
-            Output {
+        Ok(Output {
                 dst: io::stdout(),
                 obs,
-                cf,
-            }
-        )
+                cflags,
+                oflags,
+        })
     }
 }
 
@@ -232,20 +296,28 @@ impl Output<File> {
     fn new(matches: &getopts::Matches) -> Result<Self, Box<dyn Error>>
     {
         let obs = parseargs::parse_obs(matches)?;
-        let cf = parseargs::parse_conv_flag_output(matches)?;
+        let cflags = parseargs::parse_conv_flag_output(matches)?;
+        let seek = parseargs::parse_seek_amt(matches)?;
+        let oflags = parseargs::parse_oflags(matches)?;
 
         if let Some(fname) = matches.opt_str("of")
         {
-            let dst = OpenOptions::new()
+            let mut dst = OpenOptions::new()
                 .write(true)
-                .create(!cf.nocreat)
-                .truncate(!cf.notrunc)
+                .create(!cflags.nocreat)
+                .truncate(!cflags.notrunc)
                 .open(fname)?;
+
+            if let Some(seek_amt) = seek
+            {
+                dst.seek(io::SeekFrom::Start(seek_amt))?;
+            }
 
             Ok(Output {
                 dst,
                 obs,
-                cf,
+                cflags,
+                oflags,
             })
         }
         else
@@ -255,31 +327,13 @@ impl Output<File> {
     }
 }
 
-impl<W: Write> Seek for Output<W>
+impl Seek for Output<File>
 {
     fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64>
     {
-        unimplemented!()
+        self.dst.seek(pos)
     }
 }
-
-// impl Seek for Output<io::Stdout>
-// {
-//     fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64>
-//     {
-//         // Default method. Called when output dst not backed by a traditional file and
-//         // should not be seeked (eg. stdout)
-//         Ok(0)
-//     }
-// }
-//
-// impl Seek for Output<File>
-// {
-//     fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64>
-//     {
-//         self.dst.seek(pos)
-//     }
-// }
 
 impl<W: Write> Write for Output<W>
 {
@@ -322,7 +376,29 @@ fn gen_prog_updater(rx: mpsc::Receiver<usize>) -> impl Fn() -> ()
     }
 }
 
-fn dd<R: Read, W: Write>(mut i: Input<R>, mut o: Output<W>) -> Result<(usize, usize), Box<dyn Error>>
+#[inline]
+fn dd_read_helper<R: Read, W: Write>(mut buf: &mut [u8], i: &mut Input<R>, o: &Output<W>) -> Result<SrcStat, Box<dyn Error>>
+{
+    match i.fill_n(&mut buf, o.obs)
+    {
+        Ok(ss) =>
+            Ok(ss),
+        Err(e) =>
+            if !i.cflags.noerror
+            {
+                return Err(e);
+            }
+            else
+            {
+                Ok(SrcStat::Read(0))
+            },
+    }
+}
+
+/// Perform the copy/convert opertaions. Non file backed output version
+// Note: Some of dd's functionality depends on whether the output is actually a file. This breaks the Output<Write> abstraction,
+// and should be fixed in the future.
+fn dd_stdout<R: Read>(mut i: Input<R>, mut o: Output<io::Stdout>) -> Result<(usize, usize), Box<dyn Error>>
 {
     let prog_tx = if i.xfer_stats == StatusLevel::Progress
     {
@@ -345,24 +421,81 @@ fn dd<R: Read, W: Write>(mut i: Input<R>, mut o: Output<W>) -> Result<(usize, us
         let mut buf = vec![DEFAULT_FILL_BYTE; o.obs];
 
         // Read
-        let r_len = match i.fill_n(&mut buf, o.obs) {
-            Ok(SrcStat::Read(len)) =>
+        let r_len = match dd_read_helper(&mut buf, &mut i, &o)?
+        {
+            SrcStat::Read(0) =>
+                continue,
+            SrcStat::Read(len) =>
             {
                 bytes_in += len;
                 len
             },
-            Ok(SrcStat::EOF) =>
+            SrcStat::EOF =>
                 break,
-            Err(e) =>
-                if !i.cf.noerror {
-                    return Err(e);
-                } else {
-                    continue
-                },
         };
 
         // Write
-        let w_len = if o.cf.sparse && is_sparse(&buf)
+        let w_len = o.write(&buf[..r_len])?;
+
+        // Prog
+        bytes_out += w_len;
+
+        if let Some(prog_tx) = &prog_tx
+        {
+            prog_tx.send(bytes_out)?;
+        }
+    }
+
+    if o.cflags.fsync || o.cflags.fdatasync
+    {
+        o.flush()?;
+    }
+
+    Ok((bytes_in, bytes_out))
+}
+
+/// Perform the copy/convert opertaions. File backed output version
+// Note: Some of dd's functionality depends on whether the output is actually a file. This breaks the Output<Write> abstraction,
+// and should be fixed in the future.
+fn dd_fileout<R: Read>(mut i: Input<R>, mut o: Output<File>) -> Result<(usize, usize), Box<dyn Error>>
+{
+    let prog_tx = if i.xfer_stats == StatusLevel::Progress
+    {
+        let (prog_tx, prog_rx) = mpsc::channel();
+
+        thread::spawn(gen_prog_updater(prog_rx));
+
+        Some(prog_tx)
+    }
+    else
+    {
+        None
+    };
+
+    let mut bytes_in  = 0;
+    let mut bytes_out = 0;
+
+    loop
+    {
+        let mut buf = vec![DEFAULT_FILL_BYTE; o.obs];
+
+        // Read
+        let r_len = match dd_read_helper(&mut buf, &mut i, &o)?
+        {
+            SrcStat::Read(0) =>
+                continue,
+            SrcStat::Read(len) =>
+            {
+                bytes_in += len;
+                len
+            },
+            SrcStat::EOF =>
+                break,
+        };
+
+
+        // Write
+        let w_len = if o.cflags.sparse && is_sparse(&buf)
         {
             let seek_amt: i64 = r_len.try_into()?;
             o.seek(io::SeekFrom::Current(seek_amt))?;
@@ -382,11 +515,15 @@ fn dd<R: Read, W: Write>(mut i: Input<R>, mut o: Output<W>) -> Result<(usize, us
         }
     }
 
-    // TODO: Also ensure file metadata is written when fsync option is specified. When _wouldn't_ this happen?
-    // See fs::File::sync_all && fs::File::sync_data methods!
-    if o.cf.fsync || o.cf.fdatasync
+    if o.cflags.fsync
     {
         o.flush()?;
+        o.dst.sync_all()?;
+    }
+    else if o.cflags.fdatasync
+    {
+        o.flush()?;
+        o.dst.sync_data()?;
     }
 
     Ok((bytes_in, bytes_out))
@@ -399,33 +536,65 @@ macro_rules! build_app (
         app!(SYNTAX, SUMMARY, LONG_HELP)
             .optopt(
                 "",
+                "skip",
+                "Skip N ‘ibs’-byte blocks in the input file before copying. If ‘iflag=skip_bytes’ is specified, N is interpreted as a byte count rather than a block count.",
+                "N"
+            )
+            .optopt(
+                "",
+                "seek",
+                "Skip N ‘obs’-byte blocks in the input file before copying. If ‘oflag=skip_bytes’ is specified, N is interpreted as a byte count rather than a block count.",
+                "N"
+            )
+            .optopt(
+                "",
+                "count",
+                "Copy N ‘ibs’-byte blocks from the input file, instead of everything until the end of the file. if ‘iflag=count_bytes’ is specified, N is interpreted as a byte count rather than a block count. Note if the input may return short reads as could be the case when reading
+     from a pipe for example, ‘iflag=fullblock’ will ensure that ‘count=’ corresponds to complete input blocks rather than the traditional POSIX specified behavior of counting input read operations.",
+                "BYTES"
+            )
+            .optopt(
+                "",
+                "bs",
+                "Set both input and output block sizes to BYTES. This makes ‘dd’ read and write BYTES per block, overriding any ‘ibs’ and ‘obs’ settings. In addition, if no data-transforming ‘conv’ option is specified, input is copied to the output as soon as it’s read, even
+     if it is smaller than the block size.",
+                "BYTES"
+            )
+            .optopt(
+                "",
                 "if",
-                "The input file",
+                "Read from FILE instead of standard input.",
                 "FILE"
             )
             .optopt(
                 "",
                 "ibs",
-                "read up to BYTES bytes at a time (default: 512)",
+                "Set the input block size to BYTES. This makes ‘dd’ read BYTES per block. The default is 512 bytes.",
                 "BYTES"
             )
             .optopt(
                 "",
                 "of",
-                "The output file",
+                "Write to FILE instead of standard output. Unless ‘conv=notrunc’ is given, ‘dd’ truncates FILE to zero bytes (or the size specified with ‘seek=’).",
                 "FILE"
             )
             .optopt(
                 "",
                 "obs",
-                "write BYTES bytes at a time (default: 512)",
+                "Set the output block size to BYTES. This makes ‘dd’ write BYTES per block. The default is 512 bytes.",
                 "BYTES"
             )
             .optopt(
                 "",
                 "conv",
-                "One or more conversion options as a comma-serparated list",
+                "Convert the file as specified by the CONVERSION argument(s). (No spaces around any comma(s).)",
                 "OPT[,OPT]..."
+            )
+            .optopt(
+                "",
+                "cbs",
+                "Set the conversion block size to BYTES. When converting variable-length records to fixed-length ones (‘conv=block’) or the reverse (‘conv=unblock’), use BYTES as the fixed record length.",
+                "BYTES"
             )
     }
 );
@@ -457,7 +626,7 @@ pub fn uumain(args: impl uucore::Args) -> i32
             let o = Output::<File>::new(&matches)
                 .expect("TODO: Return correct error code");
 
-            dd(i,o)
+            dd_fileout(i,o)
         },
         (true, false) =>
         {
@@ -466,7 +635,7 @@ pub fn uumain(args: impl uucore::Args) -> i32
             let o = Output::<io::Stdout>::new(&matches)
                 .expect("TODO: Return correct error code");
 
-            dd(i,o)
+            dd_stdout(i,o)
         },
         (false, true) =>
         {
@@ -475,7 +644,7 @@ pub fn uumain(args: impl uucore::Args) -> i32
             let o = Output::<File>::new(&matches)
                 .expect("TODO: Return correct error code");
 
-            dd(i,o)
+            dd_fileout(i,o)
         },
         (false, false) =>
         {
@@ -484,7 +653,7 @@ pub fn uumain(args: impl uucore::Args) -> i32
             let o = Output::<io::Stdout>::new(&matches)
                 .expect("TODO: Return correct error code");
 
-            dd(i,o)
+            dd_stdout(i,o)
         },
     };
 
@@ -492,7 +661,8 @@ pub fn uumain(args: impl uucore::Args) -> i32
     {
         Ok((b_in, b_out)) =>
         {
-            // TODO: Print output stats, unless noxfer
+            // TODO: Print final xfer stats
+            // print_stats(b_in, b_out);
 
             RTN_SUCCESS
         },

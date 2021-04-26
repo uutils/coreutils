@@ -9,7 +9,7 @@ use hex_literal::hex;
 // use tempfile::tempfile;
 // TODO: (Maybe) Use tempfiles in the tests.
 
-const DEFAULT_CFO: ConvFlagOutput = ConvFlagOutput {
+const DEFAULT_CFO: OConvFlags = OConvFlags {
     sparse: false,
     excl: false,
     nocreat: false,
@@ -18,15 +18,52 @@ const DEFAULT_CFO: ConvFlagOutput = ConvFlagOutput {
     fsync: false,
 };
 
+const DEFAULT_IFLAGS: IFlags = IFlags {
+    cio: false,
+    direct: false,
+    directory: false,
+    dsync: false,
+    sync: false,
+    nocache: false,
+    nonblock: false,
+    noatime: false,
+    noctty: false,
+    nofollow: false,
+    nolinks: false,
+    binary: false,
+    text: false,
+    fullblock: false,
+    count_bytes: false,
+    skip_bytes: false,
+};
+
+const DEFAULT_OFLAGS: OFlags = OFlags {
+    append: false,
+    cio: false,
+    direct: false,
+    directory: false,
+    dsync: false,
+    sync: false,
+    nocache: false,
+    nonblock: false,
+    noatime: false,
+    noctty: false,
+    nofollow: false,
+    nolinks: false,
+    binary: false,
+    text: false,
+    seek_bytes: false,
+};
+
 #[macro_export]
-macro_rules! cfi (
+macro_rules! icf (
     () =>
     {
-        cfi!(None)
+        icf!(None)
     };
     ( $ctable:expr ) =>
     {
-        ConvFlagInput {
+        IConvFlags {
             ctable: $ctable,
             block: false,
             unblock: false,
@@ -51,12 +88,13 @@ macro_rules! make_spec_test (
                             src: $src,
                             ibs: 512,
                             xfer_stats: StatusLevel::None,
-                            cf: cfi!(),
+                            cflags: icf!(),
+                            iflags: DEFAULT_IFLAGS,
                         },
                         Output {
                             dst: File::create(format!("./test-resources/FAILED-{}.test", $test_name)).unwrap(),
                             obs: 512,
-                            cf: DEFAULT_CFO,
+                            cflags: DEFAULT_CFO,
                         },
                         $spec,
                         format!("./test-resources/FAILED-{}.test", $test_name)
@@ -67,7 +105,7 @@ macro_rules! make_spec_test (
         #[test]
         fn $test_id()
         {
-            dd($i,$o).unwrap();
+            dd_fileout($i,$o).unwrap();
 
             let res = File::open($tmp_fname).unwrap();
             let res = BufReader::new(res);
@@ -94,12 +132,13 @@ macro_rules! make_conv_test (
                             src: $src,
                             ibs: 512,
                             xfer_stats: StatusLevel::None,
-                            cf: cfi!($ctable),
+                            cflags: icf!($ctable),
+                            iflags: DEFAULT_IFLAGS,
                         },
                         Output {
                             dst: File::create(format!("./test-resources/FAILED-{}.test", $test_name)).unwrap(),
                             obs: 512,
-                            cf: DEFAULT_CFO,
+                            cflags: DEFAULT_CFO,
                         },
                         $spec,
                         format!("./test-resources/FAILED-{}.test", $test_name)
@@ -107,8 +146,8 @@ macro_rules! make_conv_test (
     };
 );
 
-macro_rules! make_cfi_test (
-    ( $test_id:ident, $test_name:expr, $src:expr, $cfi:expr, $spec:expr ) =>
+macro_rules! make_icf_test (
+    ( $test_id:ident, $test_name:expr, $src:expr, $icf:expr, $spec:expr ) =>
     {
         make_spec_test!($test_id,
                         $test_name,
@@ -116,12 +155,13 @@ macro_rules! make_cfi_test (
                             src: $src,
                             ibs: 512,
                             xfer_stats: StatusLevel::None,
-                            cf: $cfi,
+                            cflags: $icf,
+                            iflags: DEFAULT_IFLAGS,
                         },
                         Output {
                             dst: File::create(format!("./test-resources/FAILED-{}.test", $test_name)).unwrap(),
                             obs: 512,
-                            cf: DEFAULT_CFO,
+                            cflags: DEFAULT_CFO,
                         },
                         $spec,
                         format!("./test-resources/FAILED-{}.test", $test_name)
@@ -240,16 +280,17 @@ fn all_valid_ascii_ebcdic_ascii_roundtrip_conv_test()
         src: File::open("./test-resources/all-valid-ascii-chars-37eff01866ba3f538421b30b7cbefcac.test").unwrap(),
         ibs: 128,
         xfer_stats: StatusLevel::None,
-        cf: cfi!(Some(&ASCII_TO_EBCDIC)),
+        cflags: icf!(Some(&ASCII_TO_EBCDIC)),
+        iflags: DEFAULT_IFLAGS,
     };
 
     let o = Output {
         dst: File::create(&tmp_fname_ae).unwrap(),
         obs: 1024,
-        cf: DEFAULT_CFO,
+        cflags: DEFAULT_CFO,
     };
 
-    dd(i,o).unwrap();
+    dd_fileout(i,o).unwrap();
 
     // EBCDIC->ASCII
     let test_name = "all-valid-ebcdic-to-ascii";
@@ -259,16 +300,17 @@ fn all_valid_ascii_ebcdic_ascii_roundtrip_conv_test()
         src: File::open(&tmp_fname_ae).unwrap(),
         ibs: 256,
         xfer_stats: StatusLevel::None,
-        cf: cfi!(Some(&EBCDIC_TO_ASCII)),
+        cflags: icf!(Some(&EBCDIC_TO_ASCII)),
+        iflags: DEFAULT_IFLAGS,
     };
 
     let o = Output {
         dst: File::create(&tmp_fname_ea).unwrap(),
         obs: 1024,
-        cf: DEFAULT_CFO,
+        cflags: DEFAULT_CFO,
     };
 
-    dd(i,o).unwrap();
+    dd_fileout(i,o).unwrap();
 
     let res = {
         let res = File::open(&tmp_fname_ea).unwrap();
@@ -289,11 +331,11 @@ fn all_valid_ascii_ebcdic_ascii_roundtrip_conv_test()
     fs::remove_file(&tmp_fname_ea).unwrap();
 }
 
-make_cfi_test!(
+make_icf_test!(
     swab_256_test,
     "swab-256",
     File::open("./test-resources/seq-byte-values.test").unwrap(),
-    ConvFlagInput {
+    IConvFlags {
         ctable: None,
         block: false,
         unblock: false,
@@ -304,11 +346,11 @@ make_cfi_test!(
     File::open("./test-resources/seq-byte-values-swapped.test").unwrap()
 );
 
-make_cfi_test!(
+make_icf_test!(
     swab_257_test,
     "swab-257",
     File::open("./test-resources/seq-byte-values-odd.test").unwrap(),
-    ConvFlagInput {
+    IConvFlags {
         ctable: None,
         block: false,
         unblock: false,
