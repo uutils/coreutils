@@ -1616,7 +1616,7 @@ fn display_file_name(path: &PathData, strip: Option<&Path>, config: &Config) -> 
         }
     }
 
-    // We need to keep track of the width ourselfs instead of letting term_grid
+    // We need to keep track of the width ourselves instead of letting term_grid
     // infer it because the color codes mess up term_grid's width calculation.
     let mut width = name.width();
 
