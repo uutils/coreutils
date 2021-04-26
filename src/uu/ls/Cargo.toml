@@ -16,6 +16,7 @@ path = "src/ls.rs"
 
 [dependencies]
 clap = "2.33"
+unicode-width = "0.1.8"
 number_prefix = "0.4"
 term_grid = "0.1.5"
 termsize = "0.1.6"
