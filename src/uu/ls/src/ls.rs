@@ -1056,7 +1056,9 @@ impl PathData {
     ) -> Self {
         let name = p_buf
             .file_name()
-            .map_or(String::new(), |s| s.to_string_lossy().into_owned());
+            .unwrap_or_else(|| p_buf.iter().next_back().unwrap())
+            .to_string_lossy()
+            .into_owned();
         let must_dereference = match &config.dereference {
             Dereference::All => true,
             Dereference::Args => command_line,
@@ -1355,8 +1357,7 @@ fn display_item_long(
 ) {
     let md = match item.md() {
         None => {
-            let filename = get_file_name(&item.p_buf);
-            show_error!("could not show file: {}", filename);
+            show_error!("could not show file: {}", &item.p_buf.display());
             return;
         }
         Some(md) => md,
@@ -1550,13 +1551,6 @@ fn display_file_type(file_type: FileType) -> char {
     }
 }
 
-fn get_file_name(name: &Path) -> String {
-    name.file_name()
-        .unwrap_or(name.iter().last().unwrap())
-        .to_string_lossy()
-        .into()
-}
-
 #[cfg(unix)]
 fn file_is_executable(md: &Metadata) -> bool {
     // Mode always returns u32, but the flags might not be, based on the platform
@@ -1594,7 +1588,7 @@ fn classify_file(path: &PathData) -> Option<char> {
 }
 
 fn display_file_name(path: &PathData, config: &Config) -> Option<Cell> {
-    let mut name = escape_name(get_file_name(&path.p_buf), &config.quoting_style);
+    let mut name = escape_name(&path.file_name, &config.quoting_style);
 
     #[cfg(unix)]
     {
