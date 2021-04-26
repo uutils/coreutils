@@ -34,17 +34,17 @@ impl Config {
     fn from(options: clap::ArgMatches) -> Config {
         let file: Option<String> = match options.values_of(options::FILE) {
             Some(mut values) => {
-                if values.len() != 1 {
-                    crash!(3, "extra operand ‘{}’", values.nth(0).unwrap())
-                }
-                let name = values.nth(0).unwrap();
-                if !Path::exists(Path::new(name)) {
-                    crash!(2, "{}: No such file or directory", name);
+                let name = values.next().unwrap();
+                if values.len() != 0 {
+                    crash!(3, "extra operand ‘{}’", name);
                 }
 
                 if name == "-" {
-                    None // stdin
+                    None
                 } else {
+                    if !Path::exists(Path::new(name)) {
+                        crash!(2, "{}: No such file or directory", name);
+                    }
                     Some(name.to_owned())
                 }
             }
@@ -70,15 +70,10 @@ impl Config {
     }
 }
 
-fn get_usage() -> String {
-    format!("{0} [OPTION]... [FILE]", executable!())
-}
-
-pub fn execute(args: Vec<String>, _summary: &str, long_help: &str, format: Format) -> i32 {
-    let usage = get_usage();
+pub fn execute(args: Vec<String>, _summary: &str, long_help: &str, usage: &str, format: Format) -> i32 {
     let app = App::new(executable!())
         .version(VERSION)
-        .usage(&usage[..])
+        .usage(usage)
         .about(long_help)
         // Format arguments.
         .arg(
@@ -131,51 +126,6 @@ pub fn execute(args: Vec<String>, _summary: &str, long_help: &str, format: Forma
             );
         }
     };
-
-    // let matches = app!(syntax, summary, long_help)
-    //     .optflag("d", "decode", "decode data")
-    //     .optflag(
-    //         "i",
-    //         "ignore-garbage",
-    //         "when decoding, ignore non-alphabetic characters",
-    //     )
-    //     .optopt(
-    //         "w",
-    //         "wrap",
-    //         "wrap encoded lines after COLS character (default 76, 0 to disable wrapping)",
-    //         "COLS",
-    //     )
-    //     .parse(args);
-
-    // let line_wrap = matches.opt_str("wrap").map(|s| match s.parse() {
-    //     Ok(n) => n,
-    //     Err(e) => {
-    //         crash!(1, "invalid wrap size: ‘{}’: {}", s, e);
-    //     }
-    // });
-    // let ignore_garbage = matches.opt_present("ignore-garbage");
-    // let decode = matches.opt_present("decode");
-
-    // if matches.free.len() > 1 {
-    //     show_usage_error!("extra operand ‘{}’", matches.free[0]);
-    //     return 1;
-    // }
-
-    // if matches.free.is_empty() || &matches.free[0][..] == "-" {
-    //     let stdin_raw = stdin();
-    //     handle_input(
-    //         &mut stdin_raw.lock(),
-    //         format,
-    //         line_wrap,
-    //         ignore_garbage,
-    //         decode,
-    //     );
-    // } else {
-    //     let path = Path::new(matches.free[0].as_str());
-    //     let file_buf = safe_unwrap!(File::open(&path));
-    //     let mut input = BufReader::new(file_buf);
-    //
-    // };
 
     0
 }

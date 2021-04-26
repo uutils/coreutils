@@ -23,12 +23,17 @@ static LONG_HELP: &str = "
  encoded stream.
 ";
 
+fn get_usage() -> String {
+    format!("{0} [OPTION]... [FILE]", executable!())
+}
+
 pub fn uumain(args: impl uucore::Args) -> i32 {
     base_common::execute(
         args.collect_str(InvalidEncodingHandling::ConvertLossy)
             .accept_any(),
         SUMMARY,
         LONG_HELP,
+        &get_usage(),
         Format::Base32,
     )
 }

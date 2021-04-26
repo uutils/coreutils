@@ -15,6 +15,21 @@ fn test_encode() {
         .pipe_in(input)
         .succeeds()
         .stdout_only("JBSWY3DPFQQFO33SNRSCC===\n");
+
+    // Using '-' as our file
+    new_ucmd!()
+        .arg("-")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only("JBSWY3DPFQQFO33SNRSCC===\n");
+}
+
+#[test]
+fn test_base32_encode_file() {
+    new_ucmd!()
+        .arg("input-simple.txt")
+        .succeeds()
+        .stdout_only("JBSWY3DPFQQFO33SNRSCCCQ=\n");
 }
 
 #[test]
