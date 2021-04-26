@@ -556,9 +556,9 @@ fn test_ls_order_birthtime() {
     let result = scene.ucmd().arg("--time=birth").arg("-t").run();
 
     #[cfg(not(windows))]
-    assert_eq!(result.stdout, "test-birthtime-2\ntest-birthtime-1\n");
+    assert_eq!(result.stdout_str(), "test-birthtime-2\ntest-birthtime-1\n");
     #[cfg(windows)]
-    assert_eq!(result.stdout, "test-birthtime-2  test-birthtime-1\n");
+    assert_eq!(result.stdout_str(), "test-birthtime-2  test-birthtime-1\n");
 }
 
 #[test]
@@ -583,20 +583,20 @@ fn test_ls_styles() {
         .arg("-l")
         .arg("--time-style=full-iso")
         .succeeds();
-    assert!(re_full.is_match(&result.stdout));
+    assert!(re_full.is_match(&result.stdout_str()));
     //long-iso
     let result = scene
         .ucmd()
         .arg("-l")
         .arg("--time-style=long-iso")
         .succeeds();
-    assert!(re_long.is_match(&result.stdout));
+    assert!(re_long.is_match(&result.stdout_str()));
     //iso
     let result = scene.ucmd().arg("-l").arg("--time-style=iso").succeeds();
-    assert!(re_iso.is_match(&result.stdout));
+    assert!(re_iso.is_match(&result.stdout_str()));
     //locale
     let result = scene.ucmd().arg("-l").arg("--time-style=locale").succeeds();
-    assert!(re_locale.is_match(&result.stdout));
+    assert!(re_locale.is_match(&result.stdout_str()));
 
     //Overwrite options tests
     let result = scene
@@ -605,19 +605,19 @@ fn test_ls_styles() {
         .arg("--time-style=long-iso")
         .arg("--time-style=iso")
         .succeeds();
-    assert!(re_iso.is_match(&result.stdout));
+    assert!(re_iso.is_match(&result.stdout_str()));
     let result = scene
         .ucmd()
         .arg("--time-style=iso")
         .arg("--full-time")
         .succeeds();
-    assert!(re_full.is_match(&result.stdout));
+    assert!(re_full.is_match(&result.stdout_str()));
     let result = scene
         .ucmd()
         .arg("--full-time")
         .arg("--time-style=iso")
         .succeeds();
-    assert!(re_iso.is_match(&result.stdout));
+    assert!(re_iso.is_match(&result.stdout_str()));
 
     let result = scene
         .ucmd()
@@ -625,7 +625,7 @@ fn test_ls_styles() {
         .arg("--time-style=iso")
         .arg("--full-time")
         .succeeds();
-    assert!(re_full.is_match(&result.stdout));
+    assert!(re_full.is_match(&result.stdout_str()));
 
     let result = scene
         .ucmd()
@@ -633,14 +633,14 @@ fn test_ls_styles() {
         .arg("-x")
         .arg("-l")
         .succeeds();
-    assert!(re_full.is_match(&result.stdout));
+    assert!(re_full.is_match(&result.stdout_str()));
 
     at.touch("test2");
     let result = scene.ucmd().arg("--full-time").arg("-x").succeeds();
     #[cfg(not(windows))]
-    assert_eq!(result.stdout, "test\ntest2\n");
+    assert_eq!(result.stdout_str(), "test\ntest2\n");
     #[cfg(windows)]
-    assert_eq!(result.stdout, "test  test2\n");
+    assert_eq!(result.stdout_str(), "test  test2\n");
 }
 
 #[test]
