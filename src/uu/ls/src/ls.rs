@@ -1615,6 +1615,10 @@ fn display_file_name(path: &PathData, strip: Option<&Path>, config: &Config) -> 
         }
     }
 
+    // We need to keep track of the width ourselfs instead of letting term_grid
+    // infer it because the color codes mess up term_grid's width calculation.
+    let mut width = name.len();
+
     if let Some(ls_colors) = &config.color {
         name = color_name(&ls_colors, &path.p_buf, name, path.md()?);
     }
@@ -1643,6 +1647,7 @@ fn display_file_name(path: &PathData, strip: Option<&Path>, config: &Config) -> 
 
         if let Some(c) = char_opt {
             name.push(c);
+            width += 1;
         }
     }
 
@@ -1653,7 +1658,10 @@ fn display_file_name(path: &PathData, strip: Option<&Path>, config: &Config) -> 
         }
     }
 
-    Some(name.into())
+    Some(Cell {
+        contents: name,
+        width,
+    })
 }
 
 fn color_name(ls_colors: &LsColors, path: &Path, name: String, md: &Metadata) -> String {
