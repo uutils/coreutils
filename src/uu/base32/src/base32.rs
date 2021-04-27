@@ -89,21 +89,13 @@ impl Config {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    execute(
-        args.collect_str(InvalidEncodingHandling::ConvertLossy)
-            .accept_any(),
-        SUMMARY,
-        LONG_HELP,
-        &get_usage(),
-        Format::Base32,
-    )
-}
-
-fn execute(args: Vec<String>, _summary: &str, long_help: &str, usage: &str, format: Format) -> i32 {
+    let format = Format::Base32;
+    let usage = get_usage();
     let app = App::new(executable!())
         .version(VERSION)
-        .usage(usage)
-        .about(long_help)
+        .about(SUMMARY)
+        .usage(&usage[..])
+        .about(LONG_HELP)
         // Format arguments.
         .arg(
             Arg::with_name(options::DECODE)
@@ -130,7 +122,10 @@ fn execute(args: Vec<String>, _summary: &str, long_help: &str, usage: &str, form
         // file passed in.
         .arg(Arg::with_name(options::FILE).index(1).multiple(true));
 
-    let config: Config = Config::from(app.get_matches_from(args));
+    let arg_list = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
+    let config: Config = Config::from(app.get_matches_from(arg_list));
     match config.to_read {
         // Read from file.
         Some(name) => {
