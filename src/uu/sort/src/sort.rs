@@ -91,12 +91,6 @@ static THOUSANDS_SEP: char = ',';
 static NEGATIVE: char = '-';
 static POSITIVE: char = '+';
 
-#[cfg(any(target_os = "windows",))]
-static DEFAULT_TMPDIR: &str = r"%USERPROFILE%\AppData\Local\Temp";
-
-#[cfg(not(any(target_os = "windows",)))]
-static DEFAULT_TMPDIR: &str = r"/tmp";
-
 static DEFAULT_BUF_SIZE: usize = std::usize::MAX;
 
 #[derive(Eq, Ord, PartialEq, PartialOrd, Clone, Copy)]
@@ -179,7 +173,7 @@ impl Default for GlobalSettings {
             threads: String::new(),
             zero_terminated: false,
             buffer_size: DEFAULT_BUF_SIZE,
-            tmp_dir: PathBuf::from(DEFAULT_TMPDIR),
+            tmp_dir: PathBuf::new(),
             ext_sort: false,
         }
     }
@@ -1064,7 +1058,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         let result = matches
             .value_of(OPT_TMP_DIR)
             .map(String::from)
-            .unwrap_or(DEFAULT_TMPDIR.to_owned());
+            .unwrap_or(format!("{}", env::temp_dir().display()));
         settings.tmp_dir = PathBuf::from(result);
         settings.ext_sort = true;
     } else {
