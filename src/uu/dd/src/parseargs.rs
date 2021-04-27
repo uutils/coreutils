@@ -23,7 +23,7 @@ pub enum ParseError
     FlagNoMatch(String),
     ConvFlagNoMatch(String),
     NoMatchingMultiplier(String),
-    MultiplierStringContainsNoValue(String),
+    ByteStringContainsNoValue(String),
     MultiplierStringWouldOverflow(String),
 }
 
@@ -235,15 +235,21 @@ fn parse_multiplier<'a>(s: &'a str) -> Result<usize, ParseError>
     }
 }
 
+fn parse_bytes_only(s: &str) -> Result<usize, ParseError>
+{
+    let bytes: usize = match s.parse()
+    {
+        Ok(val) => val,
+        Err(_) => return Err(ParseError::ByteStringContainsNoValue(String::from(s))),
+    };
+    Ok(bytes)
+}
+
 fn parse_bytes_with_opt_multiplier(s: String) -> Result<usize, ParseError>
 {
     if let Some(idx) = s.find(char::is_alphabetic)
     {
-        let base: usize = match s[0..idx].parse()
-        {
-            Ok(val) => val,
-            Err(_) => return Err(ParseError::MultiplierStringContainsNoValue(s)),
-        };
+        let base = parse_bytes_only(&s[0..idx])?;
         let mult = parse_multiplier(&s[idx..])?;
 
         if let Some(bytes) = base.checked_mul(mult)
@@ -257,12 +263,7 @@ fn parse_bytes_with_opt_multiplier(s: String) -> Result<usize, ParseError>
     }
     else
     {
-        let bytes: usize = match s.parse()
-        {
-            Ok(val) => val,
-            Err(_) => return Err(ParseError::MultiplierStringContainsNoValue(s)),
-        };
-        Ok(bytes)
+        parse_bytes_only(&s)
     }
 }
 
@@ -279,6 +280,19 @@ pub fn parse_ibs(matches: &getopts::Matches) -> Result<usize, ParseError>
     else
     {
         Ok(512)
+    }
+}
+
+fn parse_cbs(matches: &getopts::Matches) -> Result<Option<usize>, ParseError>
+{
+    if let Some(s) = matches.opt_str("cbs")
+    {
+        let bytes = parse_bytes_with_opt_multiplier(s)?;
+        Ok(Some(bytes))
+    }
+    else
+    {
+        Ok(None)
     }
 }
 
@@ -371,6 +385,7 @@ fn parse_flag_list<T: std::str::FromStr<Err = ParseError>>(tag: &str, matches: &
 pub fn parse_conv_flag_input(matches: &getopts::Matches) -> Result<IConvFlags, ParseError>
 {
     let flags = parse_flag_list("conv", matches)?;
+    let cbs = parse_cbs(matches)?;
 
     let mut fmt = None;
     let mut case = None;
@@ -461,6 +476,7 @@ pub fn parse_conv_flag_input(matches: &getopts::Matches) -> Result<IConvFlags, P
 
     Ok(IConvFlags {
         ctable,
+        cbs,
         block,
         unblock,
         swab,
@@ -691,11 +707,20 @@ pub fn parse_oflags(matches: &getopts::Matches) -> Result<OFlags, ParseError>
 }
 
 /// Parse the amount of the input file to skip.
-pub fn parse_skip_amt(matches: &getopts::Matches) -> Result<Option<usize>, ParseError>
+pub fn parse_skip_amt(ibs: &usize, iflags: &IFlags, matches: &getopts::Matches) -> Result<Option<usize>, ParseError>
 {
-    if let Some(skip_amt) = matches.opt_str("skip")
+    if let Some(amt) = matches.opt_str("skip")
     {
-        unimplemented!()
+        if iflags.skip_bytes
+        {
+            let n = parse_bytes_with_opt_multiplier(amt)?;
+            Ok(Some(n))
+        }
+        else
+        {
+            let n = parse_bytes_only(&amt)?;
+            Ok(Some(ibs*n))
+        }
     }
     else
     {
@@ -704,11 +729,20 @@ pub fn parse_skip_amt(matches: &getopts::Matches) -> Result<Option<usize>, Parse
 }
 
 /// Parse the amount of the output file to seek.
-pub fn parse_seek_amt(matches: &getopts::Matches) -> Result<Option<u64>, ParseError>
+pub fn parse_seek_amt(obs: &usize, oflags: &OFlags, matches: &getopts::Matches) -> Result<Option<usize>, ParseError>
 {
-    if let Some(seek_amt) = matches.opt_str("seek")
+    if let Some(amt) = matches.opt_str("seek")
     {
-        unimplemented!()
+        if oflags.seek_bytes
+        {
+            let n = parse_bytes_with_opt_multiplier(amt)?;
+            Ok(Some(n))
+        }
+        else
+        {
+            let n = parse_bytes_only(&amt)?;
+            Ok(Some(obs*n))
+        }
     }
     else
     {

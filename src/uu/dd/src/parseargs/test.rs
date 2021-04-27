@@ -14,6 +14,7 @@ fn build_icf()
 {
     let icf_expd = IConvFlags {
         ctable: Some(&ASCII_TO_IBM),
+        cbs: None,
         block: false,
         unblock: false,
         swab: false,
@@ -103,7 +104,7 @@ fn parse_icf_token_ibm()
     ];
     let matches = build_app!().parse(args);
 
-    let act = parse_conv_opts(&matches).unwrap();
+    let act = parse_flag_list::<ConvFlag>("conv", &matches).unwrap();
 
     assert_eq!(exp.len(), act.len());
     for cf in &exp
@@ -126,7 +127,7 @@ fn parse_icf_tokens_elu()
         String::from("--conv=ebcdic,lcase,unblock"),
     ];
     let matches = build_app!().parse(args);
-    let act = parse_conv_opts(&matches).unwrap();
+    let act = parse_flag_list::<ConvFlag>("conv", &matches).unwrap();
 
     assert_eq!(exp.len(), act.len());
     for cf in &exp
@@ -159,7 +160,8 @@ fn parse_icf_tokens_remaining()
         String::from("--conv=ascii,ucase,block,sparse,swab,sync,noerror,excl,nocreat,notrunc,noerror,fdatasync,fsync"),
     ];
     let matches = build_app!().parse(args);
-    let act = parse_conv_opts(&matches).unwrap();
+
+    let act = parse_flag_list::<ConvFlag>("conv", &matches).unwrap();
 
     assert_eq!(exp.len(), act.len());
     for cf in &exp

@@ -36,6 +36,7 @@ const SUMMARY: &str = "convert, and optionally copy, a file";
 const LONG_HELP: &str = "";
 
 const DEFAULT_FILL_BYTE: u8 = 0xDD;
+const DEFAULT_SKIP_TRIES: u8 = 3;
 
 const RTN_SUCCESS: i32 = 0;
 const RTN_FAILURE: i32 = 1;
@@ -51,6 +52,7 @@ enum SrcStat
 pub struct IConvFlags
 {
     ctable: Option<&'static ConversionTable>,
+    cbs: Option<usize>,
     block: bool,
     unblock: bool,
     swab: bool,
@@ -131,7 +133,12 @@ enum InternalError
 impl std::fmt::Display for InternalError
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Internal dd error")
+        match self
+        {
+            Self::WrongInputType |
+            Self::WrongOutputType =>
+                write!(f, "Internal dd error"),
+        }
     }
 }
 
@@ -184,7 +191,7 @@ impl Input<io::Stdin>
         let xfer_stats = parseargs::parse_status_level(matches)?;
         let cflags = parseargs::parse_conv_flag_input(matches)?;
         let iflags = parseargs::parse_iflags(matches)?;
-        let skip = parseargs::parse_skip_amt(matches)?;
+        let skip = parseargs::parse_skip_amt(&ibs, &iflags, matches)?;
 
         let mut i = Input {
             src: io::stdin(),
@@ -194,10 +201,11 @@ impl Input<io::Stdin>
             iflags,
         };
 
-        if let Some(skip_amt) = skip
+        if let Some(amt) = skip
         {
-            let mut buf = vec![DEFAULT_FILL_BYTE; skip_amt];
-            i.read(&mut buf)?;
+            let mut buf = vec![DEFAULT_FILL_BYTE; amt];
+
+            i.force_fill(&mut buf, amt)?;
         }
 
         Ok(i)
@@ -212,16 +220,16 @@ impl Input<File>
         let xfer_stats = parseargs::parse_status_level(matches)?;
         let cflags = parseargs::parse_conv_flag_input(matches)?;
         let iflags = parseargs::parse_iflags(matches)?;
-        let skip = parseargs::parse_skip_amt(matches)?;
+        let skip = parseargs::parse_skip_amt(&ibs, &iflags, matches)?;
 
         if let Some(fname) = matches.opt_str("if")
         {
             let mut src = File::open(fname)?;
 
-            if let Some(skip_amt) = skip
+            if let Some(amt) = skip
             {
-                let skip_amt: u64 = skip_amt.try_into()?;
-                src.seek(io::SeekFrom::Start(skip_amt))?;
+                let amt: u64 = amt.try_into()?;
+                src.seek(io::SeekFrom::Start(amt))?;
             }
 
             let i = Input {
@@ -266,6 +274,21 @@ impl<R: Read> Input<R>
             Ok(SrcStat::EOF)
         }
     }
+
+    fn force_fill(&mut self, mut buf: &mut [u8], len: usize) -> Result<(), Box<dyn Error>>
+    {
+        let mut total_len = 0;
+
+        loop
+        {
+            total_len += self.read(&mut buf)?;
+
+            if total_len == len
+            {
+                return Ok(());
+            }
+        }
+    }
 }
 
 struct Output<W: Write>
@@ -297,8 +320,8 @@ impl Output<File> {
     {
         let obs = parseargs::parse_obs(matches)?;
         let cflags = parseargs::parse_conv_flag_output(matches)?;
-        let seek = parseargs::parse_seek_amt(matches)?;
         let oflags = parseargs::parse_oflags(matches)?;
+        let seek = parseargs::parse_seek_amt(&obs, &oflags, matches)?;
 
         if let Some(fname) = matches.opt_str("of")
         {
@@ -308,9 +331,10 @@ impl Output<File> {
                 .truncate(!cflags.notrunc)
                 .open(fname)?;
 
-            if let Some(seek_amt) = seek
+            if let Some(amt) = seek
             {
-                dst.seek(io::SeekFrom::Start(seek_amt))?;
+                let amt: u64 = amt.try_into()?;
+                dst.seek(io::SeekFrom::Start(amt))?;
             }
 
             Ok(Output {
