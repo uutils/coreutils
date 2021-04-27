@@ -39,8 +39,6 @@ use std::{
     time::Duration,
 };
 
-use indoc::indoc;
-
 use chrono;
 
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
@@ -55,6 +53,8 @@ static ABOUT: &str = "
  the command line, expect that it will ignore files and directories
  whose names start with '.'
 ";
+static AFTER_HELP: &str = "The TIME_STYLE argument can be full-iso, long-iso, iso.
+Also the TIME_STYLE environment variable sets the default style to use.";
 
 fn get_usage() -> String {
     format!("{0} [OPTION]... [FILE]...", executable!())
@@ -1092,10 +1092,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     // Positional arguments
         .arg(Arg::with_name(options::PATHS).multiple(true).takes_value(true))
 
-        .after_help(indoc!(
-        "The TIME_STYLE argument can be full-iso, long-iso, iso.
-        Also the TIME_STYLE environment variable sets the default style to use.
-        "));
+        .after_help(AFTER_HELP);
 
     let matches = app.get_matches_from(args);
 
