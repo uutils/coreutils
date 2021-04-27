@@ -39,7 +39,6 @@ fn test_double_not_is_false() {
 }
 
 #[test]
-#[ignore = "fixme: parse/evaluation error (code 2); GNU returns 1"]
 fn test_and_not_is_false() {
     new_ucmd!().args(&["-a", "!"]).run().status_code(1);
 }
@@ -51,7 +50,6 @@ fn test_not_and_is_false() {
 }
 
 #[test]
-#[ignore = "fixme: parse/evaluation error (code 2); GNU returns 0"]
 fn test_not_and_not_succeeds() {
     new_ucmd!().args(&["!", "-a", "!"]).succeeds();
 }
@@ -62,7 +60,6 @@ fn test_simple_or() {
 }
 
 #[test]
-#[ignore = "fixme: parse/evaluation error (code 0); GNU returns 1"]
 fn test_negated_or() {
     new_ucmd!()
         .args(&["!", "foo", "-o", "bar"])
@@ -111,13 +108,8 @@ fn test_solo_paren_is_literal() {
 }
 
 #[test]
-#[ignore = "GNU considers this an error"]
 fn test_solo_empty_parenthetical_is_error() {
-    new_ucmd!()
-        .args(&["(", ")"])
-        .run()
-        .status_code(2)
-        .stderr_is("test: missing argument after ‘)’");
+    new_ucmd!().args(&["(", ")"]).run().status_code(2);
 }
 
 #[test]
@@ -248,13 +240,38 @@ fn test_negative_int_compare() {
 }
 
 #[test]
-#[ignore = "fixme: error reporting"]
 fn test_float_inequality_is_error() {
     new_ucmd!()
         .args(&["123.45", "-ge", "6"])
         .run()
         .status_code(2)
         .stderr_is("test: invalid integer ‘123.45’");
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_invalid_utf8_integer_compare() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let source = [0x66, 0x6f, 0x80, 0x6f];
+    let arg = OsStr::from_bytes(&source[..]);
+
+    let mut cmd = new_ucmd!();
+    cmd.arg("123").arg("-ne");
+    cmd.raw.arg(arg);
+
+    cmd.run()
+        .status_code(2)
+        .stderr_is("test: invalid integer ‘fo�o’");
+
+    let mut cmd = new_ucmd!();
+    cmd.raw.arg(arg);
+    cmd.arg("-eq").arg("456");
+
+    cmd.run()
+        .status_code(2)
+        .stderr_is("test: invalid integer ‘fo�o’");
 }
 
 #[test]
@@ -446,10 +463,57 @@ fn test_op_prec_and_or_1() {
 }
 
 #[test]
+fn test_op_prec_and_or_1_overridden_by_parentheses() {
+    new_ucmd!()
+        .args(&["(", " ", "-o", "", ")", "-a", ""])
+        .run()
+        .status_code(1);
+}
+
+#[test]
 fn test_op_prec_and_or_2() {
     new_ucmd!()
         .args(&["", "-a", "", "-o", " ", "-a", " "])
         .succeeds();
+}
+
+#[test]
+fn test_op_prec_and_or_2_overridden_by_parentheses() {
+    new_ucmd!()
+        .args(&["", "-a", "(", "", "-o", " ", ")", "-a", " "])
+        .run()
+        .status_code(1);
+}
+
+#[test]
+#[ignore = "fixme: error reporting"]
+fn test_dangling_parenthesis() {
+    new_ucmd!()
+        .args(&["(", "(", "a", "!=", "b", ")", "-o", "-n", "c"])
+        .run()
+        .status_code(2);
+    new_ucmd!()
+        .args(&["(", "(", "a", "!=", "b", ")", "-o", "-n", "c", ")"])
+        .succeeds();
+}
+
+#[test]
+fn test_complicated_parenthesized_expression() {
+    new_ucmd!()
+        .args(&[
+            "(", "(", "!", "(", "a", "=", "b", ")", "-o", "c", "=", "d", ")", "-a", "(", "q", "!=",
+            "r", ")", ")",
+        ])
+        .succeeds();
+}
+
+#[test]
+fn test_erroneous_parenthesized_expression() {
+    new_ucmd!()
+        .args(&["a", "!=", "(", "b", "-a", "b", ")", "!=", "c"])
+        .run()
+        .status_code(2)
+        .stderr_is("test: extra argument ‘b’");
 }
 
 #[test]
