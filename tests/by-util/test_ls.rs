@@ -559,6 +559,118 @@ fn test_ls_long_ctime() {
 }
 
 #[test]
+#[cfg(not(windows))]
+// This test is currently failing on windows
+fn test_ls_order_birthtime() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    /*
+        Here we make 2 files with a timeout in between.
+        After creating the first file try to sync it.
+        This ensures the file gets created immediately instead of being saved
+        inside the OS's IO operation buffer.
+        Without this, both files might accidentally be created at the same time,
+        even though we placed a timeout between creating the two.
+
+        https://github.com/uutils/coreutils/pull/1986/#issuecomment-828490651
+    */
+    at.make_file("test-birthtime-1").sync_all().unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(1));
+    at.make_file("test-birthtime-2");
+    at.touch("test-birthtime-1");
+
+    let result = scene.ucmd().arg("--time=birth").arg("-t").run();
+
+    #[cfg(not(windows))]
+    assert_eq!(result.stdout_str(), "test-birthtime-2\ntest-birthtime-1\n");
+    #[cfg(windows)]
+    assert_eq!(result.stdout_str(), "test-birthtime-2  test-birthtime-1\n");
+}
+
+#[test]
+fn test_ls_styles() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("test");
+
+    let re_full = Regex::new(
+        r"[a-z-]* \d* \w* \w* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d* \+\d{4} test\n",
+    )
+    .unwrap();
+    let re_long =
+        Regex::new(r"[a-z-]* \d* \w* \w* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2} test\n").unwrap();
+    let re_iso = Regex::new(r"[a-z-]* \d* \w* \w* \d* \d{2}-\d{2} \d{2}:\d{2} test\n").unwrap();
+    let re_locale =
+        Regex::new(r"[a-z-]* \d* \w* \w* \d* [A-Z][a-z]{2} \d{2} \d{2}:\d{2} test\n").unwrap();
+
+    //full-iso
+    let result = scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=full-iso")
+        .succeeds();
+    assert!(re_full.is_match(&result.stdout_str()));
+    //long-iso
+    let result = scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=long-iso")
+        .succeeds();
+    assert!(re_long.is_match(&result.stdout_str()));
+    //iso
+    let result = scene.ucmd().arg("-l").arg("--time-style=iso").succeeds();
+    assert!(re_iso.is_match(&result.stdout_str()));
+    //locale
+    let result = scene.ucmd().arg("-l").arg("--time-style=locale").succeeds();
+    assert!(re_locale.is_match(&result.stdout_str()));
+
+    //Overwrite options tests
+    let result = scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=long-iso")
+        .arg("--time-style=iso")
+        .succeeds();
+    assert!(re_iso.is_match(&result.stdout_str()));
+    let result = scene
+        .ucmd()
+        .arg("--time-style=iso")
+        .arg("--full-time")
+        .succeeds();
+    assert!(re_full.is_match(&result.stdout_str()));
+    let result = scene
+        .ucmd()
+        .arg("--full-time")
+        .arg("--time-style=iso")
+        .succeeds();
+    assert!(re_iso.is_match(&result.stdout_str()));
+
+    let result = scene
+        .ucmd()
+        .arg("--full-time")
+        .arg("--time-style=iso")
+        .arg("--full-time")
+        .succeeds();
+    assert!(re_full.is_match(&result.stdout_str()));
+
+    let result = scene
+        .ucmd()
+        .arg("--full-time")
+        .arg("-x")
+        .arg("-l")
+        .succeeds();
+    assert!(re_full.is_match(&result.stdout_str()));
+
+    at.touch("test2");
+    let result = scene.ucmd().arg("--full-time").arg("-x").succeeds();
+    #[cfg(not(windows))]
+    assert_eq!(result.stdout_str(), "test\ntest2\n");
+    #[cfg(windows)]
+    assert_eq!(result.stdout_str(), "test  test2\n");
+}
+
+#[test]
 fn test_ls_order_time() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
