@@ -565,6 +565,16 @@ fn test_ls_order_birthtime() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
+    /*
+        Here we make 2 files with a timeout in between.
+        After creating the first file try to sync it.
+        This ensures the file gets created immediately instead of being saved
+        inside the OS's IO operation buffer.
+        Without this, both files might accidentally be created at the same time,
+        even though we placed a timeout between creating the two.
+
+        https://github.com/uutils/coreutils/pull/1986/#issuecomment-828490651
+    */
     at.make_file("test-birthtime-1").sync_all().unwrap();
     std::thread::sleep(std::time::Duration::from_millis(1));
     at.make_file("test-birthtime-2");
