@@ -139,7 +139,7 @@ fn test_arg1_arg2() {
 #[test]
 fn test_too_many_args() {
     let expected =
-        "error: The value 'u' was provided to '<FILE>...' but it wasn't expecting any more values";
+        "error: The value 'u' was provided to '<FILE>...', but it wasn't expecting any more values";
 
     new_ucmd!()
         .arg("am")

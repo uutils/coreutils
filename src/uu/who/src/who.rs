@@ -63,95 +63,100 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let matches = App::new(executable!())
         .version(VERSION)
         .about(ABOUT)
-        .override_usage(&usage[..])
+        .usage(&usage[..])
         .after_help(&after_help[..])
         .arg(
-            Arg::new(options::ALL)
+            Arg::with_name(options::ALL)
                 .long(options::ALL)
-                .short('a')
-                .about("same as -b -d --login -p -r -t -T -u"),
+                .short("a")
+                .help("same as -b -d --login -p -r -t -T -u"),
         )
         .arg(
-            Arg::new(options::BOOT)
+            Arg::with_name(options::BOOT)
                 .long(options::BOOT)
-                .short('b')
-                .about("time of last system boot"),
+                .short("b")
+                .help("time of last system boot"),
         )
         .arg(
-            Arg::new(options::DEAD)
+            Arg::with_name(options::DEAD)
                 .long(options::DEAD)
-                .short('d')
-                .about("print dead processes"),
+                .short("d")
+                .help("print dead processes"),
         )
         .arg(
-            Arg::new(options::HEADING)
+            Arg::with_name(options::HEADING)
                 .long(options::HEADING)
-                .short('H')
-                .about("print line of column headings"),
+                .short("H")
+                .help("print line of column headings"),
         )
         .arg(
-            Arg::new(options::LOGIN)
+            Arg::with_name(options::LOGIN)
                 .long(options::LOGIN)
-                .short('l')
-                .about("print system login processes"),
+                .short("l")
+                .help("print system login processes"),
         )
         .arg(
-            Arg::new(options::LOOKUP)
+            Arg::with_name(options::LOOKUP)
                 .long(options::LOOKUP)
-                .about("attempt to canonicalize hostnames via DNS"),
+                .help("attempt to canonicalize hostnames via DNS"),
         )
         .arg(
-            Arg::new(options::ONLY_HOSTNAME_USER)
-                .short('m')
-                .about("only hostname and user associated with stdin"),
+            Arg::with_name(options::ONLY_HOSTNAME_USER)
+                .short("m")
+                .help("only hostname and user associated with stdin"),
         )
         .arg(
-            Arg::new(options::PROCESS)
+            Arg::with_name(options::PROCESS)
                 .long(options::PROCESS)
-                .short('p')
-                .about("print active processes spawned by init"),
+                .short("p")
+                .help("print active processes spawned by init"),
         )
         .arg(
-            Arg::new(options::COUNT)
+            Arg::with_name(options::COUNT)
                 .long(options::COUNT)
-                .short('q')
-                .about("all login names and number of users logged on"),
+                .short("q")
+                .help("all login names and number of users logged on"),
         )
         .arg(
             #[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
-            Arg::new(options::RUNLEVEL)
+            Arg::with_name(options::RUNLEVEL)
                 .long(options::RUNLEVEL)
-                .short('r')
-                .about("print current runlevel"),
+                .short("r")
+                .help("print current runlevel"),
         )
         .arg(
-            Arg::new(options::SHORT)
+            Arg::with_name(options::SHORT)
                 .long(options::SHORT)
-                .short('s')
-                .about("print only name, line, and time (default)"),
+                .short("s")
+                .help("print only name, line, and time (default)"),
         )
         .arg(
-            Arg::new(options::TIME)
+            Arg::with_name(options::TIME)
                 .long(options::TIME)
-                .short('t')
-                .about("print last system clock change"),
+                .short("t")
+                .help("print last system clock change"),
         )
         .arg(
-            Arg::new(options::USERS)
+            Arg::with_name(options::USERS)
                 .long(options::USERS)
-                .short('u')
-                .about("list users logged in"),
+                .short("u")
+                .help("list users logged in"),
         )
         .arg(
-            Arg::new(options::MESG)
+            Arg::with_name(options::MESG)
                 .long(options::MESG)
-                .short('T')
-                .visible_short_alias('w')
+                .short("T")
+                // .visible_short_alias('w')  // TODO: requires clap "3.0.0-beta.2"
                 .visible_aliases(&["message", "writable"])
-                .about("add user's message status as +, - or ?"),
+                .help("add user's message status as +, - or ?"),
         )
         .arg(
-            Arg::new(options::FILE)
+            Arg::with_name("w") // work around for `Arg::visible_short_alias`
+                .short("w")
+                .help("same as -T"),
+        )
+        .arg(
+            Arg::with_name(options::FILE)
                 .takes_value(true)
                 .min_values(1)
                 .max_values(2),
@@ -184,7 +189,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     // If true, display a '+' for each user if mesg y, a '-' if mesg n,
     // or a '?' if their tty cannot be statted.
-    let include_mesg = matches.is_present(options::ALL) || matches.is_present(options::MESG);
+    let include_mesg = matches.is_present(options::ALL)
+        || matches.is_present(options::MESG)
+        || matches.is_present("w");
 
     // If true, display process termination & exit status.
     let mut include_exit = false;
