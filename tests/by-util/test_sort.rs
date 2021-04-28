@@ -15,6 +15,31 @@ fn test_helper(file_name: &str, args: &str) {
         .stdout_is_fixture(format!("{}.expected.debug", file_name));
 }
 
+// FYI, the initialization size of our Line struct is 96 bytes.
+//  
+// At very small buffer sizes, with that overhead we are certainly going 
+// to overrun our buffer way, way, way too quickly because of these excess 
+// bytes for the struct.
+//
+// For instance, seq 0..20000 > ...text = 108894 bytes
+// But overhead is 1920000 + 108894 = 2028894 bytes
+//
+// Or kjvbible-random.txt = 4332506 bytes, but minimum size of its 
+// 99817 lines in memory * 96 bytes = 9582432 bytes
+//
+// Here, we test 108894 bytes with a 50K buffer
+//
+#[test]
+fn test_larger_than_specified_segment() {
+    new_ucmd!()
+        .arg("-n")
+        .arg("-S")
+        .arg("50K")
+        .arg("ext_sort.txt")
+        .succeeds()
+        .stdout_is_fixture(format!("{}", "ext_sort.expected"));
+}
+
 #[test]
 fn test_months_whitespace() {
     test_helper("months-whitespace", "-M");
@@ -32,6 +57,18 @@ fn test_version_empty_lines() {
 #[test]
 fn test_human_numeric_whitespace() {
     test_helper("human-numeric-whitespace", "-h");
+}
+
+// This tests where serde often fails when reading back JSON 
+// if it finds a null value
+#[test]
+fn test_extsort_as64_bailout() {
+    new_ucmd!()
+        .arg("-g")
+        .arg("-S 5K")
+        .arg("multiple_decimals_general.txt")
+        .succeeds()
+        .stdout_is_fixture("multiple_decimals_general.expected");
 }
 
 #[test]
