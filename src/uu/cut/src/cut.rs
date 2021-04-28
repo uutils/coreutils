@@ -205,7 +205,7 @@ fn cut_fields_delimiter<R: Read>(
             return Ok(true);
         }
 
-        for &Range { low, high } in ranges.iter() {
+        for &Range { low, high } in ranges {
             if low - fields_pos > 0 {
                 low_idx = match delim_search.nth(low - fields_pos - 1) {
                     Some(index) => index + input_delim_len,

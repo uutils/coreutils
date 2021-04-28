@@ -33,9 +33,9 @@ impl<'a> Iterator for Searcher<'a> {
                 if self.needle.len() == 1
                     || self.haystack[match_idx + 1..].starts_with(&self.needle[1..])
                 {
+                    let match_pos = self.position + match_idx;
                     let skip = match_idx + self.needle.len();
                     self.haystack = &self.haystack[skip..];
-                    let match_pos = self.position + match_idx;
                     self.position += skip;
                     return Some(match_pos);
                 } else {
