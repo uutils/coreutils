@@ -565,9 +565,9 @@ fn test_ls_order_birthtime() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    at.touch("test-birthtime-1");
+    at.make_file("test-birthtime-1").sync_all().unwrap();
     std::thread::sleep(std::time::Duration::from_millis(1));
-    at.touch("test-birthtime-2");
+    at.make_file("test-birthtime-2");
     at.touch("test-birthtime-1");
 
     let result = scene.ucmd().arg("--time=birth").arg("-t").run();
