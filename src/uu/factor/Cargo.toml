@@ -23,6 +23,7 @@ uucore = { version=">=0.0.8", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [dev-dependencies]
+array-init = "2.0.0"
 criterion = "0.3"
 paste = "0.1.18"
 quickcheck = "0.9.2"
@@ -30,6 +31,10 @@ rand_chacha = "0.2.2"
 
 [[bench]]
 name = "gcd"
+harness = false
+
+[[bench]]
+name = "table"
 harness = false
 
 [[bin]]

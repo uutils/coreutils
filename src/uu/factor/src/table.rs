@@ -12,7 +12,7 @@ use crate::Factors;
 
 include!(concat!(env!("OUT_DIR"), "/prime_table.rs"));
 
-pub(crate) fn factor(num: &mut u64, factors: &mut Factors) {
+pub fn factor(num: &mut u64, factors: &mut Factors) {
     for &(prime, inv, ceil) in P_INVS_U64 {
         if *num == 1 {
             break;
@@ -40,5 +40,12 @@ pub(crate) fn factor(num: &mut u64, factors: &mut Factors) {
                 break;
             }
         }
+    }
+}
+
+pub const CHUNK_SIZE: usize = 4;
+pub fn factor_chunk(n_s: &mut [u64; CHUNK_SIZE], f_s: &mut [Factors; CHUNK_SIZE]) {
+    for (n, s) in n_s.iter_mut().zip(f_s.iter_mut()) {
+        factor(n, s);
     }
 }
