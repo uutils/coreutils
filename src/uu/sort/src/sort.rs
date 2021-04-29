@@ -1222,7 +1222,7 @@ fn ext_sort_by(unsorted: Vec<Line>, settings: GlobalSettings) -> Vec<Line> {
         settings.clone(),
     );
     let iter = external_sorter
-        .sort_by(unsorted.into_iter(), settings.clone())
+        .sort_by(unsorted.into_iter(), settings)
         .unwrap()
         .map(|x| x.unwrap())
         .collect::<Vec<Line>>();
