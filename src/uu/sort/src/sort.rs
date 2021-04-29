@@ -1254,8 +1254,8 @@ fn compare_by(a: &Line, b: &Line, global_settings: &GlobalSettings) -> Ordering 
                     (b_str, b_selection.num_cache.as_num_info()),
                 ),
                 SortMode::GeneralNumeric => general_numeric_compare(
-                    general_f64_parse(&a_str[get_leading_gen(a_str)]),
-                    general_f64_parse(&b_str[get_leading_gen(b_str)]),
+                    a_selection.num_cache.as_f64(),
+                    b_selection.num_cache.as_f64(),
                 ),
                 SortMode::Month => month_compare(a_str, b_str),
                 SortMode::Version => version_compare(a_str, b_str),
