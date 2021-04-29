@@ -559,8 +559,6 @@ fn test_ls_long_ctime() {
 }
 
 #[test]
-#[cfg(not(windows))]
-// This test is currently failing on windows
 fn test_ls_order_birthtime() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -570,15 +568,11 @@ fn test_ls_order_birthtime() {
         After creating the first file try to sync it.
         This ensures the file gets created immediately instead of being saved
         inside the OS's IO operation buffer.
-        Without this, both files might accidentally be created at the same time,
-        even though we placed a timeout between creating the two.
-
-        https://github.com/uutils/coreutils/pull/1986/#issuecomment-828490651
+        Without this, both files might accidentally be created at the same time.
     */
     at.make_file("test-birthtime-1").sync_all().unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(1));
-    at.make_file("test-birthtime-2");
-    at.touch("test-birthtime-1");
+    at.make_file("test-birthtime-2").sync_all().unwrap();
+    at.open("test-birthtime-1");
 
     let result = scene.ucmd().arg("--time=birth").arg("-t").run();
 
