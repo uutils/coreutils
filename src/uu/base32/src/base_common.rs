@@ -83,7 +83,7 @@ pub fn parse_base_cmd_args(
     let app = App::new(name)
         .version(version)
         .about(about)
-        .usage(&usage[..])
+        .usage(usage)
         // Format arguments.
         .arg(
             Arg::with_name(options::DECODE)
