@@ -8,15 +8,13 @@
 
 // spell-checker: ignore (ToDO) INVS
 
-use std::num::Wrapping;
-
 use crate::Factors;
 
 include!(concat!(env!("OUT_DIR"), "/prime_table.rs"));
 
-pub(crate) fn factor(mut num: u64, mut factors: Factors) -> (Factors, u64) {
+pub(crate) fn factor(num: &mut u64, factors: &mut Factors) {
     for &(prime, inv, ceil) in P_INVS_U64 {
-        if num == 1 {
+        if *num == 1 {
             break;
         }
 
@@ -27,11 +25,11 @@ pub(crate) fn factor(mut num: u64, mut factors: Factors) -> (Factors, u64) {
         // for a nice explanation.
         let mut k = 0;
         loop {
-            let Wrapping(x) = Wrapping(num) * Wrapping(inv);
+            let x = num.wrapping_mul(inv);
 
             // While prime divides num
             if x <= ceil {
-                num = x;
+                *num = x;
                 k += 1;
                 #[cfg(feature = "coz")]
                 coz::progress!("factor found");
@@ -43,6 +41,4 @@ pub(crate) fn factor(mut num: u64, mut factors: Factors) -> (Factors, u64) {
             }
         }
     }
-
-    (factors, num)
 }

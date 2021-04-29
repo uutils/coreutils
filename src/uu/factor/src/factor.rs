@@ -161,7 +161,7 @@ pub fn factor(mut n: u64) -> Factors {
         return factors;
     }
 
-    let (factors, n) = table::factor(n, factors);
+    table::factor(&mut n, &mut factors);
 
     #[allow(clippy::let_and_return)]
     let r = if n < (1 << 32) {
