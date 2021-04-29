@@ -98,7 +98,7 @@ fn test_wrap_bad_arg() {
             .arg(wrap_param)
             .arg("b")
             .fails()
-            .stderr_only("base32: error: invalid wrap size: ‘b’: invalid digit found in string\n");
+            .stderr_only("base32: error: Invalid wrap size: ‘b’: invalid digit found in string\n");
     }
 }
 

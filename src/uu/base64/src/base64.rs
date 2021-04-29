@@ -9,20 +9,13 @@
 #[macro_use]
 extern crate uucore;
 
+use uu_base32::base_common;
+
 use uucore::encoding::Format;
-use uucore::InvalidEncodingHandling;
 
-use std::fs::File;
-use std::io::{stdin, BufReader};
-use std::path::Path;
+use std::io::{stdin, Read};
 
-use clap::{App, Arg};
-
-mod base_common;
-
-static BASE64_ARG_ERROR: i32 = 1;
-static SUMMARY: &str = "Base64 encode or decode FILE, or standard input, to standard output.";
-static LONG_HELP: &str = "
+static ABOUT: &str = "
  With no FILE, or when FILE is -, read standard input.
 
  The data are encoded as described for the base64 alphabet in RFC
@@ -33,126 +26,40 @@ static LONG_HELP: &str = "
 ";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
+static BASE_CMD_PARSE_ERROR: i32 = 1;
+
 fn get_usage() -> String {
     format!("{0} [OPTION]... [FILE]", executable!())
-}
-
-pub mod options {
-    pub static DECODE: &str = "decode";
-    pub static WRAP: &str = "wrap";
-    pub static IGNORE_GARBAGE: &str = "ignore-garbage";
-    pub static FILE: &str = "file";
-}
-
-struct Config {
-    decode: bool,
-    ignore_garbage: bool,
-    wrap_cols: Option<usize>,
-    to_read: Option<String>,
-}
-
-impl Config {
-    fn from(options: clap::ArgMatches) -> Config {
-        let file: Option<String> = match options.values_of(options::FILE) {
-            Some(mut values) => {
-                let name = values.next().unwrap();
-                if values.len() != 0 {
-                    crash!(BASE64_ARG_ERROR, "extra operand ‘{}’", name);
-                }
-
-                if name == "-" {
-                    None
-                } else {
-                    if !Path::exists(Path::new(name)) {
-                        crash!(BASE64_ARG_ERROR, "{}: No such file or directory", name);
-                    }
-                    Some(name.to_owned())
-                }
-            }
-            None => None,
-        };
-
-        let cols = match options.value_of(options::WRAP) {
-            Some(num) => match num.parse::<usize>() {
-                Ok(n) => Some(n),
-                Err(e) => {
-                    crash!(BASE64_ARG_ERROR, "invalid wrap size: ‘{}’: {}", num, e);
-                }
-            },
-            None => None,
-        };
-
-        Config {
-            decode: options.is_present(options::DECODE),
-            ignore_garbage: options.is_present(options::IGNORE_GARBAGE),
-            wrap_cols: cols,
-            to_read: file,
-        }
-    }
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let format = Format::Base64;
     let usage = get_usage();
-    let app = App::new(executable!())
-        .version(VERSION)
-        .about(SUMMARY)
-        .usage(&usage[..])
-        .about(LONG_HELP)
-        // Format arguments.
-        .arg(
-            Arg::with_name(options::DECODE)
-                .short("d")
-                .long(options::DECODE)
-                .help("decode data"),
-        )
-        .arg(
-            Arg::with_name(options::IGNORE_GARBAGE)
-                .short("i")
-                .long(options::IGNORE_GARBAGE)
-                .help("when decoding, ignore non-alphabetic characters"),
-        )
-        .arg(
-            Arg::with_name(options::WRAP)
-                .short("w")
-                .long(options::WRAP)
-                .takes_value(true)
-                .help(
-                    "wrap encoded lines after COLS character (default 76, 0 to disable wrapping)",
-                ),
-        )
-        // "multiple" arguments are used to check whether there is more than one
-        // file passed in.
-        .arg(Arg::with_name(options::FILE).index(1).multiple(true));
+    let name = executable!();
+    let config_result: Result<base_common::Config, String> =
+        base_common::parse_base_cmd_args(args, name, VERSION, ABOUT, &usage);
 
-    let arg_list = args
-        .collect_str(InvalidEncodingHandling::ConvertLossy)
-        .accept_any();
-    let config: Config = Config::from(app.get_matches_from(arg_list));
-    match config.to_read {
-        // Read from file.
-        Some(name) => {
-            let file_buf = safe_unwrap!(File::open(Path::new(&name)));
-            let mut input = BufReader::new(file_buf);
-            base_common::handle_input(
-                &mut input,
-                format,
-                config.wrap_cols,
-                config.ignore_garbage,
-                config.decode,
-            );
+    if config_result.is_err() {
+        match config_result {
+            Ok(_) => panic!(),
+            Err(s) => crash!(BASE_CMD_PARSE_ERROR, "{}", s),
         }
-        // stdin
-        None => {
-            base_common::handle_input(
-                &mut stdin().lock(),
-                format,
-                config.wrap_cols,
-                config.ignore_garbage,
-                config.decode,
-            );
-        }
-    };
+    }
+
+    // Create a reference to stdin so we can return a locked stdin from
+    // parse_base_cmd_args
+    let stdin_raw = stdin();
+    let config = config_result.unwrap();
+    let mut input: Box<dyn Read> = base_common::get_input(&config, &stdin_raw);
+
+    base_common::handle_input(
+        &mut input,
+        format,
+        config.wrap_cols,
+        config.ignore_garbage,
+        config.decode,
+        name,
+    );
 
     0
 }
