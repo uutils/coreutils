@@ -45,7 +45,30 @@ pub fn factor(num: &mut u64, factors: &mut Factors) {
 
 pub const CHUNK_SIZE: usize = 4;
 pub fn factor_chunk(n_s: &mut [u64; CHUNK_SIZE], f_s: &mut [Factors; CHUNK_SIZE]) {
-    for (n, s) in n_s.iter_mut().zip(f_s.iter_mut()) {
-        factor(n, s);
+    for &(prime, inv, ceil) in P_INVS_U64 {
+        if n_s[0] == 1 && n_s[1] == 1 && n_s[2] == 1 && n_s[3] == 1 {
+            break;
+        }
+
+        for (num, factors) in n_s.iter_mut().zip(f_s.iter_mut()) {
+            if *num == 1 {
+                continue;
+            }
+            let mut k = 0;
+            loop {
+                let x = num.wrapping_mul(inv);
+
+                // While prime divides num
+                if x <= ceil {
+                    *num = x;
+                    k += 1;
+                } else {
+                    if k > 0 {
+                        factors.add(prime, k);
+                    }
+                    break;
+                }
+            }
+        }
     }
 }
