@@ -43,7 +43,7 @@ pub fn factor(num: &mut u64, factors: &mut Factors) {
     }
 }
 
-pub const CHUNK_SIZE: usize = 4;
+pub const CHUNK_SIZE: usize = 8;
 pub fn factor_chunk(n_s: &mut [u64; CHUNK_SIZE], f_s: &mut [Factors; CHUNK_SIZE]) {
     for &(prime, inv, ceil) in P_INVS_U64 {
         if n_s[0] == 1 && n_s[1] == 1 && n_s[2] == 1 && n_s[3] == 1 {
