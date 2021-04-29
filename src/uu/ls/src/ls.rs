@@ -1623,10 +1623,18 @@ fn format_prefixed(prefixed: NumberPrefix<f64>) -> String {
 fn display_file_size(metadata: &Metadata, config: &Config) -> String {
     // NOTE: The human-readable behaviour deviates from the GNU ls.
     // The GNU ls uses binary prefixes by default.
-    match config.size_format {
-        SizeFormat::Binary => format_prefixed(NumberPrefix::binary(metadata.len() as f64)),
-        SizeFormat::Decimal => format_prefixed(NumberPrefix::decimal(metadata.len() as f64)),
-        SizeFormat::Bytes => metadata.len().to_string(),
+    let ft = metadata.file_type();
+    if ft.is_char_device() || ft.is_block_device() {
+        let dev: u64 = metadata.rdev();
+        let major = (dev >> 8) as u8;
+        let minor = dev as u8;
+        return format!("{}, {}", major, minor);
+    } else {
+        match config.size_format {
+            SizeFormat::Binary => format_prefixed(NumberPrefix::binary(metadata.len() as f64)),
+            SizeFormat::Decimal => format_prefixed(NumberPrefix::decimal(metadata.len() as f64)),
+            SizeFormat::Bytes => metadata.len().to_string(),
+        }
     }
 }
 
@@ -1635,6 +1643,10 @@ fn display_file_type(file_type: FileType) -> char {
         'd'
     } else if file_type.is_symlink() {
         'l'
+    } else if file_type.is_block_device() {
+        'b'
+    } else if file_type.is_char_device() {
+        'c'
     } else {
         '-'
     }
