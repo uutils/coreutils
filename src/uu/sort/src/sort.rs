@@ -15,10 +15,12 @@
 #[macro_use]
 extern crate uucore;
 
+mod custom_str_cmp;
 mod external_sort;
 mod numeric_str_cmp;
 
 use clap::{App, Arg};
+use custom_str_cmp::custom_str_cmp;
 use external_sort::{ExternalSorter, ExternallySortable};
 use fnv::FnvHasher;
 use itertools::Itertools;
@@ -206,33 +208,23 @@ impl From<&GlobalSettings> for KeySettings {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 /// Represents the string selected by a FieldSelector.
-enum SelectionRange {
-    /// If we had to transform this selection, we have to store a new string.
-    String(String),
-    /// If there was no transformation, we can store an index into the line.
-    ByIndex(Range<usize>),
+struct SelectionRange {
+    range: Range<usize>,
 }
 
 impl SelectionRange {
+    fn new(range: Range<usize>) -> Self {
+        Self { range }
+    }
+
     /// Gets the actual string slice represented by this Selection.
-    fn get_str<'a>(&'a self, line: &'a str) -> &'a str {
-        match self {
-            SelectionRange::String(string) => string.as_str(),
-            SelectionRange::ByIndex(range) => &line[range.to_owned()],
-        }
+    fn get_str<'a>(&self, line: &'a str) -> &'a str {
+        &line[self.range.to_owned()]
     }
 
     fn shorten(&mut self, new_range: Range<usize>) {
-        match self {
-            SelectionRange::String(string) => {
-                string.drain(new_range.end..);
-                string.drain(..new_range.start);
-            }
-            SelectionRange::ByIndex(range) => {
-                range.end = range.start + new_range.end;
-                range.start += new_range.start;
-            }
-        }
+        self.range.end = self.range.start + new_range.end;
+        self.range.start += new_range.start;
     }
 }
 
@@ -303,14 +295,8 @@ impl Line {
             .selectors
             .iter()
             .map(|selector| {
-                let range = selector.get_selection(&line, fields.as_deref());
-                let mut range = if let Some(transformed) =
-                    transform(&line[range.to_owned()], &selector.settings)
-                {
-                    SelectionRange::String(transformed)
-                } else {
-                    SelectionRange::ByIndex(range)
-                };
+                let mut range =
+                    SelectionRange::new(selector.get_selection(&line, fields.as_deref()));
                 let num_cache = if selector.settings.mode == SortMode::Numeric
                     || selector.settings.mode == SortMode::HumanNumeric
                 {
@@ -458,34 +444,6 @@ impl Line {
         }
         Ok(())
     }
-}
-
-/// Transform this line. Returns None if there's no need to transform.
-fn transform(line: &str, settings: &KeySettings) -> Option<String> {
-    let mut transformed = None;
-    if settings.ignore_case {
-        transformed = Some(line.to_uppercase());
-    }
-    if settings.ignore_blanks {
-        transformed = Some(
-            transformed
-                .as_deref()
-                .unwrap_or(line)
-                .trim_start()
-                .to_string(),
-        );
-    }
-    if settings.dictionary_order {
-        transformed = Some(remove_nondictionary_chars(
-            transformed.as_deref().unwrap_or(line),
-        ));
-    }
-    if settings.ignore_non_printing {
-        transformed = Some(remove_nonprinting_chars(
-            transformed.as_deref().unwrap_or(line),
-        ));
-    }
-    transformed
 }
 
 /// Tokenize a line into fields.
@@ -1301,7 +1259,13 @@ fn compare_by(a: &Line, b: &Line, global_settings: &GlobalSettings) -> Ordering 
                 ),
                 SortMode::Month => month_compare(a_str, b_str),
                 SortMode::Version => version_compare(a_str, b_str),
-                SortMode::Default => default_compare(a_str, b_str),
+                SortMode::Default => custom_str_cmp(
+                    a_str,
+                    b_str,
+                    settings.ignore_non_printing,
+                    settings.dictionary_order,
+                    settings.ignore_case,
+                ),
             }
         };
         if cmp != Ordering::Equal {
@@ -1313,7 +1277,7 @@ fn compare_by(a: &Line, b: &Line, global_settings: &GlobalSettings) -> Ordering 
     let cmp = if global_settings.random || global_settings.stable || global_settings.unique {
         Ordering::Equal
     } else {
-        default_compare(&a.line, &b.line)
+        a.line.cmp(&b.line)
     };
 
     if global_settings.reverse {
@@ -1321,13 +1285,6 @@ fn compare_by(a: &Line, b: &Line, global_settings: &GlobalSettings) -> Ordering 
     } else {
         cmp
     }
-}
-
-// Test output against BSDs and GNU with their locale
-// env var set to lc_ctype=utf-8 to enjoy the exact same output.
-#[inline(always)]
-fn default_compare(a: &str, b: &str) -> Ordering {
-    a.cmp(b)
 }
 
 // This function cleans up the initial comparison done by leading_num_common for a general numeric compare.
@@ -1516,22 +1473,6 @@ fn version_compare(a: &str, b: &str) -> Ordering {
     }
 }
 
-fn remove_nondictionary_chars(s: &str) -> String {
-    // According to GNU, dictionary chars are those of ASCII
-    // and a blank is a space or a tab
-    s.chars()
-        .filter(|c| c.is_ascii_alphanumeric() || c.is_ascii_whitespace())
-        .collect::<String>()
-}
-
-fn remove_nonprinting_chars(s: &str) -> String {
-    // However, GNU says nonprinting chars are more permissive.
-    // All of ASCII except control chars ie, escape, newline
-    s.chars()
-        .filter(|c| c.is_ascii() && !c.is_ascii_control())
-        .collect::<String>()
-}
-
 fn print_sorted<T: Iterator<Item = Line>>(iter: T, settings: &GlobalSettings) {
     let mut file: Box<dyn Write> = match settings.outfile {
         Some(ref filename) => match File::create(Path::new(&filename)) {
@@ -1596,14 +1537,6 @@ mod tests {
         let c = get_rand_string();
 
         assert_eq!(Ordering::Equal, random_shuffle(a, b, c));
-    }
-
-    #[test]
-    fn test_default_compare() {
-        let a = "your own";
-        let b = "your place";
-
-        assert_eq!(Ordering::Less, default_compare(a, b));
     }
 
     #[test]
