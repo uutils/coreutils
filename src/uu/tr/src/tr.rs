@@ -278,8 +278,58 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             translate_input(&mut locked_stdin, &mut buffered_stdout, op);
         }
     } else if squeeze_flag {
-        let op = SqueezeOperation::new(set1, complement_flag);
-        translate_input(&mut locked_stdin, &mut buffered_stdout, op);
+        if sets.len() < 2 {
+            let op = SqueezeOperation::new(set1, complement_flag);
+            translate_input(&mut locked_stdin, &mut buffered_stdout, op);
+        } else {
+            // Define a closure that computes the translation using a hash map.
+            //
+            // The `unwrap()` should never panic because the
+            // `TranslateOperation.translate()` method always returns
+            // `Some`.
+            let mut set2 = ExpandSet::new(sets[1].as_ref());
+            let translator = TranslateOperation::new(set1, &mut set2, truncate_flag);
+            let translate = |c| translator.translate(c, 0 as char).unwrap();
+
+            // Prepare some variables to be used for the closure that
+            // computes the squeeze operation.
+            //
+            // The `squeeze()` closure needs to be defined anew for
+            // each line of input, but these variables do not change
+            // while reading the input so they can be defined before
+            // the `while` loop.
+            let set2 = ExpandSet::new(sets[1].as_ref());
+            let squeezer = SqueezeOperation::new(set2, complement_flag);
+
+            // Prepare some memory to read each line of the input (`buf`) and to write
+            let mut buf = String::with_capacity(BUFFER_LEN + 4);
+
+            // Loop over each line of stdin.
+            while let Ok(length) = locked_stdin.read_line(&mut buf) {
+                if length == 0 {
+                    break;
+                }
+
+                // Define a closure that computes the squeeze operation.
+                //
+                // We keep track of the previously seen character on
+                // each call to `squeeze()`, but we need to reset the
+                // `prev_c` variable at the beginning of each line of
+                // the input. That's why we define the closure inside
+                // the `while` loop.
+                let mut prev_c = 0 as char;
+                let squeeze = |c| {
+                    let result = squeezer.translate(c, prev_c);
+                    prev_c = c;
+                    result
+                };
+
+                // First translate, then squeeze each character of the input line.
+                let filtered: String = buf.chars().map(translate).filter_map(squeeze).collect();
+                buf.clear();
+                buffered_stdout.write_all(filtered.as_bytes()).unwrap();
+            }
+        }
     } else {
         let mut set2 = ExpandSet::new(sets[1].as_ref());
         let op = TranslateOperation::new(set1, &mut set2, truncate_flag);
