@@ -1559,6 +1559,7 @@ fn get_system_time(md: &Metadata, config: &Config) -> Option<SystemTime> {
     match config.time {
         Time::Modification => md.modified().ok(),
         Time::Access => md.accessed().ok(),
+        Time::Birth => md.created().ok(),
         _ => None,
     }
 }
