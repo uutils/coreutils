@@ -1169,9 +1169,7 @@ fn file_to_lines_iter<'a>(
             })
             .map(move |line| {
                 Line::new(
-                    std::str::from_utf8(&line.unwrap())
-                        .expect("input is not valid utf-8")
-                        .to_string(),
+                    crash_if_err!(1, String::from_utf8(crash_if_err!(1, line))),
                     settings,
                 )
             }),
@@ -1226,7 +1224,7 @@ fn exec(files: Vec<String>, settings: GlobalSettings) -> i32 {
                 } else {
                     b'\n'
                 }) {
-                    let string = String::from_utf8(line.unwrap()).unwrap();
+                    let string = crash_if_err!(1, String::from_utf8(crash_if_err!(1, line)));
                     lines.push(Line::new(string, &settings));
                 }
             }
