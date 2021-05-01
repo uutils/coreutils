@@ -1372,9 +1372,6 @@ name = "serde"
 version = "1.0.125"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "558dc50e1a5a5fa7112ca2ce4effcb321b0300c0d4ccf0776a9f60cd89031171"
-dependencies = [
- "serde_derive",
-]
 
 [[package]]
 name = "serde_cbor"
@@ -1453,9 +1450,6 @@ name = "smallvec"
 version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fe0f37c9e8f3c5a4a66ad655a93c74daac4ad00c441533bf5c6e7990bb42604e"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "strsim"
@@ -2391,8 +2385,6 @@ dependencies = [
  "rand 0.7.3",
  "rayon",
  "semver",
- "serde",
- "serde_json",
  "smallvec 1.6.1",
  "tempdir",
  "unicode-width",
