@@ -16,15 +16,15 @@ fn test_helper(file_name: &str, args: &str) {
 }
 
 // FYI, the initialization size of our Line struct is 96 bytes.
-//  
-// At very small buffer sizes, with that overhead we are certainly going 
-// to overrun our buffer way, way, way too quickly because of these excess 
+//
+// At very small buffer sizes, with that overhead we are certainly going
+// to overrun our buffer way, way, way too quickly because of these excess
 // bytes for the struct.
 //
 // For instance, seq 0..20000 > ...text = 108894 bytes
 // But overhead is 1920000 + 108894 = 2028894 bytes
 //
-// Or kjvbible-random.txt = 4332506 bytes, but minimum size of its 
+// Or kjvbible-random.txt = 4332506 bytes, but minimum size of its
 // 99817 lines in memory * 96 bytes = 9582432 bytes
 //
 // Here, we test 108894 bytes with a 50K buffer
@@ -59,7 +59,7 @@ fn test_human_numeric_whitespace() {
     test_helper("human-numeric-whitespace", "-h");
 }
 
-// This tests where serde often fails when reading back JSON 
+// This tests where serde often fails when reading back JSON
 // if it finds a null value
 #[test]
 fn test_extsort_as64_bailout() {
