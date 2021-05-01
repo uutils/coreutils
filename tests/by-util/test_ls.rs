@@ -584,7 +584,6 @@ fn test_ls_order_birthtime() {
 }
 
 #[test]
-#[ignore]
 fn test_ls_styles() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -598,7 +597,7 @@ fn test_ls_styles() {
         Regex::new(r"[a-z-]* \d* \w* \w* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2} test\n").unwrap();
     let re_iso = Regex::new(r"[a-z-]* \d* \w* \w* \d* \d{2}-\d{2} \d{2}:\d{2} test\n").unwrap();
     let re_locale =
-        Regex::new(r"[a-z-]* \d* \w* \w* \d* [A-Z][a-z]{2} \d{2} \d{2}:\d{2} test\n").unwrap();
+        Regex::new(r"[a-z-]* \d* \w* \w* \d* [A-Z][a-z]{2} ( |\d)\d \d{2}:\d{2} test\n").unwrap();
 
     //full-iso
     let result = scene
