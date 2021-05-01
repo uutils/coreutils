@@ -74,7 +74,8 @@ Run `cargo build --release` before benchmarking after you make a change!
 Try running commands with the `-S` option set to an amount of memory to be used, such as `1M`. Additionally, you could try sorting
 huge files (ideally multiple Gigabytes) with `-S`. Creating such a large file can be achieved by running `cat shuffled_wordlist.txt | sort -R >> shuffled_wordlist.txt`
 multiple times (this will add the contents of `shuffled_wordlist.txt` to itself).
-Example: Run `hyperfine "target/release/coreutils sort shuffled_wordlist.txt -S 1M"`
+Example: Run `hyperfine './target/release/coreutils sort shuffled_wordlist.txt -S 1M' 'sort shuffled_wordlist.txt -S 1M'`
+`
 
 ## Stdout and stdin performance
 
