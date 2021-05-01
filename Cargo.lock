@@ -2041,6 +2041,7 @@ dependencies = [
 name = "uu_kill"
 version = "0.0.6"
 dependencies = [
+ "clap",
  "libc",
  "uucore",
  "uucore_procs",
