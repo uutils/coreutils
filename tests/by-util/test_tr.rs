@@ -78,6 +78,24 @@ fn test_squeeze_complement() {
 }
 
 #[test]
+fn test_translate_and_squeeze() {
+    new_ucmd!()
+        .args(&["-s", "x", "y"])
+        .pipe_in("xx")
+        .run()
+        .stdout_is("y");
+}
+
+#[test]
+fn test_translate_and_squeeze_multiple_lines() {
+    new_ucmd!()
+        .args(&["-s", "x", "y"])
+        .pipe_in("xxaax\nxaaxx")
+        .run()
+        .stdout_is("yaay\nyaay");
+}
+
+#[test]
 fn test_delete_and_squeeze() {
     new_ucmd!()
         .args(&["-ds", "a-z", "A-Z"])
