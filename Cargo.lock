@@ -1688,6 +1688,8 @@ dependencies = [
 name = "uu_base64"
 version = "0.0.6"
 dependencies = [
+ "clap",
+ "uu_base32",
  "uucore",
  "uucore_procs",
 ]
