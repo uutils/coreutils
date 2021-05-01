@@ -59,7 +59,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             return kill(
                 &matches
                     .opt_str("signal")
-                    .unwrap_or_else(|| obs_signal.unwrap_or_else(|| "9".to_owned())),
+                    .unwrap_or_else(|| obs_signal.unwrap_or_else(|| "TERM".to_owned())),
                 matches.free,
             )
         }
