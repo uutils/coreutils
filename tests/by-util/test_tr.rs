@@ -46,6 +46,20 @@ fn test_delete_complement() {
 }
 
 #[test]
+fn test_delete_complement_2() {
+    new_ucmd!()
+        .args(&["-d", "-C", "0-9"])
+        .pipe_in("Phone: 01234 567890")
+        .succeeds()
+        .stdout_is("01234567890");
+    new_ucmd!()
+        .args(&["-d", "--complement", "0-9"])
+        .pipe_in("Phone: 01234 567890")
+        .succeeds()
+        .stdout_is("01234567890");
+}
+
+#[test]
 fn test_complement1() {
     new_ucmd!()
         .args(&["-c", "a", "X"])

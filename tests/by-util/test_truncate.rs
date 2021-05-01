@@ -224,8 +224,14 @@ fn test_size_and_reference() {
     let mut file1 = at.make_file(TFILE1);
     let mut file2 = at.make_file(TFILE2);
     file1.write_all(b"1234567890").unwrap();
-    ucmd.args(&["--reference", TFILE1, "--size", "+5", TFILE2]).succeeds();
+    ucmd.args(&["--reference", TFILE1, "--size", "+5", TFILE2])
+        .succeeds();
     file2.seek(SeekFrom::End(0)).unwrap();
     let actual = file2.seek(SeekFrom::Current(0)).unwrap();
-    assert!(expected == actual, "expected '{}' got '{}'", expected, actual);
+    assert!(
+        expected == actual,
+        "expected '{}' got '{}'",
+        expected,
+        actual
+    );
 }

@@ -23,11 +23,9 @@ use std::io::{stdin, stdout, BufRead, BufWriter, Write};
 use crate::expand::ExpandSet;
 use uucore::InvalidEncodingHandling;
 
-static NAME: &str = "tr";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "translate or delete characters";
-static LONG_HELP: &str = "Translate,  squeeze, and/or delete characters from standard input,
-writing to standard output.";
+
 const BUFFER_LEN: usize = 1024;
 
 mod options {
@@ -205,23 +203,37 @@ fn get_usage() -> String {
     format!("{} [OPTION]... SET1 [SET2]", executable!())
 }
 
+fn get_long_usage() -> String {
+    String::from(
+        "Translate, squeeze, and/or delete characters from standard input,
+writing to standard output.",
+    )
+}
+
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
+
+    let usage = get_usage();
+    let after_help = get_long_usage();
 
     let matches = App::new(executable!())
         .version(VERSION)
         .about(ABOUT)
         .usage(&usage[..])
-        .after_help(LONG_HELP)
+        .after_help(&after_help[..])
         .arg(
             Arg::with_name(options::COMPLEMENT)
-                .short("C")
+                // .visible_short_alias('C')  // TODO: requires clap "3.0.0-beta.2"
                 .short("c")
                 .long(options::COMPLEMENT)
                 .help("use the complement of SET1"),
+        )
+        .arg(
+            Arg::with_name("C") // work around for `Arg::visible_short_alias`
+                .short("C")
+                .help("same as -c"),
         )
         .arg(
             Arg::with_name(options::DELETE)
@@ -235,8 +247,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .short("s")
                 .help(
                     "replace each sequence  of  a  repeated  character  that  is
-            listed  in the last specified SET, with a single occurrence
-            of that character",
+  listed  in the last specified SET, with a single occurrence
+  of that character",
                 ),
         )
         .arg(
@@ -249,7 +261,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .get_matches_from(args);
 
     let delete_flag = matches.is_present(options::DELETE);
-    let complement_flag = matches.is_present(options::COMPLEMENT);
+    let complement_flag = matches.is_present(options::COMPLEMENT) || matches.is_present("C");
     let squeeze_flag = matches.is_present(options::SQUEEZE);
     let truncate_flag = matches.is_present(options::TRUNCATE);
 
@@ -261,7 +273,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if sets.is_empty() {
         show_error!(
             "missing operand\nTry `{} --help` for more information.",
-            NAME
+            executable!()
         );
         return 1;
     }
@@ -270,7 +282,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         show_error!(
             "missing operand after ‘{}’\nTry `{} --help` for more information.",
             sets[0],
-            NAME
+            executable!()
         );
         return 1;
     }
