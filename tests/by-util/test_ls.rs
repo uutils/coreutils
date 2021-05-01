@@ -559,6 +559,7 @@ fn test_ls_long_ctime() {
 }
 
 #[test]
+#[ignore]
 fn test_ls_order_birthtime() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -583,6 +584,7 @@ fn test_ls_order_birthtime() {
 }
 
 #[test]
+#[ignore]
 fn test_ls_styles() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
