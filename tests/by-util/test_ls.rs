@@ -527,7 +527,6 @@ fn test_ls_sort_name() {
         .succeeds()
         .stdout_is(["test-1", "test-2", "test-3\n"].join(sep));
 
-    // Order of a named sort ignores leading dots.
     let scene_dot = TestScenario::new(util_name!());
     let at = &scene_dot.fixtures;
     at.touch(".a");
@@ -540,7 +539,7 @@ fn test_ls_sort_name() {
         .arg("--sort=name")
         .arg("-A")
         .succeeds()
-        .stdout_is([".a", "a", ".b", "b\n"].join(sep));
+        .stdout_is([".a", ".b", "a", "b\n"].join(sep));
 }
 
 #[test]

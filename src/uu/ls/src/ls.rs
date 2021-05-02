@@ -1244,14 +1244,8 @@ fn sort_entries(entries: &mut Vec<PathData>, config: &Config) {
             entries.sort_by_key(|k| Reverse(k.md().as_ref().map(|md| md.len()).unwrap_or(0)))
         }
         // The default sort in GNU ls is case insensitive
-        Sort::Name => entries.sort_by_cached_key(|k| {
-            let has_dot: bool = k.file_name.starts_with('.');
-            let filename_nodot: &str = &k.file_name[if has_dot { 1 } else { 0 }..];
-            // We want hidden files to appear before regular files of the same
-            // name, so we need to negate the "has_dot" variable.
-            (filename_nodot.to_lowercase(), !has_dot)
-        }),
-        Sort::Version => entries.sort_by(|k, j| version_cmp::version_cmp(&k.p_buf, &j.p_buf)),
+        Sort::Name => entries.sort_by(|a, b| a.file_name.cmp(&b.file_name)),
+        Sort::Version => entries.sort_by(|a, b| version_cmp::version_cmp(&a.p_buf, &b.p_buf)),
         Sort::Extension => entries.sort_by(|a, b| {
             a.p_buf
                 .extension()
