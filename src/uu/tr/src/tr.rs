@@ -217,8 +217,8 @@ fn translate_input<T: SymbolTranslator>(
                 // Set `prev_c` to the post-translate character. This
                 // allows the squeeze operation to correctly function
                 // after the translate operation.
-                if res.is_some() {
-                    prev_c = res.unwrap();
+                if let Some(rc) = res {
+                    prev_c = rc;
                 }
                 res
             });
