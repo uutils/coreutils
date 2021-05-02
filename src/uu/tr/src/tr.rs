@@ -182,7 +182,7 @@ impl TranslateAndSqueezeOperation {
         complement: bool,
     ) -> TranslateAndSqueezeOperation {
         TranslateAndSqueezeOperation {
-            translate: TranslateOperation::new(set1, set2, truncate),
+            translate: TranslateOperation::new(set1, set2, truncate, complement),
             squeeze: SqueezeOperation::new(set2_, complement),
         }
     }
