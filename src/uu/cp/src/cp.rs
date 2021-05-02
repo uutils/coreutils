@@ -551,6 +551,10 @@ impl FromStr for Attribute {
 fn add_all_attributes() -> Vec<Attribute> {
     use Attribute::*;
 
+    #[cfg(target_os = "windows")]
+    let attr = vec![Ownership, Timestamps, Context, Xattr, Links];
+
+    #[cfg(not(target_os = "windows"))]
     let mut attr = vec![Ownership, Timestamps, Context, Xattr, Links];
 
     #[cfg(unix)]

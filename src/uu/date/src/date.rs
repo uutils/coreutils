@@ -348,7 +348,7 @@ fn set_system_datetime(_date: DateTime<Utc>) -> i32 {
 #[cfg(target_os = "macos")]
 fn set_system_datetime(_date: DateTime<Utc>) -> i32 {
     eprintln!("date: setting the date is not supported by macOS");
-    return 1;
+    1
 }
 
 #[cfg(all(unix, not(target_os = "macos")))]

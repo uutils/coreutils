@@ -168,6 +168,35 @@ impl SymbolTranslator for TranslateOperation {
     }
 }
 
+struct TranslateAndSqueezeOperation {
+    translate: TranslateOperation,
+    squeeze: SqueezeOperation,
+}
+
+impl TranslateAndSqueezeOperation {
+    fn new(
+        set1: ExpandSet,
+        set2: &mut ExpandSet,
+        set2_: ExpandSet,
+        truncate: bool,
+        complement: bool,
+    ) -> TranslateAndSqueezeOperation {
+        TranslateAndSqueezeOperation {
+            translate: TranslateOperation::new(set1, set2, truncate),
+            squeeze: SqueezeOperation::new(set2_, complement),
+        }
+    }
+}
+
+impl SymbolTranslator for TranslateAndSqueezeOperation {
+    fn translate(&self, c: char, prev_c: char) -> Option<char> {
+        // `unwrap()` will never panic because `Translate.translate()`
+        // always returns `Some`.
+        self.squeeze
+            .translate(self.translate.translate(c, 0 as char).unwrap(), prev_c)
+    }
+}
+
 fn translate_input<T: SymbolTranslator>(
     input: &mut dyn BufRead,
     output: &mut dyn Write,
@@ -185,8 +214,11 @@ fn translate_input<T: SymbolTranslator>(
             // isolation to make borrow checker happy
             let filtered = buf.chars().filter_map(|c| {
                 let res = translator.translate(c, prev_c);
+                // Set `prev_c` to the post-translate character. This
+                // allows the squeeze operation to correctly function
+                // after the translate operation.
                 if res.is_some() {
-                    prev_c = c;
+                    prev_c = res.unwrap();
                 }
                 res
             });
@@ -304,8 +336,21 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             translate_input(&mut locked_stdin, &mut buffered_stdout, op);
         }
     } else if squeeze_flag {
-        let op = SqueezeOperation::new(set1, complement_flag);
-        translate_input(&mut locked_stdin, &mut buffered_stdout, op);
+        if sets.len() < 2 {
+            let op = SqueezeOperation::new(set1, complement_flag);
+            translate_input(&mut locked_stdin, &mut buffered_stdout, op);
+        } else {
+            let mut set2 = ExpandSet::new(sets[1].as_ref());
+            let set2_ = ExpandSet::new(sets[1].as_ref());
+            let op = TranslateAndSqueezeOperation::new(
+                set1,
+                &mut set2,
+                set2_,
+                complement_flag,
+                truncate_flag,
+            );
+            translate_input(&mut locked_stdin, &mut buffered_stdout, op);
+        }
     } else {
         let mut set2 = ExpandSet::new(sets[1].as_ref());
         let op = TranslateOperation::new(set1, &mut set2, truncate_flag, complement_flag);
