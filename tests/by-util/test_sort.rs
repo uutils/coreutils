@@ -37,7 +37,29 @@ fn test_larger_than_specified_segment() {
         .arg("50K")
         .arg("ext_sort.txt")
         .succeeds()
-        .stdout_is_fixture(format!("{}", "ext_sort.expected"));
+        .stdout_is_fixture("ext_sort.expected");
+}
+
+#[test]
+fn test_smaller_than_specified_segment() {
+    new_ucmd!()
+        .arg("-n")
+        .arg("-S")
+        .arg("100M")
+        .arg("ext_sort.txt")
+        .succeeds()
+        .stdout_is_fixture("ext_sort.expected");
+}
+
+#[test]
+fn test_extsort_zero_terminated() {
+    new_ucmd!()
+        .arg("-z")
+        .arg("-S")
+        .arg("10K")
+        .arg("zero-terminated.txt")
+        .succeeds()
+        .stdout_is_fixture("zero-terminated.expected");
 }
 
 #[test]
