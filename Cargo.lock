@@ -2052,6 +2052,7 @@ dependencies = [
 name = "uu_link"
 version = "0.0.6"
 dependencies = [
+ "clap",
  "libc",
  "uucore",
  "uucore_procs",
