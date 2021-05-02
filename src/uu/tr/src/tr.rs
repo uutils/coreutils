@@ -123,10 +123,17 @@ impl SymbolTranslator for DeleteAndSqueezeOperation {
 
 struct TranslateOperation {
     translate_map: FnvHashMap<usize, char>,
+    complement: bool,
+    s2_last: char,
 }
 
 impl TranslateOperation {
-    fn new(set1: ExpandSet, set2: &mut ExpandSet, truncate: bool) -> TranslateOperation {
+    fn new(
+        set1: ExpandSet,
+        set2: &mut ExpandSet,
+        truncate: bool,
+        complement: bool,
+    ) -> TranslateOperation {
         let mut map = FnvHashMap::default();
         let mut s2_prev = '_';
         for i in set1 {
@@ -139,13 +146,25 @@ impl TranslateOperation {
                 map.insert(i as usize, s2_prev);
             }
         }
-        TranslateOperation { translate_map: map }
+        TranslateOperation {
+            translate_map: map,
+            complement,
+            s2_last: set2.last().unwrap_or(s2_prev),
+        }
     }
 }
 
 impl SymbolTranslator for TranslateOperation {
     fn translate(&self, c: char, _prev_c: char) -> Option<char> {
-        Some(*self.translate_map.get(&(c as usize)).unwrap_or(&c))
+        if self.complement {
+            Some(if self.translate_map.contains_key(&(c as usize)) {
+                c
+            } else {
+                self.s2_last
+            })
+        } else {
+            Some(*self.translate_map.get(&(c as usize)).unwrap_or(&c))
+        }
     }
 }
 
@@ -163,7 +182,7 @@ impl TranslateAndSqueezeOperation {
         complement: bool,
     ) -> TranslateAndSqueezeOperation {
         TranslateAndSqueezeOperation {
-            translate: TranslateOperation::new(set1, set2, truncate),
+            translate: TranslateOperation::new(set1, set2, truncate, complement),
             squeeze: SqueezeOperation::new(set2_, complement),
         }
     }
@@ -198,8 +217,8 @@ fn translate_input<T: SymbolTranslator>(
                 // Set `prev_c` to the post-translate character. This
                 // allows the squeeze operation to correctly function
                 // after the translate operation.
-                if res.is_some() {
-                    prev_c = res.unwrap();
+                if let Some(rc) = res {
+                    prev_c = rc;
                 }
                 res
             });
@@ -300,11 +319,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         return 1;
     }
 
-    if complement_flag && !delete_flag && !squeeze_flag {
-        show_error!("-c is only supported with -d or -s");
-        return 1;
-    }
-
     let stdin = stdin();
     let mut locked_stdin = stdin.lock();
     let stdout = stdout();
@@ -339,8 +353,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     } else {
         let mut set2 = ExpandSet::new(sets[1].as_ref());
-        let op = TranslateOperation::new(set1, &mut set2, truncate_flag);
-        translate_input(&mut locked_stdin, &mut buffered_stdout, op)
+        let op = TranslateOperation::new(set1, &mut set2, truncate_flag, complement_flag);
+        translate_input(&mut locked_stdin, &mut buffered_stdout, op);
     }
 
     0
