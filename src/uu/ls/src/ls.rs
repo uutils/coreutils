@@ -1284,7 +1284,13 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
 fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>) {
     let mut entries: Vec<_> = if config.files == Files::All {
         vec![
-            PathData::new(dir.p_buf.join("."), None, Some(".".into()), config, false),
+            PathData::new(
+                dir.p_buf.clone(),
+                Some(Ok(*dir.file_type().unwrap())),
+                Some(".".into()),
+                config,
+                false,
+            ),
             PathData::new(dir.p_buf.join(".."), None, Some("..".into()), config, false),
         ]
     } else {
