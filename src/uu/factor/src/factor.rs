@@ -172,7 +172,7 @@ pub fn factor(mut n: u64) -> Factors {
     #[cfg(feature = "coz")]
     coz::end!("factorization");
 
-    return r;
+    r
 }
 
 #[cfg(test)]
