@@ -43,23 +43,68 @@ fn test_ls_a() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.touch(".test-1");
+    at.mkdir("some-dir");
+    at.touch(
+        Path::new("some-dir")
+            .join(".test-2")
+            .as_os_str()
+            .to_str()
+            .unwrap(),
+    );
 
-    let result = scene.ucmd().succeeds();
-    let stdout = result.stdout_str();
-    assert!(!stdout.contains(".test-1"));
-    assert!(!stdout.contains(".."));
+    let re_pwd = Regex::new(r"^\.\n").unwrap();
+
+    // Using the present working directory
+    scene
+        .ucmd()
+        .succeeds()
+        .stdout_does_not_contain(".test-1")
+        .stdout_does_not_contain("..")
+        .stdout_does_not_match(&re_pwd);
 
     scene
         .ucmd()
         .arg("-a")
         .succeeds()
         .stdout_contains(&".test-1")
-        .stdout_contains(&"..");
+        .stdout_contains(&"..")
+        .stdout_matches(&re_pwd);
 
-    let result = scene.ucmd().arg("-A").succeeds();
-    result.stdout_contains(".test-1");
-    let stdout = result.stdout_str();
-    assert!(!stdout.contains(".."));
+    scene
+        .ucmd()
+        .arg("-A")
+        .succeeds()
+        .stdout_contains(".test-1")
+        .stdout_does_not_contain("..")
+        .stdout_does_not_match(&re_pwd);
+
+    // Using a subdirectory
+    scene
+        .ucmd()
+        .arg("some-dir")
+        .succeeds()
+        .stdout_does_not_contain(".test-2")
+        .stdout_does_not_contain("..")
+        .stdout_does_not_match(&re_pwd);
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("some-dir")
+        .succeeds()
+        .stdout_contains(&".test-2")
+        .stdout_contains(&"..")
+        .no_stderr()
+        .stdout_matches(&re_pwd);
+
+    scene
+        .ucmd()
+        .arg("-A")
+        .arg("some-dir")
+        .succeeds()
+        .stdout_contains(".test-2")
+        .stdout_does_not_contain("..")
+        .stdout_does_not_match(&re_pwd);
 }
 
 #[test]

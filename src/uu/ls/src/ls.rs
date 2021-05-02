@@ -1122,14 +1122,21 @@ impl PathData {
     fn new(
         p_buf: PathBuf,
         file_type: Option<std::io::Result<FileType>>,
+        file_name: Option<String>,
         config: &Config,
         command_line: bool,
     ) -> Self {
-        let name = p_buf
-            .file_name()
-            .unwrap_or_else(|| p_buf.iter().next_back().unwrap())
-            .to_string_lossy()
-            .into_owned();
+        // We cannot use `Path::ends_with` or `Path::Components`, because they remove occurrences of '.'
+        // For '..', the filename is None
+        let name = if let Some(name) = file_name {
+            name
+        } else {
+            p_buf
+                .file_name()
+                .unwrap_or_else(|| p_buf.iter().next_back().unwrap())
+                .to_string_lossy()
+                .into_owned()
+        };
         let must_dereference = match &config.dereference {
             Dereference::All => true,
             Dereference::Args => command_line,
@@ -1192,7 +1199,7 @@ fn list(locs: Vec<String>, config: Config) -> i32 {
             continue;
         }
 
-        let path_data = PathData::new(p, None, &config, true);
+        let path_data = PathData::new(p, None, None, &config, true);
 
         let show_dir_contents = if let Some(ft) = path_data.file_type() {
             !config.directory && ft.is_dir()
@@ -1283,8 +1290,8 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
 fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>) {
     let mut entries: Vec<_> = if config.files == Files::All {
         vec![
-            PathData::new(dir.p_buf.join("."), None, config, false),
-            PathData::new(dir.p_buf.join(".."), None, config, false),
+            PathData::new(dir.p_buf.join("."), None, Some(".".into()), config, false),
+            PathData::new(dir.p_buf.join(".."), None, Some("..".into()), config, false),
         ]
     } else {
         vec![]
@@ -1293,7 +1300,7 @@ fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>)
     let mut temp: Vec<_> = safe_unwrap!(fs::read_dir(&dir.p_buf))
         .map(|res| safe_unwrap!(res))
         .filter(|e| should_display(e, config))
-        .map(|e| PathData::new(DirEntry::path(&e), Some(e.file_type()), config, false))
+        .map(|e| PathData::new(DirEntry::path(&e), Some(e.file_type()), None, config, false))
         .collect();
 
     sort_entries(&mut temp, config);
