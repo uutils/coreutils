@@ -1120,14 +1120,21 @@ impl PathData {
     fn new(
         p_buf: PathBuf,
         file_type: Option<std::io::Result<FileType>>,
+        file_name: Option<String>,
         config: &Config,
         command_line: bool,
     ) -> Self {
-        let name = p_buf
-            .file_name()
-            .unwrap_or_else(|| p_buf.iter().next_back().unwrap())
-            .to_string_lossy()
-            .into_owned();
+        // We cannot use `Path::ends_with` or `Path::Components`, because they remove occurrences of '.'
+        // For '..', the filename is None
+        let name = if let Some(name) = file_name {
+            name
+        } else {
+            p_buf
+                .file_name()
+                .unwrap_or_else(|| p_buf.iter().next_back().unwrap())
+                .to_string_lossy()
+                .into_owned()
+        };
         let must_dereference = match &config.dereference {
             Dereference::All => true,
             Dereference::Args => command_line,
@@ -1190,7 +1197,7 @@ fn list(locs: Vec<String>, config: Config) -> i32 {
             continue;
         }
 
-        let path_data = PathData::new(p, None, &config, true);
+        let path_data = PathData::new(p, None, None, &config, true);
 
         let show_dir_contents = if let Some(ft) = path_data.file_type() {
             !config.directory && ft.is_dir()
@@ -1235,14 +1242,8 @@ fn sort_entries(entries: &mut Vec<PathData>, config: &Config) {
             entries.sort_by_key(|k| Reverse(k.md().as_ref().map(|md| md.len()).unwrap_or(0)))
         }
         // The default sort in GNU ls is case insensitive
-        Sort::Name => entries.sort_by_cached_key(|k| {
-            let has_dot: bool = k.file_name.starts_with('.');
-            let filename_nodot: &str = &k.file_name[if has_dot { 1 } else { 0 }..];
-            // We want hidden files to appear before regular files of the same
-            // name, so we need to negate the "has_dot" variable.
-            (filename_nodot.to_lowercase(), !has_dot)
-        }),
-        Sort::Version => entries.sort_by(|k, j| version_cmp::version_cmp(&k.p_buf, &j.p_buf)),
+        Sort::Name => entries.sort_by(|a, b| a.file_name.cmp(&b.file_name)),
+        Sort::Version => entries.sort_by(|a, b| version_cmp::version_cmp(&a.p_buf, &b.p_buf)),
         Sort::Extension => entries.sort_by(|a, b| {
             a.p_buf
                 .extension()
@@ -1281,8 +1282,14 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
 fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>) {
     let mut entries: Vec<_> = if config.files == Files::All {
         vec![
-            PathData::new(dir.p_buf.join("."), None, config, false),
-            PathData::new(dir.p_buf.join(".."), None, config, false),
+            PathData::new(
+                dir.p_buf.clone(),
+                Some(Ok(*dir.file_type().unwrap())),
+                Some(".".into()),
+                config,
+                false,
+            ),
+            PathData::new(dir.p_buf.join(".."), None, Some("..".into()), config, false),
         ]
     } else {
         vec![]
@@ -1291,7 +1298,7 @@ fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>)
     let mut temp: Vec<_> = safe_unwrap!(fs::read_dir(&dir.p_buf))
         .map(|res| safe_unwrap!(res))
         .filter(|e| should_display(e, config))
-        .map(|e| PathData::new(DirEntry::path(&e), Some(e.file_type()), config, false))
+        .map(|e| PathData::new(DirEntry::path(&e), Some(e.file_type()), None, config, false))
         .collect();
 
     sort_entries(&mut temp, config);
