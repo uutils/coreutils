@@ -281,7 +281,9 @@ pub struct Line {
 
 impl Line {
     pub fn estimate_size(&self) -> usize {
-        self.line.capacity() + self.selections.capacity() * std::mem::size_of::<Selection>()
+        self.line.capacity()
+            + self.selections.capacity() * std::mem::size_of::<Selection>()
+            + std::mem::size_of::<Self>()
     }
 
     pub fn new(line: String, settings: &GlobalSettings) -> Self {
