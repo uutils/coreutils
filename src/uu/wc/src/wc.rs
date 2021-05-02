@@ -11,17 +11,17 @@
 extern crate uucore;
 
 mod count_bytes;
+mod countable;
 use count_bytes::count_bytes_fast;
+use countable::WordCountable;
 
 use clap::{App, Arg, ArgMatches};
 use thiserror::Error;
 
 use std::cmp::max;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Read, StdinLock, Write};
+use std::io::{self, Write};
 use std::ops::{Add, AddAssign};
-#[cfg(unix)]
-use std::os::unix::io::AsRawFd;
 use std::path::Path;
 use std::str::from_utf8;
 
@@ -79,32 +79,6 @@ impl Settings {
         result += self.show_max_line_length as u32;
         result += self.show_words as u32;
         result
-    }
-}
-
-#[cfg(unix)]
-trait WordCountable: AsRawFd + Read {
-    type Buffered: BufRead;
-    fn get_buffered(self) -> Self::Buffered;
-}
-#[cfg(not(unix))]
-trait WordCountable: Read {
-    type Buffered: BufRead;
-    fn get_buffered(self) -> Self::Buffered;
-}
-
-impl WordCountable for StdinLock<'_> {
-    type Buffered = Self;
-
-    fn get_buffered(self) -> Self::Buffered {
-        self
-    }
-}
-impl WordCountable for File {
-    type Buffered = BufReader<Self>;
-
-    fn get_buffered(self) -> Self::Buffered {
-        BufReader::new(self)
     }
 }
 
@@ -270,25 +244,16 @@ fn word_count_from_reader<T: WordCountable>(
     let mut byte_count: usize = 0;
     let mut char_count: usize = 0;
     let mut longest_line_length: usize = 0;
-    let mut raw_line = Vec::new();
     let mut ends_lf: bool;
 
     // reading from a TTY seems to raise a condition on, rather than return Some(0) like a file.
     // hence the option wrapped in a result here
-    let mut buffered_reader = reader.get_buffered();
-    loop {
-        match buffered_reader.read_until(LF, &mut raw_line) {
-            Ok(n) => {
-                if n == 0 {
-                    break;
-                }
-            }
-            Err(ref e) => {
-                if !raw_line.is_empty() {
-                    show_warning!("Error while reading {}: {}", path, e);
-                } else {
-                    break;
-                }
+    for line_result in reader.lines() {
+        let raw_line = match line_result {
+            Ok(l) => l,
+            Err(e) => {
+                show_warning!("Error while reading {}: {}", path, e);
+                continue;
             }
         };
 
@@ -317,8 +282,6 @@ fn word_count_from_reader<T: WordCountable>(
                 longest_line_length = current_char_count - (ends_lf as usize);
             }
         }
-
-        raw_line.truncate(0);
     }
 
     Ok(WordCount {
