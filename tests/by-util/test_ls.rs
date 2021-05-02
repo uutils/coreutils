@@ -57,6 +57,7 @@ fn test_ls_a() {
     // Using the present working directory
     scene
         .ucmd()
+        .arg("-1")
         .succeeds()
         .stdout_does_not_contain(".test-1")
         .stdout_does_not_contain("..")
@@ -65,6 +66,7 @@ fn test_ls_a() {
     scene
         .ucmd()
         .arg("-a")
+        .arg("-1")
         .succeeds()
         .stdout_contains(&".test-1")
         .stdout_contains(&"..")
@@ -73,6 +75,7 @@ fn test_ls_a() {
     scene
         .ucmd()
         .arg("-A")
+        .arg("-1")
         .succeeds()
         .stdout_contains(".test-1")
         .stdout_does_not_contain("..")
@@ -81,6 +84,7 @@ fn test_ls_a() {
     // Using a subdirectory
     scene
         .ucmd()
+        .arg("-1")
         .arg("some-dir")
         .succeeds()
         .stdout_does_not_contain(".test-2")
@@ -90,6 +94,7 @@ fn test_ls_a() {
     scene
         .ucmd()
         .arg("-a")
+        .arg("-1")
         .arg("some-dir")
         .succeeds()
         .stdout_contains(&".test-2")
@@ -100,6 +105,7 @@ fn test_ls_a() {
     scene
         .ucmd()
         .arg("-A")
+        .arg("-1")
         .arg("some-dir")
         .succeeds()
         .stdout_contains(".test-2")
