@@ -149,7 +149,7 @@ impl TranslateOperation {
         TranslateOperation {
             translate_map: map,
             complement,
-            s2_last: s2_prev,
+            s2_last: set2.last().unwrap_or(s2_prev),
         }
     }
 }

@@ -87,6 +87,26 @@ fn test_complement3() {
 }
 
 #[test]
+fn test_complement4() {
+    // $ echo -n '0x1y2z3' | tr -c '0-@' '*-~'
+    // 0~1~2~3
+    new_ucmd!()
+        .args(&["-c", "0-@", "*-~"])
+        .pipe_in("0x1y2z3")
+        .run()
+        .stdout_is("0~1~2~3");
+
+    // TODO: fix this
+    // $ echo '0x1y2z3' | tr -c '\0-@' '*-~'
+    // 0a1b2c3
+    // new_ucmd!()
+    //     .args(&["-c", "\\0-@", "*-~"])
+    //     .pipe_in("0x1y2z3")
+    //     .run()
+    //     .stdout_is("0a1b2c3");
+}
+
+#[test]
 fn test_squeeze() {
     new_ucmd!()
         .args(&["-s", "a-z"])
