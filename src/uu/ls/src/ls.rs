@@ -39,8 +39,6 @@ use std::{
     time::Duration,
 };
 
-use chrono;
-
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 
 use unicode_width::UnicodeWidthStr;
