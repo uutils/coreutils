@@ -106,9 +106,9 @@ dependencies = [
 
 [[package]]
 name = "bstr"
-version = "0.2.15"
+version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a40b47ad93e1a5404e6c18dec46b628214fee441c70f4ab5d6942142cc268a3d"
+checksum = "90682c8d613ad3373e66de8c6411e0ae2ab2571e879d2efbf73558cc66f21279"
 dependencies = [
  "lazy_static",
  "memchr 2.4.0",
@@ -1277,9 +1277,9 @@ dependencies = [
 
 [[package]]
 name = "regex"
-version = "1.5.1"
+version = "1.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a068b905b8cb93815aa3069ae48653d90f382308aebd1d33d940ac1f1d771e2d"
+checksum = "ce5f1ceb7f74abbce32601642fcf8e8508a8a8991e0621c7d750295b9095702b"
 dependencies = [
  "aho-corasick",
  "memchr 2.4.0",
@@ -1297,9 +1297,9 @@ dependencies = [
 
 [[package]]
 name = "regex-syntax"
-version = "0.6.24"
+version = "0.6.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00efb87459ba4f6fb2169d20f68565555688e1250ee6825cdf6254f8b48fafb2"
+checksum = "f497285884f3fcff424ffc933e56d7cbca511def0c9831a7f9b5f6153e3cc89b"
 
 [[package]]
 name = "remove_dir_all"
@@ -1682,6 +1682,8 @@ dependencies = [
 name = "uu_base64"
 version = "0.0.6"
 dependencies = [
+ "clap",
+ "uu_base32",
  "uucore",
  "uucore_procs",
 ]
@@ -2044,6 +2046,7 @@ dependencies = [
 name = "uu_link"
 version = "0.0.6"
 dependencies = [
+ "clap",
  "libc",
  "uucore",
  "uucore_procs",
@@ -2241,6 +2244,7 @@ dependencies = [
 name = "uu_pinky"
 version = "0.0.6"
 dependencies = [
+ "clap",
  "uucore",
  "uucore_procs",
 ]
