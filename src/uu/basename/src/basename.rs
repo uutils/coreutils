@@ -71,7 +71,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if !matches.is_present(options::NAME) {
         crash!(
             1,
-            "{0}: {1}\nTry '{0} --help' for more information.",
+            "{1}\nTry '{0} --help' for more information.",
             executable!(),
             "missing operand"
         );
@@ -85,7 +85,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if !multiple_paths && matches.occurrences_of(options::NAME) > 2 {
         crash!(
             1,
-            "{0}: extra operand '{1}'\nTry '{0} --help' for more information.",
+            "extra operand '{1}'\nTry '{0} --help' for more information.",
             executable!(),
             matches.values_of(options::NAME).unwrap().nth(2).unwrap()
         );
