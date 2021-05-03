@@ -105,8 +105,22 @@ fn test_no_args() {
 }
 
 #[test]
+fn test_no_args_output() {
+    new_ucmd!()
+        .fails()
+        .stderr_is("basename: error: missing operand\nTry 'basename --help' for more information.");
+}
+
+#[test]
 fn test_too_many_args() {
     expect_error(vec!["a", "b", "c"]);
+}
+
+#[test]
+fn test_too_many_args_output() {
+    new_ucmd!().args(&["a", "b", "c"]).fails().stderr_is(
+        "basename: error: extra operand 'c'\nTry 'basename --help' for more information.",
+    );
 }
 
 fn test_invalid_utf8_args(os_str: &OsStr) {
