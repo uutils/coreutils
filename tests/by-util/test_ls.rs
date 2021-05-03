@@ -308,6 +308,31 @@ fn test_ls_long() {
     }
 }
 
+#[cfg(unix)]
+#[test]
+fn test_ls_long_total_size() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch(&at.plus_as_string("test-long"));
+    at.append("test-long", "1");
+    at.touch(&at.plus_as_string("test-long2"));
+    at.append("test-long2", "2");
+
+    for arg in &["-l", "--long", "--format=long", "--format=verbose"] {
+        let result = scene.ucmd().arg(arg).succeeds();
+        result.stdout_contains("total 8");
+
+        for arg2 in &["-h", "--human-readable", "--si"] {
+            let result = scene.ucmd().arg(arg).arg(arg2).succeeds();
+            result.stdout_contains(if *arg2 == "--si" {
+                "total 8.2k"
+            } else {
+                "total 8.0K"
+            });
+        }
+    }
+}
+
 #[test]
 fn test_ls_long_formats() {
     let scene = TestScenario::new(util_name!());
