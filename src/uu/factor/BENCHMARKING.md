@@ -32,3 +32,34 @@ as possible:
 [lemire]: https://lemire.me/blog/2018/01/16/microbenchmarking-calls-for-idealized-conditions/
 [isolate a **physical** core]: https://pyperf.readthedocs.io/en/latest/system.html#isolate-cpus-on-linux
 [frequency stays constant]: XXXTODO
+
+
+### Guidance for designing µbenchmarks
+
+*Note:* this guidance is specific to `factor` and takes its application domain
+into account; do not expect it to generalise to other projects.  It is based
+on Daniel Lemire's [*Microbenchmarking calls for idealized conditions*][lemire],
+which I recommend reading if you want to add benchmarks to `factor`.
+
+1. Select a small, self-contained, deterministic component  
+   `gcd` and `table::factor` are good example of such:
+   - no I/O or access to external data structures ;
+   - no call into other components ;
+   - behaviour is deterministic: no RNG, no concurrency, ... ;
+   - the test's body is *fast* (~100ns for `gcd`, ~10µs for `factor::table`),
+     so each sample takes a very short time, minimizing variability and
+     maximizing the numbers of samples we can take in a given time.
+
+2. Benchmarks are immutable (once merged in `uutils`)  
+   Modifying a benchmark means previously-collected values cannot meaningfully
+   be compared, silently giving nonsensical results.  If you must modify an
+   existing benchmark, rename it.
+
+3. Test common cases  
+   We are interested in overall performance, rather than specific edge-cases;
+   use **reproducibly-randomised inputs**, sampling from either all possible
+   input values or some subset of interest.
+
+4. Use [`criterion`], `criterion::black_box`, ...  
+   `criterion` isn't perfect, but it is also much better than ad-hoc
+   solutions in each benchmark.
