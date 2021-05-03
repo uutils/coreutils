@@ -317,6 +317,20 @@ fn test_multi_files() {
         .stdout_is(expected_result(&args));
 }
 
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_vendor = "apple"))]
+#[test]
+fn test_one_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "TEST_FILE.mp4";
+    at.touch(file);
+
+    ucmd.arg(file)
+        .succeeds()
+        .stdout_contains(format!("File: `{}'", file))
+        .stdout_contains(format!("Size: 0"))
+        .stdout_contains(format!("Access: (0644/-rw-r--r--)"));
+}
+
 #[test]
 #[cfg(target_os = "linux")]
 fn test_printf() {
