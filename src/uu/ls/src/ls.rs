@@ -1179,31 +1179,32 @@ impl PathData {
 }
 
 fn list(locs: Vec<String>, config: Config) -> i32 {
-    let number_of_locs = locs.len();
-
     let mut files = Vec::<PathData>::new();
     let mut dirs = Vec::<PathData>::new();
     let mut has_failed = false;
 
     let mut out = BufWriter::new(stdout());
 
-    for loc in locs {
+    for loc in &locs {
         let p = PathBuf::from(&loc);
         if !p.exists() {
             show_error!("'{}': {}", &loc, "No such file or directory");
-            // We found an error, the return code of ls should not be 0
-            // And no need to continue the execution
+            /*
+            We found an error, the return code of ls should not be 0
+            And no need to continue the execution
+            */
             has_failed = true;
             continue;
         }
 
         let path_data = PathData::new(p, None, None, &config, true);
 
-        let show_dir_contents = if let Some(ft) = path_data.file_type() {
-            !config.directory && ft.is_dir()
-        } else {
-            has_failed = true;
-            false
+        let show_dir_contents = match path_data.file_type() {
+            Some(ft) => !config.directory && ft.is_dir(),
+            None => {
+                has_failed = true;
+                false
+            }
         };
 
         if show_dir_contents {
@@ -1217,7 +1218,7 @@ fn list(locs: Vec<String>, config: Config) -> i32 {
 
     sort_entries(&mut dirs, &config);
     for dir in dirs {
-        if number_of_locs > 1 {
+        if locs.len() > 1 {
             let _ = writeln!(out, "\n{}:", dir.p_buf.display());
         }
         enter_directory(&dir, &config, &mut out);
@@ -1331,7 +1332,7 @@ fn display_dir_entry_size(entry: &PathData, config: &Config) -> (usize, usize) {
     if let Some(md) = entry.md() {
         (
             display_symlink_count(&md).len(),
-            display_file_size(&md, config).len(),
+            display_file_size(md.len(), config).len(),
         )
     } else {
         (0, 0)
@@ -1344,14 +1345,23 @@ fn pad_left(string: String, count: usize) -> String {
 
 fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) {
     if config.format == Format::Long {
-        let (mut max_links, mut max_size) = (1, 1);
+        let (mut max_links, mut max_width) = (1, 1);
+        let mut total_size = 0;
+
         for item in items {
-            let (links, size) = display_dir_entry_size(item, config);
+            let (links, width) = display_dir_entry_size(item, config);
             max_links = links.max(max_links);
-            max_size = size.max(max_size);
+            max_width = width.max(max_width);
+            total_size += item.md().map_or(0, |md| display_block_size(md, config));
         }
+
+        #[cfg(unix)]
+        if total_size > 0 {
+            let _ = writeln!(out, "total {}", display_file_size(total_size, config));
+        }
+
         for item in items {
-            display_item_long(item, max_links, max_size, config, out);
+            display_item_long(item, max_links, max_width, config, out);
         }
     } else {
         let names = items.iter().filter_map(|i| display_file_name(&i, config));
@@ -1394,6 +1404,26 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             }
         }
     }
+}
+
+fn display_block_size(md: &Metadata, config: &Config) -> u64 {
+    /* GNU ls will display sizes in terms of block size
+       md.len() will differ from this value when the file has some holes
+    */
+    #[cfg(unix)]
+    {
+        // hard-coded for now - enabling setting this remains a TODO
+        let ls_block_size = 1024;
+        return match config.size_format {
+            SizeFormat::Binary => md.blocks() * 512,
+            SizeFormat::Decimal => md.blocks() * 512,
+            SizeFormat::Bytes => md.blocks() * 512 / ls_block_size,
+        };
+    }
+
+    #[cfg(not(unix))]
+    // unsupported for windows at the moment
+    0
 }
 
 fn display_grid(
@@ -1471,7 +1501,7 @@ fn display_item_long(
     let _ = writeln!(
         out,
         " {} {} {}",
-        pad_left(display_file_size(&md, config), max_size),
+        pad_left(display_file_size(md.len(), config), max_size),
         display_date(&md, config),
         // unwrap is fine because it fails when metadata is not available
         // but we already know that it is because it's checked at the
@@ -1626,13 +1656,13 @@ fn format_prefixed(prefixed: NumberPrefix<f64>) -> String {
     }
 }
 
-fn display_file_size(metadata: &Metadata, config: &Config) -> String {
+fn display_file_size(len: u64, config: &Config) -> String {
     // NOTE: The human-readable behaviour deviates from the GNU ls.
     // The GNU ls uses binary prefixes by default.
     match config.size_format {
-        SizeFormat::Binary => format_prefixed(NumberPrefix::binary(metadata.len() as f64)),
-        SizeFormat::Decimal => format_prefixed(NumberPrefix::decimal(metadata.len() as f64)),
-        SizeFormat::Bytes => metadata.len().to_string(),
+        SizeFormat::Binary => format_prefixed(NumberPrefix::binary(len as f64)),
+        SizeFormat::Decimal => format_prefixed(NumberPrefix::decimal(len as f64)),
+        SizeFormat::Bytes => len.to_string(),
     }
 }
 
