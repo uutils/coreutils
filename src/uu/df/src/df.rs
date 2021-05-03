@@ -916,6 +916,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             "Use%",
         ]
     });
+    if cfg!(target_os = "macos") && !opt.show_inode_instead {
+        header.insert(header.len() - 1, "Capacity");
+    }
     header.push("Mounted on");
 
     for (idx, title) in header.iter().enumerate() {
@@ -970,6 +973,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 "{0: >12} ",
                 human_readable(free_size, opt.human_readable_base)
             );
+            if cfg!(target_os = "macos") {
+                let used = fs.usage.blocks - fs.usage.bfree;
+                let blocks = used + fs.usage.bavail;
+                print!("{0: >12} ", use_size(used, blocks));
+            }
             print!("{0: >5} ", use_size(free_size, total_size));
         }
         print!("{0: <16}", fs.mountinfo.mount_dir);
