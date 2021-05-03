@@ -1,6 +1,6 @@
-use std::convert::TryInto;
 use array_init::array_init;
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use std::convert::TryInto;
 use uu_factor::{table::*, Factors};
 
 fn table(c: &mut Criterion) {
@@ -22,6 +22,7 @@ fn table(c: &mut Criterion) {
     };
 
     let mut group = c.benchmark_group("table");
+    group.throughput(Throughput::Elements(INPUT_SIZE as _));
     for a in inputs.take(10) {
         let a_str = format!("{:?}", a);
         group.bench_with_input(
