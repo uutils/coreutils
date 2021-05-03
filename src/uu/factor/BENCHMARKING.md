@@ -25,7 +25,6 @@ as possible:
   to it, so it won't be preempted in the middle of a measurement ;
 - disable ASLR by running `setarch -R cargo bench`, so we can compare results
   across multiple executions.  
-  **TODO**: check this propagates to the benchmark process
 
 
 [`criterion`]: https://bheisler.github.io/criterion.rs/book/index.html

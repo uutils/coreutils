@@ -4,6 +4,9 @@ use std::convert::TryInto;
 use uu_factor::{table::*, Factors};
 
 fn table(c: &mut Criterion) {
+    #[cfg(target_os = "linux")]
+    check_personality();
+
     const INPUT_SIZE: usize = 128;
     assert!(
         INPUT_SIZE % CHUNK_SIZE == 0,
@@ -53,6 +56,30 @@ fn table(c: &mut Criterion) {
         );
     }
     group.finish()
+}
+
+#[cfg(target_os = "linux")]
+fn check_personality() {
+    use std::fs;
+    const ADDR_NO_RANDOMIZE: u64 = 0x0040000;
+    const PERSONALITY_PATH: &'static str = "/proc/self/personality";
+
+    let p_string = fs::read_to_string(PERSONALITY_PATH)
+        .expect(&format!("Couldn't read '{}'", PERSONALITY_PATH))
+        .strip_suffix("\n")
+        .unwrap()
+        .to_owned();
+
+    let personality = u64::from_str_radix(&p_string, 16).expect(&format!(
+        "Expected a hex value for personality, got '{:?}'",
+        p_string
+    ));
+    if personality & ADDR_NO_RANDOMIZE == 0 {
+        eprintln!(
+            "WARNING: Benchmarking with ASLR enabled (personality is {:x}), results might not be reproducible.",
+            personality
+        );
+    }
 }
 
 criterion_group!(benches, table);
