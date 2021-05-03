@@ -63,3 +63,52 @@ which I recommend reading if you want to add benchmarks to `factor`.
 4. Use [`criterion`], `criterion::black_box`, ...  
    `criterion` isn't perfect, but it is also much better than ad-hoc
    solutions in each benchmark.
+
+
+## Wishlist
+
+### Configurable statistical estimators
+
+`criterion` always uses the arithmetic average as estimator; in µbenchmarks,
+where the code under test is fully deterministic and the measurements are
+subject to additive, positive noise, [the minimum is more appropriate][lemire].
+
+
+### CI & reproducible performance testing
+
+Measuring performance on real hardware is important, as it relates directly
+to what users of `factor` experience; however, such measurements are subject
+to the constraints of the real-world, and aren't perfectly reproducible.
+Moreover, the mitigations for it (described above) aren't achievable in
+virtualized, multi-tenant environments such as CI.
+
+Instead, we could run the µbenchmarks in a simulated CPU with [`cachegrind`],
+measure execution “time” in that model (in CI), and use it to detect and report
+performance improvements and regressions.
+
+[`iai`] is an implementation of this idea for Rust.
+
+[`cachegrind`]: https://www.valgrind.org/docs/manual/cg-manual.html
+[`iai`]: https://bheisler.github.io/criterion.rs/book/iai/iai.html
+
+
+### Comparing randomised implementations across multiple inputs
+
+`factor` is a challenging target for system benchmarks as it combines two
+characteristics:
+
+1. integer factoring algorithms are randomised, with large variance in
+   execution time ;
+
+2. various inputs also have large differences in factoring time, that
+   corresponds to no natural, linear ordering of the inputs.
+
+
+If (1) was untrue (i.e. if execution time wasn't random), we could faithfully
+compare 2 implementations (2 successive versions, or `uutils` and GNU) using
+a scatter plot, where each axis corresponds to the perf. of one implementation.
+
+Similarly, without (2) we could plot numbers on the X axis and their factoring
+time on the Y axis, using multiple lines for various quantiles.  The large
+differences in factoring times for successive numbers, mean that such a plot
+would be unreadable.
