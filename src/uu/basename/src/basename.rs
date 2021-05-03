@@ -77,10 +77,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         );
     }
 
-    let opt_s = matches.is_present(options::SUFFIX);
-    let opt_a = matches.is_present(options::MULTIPLE);
-    let opt_z = matches.is_present(options::ZERO);
-    let multiple_paths = opt_s || opt_a;
+    let opt_suffix = matches.is_present(options::SUFFIX);
+    let opt_multiple = matches.is_present(options::MULTIPLE);
+    let opt_zero = matches.is_present(options::ZERO);
+    let multiple_paths = opt_suffix || opt_multiple;
     // too many arguments
     if !multiple_paths && matches.occurrences_of(options::NAME) > 2 {
         crash!(
@@ -91,9 +91,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         );
     }
 
-    let suffix = if opt_s {
+    let suffix = if opt_suffix {
         matches.value_of(options::SUFFIX).unwrap()
-    } else if !opt_a && matches.occurrences_of(options::NAME) > 1 {
+    } else if !opt_multiple && matches.occurrences_of(options::NAME) > 1 {
         matches.values_of(options::NAME).unwrap().nth(1).unwrap()
     } else {
         ""
@@ -109,7 +109,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         matches.values_of(options::NAME).unwrap().take(1).collect()
     };
 
-    let line_ending = if opt_z { "\0" } else { "\n" };
+    let line_ending = if opt_zero { "\0" } else { "\n" };
     for path in paths {
         print!("{}{}", basename(&path, &suffix), line_ending);
     }
