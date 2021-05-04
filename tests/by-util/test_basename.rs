@@ -2,6 +2,29 @@ use crate::common::util::*;
 use std::ffi::OsStr;
 
 #[test]
+fn test_help() {
+    for help_flg in vec!["-h", "--help"] {
+        new_ucmd!()
+            .arg(&help_flg)
+            .succeeds()
+            .no_stderr()
+            .stdout_contains("USAGE:");
+    }
+}
+
+#[test]
+fn test_version() {
+    for version_flg in vec!["-V", "--version"] {
+        assert!(new_ucmd!()
+            .arg(&version_flg)
+            .succeeds()
+            .no_stderr()
+            .stdout_str()
+            .starts_with("basename"));
+    }
+}
+
+#[test]
 fn test_directory() {
     new_ucmd!()
         .args(&["/root/alpha/beta/gamma/delta/epsilon/omega/"])
@@ -82,8 +105,22 @@ fn test_no_args() {
 }
 
 #[test]
+fn test_no_args_output() {
+    new_ucmd!()
+        .fails()
+        .stderr_is("basename: error: missing operand\nTry 'basename --help' for more information.");
+}
+
+#[test]
 fn test_too_many_args() {
     expect_error(vec!["a", "b", "c"]);
+}
+
+#[test]
+fn test_too_many_args_output() {
+    new_ucmd!().args(&["a", "b", "c"]).fails().stderr_is(
+        "basename: error: extra operand 'c'\nTry 'basename --help' for more information.",
+    );
 }
 
 fn test_invalid_utf8_args(os_str: &OsStr) {
