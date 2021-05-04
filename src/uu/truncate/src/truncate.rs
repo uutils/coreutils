@@ -16,6 +16,7 @@ use std::path::Path;
 
 #[derive(Eq, PartialEq)]
 enum TruncateMode {
+    Absolute,
     Reference,
     Extend,
     Reduce,
@@ -131,18 +132,30 @@ fn truncate(
     size: Option<String>,
     filenames: Vec<String>,
 ) {
-    let (refsize, mode) = match reference {
-        Some(rfilename) => {
-            let _ = match File::open(Path::new(&rfilename)) {
+    let (modsize, mode) = match size {
+        Some(size_string) => parse_size(&size_string),
+        None => (0, TruncateMode::Reference),
+    };
+
+    let refsize = match reference {
+        Some(ref rfilename) => {
+            match mode {
+                // Only Some modes work with a reference
+                TruncateMode::Reference => (), //No --size was given
+                TruncateMode::Extend => (),
+                TruncateMode::Reduce => (),
+                _ => crash!(1, "you must specify a relative ‘--size’ with ‘--reference’"),
+            };
+            let _ = match File::open(Path::new(rfilename)) {
                 Ok(m) => m,
                 Err(f) => crash!(1, "{}", f.to_string()),
             };
             match metadata(rfilename) {
-                Ok(meta) => (meta.len(), TruncateMode::Reference),
+                Ok(meta) => meta.len(),
                 Err(f) => crash!(1, "{}", f.to_string()),
             }
         }
-        None => parse_size(size.unwrap().as_ref()),
+        None => 0,
     };
     for filename in &filenames {
         let path = Path::new(filename);
@@ -153,33 +166,37 @@ fn truncate(
             .open(path)
         {
             Ok(file) => {
-                let fsize = match metadata(filename) {
-                    Ok(meta) => meta.len(),
-                    Err(f) => {
-                        show_warning!("{}", f.to_string());
-                        continue;
-                    }
+                let fsize = match reference {
+                    Some(_) => refsize,
+                    None => match metadata(filename) {
+                        Ok(meta) => meta.len(),
+                        Err(f) => {
+                            show_warning!("{}", f.to_string());
+                            continue;
+                        }
+                    },
                 };
                 let tsize: u64 = match mode {
-                    TruncateMode::Reference => refsize,
-                    TruncateMode::Extend => fsize + refsize,
-                    TruncateMode::Reduce => fsize - refsize,
+                    TruncateMode::Absolute => modsize,
+                    TruncateMode::Reference => fsize,
+                    TruncateMode::Extend => fsize + modsize,
+                    TruncateMode::Reduce => fsize - modsize,
                     TruncateMode::AtMost => {
-                        if fsize > refsize {
-                            refsize
+                        if fsize > modsize {
+                            modsize
                         } else {
                             fsize
                         }
                     }
                     TruncateMode::AtLeast => {
-                        if fsize < refsize {
-                            refsize
+                        if fsize < modsize {
+                            modsize
                         } else {
                             fsize
                         }
                     }
-                    TruncateMode::RoundDown => fsize - fsize % refsize,
-                    TruncateMode::RoundUp => fsize + fsize % refsize,
+                    TruncateMode::RoundDown => fsize - fsize % modsize,
+                    TruncateMode::RoundUp => fsize + fsize % modsize,
                 };
                 match file.set_len(tsize) {
                     Ok(_) => {}
@@ -200,10 +217,10 @@ fn parse_size(size: &str) -> (u64, TruncateMode) {
         '>' => TruncateMode::AtLeast,
         '/' => TruncateMode::RoundDown,
         '*' => TruncateMode::RoundUp,
-        _ => TruncateMode::Reference, /* assume that the size is just a number */
+        _ => TruncateMode::Absolute, /* assume that the size is just a number */
     };
     let bytes = {
-        let mut slice = if mode == TruncateMode::Reference {
+        let mut slice = if mode == TruncateMode::Absolute {
             &clean_size
         } else {
             &clean_size[1..]

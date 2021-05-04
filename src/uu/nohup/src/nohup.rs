@@ -20,6 +20,7 @@ use std::io::Error;
 use std::os::unix::prelude::*;
 use std::path::{Path, PathBuf};
 use uucore::fs::{is_stderr_interactive, is_stdin_interactive, is_stdout_interactive};
+use uucore::InvalidEncodingHandling;
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Run COMMAND ignoring hangup signals.";
@@ -42,6 +43,9 @@ mod options {
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     let matches = App::new(executable!())
         .version(VERSION)

@@ -14,6 +14,7 @@ use clap::{App, Arg};
 use std::fs::File;
 use std::io::{stdin, Read, Result};
 use std::path::Path;
+use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "sum";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -94,7 +95,9 @@ mod options {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     let matches = App::new(executable!())
         .name(NAME)

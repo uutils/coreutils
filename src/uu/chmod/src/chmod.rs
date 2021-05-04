@@ -17,6 +17,7 @@ use std::path::Path;
 use uucore::fs::display_permissions_unix;
 #[cfg(not(windows))]
 use uucore::mode;
+use uucore::InvalidEncodingHandling;
 use walkdir::WalkDir;
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -49,7 +50,9 @@ fn get_long_usage() -> String {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let mut args = args.collect_str();
+    let mut args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     // Before we can parse 'args' with clap (and previously getopts),
     // a possible MODE prefix '-' needs to be removed (e.g. "chmod -x FILE").

@@ -17,6 +17,7 @@ use std::io;
 use std::io::prelude::*;
 use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
+use uucore::InvalidEncodingHandling;
 
 #[macro_use]
 extern crate uucore;
@@ -270,7 +271,9 @@ pub mod options {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
 
     let usage = get_usage();
 

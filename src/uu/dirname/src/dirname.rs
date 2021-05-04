@@ -10,36 +10,44 @@ extern crate uucore;
 
 use clap::{App, Arg};
 use std::path::Path;
+use uucore::InvalidEncodingHandling;
 
-static NAME: &str = "dirname";
-static SYNTAX: &str = "[OPTION] NAME...";
-static SUMMARY: &str = "strip last component from file name";
+static ABOUT: &str = "strip last component from file name";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
-static LONG_HELP: &str = "
- Output each NAME with its last non-slash component and trailing slashes
- removed; if NAME contains no /'s, output '.' (meaning the current
- directory).
-";
 
 mod options {
     pub const ZERO: &str = "zero";
     pub const DIR: &str = "dir";
 }
 
+fn get_usage() -> String {
+    format!("{0} [OPTION] NAME...", executable!())
+}
+
+fn get_long_usage() -> String {
+    String::from(
+        "Output each NAME with its last non-slash component and trailing slashes
+        removed; if NAME contains no /'s, output '.' (meaning the current directory).",
+    )
+}
+
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
+
+    let usage = get_usage();
+    let after_help = get_long_usage();
 
     let matches = App::new(executable!())
-        .name(NAME)
-        .usage(SYNTAX)
-        .about(SUMMARY)
-        .after_help(LONG_HELP)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .after_help(&after_help[..])
         .version(VERSION)
         .arg(
             Arg::with_name(options::ZERO)
-                .short(options::ZERO)
+                .long(options::ZERO)
                 .short("z")
-                .takes_value(false)
                 .help("separate output with NUL rather than newline"),
         )
         .arg(Arg::with_name(options::DIR).hidden(true).multiple(true))

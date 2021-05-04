@@ -43,23 +43,74 @@ fn test_ls_a() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.touch(".test-1");
+    at.mkdir("some-dir");
+    at.touch(
+        Path::new("some-dir")
+            .join(".test-2")
+            .as_os_str()
+            .to_str()
+            .unwrap(),
+    );
 
-    let result = scene.ucmd().succeeds();
-    let stdout = result.stdout_str();
-    assert!(!stdout.contains(".test-1"));
-    assert!(!stdout.contains(".."));
+    let re_pwd = Regex::new(r"^\.\n").unwrap();
+
+    // Using the present working directory
+    scene
+        .ucmd()
+        .arg("-1")
+        .succeeds()
+        .stdout_does_not_contain(".test-1")
+        .stdout_does_not_contain("..")
+        .stdout_does_not_match(&re_pwd);
 
     scene
         .ucmd()
         .arg("-a")
+        .arg("-1")
         .succeeds()
         .stdout_contains(&".test-1")
-        .stdout_contains(&"..");
+        .stdout_contains(&"..")
+        .stdout_matches(&re_pwd);
 
-    let result = scene.ucmd().arg("-A").succeeds();
-    result.stdout_contains(".test-1");
-    let stdout = result.stdout_str();
-    assert!(!stdout.contains(".."));
+    scene
+        .ucmd()
+        .arg("-A")
+        .arg("-1")
+        .succeeds()
+        .stdout_contains(".test-1")
+        .stdout_does_not_contain("..")
+        .stdout_does_not_match(&re_pwd);
+
+    // Using a subdirectory
+    scene
+        .ucmd()
+        .arg("-1")
+        .arg("some-dir")
+        .succeeds()
+        .stdout_does_not_contain(".test-2")
+        .stdout_does_not_contain("..")
+        .stdout_does_not_match(&re_pwd);
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("-1")
+        .arg("some-dir")
+        .succeeds()
+        .stdout_contains(&".test-2")
+        .stdout_contains(&"..")
+        .no_stderr()
+        .stdout_matches(&re_pwd);
+
+    scene
+        .ucmd()
+        .arg("-A")
+        .arg("-1")
+        .arg("some-dir")
+        .succeeds()
+        .stdout_contains(".test-2")
+        .stdout_does_not_contain("..")
+        .stdout_does_not_match(&re_pwd);
 }
 
 #[test]
@@ -481,6 +532,20 @@ fn test_ls_sort_name() {
         .arg("--sort=name")
         .succeeds()
         .stdout_is(["test-1", "test-2", "test-3\n"].join(sep));
+
+    let scene_dot = TestScenario::new(util_name!());
+    let at = &scene_dot.fixtures;
+    at.touch(".a");
+    at.touch("a");
+    at.touch(".b");
+    at.touch("b");
+
+    scene_dot
+        .ucmd()
+        .arg("--sort=name")
+        .arg("-A")
+        .succeeds()
+        .stdout_is([".a", ".b", "a", "b\n"].join(sep));
 }
 
 #[test]
@@ -541,6 +606,113 @@ fn test_ls_long_ctime() {
         #[cfg(not(unix))]
         result.stdout_contains("???");
     }
+}
+
+#[test]
+#[ignore]
+fn test_ls_order_birthtime() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    /*
+        Here we make 2 files with a timeout in between.
+        After creating the first file try to sync it.
+        This ensures the file gets created immediately instead of being saved
+        inside the OS's IO operation buffer.
+        Without this, both files might accidentally be created at the same time.
+    */
+    at.make_file("test-birthtime-1").sync_all().unwrap();
+    at.make_file("test-birthtime-2").sync_all().unwrap();
+    at.open("test-birthtime-1");
+
+    let result = scene.ucmd().arg("--time=birth").arg("-t").run();
+
+    #[cfg(not(windows))]
+    assert_eq!(result.stdout_str(), "test-birthtime-2\ntest-birthtime-1\n");
+    #[cfg(windows)]
+    assert_eq!(result.stdout_str(), "test-birthtime-2  test-birthtime-1\n");
+}
+
+#[test]
+fn test_ls_styles() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("test");
+
+    let re_full = Regex::new(
+        r"[a-z-]* \d* \w* \w* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d* \+\d{4} test\n",
+    )
+    .unwrap();
+    let re_long =
+        Regex::new(r"[a-z-]* \d* \w* \w* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2} test\n").unwrap();
+    let re_iso = Regex::new(r"[a-z-]* \d* \w* \w* \d* \d{2}-\d{2} \d{2}:\d{2} test\n").unwrap();
+    let re_locale =
+        Regex::new(r"[a-z-]* \d* \w* \w* \d* [A-Z][a-z]{2} ( |\d)\d \d{2}:\d{2} test\n").unwrap();
+
+    //full-iso
+    let result = scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=full-iso")
+        .succeeds();
+    assert!(re_full.is_match(&result.stdout_str()));
+    //long-iso
+    let result = scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=long-iso")
+        .succeeds();
+    assert!(re_long.is_match(&result.stdout_str()));
+    //iso
+    let result = scene.ucmd().arg("-l").arg("--time-style=iso").succeeds();
+    assert!(re_iso.is_match(&result.stdout_str()));
+    //locale
+    let result = scene.ucmd().arg("-l").arg("--time-style=locale").succeeds();
+    assert!(re_locale.is_match(&result.stdout_str()));
+
+    //Overwrite options tests
+    let result = scene
+        .ucmd()
+        .arg("-l")
+        .arg("--time-style=long-iso")
+        .arg("--time-style=iso")
+        .succeeds();
+    assert!(re_iso.is_match(&result.stdout_str()));
+    let result = scene
+        .ucmd()
+        .arg("--time-style=iso")
+        .arg("--full-time")
+        .succeeds();
+    assert!(re_full.is_match(&result.stdout_str()));
+    let result = scene
+        .ucmd()
+        .arg("--full-time")
+        .arg("--time-style=iso")
+        .succeeds();
+    assert!(re_iso.is_match(&result.stdout_str()));
+
+    let result = scene
+        .ucmd()
+        .arg("--full-time")
+        .arg("--time-style=iso")
+        .arg("--full-time")
+        .succeeds();
+    assert!(re_full.is_match(&result.stdout_str()));
+
+    let result = scene
+        .ucmd()
+        .arg("--full-time")
+        .arg("-x")
+        .arg("-l")
+        .succeeds();
+    assert!(re_full.is_match(&result.stdout_str()));
+
+    at.touch("test2");
+    let result = scene.ucmd().arg("--full-time").arg("-x").succeeds();
+    #[cfg(not(windows))]
+    assert_eq!(result.stdout_str(), "test\ntest2\n");
+    #[cfg(windows)]
+    assert_eq!(result.stdout_str(), "test  test2\n");
 }
 
 #[test]
@@ -760,6 +932,18 @@ fn test_ls_color() {
         .arg("z")
         .succeeds()
         .stdout_only("");
+
+    // The colors must not mess up the grid layout
+    at.touch("b");
+    scene
+        .ucmd()
+        .arg("--color")
+        .arg("-w=15")
+        .succeeds()
+        .stdout_only(format!(
+            "{}  test-color\nb  {}\n",
+            a_with_colors, z_with_colors
+        ));
 }
 
 #[cfg(unix)]
@@ -1680,4 +1864,60 @@ fn test_ls_deref_command_line_dir() {
         .succeeds();
 
     assert!(!result.stdout_str().ends_with("sym_dir"));
+}
+
+#[test]
+fn test_ls_sort_extension() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    for filename in &[
+        "file1",
+        "file2",
+        "anotherFile",
+        ".hidden",
+        ".file.1",
+        ".file.2",
+        "file.1",
+        "file.2",
+        "anotherFile.1",
+        "anotherFile.2",
+        "file.ext",
+        "file.debug",
+        "anotherFile.ext",
+        "anotherFile.debug",
+    ] {
+        at.touch(filename);
+    }
+
+    let expected = vec![
+        ".",
+        "..",
+        ".hidden",
+        "anotherFile",
+        "file1",
+        "file2",
+        ".file.1",
+        "anotherFile.1",
+        "file.1",
+        ".file.2",
+        "anotherFile.2",
+        "file.2",
+        "anotherFile.debug",
+        "file.debug",
+        "anotherFile.ext",
+        "file.ext",
+        "", // because of '\n' at the end of the output
+    ];
+
+    let result = scene.ucmd().arg("-1aX").run();
+    assert_eq!(
+        result.stdout_str().split('\n').collect::<Vec<_>>(),
+        expected,
+    );
+
+    let result = scene.ucmd().arg("-1a").arg("--sort=extension").run();
+    assert_eq!(
+        result.stdout_str().split('\n').collect::<Vec<_>>(),
+        expected,
+    );
 }

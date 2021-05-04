@@ -36,6 +36,36 @@ fn test_long_format() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn test_long_format_multiple_users() {
+    let scene = TestScenario::new(util_name!());
+
+    let expected = scene
+        .cmd_keepenv(util_name!())
+        .env("LANGUAGE", "C")
+        .arg("-l")
+        .arg("root")
+        .arg("root")
+        .arg("root")
+        .succeeds();
+
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("root")
+        .arg("root")
+        .arg("root")
+        .succeeds()
+        .stdout_is(expected.stdout_str());
+}
+
+#[test]
+fn test_long_format_wo_user() {
+    // "no username specified; at least one must be specified when using -l"
+    new_ucmd!().arg("-l").fails().code_is(1);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn test_short_format_i() {
     // allow whitespace variation
     // * minor whitespace differences occur between platform built-in outputs; specifically, the number of trailing TABs may be variant

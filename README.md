@@ -429,6 +429,7 @@ This is an auto-generated table showing which binaries compile for each target-t
 |windows-msvc|i686|y|y|y|y|y| | | | |y|y|y|y|y|y|y|y|y| |y|y|y| |y|y|y|y| |y|y|y|y| | |y| |y|y|y|y|y| | |y|y|y| |y| |y|y|y|y| | |y|y|y|y|y|y|y|y|y|y|y|y|y|y|y| | |y|y|y|y|y|y| |y|y|y|y|y| |y|y|y| |y| |y| |y|y|
 |windows-gnu|x86_64|y|y|y|y|y| | | | |y|y|y|y|y|y|y|y|y| |y|y|y| |y|y|y|y| |y|y|y|y| | |y| |y|y|y|y|y| | |y|y|y| |y| |y|y|y|y| | |y|y|y|y|y|y|y|y|y|y|y|y|y|y|y| | |y|y|y|y|y|y| |y|y|y|y|y|y|y|y|y| |y| |y| |y|y|
 |windows-msvc|x86_64|y|y|y|y|y| | | | |y|y|y|y|y|y|y|y|y| |y|y|y| |y|y|y|y| |y|y|y|y| | |y| |y|y|y|y|y| | |y|y|y| |y| |y|y|y|y| | |y|y|y|y|y|y|y|y|y|y|y|y|y|y|y| | |y|y|y|y|y|y| |y|y|y|y|y| |y|y|y| |y| |y| |y|y|
+|apple MacOS|aarch64|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y| |y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|
 |apple MacOS|x86_64|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y| |y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|
 |freebsd|x86_64|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|
 |netbsd|x86_64|y|y|y|y|y|y|y|y| |y|y|y|y|y|y| |y|y|y|y|y|y| |y|y|y|y|y|y|y|y|y| |y|y| |y|y|y|y|y|y|y|y|y|y|y|y| |y|y|y|y|y| |y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y| |y|y|y|y|y|y| |y|y|y| | |y| |y|y|

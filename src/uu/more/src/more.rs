@@ -17,6 +17,7 @@ use std::io::{stdin, stdout, BufRead, BufReader, Read, Write};
 extern crate nix;
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 use nix::sys::termios::{self, LocalFlags, SetArg};
+use uucore::InvalidEncodingHandling;
 
 #[cfg(target_os = "redox")]
 extern crate redox_termios;
@@ -38,6 +39,9 @@ fn get_usage() -> String {
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     let matches = App::new(executable!())
         .version(VERSION)

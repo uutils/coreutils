@@ -20,6 +20,7 @@ use std::str::from_utf8;
 use std::thread::sleep;
 use std::time::Duration;
 use tempfile::TempDir;
+use uucore::{Args, InvalidEncodingHandling};
 
 #[cfg(windows)]
 static PROGNAME: &str = concat!(env!("CARGO_PKG_NAME"), ".exe");
@@ -761,7 +762,8 @@ impl UCommand {
             panic!("{}", ALREADY_RUN);
         }
         self.comm_string.push_str(" ");
-        self.comm_string.push_str(arg.as_ref().to_str().unwrap());
+        self.comm_string
+            .push_str(arg.as_ref().to_str().unwrap_or_default());
         self.raw.arg(arg.as_ref());
         self
     }
@@ -772,9 +774,15 @@ impl UCommand {
         if self.has_run {
             panic!("{}", MULTIPLE_STDIN_MEANINGLESS);
         }
-        for s in args {
+        let strings = args
+            .iter()
+            .map(|s| s.as_ref().to_os_string())
+            .collect_str(InvalidEncodingHandling::Ignore)
+            .accept_any();
+
+        for s in strings {
             self.comm_string.push_str(" ");
-            self.comm_string.push_str(s.as_ref().to_str().unwrap());
+            self.comm_string.push_str(&s);
         }
 
         self.raw.args(args.as_ref());

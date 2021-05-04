@@ -14,6 +14,7 @@ use clap::{App, Arg};
 use std::env;
 use std::path::{Path, PathBuf};
 use uucore::fs::{canonicalize, CanonicalizeMode};
+use uucore::InvalidEncodingHandling;
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Convert TO destination to the relative path from the FROM dir.
@@ -30,7 +31,9 @@ fn get_usage() -> String {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
     let usage = get_usage();
 
     let matches = App::new(executable!())

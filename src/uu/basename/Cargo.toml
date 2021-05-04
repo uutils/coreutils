@@ -15,6 +15,7 @@ edition = "2018"
 path = "src/basename.rs"
 
 [dependencies]
+clap = "2.33.2"
 uucore = { version=">=0.0.8", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 

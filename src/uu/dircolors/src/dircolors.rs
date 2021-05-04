@@ -53,7 +53,9 @@ pub fn guess_syntax() -> OutputFmt {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
 
     let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
         .optflag("b", "sh", "output Bourne shell code to set LS_COLORS")
@@ -202,6 +204,8 @@ enum ParseState {
     Pass,
 }
 use std::collections::HashMap;
+use uucore::InvalidEncodingHandling;
+
 fn parse<T>(lines: T, fmt: OutputFmt, fp: &str) -> Result<String, String>
 where
     T: IntoIterator,

@@ -17,6 +17,21 @@ fn test_path_without_trailing_slashes() {
 }
 
 #[test]
+fn test_path_without_trailing_slashes_and_zero() {
+    new_ucmd!()
+        .arg("-z")
+        .arg("/root/alpha/beta/gamma/delta/epsilon/omega")
+        .succeeds()
+        .stdout_is("/root/alpha/beta/gamma/delta/epsilon\u{0}");
+
+    new_ucmd!()
+        .arg("--zero")
+        .arg("/root/alpha/beta/gamma/delta/epsilon/omega")
+        .succeeds()
+        .stdout_is("/root/alpha/beta/gamma/delta/epsilon\u{0}");
+}
+
+#[test]
 fn test_root() {
     new_ucmd!().arg("/").run().stdout_is("/\n");
 }

@@ -15,9 +15,13 @@
 #[macro_use]
 extern crate uucore;
 
+mod custom_str_cmp;
+mod external_sort;
 mod numeric_str_cmp;
 
 use clap::{App, Arg};
+use custom_str_cmp::custom_str_cmp;
+use external_sort::{ExternalSorter, ExternallySortable};
 use fnv::FnvHasher;
 use itertools::Itertools;
 use numeric_str_cmp::{numeric_str_cmp, NumInfo, NumInfoParseSettings};
@@ -25,6 +29,7 @@ use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use rayon::prelude::*;
 use semver::Version;
+use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
@@ -35,8 +40,10 @@ use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Lines, Read, Write};
 use std::mem::replace;
 use std::ops::Range;
 use std::path::Path;
+use std::path::PathBuf;
 use unicode_width::UnicodeWidthStr;
 use uucore::fs::is_stdin_interactive; // for Iterator::dedup()
+use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "sort";
 static ABOUT: &str = "Display sorted concatenation of all FILE(s).";
@@ -76,6 +83,8 @@ static OPT_RANDOM: &str = "random-sort";
 static OPT_ZERO_TERMINATED: &str = "zero-terminated";
 static OPT_PARALLEL: &str = "parallel";
 static OPT_FILES0_FROM: &str = "files0-from";
+static OPT_BUF_SIZE: &str = "buffer-size";
+static OPT_TMP_DIR: &str = "temporary-directory";
 
 static ARG_FILES: &str = "files";
 
@@ -84,6 +93,8 @@ static THOUSANDS_SEP: char = ',';
 
 static NEGATIVE: char = '-';
 static POSITIVE: char = '+';
+
+static DEFAULT_BUF_SIZE: usize = std::usize::MAX;
 
 #[derive(Eq, Ord, PartialEq, PartialOrd, Clone, Copy)]
 enum SortMode {
@@ -94,7 +105,7 @@ enum SortMode {
     Version,
     Default,
 }
-
+#[derive(Clone)]
 struct GlobalSettings {
     mode: SortMode,
     debug: bool,
@@ -115,6 +126,31 @@ struct GlobalSettings {
     separator: Option<char>,
     threads: String,
     zero_terminated: bool,
+    buffer_size: usize,
+    tmp_dir: PathBuf,
+    ext_sort: bool,
+}
+
+impl GlobalSettings {
+    // It's back to do conversions for command line opts!
+    // Probably want to do through numstrcmp somehow now?
+    fn human_numeric_convert(a: &str) -> usize {
+        let num_str = &a[get_leading_gen(a)];
+        let (_, suf_str) = a.split_at(num_str.len());
+        let num_usize = num_str
+            .parse::<usize>()
+            .expect("Error parsing buffer size: ");
+        let suf_usize: usize = match suf_str.to_uppercase().as_str() {
+            // SI Units
+            "B" => 1usize,
+            "K" => 1000usize,
+            "M" => 1000000usize,
+            "G" => 1000000000usize,
+            // GNU regards empty human numeric values as K by default
+            _ => 1000usize,
+        };
+        num_usize * suf_usize
+    }
 }
 
 impl Default for GlobalSettings {
@@ -139,10 +175,13 @@ impl Default for GlobalSettings {
             separator: None,
             threads: String::new(),
             zero_terminated: false,
+            buffer_size: DEFAULT_BUF_SIZE,
+            tmp_dir: PathBuf::new(),
+            ext_sort: false,
         }
     }
 }
-
+#[derive(Clone)]
 struct KeySettings {
     mode: SortMode,
     ignore_blanks: bool,
@@ -167,37 +206,29 @@ impl From<&GlobalSettings> for KeySettings {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
 /// Represents the string selected by a FieldSelector.
-enum SelectionRange {
-    /// If we had to transform this selection, we have to store a new string.
-    String(String),
-    /// If there was no transformation, we can store an index into the line.
-    ByIndex(Range<usize>),
+struct SelectionRange {
+    range: Range<usize>,
 }
 
 impl SelectionRange {
+    fn new(range: Range<usize>) -> Self {
+        Self { range }
+    }
+
     /// Gets the actual string slice represented by this Selection.
-    fn get_str<'a>(&'a self, line: &'a str) -> &'a str {
-        match self {
-            SelectionRange::String(string) => string.as_str(),
-            SelectionRange::ByIndex(range) => &line[range.to_owned()],
-        }
+    fn get_str<'a>(&self, line: &'a str) -> &'a str {
+        &line[self.range.to_owned()]
     }
 
     fn shorten(&mut self, new_range: Range<usize>) {
-        match self {
-            SelectionRange::String(string) => {
-                string.drain(new_range.end..);
-                string.drain(..new_range.start);
-            }
-            SelectionRange::ByIndex(range) => {
-                range.end = range.start + new_range.end;
-                range.start += new_range.start;
-            }
-        }
+        self.range.end = self.range.start + new_range.end;
+        self.range.start += new_range.start;
     }
 }
 
+#[derive(Serialize, Deserialize, Clone)]
 enum NumCache {
     AsF64(GeneralF64ParseResult),
     WithInfo(NumInfo),
@@ -218,7 +249,7 @@ impl NumCache {
         }
     }
 }
-
+#[derive(Serialize, Deserialize, Clone)]
 struct Selection {
     range: SelectionRange,
     num_cache: NumCache,
@@ -233,10 +264,18 @@ impl Selection {
 
 type Field = Range<usize>;
 
+#[derive(Serialize, Deserialize, Clone)]
 struct Line {
     line: String,
     // The common case is not to specify fields. Let's make this fast.
     selections: SmallVec<[Selection; 1]>,
+}
+
+impl ExternallySortable for Line {
+    fn get_size(&self) -> u64 {
+        // Currently 96 bytes, but that could change, so we get that size here
+        std::mem::size_of::<Line>() as u64
+    }
 }
 
 impl Line {
@@ -256,14 +295,8 @@ impl Line {
             .selectors
             .iter()
             .map(|selector| {
-                let range = selector.get_selection(&line, fields.as_deref());
-                let mut range = if let Some(transformed) =
-                    transform(&line[range.to_owned()], &selector.settings)
-                {
-                    SelectionRange::String(transformed)
-                } else {
-                    SelectionRange::ByIndex(range)
-                };
+                let mut range =
+                    SelectionRange::new(selector.get_selection(&line, fields.as_deref()));
                 let num_cache = if selector.settings.mode == SortMode::Numeric
                     || selector.settings.mode == SortMode::HumanNumeric
                 {
@@ -413,34 +446,6 @@ impl Line {
     }
 }
 
-/// Transform this line. Returns None if there's no need to transform.
-fn transform(line: &str, settings: &KeySettings) -> Option<String> {
-    let mut transformed = None;
-    if settings.ignore_case {
-        transformed = Some(line.to_uppercase());
-    }
-    if settings.ignore_blanks {
-        transformed = Some(
-            transformed
-                .as_deref()
-                .unwrap_or(line)
-                .trim_start()
-                .to_string(),
-        );
-    }
-    if settings.dictionary_order {
-        transformed = Some(remove_nondictionary_chars(
-            transformed.as_deref().unwrap_or(line),
-        ));
-    }
-    if settings.ignore_non_printing {
-        transformed = Some(remove_nonprinting_chars(
-            transformed.as_deref().unwrap_or(line),
-        ));
-    }
-    transformed
-}
-
 /// Tokenize a line into fields.
 fn tokenize(line: &str, separator: Option<char>) -> Vec<Field> {
     if let Some(separator) = separator {
@@ -488,6 +493,7 @@ fn tokenize_with_separator(line: &str, separator: char) -> Vec<Field> {
     tokens
 }
 
+#[derive(Clone)]
 struct KeyPosition {
     /// 1-indexed, 0 is invalid.
     field: usize,
@@ -577,7 +583,7 @@ impl KeyPosition {
         }
     }
 }
-
+#[derive(Clone)]
 struct FieldSelector {
     from: KeyPosition,
     to: Option<KeyPosition>,
@@ -768,7 +774,9 @@ With no FILE, or when FILE is -, read standard input.",
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
     let usage = get_usage();
     let mut settings: GlobalSettings = Default::default();
 
@@ -910,6 +918,22 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .value_name("NUM_THREADS"),
         )
         .arg(
+            Arg::with_name(OPT_BUF_SIZE)
+                .short("S")
+                .long(OPT_BUF_SIZE)
+                .help("sets the maximum SIZE of each segment in number of sorted items")
+                .takes_value(true)
+                .value_name("SIZE"),
+        )
+        .arg(
+            Arg::with_name(OPT_TMP_DIR)
+                .short("T")
+                .long(OPT_TMP_DIR)
+                .help("use DIR for temporaries, not $TMPDIR or /tmp")
+                .takes_value(true)
+                .value_name("DIR"),
+        )
+        .arg(
             Arg::with_name(OPT_FILES0_FROM)
                 .long(OPT_FILES0_FROM)
                 .help("read input from the files specified by NUL-terminated NUL_FILES")
@@ -977,6 +1001,29 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             .map(String::from)
             .unwrap_or_else(|| "0".to_string());
         env::set_var("RAYON_NUM_THREADS", &settings.threads);
+    }
+
+    if matches.is_present(OPT_BUF_SIZE) {
+        settings.buffer_size = {
+            let input = matches
+                .value_of(OPT_BUF_SIZE)
+                .map(String::from)
+                .unwrap_or(format!("{}", DEFAULT_BUF_SIZE));
+
+            GlobalSettings::human_numeric_convert(&input)
+        };
+        settings.ext_sort = true;
+    }
+
+    if matches.is_present(OPT_TMP_DIR) {
+        let result = matches
+            .value_of(OPT_TMP_DIR)
+            .map(String::from)
+            .unwrap_or(format!("{}", env::temp_dir().display()));
+        settings.tmp_dir = PathBuf::from(result);
+        settings.ext_sort = true;
+    } else {
+        settings.tmp_dir = env::temp_dir();
     }
 
     settings.zero_terminated = matches.is_present(OPT_ZERO_TERMINATED);
@@ -1063,10 +1110,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         });
     }
 
-    exec(files, &settings)
+    exec(files, settings)
 }
 
-fn exec(files: Vec<String>, settings: &GlobalSettings) -> i32 {
+fn exec(files: Vec<String>, settings: GlobalSettings) -> i32 {
     let mut lines = Vec::new();
     let mut file_merger = FileMerger::new(&settings);
 
@@ -1102,6 +1149,13 @@ fn exec(files: Vec<String>, settings: &GlobalSettings) -> i32 {
 
     if settings.check {
         return exec_check_file(&lines, &settings);
+    }
+
+    // Only use ext_sorter when we need to.
+    // Probably faster that we don't create
+    // an owned value each run
+    if settings.ext_sort {
+        lines = ext_sort_by(lines, settings.clone());
     } else {
         sort_by(&mut lines, &settings);
     }
@@ -1109,7 +1163,7 @@ fn exec(files: Vec<String>, settings: &GlobalSettings) -> i32 {
     if settings.merge {
         if settings.unique {
             print_sorted(
-                file_merger.dedup_by(|a, b| compare_by(a, b, settings) == Ordering::Equal),
+                file_merger.dedup_by(|a, b| compare_by(a, b, &settings) == Ordering::Equal),
                 &settings,
             )
         } else {
@@ -1119,7 +1173,7 @@ fn exec(files: Vec<String>, settings: &GlobalSettings) -> i32 {
         print_sorted(
             lines
                 .into_iter()
-                .dedup_by(|a, b| compare_by(a, b, settings) == Ordering::Equal),
+                .dedup_by(|a, b| compare_by(a, b, &settings) == Ordering::Equal),
             &settings,
         )
     } else {
@@ -1161,11 +1215,25 @@ fn exec_check_file(unwrapped_lines: &[Line], settings: &GlobalSettings) -> i32 {
     }
 }
 
-fn sort_by(lines: &mut Vec<Line>, settings: &GlobalSettings) {
+fn ext_sort_by(unsorted: Vec<Line>, settings: GlobalSettings) -> Vec<Line> {
+    let external_sorter = ExternalSorter::new(
+        settings.buffer_size as u64,
+        Some(settings.tmp_dir.clone()),
+        settings.clone(),
+    );
+    let iter = external_sorter
+        .sort_by(unsorted.into_iter(), settings)
+        .unwrap()
+        .map(|x| x.unwrap())
+        .collect::<Vec<Line>>();
+    iter
+}
+
+fn sort_by(unsorted: &mut Vec<Line>, settings: &GlobalSettings) {
     if settings.stable || settings.unique {
-        lines.par_sort_by(|a, b| compare_by(a, b, &settings))
+        unsorted.par_sort_by(|a, b| compare_by(a, b, &settings))
     } else {
-        lines.par_sort_unstable_by(|a, b| compare_by(a, b, &settings))
+        unsorted.par_sort_unstable_by(|a, b| compare_by(a, b, &settings))
     }
 }
 
@@ -1191,7 +1259,13 @@ fn compare_by(a: &Line, b: &Line, global_settings: &GlobalSettings) -> Ordering 
                 ),
                 SortMode::Month => month_compare(a_str, b_str),
                 SortMode::Version => version_compare(a_str, b_str),
-                SortMode::Default => default_compare(a_str, b_str),
+                SortMode::Default => custom_str_cmp(
+                    a_str,
+                    b_str,
+                    settings.ignore_non_printing,
+                    settings.dictionary_order,
+                    settings.ignore_case,
+                ),
             }
         };
         if cmp != Ordering::Equal {
@@ -1203,7 +1277,7 @@ fn compare_by(a: &Line, b: &Line, global_settings: &GlobalSettings) -> Ordering 
     let cmp = if global_settings.random || global_settings.stable || global_settings.unique {
         Ordering::Equal
     } else {
-        default_compare(&a.line, &b.line)
+        a.line.cmp(&b.line)
     };
 
     if global_settings.reverse {
@@ -1211,13 +1285,6 @@ fn compare_by(a: &Line, b: &Line, global_settings: &GlobalSettings) -> Ordering 
     } else {
         cmp
     }
-}
-
-// Test output against BSDs and GNU with their locale
-// env var set to lc_ctype=utf-8 to enjoy the exact same output.
-#[inline(always)]
-fn default_compare(a: &str, b: &str) -> Ordering {
-    a.cmp(b)
 }
 
 // This function cleans up the initial comparison done by leading_num_common for a general numeric compare.
@@ -1265,7 +1332,7 @@ fn get_leading_gen(input: &str) -> Range<usize> {
     leading_whitespace_len..input.len()
 }
 
-#[derive(Copy, Clone, PartialEq, PartialOrd)]
+#[derive(Serialize, Deserialize, Copy, Clone, PartialEq, PartialOrd)]
 enum GeneralF64ParseResult {
     Invalid,
     NaN,
@@ -1406,22 +1473,6 @@ fn version_compare(a: &str, b: &str) -> Ordering {
     }
 }
 
-fn remove_nondictionary_chars(s: &str) -> String {
-    // According to GNU, dictionary chars are those of ASCII
-    // and a blank is a space or a tab
-    s.chars()
-        .filter(|c| c.is_ascii_alphanumeric() || c.is_ascii_whitespace())
-        .collect::<String>()
-}
-
-fn remove_nonprinting_chars(s: &str) -> String {
-    // However, GNU says nonprinting chars are more permissive.
-    // All of ASCII except control chars ie, escape, newline
-    s.chars()
-        .filter(|c| c.is_ascii() && !c.is_ascii_control())
-        .collect::<String>()
-}
-
 fn print_sorted<T: Iterator<Item = Line>>(iter: T, settings: &GlobalSettings) {
     let mut file: Box<dyn Write> = match settings.outfile {
         Some(ref filename) => match File::create(Path::new(&filename)) {
@@ -1486,14 +1537,6 @@ mod tests {
         let c = get_rand_string();
 
         assert_eq!(Ordering::Equal, random_shuffle(a, b, c));
-    }
-
-    #[test]
-    fn test_default_compare() {
-        let a = "your own";
-        let b = "your place";
-
-        assert_eq!(Ordering::Less, default_compare(a, b));
     }
 
     #[test]

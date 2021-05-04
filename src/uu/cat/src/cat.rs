@@ -35,6 +35,7 @@ use std::net::Shutdown;
 use std::os::unix::fs::FileTypeExt;
 #[cfg(unix)]
 use unix_socket::UnixStream;
+use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "cat";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -166,7 +167,9 @@ mod options {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
 
     let matches = App::new(executable!())
         .name(NAME)

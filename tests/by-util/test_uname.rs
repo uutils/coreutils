@@ -36,7 +36,12 @@ fn test_uname_kernel_version() {
 fn test_uname_kernel() {
     let (_, mut ucmd) = at_and_ucmd!();
 
-    let result = ucmd.arg("-o").succeeds();
     #[cfg(target_os = "linux")]
-    assert!(result.stdout_str().to_lowercase().contains("linux"));
+    {
+        let result = ucmd.arg("-o").succeeds();
+        assert!(result.stdout_str().to_lowercase().contains("linux"));
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    let result = ucmd.arg("-o").succeeds();
 }
