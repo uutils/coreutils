@@ -112,3 +112,60 @@ fn test_multiple_default() {
              alice_in_wonderland.txt\n   36  370 2189 total\n",
         );
 }
+
+/// Test for an empty file.
+#[test]
+fn test_file_empty() {
+    // TODO There is a leading space in the output that should be
+    // removed; see issue #2173.
+    new_ucmd!()
+        .args(&["-clmwL", "emptyfile.txt"])
+        .run()
+        .stdout_is(" 0 0 0 0 0 emptyfile.txt\n");
+}
+
+/// Test for an file containing a single non-whitespace character
+/// *without* a trailing newline.
+#[test]
+fn test_file_single_line_no_trailing_newline() {
+    // TODO There is a leading space in the output that should be
+    // removed; see issue #2173.
+    new_ucmd!()
+        .args(&["-clmwL", "notrailingnewline.txt"])
+        .run()
+        .stdout_is(" 1 1 2 2 1 notrailingnewline.txt\n");
+}
+
+/// Test for a file that has 100 empty lines (that is, the contents of
+/// the file are the newline character repeated one hundred times).
+#[test]
+fn test_file_many_empty_lines() {
+    // TODO There is a leading space in the output that should be
+    // removed; see issue #2173.
+    new_ucmd!()
+        .args(&["-clmwL", "manyemptylines.txt"])
+        .run()
+        .stdout_is(" 100   0 100 100   0 manyemptylines.txt\n");
+}
+
+/// Test for a file that has one long line comprising only spaces.
+#[test]
+fn test_file_one_long_line_only_spaces() {
+    // TODO There is a leading space in the output that should be
+    // removed; see issue #2173.
+    new_ucmd!()
+        .args(&["-clmwL", "onelongemptyline.txt"])
+        .run()
+        .stdout_is("     1     0 10001 10001 10000 onelongemptyline.txt\n");
+}
+
+/// Test for a file that has one long line comprising a single "word".
+#[test]
+fn test_file_one_long_word() {
+    // TODO There is a leading space in the output that should be
+    // removed; see issue #2173.
+    new_ucmd!()
+        .args(&["-clmwL", "onelongword.txt"])
+        .run()
+        .stdout_is("     1     1 10001 10001 10000 onelongword.txt\n");
+}
