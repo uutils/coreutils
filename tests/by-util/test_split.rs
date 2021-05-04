@@ -176,10 +176,13 @@ fn test_split_bytes_prime_part_size() {
 
     let glob = Glob::new(&at, ".", r"b[[:alpha:]][[:alpha:]]$");
     assert_eq!(glob.count(), 6);
+    let mut fns = glob.collect();
+    // glob.collect() is not guaranteed to return in sorted order, so we sort.
+    fns.sort();
     for i in 0..5 {
-        assert_eq!(glob.directory.metadata(&glob.collect()[i]).len(), 1753);
+        assert_eq!(glob.directory.metadata(&fns[i]).len(), 1753);
     }
-    assert_eq!(glob.directory.metadata(&glob.collect()[5]).len(), 1235);
+    assert_eq!(glob.directory.metadata(&fns[5]).len(), 1235);
     assert_eq!(glob.collate(), at.read_bytes(name));
 }
 
