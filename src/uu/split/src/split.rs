@@ -221,7 +221,7 @@ trait Splitter {
         &mut self,
         reader: &mut BufReader<Box<dyn Read>>,
         writer: &mut BufWriter<Box<dyn Write>>,
-    ) -> usize;
+    ) -> u128;
 }
 
 struct LineSplitter {
@@ -244,8 +244,8 @@ impl Splitter for LineSplitter {
         &mut self,
         reader: &mut BufReader<Box<dyn Read>>,
         writer: &mut BufWriter<Box<dyn Write>>,
-    ) -> usize {
-        let mut bytes_consumed = 0usize;
+    ) -> u128 {
+        let mut bytes_consumed = 0u128;
         let mut buffer = String::with_capacity(1024);
         for _ in 0..self.lines_per_split {
             let bytes_read = reader
@@ -263,7 +263,7 @@ impl Splitter for LineSplitter {
             // replaces.
             buffer.clear();
 
-            bytes_consumed += bytes_read;
+            bytes_consumed += bytes_read as u128;
         }
 
         bytes_consumed
@@ -271,32 +271,29 @@ impl Splitter for LineSplitter {
 }
 
 struct ByteSplitter {
-    bytes_per_split: usize,
+    bytes_per_split: u128,
 }
 
 impl ByteSplitter {
     fn new(settings: &Settings) -> ByteSplitter {
-        // These multipliers are the same as supported by GNU coreutils with the
-        // exception of zetabytes (2^70) and yottabytes (2^80) as they overflow
-        // standard machine usize (2^64), so we disable for now. Note however
-        // that they are supported by the GNU coreutils split. Ignored for now.
-        let modifiers: Vec<(&str, usize)> = vec![
-            ("K", 1024usize),
+        // These multipliers are the same as supported by GNU coreutils.
+        let modifiers: Vec<(&str, u128)> = vec![
+            ("K", 1024u128),
             ("M", 1024 * 1024),
             ("G", 1024 * 1024 * 1024),
             ("T", 1024 * 1024 * 1024 * 1024),
             ("P", 1024 * 1024 * 1024 * 1024 * 1024),
             ("E", 1024 * 1024 * 1024 * 1024 * 1024 * 1024),
-            // ("Z", 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024),
-            // ("Y", 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024),
+            ("Z", 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024),
+            ("Y", 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024),
             ("KB", 1000),
             ("MB", 1000 * 1000),
             ("GB", 1000 * 1000 * 1000),
             ("TB", 1000 * 1000 * 1000 * 1000),
             ("PB", 1000 * 1000 * 1000 * 1000 * 1000),
             ("EB", 1000 * 1000 * 1000 * 1000 * 1000 * 1000),
-            // ("ZB", 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000),
-            // ("YB", 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000),
+            ("ZB", 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000),
+            ("YB", 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000),
         ];
 
         // This sequential find is acceptable since none of the modifiers are
@@ -308,7 +305,7 @@ impl ByteSplitter {
 
         // Try to parse the actual numeral.
         let n = &settings.strategy_param[0..(settings.strategy_param.len() - suffix.len())]
-            .parse::<usize>()
+            .parse::<u128>()
             .unwrap_or_else(|e| crash!(1, "invalid number of bytes: {}", e));
 
         ByteSplitter {
@@ -322,15 +319,23 @@ impl Splitter for ByteSplitter {
         &mut self,
         reader: &mut BufReader<Box<dyn Read>>,
         writer: &mut BufWriter<Box<dyn Write>>,
-    ) -> usize {
+    ) -> u128 {
         // We buffer reads and writes. We proceed until `bytes_consumed` is
         // equal to `self.bytes_per_split` or we reach EOF.
-        let mut bytes_consumed = 0usize;
+        let mut bytes_consumed = 0u128;
         const BUFFER_SIZE: usize = 1024;
         let mut buffer = [0u8; BUFFER_SIZE];
         while bytes_consumed < self.bytes_per_split {
-            // Don't overshoot `self.bytes_per_split`!
-            let bytes_desired = std::cmp::min(BUFFER_SIZE, self.bytes_per_split - bytes_consumed);
+            // Don't overshoot `self.bytes_per_split`! Note: Using std::cmp::min
+            // doesn't really work since we have to get types to match which
+            // can't be done in a way that keeps all conversions safe.
+            let bytes_desired = if (BUFFER_SIZE as u128) <= self.bytes_per_split - bytes_consumed {
+                BUFFER_SIZE
+            } else {
+                // This is a safe conversion since the difference must be less
+                // than BUFFER_SIZE in this branch.
+                (self.bytes_per_split - bytes_consumed) as usize
+            };
             let bytes_read = reader
                 .read(&mut buffer[0..bytes_desired])
                 .unwrap_or_else(|_| crash!(1, "error reading bytes from input file"));
@@ -343,7 +348,7 @@ impl Splitter for ByteSplitter {
                 .write_all(&buffer[0..bytes_read])
                 .unwrap_or_else(|_| crash!(1, "error writing bytes to output file"));
 
-            bytes_consumed += bytes_read;
+            bytes_consumed += bytes_read as u128;
         }
 
         bytes_consumed
