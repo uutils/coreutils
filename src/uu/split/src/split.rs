@@ -430,7 +430,7 @@ fn split(settings: &Settings) -> i32 {
         // If we didn't write anything we should clean up the empty file, and
         // break from the loop.
         if bytes_consumed == 0 {
-            // The output file is only ever created if filter's aren't used.
+            // The output file is only ever created if --filter isn't used.
             // Complicated, I know...
             if settings.filter.is_none() {
                 remove_file(filename)
