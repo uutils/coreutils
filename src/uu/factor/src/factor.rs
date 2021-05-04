@@ -125,6 +125,8 @@ fn _factor<A: Arithmetic + miller_rabin::Basis>(num: u64, f: Factors) -> Factors
     let n = A::new(num);
     let divisor = match miller_rabin::test::<A>(n) {
         Prime => {
+            #[cfg(feature = "coz")]
+            coz::progress!("factor found");
             let mut r = f;
             r.push(num);
             return r;
@@ -139,6 +141,8 @@ fn _factor<A: Arithmetic + miller_rabin::Basis>(num: u64, f: Factors) -> Factors
 }
 
 pub fn factor(mut n: u64) -> Factors {
+    #[cfg(feature = "coz")]
+    coz::begin!("factorization");
     let mut factors = Factors::one();
 
     if n < 2 {
@@ -152,16 +156,23 @@ pub fn factor(mut n: u64) -> Factors {
     }
 
     if n == 1 {
+        #[cfg(feature = "coz")]
+        coz::end!("factorization");
         return factors;
     }
 
     let (factors, n) = table::factor(n, factors);
 
-    if n < (1 << 32) {
+    let r = if n < (1 << 32) {
         _factor::<Montgomery<u32>>(n, factors)
     } else {
         _factor::<Montgomery<u64>>(n, factors)
-    }
+    };
+
+    #[cfg(feature = "coz")]
+    coz::end!("factorization");
+
+    r
 }
 
 #[cfg(test)]

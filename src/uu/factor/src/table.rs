@@ -33,6 +33,8 @@ pub(crate) fn factor(mut num: u64, mut factors: Factors) -> (Factors, u64) {
             if x <= ceil {
                 num = x;
                 k += 1;
+                #[cfg(feature = "coz")]
+                coz::progress!("factor found");
             } else {
                 if k > 0 {
                     factors.add(prime, k);

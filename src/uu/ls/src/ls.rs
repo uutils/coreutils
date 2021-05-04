@@ -38,8 +38,9 @@ use std::{
     os::unix::fs::{FileTypeExt, MetadataExt},
     time::Duration,
 };
+
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
-use time::{strftime, Timespec};
+
 use unicode_width::UnicodeWidthStr;
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
@@ -50,6 +51,8 @@ static ABOUT: &str = "
  the command line, expect that it will ignore files and directories
  whose names start with '.'
 ";
+static AFTER_HELP: &str = "The TIME_STYLE argument can be full-iso, long-iso, iso.
+Also the TIME_STYLE environment variable sets the default style to use.";
 
 fn get_usage() -> String {
     format!("{0} [OPTION]... [FILE]...", executable!())
@@ -117,6 +120,8 @@ pub mod options {
     pub static COLOR: &str = "color";
     pub static PATHS: &str = "paths";
     pub static INDICATOR_STYLE: &str = "indicator-style";
+    pub static TIME_STYLE: &str = "time-style";
+    pub static FULL_TIME: &str = "full-time";
     pub static HIDE: &str = "hide";
     pub static IGNORE: &str = "ignore";
 }
@@ -156,6 +161,15 @@ enum Time {
     Modification,
     Access,
     Change,
+    Birth,
+}
+
+#[derive(Debug)]
+enum TimeStyle {
+    FullIso,
+    LongIso,
+    Iso,
+    Locale,
 }
 
 enum Dereference {
@@ -191,6 +205,7 @@ struct Config {
     width: Option<u16>,
     quoting_style: QuotingStyle,
     indicator_style: IndicatorStyle,
+    time_style: TimeStyle,
 }
 
 // Fields that can be removed or added to the long format
@@ -251,6 +266,7 @@ impl Config {
                 options::format::LONG_NO_OWNER,
                 options::format::LONG_NO_GROUP,
                 options::format::LONG_NUMERIC_UID_GID,
+                options::FULL_TIME,
             ]
             .iter()
             .flat_map(|opt| options.indices_of(opt))
@@ -302,6 +318,7 @@ impl Config {
             match field {
                 "ctime" | "status" => Time::Change,
                 "access" | "atime" | "use" => Time::Access,
+                "birth" | "creation" => Time::Birth,
                 // below should never happen as clap already restricts the values.
                 _ => unreachable!("Invalid field for --time"),
             }
@@ -439,6 +456,30 @@ impl Config {
             IndicatorStyle::None
         };
 
+        let time_style = if let Some(field) = options.value_of(options::TIME_STYLE) {
+            //If both FULL_TIME and TIME_STYLE are present
+            //The one added last is dominant
+            if options.is_present(options::FULL_TIME)
+                && options.indices_of(options::FULL_TIME).unwrap().last()
+                    > options.indices_of(options::TIME_STYLE).unwrap().last()
+            {
+                TimeStyle::FullIso
+            } else {
+                //Clap handles the env variable "TIME_STYLE"
+                match field {
+                    "full-iso" => TimeStyle::FullIso,
+                    "long-iso" => TimeStyle::LongIso,
+                    "iso" => TimeStyle::Iso,
+                    "locale" => TimeStyle::Locale,
+                    // below should never happen as clap already restricts the values.
+                    _ => unreachable!("Invalid field for --time-style"),
+                }
+            }
+        } else if options.is_present(options::FULL_TIME) {
+            TimeStyle::FullIso
+        } else {
+            TimeStyle::Locale
+        };
         let mut ignore_patterns = GlobSetBuilder::new();
         if options.is_present(options::IGNORE_BACKUPS) {
             ignore_patterns.add(Glob::new("*~").unwrap());
@@ -504,6 +545,7 @@ impl Config {
             width,
             quoting_style,
             indicator_style,
+            time_style,
         }
     }
 }
@@ -696,10 +738,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(options::TIME)
                 .help("Show time in <field>:\n\
                     \taccess time (-u): atime, access, use;\n\
-                    \tchange time (-t): ctime, status.")
+                    \tchange time (-t): ctime, status.\n\
+                    \tbirth time: birth, creation;")
                 .value_name("field")
                 .takes_value(true)
-                .possible_values(&["atime", "access", "use", "ctime", "status"])
+                .possible_values(&["atime", "access", "use", "ctime", "status", "birth", "creation"])
                 .hide_possible_values(true)
                 .require_equals(true)
                 .overrides_with_all(&[
@@ -1020,9 +1063,34 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::indicator_style::CLASSIFY,
                     options::INDICATOR_STYLE,
                 ]))
+        .arg(
+            //This still needs support for posix-*, +FORMAT
+            Arg::with_name(options::TIME_STYLE)
+                .long(options::TIME_STYLE)
+                .help("time/date format with -l; see TIME_STYLE below")
+                .value_name("TIME_STYLE")
+                .env("TIME_STYLE")
+                .possible_values(&[
+                    "full-iso",
+                    "long-iso",
+                    "iso",
+                    "locale",
+                ])
+                .overrides_with_all(&[
+                    options::TIME_STYLE
+                ])
+        )
+        .arg(
+            Arg::with_name(options::FULL_TIME)
+            .long(options::FULL_TIME)
+            .overrides_with(options::FULL_TIME)
+            .help("like -l --time-style=full-iso")
+        )
 
     // Positional arguments
-        .arg(Arg::with_name(options::PATHS).multiple(true).takes_value(true));
+        .arg(Arg::with_name(options::PATHS).multiple(true).takes_value(true))
+
+        .after_help(AFTER_HELP);
 
     let matches = app.get_matches_from(args);
 
@@ -1052,14 +1120,21 @@ impl PathData {
     fn new(
         p_buf: PathBuf,
         file_type: Option<std::io::Result<FileType>>,
+        file_name: Option<String>,
         config: &Config,
         command_line: bool,
     ) -> Self {
-        let name = p_buf
-            .file_name()
-            .unwrap_or_else(|| p_buf.iter().next_back().unwrap())
-            .to_string_lossy()
-            .into_owned();
+        // We cannot use `Path::ends_with` or `Path::Components`, because they remove occurrences of '.'
+        // For '..', the filename is None
+        let name = if let Some(name) = file_name {
+            name
+        } else {
+            p_buf
+                .file_name()
+                .unwrap_or_else(|| p_buf.iter().next_back().unwrap())
+                .to_string_lossy()
+                .into_owned()
+        };
         let must_dereference = match &config.dereference {
             Dereference::All => true,
             Dereference::Args => command_line,
@@ -1122,7 +1197,7 @@ fn list(locs: Vec<String>, config: Config) -> i32 {
             continue;
         }
 
-        let path_data = PathData::new(p, None, &config, true);
+        let path_data = PathData::new(p, None, None, &config, true);
 
         let show_dir_contents = if let Some(ft) = path_data.file_type() {
             !config.directory && ft.is_dir()
@@ -1167,14 +1242,8 @@ fn sort_entries(entries: &mut Vec<PathData>, config: &Config) {
             entries.sort_by_key(|k| Reverse(k.md().as_ref().map(|md| md.len()).unwrap_or(0)))
         }
         // The default sort in GNU ls is case insensitive
-        Sort::Name => entries.sort_by_cached_key(|k| {
-            let has_dot: bool = k.file_name.starts_with('.');
-            let filename_nodot: &str = &k.file_name[if has_dot { 1 } else { 0 }..];
-            // We want hidden files to appear before regular files of the same
-            // name, so we need to negate the "has_dot" variable.
-            (filename_nodot.to_lowercase(), !has_dot)
-        }),
-        Sort::Version => entries.sort_by(|k, j| version_cmp::version_cmp(&k.p_buf, &j.p_buf)),
+        Sort::Name => entries.sort_by(|a, b| a.file_name.cmp(&b.file_name)),
+        Sort::Version => entries.sort_by(|a, b| version_cmp::version_cmp(&a.p_buf, &b.p_buf)),
         Sort::Extension => entries.sort_by(|a, b| {
             a.p_buf
                 .extension()
@@ -1213,8 +1282,14 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
 fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>) {
     let mut entries: Vec<_> = if config.files == Files::All {
         vec![
-            PathData::new(dir.p_buf.join("."), None, config, false),
-            PathData::new(dir.p_buf.join(".."), None, config, false),
+            PathData::new(
+                dir.p_buf.clone(),
+                Some(Ok(*dir.file_type().unwrap())),
+                Some(".".into()),
+                config,
+                false,
+            ),
+            PathData::new(dir.p_buf.join(".."), None, Some("..".into()), config, false),
         ]
     } else {
         vec![]
@@ -1223,7 +1298,7 @@ fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>)
     let mut temp: Vec<_> = safe_unwrap!(fs::read_dir(&dir.p_buf))
         .map(|res| safe_unwrap!(res))
         .filter(|e| should_display(e, config))
-        .map(|e| PathData::new(DirEntry::path(&e), Some(e.file_type()), config, false))
+        .map(|e| PathData::new(DirEntry::path(&e), Some(e.file_type()), None, config, false))
         .collect();
 
     sort_entries(&mut temp, config);
@@ -1480,6 +1555,7 @@ fn get_system_time(md: &Metadata, config: &Config) -> Option<SystemTime> {
         Time::Change => Some(UNIX_EPOCH + Duration::new(md.ctime() as u64, md.ctime_nsec() as u32)),
         Time::Modification => md.modified().ok(),
         Time::Access => md.accessed().ok(),
+        Time::Birth => md.created().ok(),
     }
 }
 
@@ -1488,22 +1564,40 @@ fn get_system_time(md: &Metadata, config: &Config) -> Option<SystemTime> {
     match config.time {
         Time::Modification => md.modified().ok(),
         Time::Access => md.accessed().ok(),
+        Time::Birth => md.created().ok(),
         _ => None,
     }
 }
 
-fn get_time(md: &Metadata, config: &Config) -> Option<time::Tm> {
-    let duration = get_system_time(md, config)?
-        .duration_since(UNIX_EPOCH)
-        .ok()?;
-    let secs = duration.as_secs() as i64;
-    let nsec = duration.subsec_nanos() as i32;
-    Some(time::at(Timespec::new(secs, nsec)))
+fn get_time(md: &Metadata, config: &Config) -> Option<chrono::DateTime<chrono::Local>> {
+    let time = get_system_time(md, config)?;
+    Some(time.into())
 }
 
 fn display_date(metadata: &Metadata, config: &Config) -> String {
     match get_time(metadata, config) {
-        Some(time) => strftime("%F %R", &time).unwrap(),
+        Some(time) => {
+            //Date is recent if from past 6 months
+            //According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
+            let recent = time + chrono::Duration::seconds(31556952 / 2) > chrono::Local::now();
+
+            match config.time_style {
+                TimeStyle::FullIso => time.format("%Y-%m-%d %H:%M:%S.%f %z"),
+                TimeStyle::LongIso => time.format("%Y-%m-%d %H:%M"),
+                TimeStyle::Iso => time.format(if recent { "%m-%d %H:%M" } else { "%Y-%m-%d " }),
+                TimeStyle::Locale => {
+                    let fmt = if recent { "%b %e %H:%M" } else { "%b %e  %Y" };
+
+                    //In this version of chrono translating can be done
+                    //The function is chrono::datetime::DateTime::format_localized
+                    //However it's currently still hard to get the current pure-rust-locale
+                    //So it's not yet implemented
+
+                    time.format(fmt)
+                }
+            }
+            .to_string()
+        }
         None => "???".into(),
     }
 }

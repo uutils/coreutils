@@ -8,14 +8,21 @@
 #[macro_use]
 extern crate uucore;
 
+use clap::{App, Arg};
 use std::fs::hard_link;
 use std::io::Error;
 use std::path::Path;
-use uucore::InvalidEncodingHandling;
 
-static SYNTAX: &str = "[OPTIONS] FILE1 FILE2";
-static SUMMARY: &str = "Create a link named FILE2 to FILE1";
-static LONG_HELP: &str = "";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
+static ABOUT: &str = "Call the link function to create a link named FILE2 to an existing FILE1.";
+
+pub mod options {
+    pub static FILES: &str = "FILES";
+}
+
+fn get_usage() -> String {
+    format!("{0} FILE1 FILE2", executable!())
+}
 
 pub fn normalize_error_message(e: Error) -> String {
     match e.raw_os_error() {
@@ -25,16 +32,27 @@ pub fn normalize_error_message(e: Error) -> String {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let matches = app!(SYNTAX, SUMMARY, LONG_HELP).parse(
-        args.collect_str(InvalidEncodingHandling::Ignore)
-            .accept_any(),
-    );
-    if matches.free.len() != 2 {
-        crash!(1, "{}", msg_wrong_number_of_arguments!(2));
-    }
+    let usage = get_usage();
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .arg(
+            Arg::with_name(options::FILES)
+                .hidden(true)
+                .required(true)
+                .min_values(2)
+                .max_values(2)
+                .takes_value(true),
+        )
+        .get_matches_from(args);
 
-    let old = Path::new(&matches.free[0]);
-    let new = Path::new(&matches.free[1]);
+    let files: Vec<_> = matches
+        .values_of_os(options::FILES)
+        .unwrap_or_default()
+        .collect();
+    let old = Path::new(files[0]);
+    let new = Path::new(files[1]);
 
     match hard_link(old, new) {
         Ok(_) => 0,
