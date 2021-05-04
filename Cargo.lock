@@ -1698,6 +1698,7 @@ dependencies = [
 name = "uu_basename"
 version = "0.0.6"
 dependencies = [
+ "clap",
  "uucore",
  "uucore_procs",
 ]
@@ -2653,6 +2654,7 @@ dependencies = [
 name = "uu_who"
 version = "0.0.6"
 dependencies = [
+ "clap",
  "uucore",
  "uucore_procs",
 ]

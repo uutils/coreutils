@@ -1356,8 +1356,10 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
         }
 
         #[cfg(unix)]
-        if total_size > 0 {
-            let _ = writeln!(out, "total {}", display_file_size(total_size, config));
+        {
+            if total_size > 0 {
+                let _ = writeln!(out, "total {}", display_file_size(total_size, config));
+            }
         }
 
         for item in items {
