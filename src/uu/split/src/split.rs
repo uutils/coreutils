@@ -261,31 +261,41 @@ struct ByteSplitter {
 
 impl ByteSplitter {
     fn new(settings: &Settings) -> ByteSplitter {
-        let mut strategy_param: Vec<char> = settings.strategy_param.chars().collect();
-        let suffix = strategy_param.pop().unwrap();
-        let multiplier = match suffix {
-            '0'..='9' => 1usize,
-            'b' => 512usize,
-            'k' => 1024usize,
-            'm' => 1024usize * 1024usize,
-            _ => crash!(1, "invalid number of bytes"),
-        };
-        let n = if suffix.is_alphabetic() {
-            match strategy_param
-                .iter()
-                .cloned()
-                .collect::<String>()
-                .parse::<usize>()
-            {
-                Ok(a) => a,
-                Err(e) => crash!(1, "invalid number of bytes: {}", e),
-            }
-        } else {
-            match settings.strategy_param.parse::<usize>() {
-                Ok(a) => a,
-                Err(e) => crash!(1, "invalid number of bytes: {}", e),
-            }
-        };
+        // These multipliers are the same as supported by GNU coreutils with the
+        // exception of zetabytes (2^70) and yottabytes (2^80) as they overflow
+        // standard machine usize (2^64), so we disable for now. Note however
+        // that they are supported by the GNU coreutils split. Ignored for now.
+        let modifiers: Vec<(&str, usize)> = vec![
+            ("K", 1024usize),
+            ("M", 1024 * 1024),
+            ("G", 1024 * 1024 * 1024),
+            ("T", 1024 * 1024 * 1024 * 1024),
+            ("P", 1024 * 1024 * 1024 * 1024 * 1024),
+            ("E", 1024 * 1024 * 1024 * 1024 * 1024 * 1024),
+            // ("Z", 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024),
+            // ("Y", 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024),
+            ("KB", 1000),
+            ("MB", 1000 * 1000),
+            ("GB", 1000 * 1000 * 1000),
+            ("TB", 1000 * 1000 * 1000 * 1000),
+            ("PB", 1000 * 1000 * 1000 * 1000 * 1000),
+            ("EB", 1000 * 1000 * 1000 * 1000 * 1000 * 1000),
+            // ("ZB", 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000),
+            // ("YB", 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000),
+        ];
+
+        // This sequential find is acceptable since none of the modifiers are
+        // suffixes of any other modifiers, a la Huffman codes.
+        let (suffix, multiplier) = modifiers
+            .iter()
+            .find(|(suffix, _)| settings.strategy_param.ends_with(suffix))
+            .unwrap_or(&("", 1));
+
+        // Try to parse the actual numeral.
+        let n = &settings.strategy_param[0..(settings.strategy_param.len() - suffix.len())]
+            .parse::<usize>()
+            .unwrap_or_else(|_| crash!(1, "invalid number of bytes"));
+
         ByteSplitter {
             saved_bytes_to_write: n * multiplier,
             bytes_to_write: n * multiplier,
