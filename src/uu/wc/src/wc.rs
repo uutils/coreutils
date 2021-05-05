@@ -24,7 +24,6 @@ use std::cmp::max;
 use std::fs::File;
 use std::io::{self, Write};
 use std::path::Path;
-use std::str::from_utf8;
 
 #[derive(Error, Debug)]
 pub enum WcError {
@@ -163,18 +162,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 }
 
-const CR: u8 = b'\r';
-const LF: u8 = b'\n';
-const SPACE: u8 = b' ';
-const TAB: u8 = b'\t';
-const SYN: u8 = 0x16_u8;
-const FF: u8 = 0x0C_u8;
-
-#[inline(always)]
-fn is_word_separator(byte: u8) -> bool {
-    byte == SPACE || byte == TAB || byte == CR || byte == SYN || byte == FF
-}
-
 fn word_count_from_reader<T: WordCountable>(
     mut reader: T,
     settings: &Settings,
@@ -195,58 +182,20 @@ fn word_count_from_reader<T: WordCountable>(
     // we do not need to decode the byte stream if we're only counting bytes/newlines
     let decode_chars = settings.show_chars || settings.show_words || settings.show_max_line_length;
 
-    let mut line_count: usize = 0;
-    let mut word_count: usize = 0;
-    let mut byte_count: usize = 0;
-    let mut char_count: usize = 0;
-    let mut longest_line_length: usize = 0;
-    let mut ends_lf: bool;
-
-    // reading from a TTY seems to raise a condition on, rather than return Some(0) like a file.
-    // hence the option wrapped in a result here
-    for line_result in reader.lines() {
-        let raw_line = match line_result {
-            Ok(l) => l,
+    // Sum the WordCount for each line. Show a warning for each line
+    // that results in an IO error when trying to read it.
+    let total = reader
+        .lines()
+        .filter_map(|res| match res {
+            Ok(line) => Some(line),
             Err(e) => {
                 show_warning!("Error while reading {}: {}", path, e);
-                continue;
+                None
             }
-        };
-
-        // GNU 'wc' only counts lines that end in LF as lines
-        ends_lf = *raw_line.last().unwrap() == LF;
-        line_count += ends_lf as usize;
-
-        byte_count += raw_line.len();
-
-        if decode_chars {
-            // try and convert the bytes to UTF-8 first
-            let current_char_count;
-            match from_utf8(&raw_line[..]) {
-                Ok(line) => {
-                    word_count += line.split_whitespace().count();
-                    current_char_count = line.chars().count();
-                }
-                Err(..) => {
-                    word_count += raw_line.split(|&x| is_word_separator(x)).count();
-                    current_char_count = raw_line.iter().filter(|c| c.is_ascii()).count()
-                }
-            }
-            char_count += current_char_count;
-            if current_char_count > longest_line_length {
-                // -L is a GNU 'wc' extension so same behavior on LF
-                longest_line_length = current_char_count - (ends_lf as usize);
-            }
-        }
-    }
-
-    Ok(WordCount {
-        bytes: byte_count,
-        chars: char_count,
-        lines: line_count,
-        words: word_count,
-        max_line_length: longest_line_length,
-    })
+        })
+        .map(|line| WordCount::from_line(&line, decode_chars))
+        .sum();
+    Ok(total)
 }
 
 fn word_count_from_path(path: &str, settings: &Settings) -> WcResult<WordCount> {
