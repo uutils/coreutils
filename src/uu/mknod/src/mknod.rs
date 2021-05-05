@@ -16,9 +16,6 @@ use clap::{App, Arg, ArgMatches};
 use libc::{dev_t, mode_t};
 use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
 
-use getopts::Options;
-
-use std::ffi::CString;
 use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "mknod";
@@ -84,14 +81,12 @@ fn _makenod(file_name: &str, mode: mode_t, dev: dev_t) -> i32 {
     }
 }
 
-
-
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
-   // Linux-specific options, not implemented
+    // Linux-specific options, not implemented
     // opts.optflag("Z", "", "set the SELinux security context to default type");
     // opts.optopt("", "context", "like -Z, or if CTX is specified then set the SELinux or SMACK security context to CTX");
 
