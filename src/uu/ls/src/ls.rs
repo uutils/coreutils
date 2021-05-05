@@ -1332,7 +1332,7 @@ fn display_dir_entry_size(entry: &PathData, config: &Config) -> (usize, usize) {
     if let Some(md) = entry.md() {
         (
             display_symlink_count(&md).len(),
-            display_file_size(md.len(), config).len(),
+            display_size(md.len(), config).len(),
         )
     } else {
         (0, 0)
@@ -1352,14 +1352,11 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             let (links, width) = display_dir_entry_size(item, config);
             max_links = links.max(max_links);
             max_width = width.max(max_width);
-            total_size += item.md().map_or(0, |md| display_block_size(md, config));
+            total_size += item.md().map_or(0, |md| get_block_size(md, config));
         }
 
-        #[cfg(unix)]
-        {
-            if total_size > 0 {
-                let _ = writeln!(out, "total {}", display_file_size(total_size, config));
-            }
+        if total_size > 0 {
+            let _ = writeln!(out, "total {}", display_size(total_size, config));
         }
 
         for item in items {
@@ -1408,7 +1405,7 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
     }
 }
 
-fn display_block_size(md: &Metadata, config: &Config) -> u64 {
+fn get_block_size(md: &Metadata, config: &Config) -> u64 {
     /* GNU ls will display sizes in terms of block size
        md.len() will differ from this value when the file has some holes
     */
@@ -1424,8 +1421,11 @@ fn display_block_size(md: &Metadata, config: &Config) -> u64 {
     }
 
     #[cfg(not(unix))]
-    // unsupported for windows at the moment
-    0
+    {
+        let _ = config;
+        // no way to get block size for windows, fall-back to file size
+        md.len()
+    }
 }
 
 fn display_grid(
@@ -1503,7 +1503,7 @@ fn display_item_long(
     let _ = writeln!(
         out,
         " {} {} {}",
-        pad_left(display_file_size(md.len(), config), max_size),
+        pad_left(display_size(md.len(), config), max_size),
         display_date(&md, config),
         // unwrap is fine because it fails when metadata is not available
         // but we already know that it is because it's checked at the
@@ -1658,7 +1658,7 @@ fn format_prefixed(prefixed: NumberPrefix<f64>) -> String {
     }
 }
 
-fn display_file_size(len: u64, config: &Config) -> String {
+fn display_size(len: u64, config: &Config) -> String {
     // NOTE: The human-readable behaviour deviates from the GNU ls.
     // The GNU ls uses binary prefixes by default.
     match config.size_format {

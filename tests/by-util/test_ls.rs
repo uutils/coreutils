@@ -5,6 +5,7 @@ use crate::common::util::*;
 extern crate regex;
 use self::regex::Regex;
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
@@ -308,7 +309,6 @@ fn test_ls_long() {
     }
 }
 
-#[cfg(unix)]
 #[test]
 fn test_ls_long_total_size() {
     let scene = TestScenario::new(util_name!());
@@ -318,16 +318,36 @@ fn test_ls_long_total_size() {
     at.touch(&at.plus_as_string("test-long2"));
     at.append("test-long2", "2");
 
+    let expected_prints: HashMap<_, _> = if cfg!(unix) {
+        [
+            ("long_vanilla", "total 8"),
+            ("long_human_readable", "total 8.0K"),
+            ("long_si", "total 8.2k"),
+        ]
+        .iter()
+        .cloned()
+        .collect()
+    } else {
+        [
+            ("long_vanilla", "total 2"),
+            ("long_human_readable", "total 2"),
+            ("long_si", "total 2"),
+        ]
+        .iter()
+        .cloned()
+        .collect()
+    };
+
     for arg in &["-l", "--long", "--format=long", "--format=verbose"] {
         let result = scene.ucmd().arg(arg).succeeds();
-        result.stdout_contains("total 8");
+        result.stdout_contains(expected_prints["long_vanilla"]);
 
         for arg2 in &["-h", "--human-readable", "--si"] {
             let result = scene.ucmd().arg(arg).arg(arg2).succeeds();
             result.stdout_contains(if *arg2 == "--si" {
-                "total 8.2k"
+                expected_prints["long_si"]
             } else {
-                "total 8.0K"
+                expected_prints["long_human_readable"]
             });
         }
     }
