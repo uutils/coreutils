@@ -2116,7 +2116,7 @@ dependencies = [
 name = "uu_mknod"
 version = "0.0.6"
 dependencies = [
- "getopts",
+ "clap",
  "libc",
  "uucore",
  "uucore_procs",
