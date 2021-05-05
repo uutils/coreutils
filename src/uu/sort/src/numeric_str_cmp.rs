@@ -14,21 +14,20 @@
 //! More specifically, exponent can be understood so that the original number is in (1..10)*10^exponent.
 //! From that follows the constraints of this algorithm: It is able to compare numbers in ±(1*10^[i64::MIN]..10*10^[i64::MAX]).
 
-use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, ops::Range};
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 enum Sign {
     Negative,
     Positive,
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct NumInfo {
     exponent: i64,
     sign: Sign,
 }
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct NumInfoParseSettings {
     pub accept_si_units: bool,
     pub thousands_separator: Option<char>,

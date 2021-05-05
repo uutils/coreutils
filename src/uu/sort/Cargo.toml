@@ -15,15 +15,13 @@ edition = "2018"
 path = "src/sort.rs"
 
 [dependencies]
-serde_json = { version = "1.0.64", default-features = false, features = ["alloc"] }
-serde = { version = "1.0", features = ["derive"] }
 rayon = "1.5"
 rand = "0.7"
 clap = "2.33"
 fnv = "1.0.7"
 itertools = "0.10.0"
 semver = "0.9.0"
-smallvec = { version="1.6.1", features=["serde"] } 
+smallvec = "1.6.1"
 unicode-width = "0.1.8"
 uucore = { version=">=0.0.8", package="uucore", path="../../uucore", features=["fs"] }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
