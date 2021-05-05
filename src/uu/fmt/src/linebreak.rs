@@ -296,7 +296,7 @@ fn find_kp_breakpoints<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
                         (0, 0.0)
                     } else {
                         compute_demerits(
-                            (args.opts.goal - tlen) as isize,
+                            args.opts.goal as isize - tlen as isize,
                             stretch,
                             w.word_nchars as isize,
                             active.prev_rat,
