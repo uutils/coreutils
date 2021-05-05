@@ -198,9 +198,16 @@ fn test_terse_normal_format() {
     let expect = expected_result(&args);
     println!("actual: {:?}", actual);
     println!("expect: {:?}", expect);
-    let v_actual: Vec<&str> = actual.split(' ').collect();
-    let v_expect: Vec<&str> = expect.split(' ').collect();
+    let v_actual: Vec<&str> = actual.trim().split(' ').collect();
+    let mut v_expect: Vec<&str> = expect.trim().split(' ').collect();
     assert!(!v_expect.is_empty());
+
+    // uu_stat does not support selinux
+    if v_actual.len() == v_expect.len() - 1 && v_expect[v_expect.len() - 1].contains(":") {
+        // assume last element contains: `SELinux security context string`
+        v_expect.pop();
+    }
+
     // * allow for inequality if `stat` (aka, expect) returns "0" (unknown value)
     assert!(
         expect == "0"
