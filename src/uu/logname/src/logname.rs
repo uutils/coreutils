@@ -13,6 +13,7 @@
 extern crate uucore;
 
 use std::ffi::CStr;
+use uucore::InvalidEncodingHandling;
 
 use clap::App;
 
@@ -35,10 +36,21 @@ fn get_userlogin() -> Option<String> {
 static SUMMARY: &str = "Print user's login name";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
-pub fn uumain(_: impl uucore::Args) -> i32 {
+fn get_usage() -> String {
+    format!("{0}", executable!())
+}
+
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let _ = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
+
+    let usage = get_usage();
+
     let _ = App::new(executable!())
         .version(VERSION)
         .about(SUMMARY)
+        .usage(&usage[..])
         .get_matches();
 
     match get_userlogin() {
