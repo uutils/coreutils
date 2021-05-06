@@ -2068,6 +2068,7 @@ dependencies = [
 name = "uu_logname"
 version = "0.0.6"
 dependencies = [
+ "clap",
  "libc",
  "uucore",
  "uucore_procs",
