@@ -24,7 +24,7 @@ extern crate nix;
 use clap::{App, Arg};
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
-    execute,
+    execute, queue,
     style::Attribute,
     terminal,
 };
@@ -134,16 +134,26 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .get_matches_from(args);
     let mut buff = String::new();
     let mut stdout = setup_term();
-
     if let Some(filenames) = matches.values_of(options::FILES) {
         let length = filenames.len();
         for (idx, fname) in filenames.clone().enumerate() {
-            if Path::new(fname).is_dir() {
-                show_usage_error!("'{}' is a directory.", fname);
+            let fname = Path::new(fname);
+            if fname.is_dir() {
+                terminal::disable_raw_mode().unwrap();
+                show_usage_error!("'{}' is a directory.", fname.display());
+                return 1;
+            }
+            if !fname.exists() {
+                terminal::disable_raw_mode().unwrap();
+                eprintln!(
+                    "{}: cannot open {}: No such file or directory",
+                    executable!(),
+                    fname.display()
+                );
                 return 1;
             }
             if filenames.len() > 1 {
-                buff.push_str(&MULTI_FILE_TOP_PROMPT.replace("{}", fname));
+                buff.push_str(&MULTI_FILE_TOP_PROMPT.replace("{}", fname.to_str().unwrap()));
             }
             let mut reader = BufReader::new(File::open(fname).unwrap());
             reader.read_to_string(&mut buff).unwrap();
@@ -151,19 +161,23 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             more(&buff, &mut stdout, last);
             buff.clear();
         }
+        reset_term(&mut stdout);
     } else {
-        stdin().read_to_string(&mut buff).unwrap();
-        more(&buff, &mut stdout, true);
+        if atty::isnt(atty::Stream::Stdin) {
+            let mut stdout = setup_term();
+            stdin().read_to_string(&mut buff).unwrap();
+            more(&buff, &mut stdout, true);
+        } else {
+            show_usage_error!("bad usage");
+        }
     }
     0
 }
 
 #[cfg(not(target_os = "fuchsia"))]
 fn setup_term() -> std::io::Stdout {
-    let mut stdout = stdout();
+    let stdout = stdout();
     terminal::enable_raw_mode().unwrap();
-    // Change this to a queue if more commands are executed to avoid too many writes to the terminal
-    execute!(stdout, terminal::Clear(terminal::ClearType::All)).unwrap();
     stdout
 }
 
@@ -177,8 +191,10 @@ fn setup_term() -> usize {
 fn reset_term(stdout: &mut std::io::Stdout) {
     terminal::disable_raw_mode().unwrap();
     // Clear the prompt
-    execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine)).unwrap();
-    println!("\r");
+    queue!(stdout, terminal::Clear(terminal::ClearType::CurrentLine)).unwrap();
+    // Move cursor to the beginning without printing new line
+    print!("\r");
+    stdout.flush().unwrap();
 }
 
 #[cfg(target_os = "fuchsia")]
