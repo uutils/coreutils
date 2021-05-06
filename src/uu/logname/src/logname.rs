@@ -37,21 +37,20 @@ static SUMMARY: &str = "Print user's login name";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn get_usage() -> String {
-    format!("{0}", executable!())
+    String::from(executable!())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let _ = args
+    let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
     let usage = get_usage();
-
     let _ = App::new(executable!())
         .version(VERSION)
         .about(SUMMARY)
         .usage(&usage[..])
-        .get_matches();
+        .get_matches_from(args);
 
     match get_userlogin() {
         Some(userlogin) => println!("{}", userlogin),
