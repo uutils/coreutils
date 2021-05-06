@@ -323,7 +323,12 @@ fn wc(files: Vec<String>, settings: &Settings) -> Result<(), u32> {
             error_count += 1;
             WordCount::default()
         });
-        max_width = max(max_width, word_count.bytes.to_string().len() + 1);
+        // Compute the number of digits needed to display the number
+        // of bytes in the file. Even if the settings indicate that we
+        // won't *display* the number of bytes, we still use the
+        // number of digits in the byte count as the width when
+        // formatting each count as a string for output.
+        max_width = max(max_width, word_count.bytes.to_string().len());
         total_word_count += word_count;
         results.push(word_count.with_title(path));
     }
@@ -364,24 +369,54 @@ fn print_stats(
         min_width = 0;
     }
 
+    let mut is_first: bool = true;
+
     if settings.show_lines {
-        write!(stdout_lock, "{:1$}", result.count.lines, min_width)?;
+        if is_first {
+            write!(stdout_lock, "{:1$}", result.count.lines, min_width)?;
+        } else {
+            write!(stdout_lock, " {:1$}", result.count.lines, min_width)?;
+        }
+        is_first = false;
     }
     if settings.show_words {
-        write!(stdout_lock, "{:1$}", result.count.words, min_width)?;
+        if is_first {
+            write!(stdout_lock, "{:1$}", result.count.words, min_width)?;
+        } else {
+            write!(stdout_lock, " {:1$}", result.count.words, min_width)?;
+        }
+        is_first = false;
     }
     if settings.show_bytes {
-        write!(stdout_lock, "{:1$}", result.count.bytes, min_width)?;
+        if is_first {
+            write!(stdout_lock, "{:1$}", result.count.bytes, min_width)?;
+        } else {
+            write!(stdout_lock, " {:1$}", result.count.bytes, min_width)?;
+        }
+        is_first = false;
     }
     if settings.show_chars {
-        write!(stdout_lock, "{:1$}", result.count.chars, min_width)?;
+        if is_first {
+            write!(stdout_lock, "{:1$}", result.count.chars, min_width)?;
+        } else {
+            write!(stdout_lock, " {:1$}", result.count.chars, min_width)?;
+        }
+        is_first = false;
     }
     if settings.show_max_line_length {
-        write!(
-            stdout_lock,
-            "{:1$}",
-            result.count.max_line_length, min_width
-        )?;
+        if is_first {
+            write!(
+                stdout_lock,
+                "{:1$}",
+                result.count.max_line_length, min_width
+            )?;
+        } else {
+            write!(
+                stdout_lock,
+                " {:1$}",
+                result.count.max_line_length, min_width
+            )?;
+        }
     }
 
     if result.title == "-" {
