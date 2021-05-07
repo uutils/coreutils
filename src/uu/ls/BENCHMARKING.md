@@ -36,6 +36,8 @@ args="$@"
 hyperfine "ls $args" "target/release/coreutils ls $args"
 ```
 
+**Note**: No localization is currently implemented. This means that the comparison above is not really fair. We can fix this by setting `LC_ALL=C`, so GNU `ls` can ignore localization.
+
 ## Checking system call count
 
 - Another thing to look at would be system calls count using strace (on linux) or equivalent on other operating systems.

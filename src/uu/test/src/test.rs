@@ -1,144 +1,154 @@
-//  * This file is part of the uutils coreutils package.
-//  *
-//  * (c) mahkoh (ju.orth [at] gmail [dot] com)
-//  *
-//  * For the full copyright and license information, please view the LICENSE
-//  * file that was distributed with this source code.
+// This file is part of the uutils coreutils package.
+//
+// (c) mahkoh (ju.orth [at] gmail [dot] com)
+// (c) Daniel Rocco <drocco@gmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) retval paren prec subprec cond
 
-use std::collections::HashMap;
-use std::str::from_utf8;
+mod parser;
 
-static NAME: &str = "test";
+use parser::{parse, Symbol};
+use std::ffi::{OsStr, OsString};
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args: Vec<_> = args.collect();
-    // This is completely disregarding valid windows paths that aren't valid unicode
-    let args = args
-        .iter()
-        .map(|a| a.to_str().unwrap().as_bytes())
-        .collect::<Vec<&[u8]>>();
-    if args.is_empty() {
-        return 2;
-    }
-    let args = if !args[0].ends_with(NAME.as_bytes()) {
-        &args[1..]
-    } else {
-        &args[..]
-    };
-    let args = match args[0] {
-        b"[" => match args[args.len() - 1] {
-            b"]" => &args[1..args.len() - 1],
-            _ => return 2,
-        },
-        _ => &args[1..args.len()],
-    };
-    let mut error = false;
-    let retval = 1 - parse_expr(args, &mut error) as i32;
-    if error {
-        2
-    } else {
-        retval
-    }
-}
+    // TODO: handle being called as `[`
+    let args: Vec<_> = args.skip(1).collect();
 
-fn one(args: &[&[u8]]) -> bool {
-    !args[0].is_empty()
-}
+    let result = parse(args).and_then(|mut stack| eval(&mut stack));
 
-fn two(args: &[&[u8]], error: &mut bool) -> bool {
-    match args[0] {
-        b"!" => !one(&args[1..]),
-        b"-b" => path(args[1], PathCondition::BlockSpecial),
-        b"-c" => path(args[1], PathCondition::CharacterSpecial),
-        b"-d" => path(args[1], PathCondition::Directory),
-        b"-e" => path(args[1], PathCondition::Exists),
-        b"-f" => path(args[1], PathCondition::Regular),
-        b"-g" => path(args[1], PathCondition::GroupIdFlag),
-        b"-h" => path(args[1], PathCondition::SymLink),
-        b"-L" => path(args[1], PathCondition::SymLink),
-        b"-n" => one(&args[1..]),
-        b"-p" => path(args[1], PathCondition::Fifo),
-        b"-r" => path(args[1], PathCondition::Readable),
-        b"-S" => path(args[1], PathCondition::Socket),
-        b"-s" => path(args[1], PathCondition::NonEmpty),
-        b"-t" => isatty(args[1]),
-        b"-u" => path(args[1], PathCondition::UserIdFlag),
-        b"-w" => path(args[1], PathCondition::Writable),
-        b"-x" => path(args[1], PathCondition::Executable),
-        b"-z" => !one(&args[1..]),
-        _ => {
-            *error = true;
-            false
-        }
-    }
-}
-
-fn three(args: &[&[u8]], error: &mut bool) -> bool {
-    match args[1] {
-        b"=" => args[0] == args[2],
-        b"==" => args[0] == args[2],
-        b"!=" => args[0] != args[2],
-        b"-eq" => integers(args[0], args[2], IntegerCondition::Equal),
-        b"-ne" => integers(args[0], args[2], IntegerCondition::Unequal),
-        b"-gt" => integers(args[0], args[2], IntegerCondition::Greater),
-        b"-ge" => integers(args[0], args[2], IntegerCondition::GreaterEqual),
-        b"-lt" => integers(args[0], args[2], IntegerCondition::Less),
-        b"-le" => integers(args[0], args[2], IntegerCondition::LessEqual),
-        _ => match args[0] {
-            b"!" => !two(&args[1..], error),
-            _ => {
-                *error = true;
-                false
+    match result {
+        Ok(result) => {
+            if result {
+                0
+            } else {
+                1
             }
-        },
-    }
-}
-
-fn four(args: &[&[u8]], error: &mut bool) -> bool {
-    match args[0] {
-        b"!" => !three(&args[1..], error),
-        _ => {
-            *error = true;
-            false
+        }
+        Err(e) => {
+            eprintln!("test: {}", e);
+            2
         }
     }
 }
 
-enum IntegerCondition {
-    Equal,
-    Unequal,
-    Greater,
-    GreaterEqual,
-    Less,
-    LessEqual,
-}
+/// Evaluate a stack of Symbols, returning the result of the evaluation or
+/// an error message if evaluation failed.
+fn eval(stack: &mut Vec<Symbol>) -> Result<bool, String> {
+    macro_rules! pop_literal {
+        () => {
+            match stack.pop() {
+                Some(Symbol::Literal(s)) => s,
+                _ => panic!(),
+            }
+        };
+    }
 
-fn integers(a: &[u8], b: &[u8], cond: IntegerCondition) -> bool {
-    let (a, b): (&str, &str) = match (from_utf8(a), from_utf8(b)) {
-        (Ok(a), Ok(b)) => (a, b),
-        _ => return false,
-    };
-    let (a, b): (i64, i64) = match (a.parse(), b.parse()) {
-        (Ok(a), Ok(b)) => (a, b),
-        _ => return false,
-    };
-    match cond {
-        IntegerCondition::Equal => a == b,
-        IntegerCondition::Unequal => a != b,
-        IntegerCondition::Greater => a > b,
-        IntegerCondition::GreaterEqual => a >= b,
-        IntegerCondition::Less => a < b,
-        IntegerCondition::LessEqual => a <= b,
+    let s = stack.pop();
+
+    match s {
+        Some(Symbol::Bang) => {
+            let result = eval(stack)?;
+
+            Ok(!result)
+        }
+        Some(Symbol::StringOp(op)) => {
+            let b = stack.pop();
+            let a = stack.pop();
+            Ok(if op == "=" { a == b } else { a != b })
+        }
+        Some(Symbol::IntOp(op)) => {
+            let b = pop_literal!();
+            let a = pop_literal!();
+
+            Ok(integers(&a, &b, &op)?)
+        }
+        Some(Symbol::FileOp(_op)) => unimplemented!(),
+        Some(Symbol::StrlenOp(op)) => {
+            let s = match stack.pop() {
+                Some(Symbol::Literal(s)) => s,
+                Some(Symbol::None) => OsString::from(""),
+                None => {
+                    return Ok(true);
+                }
+                _ => {
+                    return Err(format!("missing argument after ‘{:?}’", op));
+                }
+            };
+
+            Ok(if op == "-z" {
+                s.is_empty()
+            } else {
+                !s.is_empty()
+            })
+        }
+        Some(Symbol::FiletestOp(op)) => {
+            let op = op.to_string_lossy();
+
+            let f = pop_literal!();
+
+            Ok(match op.as_ref() {
+                "-b" => path(&f, PathCondition::BlockSpecial),
+                "-c" => path(&f, PathCondition::CharacterSpecial),
+                "-d" => path(&f, PathCondition::Directory),
+                "-e" => path(&f, PathCondition::Exists),
+                "-f" => path(&f, PathCondition::Regular),
+                "-g" => path(&f, PathCondition::GroupIdFlag),
+                "-h" => path(&f, PathCondition::SymLink),
+                "-L" => path(&f, PathCondition::SymLink),
+                "-p" => path(&f, PathCondition::Fifo),
+                "-r" => path(&f, PathCondition::Readable),
+                "-S" => path(&f, PathCondition::Socket),
+                "-s" => path(&f, PathCondition::NonEmpty),
+                "-t" => isatty(&f)?,
+                "-u" => path(&f, PathCondition::UserIdFlag),
+                "-w" => path(&f, PathCondition::Writable),
+                "-x" => path(&f, PathCondition::Executable),
+                _ => panic!(),
+            })
+        }
+        Some(Symbol::Literal(s)) => Ok(!s.is_empty()),
+        Some(Symbol::None) => Ok(false),
+        Some(Symbol::BoolOp(op)) => {
+            let b = eval(stack)?;
+            let a = eval(stack)?;
+
+            Ok(if op == "-a" { a && b } else { a || b })
+        }
+        None => Ok(false),
+        _ => Err("expected value".to_string()),
     }
 }
 
-fn isatty(fd: &[u8]) -> bool {
-    from_utf8(fd)
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .map_or(false, |i| {
+fn integers(a: &OsStr, b: &OsStr, cond: &OsStr) -> Result<bool, String> {
+    let format_err = |value| format!("invalid integer ‘{}’", value);
+
+    let a = a.to_string_lossy();
+    let a: i64 = a.parse().map_err(|_| format_err(a))?;
+
+    let b = b.to_string_lossy();
+    let b: i64 = b.parse().map_err(|_| format_err(b))?;
+
+    let cond = cond.to_string_lossy();
+    Ok(match cond.as_ref() {
+        "-eq" => a == b,
+        "-ne" => a != b,
+        "-gt" => a > b,
+        "-ge" => a >= b,
+        "-lt" => a < b,
+        "-le" => a <= b,
+        _ => return Err(format!("unknown operator ‘{}’", cond)),
+    })
+}
+
+fn isatty(fd: &OsStr) -> Result<bool, String> {
+    let fd = fd.to_string_lossy();
+
+    fd.parse()
+        .map_err(|_| format!("invalid integer ‘{}’", fd))
+        .map(|i| {
             #[cfg(not(target_os = "redox"))]
             unsafe {
                 libc::isatty(i) == 1
@@ -146,173 +156,6 @@ fn isatty(fd: &[u8]) -> bool {
             #[cfg(target_os = "redox")]
             syscall::dup(i, b"termios").map(syscall::close).is_ok()
         })
-}
-
-fn dispatch(args: &mut &[&[u8]], error: &mut bool) -> bool {
-    let (val, idx) = match args.len() {
-        0 => {
-            *error = true;
-            (false, 0)
-        }
-        1 => (one(*args), 1),
-        2 => dispatch_two(args, error),
-        3 => dispatch_three(args, error),
-        _ => dispatch_four(args, error),
-    };
-    *args = &(*args)[idx..];
-    val
-}
-
-fn dispatch_two(args: &mut &[&[u8]], error: &mut bool) -> (bool, usize) {
-    let val = two(*args, error);
-    if *error {
-        *error = false;
-        (one(*args), 1)
-    } else {
-        (val, 2)
-    }
-}
-
-fn dispatch_three(args: &mut &[&[u8]], error: &mut bool) -> (bool, usize) {
-    let val = three(*args, error);
-    if *error {
-        *error = false;
-        dispatch_two(args, error)
-    } else {
-        (val, 3)
-    }
-}
-
-fn dispatch_four(args: &mut &[&[u8]], error: &mut bool) -> (bool, usize) {
-    let val = four(*args, error);
-    if *error {
-        *error = false;
-        dispatch_three(args, error)
-    } else {
-        (val, 4)
-    }
-}
-
-#[derive(Clone, Copy)]
-enum Precedence {
-    Unknown = 0,
-    Paren, // FIXME: this is useless (parentheses have not been implemented)
-    Or,
-    And,
-    BUnOp,
-    BinOp,
-    UnOp,
-}
-
-fn parse_expr(mut args: &[&[u8]], error: &mut bool) -> bool {
-    if args.is_empty() {
-        false
-    } else {
-        let hashmap = setup_hashmap();
-        let lhs = dispatch(&mut args, error);
-
-        if !args.is_empty() {
-            parse_expr_helper(&hashmap, &mut args, lhs, Precedence::Unknown, error)
-        } else {
-            lhs
-        }
-    }
-}
-
-fn parse_expr_helper<'a>(
-    hashmap: &HashMap<&'a [u8], Precedence>,
-    args: &mut &[&'a [u8]],
-    mut lhs: bool,
-    min_prec: Precedence,
-    error: &mut bool,
-) -> bool {
-    let mut prec = *hashmap.get(&args[0]).unwrap_or_else(|| {
-        *error = true;
-        &min_prec
-    });
-    while !*error && !args.is_empty() && prec as usize >= min_prec as usize {
-        let op = args[0];
-        *args = &(*args)[1..];
-        let mut rhs = dispatch(args, error);
-        while !args.is_empty() {
-            let subprec = *hashmap.get(&args[0]).unwrap_or_else(|| {
-                *error = true;
-                &min_prec
-            });
-            if subprec as usize <= prec as usize || *error {
-                break;
-            }
-            rhs = parse_expr_helper(hashmap, args, rhs, subprec, error);
-        }
-        lhs = match prec {
-            Precedence::UnOp | Precedence::BUnOp => {
-                *error = true;
-                false
-            }
-            Precedence::And => lhs && rhs,
-            Precedence::Or => lhs || rhs,
-            Precedence::BinOp => three(
-                &[
-                    if lhs { b" " } else { b"" },
-                    op,
-                    if rhs { b" " } else { b"" },
-                ],
-                error,
-            ),
-            Precedence::Paren => unimplemented!(), // TODO: implement parentheses
-            _ => unreachable!(),
-        };
-        if !args.is_empty() {
-            prec = *hashmap.get(&args[0]).unwrap_or_else(|| {
-                *error = true;
-                &min_prec
-            });
-        }
-    }
-    lhs
-}
-
-#[inline]
-fn setup_hashmap<'a>() -> HashMap<&'a [u8], Precedence> {
-    let mut hashmap = HashMap::<&'a [u8], Precedence>::new();
-
-    hashmap.insert(b"-b", Precedence::UnOp);
-    hashmap.insert(b"-c", Precedence::UnOp);
-    hashmap.insert(b"-d", Precedence::UnOp);
-    hashmap.insert(b"-e", Precedence::UnOp);
-    hashmap.insert(b"-f", Precedence::UnOp);
-    hashmap.insert(b"-g", Precedence::UnOp);
-    hashmap.insert(b"-h", Precedence::UnOp);
-    hashmap.insert(b"-L", Precedence::UnOp);
-    hashmap.insert(b"-n", Precedence::UnOp);
-    hashmap.insert(b"-p", Precedence::UnOp);
-    hashmap.insert(b"-r", Precedence::UnOp);
-    hashmap.insert(b"-S", Precedence::UnOp);
-    hashmap.insert(b"-s", Precedence::UnOp);
-    hashmap.insert(b"-t", Precedence::UnOp);
-    hashmap.insert(b"-u", Precedence::UnOp);
-    hashmap.insert(b"-w", Precedence::UnOp);
-    hashmap.insert(b"-x", Precedence::UnOp);
-    hashmap.insert(b"-z", Precedence::UnOp);
-
-    hashmap.insert(b"=", Precedence::BinOp);
-    hashmap.insert(b"!=", Precedence::BinOp);
-    hashmap.insert(b"-eq", Precedence::BinOp);
-    hashmap.insert(b"-ne", Precedence::BinOp);
-    hashmap.insert(b"-gt", Precedence::BinOp);
-    hashmap.insert(b"-ge", Precedence::BinOp);
-    hashmap.insert(b"-lt", Precedence::BinOp);
-    hashmap.insert(b"-le", Precedence::BinOp);
-
-    hashmap.insert(b"!", Precedence::BUnOp);
-
-    hashmap.insert(b"-a", Precedence::And);
-    hashmap.insert(b"-o", Precedence::Or);
-
-    hashmap.insert(b"(", Precedence::Paren);
-    hashmap.insert(b")", Precedence::Paren);
-
-    hashmap
 }
 
 #[derive(Eq, PartialEq)]
@@ -334,13 +177,9 @@ enum PathCondition {
 }
 
 #[cfg(not(windows))]
-fn path(path: &[u8], cond: PathCondition) -> bool {
-    use std::ffi::OsStr;
+fn path(path: &OsStr, cond: PathCondition) -> bool {
     use std::fs::{self, Metadata};
-    use std::os::unix::ffi::OsStrExt;
     use std::os::unix::fs::{FileTypeExt, MetadataExt};
-
-    let path = OsStr::from_bytes(path);
 
     const S_ISUID: u32 = 0o4000;
     const S_ISGID: u32 = 0o2000;
@@ -403,13 +242,14 @@ fn path(path: &[u8], cond: PathCondition) -> bool {
 }
 
 #[cfg(windows)]
-fn path(path: &[u8], cond: PathCondition) -> bool {
+fn path(path: &OsStr, cond: PathCondition) -> bool {
     use std::fs::metadata;
-    let path = from_utf8(path).unwrap();
+
     let stat = match metadata(path) {
         Ok(s) => s,
         _ => return false,
     };
+
     match cond {
         PathCondition::BlockSpecial => false,
         PathCondition::CharacterSpecial => false,

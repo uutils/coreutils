@@ -5,6 +5,7 @@ use crate::common::util::*;
 extern crate regex;
 use self::regex::Regex;
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
@@ -43,23 +44,74 @@ fn test_ls_a() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.touch(".test-1");
+    at.mkdir("some-dir");
+    at.touch(
+        Path::new("some-dir")
+            .join(".test-2")
+            .as_os_str()
+            .to_str()
+            .unwrap(),
+    );
 
-    let result = scene.ucmd().succeeds();
-    let stdout = result.stdout_str();
-    assert!(!stdout.contains(".test-1"));
-    assert!(!stdout.contains(".."));
+    let re_pwd = Regex::new(r"^\.\n").unwrap();
+
+    // Using the present working directory
+    scene
+        .ucmd()
+        .arg("-1")
+        .succeeds()
+        .stdout_does_not_contain(".test-1")
+        .stdout_does_not_contain("..")
+        .stdout_does_not_match(&re_pwd);
 
     scene
         .ucmd()
         .arg("-a")
+        .arg("-1")
         .succeeds()
         .stdout_contains(&".test-1")
-        .stdout_contains(&"..");
+        .stdout_contains(&"..")
+        .stdout_matches(&re_pwd);
 
-    let result = scene.ucmd().arg("-A").succeeds();
-    result.stdout_contains(".test-1");
-    let stdout = result.stdout_str();
-    assert!(!stdout.contains(".."));
+    scene
+        .ucmd()
+        .arg("-A")
+        .arg("-1")
+        .succeeds()
+        .stdout_contains(".test-1")
+        .stdout_does_not_contain("..")
+        .stdout_does_not_match(&re_pwd);
+
+    // Using a subdirectory
+    scene
+        .ucmd()
+        .arg("-1")
+        .arg("some-dir")
+        .succeeds()
+        .stdout_does_not_contain(".test-2")
+        .stdout_does_not_contain("..")
+        .stdout_does_not_match(&re_pwd);
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("-1")
+        .arg("some-dir")
+        .succeeds()
+        .stdout_contains(&".test-2")
+        .stdout_contains(&"..")
+        .no_stderr()
+        .stdout_matches(&re_pwd);
+
+    scene
+        .ucmd()
+        .arg("-A")
+        .arg("-1")
+        .arg("some-dir")
+        .succeeds()
+        .stdout_contains(".test-2")
+        .stdout_does_not_contain("..")
+        .stdout_does_not_match(&re_pwd);
 }
 
 #[test]
@@ -253,6 +305,50 @@ fn test_ls_long() {
     {
         unsafe {
             umask(last);
+        }
+    }
+}
+
+#[test]
+fn test_ls_long_total_size() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch(&at.plus_as_string("test-long"));
+    at.append("test-long", "1");
+    at.touch(&at.plus_as_string("test-long2"));
+    at.append("test-long2", "2");
+
+    let expected_prints: HashMap<_, _> = if cfg!(unix) {
+        [
+            ("long_vanilla", "total 8"),
+            ("long_human_readable", "total 8.0K"),
+            ("long_si", "total 8.2k"),
+        ]
+        .iter()
+        .cloned()
+        .collect()
+    } else {
+        [
+            ("long_vanilla", "total 2"),
+            ("long_human_readable", "total 2"),
+            ("long_si", "total 2"),
+        ]
+        .iter()
+        .cloned()
+        .collect()
+    };
+
+    for arg in &["-l", "--long", "--format=long", "--format=verbose"] {
+        let result = scene.ucmd().arg(arg).succeeds();
+        result.stdout_contains(expected_prints["long_vanilla"]);
+
+        for arg2 in &["-h", "--human-readable", "--si"] {
+            let result = scene.ucmd().arg(arg).arg(arg2).succeeds();
+            result.stdout_contains(if *arg2 == "--si" {
+                expected_prints["long_si"]
+            } else {
+                expected_prints["long_human_readable"]
+            });
         }
     }
 }
@@ -482,7 +578,6 @@ fn test_ls_sort_name() {
         .succeeds()
         .stdout_is(["test-1", "test-2", "test-3\n"].join(sep));
 
-    // Order of a named sort ignores leading dots.
     let scene_dot = TestScenario::new(util_name!());
     let at = &scene_dot.fixtures;
     at.touch(".a");
@@ -495,7 +590,7 @@ fn test_ls_sort_name() {
         .arg("--sort=name")
         .arg("-A")
         .succeeds()
-        .stdout_is([".a", "a", ".b", "b\n"].join(sep));
+        .stdout_is([".a", ".b", "a", "b\n"].join(sep));
 }
 
 #[test]
@@ -559,8 +654,7 @@ fn test_ls_long_ctime() {
 }
 
 #[test]
-#[cfg(not(windows))]
-// This test is currently failing on windows
+#[ignore]
 fn test_ls_order_birthtime() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -570,15 +664,11 @@ fn test_ls_order_birthtime() {
         After creating the first file try to sync it.
         This ensures the file gets created immediately instead of being saved
         inside the OS's IO operation buffer.
-        Without this, both files might accidentally be created at the same time,
-        even though we placed a timeout between creating the two.
-
-        https://github.com/uutils/coreutils/pull/1986/#issuecomment-828490651
+        Without this, both files might accidentally be created at the same time.
     */
     at.make_file("test-birthtime-1").sync_all().unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(1));
-    at.make_file("test-birthtime-2");
-    at.touch("test-birthtime-1");
+    at.make_file("test-birthtime-2").sync_all().unwrap();
+    at.open("test-birthtime-1");
 
     let result = scene.ucmd().arg("--time=birth").arg("-t").run();
 
@@ -602,7 +692,7 @@ fn test_ls_styles() {
         Regex::new(r"[a-z-]* \d* \w* \w* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2} test\n").unwrap();
     let re_iso = Regex::new(r"[a-z-]* \d* \w* \w* \d* \d{2}-\d{2} \d{2}:\d{2} test\n").unwrap();
     let re_locale =
-        Regex::new(r"[a-z-]* \d* \w* \w* \d* [A-Z][a-z]{2} \d{2} \d{2}:\d{2} test\n").unwrap();
+        Regex::new(r"[a-z-]* \d* \w* \w* \d* [A-Z][a-z]{2} ( |\d)\d \d{2}:\d{2} test\n").unwrap();
 
     //full-iso
     let result = scene
