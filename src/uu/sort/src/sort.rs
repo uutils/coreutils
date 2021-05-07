@@ -20,8 +20,8 @@ mod external_sort;
 mod numeric_str_cmp;
 
 use clap::{App, Arg};
-use external_sort::ext_sort;
 use custom_str_cmp::custom_str_cmp;
+use external_sort::ext_sort;
 use fnv::FnvHasher;
 use itertools::Itertools;
 use numeric_str_cmp::{numeric_str_cmp, NumInfo, NumInfoParseSettings};
@@ -29,7 +29,6 @@ use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use rayon::prelude::*;
 use semver::Version;
-use smallvec::SmallVec;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::env;
@@ -231,7 +230,6 @@ impl SelectionRange {
 enum NumCache {
     AsF64(GeneralF64ParseResult),
     WithInfo(NumInfo),
-    None,
 }
 
 impl NumCache {
@@ -252,7 +250,7 @@ impl NumCache {
 #[derive(Clone)]
 struct Selection {
     range: SelectionRange,
-    num_cache: NumCache,
+    num_cache: Option<Box<NumCache>>,
 }
 
 impl Selection {
@@ -266,15 +264,17 @@ type Field = Range<usize>;
 
 #[derive(Clone)]
 pub struct Line {
-    line: String,
+    line: Box<str>,
     // The common case is not to specify fields. Let's make this fast.
-    selections: SmallVec<[Selection; 1]>,
+    first_selection: Selection,
+    other_selections: Box<[Selection]>,
 }
 
 impl Line {
+    /// Estimate the number of bytes that this Line is occupying
     pub fn estimate_size(&self) -> usize {
-        self.line.capacity()
-            + self.selections.capacity() * std::mem::size_of::<Selection>()
+        self.line.len()
+            + self.other_selections.len() * std::mem::size_of::<Selection>()
             + std::mem::size_of::<Self>()
     }
 
@@ -290,35 +290,22 @@ impl Line {
             None
         };
 
-        let selections: SmallVec<[Selection; 1]> = settings
-            .selectors
-            .iter()
-            .map(|selector| {
-                let mut range =
-                    SelectionRange::new(selector.get_selection(&line, fields.as_deref()));
-                let num_cache = if selector.settings.mode == SortMode::Numeric
-                    || selector.settings.mode == SortMode::HumanNumeric
-                {
-                    let (info, num_range) = NumInfo::parse(
-                        range.get_str(&line),
-                        NumInfoParseSettings {
-                            accept_si_units: selector.settings.mode == SortMode::HumanNumeric,
-                            thousands_separator: Some(THOUSANDS_SEP),
-                            decimal_pt: Some(DECIMAL_PT),
-                        },
-                    );
-                    range.shorten(num_range);
-                    NumCache::WithInfo(info)
-                } else if selector.settings.mode == SortMode::GeneralNumeric {
-                    let str = range.get_str(&line);
-                    NumCache::AsF64(general_f64_parse(&str[get_leading_gen(str)]))
-                } else {
-                    NumCache::None
-                };
-                Selection { range, num_cache }
-            })
+        let mut selectors = settings.selectors.iter();
+
+        let first_selection = selectors
+            .next()
+            .unwrap()
+            .get_selection(&line, fields.as_deref());
+
+        let other_selections: Vec<Selection> = selectors
+            .map(|selector| selector.get_selection(&line, fields.as_deref()))
             .collect();
-        Self { line, selections }
+
+        Self {
+            line: line.into_boxed_str(),
+            first_selection,
+            other_selections: other_selections.into_boxed_slice(),
+        }
     }
 
     /// Writes indicators for the selections this line matched. The original line content is NOT expected
@@ -337,7 +324,7 @@ impl Line {
 
         let fields = tokenize(&self.line, settings.separator);
         for selector in settings.selectors.iter() {
-            let mut selection = selector.get_selection(&self.line, Some(&fields));
+            let mut selection = selector.get_range(&self.line, Some(&fields));
             match selector.settings.mode {
                 SortMode::Numeric | SortMode::HumanNumeric => {
                     // find out which range is used for numeric comparisons
@@ -594,9 +581,35 @@ impl FieldSelector {
         self.from.field != 1 || self.from.char == 0 || self.to.is_some()
     }
 
+    fn get_selection(&self, line: &str, fields: Option<&[Field]>) -> Selection {
+        let mut range = SelectionRange::new(self.get_range(&line, fields));
+        let num_cache = if self.settings.mode == SortMode::Numeric
+            || self.settings.mode == SortMode::HumanNumeric
+        {
+            let (info, num_range) = NumInfo::parse(
+                range.get_str(&line),
+                NumInfoParseSettings {
+                    accept_si_units: self.settings.mode == SortMode::HumanNumeric,
+                    thousands_separator: Some(THOUSANDS_SEP),
+                    decimal_pt: Some(DECIMAL_PT),
+                },
+            );
+            range.shorten(num_range);
+            Some(Box::new(NumCache::WithInfo(info)))
+        } else if self.settings.mode == SortMode::GeneralNumeric {
+            let str = range.get_str(&line);
+            Some(Box::new(NumCache::AsF64(general_f64_parse(
+                &str[get_leading_gen(str)],
+            ))))
+        } else {
+            None
+        };
+        Selection { range, num_cache }
+    }
+
     /// Look up the slice that corresponds to this selector for the given line.
-    /// If needs_fields returned false, fields may be None.
-    fn get_selection<'a>(&self, line: &'a str, tokens: Option<&[Field]>) -> Range<usize> {
+    /// If needs_fields returned false, tokens may be None.
+    fn get_range<'a>(&self, line: &'a str, tokens: Option<&[Field]>) -> Range<usize> {
         enum Resolution {
             // The start index of the resolved character, inclusive
             StartOfChar(usize),
@@ -1237,8 +1250,11 @@ fn sort_by(unsorted: &mut Vec<Line>, settings: &GlobalSettings) {
 
 fn compare_by(a: &Line, b: &Line, global_settings: &GlobalSettings) -> Ordering {
     for (idx, selector) in global_settings.selectors.iter().enumerate() {
-        let a_selection = &a.selections[idx];
-        let b_selection = &b.selections[idx];
+        let (a_selection, b_selection) = if idx == 0 {
+            (&a.first_selection, &b.first_selection)
+        } else {
+            (&a.other_selections[idx - 1], &b.other_selections[idx - 1])
+        };
         let a_str = a_selection.get_str(a);
         let b_str = b_selection.get_str(b);
         let settings = &selector.settings;
@@ -1248,12 +1264,12 @@ fn compare_by(a: &Line, b: &Line, global_settings: &GlobalSettings) -> Ordering 
         } else {
             match settings.mode {
                 SortMode::Numeric | SortMode::HumanNumeric => numeric_str_cmp(
-                    (a_str, a_selection.num_cache.as_num_info()),
-                    (b_str, b_selection.num_cache.as_num_info()),
+                    (a_str, a_selection.num_cache.as_ref().unwrap().as_num_info()),
+                    (b_str, b_selection.num_cache.as_ref().unwrap().as_num_info()),
                 ),
                 SortMode::GeneralNumeric => general_numeric_compare(
-                    a_selection.num_cache.as_f64(),
-                    b_selection.num_cache.as_f64(),
+                    a_selection.num_cache.as_ref().unwrap().as_f64(),
+                    b_selection.num_cache.as_ref().unwrap().as_f64(),
                 ),
                 SortMode::Month => month_compare(a_str, b_str),
                 SortMode::Version => version_compare(a_str, b_str),
@@ -1590,5 +1606,17 @@ mod tests {
         assert_eq!(tokenize(line, Some('a')), vec![0..0, 1..1]);
         let line = "..a..a";
         assert_eq!(tokenize(line, Some('a')), vec![0..2, 3..5]);
+    }
+
+    #[test]
+    #[cfg(target_pointer_width = "64")]
+    fn test_line_size() {
+        // We should make sure to not regress the size of the Line struct because
+        // it is unconditional overhead for every line we sort.
+        assert_eq!(std::mem::size_of::<Line>(), 56);
+        // These are the fields of Line:
+        assert_eq!(std::mem::size_of::<Box<str>>(), 16);
+        assert_eq!(std::mem::size_of::<Selection>(), 24);
+        assert_eq!(std::mem::size_of::<Box<[Selection]>>(), 16);
     }
 }
