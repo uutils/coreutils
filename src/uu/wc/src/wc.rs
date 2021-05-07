@@ -372,51 +372,42 @@ fn print_stats(
     let mut is_first: bool = true;
 
     if settings.show_lines {
-        if is_first {
-            write!(stdout_lock, "{:1$}", result.count.lines, min_width)?;
-        } else {
-            write!(stdout_lock, " {:1$}", result.count.lines, min_width)?;
+        if !is_first {
+            write!(stdout_lock, " ")?;
         }
+        write!(stdout_lock, "{:1$}", result.count.lines, min_width)?;
         is_first = false;
     }
     if settings.show_words {
-        if is_first {
-            write!(stdout_lock, "{:1$}", result.count.words, min_width)?;
-        } else {
-            write!(stdout_lock, " {:1$}", result.count.words, min_width)?;
+        if !is_first {
+            write!(stdout_lock, " ")?;
         }
+        write!(stdout_lock, "{:1$}", result.count.words, min_width)?;
         is_first = false;
     }
     if settings.show_bytes {
-        if is_first {
-            write!(stdout_lock, "{:1$}", result.count.bytes, min_width)?;
-        } else {
-            write!(stdout_lock, " {:1$}", result.count.bytes, min_width)?;
+        if !is_first {
+            write!(stdout_lock, " ")?;
         }
+        write!(stdout_lock, "{:1$}", result.count.bytes, min_width)?;
         is_first = false;
     }
     if settings.show_chars {
-        if is_first {
-            write!(stdout_lock, "{:1$}", result.count.chars, min_width)?;
-        } else {
-            write!(stdout_lock, " {:1$}", result.count.chars, min_width)?;
+        if !is_first {
+            write!(stdout_lock, " ")?;
         }
+        write!(stdout_lock, "{:1$}", result.count.chars, min_width)?;
         is_first = false;
     }
     if settings.show_max_line_length {
-        if is_first {
-            write!(
-                stdout_lock,
-                "{:1$}",
-                result.count.max_line_length, min_width
-            )?;
-        } else {
-            write!(
-                stdout_lock,
-                " {:1$}",
-                result.count.max_line_length, min_width
-            )?;
+        if !is_first {
+            write!(stdout_lock, " ")?;
         }
+        write!(
+            stdout_lock,
+            "{:1$}",
+            result.count.max_line_length, min_width
+        )?;
     }
 
     if result.title == "-" {
