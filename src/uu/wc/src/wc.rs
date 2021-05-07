@@ -311,7 +311,6 @@ fn word_count_from_path(path: &str, settings: &Settings) -> WcResult<WordCount> 
 
 fn wc(files: Vec<String>, settings: &Settings) -> Result<(), u32> {
     let mut total_word_count = WordCount::default();
-    let mut results = vec![];
     let mut max_width: usize = 0;
     let mut error_count = 0;
 
@@ -325,10 +324,7 @@ fn wc(files: Vec<String>, settings: &Settings) -> Result<(), u32> {
         });
         max_width = max(max_width, word_count.bytes.to_string().len() + 1);
         total_word_count += word_count;
-        results.push(word_count.with_title(path));
-    }
-
-    for result in &results {
+        let result = word_count.with_title(path);
         if let Err(err) = print_stats(settings, &result, max_width) {
             show_warning!("failed to print result for {}: {}", result.title, err);
             error_count += 1;
