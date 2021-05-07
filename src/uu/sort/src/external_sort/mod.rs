@@ -113,7 +113,7 @@ pub fn ext_sort(
 
         chunk.push(seq);
 
-        if total_read >= settings.buffer_size {
+        if total_read + chunk.len() * std::mem::size_of::<Line>() >= settings.buffer_size {
             super::sort_by(&mut chunk, &settings);
             write_chunk(
                 settings,
@@ -135,6 +135,9 @@ pub fn ext_sort(
         );
         iter.chunks += 1;
     }
+
+    // We manually drop here to not go over our memory limit when we allocate below.
+    drop(chunk);
 
     // initialize buffers for each chunk
     //
