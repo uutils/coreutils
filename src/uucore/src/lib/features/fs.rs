@@ -8,8 +8,9 @@
 
 #[cfg(unix)]
 use libc::{
-    mode_t, S_IRGRP, S_IROTH, S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP, S_IWOTH, S_IWUSR,
-    S_IXGRP, S_IXOTH, S_IXUSR,
+    mode_t, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK, S_IRGRP,
+    S_IROTH, S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP, S_IWOTH, S_IWUSR, S_IXGRP, S_IXOTH,
+    S_IXUSR,
 };
 use std::borrow::Cow;
 use std::env;
@@ -23,9 +24,10 @@ use std::os::unix::fs::MetadataExt;
 use std::path::{Component, Path, PathBuf};
 
 #[cfg(unix)]
+#[macro_export]
 macro_rules! has {
     ($mode:expr, $perm:expr) => {
-        $mode & ($perm as u32) != 0
+        $mode & $perm != 0
     };
 }
 
@@ -240,22 +242,42 @@ pub fn is_stderr_interactive() -> bool {
 
 #[cfg(not(unix))]
 #[allow(unused_variables)]
-pub fn display_permissions(metadata: &fs::Metadata) -> String {
+pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> String {
+    if display_file_type {
+        return String::from("----------");
+    }
     String::from("---------")
 }
 
 #[cfg(unix)]
-pub fn display_permissions(metadata: &fs::Metadata) -> String {
+pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> String {
     let mode: mode_t = metadata.mode() as mode_t;
-    display_permissions_unix(mode as u32)
+    display_permissions_unix(mode, display_file_type)
 }
 
 #[cfg(unix)]
-pub fn display_permissions_unix(mode: u32) -> String {
-    let mut result = String::with_capacity(9);
+pub fn display_permissions_unix(mode: mode_t, display_file_type: bool) -> String {
+    let mut result;
+    if display_file_type {
+        result = String::with_capacity(10);
+        result.push(match mode & S_IFMT {
+            S_IFDIR => 'd',
+            S_IFCHR => 'c',
+            S_IFBLK => 'b',
+            S_IFREG => '-',
+            S_IFIFO => 'p',
+            S_IFLNK => 'l',
+            S_IFSOCK => 's',
+            // TODO: Other file types
+            _ => '?',
+        });
+    } else {
+        result = String::with_capacity(9);
+    }
+
     result.push(if has!(mode, S_IRUSR) { 'r' } else { '-' });
     result.push(if has!(mode, S_IWUSR) { 'w' } else { '-' });
-    result.push(if has!(mode, S_ISUID) {
+    result.push(if has!(mode, S_ISUID as mode_t) {
         if has!(mode, S_IXUSR) {
             's'
         } else {
@@ -269,7 +291,7 @@ pub fn display_permissions_unix(mode: u32) -> String {
 
     result.push(if has!(mode, S_IRGRP) { 'r' } else { '-' });
     result.push(if has!(mode, S_IWGRP) { 'w' } else { '-' });
-    result.push(if has!(mode, S_ISGID) {
+    result.push(if has!(mode, S_ISGID as mode_t) {
         if has!(mode, S_IXGRP) {
             's'
         } else {
@@ -283,7 +305,7 @@ pub fn display_permissions_unix(mode: u32) -> String {
 
     result.push(if has!(mode, S_IROTH) { 'r' } else { '-' });
     result.push(if has!(mode, S_IWOTH) { 'w' } else { '-' });
-    result.push(if has!(mode, S_ISVTX) {
+    result.push(if has!(mode, S_ISVTX as mode_t) {
         if has!(mode, S_IXOTH) {
             't'
         } else {
@@ -354,5 +376,58 @@ mod tests {
                 normalized.to_str().expect("Path is not valid utf-8!")
             );
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_display_permissions() {
+        assert_eq!(
+            "drwxr-xr-x",
+            display_permissions_unix(S_IFDIR | 0o755, true)
+        );
+        assert_eq!(
+            "rwxr-xr-x",
+            display_permissions_unix(S_IFDIR | 0o755, false)
+        );
+        assert_eq!(
+            "-rw-r--r--",
+            display_permissions_unix(S_IFREG | 0o644, true)
+        );
+        assert_eq!(
+            "srw-r-----",
+            display_permissions_unix(S_IFSOCK | 0o640, true)
+        );
+        assert_eq!(
+            "lrw-r-xr-x",
+            display_permissions_unix(S_IFLNK | 0o655, true)
+        );
+        assert_eq!("?rw-r-xr-x", display_permissions_unix(0o655, true));
+
+        assert_eq!(
+            "brwSr-xr-x",
+            display_permissions_unix(S_IFBLK | S_ISUID as mode_t | 0o655, true)
+        );
+        assert_eq!(
+            "brwsr-xr-x",
+            display_permissions_unix(S_IFBLK | S_ISUID as mode_t | 0o755, true)
+        );
+
+        assert_eq!(
+            "prw---sr--",
+            display_permissions_unix(S_IFIFO | S_ISGID as mode_t | 0o614, true)
+        );
+        assert_eq!(
+            "prw---Sr--",
+            display_permissions_unix(S_IFIFO | S_ISGID as mode_t | 0o604, true)
+        );
+
+        assert_eq!(
+            "c---r-xr-t",
+            display_permissions_unix(S_IFCHR | S_ISVTX as mode_t | 0o055, true)
+        );
+        assert_eq!(
+            "c---r-xr-T",
+            display_permissions_unix(S_IFCHR | S_ISVTX as mode_t | 0o054, true)
+        );
     }
 }

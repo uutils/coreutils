@@ -1480,9 +1480,8 @@ fn display_item_long(
 
     let _ = write!(
         out,
-        "{}{} {}",
-        display_file_type(md.file_type()),
-        display_permissions(&md),
+        "{} {}",
+        display_permissions(&md, true),
         pad_left(display_symlink_count(&md), max_links),
     );
 
@@ -1665,16 +1664,6 @@ fn display_size(len: u64, config: &Config) -> String {
         SizeFormat::Binary => format_prefixed(NumberPrefix::binary(len as f64)),
         SizeFormat::Decimal => format_prefixed(NumberPrefix::decimal(len as f64)),
         SizeFormat::Bytes => len.to_string(),
-    }
-}
-
-fn display_file_type(file_type: FileType) -> char {
-    if file_type.is_dir() {
-        'd'
-    } else if file_type.is_symlink() {
-        'l'
-    } else {
-        '-'
     }
 }
 

@@ -15,6 +15,7 @@ use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
 use uucore::fs::display_permissions_unix;
+use uucore::libc::mode_t;
 #[cfg(not(windows))]
 use uucore::mode;
 use uucore::InvalidEncodingHandling;
@@ -306,7 +307,7 @@ impl Chmoder {
                     "mode of '{}' retained as {:04o} ({})",
                     file.display(),
                     fperm,
-                    display_permissions_unix(fperm),
+                    display_permissions_unix(fperm as mode_t, false),
                 );
             }
             Ok(())
@@ -319,9 +320,9 @@ impl Chmoder {
                     "failed to change mode of file '{}' from {:o} ({}) to {:o} ({})",
                     file.display(),
                     fperm,
-                    display_permissions_unix(fperm),
+                    display_permissions_unix(fperm as mode_t, false),
                     mode,
-                    display_permissions_unix(mode)
+                    display_permissions_unix(mode as mode_t, false)
                 );
             }
             Err(1)
@@ -331,9 +332,9 @@ impl Chmoder {
                     "mode of '{}' changed from {:o} ({}) to {:o} ({})",
                     file.display(),
                     fperm,
-                    display_permissions_unix(fperm),
+                    display_permissions_unix(fperm as mode_t, false),
                     mode,
-                    display_permissions_unix(mode)
+                    display_permissions_unix(mode as mode_t, false)
                 );
             }
             Ok(())
