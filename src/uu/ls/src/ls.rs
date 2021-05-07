@@ -1332,7 +1332,7 @@ fn display_dir_entry_size(entry: &PathData, config: &Config) -> (usize, usize) {
     if let Some(md) = entry.md() {
         (
             display_symlink_count(&md).len(),
-            display_size(md.len(), config).len(),
+            display_size_or_rdev(&md, config).len(),
         )
     } else {
         (0, 0)
@@ -1503,7 +1503,7 @@ fn display_item_long(
     let _ = writeln!(
         out,
         " {} {} {}",
-        pad_left(display_size(md.len(), config), max_size),
+        pad_left(display_size_or_rdev(md, config), max_size),
         display_date(&md, config),
         // unwrap is fine because it fails when metadata is not available
         // but we already know that it is because it's checked at the
@@ -1658,7 +1658,7 @@ fn format_prefixed(prefixed: NumberPrefix<f64>) -> String {
     }
 }
 
-fn display_size(metadata: &Metadata, config: &Config) -> String {
+fn display_size_or_rdev(metadata: &Metadata, config: &Config) -> String {
     #[cfg(unix)]
     {
         let ft = metadata.file_type();
@@ -1670,12 +1670,16 @@ fn display_size(metadata: &Metadata, config: &Config) -> String {
         }
     }
 
+    display_size(metadata.len(), config)
+}
+
+fn display_size(size: u64, config: &Config) -> String {
     // NOTE: The human-readable behaviour deviates from the GNU ls.
     // The GNU ls uses binary prefixes by default.
     match config.size_format {
-        SizeFormat::Binary => format_prefixed(NumberPrefix::binary(len as f64)),
-        SizeFormat::Decimal => format_prefixed(NumberPrefix::decimal(len as f64)),
-        SizeFormat::Bytes => len.to_string(),
+        SizeFormat::Binary => format_prefixed(NumberPrefix::binary(size as f64)),
+        SizeFormat::Decimal => format_prefixed(NumberPrefix::decimal(size as f64)),
+        SizeFormat::Bytes => size.to_string(),
     }
 }
 
