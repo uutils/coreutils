@@ -20,10 +20,12 @@ use wordcount::{TitledWordCount, WordCount};
 use clap::{App, Arg, ArgMatches};
 use thiserror::Error;
 
-use std::cmp::max;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{self, ErrorKind, Write};
 use std::path::Path;
+
+/// The minimum character width for formatting counts when reading from stdin.
+const MINIMUM_WIDTH: usize = 7;
 
 #[derive(Error, Debug)]
 pub enum WcError {
@@ -277,11 +279,101 @@ fn show_error(input: &Input, err: WcError) {
     };
 }
 
+/// Compute the number of digits needed to represent any count for this input.
+///
+/// If `input` is [`Input::Stdin`], then this function returns
+/// [`MINIMUM_WIDTH`]. Otherwise, if metadata could not be read from
+/// `input` then this function returns 1.
+///
+/// # Errors
+///
+/// This function will return an error if `input` is a [`Input::Path`]
+/// and there is a problem accessing the metadata of the given `input`.
+///
+/// # Examples
+///
+/// A [`Input::Stdin`] gets a default minimum width:
+///
+/// ```rust,ignore
+/// let input = Input::Stdin(StdinKind::Explicit);
+/// assert_eq!(7, digit_width(input));
+/// ```
+fn digit_width(input: &Input) -> WcResult<Option<usize>> {
+    match input {
+        Input::Stdin(_) => Ok(Some(MINIMUM_WIDTH)),
+        Input::Path(filename) => {
+            let path = Path::new(filename);
+            let metadata = fs::metadata(path)?;
+            if metadata.is_file() {
+                // TODO We are now computing the number of bytes in a file
+                // twice: once here and once in `WordCount::from_line()` (or
+                // in `count_bytes_fast()` if that function is called
+                // instead). See GitHub issue #2201.
+                let num_bytes = metadata.len();
+                let num_digits = num_bytes.to_string().len();
+                Ok(Some(num_digits))
+            } else {
+                Ok(None)
+            }
+        }
+    }
+}
+
+/// Compute the number of digits needed to represent all counts in all inputs.
+///
+/// `inputs` may include zero or more [`Input::Stdin`] entries, each of
+/// which represents reading from `stdin`. The presence of any such
+/// entry causes this function to return a width that is at least
+/// [`MINIMUM_WIDTH`].
+///
+/// If `input` is empty, then this function returns 1. If file metadata
+/// could not be read from any of the [`Input::Path`] inputs and there
+/// are no [`Input::Stdin`] inputs, then this function returns 1.
+///
+/// If there is a problem accessing the metadata, this function will
+/// silently ignore the error and assume that the number of digits
+/// needed to display the counts for that file is 1.
+///
+/// # Examples
+///
+/// An empty slice implies a width of 1:
+///
+/// ```rust,ignore
+/// assert_eq!(1, max_width(&vec![]));
+/// ```
+///
+/// The presence of [`Input::Stdin`] implies a minimum width:
+///
+/// ```rust,ignore
+/// let inputs = vec![Input::Stdin(StdinKind::Explicit)];
+/// assert_eq!(7, max_width(&inputs));
+/// ```
+fn max_width(inputs: &[Input]) -> usize {
+    let mut result = 1;
+    for input in inputs {
+        match digit_width(input) {
+            Ok(maybe_n) => {
+                if let Some(n) = maybe_n {
+                    result = result.max(n);
+                }
+            }
+            Err(_) => continue,
+        }
+    }
+    result
+}
+
 fn wc(inputs: Vec<Input>, settings: &Settings) -> Result<(), u32> {
+    // Compute the width, in digits, to use when formatting counts.
+    //
+    // The width is the number of digits needed to print the number of
+    // bytes in the largest file. This is true regardless of whether
+    // the `settings` indicate that the bytes will be displayed.
+    let mut error_count = 0;
+    let max_width = max_width(&inputs);
+
     let mut total_word_count = WordCount::default();
     let mut results = vec![];
-    let mut max_width: usize = 0;
-    let mut error_count = 0;
 
     let num_inputs = inputs.len();
 
@@ -291,12 +383,6 @@ fn wc(inputs: Vec<Input>, settings: &Settings) -> Result<(), u32> {
             error_count += 1;
             WordCount::default()
         });
-        // Compute the number of digits needed to display the number
-        // of bytes in the file. Even if the settings indicate that we
-        // won't *display* the number of bytes, we still use the
-        // number of digits in the byte count as the width when
-        // formatting each count as a string for output.
-        max_width = max(max_width, word_count.bytes.to_string().len());
         total_word_count += word_count;
         results.push(word_count.with_title(input.to_title()));
     }
