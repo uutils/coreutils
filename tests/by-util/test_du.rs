@@ -53,7 +53,15 @@ fn _du_basics_subdir(s: &str) {
 fn _du_basics_subdir(s: &str) {
     assert_eq!(s, "0\tsubdir/deeper\n");
 }
-#[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))]
+#[cfg(target_os = "freebsd")]
+fn _du_basics_subdir(s: &str) {
+    assert_eq!(s, "8\tsubdir/deeper\n");
+}
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "freebsd")
+))]
 fn _du_basics_subdir(s: &str) {
     // MS-WSL linux has altered expected output
     if !uucore::os::is_wsl_1() {
@@ -100,7 +108,15 @@ fn _du_soft_link(s: &str) {
 fn _du_soft_link(s: &str) {
     assert_eq!(s, "8\tsubdir/links\n");
 }
-#[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))]
+#[cfg(target_os = "freebsd")]
+fn _du_soft_link(s: &str) {
+    assert_eq!(s, "16\tsubdir/links\n");
+}
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "freebsd")
+))]
 fn _du_soft_link(s: &str) {
     // MS-WSL linux has altered expected output
     if !uucore::os::is_wsl_1() {
@@ -141,7 +157,15 @@ fn _du_hard_link(s: &str) {
 fn _du_hard_link(s: &str) {
     assert_eq!(s, "8\tsubdir/links\n")
 }
-#[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))]
+#[cfg(target_os = "freebsd")]
+fn _du_hard_link(s: &str) {
+    assert_eq!(s, "16\tsubdir/links\n")
+}
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "freebsd")
+))]
 fn _du_hard_link(s: &str) {
     // MS-WSL linux has altered expected output
     if !uucore::os::is_wsl_1() {
@@ -181,7 +205,15 @@ fn _du_d_flag(s: &str) {
 fn _du_d_flag(s: &str) {
     assert_eq!(s, "8\t./subdir\n8\t./\n");
 }
-#[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))]
+#[cfg(target_os = "freebsd")]
+fn _du_d_flag(s: &str) {
+    assert_eq!(s, "28\t./subdir\n36\t./\n");
+}
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "freebsd")
+))]
 fn _du_d_flag(s: &str) {
     // MS-WSL linux has altered expected output
     if !uucore::os::is_wsl_1() {

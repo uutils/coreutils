@@ -32,6 +32,7 @@ use semver::Version;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::env;
+use std::ffi::OsStr;
 use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
@@ -1122,10 +1123,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     exec(files, settings)
 }
 
-fn file_to_lines_iter<'a>(
-    file: &str,
-    settings: &'a GlobalSettings,
-) -> Option<impl Iterator<Item = Line> + 'a> {
+fn file_to_lines_iter(
+    file: impl AsRef<OsStr>,
+    settings: &'_ GlobalSettings,
+) -> Option<impl Iterator<Item = Line> + '_> {
     let (reader, _) = match open(file) {
         Some(x) => x,
         None => return None,
@@ -1190,7 +1191,7 @@ fn exec(files: Vec<String>, settings: GlobalSettings) -> i32 {
             let mut lines = vec![];
 
             // This is duplicated from fn file_to_lines_iter, but using that function directly results in a performance regression.
-            for (file, _) in files.iter().map(|file| open(file)).flatten() {
+            for (file, _) in files.iter().map(open).flatten() {
                 let buf_reader = BufReader::new(file);
                 for line in buf_reader.split(if settings.zero_terminated {
                     b'\0'
@@ -1517,7 +1518,8 @@ fn print_sorted<T: Iterator<Item = Line>>(iter: T, settings: &GlobalSettings) {
 }
 
 // from cat.rs
-fn open(path: &str) -> Option<(Box<dyn Read>, bool)> {
+fn open(path: impl AsRef<OsStr>) -> Option<(Box<dyn Read>, bool)> {
+    let path = path.as_ref();
     if path == "-" {
         let stdin = stdin();
         return Some((Box::new(stdin) as Box<dyn Read>, is_stdin_interactive()));
@@ -1526,7 +1528,7 @@ fn open(path: &str) -> Option<(Box<dyn Read>, bool)> {
     match File::open(Path::new(path)) {
         Ok(f) => Some((Box::new(f) as Box<dyn Read>, false)),
         Err(e) => {
-            show_error!("{0}: {1}", path, e.to_string());
+            show_error!("{0:?}: {1}", path, e.to_string());
             None
         }
     }
