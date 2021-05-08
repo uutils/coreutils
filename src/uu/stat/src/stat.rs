@@ -18,8 +18,6 @@ use uucore::fs::display_permissions;
 use clap::{App, Arg, ArgMatches};
 use std::borrow::Cow;
 use std::convert::AsRef;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::Path;
 use std::{cmp, fs, iter};
@@ -97,7 +95,6 @@ pub mod options {
 
 static ARG_FILES: &str = "files";
 
-const MOUNT_INFO: &str = "/etc/mtab";
 pub const F_ALTER: u8 = 1;
 pub const F_ZERO: u8 = 1 << 1;
 pub const F_LEFT: u8 = 1 << 2;
@@ -490,13 +487,9 @@ impl Stater {
             // mount points aren't displayed when showing filesystem information
             None
         } else {
-            let reader = BufReader::new(
-                File::open(MOUNT_INFO).unwrap_or_else(|_| panic!("Failed to read {}", MOUNT_INFO)),
-            );
-            let mut mount_list = reader
-                .lines()
-                .filter_map(Result::ok)
-                .filter_map(|line| line.split_whitespace().nth(1).map(ToOwned::to_owned))
+            let mut mount_list = read_fs_list()
+                .iter()
+                .map(|mi| mi.mount_dir.clone())
                 .collect::<Vec<String>>();
             // Reverse sort. The longer comes first.
             mount_list.sort();

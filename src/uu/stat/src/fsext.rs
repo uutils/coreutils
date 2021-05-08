@@ -9,6 +9,12 @@
 
 extern crate time;
 
+#[cfg(target_os = "linux")]
+static LINUX_MTAB: &str = "/etc/mtab";
+#[cfg(target_os = "linux")]
+static LINUX_MOUNTINFO: &str = "/proc/self/mountinfo";
+static MOUNT_OPT_BIND: &str = "bind";
+
 use self::time::Timespec;
 use std::time::UNIX_EPOCH;
 pub use uucore::libc::{
@@ -345,5 +351,186 @@ pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
         0x012F_D16D => "xia".into(),
         0x2FC1_2FC1 => "zfs".into(),
         other => format!("UNKNOWN ({:#x})", other).into(),
+    }
+}
+
+#[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+extern "C" {
+    #[cfg(all(target_vendor = "apple", target_arch = "x86_64"))]
+    #[link_name = "getmntinfo$INODE64"]
+    fn getmntinfo(mntbufp: *mut *mut Sstatfs, flags: c_int) -> c_int;
+
+    #[cfg(any(
+        all(target_os = "freebsd"),
+        all(target_vendor = "apple", target_arch = "aarch64")
+    ))]
+    fn getmntinfo(mntbufp: *mut *mut Sstatfs, flags: c_int) -> c_int;
+}
+
+#[derive(Debug, Clone)]
+pub struct MountInfo {
+    // it stores `volume_name` in windows platform and `dev_id` in unix platform
+    dev_id: String,
+    dev_name: String,
+    fs_type: String,
+    pub mount_dir: String,
+    mount_option: String, // we only care "bind" option
+    mount_root: String,
+    remote: bool,
+    dummy: bool,
+}
+
+impl MountInfo {
+    fn set_missing_fields(&mut self) {
+        #[cfg(unix)]
+        {
+            // We want to keep the dev_id on Windows
+            // but set dev_id
+            let path = CString::new(self.mount_dir.clone()).unwrap();
+            unsafe {
+                let mut stat = mem::zeroed();
+                if libc::stat(path.as_ptr(), &mut stat) == 0 {
+                    self.dev_id = (stat.st_dev as i32).to_string();
+                } else {
+                    self.dev_id = "".to_string();
+                }
+            }
+        }
+        // set MountInfo::dummy
+        match self.fs_type.as_ref() {
+            "autofs" | "proc" | "subfs"
+            /* for Linux 2.6/3.x */
+            | "debugfs" | "devpts" | "fusectl" | "mqueue" | "rpc_pipefs" | "sysfs"
+            /* FreeBSD, Linux 2.4 */
+            | "devfs"
+            /* for NetBSD 3.0 */
+            | "kernfs"
+            /* for Irix 6.5 */
+            | "ignore" => self.dummy = true,
+            _ => self.dummy = self.fs_type == "none"
+                && self.mount_option.find(MOUNT_OPT_BIND).is_none(),
+        }
+        // set MountInfo::remote
+        #[cfg(unix)]
+        {
+            if self.dev_name.find(':').is_some()
+                || (self.dev_name.starts_with("//") && self.fs_type == "smbfs"
+                    || self.fs_type == "cifs")
+                || self.dev_name == "-hosts"
+            {
+                self.remote = true;
+            } else {
+                self.remote = false;
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn new(file_name: &str, raw: Vec<&str>) -> Option<MountInfo> {
+        match file_name {
+            // Format: 36 35 98:0 /mnt1 /mnt2 rw,noatime master:1 - ext3 /dev/root rw,errors=continue
+            // "man proc" for more details
+            "/proc/self/mountinfo" => {
+                let mut m = MountInfo {
+                    dev_id: "".to_string(),
+                    dev_name: raw[9].to_string(),
+                    fs_type: raw[8].to_string(),
+                    mount_root: raw[3].to_string(),
+                    mount_dir: raw[4].to_string(),
+                    mount_option: raw[5].to_string(),
+                    remote: false,
+                    dummy: false,
+                };
+                m.set_missing_fields();
+                Some(m)
+            }
+            "/etc/mtab" => {
+                let mut m = MountInfo {
+                    dev_id: "".to_string(),
+                    dev_name: raw[0].to_string(),
+                    fs_type: raw[2].to_string(),
+                    mount_root: "".to_string(),
+                    mount_dir: raw[1].to_string(),
+                    mount_option: raw[3].to_string(),
+                    remote: false,
+                    dummy: false,
+                };
+                m.set_missing_fields();
+                Some(m)
+            }
+            _ => None,
+        }
+    }
+}
+
+#[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
+use std::ffi::CStr;
+#[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+impl From<Sstatfs> for MountInfo {
+    fn from(statfs: Sstatfs) -> Self {
+        let mut info = MountInfo {
+            dev_id: "".to_string(),
+            dev_name: unsafe {
+                CStr::from_ptr(&statfs.f_mntfromname[0])
+                    .to_string_lossy()
+                    .into_owned()
+            },
+            fs_type: unsafe {
+                CStr::from_ptr(&statfs.f_fstypename[0])
+                    .to_string_lossy()
+                    .into_owned()
+            },
+            mount_dir: unsafe {
+                CStr::from_ptr(&statfs.f_mntonname[0])
+                    .to_string_lossy()
+                    .into_owned()
+            },
+            mount_root: "".to_string(),
+            mount_option: "".to_string(),
+            remote: false,
+            dummy: false,
+        };
+        info.set_missing_fields();
+        info
+    }
+}
+
+#[cfg(target_os = "linux")]
+use std::fs::File;
+#[cfg(target_os = "linux")]
+use std::io::{BufRead, BufReader};
+#[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
+use std::ptr;
+#[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
+use std::slice;
+pub fn read_fs_list() -> Vec<MountInfo> {
+    #[cfg(target_os = "linux")]
+    {
+        let (file_name, fobj) = File::open(LINUX_MOUNTINFO)
+            .map(|f| (LINUX_MOUNTINFO, f))
+            .or_else(|_| File::open(LINUX_MTAB).map(|f| (LINUX_MTAB, f)))
+            .expect("failed to find mount list files");
+        let reader = BufReader::new(fobj);
+        reader
+            .lines()
+            .filter_map(|line| line.ok())
+            .filter_map(|line| {
+                let raw_data = line.split_whitespace().collect::<Vec<&str>>();
+                MountInfo::new(file_name, raw_data)
+            })
+            .collect::<Vec<_>>()
+    }
+    #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+    {
+        let mut mptr: *mut Sstatfs = ptr::null_mut();
+        let len = unsafe { getmntinfo(&mut mptr, 1 as c_int) };
+        if len < 0 {
+            crash!(1, "getmntinfo failed");
+        }
+        let mounts = unsafe { slice::from_raw_parts(mptr, len as usize) };
+        mounts
+            .iter()
+            .map(|m| MountInfo::from(*m))
+            .collect::<Vec<_>>()
     }
 }
