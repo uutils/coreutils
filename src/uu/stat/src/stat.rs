@@ -7,13 +7,13 @@
 
 // spell-checker:ignore (ToDO) mtab fsext showfs otype fmtstr prec ftype blocksize nlink rdev fnodes fsid namelen blksize inodes fstype iosize statfs gnulib NBLOCKSIZE
 
-#[macro_use]
 mod fsext;
 pub use crate::fsext::*;
 
 #[macro_use]
 extern crate uucore;
 use uucore::entries;
+use uucore::fs::display_permissions;
 
 use clap::{App, Arg, ArgMatches};
 use std::borrow::Cow;
@@ -575,7 +575,7 @@ impl Stater {
                                     }
                                     // access rights in human readable form
                                     'A' => {
-                                        arg = pretty_access(meta.mode() as mode_t);
+                                        arg = display_permissions(&meta, true);
                                         otype = OutputType::Str;
                                     }
                                     // number of blocks allocated (see %B)

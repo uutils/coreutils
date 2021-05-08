@@ -41,13 +41,6 @@ impl BirthTime for Metadata {
     }
 }
 
-#[macro_export]
-macro_rules! has {
-    ($mode:expr, $perm:expr) => {
-        $mode & $perm != 0
-    };
-}
-
 pub fn pretty_time(sec: i64, nsec: i64) -> String {
     // sec == seconds since UNIX_EPOCH
     // nsec == nanoseconds since (UNIX_EPOCH + sec)
@@ -79,65 +72,6 @@ pub fn pretty_filetype<'a>(mode: mode_t, size: u64) -> &'a str {
         // See coreutils/gnulib/lib/file-type.c
         _ => "weird file",
     }
-}
-
-pub fn pretty_access(mode: mode_t) -> String {
-    let mut result = String::with_capacity(10);
-    result.push(match mode & S_IFMT {
-        S_IFDIR => 'd',
-        S_IFCHR => 'c',
-        S_IFBLK => 'b',
-        S_IFREG => '-',
-        S_IFIFO => 'p',
-        S_IFLNK => 'l',
-        S_IFSOCK => 's',
-        // TODO: Other file types
-        _ => '?',
-    });
-
-    result.push(if has!(mode, S_IRUSR) { 'r' } else { '-' });
-    result.push(if has!(mode, S_IWUSR) { 'w' } else { '-' });
-    result.push(if has!(mode, S_ISUID as mode_t) {
-        if has!(mode, S_IXUSR) {
-            's'
-        } else {
-            'S'
-        }
-    } else if has!(mode, S_IXUSR) {
-        'x'
-    } else {
-        '-'
-    });
-
-    result.push(if has!(mode, S_IRGRP) { 'r' } else { '-' });
-    result.push(if has!(mode, S_IWGRP) { 'w' } else { '-' });
-    result.push(if has!(mode, S_ISGID as mode_t) {
-        if has!(mode, S_IXGRP) {
-            's'
-        } else {
-            'S'
-        }
-    } else if has!(mode, S_IXGRP) {
-        'x'
-    } else {
-        '-'
-    });
-
-    result.push(if has!(mode, S_IROTH) { 'r' } else { '-' });
-    result.push(if has!(mode, S_IWOTH) { 'w' } else { '-' });
-    result.push(if has!(mode, S_ISVTX as mode_t) {
-        if has!(mode, S_IXOTH) {
-            't'
-        } else {
-            'T'
-        }
-    } else if has!(mode, S_IXOTH) {
-        'x'
-    } else {
-        '-'
-    });
-
-    result
 }
 
 use std::borrow::Cow;

@@ -27,7 +27,7 @@ fn test_df_output() {
         stdout_only("Filesystem               Size         Used    Available     Capacity  Use% Mounted on       \n");
     } else {
         new_ucmd!().arg("-H").arg("-total").succeeds().stdout_only(
-            "Filesystem               Size         Used    Available  Use% Mounted on       \n"
+            "Filesystem               Size         Used    Available  Use% Mounted on       \n",
         );
     }
 }
