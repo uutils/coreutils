@@ -28,32 +28,24 @@ fn table(c: &mut Criterion) {
     group.throughput(Throughput::Elements(INPUT_SIZE as _));
     for a in inputs.take(10) {
         let a_str = format!("{:?}", a);
-        group.bench_with_input(
-            BenchmarkId::from_parameter("chunked_".to_owned() + &a_str),
-            &a,
-            |b, &a| {
-                b.iter(|| {
-                    let mut n_s = a.clone();
-                    let mut f_s: [_; INPUT_SIZE] = array_init(|_| Factors::one());
-                    for (n_s, f_s) in n_s.chunks_mut(CHUNK_SIZE).zip(f_s.chunks_mut(CHUNK_SIZE)) {
-                        factor_chunk(n_s.try_into().unwrap(), f_s.try_into().unwrap())
-                    }
-                })
-            },
-        );
-        group.bench_with_input(
-            BenchmarkId::from_parameter("seq_".to_owned() + &a_str),
-            &a,
-            |b, &a| {
-                b.iter(|| {
-                    let mut n_s = a.clone();
-                    let mut f_s: [_; INPUT_SIZE] = array_init(|_| Factors::one());
-                    for (n, f) in n_s.iter_mut().zip(f_s.iter_mut()) {
-                        factor(n, f)
-                    }
-                })
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("factor_chunk", &a_str), &a, |b, &a| {
+            b.iter(|| {
+                let mut n_s = a.clone();
+                let mut f_s: [_; INPUT_SIZE] = array_init(|_| Factors::one());
+                for (n_s, f_s) in n_s.chunks_mut(CHUNK_SIZE).zip(f_s.chunks_mut(CHUNK_SIZE)) {
+                    factor_chunk(n_s.try_into().unwrap(), f_s.try_into().unwrap())
+                }
+            })
+        });
+        group.bench_with_input(BenchmarkId::new("factor", &a_str), &a, |b, &a| {
+            b.iter(|| {
+                let mut n_s = a.clone();
+                let mut f_s: [_; INPUT_SIZE] = array_init(|_| Factors::one());
+                for (n, f) in n_s.iter_mut().zip(f_s.iter_mut()) {
+                    factor(n, f)
+                }
+            })
+        });
     }
     group.finish()
 }
