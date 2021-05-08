@@ -582,11 +582,14 @@ impl FieldSelector {
         self.from.field != 1 || self.from.char == 0 || self.to.is_some()
     }
 
-    fn get_selection(&self, line: &str, fields: Option<&[Field]>) -> Selection {
-        let mut range = SelectionRange::new(self.get_range(&line, fields));
+    /// Get the selection that corresponds to this selector for the line.
+    /// If needs_fields returned false, tokens may be None.
+    fn get_selection(&self, line: &str, tokens: Option<&[Field]>) -> Selection {
+        let mut range = SelectionRange::new(self.get_range(&line, tokens));
         let num_cache = if self.settings.mode == SortMode::Numeric
             || self.settings.mode == SortMode::HumanNumeric
         {
+            // Parse NumInfo for this number.
             let (info, num_range) = NumInfo::parse(
                 range.get_str(&line),
                 NumInfoParseSettings {
@@ -595,20 +598,23 @@ impl FieldSelector {
                     decimal_pt: Some(DECIMAL_PT),
                 },
             );
+            // Shorten the range to what we need to pass to numeric_str_cmp later.
             range.shorten(num_range);
             Some(Box::new(NumCache::WithInfo(info)))
         } else if self.settings.mode == SortMode::GeneralNumeric {
+            // Parse this number as f64, as this is the requirement for general numeric sorting.
             let str = range.get_str(&line);
             Some(Box::new(NumCache::AsF64(general_f64_parse(
                 &str[get_leading_gen(str)],
             ))))
         } else {
+            // This is not a numeric sort, so we don't need a NumCache.
             None
         };
         Selection { range, num_cache }
     }
 
-    /// Look up the slice that corresponds to this selector for the given line.
+    /// Look up the range in the line that corresponds to this selector.
     /// If needs_fields returned false, tokens may be None.
     fn get_range<'a>(&self, line: &'a str, tokens: Option<&[Field]>) -> Range<usize> {
         enum Resolution {
@@ -1356,7 +1362,8 @@ enum GeneralF64ParseResult {
     Infinity,
 }
 
-/// Parse the beginning string into an f64, returning -inf instead of NaN on errors.
+/// Parse the beginning string into a GeneralF64ParseResult.
+/// Using a GeneralF64ParseResult instead of f64 is necessary to correctly order floats.
 #[inline(always)]
 fn general_f64_parse(a: &str) -> GeneralF64ParseResult {
     // The actual behavior here relies on Rust's implementation of parsing floating points.
