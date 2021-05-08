@@ -11,19 +11,19 @@
 extern crate uucore;
 
 mod count_bytes;
+mod countable;
+mod wordcount;
 use count_bytes::count_bytes_fast;
+use countable::WordCountable;
+use wordcount::{TitledWordCount, WordCount};
 
 use clap::{App, Arg, ArgMatches};
 use thiserror::Error;
 
 use std::cmp::max;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, Read, StdinLock, Write};
-use std::ops::{Add, AddAssign};
-#[cfg(unix)]
-use std::os::unix::io::AsRawFd;
+use std::io::{self, Write};
 use std::path::Path;
-use std::str::from_utf8;
 
 #[derive(Error, Debug)]
 pub enum WcError {
@@ -80,77 +80,6 @@ impl Settings {
         result += self.show_words as u32;
         result
     }
-}
-
-#[cfg(unix)]
-trait WordCountable: AsRawFd + Read {
-    type Buffered: BufRead;
-    fn get_buffered(self) -> Self::Buffered;
-}
-#[cfg(not(unix))]
-trait WordCountable: Read {
-    type Buffered: BufRead;
-    fn get_buffered(self) -> Self::Buffered;
-}
-
-impl WordCountable for StdinLock<'_> {
-    type Buffered = Self;
-
-    fn get_buffered(self) -> Self::Buffered {
-        self
-    }
-}
-impl WordCountable for File {
-    type Buffered = BufReader<Self>;
-
-    fn get_buffered(self) -> Self::Buffered {
-        BufReader::new(self)
-    }
-}
-
-#[derive(Debug, Default, Copy, Clone)]
-struct WordCount {
-    bytes: usize,
-    chars: usize,
-    lines: usize,
-    words: usize,
-    max_line_length: usize,
-}
-
-impl Add for WordCount {
-    type Output = Self;
-
-    fn add(self, other: Self) -> Self {
-        Self {
-            bytes: self.bytes + other.bytes,
-            chars: self.chars + other.chars,
-            lines: self.lines + other.lines,
-            words: self.words + other.words,
-            max_line_length: max(self.max_line_length, other.max_line_length),
-        }
-    }
-}
-
-impl AddAssign for WordCount {
-    fn add_assign(&mut self, other: Self) {
-        *self = *self + other
-    }
-}
-
-impl WordCount {
-    fn with_title(self, title: &str) -> TitledWordCount {
-        TitledWordCount { title, count: self }
-    }
-}
-
-/// This struct supplements the actual word count with a title that is displayed
-/// to the user at the end of the program.
-/// The reason we don't simply include title in the `WordCount` struct is that
-/// it would result in unneccesary copying of `String`.
-#[derive(Debug, Default, Clone)]
-struct TitledWordCount<'a> {
-    title: &'a str,
-    count: WordCount,
 }
 
 static ABOUT: &str = "Display newline, word, and byte counts for each FILE, and a total line if
@@ -233,18 +162,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 }
 
-const CR: u8 = b'\r';
-const LF: u8 = b'\n';
-const SPACE: u8 = b' ';
-const TAB: u8 = b'\t';
-const SYN: u8 = 0x16_u8;
-const FF: u8 = 0x0C_u8;
-
-#[inline(always)]
-fn is_word_separator(byte: u8) -> bool {
-    byte == SPACE || byte == TAB || byte == CR || byte == SYN || byte == FF
-}
-
 fn word_count_from_reader<T: WordCountable>(
     mut reader: T,
     settings: &Settings,
@@ -265,69 +182,20 @@ fn word_count_from_reader<T: WordCountable>(
     // we do not need to decode the byte stream if we're only counting bytes/newlines
     let decode_chars = settings.show_chars || settings.show_words || settings.show_max_line_length;
 
-    let mut line_count: usize = 0;
-    let mut word_count: usize = 0;
-    let mut byte_count: usize = 0;
-    let mut char_count: usize = 0;
-    let mut longest_line_length: usize = 0;
-    let mut raw_line = Vec::new();
-    let mut ends_lf: bool;
-
-    // reading from a TTY seems to raise a condition on, rather than return Some(0) like a file.
-    // hence the option wrapped in a result here
-    let mut buffered_reader = reader.get_buffered();
-    loop {
-        match buffered_reader.read_until(LF, &mut raw_line) {
-            Ok(n) => {
-                if n == 0 {
-                    break;
-                }
+    // Sum the WordCount for each line. Show a warning for each line
+    // that results in an IO error when trying to read it.
+    let total = reader
+        .lines()
+        .filter_map(|res| match res {
+            Ok(line) => Some(line),
+            Err(e) => {
+                show_warning!("Error while reading {}: {}", path, e);
+                None
             }
-            Err(ref e) => {
-                if !raw_line.is_empty() {
-                    show_warning!("Error while reading {}: {}", path, e);
-                } else {
-                    break;
-                }
-            }
-        };
-
-        // GNU 'wc' only counts lines that end in LF as lines
-        ends_lf = *raw_line.last().unwrap() == LF;
-        line_count += ends_lf as usize;
-
-        byte_count += raw_line.len();
-
-        if decode_chars {
-            // try and convert the bytes to UTF-8 first
-            let current_char_count;
-            match from_utf8(&raw_line[..]) {
-                Ok(line) => {
-                    word_count += line.split_whitespace().count();
-                    current_char_count = line.chars().count();
-                }
-                Err(..) => {
-                    word_count += raw_line.split(|&x| is_word_separator(x)).count();
-                    current_char_count = raw_line.iter().filter(|c| c.is_ascii()).count()
-                }
-            }
-            char_count += current_char_count;
-            if current_char_count > longest_line_length {
-                // -L is a GNU 'wc' extension so same behavior on LF
-                longest_line_length = current_char_count - (ends_lf as usize);
-            }
-        }
-
-        raw_line.truncate(0);
-    }
-
-    Ok(WordCount {
-        bytes: byte_count,
-        chars: char_count,
-        lines: line_count,
-        words: word_count,
-        max_line_length: longest_line_length,
-    })
+        })
+        .map(|line| WordCount::from_line(&line, decode_chars))
+        .sum();
+    Ok(total)
 }
 
 fn word_count_from_path(path: &str, settings: &Settings) -> WcResult<WordCount> {
@@ -360,7 +228,12 @@ fn wc(files: Vec<String>, settings: &Settings) -> Result<(), u32> {
             error_count += 1;
             WordCount::default()
         });
-        max_width = max(max_width, word_count.bytes.to_string().len() + 1);
+        // Compute the number of digits needed to display the number
+        // of bytes in the file. Even if the settings indicate that we
+        // won't *display* the number of bytes, we still use the
+        // number of digits in the byte count as the width when
+        // formatting each count as a string for output.
+        max_width = max(max_width, word_count.bytes.to_string().len());
         total_word_count += word_count;
         results.push(word_count.with_title(path));
     }
@@ -401,19 +274,40 @@ fn print_stats(
         min_width = 0;
     }
 
+    let mut is_first: bool = true;
+
     if settings.show_lines {
+        if !is_first {
+            write!(stdout_lock, " ")?;
+        }
         write!(stdout_lock, "{:1$}", result.count.lines, min_width)?;
+        is_first = false;
     }
     if settings.show_words {
+        if !is_first {
+            write!(stdout_lock, " ")?;
+        }
         write!(stdout_lock, "{:1$}", result.count.words, min_width)?;
+        is_first = false;
     }
     if settings.show_bytes {
+        if !is_first {
+            write!(stdout_lock, " ")?;
+        }
         write!(stdout_lock, "{:1$}", result.count.bytes, min_width)?;
+        is_first = false;
     }
     if settings.show_chars {
+        if !is_first {
+            write!(stdout_lock, " ")?;
+        }
         write!(stdout_lock, "{:1$}", result.count.chars, min_width)?;
+        is_first = false;
     }
     if settings.show_max_line_length {
+        if !is_first {
+            write!(stdout_lock, " ")?;
+        }
         write!(
             stdout_lock,
             "{:1$}",

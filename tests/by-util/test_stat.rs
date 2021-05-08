@@ -10,42 +10,6 @@ mod test_fsext {
     use super::*;
 
     #[test]
-    fn test_access() {
-        assert_eq!("drwxr-xr-x", pretty_access(S_IFDIR | 0o755));
-        assert_eq!("-rw-r--r--", pretty_access(S_IFREG | 0o644));
-        assert_eq!("srw-r-----", pretty_access(S_IFSOCK | 0o640));
-        assert_eq!("lrw-r-xr-x", pretty_access(S_IFLNK | 0o655));
-        assert_eq!("?rw-r-xr-x", pretty_access(0o655));
-
-        assert_eq!(
-            "brwSr-xr-x",
-            pretty_access(S_IFBLK | S_ISUID as mode_t | 0o655)
-        );
-        assert_eq!(
-            "brwsr-xr-x",
-            pretty_access(S_IFBLK | S_ISUID as mode_t | 0o755)
-        );
-
-        assert_eq!(
-            "prw---sr--",
-            pretty_access(S_IFIFO | S_ISGID as mode_t | 0o614)
-        );
-        assert_eq!(
-            "prw---Sr--",
-            pretty_access(S_IFIFO | S_ISGID as mode_t | 0o604)
-        );
-
-        assert_eq!(
-            "c---r-xr-t",
-            pretty_access(S_IFCHR | S_ISVTX as mode_t | 0o055)
-        );
-        assert_eq!(
-            "c---r-xr-T",
-            pretty_access(S_IFCHR | S_ISVTX as mode_t | 0o054)
-        );
-    }
-
-    #[test]
     fn test_file_type() {
         assert_eq!("block special file", pretty_filetype(S_IFBLK, 0));
         assert_eq!("character special file", pretty_filetype(S_IFCHR, 0));
@@ -198,9 +162,16 @@ fn test_terse_normal_format() {
     let expect = expected_result(&args);
     println!("actual: {:?}", actual);
     println!("expect: {:?}", expect);
-    let v_actual: Vec<&str> = actual.split(' ').collect();
-    let v_expect: Vec<&str> = expect.split(' ').collect();
+    let v_actual: Vec<&str> = actual.trim().split(' ').collect();
+    let mut v_expect: Vec<&str> = expect.trim().split(' ').collect();
     assert!(!v_expect.is_empty());
+
+    // uu_stat does not support selinux
+    if v_actual.len() == v_expect.len() - 1 && v_expect[v_expect.len() - 1].contains(":") {
+        // assume last element contains: `SELinux security context string`
+        v_expect.pop();
+    }
+
     // * allow for inequality if `stat` (aka, expect) returns "0" (unknown value)
     assert!(
         expect == "0"

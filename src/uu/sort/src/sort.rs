@@ -21,7 +21,7 @@ mod numeric_str_cmp;
 
 use clap::{App, Arg};
 use custom_str_cmp::custom_str_cmp;
-use external_sort::{ExternalSorter, ExternallySortable};
+use external_sort::ext_sort;
 use fnv::FnvHasher;
 use itertools::Itertools;
 use numeric_str_cmp::{numeric_str_cmp, NumInfo, NumInfoParseSettings};
@@ -29,14 +29,14 @@ use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use rayon::prelude::*;
 use semver::Version;
-use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::env;
+use std::ffi::OsStr;
 use std::fs::File;
 use std::hash::{Hash, Hasher};
-use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Lines, Read, Write};
+use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::mem::replace;
 use std::ops::Range;
 use std::path::Path;
@@ -106,7 +106,7 @@ enum SortMode {
     Default,
 }
 #[derive(Clone)]
-struct GlobalSettings {
+pub struct GlobalSettings {
     mode: SortMode,
     debug: bool,
     ignore_blanks: bool,
@@ -206,7 +206,7 @@ impl From<&GlobalSettings> for KeySettings {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Clone)]
 /// Represents the string selected by a FieldSelector.
 struct SelectionRange {
     range: Range<usize>,
@@ -228,7 +228,7 @@ impl SelectionRange {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Clone)]
 enum NumCache {
     AsF64(GeneralF64ParseResult),
     WithInfo(NumInfo),
@@ -249,7 +249,8 @@ impl NumCache {
         }
     }
 }
-#[derive(Serialize, Deserialize, Clone)]
+
+#[derive(Clone)]
 struct Selection {
     range: SelectionRange,
     num_cache: NumCache,
@@ -264,22 +265,21 @@ impl Selection {
 
 type Field = Range<usize>;
 
-#[derive(Serialize, Deserialize, Clone)]
-struct Line {
+#[derive(Clone)]
+pub struct Line {
     line: String,
     // The common case is not to specify fields. Let's make this fast.
     selections: SmallVec<[Selection; 1]>,
 }
 
-impl ExternallySortable for Line {
-    fn get_size(&self) -> u64 {
-        // Currently 96 bytes, but that could change, so we get that size here
-        std::mem::size_of::<Line>() as u64
-    }
-}
-
 impl Line {
-    fn new(line: String, settings: &GlobalSettings) -> Self {
+    pub fn estimate_size(&self) -> usize {
+        self.line.capacity()
+            + self.selections.capacity() * std::mem::size_of::<Selection>()
+            + std::mem::size_of::<Self>()
+    }
+
+    pub fn new(line: String, settings: &GlobalSettings) -> Self {
         let fields = if settings
             .selectors
             .iter()
@@ -291,7 +291,7 @@ impl Line {
             None
         };
 
-        let selections = settings
+        let selections: SmallVec<[Selection; 1]> = settings
             .selectors
             .iter()
             .map(|selector| {
@@ -683,7 +683,7 @@ impl FieldSelector {
 }
 
 struct MergeableFile<'a> {
-    lines: Lines<BufReader<Box<dyn Read>>>,
+    lines: Box<dyn Iterator<Item = Line> + 'a>,
     current_line: Line,
     settings: &'a GlobalSettings,
 }
@@ -723,11 +723,11 @@ impl<'a> FileMerger<'a> {
             settings,
         }
     }
-    fn push_file(&mut self, mut lines: Lines<BufReader<Box<dyn Read>>>) {
-        if let Some(Ok(next_line)) = lines.next() {
+    fn push_file(&mut self, mut lines: Box<dyn Iterator<Item = Line> + 'a>) {
+        if let Some(next_line) = lines.next() {
             let mergeable_file = MergeableFile {
                 lines,
-                current_line: Line::new(next_line, &self.settings),
+                current_line: next_line,
                 settings: &self.settings,
             };
             self.heap.push(mergeable_file);
@@ -741,11 +741,8 @@ impl<'a> Iterator for FileMerger<'a> {
         match self.heap.pop() {
             Some(mut current) => {
                 match current.lines.next() {
-                    Some(Ok(next_line)) => {
-                        let ret = replace(
-                            &mut current.current_line,
-                            Line::new(next_line, &self.settings),
-                        );
+                    Some(next_line) => {
+                        let ret = replace(&mut current.current_line, next_line);
                         self.heap.push(current);
                         Some(ret)
                     }
@@ -1113,90 +1110,106 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     exec(files, settings)
 }
 
+fn file_to_lines_iter(
+    file: impl AsRef<OsStr>,
+    settings: &'_ GlobalSettings,
+) -> Option<impl Iterator<Item = Line> + '_> {
+    let (reader, _) = match open(file) {
+        Some(x) => x,
+        None => return None,
+    };
+
+    let buf_reader = BufReader::new(reader);
+
+    Some(
+        buf_reader
+            .split(if settings.zero_terminated {
+                b'\0'
+            } else {
+                b'\n'
+            })
+            .map(move |line| {
+                Line::new(
+                    crash_if_err!(1, String::from_utf8(crash_if_err!(1, line))),
+                    settings,
+                )
+            }),
+    )
+}
+
+fn output_sorted_lines(iter: impl Iterator<Item = Line>, settings: &GlobalSettings) {
+    if settings.unique {
+        print_sorted(
+            iter.dedup_by(|a, b| compare_by(a, b, &settings) == Ordering::Equal),
+            &settings,
+        );
+    } else {
+        print_sorted(iter, &settings);
+    }
+}
+
 fn exec(files: Vec<String>, settings: GlobalSettings) -> i32 {
-    let mut lines = Vec::new();
-    let mut file_merger = FileMerger::new(&settings);
+    if settings.merge {
+        let mut file_merger = FileMerger::new(&settings);
+        for lines in files
+            .iter()
+            .filter_map(|file| file_to_lines_iter(file, &settings))
+        {
+            file_merger.push_file(Box::new(lines));
+        }
+        output_sorted_lines(file_merger, &settings);
+    } else {
+        let lines = files
+            .iter()
+            .filter_map(|file| file_to_lines_iter(file, &settings))
+            .flatten();
 
-    for path in &files {
-        let (reader, _) = match open(path) {
-            Some(x) => x,
-            None => continue,
-        };
+        if settings.check {
+            return exec_check_file(lines, &settings);
+        }
 
-        let buf_reader = BufReader::new(reader);
-
-        if settings.merge {
-            file_merger.push_file(buf_reader.lines());
-        } else if settings.zero_terminated {
-            for line in buf_reader.split(b'\0').flatten() {
-                lines.push(Line::new(
-                    std::str::from_utf8(&line)
-                        .expect("Could not parse string from zero terminated input.")
-                        .to_string(),
-                    &settings,
-                ));
-            }
+        // Only use ext_sorter when we need to.
+        // Probably faster that we don't create
+        // an owned value each run
+        if settings.ext_sort {
+            let sorted_lines = ext_sort(lines, &settings);
+            output_sorted_lines(sorted_lines, &settings);
         } else {
-            for line in buf_reader.lines() {
-                if let Ok(n) = line {
-                    lines.push(Line::new(n, &settings));
+            let mut lines = vec![];
+
+            // This is duplicated from fn file_to_lines_iter, but using that function directly results in a performance regression.
+            for (file, _) in files.iter().map(open).flatten() {
+                let buf_reader = BufReader::new(file);
+                for line in buf_reader.split(if settings.zero_terminated {
+                    b'\0'
                 } else {
-                    break;
+                    b'\n'
+                }) {
+                    let string = crash_if_err!(1, String::from_utf8(crash_if_err!(1, line)));
+                    lines.push(Line::new(string, &settings));
                 }
             }
+
+            sort_by(&mut lines, &settings);
+            output_sorted_lines(lines.into_iter(), &settings);
         }
-    }
-
-    if settings.check {
-        return exec_check_file(&lines, &settings);
-    }
-
-    // Only use ext_sorter when we need to.
-    // Probably faster that we don't create
-    // an owned value each run
-    if settings.ext_sort {
-        lines = ext_sort_by(lines, settings.clone());
-    } else {
-        sort_by(&mut lines, &settings);
-    }
-
-    if settings.merge {
-        if settings.unique {
-            print_sorted(
-                file_merger.dedup_by(|a, b| compare_by(a, b, &settings) == Ordering::Equal),
-                &settings,
-            )
-        } else {
-            print_sorted(file_merger, &settings)
-        }
-    } else if settings.unique {
-        print_sorted(
-            lines
-                .into_iter()
-                .dedup_by(|a, b| compare_by(a, b, &settings) == Ordering::Equal),
-            &settings,
-        )
-    } else {
-        print_sorted(lines.into_iter(), &settings)
     }
 
     0
 }
 
-fn exec_check_file(unwrapped_lines: &[Line], settings: &GlobalSettings) -> i32 {
+fn exec_check_file(unwrapped_lines: impl Iterator<Item = Line>, settings: &GlobalSettings) -> i32 {
     // errors yields the line before each disorder,
     // plus the last line (quirk of .coalesce())
-    let mut errors =
-        unwrapped_lines
-            .iter()
-            .enumerate()
-            .coalesce(|(last_i, last_line), (i, line)| {
-                if compare_by(&last_line, &line, &settings) == Ordering::Greater {
-                    Err(((last_i, last_line), (i, line)))
-                } else {
-                    Ok((i, line))
-                }
-            });
+    let mut errors = unwrapped_lines
+        .enumerate()
+        .coalesce(|(last_i, last_line), (i, line)| {
+            if compare_by(&last_line, &line, &settings) == Ordering::Greater {
+                Err(((last_i, last_line), (i, line)))
+            } else {
+                Ok((i, line))
+            }
+        });
     if let Some((first_error_index, _line)) = errors.next() {
         // Check for a second "error", as .coalesce() always returns the last
         // line, no matter what our merging function does.
@@ -1213,20 +1226,6 @@ fn exec_check_file(unwrapped_lines: &[Line], settings: &GlobalSettings) -> i32 {
         // unwrapped_lines was empty. Empty files are defined to be sorted.
         0
     }
-}
-
-fn ext_sort_by(unsorted: Vec<Line>, settings: GlobalSettings) -> Vec<Line> {
-    let external_sorter = ExternalSorter::new(
-        settings.buffer_size as u64,
-        Some(settings.tmp_dir.clone()),
-        settings.clone(),
-    );
-    let iter = external_sorter
-        .sort_by(unsorted.into_iter(), settings)
-        .unwrap()
-        .map(|x| x.unwrap())
-        .collect::<Vec<Line>>();
-    iter
 }
 
 fn sort_by(unsorted: &mut Vec<Line>, settings: &GlobalSettings) {
@@ -1332,7 +1331,7 @@ fn get_leading_gen(input: &str) -> Range<usize> {
     leading_whitespace_len..input.len()
 }
 
-#[derive(Serialize, Deserialize, Copy, Clone, PartialEq, PartialOrd)]
+#[derive(Copy, Clone, PartialEq, PartialOrd)]
 enum GeneralF64ParseResult {
     Invalid,
     NaN,
@@ -1503,7 +1502,8 @@ fn print_sorted<T: Iterator<Item = Line>>(iter: T, settings: &GlobalSettings) {
 }
 
 // from cat.rs
-fn open(path: &str) -> Option<(Box<dyn Read>, bool)> {
+fn open(path: impl AsRef<OsStr>) -> Option<(Box<dyn Read>, bool)> {
+    let path = path.as_ref();
     if path == "-" {
         let stdin = stdin();
         return Some((Box::new(stdin) as Box<dyn Read>, is_stdin_interactive()));
@@ -1512,7 +1512,7 @@ fn open(path: &str) -> Option<(Box<dyn Read>, bool)> {
     match File::open(Path::new(path)) {
         Ok(f) => Some((Box::new(f) as Box<dyn Read>, false)),
         Err(e) => {
-            show_error!("{0}: {1}", path, e.to_string());
+            show_error!("{0:?}: {1}", path, e.to_string());
             None
         }
     }
