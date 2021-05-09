@@ -5,15 +5,16 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) mtab fsext showfs otype fmtstr prec ftype blocksize nlink rdev fnodes fsid namelen blksize inodes fstype iosize statfs gnulib NBLOCKSIZE
-
-mod fsext;
-pub use crate::fsext::*;
+// spell-checker:ignore (ToDO) showfs otype fmtstr prec ftype blocksize nlink rdev fnodes fsid namelen blksize inodes fstype iosize statfs gnulib NBLOCKSIZE
 
 #[macro_use]
 extern crate uucore;
 use uucore::entries;
 use uucore::fs::display_permissions;
+use uucore::fsext::{
+    pretty_filetype, pretty_fstype, pretty_time, read_fs_list, statfs, BirthTime, FsMeta,
+};
+use uucore::libc::mode_t;
 
 use clap::{App, Arg, ArgMatches};
 use std::borrow::Cow;

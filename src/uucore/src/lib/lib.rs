@@ -35,6 +35,8 @@ pub use crate::mods::ranges;
 pub use crate::features::encoding;
 #[cfg(feature = "fs")]
 pub use crate::features::fs;
+#[cfg(feature = "fsext")]
+pub use crate::features::fsext;
 #[cfg(feature = "parse_time")]
 pub use crate::features::parse_time;
 #[cfg(feature = "zero-copy")]

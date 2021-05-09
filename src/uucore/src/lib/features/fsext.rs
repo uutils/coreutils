@@ -9,6 +9,8 @@
 
 extern crate time;
 
+pub use crate::*; // import macros from `../../macros.rs`
+
 #[cfg(target_os = "linux")]
 static LINUX_MTAB: &str = "/etc/mtab";
 #[cfg(target_os = "linux")]
@@ -16,12 +18,12 @@ static LINUX_MOUNTINFO: &str = "/proc/self/mountinfo";
 static MOUNT_OPT_BIND: &str = "bind";
 
 use self::time::Timespec;
-use std::time::UNIX_EPOCH;
-pub use uucore::libc::{
+pub use libc::{
     c_int, mode_t, strerror, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG,
     S_IFSOCK, S_IRGRP, S_IROTH, S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP, S_IWOTH, S_IWUSR,
     S_IXGRP, S_IXOTH, S_IXUSR,
 };
+use std::time::UNIX_EPOCH;
 
 pub trait BirthTime {
     fn pretty_birth(&self) -> String;
@@ -93,7 +95,7 @@ use std::path::Path;
     target_os = "android",
     target_os = "freebsd"
 ))]
-use uucore::libc::statfs as Sstatfs;
+use libc::statfs as Sstatfs;
 #[cfg(any(
     target_os = "openbsd",
     target_os = "netbsd",
@@ -101,7 +103,7 @@ use uucore::libc::statfs as Sstatfs;
     target_os = "bitrig",
     target_os = "dragonfly"
 ))]
-use uucore::libc::statvfs as Sstatfs;
+use libc::statvfs as Sstatfs;
 
 #[cfg(any(
     target_os = "linux",
@@ -109,7 +111,7 @@ use uucore::libc::statvfs as Sstatfs;
     target_os = "android",
     target_os = "freebsd"
 ))]
-use uucore::libc::statfs as statfs_fn;
+use libc::statfs as statfs_fn;
 #[cfg(any(
     target_os = "openbsd",
     target_os = "netbsd",
@@ -117,7 +119,7 @@ use uucore::libc::statfs as statfs_fn;
     target_os = "bitrig",
     target_os = "dragonfly"
 ))]
-use uucore::libc::statvfs as statfs_fn;
+use libc::statvfs as statfs_fn;
 
 pub trait FsMeta {
     fn fs_type(&self) -> i64;
@@ -184,7 +186,7 @@ impl FsMeta for Sstatfs {
     #[cfg(any(target_vendor = "apple", target_os = "freebsd", target_os = "linux"))]
     fn fsid(&self) -> u64 {
         let f_fsid: &[u32; 2] =
-            unsafe { &*(&self.f_fsid as *const uucore::libc::fsid_t as *const [u32; 2]) };
+            unsafe { &*(&self.f_fsid as *const libc::fsid_t as *const [u32; 2]) };
         (u64::from(f_fsid[0])) << 32 | u64::from(f_fsid[1])
     }
     #[cfg(not(any(target_vendor = "apple", target_os = "freebsd", target_os = "linux")))]
@@ -532,5 +534,32 @@ pub fn read_fs_list() -> Vec<MountInfo> {
             .iter()
             .map(|m| MountInfo::from(*m))
             .collect::<Vec<_>>()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_file_type() {
+        assert_eq!("block special file", pretty_filetype(S_IFBLK, 0));
+        assert_eq!("character special file", pretty_filetype(S_IFCHR, 0));
+        assert_eq!("regular file", pretty_filetype(S_IFREG, 1));
+        assert_eq!("regular empty file", pretty_filetype(S_IFREG, 0));
+        assert_eq!("weird file", pretty_filetype(0, 0));
+    }
+
+    #[test]
+    fn test_fs_type() {
+        assert_eq!("ext2/ext3", pretty_fstype(0xEF53));
+        assert_eq!("tmpfs", pretty_fstype(0x01021994));
+        assert_eq!("nfs", pretty_fstype(0x6969));
+        assert_eq!("btrfs", pretty_fstype(0x9123683e));
+        assert_eq!("xfs", pretty_fstype(0x58465342));
+        assert_eq!("zfs", pretty_fstype(0x2FC12FC1));
+        assert_eq!("ntfs", pretty_fstype(0x5346544e));
+        assert_eq!("fat", pretty_fstype(0x4006));
+        assert_eq!("UNKNOWN (0x1234)", pretty_fstype(0x1234));
     }
 }
