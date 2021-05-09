@@ -1658,6 +1658,7 @@ dependencies = [
 name = "uu_arch"
 version = "0.0.6"
 dependencies = [
+ "clap",
  "platform-info",
  "uucore",
  "uucore_procs",
@@ -2406,6 +2407,7 @@ name = "uu_stat"
 version = "0.0.6"
 dependencies = [
  "clap",
+ "libc",
  "time",
  "uucore",
  "uucore_procs",

@@ -10,17 +10,20 @@
 extern crate uucore;
 
 use platform_info::*;
-use uucore::InvalidEncodingHandling;
 
-static SYNTAX: &str = "Display machine architecture";
+use clap::App;
+
+static VERSION: &str = env!("CARGO_PKG_VERSION");
+static ABOUT: &str = "Display machine architecture";
 static SUMMARY: &str = "Determine architecture name for current machine.";
-static LONG_HELP: &str = "";
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    app!(SYNTAX, SUMMARY, LONG_HELP).parse(
-        args.collect_str(InvalidEncodingHandling::ConvertLossy)
-            .accept_any(),
-    );
+    App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .after_help(SUMMARY)
+        .get_matches_from(args);
+
     let uts = return_if_err!(1, PlatformInfo::new());
     println!("{}", uts.machine().trim());
     0
