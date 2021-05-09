@@ -37,6 +37,15 @@ fn test_stdin_default() {
 }
 
 #[test]
+fn test_stdin_explicit() {
+    new_ucmd!()
+        .pipe_in_fixture("lorem_ipsum.txt")
+        .arg("-")
+        .run()
+        .stdout_is(" 13 109 772 -\n");
+}
+
+#[test]
 fn test_utf8() {
     new_ucmd!()
         .args(&["-lwmcL"])

@@ -103,7 +103,7 @@ impl WordCount {
         (word_count, char_count)
     }
 
-    pub fn with_title(self, title: &str) -> TitledWordCount {
+    pub fn with_title(self, title: Option<&str>) -> TitledWordCount {
         TitledWordCount { title, count: self }
     }
 
@@ -120,12 +120,12 @@ impl WordCount {
     }
 }
 
-/// This struct supplements the actual word count with a title that is displayed
-/// to the user at the end of the program.
+/// This struct supplements the actual word count with an optional title that is
+/// displayed to the user at the end of the program.
 /// The reason we don't simply include title in the `WordCount` struct is that
 /// it would result in unneccesary copying of `String`.
 #[derive(Debug, Default, Clone)]
 pub struct TitledWordCount<'a> {
-    pub title: &'a str,
+    pub title: Option<&'a str>,
     pub count: WordCount,
 }
