@@ -163,6 +163,7 @@ pub fn factor(mut n: u64) -> Factors {
 
     let (factors, n) = table::factor(n, factors);
 
+    #[allow(clippy::let_and_return)]
     let r = if n < (1 << 32) {
         _factor::<Montgomery<u32>>(n, factors)
     } else {
@@ -280,6 +281,6 @@ impl std::ops::BitXor<Exponent> for Factors {
         }
 
         debug_assert_eq!(r.product(), self.product().pow(rhs.into()));
-        return r;
+        r
     }
 }

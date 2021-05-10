@@ -121,6 +121,8 @@ impl Parser {
     /// Test if the next token in the stream is a BOOLOP (-a or -o), without
     /// removing the token from the stream.
     fn peek_is_boolop(&mut self) -> bool {
+        // TODO: change to `matches!(self.peek(), Symbol::BoolOp(_))` once MSRV is 1.42
+        // #[allow(clippy::match_like_matches_macro)] // needs MSRV 1.43
         if let Symbol::BoolOp(_) = self.peek() {
             true
         } else {
