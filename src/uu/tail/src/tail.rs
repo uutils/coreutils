@@ -16,6 +16,8 @@ extern crate clap;
 extern crate uucore;
 
 mod platform;
+mod ringbuffer;
+use ringbuffer::RingBuffer;
 
 use clap::{App, Arg};
 use std::collections::VecDeque;
@@ -482,71 +484,46 @@ fn bounded_tail(mut file: &File, settings: &Settings) {
     }
 }
 
+/// Collect the last elements of an iterator into a `VecDeque`.
+///
+/// This function returns a [`VecDeque`] containing either the last
+/// `count` elements of `iter`, an [`Iterator`] over [`Result`]
+/// instances, or all but the first `count` elements of `iter`. If
+/// `beginning` is `true`, then all but the first `count` elements are
+/// returned.
+///
+/// # Panics
+///
+/// If any element of `iter` is an [`Err`], then this function panics.
+fn unbounded_tail_collect<T, E>(
+    iter: impl Iterator<Item = Result<T, E>>,
+    count: u64,
+    beginning: bool,
+) -> VecDeque<T>
+where
+    E: fmt::Debug,
+{
+    if beginning {
+        iter.skip(count as usize).map(|r| r.unwrap()).collect()
+    } else {
+        RingBuffer::from_iter(iter.map(|r| r.unwrap()), count as usize).data
+    }
+}
+
 fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
     // Read through each line/char and store them in a ringbuffer that always
     // contains count lines/chars. When reaching the end of file, output the
     // data in the ringbuf.
     match settings.mode {
-        FilterMode::Lines(mut count, _delimiter) => {
-            let mut ringbuf: VecDeque<String> = VecDeque::new();
-            let mut skip = if settings.beginning {
-                let temp = count;
-                count = ::std::u64::MAX;
-                temp - 1
-            } else {
-                0
-            };
-            loop {
-                let mut datum = String::new();
-                match reader.read_line(&mut datum) {
-                    Ok(0) => break,
-                    Ok(_) => {
-                        if skip > 0 {
-                            skip -= 1;
-                        } else {
-                            if count <= ringbuf.len() as u64 {
-                                ringbuf.pop_front();
-                            }
-                            ringbuf.push_back(datum);
-                        }
-                    }
-                    Err(err) => panic!("{}", err),
-                }
-            }
-            let mut stdout = stdout();
-            for datum in &ringbuf {
-                print_string(&mut stdout, datum);
+        FilterMode::Lines(count, _) => {
+            for line in unbounded_tail_collect(reader.lines(), count, settings.beginning) {
+                println!("{}", line);
             }
         }
-        FilterMode::Bytes(mut count) => {
-            let mut ringbuf: VecDeque<u8> = VecDeque::new();
-            let mut skip = if settings.beginning {
-                let temp = count;
-                count = ::std::u64::MAX;
-                temp - 1
-            } else {
-                0
-            };
-            loop {
-                let mut datum = [0; 1];
-                match reader.read(&mut datum) {
-                    Ok(0) => break,
-                    Ok(_) => {
-                        if skip > 0 {
-                            skip -= 1;
-                        } else {
-                            if count <= ringbuf.len() as u64 {
-                                ringbuf.pop_front();
-                            }
-                            ringbuf.push_back(datum[0]);
-                        }
-                    }
-                    Err(err) => panic!("{}", err),
-                }
-            }
-            let mut stdout = stdout();
-            for datum in &ringbuf {
-                print_byte(&mut stdout, *datum);
+        FilterMode::Bytes(count) => {
+            for byte in unbounded_tail_collect(reader.bytes(), count, settings.beginning) {
+                let mut stdout = stdout();
+                print_byte(&mut stdout, byte);
             }
         }
     }
@@ -561,9 +538,4 @@ fn print_byte<T: Write>(stdout: &mut T, ch: u8) {
     if let Err(err) = stdout.write(&[ch]) {
         crash!(1, "{}", err);
     }
-}
-
-#[inline]
-fn print_string<T: Write>(_: &mut T, s: &str) {
-    print!("{}", s);
 }
