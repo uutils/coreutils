@@ -395,6 +395,7 @@ fn test_dev_full_show_all() {
 
 #[test]
 #[cfg(unix)]
+#[ignore]
 fn test_domain_socket() {
     use std::io::prelude::*;
     use std::sync::{Arc, Barrier};
