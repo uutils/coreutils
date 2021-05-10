@@ -1413,11 +1413,11 @@ fn get_block_size(md: &Metadata, config: &Config) -> u64 {
     {
         // hard-coded for now - enabling setting this remains a TODO
         let ls_block_size = 1024;
-        return match config.size_format {
+        match config.size_format {
             SizeFormat::Binary => md.blocks() * 512,
             SizeFormat::Decimal => md.blocks() * 512,
             SizeFormat::Bytes => md.blocks() * 512 / ls_block_size,
-        };
+        }
     }
 
     #[cfg(not(unix))]
