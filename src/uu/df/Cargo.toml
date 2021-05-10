@@ -16,13 +16,9 @@ path = "src/df.rs"
 
 [dependencies]
 clap = "2.33"
-libc = "0.2"
 number_prefix = "0.4"
-uucore = { version=">=0.0.8", package="uucore", path="../../uucore" }
+uucore = { version=">=0.0.8", package="uucore", path="../../uucore", features=["libc", "fsext"] }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
-
-[target.'cfg(target_os = "windows")'.dependencies]
-winapi = { version = "0.3", features = ["errhandlingapi", "fileapi", "handleapi", "winerror"] }
 
 [[bin]]
 name = "df"
