@@ -207,11 +207,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .alias(OPT_UNIVERSAL_2)
                 .help("print or set Coordinated Universal Time (UTC)"),
         )
-        .arg(Arg::with_name(OPT_FORMAT).multiple(true))
+        .arg(Arg::with_name(OPT_FORMAT).multiple(false))
         .get_matches_from(args);
 
     let format = if let Some(form) = matches.value_of(OPT_FORMAT) {
-        let form = form[1..].into();
+        if !form.starts_with('+') {
+            eprintln!("date: invalid date ‘{}’", form);
+            return 1;
+        }
+        // GNU `date` uses `%N` for nano seconds, however crate::chrono uses `%f`
+        let form = form[1..].replace("%N", "%f");
         Format::Custom(form)
     } else if let Some(fmt) = matches
         .values_of(OPT_ISO_8601)
@@ -237,7 +242,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let set_to = match matches.value_of(OPT_SET).map(parse_date) {
         None => None,
         Some(Err((input, _err))) => {
-            eprintln!("date: invalid date '{}'", input);
+            eprintln!("date: invalid date ‘{}’", input);
             return 1;
         }
         Some(Ok(date)) => Some(date),
@@ -301,7 +306,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     println!("{}", formatted);
                 }
                 Err((input, _err)) => {
-                    println!("date: invalid date '{}'", input);
+                    println!("date: invalid date ‘{}’", input);
                 }
             }
         }
