@@ -15,8 +15,11 @@ extern crate clap;
 #[macro_use]
 extern crate uucore;
 
+mod chunks;
 mod platform;
 mod ringbuffer;
+use chunks::ReverseChunks;
+use chunks::BLOCK_SIZE;
 use ringbuffer::RingBuffer;
 
 use clap::{App, Arg};
@@ -355,10 +358,6 @@ pub fn parse_size(mut size_slice: &str) -> Result<u64, ParseSizeErr> {
     }
 }
 
-/// When reading files in reverse in `bounded_tail`, this is the size of each
-/// block read at a time.
-const BLOCK_SIZE: u64 = 1 << 16;
-
 fn follow<T: Read>(readers: &mut [BufReader<T>], filenames: &[String], settings: &Settings) {
     assert!(settings.follow);
     let mut last = readers.len() - 1;
@@ -396,48 +395,42 @@ fn follow<T: Read>(readers: &mut [BufReader<T>], filenames: &[String], settings:
     }
 }
 
-/// Iterate over bytes in the file, in reverse, until `should_stop` returns
-/// true. The `file` is left seek'd to the position just after the byte that
-/// `should_stop` returned true for.
-fn backwards_thru_file<F>(
-    file: &mut File,
-    size: u64,
-    buf: &mut Vec<u8>,
-    delimiter: u8,
-    should_stop: &mut F,
-) where
-    F: FnMut(u8) -> bool,
-{
-    assert!(buf.len() >= BLOCK_SIZE as usize);
+/// Iterate over bytes in the file, in reverse, until we find the
+/// `num_delimiters` instance of `delimiter`. The `file` is left seek'd to the
+/// position just after that delimiter.
+fn backwards_thru_file(file: &mut File, num_delimiters: usize, delimiter: u8) {
+    // This variable counts the number of delimiters found in the file
+    // so far (reading from the end of the file toward the beginning).
+    let mut counter = 0;
 
-    let max_blocks_to_read = (size as f64 / BLOCK_SIZE as f64).ceil() as usize;
+    for (block_idx, slice) in ReverseChunks::new(file).enumerate() {
+        // Iterate over each byte in the slice in reverse order.
+        let mut iter = slice.iter().enumerate().rev();
 
-    for block_idx in 0..max_blocks_to_read {
-        let block_size = if block_idx == max_blocks_to_read - 1 {
-            size % BLOCK_SIZE
-        } else {
-            BLOCK_SIZE
-        };
-
-        // Seek backwards by the next block, read the full block into
-        // `buf`, and then seek back to the start of the block again.
-        let pos = file.seek(SeekFrom::Current(-(block_size as i64))).unwrap();
-        file.read_exact(&mut buf[0..(block_size as usize)]).unwrap();
-        let pos2 = file.seek(SeekFrom::Current(-(block_size as i64))).unwrap();
-        assert_eq!(pos, pos2);
-
-        // Iterate backwards through the bytes, calling `should_stop` on each
-        // one.
-        let slice = &buf[0..(block_size as usize)];
-        for (i, ch) in slice.iter().enumerate().rev() {
-            // Ignore one trailing newline.
-            if block_idx == 0 && i as u64 == block_size - 1 && *ch == delimiter {
-                continue;
+        // Ignore a trailing newline in the last block, if there is one.
+        if block_idx == 0 {
+            if let Some(c) = slice.last() {
+                if *c == delimiter {
+                    iter.next();
+                }
             }
+        }
 
-            if should_stop(*ch) {
-                file.seek(SeekFrom::Current((i + 1) as i64)).unwrap();
-                return;
+        // For each byte, increment the count of the number of
+        // delimiters found. If we have found more than the specified
+        // number of delimiters, terminate the search and seek to the
+        // appropriate location in the file.
+        for (i, ch) in iter {
+            if *ch == delimiter {
+                counter += 1;
+                if counter >= num_delimiters {
+                    // After each iteration of the outer loop, the
+                    // cursor in the file is at the *beginning* of the
+                    // block, so seeking forward by `i + 1` bytes puts
+                    // us right after the found delimiter.
+                    file.seek(SeekFrom::Current((i + 1) as i64)).unwrap();
+                    return;
+                }
             }
         }
     }
@@ -449,20 +442,12 @@ fn backwards_thru_file<F>(
 /// `BLOCK_SIZE` until we find the location of the first line/byte. This ends up
 /// being a nice performance win for very large files.
 fn bounded_tail(file: &mut File, settings: &Settings) {
-    let size = file.seek(SeekFrom::End(0)).unwrap();
     let mut buf = vec![0; BLOCK_SIZE as usize];
 
     // Find the position in the file to start printing from.
     match settings.mode {
-        FilterMode::Lines(mut count, delimiter) => {
-            backwards_thru_file(file, size, &mut buf, delimiter, &mut |byte| {
-                if byte == delimiter {
-                    count -= 1;
-                    count == 0
-                } else {
-                    false
-                }
-            });
+        FilterMode::Lines(count, delimiter) => {
+            backwards_thru_file(file, count as usize, delimiter);
         }
         FilterMode::Bytes(count) => {
             file.seek(SeekFrom::End(-(count as i64))).unwrap();
