@@ -4,6 +4,8 @@
 pub mod encoding;
 #[cfg(feature = "fs")]
 pub mod fs;
+#[cfg(feature = "fsext")]
+pub mod fsext;
 #[cfg(feature = "parse_time")]
 pub mod parse_time;
 #[cfg(feature = "zero-copy")]
