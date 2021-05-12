@@ -52,6 +52,18 @@ fn test_smaller_than_specified_segment() {
 }
 
 #[test]
+fn test_ext_sort_stable() {
+    new_ucmd!()
+        .arg("-n")
+        .arg("--stable")
+        .arg("-S")
+        .arg("0M")
+        .arg("ext_stable.txt")
+        .succeeds()
+        .stdout_only_fixture("ext_stable.expected");
+}
+
+#[test]
 fn test_extsort_zero_terminated() {
     new_ucmd!()
         .arg("-z")
@@ -564,6 +576,18 @@ fn test_merge_unique() {
         .arg("merge_ints_interleaved_1.txt")
         .succeeds()
         .stdout_only_fixture("merge_ints_interleaved.expected");
+}
+
+#[test]
+fn test_merge_stable() {
+    new_ucmd!()
+        .arg("-m")
+        .arg("--stable")
+        .arg("-n")
+        .arg("merge_stable_1.txt")
+        .arg("merge_stable_2.txt")
+        .succeeds()
+        .stdout_only_fixture("merge_stable.expected");
 }
 
 #[test]

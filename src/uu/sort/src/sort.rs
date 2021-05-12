@@ -705,6 +705,7 @@ struct MergeableFile<'a> {
     lines: Box<dyn Iterator<Item = Line> + 'a>,
     current_line: Line,
     settings: &'a GlobalSettings,
+    file_index: usize,
 }
 
 // BinaryHeap depends on `Ord`. Note that we want to pop smallest items
@@ -712,7 +713,14 @@ struct MergeableFile<'a> {
 // trick it into the right order by calling reverse() here.
 impl<'a> Ord for MergeableFile<'a> {
     fn cmp(&self, other: &MergeableFile) -> Ordering {
-        compare_by(&self.current_line, &other.current_line, self.settings).reverse()
+        let comparison = compare_by(&self.current_line, &other.current_line, self.settings);
+        if comparison == Ordering::Equal {
+            // If lines are equal, the earlier file takes precedence.
+            self.file_index.cmp(&other.file_index)
+        } else {
+            comparison
+        }
+        .reverse()
     }
 }
 
@@ -748,6 +756,7 @@ impl<'a> FileMerger<'a> {
                 lines,
                 current_line: next_line,
                 settings: &self.settings,
+                file_index: self.heap.len(),
             };
             self.heap.push(mergeable_file);
         }
