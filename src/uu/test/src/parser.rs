@@ -33,7 +33,7 @@ impl Symbol {
                 "(" => Symbol::LParen,
                 "!" => Symbol::Bang,
                 "-a" | "-o" => Symbol::BoolOp(s),
-                "=" | "!=" => Symbol::StringOp(s),
+                "=" | "==" | "!=" => Symbol::StringOp(s),
                 "-eq" | "-ge" | "-gt" | "-le" | "-lt" | "-ne" => Symbol::IntOp(s),
                 "-ef" | "-nt" | "-ot" => Symbol::FileOp(s),
                 "-n" | "-z" => Symbol::StrlenOp(s),
@@ -83,7 +83,7 @@ impl Symbol {
 ///   TERM → str OP str
 ///   TERM → str | 𝜖
 ///   OP → STRINGOP | INTOP | FILEOP
-///   STRINGOP → = | !=
+///   STRINGOP → = | == | !=
 ///   INTOP → -eq | -ge | -gt | -le | -lt | -ne
 ///   FILEOP → -ef | -nt | -ot
 ///   STRLEN → -n | -z
@@ -163,7 +163,7 @@ impl Parser {
         match self.peek() {
             // lparen is a literal when followed by nothing or comparison
             Symbol::None | Symbol::StringOp(_) | Symbol::IntOp(_) | Symbol::FileOp(_) => {
-                self.literal(Symbol::Literal(OsString::from("(")));
+                self.literal(Symbol::LParen.into_literal());
             }
             // empty parenthetical
             Symbol::Literal(s) if s == ")" => {}
@@ -183,27 +183,67 @@ impl Parser {
     ///
     /// * `! =`: negate the result of the implicit string length test of `=`
     /// * `! = foo`: compare the literal strings `!` and `foo`
-    /// * `! <expr>`: negate the result of the expression
+    /// * `! = = str`: negate comparison of literal `=` and `str`
+    /// * `!`: bang followed by nothing is literal
+    /// * `! EXPR`: negate the result of the expression
+    ///
+    /// Combined Boolean & negation:
+    ///
+    /// * `! ( EXPR ) [BOOLOP EXPR]`: negate the parenthesized expression only
+    /// * `! UOP str BOOLOP EXPR`: negate the unary subexpression
+    /// * `! str BOOLOP str`: negate the entire Boolean expression
+    /// * `! str BOOLOP EXPR BOOLOP EXPR`: negate the value of the first `str` term
     ///
     fn bang(&mut self) {
-        if let Symbol::StringOp(_) | Symbol::IntOp(_) | Symbol::FileOp(_) = self.peek() {
-            // we need to peek ahead one more token to disambiguate the first
-            // two cases listed above: case 1 — `! <OP as literal>` — and
-            // case 2: `<! as literal> OP str`.
-            let peek2 = self.tokens.clone().nth(1);
+        match self.peek() {
+            Symbol::StringOp(_) | Symbol::IntOp(_) | Symbol::FileOp(_) | Symbol::BoolOp(_) => {
+                // we need to peek ahead one more token to disambiguate the first
+                // three cases listed above
+                let peek2 = Symbol::new(self.tokens.clone().nth(1));
 
-            if peek2.is_none() {
-                // op is literal
-                let op = self.next_token().into_literal();
-                self.stack.push(op);
-                self.stack.push(Symbol::Bang);
-            } else {
-                // bang is literal; parsing continues with op
-                self.literal(Symbol::Literal(OsString::from("!")));
+                match peek2 {
+                    // case 1: `! <OP as literal>`
+                    // case 3: `! = OP str`
+                    Symbol::StringOp(_) | Symbol::None => {
+                        // op is literal
+                        let op = self.next_token().into_literal();
+                        self.literal(op);
+                        self.stack.push(Symbol::Bang);
+                    }
+                    // case 2: `<! as literal> OP str [BOOLOP EXPR]`.
+                    _ => {
+                        // bang is literal; parsing continues with op
+                        self.literal(Symbol::Bang.into_literal());
+                        self.maybe_boolop();
+                    }
+                }
             }
-        } else {
-            self.expr();
-            self.stack.push(Symbol::Bang);
+
+            // bang followed by nothing is literal
+            Symbol::None => self.stack.push(Symbol::Bang.into_literal()),
+
+            _ => {
+                // peek ahead up to 4 tokens to determine if we need to negate
+                // the entire expression or just the first term
+                let peek4: Vec<Symbol> = self
+                    .tokens
+                    .clone()
+                    .take(4)
+                    .map(|token| Symbol::new(Some(token)))
+                    .collect();
+
+                match peek4.as_slice() {
+                    // we peeked ahead 4 but there were only 3 tokens left
+                    [Symbol::Literal(_), Symbol::BoolOp(_), Symbol::Literal(_)] => {
+                        self.expr();
+                        self.stack.push(Symbol::Bang);
+                    }
+                    _ => {
+                        self.term();
+                        self.stack.push(Symbol::Bang);
+                    }
+                }
+            }
         }
     }
 
@@ -211,13 +251,14 @@ impl Parser {
     /// as appropriate.
     fn maybe_boolop(&mut self) {
         if self.peek_is_boolop() {
-            let token = self.tokens.next().unwrap(); // safe because we peeked
+            let symbol = self.next_token();
 
             // BoolOp by itself interpreted as Literal
             if let Symbol::None = self.peek() {
-                self.literal(Symbol::Literal(token))
+                self.literal(symbol.into_literal());
             } else {
-                self.boolop(Symbol::BoolOp(token))
+                self.boolop(symbol);
+                self.maybe_boolop();
             }
         }
     }
@@ -231,7 +272,6 @@ impl Parser {
         if op == Symbol::BoolOp(OsString::from("-a")) {
             self.term();
             self.stack.push(op);
-            self.maybe_boolop();
         } else {
             self.expr();
             self.stack.push(op);
