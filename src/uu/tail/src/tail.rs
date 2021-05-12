@@ -241,7 +241,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             }
             let mut file = File::open(&path).unwrap();
             if is_seekable(&mut file) {
-                bounded_tail(&file, &settings);
+                bounded_tail(&mut file, &settings);
                 if settings.follow {
                     let reader = BufReader::new(file);
                     readers.push(reader);
@@ -400,7 +400,7 @@ fn follow<T: Read>(readers: &mut [BufReader<T>], filenames: &[String], settings:
 /// true. The `file` is left seek'd to the position just after the byte that
 /// `should_stop` returned true for.
 fn backwards_thru_file<F>(
-    mut file: &File,
+    file: &mut File,
     size: u64,
     buf: &mut Vec<u8>,
     delimiter: u8,
@@ -448,14 +448,14 @@ fn backwards_thru_file<F>(
 /// end of the file, and then read the file "backwards" in blocks of size
 /// `BLOCK_SIZE` until we find the location of the first line/byte. This ends up
 /// being a nice performance win for very large files.
-fn bounded_tail(mut file: &File, settings: &Settings) {
+fn bounded_tail(file: &mut File, settings: &Settings) {
     let size = file.seek(SeekFrom::End(0)).unwrap();
     let mut buf = vec![0; BLOCK_SIZE as usize];
 
     // Find the position in the file to start printing from.
     match settings.mode {
         FilterMode::Lines(mut count, delimiter) => {
-            backwards_thru_file(&file, size, &mut buf, delimiter, &mut |byte| {
+            backwards_thru_file(file, size, &mut buf, delimiter, &mut |byte| {
                 if byte == delimiter {
                     count -= 1;
                     count == 0
