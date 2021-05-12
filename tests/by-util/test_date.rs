@@ -122,6 +122,12 @@ fn test_date_format_without_plus() {
 }
 
 #[test]
+fn test_date_format_literal() {
+    new_ucmd!().arg("+%%s").succeeds().stdout_is("%s\n");
+    new_ucmd!().arg("+%%N").succeeds().stdout_is("%N\n");
+}
+
+#[test]
 #[cfg(all(unix, not(target_os = "macos")))]
 fn test_date_set_valid() {
     if get_effective_uid() == 0 {

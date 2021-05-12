@@ -215,8 +215,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             eprintln!("date: invalid date ‘{}’", form);
             return 1;
         }
-        // GNU `date` uses `%N` for nano seconds, however crate::chrono uses `%f`
-        let form = form[1..].replace("%N", "%f");
+        let form = form[1..].to_string();
         Format::Custom(form)
     } else if let Some(fmt) = matches
         .values_of(OPT_ISO_8601)
@@ -302,7 +301,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         for date in dates {
             match date {
                 Ok(date) => {
-                    let formatted = date.format(format_string);
+                    // GNU `date` uses `%N` for nano seconds, however crate::chrono uses `%f`
+                    let format_string = &format_string.replace("%N", "%f");
+                    let formatted = date.format(format_string).to_string().replace("%f", "%N");
                     println!("{}", formatted);
                 }
                 Err((input, _err)) => {
