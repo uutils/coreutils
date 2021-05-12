@@ -27,8 +27,12 @@ mod options {
     pub const ZERO_NAME: &str = "ZERO";
     pub const FILES_NAME: &str = "FILE";
 }
+mod lines;
 mod parse;
 mod split;
+mod take;
+use lines::zlines;
+use take::take_all_but;
 
 fn app<'a>() -> App<'a, 'a> {
     App::new(executable!())
@@ -293,36 +297,22 @@ fn rbuf_but_last_n_bytes(input: &mut impl std::io::BufRead, n: usize) -> std::io
 }
 
 fn rbuf_but_last_n_lines(
-    input: &mut impl std::io::BufRead,
+    input: impl std::io::BufRead,
     n: usize,
     zero: bool,
 ) -> std::io::Result<()> {
-    if n == 0 {
-        //prints everything
-        return rbuf_n_bytes(input, std::usize::MAX);
+    if zero {
+        let stdout = std::io::stdout();
+        let mut stdout = stdout.lock();
+        for bytes in take_all_but(zlines(input), n) {
+            stdout.write_all(&bytes?)?;
+        }
+    } else {
+        for line in take_all_but(input.lines(), n) {
+            println!("{}", line?);
+        }
     }
-    let mut ringbuf = vec![Vec::new(); n];
-    let stdout = std::io::stdout();
-    let mut stdout = stdout.lock();
-    let mut line = Vec::new();
-    let mut lines = 0usize;
-    split::walk_lines(input, zero, |e| match e {
-        split::Event::Data(dat) => {
-            line.extend_from_slice(dat);
-            Ok(true)
-        }
-        split::Event::Line => {
-            if lines < n {
-                ringbuf[lines] = std::mem::replace(&mut line, Vec::new());
-                lines += 1;
-            } else {
-                stdout.write_all(&ringbuf[0])?;
-                ringbuf.rotate_left(1);
-                ringbuf[n - 1] = std::mem::replace(&mut line, Vec::new());
-            }
-            Ok(true)
-        }
-    })
+    Ok(())
 }
 
 fn head_backwards_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Result<()> {

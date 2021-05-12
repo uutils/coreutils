@@ -17,7 +17,7 @@ path = "src/tail.rs"
 [dependencies]
 clap = "2.33"
 libc = "0.2.42"
-uucore = { version=">=0.0.8", package="uucore", path="../../uucore" }
+uucore = { version=">=0.0.8", package="uucore", path="../../uucore", features=["ringbuffer"] }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 winapi = { version="0.3", features=["fileapi", "handleapi", "processthreadsapi", "synchapi", "winbase"] }
 
