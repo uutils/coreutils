@@ -16,6 +16,7 @@ edition = "2018"
 path="src/lib/lib.rs"
 
 [dependencies]
+dns-lookup = "1.0.5"
 dunce = "1.0.0"
 getopts = "<= 0.2.21"
 wild = "2.0.4"

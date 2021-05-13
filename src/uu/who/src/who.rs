@@ -548,20 +548,10 @@ impl Who {
             "  ?".into()
         };
 
-        let mut buf = vec![];
-        let ut_host = ut.host();
-        let mut res = ut_host.splitn(2, ':');
-        if let Some(h) = res.next() {
-            if self.do_lookup {
-                buf.push(ut.canon_host().unwrap_or_else(|_| h.to_owned()));
-            } else {
-                buf.push(h.to_owned());
-            }
+        let mut s = ut.host();
+        if self.do_lookup {
+            s = safe_unwrap!(ut.canon_host());
         }
-        if let Some(h) = res.next() {
-            buf.push(h.to_owned());
-        }
-        let s = buf.join(":");
         let hoststr = if s.is_empty() { s } else { format!("({})", s) };
 
         self.print_line(

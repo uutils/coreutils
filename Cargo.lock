@@ -577,6 +577,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "dns-lookup"
+version = "1.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "093d88961fd18c4ecacb8c80cd0b356463ba941ba11e0e01f9cf5271380b79dc"
+dependencies = [
+ "cfg-if 1.0.0",
+ "libc",
+ "socket2",
+ "winapi 0.3.9",
+]
+
+[[package]]
 name = "dunce"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1446,6 +1458,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "socket2"
+version = "0.3.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "122e570113d28d773067fab24266b66753f6ea915758651696b6e35e49f88d6e"
+dependencies = [
+ "cfg-if 1.0.0",
+ "libc",
+ "winapi 0.3.9",
+]
+
+[[package]]
 name = "strsim"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1820,11 +1843,9 @@ name = "uu_df"
 version = "0.0.6"
 dependencies = [
  "clap",
- "libc",
  "number_prefix",
  "uucore",
  "uucore_procs",
- "winapi 0.3.9",
 ]
 
 [[package]]
@@ -2407,8 +2428,6 @@ name = "uu_stat"
 version = "0.0.6"
 dependencies = [
  "clap",
- "libc",
- "time",
  "uucore",
  "uucore_procs",
 ]
@@ -2672,6 +2691,7 @@ name = "uucore"
 version = "0.0.8"
 dependencies = [
  "data-encoding",
+ "dns-lookup",
  "dunce",
  "getopts",
  "lazy_static",
@@ -2682,6 +2702,7 @@ dependencies = [
  "thiserror",
  "time",
  "wild",
+ "winapi 0.3.9",
 ]
 
 [[package]]

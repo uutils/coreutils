@@ -99,6 +99,23 @@ fn test_short_format_q() {
 }
 
 #[cfg(target_os = "linux")]
+#[test]
+fn test_no_flag() {
+    let scene = TestScenario::new(util_name!());
+
+    let actual = scene.ucmd().succeeds().stdout_move_str();
+    let expect = scene
+        .cmd_keepenv(util_name!())
+        .env("LANGUAGE", "C")
+        .succeeds()
+        .stdout_move_str();
+
+    let v_actual: Vec<&str> = actual.split_whitespace().collect();
+    let v_expect: Vec<&str> = expect.split_whitespace().collect();
+    assert_eq!(v_actual, v_expect);
+}
+
+#[cfg(target_os = "linux")]
 fn expected_result(args: &[&str]) -> String {
     TestScenario::new(util_name!())
         .cmd_keepenv(util_name!())
