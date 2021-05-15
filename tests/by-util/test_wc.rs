@@ -168,3 +168,26 @@ fn test_file_one_long_word() {
         .run()
         .stdout_is("    1     1 10001 10001 10000 onelongword.txt\n");
 }
+
+/// Test that getting counts from a directory is an error.
+#[test]
+fn test_read_from_directory_error() {
+    // TODO To match GNU `wc`, the `stdout` should be:
+    //
+    //     "      0       0       0 .\n"
+    //
+    new_ucmd!()
+        .args(&["."])
+        .fails()
+        .stderr_contains(".: Is a directory\n")
+        .stdout_is("0 0 0 .\n");
+}
+
+/// Test that getting counts from nonexistent file is an error.
+#[test]
+fn test_read_from_nonexistent_file() {
+    new_ucmd!()
+        .args(&["bogusfile"])
+        .fails()
+        .stderr_contains("bogusfile: No such file or directory\n");
+}

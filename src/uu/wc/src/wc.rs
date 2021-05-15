@@ -22,7 +22,7 @@ use thiserror::Error;
 
 use std::cmp::max;
 use std::fs::File;
-use std::io::{self, Write};
+use std::io::{self, ErrorKind, Write};
 use std::path::Path;
 
 #[derive(Error, Debug)]
@@ -254,6 +254,29 @@ fn word_count_from_input(input: &Input, settings: &Settings) -> WcResult<WordCou
     }
 }
 
+/// Print a message appropriate for the particular error to `stderr`.
+///
+/// # Examples
+///
+/// This will print `wc: /tmp: Is a directory` to `stderr`.
+///
+/// ```rust,ignore
+/// show_error(Input::Path("/tmp"), WcError::IsDirectory("/tmp"))
+/// ```
+fn show_error(input: &Input, err: WcError) {
+    match (input, err) {
+        (_, WcError::IsDirectory(path)) => {
+            show_error_custom_description!(path, "Is a directory");
+        }
+        (Input::Path(path), WcError::Io(e)) if e.kind() == ErrorKind::NotFound => {
+            show_error_custom_description!(path, "No such file or directory");
+        }
+        (_, e) => {
+            show_error!("{}", e);
+        }
+    };
+}
+
 fn wc(inputs: Vec<Input>, settings: &Settings) -> Result<(), u32> {
     let mut total_word_count = WordCount::default();
     let mut results = vec![];
@@ -264,7 +287,7 @@ fn wc(inputs: Vec<Input>, settings: &Settings) -> Result<(), u32> {
 
     for input in &inputs {
         let word_count = word_count_from_input(&input, settings).unwrap_or_else(|err| {
-            show_error!("{}", err);
+            show_error(&input, err);
             error_count += 1;
             WordCount::default()
         });
