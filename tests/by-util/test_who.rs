@@ -162,7 +162,6 @@ fn test_users() {
 
 #[cfg(target_os = "linux")]
 #[test]
-#[ignore]
 fn test_lookup() {
     for opt in vec!["--lookup"] {
         new_ucmd!()
