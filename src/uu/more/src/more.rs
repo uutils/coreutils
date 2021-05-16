@@ -168,6 +168,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             stdin().read_to_string(&mut buff).unwrap();
             more(&buff, &mut stdout, true);
         } else {
+            terminal::disable_raw_mode().unwrap();
             show_usage_error!("bad usage");
         }
     }

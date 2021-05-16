@@ -848,21 +848,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ccac4b00700875e6a07c6cde370d44d32fa01c5a65cdd2fca6858c479d28bb3"
 
 [[package]]
-name = "lock_api"
-version = "0.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5a3c91c24eae6777794bb1997ad98bbb87daf92890acab859f7eaa4320333176"
-dependencies = [
- "scopeguard",
-]
-
-[[package]]
 name = "locale"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5fdbe492a9c0238da900a1165c42fc5067161ce292678a6fe80921f30fe307fd"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "lock_api"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5a3c91c24eae6777794bb1997ad98bbb87daf92890acab859f7eaa4320333176"
+dependencies = [
+ "scopeguard",
 ]
 
 [[package]]
@@ -1091,7 +1091,7 @@ dependencies = [
  "cfg-if 1.0.0",
  "instant",
  "libc",
- "redox_syscall 0.2.6",
+ "redox_syscall 0.2.7",
  "smallvec 1.6.1",
  "winapi 0.3.9",
 ]
@@ -1818,6 +1818,7 @@ dependencies = [
 name = "uu_basename"
 version = "0.0.6"
 dependencies = [
+ "clap",
  "uucore",
  "uucore_procs",
 ]
@@ -2263,6 +2264,7 @@ dependencies = [
 name = "uu_more"
 version = "0.0.6"
 dependencies = [
+ "atty",
  "clap",
  "crossterm",
  "nix 0.13.1",
@@ -2774,6 +2776,7 @@ dependencies = [
 name = "uu_who"
 version = "0.0.6"
 dependencies = [
+ "clap",
  "uucore",
  "uucore_procs",
 ]
