@@ -196,3 +196,28 @@ fn test_obsolete_extras() {
         .succeeds()
         .stdout_is("==> standard input <==\n1\02\03\04\05\0");
 }
+
+#[test]
+fn test_multiple_files() {
+    new_ucmd!()
+        .args(&["emptyfile.txt", "emptyfile.txt"])
+        .succeeds()
+        .stdout_is("==> emptyfile.txt <==\n\n==> emptyfile.txt <==\n");
+}
+
+#[test]
+fn test_multiple_files_with_stdin() {
+    new_ucmd!()
+        .args(&["emptyfile.txt", "-", "emptyfile.txt"])
+        .pipe_in("hello\n")
+        .succeeds()
+        .stdout_is(
+            "==> emptyfile.txt <==
+
+==> standard input <==
+hello
+
+==> emptyfile.txt <==
+",
+        );
+}
