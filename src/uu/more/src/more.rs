@@ -162,15 +162,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             buff.clear();
         }
         reset_term(&mut stdout);
+    } else if atty::isnt(atty::Stream::Stdin) {
+        let mut stdout = setup_term();
+        stdin().read_to_string(&mut buff).unwrap();
+        more(&buff, &mut stdout, true);
     } else {
-        if atty::isnt(atty::Stream::Stdin) {
-            let mut stdout = setup_term();
-            stdin().read_to_string(&mut buff).unwrap();
-            more(&buff, &mut stdout, true);
-        } else {
-            terminal::disable_raw_mode().unwrap();
-            show_usage_error!("bad usage");
-        }
+        terminal::disable_raw_mode().unwrap();
+        show_usage_error!("bad usage");
     }
     0
 }
