@@ -1,7 +1,7 @@
 use clap::{App, Arg};
 use std::convert::TryFrom;
 use std::ffi::OsString;
-use std::io::{ErrorKind, Read, Seek, SeekFrom, Write};
+use std::io::{self, ErrorKind, Read, Seek, SeekFrom, Write};
 use uucore::{crash, executable, show_error};
 
 const EXIT_FAILURE: i32 = 1;
@@ -206,38 +206,20 @@ impl Default for HeadOptions {
     }
 }
 
-fn rbuf_n_bytes(input: &mut impl std::io::BufRead, n: usize) -> std::io::Result<()> {
-    if n == 0 {
-        return Ok(());
-    }
-    let mut readbuf = [0u8; BUF_SIZE];
-    let mut i = 0usize;
+fn rbuf_n_bytes<R>(input: R, n: usize) -> std::io::Result<()>
+where
+    R: Read,
+{
+    // Read the first `n` bytes from the `input` reader.
+    let mut reader = input.take(n as u64);
 
+    // Write those bytes to `stdout`.
     let stdout = std::io::stdout();
     let mut stdout = stdout.lock();
 
-    loop {
-        let read = loop {
-            match input.read(&mut readbuf) {
-                Ok(n) => break n,
-                Err(e) => match e.kind() {
-                    ErrorKind::Interrupted => {}
-                    _ => return Err(e),
-                },
-            }
-        };
-        if read == 0 {
-            // might be unexpected if
-            // we haven't read `n` bytes
-            // but this mirrors GNU's behavior
-            return Ok(());
-        }
-        stdout.write_all(&readbuf[..read.min(n - i)])?;
-        i += read.min(n - i);
-        if i == n {
-            return Ok(());
-        }
-    }
+    io::copy(&mut reader, &mut stdout)?;
+
+    Ok(())
 }
 
 fn rbuf_n_lines(input: &mut impl std::io::BufRead, n: usize, zero: bool) -> std::io::Result<()> {
