@@ -1966,3 +1966,15 @@ fn test_ls_sort_extension() {
         expected,
     );
 }
+
+#[test]
+#[cfg(not(windows))]
+fn test_ls_device_type_major_minor_numbers() {
+    let scene = TestScenario::new(util_name!());
+    let result = scene.ucmd().args(&["-l", "/dev/null"]).run();
+    let result_fields: Vec<&str> = result.stdout_str().split_whitespace().collect();
+
+    assert!(result_fields[0].starts_with("c"));
+    assert!(result_fields[4].eq("3,"));
+    assert!(result_fields[5].eq("2"));
+}
