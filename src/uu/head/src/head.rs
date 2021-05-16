@@ -405,7 +405,7 @@ fn uu_head(options: &HeadOptions) {
     for fname in &options.files {
         let res = match fname.as_str() {
             "-" => {
-                if options.verbose {
+                if (options.files.len() > 1 && !options.quiet) || options.verbose {
                     if !first {
                         println!();
                     }
@@ -459,6 +459,9 @@ fn uu_head(options: &HeadOptions) {
                     },
                 };
                 if (options.files.len() > 1 && !options.quiet) || options.verbose {
+                    if !first {
+                        println!();
+                    }
                     println!("==> {} <==", name)
                 }
                 head_file(&mut file, options)
