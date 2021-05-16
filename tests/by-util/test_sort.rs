@@ -122,7 +122,7 @@ fn test_check_zero_terminated_failure() {
         .arg("-c")
         .arg("zero-terminated.txt")
         .fails()
-        .stdout_is("sort: disorder in line 0\n");
+        .stdout_is("sort: zero-terminated.txt:2: disorder: ../../fixtures/du\n");
 }
 
 #[test]
@@ -621,7 +621,7 @@ fn test_check() {
         .arg("-c")
         .arg("check_fail.txt")
         .fails()
-        .stdout_is("sort: disorder in line 4\n");
+        .stdout_is("sort: check_fail.txt:6: disorder: 5\n");
 
     new_ucmd!()
         .arg("-c")
