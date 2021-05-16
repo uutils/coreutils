@@ -1663,7 +1663,7 @@ fn display_size_or_rdev(metadata: &Metadata, config: &Config) -> String {
         let ft = metadata.file_type();
         if ft.is_char_device() || ft.is_block_device() {
             let dev: u64 = metadata.rdev();
-            let major = (dev >> 8) as u8;
+            let major = (dev >> 24) as u8;
             let minor = dev as u8;
             return format!("{}, {}", major, minor);
         }
