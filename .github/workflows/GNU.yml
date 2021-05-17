@@ -1,6 +1,7 @@
 name: GNU
 
-on: [push, pull_request]
+# on: [push, pull_request]
+on: []
 
 jobs:
   gnu:
