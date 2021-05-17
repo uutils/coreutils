@@ -489,7 +489,10 @@ where
     E: fmt::Debug,
 {
     if beginning {
-        iter.skip(count as usize).map(|r| r.unwrap()).collect()
+        // GNU `tail` seems to index bytes and lines starting at 1, not
+        // at 0. It seems to treat `+0` and `+1` as the same thing.
+        let i = count.max(1) - 1;
+        iter.skip(i as usize).map(|r| r.unwrap()).collect()
     } else {
         RingBuffer::from_iter(iter.map(|r| r.unwrap()), count as usize).data
     }
