@@ -1,14 +1,17 @@
 # Benchmarking `factor`
 
+The benchmarks for `factor` are located under `tests/benches/factor`
+and can be invoked with `cargo bench` in that directory.
+
+They are located outside the `uu_factor` crate, as they do not comply
+with the project's minimum supported Rust version, *i.e.* may require
+a newer version of `rustc`.
+
+
 ## Microbenchmarking deterministic functions
 
 We currently use [`criterion`] to benchmark deterministic functions,
 such as `gcd` and `table::factor`.
-
-Those benchmarks can be simply executed with `cargo bench` as usual,
-but may require a recent version of Rust, *i.e.* the project's minimum
-supported version of Rust does not apply to the benchmarks.
-
 
 However, µbenchmarks are by nature unstable: not only are they specific to
 the hardware, operating system version, etc., but they are noisy and affected
