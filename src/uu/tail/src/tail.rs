@@ -19,7 +19,6 @@ mod chunks;
 mod platform;
 mod ringbuffer;
 use chunks::ReverseChunks;
-use chunks::BLOCK_SIZE;
 use ringbuffer::RingBuffer;
 
 use clap::{App, Arg};
@@ -442,8 +441,6 @@ fn backwards_thru_file(file: &mut File, num_delimiters: usize, delimiter: u8) {
 /// `BLOCK_SIZE` until we find the location of the first line/byte. This ends up
 /// being a nice performance win for very large files.
 fn bounded_tail(file: &mut File, settings: &Settings) {
-    let mut buf = vec![0; BLOCK_SIZE as usize];
-
     // Find the position in the file to start printing from.
     match settings.mode {
         FilterMode::Lines(count, delimiter) => {
@@ -455,18 +452,9 @@ fn bounded_tail(file: &mut File, settings: &Settings) {
     }
 
     // Print the target section of the file.
-    loop {
-        let bytes_read = file.read(&mut buf).unwrap();
-
-        let mut stdout = stdout();
-        for b in &buf[0..bytes_read] {
-            print_byte(&mut stdout, *b);
-        }
-
-        if bytes_read == 0 {
-            break;
-        }
-    }
+    let stdout = stdout();
+    let mut stdout = stdout.lock();
+    std::io::copy(file, &mut stdout).unwrap();
 }
 
 /// Collect the last elements of an iterator into a `VecDeque`.
