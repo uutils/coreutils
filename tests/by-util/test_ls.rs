@@ -685,7 +685,7 @@ fn test_ls_styles() {
     at.touch("test");
 
     let re_full = Regex::new(
-        r"[a-z-]* \d* \w* \w* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d* \+\d{4} test\n",
+        r"[a-z-]* \d* \w* \w* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d* (\+|\-)\d{4} test\n",
     )
     .unwrap();
     let re_long =
