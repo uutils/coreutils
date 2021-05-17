@@ -315,7 +315,12 @@ impl CmdResult {
     }
 
     pub fn stdout_does_not_contain<T: AsRef<str>>(&self, cmp: T) -> &CmdResult {
-        assert!(!self.stdout_str().contains(cmp.as_ref()));
+        assert!(
+            !self.stdout_str().contains(cmp.as_ref()),
+            "'{}' contains '{}' but should not",
+            self.stdout_str(),
+            cmp.as_ref(),
+        );
         self
     }
 
