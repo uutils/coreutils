@@ -347,10 +347,18 @@ fn test_squeeze_blank_before_numbering() {
 #[cfg(unix)]
 fn test_dev_random() {
     let mut buf = [0; 2048];
-    let mut proc = new_ucmd!().args(&["/dev/random"]).run_no_wait();
+    #[cfg(target_os = "linux")]
+    fn rand_gen() -> &'static str { "/dev/urandom"}
+
+    #[cfg(not(target_os = "linux"))]
+    fn rand_gen() -> &'static str { "/dev/random"}
+
+    let mut proc = new_ucmd!().args(&[rand_gen()]).run_no_wait();
     let mut proc_stdout = proc.stdout.take().unwrap();
+    println!("I got to 1");
     proc_stdout.read_exact(&mut buf).unwrap();
 
+    println!("I got to 3");
     let num_zeroes = buf.iter().fold(0, |mut acc, &n| {
         if n == 0 {
             acc += 1;
