@@ -355,10 +355,8 @@ fn test_dev_random() {
 
     let mut proc = new_ucmd!().args(&[rand_gen()]).run_no_wait();
     let mut proc_stdout = proc.stdout.take().unwrap();
-    println!("I got to 1");
     proc_stdout.read_exact(&mut buf).unwrap();
 
-    println!("I got to 3");
     let num_zeroes = buf.iter().fold(0, |mut acc, &n| {
         if n == 0 {
             acc += 1;
