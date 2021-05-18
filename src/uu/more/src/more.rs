@@ -133,8 +133,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         )
         .get_matches_from(args);
     let mut buff = String::new();
-    let mut stdout = setup_term();
     if let Some(filenames) = matches.values_of(options::FILES) {
+        let mut stdout = setup_term();
         let length = filenames.len();
         for (idx, fname) in filenames.clone().enumerate() {
             let fname = Path::new(fname);
@@ -163,11 +163,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
         reset_term(&mut stdout);
     } else if atty::isnt(atty::Stream::Stdin) {
-        let mut stdout = setup_term();
         stdin().read_to_string(&mut buff).unwrap();
+        let mut stdout = setup_term();
         more(&buff, &mut stdout, true);
+        reset_term(&mut stdout);
     } else {
-        terminal::disable_raw_mode().unwrap();
         show_usage_error!("bad usage");
     }
     0
