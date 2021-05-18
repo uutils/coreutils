@@ -1,4 +1,5 @@
 use crate::common::util::*;
+#[cfg(any(unix, target_os = "redox"))]
 use std::ffi::OsStr;
 
 #[test]
@@ -123,6 +124,7 @@ fn test_too_many_args_output() {
     );
 }
 
+#[cfg(any(unix, target_os = "redox"))]
 fn test_invalid_utf8_args(os_str: &OsStr) {
     let test_vec = vec![os_str.to_os_string()];
     new_ucmd!().args(&test_vec).succeeds().stdout_is("fo�o\n");

@@ -155,7 +155,7 @@ fn test_relpath_no_from_with_d() {
         at.mkdir_all(to);
 
         // d is part of subpath -> expect relative path
-        let mut result_stdout = scene
+        let _result_stdout = scene
             .ucmd()
             .arg(to)
             .arg(&format!("-d{}", pwd))
@@ -163,10 +163,10 @@ fn test_relpath_no_from_with_d() {
             .stdout_move_str();
         // relax rules for windows test environment
         #[cfg(not(windows))]
-        assert!(Path::new(&result_stdout).is_relative());
+        assert!(Path::new(&_result_stdout).is_relative());
 
         // d is not part of subpath -> expect absolut path
-        result_stdout = scene
+        let result_stdout = scene
             .ucmd()
             .arg(to)
             .arg("-dnon_existing")
