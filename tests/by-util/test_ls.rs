@@ -1966,3 +1966,38 @@ fn test_ls_sort_extension() {
         expected,
     );
 }
+
+// This tests for the open issue described in #2223
+#[cfg_attr(not(feature = "test_unimplemented"), ignore)]
+#[test]
+fn test_ls_path() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file1 = "file1";
+    let file2 = "file2";
+    let dir = "dir";
+    let path = &format!("{}/{}", dir, file2);
+
+    at.mkdir(dir);
+    at.touch(file1);
+    at.touch(path);
+
+    let expected_stdout = &format!("{}\n", path);
+    scene.ucmd().arg(path).run().stdout_is(expected_stdout);
+
+    let expected_stdout = &format!("./{}\n", path);
+    scene.ucmd().arg(path).run().stdout_is(expected_stdout);
+
+    let abs_path = format!("{}/{}\n", at.as_string(), path);
+    println!(":{}", abs_path);
+    scene.ucmd().arg(&abs_path).run().stdout_is(&abs_path);
+
+    let expected_stdout = &format!("{}\n{}\n", file1, path);
+    scene
+        .ucmd()
+        .arg(file1)
+        .arg(path)
+        .run()
+        .stdout_is(expected_stdout);
+}
