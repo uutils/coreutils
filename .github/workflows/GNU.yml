@@ -34,7 +34,7 @@ jobs:
       shell: bash
       run: |
         sudo apt-get update
-        sudo apt-get install autoconf autopoint bison texinfo gperf gcc g++ gdb python-pyinotify python3-sphinx
+        sudo apt-get install autoconf autopoint bison texinfo gperf gcc g++ gdb python-pyinotify python3-sphinx jq
         pushd uutils
         make PROFILE=release
         BUILDDIR="$PWD/target/release/"
@@ -117,15 +117,24 @@ jobs:
     - name: Extract tests info
       shell: bash
       run: |
-        if test -f gnu/tests/test-suite.log
+        LOG_FILE=gnu/tests/test-suite.log
+        if test -f "$LOG_FILE"
         then
-            TOTAL=$( grep "# TOTAL:" gnu/tests/test-suite.log|cut -d' ' -f2-)
-            PASS=$( grep "# PASS:" gnu/tests/test-suite.log|cut -d' ' -f2-)
-            SKIP=$( grep "# SKIP:" gnu/tests/test-suite.log|cut -d' ' -f2-)
-            FAIL=$( grep "# FAIL:" gnu/tests/test-suite.log|cut -d' ' -f2-)
-            XPASS=$( grep "# XPASS:" gnu/tests/test-suite.log|cut -d' ' -f2-)
-            ERROR=$( grep "# ERROR:" gnu/tests/test-suite.log|cut -d' ' -f2-)
-            echo "::warning ::GNU testsuite = $TOTAL / $PASS / $FAIL / $ERROR"
+            TOTAL=$(sed -n "s/.*# TOTAL: \(.*\)/\1/p"  "$LOG_FILE"|tr -d '\r'|head -n1)
+            PASS=$(sed -n "s/.*# PASS: \(.*\)/\1/p" "$LOG_FILE"|tr -d '\r'|head -n1)
+            SKIP=$(sed -n "s/.*# SKIP: \(.*\)/\1/p" "$LOG_FILE"|tr -d '\r'|head -n1)
+            FAIL=$(sed -n "s/.*# FAIL: \(.*\)/\1/p" "$LOG_FILE"|tr -d '\r'|head -n1)
+            XPASS=$(sed -n "s/.*# XPASS: \(.*\)/\1/p" "$LOG_FILE"|tr -d '\r'|head -n1)
+            ERROR=$(sed -n "s/.*# ERROR: \(.*\)/\1/p" "$LOG_FILE"|tr -d '\r'|head -n1)
+            echo "::warning ::GNU testsuite = TOTAL: $TOTAL / PASS: $PASS / FAIL: $FAIL / ERROR: $ERROR"
+            jq -n \
+                  --arg total "$TOTAL" \
+                  --arg pass "$PASS" \
+                  --arg skip "$SKIP" \
+                  --arg fail "$FAIL" \
+                  --arg xpass "$XPASS" \
+                  --arg error "$ERROR" \
+                  '{total: $total, pass: $pass, skip: $skip, fail: $fail, xpass: $xpass, error: $error, }' > gnu-result.json
           else
             echo "::error ::Failed to get summary of test results"
           fi
@@ -134,3 +143,8 @@ jobs:
       with:
         name: test-report
         path: gnu/tests/**/*.log
+
+    - uses: actions/upload-artifact@v2
+      with:
+        name: gnu-result
+        path: gnu-result.json
