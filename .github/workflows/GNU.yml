@@ -135,7 +135,7 @@ jobs:
                   --arg fail "$FAIL" \
                   --arg xpass "$XPASS" \
                   --arg error "$ERROR" \
-                  '{($date): { total: $total, pass: $pass, skip: $skip, fail: $fail, xpass: $xpass, error: $error, }}' > gnu-result.json                
+                  '{($date): { total: $total, pass: $pass, skip: $skip, fail: $fail, xpass: $xpass, error: $error, }}' > gnu-result.json
           else
             echo "::error ::Failed to get summary of test results"
           fi
