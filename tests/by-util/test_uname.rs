@@ -43,5 +43,5 @@ fn test_uname_kernel() {
     }
 
     #[cfg(not(target_os = "linux"))]
-    let result = ucmd.arg("-o").succeeds();
+    ucmd.arg("-o").succeeds();
 }

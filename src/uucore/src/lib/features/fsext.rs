@@ -276,7 +276,7 @@ impl MountInfo {
             GetVolumeInformationW(
                 String2LPWSTR!(mount_root),
                 ptr::null_mut(),
-                0 as DWORD,
+                0,
                 ptr::null_mut(),
                 ptr::null_mut(),
                 ptr::null_mut(),
@@ -510,12 +510,12 @@ impl FsUsage {
             //  Total number of free blocks.
             bfree: number_of_free_clusters as u64,
             //  Total number of free blocks available to non-privileged processes.
-            bavail: 0 as u64,
+            bavail: 0,
             bavail_top_bit_set: ((bytes_per_sector as u64) & (1u64.rotate_right(1))) != 0,
             // Total number of file nodes (inodes) on the file system.
-            files: 0 as u64, // Not available on windows
+            files: 0, // Not available on windows
             // Total number of free file nodes (inodes).
-            ffree: 4096 as u64, // Meaningless on Windows
+            ffree: 4096, // Meaningless on Windows
         }
     }
 }
