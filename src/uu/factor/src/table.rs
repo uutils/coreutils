@@ -72,3 +72,30 @@ pub fn factor_chunk(n_s: &mut [u64; CHUNK_SIZE], f_s: &mut [Factors; CHUNK_SIZE]
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Factors;
+    use quickcheck::quickcheck;
+    use rand::{rngs::SmallRng, Rng, SeedableRng};
+
+    quickcheck! {
+        fn chunk_vs_iter(seed: u64) -> () {
+            let mut rng = SmallRng::seed_from_u64(seed);
+            let mut n_c: [u64; CHUNK_SIZE] = rng.gen();
+            let mut f_c: [Factors; CHUNK_SIZE] = rng.gen();
+
+            let mut n_i = n_c.clone();
+            let mut f_i = f_c.clone();
+            for (n, f) in n_i.iter_mut().zip(f_i.iter_mut()) {
+                factor(n, f);
+            }
+
+            factor_chunk(&mut n_c, &mut f_c);
+
+            assert_eq!(n_i, n_c);
+            assert_eq!(f_i, f_c);
+        }
+    }
+}
