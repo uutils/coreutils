@@ -92,7 +92,7 @@ pub fn wrap_chgrp<P: AsRef<Path>>(
             out = format!(
                 "group of '{}' retained as {}",
                 path.display(),
-                entries::gid2grp(dest_gid).unwrap()
+                entries::gid2grp(dest_gid).unwrap_or_default()
             );
         }
     }

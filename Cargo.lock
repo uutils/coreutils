@@ -1772,6 +1772,7 @@ dependencies = [
 name = "uu_chgrp"
 version = "0.0.6"
 dependencies = [
+ "clap",
  "uucore",
  "uucore_procs",
  "walkdir",
