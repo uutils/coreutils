@@ -133,7 +133,35 @@ fn truncate(
     filenames: Vec<String>,
 ) {
     let (modsize, mode) = match size {
-        Some(size_string) => parse_size(&size_string),
+        Some(size_string) => {
+            // Trim any whitespace.
+            let size_string = size_string.trim();
+
+            // Get the modifier character from the size string, if any. For
+            // example, if the argument is "+123", then the modifier is '+'.
+            let c = size_string.chars().next().unwrap();
+
+            let mode = match c {
+                '+' => TruncateMode::Extend,
+                '-' => TruncateMode::Reduce,
+                '<' => TruncateMode::AtMost,
+                '>' => TruncateMode::AtLeast,
+                '/' => TruncateMode::RoundDown,
+                '*' => TruncateMode::RoundUp,
+                _ => TruncateMode::Absolute, /* assume that the size is just a number */
+            };
+
+            // If there was a modifier character, strip it.
+            let size_string = match mode {
+                TruncateMode::Absolute => size_string,
+                _ => &size_string[1..],
+            };
+            let num_bytes = match parse_size(size_string) {
+                Ok(b) => b,
+                Err(_) => crash!(1, "Invalid number: ‘{}’", size_string),
+            };
+            (num_bytes, mode)
+        }
         None => (0, TruncateMode::Reference),
     };
 
@@ -208,64 +236,89 @@ fn truncate(
     }
 }
 
-fn parse_size(size: &str) -> (u64, TruncateMode) {
-    let clean_size = size.replace(" ", "");
-    let mode = match clean_size.chars().next().unwrap() {
-        '+' => TruncateMode::Extend,
-        '-' => TruncateMode::Reduce,
-        '<' => TruncateMode::AtMost,
-        '>' => TruncateMode::AtLeast,
-        '/' => TruncateMode::RoundDown,
-        '*' => TruncateMode::RoundUp,
-        _ => TruncateMode::Absolute, /* assume that the size is just a number */
+/// Parse a size string into a number of bytes.
+///
+/// A size string comprises an integer and an optional unit. The unit
+/// may be K, M, G, T, P, E, Z, or Y (powers of 1024) or KB, MB,
+/// etc. (powers of 1000).
+///
+/// # Errors
+///
+/// This function returns an error if the string does not begin with a
+/// numeral, or if the unit is not one of the supported units described
+/// in the preceding section.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// assert_eq!(parse_size("123").unwrap(), 123);
+/// assert_eq!(parse_size("123K").unwrap(), 123 * 1024);
+/// assert_eq!(parse_size("123KB").unwrap(), 123 * 1000);
+/// ```
+fn parse_size(size: &str) -> Result<u64, ()> {
+    // Get the numeric part of the size argument. For example, if the
+    // argument is "123K", then the numeric part is "123".
+    let numeric_string: String = size.chars().take_while(|c| c.is_digit(10)).collect();
+    let number: u64 = match numeric_string.parse() {
+        Ok(n) => n,
+        Err(_) => return Err(()),
     };
-    let bytes = {
-        let mut slice = if mode == TruncateMode::Absolute {
-            &clean_size
-        } else {
-            &clean_size[1..]
-        };
-        if slice.chars().last().unwrap().is_alphabetic() {
-            slice = &slice[..slice.len() - 1];
-            if !slice.is_empty() && slice.chars().last().unwrap().is_alphabetic() {
-                slice = &slice[..slice.len() - 1];
-            }
-        }
-        slice
-    }
-    .to_owned();
-    let mut number: u64 = match bytes.parse() {
-        Ok(num) => num,
-        Err(e) => crash!(1, "'{}' is not a valid number: {}", size, e),
+
+    // Get the alphabetic units part of the size argument and compute
+    // the factor it represents. For example, if the argument is "123K",
+    // then the unit part is "K" and the factor is 1024. This may be the
+    // empty string, in which case, the factor is 1.
+    let n = numeric_string.len();
+    let (base, exponent): (u64, u32) = match &size[n..] {
+        "" => (1, 0),
+        "K" | "k" => (1024, 1),
+        "M" | "m" => (1024, 2),
+        "G" | "g" => (1024, 3),
+        "T" | "t" => (1024, 4),
+        "P" | "p" => (1024, 5),
+        "E" | "e" => (1024, 6),
+        "Z" | "z" => (1024, 7),
+        "Y" | "y" => (1024, 8),
+        "KB" | "kB" => (1000, 1),
+        "MB" | "mB" => (1000, 2),
+        "GB" | "gB" => (1000, 3),
+        "TB" | "tB" => (1000, 4),
+        "PB" | "pB" => (1000, 5),
+        "EB" | "eB" => (1000, 6),
+        "ZB" | "zB" => (1000, 7),
+        "YB" | "yB" => (1000, 8),
+        _ => return Err(()),
     };
-    if clean_size.chars().last().unwrap().is_alphabetic() {
-        number *= match clean_size.chars().last().unwrap().to_ascii_uppercase() {
-            'B' => match clean_size
-                .chars()
-                .nth(clean_size.len() - 2)
-                .unwrap()
-                .to_ascii_uppercase()
-            {
-                'K' => 1000u64,
-                'M' => 1000u64.pow(2),
-                'G' => 1000u64.pow(3),
-                'T' => 1000u64.pow(4),
-                'P' => 1000u64.pow(5),
-                'E' => 1000u64.pow(6),
-                'Z' => 1000u64.pow(7),
-                'Y' => 1000u64.pow(8),
-                letter => crash!(1, "'{}B' is not a valid suffix.", letter),
-            },
-            'K' => 1024u64,
-            'M' => 1024u64.pow(2),
-            'G' => 1024u64.pow(3),
-            'T' => 1024u64.pow(4),
-            'P' => 1024u64.pow(5),
-            'E' => 1024u64.pow(6),
-            'Z' => 1024u64.pow(7),
-            'Y' => 1024u64.pow(8),
-            letter => crash!(1, "'{}' is not a valid suffix.", letter),
-        };
+    let factor = base.pow(exponent);
+    Ok(number * factor)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::parse_size;
+
+    #[test]
+    fn test_parse_size_zero() {
+        assert_eq!(parse_size("0").unwrap(), 0);
+        assert_eq!(parse_size("0K").unwrap(), 0);
+        assert_eq!(parse_size("0KB").unwrap(), 0);
     }
-    (number, mode)
+
+    #[test]
+    fn test_parse_size_without_factor() {
+        assert_eq!(parse_size("123").unwrap(), 123);
+    }
+
+    #[test]
+    fn test_parse_size_kilobytes() {
+        assert_eq!(parse_size("123K").unwrap(), 123 * 1024);
+        assert_eq!(parse_size("123KB").unwrap(), 123 * 1000);
+    }
+
+    #[test]
+    fn test_parse_size_megabytes() {
+        assert_eq!(parse_size("123").unwrap(), 123);
+        assert_eq!(parse_size("123M").unwrap(), 123 * 1024 * 1024);
+        assert_eq!(parse_size("123MB").unwrap(), 123 * 1000 * 1000);
+    }
 }
