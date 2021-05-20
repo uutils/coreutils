@@ -96,10 +96,10 @@ fn test_invalid_option() {
     new_ucmd!().arg("-w").arg("-q").arg("/").fails();
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_vendor = "apple"))]
 const NORMAL_FMTSTR: &'static str =
     "%a %A %b %B %d %D %f %F %g %G %h %i %m %n %o %s %u %U %x %X %y %Y %z %Z"; // avoid "%w %W" (birth/creation) due to `stat` limitations and linux kernel & rust version capability variations
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux"))]
 const DEV_FMTSTR: &'static str =
     "%a %A %b %B %d %D %f %F %g %G %h %i %m %n %o %s (%t/%T) %u %U %w %W %x %X %y %Y %z %Z";
 #[cfg(target_os = "linux")]
@@ -125,8 +125,8 @@ fn test_fs_format() {
         .stdout_is(expected_result(&args));
 }
 
+#[cfg(any(target_os = "linux", target_vendor = "apple"))]
 #[test]
-#[cfg(target_os = "linux")]
 fn test_terse_normal_format() {
     // note: contains birth/creation date which increases test fragility
     // * results may vary due to built-in `stat` limitations as well as linux kernel and rust version capability variations
@@ -156,10 +156,10 @@ fn test_terse_normal_format() {
     );
 }
 
+#[cfg(any(target_os = "linux", target_vendor = "apple"))]
 #[test]
-#[cfg(target_os = "linux")]
 fn test_format_created_time() {
-    let args = ["-c", "%w", "/boot"];
+    let args = ["-c", "%w", "/bin"];
     let actual = new_ucmd!().args(&args).succeeds().stdout_move_str();
     let expect = expected_result(&args);
     println!("actual: {:?}", actual);
@@ -180,10 +180,10 @@ fn test_format_created_time() {
     );
 }
 
+#[cfg(any(target_os = "linux", target_vendor = "apple"))]
 #[test]
-#[cfg(target_os = "linux")]
 fn test_format_created_seconds() {
-    let args = ["-c", "%W", "/boot"];
+    let args = ["-c", "%W", "/bin"];
     let actual = new_ucmd!().args(&args).succeeds().stdout_move_str();
     let expect = expected_result(&args);
     println!("actual: {:?}", actual);
@@ -204,79 +204,97 @@ fn test_format_created_seconds() {
     );
 }
 
+#[cfg(any(target_os = "linux", target_vendor = "apple"))]
 #[test]
-#[cfg(target_os = "linux")]
 fn test_normal_format() {
-    let args = ["-c", NORMAL_FMTSTR, "/boot"];
+    let args = ["-c", NORMAL_FMTSTR, "/bin"];
     new_ucmd!()
         .args(&args)
-        .run()
+        .succeeds()
         .stdout_is(expected_result(&args));
 }
 
+#[cfg(any(target_os = "linux", target_vendor = "apple"))]
 #[test]
-#[cfg(target_os = "linux")]
-fn test_follow_symlink() {
-    let args = ["-L", "-c", DEV_FMTSTR, "/dev/cdrom"];
-    new_ucmd!()
-        .args(&args)
-        .run()
-        .stdout_is(expected_result(&args));
+fn test_symlinks() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let mut tested: bool = false;
+    // arbitrarily chosen symlinks with hope that the CI environment provides at least one of them
+    for file in vec![
+        "/bin/sh",
+        "/bin/sudoedit",
+        "/usr/bin/ex",
+        "/etc/localtime",
+        "/etc/aliases",
+    ] {
+        if at.file_exists(file) && at.is_symlink(file) {
+            tested = true;
+            let args = ["-c", NORMAL_FMTSTR, file];
+            scene
+                .ucmd()
+                .args(&args)
+                .succeeds()
+                .stdout_is(expected_result(&args));
+            // -L, --dereference    follow links
+            let args = ["-L", "-c", NORMAL_FMTSTR, file];
+            scene
+                .ucmd()
+                .args(&args)
+                .succeeds()
+                .stdout_is(expected_result(&args));
+        }
+    }
+    if !tested {
+        panic!("No symlink found to test in this environment");
+    }
 }
 
+#[cfg(any(target_os = "linux", target_vendor = "apple"))]
 #[test]
-#[cfg(target_os = "linux")]
-fn test_symlink() {
-    let args = ["-c", DEV_FMTSTR, "/dev/cdrom"];
-    new_ucmd!()
-        .args(&args)
-        .run()
-        .stdout_is(expected_result(&args));
-}
-
-#[test]
-#[cfg(target_os = "linux")]
 fn test_char() {
-    let args = ["-c", DEV_FMTSTR, "/dev/pts/ptmx"];
+    // TODO: "(%t) (%x) (%w)" deviate from GNU stat for `character special file` on macOS
+    // Diff < left / right > :
+    // <"(f0000) (2021-05-20 23:08:03.442555000 +0200) (1970-01-01 01:00:00.000000000 +0100)\n"
+    // >"(f) (2021-05-20 23:08:03.455598000 +0200) (-)\n"
+    let args = [
+        "-c",
+        #[cfg(target_os = "linux")]
+        DEV_FMTSTR,
+        #[cfg(target_os = "linux")]
+        "/dev/pts/ptmx",
+        #[cfg(any(target_vendor = "apple"))]
+        "%a %A %b %B %d %D %f %F %g %G %h %i %m %n %o %s (/%T) %u %U %W %X %y %Y %z %Z",
+        #[cfg(any(target_vendor = "apple"))]
+        "/dev/ptmx",
+    ];
     new_ucmd!()
         .args(&args)
-        .run()
+        .succeeds()
         .stdout_is(expected_result(&args));
 }
 
+#[cfg(any(target_os = "linux", target_vendor = "apple"))]
 #[test]
-#[cfg(target_os = "linux")]
 fn test_multi_files() {
     let args = [
         "-c",
         NORMAL_FMTSTR,
         "/dev",
         "/usr/lib",
+        #[cfg(target_os = "linux")]
         "/etc/fstab",
         "/var",
     ];
     new_ucmd!()
         .args(&args)
-        .run()
+        .succeeds()
         .stdout_is(expected_result(&args));
 }
 
-#[cfg(any(target_os = "linux", target_os = "freebsd", target_vendor = "apple"))]
+#[cfg(any(target_vendor = "apple", target_os = "linux"))]
 #[test]
-fn test_one_file() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file = "TEST_FILE.mp4";
-    at.touch(file);
-
-    ucmd.arg(file)
-        .succeeds()
-        .stdout_contains(format!("File: `{}'", file))
-        .stdout_contains(format!("Size: 0"))
-        .stdout_contains(format!("Access: (0644/-rw-r--r--)"));
-}
-
-#[test]
-#[cfg(target_os = "linux")]
 fn test_printf() {
     let args = [
         "--printf=123%-# 15q\\r\\\"\\\\\\a\\b\\e\\f\\v%+020.23m\\x12\\167\\132\\112\\n",
@@ -284,16 +302,21 @@ fn test_printf() {
     ];
     new_ucmd!()
         .args(&args)
-        .run()
+        .succeeds()
         .stdout_is(expected_result(&args));
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_vendor = "apple", target_os = "linux"))]
 fn expected_result(args: &[&str]) -> String {
-    TestScenario::new(util_name!())
-        .cmd_keepenv(util_name!())
+    #[cfg(target_os = "linux")]
+    let util_name = util_name!();
+    #[cfg(target_vendor = "apple")]
+    let util_name = format!("g{}", util_name!());
+
+    TestScenario::new(&util_name)
+        .cmd_keepenv(util_name)
         .env("LANGUAGE", "C")
         .args(args)
-        .run()
+        .succeeds()
         .stdout_move_str()
 }

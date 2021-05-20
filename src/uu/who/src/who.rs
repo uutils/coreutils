@@ -46,9 +46,10 @@ fn get_usage() -> String {
 }
 
 fn get_long_usage() -> String {
-    String::from(
-        "If FILE is not specified, use /var/run/utmp.  /var/log/wtmp as FILE is common.\n\
-If ARG1 ARG2 given, -m presumed: 'am i' or 'mom likes' are usual.",
+    format!(
+        "If FILE is not specified, use {}.  /var/log/wtmp as FILE is common.\n\
+         If ARG1 ARG2 given, -m presumed: 'am i' or 'mom likes' are usual.",
+        utmpx::DEFAULT_FILE,
     )
 }
 
