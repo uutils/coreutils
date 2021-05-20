@@ -162,6 +162,18 @@ fn test_no_such_file_or_directory() {
         .stderr_contains("cannot open 'no_such_file.toml' for reading: No such file or directory");
 }
 
+/// Test that each non-existent files gets its own error message printed.
+#[test]
+fn test_multiple_nonexistent_files() {
+    new_ucmd!()
+        .args(&["bogusfile1", "bogusfile2"])
+        .fails()
+        .stdout_does_not_contain("==> bogusfile1 <==")
+        .stderr_contains("cannot open 'bogusfile1' for reading: No such file or directory")
+        .stdout_does_not_contain("==> bogusfile2 <==")
+        .stderr_contains("cannot open 'bogusfile2' for reading: No such file or directory");
+}
+
 // there was a bug not caught by previous tests
 // where for negative n > 3, the total amount of lines
 // was correct, but it would eat from the second line

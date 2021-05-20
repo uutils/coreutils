@@ -2,7 +2,7 @@ use clap::{App, Arg};
 use std::convert::TryFrom;
 use std::ffi::OsString;
 use std::io::{self, ErrorKind, Read, Seek, SeekFrom, Write};
-use uucore::{crash, executable, show_error};
+use uucore::{crash, executable, show_error, show_error_custom_description};
 
 const EXIT_FAILURE: i32 = 1;
 const EXIT_SUCCESS: i32 = 0;
@@ -400,7 +400,8 @@ fn head_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Resul
     }
 }
 
-fn uu_head(options: &HeadOptions) {
+fn uu_head(options: &HeadOptions) -> Result<(), u32> {
+    let mut error_count = 0;
     let mut first = true;
     for fname in &options.files {
         let res = match fname.as_str() {
@@ -433,30 +434,22 @@ fn uu_head(options: &HeadOptions) {
             name => {
                 let mut file = match std::fs::File::open(name) {
                     Ok(f) => f,
-                    Err(err) => match err.kind() {
-                        ErrorKind::NotFound => {
-                            crash!(
-                                EXIT_FAILURE,
-                                "head: cannot open '{}' for reading: No such file or directory",
-                                name
-                            );
+                    Err(err) => {
+                        let prefix = format!("cannot open '{}' for reading", name);
+                        match err.kind() {
+                            ErrorKind::NotFound => {
+                                show_error_custom_description!(prefix, "No such file or directory");
+                            }
+                            ErrorKind::PermissionDenied => {
+                                show_error_custom_description!(prefix, "Permission denied");
+                            }
+                            _ => {
+                                show_error_custom_description!(prefix, "{}", err);
+                            }
                         }
-                        ErrorKind::PermissionDenied => {
-                            crash!(
-                                EXIT_FAILURE,
-                                "head: cannot open '{}' for reading: Permission denied",
-                                name
-                            );
-                        }
-                        _ => {
-                            crash!(
-                                EXIT_FAILURE,
-                                "head: cannot open '{}' for reading: {}",
-                                name,
-                                err
-                            );
-                        }
-                    },
+                        error_count += 1;
+                        continue;
+                    }
                 };
                 if (options.files.len() > 1 && !options.quiet) || options.verbose {
                     if !first {
@@ -468,20 +461,21 @@ fn uu_head(options: &HeadOptions) {
             }
         };
         if res.is_err() {
-            if fname.as_str() == "-" {
-                crash!(
-                    EXIT_FAILURE,
-                    "head: error reading standard input: Input/output error"
-                );
+            let name = if fname.as_str() == "-" {
+                "standard input"
             } else {
-                crash!(
-                    EXIT_FAILURE,
-                    "head: error reading {}: Input/output error",
-                    fname
-                );
-            }
+                fname
+            };
+            let prefix = format!("error reading {}", name);
+            show_error_custom_description!(prefix, "Input/output error");
+            error_count += 1;
         }
         first = false;
+    }
+    if error_count > 0 {
+        Err(error_count)
+    } else {
+        Ok(())
     }
 }
 
@@ -492,9 +486,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             crash!(EXIT_FAILURE, "head: {}", s);
         }
     };
-    uu_head(&args);
-
-    EXIT_SUCCESS
+    match uu_head(&args) {
+        Ok(_) => EXIT_SUCCESS,
+        Err(_) => EXIT_FAILURE,
+    }
 }
 
 #[cfg(test)]
