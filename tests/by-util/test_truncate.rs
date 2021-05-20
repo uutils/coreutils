@@ -235,3 +235,13 @@ fn test_size_and_reference() {
         actual
     );
 }
+
+#[test]
+fn test_invalid_numbers() {
+    // TODO For compatibility with GNU, `truncate -s 0X` should cause
+    // the same error as `truncate -s 0X file`, but currently it returns
+    // a different error.
+    new_ucmd!().args(&["-s", "0X", "file"]).fails().stderr_contains("Invalid number: ‘0X’");
+    new_ucmd!().args(&["-s", "0XB", "file"]).fails().stderr_contains("Invalid number: ‘0XB’");
+    new_ucmd!().args(&["-s", "0B", "file"]).fails().stderr_contains("Invalid number: ‘0B’");
+}
