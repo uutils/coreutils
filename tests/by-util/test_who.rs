@@ -83,7 +83,7 @@ fn test_process() {
     }
 }
 
-#[cfg(any(target_vendor = "apple", target_os = "linux"))]
+#[cfg(target_os = "linux")]
 #[test]
 fn test_runlevel() {
     for opt in vec!["-r", "--runlevel"] {
@@ -91,6 +91,19 @@ fn test_runlevel() {
             .arg(opt)
             .succeeds()
             .stdout_is(expected_result(&[opt]));
+    }
+}
+
+#[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
+#[test]
+fn test_runlevel() {
+    let expected =
+        "error: Found argument";
+    for opt in vec!["-r", "--runlevel"] {
+        new_ucmd!()
+            .arg(opt)
+            .fails()
+            .stderr_contains(expected);
     }
 }
 
@@ -122,6 +135,7 @@ fn test_mesg() {
     }
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 fn test_arg1_arg2() {
     let args = ["am", "i"];
@@ -132,6 +146,7 @@ fn test_arg1_arg2() {
         .stdout_is(expected_result(&args));
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 fn test_too_many_args() {
     const EXPECTED: &str =

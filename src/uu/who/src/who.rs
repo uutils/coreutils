@@ -29,7 +29,7 @@ mod options {
     pub const ONLY_HOSTNAME_USER: &str = "only_hostname_user";
     pub const PROCESS: &str = "process";
     pub const COUNT: &str = "count";
-    #[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     pub const RUNLEVEL: &str = "runlevel";
     pub const SHORT: &str = "short";
     pub const TIME: &str = "time";
@@ -119,11 +119,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("all login names and number of users logged on"),
         )
         .arg(
-            #[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
+            #[cfg(any(target_os = "linux", target_os = "android"))]
             Arg::with_name(options::RUNLEVEL)
                 .long(options::RUNLEVEL)
                 .short("r")
                 .help("print current runlevel"),
+            #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
+            Arg::with_name(""),
         )
         .arg(
             Arg::with_name(options::SHORT)
@@ -265,10 +267,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             assumptions = false;
         }
 
-        if matches.is_present(options::RUNLEVEL) {
-            need_runlevel = true;
-            include_idle = true;
-            assumptions = false;
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        {
+            if matches.is_present(options::RUNLEVEL) {
+                need_runlevel = true;
+                include_idle = true;
+                assumptions = false;
+            }
         }
 
         if matches.is_present(options::SHORT) {
