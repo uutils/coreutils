@@ -32,11 +32,14 @@ jobs:
         default: true
         profile: minimal # minimal component installation (ie, no documentation)
         components: rustfmt
-    - name: Build binaries
+    - name: Install deps
       shell: bash
       run: |
         sudo apt-get update
         sudo apt-get install autoconf autopoint bison texinfo gperf gcc g++ gdb python-pyinotify python3-sphinx jq
+    - name: Build binaries
+      shell: bash
+      run: |
         pushd uutils
         make PROFILE=release
         BUILDDIR="$PWD/target/release/"
