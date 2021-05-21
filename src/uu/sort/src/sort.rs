@@ -93,7 +93,10 @@ static THOUSANDS_SEP: char = ',';
 static NEGATIVE: char = '-';
 static POSITIVE: char = '+';
 
-static DEFAULT_BUF_SIZE: usize = std::usize::MAX;
+/// Choosing a higher buffer size does not result in performance improvements
+/// (at least not on my machine). TODO: In the future, we should also take the amount of
+/// available memory into consideration, instead of relying on this constant only.
+static DEFAULT_BUF_SIZE: usize = 1_000_000_000;
 
 #[derive(Eq, Ord, PartialEq, PartialOrd, Clone, Copy)]
 enum SortMode {
@@ -127,7 +130,6 @@ pub struct GlobalSettings {
     zero_terminated: bool,
     buffer_size: usize,
     tmp_dir: PathBuf,
-    ext_sort: bool,
 }
 
 impl GlobalSettings {
@@ -189,7 +191,6 @@ impl Default for GlobalSettings {
             zero_terminated: false,
             buffer_size: DEFAULT_BUF_SIZE,
             tmp_dir: PathBuf::new(),
-            ext_sort: false,
         }
     }
 }
@@ -941,28 +942,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         env::set_var("RAYON_NUM_THREADS", &settings.threads);
     }
 
-    if matches.is_present(OPT_BUF_SIZE) {
-        settings.buffer_size = {
-            let input = matches
-                .value_of(OPT_BUF_SIZE)
-                .map(String::from)
-                .unwrap_or(format!("{}", DEFAULT_BUF_SIZE));
+    settings.buffer_size = matches
+        .value_of(OPT_BUF_SIZE)
+        .map(GlobalSettings::human_numeric_convert)
+        .unwrap_or(DEFAULT_BUF_SIZE);
 
-            GlobalSettings::human_numeric_convert(&input)
-        };
-        settings.ext_sort = true;
-    }
-
-    if matches.is_present(OPT_TMP_DIR) {
-        let result = matches
-            .value_of(OPT_TMP_DIR)
-            .map(String::from)
-            .unwrap_or(format!("{}", env::temp_dir().display()));
-        settings.tmp_dir = PathBuf::from(result);
-        settings.ext_sort = true;
-    } else {
-        settings.tmp_dir = env::temp_dir();
-    }
+    settings.tmp_dir = matches
+        .value_of(OPT_TMP_DIR)
+        .map(PathBuf::from)
+        .unwrap_or_else(env::temp_dir);
 
     settings.zero_terminated = matches.is_present(OPT_ZERO_TERMINATED);
     settings.merge = matches.is_present(OPT_MERGE);
@@ -1047,7 +1035,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     exec(&files, &settings)
 }
 
-fn output_sorted_lines<'a>(iter: impl Iterator<Item = Line<'a>>, settings: &GlobalSettings) {
+fn output_sorted_lines<'a>(iter: impl Iterator<Item = &'a Line<'a>>, settings: &GlobalSettings) {
     if settings.unique {
         print_sorted(
             iter.dedup_by(|a, b| compare_by(a, b, &settings) == Ordering::Equal),
@@ -1067,34 +1055,10 @@ fn exec(files: &[String], settings: &GlobalSettings) -> i32 {
             crash!(1, "only one file allowed with -c");
         }
         return check::check(files.first().unwrap(), settings);
-    } else if settings.ext_sort {
+    } else {
         let mut lines = files.iter().filter_map(open);
 
-        let mut sorted = ext_sort(&mut lines, &settings);
-        sorted.file_merger.write_all(settings);
-    } else {
-        let separator = if settings.zero_terminated { '\0' } else { '\n' };
-        let mut lines = vec![];
-        let mut full_string = String::new();
-
-        for mut file in files.iter().filter_map(open) {
-            crash_if_err!(1, file.read_to_string(&mut full_string));
-
-            if !full_string.ends_with(separator) {
-                full_string.push(separator);
-            }
-        }
-
-        if full_string.ends_with(separator) {
-            full_string.pop();
-        }
-
-        for line in full_string.split(if settings.zero_terminated { '\0' } else { '\n' }) {
-            lines.push(Line::create(line, &settings));
-        }
-
-        sort_by(&mut lines, &settings);
-        output_sorted_lines(lines.into_iter(), &settings);
+        ext_sort(&mut lines, &settings);
     }
     0
 }
@@ -1366,7 +1330,7 @@ fn version_compare(a: &str, b: &str) -> Ordering {
     }
 }
 
-fn print_sorted<'a, T: Iterator<Item = Line<'a>>>(iter: T, settings: &GlobalSettings) {
+fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(iter: T, settings: &GlobalSettings) {
     let mut writer = settings.out_writer();
     for line in iter {
         line.print(&mut writer, settings);
