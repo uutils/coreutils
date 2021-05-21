@@ -206,7 +206,7 @@ fn test_round_up() {
     let (at, mut ucmd) = at_and_ucmd!();
     let mut file = at.make_file(TFILE2);
     file.write_all(b"1234567890").unwrap();
-    ucmd.args(&["--size", "*4", TFILE2]).succeeds();
+    ucmd.args(&["--size", "%4", TFILE2]).succeeds();
     file.seek(SeekFrom::End(0)).unwrap();
     let actual = file.seek(SeekFrom::Current(0)).unwrap();
     assert!(

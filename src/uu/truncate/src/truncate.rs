@@ -147,7 +147,7 @@ fn truncate(
                 '<' => TruncateMode::AtMost,
                 '>' => TruncateMode::AtLeast,
                 '/' => TruncateMode::RoundDown,
-                '*' => TruncateMode::RoundUp,
+                '%' => TruncateMode::RoundUp,
                 _ => TruncateMode::Absolute, /* assume that the size is just a number */
             };
 
