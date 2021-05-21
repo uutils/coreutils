@@ -262,3 +262,11 @@ fn test_reference_file_not_found() {
         .fails()
         .stderr_contains("cannot stat 'a': No such file or directory");
 }
+
+#[test]
+fn test_reference_with_size_file_not_found() {
+    new_ucmd!()
+        .args(&["-r", "a", "-s", "+1", "b"])
+        .fails()
+        .stderr_contains("cannot stat 'a': No such file or directory");
+}
