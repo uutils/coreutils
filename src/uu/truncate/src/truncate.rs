@@ -211,20 +211,8 @@ fn truncate(
                     TruncateMode::Reference => fsize,
                     TruncateMode::Extend => fsize + modsize,
                     TruncateMode::Reduce => fsize - modsize,
-                    TruncateMode::AtMost => {
-                        if fsize > modsize {
-                            modsize
-                        } else {
-                            fsize
-                        }
-                    }
-                    TruncateMode::AtLeast => {
-                        if fsize < modsize {
-                            modsize
-                        } else {
-                            fsize
-                        }
-                    }
+                    TruncateMode::AtMost => fsize.min(modsize),
+                    TruncateMode::AtLeast => fsize.max(modsize),
                     TruncateMode::RoundDown => fsize - fsize % modsize,
                     TruncateMode::RoundUp => fsize + fsize % modsize,
                 };
