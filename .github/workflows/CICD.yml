@@ -489,6 +489,13 @@ jobs:
           - { os: windows-latest , features: windows }
     steps:
     - uses: actions/checkout@v1
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        ## install/setup prerequisites
+        case '${{ matrix.job.os }}' in
+          macos-latest) brew install coreutils ;; # needed for testing
+        esac
     # - name: Reattach HEAD ## may be needed for accurate code coverage info
     #   run: git checkout ${{ github.head_ref }}
     - name: Initialize workflow variables
