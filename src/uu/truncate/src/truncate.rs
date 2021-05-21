@@ -11,7 +11,8 @@
 extern crate uucore;
 
 use clap::{App, Arg};
-use std::fs::{metadata, File, OpenOptions};
+use std::fs::{metadata, OpenOptions};
+use std::io::ErrorKind;
 use std::path::Path;
 
 #[derive(Eq, PartialEq)]
@@ -174,13 +175,14 @@ fn truncate(
                 TruncateMode::Reduce => (),
                 _ => crash!(1, "you must specify a relative ‘--size’ with ‘--reference’"),
             };
-            let _ = match File::open(Path::new(rfilename)) {
-                Ok(m) => m,
-                Err(f) => crash!(1, "{}", f.to_string()),
-            };
             match metadata(rfilename) {
                 Ok(meta) => meta.len(),
-                Err(f) => crash!(1, "{}", f.to_string()),
+                Err(f) => match f.kind() {
+                    ErrorKind::NotFound => {
+                        crash!(1, "cannot stat '{}': No such file or directory", rfilename)
+                    }
+                    _ => crash!(1, "{}", f.to_string()),
+                },
             }
         }
         None => 0,
