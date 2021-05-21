@@ -245,3 +245,11 @@ fn test_invalid_numbers() {
     new_ucmd!().args(&["-s", "0XB", "file"]).fails().stderr_contains("Invalid number: ‘0XB’");
     new_ucmd!().args(&["-s", "0B", "file"]).fails().stderr_contains("Invalid number: ‘0B’");
 }
+
+#[test]
+fn test_reference_file_not_found() {
+    new_ucmd!()
+        .args(&["-r", "a", "b"])
+        .fails()
+        .stderr_contains("cannot stat 'a': No such file or directory");
+}
