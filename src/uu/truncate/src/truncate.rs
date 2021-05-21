@@ -189,12 +189,7 @@ fn truncate(
     };
     for filename in &filenames {
         let path = Path::new(filename);
-        match OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(!no_create)
-            .open(path)
-        {
+        match OpenOptions::new().write(true).create(!no_create).open(path) {
             Ok(file) => {
                 let fsize = match reference {
                     Some(_) => refsize,
