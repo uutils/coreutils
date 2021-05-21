@@ -318,6 +318,16 @@ To pass an argument like "-v" to the busybox test runtime
 $ make UTILS='UTILITY_1 UTILITY_2' RUNTEST_ARGS='-v' busytest
 ```
 
+## Comparing with GNU
+
+![Evolution over time](https://github.com/uutils/coreutils-tracking/blob/main/gnu-results.png?raw=true)
+
+To run locally:
+```bash
+$ bash util/build-gnu.sh
+$ bash util/run-gnu-test.sh
+```
+
 ## Contribute
 
 To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
