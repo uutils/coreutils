@@ -1967,8 +1967,6 @@ fn test_ls_sort_extension() {
     );
 }
 
-// This tests for the open issue described in #2223
-#[cfg_attr(not(feature = "test_unimplemented"), ignore)]
 #[test]
 fn test_ls_path() {
     let scene = TestScenario::new(util_name!());
@@ -1987,13 +1985,17 @@ fn test_ls_path() {
     scene.ucmd().arg(path).run().stdout_is(expected_stdout);
 
     let expected_stdout = &format!("./{}\n", path);
-    scene.ucmd().arg(path).run().stdout_is(expected_stdout);
+    scene
+        .ucmd()
+        .arg(format!("./{}", path))
+        .run()
+        .stdout_is(expected_stdout);
 
-    let abs_path = format!("{}/{}\n", at.as_string(), path);
-    println!(":{}", abs_path);
-    scene.ucmd().arg(&abs_path).run().stdout_is(&abs_path);
+    let abs_path = format!("{}/{}", at.as_string(), path);
+    let expected_stdout = &format!("{}\n", abs_path);
+    scene.ucmd().arg(&abs_path).run().stdout_is(expected_stdout);
 
-    let expected_stdout = &format!("{}\n{}\n", file1, path);
+    let expected_stdout = &format!("{}\n{}\n", path, file1);
     scene
         .ucmd()
         .arg(file1)
