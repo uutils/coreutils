@@ -27,6 +27,32 @@ enum TruncateMode {
     RoundUp(u64),
 }
 
+impl TruncateMode {
+    /// Compute a target size in bytes for this truncate mode.
+    ///
+    /// `fsize` is the size of the reference file, in bytes.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// let mode = TruncateMode::Extend(5);
+    /// let fsize = 10;
+    /// assert_eq!(mode.to_size(fsize), 15);
+    /// ```
+    fn to_size(&self, fsize: u64) -> u64 {
+        match self {
+            TruncateMode::Absolute(modsize) => *modsize,
+            TruncateMode::Reference(_) => fsize,
+            TruncateMode::Extend(modsize) => fsize + modsize,
+            TruncateMode::Reduce(modsize) => fsize - modsize,
+            TruncateMode::AtMost(modsize) => fsize.min(*modsize),
+            TruncateMode::AtLeast(modsize) => fsize.max(*modsize),
+            TruncateMode::RoundDown(modsize) => fsize - fsize % modsize,
+            TruncateMode::RoundUp(modsize) => fsize + fsize % modsize,
+        }
+    }
+}
+
 static ABOUT: &str = "Shrink or extend the size of each file to the specified size.";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -176,16 +202,7 @@ fn truncate(
                         }
                     },
                 };
-                let tsize: u64 = match mode {
-                    TruncateMode::Absolute(modsize) => modsize,
-                    TruncateMode::Reference(_) => fsize,
-                    TruncateMode::Extend(modsize) => fsize + modsize,
-                    TruncateMode::Reduce(modsize) => fsize - modsize,
-                    TruncateMode::AtMost(modsize) => fsize.min(modsize),
-                    TruncateMode::AtLeast(modsize) => fsize.max(modsize),
-                    TruncateMode::RoundDown(modsize) => fsize - fsize % modsize,
-                    TruncateMode::RoundUp(modsize) => fsize + fsize % modsize,
-                };
+                let tsize = mode.to_size(fsize);
                 match file.set_len(tsize) {
                     Ok(_) => {}
                     Err(f) => crash!(1, "{}", f.to_string()),
