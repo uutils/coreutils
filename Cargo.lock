@@ -44,6 +44,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "array-init"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6945cc5422176fc5e602e590c2878d2c2acd9a4fe20a4baa7c28022521698ec6"
+
+[[package]]
 name = "arrayvec"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -279,6 +285,7 @@ dependencies = [
  "uu_expand",
  "uu_expr",
  "uu_factor",
+ "uu_factor_benches",
  "uu_false",
  "uu_fmt",
  "uu_fold",
@@ -2029,15 +2036,24 @@ name = "uu_factor"
 version = "0.0.6"
 dependencies = [
  "coz",
- "criterion",
  "num-traits",
  "paste",
  "quickcheck",
  "rand 0.7.3",
- "rand_chacha",
  "smallvec",
  "uucore",
  "uucore_procs",
+]
+
+[[package]]
+name = "uu_factor_benches"
+version = "0.0.0"
+dependencies = [
+ "array-init",
+ "criterion",
+ "rand 0.7.3",
+ "rand_chacha",
+ "uu_factor",
 ]
 
 [[package]]
