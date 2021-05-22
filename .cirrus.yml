@@ -8,7 +8,7 @@ env:
 task:
   name: stable x86_64-unknown-freebsd-12
   freebsd_instance:
-    image: freebsd-12-1-release-amd64
+    image: freebsd-12-2-release-amd64
   setup_script:
     - pkg install -y curl gmake
     - curl https://sh.rustup.rs -sSf --output rustup.sh
