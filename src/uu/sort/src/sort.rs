@@ -93,10 +93,10 @@ static THOUSANDS_SEP: char = ',';
 static NEGATIVE: char = '-';
 static POSITIVE: char = '+';
 
-/// Choosing a higher buffer size does not result in performance improvements
-/// (at least not on my machine). TODO: In the future, we should also take the amount of
-/// available memory into consideration, instead of relying on this constant only.
-static DEFAULT_BUF_SIZE: usize = 1_000_000_000;
+// Choosing a higher buffer size does not result in performance improvements
+// (at least not on my machine). TODO: In the future, we should also take the amount of
+// available memory into consideration, instead of relying on this constant only.
+static DEFAULT_BUF_SIZE: usize = 1_000_000_000; // 1 GB
 
 #[derive(Eq, Ord, PartialEq, PartialOrd, Clone, Copy)]
 enum SortMode {
@@ -133,24 +133,32 @@ pub struct GlobalSettings {
 }
 
 impl GlobalSettings {
-    // It's back to do conversions for command line opts!
-    // Probably want to do through numstrcmp somehow now?
-    fn human_numeric_convert(a: &str) -> usize {
-        let num_str = &a[get_leading_gen(a)];
-        let (_, suf_str) = a.split_at(num_str.len());
-        let num_usize = num_str
-            .parse::<usize>()
-            .expect("Error parsing buffer size: ");
-        let suf_usize: usize = match suf_str.to_uppercase().as_str() {
-            // SI Units
-            "B" => 1usize,
-            "K" => 1000usize,
-            "M" => 1000000usize,
-            "G" => 1000000000usize,
-            // GNU regards empty human numeric values as K by default
-            _ => 1000usize,
-        };
-        num_usize * suf_usize
+    /// Interpret this `&str` as a number with an optional trailing si unit.
+    ///
+    /// If there is no trailing si unit, the implicit unit is K.
+    /// The suffix B causes the number to be interpreted as a byte count.
+    fn parse_byte_count(input: &str) -> usize {
+        const SI_UNITS: &[char] = &['B', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'];
+
+        let input = input.trim();
+
+        let (num_str, si_unit) =
+            if input.ends_with(|c: char| SI_UNITS.contains(&c.to_ascii_uppercase())) {
+                let mut chars = input.chars();
+                let si_suffix = chars.next_back().unwrap().to_ascii_uppercase();
+                let si_unit = SI_UNITS.iter().position(|&c| c == si_suffix).unwrap();
+                let num_str = chars.as_str();
+                (num_str, si_unit)
+            } else {
+                (input, 1)
+            };
+
+        let num_usize: usize = num_str
+            .trim()
+            .parse()
+            .unwrap_or_else(|e| crash!(1, "failed to parse buffer size `{}`: {}", num_str, e));
+
+        num_usize.saturating_mul(1000usize.saturating_pow(si_unit as u32))
     }
 
     fn out_writer(&self) -> BufWriter<Box<dyn Write>> {
@@ -944,7 +952,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     settings.buffer_size = matches
         .value_of(OPT_BUF_SIZE)
-        .map(GlobalSettings::human_numeric_convert)
+        .map(GlobalSettings::parse_byte_count)
         .unwrap_or(DEFAULT_BUF_SIZE);
 
     settings.tmp_dir = matches

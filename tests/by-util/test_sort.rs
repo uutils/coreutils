@@ -17,7 +17,9 @@ fn test_helper(file_name: &str, args: &str) {
 
 #[test]
 fn test_buffer_sizes() {
-    let buffer_sizes = ["0", "50K", "1M", "1000G"];
+    let buffer_sizes = [
+        "0", "50K", "50k", "1M", "100M", "1000G", "10T", "500E", "1Y",
+    ];
     for buffer_size in &buffer_sizes {
         new_ucmd!()
             .arg("-n")
@@ -30,14 +32,18 @@ fn test_buffer_sizes() {
 }
 
 #[test]
-fn test_smaller_than_specified_segment() {
-    new_ucmd!()
-        .arg("-n")
-        .arg("-S")
-        .arg("100M")
-        .arg("ext_sort.txt")
-        .succeeds()
-        .stdout_is_fixture("ext_sort.expected");
+fn test_invalid_buffer_size() {
+    let buffer_sizes = ["asd", "100f"];
+    for invalid_buffer_size in &buffer_sizes {
+        new_ucmd!()
+            .arg("-S")
+            .arg(invalid_buffer_size)
+            .fails()
+            .stderr_only(format!(
+                "sort: error: failed to parse buffer size `{}`: invalid digit found in string",
+                invalid_buffer_size
+            ));
+    }
 }
 
 #[test]
