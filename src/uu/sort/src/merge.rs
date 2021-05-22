@@ -108,6 +108,7 @@ fn reader(
         chunks::read(
             sender,
             recycled_buffer,
+            None,
             carry_over,
             file,
             &mut iter::empty(),

@@ -52,13 +52,20 @@ impl Chunk {
 
 /// Read a chunk, parse lines and send them.
 ///
-/// No empty chunk will be sent.
+/// No empty chunk will be sent. If we reach the end of the input, sender_option
+/// is set to None. If this function however does not set sender_option to None,
+/// it is not guaranteed that there is still input left: If the input fits _exactly_
+/// into a buffer, we will only notice that there's nothing more to read at the next
+/// invocation.
 ///
 /// # Arguments
 ///
-/// * `sender_option`: The sender to send the lines to the sorter. If `None`, does nothing.
+/// (see also `read_to_chunk` for a more detailed documentation)
+///
+/// * `sender_option`: The sender to send the lines to the sorter. If `None`, this function does nothing.
 /// * `buffer`: The recycled buffer. All contents will be overwritten, but it must already be filled.
 ///   (i.e. `buffer.len()` should be equal to `buffer.capacity()`)
+/// * `max_buffer_size`: How big `buffer` can be.
 /// * `carry_over`: The bytes that must be carried over in between invocations.
 /// * `file`: The current file.
 /// * `next_files`: What `file` should be updated to next.
@@ -69,6 +76,7 @@ impl Chunk {
 pub fn read(
     sender_option: &mut Option<SyncSender<Chunk>>,
     mut buffer: Vec<u8>,
+    max_buffer_size: Option<usize>,
     carry_over: &mut Vec<u8>,
     file: &mut Box<dyn Read + Send>,
     next_files: &mut impl Iterator<Item = Box<dyn Read + Send>>,
@@ -82,8 +90,14 @@ pub fn read(
             buffer.resize(carry_over.len() + 10 * 1024, 0);
         }
         buffer[..carry_over.len()].copy_from_slice(&carry_over);
-        let (read, should_continue) =
-            read_to_buffer(file, next_files, &mut buffer, carry_over.len(), separator);
+        let (read, should_continue) = read_to_buffer(
+            file,
+            next_files,
+            &mut buffer,
+            max_buffer_size,
+            carry_over.len(),
+            separator,
+        );
         carry_over.clear();
         carry_over.extend_from_slice(&buffer[read..]);
 
@@ -138,7 +152,8 @@ fn parse_lines<'a>(
 /// * `next_files`: When `file` reaches EOF, it is updated to `next_files.next()` if that is `Some`,
 ///    and this function continues reading.
 /// * `buffer`: The buffer that is filled with bytes. Its contents will mostly be overwritten (see `start_offset`
-///   as well). It will not be grown by default, unless that is necessary to read at least two lines.
+///   as well). It will be grown up to `max_buffer_size` if necessary, but it will always grow to read at least two lines.
+/// * `max_buffer_size`: Grow the buffer to at most this length. If None, the buffer will not grow, unless needed to read at least two lines.
 /// * `start_offset`: The amount of bytes at the start of `buffer` that were carried over
 ///    from the previous read and should not be overwritten.
 /// * `separator`: The byte that separates lines.
@@ -153,6 +168,7 @@ fn read_to_buffer(
     file: &mut Box<dyn Read + Send>,
     next_files: &mut impl Iterator<Item = Box<dyn Read + Send>>,
     buffer: &mut Vec<u8>,
+    max_buffer_size: Option<usize>,
     start_offset: usize,
     separator: u8,
 ) -> (usize, bool) {
@@ -162,6 +178,19 @@ fn read_to_buffer(
             Ok(0) => {
                 if read_target.is_empty() {
                     // chunk is full
+                    if let Some(max_buffer_size) = max_buffer_size {
+                        if max_buffer_size > buffer.len() {
+                            // we can grow the buffer
+                            let prev_len = buffer.len();
+                            if buffer.len() < max_buffer_size / 2 {
+                                buffer.resize(buffer.len() * 2, 0);
+                            } else {
+                                buffer.resize(max_buffer_size, 0);
+                            }
+                            read_target = &mut buffer[prev_len..];
+                            continue;
+                        }
+                    }
                     let mut sep_iter = memchr_iter(separator, &buffer).rev();
                     let last_line_end = sep_iter.next();
                     if sep_iter.next().is_some() {

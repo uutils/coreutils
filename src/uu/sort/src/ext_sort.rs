@@ -5,12 +5,13 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-//! Sort big files by using files for storing intermediate chunks.
+//! Sort big files by using auxiliary files for storing intermediate chunks.
 //!
 //! Files are read into chunks of memory which are then sorted individually and
 //! written to temporary files. There are two threads: One sorter, and one reader/writer.
 //! The buffers for the individual chunks are recycled. There are two buffers.
 
+use std::cmp::Ordering;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 use std::{
@@ -20,30 +21,19 @@ use std::{
     thread,
 };
 
+use itertools::Itertools;
+
 use tempdir::TempDir;
 
 use crate::{
     chunks::{self, Chunk},
-    merge::{self, FileMerger},
-    sort_by, GlobalSettings,
+    compare_by, merge, output_sorted_lines, sort_by, GlobalSettings,
 };
 
-/// Iterator that wraps the
-pub struct ExtSortedMerger<'a> {
-    pub file_merger: FileMerger<'a>,
-    // Keep _tmp_dir around, as it is deleted when dropped.
-    _tmp_dir: TempDir,
-}
+const MIN_BUFFER_SIZE: usize = 8_000;
 
-/// Sort big files by using files for storing intermediate chunks.
-///
-/// # Returns
-///
-/// An iterator that merges intermediate files back together.
-pub fn ext_sort<'a>(
-    files: &mut impl Iterator<Item = Box<dyn Read + Send>>,
-    settings: &'a GlobalSettings,
-) -> ExtSortedMerger<'a> {
+/// Sort files by using auxiliary files for storing intermediate chunks (if needed), and output the result.
+pub fn ext_sort(files: &mut impl Iterator<Item = Box<dyn Read + Send>>, settings: &GlobalSettings) {
     let tmp_dir = crash_if_err!(1, TempDir::new_in(&settings.tmp_dir, "uutils_sort"));
     let (sorted_sender, sorted_receiver) = std::sync::mpsc::sync_channel(1);
     let (recycled_sender, recycled_receiver) = std::sync::mpsc::sync_channel(1);
@@ -51,7 +41,7 @@ pub fn ext_sort<'a>(
         let settings = settings.clone();
         move || sorter(recycled_receiver, sorted_sender, settings)
     });
-    let chunks_read = reader_writer(
+    let read_result = reader_writer(
         files,
         &tmp_dir,
         if settings.zero_terminated {
@@ -66,13 +56,29 @@ pub fn ext_sort<'a>(
         sorted_receiver,
         recycled_sender,
     );
-    let files = (0..chunks_read)
-        .map(|chunk_num| tmp_dir.path().join(chunk_num.to_string()))
-        .collect::<Vec<_>>();
-
-    ExtSortedMerger {
-        file_merger: merge::merge(&files, settings),
-        _tmp_dir: tmp_dir,
+    match read_result {
+        ReadResult::WroteChunksToFile { chunks_written } => {
+            let files = (0..chunks_written)
+                .map(|chunk_num| tmp_dir.path().join(chunk_num.to_string()))
+                .collect::<Vec<_>>();
+            let mut merger = merge::merge(&files, settings);
+            merger.write_all(settings);
+        }
+        ReadResult::SortedSingleChunk(chunk) => {
+            output_sorted_lines(chunk.borrow_lines().iter(), settings);
+        }
+        ReadResult::SortedTwoChunks([a, b]) => {
+            let merged_iter = a
+                .borrow_lines()
+                .iter()
+                .merge_by(b.borrow_lines().iter(), |line_a, line_b| {
+                    compare_by(line_a, line_b, settings) != Ordering::Greater
+                });
+            output_sorted_lines(merged_iter, settings);
+        }
+        ReadResult::EmptyInput => {
+            // don't output anything
+        }
     }
 }
 
@@ -82,6 +88,21 @@ fn sorter(receiver: Receiver<Chunk>, sender: SyncSender<Chunk>, settings: Global
         payload.with_lines_mut(|lines| sort_by(lines, &settings));
         sender.send(payload).unwrap();
     }
+}
+
+/// Describes how we read the chunks from the input.
+enum ReadResult {
+    /// The input was empty. Nothing was read.
+    EmptyInput,
+    /// The input fits into a single Chunk, which was kept in memory.
+    SortedSingleChunk(Chunk),
+    /// The input fits into two chunks, which were kept in memory.
+    SortedTwoChunks([Chunk; 2]),
+    /// The input was read into multiple chunks, which were written to auxiliary files.
+    WroteChunksToFile {
+        /// The number of chunks written to auxiliary files.
+        chunks_written: usize,
+    },
 }
 
 /// The function that is executed on the reader/writer thread.
@@ -96,7 +117,7 @@ fn reader_writer(
     settings: GlobalSettings,
     receiver: Receiver<Chunk>,
     sender: SyncSender<Chunk>,
-) -> usize {
+) -> ReadResult {
     let mut sender_option = Some(sender);
 
     let mut file = files.next().unwrap();
@@ -106,21 +127,40 @@ fn reader_writer(
     for _ in 0..2 {
         chunks::read(
             &mut sender_option,
-            vec![0; buffer_size],
+            vec![0; MIN_BUFFER_SIZE],
+            Some(buffer_size),
             &mut carry_over,
             &mut file,
             &mut files,
             separator,
             Vec::new(),
             &settings,
-        )
+        );
+        if sender_option.is_none() {
+            // We have already read the whole input. Since we are in our first two reads,
+            // this means that we can fit the whole input into memory. Bypass writing below and
+            // handle this case in a more straightforward way.
+            return if let Ok(first_chunk) = receiver.recv() {
+                if let Ok(second_chunk) = receiver.recv() {
+                    ReadResult::SortedTwoChunks([first_chunk, second_chunk])
+                } else {
+                    ReadResult::SortedSingleChunk(first_chunk)
+                }
+            } else {
+                ReadResult::EmptyInput
+            };
+        }
     }
 
     let mut file_number = 0;
     loop {
         let mut chunk = match receiver.recv() {
             Ok(it) => it,
-            _ => return file_number,
+            _ => {
+                return ReadResult::WroteChunksToFile {
+                    chunks_written: file_number,
+                }
+            }
         };
 
         write(
@@ -129,13 +169,14 @@ fn reader_writer(
             separator,
         );
 
-        let (recycled_lines, recycled_buffer) = chunk.recycle();
-
         file_number += 1;
+
+        let (recycled_lines, recycled_buffer) = chunk.recycle();
 
         chunks::read(
             &mut sender_option,
             recycled_buffer,
+            None,
             &mut carry_over,
             &mut file,
             &mut files,

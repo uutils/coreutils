@@ -87,6 +87,7 @@ fn reader(
         chunks::read(
             &mut sender,
             recycled_buffer,
+            None,
             &mut carry_over,
             &mut file,
             &mut iter::empty(),
