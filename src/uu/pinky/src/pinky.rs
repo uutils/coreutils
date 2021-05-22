@@ -48,7 +48,7 @@ fn get_usage() -> String {
 fn get_long_usage() -> String {
     format!(
         "A lightweight 'finger' program;  print user information.\n\
-        The utmp file will be {}.",
+         The utmp file will be {}.",
         utmpx::DEFAULT_FILE
     )
 }
