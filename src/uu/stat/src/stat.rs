@@ -657,7 +657,7 @@ impl Stater {
                                                 dst.to_string_lossy()
                                             );
                                         } else {
-                                            arg = format!("`{}'", file);
+                                            arg = file.to_string();
                                         }
                                         otype = OutputType::Str;
                                     }
