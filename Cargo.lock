@@ -1098,9 +1098,9 @@ dependencies = [
 
 [[package]]
 name = "plotters"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45ca0ae5f169d0917a7c7f5a9c1a3d3d9598f18f529dd2b8373ed988efea307a"
+checksum = "32a3fd9ec30b9749ce28cd91f255d569591cdf937fe280c312143e3c4bad6f2a"
 dependencies = [
  "num-traits",
  "plotters-backend",
@@ -1174,9 +1174,9 @@ checksum = "dbf0c48bc1d91375ae5c3cd81e3722dff1abcf81a30960240640d223f59fe0e5"
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.26"
+version = "1.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a152013215dca273577e18d2bf00fa862b89b24169fb78c4c95aeb07992c9cec"
+checksum = "f0d8caf72986c1a598726adc988bb5984792ef84f5ee5aa50209145ee8077038"
 dependencies = [
  "unicode-xid 0.2.2",
 ]
@@ -1308,9 +1308,9 @@ dependencies = [
 
 [[package]]
 name = "rayon"
-version = "1.5.0"
+version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b0d8e0819fadc20c74ea8373106ead0600e3a67ef1fe8da56e39b9ae7275674"
+checksum = "c06aca804d41dbc8ba42dfd964f0d01334eceb64314b9ecf7c5fad5188a06d90"
 dependencies = [
  "autocfg",
  "crossbeam-deque",
@@ -1320,9 +1320,9 @@ dependencies = [
 
 [[package]]
 name = "rayon-core"
-version = "1.9.0"
+version = "1.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9ab346ac5921dc62ffa9f89b7a773907511cdfa5490c572ae9be1be33e8afa4a"
+checksum = "d78120e2c850279833f1dd3582f730c4ab53ed95aeaaaa862a2a5c71b1656d8e"
 dependencies = [
  "crossbeam-channel",
  "crossbeam-deque",
