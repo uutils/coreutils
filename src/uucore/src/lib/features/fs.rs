@@ -54,11 +54,19 @@ pub fn resolve_relative_path(path: &Path) -> Cow<Path> {
     result.into()
 }
 
+/// Controls how symbolic links should be handled when canonicalizing a path.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CanonicalizeMode {
+    /// Do not resolve any symbolic links.
     None,
+
+    /// Resolve all symbolic links.
     Normal,
+
+    /// Resolve symbolic links, ignoring errors on the final component.
     Existing,
+
+    /// Resolve symbolic links, ignoring errors on the non-final components.
     Missing,
 }
 
@@ -125,6 +133,24 @@ fn resolve<P: AsRef<Path>>(original: P) -> IOResult<PathBuf> {
     Ok(result)
 }
 
+/// Return the canonical, absolute form of a path.
+///
+/// This function is a generalization of [`std::fs::canonicalize`] that
+/// allows controlling how symbolic links are resolved and how to deal
+/// with missing components. It returns the canonical, absolute form of
+/// a path. The `can_mode` parameter controls how symbolic links are
+/// resolved:
+///
+/// * [`CanonicalizeMode::Normal`] makes this function behave like
+///   [`std::fs::canonicalize`], resolving symbolic links and returning
+///   an error if the path does not exist.
+/// * [`CanonicalizeMode::Missing`] makes this function ignore non-final
+///   components of the path that could not be resolved.
+/// * [`CanonicalizeMode::Existing`] makes this function return an error
+///   if the final component of the path does not exist.
+/// * [`CanonicalizeMode::None`] makes this function not try to resolve
+///   any symbolic links.
+///
 pub fn canonicalize<P: AsRef<Path>>(original: P, can_mode: CanonicalizeMode) -> IOResult<PathBuf> {
     // Create an absolute path
     let original = original.as_ref();
@@ -179,6 +205,10 @@ pub fn canonicalize<P: AsRef<Path>>(original: P, can_mode: CanonicalizeMode) -> 
         }
 
         result.push(parts.last().unwrap());
+
+        if can_mode == CanonicalizeMode::None {
+            return Ok(result);
+        }
 
         match resolve(&result) {
             Err(e) => {
