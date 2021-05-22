@@ -17,7 +17,6 @@ use std::path::Path;
 
 #[derive(Debug, Eq, PartialEq)]
 enum TruncateMode {
-    Reference(u64),
     Absolute(u64),
     Extend(u64),
     Reduce(u64),
@@ -42,7 +41,6 @@ impl TruncateMode {
     fn to_size(&self, fsize: u64) -> u64 {
         match self {
             TruncateMode::Absolute(modsize) => *modsize,
-            TruncateMode::Reference(_) => fsize,
             TruncateMode::Extend(modsize) => fsize + modsize,
             TruncateMode::Reduce(modsize) => fsize - modsize,
             TruncateMode::AtMost(modsize) => fsize.min(*modsize),
@@ -142,14 +140,136 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         let no_create = matches.is_present(options::NO_CREATE);
         let reference = matches.value_of(options::REFERENCE).map(String::from);
         let size = matches.value_of(options::SIZE).map(String::from);
-        if reference.is_none() && size.is_none() {
-            crash!(1, "you must specify either --reference or --size");
-        } else {
-            truncate(no_create, io_blocks, reference, size, files);
+        if let Err(e) = truncate(no_create, io_blocks, reference, size, files) {
+            match e.kind() {
+                ErrorKind::NotFound => {
+                    // TODO Improve error-handling so that the error
+                    // returned by `truncate()` provides the necessary
+                    // parameter for formatting the error message.
+                    let reference = matches.value_of(options::REFERENCE).map(String::from);
+                    crash!(
+                        1,
+                        "cannot stat '{}': No such file or directory",
+                        reference.unwrap()
+                    );
+                }
+                _ => crash!(1, "{}", e.to_string()),
+            }
         }
     }
 
     0
+}
+
+/// Truncate the named file to the specified size.
+///
+/// If `create` is true, then the file will be created if it does not
+/// already exist. If `size` is larger than the number of bytes in the
+/// file, then the file will be padded with zeros. If `size` is smaller
+/// than the number of bytes in the file, then the file will be
+/// truncated and any bytes beyond `size` will be lost.
+///
+/// # Errors
+///
+/// If the file could not be opened, or there was a problem setting the
+/// size of the file.
+fn file_truncate(filename: &str, create: bool, size: u64) -> std::io::Result<()> {
+    let path = Path::new(filename);
+    let f = OpenOptions::new().write(true).create(create).open(path)?;
+    f.set_len(size)
+}
+
+/// Truncate files to a size relative to a given file.
+///
+/// `rfilename` is the name of the reference file.
+///
+/// `size_string` gives the size relative to the reference file to which
+/// to set the target files. For example, "+3K" means "set each file to
+/// be three kilobytes larger than the size of the reference file".
+///
+/// If `create` is true, then each file will be created if it does not
+/// already exist.
+///
+/// # Errors
+///
+/// If the any file could not be opened, or there was a problem setting
+/// the size of at least one file.
+fn truncate_reference_and_size(
+    rfilename: &str,
+    size_string: &str,
+    filenames: Vec<String>,
+    create: bool,
+) -> std::io::Result<()> {
+    let mode = match parse_mode_and_size(size_string) {
+        Ok(m) => match m {
+            TruncateMode::Absolute(_) => {
+                crash!(1, "you must specify a relative ‘--size’ with ‘--reference’")
+            }
+            _ => m,
+        },
+        Err(_) => crash!(1, "Invalid number: ‘{}’", size_string),
+    };
+    let fsize = metadata(rfilename)?.len();
+    let tsize = mode.to_size(fsize);
+    for filename in &filenames {
+        file_truncate(filename, create, tsize)?;
+    }
+    Ok(())
+}
+
+/// Truncate files to match the size of a given reference file.
+///
+/// `rfilename` is the name of the reference file.
+///
+/// If `create` is true, then each file will be created if it does not
+/// already exist.
+///
+/// # Errors
+///
+/// If the any file could not be opened, or there was a problem setting
+/// the size of at least one file.
+fn truncate_reference_file_only(
+    rfilename: &str,
+    filenames: Vec<String>,
+    create: bool,
+) -> std::io::Result<()> {
+    let tsize = metadata(rfilename)?.len();
+    for filename in &filenames {
+        file_truncate(filename, create, tsize)?;
+    }
+    Ok(())
+}
+
+/// Truncate files to a specified size.
+///
+/// `size_string` gives either an absolute size or a relative size. A
+/// relative size adjusts the size of each file relative to its current
+/// size. For example, "3K" means "set each file to be three kilobytes"
+/// whereas "+3K" means "set each file to be three kilobytes larger than
+/// its current size".
+///
+/// If `create` is true, then each file will be created if it does not
+/// already exist.
+///
+/// # Errors
+///
+/// If the any file could not be opened, or there was a problem setting
+/// the size of at least one file.
+fn truncate_size_only(
+    size_string: &str,
+    filenames: Vec<String>,
+    create: bool,
+) -> std::io::Result<()> {
+    let mode = match parse_mode_and_size(size_string) {
+        Ok(m) => m,
+        Err(_) => crash!(1, "Invalid number: ‘{}’", size_string),
+    };
+    for filename in &filenames {
+        let fsize = metadata(filename).map(|m| m.len()).unwrap_or(0);
+        let tsize = mode.to_size(fsize);
+        file_truncate(filename, create, tsize)?;
+    }
+    Ok(())
 }
 
 fn truncate(
@@ -158,58 +278,20 @@ fn truncate(
     reference: Option<String>,
     size: Option<String>,
     filenames: Vec<String>,
-) {
-    let mode = match size {
-        Some(size_string) => match parse_mode_and_size(&size_string) {
-            Ok(m) => m,
-            Err(_) => crash!(1, "Invalid number: ‘{}’", size_string),
-        },
-        None => TruncateMode::Reference(0),
-    };
-
-    let refsize = match reference {
-        Some(ref rfilename) => {
-            match mode {
-                // Only Some modes work with a reference
-                TruncateMode::Reference(_) => (), //No --size was given
-                TruncateMode::Extend(_) => (),
-                TruncateMode::Reduce(_) => (),
-                _ => crash!(1, "you must specify a relative ‘--size’ with ‘--reference’"),
-            };
-            match metadata(rfilename) {
-                Ok(meta) => meta.len(),
-                Err(f) => match f.kind() {
-                    ErrorKind::NotFound => {
-                        crash!(1, "cannot stat '{}': No such file or directory", rfilename)
-                    }
-                    _ => crash!(1, "{}", f.to_string()),
-                },
-            }
+) -> std::io::Result<()> {
+    let create = !no_create;
+    // There are four possibilities
+    // - reference file given and size given,
+    // - reference file given but no size given,
+    // - no reference file given but size given,
+    // - no reference file given and no size given,
+    match (reference, size) {
+        (Some(rfilename), Some(size_string)) => {
+            truncate_reference_and_size(&rfilename, &size_string, filenames, create)
         }
-        None => 0,
-    };
-    for filename in &filenames {
-        let path = Path::new(filename);
-        match OpenOptions::new().write(true).create(!no_create).open(path) {
-            Ok(file) => {
-                let fsize = match reference {
-                    Some(_) => refsize,
-                    None => match metadata(filename) {
-                        Ok(meta) => meta.len(),
-                        Err(f) => {
-                            show_warning!("{}", f.to_string());
-                            continue;
-                        }
-                    },
-                };
-                let tsize = mode.to_size(fsize);
-                match file.set_len(tsize) {
-                    Ok(_) => {}
-                    Err(f) => crash!(1, "{}", f.to_string()),
-                };
-            }
-            Err(f) => crash!(1, "{}", f.to_string()),
-        }
+        (Some(rfilename), None) => truncate_reference_file_only(&rfilename, filenames, create),
+        (None, Some(size_string)) => truncate_size_only(&size_string, filenames, create),
+        (None, None) => crash!(1, "you must specify either --reference or --size"),
     }
 }
 
