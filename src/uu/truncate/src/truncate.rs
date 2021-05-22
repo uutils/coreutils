@@ -15,16 +15,16 @@ use std::fs::{metadata, OpenOptions};
 use std::io::ErrorKind;
 use std::path::Path;
 
-#[derive(Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 enum TruncateMode {
-    Absolute,
-    Reference,
-    Extend,
-    Reduce,
-    AtMost,
-    AtLeast,
-    RoundDown,
-    RoundUp,
+    Reference(u64),
+    Absolute(u64),
+    Extend(u64),
+    Reduce(u64),
+    AtMost(u64),
+    AtLeast(u64),
+    RoundDown(u64),
+    RoundUp(u64),
 }
 
 static ABOUT: &str = "Shrink or extend the size of each file to the specified size.";
@@ -133,46 +133,21 @@ fn truncate(
     size: Option<String>,
     filenames: Vec<String>,
 ) {
-    let (modsize, mode) = match size {
-        Some(size_string) => {
-            // Trim any whitespace.
-            let size_string = size_string.trim();
-
-            // Get the modifier character from the size string, if any. For
-            // example, if the argument is "+123", then the modifier is '+'.
-            let c = size_string.chars().next().unwrap();
-
-            let mode = match c {
-                '+' => TruncateMode::Extend,
-                '-' => TruncateMode::Reduce,
-                '<' => TruncateMode::AtMost,
-                '>' => TruncateMode::AtLeast,
-                '/' => TruncateMode::RoundDown,
-                '%' => TruncateMode::RoundUp,
-                _ => TruncateMode::Absolute, /* assume that the size is just a number */
-            };
-
-            // If there was a modifier character, strip it.
-            let size_string = match mode {
-                TruncateMode::Absolute => size_string,
-                _ => &size_string[1..],
-            };
-            let num_bytes = match parse_size(size_string) {
-                Ok(b) => b,
-                Err(_) => crash!(1, "Invalid number: ‘{}’", size_string),
-            };
-            (num_bytes, mode)
-        }
-        None => (0, TruncateMode::Reference),
+    let mode = match size {
+        Some(size_string) => match parse_mode_and_size(&size_string) {
+            Ok(m) => m,
+            Err(_) => crash!(1, "Invalid number: ‘{}’", size_string),
+        },
+        None => TruncateMode::Reference(0),
     };
 
     let refsize = match reference {
         Some(ref rfilename) => {
             match mode {
                 // Only Some modes work with a reference
-                TruncateMode::Reference => (), //No --size was given
-                TruncateMode::Extend => (),
-                TruncateMode::Reduce => (),
+                TruncateMode::Reference(_) => (), //No --size was given
+                TruncateMode::Extend(_) => (),
+                TruncateMode::Reduce(_) => (),
                 _ => crash!(1, "you must specify a relative ‘--size’ with ‘--reference’"),
             };
             match metadata(rfilename) {
@@ -202,14 +177,14 @@ fn truncate(
                     },
                 };
                 let tsize: u64 = match mode {
-                    TruncateMode::Absolute => modsize,
-                    TruncateMode::Reference => fsize,
-                    TruncateMode::Extend => fsize + modsize,
-                    TruncateMode::Reduce => fsize - modsize,
-                    TruncateMode::AtMost => fsize.min(modsize),
-                    TruncateMode::AtLeast => fsize.max(modsize),
-                    TruncateMode::RoundDown => fsize - fsize % modsize,
-                    TruncateMode::RoundUp => fsize + fsize % modsize,
+                    TruncateMode::Absolute(modsize) => modsize,
+                    TruncateMode::Reference(_) => fsize,
+                    TruncateMode::Extend(modsize) => fsize + modsize,
+                    TruncateMode::Reduce(modsize) => fsize - modsize,
+                    TruncateMode::AtMost(modsize) => fsize.min(modsize),
+                    TruncateMode::AtLeast(modsize) => fsize.max(modsize),
+                    TruncateMode::RoundDown(modsize) => fsize - fsize % modsize,
+                    TruncateMode::RoundUp(modsize) => fsize + fsize % modsize,
                 };
                 match file.set_len(tsize) {
                     Ok(_) => {}
@@ -219,6 +194,52 @@ fn truncate(
             Err(f) => crash!(1, "{}", f.to_string()),
         }
     }
+}
+
+/// Decide whether a character is one of the size modifiers, like '+' or '<'.
+fn is_modifier(c: char) -> bool {
+    c == '+' || c == '-' || c == '<' || c == '>' || c == '/' || c == '%'
+}
+
+/// Parse a size string with optional modifier symbol as its first character.
+///
+/// A size string is as described in [`parse_size`]. The first character
+/// of `size_string` might be a modifier symbol, like `'+'` or
+/// `'<'`. The first element of the pair returned by this function
+/// indicates which modifier symbol was present, or
+/// [`TruncateMode::Absolute`] if none.
+///
+/// # Panics
+///
+/// If `size_string` is empty, or if no number could be parsed from the
+/// given string (for example, if the string were `"abc"`).
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// assert_eq!(parse_mode_and_size("+123"), (TruncateMode::Extend, 123));
+/// ```
+fn parse_mode_and_size(size_string: &str) -> Result<TruncateMode, ()> {
+    // Trim any whitespace.
+    let size_string = size_string.trim();
+
+    // Get the modifier character from the size string, if any. For
+    // example, if the argument is "+123", then the modifier is '+'.
+    let c = size_string.chars().next().unwrap();
+    let size_string = if is_modifier(c) {
+        &size_string[1..]
+    } else {
+        size_string
+    };
+    parse_size(size_string).map(match c {
+        '+' => TruncateMode::Extend,
+        '-' => TruncateMode::Reduce,
+        '<' => TruncateMode::AtMost,
+        '>' => TruncateMode::AtLeast,
+        '/' => TruncateMode::RoundDown,
+        '%' => TruncateMode::RoundUp,
+        _ => TruncateMode::Absolute,
+    })
 }
 
 /// Parse a size string into a number of bytes.
@@ -280,7 +301,9 @@ fn parse_size(size: &str) -> Result<u64, ()> {
 
 #[cfg(test)]
 mod tests {
+    use crate::parse_mode_and_size;
     use crate::parse_size;
+    use crate::TruncateMode;
 
     #[test]
     fn test_parse_size_zero() {
@@ -305,5 +328,16 @@ mod tests {
         assert_eq!(parse_size("123").unwrap(), 123);
         assert_eq!(parse_size("123M").unwrap(), 123 * 1024 * 1024);
         assert_eq!(parse_size("123MB").unwrap(), 123 * 1000 * 1000);
+    }
+
+    #[test]
+    fn test_parse_mode_and_size() {
+        assert_eq!(parse_mode_and_size("10"), Ok(TruncateMode::Absolute(10)));
+        assert_eq!(parse_mode_and_size("+10"), Ok(TruncateMode::Extend(10)));
+        assert_eq!(parse_mode_and_size("-10"), Ok(TruncateMode::Reduce(10)));
+        assert_eq!(parse_mode_and_size("<10"), Ok(TruncateMode::AtMost(10)));
+        assert_eq!(parse_mode_and_size(">10"), Ok(TruncateMode::AtLeast(10)));
+        assert_eq!(parse_mode_and_size("/10"), Ok(TruncateMode::RoundDown(10)));
+        assert_eq!(parse_mode_and_size("%10"), Ok(TruncateMode::RoundUp(10)));
     }
 }
