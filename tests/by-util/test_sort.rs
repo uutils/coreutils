@@ -3,14 +3,24 @@ use crate::common::util::*;
 fn test_helper(file_name: &str, args: &str) {
     new_ucmd!()
         .arg(format!("{}.txt", file_name))
-        .args(&args.split(' ').collect::<Vec<&str>>())
+        .args(
+            &args
+                .split(' ')
+                .filter(|arg| !arg.is_empty())
+                .collect::<Vec<&str>>(),
+        )
         .succeeds()
         .stdout_is_fixture(format!("{}.expected", file_name));
 
     new_ucmd!()
         .arg(format!("{}.txt", file_name))
         .arg("--debug")
-        .args(&args.split(' ').collect::<Vec<&str>>())
+        .args(
+            &args
+                .split(' ')
+                .filter(|arg| !arg.is_empty())
+                .collect::<Vec<&str>>(),
+        )
         .succeeds()
         .stdout_is_fixture(format!("{}.expected.debug", file_name));
 }
@@ -668,4 +678,15 @@ fn test_trailing_separator() {
         .pipe_in("aax\naaa\n")
         .succeeds()
         .stdout_is("aax\naaa\n");
+}
+
+#[test]
+fn test_nonexistent_file() {
+    new_ucmd!()
+        .arg("nonexistent.txt")
+        .fails()
+        .status_code(2)
+        .stderr_only(
+            "sort: error: cannot read: \"nonexistent.txt\": No such file or directory (os error 2)",
+        );
 }

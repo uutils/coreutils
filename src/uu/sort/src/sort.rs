@@ -907,7 +907,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
         let mut files = Vec::new();
         for path in &files0_from {
-            let reader = open(path.as_str()).expect("Could not read from file specified.");
+            let reader = open(path.as_str());
             let buf_reader = BufReader::new(reader);
             for line in buf_reader.split(b'\0').flatten() {
                 files.push(
@@ -1064,7 +1064,7 @@ fn exec(files: &[String], settings: &GlobalSettings) -> i32 {
         }
         return check::check(files.first().unwrap(), settings);
     } else {
-        let mut lines = files.iter().filter_map(open);
+        let mut lines = files.iter().map(open);
 
         ext_sort(&mut lines, &settings);
     }
@@ -1346,18 +1346,17 @@ fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(iter: T, settings: &Global
 }
 
 // from cat.rs
-fn open(path: impl AsRef<OsStr>) -> Option<Box<dyn Read + Send>> {
+fn open(path: impl AsRef<OsStr>) -> Box<dyn Read + Send> {
     let path = path.as_ref();
     if path == "-" {
         let stdin = stdin();
-        return Some(Box::new(stdin) as Box<dyn Read + Send>);
+        return Box::new(stdin) as Box<dyn Read + Send>;
     }
 
     match File::open(Path::new(path)) {
-        Ok(f) => Some(Box::new(f) as Box<dyn Read + Send>),
+        Ok(f) => Box::new(f) as Box<dyn Read + Send>,
         Err(e) => {
-            show_error!("{0:?}: {1}", path, e.to_string());
-            None
+            crash!(2, "cannot read: {0:?}: {1}", path, e);
         }
     }
 }
