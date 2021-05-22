@@ -1110,7 +1110,7 @@ struct PathData {
     md: OnceCell<Option<Metadata>>,
     ft: OnceCell<Option<FileType>>,
     // Name of the file - will be empty for . or ..
-    file_name: String,
+    display_name: String,
     // PathBuf that all above data corresponds to
     p_buf: PathBuf,
     must_dereference: bool,
@@ -1126,14 +1126,18 @@ impl PathData {
     ) -> Self {
         // We cannot use `Path::ends_with` or `Path::Components`, because they remove occurrences of '.'
         // For '..', the filename is None
-        let name = if let Some(name) = file_name {
+        let display_name = if let Some(name) = file_name {
             name
         } else {
-            p_buf
-                .file_name()
-                .unwrap_or_else(|| p_buf.iter().next_back().unwrap())
-                .to_string_lossy()
-                .into_owned()
+            let display_osstr = if command_line {
+                p_buf.as_os_str()
+            } else {
+                p_buf
+                    .file_name()
+                    .unwrap_or_else(|| p_buf.iter().next_back().unwrap())
+            };
+
+            display_osstr.to_string_lossy().into_owned()
         };
         let must_dereference = match &config.dereference {
             Dereference::All => true,
@@ -1159,7 +1163,7 @@ impl PathData {
         Self {
             md: OnceCell::new(),
             ft,
-            file_name: name,
+            display_name,
             p_buf,
             must_dereference,
         }
@@ -1243,7 +1247,7 @@ fn sort_entries(entries: &mut Vec<PathData>, config: &Config) {
             entries.sort_by_key(|k| Reverse(k.md().as_ref().map(|md| md.len()).unwrap_or(0)))
         }
         // The default sort in GNU ls is case insensitive
-        Sort::Name => entries.sort_by(|a, b| a.file_name.cmp(&b.file_name)),
+        Sort::Name => entries.sort_by(|a, b| a.display_name.cmp(&b.display_name)),
         Sort::Version => entries.sort_by(|a, b| version_cmp::version_cmp(&a.p_buf, &b.p_buf)),
         Sort::Extension => entries.sort_by(|a, b| {
             a.p_buf
@@ -1719,7 +1723,7 @@ fn classify_file(path: &PathData) -> Option<char> {
 }
 
 fn display_file_name(path: &PathData, config: &Config) -> Option<Cell> {
-    let mut name = escape_name(&path.file_name, &config.quoting_style);
+    let mut name = escape_name(&path.display_name, &config.quoting_style);
 
     #[cfg(unix)]
     {
