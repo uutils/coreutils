@@ -1992,10 +1992,18 @@ fn test_ls_path() {
         .stdout_is(expected_stdout);
 
     let abs_path = format!("{}/{}", at.as_string(), path);
-    let expected_stdout = &format!("{}\n", abs_path);
+    let expected_stdout = if cfg!(windows) {
+        format!("\'{}\'\n", abs_path)
+    } else {
+        format!("{}\n", abs_path)
+    };
     scene.ucmd().arg(&abs_path).run().stdout_is(expected_stdout);
 
-    let expected_stdout = &format!("{}\n{}\n", path, file1);
+    let expected_stdout = if cfg!(windows) {
+        format!("{}  {}\n", path, file1)
+    } else {
+        format!("{}\n{}\n", path, file1)
+    };
     scene
         .ucmd()
         .arg(file1)
