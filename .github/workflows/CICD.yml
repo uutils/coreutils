@@ -366,7 +366,7 @@ jobs:
       env:
         # Override auto-detection of RAM for Rustc install.
         # https://github.com/rust-lang/rustup/issues/2229#issuecomment-585855925
-        RUSTUP_UNPACK_RAM: "21474836480"
+        RUSTUP_UNPACK_RAM: "200000000"
       with:
         toolchain: ${{ steps.vars.outputs.TOOLCHAIN }}
         target: ${{ matrix.job.target }}
