@@ -83,23 +83,17 @@ fn test_process() {
     }
 }
 
-#[cfg(target_os = "linux")]
 #[test]
 fn test_runlevel() {
     for opt in vec!["-r", "--runlevel"] {
+        #[cfg(any(target_vendor = "apple", target_os = "linux"))]
         new_ucmd!()
             .arg(opt)
             .succeeds()
             .stdout_is(expected_result(&[opt]));
-    }
-}
 
-#[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
-#[test]
-fn test_runlevel() {
-    let expected = "error: Found argument";
-    for opt in vec!["-r", "--runlevel"] {
-        new_ucmd!().arg(opt).fails().stderr_contains(expected);
+        #[cfg(not(target_os = "linux"))]
+        new_ucmd!().arg(opt).succeeds().stdout_is("");
     }
 }
 
@@ -131,7 +125,6 @@ fn test_mesg() {
     }
 }
 
-#[cfg(target_os = "linux")]
 #[test]
 fn test_arg1_arg2() {
     let args = ["am", "i"];
@@ -142,7 +135,6 @@ fn test_arg1_arg2() {
         .stdout_is(expected_result(&args));
 }
 
-#[cfg(target_os = "linux")]
 #[test]
 fn test_too_many_args() {
     const EXPECTED: &str =
@@ -164,11 +156,11 @@ fn test_users() {
         let mut v_actual: Vec<&str> = actual.split_whitespace().collect();
         let mut v_expect: Vec<&str> = expect.split_whitespace().collect();
 
-        // TODO: `--users` differs from GNU's output on manOS running in CI
+        // TODO: `--users` differs from GNU's output on macOS
         // Diff < left / right > :
         // <"runner   console      2021-05-20 22:03 00:08         196\n"
         // >"runner   console      2021-05-20 22:03  old          196\n"
-        if is_ci() && cfg!(target_os = "macos") {
+        if cfg!(target_os = "macos") {
             v_actual.remove(4);
             v_expect.remove(4);
         }
@@ -202,7 +194,7 @@ fn test_dead() {
 #[cfg(any(target_vendor = "apple", target_os = "linux"))]
 #[test]
 fn test_all_separately() {
-    if is_ci() && cfg!(target_os = "macos") {
+    if cfg!(target_os = "macos") {
         // TODO: fix `-u`, see: test_users
         return;
     }
@@ -225,7 +217,7 @@ fn test_all_separately() {
 #[cfg(any(target_vendor = "apple", target_os = "linux"))]
 #[test]
 fn test_all() {
-    if is_ci() && cfg!(target_os = "macos") {
+    if cfg!(target_os = "macos") {
         // TODO: fix `-u`, see: test_users
         return;
     }
