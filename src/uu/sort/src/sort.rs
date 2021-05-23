@@ -99,7 +99,6 @@ static OPT_TMP_DIR: &str = "temporary-directory";
 static ARG_FILES: &str = "files";
 
 static DECIMAL_PT: char = '.';
-static THOUSANDS_SEP: char = ',';
 
 static NEGATIVE: char = '-';
 static POSITIVE: char = '+';
@@ -330,8 +329,7 @@ impl<'a> Line<'a> {
                         &self.line[selection.clone()],
                         NumInfoParseSettings {
                             accept_si_units: selector.settings.mode == SortMode::HumanNumeric,
-                            thousands_separator: Some(THOUSANDS_SEP),
-                            decimal_pt: Some(DECIMAL_PT),
+                            ..Default::default()
                         },
                     );
                     let initial_selection = selection.clone();
@@ -607,8 +605,7 @@ impl FieldSelector {
                 range,
                 NumInfoParseSettings {
                     accept_si_units: self.settings.mode == SortMode::HumanNumeric,
-                    thousands_separator: Some(THOUSANDS_SEP),
-                    decimal_pt: Some(DECIMAL_PT),
+                    ..Default::default()
                 },
             );
             // Shorten the range to what we need to pass to numeric_str_cmp later.
