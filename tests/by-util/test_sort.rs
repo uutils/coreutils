@@ -3,24 +3,14 @@ use crate::common::util::*;
 fn test_helper(file_name: &str, args: &str) {
     new_ucmd!()
         .arg(format!("{}.txt", file_name))
-        .args(
-            &args
-                .split(' ')
-                .filter(|arg| !arg.is_empty())
-                .collect::<Vec<&str>>(),
-        )
+        .args(&args.split_whitespace().collect::<Vec<&str>>())
         .succeeds()
         .stdout_is_fixture(format!("{}.expected", file_name));
 
     new_ucmd!()
         .arg(format!("{}.txt", file_name))
         .arg("--debug")
-        .args(
-            &args
-                .split(' ')
-                .filter(|arg| !arg.is_empty())
-                .collect::<Vec<&str>>(),
-        )
+        .args(&args.split_whitespace().collect::<Vec<&str>>())
         .succeeds()
         .stdout_is_fixture(format!("{}.expected.debug", file_name));
 }
