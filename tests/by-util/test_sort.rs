@@ -526,6 +526,11 @@ fn test_keys_with_options_blanks_start() {
 }
 
 #[test]
+fn test_keys_blanks_with_char_idx() {
+    test_helper("keys_blanks", &["-k 1.2b"])
+}
+
+#[test]
 fn test_keys_with_options_blanks_end() {
     let input = "a  b
 a b

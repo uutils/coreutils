@@ -664,22 +664,21 @@ impl FieldSelector {
                 } else {
                     tokens.unwrap()[position.field - 1].start
                 };
+                // strip blanks if needed
+                if position.ignore_blanks {
+                    idx += line[idx..]
+                        .char_indices()
+                        .find(|(_, c)| !c.is_whitespace())
+                        .map_or(line[idx..].len(), |(idx, _)| idx);
+                }
+                // apply the character index
                 idx += line[idx..]
                     .char_indices()
                     .nth(position.char - 1)
-                    .map_or(line.len(), |(idx, _)| idx);
+                    .map_or(line[idx..].len(), |(idx, _)| idx);
                 if idx >= line.len() {
                     Resolution::TooHigh
                 } else {
-                    if position.ignore_blanks {
-                        if let Some((not_whitespace, _)) =
-                            line[idx..].char_indices().find(|(_, c)| !c.is_whitespace())
-                        {
-                            idx += not_whitespace;
-                        } else {
-                            return Resolution::TooHigh;
-                        }
-                    }
                     Resolution::StartOfChar(idx)
                 }
             }
