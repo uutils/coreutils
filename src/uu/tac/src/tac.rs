@@ -11,7 +11,7 @@
 extern crate uucore;
 
 use clap::{App, Arg};
-use std::io::{stdin, stdout, BufReader, Read, Stdout, Write};
+use std::io::{self, stdin, stdout, Cursor, ErrorKind, Read, Seek, Write};
 use std::{fs::File, path::Path};
 use uucore::InvalidEncodingHandling;
 
@@ -19,6 +19,11 @@ static NAME: &str = "tac";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static USAGE: &str = "[OPTION]... [FILE]...";
 static SUMMARY: &str = "Write each file to standard output, last line first.";
+
+mod chunks;
+mod lines;
+use lines::rlines_leading_separator;
+use lines::rlines_trailing_separator;
 
 mod options {
     pub static BEFORE: &str = "before";
@@ -82,96 +87,62 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     tac(files, before, regex, &separator[..])
 }
 
+fn generic_tac<T>(f: &mut T, separator: &str, before: bool) -> io::Result<()>
+where
+    T: Read + Seek,
+{
+    let mut out = stdout();
+    let sep = separator.as_bytes().first().unwrap();
+    if before {
+        for line in rlines_leading_separator(f, *sep) {
+            out.write_all(&line)?;
+        }
+    } else {
+        for line in rlines_trailing_separator(f, *sep) {
+            out.write_all(&line)?;
+        }
+    }
+    Ok(())
+}
+
+/// Print lines of `stdin` in reverse.
+fn stdin_tac(separator: &str, before: bool) -> io::Result<()> {
+    let mut data = Vec::new();
+    stdin().read_to_end(&mut data).unwrap();
+    let mut file = Cursor::new(&data);
+    generic_tac(&mut file, separator, before)
+}
+
+/// Print lines of the given file in reverse.
+fn file_tac(filename: &str, separator: &str, before: bool) -> io::Result<()> {
+    let mut file = File::open(Path::new(filename))?;
+    generic_tac(&mut file, separator, before)
+}
+
 fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) -> i32 {
     let mut exit_code = 0;
-    let mut out = stdout();
-    let sbytes = separator.as_bytes();
-    let slen = sbytes.len();
-
     for filename in &filenames {
-        let mut file = BufReader::new(if filename == "-" {
-            Box::new(stdin()) as Box<dyn Read>
+        if filename == "-" {
+            if let Err(e) = stdin_tac(separator, before) {
+                show_error!("failed to read '{}': {}", filename, e);
+                exit_code = 1;
+            }
         } else {
-            let path = Path::new(filename);
-            if path.is_dir() || path.metadata().is_err() {
-                if path.is_dir() {
-                    show_error!("dir: read error: Invalid argument");
-                } else {
-                    show_error!(
-                        "failed to open '{}' for reading: No such file or directory",
-                        filename
-                    );
-                }
+            if Path::new(filename).is_dir() {
+                show_error!("{}: read error: Invalid argument", filename);
                 exit_code = 1;
                 continue;
             }
-            match File::open(path) {
-                Ok(f) => Box::new(f) as Box<dyn Read>,
-                Err(e) => {
-                    show_error!("failed to open '{}' for reading: {}", filename, e);
-                    exit_code = 1;
-                    continue;
+            if let Err(e) = file_tac(filename, separator, before) {
+                match e.kind() {
+                    ErrorKind::NotFound => {
+                        show_error!("failed to open '{}' for reading: {}", filename, e)
+                    }
+                    _ => show_error!("failed to read '{}': {}", filename, e),
                 }
-            }
-        });
-
-        let mut data = Vec::new();
-        if let Err(e) = file.read_to_end(&mut data) {
-            show_error!("failed to read '{}': {}", filename, e);
-            exit_code = 1;
-            continue;
-        };
-
-        // find offsets in string of all separators
-        let mut offsets = Vec::new();
-        let mut i = 0;
-        loop {
-            if i + slen > data.len() {
-                break;
-            }
-
-            if &data[i..i + slen] == sbytes {
-                offsets.push(i);
-                i += slen;
-            } else {
-                i += 1;
+                exit_code = 1;
             }
         }
-
-        // if there isn't a separator at the end of the file, fake it
-        if offsets.is_empty() || *offsets.last().unwrap() < data.len() - slen {
-            offsets.push(data.len());
-        }
-
-        let mut prev = *offsets.last().unwrap();
-        let mut start = true;
-        for off in offsets.iter().rev().skip(1) {
-            // correctly handle case of no final separator in file
-            if start && prev == data.len() {
-                show_line(&mut out, &[], &data[*off + slen..prev], before);
-                start = false;
-            } else {
-                show_line(&mut out, sbytes, &data[*off + slen..prev], before);
-            }
-            prev = *off;
-        }
-        show_line(&mut out, sbytes, &data[0..prev], before);
     }
-
     exit_code
-}
-
-fn show_line(out: &mut Stdout, sep: &[u8], dat: &[u8], before: bool) {
-    if before {
-        out.write_all(sep)
-            .unwrap_or_else(|e| crash!(1, "failed to write to stdout: {}", e));
-    }
-
-    out.write_all(dat)
-        .unwrap_or_else(|e| crash!(1, "failed to write to stdout: {}", e));
-
-    if !before {
-        out.write_all(sep)
-            .unwrap_or_else(|e| crash!(1, "failed to write to stdout: {}", e));
-    }
 }
