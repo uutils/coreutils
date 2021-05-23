@@ -39,6 +39,8 @@ pub use crate::features::fs;
 pub use crate::features::fsext;
 #[cfg(feature = "parse_time")]
 pub use crate::features::parse_time;
+#[cfg(feature = "ringbuffer")]
+pub use crate::features::ringbuffer;
 #[cfg(feature = "zero-copy")]
 pub use crate::features::zero_copy;
 

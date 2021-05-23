@@ -61,13 +61,14 @@ jobs:
             echo "::warning ::GNU testsuite = TOTAL: $TOTAL / PASS: $PASS / FAIL: $FAIL / ERROR: $ERROR"
             jq -n \
                   --arg date "$(date --rfc-email)" \
+                  --arg sha "$GITHUB_SHA" \
                   --arg total "$TOTAL" \
                   --arg pass "$PASS" \
                   --arg skip "$SKIP" \
                   --arg fail "$FAIL" \
                   --arg xpass "$XPASS" \
                   --arg error "$ERROR" \
-                  '{($date): { total: $total, pass: $pass, skip: $skip, fail: $fail, xpass: $xpass, error: $error, }}' > gnu-result.json
+                  '{($date): { sha: $sha, total: $total, pass: $pass, skip: $skip, fail: $fail, xpass: $xpass, error: $error, }}' > gnu-result.json
           else
             echo "::error ::Failed to get summary of test results"
           fi
