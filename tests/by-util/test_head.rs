@@ -130,6 +130,15 @@ fn test_zero_terminated_syntax_2() {
 }
 
 #[test]
+fn test_zero_terminated_negative_lines() {
+    new_ucmd!()
+        .args(&["-z", "-n", "-1"])
+        .pipe_in("x\0y\0z\0")
+        .run()
+        .stdout_is("x\0y\0");
+}
+
+#[test]
 fn test_negative_byte_syntax() {
     new_ucmd!()
         .args(&["--bytes=-2"])
