@@ -223,9 +223,7 @@ fn read_to_buffer(
             Err(e) if e.kind() == ErrorKind::Interrupted => {
                 // retry
             }
-            Err(e) => {
-                crash!(1, "{}", e)
-            }
+            Err(e) => crash!(1, "{}", e),
         }
     }
 }

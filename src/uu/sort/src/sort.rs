@@ -505,9 +505,7 @@ impl KeyPosition {
                     'R' => settings.random = true,
                     'r' => settings.reverse = true,
                     'V' => settings.mode = SortMode::Version,
-                    c => {
-                        crash!(1, "invalid option for key: `{}`", c)
-                    }
+                    c => crash!(1, "invalid option for key: `{}`", c),
                 }
                 // All numeric sorts and month sort conflict with dictionary_order and ignore_non_printing.
                 // Instad of reporting an error, let them overwrite each other.

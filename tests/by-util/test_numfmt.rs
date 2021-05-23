@@ -281,6 +281,7 @@ fn test_leading_whitespace_in_free_argument_should_imply_padding() {
 }
 
 #[test]
+#[ignore]
 fn test_should_calculate_implicit_padding_per_free_argument() {
     new_ucmd!()
         .args(&["--from=auto", "   1Ki", "        2K"])

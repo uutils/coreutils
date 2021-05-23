@@ -97,13 +97,9 @@ fn test_runlevel() {
 #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
 #[test]
 fn test_runlevel() {
-    let expected =
-        "error: Found argument";
+    let expected = "error: Found argument";
     for opt in vec!["-r", "--runlevel"] {
-        new_ucmd!()
-            .arg(opt)
-            .fails()
-            .stderr_contains(expected);
+        new_ucmd!().arg(opt).fails().stderr_contains(expected);
     }
 }
 

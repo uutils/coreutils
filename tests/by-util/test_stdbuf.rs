@@ -27,12 +27,12 @@ fn test_stdbuf_line_buffered_stdout() {
 fn test_stdbuf_no_buffer_option_fails() {
     new_ucmd!().args(&["head"]).fails().stderr_is(
         "error: The following required arguments were not provided:\n    \
-            --error <MODE>\n    \
-            --input <MODE>\n    \
-            --output <MODE>\n\n\
-            USAGE:\n    \
-            stdbuf OPTION... COMMAND\n\n\
-            For more information try --help",
+         --error <MODE>\n    \
+         --input <MODE>\n    \
+         --output <MODE>\n\n\
+         USAGE:\n    \
+         stdbuf OPTION... COMMAND\n\n\
+         For more information try --help",
     );
 }
 
