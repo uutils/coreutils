@@ -54,3 +54,32 @@ fn test_and() {
 
     new_ucmd!().args(&["", "&", "1"]).run().stdout_is("0\n");
 }
+
+#[test]
+fn test_substr() {
+    new_ucmd!()
+        .args(&["substr", "abc", "1", "1"])
+        .succeeds()
+        .stdout_only("a\n");
+}
+
+#[test]
+fn test_invalid_substr() {
+    new_ucmd!()
+        .args(&["substr", "abc", "0", "1"])
+        .fails()
+        .status_code(1)
+        .stdout_only("\n");
+
+    new_ucmd!()
+        .args(&["substr", "abc", &(std::usize::MAX.to_string() + "0"), "1"])
+        .fails()
+        .status_code(1)
+        .stdout_only("\n");
+
+    new_ucmd!()
+        .args(&["substr", "abc", "0", &(std::usize::MAX.to_string() + "0")])
+        .fails()
+        .status_code(1)
+        .stdout_only("\n");
+}
