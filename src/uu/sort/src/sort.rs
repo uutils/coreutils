@@ -365,16 +365,24 @@ impl<'a> Line<'a> {
                 SortMode::Month => {
                     let initial_selection = &self.line[selection.clone()];
 
+                    let mut month_chars = initial_selection
+                        .char_indices()
+                        .skip_while(|(_, c)| c.is_whitespace());
+
                     let month = if month_parse(initial_selection) == Month::Unknown {
                         // We failed to parse a month, which is equivalent to matching nothing.
-                        0..0
+                        // Add the "no match for key" marker to the first non-whitespace character.
+                        let first_non_whitespace = month_chars.next();
+                        first_non_whitespace.map_or(
+                            initial_selection.len()..initial_selection.len(),
+                            |(idx, _)| idx..idx,
+                        )
                     } else {
-                        // We parsed a month. Match the three first non-whitespace characters, which must be the month we parsed.
-                        let mut chars = initial_selection
-                            .char_indices()
-                            .skip_while(|(_, c)| c.is_whitespace());
-                        chars.next().unwrap().0
-                            ..chars.nth(2).map_or(initial_selection.len(), |(idx, _)| idx)
+                        // We parsed a month. Match the first three non-whitespace characters, which must be the month we parsed.
+                        month_chars.next().unwrap().0
+                            ..month_chars
+                                .nth(2)
+                                .map_or(initial_selection.len(), |(idx, _)| idx)
                     };
 
                     // Shorten selection to month.
