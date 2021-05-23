@@ -688,8 +688,9 @@ impl FieldSelector {
             Resolution::StartOfChar(from) => {
                 let to = self.to.as_ref().map(|to| resolve_index(line, tokens, &to));
 
-                match to {
+                let mut range = match to {
                     Some(Resolution::StartOfChar(mut to)) => {
+                        // We need to include the character at `to`.
                         to += line[to..].chars().next().map_or(1, |c| c.len_utf8());
                         from..to
                     }
@@ -700,7 +701,11 @@ impl FieldSelector {
                     // If `to` is before the start of the line, report no match.
                     // This can happen if the line starts with a separator.
                     Some(Resolution::TooLow) => 0..0,
+                };
+                if range.start > range.end {
+                    range.end = range.start;
                 }
+                range
             }
             Resolution::TooLow | Resolution::EndOfChar(_) => {
                 unreachable!("This should only happen if the field start index is 0, but that should already have caused an error.")

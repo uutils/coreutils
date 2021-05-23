@@ -579,6 +579,13 @@ aaaa
 }
 
 #[test]
+fn test_keys_negative_size_match() {
+    // If the end of a field is before its start, we should not crash.
+    // Debug output should report "no match for key" at the start position (i.e. the later position).
+    test_helper("keys_negative_size", &["-k 3,1"]);
+}
+
+#[test]
 fn test_zero_terminated() {
     test_helper("zero-terminated", &["-z"]);
 }
