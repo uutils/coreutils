@@ -12,6 +12,7 @@
 
 // spell-checker:ignore (ToDO) binop binops ints paren prec
 
+use num_bigint::BigInt;
 use onig::{Regex, RegexOptions, Syntax};
 
 use crate::tokens::Token;
@@ -86,31 +87,28 @@ impl AstNode {
             AstNode::Node { ref op_type, .. } => match self.operand_values() {
                 Err(reason) => Err(reason),
                 Ok(operand_values) => match op_type.as_ref() {
-                    "+" => infix_operator_two_ints(
-                        |a: i64, b: i64| checked_binop(|| a.checked_add(b), "+"),
-                        &operand_values,
-                    ),
-                    "-" => infix_operator_two_ints(
-                        |a: i64, b: i64| checked_binop(|| a.checked_sub(b), "-"),
-                        &operand_values,
-                    ),
-                    "*" => infix_operator_two_ints(
-                        |a: i64, b: i64| checked_binop(|| a.checked_mul(b), "*"),
-                        &operand_values,
-                    ),
+                    "+" => {
+                        infix_operator_two_ints(|a: BigInt, b: BigInt| Ok(a + b), &operand_values)
+                    }
+                    "-" => {
+                        infix_operator_two_ints(|a: BigInt, b: BigInt| Ok(a - b), &operand_values)
+                    }
+                    "*" => {
+                        infix_operator_two_ints(|a: BigInt, b: BigInt| Ok(a * b), &operand_values)
+                    }
                     "/" => infix_operator_two_ints(
-                        |a: i64, b: i64| {
-                            if b == 0 {
+                        |a: BigInt, b: BigInt| {
+                            if b == BigInt::from(0) {
                                 Err("division by zero".to_owned())
                             } else {
-                                checked_binop(|| a.checked_div(b), "/")
+                                Ok(a / b)
                             }
                         },
                         &operand_values,
                     ),
                     "%" => infix_operator_two_ints(
-                        |a: i64, b: i64| {
-                            if b == 0 {
+                        |a: BigInt, b: BigInt| {
+                            if b == BigInt::from(0) {
                                 Err("division by zero".to_owned())
                             } else {
                                 Ok(a % b)
@@ -119,32 +117,32 @@ impl AstNode {
                         &operand_values,
                     ),
                     "=" => infix_operator_two_ints_or_two_strings(
-                        |a: i64, b: i64| Ok(bool_as_int(a == b)),
+                        |a: BigInt, b: BigInt| Ok(bool_as_int(a == b)),
                         |a: &String, b: &String| Ok(bool_as_string(a == b)),
                         &operand_values,
                     ),
                     "!=" => infix_operator_two_ints_or_two_strings(
-                        |a: i64, b: i64| Ok(bool_as_int(a != b)),
+                        |a: BigInt, b: BigInt| Ok(bool_as_int(a != b)),
                         |a: &String, b: &String| Ok(bool_as_string(a != b)),
                         &operand_values,
                     ),
                     "<" => infix_operator_two_ints_or_two_strings(
-                        |a: i64, b: i64| Ok(bool_as_int(a < b)),
+                        |a: BigInt, b: BigInt| Ok(bool_as_int(a < b)),
                         |a: &String, b: &String| Ok(bool_as_string(a < b)),
                         &operand_values,
                     ),
                     ">" => infix_operator_two_ints_or_two_strings(
-                        |a: i64, b: i64| Ok(bool_as_int(a > b)),
+                        |a: BigInt, b: BigInt| Ok(bool_as_int(a > b)),
                         |a: &String, b: &String| Ok(bool_as_string(a > b)),
                         &operand_values,
                     ),
                     "<=" => infix_operator_two_ints_or_two_strings(
-                        |a: i64, b: i64| Ok(bool_as_int(a <= b)),
+                        |a: BigInt, b: BigInt| Ok(bool_as_int(a <= b)),
                         |a: &String, b: &String| Ok(bool_as_string(a <= b)),
                         &operand_values,
                     ),
                     ">=" => infix_operator_two_ints_or_two_strings(
-                        |a: i64, b: i64| Ok(bool_as_int(a >= b)),
+                        |a: BigInt, b: BigInt| Ok(bool_as_int(a >= b)),
                         |a: &String, b: &String| Ok(bool_as_string(a >= b)),
                         &operand_values,
                     ),
@@ -420,24 +418,14 @@ fn move_till_match_paren(
     }
 }
 
-fn checked_binop<F: Fn() -> Option<T>, T>(cb: F, op: &str) -> Result<T, String> {
-    match cb() {
-        Some(v) => Ok(v),
-        None => Err(format!("{}: Numerical result out of range", op)),
-    }
-}
-
 fn infix_operator_two_ints<F>(f: F, values: &[String]) -> Result<String, String>
 where
-    F: Fn(i64, i64) -> Result<i64, String>,
+    F: Fn(BigInt, BigInt) -> Result<BigInt, String>,
 {
     assert!(values.len() == 2);
-    if let Ok(left) = values[0].parse::<i64>() {
-        if let Ok(right) = values[1].parse::<i64>() {
-            return match f(left, right) {
-                Ok(result) => Ok(result.to_string()),
-                Err(reason) => Err(reason),
-            };
+    if let Ok(left) = values[0].parse::<BigInt>() {
+        if let Ok(right) = values[1].parse::<BigInt>() {
+            return f(left, right).map(|big_int| big_int.to_string());
         }
     }
     Err("Expected an integer operand".to_string())
@@ -449,13 +437,14 @@ fn infix_operator_two_ints_or_two_strings<FI, FS>(
     values: &[String],
 ) -> Result<String, String>
 where
-    FI: Fn(i64, i64) -> Result<i64, String>,
+    FI: Fn(BigInt, BigInt) -> Result<u8, String>,
     FS: Fn(&String, &String) -> Result<String, String>,
 {
     assert!(values.len() == 2);
-    if let (Some(a_int), Some(b_int)) =
-        (values[0].parse::<i64>().ok(), values[1].parse::<i64>().ok())
-    {
+    if let (Some(a_int), Some(b_int)) = (
+        values[0].parse::<BigInt>().ok(),
+        values[1].parse::<BigInt>().ok(),
+    ) {
         match fi(a_int, b_int) {
             Ok(result) => Ok(result.to_string()),
             Err(reason) => Err(reason),
@@ -553,7 +542,7 @@ fn prefix_operator_substr(values: &[String]) -> Result<String, String> {
     Ok(out_str)
 }
 
-fn bool_as_int(b: bool) -> i64 {
+fn bool_as_int(b: bool) -> u8 {
     if b {
         1
     } else {
