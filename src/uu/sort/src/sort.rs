@@ -64,6 +64,17 @@ static OPT_NUMERIC_SORT: &str = "numeric-sort";
 static OPT_GENERAL_NUMERIC_SORT: &str = "general-numeric-sort";
 static OPT_VERSION_SORT: &str = "version-sort";
 
+static OPT_SORT: &str = "sort";
+
+static ALL_SORT_MODES: &[&str] = &[
+    OPT_GENERAL_NUMERIC_SORT,
+    OPT_HUMAN_NUMERIC_SORT,
+    OPT_MONTH_SORT,
+    OPT_NUMERIC_SORT,
+    OPT_VERSION_SORT,
+    OPT_RANDOM,
+];
+
 static OPT_DICTIONARY_ORDER: &str = "dictionary-order";
 static OPT_MERGE: &str = "merge";
 static OPT_CHECK: &str = "check";
@@ -105,6 +116,7 @@ enum SortMode {
     GeneralNumeric,
     Month,
     Version,
+    Random,
     Default,
 }
 #[derive(Clone)]
@@ -122,7 +134,6 @@ pub struct GlobalSettings {
     unique: bool,
     check: bool,
     check_silent: bool,
-    random: bool,
     salt: String,
     selectors: Vec<FieldSelector>,
     separator: Option<char>,
@@ -191,7 +202,6 @@ impl Default for GlobalSettings {
             unique: false,
             check: false,
             check_silent: false,
-            random: false,
             salt: String::new(),
             selectors: vec![],
             separator: None,
@@ -209,7 +219,6 @@ struct KeySettings {
     ignore_case: bool,
     dictionary_order: bool,
     ignore_non_printing: bool,
-    random: bool,
     reverse: bool,
 }
 
@@ -220,7 +229,6 @@ impl From<&GlobalSettings> for KeySettings {
             ignore_blanks: settings.ignore_blanks,
             ignore_case: settings.ignore_case,
             ignore_non_printing: settings.ignore_non_printing,
-            random: settings.random,
             reverse: settings.reverse,
             dictionary_order: settings.dictionary_order,
         }
@@ -398,7 +406,7 @@ impl<'a> Line<'a> {
                 }
             }
         }
-        if !(settings.random
+        if !(settings.mode == SortMode::Random
             || settings.stable
             || settings.unique
             || !(settings.dictionary_order
@@ -502,12 +510,10 @@ impl KeyPosition {
                     'h' => settings.mode = SortMode::HumanNumeric,
                     'i' => settings.ignore_non_printing = true,
                     'n' => settings.mode = SortMode::Numeric,
-                    'R' => settings.random = true,
+                    'R' => settings.mode = SortMode::Random,
                     'r' => settings.reverse = true,
                     'V' => settings.mode = SortMode::Version,
-                    c => {
-                        crash!(1, "invalid option for key: `{}`", c)
-                    }
+                    c => crash!(1, "invalid option for key: `{}`", c),
                 }
                 // All numeric sorts and month sort conflict with dictionary_order and ignore_non_printing.
                 // Instad of reporting an error, let them overwrite each other.
@@ -526,7 +532,9 @@ impl KeyPosition {
                             | SortMode::GeneralNumeric
                             | SortMode::Month => SortMode::Default,
                             // Only SortMode::Default and SortMode::Version work with dictionary_order and ignore_non_printing
-                            m @ SortMode::Default | m @ SortMode::Version => m,
+                            m @ SortMode::Default
+                            | m @ SortMode::Version
+                            | m @ SortMode::Random => m,
                         }
                     }
                     _ => {}
@@ -720,6 +728,16 @@ With no FILE, or when FILE is -, read standard input.",
     )
 }
 
+fn make_sort_mode_arg<'a, 'b>(mode: &'a str, short: &'b str, help: &'b str) -> Arg<'a, 'b> {
+    let mut arg = Arg::with_name(mode).short(short).long(mode).help(help);
+    for possible_mode in ALL_SORT_MODES {
+        if *possible_mode != mode {
+            arg = arg.conflicts_with(possible_mode);
+        }
+    }
+    arg
+}
+
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
@@ -732,34 +750,62 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .about(ABOUT)
         .usage(&usage[..])
         .arg(
-            Arg::with_name(OPT_HUMAN_NUMERIC_SORT)
-                .short("h")
-                .long(OPT_HUMAN_NUMERIC_SORT)
-                .help("compare according to human readable sizes, eg 1M > 100k"),
+            Arg::with_name(OPT_SORT)
+                .long(OPT_SORT)
+                .takes_value(true)
+                .possible_values(
+                    &[
+                        "general-numeric",
+                        "human-numeric",
+                        "month",
+                        "numeric",
+                        "version",
+                        "random",
+                    ]
+                )
+                .conflicts_with_all(ALL_SORT_MODES)
         )
         .arg(
-            Arg::with_name(OPT_MONTH_SORT)
-                .short("M")
-                .long(OPT_MONTH_SORT)
-                .help("compare according to month name abbreviation"),
+            make_sort_mode_arg(
+                OPT_HUMAN_NUMERIC_SORT,
+                "h",
+                "compare according to human readable sizes, eg 1M > 100k"
+            ),
         )
         .arg(
-            Arg::with_name(OPT_NUMERIC_SORT)
-                .short("n")
-                .long(OPT_NUMERIC_SORT)
-                .help("compare according to string numerical value"),
+            make_sort_mode_arg(
+                OPT_MONTH_SORT,
+                "M",
+                "compare according to month name abbreviation"
+            ),
         )
         .arg(
-            Arg::with_name(OPT_GENERAL_NUMERIC_SORT)
-                .short("g")
-                .long(OPT_GENERAL_NUMERIC_SORT)
-                .help("compare according to string general numerical value"),
+            make_sort_mode_arg(
+                OPT_NUMERIC_SORT,
+                "n",
+                "compare according to string numerical value"
+            ),
         )
         .arg(
-            Arg::with_name(OPT_VERSION_SORT)
-                .short("V")
-                .long(OPT_VERSION_SORT)
-                .help("Sort by SemVer version number, eg 1.12.2 > 1.1.2"),
+            make_sort_mode_arg(
+                OPT_GENERAL_NUMERIC_SORT,
+                "g",
+                "compare according to string general numerical value"
+            ),
+        )
+        .arg(
+            make_sort_mode_arg(
+                OPT_VERSION_SORT,
+                "V",
+                "Sort by SemVer version number, eg 1.12.2 > 1.1.2",
+            ),
+        )
+        .arg(
+            make_sort_mode_arg(
+                OPT_RANDOM,
+                "R",
+                "shuffle in random order",
+            ),
         )
         .arg(
             Arg::with_name(OPT_DICTIONARY_ORDER)
@@ -812,12 +858,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("write output to FILENAME instead of stdout")
                 .takes_value(true)
                 .value_name("FILENAME"),
-        )
-        .arg(
-            Arg::with_name(OPT_RANDOM)
-                .short("R")
-                .long(OPT_RANDOM)
-                .help("shuffle in random order"),
         )
         .arg(
             Arg::with_name(OPT_REVERSE)
@@ -925,16 +965,25 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             .unwrap_or_default()
     };
 
-    settings.mode = if matches.is_present(OPT_HUMAN_NUMERIC_SORT) {
+    settings.mode = if matches.is_present(OPT_HUMAN_NUMERIC_SORT)
+        || matches.value_of(OPT_SORT) == Some("human-numeric")
+    {
         SortMode::HumanNumeric
-    } else if matches.is_present(OPT_MONTH_SORT) {
+    } else if matches.is_present(OPT_MONTH_SORT) || matches.value_of(OPT_SORT) == Some("month") {
         SortMode::Month
-    } else if matches.is_present(OPT_GENERAL_NUMERIC_SORT) {
+    } else if matches.is_present(OPT_GENERAL_NUMERIC_SORT)
+        || matches.value_of(OPT_SORT) == Some("general-numeric")
+    {
         SortMode::GeneralNumeric
-    } else if matches.is_present(OPT_NUMERIC_SORT) {
+    } else if matches.is_present(OPT_NUMERIC_SORT) || matches.value_of(OPT_SORT) == Some("numeric")
+    {
         SortMode::Numeric
-    } else if matches.is_present(OPT_VERSION_SORT) {
+    } else if matches.is_present(OPT_VERSION_SORT) || matches.value_of(OPT_SORT) == Some("version")
+    {
         SortMode::Version
+    } else if matches.is_present(OPT_RANDOM) || matches.value_of(OPT_SORT) == Some("random") {
+        settings.salt = get_rand_string();
+        SortMode::Random
     } else {
         SortMode::Default
     };
@@ -977,11 +1026,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     settings.reverse = matches.is_present(OPT_REVERSE);
     settings.stable = matches.is_present(OPT_STABLE);
     settings.unique = matches.is_present(OPT_UNIQUE);
-
-    if matches.is_present(OPT_RANDOM) {
-        settings.random = matches.is_present(OPT_RANDOM);
-        settings.salt = get_rand_string();
-    }
 
     if files.is_empty() {
         /* if no file, default to stdin */
@@ -1110,28 +1154,25 @@ fn compare_by<'a>(a: &Line<'a>, b: &Line<'a>, global_settings: &GlobalSettings) 
         let b_str = b_selection.slice;
         let settings = &selector.settings;
 
-        let cmp: Ordering = if settings.random {
-            random_shuffle(a_str, b_str, &global_settings.salt)
-        } else {
-            match settings.mode {
-                SortMode::Numeric | SortMode::HumanNumeric => numeric_str_cmp(
-                    (a_str, a_selection.num_cache.as_ref().unwrap().as_num_info()),
-                    (b_str, b_selection.num_cache.as_ref().unwrap().as_num_info()),
-                ),
-                SortMode::GeneralNumeric => general_numeric_compare(
-                    a_selection.num_cache.as_ref().unwrap().as_f64(),
-                    b_selection.num_cache.as_ref().unwrap().as_f64(),
-                ),
-                SortMode::Month => month_compare(a_str, b_str),
-                SortMode::Version => version_compare(a_str, b_str),
-                SortMode::Default => custom_str_cmp(
-                    a_str,
-                    b_str,
-                    settings.ignore_non_printing,
-                    settings.dictionary_order,
-                    settings.ignore_case,
-                ),
-            }
+        let cmp: Ordering = match settings.mode {
+            SortMode::Random => random_shuffle(a_str, b_str, &global_settings.salt),
+            SortMode::Numeric | SortMode::HumanNumeric => numeric_str_cmp(
+                (a_str, a_selection.num_cache.as_ref().unwrap().as_num_info()),
+                (b_str, b_selection.num_cache.as_ref().unwrap().as_num_info()),
+            ),
+            SortMode::GeneralNumeric => general_numeric_compare(
+                a_selection.num_cache.as_ref().unwrap().as_f64(),
+                b_selection.num_cache.as_ref().unwrap().as_f64(),
+            ),
+            SortMode::Month => month_compare(a_str, b_str),
+            SortMode::Version => version_compare(a_str, b_str),
+            SortMode::Default => custom_str_cmp(
+                a_str,
+                b_str,
+                settings.ignore_non_printing,
+                settings.dictionary_order,
+                settings.ignore_case,
+            ),
         };
         if cmp != Ordering::Equal {
             return if settings.reverse { cmp.reverse() } else { cmp };
@@ -1139,7 +1180,10 @@ fn compare_by<'a>(a: &Line<'a>, b: &Line<'a>, global_settings: &GlobalSettings) 
     }
 
     // Call "last resort compare" if all selectors returned Equal
-    let cmp = if global_settings.random || global_settings.stable || global_settings.unique {
+    let cmp = if global_settings.mode == SortMode::Random
+        || global_settings.stable
+        || global_settings.unique
+    {
         Ordering::Equal
     } else {
         a.line.cmp(b.line)

@@ -8,6 +8,8 @@ pub mod fs;
 pub mod fsext;
 #[cfg(feature = "parse_time")]
 pub mod parse_time;
+#[cfg(feature = "ringbuffer")]
+pub mod ringbuffer;
 #[cfg(feature = "zero-copy")]
 pub mod zero_copy;
 
