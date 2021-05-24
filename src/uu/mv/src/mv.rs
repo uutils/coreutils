@@ -291,22 +291,12 @@ fn exec(files: &[PathBuf], b: Behavior) -> i32 {
 
                     return match rename(source, target, &b) {
                         Err(e) => {
-                            let error_as_str = e.to_string();
-                            let is_perm_denied = error_as_str.contains("Permission denied");
-                            match e.kind() {
-                                _ => {
-                                    show_error!(
-                                        "cannot move ‘{}’ to ‘{}’: {}",
-                                        source.display(),
-                                        target.display(),
-                                        if is_perm_denied {
-                                            "Permission denied".to_string()
-                                        } else {
-                                            e.to_string()
-                                        }
-                                    );
-                                }
-                            }
+                            show_error!(
+                                "cannot move ‘{}’ to ‘{}’: {}",
+                                source.display(),
+                                target.display(),
+                                e.to_string()
+                            );
                             1
                         }
                         _ => 0,
@@ -367,17 +357,11 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> i3
         };
 
         if let Err(e) = rename(sourcepath, &targetpath, b) {
-            let error_as_str = e.to_string();
-            let is_perm_denied = error_as_str.contains("Permission denied");
             show_error!(
                 "cannot move ‘{}’ to ‘{}’: {}",
                 sourcepath.display(),
                 targetpath.display(),
-                if is_perm_denied {
-                    "Permission denied".to_string()
-                } else {
-                    e.to_string()
-                }
+                e.to_string()
             );
             all_successful = false;
         }
@@ -469,7 +453,13 @@ fn rename_with_fallback(from: &Path, to: &Path) -> io::Result<()> {
                 ..DirCopyOptions::new()
             };
             if let Err(err) = move_dir(from, to, &options) {
-                return Err(io::Error::new(io::ErrorKind::Other, format!("{:?}", err)));
+                return match err.kind {
+                    fs_extra::error::ErrorKind::PermissionDenied => Err(io::Error::new(
+                        io::ErrorKind::PermissionDenied,
+                        "Permission denied",
+                    )),
+                    _ => Err(io::Error::new(io::ErrorKind::Other, format!("{:?}", err))),
+                };
             }
         } else {
             fs::copy(from, to).and_then(|_| fs::remove_file(from))?;
