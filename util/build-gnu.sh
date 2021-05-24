@@ -43,7 +43,8 @@ sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${BUILDDIR//\//\\/}\$(PATH_SEPARATOR)'\"\
 sed -i 's| tr | /usr/bin/tr |' tests/init.sh
 make
 # Generate the factor tests, so they can be fixed
-for i in {00..36}
+# Used to be 36. Reduced to 20 to decrease the log size
+for i in {00..20}
 do
     make tests/factor/t${i}.sh
 done
