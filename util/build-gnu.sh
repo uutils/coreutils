@@ -58,6 +58,10 @@ sed -i -e '/tests\/misc\/invalid-opt.pl/ D' \
     -e '/tests\/misc\/help-version-getopt.sh/ D' \
     Makefile
 
+# logs are clotted because of this test
+sed -i -e '/tests\/misc\/seq-precision.sh/ D' \
+    Makefile
+
 # printf doesn't limit the values used in its arg, so this produced ~2GB of output
 sed -i '/INT_OFLOW/ D' tests/misc/printf.sh
 
