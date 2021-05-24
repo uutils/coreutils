@@ -587,6 +587,24 @@ fn test_mv_verbose() {
         ));
 }
 
+#[test]
+fn test_mv_permission_error() {
+    let scene = TestScenario::new("mkdir");
+    let folder1 = "bar";
+    let folder2 = "foo";
+    let folder_to_move = "bar/foo";
+    scene.ucmd().arg("-m444").arg(folder1).succeeds();
+    scene.ucmd().arg("-m777").arg(folder2).succeeds();
+
+    scene
+        .cmd_keepenv(util_name!())
+        .arg(folder2)
+        .arg(folder_to_move)
+        .run()
+        .stderr_str()
+        .ends_with("Permission denied");
+}
+
 // Todo:
 
 // $ at.touch a b

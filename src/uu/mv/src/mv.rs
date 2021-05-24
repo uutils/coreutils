@@ -291,12 +291,22 @@ fn exec(files: &[PathBuf], b: Behavior) -> i32 {
 
                     return match rename(source, target, &b) {
                         Err(e) => {
-                            show_error!(
-                                "cannot move ‘{}’ to ‘{}’: {}",
-                                source.display(),
-                                target.display(),
-                                e
-                            );
+                            let error_as_str = e.to_string();
+                            let is_perm_denied = error_as_str.contains("Permission denied");
+                            match e.kind() {
+                                _ => {
+                                    show_error!(
+                                        "cannot move ‘{}’ to ‘{}’: {}",
+                                        source.display(),
+                                        target.display(),
+                                        if is_perm_denied {
+                                            "Permission denied".to_string()
+                                        } else {
+                                            e.to_string()
+                                        }
+                                    );
+                                }
+                            }
                             1
                         }
                         _ => 0,
@@ -357,15 +367,22 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> i3
         };
 
         if let Err(e) = rename(sourcepath, &targetpath, b) {
+            let error_as_str = e.to_string();
+            let is_perm_denied = error_as_str.contains("Permission denied");
             show_error!(
-                "mv: cannot move ‘{}’ to ‘{}’: {}",
+                "cannot move ‘{}’ to ‘{}’: {}",
                 sourcepath.display(),
                 targetpath.display(),
-                e
+                if is_perm_denied {
+                    "Permission denied".to_string()
+                } else {
+                    e.to_string()
+                }
             );
             all_successful = false;
         }
     }
+
     if all_successful {
         0
     } else {
