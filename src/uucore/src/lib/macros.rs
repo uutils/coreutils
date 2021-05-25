@@ -47,15 +47,6 @@ macro_rules! show_warning(
     })
 );
 
-/// Show an info message to stderr in a silimar style to GNU coreutils.
-#[macro_export]
-macro_rules! show_info(
-    ($($args:tt)+) => ({
-        eprint!("{}: ", executable!());
-        eprintln!($($args)+);
-    })
-);
-
 /// Show a bad inocation help message in a similar style to GNU coreutils.
 #[macro_export]
 macro_rules! show_usage_error(

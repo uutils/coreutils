@@ -316,7 +316,7 @@ impl Chmoder {
                 show_error!("{}", err);
             }
             if self.verbose {
-                show_info!(
+                show_error!(
                     "failed to change mode of file '{}' from {:o} ({}) to {:o} ({})",
                     file.display(),
                     fperm,
@@ -328,7 +328,7 @@ impl Chmoder {
             Err(1)
         } else {
             if self.verbose || self.changes {
-                show_info!(
+                show_error!(
                     "mode of '{}' changed from {:o} ({}) to {:o} ({})",
                     file.display(),
                     fperm,
