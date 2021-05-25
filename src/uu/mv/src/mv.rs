@@ -295,7 +295,7 @@ fn exec(files: &[PathBuf], b: Behavior) -> i32 {
                                 "cannot move ‘{}’ to ‘{}’: {}",
                                 source.display(),
                                 target.display(),
-                                e
+                                e.to_string()
                             );
                             1
                         }
@@ -358,14 +358,15 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> i3
 
         if let Err(e) = rename(sourcepath, &targetpath, b) {
             show_error!(
-                "mv: cannot move ‘{}’ to ‘{}’: {}",
+                "cannot move ‘{}’ to ‘{}’: {}",
                 sourcepath.display(),
                 targetpath.display(),
-                e
+                e.to_string()
             );
             all_successful = false;
         }
     }
+
     if all_successful {
         0
     } else {
@@ -452,7 +453,13 @@ fn rename_with_fallback(from: &Path, to: &Path) -> io::Result<()> {
                 ..DirCopyOptions::new()
             };
             if let Err(err) = move_dir(from, to, &options) {
-                return Err(io::Error::new(io::ErrorKind::Other, format!("{:?}", err)));
+                return match err.kind {
+                    fs_extra::error::ErrorKind::PermissionDenied => Err(io::Error::new(
+                        io::ErrorKind::PermissionDenied,
+                        "Permission denied",
+                    )),
+                    _ => Err(io::Error::new(io::ErrorKind::Other, format!("{:?}", err))),
+                };
             }
         } else {
             fs::copy(from, to).and_then(|_| fs::remove_file(from))?;
