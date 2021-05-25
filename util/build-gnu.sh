@@ -48,6 +48,14 @@ for i in {00..20}
 do
     make tests/factor/t${i}.sh
 done
+
+# strip the long stuff
+for i in {21..36}
+do
+    sed -i -e "s/\$(tf)\/t${i}.sh//g" Makefile
+done
+
+
 grep -rl 'path_prepend_' tests/* | xargs sed -i 's|path_prepend_ ./src||'
 sed -i -e 's|^seq |/usr/bin/seq |' -e 's|sha1sum |/usr/bin/sha1sum |' tests/factor/t*sh
 
