@@ -25,7 +25,7 @@ macro_rules! executable(
 #[macro_export]
 macro_rules! show_error(
     ($($args:tt)+) => ({
-        eprint!("{}: error: ", executable!());
+        eprint!("{}: ", executable!());
         eprintln!($($args)+);
     })
 );
