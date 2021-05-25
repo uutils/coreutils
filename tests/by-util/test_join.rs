@@ -148,7 +148,7 @@ fn multitab_character() {
         .arg("-t")
         .arg("э")
         .fails()
-        .stderr_is("join: error: multi-character tab э");
+        .stderr_is("join: multi-character tab э");
 }
 
 #[test]
@@ -211,7 +211,7 @@ fn empty_format() {
         .arg("-o")
         .arg("")
         .fails()
-        .stderr_is("join: error: invalid file number in field spec: ''");
+        .stderr_is("join: invalid file number in field spec: ''");
 }
 
 #[test]

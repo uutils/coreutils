@@ -76,7 +76,7 @@ fn test_du_basics_bad_name() {
     new_ucmd!()
         .arg("bad_name")
         .succeeds() // TODO: replace with ".fails()" once `du` is fixed
-        .stderr_only("du: error: bad_name: No such file or directory\n");
+        .stderr_only("du: bad_name: No such file or directory\n");
 }
 
 #[test]

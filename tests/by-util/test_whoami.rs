@@ -5,7 +5,7 @@ use crate::common::util::*;
 // considered okay. If we are not inside the CI this calls assert!(result.success).
 //
 // From the Logs: "Build (ubuntu-18.04, x86_64-unknown-linux-gnu, feat_os_unix, use-cross)"
-// stderr: "whoami: error: failed to get username"
+// stderr: "whoami: failed to get username"
 // Maybe: "adduser --uid 1001 username" can put things right?
 fn skipping_test_is_okay(result: &CmdResult, needle: &str) -> bool {
     if !result.succeeded() {
