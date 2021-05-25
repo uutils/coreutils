@@ -1212,6 +1212,8 @@ fn compare_by<'a>(a: &Line<'a>, b: &Line<'a>, global_settings: &GlobalSettings) 
 fn get_leading_gen(input: &str) -> Range<usize> {
     let trimmed = input.trim_start();
     let leading_whitespace_len = input.len() - trimmed.len();
+
+    // check for inf, -inf and nan
     for allowed_prefix in &["inf", "-inf", "nan"] {
         if trimmed.is_char_boundary(allowed_prefix.len())
             && trimmed[..allowed_prefix.len()].eq_ignore_ascii_case(allowed_prefix)
@@ -1220,10 +1222,11 @@ fn get_leading_gen(input: &str) -> Range<usize> {
         }
     }
     // Make this iter peekable to see if next char is numeric
-    let mut char_indices = trimmed.char_indices().peekable();
+    let mut char_indices = itertools::peek_nth(trimmed.char_indices());
 
     let first = char_indices.peek();
 
+    // TODO: replace with matches! macro once MinRustV is 1.42 or higher (also the map_or below)
     if first.map_or(false, |&(_, c)| c == NEGATIVE || c == POSITIVE) {
         char_indices.next();
     }
@@ -1234,16 +1237,28 @@ fn get_leading_gen(input: &str) -> Range<usize> {
         if c.is_ascii_digit() {
             continue;
         }
-        if c == DECIMAL_PT && !had_decimal_pt {
+        if c == DECIMAL_PT && !had_decimal_pt && !had_e_notation {
             had_decimal_pt = true;
             continue;
         }
-        let next_char_numeric = char_indices
-            .peek()
-            .map_or(false, |(_, c)| c.is_ascii_digit());
-        if (c == 'e' || c == 'E') && !had_e_notation && next_char_numeric {
-            had_e_notation = true;
-            continue;
+        if (c == 'e' || c == 'E') && !had_e_notation {
+            // we can only consume the 'e' if what follow is either a digit, or a sign followed by a digit.
+            if let Some(&(_, next_char)) = char_indices.peek() {
+                if (next_char == '+' || next_char == '-')
+                    && char_indices
+                        .peek_nth(2)
+                        .map_or(false, |&(_, c)| c.is_ascii_digit())
+                {
+                    // Consume the sign. The following digits will be consumed by the main loop.
+                    char_indices.next();
+                    had_e_notation = true;
+                    continue;
+                }
+                if next_char.is_ascii_digit() {
+                    had_e_notation = true;
+                    continue;
+                }
+            }
         }
         return leading_whitespace_len..(leading_whitespace_len + idx);
     }
