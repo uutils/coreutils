@@ -157,7 +157,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     if matches.is_present(OPT_TMPDIR) && PathBuf::from(prefix).is_absolute() {
-        show_info!(
+        show_error!(
             "invalid template, ‘{}’; with --tmpdir, it may not be absolute",
             template
         );
@@ -229,7 +229,7 @@ fn exec(
             }
             Err(e) => {
                 if !quiet {
-                    show_info!("{}: {}", e, tmpdir.display());
+                    show_error!("{}: {}", e, tmpdir.display());
                 }
                 return 1;
             }
@@ -244,7 +244,7 @@ fn exec(
         Ok(f) => f,
         Err(e) => {
             if !quiet {
-                show_info!("failed to create tempfile: {}", e);
+                show_error!("failed to create tempfile: {}", e);
             }
             return 1;
         }

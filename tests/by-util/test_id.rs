@@ -7,7 +7,7 @@ use crate::common::util::*;
 // From the Logs: "Build (ubuntu-18.04, x86_64-unknown-linux-gnu, feat_os_unix, use-cross)"
 // stderr: "whoami: cannot find name for user ID 1001"
 // Maybe: "adduser --uid 1001 username" can put things right?
-// stderr = id: error: Could not find uid 1001: No such id: 1001
+// stderr = id: Could not find uid 1001: No such id: 1001
 fn skipping_test_is_okay(result: &CmdResult, needle: &str) -> bool {
     if !result.succeeded() {
         println!("result.stdout = {}", result.stdout_str());

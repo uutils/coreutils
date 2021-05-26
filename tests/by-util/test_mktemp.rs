@@ -120,7 +120,7 @@ fn test_mktemp_mktemp_t() {
         .arg(TEST_TEMPLATE8)
         .fails()
         .no_stdout()
-        .stderr_contains("error: suffix cannot contain any path separators");
+        .stderr_contains("suffix cannot contain any path separators");
 }
 
 #[test]

@@ -105,7 +105,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if out_format == OutputFmt::Unknown {
         match guess_syntax() {
             OutputFmt::Unknown => {
-                show_info!("no SHELL environment variable, and no shell type option given");
+                show_error!("no SHELL environment variable, and no shell type option given");
                 return 1;
             }
             fmt => out_format = fmt,
@@ -130,7 +130,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 )
             }
             Err(e) => {
-                show_info!("{}: {}", matches.free[0], e);
+                show_error!("{}: {}", matches.free[0], e);
                 return 1;
             }
         }
@@ -141,7 +141,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             0
         }
         Err(s) => {
-            show_info!("{}", s);
+            show_error!("{}", s);
             1
         }
     }

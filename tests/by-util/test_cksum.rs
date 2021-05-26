@@ -66,7 +66,7 @@ fn test_invalid_file() {
         .arg(folder_name)
         .fails()
         .no_stdout()
-        .stderr_contains("cksum: error: 'asdf' No such file or directory");
+        .stderr_contains("cksum: 'asdf' No such file or directory");
 
     // Then check when the file is of an invalid type
     at.mkdir(folder_name);
@@ -74,7 +74,7 @@ fn test_invalid_file() {
         .arg(folder_name)
         .fails()
         .no_stdout()
-        .stderr_contains("cksum: error: 'asdf' Is a directory");
+        .stderr_contains("cksum: 'asdf' Is a directory");
 }
 
 // Make sure crc is correct for files larger than 32 bytes

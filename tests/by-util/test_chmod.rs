@@ -338,7 +338,7 @@ fn test_chmod_preserve_root() {
         .arg("755")
         .arg("/")
         .fails()
-        .stderr_contains(&"chmod: error: it is dangerous to operate recursively on '/'");
+        .stderr_contains(&"chmod: it is dangerous to operate recursively on '/'");
 }
 
 #[test]

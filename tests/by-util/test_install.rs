@@ -301,7 +301,7 @@ fn test_install_target_new_file_with_group() {
         .arg(format!("{}/{}", dir, file))
         .run();
 
-    if is_ci() && result.stderr_str().contains("error: no such group:") {
+    if is_ci() && result.stderr_str().contains("no such group:") {
         // In the CI, some server are failing to return the group.
         // As seems to be a configuration issue, ignoring it
         return;
@@ -328,7 +328,7 @@ fn test_install_target_new_file_with_owner() {
         .arg(format!("{}/{}", dir, file))
         .run();
 
-    if is_ci() && result.stderr_str().contains("error: no such user:") {
+    if is_ci() && result.stderr_str().contains("no such user:") {
         // In the CI, some server are failing to return the user id.
         // As seems to be a configuration issue, ignoring it
         return;

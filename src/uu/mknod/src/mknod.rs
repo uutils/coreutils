@@ -136,7 +136,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let mode = match get_mode(&matches) {
         Ok(mode) => mode,
         Err(err) => {
-            show_info!("{}", err);
+            show_error!("{}", err);
             return 1;
         }
     };

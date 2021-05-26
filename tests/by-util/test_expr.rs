@@ -17,11 +17,11 @@ fn test_complex_arithmetic() {
         .args(&["9223372036854775807", "+", "9223372036854775807"])
         .run();
     run.stdout_is("");
-    run.stderr_is("expr: error: +: Numerical result out of range");
+    run.stderr_is("expr: +: Numerical result out of range");
 
     let run = new_ucmd!().args(&["9", "/", "0"]).run();
     run.stdout_is("");
-    run.stderr_is("expr: error: division by zero");
+    run.stderr_is("expr: division by zero");
 }
 
 #[test]
