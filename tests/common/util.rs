@@ -875,7 +875,7 @@ impl UCommand {
             code: prog.status.code(),
             success: prog.status.success(),
             stdout: prog.stdout,
-            stderr: prog.stderr
+            stderr: prog.stderr,
         }
     }
 
