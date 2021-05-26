@@ -373,7 +373,6 @@ fn wc(inputs: Vec<Input>, settings: &Settings) -> Result<(), u32> {
     let max_width = max_width(&inputs);
 
     let mut total_word_count = WordCount::default();
-    let mut results = vec![];
 
     let num_inputs = inputs.len();
 
@@ -384,10 +383,7 @@ fn wc(inputs: Vec<Input>, settings: &Settings) -> Result<(), u32> {
             WordCount::default()
         });
         total_word_count += word_count;
-        results.push(word_count.with_title(input.to_title()));
-    }
-
-    for result in &results {
+        let result = word_count.with_title(input.to_title());
         if let Err(err) = print_stats(settings, &result, max_width) {
             show_warning!(
                 "failed to print result for {}: {}",

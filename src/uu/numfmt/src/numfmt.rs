@@ -216,7 +216,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     match result {
         Err(e) => {
             std::io::stdout().flush().expect("error flushing stdout");
-            show_info!("{}", e);
+            show_error!("{}", e);
             1
         }
         _ => 0,

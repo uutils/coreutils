@@ -199,7 +199,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if recursive {
         if bit_flag == FTS_PHYSICAL {
             if derefer == 1 {
-                show_info!("-R --dereference requires -H or -L");
+                show_error!("-R --dereference requires -H or -L");
                 return 1;
             }
             derefer = 0;
@@ -227,7 +227,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Ok((Some(uid), Some(gid))) => IfFrom::UserGroup(uid, gid),
             Ok((None, None)) => IfFrom::All,
             Err(e) => {
-                show_info!("{}", e);
+                show_error!("{}", e);
                 return 1;
             }
         }
@@ -244,7 +244,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 dest_uid = Some(meta.uid());
             }
             Err(e) => {
-                show_info!("failed to get attributes of '{}': {}", file, e);
+                show_error!("failed to get attributes of '{}': {}", file, e);
                 return 1;
             }
         }
@@ -255,7 +255,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 dest_gid = g;
             }
             Err(e) => {
-                show_info!("{}", e);
+                show_error!("{}", e);
                 return 1;
             }
         }
@@ -377,8 +377,8 @@ impl Chowner {
 
             if let Some(p) = may_exist {
                 if p.parent().is_none() {
-                    show_info!("it is dangerous to operate recursively on '/'");
-                    show_info!("use --no-preserve-root to override this failsafe");
+                    show_error!("it is dangerous to operate recursively on '/'");
+                    show_error!("use --no-preserve-root to override this failsafe");
                     return 1;
                 }
             }
@@ -395,13 +395,13 @@ impl Chowner {
             ) {
                 Ok(n) => {
                     if !n.is_empty() {
-                        show_info!("{}", n);
+                        show_error!("{}", n);
                     }
                     0
                 }
                 Err(e) => {
                     if self.verbosity != Verbosity::Silent {
-                        show_info!("{}", e);
+                        show_error!("{}", e);
                     }
                     1
                 }
@@ -424,7 +424,7 @@ impl Chowner {
         for entry in WalkDir::new(root).follow_links(follow).min_depth(1) {
             let entry = unwrap!(entry, e, {
                 ret = 1;
-                show_info!("{}", e);
+                show_error!("{}", e);
                 continue;
             });
             let path = entry.path();
@@ -450,13 +450,13 @@ impl Chowner {
             ) {
                 Ok(n) => {
                     if !n.is_empty() {
-                        show_info!("{}", n);
+                        show_error!("{}", n);
                     }
                     0
                 }
                 Err(e) => {
                     if self.verbosity != Verbosity::Silent {
-                        show_info!("{}", e);
+                        show_error!("{}", e);
                     }
                     1
                 }
@@ -472,7 +472,7 @@ impl Chowner {
             unwrap!(path.metadata(), e, {
                 match self.verbosity {
                     Silent => (),
-                    _ => show_info!("cannot access '{}': {}", path.display(), e),
+                    _ => show_error!("cannot access '{}': {}", path.display(), e),
                 }
                 return None;
             })
@@ -480,7 +480,7 @@ impl Chowner {
             unwrap!(path.symlink_metadata(), e, {
                 match self.verbosity {
                     Silent => (),
-                    _ => show_info!("cannot dereference '{}': {}", path.display(), e),
+                    _ => show_error!("cannot dereference '{}': {}", path.display(), e),
                 }
                 return None;
             })

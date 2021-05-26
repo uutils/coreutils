@@ -472,7 +472,7 @@ fn test_mv_overwrite_nonempty_dir() {
     at.touch(dummy);
     // Not same error as GNU; the error message is a rust builtin
     // TODO: test (and implement) correct error message (or at least decide whether to do so)
-    // Current: "mv: error: couldn't rename path (Directory not empty; from=a; to=b)"
+    // Current: "mv: couldn't rename path (Directory not empty; from=a; to=b)"
     // GNU:     "mv: cannot move ‘a’ to ‘b’: Directory not empty"
 
     // Verbose output for the move should not be shown on failure
@@ -539,7 +539,7 @@ fn test_mv_errors() {
         .arg(dir)
         .fails()
         .stderr_is(format!(
-            "mv: error: cannot overwrite directory ‘{}’ with non-directory\n",
+            "mv: cannot overwrite directory ‘{}’ with non-directory\n",
             dir
         ));
 
@@ -585,6 +585,24 @@ fn test_mv_verbose() {
             "‘{}’ -> ‘{}’ (backup: ‘{}~’)\n",
             file_a, file_b, file_b
         ));
+}
+
+#[test]
+fn test_mv_permission_error() {
+    let scene = TestScenario::new("mkdir");
+    let folder1 = "bar";
+    let folder2 = "foo";
+    let folder_to_move = "bar/foo";
+    scene.ucmd().arg("-m444").arg(folder1).succeeds();
+    scene.ucmd().arg("-m777").arg(folder2).succeeds();
+
+    scene
+        .cmd_keepenv(util_name!())
+        .arg(folder2)
+        .arg(folder_to_move)
+        .run()
+        .stderr_str()
+        .ends_with("Permission denied");
 }
 
 // Todo:

@@ -166,7 +166,7 @@ impl Write for MultiWriter {
             let result = writer.write_all(buf);
             match result {
                 Err(f) => {
-                    show_info!("{}: {}", writer.name, f.to_string());
+                    show_error!("{}: {}", writer.name, f.to_string());
                     false
                 }
                 _ => true,
@@ -180,7 +180,7 @@ impl Write for MultiWriter {
             let result = writer.flush();
             match result {
                 Err(f) => {
-                    show_info!("{}: {}", writer.name, f.to_string());
+                    show_error!("{}: {}", writer.name, f.to_string());
                     false
                 }
                 _ => true,
@@ -213,7 +213,7 @@ impl Read for NamedReader {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         match self.inner.read(buf) {
             Err(f) => {
-                show_info!("{}: {}", Path::new("stdin").display(), f.to_string());
+                show_error!("{}: {}", Path::new("stdin").display(), f.to_string());
                 Err(f)
             }
             okay => okay,

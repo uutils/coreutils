@@ -101,7 +101,7 @@ fn exec(dirs: Vec<String>, recursive: bool, mode: u16, verbose: bool) -> i32 {
         if !recursive {
             if let Some(parent) = path.parent() {
                 if parent != empty && !parent.exists() {
-                    show_info!(
+                    show_error!(
                         "cannot create directory '{}': No such file or directory",
                         path.display()
                     );
@@ -125,7 +125,7 @@ fn mkdir(path: &Path, recursive: bool, mode: u16, verbose: bool) -> i32 {
         fs::create_dir
     };
     if let Err(e) = create_dir(path) {
-        show_info!("{}: {}", path.display(), e.to_string());
+        show_error!("{}: {}", path.display(), e.to_string());
         return 1;
     }
 
