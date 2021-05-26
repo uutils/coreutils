@@ -540,6 +540,18 @@ fn test_cp_backup_off() {
 }
 
 #[test]
+fn test_cp_backup_no_clobber_conflicting_options() {
+    let (_, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("--backup")
+        .arg("--no-clobber")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .fails()
+        .stderr_is("cp: options --backup and --no-clobber are mutually exclusive\nTry 'cp --help' for more information.");
+}
+
+#[test]
 fn test_cp_deref_conflicting_options() {
     new_ucmd!()
         .arg("-LP")

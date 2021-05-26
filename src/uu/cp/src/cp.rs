@@ -463,6 +463,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .get_matches_from(args);
 
     let options = crash_if_err!(EXIT_ERR, Options::from_matches(&matches));
+
+    if options.overwrite == OverwriteMode::NoClobber && options.backup != BackupMode::NoBackup {
+        show_usage_error!("options --backup and --no-clobber are mutually exclusive");
+        return 1;
+    }
+
     let paths: Vec<String> = matches
         .values_of(OPT_PATHS)
         .map(|v| v.map(ToString::to_string).collect())
@@ -592,17 +598,6 @@ impl Options {
         let backup_suffix = backup_control::determine_backup_suffix(matches.value_of(OPT_SUFFIX));
 
         let overwrite = OverwriteMode::from_matches(matches);
-
-        if overwrite == OverwriteMode::NoClobber && backup_mode != BackupMode::NoBackup {
-            show_error!(
-                "options --backup and --no-clobber are mutually exclusive\n\
-                 Try '{} --help' for more information.",
-                executable!()
-            );
-            return Err(Error::Error(
-                "options --backup and --no-clobber are mutually exclusive".to_owned(),
-            ));
-        }
 
         // Parse target directory options
         let no_target_dir = matches.is_present(OPT_NO_TARGET_DIRECTORY);
