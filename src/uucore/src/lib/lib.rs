@@ -25,6 +25,7 @@ mod features; // feature-gated code modules
 mod mods; // core cross-platform modules
 
 // * cross-platform modules
+pub use crate::mods::backup_control;
 pub use crate::mods::coreopts;
 pub use crate::mods::os;
 pub use crate::mods::panic;
