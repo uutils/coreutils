@@ -37,5 +37,5 @@ fn test_sync_no_existing_files() {
         .arg("--data")
         .arg("do-no-exist")
         .fails()
-        .stderr_contains("error: cannot stat");
+        .stderr_contains("cannot stat");
 }

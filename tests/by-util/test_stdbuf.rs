@@ -26,7 +26,7 @@ fn test_stdbuf_line_buffered_stdout() {
 #[test]
 fn test_stdbuf_no_buffer_option_fails() {
     new_ucmd!().args(&["head"]).fails().stderr_is(
-        "The following required arguments were not provided:\n    \
+        "error: The following required arguments were not provided:\n    \
          --error <MODE>\n    \
          --input <MODE>\n    \
          --output <MODE>\n\n\
