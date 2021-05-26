@@ -252,6 +252,40 @@ fn test_mv_simple_backup() {
 }
 
 #[test]
+fn test_mv_simple_backup_with_file_extension() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file_a = "test_mv_simple_backup_file_a.txt";
+    let file_b = "test_mv_simple_backup_file_b.txt";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    ucmd.arg("-b")
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
+    assert!(at.file_exists(&format!("{}~", file_b)));
+}
+
+#[test]
+fn test_mv_arg_backup_arg_first() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file_a = "test_mv_simple_backup_file_a";
+    let file_b = "test_mv_simple_backup_file_b";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    ucmd.arg("--backup").arg(file_a).arg(file_b).succeeds();
+
+    assert!(!at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
+    assert!(at.file_exists(&format!("{}~", file_b)));
+}
+
+#[test]
 fn test_mv_custom_backup_suffix() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_custom_backup_suffix_file_a";
@@ -293,7 +327,7 @@ fn test_mv_custom_backup_suffix_via_env() {
 }
 
 #[test]
-fn test_mv_backup_numbering() {
+fn test_mv_backup_numbered_with_t() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_backup_numbering_file_a";
     let file_b = "test_mv_backup_numbering_file_b";
@@ -301,6 +335,25 @@ fn test_mv_backup_numbering() {
     at.touch(file_a);
     at.touch(file_b);
     ucmd.arg("--backup=t")
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
+    assert!(at.file_exists(&format!("{}.~1~", file_b)));
+}
+
+#[test]
+fn test_mv_backup_numbered() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file_a = "test_mv_backup_numbering_file_a";
+    let file_b = "test_mv_backup_numbering_file_b";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    ucmd.arg("--backup=numbered")
         .arg(file_a)
         .arg(file_b)
         .succeeds()
@@ -331,6 +384,67 @@ fn test_mv_backup_existing() {
 }
 
 #[test]
+fn test_mv_backup_nil() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file_a = "test_mv_backup_numbering_file_a";
+    let file_b = "test_mv_backup_numbering_file_b";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    ucmd.arg("--backup=nil")
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
+    assert!(at.file_exists(&format!("{}~", file_b)));
+}
+
+#[test]
+fn test_mv_numbered_if_existing_backup_existing() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file_a = "test_mv_backup_numbering_file_a";
+    let file_b = "test_mv_backup_numbering_file_b";
+    let file_b_backup = "test_mv_backup_numbering_file_b.~1~";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    at.touch(file_b_backup);
+    ucmd.arg("--backup=existing")
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file_b));
+    assert!(at.file_exists(file_b_backup));
+    assert!(at.file_exists(&*format!("{}.~2~", file_b)));
+}
+
+#[test]
+fn test_mv_numbered_if_existing_backup_nil() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file_a = "test_mv_backup_numbering_file_a";
+    let file_b = "test_mv_backup_numbering_file_b";
+    let file_b_backup = "test_mv_backup_numbering_file_b.~1~";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    at.touch(file_b_backup);
+    ucmd.arg("--backup=nil")
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file_b));
+    assert!(at.file_exists(file_b_backup));
+    assert!(at.file_exists(&*format!("{}.~2~", file_b)));
+}
+
+#[test]
 fn test_mv_backup_simple() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_backup_numbering_file_a";
@@ -339,6 +453,25 @@ fn test_mv_backup_simple() {
     at.touch(file_a);
     at.touch(file_b);
     ucmd.arg("--backup=simple")
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
+    assert!(at.file_exists(&format!("{}~", file_b)));
+}
+
+#[test]
+fn test_mv_backup_never() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file_a = "test_mv_backup_numbering_file_a";
+    let file_b = "test_mv_backup_numbering_file_b";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    ucmd.arg("--backup=never")
         .arg(file_a)
         .arg(file_b)
         .succeeds()
@@ -369,17 +502,14 @@ fn test_mv_backup_none() {
 }
 
 #[test]
-fn test_mv_existing_backup() {
+fn test_mv_backup_off() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let file_a = "test_mv_existing_backup_file_a";
-    let file_b = "test_mv_existing_backup_file_b";
-    let file_b_backup = "test_mv_existing_backup_file_b.~1~";
-    let resulting_backup = "test_mv_existing_backup_file_b.~2~";
+    let file_a = "test_mv_backup_numbering_file_a";
+    let file_b = "test_mv_backup_numbering_file_b";
 
     at.touch(file_a);
     at.touch(file_b);
-    at.touch(file_b_backup);
-    ucmd.arg("--backup=nil")
+    ucmd.arg("--backup=off")
         .arg(file_a)
         .arg(file_b)
         .succeeds()
@@ -387,8 +517,19 @@ fn test_mv_existing_backup() {
 
     assert!(!at.file_exists(file_a));
     assert!(at.file_exists(file_b));
-    assert!(at.file_exists(file_b_backup));
-    assert!(at.file_exists(resulting_backup));
+    assert!(!at.file_exists(&format!("{}~", file_b)));
+}
+
+#[test]
+fn test_mv_backup_no_clobber_conflicting_options() {
+    let (_, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("--backup")
+        .arg("--no-clobber")
+        .arg("file1")
+        .arg("file2")
+        .fails()
+        .stderr_is("mv: options --backup and --no-clobber are mutually exclusive\nTry 'mv --help' for more information.");
 }
 
 #[test]
