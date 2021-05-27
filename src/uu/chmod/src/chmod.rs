@@ -262,8 +262,10 @@ impl Chmoder {
                         );
                     }
                     return Ok(());
+                } else if err.kind() == std::io::ErrorKind::PermissionDenied {
+                    show_error!("'{}': Permission denied", file.display());
                 } else {
-                    show_error!("{}: '{}'", err, file.display());
+                    show_error!("'{}': {}", file.display(), err);
                 }
                 return Err(1);
             }
