@@ -18,6 +18,8 @@
 
 // spell-checker:ignore (ToDO) paren
 
+use num_bigint::BigInt;
+
 #[derive(Debug, Clone)]
 pub enum Token {
     Value {
@@ -58,7 +60,7 @@ impl Token {
     }
     fn is_a_number(&self) -> bool {
         match *self {
-            Token::Value { ref value, .. } => value.parse::<i64>().is_ok(),
+            Token::Value { ref value, .. } => value.parse::<BigInt>().is_ok(),
             _ => false,
         }
     }
