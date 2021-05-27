@@ -65,9 +65,8 @@ macro_rules! icf (
     {
         IConvFlags {
             ctable: $ctable,
-            cbs: None,
-            block: false,
-            unblock: false,
+            block: None,
+            unblock: None,
             swab: false,
             sync: false,
             noerror: false,
@@ -87,6 +86,7 @@ macro_rules! make_spec_test (
                         $test_name,
                         Input {
                             src: $src,
+                            non_ascii: false,
                             ibs: 512,
                             xfer_stats: StatusLevel::None,
                             cflags: icf!(),
@@ -132,6 +132,7 @@ macro_rules! make_conv_test (
                         $test_name,
                         Input {
                             src: $src,
+                            non_ascii: false,
                             ibs: 512,
                             xfer_stats: StatusLevel::None,
                             cflags: icf!($ctable),
@@ -156,6 +157,7 @@ macro_rules! make_icf_test (
                         $test_name,
                         Input {
                             src: $src,
+                            non_ascii: false,
                             ibs: 512,
                             xfer_stats: StatusLevel::None,
                             cflags: $icf,
@@ -282,6 +284,7 @@ fn all_valid_ascii_ebcdic_ascii_roundtrip_conv_test()
 
     let i = Input {
         src: File::open("./test-resources/all-valid-ascii-chars-37eff01866ba3f538421b30b7cbefcac.test").unwrap(),
+        non_ascii: false,
         ibs: 128,
         xfer_stats: StatusLevel::None,
         cflags: icf!(Some(&ASCII_TO_EBCDIC)),
@@ -303,6 +306,7 @@ fn all_valid_ascii_ebcdic_ascii_roundtrip_conv_test()
 
     let i = Input {
         src: File::open(&tmp_fname_ae).unwrap(),
+        non_ascii: false,
         ibs: 256,
         xfer_stats: StatusLevel::None,
         cflags: icf!(Some(&EBCDIC_TO_ASCII)),
@@ -343,9 +347,8 @@ make_icf_test!(
     File::open("./test-resources/seq-byte-values.test").unwrap(),
     IConvFlags {
         ctable: None,
-        cbs: None,
-        block: false,
-        unblock: false,
+        block: None,
+        unblock: None,
         swab: true,
         sync: false,
         noerror: false,
@@ -359,12 +362,19 @@ make_icf_test!(
     File::open("./test-resources/seq-byte-values-odd.test").unwrap(),
     IConvFlags {
         ctable: None,
-        cbs: None,
-        block: false,
-        unblock: false,
+        block: None,
+        unblock: None,
         swab: true,
         sync: false,
         noerror: false,
     },
     File::open("./test-resources/seq-byte-values-odd.spec").unwrap()
 );
+
+fn block_test_basic()
+{
+    let mut buf = vec![0u8, 1u8, 2u8, 3u8];
+    let res = block(&buf, 4);
+
+    assert_eq!(res, vec![buf]);
+}

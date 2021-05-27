@@ -25,6 +25,7 @@ pub enum ParseError
     NoMatchingMultiplier(String),
     ByteStringContainsNoValue(String),
     MultiplierStringWouldOverflow(String),
+    BlockUnblockWithoutCBS,
 }
 
 impl std::fmt::Display for ParseError
@@ -298,7 +299,6 @@ fn parse_cbs(matches: &getopts::Matches) -> Result<Option<usize>, ParseError>
 
 pub fn parse_status_level(matches: &getopts::Matches) -> Result<StatusLevel, ParseError>
 {
-    // TODO: Impl
     unimplemented!()
 }
 
@@ -322,7 +322,7 @@ fn parse_ctable(fmt: Option<ConvFlag>, case: Option<ConvFlag>) -> Option<&'stati
 {
     match (fmt, case)
     {
-        // Both specified
+        // Both [ascii | ebcdic | ibm] and [lcase | ucase] specified
         (Some(fmt), Some(case)) =>
             match (fmt, case)
             {
@@ -341,7 +341,7 @@ fn parse_ctable(fmt: Option<ConvFlag>, case: Option<ConvFlag>) -> Option<&'stati
                 (_, _) =>
                     None,
             },
-        // Only one of {ascii, ebcdic, ibm} specified
+        // Only [ascii | ebcdic | ibm] specified
         (Some(fmt), None) =>
             match fmt
             {
@@ -354,7 +354,7 @@ fn parse_ctable(fmt: Option<ConvFlag>, case: Option<ConvFlag>) -> Option<&'stati
                 _ =>
                     None,
             },
-        // Only one of {ucase, lcase} specified
+        // Only [lcase | ucase] specified
         (None, Some(ConvFlag::UCase)) =>
             Some(&ASCII_LCASE_TO_UCASE),
         (None, Some(ConvFlag::LCase)) =>
@@ -389,8 +389,8 @@ pub fn parse_conv_flag_input(matches: &getopts::Matches) -> Result<IConvFlags, P
 
     let mut fmt = None;
     let mut case = None;
-    let mut block = false;
-    let mut unblock = false;
+    let mut block = None;
+    let mut unblock = None;
     let mut swab = false;
     let mut sync = false;
     let mut noerror = false;
@@ -445,22 +445,24 @@ pub fn parse_conv_flag_input(matches: &getopts::Matches) -> Result<IConvFlags, P
                     case = Some(flag)
                 },
             ConvFlag::Block =>
-                if !unblock
+                match (cbs, unblock)
                 {
-                    block = true;
-                }
-                else
-                {
-                    return Err(ParseError::MultipleBlockUnblock);
+                    (Some(cbs), None) =>
+                        block = Some(cbs),
+                    (None, _) =>
+                        return Err(ParseError::BlockUnblockWithoutCBS),
+                    (_, Some(_)) =>
+                        return Err(ParseError::MultipleBlockUnblock),
                 },
             ConvFlag::Unblock =>
-                if !block
+                match (cbs, block)
                 {
-                    unblock = true;
-                }
-                else
-                {
-                    return Err(ParseError::MultipleBlockUnblock);
+                    (Some(cbs), None) =>
+                        unblock = Some(cbs),
+                    (None, _) =>
+                        return Err(ParseError::BlockUnblockWithoutCBS),
+                    (_, Some(_)) =>
+                        return Err(ParseError::MultipleBlockUnblock),
                 },
             ConvFlag::Swab =>
                 swab = true,
@@ -476,7 +478,6 @@ pub fn parse_conv_flag_input(matches: &getopts::Matches) -> Result<IConvFlags, P
 
     Ok(IConvFlags {
         ctable,
-        cbs,
         block,
         unblock,
         swab,
@@ -580,8 +581,6 @@ pub fn parse_iflags(matches: &getopts::Matches) -> Result<IFlags, ParseError>
                 sync = true,
             Flag::NoCache =>
                 nocache = true,
-            Flag::NoCache =>
-                nocache = true,
             Flag::NonBlock =>
                 nonblock = true,
             Flag::NoATime =>
@@ -665,8 +664,6 @@ pub fn parse_oflags(matches: &getopts::Matches) -> Result<OFlags, ParseError>
                 sync = true,
             Flag::NoCache =>
                 nocache = true,
-            Flag::NoCache =>
-                nocache = true,
             Flag::NonBlock =>
                 nonblock = true,
             Flag::NoATime =>
@@ -718,7 +715,7 @@ pub fn parse_skip_amt(ibs: &usize, iflags: &IFlags, matches: &getopts::Matches) 
         }
         else
         {
-            let n = parse_bytes_only(&amt)?;
+            let n = parse_bytes_with_opt_multiplier(amt)?;
             Ok(Some(ibs*n))
         }
     }
@@ -740,12 +737,25 @@ pub fn parse_seek_amt(obs: &usize, oflags: &OFlags, matches: &getopts::Matches) 
         }
         else
         {
-            let n = parse_bytes_only(&amt)?;
+            let n = parse_bytes_with_opt_multiplier(amt)?;
             Ok(Some(obs*n))
         }
     }
     else
     {
         Ok(None)
+    }
+}
+
+/// Parse whether the args indicate the input is not ascii
+pub fn parse_input_non_ascii(matches: &getopts::Matches) -> Result<bool, ParseError>
+{
+    if let Some(conv_opts) = matches.opt_str("conv")
+    {
+        Ok(conv_opts.contains("ascii"))
+    }
+    else
+    {
+        Ok(false)
     }
 }

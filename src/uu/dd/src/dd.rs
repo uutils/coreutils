@@ -52,9 +52,8 @@ enum SrcStat
 pub struct IConvFlags
 {
     ctable: Option<&'static ConversionTable>,
-    cbs: Option<usize>,
-    block: bool,
-    unblock: bool,
+    block: Option<usize>,
+    unblock: Option<usize>,
     swab: bool,
     sync: bool,
     noerror: bool,
@@ -128,6 +127,7 @@ enum InternalError
 {
     WrongInputType,
     WrongOutputType,
+    InvalidConvBlockUnblockCase,
 }
 
 impl std::fmt::Display for InternalError
@@ -137,7 +137,9 @@ impl std::fmt::Display for InternalError
         {
             Self::WrongInputType |
             Self::WrongOutputType =>
-                write!(f, "Internal dd error"),
+                write!(f, "Internal dd error: Wrong Input/Output data type"),
+            Self::InvalidConvBlockUnblockCase =>
+                write!(f, "Internal dd error: Invalid Conversion, Block, or Unblock data"),
         }
     }
 }
@@ -147,40 +149,11 @@ impl Error for InternalError {}
 struct Input<R: Read>
 {
     src: R,
+    non_ascii: bool,
     ibs: usize,
     xfer_stats: StatusLevel,
     cflags: IConvFlags,
     iflags: IFlags,
-}
-
-impl<R: Read> Read for Input<R>
-{
-    fn read(&mut self, mut buf: &mut [u8]) -> io::Result<usize>
-    {
-        let len = self.src.read(&mut buf)?;
-
-        if let Some(ct) = self.cflags.ctable
-        {
-            for idx in 0..len
-            {
-                buf[idx] = ct[buf[idx] as usize];
-            }
-        }
-
-        if self.cflags.swab
-        {
-            let mut tmp = DEFAULT_FILL_BYTE;
-
-            for base in (1..len).step_by(2)
-            {
-                tmp = buf[base];
-                buf[base] = buf[base-1];
-                buf[base-1] = tmp;
-            }
-        }
-
-        Ok(len)
-    }
 }
 
 impl Input<io::Stdin>
@@ -188,6 +161,7 @@ impl Input<io::Stdin>
     fn new(matches: &getopts::Matches) -> Result<Self, Box<dyn Error>>
     {
         let ibs = parseargs::parse_ibs(matches)?;
+        let non_ascii = parseargs::parse_input_non_ascii(matches)?;
         let xfer_stats = parseargs::parse_status_level(matches)?;
         let cflags = parseargs::parse_conv_flag_input(matches)?;
         let iflags = parseargs::parse_iflags(matches)?;
@@ -195,6 +169,7 @@ impl Input<io::Stdin>
 
         let mut i = Input {
             src: io::stdin(),
+            non_ascii,
             ibs,
             xfer_stats,
             cflags,
@@ -217,6 +192,7 @@ impl Input<File>
     fn new(matches: &getopts::Matches) -> Result<Self, Box<dyn Error>>
     {
         let ibs = parseargs::parse_ibs(matches)?;
+        let non_ascii = parseargs::parse_input_non_ascii(matches)?;
         let xfer_stats = parseargs::parse_status_level(matches)?;
         let cflags = parseargs::parse_conv_flag_input(matches)?;
         let iflags = parseargs::parse_iflags(matches)?;
@@ -234,6 +210,7 @@ impl Input<File>
 
             let i = Input {
                 src,
+                non_ascii,
                 ibs,
                 xfer_stats,
                 cflags,
@@ -250,12 +227,41 @@ impl Input<File>
     }
 }
 
+impl<R: Read> Read for Input<R>
+{
+    fn read(&mut self, mut buf: &mut [u8]) -> io::Result<usize>
+    {
+        // Read from source, ignore read errors if conv=noerror
+        let len = match self.src.read(&mut buf)
+        {
+            Ok(len) =>
+                len,
+            Err(e) =>
+                if !self.cflags.noerror
+                {
+                    return Err(e);
+                }
+                else
+                {
+                    return Ok(0);
+                },
+        };
+
+        Ok(len)
+    }
+}
+
 impl<R: Read> Input<R>
 {
-    fn fill_n(&mut self, buf: &mut [u8], obs: usize) -> Result<SrcStat, Box<dyn Error>>
+    /// Fills to a given size n, which is expected to be 'obs'.
+    /// Reads in increments of 'self.ibs'.
+    fn fill_n(&mut self, buf: &mut [u8], obs: usize) -> Result<usize, Box<dyn Error>>
     {
         let ibs = self.ibs;
         let mut bytes_read = 0;
+
+        // TODO: Fix this!
+        assert!(obs > ibs);
 
         for n in 0..(obs/ibs) {
             // fill an ibs-len slice from src
@@ -268,14 +274,13 @@ impl<R: Read> Input<R>
             }
         }
 
-        if bytes_read != 0 {
-            Ok(SrcStat::Read(bytes_read))
-        } else {
-            Ok(SrcStat::EOF)
-        }
-    }
+        Ok(bytes_read)
+   }
 
-    fn force_fill(&mut self, mut buf: &mut [u8], len: usize) -> Result<(), Box<dyn Error>>
+    /// Force-fills a buffer, ignoring zero-length reads which would otherwise be
+    /// interpreted as EOF. Does not continue after errors.
+    /// Note: This may never return.
+    fn force_fill(&mut self, mut buf: &mut [u8], target_len: usize) -> Result<(), Box<dyn Error>>
     {
         let mut total_len = 0;
 
@@ -283,12 +288,13 @@ impl<R: Read> Input<R>
         {
             total_len += self.read(&mut buf)?;
 
-            if total_len == len
+            if total_len == target_len
             {
                 return Ok(());
             }
         }
     }
+
 }
 
 struct Output<W: Write>
@@ -312,6 +318,16 @@ impl Output<io::Stdout> {
                 cflags,
                 oflags,
         })
+    }
+
+    fn fsync(&mut self) -> io::Result<()>
+    {
+        self.dst.flush()
+    }
+
+    fn fdatasync(&mut self) -> io::Result<()>
+    {
+        self.dst.flush()
     }
 }
 
@@ -346,8 +362,24 @@ impl Output<File> {
         }
         else
         {
+            // The following error should only occur if someone
+            // mistakenly calls Output::<File>::new() without checking
+            // if 'of' has been provided. In this case,
+            // Output::<io::stdout>::new() is probably intended.
             Err(Box::new(InternalError::WrongOutputType))
         }
+    }
+
+    fn fsync(&mut self) -> io::Result<()>
+    {
+        self.dst.flush()?;
+        self.dst.sync_all()
+    }
+
+    fn fdatasync(&mut self) -> io::Result<()>
+    {
+        self.dst.flush()?;
+        self.dst.sync_data()
     }
 }
 
@@ -359,11 +391,29 @@ impl Seek for Output<File>
     }
 }
 
-impl<W: Write> Write for Output<W>
+impl Write for Output<File>
 {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize>
     {
+        #[inline]
+        fn is_sparse(buf: &[u8]) -> bool
+        {
+            buf.iter()
+               .all(|&e| e == 0u8)
+        }
+        // -----------------------------
+        if self.cflags.sparse && is_sparse(buf)
+        {
+            let seek_amt: i64 = buf.len()
+                                   .try_into()
+                                   .expect("Internal dd Error: Seek amount greater than signed 64-bit integer");
+            self.dst.seek(io::SeekFrom::Current(seek_amt))?;
+            Ok(buf.len())
+        }
+        else
+        {
             self.dst.write(buf)
+        }
     }
 
     fn flush(&mut self) -> io::Result<()>
@@ -372,9 +422,17 @@ impl<W: Write> Write for Output<W>
     }
 }
 
-fn is_sparse(buf: &[u8]) -> bool
+impl Write for Output<io::Stdout>
 {
-    buf.iter().all(| &e | e == 0)
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize>
+    {
+        self.dst.write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()>
+    {
+        self.dst.flush()
+    }
 }
 
 fn gen_prog_updater(rx: mpsc::Receiver<usize>) -> impl Fn() -> ()
@@ -400,22 +458,243 @@ fn gen_prog_updater(rx: mpsc::Receiver<usize>) -> impl Fn() -> ()
     }
 }
 
-#[inline]
-fn dd_read_helper<R: Read, W: Write>(mut buf: &mut [u8], i: &mut Input<R>, o: &Output<W>) -> Result<SrcStat, Box<dyn Error>>
+fn pad(buf: &mut Vec<u8>, padding: u8)
 {
-    match i.fill_n(&mut buf, o.obs)
+    unimplemented!()
+}
+
+/// Splits the content of buf into cbs-length blocks
+/// Appends padding as specified by conv=block and cbs=N
+///
+/// Example cases:
+///
+/// [a...b] -> [a...b]
+/// [a...b'\n'c...d] -> [a...b' '...], [c...d]
+/// [a...b'\n'c...d'\n'e...] -> [a...b' '...], [c...d' '...], [e...]
+///
+/// [a...b'\n'] -> [a...b' ']
+/// ['\n'a...b] -> [' '...], [a...b]
+///
+/// ['\n'a...b] -> [' '...], [a...b]
+/// ['\n''\n'a...b] -> [' '...], [' '...], [a...b]
+//
+fn block(buf: &[u8], cbs: usize) -> Vec<Vec<u8>>
+{
+    buf.split(| &c | c == '\n' as u8)
+       .fold(Vec::new(), | mut blocks, split | {
+           let mut block = Vec::with_capacity(cbs);
+           block.extend(split);
+           pad(&mut block, ' ' as u8);
+           blocks.push(block);
+
+           blocks
+       })
+}
+
+// Trims padding from each cbs-length partition of buf
+// as specified by conv=unblock and cbs=N
+fn unblock(buf: &[u8], cbs: usize)
+{
+    unimplemented!()
+}
+
+#[inline]
+fn apply_ct(buf: &mut [u8], ct: &ConversionTable)
+{
+    for idx in 0..buf.len()
     {
-        Ok(ss) =>
-            Ok(ss),
-        Err(e) =>
-            if !i.cflags.noerror
+        buf[idx] = ct[buf[idx] as usize];
+    }
+}
+
+#[inline]
+fn perform_swab(buf: &mut [u8])
+{
+    let mut tmp;
+
+    for base in (1..buf.len()).step_by(2)
+    {
+        tmp = buf[base];
+        buf[base] = buf[base-1];
+        buf[base-1] = tmp;
+    }
+}
+
+fn conv_block_unblock_helper<R: Read, W: Write>(mut buf: Vec<u8>, i: &mut Input<R>, o: &Output<W>) -> Result<Vec<u8>, Box<dyn Error>>
+{
+    #[inline]
+    fn should_block_then_conv<R: Read>(i: &Input<R>) -> bool
+    {
+        !i.non_ascii
+            && i.cflags.block.is_some()
+    }
+    #[inline]
+    fn should_conv_then_block<R: Read>(i: &Input<R>) -> bool
+    {
+        i.non_ascii
+            && i.cflags.block.is_some()
+    }
+    #[inline]
+    fn should_unblock_then_conv<R: Read>(i: &Input<R>) -> bool
+    {
+        !i.non_ascii
+            && i.cflags.unblock.is_some()
+    }
+    #[inline]
+    fn should_conv_then_unblock<R: Read>(i: &Input<R>) -> bool
+    {
+        i.non_ascii
+            && i.cflags.unblock.is_some()
+    }
+    fn conv_only<R: Read>(i: &Input<R>) -> bool
+    {
+        i.cflags.ctable.is_some()
+            && i.cflags.block.is_none()
+            && i.cflags.unblock.is_none()
+    }
+    // --------------------------------------------------------------------
+    if conv_only(&i)
+    { // no block/unblock
+        let ct = i.cflags.ctable.unwrap();
+        apply_ct(&mut buf, &ct);
+
+        Ok(buf)
+    }
+    else if should_block_then_conv(&i)
+    { // ascii input so perform the block first
+        let cbs = i.cflags.block.unwrap();
+
+        let mut blocks = block(&mut buf, cbs);
+
+        if let Some(ct) = i.cflags.ctable
+        {
+            for buf in blocks.iter_mut()
             {
-                return Err(e);
+                apply_ct(buf, &ct);
             }
-            else
-            {
-                Ok(SrcStat::Read(0))
-            },
+        }
+
+       let blocks = blocks.into_iter()
+                           .flatten()
+                           .collect();
+
+        Ok(blocks)
+    }
+    else if should_conv_then_block(&i)
+    { // Non-ascii so perform the conversion first
+        let cbs = i.cflags.block.unwrap();
+
+        if let Some(ct) = i.cflags.ctable
+        {
+             apply_ct(&mut buf, &ct);
+        }
+
+        let blocks = block(&mut buf, cbs);
+
+        let blocks = blocks.into_iter()
+                           .flatten()
+                           .collect();
+
+        Ok(blocks)
+    }
+    else if should_unblock_then_conv(&i)
+    { // ascii input so perform the unblock first
+        let cbs = i.cflags.unblock.unwrap();
+
+        unblock(&mut buf, cbs);
+
+        if let Some(ct) = i.cflags.ctable
+        {
+             apply_ct(&mut buf, &ct);
+        }
+
+        Ok(buf)
+    }
+    else if should_conv_then_unblock(&i)
+    { // Non-ascii input so perform the conversion first
+        let cbs = i.cflags.unblock.unwrap();
+
+        if let Some(ct) = i.cflags.ctable
+        {
+             apply_ct(&mut buf, &ct);
+        }
+
+        unblock(&buf, cbs);
+
+        Ok(buf)
+    }
+    else
+    {
+        // The following error should not happen, as it results from
+        // insufficient command line data. This case should be caught
+        // by the parser before making it this far.
+        // Producing this error is an alternative to risking an unwrap call
+        // on 'cbs' if the required data is not provided.
+        Err(Box::new(InternalError::InvalidConvBlockUnblockCase))
+    }
+}
+
+fn read_write_helper<R: Read, W: Write>(i: &mut Input<R>, o: &mut Output<W>) -> Result<(usize, Vec<u8>), Box<dyn Error>>
+{
+    #[inline]
+    fn is_fast_read<R: Read, W: Write>(i: &Input<R>, o: &Output<W>) -> bool
+    {
+        i.ibs == o.obs
+            && !is_conv(i)
+            && !is_block(i)
+            && !is_unblock(i)
+            && !i.cflags.swab
+    }
+    #[inline]
+    fn is_conv<R: Read>(i: &Input<R>) -> bool
+    {
+        i.cflags.ctable.is_some()
+    }
+    #[inline]
+    fn is_block<R: Read>(i: &Input<R>) -> bool
+    {
+        i.cflags.block.is_some()
+    }
+    #[inline]
+    fn is_unblock<R: Read>(i: &Input<R>) -> bool
+    {
+        i.cflags.unblock.is_some()
+    }
+    // --------------------------------------------------------------------
+    if is_fast_read(&i, &o)
+    {
+        // TODO: fast reads are copies performed
+        // directly to output (without creating any buffers)
+        // as mentioned in the dd spec.
+        unimplemented!()
+    }
+    else
+    {
+        // Read
+        let mut buf = Vec::with_capacity(o.obs);
+        let rlen = i.fill_n(&mut buf, o.obs)?;
+
+        if rlen == 0
+        {
+            return Ok((0,Vec::new()));
+        }
+
+
+        // Conv etc...
+        if i.cflags.swab
+        {
+            perform_swab(&mut buf[..rlen]);
+        }
+
+        if is_conv(&i) || is_block(&i) || is_unblock(&i)
+        {
+            let buf = conv_block_unblock_helper(buf, i, o)?;
+            Ok((rlen, buf))
+        }
+        else
+        {
+            Ok((rlen, buf))
+        }
     }
 }
 
@@ -424,12 +703,13 @@ fn dd_read_helper<R: Read, W: Write>(mut buf: &mut [u8], i: &mut Input<R>, o: &O
 // and should be fixed in the future.
 fn dd_stdout<R: Read>(mut i: Input<R>, mut o: Output<io::Stdout>) -> Result<(usize, usize), Box<dyn Error>>
 {
+    let mut bytes_in  = 0;
+    let mut bytes_out = 0;
+
     let prog_tx = if i.xfer_stats == StatusLevel::Progress
     {
         let (prog_tx, prog_rx) = mpsc::channel();
-
         thread::spawn(gen_prog_updater(prog_rx));
-
         Some(prog_tx)
     }
     else
@@ -437,42 +717,35 @@ fn dd_stdout<R: Read>(mut i: Input<R>, mut o: Output<io::Stdout>) -> Result<(usi
         None
     };
 
-    let mut bytes_in  = 0;
-    let mut bytes_out = 0;
-
     loop
     {
-        let mut buf = vec![DEFAULT_FILL_BYTE; o.obs];
-
-        // Read
-        let r_len = match dd_read_helper(&mut buf, &mut i, &o)?
+        match read_write_helper(&mut i, &mut o)?
         {
-            SrcStat::Read(0) =>
-                continue,
-            SrcStat::Read(len) =>
-            {
-                bytes_in += len;
-                len
-            },
-            SrcStat::EOF =>
+            (0, _) =>
                 break,
+            (rlen, buf) =>
+            {
+                let wlen = o.write(&buf)?;
+
+                bytes_in += rlen;
+                bytes_out += wlen;
+            },
         };
 
-        // Write
-        let w_len = o.write(&buf[..r_len])?;
-
         // Prog
-        bytes_out += w_len;
-
         if let Some(prog_tx) = &prog_tx
         {
             prog_tx.send(bytes_out)?;
         }
     }
 
-    if o.cflags.fsync || o.cflags.fdatasync
+    if o.cflags.fsync
     {
-        o.flush()?;
+        o.fsync()?;
+    }
+    else if o.cflags.fdatasync
+    {
+        o.fdatasync()?;
     }
 
     Ok((bytes_in, bytes_out))
@@ -483,12 +756,13 @@ fn dd_stdout<R: Read>(mut i: Input<R>, mut o: Output<io::Stdout>) -> Result<(usi
 // and should be fixed in the future.
 fn dd_fileout<R: Read>(mut i: Input<R>, mut o: Output<File>) -> Result<(usize, usize), Box<dyn Error>>
 {
+    let mut bytes_in  = 0;
+    let mut bytes_out = 0;
+
     let prog_tx = if i.xfer_stats == StatusLevel::Progress
     {
         let (prog_tx, prog_rx) = mpsc::channel();
-
         thread::spawn(gen_prog_updater(prog_rx));
-
         Some(prog_tx)
     }
     else
@@ -496,43 +770,22 @@ fn dd_fileout<R: Read>(mut i: Input<R>, mut o: Output<File>) -> Result<(usize, u
         None
     };
 
-    let mut bytes_in  = 0;
-    let mut bytes_out = 0;
-
     loop
     {
-        let mut buf = vec![DEFAULT_FILL_BYTE; o.obs];
-
-        // Read
-        let r_len = match dd_read_helper(&mut buf, &mut i, &o)?
+        match read_write_helper(&mut i, &mut o)?
         {
-            SrcStat::Read(0) =>
-                continue,
-            SrcStat::Read(len) =>
-            {
-                bytes_in += len;
-                len
-            },
-            SrcStat::EOF =>
+            (0, _) =>
                 break,
-        };
+            (rlen, buf) =>
+            {
+                let wlen = o.write(&buf)?;
 
-
-        // Write
-        let w_len = if o.cflags.sparse && is_sparse(&buf)
-        {
-            let seek_amt: i64 = r_len.try_into()?;
-            o.seek(io::SeekFrom::Current(seek_amt))?;
-            r_len
-        }
-        else
-        {
-            o.write(&buf[..r_len])?
+                bytes_in += rlen;
+                bytes_out += wlen;
+            },
         };
 
         // Prog
-        bytes_out += w_len;
-
         if let Some(prog_tx) = &prog_tx
         {
             prog_tx.send(bytes_out)?;
@@ -541,13 +794,11 @@ fn dd_fileout<R: Read>(mut i: Input<R>, mut o: Output<File>) -> Result<(usize, u
 
     if o.cflags.fsync
     {
-        o.flush()?;
-        o.dst.sync_all()?;
+        o.fsync()?;
     }
     else if o.cflags.fdatasync
     {
-        o.flush()?;
-        o.dst.sync_data()?;
+        o.fdatasync()?;
     }
 
     Ok((bytes_in, bytes_out))

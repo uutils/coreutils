@@ -14,9 +14,8 @@ fn build_icf()
 {
     let icf_expd = IConvFlags {
         ctable: Some(&ASCII_TO_IBM),
-        cbs: None,
-        block: false,
-        unblock: false,
+        block: None,
+        unblock: None,
         swab: false,
         sync: false,
         noerror: false,
