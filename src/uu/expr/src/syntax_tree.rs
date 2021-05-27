@@ -41,20 +41,17 @@ impl AstNode {
         for _ in 0..depth {
             print!("\t",);
         }
-        match *self {
-            AstNode::Leaf {
-                ref token_idx,
-                ref value,
-            } => println!(
+        match self {
+            AstNode::Leaf { token_idx, value } => println!(
                 "Leaf( {} ) at #{} ( evaluate -> {:?} )",
                 value,
                 token_idx,
                 self.evaluate()
             ),
             AstNode::Node {
-                ref token_idx,
-                ref op_type,
-                ref operands,
+                token_idx,
+                op_type,
+                operands,
             } => {
                 println!(
                     "Node( {} ) at #{} (evaluate -> {:?})",
@@ -83,9 +80,9 @@ impl AstNode {
         })
     }
     pub fn evaluate(&self) -> Result<String, String> {
-        match *self {
-            AstNode::Leaf { ref value, .. } => Ok(value.clone()),
-            AstNode::Node { ref op_type, .. } => match self.operand_values() {
+        match self {
+            AstNode::Leaf { value, .. } => Ok(value.clone()),
+            AstNode::Node { op_type, .. } => match self.operand_values() {
                 Err(reason) => Err(reason),
                 Ok(operand_values) => match op_type.as_ref() {
                     "+" => {
@@ -160,7 +157,7 @@ impl AstNode {
         }
     }
     pub fn operand_values(&self) -> Result<Vec<String>, String> {
-        if let AstNode::Node { ref operands, .. } = *self {
+        if let AstNode::Node { operands, .. } = self {
             let mut out = Vec::with_capacity(operands.len());
             for operand in operands {
                 match operand.evaluate() {
@@ -216,9 +213,9 @@ fn maybe_dump_ast(result: &Result<Box<AstNode>, String>) {
     if let Ok(debug_var) = env::var("EXPR_DEBUG_AST") {
         if debug_var == "1" {
             println!("EXPR_DEBUG_AST");
-            match *result {
-                Ok(ref ast) => ast.debug_dump(),
-                Err(ref reason) => println!("\terr: {:?}", reason),
+            match result {
+                Ok(ast) => ast.debug_dump(),
+                Err(reason) => println!("\terr: {:?}", reason),
             }
         }
     }
@@ -303,7 +300,7 @@ fn push_token_to_either_stack(
     out_stack: &mut TokenStack,
     op_stack: &mut TokenStack,
 ) -> Result<(), String> {
-    let result = match *token {
+    let result = match token {
         Token::Value { .. } => {
             out_stack.push((token_idx, token.clone()));
             Ok(())

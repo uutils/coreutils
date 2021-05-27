@@ -53,21 +53,21 @@ impl Token {
     }
 
     fn is_infix_plus(&self) -> bool {
-        match *self {
-            Token::InfixOp { ref value, .. } => value == "+",
+        match self {
+            Token::InfixOp { value, .. } => value == "+",
             _ => false,
         }
     }
     fn is_a_number(&self) -> bool {
-        match *self {
-            Token::Value { ref value, .. } => value.parse::<BigInt>().is_ok(),
+        match self {
+            Token::Value { value, .. } => value.parse::<BigInt>().is_ok(),
             _ => false,
         }
     }
     fn is_a_close_paren(&self) -> bool {
         #[allow(clippy::match_like_matches_macro)]
         // `matches!(...)` macro not stabilized until rust v1.42
-        match *self {
+        match self {
             Token::ParClose => true,
             _ => false,
         }
@@ -149,7 +149,7 @@ fn push_token_if_not_escaped(acc: &mut Vec<(usize, Token)>, tok_idx: usize, toke
     // Smells heuristics... :(
     let prev_is_plus = match acc.last() {
         None => false,
-        Some(ref t) => t.1.is_infix_plus(),
+        Some(t) => t.1.is_infix_plus(),
     };
     let should_use_as_escaped = if prev_is_plus && acc.len() >= 2 {
         let pre_prev = &acc[acc.len() - 2];
