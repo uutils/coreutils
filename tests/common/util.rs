@@ -16,7 +16,6 @@ use std::os::windows::fs::{symlink_dir, symlink_file};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::rc::Rc;
-use std::str::from_utf8;
 use std::thread::sleep;
 use std::time::Duration;
 use tempfile::TempDir;
