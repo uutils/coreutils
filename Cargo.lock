@@ -2041,6 +2041,7 @@ version = "0.0.6"
 dependencies = [
  "libc",
  "num-bigint",
+ "num-traits",
  "onig",
  "uucore",
  "uucore_procs",

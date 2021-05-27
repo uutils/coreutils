@@ -13,6 +13,7 @@
 // spell-checker:ignore (ToDO) binop binops ints paren prec
 
 use num_bigint::BigInt;
+use num_traits::{One, Zero};
 use onig::{Regex, RegexOptions, Syntax};
 
 use crate::tokens::Token;
@@ -98,7 +99,7 @@ impl AstNode {
                     }
                     "/" => infix_operator_two_ints(
                         |a: BigInt, b: BigInt| {
-                            if b == BigInt::from(0) {
+                            if b.is_zero() {
                                 Err("division by zero".to_owned())
                             } else {
                                 Ok(a / b)
@@ -108,7 +109,7 @@ impl AstNode {
                     ),
                     "%" => infix_operator_two_ints(
                         |a: BigInt, b: BigInt| {
-                            if b == BigInt::from(0) {
+                            if b.is_zero() {
                                 Err("division by zero".to_owned())
                             } else {
                                 Ok(a % b)
@@ -548,8 +549,8 @@ fn value_as_bool(s: &str) -> bool {
     if s.is_empty() {
         return false;
     }
-    match s.parse::<i64>() {
-        Ok(n) => n != 0,
+    match s.parse::<BigInt>() {
+        Ok(n) => n.is_one(),
         Err(_) => true,
     }
 }
