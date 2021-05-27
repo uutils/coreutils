@@ -15,9 +15,7 @@ extern crate clap;
 #[macro_use]
 extern crate uucore;
 
-mod chunks;
 mod platform;
-use chunks::ReverseChunks;
 
 use clap::{App, Arg};
 use std::collections::VecDeque;
@@ -28,6 +26,7 @@ use std::io::{stdin, stdout, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
+use uucore::chunks::rchunks;
 use uucore::ringbuffer::RingBuffer;
 
 pub mod options {
@@ -401,7 +400,8 @@ fn backwards_thru_file(file: &mut File, num_delimiters: usize, delimiter: u8) {
     // so far (reading from the end of the file toward the beginning).
     let mut counter = 0;
 
-    for (block_idx, slice) in ReverseChunks::new(file).enumerate() {
+    let chunk_size = 1 << 16;
+    for (block_idx, slice) in rchunks(file, chunk_size).enumerate() {
         // Iterate over each byte in the slice in reverse order.
         let mut iter = slice.iter().enumerate().rev();
 

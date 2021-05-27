@@ -23,9 +23,9 @@
 //!
 //! and the line separator is assumed to be the slash character ("/"),
 //! then the lines in reverse order would be "/ghi", "/def", "/abc".
-use crate::chunks::rchunks;
 use std::io::Read;
 use std::io::Seek;
+use uucore::chunks::rchunks;
 
 /// The chunk size to use when reading bytes from a file.
 ///

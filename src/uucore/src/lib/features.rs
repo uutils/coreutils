@@ -1,5 +1,7 @@
 // features ~ feature-gated modules (core/bundler file)
 
+#[cfg(feature = "chunks")]
+pub mod chunks;
 #[cfg(feature = "encoding")]
 pub mod encoding;
 #[cfg(feature = "fs")]

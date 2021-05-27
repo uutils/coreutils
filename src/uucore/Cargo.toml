@@ -39,6 +39,7 @@ termion = "1.5"
 [features]
 default = []
 # * non-default features
+chunks = []
 encoding = ["data-encoding", "thiserror"]
 entries = ["libc"]
 fs = ["libc"]

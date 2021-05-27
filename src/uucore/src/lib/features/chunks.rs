@@ -119,7 +119,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::chunks::rchunks;
+    use crate::features::rchunks;
     use std::io::Cursor;
 
     #[test]

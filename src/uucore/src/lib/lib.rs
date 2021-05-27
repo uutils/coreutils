@@ -32,6 +32,8 @@ pub use crate::mods::panic;
 pub use crate::mods::ranges;
 
 // * feature-gated modules
+#[cfg(feature = "chunks")]
+pub use crate::features::chunks;
 #[cfg(feature = "encoding")]
 pub use crate::features::encoding;
 #[cfg(feature = "fs")]

@@ -20,7 +20,6 @@ static VERSION: &str = env!("CARGO_PKG_VERSION");
 static USAGE: &str = "[OPTION]... [FILE]...";
 static SUMMARY: &str = "Write each file to standard output, last line first.";
 
-mod chunks;
 mod lines;
 use lines::rlines_leading_separator;
 use lines::rlines_trailing_separator;
