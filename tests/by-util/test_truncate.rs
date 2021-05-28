@@ -206,7 +206,7 @@ fn test_round_up() {
     let (at, mut ucmd) = at_and_ucmd!();
     let mut file = at.make_file(TFILE2);
     file.write_all(b"1234567890").unwrap();
-    ucmd.args(&["--size", "*4", TFILE2]).succeeds();
+    ucmd.args(&["--size", "%4", TFILE2]).succeeds();
     file.seek(SeekFrom::End(0)).unwrap();
     let actual = file.seek(SeekFrom::Current(0)).unwrap();
     assert!(
@@ -234,4 +234,31 @@ fn test_size_and_reference() {
         expected,
         actual
     );
+}
+
+#[test]
+fn test_invalid_numbers() {
+    // TODO For compatibility with GNU, `truncate -s 0X` should cause
+    // the same error as `truncate -s 0X file`, but currently it returns
+    // a different error.
+    new_ucmd!()
+        .args(&["-s", "0X", "file"])
+        .fails()
+        .stderr_contains("Invalid number: ‘0X’");
+    new_ucmd!()
+        .args(&["-s", "0XB", "file"])
+        .fails()
+        .stderr_contains("Invalid number: ‘0XB’");
+    new_ucmd!()
+        .args(&["-s", "0B", "file"])
+        .fails()
+        .stderr_contains("Invalid number: ‘0B’");
+}
+
+#[test]
+fn test_reference_file_not_found() {
+    new_ucmd!()
+        .args(&["-r", "a", "b"])
+        .fails()
+        .stderr_contains("cannot stat 'a': No such file or directory");
 }

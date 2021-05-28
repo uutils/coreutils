@@ -214,8 +214,8 @@ fn test_cp_arg_symlink() {
 fn test_cp_arg_no_clobber() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
-        .arg("--no-clobber")
         .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .arg("--no-clobber")
         .succeeds();
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
@@ -305,7 +305,39 @@ fn test_cp_arg_backup() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
-        .arg("--backup")
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .arg("-b")
+        .succeeds();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert_eq!(
+        at.read(&*format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_arg_backup_with_other_args() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .arg("-vbL")
+        .succeeds();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert_eq!(
+        at.read(&*format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_arg_backup_arg_first() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("--backup")
+        .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_HOW_ARE_YOU_SOURCE)
         .succeeds();
 
@@ -321,6 +353,7 @@ fn test_cp_arg_suffix() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg("-b")
         .arg("--suffix")
         .arg(".bak")
         .arg(TEST_HOW_ARE_YOU_SOURCE)
@@ -331,6 +364,207 @@ fn test_cp_arg_suffix() {
         at.read(&*format!("{}.bak", TEST_HOW_ARE_YOU_SOURCE)),
         "How are you?\n"
     );
+}
+
+#[test]
+fn test_cp_custom_backup_suffix_via_env() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let suffix = "super-suffix-of-the-century";
+
+    ucmd.arg("-b")
+        .env("SIMPLE_BACKUP_SUFFIX", suffix)
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert_eq!(
+        at.read(&*format!("{}{}", TEST_HOW_ARE_YOU_SOURCE, suffix)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_backup_numbered_with_t() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("--backup=t")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert_eq!(
+        at.read(&*format!("{}.~1~", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_backup_numbered() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("--backup=numbered")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert_eq!(
+        at.read(&*format!("{}.~1~", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_backup_existing() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("--backup=existing")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert_eq!(
+        at.read(&*format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_backup_nil() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("--backup=nil")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert_eq!(
+        at.read(&*format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_numbered_if_existing_backup_existing() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let existing_backup = &*format!("{}.~1~", TEST_HOW_ARE_YOU_SOURCE);
+    at.touch(existing_backup);
+
+    ucmd.arg("--backup=existing")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(TEST_HOW_ARE_YOU_SOURCE));
+    assert!(at.file_exists(existing_backup));
+    assert_eq!(
+        at.read(&*format!("{}.~2~", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_numbered_if_existing_backup_nil() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let existing_backup = &*format!("{}.~1~", TEST_HOW_ARE_YOU_SOURCE);
+
+    at.touch(existing_backup);
+    ucmd.arg("--backup=nil")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(TEST_HOW_ARE_YOU_SOURCE));
+    assert!(at.file_exists(existing_backup));
+    assert_eq!(
+        at.read(&*format!("{}.~2~", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_backup_simple() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("--backup=simple")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert_eq!(
+        at.read(&*format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_backup_never() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("--backup=never")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert_eq!(
+        at.read(&*format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_backup_none() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("--backup=none")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert!(!at.file_exists(&format!("{}~", TEST_HOW_ARE_YOU_SOURCE)));
+}
+
+#[test]
+fn test_cp_backup_off() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("--backup=off")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert!(!at.file_exists(&format!("{}~", TEST_HOW_ARE_YOU_SOURCE)));
+}
+
+#[test]
+fn test_cp_backup_no_clobber_conflicting_options() {
+    let (_, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("--backup")
+        .arg("--no-clobber")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .fails()
+        .stderr_is("cp: options --backup and --no-clobber are mutually exclusive\nTry 'cp --help' for more information.");
 }
 
 #[test]

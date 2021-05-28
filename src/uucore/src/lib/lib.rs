@@ -25,6 +25,7 @@ mod features; // feature-gated code modules
 mod mods; // core cross-platform modules
 
 // * cross-platform modules
+pub use crate::mods::backup_control;
 pub use crate::mods::coreopts;
 pub use crate::mods::os;
 pub use crate::mods::panic;
@@ -35,8 +36,12 @@ pub use crate::mods::ranges;
 pub use crate::features::encoding;
 #[cfg(feature = "fs")]
 pub use crate::features::fs;
+#[cfg(feature = "fsext")]
+pub use crate::features::fsext;
 #[cfg(feature = "parse_time")]
 pub use crate::features::parse_time;
+#[cfg(feature = "ringbuffer")]
+pub use crate::features::ringbuffer;
 #[cfg(feature = "zero-copy")]
 pub use crate::features::zero_copy;
 
@@ -187,6 +192,7 @@ mod tests {
         vec.into_iter().collect_str(handling)
     }
 
+    #[cfg(any(unix, target_os = "redox"))]
     fn test_invalid_utf8_args_lossy(os_str: &OsStr) {
         //assert our string is invalid utf8
         assert!(os_str.to_os_string().into_string().is_err());
@@ -210,6 +216,7 @@ mod tests {
         );
     }
 
+    #[cfg(any(unix, target_os = "redox"))]
     fn test_invalid_utf8_args_ignore(os_str: &OsStr) {
         //assert our string is invalid utf8
         assert!(os_str.to_os_string().into_string().is_err());
@@ -234,7 +241,7 @@ mod tests {
         //create a vector containing only correct encoding
         let test_vec = make_os_vec(&OsString::from("test2"));
         //expect complete conversion without losses, even when lossy conversion is accepted
-        let _ = collect_os_str(test_vec.clone(), InvalidEncodingHandling::ConvertLossy)
+        let _ = collect_os_str(test_vec, InvalidEncodingHandling::ConvertLossy)
             .expect_complete("Lossy conversion not expected in this test");
     }
 

@@ -48,7 +48,7 @@ fn get_usage() -> String {
 fn get_long_usage() -> String {
     format!(
         "A lightweight 'finger' program;  print user information.\n\
-        The utmp file will be {}.",
+         The utmp file will be {}.",
         utmpx::DEFAULT_FILE
     )
 }
@@ -286,17 +286,10 @@ impl Pinky {
 
         print!(" {}", time_string(&ut));
 
-        if self.include_where && !ut.host().is_empty() {
-            let ut_host = ut.host();
-            let mut res = ut_host.splitn(2, ':');
-            let host = match res.next() {
-                Some(_) => ut.canon_host().unwrap_or_else(|_| ut_host.clone()),
-                None => ut_host.clone(),
-            };
-            match res.next() {
-                Some(d) => print!(" {}:{}", host, d),
-                None => print!(" {}", host),
-            }
+        let mut s = ut.host();
+        if self.include_where && !s.is_empty() {
+            s = safe_unwrap!(ut.canon_host());
+            print!(" {}", s);
         }
 
         println!();

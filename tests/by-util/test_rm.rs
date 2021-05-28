@@ -258,7 +258,7 @@ fn test_rm_no_operand() {
     let mut ucmd = new_ucmd!();
 
     ucmd.fails()
-        .stderr_is("rm: error: missing an argument\nrm: error: for help, try 'rm --help'\n");
+        .stderr_is("rm: missing an argument\nrm: for help, try 'rm --help'\n");
 }
 
 #[test]

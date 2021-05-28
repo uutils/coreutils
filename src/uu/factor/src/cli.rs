@@ -13,13 +13,13 @@ use std::error::Error;
 use std::io::{self, stdin, stdout, BufRead, Write};
 
 mod factor;
-pub(crate) use factor::*;
+pub use factor::*;
 use uucore::InvalidEncodingHandling;
 
 mod miller_rabin;
 pub mod numeric;
 mod rho;
-mod table;
+pub mod table;
 
 static SYNTAX: &str = "[OPTION] [NUMBER]...";
 static SUMMARY: &str = "Print the prime factors of the given number(s).

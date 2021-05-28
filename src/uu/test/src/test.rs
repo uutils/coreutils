@@ -57,7 +57,7 @@ fn eval(stack: &mut Vec<Symbol>) -> Result<bool, String> {
         Some(Symbol::StringOp(op)) => {
             let b = stack.pop();
             let a = stack.pop();
-            Ok(if op == "=" { a == b } else { a != b })
+            Ok(if op == "!=" { a != b } else { a == b })
         }
         Some(Symbol::IntOp(op)) => {
             let b = pop_literal!();

@@ -29,7 +29,6 @@ mod options {
     pub const ONLY_HOSTNAME_USER: &str = "only_hostname_user";
     pub const PROCESS: &str = "process";
     pub const COUNT: &str = "count";
-    #[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
     pub const RUNLEVEL: &str = "runlevel";
     pub const SHORT: &str = "short";
     pub const TIME: &str = "time";
@@ -41,14 +40,20 @@ mod options {
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Print information about users who are currently logged in.";
 
+#[cfg(any(target_os = "linux"))]
+static RUNLEVEL_HELP: &str = "print current runlevel";
+#[cfg(not(target_os = "linux"))]
+static RUNLEVEL_HELP: &str = "print current runlevel (This is meaningless on non Linux)";
+
 fn get_usage() -> String {
     format!("{0} [OPTION]... [ FILE | ARG1 ARG2 ]", executable!())
 }
 
 fn get_long_usage() -> String {
-    String::from(
-        "If FILE is not specified, use /var/run/utmp.  /var/log/wtmp as FILE is common.\n\
-If ARG1 ARG2 given, -m presumed: 'am i' or 'mom likes' are usual.",
+    format!(
+        "If FILE is not specified, use {}.  /var/log/wtmp as FILE is common.\n\
+         If ARG1 ARG2 given, -m presumed: 'am i' or 'mom likes' are usual.",
+        utmpx::DEFAULT_FILE,
     )
 }
 
@@ -118,11 +123,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("all login names and number of users logged on"),
         )
         .arg(
-            #[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
             Arg::with_name(options::RUNLEVEL)
                 .long(options::RUNLEVEL)
                 .short("r")
-                .help("print current runlevel"),
+                .help(RUNLEVEL_HELP),
         )
         .arg(
             Arg::with_name(options::SHORT)
@@ -383,15 +387,12 @@ fn current_tty() -> String {
 
 impl Who {
     fn exec(&mut self) {
-        let run_level_chk = |record: i16| {
-            #[allow(unused_assignments)]
-            let mut res = false;
+        let run_level_chk = |_record: i16| {
+            #[cfg(not(target_os = "linux"))]
+            return false;
 
-            #[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
-            {
-                res = record == utmpx::RUN_LVL;
-            }
-            res
+            #[cfg(target_os = "linux")]
+            return _record == utmpx::RUN_LVL;
         };
 
         let f = if self.args.len() == 1 {
@@ -424,7 +425,9 @@ impl Who {
                     if self.need_users && ut.is_user_process() {
                         self.print_user(&ut);
                     } else if self.need_runlevel && run_level_chk(ut.record_type()) {
-                        self.print_runlevel(&ut);
+                        if cfg!(target_os = "linux") {
+                            self.print_runlevel(&ut);
+                        }
                     } else if self.need_boottime && ut.record_type() == utmpx::BOOT_TIME {
                         self.print_boottime(&ut);
                     } else if self.need_clockchange && ut.record_type() == utmpx::NEW_TIME {
@@ -548,20 +551,10 @@ impl Who {
             "  ?".into()
         };
 
-        let mut buf = vec![];
-        let ut_host = ut.host();
-        let mut res = ut_host.splitn(2, ':');
-        if let Some(h) = res.next() {
-            if self.do_lookup {
-                buf.push(ut.canon_host().unwrap_or_else(|_| h.to_owned()));
-            } else {
-                buf.push(h.to_owned());
-            }
+        let mut s = ut.host();
+        if self.do_lookup {
+            s = safe_unwrap!(ut.canon_host());
         }
-        if let Some(h) = res.next() {
-            buf.push(h.to_owned());
-        }
-        let s = buf.join(":");
         let hoststr = if s.is_empty() { s } else { format!("({})", s) };
 
         self.print_line(

@@ -6,7 +6,6 @@
 [![LOC](https://tokei.rs/b1/github/uutils/coreutils?category=code)](https://github.com/Aaronepower/tokei)
 [![dependency status](https://deps.rs/repo/github/uutils/coreutils/status.svg)](https://deps.rs/repo/github/uutils/coreutils)
 
-[![Build Status](https://api.travis-ci.org/uutils/coreutils.svg?branch=master)](https://travis-ci.org/uutils/coreutils)
 [![Build Status (FreeBSD)](https://api.cirrus-ci.com/github/uutils/coreutils.svg)](https://cirrus-ci.com/github/uutils/coreutils/master)
 [![CodeCov](https://codecov.io/gh/uutils/coreutils/branch/master/graph/badge.svg)](https://codecov.io/gh/uutils/coreutils)
 
@@ -40,7 +39,7 @@ to compile anywhere, and this is as good a way as any to try and learn it.
 ### Rust Version
 
 uutils follows Rust's release channels and is tested against stable, beta and nightly.
-The current oldest supported version of the Rust compiler is `1.40.0`.
+The current oldest supported version of the Rust compiler is `1.43.1`.
 
 On both Windows and Redox, only the nightly version is tested currently.
 
@@ -317,6 +316,16 @@ To pass an argument like "-v" to the busybox test runtime
 
 ```bash
 $ make UTILS='UTILITY_1 UTILITY_2' RUNTEST_ARGS='-v' busytest
+```
+
+## Comparing with GNU
+
+![Evolution over time](https://github.com/uutils/coreutils-tracking/blob/main/gnu-results.png?raw=true)
+
+To run locally:
+```bash
+$ bash util/build-gnu.sh
+$ bash util/run-gnu-test.sh
 ```
 
 ## Contribute

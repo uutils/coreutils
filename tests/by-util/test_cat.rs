@@ -347,7 +347,13 @@ fn test_squeeze_blank_before_numbering() {
 #[cfg(unix)]
 fn test_dev_random() {
     let mut buf = [0; 2048];
-    let mut proc = new_ucmd!().args(&["/dev/random"]).run_no_wait();
+    #[cfg(target_os = "linux")]
+    const DEV_RANDOM: &str = "/dev/urandom";
+
+    #[cfg(not(target_os = "linux"))]
+    const DEV_RANDOM: &str = "/dev/random";
+
+    let mut proc = new_ucmd!().args(&[DEV_RANDOM]).run_no_wait();
     let mut proc_stdout = proc.stdout.take().unwrap();
     proc_stdout.read_exact(&mut buf).unwrap();
 
@@ -395,14 +401,14 @@ fn test_dev_full_show_all() {
 
 #[test]
 #[cfg(unix)]
+#[ignore]
 fn test_domain_socket() {
     use std::io::prelude::*;
     use std::sync::{Arc, Barrier};
     use std::thread;
-    use tempdir::TempDir;
     use unix_socket::UnixListener;
 
-    let dir = TempDir::new("unix_socket").expect("failed to create dir");
+    let dir = tempfile::Builder::new().prefix("unix_socket").tempdir().expect("failed to create dir");
     let socket_path = dir.path().join("sock");
     let listener = UnixListener::bind(&socket_path).expect("failed to create socket");
 

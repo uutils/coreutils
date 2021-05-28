@@ -1,8 +1,8 @@
 use clap::{App, Arg};
 use std::convert::TryFrom;
 use std::ffi::OsString;
-use std::io::{ErrorKind, Read, Seek, SeekFrom, Write};
-use uucore::{crash, executable, show_error};
+use std::io::{self, ErrorKind, Read, Seek, SeekFrom, Write};
+use uucore::{crash, executable, show_error, show_error_custom_description};
 
 const EXIT_FAILURE: i32 = 1;
 const EXIT_SUCCESS: i32 = 0;
@@ -27,8 +27,12 @@ mod options {
     pub const ZERO_NAME: &str = "ZERO";
     pub const FILES_NAME: &str = "FILE";
 }
+mod lines;
 mod parse;
 mod split;
+mod take;
+use lines::zlines;
+use take::take_all_but;
 
 fn app<'a>() -> App<'a, 'a> {
     App::new(executable!())
@@ -206,38 +210,20 @@ impl Default for HeadOptions {
     }
 }
 
-fn rbuf_n_bytes(input: &mut impl std::io::BufRead, n: usize) -> std::io::Result<()> {
-    if n == 0 {
-        return Ok(());
-    }
-    let mut readbuf = [0u8; BUF_SIZE];
-    let mut i = 0usize;
+fn rbuf_n_bytes<R>(input: R, n: usize) -> std::io::Result<()>
+where
+    R: Read,
+{
+    // Read the first `n` bytes from the `input` reader.
+    let mut reader = input.take(n as u64);
 
+    // Write those bytes to `stdout`.
     let stdout = std::io::stdout();
     let mut stdout = stdout.lock();
 
-    loop {
-        let read = loop {
-            match input.read(&mut readbuf) {
-                Ok(n) => break n,
-                Err(e) => match e.kind() {
-                    ErrorKind::Interrupted => {}
-                    _ => return Err(e),
-                },
-            }
-        };
-        if read == 0 {
-            // might be unexpected if
-            // we haven't read `n` bytes
-            // but this mirrors GNU's behavior
-            return Ok(());
-        }
-        stdout.write_all(&readbuf[..read.min(n - i)])?;
-        i += read.min(n - i);
-        if i == n {
-            return Ok(());
-        }
-    }
+    io::copy(&mut reader, &mut stdout)?;
+
+    Ok(())
 }
 
 fn rbuf_n_lines(input: &mut impl std::io::BufRead, n: usize, zero: bool) -> std::io::Result<()> {
@@ -311,36 +297,22 @@ fn rbuf_but_last_n_bytes(input: &mut impl std::io::BufRead, n: usize) -> std::io
 }
 
 fn rbuf_but_last_n_lines(
-    input: &mut impl std::io::BufRead,
+    input: impl std::io::BufRead,
     n: usize,
     zero: bool,
 ) -> std::io::Result<()> {
-    if n == 0 {
-        //prints everything
-        return rbuf_n_bytes(input, std::usize::MAX);
+    if zero {
+        let stdout = std::io::stdout();
+        let mut stdout = stdout.lock();
+        for bytes in take_all_but(zlines(input), n) {
+            stdout.write_all(&bytes?)?;
+        }
+    } else {
+        for line in take_all_but(input.lines(), n) {
+            println!("{}", line?);
+        }
     }
-    let mut ringbuf = vec![Vec::new(); n];
-    let stdout = std::io::stdout();
-    let mut stdout = stdout.lock();
-    let mut line = Vec::new();
-    let mut lines = 0usize;
-    split::walk_lines(input, zero, |e| match e {
-        split::Event::Data(dat) => {
-            line.extend_from_slice(dat);
-            Ok(true)
-        }
-        split::Event::Line => {
-            if lines < n {
-                ringbuf[lines] = std::mem::replace(&mut line, Vec::new());
-                lines += 1;
-            } else {
-                stdout.write_all(&ringbuf[0])?;
-                ringbuf.rotate_left(1);
-                ringbuf[n - 1] = std::mem::replace(&mut line, Vec::new());
-            }
-            Ok(true)
-        }
-    })
+    Ok(())
 }
 
 fn head_backwards_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Result<()> {
@@ -418,12 +390,13 @@ fn head_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Resul
     }
 }
 
-fn uu_head(options: &HeadOptions) {
+fn uu_head(options: &HeadOptions) -> Result<(), u32> {
+    let mut error_count = 0;
     let mut first = true;
     for fname in &options.files {
         let res = match fname.as_str() {
             "-" => {
-                if options.verbose {
+                if (options.files.len() > 1 && !options.quiet) || options.verbose {
                     if !first {
                         println!();
                     }
@@ -451,52 +424,48 @@ fn uu_head(options: &HeadOptions) {
             name => {
                 let mut file = match std::fs::File::open(name) {
                     Ok(f) => f,
-                    Err(err) => match err.kind() {
-                        ErrorKind::NotFound => {
-                            crash!(
-                                EXIT_FAILURE,
-                                "head: cannot open '{}' for reading: No such file or directory",
-                                name
-                            );
+                    Err(err) => {
+                        let prefix = format!("cannot open '{}' for reading", name);
+                        match err.kind() {
+                            ErrorKind::NotFound => {
+                                show_error_custom_description!(prefix, "No such file or directory");
+                            }
+                            ErrorKind::PermissionDenied => {
+                                show_error_custom_description!(prefix, "Permission denied");
+                            }
+                            _ => {
+                                show_error_custom_description!(prefix, "{}", err);
+                            }
                         }
-                        ErrorKind::PermissionDenied => {
-                            crash!(
-                                EXIT_FAILURE,
-                                "head: cannot open '{}' for reading: Permission denied",
-                                name
-                            );
-                        }
-                        _ => {
-                            crash!(
-                                EXIT_FAILURE,
-                                "head: cannot open '{}' for reading: {}",
-                                name,
-                                err
-                            );
-                        }
-                    },
+                        error_count += 1;
+                        continue;
+                    }
                 };
                 if (options.files.len() > 1 && !options.quiet) || options.verbose {
+                    if !first {
+                        println!();
+                    }
                     println!("==> {} <==", name)
                 }
                 head_file(&mut file, options)
             }
         };
         if res.is_err() {
-            if fname.as_str() == "-" {
-                crash!(
-                    EXIT_FAILURE,
-                    "head: error reading standard input: Input/output error"
-                );
+            let name = if fname.as_str() == "-" {
+                "standard input"
             } else {
-                crash!(
-                    EXIT_FAILURE,
-                    "head: error reading {}: Input/output error",
-                    fname
-                );
-            }
+                fname
+            };
+            let prefix = format!("error reading {}", name);
+            show_error_custom_description!(prefix, "Input/output error");
+            error_count += 1;
         }
         first = false;
+    }
+    if error_count > 0 {
+        Err(error_count)
+    } else {
+        Ok(())
     }
 }
 
@@ -507,9 +476,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             crash!(EXIT_FAILURE, "head: {}", s);
         }
     };
-    uu_head(&args);
-
-    EXIT_SUCCESS
+    match uu_head(&args) {
+        Ok(_) => EXIT_SUCCESS,
+        Err(_) => EXIT_FAILURE,
+    }
 }
 
 #[cfg(test)]

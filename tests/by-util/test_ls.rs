@@ -5,6 +5,7 @@ use crate::common::util::*;
 extern crate regex;
 use self::regex::Regex;
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
@@ -18,9 +19,7 @@ use std::path::PathBuf;
 #[cfg(not(windows))]
 use std::sync::Mutex;
 #[cfg(not(windows))]
-extern crate tempdir;
-#[cfg(not(windows))]
-use self::tempdir::TempDir;
+extern crate tempfile;
 
 #[cfg(not(windows))]
 lazy_static! {
@@ -166,7 +165,7 @@ fn test_ls_width() {
             .ucmd()
             .args(&option.split(" ").collect::<Vec<_>>())
             .fails()
-            .stderr_only("ls: error: invalid line width: ‘1a’");
+            .stderr_only("ls: invalid line width: ‘1a’");
     }
 }
 
@@ -304,6 +303,50 @@ fn test_ls_long() {
     {
         unsafe {
             umask(last);
+        }
+    }
+}
+
+#[test]
+fn test_ls_long_total_size() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch(&at.plus_as_string("test-long"));
+    at.append("test-long", "1");
+    at.touch(&at.plus_as_string("test-long2"));
+    at.append("test-long2", "2");
+
+    let expected_prints: HashMap<_, _> = if cfg!(unix) {
+        [
+            ("long_vanilla", "total 8"),
+            ("long_human_readable", "total 8.0K"),
+            ("long_si", "total 8.2k"),
+        ]
+        .iter()
+        .cloned()
+        .collect()
+    } else {
+        [
+            ("long_vanilla", "total 2"),
+            ("long_human_readable", "total 2"),
+            ("long_si", "total 2"),
+        ]
+        .iter()
+        .cloned()
+        .collect()
+    };
+
+    for arg in &["-l", "--long", "--format=long", "--format=verbose"] {
+        let result = scene.ucmd().arg(arg).succeeds();
+        result.stdout_contains(expected_prints["long_vanilla"]);
+
+        for arg2 in &["-h", "--human-readable", "--si"] {
+            let result = scene.ucmd().arg(arg).arg(arg2).succeeds();
+            result.stdout_contains(if *arg2 == "--si" {
+                expected_prints["long_si"]
+            } else {
+                expected_prints["long_human_readable"]
+            });
         }
     }
 }
@@ -640,7 +683,7 @@ fn test_ls_styles() {
     at.touch("test");
 
     let re_full = Regex::new(
-        r"[a-z-]* \d* \w* \w* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d* \+\d{4} test\n",
+        r"[a-z-]* \d* \w* \w* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d* (\+|\-)\d{4} test\n",
     )
     .unwrap();
     let re_long =
@@ -830,7 +873,7 @@ fn test_ls_files_dirs() {
         .ucmd()
         .arg("doesntexist")
         .fails()
-        .stderr_contains(&"error: 'doesntexist': No such file or directory");
+        .stderr_contains(&"'doesntexist': No such file or directory");
 
     // One exists, the other doesn't
     scene
@@ -838,7 +881,7 @@ fn test_ls_files_dirs() {
         .arg("a")
         .arg("doesntexist")
         .fails()
-        .stderr_contains(&"error: 'doesntexist': No such file or directory")
+        .stderr_contains(&"'doesntexist': No such file or directory")
         .stdout_contains(&"a:");
 }
 
@@ -1042,7 +1085,7 @@ fn test_ls_indicator_style() {
     {
         use self::unix_socket::UnixListener;
 
-        let dir = TempDir::new("unix_socket").expect("failed to create dir");
+        let dir = tempfile::Builder::new().prefix("unix_socket").tempdir().expect("failed to create dir");
         let socket_path = dir.path().join("sock");
         let _listener = UnixListener::bind(&socket_path).expect("failed to create socket");
 
@@ -1920,4 +1963,49 @@ fn test_ls_sort_extension() {
         result.stdout_str().split('\n').collect::<Vec<_>>(),
         expected,
     );
+}
+
+#[test]
+fn test_ls_path() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file1 = "file1";
+    let file2 = "file2";
+    let dir = "dir";
+    let path = &format!("{}/{}", dir, file2);
+
+    at.mkdir(dir);
+    at.touch(file1);
+    at.touch(path);
+
+    let expected_stdout = &format!("{}\n", path);
+    scene.ucmd().arg(path).run().stdout_is(expected_stdout);
+
+    let expected_stdout = &format!("./{}\n", path);
+    scene
+        .ucmd()
+        .arg(format!("./{}", path))
+        .run()
+        .stdout_is(expected_stdout);
+
+    let abs_path = format!("{}/{}", at.as_string(), path);
+    let expected_stdout = if cfg!(windows) {
+        format!("\'{}\'\n", abs_path)
+    } else {
+        format!("{}\n", abs_path)
+    };
+    scene.ucmd().arg(&abs_path).run().stdout_is(expected_stdout);
+
+    let expected_stdout = if cfg!(windows) {
+        format!("{}  {}\n", path, file1)
+    } else {
+        format!("{}\n{}\n", path, file1)
+    };
+    scene
+        .ucmd()
+        .arg(file1)
+        .arg(path)
+        .run()
+        .stdout_is(expected_stdout);
 }

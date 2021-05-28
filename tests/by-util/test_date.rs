@@ -105,6 +105,29 @@ fn test_date_format_full_day() {
 }
 
 #[test]
+fn test_date_nano_seconds() {
+    // %N     nanoseconds (000000000..999999999)
+    let re = Regex::new(r"^\d{1,9}$").unwrap();
+    new_ucmd!().arg("+%N").succeeds().stdout_matches(&re);
+}
+
+#[test]
+fn test_date_format_without_plus() {
+    // [+FORMAT]
+    new_ucmd!()
+        .arg("%s")
+        .fails()
+        .stderr_contains("date: invalid date ‘%s’")
+        .code_is(1);
+}
+
+#[test]
+fn test_date_format_literal() {
+    new_ucmd!().arg("+%%s").succeeds().stdout_is("%s\n");
+    new_ucmd!().arg("+%%N").succeeds().stdout_is("%N\n");
+}
+
+#[test]
 #[cfg(all(unix, not(target_os = "macos")))]
 fn test_date_set_valid() {
     if get_effective_uid() == 0 {

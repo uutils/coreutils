@@ -13,11 +13,11 @@ extern crate uucore;
 mod platform;
 
 use clap::{App, Arg};
-use std::char;
 use std::env;
 use std::fs::File;
-use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
+use std::io::{stdin, BufRead, BufReader, BufWriter, Read, Write};
 use std::path::Path;
+use std::{char, fs::remove_file};
 
 static NAME: &str = "split";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -213,107 +213,145 @@ struct Settings {
     verbose: bool,
 }
 
-struct SplitControl {
-    current_line: String,   // Don't touch
-    request_new_file: bool, // Splitter implementation requests new file
-}
-
 trait Splitter {
-    // Consume the current_line and return the consumed string
-    fn consume(&mut self, _: &mut SplitControl) -> String;
+    // Consume as much as possible from `reader` so as to saturate `writer`.
+    // Equivalent to finishing one of the part files. Returns the number of
+    // bytes that have been moved.
+    fn consume(
+        &mut self,
+        reader: &mut BufReader<Box<dyn Read>>,
+        writer: &mut BufWriter<Box<dyn Write>>,
+    ) -> u128;
 }
 
 struct LineSplitter {
-    saved_lines_to_write: usize,
-    lines_to_write: usize,
+    lines_per_split: usize,
 }
 
 impl LineSplitter {
     fn new(settings: &Settings) -> LineSplitter {
-        let n = match settings.strategy_param.parse() {
-            Ok(a) => a,
-            Err(e) => crash!(1, "invalid number of lines: {}", e),
-        };
         LineSplitter {
-            saved_lines_to_write: n,
-            lines_to_write: n,
+            lines_per_split: settings
+                .strategy_param
+                .parse()
+                .unwrap_or_else(|e| crash!(1, "invalid number of lines: {}", e)),
         }
     }
 }
 
 impl Splitter for LineSplitter {
-    fn consume(&mut self, control: &mut SplitControl) -> String {
-        self.lines_to_write -= 1;
-        if self.lines_to_write == 0 {
-            self.lines_to_write = self.saved_lines_to_write;
-            control.request_new_file = true;
+    fn consume(
+        &mut self,
+        reader: &mut BufReader<Box<dyn Read>>,
+        writer: &mut BufWriter<Box<dyn Write>>,
+    ) -> u128 {
+        let mut bytes_consumed = 0u128;
+        let mut buffer = String::with_capacity(1024);
+        for _ in 0..self.lines_per_split {
+            let bytes_read = reader
+                .read_line(&mut buffer)
+                .unwrap_or_else(|_| crash!(1, "error reading bytes from input file"));
+            // If we ever read 0 bytes then we know we've hit EOF.
+            if bytes_read == 0 {
+                return bytes_consumed;
+            }
+
+            writer
+                .write_all(buffer.as_bytes())
+                .unwrap_or_else(|_| crash!(1, "error writing bytes to output file"));
+            // Empty out the String buffer since `read_line` appends instead of
+            // replaces.
+            buffer.clear();
+
+            bytes_consumed += bytes_read as u128;
         }
-        control.current_line.clone()
+
+        bytes_consumed
     }
 }
 
 struct ByteSplitter {
-    saved_bytes_to_write: usize,
-    bytes_to_write: usize,
-    break_on_line_end: bool,
-    require_whole_line: bool,
+    bytes_per_split: u128,
 }
 
 impl ByteSplitter {
     fn new(settings: &Settings) -> ByteSplitter {
-        let mut strategy_param: Vec<char> = settings.strategy_param.chars().collect();
-        let suffix = strategy_param.pop().unwrap();
-        let multiplier = match suffix {
-            '0'..='9' => 1usize,
-            'b' => 512usize,
-            'k' => 1024usize,
-            'm' => 1024usize * 1024usize,
-            _ => crash!(1, "invalid number of bytes"),
-        };
-        let n = if suffix.is_alphabetic() {
-            match strategy_param
-                .iter()
-                .cloned()
-                .collect::<String>()
-                .parse::<usize>()
-            {
-                Ok(a) => a,
-                Err(e) => crash!(1, "invalid number of bytes: {}", e),
-            }
-        } else {
-            match settings.strategy_param.parse::<usize>() {
-                Ok(a) => a,
-                Err(e) => crash!(1, "invalid number of bytes: {}", e),
-            }
-        };
+        // These multipliers are the same as supported by GNU coreutils.
+        let modifiers: Vec<(&str, u128)> = vec![
+            ("K", 1024u128),
+            ("M", 1024 * 1024),
+            ("G", 1024 * 1024 * 1024),
+            ("T", 1024 * 1024 * 1024 * 1024),
+            ("P", 1024 * 1024 * 1024 * 1024 * 1024),
+            ("E", 1024 * 1024 * 1024 * 1024 * 1024 * 1024),
+            ("Z", 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024),
+            ("Y", 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024),
+            ("KB", 1000),
+            ("MB", 1000 * 1000),
+            ("GB", 1000 * 1000 * 1000),
+            ("TB", 1000 * 1000 * 1000 * 1000),
+            ("PB", 1000 * 1000 * 1000 * 1000 * 1000),
+            ("EB", 1000 * 1000 * 1000 * 1000 * 1000 * 1000),
+            ("ZB", 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000),
+            ("YB", 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000),
+        ];
+
+        // This sequential find is acceptable since none of the modifiers are
+        // suffixes of any other modifiers, a la Huffman codes.
+        let (suffix, multiplier) = modifiers
+            .iter()
+            .find(|(suffix, _)| settings.strategy_param.ends_with(suffix))
+            .unwrap_or(&("", 1));
+
+        // Try to parse the actual numeral.
+        let n = &settings.strategy_param[0..(settings.strategy_param.len() - suffix.len())]
+            .parse::<u128>()
+            .unwrap_or_else(|e| crash!(1, "invalid number of bytes: {}", e));
+
         ByteSplitter {
-            saved_bytes_to_write: n * multiplier,
-            bytes_to_write: n * multiplier,
-            break_on_line_end: settings.strategy == "b",
-            require_whole_line: false,
+            bytes_per_split: n * multiplier,
         }
     }
 }
 
 impl Splitter for ByteSplitter {
-    fn consume(&mut self, control: &mut SplitControl) -> String {
-        let line = control.current_line.clone();
-        let n = std::cmp::min(line.chars().count(), self.bytes_to_write);
-        if self.require_whole_line && n < line.chars().count() {
-            self.bytes_to_write = self.saved_bytes_to_write;
-            control.request_new_file = true;
-            self.require_whole_line = false;
-            return "".to_owned();
+    fn consume(
+        &mut self,
+        reader: &mut BufReader<Box<dyn Read>>,
+        writer: &mut BufWriter<Box<dyn Write>>,
+    ) -> u128 {
+        // We buffer reads and writes. We proceed until `bytes_consumed` is
+        // equal to `self.bytes_per_split` or we reach EOF.
+        let mut bytes_consumed = 0u128;
+        const BUFFER_SIZE: usize = 1024;
+        let mut buffer = [0u8; BUFFER_SIZE];
+        while bytes_consumed < self.bytes_per_split {
+            // Don't overshoot `self.bytes_per_split`! Note: Using std::cmp::min
+            // doesn't really work since we have to get types to match which
+            // can't be done in a way that keeps all conversions safe.
+            let bytes_desired = if (BUFFER_SIZE as u128) <= self.bytes_per_split - bytes_consumed {
+                BUFFER_SIZE
+            } else {
+                // This is a safe conversion since the difference must be less
+                // than BUFFER_SIZE in this branch.
+                (self.bytes_per_split - bytes_consumed) as usize
+            };
+            let bytes_read = reader
+                .read(&mut buffer[0..bytes_desired])
+                .unwrap_or_else(|_| crash!(1, "error reading bytes from input file"));
+            // If we ever read 0 bytes then we know we've hit EOF.
+            if bytes_read == 0 {
+                return bytes_consumed;
+            }
+
+            writer
+                .write_all(&buffer[0..bytes_read])
+                .unwrap_or_else(|_| crash!(1, "error writing bytes to output file"));
+
+            bytes_consumed += bytes_read as u128;
         }
-        self.bytes_to_write -= n;
-        if n == 0 {
-            self.bytes_to_write = self.saved_bytes_to_write;
-            control.request_new_file = true;
-        }
-        if self.break_on_line_end && n == line.chars().count() {
-            self.require_whole_line = self.break_on_line_end;
-        }
-        line[..n].to_owned()
+
+        bytes_consumed
     }
 }
 
@@ -353,14 +391,13 @@ fn split(settings: &Settings) -> i32 {
     let mut reader = BufReader::new(if settings.input == "-" {
         Box::new(stdin()) as Box<dyn Read>
     } else {
-        let r = match File::open(Path::new(&settings.input)) {
-            Ok(a) => a,
-            Err(_) => crash!(
+        let r = File::open(Path::new(&settings.input)).unwrap_or_else(|_| {
+            crash!(
                 1,
                 "cannot open '{}' for reading: No such file or directory",
                 settings.input
-            ),
-        };
+            )
+        });
         Box::new(r) as Box<dyn Read>
     });
 
@@ -370,48 +407,39 @@ fn split(settings: &Settings) -> i32 {
         a => crash!(1, "strategy {} not supported", a),
     };
 
-    let mut control = SplitControl {
-        current_line: "".to_owned(), // Request new line
-        request_new_file: true,      // Request new file
-    };
-
-    let mut writer = BufWriter::new(Box::new(stdout()) as Box<dyn Write>);
     let mut fileno = 0;
     loop {
-        if control.current_line.chars().count() == 0 {
-            match reader.read_line(&mut control.current_line) {
-                Ok(0) | Err(_) => break,
-                _ => {}
+        // Get a new part file set up, and construct `writer` for it.
+        let mut filename = settings.prefix.clone();
+        filename.push_str(
+            if settings.numeric_suffix {
+                num_prefix(fileno, settings.suffix_length)
+            } else {
+                str_prefix(fileno, settings.suffix_length)
             }
-        }
-        if control.request_new_file {
-            let mut filename = settings.prefix.clone();
-            filename.push_str(
-                if settings.numeric_suffix {
-                    num_prefix(fileno, settings.suffix_length)
-                } else {
-                    str_prefix(fileno, settings.suffix_length)
-                }
-                .as_ref(),
-            );
-            filename.push_str(settings.additional_suffix.as_ref());
+            .as_ref(),
+        );
+        filename.push_str(settings.additional_suffix.as_ref());
+        let mut writer = platform::instantiate_current_writer(&settings.filter, filename.as_str());
 
-            crash_if_err!(1, writer.flush());
-            fileno += 1;
-            writer = platform::instantiate_current_writer(&settings.filter, filename.as_str());
-            control.request_new_file = false;
-            if settings.verbose {
-                println!("creating file '{}'", filename);
+        let bytes_consumed = splitter.consume(&mut reader, &mut writer);
+        writer
+            .flush()
+            .unwrap_or_else(|e| crash!(1, "error flushing to output file: {}", e));
+
+        // If we didn't write anything we should clean up the empty file, and
+        // break from the loop.
+        if bytes_consumed == 0 {
+            // The output file is only ever created if --filter isn't used.
+            // Complicated, I know...
+            if settings.filter.is_none() {
+                remove_file(filename)
+                    .unwrap_or_else(|e| crash!(1, "error removing empty file: {}", e));
             }
+            break;
         }
 
-        let consumed = splitter.consume(&mut control);
-        crash_if_err!(1, writer.write_all(consumed.as_bytes()));
-
-        let advance = consumed.chars().count();
-        let clone = control.current_line.clone();
-        let sl = clone;
-        control.current_line = sl[advance..sl.chars().count()].to_owned();
+        fileno += 1;
     }
     0
 }

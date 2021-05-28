@@ -15,19 +15,20 @@ edition = "2018"
 path = "src/sort.rs"
 
 [dependencies]
-serde_json = { version = "1.0.64", default-features = false, features = ["alloc"] }
-serde = { version = "1.0", features = ["derive"] }
-rayon = "1.5"
-rand = "0.7"
+binary-heap-plus = "0.4.1"
 clap = "2.33"
+compare = "0.1.0"
 fnv = "1.0.7"
 itertools = "0.10.0"
+memchr = "2.4.0"
+ouroboros = "0.9.3"
+rand = "0.7"
+rayon = "1.5"
 semver = "0.9.0"
-smallvec = { version="1.6.1", features=["serde"] } 
+tempfile = "3"
 unicode-width = "0.1.8"
 uucore = { version=">=0.0.8", package="uucore", path="../../uucore", features=["fs"] }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
-tempdir = "0.3.7"
 
 [[bin]]
 name = "sort"

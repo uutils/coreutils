@@ -12,3 +12,6 @@ target/
 Cargo.lock
 lib*.a
 /docs/_build
+*.iml
+### macOS ###
+.DS_Store

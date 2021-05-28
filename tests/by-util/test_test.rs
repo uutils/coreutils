@@ -123,6 +123,13 @@ fn test_zero_len_not_equals_zero_len_is_false() {
 }
 
 #[test]
+fn test_double_equal_is_string_comparison_op() {
+    // undocumented but part of the GNU test suite
+    new_ucmd!().args(&["t", "==", "t"]).succeeds();
+    new_ucmd!().args(&["t", "==", "f"]).run().status_code(1);
+}
+
+#[test]
 fn test_string_comparison() {
     let scenario = TestScenario::new(util_name!());
     let tests = [
@@ -131,10 +138,21 @@ fn test_string_comparison() {
         ["(", "=", "("],
         ["(", "!=", ")"],
         ["!", "=", "!"],
+        ["=", "=", "="],
     ];
 
     for test in &tests {
         scenario.ucmd().args(&test[..]).succeeds();
+    }
+
+    // run the inverse of all these tests
+    for test in &tests {
+        scenario
+            .ucmd()
+            .arg("!")
+            .args(&test[..])
+            .run()
+            .status_code(1);
     }
 }
 
@@ -419,10 +437,9 @@ fn test_not_is_not_empty() {
 #[cfg(not(windows))]
 fn test_symlink_is_symlink() {
     let scenario = TestScenario::new(util_name!());
-    let mut ln = scenario.cmd("ln");
+    let at = &scenario.fixtures;
 
-    // creating symlinks requires admin on Windows
-    ln.args(&["-s", "regular_file", "symlink"]).succeeds();
+    at.symlink_file("regular_file", "symlink");
 
     // FIXME: implement on Windows
     scenario.ucmd().args(&["-h", "symlink"]).succeeds();
@@ -483,6 +500,81 @@ fn test_op_prec_and_or_2_overridden_by_parentheses() {
         .args(&["", "-a", "(", "", "-o", " ", ")", "-a", " "])
         .run()
         .status_code(1);
+}
+
+#[test]
+fn test_negated_boolean_precedence() {
+    let scenario = TestScenario::new(util_name!());
+
+    let tests = [
+        vec!["!", "(", "foo", ")", "-o", "bar"],
+        vec!["!", "", "-o", "", "-a", ""],
+        vec!["!", "(", "", "-a", "", ")", "-o", ""],
+    ];
+
+    for test in &tests {
+        scenario.ucmd().args(&test[..]).succeeds();
+    }
+
+    let negative_tests = [
+        vec!["!", "-n", "", "-a", ""],
+        vec!["", "-a", "", "-o", ""],
+        vec!["!", "", "-a", "", "-o", ""],
+        vec!["!", "(", "", "-a", "", ")", "-a", ""],
+    ];
+
+    for test in &negative_tests {
+        scenario.ucmd().args(&test[..]).run().status_code(1);
+    }
+}
+
+#[test]
+fn test_bang_boolop_precedence() {
+    // For a Boolean combination of two literals, bang inverts the entire expression
+    new_ucmd!().args(&["!", "", "-a", ""]).succeeds();
+    new_ucmd!().args(&["!", "", "-o", ""]).succeeds();
+
+    new_ucmd!()
+        .args(&["!", "a value", "-o", "another value"])
+        .run()
+        .status_code(1);
+
+    // Introducing a UOP — even one that is equivalent to a bare string — causes
+    // bang to invert only the first term
+    new_ucmd!()
+        .args(&["!", "-n", "", "-a", ""])
+        .run()
+        .status_code(1);
+    new_ucmd!()
+        .args(&["!", "", "-a", "-n", ""])
+        .run()
+        .status_code(1);
+
+    // for compound Boolean expressions, bang inverts the _next_ expression
+    // only, not the entire compound expression
+    new_ucmd!()
+        .args(&["!", "", "-a", "", "-a", ""])
+        .run()
+        .status_code(1);
+
+    // parentheses can override this
+    new_ucmd!()
+        .args(&["!", "(", "", "-a", "", "-a", "", ")"])
+        .succeeds();
+}
+
+#[test]
+fn test_inverted_parenthetical_boolop_precedence() {
+    // For a Boolean combination of two literals, bang inverts the entire expression
+    new_ucmd!()
+        .args(&["!", "a value", "-o", "another value"])
+        .run()
+        .status_code(1);
+
+    // only the parenthetical is inverted, not the entire expression
+    new_ucmd!()
+        .args(&["!", "(", "a value", ")", "-o", "another value"])
+        .succeeds();
 }
 
 #[test]
