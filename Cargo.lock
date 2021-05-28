@@ -50,13 +50,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6945cc5422176fc5e602e590c2878d2c2acd9a4fe20a4baa7c28022521698ec6"
 
 [[package]]
-name = "arrayvec"
-version = "0.4.12"
+name = "arrayref"
+version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd9fd44efafa8690358b7408d253adf110036b88f55672a933f01d616ad9b1b9"
-dependencies = [
- "nodrop",
-]
+checksum = "a4c527152e37cf757a3f78aae5a06fbeefdb07ccc535c980a3208ee3060dd544"
+
+[[package]]
+name = "arrayvec"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "23b62fc65de8e4e7f52534fb52b0f3ed04746ae267519eef2a83941e8085068b"
 
 [[package]]
 name = "atty"
@@ -106,11 +109,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
 
 [[package]]
-name = "blake2-rfc"
-version = "0.2.18"
+name = "blake2b_simd"
+version = "0.5.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d6d530bdd2d52966a6d03b7a964add7ae1a288d25214066fd4b600f0f796400"
+checksum = "afa748e348ad3be8263be728124b24a24f268266f6f5d58af9d75f6a40b5c587"
 dependencies = [
+ "arrayref",
  "arrayvec",
  "constant_time_eq",
 ]
@@ -2098,7 +2102,7 @@ dependencies = [
 name = "uu_hashsum"
 version = "0.0.6"
 dependencies = [
- "blake2-rfc",
+ "blake2b_simd",
  "clap",
  "digest",
  "hex",
