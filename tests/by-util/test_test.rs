@@ -437,10 +437,9 @@ fn test_not_is_not_empty() {
 #[cfg(not(windows))]
 fn test_symlink_is_symlink() {
     let scenario = TestScenario::new(util_name!());
-    let mut ln = scenario.cmd("ln");
+    let at = &scenario.fixtures;
 
-    // creating symlinks requires admin on Windows
-    ln.args(&["-s", "regular_file", "symlink"]).succeeds();
+    at.symlink_file("regular_file", "symlink");
 
     // FIXME: implement on Windows
     scenario.ucmd().args(&["-h", "symlink"]).succeeds();

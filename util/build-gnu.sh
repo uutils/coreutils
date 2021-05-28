@@ -43,10 +43,19 @@ sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${BUILDDIR//\//\\/}\$(PATH_SEPARATOR)'\"\
 sed -i 's| tr | /usr/bin/tr |' tests/init.sh
 make
 # Generate the factor tests, so they can be fixed
-for i in {00..36}
+# Used to be 36. Reduced to 20 to decrease the log size
+for i in {00..20}
 do
     make tests/factor/t${i}.sh
 done
+
+# strip the long stuff
+for i in {21..36}
+do
+    sed -i -e "s/\$(tf)\/t${i}.sh//g" Makefile
+done
+
+
 grep -rl 'path_prepend_' tests/* | xargs sed -i 's|path_prepend_ ./src||'
 sed -i -e 's|^seq |/usr/bin/seq |' -e 's|sha1sum |/usr/bin/sha1sum |' tests/factor/t*sh
 
@@ -55,6 +64,10 @@ sed -i -e 's|^seq |/usr/bin/seq |' -e 's|sha1sum |/usr/bin/sha1sum |' tests/fact
 sed -i -e '/tests\/misc\/invalid-opt.pl/ D' \
     -e '/tests\/misc\/help-version.sh/ D' \
     -e '/tests\/misc\/help-version-getopt.sh/ D' \
+    Makefile
+
+# logs are clotted because of this test
+sed -i -e '/tests\/misc\/seq-precision.sh/ D' \
     Makefile
 
 # printf doesn't limit the values used in its arg, so this produced ~2GB of output

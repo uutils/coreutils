@@ -76,7 +76,7 @@ fn test_du_basics_bad_name() {
     new_ucmd!()
         .arg("bad_name")
         .succeeds() // TODO: replace with ".fails()" once `du` is fixed
-        .stderr_only("du: error: bad_name: No such file or directory\n");
+        .stderr_only("du: bad_name: No such file or directory\n");
 }
 
 #[test]
@@ -129,11 +129,9 @@ fn _du_soft_link(s: &str) {
 #[test]
 fn test_du_hard_link() {
     let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
 
-    let result_ln = scene.cmd("ln").arg(SUB_FILE).arg(SUB_LINK).run();
-    if !result_ln.succeeded() {
-        scene.ccmd("ln").arg(SUB_FILE).arg(SUB_LINK).succeeds();
-    }
+    at.hard_link(SUB_FILE, SUB_LINK);
 
     let result = scene.ucmd().arg(SUB_DIR_LINKS).succeeds();
 

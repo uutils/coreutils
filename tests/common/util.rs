@@ -7,7 +7,7 @@ use std::env;
 #[cfg(not(windows))]
 use std::ffi::CString;
 use std::ffi::OsStr;
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, hard_link, File, OpenOptions};
 use std::io::{Read, Result, Write};
 #[cfg(unix)]
 use std::os::unix::fs::{symlink as symlink_dir, symlink as symlink_file};
@@ -524,6 +524,14 @@ impl AtPath {
         }
     }
 
+    pub fn hard_link(&self, src: &str, dst: &str) {
+        log_info(
+            "hard_link",
+            &format!("{},{}", self.plus_as_string(src), self.plus_as_string(dst)),
+        );
+        hard_link(&self.plus(src), &self.plus(dst)).unwrap();
+    }
+
     pub fn symlink_file(&self, src: &str, dst: &str) {
         log_info(
             "symlink",
@@ -680,6 +688,10 @@ impl TestScenario {
         cmd
     }
 
+    /// Returns builder for invoking any system command. Paths given are treated
+    /// relative to the environment's unique temporary test directory.
+    /// Differs from the builder returned by `cmd` in that `cmd_keepenv` does not call
+    /// `Command::env_clear` (Clears the entire environment map for the child process.)
     pub fn cmd_keepenv<S: AsRef<OsStr>>(&self, bin: S) -> UCommand {
         UCommand::new_from_tmp(bin, self.tmpd.clone(), false)
     }

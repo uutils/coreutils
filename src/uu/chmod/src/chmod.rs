@@ -262,8 +262,10 @@ impl Chmoder {
                         );
                     }
                     return Ok(());
+                } else if err.kind() == std::io::ErrorKind::PermissionDenied {
+                    show_error!("'{}': Permission denied", file.display());
                 } else {
-                    show_error!("{}: '{}'", err, file.display());
+                    show_error!("'{}': {}", file.display(), err);
                 }
                 return Err(1);
             }
@@ -316,7 +318,7 @@ impl Chmoder {
                 show_error!("{}", err);
             }
             if self.verbose {
-                show_info!(
+                show_error!(
                     "failed to change mode of file '{}' from {:o} ({}) to {:o} ({})",
                     file.display(),
                     fperm,
@@ -328,7 +330,7 @@ impl Chmoder {
             Err(1)
         } else {
             if self.verbose || self.changes {
-                show_info!(
+                show_error!(
                     "mode of '{}' changed from {:o} ({}) to {:o} ({})",
                     file.display(),
                     fperm,

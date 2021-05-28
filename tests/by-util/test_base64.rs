@@ -88,7 +88,7 @@ fn test_wrap_bad_arg() {
             .arg(wrap_param)
             .arg("b")
             .fails()
-            .stderr_only("base64: error: Invalid wrap size: ‘b’: invalid digit found in string\n");
+            .stderr_only("base64: Invalid wrap size: ‘b’: invalid digit found in string\n");
     }
 }
 
@@ -99,7 +99,7 @@ fn test_base64_extra_operand() {
         .arg("a.txt")
         .arg("a.txt")
         .fails()
-        .stderr_only("base64: error: extra operand ‘a.txt’");
+        .stderr_only("base64: extra operand ‘a.txt’");
 }
 
 #[test]
@@ -107,5 +107,5 @@ fn test_base64_file_not_found() {
     new_ucmd!()
         .arg("a.txt")
         .fails()
-        .stderr_only("base64: error: a.txt: No such file or directory");
+        .stderr_only("base64: a.txt: No such file or directory");
 }

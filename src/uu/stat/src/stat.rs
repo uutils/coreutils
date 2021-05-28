@@ -749,7 +749,7 @@ impl Stater {
                     }
                 }
                 Err(e) => {
-                    show_info!("cannot stat '{}': {}", file, e);
+                    show_error!("cannot stat '{}': {}", file, e);
                     return 1;
                 }
             }
@@ -842,7 +842,7 @@ impl Stater {
                     }
                 }
                 Err(e) => {
-                    show_info!("cannot read file system information for '{}': {}", file, e);
+                    show_error!("cannot read file system information for '{}': {}", file, e);
                     return 1;
                 }
             }
@@ -1001,7 +1001,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     match Stater::new(matches) {
         Ok(stater) => stater.exec(),
         Err(e) => {
-            show_info!("{}", e);
+            show_error!("{}", e);
             1
         }
     }

@@ -409,7 +409,7 @@ fn test_symlink_missing_destination() {
     at.touch(file);
 
     ucmd.args(&["-s", "-T", file]).fails().stderr_is(format!(
-        "ln: error: missing destination file operand after '{}'",
+        "ln: missing destination file operand after '{}'",
         file
     ));
 }
