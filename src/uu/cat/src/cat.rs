@@ -347,7 +347,7 @@ fn cat_files(files: Vec<String>, options: &OutputOptions) -> Result<(), u32> {
 
     for path in &files {
         if let Err(err) = cat_path(path, &options, &mut state) {
-            show_info!("{}: {}", path, err);
+            show_error!("{}: {}", path, err);
             error_count += 1;
         }
     }

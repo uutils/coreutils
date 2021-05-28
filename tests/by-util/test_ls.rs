@@ -19,9 +19,7 @@ use std::path::PathBuf;
 #[cfg(not(windows))]
 use std::sync::Mutex;
 #[cfg(not(windows))]
-extern crate tempdir;
-#[cfg(not(windows))]
-use self::tempdir::TempDir;
+extern crate tempfile;
 
 #[cfg(not(windows))]
 lazy_static! {
@@ -167,7 +165,7 @@ fn test_ls_width() {
             .ucmd()
             .args(&option.split(" ").collect::<Vec<_>>())
             .fails()
-            .stderr_only("ls: error: invalid line width: ‘1a’");
+            .stderr_only("ls: invalid line width: ‘1a’");
     }
 }
 
@@ -875,7 +873,7 @@ fn test_ls_files_dirs() {
         .ucmd()
         .arg("doesntexist")
         .fails()
-        .stderr_contains(&"error: 'doesntexist': No such file or directory");
+        .stderr_contains(&"'doesntexist': No such file or directory");
 
     // One exists, the other doesn't
     scene
@@ -883,7 +881,7 @@ fn test_ls_files_dirs() {
         .arg("a")
         .arg("doesntexist")
         .fails()
-        .stderr_contains(&"error: 'doesntexist': No such file or directory")
+        .stderr_contains(&"'doesntexist': No such file or directory")
         .stdout_contains(&"a:");
 }
 
@@ -1087,7 +1085,7 @@ fn test_ls_indicator_style() {
     {
         use self::unix_socket::UnixListener;
 
-        let dir = TempDir::new("unix_socket").expect("failed to create dir");
+        let dir = tempfile::Builder::new().prefix("unix_socket").tempdir().expect("failed to create dir");
         let socket_path = dir.path().join("sock");
         let _listener = UnixListener::bind(&socket_path).expect("failed to create socket");
 

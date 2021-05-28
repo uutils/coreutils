@@ -29,7 +29,6 @@ mod options {
     pub const ONLY_HOSTNAME_USER: &str = "only_hostname_user";
     pub const PROCESS: &str = "process";
     pub const COUNT: &str = "count";
-    #[cfg(any(target_os = "linux", target_os = "android"))]
     pub const RUNLEVEL: &str = "runlevel";
     pub const SHORT: &str = "short";
     pub const TIME: &str = "time";
@@ -40,6 +39,11 @@ mod options {
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Print information about users who are currently logged in.";
+
+#[cfg(any(target_os = "linux"))]
+static RUNLEVEL_HELP: &str = "print current runlevel";
+#[cfg(not(target_os = "linux"))]
+static RUNLEVEL_HELP: &str = "print current runlevel (This is meaningless on non Linux)";
 
 fn get_usage() -> String {
     format!("{0} [OPTION]... [ FILE | ARG1 ARG2 ]", executable!())
@@ -119,13 +123,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("all login names and number of users logged on"),
         )
         .arg(
-            #[cfg(any(target_os = "linux", target_os = "android"))]
             Arg::with_name(options::RUNLEVEL)
                 .long(options::RUNLEVEL)
                 .short("r")
-                .help("print current runlevel"),
-            #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
-            Arg::with_name(""),
+                .help(RUNLEVEL_HELP),
         )
         .arg(
             Arg::with_name(options::SHORT)
@@ -267,13 +268,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             assumptions = false;
         }
 
-        #[cfg(any(target_os = "linux", target_os = "android"))]
-        {
-            if matches.is_present(options::RUNLEVEL) {
-                need_runlevel = true;
-                include_idle = true;
-                assumptions = false;
-            }
+        if matches.is_present(options::RUNLEVEL) {
+            need_runlevel = true;
+            include_idle = true;
+            assumptions = false;
         }
 
         if matches.is_present(options::SHORT) {
@@ -389,15 +387,12 @@ fn current_tty() -> String {
 
 impl Who {
     fn exec(&mut self) {
-        let run_level_chk = |record: i16| {
-            #[allow(unused_assignments)]
-            let mut res = false;
+        let run_level_chk = |_record: i16| {
+            #[cfg(not(target_os = "linux"))]
+            return false;
 
-            #[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
-            {
-                res = record == utmpx::RUN_LVL;
-            }
-            res
+            #[cfg(target_os = "linux")]
+            return _record == utmpx::RUN_LVL;
         };
 
         let f = if self.args.len() == 1 {
@@ -430,7 +425,9 @@ impl Who {
                     if self.need_users && ut.is_user_process() {
                         self.print_user(&ut);
                     } else if self.need_runlevel && run_level_chk(ut.record_type()) {
-                        self.print_runlevel(&ut);
+                        if cfg!(target_os = "linux") {
+                            self.print_runlevel(&ut);
+                        }
                     } else if self.need_boottime && ut.record_type() == utmpx::BOOT_TIME {
                         self.print_boottime(&ut);
                     } else if self.need_clockchange && ut.record_type() == utmpx::NEW_TIME {

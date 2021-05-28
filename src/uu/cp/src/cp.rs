@@ -47,6 +47,7 @@ use std::os::windows::ffi::OsStrExt;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::str::FromStr;
 use std::string::ToString;
+use uucore::backup_control::{self, BackupMode};
 use uucore::fs::resolve_relative_path;
 use uucore::fs::{canonicalize, CanonicalizeMode};
 use walkdir::WalkDir;
@@ -169,14 +170,6 @@ pub enum TargetType {
     File,
 }
 
-#[derive(Clone, Eq, PartialEq)]
-pub enum BackupMode {
-    ExistingBackup,
-    NoBackup,
-    NumberedBackup,
-    SimpleBackup,
-}
-
 pub enum CopyMode {
     Link,
     SymLink,
@@ -201,7 +194,7 @@ pub enum Attribute {
 #[allow(dead_code)]
 pub struct Options {
     attributes_only: bool,
-    backup: bool,
+    backup: BackupMode,
     copy_contents: bool,
     copy_mode: CopyMode,
     dereference: bool,
@@ -222,6 +215,7 @@ pub struct Options {
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.";
+static LONG_HELP: &str = "";
 static EXIT_OK: i32 = 0;
 static EXIT_ERR: i32 = 1;
 
@@ -301,6 +295,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let matches = App::new(executable!())
         .version(VERSION)
         .about(ABOUT)
+        .after_help(&*format!("{}\n{}", LONG_HELP, backup_control::BACKUP_CONTROL_LONG_HELP))
         .usage(&usage[..])
         .arg(Arg::with_name(OPT_TARGET_DIRECTORY)
              .short("t")
@@ -364,12 +359,17 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(Arg::with_name(OPT_BACKUP)
              .short("b")
              .long(OPT_BACKUP)
-             .help("make a backup of each existing destination file"))
+             .help("make a backup of each existing destination file")
+             .takes_value(true)
+             .require_equals(true)
+             .min_values(0)
+             .possible_values(backup_control::BACKUP_CONTROL_VALUES)
+             .value_name("CONTROL")
+        )
         .arg(Arg::with_name(OPT_SUFFIX)
              .short("S")
              .long(OPT_SUFFIX)
              .takes_value(true)
-             .default_value("~")
              .value_name("SUFFIX")
              .help("override the usual backup suffix"))
         .arg(Arg::with_name(OPT_UPDATE)
@@ -463,6 +463,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .get_matches_from(args);
 
     let options = crash_if_err!(EXIT_ERR, Options::from_matches(&matches));
+
+    if options.overwrite == OverwriteMode::NoClobber && options.backup != BackupMode::NoBackup {
+        show_usage_error!("options --backup and --no-clobber are mutually exclusive");
+        return 1;
+    }
+
     let paths: Vec<String> = matches
         .values_of(OPT_PATHS)
         .map(|v| v.map(ToString::to_string).collect())
@@ -585,7 +591,13 @@ impl Options {
             || matches.is_present(OPT_RECURSIVE_ALIAS)
             || matches.is_present(OPT_ARCHIVE);
 
-        let backup = matches.is_present(OPT_BACKUP) || (matches.occurrences_of(OPT_SUFFIX) > 0);
+        let backup_mode = backup_control::determine_backup_mode(
+            matches.is_present(OPT_BACKUP),
+            matches.value_of(OPT_BACKUP),
+        );
+        let backup_suffix = backup_control::determine_backup_suffix(matches.value_of(OPT_SUFFIX));
+
+        let overwrite = OverwriteMode::from_matches(matches);
 
         // Parse target directory options
         let no_target_dir = matches.is_present(OPT_NO_TARGET_DIRECTORY);
@@ -631,9 +643,7 @@ impl Options {
                 || matches.is_present(OPT_NO_DEREFERENCE_PRESERVE_LINKS)
                 || matches.is_present(OPT_ARCHIVE),
             one_file_system: matches.is_present(OPT_ONE_FILE_SYSTEM),
-            overwrite: OverwriteMode::from_matches(matches),
             parents: matches.is_present(OPT_PARENTS),
-            backup_suffix: matches.value_of(OPT_SUFFIX).unwrap().to_string(),
             update: matches.is_present(OPT_UPDATE),
             verbose: matches.is_present(OPT_VERBOSE),
             strip_trailing_slashes: matches.is_present(OPT_STRIP_TRAILING_SLASHES),
@@ -654,7 +664,9 @@ impl Options {
                     ReflinkMode::Never
                 }
             },
-            backup,
+            backup: backup_mode,
+            backup_suffix: backup_suffix,
+            overwrite: overwrite,
             no_target_dir,
             preserve_attributes,
             recursive,
@@ -1090,14 +1102,10 @@ fn context_for(src: &Path, dest: &Path) -> String {
     format!("'{}' -> '{}'", src.display(), dest.display())
 }
 
-/// Implements a relatively naive backup that is not as full featured
-/// as GNU cp.  No CONTROL version control method argument is taken
-/// for backups.
-/// TODO: Add version control methods
-fn backup_file(path: &Path, suffix: &str) -> CopyResult<PathBuf> {
-    let mut backup_path = path.to_path_buf().into_os_string();
-    backup_path.push(suffix);
-    fs::copy(path, &backup_path)?;
+/// Implements a simple backup copy for the destination file.
+/// TODO: for the backup, should this function be replaced by `copy_file(...)`?
+fn backup_dest(dest: &Path, backup_path: &PathBuf) -> CopyResult<PathBuf> {
+    fs::copy(dest, &backup_path)?;
     Ok(backup_path.into())
 }
 
@@ -1108,8 +1116,9 @@ fn handle_existing_dest(source: &Path, dest: &Path, options: &Options) -> CopyRe
 
     options.overwrite.verify(dest)?;
 
-    if options.backup {
-        backup_file(dest, &options.backup_suffix)?;
+    let backup_path = backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
+    if let Some(backup_path) = backup_path {
+        backup_dest(dest, &backup_path)?;
     }
 
     match options.overwrite {

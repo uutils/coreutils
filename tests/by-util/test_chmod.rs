@@ -283,6 +283,26 @@ fn test_chmod_reference_file() {
 }
 
 #[test]
+fn test_permission_denied() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("d/");
+    at.mkdir("d/no-x");
+    at.mkdir("d/no-x/y");
+
+    scene.ucmd().arg("u=rw").arg("d/no-x").succeeds();
+
+    scene
+        .ucmd()
+        .arg("-R")
+        .arg("o=r")
+        .arg("d")
+        .fails()
+        .stderr_is("chmod: 'd/no-x/y': Permission denied");
+}
+
+#[test]
 fn test_chmod_recursive() {
     let _guard = UMASK_MUTEX.lock();
 
@@ -338,7 +358,7 @@ fn test_chmod_preserve_root() {
         .arg("755")
         .arg("/")
         .fails()
-        .stderr_contains(&"chmod: error: it is dangerous to operate recursively on '/'");
+        .stderr_contains(&"chmod: it is dangerous to operate recursively on '/'");
 }
 
 #[test]

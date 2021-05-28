@@ -11,7 +11,7 @@ env:
   PROJECT_NAME: coreutils
   PROJECT_DESC: "Core universal (cross-platform) utilities"
   PROJECT_AUTH: "uutils"
-  RUST_MIN_SRV: "1.40.0" ## v1.40.0
+  RUST_MIN_SRV: "1.43.1" ## v1.43.0
   RUST_COV_SRV: "2020-08-01" ## (~v1.47.0) supported rust version for code coverage; (date required/used by 'coverage') ## !maint: refactor when code coverage support is included in the stable channel
 
 on: [push, pull_request]
@@ -363,6 +363,10 @@ jobs:
         mkdir -p '${{ steps.vars.outputs.STAGING }}/dpkg'
     - name: rust toolchain ~ install
       uses: actions-rs/toolchain@v1
+      env:
+        # Override auto-detection of RAM for Rustc install.
+        # https://github.com/rust-lang/rustup/issues/2229#issuecomment-585855925
+        RUSTUP_UNPACK_RAM: "21474836480"
       with:
         toolchain: ${{ steps.vars.outputs.TOOLCHAIN }}
         target: ${{ matrix.job.target }}

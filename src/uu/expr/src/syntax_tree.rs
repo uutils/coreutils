@@ -153,7 +153,7 @@ impl AstNode {
                     ":" | "match" => operator_match(&operand_values),
                     "length" => Ok(prefix_operator_length(&operand_values)),
                     "index" => Ok(prefix_operator_index(&operand_values)),
-                    "substr" => prefix_operator_substr(&operand_values),
+                    "substr" => Ok(prefix_operator_substr(&operand_values)),
 
                     _ => Err(format!("operation not implemented: {}", op_type)),
                 },
@@ -522,35 +522,23 @@ fn prefix_operator_index(values: &[String]) -> String {
     "0".to_string()
 }
 
-fn prefix_operator_substr(values: &[String]) -> Result<String, String> {
+fn prefix_operator_substr(values: &[String]) -> String {
     assert!(values.len() == 3);
     let subj = &values[0];
-    let mut idx = match values[1].parse::<i64>() {
-        Ok(i) => i,
-        Err(_) => return Err("expected integer as POS arg to 'substr'".to_string()),
+    let idx = match values[1]
+        .parse::<usize>()
+        .ok()
+        .and_then(|v| v.checked_sub(1))
+    {
+        Some(i) => i,
+        None => return String::new(),
     };
-    let mut len = match values[2].parse::<i64>() {
+    let len = match values[2].parse::<usize>() {
         Ok(i) => i,
-        Err(_) => return Err("expected integer as LENGTH arg to 'substr'".to_string()),
+        Err(_) => return String::new(),
     };
 
-    if idx <= 0 || len <= 0 {
-        return Ok("".to_string());
-    }
-
-    let mut out_str = String::new();
-    for ch in subj.chars() {
-        idx -= 1;
-        if idx <= 0 {
-            if len <= 0 {
-                break;
-            }
-            len -= 1;
-
-            out_str.push(ch);
-        }
-    }
-    Ok(out_str)
+    subj.chars().skip(idx).take(len).collect()
 }
 
 fn bool_as_int(b: bool) -> i64 {

@@ -42,7 +42,7 @@ fn test_invalid_buffer_size() {
             .arg(invalid_buffer_size)
             .fails()
             .stderr_only(format!(
-                "sort: error: failed to parse buffer size `{}`: invalid digit found in string",
+                "sort: failed to parse buffer size `{}`: invalid digit found in string",
                 invalid_buffer_size
             ));
     }
@@ -471,7 +471,7 @@ fn test_keys_invalid_field() {
     new_ucmd!()
         .args(&["-k", "1."])
         .fails()
-        .stderr_only("sort: error: failed to parse character index for key `1.`: cannot parse integer from empty string");
+        .stderr_only("sort: failed to parse character index for key `1.`: cannot parse integer from empty string");
 }
 
 #[test]
@@ -479,7 +479,7 @@ fn test_keys_invalid_field_option() {
     new_ucmd!()
         .args(&["-k", "1.1x"])
         .fails()
-        .stderr_only("sort: error: invalid option for key: `x`");
+        .stderr_only("sort: invalid option for key: `x`");
 }
 
 #[test]
@@ -487,14 +487,15 @@ fn test_keys_invalid_field_zero() {
     new_ucmd!()
         .args(&["-k", "0.1"])
         .fails()
-        .stderr_only("sort: error: field index was 0");
+        .stderr_only("sort: field index was 0");
 }
 
 #[test]
 fn test_keys_invalid_char_zero() {
-    new_ucmd!().args(&["-k", "1.0"]).fails().stderr_only(
-        "sort: error: invalid character index 0 in `1.0` for the start position of a field",
-    );
+    new_ucmd!()
+        .args(&["-k", "1.0"])
+        .fails()
+        .stderr_only("sort: invalid character index 0 in `1.0` for the start position of a field");
 }
 
 #[test]
