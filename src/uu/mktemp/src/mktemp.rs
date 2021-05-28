@@ -210,21 +210,14 @@ pub fn dry_exec(mut tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str) ->
     0
 }
 
-fn exec(
-    dir: PathBuf,
-    prefix: &str,
-    rand: usize,
-    suffix: &str,
-    make_dir: bool,
-    quiet: bool,
-) -> i32 {
+fn exec(dir: PathBuf, prefix: &str, rand: usize, suffix: &str, make_dir: bool, quiet: bool) -> i32 {
     let res = if make_dir {
         let tmpdir = Builder::new()
             .prefix(prefix)
             .rand_bytes(rand)
             .suffix(suffix)
             .tempdir_in(&dir);
-        
+
         // `into_path` consumes the TempDir without removing it
         tmpdir.map(|d| d.into_path().to_string_lossy().to_string())
     } else {
@@ -233,7 +226,7 @@ fn exec(
             .rand_bytes(rand)
             .suffix(suffix)
             .tempfile_in(&dir);
-        
+
         match tmpfile {
             Ok(f) => {
                 // `keep` ensures that the file is not deleted
@@ -245,7 +238,7 @@ fn exec(
                     }
                 }
             }
-            Err(x) => Err(x)
+            Err(x) => Err(x),
         }
     };
 
