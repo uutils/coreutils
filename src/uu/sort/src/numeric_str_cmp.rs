@@ -70,7 +70,7 @@ impl NumInfo {
 
             if matches!(
                 parse_settings.thousands_separator,
-                Some(c) if c == char,
+                Some(c) if c == char
             ) {
                 continue;
             }

@@ -585,7 +585,7 @@ impl FieldSelector {
                 && to.is_none()
                 && !matches!(
                     settings.mode,
-                    SortMode::Numeric | SortMode::GeneralNumeric | SortMode::HumanNumeric,
+                    SortMode::Numeric | SortMode::GeneralNumeric | SortMode::HumanNumeric
                 ),
             needs_tokens: from.field != 1 || from.char == 0 || to.is_some(),
             from,
