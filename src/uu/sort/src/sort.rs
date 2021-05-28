@@ -100,8 +100,8 @@ static ARG_FILES: &str = "files";
 
 static DECIMAL_PT: char = '.';
 
-static NEGATIVE: char = '-';
-static POSITIVE: char = '+';
+const NEGATIVE: char = '-';
+const POSITIVE: char = '+';
 
 // Choosing a higher buffer size does not result in performance improvements
 // (at least not on my machine). TODO: In the future, we should also take the amount of
@@ -1226,8 +1226,7 @@ fn get_leading_gen(input: &str) -> Range<usize> {
 
     let first = char_indices.peek();
 
-    // TODO: replace with matches! macro once MinRustV is 1.42 or higher (also the map_or below)
-    if first.map_or(false, |&(_, c)| c == NEGATIVE || c == POSITIVE) {
+    if matches!(first, Some((_, NEGATIVE)) | Some((_, POSITIVE))) {
         char_indices.next();
     }
 
@@ -1245,9 +1244,10 @@ fn get_leading_gen(input: &str) -> Range<usize> {
             // we can only consume the 'e' if what follow is either a digit, or a sign followed by a digit.
             if let Some(&(_, next_char)) = char_indices.peek() {
                 if (next_char == '+' || next_char == '-')
-                    && char_indices
-                        .peek_nth(2)
-                        .map_or(false, |&(_, c)| c.is_ascii_digit())
+                    && matches!(
+                        char_indices.peek_nth(2),
+                        Some((_, c)) if c.is_ascii_digit()
+                    )
                 {
                     // Consume the sign. The following digits will be consumed by the main loop.
                     char_indices.next();
