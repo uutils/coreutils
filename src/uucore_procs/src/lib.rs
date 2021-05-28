@@ -1,6 +1,3 @@
-#![allow(dead_code)] // work-around for GH:rust-lang/rust#62127; maint: can be removed when MinSRV >= v1.38.0
-#![allow(unused_macros)] // work-around for GH:rust-lang/rust#62127; maint: can be removed when MinSRV >= v1.38.0
-
 // Copyright (C) ~ Roy Ivy III <rivy.dev@gmail.com>; MIT license
 
 extern crate proc_macro;
@@ -44,7 +41,6 @@ impl syn::parse::Parse for Tokens {
 }
 
 #[proc_macro]
-#[cfg(not(test))] // work-around for GH:rust-lang/rust#62127; maint: can be removed when MinSRV >= v1.38.0
 pub fn main(stream: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let Tokens { expr } = syn::parse_macro_input!(stream as Tokens);
     proc_dbg!(&expr);
