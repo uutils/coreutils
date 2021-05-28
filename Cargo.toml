@@ -347,7 +347,6 @@ time = "0.1"
 unindent = "0.1"
 uucore = { version=">=0.0.8", package="uucore", path="src/uucore", features=["entries"] }
 walkdir = "2.2"
-tempdir = "0.3"
 
 [target.'cfg(unix)'.dev-dependencies]
 rust-users = { version="0.10", package="users" }

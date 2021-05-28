@@ -23,7 +23,7 @@ use std::{
 
 use itertools::Itertools;
 
-use tempdir::TempDir;
+use tempfile::TempDir;
 
 use crate::{
     chunks::{self, Chunk},
@@ -34,7 +34,7 @@ const MIN_BUFFER_SIZE: usize = 8_000;
 
 /// Sort files by using auxiliary files for storing intermediate chunks (if needed), and output the result.
 pub fn ext_sort(files: &mut impl Iterator<Item = Box<dyn Read + Send>>, settings: &GlobalSettings) {
-    let tmp_dir = crash_if_err!(1, TempDir::new_in(&settings.tmp_dir, "uutils_sort"));
+    let tmp_dir = crash_if_err!(1, tempfile::Builder::new().prefix("uutils_sort").tempdir_in(&settings.tmp_dir));
     let (sorted_sender, sorted_receiver) = std::sync::mpsc::sync_channel(1);
     let (recycled_sender, recycled_receiver) = std::sync::mpsc::sync_channel(1);
     thread::spawn({

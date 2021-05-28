@@ -19,9 +19,7 @@ use std::path::PathBuf;
 #[cfg(not(windows))]
 use std::sync::Mutex;
 #[cfg(not(windows))]
-extern crate tempdir;
-#[cfg(not(windows))]
-use self::tempdir::TempDir;
+extern crate tempfile;
 
 #[cfg(not(windows))]
 lazy_static! {
@@ -1087,7 +1085,7 @@ fn test_ls_indicator_style() {
     {
         use self::unix_socket::UnixListener;
 
-        let dir = TempDir::new("unix_socket").expect("failed to create dir");
+        let dir = tempfile::Builder::new().prefix("unix_socket").tempdir().expect("failed to create dir");
         let socket_path = dir.path().join("sock");
         let _listener = UnixListener::bind(&socket_path).expect("failed to create socket");
 

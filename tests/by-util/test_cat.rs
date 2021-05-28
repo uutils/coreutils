@@ -406,10 +406,9 @@ fn test_domain_socket() {
     use std::io::prelude::*;
     use std::sync::{Arc, Barrier};
     use std::thread;
-    use tempdir::TempDir;
     use unix_socket::UnixListener;
 
-    let dir = TempDir::new("unix_socket").expect("failed to create dir");
+    let dir = tempfile::Builder::new().prefix("unix_socket").tempdir().expect("failed to create dir");
     let socket_path = dir.path().join("sock");
     let listener = UnixListener::bind(&socket_path).expect("failed to create socket");
 
