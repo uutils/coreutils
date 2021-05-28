@@ -26,7 +26,7 @@ use std::{
 ///
 /// The code we should exit with.
 pub fn check(path: &str, settings: &GlobalSettings) -> i32 {
-    let file = open(path).expect("failed to open input file");
+    let file = open(path);
     let (recycled_sender, recycled_receiver) = sync_channel(2);
     let (loaded_sender, loaded_receiver) = sync_channel(2);
     thread::spawn({
