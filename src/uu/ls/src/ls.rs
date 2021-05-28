@@ -1614,7 +1614,7 @@ fn display_date(metadata: &Metadata, config: &Config) -> String {
         Some(time) => {
             //Date is recent if from past 6 months
             //According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
-            let recent = time + chrono::Duration::seconds(31556952 / 2) > chrono::Local::now();
+            let recent = time + chrono::Duration::seconds(31_556_952 / 2) > chrono::Local::now();
 
             match config.time_style {
                 TimeStyle::FullIso => time.format("%Y-%m-%d %H:%M:%S.%f %z"),
@@ -1696,7 +1696,6 @@ fn file_is_executable(md: &Metadata) -> bool {
     md.mode() & ((S_IXUSR | S_IXGRP | S_IXOTH) as u32) != 0
 }
 
-#[allow(clippy::clippy::collapsible_else_if)]
 fn classify_file(path: &PathData) -> Option<char> {
     let file_type = path.file_type()?;
 

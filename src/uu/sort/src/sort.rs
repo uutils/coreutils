@@ -296,10 +296,10 @@ impl<'a> Line<'a> {
     fn print(&self, writer: &mut impl Write, settings: &GlobalSettings) {
         if settings.zero_terminated && !settings.debug {
             crash_if_err!(1, writer.write_all(self.line.as_bytes()));
-            crash_if_err!(1, writer.write_all("\0".as_bytes()));
+            crash_if_err!(1, writer.write_all(b"\0"));
         } else if !settings.debug {
             crash_if_err!(1, writer.write_all(self.line.as_bytes()));
-            crash_if_err!(1, writer.write_all("\n".as_bytes()));
+            crash_if_err!(1, writer.write_all(b"\n"));
         } else {
             crash_if_err!(1, self.print_debug(settings, writer));
         }
@@ -1437,7 +1437,7 @@ mod tests {
     fn test_get_hash() {
         let a = "Ted".to_string();
 
-        assert_eq!(2646829031758483623, get_hash(&a));
+        assert_eq!(2_646_829_031_758_483_623, get_hash(&a));
     }
 
     #[test]

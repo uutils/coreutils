@@ -669,8 +669,8 @@ impl Options {
                 }
             },
             backup: backup_mode,
-            backup_suffix: backup_suffix,
-            overwrite: overwrite,
+            backup_suffix,
+            overwrite,
             no_target_dir,
             preserve_attributes,
             recursive,
@@ -1089,7 +1089,7 @@ fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResu
 }
 
 #[cfg(not(windows))]
-#[allow(clippy::unnecessary_wraps)] // needed for windows version
+#[allow(clippy::unnecessary_unwrap)] // needed for windows version
 fn symlink_file(source: &Path, dest: &Path, context: &str) -> CopyResult<()> {
     match std::os::unix::fs::symlink(source, dest).context(context) {
         Ok(_) => Ok(()),

@@ -50,10 +50,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    let mut separator = "\n";
-    if matches.is_present(OPT_NULL) {
-        separator = "\x00";
-    }
+    let separator = if matches.is_present(OPT_NULL) {
+        "\x00"
+    } else {
+        "\n"
+    };
 
     if variables.is_empty() {
         for (env_var, value) in env::vars() {
