@@ -41,6 +41,18 @@ fn test_first_100000_integers() {
 }
 
 #[test]
+fn test_cli_args() {
+    // Make sure that factor works with CLI arguments as well.
+    new_ucmd!().args(&["3"]).succeeds().stdout_contains("3: 3");
+
+    new_ucmd!()
+        .args(&["3", "6"])
+        .succeeds()
+        .stdout_contains("3: 3")
+        .stdout_contains("6: 2 3");
+}
+
+#[test]
 fn test_random() {
     use conv::prelude::*;
 
