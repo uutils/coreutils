@@ -232,6 +232,7 @@ fn get_usage() -> String {
 static OPT_ARCHIVE: &str = "archive";
 static OPT_ATTRIBUTES_ONLY: &str = "attributes-only";
 static OPT_BACKUP: &str = "backup";
+static OPT_BACKUP_NO_ARG: &str = "b";
 static OPT_CLI_SYMBOLIC_LINKS: &str = "cli-symbolic-links";
 static OPT_CONTEXT: &str = "context";
 static OPT_COPY_CONTENTS: &str = "copy-contents";
@@ -357,7 +358,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
              .help("remove each existing destination file before attempting to open it \
                     (contrast with --force). On Windows, current only works for writeable files."))
         .arg(Arg::with_name(OPT_BACKUP)
-             .short("b")
              .long(OPT_BACKUP)
              .help("make a backup of each existing destination file")
              .takes_value(true)
@@ -365,6 +365,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
              .min_values(0)
              .possible_values(backup_control::BACKUP_CONTROL_VALUES)
              .value_name("CONTROL")
+        )
+        .arg(Arg::with_name(OPT_BACKUP_NO_ARG)
+             .short(OPT_BACKUP_NO_ARG)
+             .help("like --backup but does not accept an argument")
         )
         .arg(Arg::with_name(OPT_SUFFIX)
              .short("S")
@@ -592,7 +596,7 @@ impl Options {
             || matches.is_present(OPT_ARCHIVE);
 
         let backup_mode = backup_control::determine_backup_mode(
-            matches.is_present(OPT_BACKUP),
+            matches.is_present(OPT_BACKUP_NO_ARG) || matches.is_present(OPT_BACKUP),
             matches.value_of(OPT_BACKUP),
         );
         let backup_suffix = backup_control::determine_backup_suffix(matches.value_of(OPT_SUFFIX));
