@@ -720,8 +720,8 @@ fn test_nonexistent_file() {
         .status_code(2)
         .stderr_only(
             #[cfg(not(windows))]
-            "sort: error: cannot read: \"nonexistent.txt\": No such file or directory (os error 2)",
+            "sort: cannot read: \"nonexistent.txt\": No such file or directory (os error 2)",
             #[cfg(windows)]
-            "sort: error: cannot read: \"nonexistent.txt\": The system cannot find the file specified. (os error 2)",
+            "sort: cannot read: \"nonexistent.txt\": The system cannot find the file specified. (os error 2)",
         );
 }
