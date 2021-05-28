@@ -11,9 +11,11 @@
 extern crate uucore;
 
 use clap::{App, Arg};
+use std::convert::TryFrom;
 use std::fs::{metadata, OpenOptions};
 use std::io::ErrorKind;
 use std::path::Path;
+use uucore::parse_size::parse_size;
 
 #[derive(Eq, PartialEq)]
 enum TruncateMode {
@@ -159,14 +161,14 @@ fn truncate(
             };
             let num_bytes = match parse_size(size_string) {
                 Ok(b) => b,
-                Err(_) => crash!(1, "Invalid number: ‘{}’", size_string),
+                Err(e) => crash!(1, "Invalid number: {}", e.to_string()),
             };
             (num_bytes, mode)
         }
         None => (0, TruncateMode::Reference),
     };
 
-    let refsize = match reference {
+    let refsize: usize = match reference {
         Some(ref rfilename) => {
             match mode {
                 // Only Some modes work with a reference
@@ -176,7 +178,7 @@ fn truncate(
                 _ => crash!(1, "you must specify a relative ‘--size’ with ‘--reference’"),
             };
             match metadata(rfilename) {
-                Ok(meta) => meta.len(),
+                Ok(meta) => usize::try_from(meta.len()).unwrap(),
                 Err(f) => match f.kind() {
                     ErrorKind::NotFound => {
                         crash!(1, "cannot stat '{}': No such file or directory", rfilename)
@@ -199,14 +201,14 @@ fn truncate(
                 let fsize = match reference {
                     Some(_) => refsize,
                     None => match metadata(filename) {
-                        Ok(meta) => meta.len(),
+                        Ok(meta) => usize::try_from(meta.len()).unwrap(),
                         Err(f) => {
                             show_warning!("{}", f.to_string());
                             continue;
                         }
                     },
                 };
-                let tsize: u64 = match mode {
+                let tsize: usize = match mode {
                     TruncateMode::Absolute => modsize,
                     TruncateMode::Reference => fsize,
                     TruncateMode::Extend => fsize + modsize,
@@ -216,99 +218,12 @@ fn truncate(
                     TruncateMode::RoundDown => fsize - fsize % modsize,
                     TruncateMode::RoundUp => fsize + fsize % modsize,
                 };
-                match file.set_len(tsize) {
+                match file.set_len(u64::try_from(tsize).unwrap()) {
                     Ok(_) => {}
                     Err(f) => crash!(1, "{}", f.to_string()),
                 };
             }
             Err(f) => crash!(1, "{}", f.to_string()),
         }
-    }
-}
-
-/// Parse a size string into a number of bytes.
-///
-/// A size string comprises an integer and an optional unit. The unit
-/// may be K, M, G, T, P, E, Z, or Y (powers of 1024) or KB, MB,
-/// etc. (powers of 1000).
-///
-/// # Errors
-///
-/// This function returns an error if the string does not begin with a
-/// numeral, or if the unit is not one of the supported units described
-/// in the preceding section.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// assert_eq!(parse_size("123").unwrap(), 123);
-/// assert_eq!(parse_size("123K").unwrap(), 123 * 1024);
-/// assert_eq!(parse_size("123KB").unwrap(), 123 * 1000);
-/// ```
-fn parse_size(size: &str) -> Result<u64, ()> {
-    // Get the numeric part of the size argument. For example, if the
-    // argument is "123K", then the numeric part is "123".
-    let numeric_string: String = size.chars().take_while(|c| c.is_digit(10)).collect();
-    let number: u64 = match numeric_string.parse() {
-        Ok(n) => n,
-        Err(_) => return Err(()),
-    };
-
-    // Get the alphabetic units part of the size argument and compute
-    // the factor it represents. For example, if the argument is "123K",
-    // then the unit part is "K" and the factor is 1024. This may be the
-    // empty string, in which case, the factor is 1.
-    let n = numeric_string.len();
-    let (base, exponent): (u64, u32) = match &size[n..] {
-        "" => (1, 0),
-        "K" | "k" => (1024, 1),
-        "M" | "m" => (1024, 2),
-        "G" | "g" => (1024, 3),
-        "T" | "t" => (1024, 4),
-        "P" | "p" => (1024, 5),
-        "E" | "e" => (1024, 6),
-        "Z" | "z" => (1024, 7),
-        "Y" | "y" => (1024, 8),
-        "KB" | "kB" => (1000, 1),
-        "MB" | "mB" => (1000, 2),
-        "GB" | "gB" => (1000, 3),
-        "TB" | "tB" => (1000, 4),
-        "PB" | "pB" => (1000, 5),
-        "EB" | "eB" => (1000, 6),
-        "ZB" | "zB" => (1000, 7),
-        "YB" | "yB" => (1000, 8),
-        _ => return Err(()),
-    };
-    let factor = base.pow(exponent);
-    Ok(number * factor)
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::parse_size;
-
-    #[test]
-    fn test_parse_size_zero() {
-        assert_eq!(parse_size("0").unwrap(), 0);
-        assert_eq!(parse_size("0K").unwrap(), 0);
-        assert_eq!(parse_size("0KB").unwrap(), 0);
-    }
-
-    #[test]
-    fn test_parse_size_without_factor() {
-        assert_eq!(parse_size("123").unwrap(), 123);
-    }
-
-    #[test]
-    fn test_parse_size_kilobytes() {
-        assert_eq!(parse_size("123K").unwrap(), 123 * 1024);
-        assert_eq!(parse_size("123KB").unwrap(), 123 * 1000);
-    }
-
-    #[test]
-    fn test_parse_size_megabytes() {
-        assert_eq!(parse_size("123").unwrap(), 123);
-        assert_eq!(parse_size("123M").unwrap(), 123 * 1024 * 1024);
-        assert_eq!(parse_size("123MB").unwrap(), 123 * 1000 * 1000);
     }
 }
