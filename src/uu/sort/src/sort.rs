@@ -99,10 +99,9 @@ static OPT_TMP_DIR: &str = "temporary-directory";
 static ARG_FILES: &str = "files";
 
 static DECIMAL_PT: char = '.';
-static THOUSANDS_SEP: char = ',';
 
-static NEGATIVE: char = '-';
-static POSITIVE: char = '+';
+const NEGATIVE: char = '-';
+const POSITIVE: char = '+';
 
 // Choosing a higher buffer size does not result in performance improvements
 // (at least not on my machine). TODO: In the future, we should also take the amount of
@@ -330,8 +329,7 @@ impl<'a> Line<'a> {
                         &self.line[selection.clone()],
                         NumInfoParseSettings {
                             accept_si_units: selector.settings.mode == SortMode::HumanNumeric,
-                            thousands_separator: Some(THOUSANDS_SEP),
-                            decimal_pt: Some(DECIMAL_PT),
+                            ..Default::default()
                         },
                     );
                     let initial_selection = selection.clone();
@@ -367,16 +365,24 @@ impl<'a> Line<'a> {
                 SortMode::Month => {
                     let initial_selection = &self.line[selection.clone()];
 
+                    let mut month_chars = initial_selection
+                        .char_indices()
+                        .skip_while(|(_, c)| c.is_whitespace());
+
                     let month = if month_parse(initial_selection) == Month::Unknown {
                         // We failed to parse a month, which is equivalent to matching nothing.
-                        0..0
+                        // Add the "no match for key" marker to the first non-whitespace character.
+                        let first_non_whitespace = month_chars.next();
+                        first_non_whitespace.map_or(
+                            initial_selection.len()..initial_selection.len(),
+                            |(idx, _)| idx..idx,
+                        )
                     } else {
-                        // We parsed a month. Match the three first non-whitespace characters, which must be the month we parsed.
-                        let mut chars = initial_selection
-                            .char_indices()
-                            .skip_while(|(_, c)| c.is_whitespace());
-                        chars.next().unwrap().0
-                            ..chars.nth(2).map_or(initial_selection.len(), |(idx, _)| idx)
+                        // We parsed a month. Match the first three non-whitespace characters, which must be the month we parsed.
+                        month_chars.next().unwrap().0
+                            ..month_chars
+                                .nth(2)
+                                .map_or(initial_selection.len(), |(idx, _)| idx)
                     };
 
                     // Shorten selection to month.
@@ -583,11 +589,10 @@ impl FieldSelector {
             is_default_selection: from.field == 1
                 && from.char == 1
                 && to.is_none()
-                // TODO: Once our MinRustV is 1.42 or higher, change this to the matches! macro
-                && match settings.mode {
-                    SortMode::Numeric | SortMode::GeneralNumeric | SortMode::HumanNumeric => false,
-                    _ => true,
-                },
+                && !matches!(
+                    settings.mode,
+                    SortMode::Numeric | SortMode::GeneralNumeric | SortMode::HumanNumeric
+                ),
             needs_tokens: from.field != 1 || from.char == 0 || to.is_some(),
             from,
             to,
@@ -607,8 +612,7 @@ impl FieldSelector {
                 range,
                 NumInfoParseSettings {
                     accept_si_units: self.settings.mode == SortMode::HumanNumeric,
-                    thousands_separator: Some(THOUSANDS_SEP),
-                    decimal_pt: Some(DECIMAL_PT),
+                    ..Default::default()
                 },
             );
             // Shorten the range to what we need to pass to numeric_str_cmp later.
@@ -650,7 +654,7 @@ impl FieldSelector {
             tokens: Option<&[Field]>,
             position: &KeyPosition,
         ) -> Resolution {
-            if tokens.map_or(false, |fields| fields.len() < position.field) {
+            if matches!(tokens, Some(tokens) if tokens.len() < position.field) {
                 Resolution::TooHigh
             } else if position.char == 0 {
                 let end = tokens.unwrap()[position.field - 1].end;
@@ -667,22 +671,21 @@ impl FieldSelector {
                 } else {
                     tokens.unwrap()[position.field - 1].start
                 };
+                // strip blanks if needed
+                if position.ignore_blanks {
+                    idx += line[idx..]
+                        .char_indices()
+                        .find(|(_, c)| !c.is_whitespace())
+                        .map_or(line[idx..].len(), |(idx, _)| idx);
+                }
+                // apply the character index
                 idx += line[idx..]
                     .char_indices()
                     .nth(position.char - 1)
-                    .map_or(line.len(), |(idx, _)| idx);
+                    .map_or(line[idx..].len(), |(idx, _)| idx);
                 if idx >= line.len() {
                     Resolution::TooHigh
                 } else {
-                    if position.ignore_blanks {
-                        if let Some((not_whitespace, _)) =
-                            line[idx..].char_indices().find(|(_, c)| !c.is_whitespace())
-                        {
-                            idx += not_whitespace;
-                        } else {
-                            return Resolution::TooHigh;
-                        }
-                    }
                     Resolution::StartOfChar(idx)
                 }
             }
@@ -692,8 +695,9 @@ impl FieldSelector {
             Resolution::StartOfChar(from) => {
                 let to = self.to.as_ref().map(|to| resolve_index(line, tokens, &to));
 
-                match to {
+                let mut range = match to {
                     Some(Resolution::StartOfChar(mut to)) => {
+                        // We need to include the character at `to`.
                         to += line[to..].chars().next().map_or(1, |c| c.len_utf8());
                         from..to
                     }
@@ -704,7 +708,11 @@ impl FieldSelector {
                     // If `to` is before the start of the line, report no match.
                     // This can happen if the line starts with a separator.
                     Some(Resolution::TooLow) => 0..0,
+                };
+                if range.start > range.end {
+                    range.end = range.start;
                 }
+                range
             }
             Resolution::TooLow | Resolution::EndOfChar(_) => {
                 unreachable!("This should only happen if the field start index is 0, but that should already have caused an error.")
@@ -947,7 +955,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
         let mut files = Vec::new();
         for path in &files0_from {
-            let reader = open(path.as_str()).expect("Could not read from file specified.");
+            let reader = open(path.as_str());
             let buf_reader = BufReader::new(reader);
             for line in buf_reader.split(b'\0').flatten() {
                 files.push(
@@ -1108,7 +1116,7 @@ fn exec(files: &[String], settings: &GlobalSettings) -> i32 {
         }
         return check::check(files.first().unwrap(), settings);
     } else {
-        let mut lines = files.iter().filter_map(open);
+        let mut lines = files.iter().map(open);
 
         ext_sort(&mut lines, &settings);
     }
@@ -1203,6 +1211,8 @@ fn compare_by<'a>(a: &Line<'a>, b: &Line<'a>, global_settings: &GlobalSettings) 
 fn get_leading_gen(input: &str) -> Range<usize> {
     let trimmed = input.trim_start();
     let leading_whitespace_len = input.len() - trimmed.len();
+
+    // check for inf, -inf and nan
     for allowed_prefix in &["inf", "-inf", "nan"] {
         if trimmed.is_char_boundary(allowed_prefix.len())
             && trimmed[..allowed_prefix.len()].eq_ignore_ascii_case(allowed_prefix)
@@ -1211,11 +1221,11 @@ fn get_leading_gen(input: &str) -> Range<usize> {
         }
     }
     // Make this iter peekable to see if next char is numeric
-    let mut char_indices = trimmed.char_indices().peekable();
+    let mut char_indices = itertools::peek_nth(trimmed.char_indices());
 
     let first = char_indices.peek();
 
-    if first.map_or(false, |&(_, c)| c == NEGATIVE || c == POSITIVE) {
+    if matches!(first, Some((_, NEGATIVE)) | Some((_, POSITIVE))) {
         char_indices.next();
     }
 
@@ -1225,16 +1235,29 @@ fn get_leading_gen(input: &str) -> Range<usize> {
         if c.is_ascii_digit() {
             continue;
         }
-        if c == DECIMAL_PT && !had_decimal_pt {
+        if c == DECIMAL_PT && !had_decimal_pt && !had_e_notation {
             had_decimal_pt = true;
             continue;
         }
-        let next_char_numeric = char_indices
-            .peek()
-            .map_or(false, |(_, c)| c.is_ascii_digit());
-        if (c == 'e' || c == 'E') && !had_e_notation && next_char_numeric {
-            had_e_notation = true;
-            continue;
+        if (c == 'e' || c == 'E') && !had_e_notation {
+            // we can only consume the 'e' if what follow is either a digit, or a sign followed by a digit.
+            if let Some(&(_, next_char)) = char_indices.peek() {
+                if (next_char == '+' || next_char == '-')
+                    && matches!(
+                        char_indices.peek_nth(2),
+                        Some((_, c)) if c.is_ascii_digit()
+                    )
+                {
+                    // Consume the sign. The following digits will be consumed by the main loop.
+                    char_indices.next();
+                    had_e_notation = true;
+                    continue;
+                }
+                if next_char.is_ascii_digit() {
+                    had_e_notation = true;
+                    continue;
+                }
+            }
         }
         return leading_whitespace_len..(leading_whitespace_len + idx);
     }
@@ -1390,18 +1413,17 @@ fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(iter: T, settings: &Global
 }
 
 // from cat.rs
-fn open(path: impl AsRef<OsStr>) -> Option<Box<dyn Read + Send>> {
+fn open(path: impl AsRef<OsStr>) -> Box<dyn Read + Send> {
     let path = path.as_ref();
     if path == "-" {
         let stdin = stdin();
-        return Some(Box::new(stdin) as Box<dyn Read + Send>);
+        return Box::new(stdin) as Box<dyn Read + Send>;
     }
 
     match File::open(Path::new(path)) {
-        Ok(f) => Some(Box::new(f) as Box<dyn Read + Send>),
+        Ok(f) => Box::new(f) as Box<dyn Read + Send>,
         Err(e) => {
-            show_error!("{0:?}: {1}", path, e.to_string());
-            None
+            crash!(2, "cannot read: {0:?}: {1}", path, e);
         }
     }
 }

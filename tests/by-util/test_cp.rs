@@ -317,6 +317,22 @@ fn test_cp_arg_backup() {
 }
 
 #[test]
+fn test_cp_arg_backup_with_other_args() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .arg("-vbL")
+        .succeeds();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert_eq!(
+        at.read(&*format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
+}
+
+#[test]
 fn test_cp_arg_backup_arg_first() {
     let (at, mut ucmd) = at_and_ucmd!();
 

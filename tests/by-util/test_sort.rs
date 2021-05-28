@@ -4,14 +4,14 @@ fn test_helper(file_name: &str, possible_args: &[&str]) {
     for args in possible_args {
         new_ucmd!()
             .arg(format!("{}.txt", file_name))
-            .args(&args.split(' ').collect::<Vec<&str>>())
+            .args(&args.split_whitespace().collect::<Vec<&str>>())
             .succeeds()
             .stdout_is_fixture(format!("{}.expected", file_name));
 
         new_ucmd!()
             .arg(format!("{}.txt", file_name))
             .arg("--debug")
-            .args(&args.split(' ').collect::<Vec<&str>>())
+            .args(&args.split_whitespace().collect::<Vec<&str>>())
             .succeeds()
             .stdout_is_fixture(format!("{}.expected.debug", file_name));
     }
@@ -527,6 +527,11 @@ fn test_keys_with_options_blanks_start() {
 }
 
 #[test]
+fn test_keys_blanks_with_char_idx() {
+    test_helper("keys_blanks", &["-k 1.2b"])
+}
+
+#[test]
 fn test_keys_with_options_blanks_end() {
     let input = "a  b
 a b
@@ -572,6 +577,13 @@ aaaa
         .pipe_in(input)
         .succeeds()
         .stdout_only(input);
+}
+
+#[test]
+fn test_keys_negative_size_match() {
+    // If the end of a field is before its start, we should not crash.
+    // Debug output should report "no match for key" at the start position (i.e. the later position).
+    test_helper("keys_negative_size", &["-k 3,1"]);
 }
 
 #[test]
@@ -710,4 +722,18 @@ fn test_trailing_separator() {
         .pipe_in("aax\naaa\n")
         .succeeds()
         .stdout_is("aax\naaa\n");
+}
+
+#[test]
+fn test_nonexistent_file() {
+    new_ucmd!()
+        .arg("nonexistent.txt")
+        .fails()
+        .status_code(2)
+        .stderr_only(
+            #[cfg(not(windows))]
+            "sort: cannot read: \"nonexistent.txt\": No such file or directory (os error 2)",
+            #[cfg(windows)]
+            "sort: cannot read: \"nonexistent.txt\": The system cannot find the file specified. (os error 2)",
+        );
 }

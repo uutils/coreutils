@@ -65,12 +65,7 @@ impl Token {
         }
     }
     fn is_a_close_paren(&self) -> bool {
-        #[allow(clippy::match_like_matches_macro)]
-        // `matches!(...)` macro not stabilized until rust v1.42
-        match self {
-            Token::ParClose => true,
-            _ => false,
-        }
+        matches!(*self, Token::ParClose)
     }
 }
 
