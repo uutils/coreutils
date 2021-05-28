@@ -527,6 +527,11 @@ fn test_keys_with_options_blanks_start() {
 }
 
 #[test]
+fn test_keys_blanks_with_char_idx() {
+    test_helper("keys_blanks", &["-k 1.2b"])
+}
+
+#[test]
 fn test_keys_with_options_blanks_end() {
     let input = "a  b
 a b
@@ -572,6 +577,13 @@ aaaa
         .pipe_in(input)
         .succeeds()
         .stdout_only(input);
+}
+
+#[test]
+fn test_keys_negative_size_match() {
+    // If the end of a field is before its start, we should not crash.
+    // Debug output should report "no match for key" at the start position (i.e. the later position).
+    test_helper("keys_negative_size", &["-k 3,1"]);
 }
 
 #[test]

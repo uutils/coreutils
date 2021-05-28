@@ -174,7 +174,11 @@ impl NumInfo {
 pub fn numeric_str_cmp((a, a_info): (&str, &NumInfo), (b, b_info): (&str, &NumInfo)) -> Ordering {
     // check for a difference in the sign
     if a_info.sign != b_info.sign {
-        return a_info.sign.cmp(&b_info.sign);
+        return if a.is_empty() && b.is_empty() {
+            Ordering::Equal
+        } else {
+            a_info.sign.cmp(&b_info.sign)
+        };
     }
 
     // check for a difference in the exponent
@@ -419,8 +423,8 @@ mod tests {
     #[test]
     fn minus_zero() {
         // This matches GNU sort behavior.
-        test_helper("-0", "0", Ordering::Less);
-        test_helper("-0x", "0", Ordering::Less);
+        test_helper("-0", "0", Ordering::Equal);
+        test_helper("-0x", "0", Ordering::Equal);
     }
     #[test]
     fn double_minus() {
