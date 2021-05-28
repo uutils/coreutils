@@ -583,11 +583,10 @@ impl FieldSelector {
             is_default_selection: from.field == 1
                 && from.char == 1
                 && to.is_none()
-                // TODO: Once our MinRustV is 1.42 or higher, change this to the matches! macro
-                && match settings.mode {
-                    SortMode::Numeric | SortMode::GeneralNumeric | SortMode::HumanNumeric => false,
-                    _ => true,
-                },
+                && !matches!(
+                    settings.mode,
+                    SortMode::Numeric | SortMode::GeneralNumeric | SortMode::HumanNumeric,
+                ),
             needs_tokens: from.field != 1 || from.char == 0 || to.is_some(),
             from,
             to,
@@ -650,7 +649,7 @@ impl FieldSelector {
             tokens: Option<&[Field]>,
             position: &KeyPosition,
         ) -> Resolution {
-            if tokens.map_or(false, |fields| fields.len() < position.field) {
+            if matches!(tokens, Some(tokens) if tokens.len() < position.field) {
                 Resolution::TooHigh
             } else if position.char == 0 {
                 let end = tokens.unwrap()[position.field - 1].end;

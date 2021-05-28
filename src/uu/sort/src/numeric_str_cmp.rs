@@ -68,10 +68,10 @@ impl NumInfo {
             }
             first_char = false;
 
-            if parse_settings
-                .thousands_separator
-                .map_or(false, |c| c == char)
-            {
+            if matches!(
+                parse_settings.thousands_separator,
+                Some(c) if c == char,
+            ) {
                 continue;
             }
 

@@ -124,12 +124,7 @@ where
     // split the file based on patterns
     for pattern in patterns.into_iter() {
         let pattern_as_str = pattern.to_string();
-        #[allow(clippy::match_like_matches_macro)]
-        let is_skip = if let patterns::Pattern::SkipToMatch(_, _, _) = pattern {
-            true
-        } else {
-            false
-        };
+        let is_skip = matches!(pattern, patterns::Pattern::SkipToMatch(_, _, _));
         match pattern {
             patterns::Pattern::UpToLine(n, ex) => {
                 let mut up_to_line = n;
