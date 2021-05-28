@@ -1,6 +1,5 @@
 extern crate tail;
 
-use self::tail::parse_size;
 use crate::common::util::*;
 use std::char::from_digit;
 use std::io::Write;
@@ -234,41 +233,6 @@ fn test_bytes_big() {
     for (actual_char, expected_char) in result.chars().zip(expected.chars()) {
         assert_eq!(actual_char, expected_char);
     }
-}
-
-#[test]
-fn test_parse_size() {
-    // No suffix.
-    assert_eq!(Ok(1234), parse_size("1234"));
-
-    // kB is 1000
-    assert_eq!(Ok(9 * 1000), parse_size("9kB"));
-
-    // K is 1024
-    assert_eq!(Ok(2 * 1024), parse_size("2K"));
-
-    let suffixes = [
-        ('M', 2u32),
-        ('G', 3u32),
-        ('T', 4u32),
-        ('P', 5u32),
-        ('E', 6u32),
-    ];
-
-    for &(c, exp) in &suffixes {
-        let s = format!("2{}B", c);
-        assert_eq!(Ok(2 * (1000 as u64).pow(exp)), parse_size(&s));
-
-        let s = format!("2{}", c);
-        assert_eq!(Ok(2 * (1024 as u64).pow(exp)), parse_size(&s));
-    }
-
-    // Sizes that are too big.
-    assert!(parse_size("1Z").is_err());
-    assert!(parse_size("1Y").is_err());
-
-    // Bad number
-    assert!(parse_size("328hdsf3290").is_err());
 }
 
 #[test]
