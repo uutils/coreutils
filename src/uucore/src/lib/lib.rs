@@ -19,10 +19,10 @@ pub extern crate winapi;
 
 //## internal modules
 
-mod macros; // crate macros (macro_rules-type; exported to `crate::...`)
-
 mod features; // feature-gated code modules
+mod macros; // crate macros (macro_rules-type; exported to `crate::...`)
 mod mods; // core cross-platform modules
+mod parser; // string parsing moduls
 
 // * cross-platform modules
 pub use crate::mods::backup_control;
@@ -30,6 +30,9 @@ pub use crate::mods::coreopts;
 pub use crate::mods::os;
 pub use crate::mods::panic;
 pub use crate::mods::ranges;
+
+// * string parsing modules
+pub use crate::parser::parse_size;
 
 // * feature-gated modules
 #[cfg(feature = "encoding")]
