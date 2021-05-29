@@ -50,6 +50,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let matches = App::new(executable!())
         .about("A file perusal filter for CRT viewing.")
         .version(env!("CARGO_PKG_VERSION"))
+        // The commented arguments below are unimplemented:
+        /*
         .arg(
             Arg::with_name(options::SILENT)
                 .short("d")
@@ -125,6 +127,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .takes_value(true)
                 .help("Display file beginning from pattern match"),
         )
+        */
         .arg(
             Arg::with_name(options::FILES)
                 .required(false)
@@ -132,6 +135,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("Path to the files to be read"),
         )
         .get_matches_from(args);
+    
     let mut buff = String::new();
     if let Some(filenames) = matches.values_of(options::FILES) {
         let mut stdout = setup_term();
