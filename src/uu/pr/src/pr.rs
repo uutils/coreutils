@@ -24,40 +24,40 @@ use std::os::unix::fs::FileTypeExt;
 
 type IOError = std::io::Error;
 
-static NAME: &str = "pr";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
-static TAB: char = '\t';
-static LINES_PER_PAGE: usize = 66;
-static LINES_PER_PAGE_FOR_FORM_FEED: usize = 63;
-static HEADER_LINES_PER_PAGE: usize = 5;
-static TRAILER_LINES_PER_PAGE: usize = 5;
-static FILE_STDIN: &str = "-";
-static READ_BUFFER_SIZE: usize = 1024 * 64;
-static DEFAULT_COLUMN_WIDTH: usize = 72;
-static DEFAULT_COLUMN_WIDTH_WITH_S_OPTION: usize = 512;
-static DEFAULT_COLUMN_SEPARATOR: &char = &TAB;
-static FF: u8 = 0x0C_u8;
+const NAME: &str = "pr";
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+const TAB: char = '\t';
+const LINES_PER_PAGE: usize = 66;
+const LINES_PER_PAGE_FOR_FORM_FEED: usize = 63;
+const HEADER_LINES_PER_PAGE: usize = 5;
+const TRAILER_LINES_PER_PAGE: usize = 5;
+const FILE_STDIN: &str = "-";
+const READ_BUFFER_SIZE: usize = 1024 * 64;
+const DEFAULT_COLUMN_WIDTH: usize = 72;
+const DEFAULT_COLUMN_WIDTH_WITH_S_OPTION: usize = 512;
+const DEFAULT_COLUMN_SEPARATOR: &char = &TAB;
+const FF: u8 = 0x0C_u8;
 
 mod options {
-    pub static STRING_HEADER_OPTION: &str = "h";
-    pub static DOUBLE_SPACE_OPTION: &str = "d";
-    pub static NUMBERING_MODE_OPTION: &str = "n";
-    pub static FIRST_LINE_NUMBER_OPTION: &str = "N";
-    pub static PAGE_RANGE_OPTION: &str = "pages";
-    pub static NO_HEADER_TRAILER_OPTION: &str = "t";
-    pub static PAGE_LENGTH_OPTION: &str = "l";
-    pub static SUPPRESS_PRINTING_ERROR: &str = "r";
-    pub static FORM_FEED_OPTION: &str = "F";
-    pub static FORM_FEED_OPTION_SMALL: &str = "f";
-    pub static COLUMN_WIDTH_OPTION: &str = "w";
-    pub static PAGE_WIDTH_OPTION: &str = "W";
-    pub static ACROSS_OPTION: &str = "a";
-    pub static COLUMN_OPTION: &str = "column";
-    pub static COLUMN_CHAR_SEPARATOR_OPTION: &str = "s";
-    pub static COLUMN_STRING_SEPARATOR_OPTION: &str = "S";
-    pub static MERGE_FILES_PRINT: &str = "m";
-    pub static OFFSET_SPACES_OPTION: &str = "o";
-    pub static JOIN_LINES_OPTION: &str = "J";
+    pub const STRING_HEADER_OPTION: &str = "h";
+    pub const DOUBLE_SPACE_OPTION: &str = "d";
+    pub const NUMBERING_MODE_OPTION: &str = "n";
+    pub const FIRST_LINE_NUMBER_OPTION: &str = "N";
+    pub const PAGE_RANGE_OPTION: &str = "pages";
+    pub const NO_HEADER_TRAILER_OPTION: &str = "t";
+    pub const PAGE_LENGTH_OPTION: &str = "l";
+    pub const SUPPRESS_PRINTING_ERROR: &str = "r";
+    pub const FORM_FEED_OPTION: &str = "F";
+    pub const FORM_FEED_OPTION_SMALL: &str = "f";
+    pub const COLUMN_WIDTH_OPTION: &str = "w";
+    pub const PAGE_WIDTH_OPTION: &str = "W";
+    pub const ACROSS_OPTION: &str = "a";
+    pub const COLUMN_OPTION: &str = "column";
+    pub const COLUMN_CHAR_SEPARATOR_OPTION: &str = "s";
+    pub const COLUMN_STRING_SEPARATOR_OPTION: &str = "S";
+    pub const MERGE_FILES_PRINT: &str = "m";
+    pub const OFFSET_SPACES_OPTION: &str = "o";
+    pub const JOIN_LINES_OPTION: &str = "J";
 }
 
 struct OutputOptions {
