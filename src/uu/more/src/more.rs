@@ -215,6 +215,9 @@ fn more(buff: &str, mut stdout: &mut Stdout, is_last: bool) {
         line_count,
     );
 
+    // Specifies whether we have reached the end of the file and should
+    // return on the next keypress. However, we immediately return when
+    // this is the last file.
     let mut to_be_done = false;
     if lines_left == 0 && is_last {
         if is_last {
@@ -224,7 +227,6 @@ fn more(buff: &str, mut stdout: &mut Stdout, is_last: bool) {
         }
     }
     
-
     loop {
         if event::poll(Duration::from_millis(10)).unwrap() {
             match event::read().unwrap() {
@@ -248,36 +250,30 @@ fn more(buff: &str, mut stdout: &mut Stdout, is_last: bool) {
                     modifiers: KeyModifiers::NONE,
                 }) => {
                     upper_mark = upper_mark.saturating_add(rows.saturating_sub(1));
-                    lines_left = line_count.saturating_sub(upper_mark + rows);
-                    draw(
-                        &mut upper_mark,
-                        rows,
-                        &mut stdout,
-                        lines.clone(),
-                        line_count,
-                    );
-
-                    if lines_left == 0 {
-                        if to_be_done || is_last {
-                            return
-                        }
-                        to_be_done = true;
-                    }
+                    
                 }
                 Event::Key(KeyEvent {
                     code: KeyCode::Up,
                     modifiers: KeyModifiers::NONE,
                 }) => {
                     upper_mark = upper_mark.saturating_sub(rows.saturating_sub(1));
-                    draw(
-                        &mut upper_mark,
-                        rows,
-                        &mut stdout,
-                        lines.clone(),
-                        line_count,
-                    );
                 }
                 _ => continue,
+            }
+            lines_left = line_count.saturating_sub(upper_mark + rows);
+            draw(
+                &mut upper_mark,
+                rows,
+                &mut stdout,
+                lines.clone(),
+                line_count,
+            );
+
+            if lines_left == 0 {
+                if to_be_done || is_last {
+                    return
+                }
+                to_be_done = true;
             }
         }
     }
