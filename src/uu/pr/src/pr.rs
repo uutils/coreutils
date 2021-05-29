@@ -98,8 +98,8 @@ struct ColumnModeOptions {
     across_mode: bool,
 }
 
+/// Line numbering mode
 struct NumberingMode {
-    /// Line numbering mode
     width: usize,
     separator: String,
     first_number: usize,
@@ -384,7 +384,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let mut files = matches.free.clone();
     if files.is_empty() {
-        //For stdin
         files.insert(0, FILE_STDIN.to_owned());
     }
 
@@ -445,14 +444,7 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
         if num_val_opt.is_some() && !num_regex.is_match(num_val_opt.unwrap()) {
             let could_be_file = arguments.remove(pos + 1);
             arguments.insert(pos + 1, format!("{}", NumberingMode::default().width));
-            // FIXME: the following line replaces the block below that had the same
-            // code for both conditional branches. Figure this out.
             arguments.insert(pos + 2, could_be_file);
-            // if a_file.is_match(could_be_file.trim().as_ref()) {
-            //     arguments.insert(pos + 2, could_be_file);
-            // } else {
-            //     arguments.insert(pos + 2, could_be_file);
-            // }
         }
     }
 
@@ -1154,7 +1146,6 @@ fn get_line_for_printing(
     line_width: &Option<usize>,
     indexes: usize,
 ) -> String {
-    // Check this condition
     let blank_line = String::new();
     let fmtd_line_number = get_fmtd_line_number(&options, file_line.line_number, index);
 
@@ -1220,9 +1211,6 @@ fn get_fmtd_line_number(opts: &OutputOptions, line_number: usize, index: usize) 
 
 /// Returns a five line header content if displaying header is not disabled by
 /// using `NO_HEADER_TRAILER_OPTION` option.
-/// # Arguments
-/// * `options` - A reference to OutputOptions
-/// * `page` - A reference to page number
 fn header_content(options: &OutputOptions, page: usize) -> Vec<String> {
     if options.display_header_and_trailer {
         let first_line = format!(
@@ -1256,8 +1244,6 @@ fn file_last_modified_time(path: &str) -> String {
 
 /// Returns five empty lines as trailer content if displaying trailer
 /// is not disabled by using `NO_HEADER_TRAILER_OPTION`option.
-/// # Arguments
-/// * `opts` - A reference to OutputOptions
 fn trailer_content(options: &OutputOptions) -> Vec<String> {
     if options.display_header_and_trailer && !options.form_feed_used {
         vec![
@@ -1275,8 +1261,6 @@ fn trailer_content(options: &OutputOptions) -> Vec<String> {
 /// Returns starting line number for the file to be printed.
 /// If -N is specified the first line number changes otherwise
 /// default is 1.
-/// # Arguments
-/// * `opts` - A reference to OutputOptions
 fn get_start_line_number(opts: &OutputOptions) -> usize {
     opts.number.as_ref().map(|i| i.first_number).unwrap_or(1)
 }
@@ -1284,8 +1268,6 @@ fn get_start_line_number(opts: &OutputOptions) -> usize {
 /// Returns number of lines to read from input for constructing one page of pr output.
 /// If double space -d is used lines are halved.
 /// If columns --columns is used the lines are multiplied by the value.
-/// # Arguments
-/// * `opts` - A reference to OutputOptions
 fn lines_to_read_for_page(opts: &OutputOptions) -> usize {
     let content_lines_per_page = opts.content_lines_per_page;
     let columns = get_columns(opts);
@@ -1297,8 +1279,6 @@ fn lines_to_read_for_page(opts: &OutputOptions) -> usize {
 }
 
 /// Returns number of columns to output
-/// # Arguments
-/// * `opts` - A reference to OutputOptions
 fn get_columns(opts: &OutputOptions) -> usize {
     opts.column_mode_options
         .as_ref()
