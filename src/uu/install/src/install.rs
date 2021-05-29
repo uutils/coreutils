@@ -520,6 +520,7 @@ fn copy_file_to_file(file: &Path, target: &Path, b: &Behavior) -> i32 {
 ///
 /// If the copy system call fails, we print a verbose error and return an empty error value.
 ///
+#[allow(clippy::cognitive_complexity)]
 fn copy(from: &Path, to: &Path, b: &Behavior) -> Result<(), ()> {
     if b.compare && !need_copy(from, to, b) {
         return Ok(());

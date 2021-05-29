@@ -110,7 +110,7 @@ impl<'a> Iterator for ExpandSet<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         // while the Range has elements, try to return chars from it
         // but make sure that they actually turn out to be Chars!
-        while let Some(n) = self.range.next() {
+        for n in &mut self.range {
             if let Some(c) = from_u32(n) {
                 return Some(c);
             }

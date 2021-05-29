@@ -136,7 +136,8 @@ fn basename(fullname: &str, suffix: &str) -> String {
     }
 }
 
-// can be replaced with strip_suffix once the minimum rust version is 1.45
+// can be replaced with strip_suffix once MSRV is 1.45
+#[allow(clippy::manual_strip)]
 fn strip_suffix(name: &str, suffix: &str) -> String {
     if name == suffix {
         return name.to_owned();

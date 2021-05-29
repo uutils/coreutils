@@ -218,6 +218,7 @@ struct LongFormat {
 }
 
 impl Config {
+    #[allow(clippy::cognitive_complexity)]
     fn from(options: clap::ArgMatches) -> Config {
         let (mut format, opt) = if let Some(format_) = options.value_of(options::FORMAT) {
             (

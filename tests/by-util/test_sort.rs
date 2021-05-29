@@ -288,7 +288,7 @@ fn test_dictionary_order() {
 
 #[test]
 fn test_dictionary_order2() {
-    for non_dictionary_order2_param in vec!["-d"] {
+    for non_dictionary_order2_param in &["-d"] {
         new_ucmd!()
             .pipe_in("a👦🏻aa	b\naaaa	b")
             .arg(non_dictionary_order2_param)
@@ -299,7 +299,7 @@ fn test_dictionary_order2() {
 
 #[test]
 fn test_non_printing_chars() {
-    for non_printing_chars_param in vec!["-i"] {
+    for non_printing_chars_param in &["-i"] {
         new_ucmd!()
             .pipe_in("a👦🏻aa\naaaa")
             .arg(non_printing_chars_param)
@@ -361,7 +361,7 @@ fn test_mixed_floats_ints_chars_numeric_stable() {
 
 #[test]
 fn test_numeric_floats_and_ints2() {
-    for numeric_sort_param in vec!["-n", "--numeric-sort"] {
+    for numeric_sort_param in &["-n", "--numeric-sort"] {
         let input = "1.444\n8.013\n1\n-8\n1.04\n-1";
         new_ucmd!()
             .arg(numeric_sort_param)
@@ -373,7 +373,7 @@ fn test_numeric_floats_and_ints2() {
 
 #[test]
 fn test_numeric_floats2() {
-    for numeric_sort_param in vec!["-n", "--numeric-sort"] {
+    for numeric_sort_param in &["-n", "--numeric-sort"] {
         let input = "1.444\n8.013\n1.58590\n-8.90880\n1.040000000\n-.05";
         new_ucmd!()
             .arg(numeric_sort_param)
@@ -426,7 +426,7 @@ fn test_default_unsorted_ints2() {
 
 #[test]
 fn test_numeric_unique_ints2() {
-    for numeric_unique_sort_param in vec!["-nu"] {
+    for numeric_unique_sort_param in &["-nu"] {
         let input = "9\n9\n8\n1\n";
         new_ucmd!()
             .arg(numeric_unique_sort_param)

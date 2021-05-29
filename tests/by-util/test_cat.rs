@@ -237,7 +237,7 @@ fn test_numbered_lines_no_trailing_newline() {
 
 #[test]
 fn test_stdin_show_nonprinting() {
-    for same_param in vec!["-v", "--show-nonprinting"] {
+    for same_param in &["-v", "--show-nonprinting"] {
         new_ucmd!()
             .args(&[same_param])
             .pipe_in("\t\0\n")
@@ -248,7 +248,7 @@ fn test_stdin_show_nonprinting() {
 
 #[test]
 fn test_stdin_show_tabs() {
-    for same_param in vec!["-T", "--show-tabs"] {
+    for same_param in &["-T", "--show-tabs"] {
         new_ucmd!()
             .args(&[same_param])
             .pipe_in("\t\0\n")
@@ -259,7 +259,7 @@ fn test_stdin_show_tabs() {
 
 #[test]
 fn test_stdin_show_ends() {
-    for same_param in vec!["-E", "--show-ends"] {
+    for &same_param in &["-E", "--show-ends"] {
         new_ucmd!()
             .args(&[same_param, "-"])
             .pipe_in("\t\0\n\t")
@@ -270,7 +270,7 @@ fn test_stdin_show_ends() {
 
 #[test]
 fn test_stdin_show_all() {
-    for same_param in vec!["-A", "--show-all"] {
+    for same_param in &["-A", "--show-all"] {
         new_ucmd!()
             .args(&[same_param])
             .pipe_in("\t\0\n")
@@ -299,7 +299,7 @@ fn test_stdin_nonprinting_and_tabs() {
 
 #[test]
 fn test_stdin_squeeze_blank() {
-    for same_param in vec!["-s", "--squeeze-blank"] {
+    for same_param in &["-s", "--squeeze-blank"] {
         new_ucmd!()
             .arg(same_param)
             .pipe_in("\n\na\n\n\n\n\nb\n\n\n")
@@ -310,7 +310,7 @@ fn test_stdin_squeeze_blank() {
 
 #[test]
 fn test_stdin_number_non_blank() {
-    for same_param in vec!["-b", "--number-nonblank"] {
+    for same_param in &["-b", "--number-nonblank"] {
         new_ucmd!()
             .arg(same_param)
             .arg("-")
@@ -322,7 +322,7 @@ fn test_stdin_number_non_blank() {
 
 #[test]
 fn test_non_blank_overrides_number() {
-    for same_param in vec!["-b", "--number-nonblank"] {
+    for &same_param in &["-b", "--number-nonblank"] {
         new_ucmd!()
             .args(&[same_param, "-"])
             .pipe_in("\na\nb\n\n\nc")
@@ -333,7 +333,7 @@ fn test_non_blank_overrides_number() {
 
 #[test]
 fn test_squeeze_blank_before_numbering() {
-    for same_param in vec!["-s", "--squeeze-blank"] {
+    for &same_param in &["-s", "--squeeze-blank"] {
         new_ucmd!()
             .args(&[same_param, "-n", "-"])
             .pipe_in("a\n\n\nb")
@@ -408,7 +408,10 @@ fn test_domain_socket() {
     use std::thread;
     use unix_socket::UnixListener;
 
-    let dir = tempfile::Builder::new().prefix("unix_socket").tempdir().expect("failed to create dir");
+    let dir = tempfile::Builder::new()
+        .prefix("unix_socket")
+        .tempdir()
+        .expect("failed to create dir");
     let socket_path = dir.path().join("sock");
     let listener = UnixListener::bind(&socket_path).expect("failed to create socket");
 
@@ -426,7 +429,7 @@ fn test_domain_socket() {
 
     let child = new_ucmd!().args(&[socket_path]).run_no_wait();
     barrier.wait();
-    let stdout = &child.wait_with_output().unwrap().stdout.clone();
+    let stdout = &child.wait_with_output().unwrap().stdout;
     let output = String::from_utf8_lossy(&stdout);
     assert_eq!("a\tb", output);
 

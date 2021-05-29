@@ -7,7 +7,7 @@ struct TestData<'b> {
     out: &'b str,
 }
 
-static EXAMPLE_DATA: &'static [TestData<'static>] = &[
+static EXAMPLE_DATA: &[TestData] = &[
     // Ensure that paste properly handles files lacking a final newline.
     TestData {
         name: "no-nl-1",
@@ -64,8 +64,8 @@ static EXAMPLE_DATA: &'static [TestData<'static>] = &[
 
 #[test]
 fn test_combine_pairs_of_lines() {
-    for s in vec!["-s", "--serial"] {
-        for d in vec!["-d", "--delimiters"] {
+    for &s in &["-s", "--serial"] {
+        for &d in &["-d", "--delimiters"] {
             new_ucmd!()
                 .args(&[s, d, "\t\n", "html_colors.txt"])
                 .run()
@@ -76,7 +76,7 @@ fn test_combine_pairs_of_lines() {
 
 #[test]
 fn test_multi_stdin() {
-    for d in vec!["-d", "--delimiters"] {
+    for &d in &["-d", "--delimiters"] {
         new_ucmd!()
             .args(&[d, "\t\n", "-", "-"])
             .pipe_in_fixture("html_colors.txt")

@@ -199,6 +199,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     }
 
+    #[allow(clippy::if_same_then_else)]
     if matches.is_present(options::FILE_SYSTEM) {
         #[cfg(any(target_os = "linux", target_os = "windows"))]
         syncfs(files);

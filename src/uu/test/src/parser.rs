@@ -265,11 +265,10 @@ impl Parser {
     fn boolop(&mut self, op: Symbol) {
         if op == Symbol::BoolOp(OsString::from("-a")) {
             self.term();
-            self.stack.push(op);
         } else {
             self.expr();
-            self.stack.push(op);
         }
+        self.stack.push(op);
     }
 
     /// Parse a (possible) unary argument test (string length or file
