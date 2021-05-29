@@ -91,23 +91,11 @@ struct FileLine {
     form_feeds_after: usize,
 }
 
-impl AsRef<FileLine> for FileLine {
-    fn as_ref(&self) -> &FileLine {
-        self
-    }
-}
-
 struct ColumnModeOptions {
     width: usize,
     columns: usize,
     column_separator: String,
     across_mode: bool,
-}
-
-impl AsRef<OutputOptions> for OutputOptions {
-    fn as_ref(&self) -> &OutputOptions {
-        self
-    }
 }
 
 struct NumberingMode {
