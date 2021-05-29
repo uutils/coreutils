@@ -669,8 +669,8 @@ impl Options {
                 }
             },
             backup: backup_mode,
-            backup_suffix: backup_suffix,
-            overwrite: overwrite,
+            backup_suffix,
+            overwrite,
             no_target_dir,
             preserve_attributes,
             recursive,
@@ -1089,7 +1089,7 @@ fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResu
 }
 
 #[cfg(not(windows))]
-#[allow(clippy::unnecessary_wraps)] // needed for windows version
+#[allow(clippy::unnecessary_unwrap)] // needed for windows version
 fn symlink_file(source: &Path, dest: &Path, context: &str) -> CopyResult<()> {
     match std::os::unix::fs::symlink(source, dest).context(context) {
         Ok(_) => Ok(()),
@@ -1108,7 +1108,7 @@ fn context_for(src: &Path, dest: &Path) -> String {
 
 /// Implements a simple backup copy for the destination file.
 /// TODO: for the backup, should this function be replaced by `copy_file(...)`?
-fn backup_dest(dest: &Path, backup_path: &PathBuf) -> CopyResult<PathBuf> {
+fn backup_dest(dest: &Path, backup_path: &Path) -> CopyResult<PathBuf> {
     fs::copy(dest, &backup_path)?;
     Ok(backup_path.into())
 }

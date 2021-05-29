@@ -483,10 +483,11 @@ where
     /// Shrink the buffer so that its length is equal to the set size, returning an iterator for
     /// the elements that were too much.
     fn shrink_buffer_to_size(&mut self) -> impl Iterator<Item = String> + '_ {
-        let mut shrink_offset = 0;
-        if self.buffer.len() > self.size {
-            shrink_offset = self.buffer.len() - self.size;
-        }
+        let shrink_offset = if self.buffer.len() > self.size {
+            self.buffer.len() - self.size
+        } else {
+            0
+        };
         self.buffer
             .drain(..shrink_offset)
             .map(|(_, line)| line.unwrap())

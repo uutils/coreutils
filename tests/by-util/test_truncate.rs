@@ -1,8 +1,8 @@
 use crate::common::util::*;
 use std::io::{Seek, SeekFrom, Write};
 
-static TFILE1: &'static str = "truncate_test_1";
-static TFILE2: &'static str = "truncate_test_2";
+static TFILE1: &str = "truncate_test_1";
+static TFILE2: &str = "truncate_test_2";
 
 #[test]
 fn test_increase_file_size() {

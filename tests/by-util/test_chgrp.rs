@@ -6,7 +6,7 @@ fn test_invalid_option() {
     new_ucmd!().arg("-w").arg("/").fails();
 }
 
-static DIR: &'static str = "/tmp";
+static DIR: &str = "/tmp";
 
 #[test]
 fn test_invalid_group() {

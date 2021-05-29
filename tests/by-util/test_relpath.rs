@@ -61,6 +61,7 @@ const TESTS: [TestCase; 10] = [
     },
 ];
 
+#[allow(clippy::needless_lifetimes)]
 fn convert_path<'a>(path: &'a str) -> Cow<'a, str> {
     #[cfg(windows)]
     return path.replace("/", "\\").into();

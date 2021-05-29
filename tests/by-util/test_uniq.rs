@@ -1,10 +1,10 @@
 use crate::common::util::*;
 
-static INPUT: &'static str = "sorted.txt";
-static OUTPUT: &'static str = "sorted-output.txt";
-static SKIP_CHARS: &'static str = "skip-chars.txt";
-static SKIP_FIELDS: &'static str = "skip-fields.txt";
-static SORTED_ZERO_TERMINATED: &'static str = "sorted-zero-terminated.txt";
+static INPUT: &str = "sorted.txt";
+static OUTPUT: &str = "sorted-output.txt";
+static SKIP_CHARS: &str = "skip-chars.txt";
+static SKIP_FIELDS: &str = "skip-fields.txt";
+static SORTED_ZERO_TERMINATED: &str = "sorted-zero-terminated.txt";
 
 #[test]
 fn test_stdin_default() {

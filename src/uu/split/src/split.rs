@@ -200,6 +200,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     split(&settings)
 }
 
+#[allow(dead_code)]
 struct Settings {
     prefix: String,
     numeric_suffix: bool,
@@ -210,7 +211,7 @@ struct Settings {
     filter: Option<String>,
     strategy: String,
     strategy_param: String,
-    verbose: bool,
+    verbose: bool, // TODO: warning: field is never read: `verbose`
 }
 
 trait Splitter {

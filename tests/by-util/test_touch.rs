@@ -401,8 +401,8 @@ fn get_dstswitch_hour() -> Option<String> {
     for _i in 0..(366 * 24) {
         if is_dst_switch_hour(ts) {
             let mut tm = time::at(ts);
-            tm.tm_hour = tm.tm_hour + 1;
-            let s = time::strftime("%Y%m%d%H%M", &tm).unwrap().to_string();
+            tm.tm_hour += 1;
+            let s = time::strftime("%Y%m%d%H%M", &tm).unwrap();
             return Some(s);
         }
         ts = ts + time::Duration::hours(1);
@@ -415,10 +415,7 @@ fn test_touch_mtime_dst_fails() {
     let (_at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_set_mtime_dst_fails";
 
-    match get_dstswitch_hour() {
-        Some(s) => {
-            ucmd.args(&["-m", "-t", &s, file]).fails();
-        }
-        None => (),
+    if let Some(s) = get_dstswitch_hour() {
+        ucmd.args(&["-m", "-t", &s, file]).fails();
     }
 }
