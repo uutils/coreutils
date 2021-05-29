@@ -633,7 +633,7 @@ fn build_options(
         })
     }) {
         Some(res) => res?,
-        _ => 1,
+        None => 1,
     };
 
     let end_page_in_plus_option = match page_plus_re
@@ -647,7 +647,7 @@ fn build_options(
             })
         }) {
         Some(res) => Some(res?),
-        _ => None,
+        None => None,
     };
 
     let invalid_pages_map = |i: String| {
@@ -666,7 +666,7 @@ fn build_options(
         .map(invalid_pages_map)
     {
         Some(res) => res?,
-        _ => start_page_in_plus_option,
+        None => start_page_in_plus_option,
     };
 
     let end_page = match matches
@@ -679,7 +679,7 @@ fn build_options(
         .map(invalid_pages_map)
     {
         Some(res) => Some(res?),
-        _ => end_page_in_plus_option,
+        None => end_page_in_plus_option,
     };
 
     if end_page.is_some() && start_page > end_page.unwrap() {
@@ -754,14 +754,14 @@ fn build_options(
         })
     }) {
         Some(res) => Some(res?),
-        _ => None,
+        None => None,
     };
 
     // --column has more priority than -column
 
     let column_option_value = match parse_usize(matches, options::COLUMN_OPTION) {
         Some(res) => Some(res?),
-        _ => start_column_option,
+        None => start_column_option,
     };
 
     let column_mode_options = column_option_value.map(|columns| ColumnModeOptions {
