@@ -316,6 +316,7 @@ fn break_buff(buff: &str, cols: usize) -> Vec<String> {
 fn break_line(mut line: &str, cols: usize) -> Vec<String> {
     let breaks = (line.len() / cols).saturating_add(1);
     let mut lines = Vec::with_capacity(breaks);
+    // TODO: Use unicode width instead of the length in bytes.
     if line.len() < cols {
         lines.push(line.to_string());
         return lines;
