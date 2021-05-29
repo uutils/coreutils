@@ -12,6 +12,8 @@
 
 // spell-checker:ignore (ToDO) binop binops ints paren prec
 
+use num_bigint::BigInt;
+use num_traits::{One, Zero};
 use onig::{Regex, RegexOptions, Syntax};
 
 use crate::tokens::Token;
@@ -39,20 +41,17 @@ impl AstNode {
         for _ in 0..depth {
             print!("\t",);
         }
-        match *self {
-            AstNode::Leaf {
-                ref token_idx,
-                ref value,
-            } => println!(
+        match self {
+            AstNode::Leaf { token_idx, value } => println!(
                 "Leaf( {} ) at #{} ( evaluate -> {:?} )",
                 value,
                 token_idx,
                 self.evaluate()
             ),
             AstNode::Node {
-                ref token_idx,
-                ref op_type,
-                ref operands,
+                token_idx,
+                op_type,
+                operands,
             } => {
                 println!(
                     "Node( {} ) at #{} (evaluate -> {:?})",
@@ -81,36 +80,33 @@ impl AstNode {
         })
     }
     pub fn evaluate(&self) -> Result<String, String> {
-        match *self {
-            AstNode::Leaf { ref value, .. } => Ok(value.clone()),
-            AstNode::Node { ref op_type, .. } => match self.operand_values() {
+        match self {
+            AstNode::Leaf { value, .. } => Ok(value.clone()),
+            AstNode::Node { op_type, .. } => match self.operand_values() {
                 Err(reason) => Err(reason),
                 Ok(operand_values) => match op_type.as_ref() {
-                    "+" => infix_operator_two_ints(
-                        |a: i64, b: i64| checked_binop(|| a.checked_add(b), "+"),
-                        &operand_values,
-                    ),
-                    "-" => infix_operator_two_ints(
-                        |a: i64, b: i64| checked_binop(|| a.checked_sub(b), "-"),
-                        &operand_values,
-                    ),
-                    "*" => infix_operator_two_ints(
-                        |a: i64, b: i64| checked_binop(|| a.checked_mul(b), "*"),
-                        &operand_values,
-                    ),
+                    "+" => {
+                        infix_operator_two_ints(|a: BigInt, b: BigInt| Ok(a + b), &operand_values)
+                    }
+                    "-" => {
+                        infix_operator_two_ints(|a: BigInt, b: BigInt| Ok(a - b), &operand_values)
+                    }
+                    "*" => {
+                        infix_operator_two_ints(|a: BigInt, b: BigInt| Ok(a * b), &operand_values)
+                    }
                     "/" => infix_operator_two_ints(
-                        |a: i64, b: i64| {
-                            if b == 0 {
+                        |a: BigInt, b: BigInt| {
+                            if b.is_zero() {
                                 Err("division by zero".to_owned())
                             } else {
-                                checked_binop(|| a.checked_div(b), "/")
+                                Ok(a / b)
                             }
                         },
                         &operand_values,
                     ),
                     "%" => infix_operator_two_ints(
-                        |a: i64, b: i64| {
-                            if b == 0 {
+                        |a: BigInt, b: BigInt| {
+                            if b.is_zero() {
                                 Err("division by zero".to_owned())
                             } else {
                                 Ok(a % b)
@@ -119,32 +115,32 @@ impl AstNode {
                         &operand_values,
                     ),
                     "=" => infix_operator_two_ints_or_two_strings(
-                        |a: i64, b: i64| Ok(bool_as_int(a == b)),
+                        |a: BigInt, b: BigInt| Ok(bool_as_int(a == b)),
                         |a: &String, b: &String| Ok(bool_as_string(a == b)),
                         &operand_values,
                     ),
                     "!=" => infix_operator_two_ints_or_two_strings(
-                        |a: i64, b: i64| Ok(bool_as_int(a != b)),
+                        |a: BigInt, b: BigInt| Ok(bool_as_int(a != b)),
                         |a: &String, b: &String| Ok(bool_as_string(a != b)),
                         &operand_values,
                     ),
                     "<" => infix_operator_two_ints_or_two_strings(
-                        |a: i64, b: i64| Ok(bool_as_int(a < b)),
+                        |a: BigInt, b: BigInt| Ok(bool_as_int(a < b)),
                         |a: &String, b: &String| Ok(bool_as_string(a < b)),
                         &operand_values,
                     ),
                     ">" => infix_operator_two_ints_or_two_strings(
-                        |a: i64, b: i64| Ok(bool_as_int(a > b)),
+                        |a: BigInt, b: BigInt| Ok(bool_as_int(a > b)),
                         |a: &String, b: &String| Ok(bool_as_string(a > b)),
                         &operand_values,
                     ),
                     "<=" => infix_operator_two_ints_or_two_strings(
-                        |a: i64, b: i64| Ok(bool_as_int(a <= b)),
+                        |a: BigInt, b: BigInt| Ok(bool_as_int(a <= b)),
                         |a: &String, b: &String| Ok(bool_as_string(a <= b)),
                         &operand_values,
                     ),
                     ">=" => infix_operator_two_ints_or_two_strings(
-                        |a: i64, b: i64| Ok(bool_as_int(a >= b)),
+                        |a: BigInt, b: BigInt| Ok(bool_as_int(a >= b)),
                         |a: &String, b: &String| Ok(bool_as_string(a >= b)),
                         &operand_values,
                     ),
@@ -161,7 +157,7 @@ impl AstNode {
         }
     }
     pub fn operand_values(&self) -> Result<Vec<String>, String> {
-        if let AstNode::Node { ref operands, .. } = *self {
+        if let AstNode::Node { operands, .. } = self {
             let mut out = Vec::with_capacity(operands.len());
             for operand in operands {
                 match operand.evaluate() {
@@ -217,9 +213,9 @@ fn maybe_dump_ast(result: &Result<Box<AstNode>, String>) {
     if let Ok(debug_var) = env::var("EXPR_DEBUG_AST") {
         if debug_var == "1" {
             println!("EXPR_DEBUG_AST");
-            match *result {
-                Ok(ref ast) => ast.debug_dump(),
-                Err(ref reason) => println!("\terr: {:?}", reason),
+            match result {
+                Ok(ast) => ast.debug_dump(),
+                Err(reason) => println!("\terr: {:?}", reason),
             }
         }
     }
@@ -304,7 +300,7 @@ fn push_token_to_either_stack(
     out_stack: &mut TokenStack,
     op_stack: &mut TokenStack,
 ) -> Result<(), String> {
-    let result = match *token {
+    let result = match token {
         Token::Value { .. } => {
             out_stack.push((token_idx, token.clone()));
             Ok(())
@@ -420,24 +416,14 @@ fn move_till_match_paren(
     }
 }
 
-fn checked_binop<F: Fn() -> Option<T>, T>(cb: F, op: &str) -> Result<T, String> {
-    match cb() {
-        Some(v) => Ok(v),
-        None => Err(format!("{}: Numerical result out of range", op)),
-    }
-}
-
 fn infix_operator_two_ints<F>(f: F, values: &[String]) -> Result<String, String>
 where
-    F: Fn(i64, i64) -> Result<i64, String>,
+    F: Fn(BigInt, BigInt) -> Result<BigInt, String>,
 {
     assert!(values.len() == 2);
-    if let Ok(left) = values[0].parse::<i64>() {
-        if let Ok(right) = values[1].parse::<i64>() {
-            return match f(left, right) {
-                Ok(result) => Ok(result.to_string()),
-                Err(reason) => Err(reason),
-            };
+    if let Ok(left) = values[0].parse::<BigInt>() {
+        if let Ok(right) = values[1].parse::<BigInt>() {
+            return f(left, right).map(|big_int| big_int.to_string());
         }
     }
     Err("Expected an integer operand".to_string())
@@ -449,13 +435,14 @@ fn infix_operator_two_ints_or_two_strings<FI, FS>(
     values: &[String],
 ) -> Result<String, String>
 where
-    FI: Fn(i64, i64) -> Result<i64, String>,
+    FI: Fn(BigInt, BigInt) -> Result<u8, String>,
     FS: Fn(&String, &String) -> Result<String, String>,
 {
     assert!(values.len() == 2);
-    if let (Some(a_int), Some(b_int)) =
-        (values[0].parse::<i64>().ok(), values[1].parse::<i64>().ok())
-    {
+    if let (Some(a_int), Some(b_int)) = (
+        values[0].parse::<BigInt>().ok(),
+        values[1].parse::<BigInt>().ok(),
+    ) {
         match fi(a_int, b_int) {
             Ok(result) => Ok(result.to_string()),
             Err(reason) => Err(reason),
@@ -541,7 +528,7 @@ fn prefix_operator_substr(values: &[String]) -> String {
     subj.chars().skip(idx).take(len).collect()
 }
 
-fn bool_as_int(b: bool) -> i64 {
+fn bool_as_int(b: bool) -> u8 {
     if b {
         1
     } else {
@@ -559,8 +546,8 @@ fn value_as_bool(s: &str) -> bool {
     if s.is_empty() {
         return false;
     }
-    match s.parse::<i64>() {
-        Ok(n) => n != 0,
+    match s.parse::<BigInt>() {
+        Ok(n) => n.is_one(),
         Err(_) => true,
     }
 }
