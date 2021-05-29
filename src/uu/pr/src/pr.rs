@@ -11,20 +11,17 @@ extern crate quick_error;
 
 use chrono::offset::Local;
 use chrono::DateTime;
-use getopts::{HasArg, Occur};
 use getopts::Matches;
-use itertools::structs::KMergeBy;
-use itertools::{GroupBy, Itertools};
+use getopts::{HasArg, Occur};
+use itertools::Itertools;
 use quick_error::ResultExt;
 use regex::Regex;
 use std::convert::From;
 use std::fs::{metadata, File, Metadata};
 use std::io::{stdin, stdout, BufRead, BufReader, Lines, Read, Stdin, Stdout, Write};
-use std::iter::{FlatMap, Map};
 use std::num::ParseIntError;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
-use std::vec::Vec;
 
 type IOError = std::io::Error;
 
@@ -40,7 +37,7 @@ static READ_BUFFER_SIZE: usize = 1024 * 64;
 static DEFAULT_COLUMN_WIDTH: usize = 72;
 static DEFAULT_COLUMN_WIDTH_WITH_S_OPTION: usize = 512;
 static DEFAULT_COLUMN_SEPARATOR: &char = &TAB;
-static FF: u8 = 0x0C as u8;
+static FF: u8 = 0x0C_u8;
 
 mod options {
     pub static STRING_HEADER_OPTION: &str = "h";
@@ -448,16 +445,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 /// Removes -column and +page option as getopts cannot parse things like -3 etc
 /// # Arguments
 /// * `args` - Command line arguments
-fn recreate_arguments(args: &Vec<String>) -> Vec<String> {
+fn recreate_arguments(args: &[String]) -> Vec<String> {
     let column_page_option = Regex::new(r"^[-+]\d+.*").unwrap();
     let num_regex: Regex = Regex::new(r"(.\d+)|(\d+)|^[^-]$").unwrap();
     //let a_file: Regex = Regex::new(r"^[^-+].*").unwrap();
     let n_regex: Regex = Regex::new(r"^-n\s*$").unwrap();
-    let mut arguments = args.clone();
+    let mut arguments = args.to_owned();
     let num_option: Option<(usize, &String)> =
         args.iter().find_position(|x| n_regex.is_match(x.trim()));
-    if num_option.is_some() {
-        let (pos, _value) = num_option.unwrap();
+    if let Some((pos, _value)) = num_option {
         let num_val_opt = args.get(pos + 1);
         if num_val_opt.is_some() && !num_regex.is_match(num_val_opt.unwrap()) {
             let could_be_file = arguments.remove(pos + 1);
@@ -545,11 +541,11 @@ fn parse_usize(matches: &Matches, opt: &str) -> Option<Result<usize, PrError>> {
 
 fn build_options(
     matches: &Matches,
-    paths: &Vec<String>,
+    paths: &[String],
     free_args: String,
 ) -> Result<OutputOptions, PrError> {
-    let form_feed_used =
-        matches.opt_present(options::FORM_FEED_OPTION) || matches.opt_present(options::FORM_FEED_OPTION_SMALL);
+    let form_feed_used = matches.opt_present(options::FORM_FEED_OPTION)
+        || matches.opt_present(options::FORM_FEED_OPTION_SMALL);
 
     let is_merge_mode: bool = matches.opt_present(options::MERGE_FILES_PRINT);
 
@@ -571,21 +567,17 @@ fn build_options(
         None
     };
 
-    let header: String = matches
-        .opt_str(options::STRING_HEADER_OPTION)
-        .unwrap_or(if is_merge_mode {
+    let header: String = matches.opt_str(options::STRING_HEADER_OPTION).unwrap_or(
+        if is_merge_mode || paths[0] == FILE_STDIN {
             String::new()
         } else {
-            if paths[0] == FILE_STDIN {
-                String::new()
-            } else {
-                paths[0].to_string()
-            }
-        });
+            paths[0].to_string()
+        },
+    );
 
     let default_first_number: usize = NumberingMode::default().first_number;
-    let first_number: usize =
-        parse_usize(matches, options::FIRST_LINE_NUMBER_OPTION).unwrap_or(Ok(default_first_number))?;
+    let first_number: usize = parse_usize(matches, options::FIRST_LINE_NUMBER_OPTION)
+        .unwrap_or(Ok(default_first_number))?;
 
     let number: Option<NumberingMode> = matches
         .opt_str(options::NUMBERING_MODE_OPTION)
@@ -598,12 +590,11 @@ fn build_options(
                 NumberingMode::default().separator
             };
 
-            let width: usize = if parse_result.is_err() {
-                i[1..]
+            let width: usize = match parse_result {
+                Ok(res) => res,
+                Err(_) => i[1..]
                     .parse::<usize>()
-                    .unwrap_or(NumberingMode::default().width)
-            } else {
-                parse_result.unwrap()
+                    .unwrap_or(NumberingMode::default().width),
             };
 
             NumberingMode {
@@ -737,7 +728,7 @@ fn build_options(
         Some(x) => Some(x),
         None => matches.opt_str(options::COLUMN_CHAR_SEPARATOR_OPTION),
     }
-    .unwrap_or(DEFAULT_COLUMN_SEPARATOR.to_string());
+    .unwrap_or_else(|| DEFAULT_COLUMN_SEPARATOR.to_string());
 
     let default_column_width = if matches.opt_present(options::COLUMN_WIDTH_OPTION)
         && matches.opt_present(options::COLUMN_CHAR_SEPARATOR_OPTION)
@@ -778,15 +769,13 @@ fn build_options(
         _ => start_column_option,
     };
 
-    let column_mode_options: Option<ColumnModeOptions> = match column_option_value {
-        Some(columns) => Some(ColumnModeOptions {
+    let column_mode_options: Option<ColumnModeOptions> =
+        column_option_value.map(|columns| ColumnModeOptions {
             columns,
             width: column_width,
             column_separator,
             across_mode,
-        }),
-        _ => None,
-    };
+        });
 
     let offset_spaces: String =
         " ".repeat(parse_usize(matches, options::OFFSET_SPACES_OPTION).unwrap_or(Ok(0))?);
@@ -795,14 +784,14 @@ fn build_options(
     let col_sep_for_printing = column_mode_options
         .as_ref()
         .map(|i| i.column_separator.clone())
-        .unwrap_or(
+        .unwrap_or_else(|| {
             merge_files_print
                 .map(|_k| DEFAULT_COLUMN_SEPARATOR.to_string())
-                .unwrap_or(String::new()),
-        );
+                .unwrap_or_default()
+        });
 
-    let columns_to_print =
-        merge_files_print.unwrap_or(column_mode_options.as_ref().map(|i| i.columns).unwrap_or(1));
+    let columns_to_print = merge_files_print
+        .unwrap_or_else(|| column_mode_options.as_ref().map(|i| i.columns).unwrap_or(1));
 
     let line_width: Option<usize> = if join_lines {
         None
@@ -864,7 +853,7 @@ fn open(path: &str) -> Result<Box<dyn Read>, PrError> {
                 _ => Err(PrError::UnknownFiletype(path_string)),
             }
         })
-        .unwrap_or(Err(PrError::NotExists(path.to_string())))
+        .unwrap_or_else(|_| Err(PrError::NotExists(path.to_string())))
 }
 
 fn split_lines_if_form_feed(file_content: Result<String, IOError>) -> Vec<FileLine> {
@@ -988,7 +977,7 @@ fn read_stream_and_create_pages(
     )
 }
 
-fn mpr(paths: &Vec<String>, options: &OutputOptions) -> Result<i32, PrError> {
+fn mpr(paths: &[String], options: &OutputOptions) -> Result<i32, PrError> {
     let nfiles = paths.len();
 
     // Check if files exists
@@ -996,11 +985,7 @@ fn mpr(paths: &Vec<String>, options: &OutputOptions) -> Result<i32, PrError> {
         open(path)?;
     }
 
-    let file_line_groups: GroupBy<
-        usize,
-        KMergeBy<FlatMap<Map<Box<dyn Iterator<Item = (usize, Vec<FileLine>)>>, _>, _, _>, _>,
-        _,
-    > = paths
+    let file_line_groups = paths
         .iter()
         .enumerate()
         .map(|indexed_path: (usize, &String)| {
@@ -1018,9 +1003,9 @@ fn mpr(paths: &Vec<String>, options: &OutputOptions) -> Result<i32, PrError> {
                             group_key: page_number * nfiles + fl.file_id,
                             ..fl
                         })
-                        .collect()
+                        .collect::<Vec<_>>()
                 })
-                .flat_map(|x: Vec<FileLine>| x)
+                .flatten()
         })
         .kmerge_by(|a: &FileLine, b: &FileLine| {
             if a.group_key == b.group_key {
@@ -1055,11 +1040,7 @@ fn mpr(paths: &Vec<String>, options: &OutputOptions) -> Result<i32, PrError> {
     Ok(0)
 }
 
-fn print_page(
-    lines: &Vec<FileLine>,
-    options: &OutputOptions,
-    page: usize,
-) -> Result<usize, IOError> {
+fn print_page(lines: &[FileLine], options: &OutputOptions, page: usize) -> Result<usize, IOError> {
     let line_separator = options.line_separator.as_bytes();
     let page_separator = options.page_separator_char.as_bytes();
 
@@ -1088,7 +1069,7 @@ fn print_page(
 }
 
 fn write_columns(
-    lines: &Vec<FileLine>,
+    lines: &[FileLine],
     options: &OutputOptions,
     out: &mut Stdout,
 ) -> Result<usize, IOError> {
@@ -1100,7 +1081,9 @@ fn write_columns(
         options.content_lines_per_page
     };
 
-    let columns = options.merge_files_print.unwrap_or(get_columns(options));
+    let columns = options
+        .merge_files_print
+        .unwrap_or_else(|| get_columns(options));
     let line_width: Option<usize> = options.line_width;
     let mut lines_printed = 0;
     let feed_line_present = options.form_feed_used;
@@ -1123,9 +1106,9 @@ fn write_columns(
                     break;
                 }
                 filled_lines.push(Some(line));
-                offset += 1;
                 inserted += 1;
             }
+            offset += inserted;
 
             for _i in inserted..content_lines_per_page {
                 filled_lines.push(None);
@@ -1279,18 +1262,16 @@ fn header_content(options: &OutputOptions, page: usize) -> Vec<String> {
 }
 
 fn file_last_modified_time(path: &str) -> String {
-    let file_metadata = metadata(path);
-    return file_metadata
+    metadata(path)
         .map(|i| {
-            return i
-                .modified()
+            i.modified()
                 .map(|x| {
                     let datetime: DateTime<Local> = x.into();
                     datetime.format("%b %d %H:%M %Y").to_string()
                 })
-                .unwrap_or(String::new());
+                .unwrap_or_default()
         })
-        .unwrap_or(String::new());
+        .unwrap_or_default()
 }
 
 /// Returns five empty lines as trailer content if displaying trailer
