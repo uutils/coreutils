@@ -206,6 +206,7 @@ dependencies = [
 name = "coreutils"
 version = "0.0.6"
 dependencies = [
+ "chrono",
  "conv",
  "filetime",
  "glob 0.3.0",
@@ -2152,16 +2153,16 @@ dependencies = [
 
 [[package]]
 name = "uu_pr"
-version = "0.0.4"
+version = "0.0.6"
 dependencies = [
- "chrono 0.4.11 (registry+https://github.com/rust-lang/crates.io-index)",
- "getopts 0.2.21 (registry+https://github.com/rust-lang/crates.io-index)",
- "itertools 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "quick-error 1.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "regex 1.4.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "time 0.1.42 (registry+https://github.com/rust-lang/crates.io-index)",
- "uucore 0.0.7",
- "uucore_procs 0.0.5",
+ "chrono",
+ "getopts",
+ "itertools 0.10.0",
+ "quick-error",
+ "regex",
+ "time",
+ "uucore",
+ "uucore_procs",
 ]
 
 [[package]]
