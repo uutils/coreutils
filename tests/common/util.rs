@@ -226,8 +226,13 @@ impl CmdResult {
     }
     /// like stdout_is_fixture(...), but replaces the data in fixture file based on values provided in template_vars
     /// command output
-    pub fn stdout_is_templated_fixture<T: AsRef<OsStr>>(&self, file_rel_path: T, template_vars: Vec<(&String, &String)>) -> &CmdResult {
-        let mut contents = String::from_utf8(read_scenario_fixture(&self.tmpd, file_rel_path)).unwrap();
+    pub fn stdout_is_templated_fixture<T: AsRef<OsStr>>(
+        &self,
+        file_rel_path: T,
+        template_vars: Vec<(&String, &String)>,
+    ) -> &CmdResult {
+        let mut contents =
+            String::from_utf8(read_scenario_fixture(&self.tmpd, file_rel_path)).unwrap();
         for kv in template_vars {
             contents = contents.replace(kv.0, kv.1);
         }
@@ -923,7 +928,7 @@ impl UCommand {
         cmd_result
     }
 
-    pub fn get_full_fixture_path(&self, file_rel_path: &str) -> String{
+    pub fn get_full_fixture_path(&self, file_rel_path: &str) -> String {
         let tmpdir_path = self.tmpd.as_ref().unwrap().path();
         format!("{}/{}", tmpdir_path.to_str().unwrap(), file_rel_path)
     }

@@ -1,7 +1,7 @@
 use crate::common::util::*;
-use std::fs::metadata;
 use chrono::offset::Local;
 use chrono::DateTime;
+use std::fs::metadata;
 
 fn file_last_modified_time(ucmd: &UCommand, path: &str) -> String {
     let tmp_dir_path = ucmd.get_full_fixture_path(path);
@@ -245,7 +245,10 @@ fn test_with_no_header_trailer_option() {
     scenario
         .args(&["-t", test_file_path])
         .succeeds()
-        .stdout_is_templated_fixture(expected_test_file_path, vec![(&"{last_modified_time}".to_string(), &value)]);
+        .stdout_is_templated_fixture(
+            expected_test_file_path,
+            vec![(&"{last_modified_time}".to_string(), &value)],
+        );
 }
 
 #[test]
