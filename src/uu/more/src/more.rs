@@ -136,7 +136,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if let Some(filenames) = matches.values_of(options::FILES) {
         let mut stdout = setup_term();
         let length = filenames.len();
-        for (idx, fname) in filenames.clone().enumerate() {
+        for (idx, fname) in filenames.enumerate() {
             let fname = Path::new(fname);
             if fname.is_dir() {
                 terminal::disable_raw_mode().unwrap();
@@ -145,20 +145,19 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             }
             if !fname.exists() {
                 terminal::disable_raw_mode().unwrap();
-                eprintln!(
-                    "{}: cannot open {}: No such file or directory",
-                    executable!(),
+                show_error!(
+                    "cannot open {}: No such file or directory",
                     fname.display()
                 );
                 return 1;
             }
-            if filenames.len() > 1 {
+            if length > 1 {
                 buff.push_str(&MULTI_FILE_TOP_PROMPT.replace("{}", fname.to_str().unwrap()));
             }
             let mut reader = BufReader::new(File::open(fname).unwrap());
             reader.read_to_string(&mut buff).unwrap();
-            let last = idx + 1 == length;
-            more(&buff, &mut stdout, last);
+            let is_last = idx + 1 == length;
+            more(&buff, &mut stdout, is_last);
             buff.clear();
         }
         reset_term(&mut stdout);
@@ -205,17 +204,9 @@ fn more(buff: &str, mut stdout: &mut Stdout, is_last: bool) {
     let lines = break_buff(buff, usize::from(cols));
     let line_count: u16 = lines.len().try_into().unwrap();
 
-    // Print everything and quit if line count is less than the availale rows
-    if line_count < rows {
-        println!("{}", buff);
-        return;
-    }
-
     let mut upper_mark = 0;
-    // Number of lines left
-    let mut lines_left = line_count - (upper_mark + rows);
-    // Are we on the very last page and the next down arrow will return this function
-    let mut to_be_done = false;
+    let mut lines_left = line_count.saturating_sub(upper_mark + rows);
+
     draw(
         &mut upper_mark,
         rows,
@@ -223,6 +214,16 @@ fn more(buff: &str, mut stdout: &mut Stdout, is_last: bool) {
         lines.clone(),
         line_count,
     );
+
+    let mut to_be_done = false;
+    if lines_left == 0 && is_last {
+        if is_last {
+            return;
+        } else {
+            to_be_done = true;
+        }
+    }
+    
 
     loop {
         if event::poll(Duration::from_millis(10)).unwrap() {
@@ -246,38 +247,21 @@ fn more(buff: &str, mut stdout: &mut Stdout, is_last: bool) {
                     code: KeyCode::Char(' '),
                     modifiers: KeyModifiers::NONE,
                 }) => {
-                    // If this is the last page but some text
-                    // is still left that does not require a page of its own
-                    // then this event will print the left lines
-                    if lines_left < rows && !to_be_done {
-                        for l in lines.iter().skip((line_count - upper_mark - rows).into()) {
-                            stdout.write_all(format!("\r{}\n", l).as_bytes()).unwrap();
+                    upper_mark = upper_mark.saturating_add(rows.saturating_sub(1));
+                    lines_left = line_count.saturating_sub(upper_mark + rows);
+                    draw(
+                        &mut upper_mark,
+                        rows,
+                        &mut stdout,
+                        lines.clone(),
+                        line_count,
+                    );
+
+                    if lines_left == 0 {
+                        if to_be_done || is_last {
+                            return
                         }
-                        make_prompt_and_flush(&mut stdout, line_count, line_count);
-                        // If this is not the last input file
-                        // do not return, but the next down arrow must return
-                        // because we have printed everyhing
-                        if !is_last {
-                            to_be_done = true;
-                        } else {
-                            // Else quit
-                            reset_term(&mut stdout);
-                            return;
-                        }
-                        // This handles the next arrow key to quit
-                    } else if lines_left < rows && to_be_done {
-                        return;
-                    } else {
-                        // Print a normal page
-                        upper_mark = upper_mark.saturating_add(rows.saturating_sub(1));
-                        lines_left = line_count.saturating_sub(upper_mark + rows);
-                        draw(
-                            &mut upper_mark,
-                            rows,
-                            &mut stdout,
-                            lines.clone(),
-                            line_count,
-                        );
+                        to_be_done = true;
                     }
                 }
                 Event::Key(KeyEvent {
