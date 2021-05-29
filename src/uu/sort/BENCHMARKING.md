@@ -2,7 +2,7 @@
 
 Most of the time when sorting is spent comparing lines. The comparison functions however differ based
 on which arguments are passed to `sort`, therefore it is important to always benchmark multiple scenarios.
-This is an overwiew over what was benchmarked, and if you make changes to `sort`, you are encouraged to check
+This is an overview over what was benchmarked, and if you make changes to `sort`, you are encouraged to check
 how performance was affected for the workloads listed below. Feel free to add other workloads to the
 list that we should improve / make sure not to regress.
 

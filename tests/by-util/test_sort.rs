@@ -471,7 +471,7 @@ fn test_keys_invalid_field() {
     new_ucmd!()
         .args(&["-k", "1."])
         .fails()
-        .stderr_only("sort: failed to parse character index for key `1.`: cannot parse integer from empty string");
+        .stderr_only("sort: failed to parse key `1.`: failed to parse character index ``: cannot parse integer from empty string");
 }
 
 #[test]
@@ -479,7 +479,7 @@ fn test_keys_invalid_field_option() {
     new_ucmd!()
         .args(&["-k", "1.1x"])
         .fails()
-        .stderr_only("sort: invalid option for key: `x`");
+        .stderr_only("sort: failed to parse key `1.1x`: invalid option: `x`");
 }
 
 #[test]
@@ -487,7 +487,7 @@ fn test_keys_invalid_field_zero() {
     new_ucmd!()
         .args(&["-k", "0.1"])
         .fails()
-        .stderr_only("sort: field index was 0");
+        .stderr_only("sort: failed to parse key `0.1`: field index can not be 0");
 }
 
 #[test]
@@ -495,7 +495,7 @@ fn test_keys_invalid_char_zero() {
     new_ucmd!()
         .args(&["-k", "1.0"])
         .fails()
-        .stderr_only("sort: invalid character index 0 in `1.0` for the start position of a field");
+        .stderr_only("sort: failed to parse key `1.0`: invalid character index 0 for the start position of a field");
 }
 
 #[test]
@@ -584,6 +584,47 @@ fn test_keys_negative_size_match() {
     // If the end of a field is before its start, we should not crash.
     // Debug output should report "no match for key" at the start position (i.e. the later position).
     test_helper("keys_negative_size", &["-k 3,1"]);
+}
+
+#[test]
+fn test_keys_ignore_flag() {
+    test_helper("keys_ignore_flag", &["-k 1n -b"])
+}
+
+#[test]
+fn test_doesnt_inherit_key_settings() {
+    let input = " 1
+2
+   10
+";
+    new_ucmd!()
+        .args(&["-k", "1b", "-n"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(
+            " 1
+   10
+2
+",
+        );
+}
+
+#[test]
+fn test_inherits_key_settings() {
+    let input = " 1
+2
+   10
+";
+    new_ucmd!()
+        .args(&["-k", "1", "-n"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(
+            " 1
+2
+   10
+",
+        );
 }
 
 #[test]
@@ -707,10 +748,9 @@ fn test_dictionary_and_nonprinting_conflicts() {
                 .succeeds();
         }
         for conflicting_arg in &conflicting_args {
-            // FIXME: this should ideally fail.
             new_ucmd!()
                 .args(&["-k", &format!("1{},1{}", restricted_arg, conflicting_arg)])
-                .succeeds();
+                .fails();
         }
     }
 }
@@ -736,4 +776,9 @@ fn test_nonexistent_file() {
             #[cfg(windows)]
             "sort: cannot read: \"nonexistent.txt\": The system cannot find the file specified. (os error 2)",
         );
+}
+
+#[test]
+fn test_blanks() {
+    test_helper("blanks", &["-b", "--ignore-blanks"]);
 }
