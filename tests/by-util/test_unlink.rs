@@ -22,7 +22,7 @@ fn test_unlink_multiple_files() {
     at.touch(file_b);
 
     ucmd.arg(file_a).arg(file_b).fails().stderr_is(
-        "unlink: error: extra operand: 'test_unlink_multiple_file_b'\nTry 'unlink --help' \
+        "unlink: extra operand: 'test_unlink_multiple_file_b'\nTry 'unlink --help' \
          for more information.\n",
     );
 }
@@ -35,7 +35,7 @@ fn test_unlink_directory() {
     at.mkdir(dir);
 
     ucmd.arg(dir).fails().stderr_is(
-        "unlink: error: cannot unlink 'test_unlink_empty_directory': Not a regular file \
+        "unlink: cannot unlink 'test_unlink_empty_directory': Not a regular file \
          or symlink\n",
     );
 }
@@ -45,7 +45,7 @@ fn test_unlink_nonexistent() {
     let file = "test_unlink_nonexistent";
 
     new_ucmd!().arg(file).fails().stderr_is(
-        "unlink: error: Cannot stat 'test_unlink_nonexistent': No such file or directory \
+        "unlink: Cannot stat 'test_unlink_nonexistent': No such file or directory \
          (os error 2)\n",
     );
 }

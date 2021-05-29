@@ -51,14 +51,23 @@ struct Options {
 }
 
 fn is_custom_binary(program: &str) -> bool {
-    #[allow(clippy::match_like_matches_macro)]
-    // `matches!(...)` macro not stabilized until rust v1.42
-    match program {
-        "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum"
-        | "sha3sum" | "sha3-224sum" | "sha3-256sum" | "sha3-384sum" | "sha3-512sum"
-        | "shake128sum" | "shake256sum" | "b2sum" => true,
-        _ => false,
-    }
+    matches!(
+        program,
+        "md5sum"
+            | "sha1sum"
+            | "sha224sum"
+            | "sha256sum"
+            | "sha384sum"
+            | "sha512sum"
+            | "sha3sum"
+            | "sha3-224sum"
+            | "sha3-256sum"
+            | "sha3-384sum"
+            | "sha3-512sum"
+            | "shake128sum"
+            | "shake256sum"
+            | "b2sum"
+    )
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -78,7 +87,7 @@ fn detect_algo<'a>(
         "sha512sum" => ("SHA512", Box::new(Sha512::new()) as Box<dyn Digest>, 512),
         "b2sum" => ("BLAKE2", Box::new(Blake2b::new(64)) as Box<dyn Digest>, 512),
         "sha3sum" => match matches.value_of("bits") {
-            Some(bits_str) => match usize::from_str_radix(&bits_str, 10) {
+            Some(bits_str) => match (&bits_str).parse::<usize>() {
                 Ok(224) => (
                     "SHA3-224",
                     Box::new(Sha3_224::new()) as Box<dyn Digest>,
@@ -128,7 +137,7 @@ fn detect_algo<'a>(
             512,
         ),
         "shake128sum" => match matches.value_of("bits") {
-            Some(bits_str) => match usize::from_str_radix(&bits_str, 10) {
+            Some(bits_str) => match (&bits_str).parse::<usize>() {
                 Ok(bits) => (
                     "SHAKE128",
                     Box::new(Shake128::new()) as Box<dyn Digest>,
@@ -139,7 +148,7 @@ fn detect_algo<'a>(
             None => crash!(1, "--bits required for SHAKE-128"),
         },
         "shake256sum" => match matches.value_of("bits") {
-            Some(bits_str) => match usize::from_str_radix(&bits_str, 10) {
+            Some(bits_str) => match (&bits_str).parse::<usize>() {
                 Ok(bits) => (
                     "SHAKE256",
                     Box::new(Shake256::new()) as Box<dyn Digest>,
@@ -182,7 +191,7 @@ fn detect_algo<'a>(
                 }
                 if matches.is_present("sha3") {
                     match matches.value_of("bits") {
-                        Some(bits_str) => match usize::from_str_radix(&bits_str, 10) {
+                        Some(bits_str) => match (&bits_str).parse::<usize>() {
                             Ok(224) => set_or_crash(
                                 "SHA3-224",
                                 Box::new(Sha3_224::new()) as Box<dyn Digest>,
@@ -226,7 +235,7 @@ fn detect_algo<'a>(
                 }
                 if matches.is_present("shake128") {
                     match matches.value_of("bits") {
-                        Some(bits_str) => match usize::from_str_radix(&bits_str, 10) {
+                        Some(bits_str) => match (&bits_str).parse::<usize>() {
                             Ok(bits) => set_or_crash("SHAKE128", Box::new(Shake128::new()), bits),
                             Err(err) => crash!(1, "{}", err),
                         },
@@ -235,7 +244,7 @@ fn detect_algo<'a>(
                 }
                 if matches.is_present("shake256") {
                     match matches.value_of("bits") {
-                        Some(bits_str) => match usize::from_str_radix(&bits_str, 10) {
+                        Some(bits_str) => match (&bits_str).parse::<usize>() {
                             Ok(bits) => set_or_crash("SHAKE256", Box::new(Shake256::new()), bits),
                             Err(err) => crash!(1, "{}", err),
                         },
@@ -253,7 +262,7 @@ fn detect_algo<'a>(
 
 // TODO: return custom error type
 fn parse_bit_num(arg: &str) -> Result<usize, ParseIntError> {
-    usize::from_str_radix(arg, 10)
+    arg.parse()
 }
 
 fn is_valid_bit_num(arg: String) -> Result<(), String> {

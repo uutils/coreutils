@@ -226,8 +226,8 @@ fn test_bytes_big() {
         .arg(FILE)
         .arg("-c")
         .arg(format!("{}", N_ARG))
-        .run()
-        .stdout;
+        .succeeds()
+        .stdout_move_str();
     let expected = at.read(EXPECTED_FILE);
 
     assert_eq!(result.len(), expected.len());
@@ -340,6 +340,51 @@ fn test_negative_indexing() {
 
     let negative_bytes_index = new_ucmd!().arg("-c").arg("-20").arg(FOOBAR_TXT).run();
 
-    assert_eq!(positive_lines_index.stdout, negative_lines_index.stdout);
-    assert_eq!(positive_bytes_index.stdout, negative_bytes_index.stdout);
+    assert_eq!(positive_lines_index.stdout(), negative_lines_index.stdout());
+    assert_eq!(positive_bytes_index.stdout(), negative_bytes_index.stdout());
+}
+
+#[test]
+fn test_sleep_interval() {
+    new_ucmd!().arg("-s").arg("10").arg(FOOBAR_TXT).succeeds();
+}
+
+/// Test for reading all but the first NUM bytes: `tail -c +3`.
+#[test]
+fn test_positive_bytes() {
+    new_ucmd!()
+        .args(&["-c", "+3"])
+        .pipe_in("abcde")
+        .succeeds()
+        .stdout_is("cde");
+}
+
+/// Test for reading all bytes, specified by `tail -c +0`.
+#[test]
+fn test_positive_zero_bytes() {
+    new_ucmd!()
+        .args(&["-c", "+0"])
+        .pipe_in("abcde")
+        .succeeds()
+        .stdout_is("abcde");
+}
+
+/// Test for reading all but the first NUM lines: `tail -n +3`.
+#[test]
+fn test_positive_lines() {
+    new_ucmd!()
+        .args(&["-n", "+3"])
+        .pipe_in("a\nb\nc\nd\ne\n")
+        .succeeds()
+        .stdout_is("c\nd\ne\n");
+}
+
+/// Test for reading all lines, specified by `tail -n +0`.
+#[test]
+fn test_positive_zero_lines() {
+    new_ucmd!()
+        .args(&["-n", "+0"])
+        .pipe_in("a\nb\nc\nd\ne\n")
+        .succeeds()
+        .stdout_is("a\nb\nc\nd\ne\n");
 }

@@ -8,6 +8,8 @@
 #[macro_use]
 extern crate uucore;
 
+use uucore::InvalidEncodingHandling;
+
 mod syntax_tree;
 mod tokens;
 
@@ -15,7 +17,9 @@ static NAME: &str = "expr";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     // For expr utility we do not want getopts.
     // The following usage should work without escaping hyphens: `expr -15 = 1 +  2 \* \( 3 - -4 \)`
@@ -51,7 +55,7 @@ fn print_expr_error(expr_error: &str) -> ! {
     crash!(2, "{}", expr_error)
 }
 
-fn evaluate_ast(maybe_ast: Result<Box<syntax_tree::ASTNode>, String>) -> Result<String, String> {
+fn evaluate_ast(maybe_ast: Result<Box<syntax_tree::AstNode>, String>) -> Result<String, String> {
     if maybe_ast.is_err() {
         Err(maybe_ast.err().unwrap())
     } else {

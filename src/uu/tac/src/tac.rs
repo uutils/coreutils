@@ -13,6 +13,7 @@ extern crate uucore;
 use clap::{App, Arg};
 use std::io::{stdin, stdout, BufReader, Read, Stdout, Write};
 use std::{fs::File, path::Path};
+use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "tac";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -27,7 +28,9 @@ mod options {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     let matches = App::new(executable!())
         .name(NAME)
@@ -90,11 +93,16 @@ fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) -> i32 {
             Box::new(stdin()) as Box<dyn Read>
         } else {
             let path = Path::new(filename);
-            if path.is_dir() || !path.metadata().is_ok() {
-                show_error!(
-                    "failed to open '{}' for reading: No such file or directory",
-                    filename
-                );
+            if path.is_dir() || path.metadata().is_err() {
+                if path.is_dir() {
+                    show_error!("dir: read error: Invalid argument");
+                } else {
+                    show_error!(
+                        "failed to open '{}' for reading: No such file or directory",
+                        filename
+                    );
+                }
+                exit_code = 1;
                 continue;
             }
             match File::open(path) {

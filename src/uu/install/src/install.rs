@@ -23,9 +23,11 @@ use std::fs;
 use std::fs::File;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::result::Result;
 
 const DEFAULT_MODE: u32 = 0o755;
+const DEFAULT_STRIP_PROGRAM: &str = "strip";
 
 #[allow(dead_code)]
 pub struct Behavior {
@@ -37,6 +39,9 @@ pub struct Behavior {
     verbose: bool,
     preserve_timestamps: bool,
     compare: bool,
+    strip: bool,
+    strip_program: String,
+    create_leading: bool,
 }
 
 #[derive(Clone, Eq, PartialEq)]
@@ -66,7 +71,7 @@ static OPT_BACKUP: &str = "backup";
 static OPT_BACKUP_2: &str = "backup2";
 static OPT_DIRECTORY: &str = "directory";
 static OPT_IGNORED: &str = "ignored";
-static OPT_CREATED: &str = "created";
+static OPT_CREATE_LEADING: &str = "create-leading";
 static OPT_GROUP: &str = "group";
 static OPT_MODE: &str = "mode";
 static OPT_OWNER: &str = "owner";
@@ -129,9 +134,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
         .arg(
             // TODO implement flag
-            Arg::with_name(OPT_CREATED)
+            Arg::with_name(OPT_CREATE_LEADING)
                 .short("D")
-                .help("(unimplemented) create all leading components of DEST except the last, then copy SOURCE to DEST")
+                .help("create all leading components of DEST except the last, then copy SOURCE to DEST")
         )
         .arg(
             Arg::with_name(OPT_GROUP)
@@ -164,17 +169,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("apply access/modification times of SOURCE files to corresponding destination files")
         )
         .arg(
-            // TODO implement flag
             Arg::with_name(OPT_STRIP)
             .short("s")
             .long(OPT_STRIP)
-            .help("(unimplemented) strip symbol tables")
+            .help("strip symbol tables (no action Windows)")
         )
         .arg(
-            // TODO implement flag
             Arg::with_name(OPT_STRIP_PROGRAM)
                 .long(OPT_STRIP_PROGRAM)
-                .help("(unimplemented) program used to strip binaries")
+                .help("program used to strip binaries (no action Windows)")
                 .value_name("PROGRAM")
         )
         .arg(
@@ -264,12 +267,6 @@ fn check_unimplemented<'a>(matches: &ArgMatches) -> Result<(), &'a str> {
         Err("--backup")
     } else if matches.is_present(OPT_BACKUP_2) {
         Err("-b")
-    } else if matches.is_present(OPT_CREATED) {
-        Err("-D")
-    } else if matches.is_present(OPT_STRIP) {
-        Err("--strip, -s")
-    } else if matches.is_present(OPT_STRIP_PROGRAM) {
-        Err("--strip-program")
     } else if matches.is_present(OPT_SUFFIX) {
         Err("--suffix, -S")
     } else if matches.is_present(OPT_TARGET_DIRECTORY) {
@@ -304,7 +301,7 @@ fn behavior(matches: &ArgMatches) -> Result<Behavior, i32> {
 
     let specified_mode: Option<u32> = if matches.is_present(OPT_MODE) {
         match matches.value_of(OPT_MODE) {
-            Some(x) => match mode::parse(&x[..], considering_dir) {
+            Some(x) => match mode::parse(x, considering_dir) {
                 Ok(y) => Some(y),
                 Err(err) => {
                     show_error!("Invalid mode string: {}", err);
@@ -339,6 +336,13 @@ fn behavior(matches: &ArgMatches) -> Result<Behavior, i32> {
         verbose: matches.is_present(OPT_VERBOSE),
         preserve_timestamps: matches.is_present(OPT_PRESERVE_TIMESTAMPS),
         compare: matches.is_present(OPT_COMPARE),
+        strip: matches.is_present(OPT_STRIP),
+        strip_program: String::from(
+            matches
+                .value_of(OPT_STRIP_PROGRAM)
+                .unwrap_or(DEFAULT_STRIP_PROGRAM),
+        ),
+        create_leading: matches.is_present(OPT_CREATE_LEADING),
     })
 }
 
@@ -366,13 +370,13 @@ fn directory(paths: Vec<String>, b: Behavior) -> i32 {
                 // created ancestor directories will have the default mode. Hence it is safe to use
                 // fs::create_dir_all and then only modify the target's dir mode.
                 if let Err(e) = fs::create_dir_all(path) {
-                    show_info!("{}: {}", path.display(), e);
+                    show_error!("{}: {}", path.display(), e);
                     all_successful = false;
                     continue;
                 }
 
                 if b.verbose {
-                    show_info!("creating directory '{}'", path.display());
+                    show_error!("creating directory '{}'", path.display());
                 }
             }
 
@@ -406,12 +410,35 @@ fn standard(paths: Vec<String>, b: Behavior) -> i32 {
         .iter()
         .map(PathBuf::from)
         .collect::<Vec<_>>();
+
     let target = Path::new(paths.last().unwrap());
 
-    if (target.is_file() || is_new_file_path(target)) && sources.len() == 1 {
-        copy_file_to_file(&sources[0], &target.to_path_buf(), &b)
-    } else {
+    if sources.len() > 1 || (target.exists() && target.is_dir()) {
         copy_files_into_dir(sources, &target.to_path_buf(), &b)
+    } else {
+        if let Some(parent) = target.parent() {
+            if !parent.exists() && b.create_leading {
+                if let Err(e) = fs::create_dir_all(parent) {
+                    show_error!("failed to create {}: {}", parent.display(), e);
+                    return 1;
+                }
+
+                if mode::chmod(&parent, b.mode()).is_err() {
+                    show_error!("failed to chmod {}", parent.display());
+                    return 1;
+                }
+            }
+        }
+
+        if target.is_file() || is_new_file_path(target) {
+            copy_file_to_file(&sources[0], &target.to_path_buf(), &b)
+        } else {
+            show_error!(
+                "invalid target {}: No such file or directory",
+                target.display()
+            );
+            1
+        }
     }
 }
 
@@ -425,7 +452,7 @@ fn standard(paths: Vec<String>, b: Behavior) -> i32 {
 /// _files_ must all exist as non-directories.
 /// _target_dir_ must be a directory.
 ///
-fn copy_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behavior) -> i32 {
+fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> i32 {
     if !target_dir.is_dir() {
         show_error!("target '{}' is not a directory", target_dir.display());
         return 1;
@@ -434,7 +461,7 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behavior) ->
     let mut all_successful = true;
     for sourcepath in files.iter() {
         if !sourcepath.exists() {
-            show_info!(
+            show_error!(
                 "cannot stat '{}': No such file or directory",
                 sourcepath.display()
             );
@@ -444,12 +471,12 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behavior) ->
         }
 
         if sourcepath.is_dir() {
-            show_info!("omitting directory '{}'", sourcepath.display());
+            show_error!("omitting directory '{}'", sourcepath.display());
             all_successful = false;
             continue;
         }
 
-        let mut targetpath = target_dir.clone().to_path_buf();
+        let mut targetpath = target_dir.to_path_buf();
         let filename = sourcepath.components().last().unwrap();
         targetpath.push(filename);
 
@@ -474,7 +501,7 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behavior) ->
 /// _file_ must exist as a non-directory.
 /// _target_ must be a non-directory
 ///
-fn copy_file_to_file(file: &PathBuf, target: &PathBuf, b: &Behavior) -> i32 {
+fn copy_file_to_file(file: &Path, target: &Path, b: &Behavior) -> i32 {
     if copy(file, &target, b).is_err() {
         1
     } else {
@@ -493,7 +520,7 @@ fn copy_file_to_file(file: &PathBuf, target: &PathBuf, b: &Behavior) -> i32 {
 ///
 /// If the copy system call fails, we print a verbose error and return an empty error value.
 ///
-fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
+fn copy(from: &Path, to: &Path, b: &Behavior) -> Result<(), ()> {
     if b.compare && !need_copy(from, to, b) {
         return Ok(());
     }
@@ -521,6 +548,21 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
         return Err(());
     }
 
+    if b.strip && cfg!(not(windows)) {
+        match Command::new(&b.strip_program).arg(to).output() {
+            Ok(o) => {
+                if !o.status.success() {
+                    crash!(
+                        1,
+                        "strip program failed: {}",
+                        String::from_utf8(o.stderr).unwrap_or_default()
+                    );
+                }
+            }
+            Err(e) => crash!(1, "strip program execution failed: {}", e),
+        }
+    }
+
     if mode::chmod(&to, b.mode()).is_err() {
         return Err(());
     }
@@ -537,7 +579,7 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
         };
         let gid = meta.gid();
         match wrap_chown(
-            to.as_path(),
+            to,
             &meta,
             Some(owner_id),
             Some(gid),
@@ -546,10 +588,10 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
         ) {
             Ok(n) => {
                 if !n.is_empty() {
-                    show_info!("{}", n);
+                    show_error!("{}", n);
                 }
             }
-            Err(e) => show_info!("{}", e),
+            Err(e) => show_error!("{}", e),
         }
     }
 
@@ -563,13 +605,13 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
             Ok(g) => g,
             _ => crash!(1, "no such group: {}", b.group),
         };
-        match wrap_chgrp(to.as_path(), &meta, group_id, false, Verbosity::Normal) {
+        match wrap_chgrp(to, &meta, group_id, false, Verbosity::Normal) {
             Ok(n) => {
                 if !n.is_empty() {
-                    show_info!("{}", n);
+                    show_error!("{}", n);
                 }
             }
-            Err(e) => show_info!("{}", e),
+            Err(e) => show_error!("{}", e),
         }
     }
 
@@ -582,14 +624,14 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
         let modified_time = FileTime::from_last_modification_time(&meta);
         let accessed_time = FileTime::from_last_access_time(&meta);
 
-        match set_file_times(to.as_path(), accessed_time, modified_time) {
+        match set_file_times(to, accessed_time, modified_time) {
             Ok(_) => {}
-            Err(e) => show_info!("{}", e),
+            Err(e) => show_error!("{}", e),
         }
     }
 
     if b.verbose {
-        show_info!("'{}' -> '{}'", from.display(), to.display());
+        show_error!("'{}' -> '{}'", from.display(), to.display());
     }
 
     Ok(())
@@ -611,7 +653,7 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
 ///
 /// Crashes the program if a nonexistent owner or group is specified in _b_.
 ///
-fn need_copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> bool {
+fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
     let from_meta = match fs::metadata(from) {
         Ok(meta) => meta,
         Err(_) => return true,

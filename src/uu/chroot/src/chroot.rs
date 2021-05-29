@@ -15,8 +15,8 @@ use std::ffi::CString;
 use std::io::Error;
 use std::path::Path;
 use std::process::Command;
-use uucore::entries;
 use uucore::libc::{self, chroot, setgid, setgroups, setuid};
+use uucore::{entries, InvalidEncodingHandling};
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static NAME: &str = "chroot";
@@ -32,7 +32,9 @@ mod options {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     let matches = App::new(executable!())
         .version(VERSION)
@@ -104,7 +106,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         _ => {
             let mut vector: Vec<&str> = Vec::new();
             for (&k, v) in matches.args.iter() {
-                vector.push(k.clone());
+                vector.push(k);
                 vector.push(&v.vals[0].to_str().unwrap());
             }
             vector
@@ -133,7 +135,7 @@ fn set_context(root: &Path, options: &clap::ArgMatches) {
     let userspec = match userspec_str {
         Some(ref u) => {
             let s: Vec<&str> = u.split(':').collect();
-            if s.len() != 2 || s.iter().any(|&spec| spec == "") {
+            if s.len() != 2 || s.iter().any(|&spec| spec.is_empty()) {
                 crash!(1, "invalid userspec: `{}`", u)
             };
             s
@@ -142,16 +144,16 @@ fn set_context(root: &Path, options: &clap::ArgMatches) {
     };
 
     let (user, group) = if userspec.is_empty() {
-        (&user_str[..], &group_str[..])
+        (user_str, group_str)
     } else {
-        (&userspec[0][..], &userspec[1][..])
+        (userspec[0], userspec[1])
     };
 
     enter_chroot(root);
 
-    set_groups_from_str(&groups_str[..]);
-    set_main_group(&group[..]);
-    set_user(&user[..]);
+    set_groups_from_str(groups_str);
+    set_main_group(group);
+    set_user(user);
 }
 
 fn enter_chroot(root: &Path) {

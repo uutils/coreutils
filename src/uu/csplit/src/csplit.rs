@@ -17,6 +17,7 @@ mod splitname;
 
 use crate::csplit_error::CsplitError;
 use crate::splitname::SplitName;
+use uucore::InvalidEncodingHandling;
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static SUMMARY: &str = "split a file into sections determined by context lines";
@@ -123,12 +124,7 @@ where
     // split the file based on patterns
     for pattern in patterns.into_iter() {
         let pattern_as_str = pattern.to_string();
-        #[allow(clippy::match_like_matches_macro)]
-        let is_skip = if let patterns::Pattern::SkipToMatch(_, _, _) = pattern {
-            true
-        } else {
-            false
-        };
+        let is_skip = matches!(pattern, patterns::Pattern::SkipToMatch(_, _, _));
         match pattern {
             patterns::Pattern::UpToLine(n, ex) => {
                 let mut up_to_line = n;
@@ -711,7 +707,9 @@ mod tests {
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
 
     let matches = App::new(executable!())
         .version(VERSION)

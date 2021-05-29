@@ -6,7 +6,6 @@
 [![LOC](https://tokei.rs/b1/github/uutils/coreutils?category=code)](https://github.com/Aaronepower/tokei)
 [![dependency status](https://deps.rs/repo/github/uutils/coreutils/status.svg)](https://deps.rs/repo/github/uutils/coreutils)
 
-[![Build Status](https://api.travis-ci.org/uutils/coreutils.svg?branch=master)](https://travis-ci.org/uutils/coreutils)
 [![Build Status (FreeBSD)](https://api.cirrus-ci.com/github/uutils/coreutils.svg)](https://cirrus-ci.com/github/uutils/coreutils/master)
 [![CodeCov](https://codecov.io/gh/uutils/coreutils/branch/master/graph/badge.svg)](https://codecov.io/gh/uutils/coreutils)
 
@@ -40,7 +39,7 @@ to compile anywhere, and this is as good a way as any to try and learn it.
 ### Rust Version
 
 uutils follows Rust's release channels and is tested against stable, beta and nightly.
-The current oldest supported version of the Rust compiler is `1.40.0`.
+The current oldest supported version of the Rust compiler is `1.43.1`.
 
 On both Windows and Redox, only the nightly version is tested currently.
 
@@ -93,7 +92,7 @@ $ cargo build --features "base32 cat echo rm" --no-default-features
 
 If you don't want to build the multicall binary and would prefer to build
 the utilities as individual binaries, that is also possible. Each utility
-is contained in it's own package within the main repository, named
+is contained in its own package within the main repository, named
 "uu_UTILNAME". To build individual utilities, use cargo to build just the
 specific packages (using the `--package` [aka `-p`] option). For example:
 
@@ -319,6 +318,16 @@ To pass an argument like "-v" to the busybox test runtime
 $ make UTILS='UTILITY_1 UTILITY_2' RUNTEST_ARGS='-v' busytest
 ```
 
+## Comparing with GNU
+
+![Evolution over time](https://github.com/uutils/coreutils-tracking/blob/main/gnu-results.png?raw=true)
+
+To run locally:
+```bash
+$ bash util/build-gnu.sh
+$ bash util/run-gnu-test.sh
+```
+
 ## Contribute
 
 To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
@@ -429,6 +438,7 @@ This is an auto-generated table showing which binaries compile for each target-t
 |windows-msvc|i686|y|y|y|y|y| | | | |y|y|y|y|y|y|y|y|y| |y|y|y| |y|y|y|y| |y|y|y|y| | |y| |y|y|y|y|y| | |y|y|y| |y| |y|y|y|y| | |y|y|y|y|y|y|y|y|y|y|y|y|y|y|y| | |y|y|y|y|y|y| |y|y|y|y|y| |y|y|y| |y| |y| |y|y|
 |windows-gnu|x86_64|y|y|y|y|y| | | | |y|y|y|y|y|y|y|y|y| |y|y|y| |y|y|y|y| |y|y|y|y| | |y| |y|y|y|y|y| | |y|y|y| |y| |y|y|y|y| | |y|y|y|y|y|y|y|y|y|y|y|y|y|y|y| | |y|y|y|y|y|y| |y|y|y|y|y|y|y|y|y| |y| |y| |y|y|
 |windows-msvc|x86_64|y|y|y|y|y| | | | |y|y|y|y|y|y|y|y|y| |y|y|y| |y|y|y|y| |y|y|y|y| | |y| |y|y|y|y|y| | |y|y|y| |y| |y|y|y|y| | |y|y|y|y|y|y|y|y|y|y|y|y|y|y|y| | |y|y|y|y|y|y| |y|y|y|y|y| |y|y|y| |y| |y| |y|y|
+|apple MacOS|aarch64|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y| |y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|
 |apple MacOS|x86_64|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y| |y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|
 |freebsd|x86_64|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|
 |netbsd|x86_64|y|y|y|y|y|y|y|y| |y|y|y|y|y|y| |y|y|y|y|y|y| |y|y|y|y|y|y|y|y|y| |y|y| |y|y|y|y|y|y|y|y|y|y|y|y| |y|y|y|y|y| |y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y| |y|y|y|y|y|y| |y|y|y| | |y| |y|y|

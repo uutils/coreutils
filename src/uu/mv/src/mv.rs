@@ -20,6 +20,7 @@ use std::os::unix;
 #[cfg(windows)]
 use std::os::windows;
 use std::path::{Path, PathBuf};
+use uucore::backup_control::{self, BackupMode};
 
 use fs_extra::dir::{move_dir, CopyOptions as DirCopyOptions};
 
@@ -40,16 +41,9 @@ pub enum OverwriteMode {
     Force,
 }
 
-#[derive(Clone, Copy, Eq, PartialEq)]
-pub enum BackupMode {
-    NoBackup,
-    SimpleBackup,
-    NumberedBackup,
-    ExistingBackup,
-}
-
 static ABOUT: &str = "Move SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
+static LONG_HELP: &str = "";
 
 static OPT_BACKUP: &str = "backup";
 static OPT_BACKUP_NO_ARG: &str = "b";
@@ -80,20 +74,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let matches = App::new(executable!())
         .version(VERSION)
         .about(ABOUT)
+        .after_help(&*format!("{}\n{}", LONG_HELP, backup_control::BACKUP_CONTROL_LONG_HELP))
         .usage(&usage[..])
     .arg(
             Arg::with_name(OPT_BACKUP)
             .long(OPT_BACKUP)
             .help("make a backup of each existing destination file")
             .takes_value(true)
-            .possible_value("simple")
-            .possible_value("never")
-            .possible_value("numbered")
-            .possible_value("t")
-            .possible_value("existing")
-            .possible_value("nil")
-            .possible_value("none")
-            .possible_value("off")
+            .require_equals(true)
+            .min_values(0)
+            .possible_values(backup_control::BACKUP_CONTROL_VALUES)
             .value_name("CONTROL")
     )
     .arg(
@@ -172,18 +162,17 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .unwrap_or_default();
 
     let overwrite_mode = determine_overwrite_mode(&matches);
-    let backup_mode = determine_backup_mode(&matches);
+    let backup_mode = backup_control::determine_backup_mode(
+        matches.is_present(OPT_BACKUP_NO_ARG) || matches.is_present(OPT_BACKUP),
+        matches.value_of(OPT_BACKUP),
+    );
 
     if overwrite_mode == OverwriteMode::NoClobber && backup_mode != BackupMode::NoBackup {
-        show_error!(
-            "options --backup and --no-clobber are mutually exclusive\n\
-             Try '{} --help' for more information.",
-            executable!()
-        );
+        show_usage_error!("options --backup and --no-clobber are mutually exclusive");
         return 1;
     }
 
-    let backup_suffix = determine_backup_suffix(backup_mode, &matches);
+    let backup_suffix = backup_control::determine_backup_suffix(matches.value_of(OPT_SUFFIX));
 
     let behavior = Behavior {
         overwrite: overwrite_mode,
@@ -227,37 +216,6 @@ fn determine_overwrite_mode(matches: &ArgMatches) -> OverwriteMode {
     }
 }
 
-fn determine_backup_mode(matches: &ArgMatches) -> BackupMode {
-    if matches.is_present(OPT_BACKUP_NO_ARG) {
-        BackupMode::SimpleBackup
-    } else if matches.is_present(OPT_BACKUP) {
-        match matches.value_of(OPT_BACKUP).map(String::from) {
-            None => BackupMode::SimpleBackup,
-            Some(mode) => match &mode[..] {
-                "simple" | "never" => BackupMode::SimpleBackup,
-                "numbered" | "t" => BackupMode::NumberedBackup,
-                "existing" | "nil" => BackupMode::ExistingBackup,
-                "none" | "off" => BackupMode::NoBackup,
-                _ => panic!(), // cannot happen as it is managed by clap
-            },
-        }
-    } else {
-        BackupMode::NoBackup
-    }
-}
-
-fn determine_backup_suffix(backup_mode: BackupMode, matches: &ArgMatches) -> String {
-    if matches.is_present(OPT_SUFFIX) {
-        matches.value_of(OPT_SUFFIX).map(String::from).unwrap()
-    } else if let (Ok(s), BackupMode::SimpleBackup) =
-        (env::var("SIMPLE_BACKUP_SUFFIX"), backup_mode)
-    {
-        s
-    } else {
-        "~".to_owned()
-    }
-}
-
 fn exec(files: &[PathBuf], b: Behavior) -> i32 {
     if let Some(ref name) = b.target_dir {
         return move_files_into_dir(files, &PathBuf::from(name), &b);
@@ -295,7 +253,7 @@ fn exec(files: &[PathBuf], b: Behavior) -> i32 {
                                 "cannot move ‘{}’ to ‘{}’: {}",
                                 source.display(),
                                 target.display(),
-                                e
+                                e.to_string()
                             );
                             1
                         }
@@ -335,7 +293,7 @@ fn exec(files: &[PathBuf], b: Behavior) -> i32 {
     0
 }
 
-fn move_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behavior) -> i32 {
+fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> i32 {
     if !target_dir.is_dir() {
         show_error!("target ‘{}’ is not a directory", target_dir.display());
         return 1;
@@ -358,14 +316,15 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behavior) ->
 
         if let Err(e) = rename(sourcepath, &targetpath, b) {
             show_error!(
-                "mv: cannot move ‘{}’ to ‘{}’: {}",
+                "cannot move ‘{}’ to ‘{}’: {}",
                 sourcepath.display(),
                 targetpath.display(),
-                e
+                e.to_string()
             );
             all_successful = false;
         }
     }
+
     if all_successful {
         0
     } else {
@@ -373,7 +332,7 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behavior) ->
     }
 }
 
-fn rename(from: &PathBuf, to: &PathBuf, b: &Behavior) -> io::Result<()> {
+fn rename(from: &Path, to: &Path, b: &Behavior) -> io::Result<()> {
     let mut backup_path = None;
 
     if to.exists() {
@@ -388,12 +347,7 @@ fn rename(from: &PathBuf, to: &PathBuf, b: &Behavior) -> io::Result<()> {
             OverwriteMode::Force => {}
         };
 
-        backup_path = match b.backup {
-            BackupMode::NoBackup => None,
-            BackupMode::SimpleBackup => Some(simple_backup_path(to, &b.suffix)),
-            BackupMode::NumberedBackup => Some(numbered_backup_path(to)),
-            BackupMode::ExistingBackup => Some(existing_backup_path(to, &b.suffix)),
-        };
+        backup_path = backup_control::get_backup_path(b.backup, to, &b.suffix);
         if let Some(ref backup_path) = backup_path {
             rename_with_fallback(to, backup_path)?;
         }
@@ -429,7 +383,7 @@ fn rename(from: &PathBuf, to: &PathBuf, b: &Behavior) -> io::Result<()> {
 
 /// A wrapper around `fs::rename`, so that if it fails, we try falling back on
 /// copying and removing.
-fn rename_with_fallback(from: &PathBuf, to: &PathBuf) -> io::Result<()> {
+fn rename_with_fallback(from: &Path, to: &Path) -> io::Result<()> {
     if fs::rename(from, to).is_err() {
         // Get metadata without following symlinks
         let metadata = from.symlink_metadata()?;
@@ -452,7 +406,13 @@ fn rename_with_fallback(from: &PathBuf, to: &PathBuf) -> io::Result<()> {
                 ..DirCopyOptions::new()
             };
             if let Err(err) = move_dir(from, to, &options) {
-                return Err(io::Error::new(io::ErrorKind::Other, format!("{:?}", err)));
+                return match err.kind {
+                    fs_extra::error::ErrorKind::PermissionDenied => Err(io::Error::new(
+                        io::ErrorKind::PermissionDenied,
+                        "Permission denied",
+                    )),
+                    _ => Err(io::Error::new(io::ErrorKind::Other, format!("{:?}", err))),
+                };
             }
         } else {
             fs::copy(from, to).and_then(|_| fs::remove_file(from))?;
@@ -464,7 +424,7 @@ fn rename_with_fallback(from: &PathBuf, to: &PathBuf) -> io::Result<()> {
 /// Move the given symlink to the given destination. On Windows, dangling
 /// symlinks return an error.
 #[inline]
-fn rename_symlink_fallback(from: &PathBuf, to: &PathBuf) -> io::Result<()> {
+fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     let path_symlink_points_to = fs::read_link(from)?;
     #[cfg(unix)]
     {
@@ -507,29 +467,7 @@ fn read_yes() -> bool {
     }
 }
 
-fn simple_backup_path(path: &PathBuf, suffix: &str) -> PathBuf {
-    let mut p = path.to_string_lossy().into_owned();
-    p.push_str(suffix);
-    PathBuf::from(p)
-}
-
-fn numbered_backup_path(path: &PathBuf) -> PathBuf {
-    (1_u64..)
-        .map(|i| path.with_extension(format!("~{}~", i)))
-        .find(|p| !p.exists())
-        .expect("cannot create backup")
-}
-
-fn existing_backup_path(path: &PathBuf, suffix: &str) -> PathBuf {
-    let test_path = path.with_extension("~1~");
-    if test_path.exists() {
-        numbered_backup_path(path)
-    } else {
-        simple_backup_path(path, suffix)
-    }
-}
-
-fn is_empty_dir(path: &PathBuf) -> bool {
+fn is_empty_dir(path: &Path) -> bool {
     match fs::read_dir(path) {
         Ok(contents) => contents.peekable().peek().is_none(),
         Err(_e) => false,

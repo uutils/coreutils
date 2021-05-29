@@ -20,6 +20,7 @@ use std::io::Error;
 use std::os::unix::prelude::*;
 use std::path::{Path, PathBuf};
 use uucore::fs::{is_stderr_interactive, is_stdin_interactive, is_stdout_interactive};
+use uucore::InvalidEncodingHandling;
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Run COMMAND ignoring hangup signals.";
@@ -42,6 +43,9 @@ mod options {
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     let matches = App::new(executable!())
         .version(VERSION)
@@ -118,13 +122,13 @@ fn find_stdout() -> File {
         .open(Path::new(NOHUP_OUT))
     {
         Ok(t) => {
-            show_info!("ignoring input and appending output to '{}'", NOHUP_OUT);
+            show_error!("ignoring input and appending output to '{}'", NOHUP_OUT);
             t
         }
         Err(e1) => {
             let home = match env::var("HOME") {
                 Err(_) => {
-                    show_info!("failed to open '{}': {}", NOHUP_OUT, e1);
+                    show_error!("failed to open '{}': {}", NOHUP_OUT, e1);
                     exit!(internal_failure_code)
                 }
                 Ok(h) => h,
@@ -139,12 +143,12 @@ fn find_stdout() -> File {
                 .open(&homeout)
             {
                 Ok(t) => {
-                    show_info!("ignoring input and appending output to '{}'", homeout_str);
+                    show_error!("ignoring input and appending output to '{}'", homeout_str);
                     t
                 }
                 Err(e2) => {
-                    show_info!("failed to open '{}': {}", NOHUP_OUT, e1);
-                    show_info!("failed to open '{}': {}", homeout_str, e2);
+                    show_error!("failed to open '{}': {}", NOHUP_OUT, e1);
+                    show_error!("failed to open '{}': {}", homeout_str, e2);
                     exit!(internal_failure_code)
                 }
             }

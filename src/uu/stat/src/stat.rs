@@ -5,21 +5,20 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) mtab fsext showfs otype fmtstr prec ftype blocksize nlink rdev fnodes fsid namelen blksize inodes fstype iosize statfs gnulib NBLOCKSIZE
-
-#[macro_use]
-mod fsext;
-pub use crate::fsext::*;
+// spell-checker:ignore (ToDO) showfs otype fmtstr prec ftype blocksize nlink rdev fnodes fsid namelen blksize inodes fstype iosize statfs gnulib NBLOCKSIZE
 
 #[macro_use]
 extern crate uucore;
 use uucore::entries;
+use uucore::fs::display_permissions;
+use uucore::fsext::{
+    pretty_filetype, pretty_fstype, pretty_time, read_fs_list, statfs, BirthTime, FsMeta,
+};
+use uucore::libc::mode_t;
 
 use clap::{App, Arg, ArgMatches};
 use std::borrow::Cow;
 use std::convert::AsRef;
-use std::fs::File;
-use std::io::{BufRead, BufReader};
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::Path;
 use std::{cmp, fs, iter};
@@ -97,7 +96,6 @@ pub mod options {
 
 static ARG_FILES: &str = "files";
 
-const MOUNT_INFO: &str = "/etc/mtab";
 pub const F_ALTER: u8 = 1;
 pub const F_ZERO: u8 = 1 << 1;
 pub const F_LEFT: u8 = 1 << 2;
@@ -490,13 +488,9 @@ impl Stater {
             // mount points aren't displayed when showing filesystem information
             None
         } else {
-            let reader = BufReader::new(
-                File::open(MOUNT_INFO).unwrap_or_else(|_| panic!("Failed to read {}", MOUNT_INFO)),
-            );
-            let mut mount_list = reader
-                .lines()
-                .filter_map(Result::ok)
-                .filter_map(|line| line.split_whitespace().nth(1).map(ToOwned::to_owned))
+            let mut mount_list = read_fs_list()
+                .iter()
+                .map(|mi| mi.mount_dir.clone())
                 .collect::<Vec<String>>();
             // Reverse sort. The longer comes first.
             mount_list.sort();
@@ -575,7 +569,7 @@ impl Stater {
                                     }
                                     // access rights in human readable form
                                     'A' => {
-                                        arg = pretty_access(meta.mode() as mode_t);
+                                        arg = display_permissions(&meta, true);
                                         otype = OutputType::Str;
                                     }
                                     // number of blocks allocated (see %B)
@@ -663,7 +657,7 @@ impl Stater {
                                                 dst.to_string_lossy()
                                             );
                                         } else {
-                                            arg = format!("`{}'", file);
+                                            arg = file.to_string();
                                         }
                                         otype = OutputType::Str;
                                     }
@@ -755,7 +749,7 @@ impl Stater {
                     }
                 }
                 Err(e) => {
-                    show_info!("cannot stat '{}': {}", file, e);
+                    show_error!("cannot stat '{}': {}", file, e);
                     return 1;
                 }
             }
@@ -848,7 +842,7 @@ impl Stater {
                     }
                 }
                 Err(e) => {
-                    show_info!("cannot read file system information for '{}': {}", file, e);
+                    show_error!("cannot read file system information for '{}': {}", file, e);
                     return 1;
                 }
             }
@@ -1007,7 +1001,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     match Stater::new(matches) {
         Ok(stater) => stater.exec(),
         Err(e) => {
-            show_info!("{}", e);
+            show_error!("{}", e);
             1
         }
     }

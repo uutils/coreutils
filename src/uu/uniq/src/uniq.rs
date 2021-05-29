@@ -61,34 +61,43 @@ impl Uniq {
         reader: &mut BufReader<R>,
         writer: &mut BufWriter<W>,
     ) {
-        let mut lines: Vec<String> = vec![];
         let mut first_line_printed = false;
-        let delimiters = self.delimiters;
+        let mut group_count = 1;
         let line_terminator = self.get_line_terminator();
-        // Don't print any delimiting lines before, after or between groups if delimiting method is 'none'
-        let no_delimiters = delimiters == Delimiters::None;
-        // The 'prepend' and 'both' delimit methods will cause output to start with delimiter line
-        let prepend_delimiter = delimiters == Delimiters::Prepend || delimiters == Delimiters::Both;
-        // The 'append' and 'both' delimit methods will cause output to end with delimiter line
-        let append_delimiter = delimiters == Delimiters::Append || delimiters == Delimiters::Both;
+        let mut lines = reader.split(line_terminator).map(get_line_string);
+        let mut line = match lines.next() {
+            Some(l) => l,
+            None => return,
+        };
 
-        for line in reader.split(line_terminator).map(get_line_string) {
-            if !lines.is_empty() && self.cmp_keys(&lines[0], &line) {
-                // Print delimiter if delimit method is not 'none' and any line has been output
-                // before or if we need to start output with delimiter
-                let print_delimiter = !no_delimiters && (prepend_delimiter || first_line_printed);
-                first_line_printed |= self.print_lines(writer, &lines, print_delimiter);
-                lines.truncate(0);
+        // compare current `line` with consecutive lines (`next_line`) of the input
+        // and if needed, print `line` based on the command line options provided
+        for next_line in lines {
+            if self.cmp_keys(&line, &next_line) {
+                if (group_count == 1 && !self.repeats_only)
+                    || (group_count > 1 && !self.uniques_only)
+                {
+                    self.print_line(writer, &line, group_count, first_line_printed);
+                    first_line_printed = true;
+                }
+                line = next_line;
+                group_count = 1;
+            } else {
+                if self.all_repeated {
+                    self.print_line(writer, &line, group_count, first_line_printed);
+                    first_line_printed = true;
+                    line = next_line;
+                }
+                group_count += 1;
             }
-            lines.push(line);
         }
-        if !lines.is_empty() {
-            // Print delimiter if delimit method is not 'none' and any line has been output
-            // before or if we need to start output with delimiter
-            let print_delimiter = !no_delimiters && (prepend_delimiter || first_line_printed);
-            first_line_printed |= self.print_lines(writer, &lines, print_delimiter);
+        if (group_count == 1 && !self.repeats_only) || (group_count > 1 && !self.uniques_only) {
+            self.print_line(writer, &line, group_count, first_line_printed);
+            first_line_printed = true;
         }
-        if append_delimiter && first_line_printed {
+        if (self.delimiters == Delimiters::Append || self.delimiters == Delimiters::Both)
+            && first_line_printed
+        {
             crash_if_err!(1, writer.write_all(&[line_terminator]));
         }
     }
@@ -163,27 +172,17 @@ impl Uniq {
         }
     }
 
-    fn print_lines<W: Write>(
-        &self,
-        writer: &mut BufWriter<W>,
-        lines: &[String],
-        print_delimiter: bool,
-    ) -> bool {
-        let mut first_line_printed = false;
-        let mut count = if self.all_repeated { 1 } else { lines.len() };
-        if lines.len() == 1 && !self.repeats_only || lines.len() > 1 && !self.uniques_only {
-            self.print_line(writer, &lines[0], count, print_delimiter);
-            first_line_printed = true;
-            count += 1;
-        }
-        if self.all_repeated {
-            for line in lines[1..].iter() {
-                self.print_line(writer, line, count, print_delimiter && !first_line_printed);
-                first_line_printed = true;
-                count += 1;
-            }
-        }
-        first_line_printed
+    fn should_print_delimiter(&self, group_count: usize, first_line_printed: bool) -> bool {
+        // if no delimiter option is selected then no other checks needed
+        self.delimiters != Delimiters::None
+            // print delimiter only before the first line of a group, not between lines of a group
+            && group_count == 1
+            // if at least one line has been output before current group then print delimiter
+            && (first_line_printed
+                // or if we need to prepend delimiter then print it even at the start of the output
+                || self.delimiters == Delimiters::Prepend
+                // the 'both' delimit mode should prepend and append delimiters
+                || self.delimiters == Delimiters::Both)
     }
 
     fn print_line<W: Write>(
@@ -191,11 +190,11 @@ impl Uniq {
         writer: &mut BufWriter<W>,
         line: &str,
         count: usize,
-        print_delimiter: bool,
+        first_line_printed: bool,
     ) {
         let line_terminator = self.get_line_terminator();
 
-        if print_delimiter {
+        if self.should_print_delimiter(count, first_line_printed) {
             crash_if_err!(1, writer.write_all(&[line_terminator]));
         }
 

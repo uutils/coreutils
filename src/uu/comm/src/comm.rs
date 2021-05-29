@@ -14,6 +14,7 @@ use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{self, stdin, BufRead, BufReader, Stdin};
 use std::path::Path;
+use uucore::InvalidEncodingHandling;
 
 use clap::{App, Arg, ArgMatches};
 
@@ -134,6 +135,9 @@ fn open_file(name: &str) -> io::Result<LineReader> {
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     let matches = App::new(executable!())
         .version(VERSION)

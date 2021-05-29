@@ -15,69 +15,114 @@ use uucore::utmpx::{self, time, Utmpx};
 
 use std::io::prelude::*;
 use std::io::BufReader;
-use std::io::Result as IOResult;
 
 use std::fs::File;
 use std::os::unix::fs::MetadataExt;
 
+use clap::{App, Arg};
 use std::path::PathBuf;
-
-static SYNTAX: &str = "[OPTION]... [USER]...";
-static SUMMARY: &str = "A lightweight 'finger' program;  print user information.";
+use uucore::InvalidEncodingHandling;
 
 const BUFSIZE: usize = 1024;
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+static VERSION: &str = env!("CARGO_PKG_VERSION");
+static ABOUT: &str = "pinky - lightweight finger";
 
-    let long_help = &format!(
-        "
-  -l              produce long format output for the specified USERs
-  -b              omit the user's home directory and shell in long format
-  -h              omit the user's project file in long format
-  -p              omit the user's plan file in long format
-  -s              do short format output, this is the default
-  -f              omit the line of column headings in short format
-  -w              omit the user's full name in short format
-  -i              omit the user's full name and remote host in short format
-  -q              omit the user's full name, remote host and idle time
-                  in short format
-      --help     display this help and exit
-      --version  output version information and exit
+mod options {
+    pub const LONG_FORMAT: &str = "long_format";
+    pub const OMIT_HOME_DIR: &str = "omit_home_dir";
+    pub const OMIT_PROJECT_FILE: &str = "omit_project_file";
+    pub const OMIT_PLAN_FILE: &str = "omit_plan_file";
+    pub const SHORT_FORMAT: &str = "short_format";
+    pub const OMIT_HEADINGS: &str = "omit_headings";
+    pub const OMIT_NAME: &str = "omit_name";
+    pub const OMIT_NAME_HOST: &str = "omit_name_host";
+    pub const OMIT_NAME_HOST_TIME: &str = "omit_name_host_time";
+    pub const USER: &str = "user";
+}
 
-The utmp file will be {}",
+fn get_usage() -> String {
+    format!("{0} [OPTION]... [USER]...", executable!())
+}
+
+fn get_long_usage() -> String {
+    format!(
+        "A lightweight 'finger' program;  print user information.\n\
+         The utmp file will be {}.",
         utmpx::DEFAULT_FILE
-    );
-    let mut opts = app!(SYNTAX, SUMMARY, &long_help);
-    opts.optflag(
-        "l",
-        "",
-        "produce long format output for the specified USERs",
-    );
-    opts.optflag(
-        "b",
-        "",
-        "omit the user's home directory and shell in long format",
-    );
-    opts.optflag("h", "", "omit the user's project file in long format");
-    opts.optflag("p", "", "omit the user's plan file in long format");
-    opts.optflag("s", "", "do short format output, this is the default");
-    opts.optflag("f", "", "omit the line of column headings in short format");
-    opts.optflag("w", "", "omit the user's full name in short format");
-    opts.optflag(
-        "i",
-        "",
-        "omit the user's full name and remote host in short format",
-    );
-    opts.optflag(
-        "q",
-        "",
-        "omit the user's full name, remote host and idle time in short format",
-    );
-    opts.optflag("", "help", "display this help and exit");
-    opts.optflag("", "version", "output version information and exit");
+    )
+}
 
-    let matches = opts.parse(args);
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
+
+    let usage = get_usage();
+    let after_help = get_long_usage();
+
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .after_help(&after_help[..])
+        .arg(
+            Arg::with_name(options::LONG_FORMAT)
+                .short("l")
+                .requires(options::USER)
+                .help("produce long format output for the specified USERs"),
+        )
+        .arg(
+            Arg::with_name(options::OMIT_HOME_DIR)
+                .short("b")
+                .help("omit the user's home directory and shell in long format"),
+        )
+        .arg(
+            Arg::with_name(options::OMIT_PROJECT_FILE)
+                .short("h")
+                .help("omit the user's project file in long format"),
+        )
+        .arg(
+            Arg::with_name(options::OMIT_PLAN_FILE)
+                .short("p")
+                .help("omit the user's plan file in long format"),
+        )
+        .arg(
+            Arg::with_name(options::SHORT_FORMAT)
+                .short("s")
+                .help("do short format output, this is the default"),
+        )
+        .arg(
+            Arg::with_name(options::OMIT_HEADINGS)
+                .short("f")
+                .help("omit the line of column headings in short format"),
+        )
+        .arg(
+            Arg::with_name(options::OMIT_NAME)
+                .short("w")
+                .help("omit the user's full name in short format"),
+        )
+        .arg(
+            Arg::with_name(options::OMIT_NAME_HOST)
+                .short("i")
+                .help("omit the user's full name and remote host in short format"),
+        )
+        .arg(
+            Arg::with_name(options::OMIT_NAME_HOST_TIME)
+                .short("q")
+                .help("omit the user's full name, remote host and idle time in short format"),
+        )
+        .arg(
+            Arg::with_name(options::USER)
+                .takes_value(true)
+                .multiple(true),
+        )
+        .get_matches_from(args);
+
+    let users: Vec<String> = matches
+        .values_of(options::USER)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
 
     // If true, display the hours:minutes since each user has touched
     // the keyboard, or blank if within the last minute, or days followed
@@ -85,43 +130,38 @@ The utmp file will be {}",
     let mut include_idle = true;
 
     // If true, display a line at the top describing each field.
-    let include_heading = !matches.opt_present("f");
+    let include_heading = !matches.is_present(options::OMIT_HEADINGS);
 
     // if true, display the user's full name from pw_gecos.
     let mut include_fullname = true;
 
     // if true, display the user's ~/.project file when doing long format.
-    let include_project = !matches.opt_present("h");
+    let include_project = !matches.is_present(options::OMIT_PROJECT_FILE);
 
     // if true, display the user's ~/.plan file when doing long format.
-    let include_plan = !matches.opt_present("p");
+    let include_plan = !matches.is_present(options::OMIT_PLAN_FILE);
 
     // if true, display the user's home directory and shell
     // when doing long format.
-    let include_home_and_shell = !matches.opt_present("b");
+    let include_home_and_shell = !matches.is_present(options::OMIT_HOME_DIR);
 
     // if true, use the "short" output format.
-    let do_short_format = !matches.opt_present("l");
+    let do_short_format = !matches.is_present(options::LONG_FORMAT);
 
     /* if true, display the ut_host field. */
     let mut include_where = true;
 
-    if matches.opt_present("w") {
+    if matches.is_present(options::OMIT_NAME) {
         include_fullname = false;
     }
-    if matches.opt_present("i") {
+    if matches.is_present(options::OMIT_NAME_HOST) {
         include_fullname = false;
         include_where = false;
     }
-    if matches.opt_present("q") {
+    if matches.is_present(options::OMIT_NAME_HOST_TIME) {
         include_fullname = false;
         include_idle = false;
         include_where = false;
-    }
-
-    if !do_short_format && matches.free.is_empty() {
-        show_usage_error!("no username specified; at least one must be specified when using -l");
-        return 1;
     }
 
     let pk = Pinky {
@@ -132,16 +172,12 @@ The utmp file will be {}",
         include_plan,
         include_home_and_shell,
         include_where,
-        names: matches.free,
+        names: users,
     };
 
     if do_short_format {
-        if let Err(e) = pk.short_pinky() {
-            show_usage_error!("{}", e);
-            1
-        } else {
-            0
-        }
+        pk.short_pinky();
+        0
     } else {
         pk.long_pinky()
     }
@@ -250,17 +286,10 @@ impl Pinky {
 
         print!(" {}", time_string(&ut));
 
-        if self.include_where && !ut.host().is_empty() {
-            let ut_host = ut.host();
-            let mut res = ut_host.splitn(2, ':');
-            let host = match res.next() {
-                Some(_) => ut.canon_host().unwrap_or_else(|_| ut_host.clone()),
-                None => ut_host.clone(),
-            };
-            match res.next() {
-                Some(d) => print!(" {}:{}", host, d),
-                None => print!(" {}", host),
-            }
+        let mut s = ut.host();
+        if self.include_where && !s.is_empty() {
+            s = safe_unwrap!(ut.canon_host());
+            print!(" {}", s);
         }
 
         println!();
@@ -282,7 +311,7 @@ impl Pinky {
         println!();
     }
 
-    fn short_pinky(&self) -> IOResult<()> {
+    fn short_pinky(&self) {
         if self.include_heading {
             self.print_heading();
         }
@@ -295,7 +324,6 @@ impl Pinky {
                 }
             }
         }
-        Ok(())
     }
 
     fn long_pinky(&self) -> i32 {

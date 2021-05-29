@@ -22,6 +22,7 @@ use std::fs::Metadata;
 use std::os::unix::fs::MetadataExt;
 
 use std::path::Path;
+use uucore::InvalidEncodingHandling;
 
 static SYNTAX: &str =
     "chgrp [OPTION]... GROUP FILE...\n or :  chgrp [OPTION]... --reference=RFILE FILE...";
@@ -32,7 +33,9 @@ const FTS_PHYSICAL: u8 = 1 << 1;
 const FTS_LOGICAL: u8 = 1 << 2;
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     let mut opts = app!(SYNTAX, SUMMARY, "");
     opts.optflag("c",
@@ -94,7 +97,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if recursive {
         if bit_flag == FTS_PHYSICAL {
             if derefer == 1 {
-                show_info!("-R --dereference requires -H or -L");
+                show_error!("-R --dereference requires -H or -L");
                 return 1;
             }
             derefer = 0;
@@ -129,7 +132,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 dest_gid = meta.gid();
             }
             Err(e) => {
-                show_info!("failed to get attributes of '{}': {}", file, e);
+                show_error!("failed to get attributes of '{}': {}", file, e);
                 return 1;
             }
         }
@@ -140,7 +143,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 dest_gid = g;
             }
             _ => {
-                show_info!("invalid group: {}", matches.free[0].as_str());
+                show_error!("invalid group: {}", matches.free[0].as_str());
                 return 1;
             }
         }
@@ -232,8 +235,8 @@ impl Chgrper {
 
             if let Some(p) = may_exist {
                 if p.parent().is_none() || self.is_bind_root(p) {
-                    show_info!("it is dangerous to operate recursively on '/'");
-                    show_info!("use --no-preserve-root to override this failsafe");
+                    show_error!("it is dangerous to operate recursively on '/'");
+                    show_error!("use --no-preserve-root to override this failsafe");
                     return 1;
                 }
             }
@@ -247,12 +250,12 @@ impl Chgrper {
             self.verbosity.clone(),
         ) {
             Ok(n) => {
-                show_info!("{}", n);
+                show_error!("{}", n);
                 0
             }
             Err(e) => {
                 if self.verbosity != Verbosity::Silent {
-                    show_info!("{}", e);
+                    show_error!("{}", e);
                 }
                 1
             }
@@ -272,7 +275,7 @@ impl Chgrper {
         for entry in WalkDir::new(root).follow_links(follow).min_depth(1) {
             let entry = unwrap!(entry, e, {
                 ret = 1;
-                show_info!("{}", e);
+                show_error!("{}", e);
                 continue;
             });
             let path = entry.path();
@@ -286,14 +289,14 @@ impl Chgrper {
 
             ret = match wrap_chgrp(path, &meta, self.dest_gid, follow, self.verbosity.clone()) {
                 Ok(n) => {
-                    if n != "" {
-                        show_info!("{}", n);
+                    if !n.is_empty() {
+                        show_error!("{}", n);
                     }
                     0
                 }
                 Err(e) => {
                     if self.verbosity != Verbosity::Silent {
-                        show_info!("{}", e);
+                        show_error!("{}", e);
                     }
                     1
                 }
@@ -310,7 +313,7 @@ impl Chgrper {
             unwrap!(path.metadata(), e, {
                 match self.verbosity {
                     Silent => (),
-                    _ => show_info!("cannot access '{}': {}", path.display(), e),
+                    _ => show_error!("cannot access '{}': {}", path.display(), e),
                 }
                 return None;
             })
@@ -318,7 +321,7 @@ impl Chgrper {
             unwrap!(path.symlink_metadata(), e, {
                 match self.verbosity {
                     Silent => (),
-                    _ => show_info!("cannot dereference '{}': {}", path.display(), e),
+                    _ => show_error!("cannot dereference '{}': {}", path.display(), e),
                 }
                 return None;
             })

@@ -54,6 +54,8 @@ pub unsafe extern "C" fn utmpxname(_file: *const libc::c_char) -> libc::c_int {
     0
 }
 
+pub use crate::*; // import macros from `../../macros.rs`
+
 // In case the c_char array doesn't end with NULL
 macro_rules! chars2string {
     ($arr:expr) => {
@@ -188,47 +190,40 @@ impl Utmpx {
 
     /// Canonicalize host name using DNS
     pub fn canon_host(&self) -> IOResult<String> {
-        const AI_CANONNAME: libc::c_int = 0x2;
         let host = self.host();
-        let host = host.split(':').next().unwrap();
-        let hints = libc::addrinfo {
-            ai_flags: AI_CANONNAME,
-            ai_family: 0,
-            ai_socktype: 0,
-            ai_protocol: 0,
-            ai_addrlen: 0,
-            ai_addr: ptr::null_mut(),
-            ai_canonname: ptr::null_mut(),
-            ai_next: ptr::null_mut(),
-        };
-        let c_host = CString::new(host).unwrap();
-        let mut res = ptr::null_mut();
-        let status = unsafe {
-            libc::getaddrinfo(
-                c_host.as_ptr(),
-                ptr::null(),
-                &hints as *const _,
-                &mut res as *mut _,
-            )
-        };
-        if status == 0 {
-            let info: libc::addrinfo = unsafe { ptr::read(res as *const _) };
-            // http://lists.gnu.org/archive/html/bug-coreutils/2006-09/msg00300.html
-            // says Darwin 7.9.0 getaddrinfo returns 0 but sets
-            // res->ai_canonname to NULL.
-            let ret = if info.ai_canonname.is_null() {
-                Ok(String::from(host))
-            } else {
-                Ok(unsafe { CString::from_raw(info.ai_canonname).into_string().unwrap() })
+
+        // TODO: change to use `split_once` when MSRV hits 1.52.0
+        // let (hostname, display) = host.split_once(':').unwrap_or((&host, ""));
+        let mut h = host.split(':');
+        let hostname = h.next().unwrap_or(&host);
+        let display = h.next().unwrap_or("");
+
+        if !hostname.is_empty() {
+            extern crate dns_lookup;
+            use dns_lookup::{getaddrinfo, AddrInfoHints};
+
+            const AI_CANONNAME: i32 = 0x2;
+            let hints = AddrInfoHints {
+                flags: AI_CANONNAME,
+                ..AddrInfoHints::default()
             };
-            unsafe {
-                libc::freeaddrinfo(res);
+            let sockets = getaddrinfo(Some(&hostname), None, Some(hints))
+                .unwrap()
+                .collect::<IOResult<Vec<_>>>()?;
+            for socket in sockets {
+                if let Some(ai_canonname) = socket.canonname {
+                    return Ok(if display.is_empty() {
+                        ai_canonname
+                    } else {
+                        format!("{}:{}", ai_canonname, display)
+                    });
+                }
             }
-            ret
-        } else {
-            Err(IOError::last_os_error())
         }
+
+        Ok(host.to_string())
     }
+
     pub fn iter_all_records() -> UtmpxIter {
         UtmpxIter
     }
@@ -247,7 +242,7 @@ impl UtmpxIter {
             utmpxname(cstr.as_ptr())
         };
         if res != 0 {
-            println!("Warning: {}", IOError::last_os_error());
+            show_warning!("utmpxname: {}", IOError::last_os_error());
         }
         unsafe {
             setutxent();

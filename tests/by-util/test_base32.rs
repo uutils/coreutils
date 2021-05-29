@@ -15,6 +15,21 @@ fn test_encode() {
         .pipe_in(input)
         .succeeds()
         .stdout_only("JBSWY3DPFQQFO33SNRSCC===\n");
+
+    // Using '-' as our file
+    new_ucmd!()
+        .arg("-")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only("JBSWY3DPFQQFO33SNRSCC===\n");
+}
+
+#[test]
+fn test_base32_encode_file() {
+    new_ucmd!()
+        .arg("input-simple.txt")
+        .succeeds()
+        .stdout_only("JBSWY3DPFQQFO33SNRSCCCQ=\n");
 }
 
 #[test]
@@ -71,8 +86,7 @@ fn test_wrap() {
 fn test_wrap_no_arg() {
     for wrap_param in vec!["-w", "--wrap"] {
         new_ucmd!().arg(wrap_param).fails().stderr_only(format!(
-            "base32: error: Argument to option '{}' missing\n",
-            if wrap_param == "-w" { "w" } else { "wrap" }
+            "error: The argument '--wrap <wrap>\' requires a value but none was supplied\n\nUSAGE:\n    base32 [OPTION]... [FILE]\n\nFor more information try --help"
         ));
     }
 }
@@ -84,6 +98,24 @@ fn test_wrap_bad_arg() {
             .arg(wrap_param)
             .arg("b")
             .fails()
-            .stderr_only("base32: error: invalid wrap size: ‘b’: invalid digit found in string\n");
+            .stderr_only("base32: Invalid wrap size: ‘b’: invalid digit found in string\n");
     }
+}
+
+#[test]
+fn test_base32_extra_operand() {
+    // Expect a failure when multiple files are specified.
+    new_ucmd!()
+        .arg("a.txt")
+        .arg("a.txt")
+        .fails()
+        .stderr_only("base32: extra operand ‘a.txt’");
+}
+
+#[test]
+fn test_base32_file_not_found() {
+    new_ucmd!()
+        .arg("a.txt")
+        .fails()
+        .stderr_only("base32: a.txt: No such file or directory");
 }

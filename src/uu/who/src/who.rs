@@ -12,76 +12,173 @@ extern crate uucore;
 use uucore::libc::{ttyname, STDIN_FILENO, S_IWGRP};
 use uucore::utmpx::{self, time, Utmpx};
 
+use clap::{App, Arg};
 use std::borrow::Cow;
 use std::ffi::CStr;
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
+use uucore::InvalidEncodingHandling;
 
-static SYNTAX: &str = "[OPTION]... [ FILE | ARG1 ARG2 ]";
-static SUMMARY: &str = "Print information about users who are currently logged in.";
-static LONG_HELP: &str = "
-  -a, --all         same as -b -d --login -p -r -t -T -u
-  -b, --boot        time of last system boot
-  -d, --dead        print dead processes
-  -H, --heading     print line of column headings
-  -l, --login       print system login processes
-      --lookup      attempt to canonicalize hostnames via DNS
-  -m                only hostname and user associated with stdin
-  -p, --process     print active processes spawned by init
-  -q, --count       all login names and number of users logged on
-  -r, --runlevel    print current runlevel (not available on BSDs)
-  -s, --short       print only name, line, and time (default)
-  -t, --time        print last system clock change
-  -T, -w, --mesg    add user's message status as +, - or ?
-  -u, --users       list users logged in
-      --message     same as -T
-      --writable    same as -T
-      --help     display this help and exit
-      --version  output version information and exit
+mod options {
+    pub const ALL: &str = "all";
+    pub const BOOT: &str = "boot";
+    pub const DEAD: &str = "dead";
+    pub const HEADING: &str = "heading";
+    pub const LOGIN: &str = "login";
+    pub const LOOKUP: &str = "lookup";
+    pub const ONLY_HOSTNAME_USER: &str = "only_hostname_user";
+    pub const PROCESS: &str = "process";
+    pub const COUNT: &str = "count";
+    pub const RUNLEVEL: &str = "runlevel";
+    pub const SHORT: &str = "short";
+    pub const TIME: &str = "time";
+    pub const USERS: &str = "users";
+    pub const MESG: &str = "mesg"; // aliases: --message, --writable
+    pub const FILE: &str = "FILE"; // if length=1: FILE, if length=2: ARG1 ARG2
+}
 
-If FILE is not specified, use /var/run/utmp.  /var/log/wtmp as FILE is common.
-If ARG1 ARG2 given, -m presumed: 'am i' or 'mom likes' are usual.
-";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
+static ABOUT: &str = "Print information about users who are currently logged in.";
+
+#[cfg(any(target_os = "linux"))]
+static RUNLEVEL_HELP: &str = "print current runlevel";
+#[cfg(not(target_os = "linux"))]
+static RUNLEVEL_HELP: &str = "print current runlevel (This is meaningless on non Linux)";
+
+fn get_usage() -> String {
+    format!("{0} [OPTION]... [ FILE | ARG1 ARG2 ]", executable!())
+}
+
+fn get_long_usage() -> String {
+    format!(
+        "If FILE is not specified, use {}.  /var/log/wtmp as FILE is common.\n\
+         If ARG1 ARG2 given, -m presumed: 'am i' or 'mom likes' are usual.",
+        utmpx::DEFAULT_FILE,
+    )
+}
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
 
-    let mut opts = app!(SYNTAX, SUMMARY, LONG_HELP);
-    opts.optflag("a", "all", "same as -b -d --login -p -r -t -T -u");
-    opts.optflag("b", "boot", "time of last system boot");
-    opts.optflag("d", "dead", "print dead processes");
-    opts.optflag("H", "heading", "print line of column headings");
-    opts.optflag("l", "login", "print system login processes");
-    opts.optflag("", "lookup", "attempt to canonicalize hostnames via DNS");
-    opts.optflag("m", "", "only hostname and user associated with stdin");
-    opts.optflag("p", "process", "print active processes spawned by init");
-    opts.optflag(
-        "q",
-        "count",
-        "all login names and number of users logged on",
-    );
-    #[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
-    opts.optflag("r", "runlevel", "print current runlevel");
-    opts.optflag("s", "short", "print only name, line, and time (default)");
-    opts.optflag("t", "time", "print last system clock change");
-    opts.optflag("u", "users", "list users logged in");
-    opts.optflag("w", "mesg", "add user's message status as +, - or ?");
-    // --message, --writable are the same as --mesg
-    opts.optflag("T", "message", "");
-    opts.optflag("T", "writable", "");
+    let usage = get_usage();
+    let after_help = get_long_usage();
 
-    opts.optflag("", "help", "display this help and exit");
-    opts.optflag("", "version", "output version information and exit");
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .usage(&usage[..])
+        .after_help(&after_help[..])
+        .arg(
+            Arg::with_name(options::ALL)
+                .long(options::ALL)
+                .short("a")
+                .help("same as -b -d --login -p -r -t -T -u"),
+        )
+        .arg(
+            Arg::with_name(options::BOOT)
+                .long(options::BOOT)
+                .short("b")
+                .help("time of last system boot"),
+        )
+        .arg(
+            Arg::with_name(options::DEAD)
+                .long(options::DEAD)
+                .short("d")
+                .help("print dead processes"),
+        )
+        .arg(
+            Arg::with_name(options::HEADING)
+                .long(options::HEADING)
+                .short("H")
+                .help("print line of column headings"),
+        )
+        .arg(
+            Arg::with_name(options::LOGIN)
+                .long(options::LOGIN)
+                .short("l")
+                .help("print system login processes"),
+        )
+        .arg(
+            Arg::with_name(options::LOOKUP)
+                .long(options::LOOKUP)
+                .help("attempt to canonicalize hostnames via DNS"),
+        )
+        .arg(
+            Arg::with_name(options::ONLY_HOSTNAME_USER)
+                .short("m")
+                .help("only hostname and user associated with stdin"),
+        )
+        .arg(
+            Arg::with_name(options::PROCESS)
+                .long(options::PROCESS)
+                .short("p")
+                .help("print active processes spawned by init"),
+        )
+        .arg(
+            Arg::with_name(options::COUNT)
+                .long(options::COUNT)
+                .short("q")
+                .help("all login names and number of users logged on"),
+        )
+        .arg(
+            Arg::with_name(options::RUNLEVEL)
+                .long(options::RUNLEVEL)
+                .short("r")
+                .help(RUNLEVEL_HELP),
+        )
+        .arg(
+            Arg::with_name(options::SHORT)
+                .long(options::SHORT)
+                .short("s")
+                .help("print only name, line, and time (default)"),
+        )
+        .arg(
+            Arg::with_name(options::TIME)
+                .long(options::TIME)
+                .short("t")
+                .help("print last system clock change"),
+        )
+        .arg(
+            Arg::with_name(options::USERS)
+                .long(options::USERS)
+                .short("u")
+                .help("list users logged in"),
+        )
+        .arg(
+            Arg::with_name(options::MESG)
+                .long(options::MESG)
+                .short("T")
+                // .visible_short_alias('w')  // TODO: requires clap "3.0.0-beta.2"
+                .visible_aliases(&["message", "writable"])
+                .help("add user's message status as +, - or ?"),
+        )
+        .arg(
+            Arg::with_name("w") // work around for `Arg::visible_short_alias`
+                .short("w")
+                .help("same as -T"),
+        )
+        .arg(
+            Arg::with_name(options::FILE)
+                .takes_value(true)
+                .min_values(1)
+                .max_values(2),
+        )
+        .get_matches_from(args);
 
-    let matches = opts.parse(args);
+    let files: Vec<String> = matches
+        .values_of(options::FILE)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
 
     // If true, attempt to canonicalize hostnames via a DNS lookup.
-    let do_lookup = matches.opt_present("lookup");
+    let do_lookup = matches.is_present(options::LOOKUP);
 
     // If true, display only a list of usernames and count of
     // the users logged on.
     // Ignored for 'who am i'.
-    let short_list = matches.opt_present("q");
+    let short_list = matches.is_present(options::COUNT);
 
     // If true, display only name, line, and time fields.
     let mut short_output = false;
@@ -92,12 +189,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let mut include_idle = false;
 
     // If true, display a line at the top describing each field.
-    let include_heading = matches.opt_present("H");
+    let include_heading = matches.is_present(options::HEADING);
 
     // If true, display a '+' for each user if mesg y, a '-' if mesg n,
     // or a '?' if their tty cannot be statted.
-    let include_mesg =
-        matches.opt_present("a") || matches.opt_present("T") || matches.opt_present("w");
+    let include_mesg = matches.is_present(options::ALL)
+        || matches.is_present(options::MESG)
+        || matches.is_present("w");
 
     // If true, display process termination & exit status.
     let mut include_exit = false;
@@ -130,7 +228,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     #[allow(clippy::useless_let_if_seq)]
     {
-        if matches.opt_present("a") {
+        if matches.is_present(options::ALL) {
             need_boottime = true;
             need_deadprocs = true;
             need_login = true;
@@ -143,49 +241,49 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             assumptions = false;
         }
 
-        if matches.opt_present("b") {
+        if matches.is_present(options::BOOT) {
             need_boottime = true;
             assumptions = false;
         }
 
-        if matches.opt_present("d") {
+        if matches.is_present(options::DEAD) {
             need_deadprocs = true;
             include_idle = true;
             include_exit = true;
             assumptions = false;
         }
 
-        if matches.opt_present("l") {
+        if matches.is_present(options::LOGIN) {
             need_login = true;
             include_idle = true;
             assumptions = false;
         }
 
-        if matches.opt_present("m") || matches.free.len() == 2 {
+        if matches.is_present(options::ONLY_HOSTNAME_USER) || files.len() == 2 {
             my_line_only = true;
         }
 
-        if matches.opt_present("p") {
+        if matches.is_present(options::PROCESS) {
             need_initspawn = true;
             assumptions = false;
         }
 
-        if matches.opt_present("r") {
+        if matches.is_present(options::RUNLEVEL) {
             need_runlevel = true;
             include_idle = true;
             assumptions = false;
         }
 
-        if matches.opt_present("s") {
+        if matches.is_present(options::SHORT) {
             short_output = true;
         }
 
-        if matches.opt_present("t") {
+        if matches.is_present(options::TIME) {
             need_clockchange = true;
             assumptions = false;
         }
 
-        if matches.opt_present("u") {
+        if matches.is_present(options::USERS) {
             need_users = true;
             include_idle = true;
             assumptions = false;
@@ -198,11 +296,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
         if include_exit {
             short_output = false;
-        }
-
-        if matches.free.len() > 2 {
-            show_usage_error!("{}", msg_wrong_number_of_arguments!());
-            exit!(1);
         }
     }
 
@@ -222,8 +315,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         need_runlevel,
         need_users,
         my_line_only,
-        has_records: false,
-        args: matches.free,
+        args: files,
     };
 
     who.exec();
@@ -247,7 +339,6 @@ struct Who {
     need_runlevel: bool,
     need_users: bool,
     my_line_only: bool,
-    has_records: bool,
     args: Vec<String>,
 }
 
@@ -296,15 +387,12 @@ fn current_tty() -> String {
 
 impl Who {
     fn exec(&mut self) {
-        let run_level_chk = |record: i16| {
-            #[allow(unused_assignments)]
-            let mut res = false;
+        let run_level_chk = |_record: i16| {
+            #[cfg(not(target_os = "linux"))]
+            return false;
 
-            #[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
-            {
-                res = record == utmpx::RUN_LVL;
-            }
-            res
+            #[cfg(target_os = "linux")]
+            return _record == utmpx::RUN_LVL;
         };
 
         let f = if self.args.len() == 1 {
@@ -321,8 +409,7 @@ impl Who {
             println!("{}", users.join(" "));
             println!("# users={}", users.len());
         } else {
-            let mut records = Utmpx::iter_all_records().read_from(f).peekable();
-            self.has_records = records.peek().is_some();
+            let records = Utmpx::iter_all_records().read_from(f).peekable();
 
             if self.include_heading {
                 self.print_heading()
@@ -338,7 +425,9 @@ impl Who {
                     if self.need_users && ut.is_user_process() {
                         self.print_user(&ut);
                     } else if self.need_runlevel && run_level_chk(ut.record_type()) {
-                        self.print_runlevel(&ut);
+                        if cfg!(target_os = "linux") {
+                            self.print_runlevel(&ut);
+                        }
                     } else if self.need_boottime && ut.record_type() == utmpx::BOOT_TIME {
                         self.print_boottime(&ut);
                     } else if self.need_clockchange && ut.record_type() == utmpx::NEW_TIME {
@@ -462,20 +551,10 @@ impl Who {
             "  ?".into()
         };
 
-        let mut buf = vec![];
-        let ut_host = ut.host();
-        let mut res = ut_host.splitn(2, ':');
-        if let Some(h) = res.next() {
-            if self.do_lookup {
-                buf.push(ut.canon_host().unwrap_or_else(|_| h.to_owned()));
-            } else {
-                buf.push(h.to_owned());
-            }
+        let mut s = ut.host();
+        if self.do_lookup {
+            s = safe_unwrap!(ut.canon_host());
         }
-        if let Some(h) = res.next() {
-            buf.push(h.to_owned());
-        }
-        let s = buf.join(":");
         let hoststr = if s.is_empty() { s } else { format!("({})", s) };
 
         self.print_line(

@@ -23,6 +23,7 @@ use std::os::unix::fs::MetadataExt;
 
 use std::convert::AsRef;
 use std::path::Path;
+use uucore::InvalidEncodingHandling;
 
 static ABOUT: &str = "change file owner and group";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -67,7 +68,9 @@ fn get_usage() -> String {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
 
     let usage = get_usage();
 
@@ -196,7 +199,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if recursive {
         if bit_flag == FTS_PHYSICAL {
             if derefer == 1 {
-                show_info!("-R --dereference requires -H or -L");
+                show_error!("-R --dereference requires -H or -L");
                 return 1;
             }
             derefer = 0;
@@ -224,7 +227,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Ok((Some(uid), Some(gid))) => IfFrom::UserGroup(uid, gid),
             Ok((None, None)) => IfFrom::All,
             Err(e) => {
-                show_info!("{}", e);
+                show_error!("{}", e);
                 return 1;
             }
         }
@@ -241,7 +244,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 dest_uid = Some(meta.uid());
             }
             Err(e) => {
-                show_info!("failed to get attributes of '{}': {}", file, e);
+                show_error!("failed to get attributes of '{}': {}", file, e);
                 return 1;
             }
         }
@@ -252,7 +255,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 dest_gid = g;
             }
             Err(e) => {
-                show_info!("{}", e);
+                show_error!("{}", e);
                 return 1;
             }
         }
@@ -272,16 +275,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 fn parse_spec(spec: &str) -> Result<(Option<u32>, Option<u32>), String> {
-    let args = spec.split(':').collect::<Vec<_>>();
-    let usr_only = args.len() == 1;
-    let grp_only = args.len() == 2 && args[0].is_empty() && !args[1].is_empty();
+    let args = spec.split_terminator(':').collect::<Vec<_>>();
+    let usr_only = args.len() == 1 && !args[0].is_empty();
+    let grp_only = args.len() == 2 && args[0].is_empty();
     let usr_grp = args.len() == 2 && !args[0].is_empty() && !args[1].is_empty();
 
     if usr_only {
         Ok((
             Some(match Passwd::locate(args[0]) {
                 Ok(v) => v.uid(),
-                _ => return Err(format!("invalid user: '{}'", spec)),
+                _ => return Err(format!("invalid user: ‘{}’", spec)),
             }),
             None,
         ))
@@ -290,18 +293,18 @@ fn parse_spec(spec: &str) -> Result<(Option<u32>, Option<u32>), String> {
             None,
             Some(match Group::locate(args[1]) {
                 Ok(v) => v.gid(),
-                _ => return Err(format!("invalid group: '{}'", spec)),
+                _ => return Err(format!("invalid group: ‘{}’", spec)),
             }),
         ))
     } else if usr_grp {
         Ok((
             Some(match Passwd::locate(args[0]) {
                 Ok(v) => v.uid(),
-                _ => return Err(format!("invalid user: '{}'", spec)),
+                _ => return Err(format!("invalid user: ‘{}’", spec)),
             }),
             Some(match Group::locate(args[1]) {
                 Ok(v) => v.gid(),
-                _ => return Err(format!("invalid group: '{}'", spec)),
+                _ => return Err(format!("invalid group: ‘{}’", spec)),
             }),
         ))
     } else {
@@ -374,8 +377,8 @@ impl Chowner {
 
             if let Some(p) = may_exist {
                 if p.parent().is_none() {
-                    show_info!("it is dangerous to operate recursively on '/'");
-                    show_info!("use --no-preserve-root to override this failsafe");
+                    show_error!("it is dangerous to operate recursively on '/'");
+                    show_error!("use --no-preserve-root to override this failsafe");
                     return 1;
                 }
             }
@@ -391,14 +394,14 @@ impl Chowner {
                 self.verbosity.clone(),
             ) {
                 Ok(n) => {
-                    if n != "" {
-                        show_info!("{}", n);
+                    if !n.is_empty() {
+                        show_error!("{}", n);
                     }
                     0
                 }
                 Err(e) => {
                     if self.verbosity != Verbosity::Silent {
-                        show_info!("{}", e);
+                        show_error!("{}", e);
                     }
                     1
                 }
@@ -421,7 +424,7 @@ impl Chowner {
         for entry in WalkDir::new(root).follow_links(follow).min_depth(1) {
             let entry = unwrap!(entry, e, {
                 ret = 1;
-                show_info!("{}", e);
+                show_error!("{}", e);
                 continue;
             });
             let path = entry.path();
@@ -446,14 +449,14 @@ impl Chowner {
                 self.verbosity.clone(),
             ) {
                 Ok(n) => {
-                    if n != "" {
-                        show_info!("{}", n);
+                    if !n.is_empty() {
+                        show_error!("{}", n);
                     }
                     0
                 }
                 Err(e) => {
                     if self.verbosity != Verbosity::Silent {
-                        show_info!("{}", e);
+                        show_error!("{}", e);
                     }
                     1
                 }
@@ -469,7 +472,7 @@ impl Chowner {
             unwrap!(path.metadata(), e, {
                 match self.verbosity {
                     Silent => (),
-                    _ => show_info!("cannot access '{}': {}", path.display(), e),
+                    _ => show_error!("cannot access '{}': {}", path.display(), e),
                 }
                 return None;
             })
@@ -477,7 +480,7 @@ impl Chowner {
             unwrap!(path.symlink_metadata(), e, {
                 match self.verbosity {
                     Silent => (),
-                    _ => show_info!("cannot dereference '{}': {}", path.display(), e),
+                    _ => show_error!("cannot dereference '{}': {}", path.display(), e),
                 }
                 return None;
             })

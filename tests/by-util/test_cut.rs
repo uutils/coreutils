@@ -149,11 +149,11 @@ fn test_directory_and_no_such_file() {
     ucmd.arg("-b1")
         .arg("some")
         .run()
-        .stderr_is("cut: error: some: Is a directory\n");
+        .stderr_is("cut: some: Is a directory\n");
 
     new_ucmd!()
         .arg("-b1")
         .arg("some")
         .run()
-        .stderr_is("cut: error: some: No such file or directory\n");
+        .stderr_is("cut: some: No such file or directory\n");
 }

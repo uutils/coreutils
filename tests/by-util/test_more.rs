@@ -2,18 +2,15 @@ use crate::common::util::*;
 
 #[test]
 fn test_more_no_arg() {
-    let (_, mut ucmd) = at_and_ucmd!();
-    let result = ucmd.run();
-    assert!(!result.success);
+    // stderr = more: Reading from stdin isn't supported yet.
+    new_ucmd!().fails();
 }
 
 #[test]
 fn test_more_dir_arg() {
-    let (_, mut ucmd) = at_and_ucmd!();
-    ucmd.arg(".");
-    let result = ucmd.run();
-    assert!(!result.success);
+    let result = new_ucmd!().arg(".").run();
+    result.failure();
     const EXPECTED_ERROR_MESSAGE: &str =
         "more: '.' is a directory.\nTry 'more --help' for more information.";
-    assert_eq!(result.stderr.trim(), EXPECTED_ERROR_MESSAGE);
+    assert_eq!(result.stderr_str().trim(), EXPECTED_ERROR_MESSAGE);
 }

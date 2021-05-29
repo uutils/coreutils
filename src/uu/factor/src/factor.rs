@@ -125,6 +125,8 @@ fn _factor<A: Arithmetic + miller_rabin::Basis>(num: u64, f: Factors) -> Factors
     let n = A::new(num);
     let divisor = match miller_rabin::test::<A>(n) {
         Prime => {
+            #[cfg(feature = "coz")]
+            coz::progress!("factor found");
             let mut r = f;
             r.push(num);
             return r;
@@ -139,6 +141,8 @@ fn _factor<A: Arithmetic + miller_rabin::Basis>(num: u64, f: Factors) -> Factors
 }
 
 pub fn factor(mut n: u64) -> Factors {
+    #[cfg(feature = "coz")]
+    coz::begin!("factorization");
     let mut factors = Factors::one();
 
     if n < 2 {
@@ -152,16 +156,24 @@ pub fn factor(mut n: u64) -> Factors {
     }
 
     if n == 1 {
+        #[cfg(feature = "coz")]
+        coz::end!("factorization");
         return factors;
     }
 
-    let (factors, n) = table::factor(n, factors);
+    table::factor(&mut n, &mut factors);
 
-    if n < (1 << 32) {
+    #[allow(clippy::let_and_return)]
+    let r = if n < (1 << 32) {
         _factor::<Montgomery<u32>>(n, factors)
     } else {
         _factor::<Montgomery<u64>>(n, factors)
-    }
+    };
+
+    #[cfg(feature = "coz")]
+    coz::end!("factorization");
+
+    r
 }
 
 #[cfg(test)]
@@ -227,9 +239,13 @@ mod tests {
 }
 
 #[cfg(test)]
-impl quickcheck::Arbitrary for Factors {
-    fn arbitrary<G: quickcheck::Gen>(gen: &mut G) -> Self {
-        use rand::Rng;
+use rand::{
+    distributions::{Distribution, Standard},
+    Rng,
+};
+#[cfg(test)]
+impl Distribution<Factors> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Factors {
         let mut f = Factors::one();
         let mut g = 1u64;
         let mut n = u64::MAX;
@@ -240,7 +256,7 @@ impl quickcheck::Arbitrary for Factors {
         // See Generating Random Factored Numbers, Easily, J. Cryptology (2003)
         'attempt: loop {
             while n > 1 {
-                n = gen.gen_range(1, n);
+                n = rng.gen_range(1, n);
                 if miller_rabin::is_prime(n) {
                     if let Some(h) = g.checked_mul(n) {
                         f.push(n);
@@ -258,6 +274,13 @@ impl quickcheck::Arbitrary for Factors {
 }
 
 #[cfg(test)]
+impl quickcheck::Arbitrary for Factors {
+    fn arbitrary<G: quickcheck::Gen>(g: &mut G) -> Self {
+        g.gen()
+    }
+}
+
+#[cfg(test)]
 impl std::ops::BitXor<Exponent> for Factors {
     type Output = Self;
 
@@ -269,6 +292,6 @@ impl std::ops::BitXor<Exponent> for Factors {
         }
 
         debug_assert_eq!(r.product(), self.product().pow(rhs.into()));
-        return r;
+        r
     }
 }

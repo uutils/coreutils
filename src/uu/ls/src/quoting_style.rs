@@ -1,6 +1,6 @@
 use std::char::from_digit;
 
-const SPECIAL_SHELL_CHARS: &str = "~`#$&*()\\|[]{};'\"<>?! ";
+const SPECIAL_SHELL_CHARS: &str = "~`#$&*()|[]{};\\'\"<>?! ";
 
 pub(super) enum QuotingStyle {
     Shell {
@@ -27,12 +27,10 @@ pub(super) enum Quotes {
 // This implementation is heavily inspired by the std::char::EscapeDefault implementation
 // in the Rust standard library. This custom implementation is needed because the
 // characters \a, \b, \e, \f & \v are not recognized by Rust.
-#[derive(Clone, Debug)]
 struct EscapedChar {
     state: EscapeState,
 }
 
-#[derive(Clone, Debug)]
 enum EscapeState {
     Done,
     Char(char),
@@ -41,14 +39,12 @@ enum EscapeState {
     Octal(EscapeOctal),
 }
 
-#[derive(Clone, Debug)]
 struct EscapeOctal {
     c: char,
     state: EscapeOctalState,
     idx: usize,
 }
 
-#[derive(Clone, Debug)]
 enum EscapeOctalState {
     Done,
     Backslash,
@@ -135,7 +131,6 @@ impl EscapedChar {
             '\x0B' => Backslash('v'),
             '\x0C' => Backslash('f'),
             '\r' => Backslash('r'),
-            '\\' => Backslash('\\'),
             '\x00'..='\x1F' | '\x7F' => Octal(EscapeOctal::from(c)),
             '\'' => match quotes {
                 Quotes::Single => Backslash('\''),
@@ -176,7 +171,7 @@ impl Iterator for EscapedChar {
     }
 }
 
-fn shell_without_escape(name: String, quotes: Quotes, show_control_chars: bool) -> (String, bool) {
+fn shell_without_escape(name: &str, quotes: Quotes, show_control_chars: bool) -> (String, bool) {
     let mut must_quote = false;
     let mut escaped_str = String::with_capacity(name.len());
 
@@ -206,7 +201,7 @@ fn shell_without_escape(name: String, quotes: Quotes, show_control_chars: bool) 
     (escaped_str, must_quote)
 }
 
-fn shell_with_escape(name: String, quotes: Quotes) -> (String, bool) {
+fn shell_with_escape(name: &str, quotes: Quotes) -> (String, bool) {
     // We need to keep track of whether we are in a dollar expression
     // because e.g. \b\n is escaped as $'\b\n' and not like $'b'$'n'
     let mut in_dollar = false;
@@ -254,7 +249,7 @@ fn shell_with_escape(name: String, quotes: Quotes) -> (String, bool) {
     (escaped_str, must_quote)
 }
 
-pub(super) fn escape_name(name: String, style: &QuotingStyle) -> String {
+pub(super) fn escape_name(name: &str, style: &QuotingStyle) -> String {
     match style {
         QuotingStyle::Literal { show_control } => {
             if !show_control {
@@ -262,7 +257,7 @@ pub(super) fn escape_name(name: String, style: &QuotingStyle) -> String {
                     .flat_map(|c| EscapedChar::new_literal(c).hide_control())
                     .collect()
             } else {
-                name
+                name.into()
             }
         }
         QuotingStyle::C { quotes } => {
@@ -359,7 +354,7 @@ mod tests {
     fn check_names(name: &str, map: Vec<(&str, &str)>) {
         assert_eq!(
             map.iter()
-                .map(|(_, style)| escape_name(name.to_string(), &get_style(style)))
+                .map(|(_, style)| escape_name(name, &get_style(style)))
                 .collect::<Vec<String>>(),
             map.iter()
                 .map(|(correct, _)| correct.to_string())
@@ -511,6 +506,23 @@ mod tests {
             ],
         );
 
+        // A control character followed by a special shell character
+        check_names(
+            "one\n&two",
+            vec![
+                ("one?&two", "literal"),
+                ("one\n&two", "literal-show"),
+                ("one\\n&two", "escape"),
+                ("\"one\\n&two\"", "c"),
+                ("'one?&two'", "shell"),
+                ("'one\n&two'", "shell-show"),
+                ("'one?&two'", "shell-always"),
+                ("'one\n&two'", "shell-always-show"),
+                ("'one'$'\\n''&two'", "shell-escape"),
+                ("'one'$'\\n''&two'", "shell-escape-always"),
+            ],
+        );
+
         // The first 16 control characters. NUL is also included, even though it is of
         // no importance for file names.
         check_names(
@@ -624,6 +636,24 @@ mod tests {
                 ("'one?two'", "shell-always-show"),
                 ("'one?two'", "shell-escape"),
                 ("'one?two'", "shell-escape-always"),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_backslash() {
+        // Escaped in C-style, but not in Shell-style escaping
+        check_names(
+            "one\\two",
+            vec![
+                ("one\\two", "literal"),
+                ("one\\two", "literal-show"),
+                ("one\\\\two", "escape"),
+                ("\"one\\\\two\"", "c"),
+                ("'one\\two'", "shell"),
+                ("\'one\\two\'", "shell-always"),
+                ("'one\\two'", "shell-escape"),
+                ("'one\\two'", "shell-escape-always"),
             ],
         );
     }

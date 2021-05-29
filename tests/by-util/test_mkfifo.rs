@@ -2,9 +2,7 @@ use crate::common::util::*;
 
 #[test]
 fn test_create_fifo_missing_operand() {
-    new_ucmd!()
-        .fails()
-        .stderr_is("mkfifo: error: missing operand");
+    new_ucmd!().fails().stderr_is("mkfifo: missing operand");
 }
 
 #[test]
@@ -19,8 +17,7 @@ fn test_create_one_fifo_with_invalid_mode() {
         .arg("-m")
         .arg("invalid")
         .fails()
-        .stderr
-        .contains("invalid mode");
+        .stderr_contains("invalid mode");
 }
 
 #[test]
@@ -44,5 +41,5 @@ fn test_create_one_fifo_already_exists() {
         .arg("abcdef")
         .arg("abcdef")
         .fails()
-        .stderr_is("mkfifo: error: cannot create fifo 'abcdef': File exists");
+        .stderr_is("mkfifo: cannot create fifo 'abcdef': File exists");
 }

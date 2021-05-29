@@ -22,6 +22,7 @@ search the issues to make sure no one else is working on it.
 1. Make sure that the code coverage is covering all of the cases, including errors.     
 1. The code must be clippy-warning-free and rustfmt-compliant.
 1. Don't hesitate to move common functions into uucore if they can be reused by other binaries.
+1. Unsafe code should be documented with Safety comments.
 
 ## Commit messages
 
@@ -67,10 +68,6 @@ lines for non-utility modules include:
 
 ```
 README: add help
-```
-
-```
-travis: fix build
 ```
 
 ```

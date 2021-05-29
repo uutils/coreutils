@@ -103,7 +103,7 @@ fn test_relpath_with_from_with_d() {
         at.mkdir_all(from);
 
         // d is part of subpath -> expect relative path
-        let mut result_stdout = scene
+        let mut _result_stdout = scene
             .ucmd()
             .arg(to)
             .arg(from)
@@ -112,17 +112,17 @@ fn test_relpath_with_from_with_d() {
             .stdout_move_str();
         // relax rules for windows test environment
         #[cfg(not(windows))]
-        assert!(Path::new(&result_stdout).is_relative());
+        assert!(Path::new(&_result_stdout).is_relative());
 
         // d is not part of subpath -> expect absolut path
-        result_stdout = scene
+        _result_stdout = scene
             .ucmd()
             .arg(to)
             .arg(from)
             .arg("-dnon_existing")
             .succeeds()
             .stdout_move_str();
-        assert!(Path::new(&result_stdout).is_absolute());
+        assert!(Path::new(&_result_stdout).is_absolute());
     }
 }
 
@@ -135,12 +135,12 @@ fn test_relpath_no_from_no_d() {
         let to: &str = &convert_path(test.to);
         at.mkdir_all(to);
 
-        let result_stdout = scene.ucmd().arg(to).succeeds().stdout_move_str();
+        let _result_stdout = scene.ucmd().arg(to).succeeds().stdout_move_str();
         #[cfg(not(windows))]
-        assert_eq!(result_stdout, format!("{}\n", to));
+        assert_eq!(_result_stdout, format!("{}\n", to));
         // relax rules for windows test environment
         #[cfg(windows)]
-        assert!(result_stdout.ends_with(&format!("{}\n", to)));
+        assert!(_result_stdout.ends_with(&format!("{}\n", to)));
     }
 }
 
@@ -155,7 +155,7 @@ fn test_relpath_no_from_with_d() {
         at.mkdir_all(to);
 
         // d is part of subpath -> expect relative path
-        let mut result_stdout = scene
+        let _result_stdout = scene
             .ucmd()
             .arg(to)
             .arg(&format!("-d{}", pwd))
@@ -163,10 +163,10 @@ fn test_relpath_no_from_with_d() {
             .stdout_move_str();
         // relax rules for windows test environment
         #[cfg(not(windows))]
-        assert!(Path::new(&result_stdout).is_relative());
+        assert!(Path::new(&_result_stdout).is_relative());
 
         // d is not part of subpath -> expect absolut path
-        result_stdout = scene
+        let result_stdout = scene
             .ucmd()
             .arg(to)
             .arg("-dnon_existing")

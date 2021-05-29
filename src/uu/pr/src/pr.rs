@@ -178,7 +178,9 @@ quick_error! {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(uucore::InvalidEncodingHandling::Ignore)
+        .accept_any();
     let mut opts = getopts::Options::new();
 
     opts.opt(

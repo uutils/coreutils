@@ -1,7 +1,8 @@
 #![allow(dead_code)]
-
 // spell-checker:ignore (change!) each's
 // spell-checker:ignore (ToDO) LONGHELP FORMATSTRING templating parameterizing formatstr
+
+use uucore::InvalidEncodingHandling;
 
 mod cli;
 mod memo;
@@ -9,7 +10,6 @@ mod tokenize;
 
 static NAME: &str = "printf";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
-static SHORT_USAGE: &str = "printf: usage: printf [-v var] format [arguments]";
 static LONGHELP_LEAD: &str = "printf
 
  USAGE: printf FORMATSTRING [ARGUMENT]...
@@ -273,7 +273,9 @@ COPYRIGHT :
 ";
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
 
     let location = &args[0];
     if args.len() <= 1 {

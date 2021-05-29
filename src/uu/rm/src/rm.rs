@@ -176,7 +176,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 } else if matches.is_present(OPT_PROMPT_MORE) {
                     InteractiveMode::Once
                 } else if matches.is_present(OPT_INTERACTIVE) {
-                    match &matches.value_of(OPT_INTERACTIVE).unwrap()[..] {
+                    match matches.value_of(OPT_INTERACTIVE).unwrap() {
                         "none" => InteractiveMode::None,
                         "once" => InteractiveMode::Once,
                         "always" => InteractiveMode::Always,
@@ -386,13 +386,8 @@ fn prompt(msg: &str) -> bool {
     let stdin = stdin();
     let mut stdin = stdin.lock();
 
-    #[allow(clippy::match_like_matches_macro)]
-    // `matches!(...)` macro not stabilized until rust v1.42
     match stdin.read_until(b'\n', &mut buf) {
-        Ok(x) if x > 0 => match buf[0] {
-            b'y' | b'Y' => true,
-            _ => false,
-        },
+        Ok(x) if x > 0 => matches!(buf[0], b'y' | b'Y'),
         _ => false,
     }
 }

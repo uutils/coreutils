@@ -1,8 +1,9 @@
-use std::{cmp::Ordering, path::PathBuf};
+use std::cmp::Ordering;
+use std::path::Path;
 
-/// Compare pathbufs in a way that matches the GNU version sort, meaning that
+/// Compare paths in a way that matches the GNU version sort, meaning that
 /// numbers get sorted in a natural way.
-pub(crate) fn version_cmp(a: &PathBuf, b: &PathBuf) -> Ordering {
+pub(crate) fn version_cmp(a: &Path, b: &Path) -> Ordering {
     let a_string = a.to_string_lossy();
     let b_string = b.to_string_lossy();
     let mut a = a_string.chars().peekable();

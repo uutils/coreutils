@@ -15,6 +15,7 @@ extern crate uucore;
 use clap::{App, Arg};
 use std::ffi::CStr;
 use uucore::fs::is_stdin_interactive;
+use uucore::InvalidEncodingHandling;
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Print the file name of the terminal connected to standard input.";
@@ -28,8 +29,10 @@ fn get_usage() -> String {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
     let usage = get_usage();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     let matches = App::new(executable!())
         .version(VERSION)
@@ -65,9 +68,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     }
 
-    return if is_stdin_interactive() {
+    if is_stdin_interactive() {
         libc::EXIT_SUCCESS
     } else {
         libc::EXIT_FAILURE
-    };
+    }
 }

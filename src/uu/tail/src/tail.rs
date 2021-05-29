@@ -15,7 +15,9 @@ extern crate clap;
 #[macro_use]
 extern crate uucore;
 
+mod chunks;
 mod platform;
+use chunks::ReverseChunks;
 
 use clap::{App, Arg};
 use std::collections::VecDeque;
@@ -26,6 +28,7 @@ use std::io::{stdin, stdout, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
+use uucore::ringbuffer::RingBuffer;
 
 pub mod options {
     pub mod verbosity {
@@ -117,6 +120,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(
             Arg::with_name(options::SLEEP_INT)
                 .short("s")
+                .takes_value(true)
                 .long(options::SLEEP_INT)
                 .help("Number or seconds to sleep between polling the file when running with -f"),
         )
@@ -238,7 +242,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             }
             let mut file = File::open(&path).unwrap();
             if is_seekable(&mut file) {
-                bounded_tail(&file, &settings);
+                bounded_tail(&mut file, &settings);
                 if settings.follow {
                     let reader = BufReader::new(file);
                     readers.push(reader);
@@ -352,10 +356,6 @@ pub fn parse_size(mut size_slice: &str) -> Result<u64, ParseSizeErr> {
     }
 }
 
-/// When reading files in reverse in `bounded_tail`, this is the size of each
-/// block read at a time.
-const BLOCK_SIZE: u64 = 1 << 16;
-
 fn follow<T: Read>(readers: &mut [BufReader<T>], filenames: &[String], settings: &Settings) {
     assert!(settings.follow);
     let mut last = readers.len() - 1;
@@ -393,48 +393,42 @@ fn follow<T: Read>(readers: &mut [BufReader<T>], filenames: &[String], settings:
     }
 }
 
-/// Iterate over bytes in the file, in reverse, until `should_stop` returns
-/// true. The `file` is left seek'd to the position just after the byte that
-/// `should_stop` returned true for.
-fn backwards_thru_file<F>(
-    mut file: &File,
-    size: u64,
-    buf: &mut Vec<u8>,
-    delimiter: u8,
-    should_stop: &mut F,
-) where
-    F: FnMut(u8) -> bool,
-{
-    assert!(buf.len() >= BLOCK_SIZE as usize);
+/// Iterate over bytes in the file, in reverse, until we find the
+/// `num_delimiters` instance of `delimiter`. The `file` is left seek'd to the
+/// position just after that delimiter.
+fn backwards_thru_file(file: &mut File, num_delimiters: usize, delimiter: u8) {
+    // This variable counts the number of delimiters found in the file
+    // so far (reading from the end of the file toward the beginning).
+    let mut counter = 0;
 
-    let max_blocks_to_read = (size as f64 / BLOCK_SIZE as f64).ceil() as usize;
+    for (block_idx, slice) in ReverseChunks::new(file).enumerate() {
+        // Iterate over each byte in the slice in reverse order.
+        let mut iter = slice.iter().enumerate().rev();
 
-    for block_idx in 0..max_blocks_to_read {
-        let block_size = if block_idx == max_blocks_to_read - 1 {
-            size % BLOCK_SIZE
-        } else {
-            BLOCK_SIZE
-        };
-
-        // Seek backwards by the next block, read the full block into
-        // `buf`, and then seek back to the start of the block again.
-        let pos = file.seek(SeekFrom::Current(-(block_size as i64))).unwrap();
-        file.read_exact(&mut buf[0..(block_size as usize)]).unwrap();
-        let pos2 = file.seek(SeekFrom::Current(-(block_size as i64))).unwrap();
-        assert_eq!(pos, pos2);
-
-        // Iterate backwards through the bytes, calling `should_stop` on each
-        // one.
-        let slice = &buf[0..(block_size as usize)];
-        for (i, ch) in slice.iter().enumerate().rev() {
-            // Ignore one trailing newline.
-            if block_idx == 0 && i as u64 == block_size - 1 && *ch == delimiter {
-                continue;
+        // Ignore a trailing newline in the last block, if there is one.
+        if block_idx == 0 {
+            if let Some(c) = slice.last() {
+                if *c == delimiter {
+                    iter.next();
+                }
             }
+        }
 
-            if should_stop(*ch) {
-                file.seek(SeekFrom::Current((i + 1) as i64)).unwrap();
-                return;
+        // For each byte, increment the count of the number of
+        // delimiters found. If we have found more than the specified
+        // number of delimiters, terminate the search and seek to the
+        // appropriate location in the file.
+        for (i, ch) in iter {
+            if *ch == delimiter {
+                counter += 1;
+                if counter >= num_delimiters {
+                    // After each iteration of the outer loop, the
+                    // cursor in the file is at the *beginning* of the
+                    // block, so seeking forward by `i + 1` bytes puts
+                    // us right after the found delimiter.
+                    file.seek(SeekFrom::Current((i + 1) as i64)).unwrap();
+                    return;
+                }
             }
         }
     }
@@ -445,21 +439,11 @@ fn backwards_thru_file<F>(
 /// end of the file, and then read the file "backwards" in blocks of size
 /// `BLOCK_SIZE` until we find the location of the first line/byte. This ends up
 /// being a nice performance win for very large files.
-fn bounded_tail(mut file: &File, settings: &Settings) {
-    let size = file.seek(SeekFrom::End(0)).unwrap();
-    let mut buf = vec![0; BLOCK_SIZE as usize];
-
+fn bounded_tail(file: &mut File, settings: &Settings) {
     // Find the position in the file to start printing from.
     match settings.mode {
-        FilterMode::Lines(mut count, delimiter) => {
-            backwards_thru_file(&file, size, &mut buf, delimiter, &mut |byte| {
-                if byte == delimiter {
-                    count -= 1;
-                    count == 0
-                } else {
-                    false
-                }
-            });
+        FilterMode::Lines(count, delimiter) => {
+            backwards_thru_file(file, count as usize, delimiter);
         }
         FilterMode::Bytes(count) => {
             file.seek(SeekFrom::End(-(count as i64))).unwrap();
@@ -467,17 +451,37 @@ fn bounded_tail(mut file: &File, settings: &Settings) {
     }
 
     // Print the target section of the file.
-    loop {
-        let bytes_read = file.read(&mut buf).unwrap();
+    let stdout = stdout();
+    let mut stdout = stdout.lock();
+    std::io::copy(file, &mut stdout).unwrap();
+}
 
-        let mut stdout = stdout();
-        for b in &buf[0..bytes_read] {
-            print_byte(&mut stdout, *b);
-        }
-
-        if bytes_read == 0 {
-            break;
-        }
+/// Collect the last elements of an iterator into a `VecDeque`.
+///
+/// This function returns a [`VecDeque`] containing either the last
+/// `count` elements of `iter`, an [`Iterator`] over [`Result`]
+/// instances, or all but the first `count` elements of `iter`. If
+/// `beginning` is `true`, then all but the first `count` elements are
+/// returned.
+///
+/// # Panics
+///
+/// If any element of `iter` is an [`Err`], then this function panics.
+fn unbounded_tail_collect<T, E>(
+    iter: impl Iterator<Item = Result<T, E>>,
+    count: u64,
+    beginning: bool,
+) -> VecDeque<T>
+where
+    E: fmt::Debug,
+{
+    if beginning {
+        // GNU `tail` seems to index bytes and lines starting at 1, not
+        // at 0. It seems to treat `+0` and `+1` as the same thing.
+        let i = count.max(1) - 1;
+        iter.skip(i as usize).map(|r| r.unwrap()).collect()
+    } else {
+        RingBuffer::from_iter(iter.map(|r| r.unwrap()), count as usize).data
     }
 }
 
@@ -486,66 +490,15 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
     // contains count lines/chars. When reaching the end of file, output the
     // data in the ringbuf.
     match settings.mode {
-        FilterMode::Lines(mut count, _delimiter) => {
-            let mut ringbuf: VecDeque<String> = VecDeque::new();
-            let mut skip = if settings.beginning {
-                let temp = count;
-                count = ::std::u64::MAX;
-                temp - 1
-            } else {
-                0
-            };
-            loop {
-                let mut datum = String::new();
-                match reader.read_line(&mut datum) {
-                    Ok(0) => break,
-                    Ok(_) => {
-                        if skip > 0 {
-                            skip -= 1;
-                        } else {
-                            if count <= ringbuf.len() as u64 {
-                                ringbuf.pop_front();
-                            }
-                            ringbuf.push_back(datum);
-                        }
-                    }
-                    Err(err) => panic!("{}", err),
-                }
-            }
-            let mut stdout = stdout();
-            for datum in &ringbuf {
-                print_string(&mut stdout, datum);
+        FilterMode::Lines(count, _) => {
+            for line in unbounded_tail_collect(reader.lines(), count, settings.beginning) {
+                println!("{}", line);
             }
         }
-        FilterMode::Bytes(mut count) => {
-            let mut ringbuf: VecDeque<u8> = VecDeque::new();
-            let mut skip = if settings.beginning {
-                let temp = count;
-                count = ::std::u64::MAX;
-                temp - 1
-            } else {
-                0
-            };
-            loop {
-                let mut datum = [0; 1];
-                match reader.read(&mut datum) {
-                    Ok(0) => break,
-                    Ok(_) => {
-                        if skip > 0 {
-                            skip -= 1;
-                        } else {
-                            if count <= ringbuf.len() as u64 {
-                                ringbuf.pop_front();
-                            }
-                            ringbuf.push_back(datum[0]);
-                        }
-                    }
-                    Err(err) => panic!("{}", err),
-                }
-            }
-            let mut stdout = stdout();
-            for datum in &ringbuf {
-                print_byte(&mut stdout, *datum);
+        FilterMode::Bytes(count) => {
+            for byte in unbounded_tail_collect(reader.bytes(), count, settings.beginning) {
+                let mut stdout = stdout();
+                print_byte(&mut stdout, byte);
             }
         }
     }
@@ -560,9 +513,4 @@ fn print_byte<T: Write>(stdout: &mut T, ch: u8) {
     if let Err(err) = stdout.write(&[ch]) {
         crash!(1, "{}", err);
     }
-}
-
-#[inline]
-fn print_string<T: Write>(_: &mut T, s: &str) {
-    print!("{}", s);
 }

@@ -12,10 +12,11 @@ extern crate uucore;
 
 use chrono::prelude::DateTime;
 use chrono::Local;
+use clap::{App, Arg};
 use std::collections::HashSet;
 use std::env;
 use std::fs;
-use std::io::{stderr, Result, Write};
+use std::io::{stderr, ErrorKind, Result, Write};
 use std::iter;
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
@@ -25,6 +26,7 @@ use std::os::windows::fs::MetadataExt;
 use std::os::windows::io::AsRawHandle;
 use std::path::PathBuf;
 use std::time::{Duration, UNIX_EPOCH};
+use uucore::InvalidEncodingHandling;
 #[cfg(windows)]
 use winapi::shared::minwindef::{DWORD, LPVOID};
 #[cfg(windows)]
@@ -36,6 +38,27 @@ use winapi::um::winbase::GetFileInformationByHandleEx;
 #[cfg(windows)]
 use winapi::um::winnt::{FILE_ID_128, ULONGLONG};
 
+mod options {
+    pub const NULL: &str = "0";
+    pub const ALL: &str = "all";
+    pub const APPARENT_SIZE: &str = "apparent-size";
+    pub const BLOCK_SIZE: &str = "B";
+    pub const BYTES: &str = "b";
+    pub const TOTAL: &str = "c";
+    pub const MAX_DEPTH: &str = "d";
+    pub const HUMAN_READABLE: &str = "h";
+    pub const BLOCK_SIZE_1K: &str = "k";
+    pub const COUNT_LINKS: &str = "l";
+    pub const BLOCK_SIZE_1M: &str = "m";
+    pub const SEPARATE_DIRS: &str = "S";
+    pub const SUMMARIZE: &str = "s";
+    pub const SI: &str = "si";
+    pub const TIME: &str = "time";
+    pub const TIME_STYLE: &str = "time-style";
+    pub const FILE: &str = "FILE";
+}
+
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 const NAME: &str = "du";
 const SUMMARY: &str = "estimate file space usage";
 const LONG_HELP: &str = "
@@ -219,14 +242,14 @@ fn unit_string_to_number(s: &str) -> Option<u64> {
     Some(number * multiple.pow(unit))
 }
 
-fn translate_to_pure_number(s: &Option<String>) -> Option<u64> {
+fn translate_to_pure_number(s: &Option<&str>) -> Option<u64> {
     match *s {
         Some(ref s) => unit_string_to_number(s),
         None => None,
     }
 }
 
-fn read_block_size(s: Option<String>) -> u64 {
+fn read_block_size(s: Option<&str>) -> u64 {
     match translate_to_pure_number(&s) {
         Some(v) => v,
         None => {
@@ -235,7 +258,8 @@ fn read_block_size(s: Option<String>) -> u64 {
             };
 
             for env_var in &["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
-                if let Some(quantity) = translate_to_pure_number(&env::var(env_var).ok()) {
+                let env_size = env::var(env_var).ok();
+                if let Some(quantity) = translate_to_pure_number(&env_size.as_deref()) {
                     return quantity;
                 }
             }
@@ -296,7 +320,21 @@ fn du(
                             }
                         }
                     }
-                    Err(error) => show_error!("{}", error),
+                    Err(error) => match error.kind() {
+                        ErrorKind::PermissionDenied => {
+                            let description = format!(
+                                "cannot access '{}'",
+                                entry
+                                    .path()
+                                    .as_os_str()
+                                    .to_str()
+                                    .unwrap_or("<Un-printable path>")
+                            );
+                            let error_message = "Permission denied";
+                            show_error_custom_description!(description, "{}", error_message)
+                        }
+                        _ => show_error!("{}", error),
+                    },
                 },
                 Err(error) => show_error!("{}", error),
             }
@@ -322,7 +360,7 @@ fn convert_size_human(size: u64, multiplier: u64, _block_size: u64) -> String {
         }
     }
     if size == 0 {
-        return format!("0");
+        return "0".to_string();
     }
     format!("{}B", size)
 }
@@ -346,124 +384,189 @@ fn convert_size_other(size: u64, _multiplier: u64, block_size: u64) -> String {
     format!("{}", ((size as f64) / (block_size as f64)).ceil())
 }
 
+fn get_usage() -> String {
+    format!(
+        "{0} [OPTION]... [FILE]...
+    {0} [OPTION]... --files0-from=F",
+        executable!()
+    )
+}
+
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
 
-    let syntax = format!(
-        "[OPTION]... [FILE]...
- {0} [OPTION]... --files0-from=F",
-        NAME
-    );
-    let matches = app!(&syntax, SUMMARY, LONG_HELP)
-        // In task
-        .optflag(
-            "a",
-            "all",
-            " write counts for all files, not just directories",
-        )
-        // In main
-        .optflag(
-            "",
-            "apparent-size",
-            "print apparent sizes,  rather  than  disk  usage
-            although  the apparent  size is usually smaller, it may be larger due to holes
-            in ('sparse') files, internal  fragmentation,  indirect  blocks, and the like",
-        )
-        // In main
-        .optopt(
-            "B",
-            "block-size",
-            "scale sizes  by  SIZE before printing them.
-            E.g., '-BM' prints sizes in units of 1,048,576 bytes.  See SIZE format below.",
-            "SIZE",
-        )
-        // In main
-        .optflag(
-            "b",
-            "bytes",
-            "equivalent to '--apparent-size --block-size=1'",
-        )
-        // In main
-        .optflag("c", "total", "produce a grand total")
-        // In task
-        // opts.optflag("D", "dereference-args", "dereference only symlinks that are listed
-        //     on the command line"),
-        // In main
-        // opts.optopt("", "files0-from", "summarize disk usage of the NUL-terminated file
-        //                   names specified in file F;
-        //                   If F is - then read names from standard input", "F"),
-        // // In task
-        // opts.optflag("H", "", "equivalent to --dereference-args (-D)"),
-        // In main
-        .optflag(
-            "h",
-            "human-readable",
-            "print sizes in human readable format (e.g., 1K 234M 2G)",
-        )
-        // In main
-        .optflag("", "si", "like -h, but use powers of 1000 not 1024")
-        // In main
-        .optflag("k", "", "like --block-size=1K")
-        // In task
-        .optflag("l", "count-links", "count sizes many times if hard linked")
-        // // In main
-        .optflag("m", "", "like --block-size=1M")
-        // // In task
-        // opts.optflag("L", "dereference", "dereference all symbolic links"),
-        // // In task
-        // opts.optflag("P", "no-dereference", "don't follow any symbolic links (this is the default)"),
-        // // In main
-        .optflag(
-            "0",
-            "null",
-            "end each output line with 0 byte rather than newline",
-        )
-        // In main
-        .optflag(
-            "S",
-            "separate-dirs",
-            "do not include size of subdirectories",
-        )
-        // In main
-        .optflag("s", "summarize", "display only a total for each argument")
-        // // In task
-        // opts.optflag("x", "one-file-system", "skip directories on different file systems"),
-        // // In task
-        // opts.optopt("X", "exclude-from", "exclude files that match any pattern in FILE", "FILE"),
-        // // In task
-        // opts.optopt("", "exclude", "exclude files that match PATTERN", "PATTERN"),
-        // In main
-        .optopt(
-            "d",
-            "max-depth",
-            "print the total for a directory (or file, with --all)
-            only if it is N or fewer levels below the command
-            line argument;  --max-depth=0 is the same as --summarize",
-            "N",
-        )
-        // In main
-        .optflagopt(
-            "",
-            "time",
-            "show time of the last modification of any file in the
-            directory, or any of its subdirectories.  If WORD is given, show time as WORD instead
-            of modification time: atime, access, use, ctime or status",
-            "WORD",
-        )
-        // In main
-        .optopt(
-            "",
-            "time-style",
-            "show times using style STYLE:
-            full-iso, long-iso, iso, +FORMAT FORMAT is interpreted like 'date'",
-            "STYLE",
-        )
-        .parse(args);
+    let usage = get_usage();
 
-    let summarize = matches.opt_present("summarize");
+    let matches = App::new(executable!())
+        .version(VERSION)
+        .about(SUMMARY)
+        .usage(&usage[..])
+        .after_help(LONG_HELP)
+        .arg(
+            Arg::with_name(options::ALL)
+                .short("a")
+                .long(options::ALL)
+                .help("write counts for all files, not just directories"),
+        )
+        .arg(
+            Arg::with_name(options::APPARENT_SIZE)
+                .long(options::APPARENT_SIZE)
+                .help(
+                    "print apparent sizes,  rather  than  disk  usage \
+                    although  the apparent  size is usually smaller, it may be larger due to holes \
+                    in ('sparse') files, internal  fragmentation,  indirect  blocks, and the like"
+                )
+        )
+        .arg(
+            Arg::with_name(options::BLOCK_SIZE)
+                .short("B")
+                .long("block-size")
+                .value_name("SIZE")
+                .help(
+                    "scale sizes  by  SIZE before printing them. \
+                    E.g., '-BM' prints sizes in units of 1,048,576 bytes.  See SIZE format below."
+                )
+        )
+        .arg(
+            Arg::with_name(options::BYTES)
+                .short("b")
+                .long("bytes")
+                .help("equivalent to '--apparent-size --block-size=1'")
+        )
+        .arg(
+            Arg::with_name(options::TOTAL)
+                .long("total")
+                .short("c")
+                .help("produce a grand total")
+        )
+        .arg(
+            Arg::with_name(options::MAX_DEPTH)
+                .short("d")
+                .long("max-depth")
+                .value_name("N")
+                .help(
+                    "print the total for a directory (or file, with --all) \
+                    only if it is N or fewer levels below the command \
+                    line argument;  --max-depth=0 is the same as --summarize"
+                )
+        )
+        .arg(
+            Arg::with_name(options::HUMAN_READABLE)
+                .long("human-readable")
+                .short("h")
+                .help("print sizes in human readable format (e.g., 1K 234M 2G)")
+        )
+        .arg(
+            Arg::with_name("inodes")
+                .long("inodes")
+                .help(
+                    "list inode usage information instead of block usage like --block-size=1K"
+                )
+        )
+        .arg(
+            Arg::with_name(options::BLOCK_SIZE_1K)
+                .short("k")
+                .help("like --block-size=1K")
+        )
+        .arg(
+            Arg::with_name(options::COUNT_LINKS)
+                .short("l")
+                .long("count-links")
+                .help("count sizes many times if hard linked")
+        )
+        // .arg(
+        //     Arg::with_name("dereference")
+        //         .short("L")
+        //         .long("dereference")
+        //         .help("dereference all symbolic links")
+        // )
+        // .arg(
+        //     Arg::with_name("no-dereference")
+        //         .short("P")
+        //         .long("no-dereference")
+        //         .help("don't follow any symbolic links (this is the default)")
+        // )
+        .arg(
+            Arg::with_name(options::BLOCK_SIZE_1M)
+                .short("m")
+                .help("like --block-size=1M")
+        )
+        .arg(
+            Arg::with_name(options::NULL)
+                .short("0")
+                .long("null")
+                .help("end each output line with 0 byte rather than newline")
+        )
+        .arg(
+            Arg::with_name(options::SEPARATE_DIRS)
+                .short("S")
+                .long("separate-dirs")
+                .help("do not include size of subdirectories")
+        )
+        .arg(
+            Arg::with_name(options::SUMMARIZE)
+                .short("s")
+                .long("summarize")
+                .help("display only a total for each argument")
+        )
+        .arg(
+            Arg::with_name(options::SI)
+                .long(options::SI)
+                .help("like -h, but use powers of 1000 not 1024")
+        )
+        // .arg(
+        //     Arg::with_name("one-file-system")
+        //         .short("x")
+        //         .long("one-file-system")
+        //         .help("skip directories on different file systems")
+        // )
+        // .arg(
+        //     Arg::with_name("")
+        //         .short("x")
+        //         .long("exclude-from")
+        //         .value_name("FILE")
+        //         .help("exclude files that match any pattern in FILE")
+        // )
+        // .arg(
+        //     Arg::with_name("exclude")
+        //         .long("exclude")
+        //         .value_name("PATTERN")
+        //         .help("exclude files that match PATTERN")
+        // )
+        .arg(
+            Arg::with_name(options::TIME)
+                .long(options::TIME)
+                .value_name("WORD")
+                .require_equals(true)
+                .min_values(0)
+                .help(
+                    "show time of the last modification of any file in the \
+                    directory, or any of its subdirectories.  If WORD is given, show time as WORD instead \
+                    of modification time: atime, access, use, ctime or status"
+                )
+        )
+        .arg(
+            Arg::with_name(options::TIME_STYLE)
+                .long(options::TIME_STYLE)
+                .value_name("STYLE")
+                .help(
+                    "show times using style STYLE: \
+                    full-iso, long-iso, iso, +FORMAT FORMAT is interpreted like 'date'"
+                )
+        )
+        .arg(
+            Arg::with_name(options::FILE)
+                .hidden(true)
+                .multiple(true)
+        )
+        .get_matches_from(args);
 
-    let max_depth_str = matches.opt_str("max-depth");
+    let summarize = matches.is_present(options::SUMMARIZE);
+
+    let max_depth_str = matches.value_of(options::MAX_DEPTH);
     let max_depth = max_depth_str.as_ref().and_then(|s| s.parse::<usize>().ok());
     match (max_depth_str, max_depth) {
         (Some(ref s), _) if summarize => {
@@ -478,34 +581,35 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     let options = Options {
-        all: matches.opt_present("all"),
+        all: matches.is_present(options::ALL),
         program_name: NAME.to_owned(),
         max_depth,
-        total: matches.opt_present("total"),
-        separate_dirs: matches.opt_present("S"),
+        total: matches.is_present(options::TOTAL),
+        separate_dirs: matches.is_present(options::SEPARATE_DIRS),
     };
 
-    let strs = if matches.free.is_empty() {
-        vec!["./".to_owned()]
-    } else {
-        matches.free.clone()
+    let strs = match matches.value_of(options::FILE) {
+        Some(_) => matches.values_of(options::FILE).unwrap().collect(),
+        None => {
+            vec!["./"] // TODO: gnu `du` doesn't use trailing "/" here
+        }
     };
 
-    let block_size = read_block_size(matches.opt_str("block-size"));
+    let block_size = read_block_size(matches.value_of(options::BLOCK_SIZE));
 
-    let multiplier: u64 = if matches.opt_present("si") {
+    let multiplier: u64 = if matches.is_present(options::SI) {
         1000
     } else {
         1024
     };
     let convert_size_fn = {
-        if matches.opt_present("human-readable") || matches.opt_present("si") {
+        if matches.is_present(options::HUMAN_READABLE) || matches.is_present(options::SI) {
             convert_size_human
-        } else if matches.opt_present("b") {
+        } else if matches.is_present(options::BYTES) {
             convert_size_b
-        } else if matches.opt_present("k") {
+        } else if matches.is_present(options::BLOCK_SIZE_1K) {
             convert_size_k
-        } else if matches.opt_present("m") {
+        } else if matches.is_present(options::BLOCK_SIZE_1M) {
             convert_size_m
         } else {
             convert_size_other
@@ -513,8 +617,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     };
     let convert_size = |size| convert_size_fn(size, multiplier, block_size);
 
-    let time_format_str = match matches.opt_str("time-style") {
-        Some(s) => match &s[..] {
+    let time_format_str = match matches.value_of("time-style") {
+        Some(s) => match s {
             "full-iso" => "%Y-%m-%d %H:%M:%S.%f %z",
             "long-iso" => "%Y-%m-%d %H:%M",
             "iso" => "%Y-%m-%d",
@@ -535,7 +639,11 @@ Try '{} --help' for more information.",
         None => "%Y-%m-%d %H:%M",
     };
 
-    let line_separator = if matches.opt_present("0") { "\0" } else { "\n" };
+    let line_separator = if matches.is_present(options::NULL) {
+        "\0"
+    } else {
+        "\n"
+    };
 
     let mut grand_total = 0;
     for path_str in strs {
@@ -548,18 +656,20 @@ Try '{} --help' for more information.",
                 let (_, len) = iter.size_hint();
                 let len = len.unwrap();
                 for (index, stat) in iter.enumerate() {
-                    let size = if matches.opt_present("apparent-size") || matches.opt_present("b") {
+                    let size = if matches.is_present(options::APPARENT_SIZE)
+                        || matches.is_present(options::BYTES)
+                    {
                         stat.size
                     } else {
                         // C's stat is such that each block is assume to be 512 bytes
                         // See: http://linux.die.net/man/2/stat
                         stat.blocks * 512
                     };
-                    if matches.opt_present("time") {
+                    if matches.is_present(options::TIME) {
                         let tm = {
                             let secs = {
-                                match matches.opt_str("time") {
-                                    Some(s) => match &s[..] {
+                                match matches.value_of(options::TIME) {
+                                    Some(s) => match s {
                                         "accessed" => stat.accessed,
                                         "created" => stat.created,
                                         "modified" => stat.modified,
@@ -632,8 +742,8 @@ mod test_du {
             (Some("900KB".to_string()), Some(900 * 1000)),
             (Some("BAD_STRING".to_string()), None),
         ];
-        for it in test_data.into_iter() {
-            assert_eq!(translate_to_pure_number(&it.0), it.1);
+        for it in test_data.iter() {
+            assert_eq!(translate_to_pure_number(&it.0.as_deref()), it.1);
         }
     }
 
@@ -644,8 +754,8 @@ mod test_du {
             (None, 1024),
             (Some("BAD_STRING".to_string()), 1024),
         ];
-        for it in test_data.into_iter() {
-            assert_eq!(read_block_size(it.0.clone()), it.1);
+        for it in test_data.iter() {
+            assert_eq!(read_block_size(it.0.as_deref()), it.1);
         }
     }
 }

@@ -15,8 +15,10 @@ use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
 use uucore::fs::display_permissions_unix;
+use uucore::libc::mode_t;
 #[cfg(not(windows))]
 use uucore::mode;
+use uucore::InvalidEncodingHandling;
 use walkdir::WalkDir;
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -49,7 +51,9 @@ fn get_long_usage() -> String {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let mut args = args.collect_str();
+    let mut args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     // Before we can parse 'args' with clap (and previously getopts),
     // a possible MODE prefix '-' needs to be removed (e.g. "chmod -x FILE").
@@ -171,13 +175,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 // of a prefix '-' if it's associated with MODE
 // e.g. "chmod -v -xw -R FILE" -> "chmod -v xw -R FILE"
 pub fn strip_minus_from_mode(args: &mut Vec<String>) -> bool {
-    for i in 0..args.len() {
-        if args[i].starts_with("-") {
-            if let Some(second) = args[i].chars().nth(1) {
+    for arg in args {
+        if arg.starts_with('-') {
+            if let Some(second) = arg.chars().nth(1) {
                 match second {
                     'r' | 'w' | 'x' | 'X' | 's' | 't' | 'u' | 'g' | 'o' | '0'..='7' => {
                         // TODO: use strip_prefix() once minimum rust version reaches 1.45.0
-                        args[i] = args[i][1..args[i].len()].to_string();
+                        *arg = arg[1..arg.len()].to_string();
                         return true;
                     }
                     _ => {}
@@ -258,8 +262,10 @@ impl Chmoder {
                         );
                     }
                     return Ok(());
+                } else if err.kind() == std::io::ErrorKind::PermissionDenied {
+                    show_error!("'{}': Permission denied", file.display());
                 } else {
-                    show_error!("{}: '{}'", err, file.display());
+                    show_error!("'{}': {}", file.display(), err);
                 }
                 return Err(1);
             }
@@ -303,7 +309,7 @@ impl Chmoder {
                     "mode of '{}' retained as {:04o} ({})",
                     file.display(),
                     fperm,
-                    display_permissions_unix(fperm),
+                    display_permissions_unix(fperm as mode_t, false),
                 );
             }
             Ok(())
@@ -312,25 +318,25 @@ impl Chmoder {
                 show_error!("{}", err);
             }
             if self.verbose {
-                show_info!(
+                show_error!(
                     "failed to change mode of file '{}' from {:o} ({}) to {:o} ({})",
                     file.display(),
                     fperm,
-                    display_permissions_unix(fperm),
+                    display_permissions_unix(fperm as mode_t, false),
                     mode,
-                    display_permissions_unix(mode)
+                    display_permissions_unix(mode as mode_t, false)
                 );
             }
             Err(1)
         } else {
             if self.verbose || self.changes {
-                show_info!(
+                show_error!(
                     "mode of '{}' changed from {:o} ({}) to {:o} ({})",
                     file.display(),
                     fperm,
-                    display_permissions_unix(fperm),
+                    display_permissions_unix(fperm as mode_t, false),
                     mode,
-                    display_permissions_unix(mode)
+                    display_permissions_unix(mode as mode_t, false)
                 );
             }
             Ok(())

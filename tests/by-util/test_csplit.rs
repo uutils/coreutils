@@ -208,7 +208,7 @@ fn test_up_to_match_repeat_over() {
     ucmd.args(&["numbers50.txt", "/9$/", "{50}"])
         .fails()
         .stdout_is("16\n29\n30\n30\n30\n6\n")
-        .stderr_is("csplit: error: '/9$/': match not found on repetition 5");
+        .stderr_is("csplit: '/9$/': match not found on repetition 5");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("there should be splits created")
@@ -219,7 +219,7 @@ fn test_up_to_match_repeat_over() {
     ucmd.args(&["numbers50.txt", "/9$/", "{50}", "-k"])
         .fails()
         .stdout_is("16\n29\n30\n30\n30\n6\n")
-        .stderr_is("csplit: error: '/9$/': match not found on repetition 5");
+        .stderr_is("csplit: '/9$/': match not found on repetition 5");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("there should be splits created")
@@ -365,7 +365,7 @@ fn test_option_keep() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-k", "numbers50.txt", "/20/", "/nope/"])
         .fails()
-        .stderr_is("csplit: error: '/nope/': match not found")
+        .stderr_is("csplit: '/nope/': match not found")
         .stdout_is("48\n93\n");
 
     let count = glob(&at.plus_as_string("xx*"))
@@ -541,7 +541,7 @@ fn test_up_to_match_context_overflow() {
     ucmd.args(&["numbers50.txt", "/45/+10"])
         .fails()
         .stdout_is("141\n")
-        .stderr_is("csplit: error: '/45/+10': line number out of range");
+        .stderr_is("csplit: '/45/+10': line number out of range");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
@@ -552,7 +552,7 @@ fn test_up_to_match_context_overflow() {
     ucmd.args(&["numbers50.txt", "/45/+10", "-k"])
         .fails()
         .stdout_is("141\n")
-        .stderr_is("csplit: error: '/45/+10': line number out of range");
+        .stderr_is("csplit: '/45/+10': line number out of range");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
@@ -567,7 +567,7 @@ fn test_skip_to_match_context_underflow() {
     ucmd.args(&["numbers50.txt", "%5%-10"])
         .fails()
         .stdout_is("141\n")
-        .stderr_is("csplit: error: '%5%-10': line number out of range");
+        .stderr_is("csplit: '%5%-10': line number out of range");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
@@ -578,7 +578,7 @@ fn test_skip_to_match_context_underflow() {
     ucmd.args(&["numbers50.txt", "%5%-10", "-k"])
         .fails()
         .stdout_is("141\n")
-        .stderr_is("csplit: error: '%5%-10': line number out of range");
+        .stderr_is("csplit: '%5%-10': line number out of range");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
@@ -592,7 +592,7 @@ fn test_skip_to_match_context_overflow() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "%45%+10"])
         .fails()
-        .stderr_only("csplit: error: '%45%+10': line number out of range");
+        .stderr_only("csplit: '%45%+10': line number out of range");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
@@ -602,7 +602,7 @@ fn test_skip_to_match_context_overflow() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "%45%+10", "-k"])
         .fails()
-        .stderr_only("csplit: error: '%45%+10': line number out of range");
+        .stderr_only("csplit: '%45%+10': line number out of range");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
@@ -616,7 +616,7 @@ fn test_up_to_no_match1() {
     ucmd.args(&["numbers50.txt", "/4/", "/nope/"])
         .fails()
         .stdout_is("6\n135\n")
-        .stderr_is("csplit: error: '/nope/': match not found");
+        .stderr_is("csplit: '/nope/': match not found");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
@@ -627,7 +627,7 @@ fn test_up_to_no_match1() {
     ucmd.args(&["numbers50.txt", "/4/", "/nope/", "-k"])
         .fails()
         .stdout_is("6\n135\n")
-        .stderr_is("csplit: error: '/nope/': match not found");
+        .stderr_is("csplit: '/nope/': match not found");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
@@ -643,7 +643,7 @@ fn test_up_to_no_match2() {
     ucmd.args(&["numbers50.txt", "/4/", "/nope/", "{50}"])
         .fails()
         .stdout_is("6\n135\n")
-        .stderr_is("csplit: error: '/nope/': match not found");
+        .stderr_is("csplit: '/nope/': match not found");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
@@ -654,7 +654,7 @@ fn test_up_to_no_match2() {
     ucmd.args(&["numbers50.txt", "/4/", "/nope/", "{50}", "-k"])
         .fails()
         .stdout_is("6\n135\n")
-        .stderr_is("csplit: error: '/nope/': match not found");
+        .stderr_is("csplit: '/nope/': match not found");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
@@ -670,7 +670,7 @@ fn test_up_to_no_match3() {
     ucmd.args(&["numbers50.txt", "/0$/", "{50}"])
         .fails()
         .stdout_is("18\n30\n30\n30\n30\n3\n")
-        .stderr_is("csplit: error: '/0$/': match not found on repetition 5");
+        .stderr_is("csplit: '/0$/': match not found on repetition 5");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
@@ -681,7 +681,7 @@ fn test_up_to_no_match3() {
     ucmd.args(&["numbers50.txt", "/0$/", "{50}", "-k"])
         .fails()
         .stdout_is("18\n30\n30\n30\n30\n3\n")
-        .stderr_is("csplit: error: '/0$/': match not found on repetition 5");
+        .stderr_is("csplit: '/0$/': match not found on repetition 5");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
@@ -701,7 +701,7 @@ fn test_up_to_no_match4() {
     ucmd.args(&["numbers50.txt", "/nope/", "/4/"])
         .fails()
         .stdout_is("141\n")
-        .stderr_is("csplit: error: '/nope/': match not found");
+        .stderr_is("csplit: '/nope/': match not found");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
@@ -712,7 +712,7 @@ fn test_up_to_no_match4() {
     ucmd.args(&["numbers50.txt", "/nope/", "/4/", "-k"])
         .fails()
         .stdout_is("141\n")
-        .stderr_is("csplit: error: '/nope/': match not found");
+        .stderr_is("csplit: '/nope/': match not found");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
@@ -741,7 +741,7 @@ fn test_up_to_no_match6() {
     ucmd.args(&["numbers50.txt", "/nope/-5"])
         .fails()
         .stdout_is("141\n")
-        .stderr_is("csplit: error: '/nope/-5': match not found");
+        .stderr_is("csplit: '/nope/-5': match not found");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
@@ -752,7 +752,7 @@ fn test_up_to_no_match6() {
     ucmd.args(&["numbers50.txt", "/nope/-5", "-k"])
         .fails()
         .stdout_is("141\n")
-        .stderr_is("csplit: error: '/nope/-5': match not found");
+        .stderr_is("csplit: '/nope/-5': match not found");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
@@ -767,7 +767,7 @@ fn test_up_to_no_match7() {
     ucmd.args(&["numbers50.txt", "/nope/+5"])
         .fails()
         .stdout_is("141\n")
-        .stderr_is("csplit: error: '/nope/+5': match not found");
+        .stderr_is("csplit: '/nope/+5': match not found");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
@@ -778,7 +778,7 @@ fn test_up_to_no_match7() {
     ucmd.args(&["numbers50.txt", "/nope/+5", "-k"])
         .fails()
         .stdout_is("141\n")
-        .stderr_is("csplit: error: '/nope/+5': match not found");
+        .stderr_is("csplit: '/nope/+5': match not found");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
@@ -792,7 +792,7 @@ fn test_skip_to_no_match1() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "%nope%"])
         .fails()
-        .stderr_only("csplit: error: '%nope%': match not found");
+        .stderr_only("csplit: '%nope%': match not found");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
@@ -805,7 +805,7 @@ fn test_skip_to_no_match2() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "%nope%", "{50}"])
         .fails()
-        .stderr_only("csplit: error: '%nope%': match not found");
+        .stderr_only("csplit: '%nope%': match not found");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
@@ -818,7 +818,7 @@ fn test_skip_to_no_match3() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "%0$%", "{50}"])
         .fails()
-        .stderr_only("csplit: error: '%0$%': match not found on repetition 5");
+        .stderr_only("csplit: '%0$%': match not found on repetition 5");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
@@ -831,7 +831,7 @@ fn test_skip_to_no_match4() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "%nope%", "/4/"])
         .fails()
-        .stderr_only("csplit: error: '%nope%': match not found");
+        .stderr_only("csplit: '%nope%': match not found");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
@@ -858,7 +858,7 @@ fn test_skip_to_no_match6() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "%nope%-5"])
         .fails()
-        .stderr_only("csplit: error: '%nope%-5': match not found");
+        .stderr_only("csplit: '%nope%-5': match not found");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
@@ -871,7 +871,7 @@ fn test_skip_to_no_match7() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "%nope%+5"])
         .fails()
-        .stderr_only("csplit: error: '%nope%+5': match not found");
+        .stderr_only("csplit: '%nope%+5': match not found");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
@@ -884,7 +884,7 @@ fn test_no_match() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "%nope%"])
         .fails()
-        .stderr_only("csplit: error: '%nope%': match not found");
+        .stderr_only("csplit: '%nope%': match not found");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
@@ -895,7 +895,7 @@ fn test_no_match() {
     ucmd.args(&["numbers50.txt", "/nope/"])
         .fails()
         .stdout_is("141\n")
-        .stderr_is("csplit: error: '/nope/': match not found");
+        .stderr_is("csplit: '/nope/': match not found");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
@@ -992,7 +992,7 @@ fn test_too_small_linenum_repeat() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "/20/", "10", "{*}"])
         .fails()
-        .stderr_is("csplit: error: '10': line number out of range on repetition 5")
+        .stderr_is("csplit: '10': line number out of range on repetition 5")
         .stdout_is("48\n0\n0\n30\n30\n30\n3\n");
 
     let count = glob(&at.plus_as_string("xx*"))
@@ -1003,7 +1003,7 @@ fn test_too_small_linenum_repeat() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "/20/", "10", "{*}", "-k"])
         .fails()
-        .stderr_is("csplit: error: '10': line number out of range on repetition 5")
+        .stderr_is("csplit: '10': line number out of range on repetition 5")
         .stdout_is("48\n0\n0\n30\n30\n30\n3\n");
 
     let count = glob(&at.plus_as_string("xx*"))
@@ -1025,7 +1025,7 @@ fn test_linenum_out_of_range1() {
     ucmd.args(&["numbers50.txt", "100"])
         .fails()
         .stdout_is("141\n")
-        .stderr_is("csplit: error: '100': line number out of range");
+        .stderr_is("csplit: '100': line number out of range");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("there should be splits created")
@@ -1036,7 +1036,7 @@ fn test_linenum_out_of_range1() {
     ucmd.args(&["numbers50.txt", "100", "-k"])
         .fails()
         .stdout_is("141\n")
-        .stderr_is("csplit: error: '100': line number out of range");
+        .stderr_is("csplit: '100': line number out of range");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("there should be splits created")
@@ -1051,7 +1051,7 @@ fn test_linenum_out_of_range2() {
     ucmd.args(&["numbers50.txt", "10", "100"])
         .fails()
         .stdout_is("18\n123\n")
-        .stderr_is("csplit: error: '100': line number out of range");
+        .stderr_is("csplit: '100': line number out of range");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("there should be splits created")
@@ -1062,7 +1062,7 @@ fn test_linenum_out_of_range2() {
     ucmd.args(&["numbers50.txt", "10", "100", "-k"])
         .fails()
         .stdout_is("18\n123\n")
-        .stderr_is("csplit: error: '100': line number out of range");
+        .stderr_is("csplit: '100': line number out of range");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("there should be splits created")
@@ -1078,7 +1078,7 @@ fn test_linenum_out_of_range3() {
     ucmd.args(&["numbers50.txt", "40", "{2}"])
         .fails()
         .stdout_is("108\n33\n")
-        .stderr_is("csplit: error: '40': line number out of range on repetition 1");
+        .stderr_is("csplit: '40': line number out of range on repetition 1");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("there should be splits created")
@@ -1089,7 +1089,7 @@ fn test_linenum_out_of_range3() {
     ucmd.args(&["numbers50.txt", "40", "{2}", "-k"])
         .fails()
         .stdout_is("108\n33\n")
-        .stderr_is("csplit: error: '40': line number out of range on repetition 1");
+        .stderr_is("csplit: '40': line number out of range on repetition 1");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("there should be splits created")
@@ -1105,7 +1105,7 @@ fn test_linenum_out_of_range4() {
     ucmd.args(&["numbers50.txt", "40", "{*}"])
         .fails()
         .stdout_is("108\n33\n")
-        .stderr_is("csplit: error: '40': line number out of range on repetition 1");
+        .stderr_is("csplit: '40': line number out of range on repetition 1");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("there should be splits created")
@@ -1116,7 +1116,7 @@ fn test_linenum_out_of_range4() {
     ucmd.args(&["numbers50.txt", "40", "{*}", "-k"])
         .fails()
         .stdout_is("108\n33\n")
-        .stderr_is("csplit: error: '40': line number out of range on repetition 1");
+        .stderr_is("csplit: '40': line number out of range on repetition 1");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("there should be splits created")
@@ -1132,7 +1132,7 @@ fn test_skip_to_match_negative_offset_before_a_match() {
     ucmd.args(&["numbers50.txt", "/20/-10", "/15/"])
         .fails()
         .stdout_is("18\n123\n")
-        .stderr_is("csplit: error: '/15/': match not found");
+        .stderr_is("csplit: '/15/': match not found");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("there should be splits created")
@@ -1177,7 +1177,7 @@ fn test_corner_case2() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "/10/-5", "/10/"])
         .fails()
-        .stderr_is("csplit: error: '/10/': match not found")
+        .stderr_is("csplit: '/10/': match not found")
         .stdout_is("8\n133\n");
 
     let count = glob(&at.plus_as_string("xx*"))
@@ -1191,7 +1191,7 @@ fn test_corner_case3() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "/15/-3", "14", "/15/"])
         .fails()
-        .stderr_is("csplit: error: '/15/': match not found")
+        .stderr_is("csplit: '/15/': match not found")
         .stdout_is("24\n6\n111\n");
 
     let count = glob(&at.plus_as_string("xx*"))
@@ -1223,7 +1223,7 @@ fn test_up_to_match_context_underflow() {
     ucmd.args(&["numbers50.txt", "/5/-10"])
         .fails()
         .stdout_is("0\n141\n")
-        .stderr_is("csplit: error: '/5/-10': line number out of range");
+        .stderr_is("csplit: '/5/-10': line number out of range");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
@@ -1234,7 +1234,7 @@ fn test_up_to_match_context_underflow() {
     ucmd.args(&["numbers50.txt", "/5/-10", "-k"])
         .fails()
         .stdout_is("0\n141\n")
-        .stderr_is("csplit: error: '/5/-10': line number out of range");
+        .stderr_is("csplit: '/5/-10': line number out of range");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
@@ -1251,7 +1251,7 @@ fn test_linenum_range_with_up_to_match1() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "10", "/12/-5"])
         .fails()
-        .stderr_is("csplit: error: '/12/-5': line number out of range")
+        .stderr_is("csplit: '/12/-5': line number out of range")
         .stdout_is("18\n0\n123\n");
 
     let count = glob(&at.plus_as_string("xx*"))
@@ -1262,7 +1262,7 @@ fn test_linenum_range_with_up_to_match1() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "10", "/12/-5", "-k"])
         .fails()
-        .stderr_is("csplit: error: '/12/-5': line number out of range")
+        .stderr_is("csplit: '/12/-5': line number out of range")
         .stdout_is("18\n0\n123\n");
 
     let count = glob(&at.plus_as_string("xx*"))
@@ -1281,7 +1281,7 @@ fn test_linenum_range_with_up_to_match2() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "10", "/12/-15"])
         .fails()
-        .stderr_is("csplit: error: '/12/-15': line number out of range")
+        .stderr_is("csplit: '/12/-15': line number out of range")
         .stdout_is("18\n0\n123\n");
 
     let count = glob(&at.plus_as_string("xx*"))
@@ -1292,7 +1292,7 @@ fn test_linenum_range_with_up_to_match2() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "10", "/12/-15", "-k"])
         .fails()
-        .stderr_is("csplit: error: '/12/-15': line number out of range")
+        .stderr_is("csplit: '/12/-15': line number out of range")
         .stdout_is("18\n0\n123\n");
 
     let count = glob(&at.plus_as_string("xx*"))
@@ -1310,7 +1310,7 @@ fn test_linenum_range_with_up_to_match3() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "10", "/10/", "-k"])
         .fails()
-        .stderr_is("csplit: error: '/10/': match not found")
+        .stderr_is("csplit: '/10/': match not found")
         .stdout_is("18\n123\n");
 
     let count = glob(&at.plus_as_string("xx*"))

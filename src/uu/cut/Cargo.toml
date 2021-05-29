@@ -18,6 +18,8 @@ path = "src/cut.rs"
 clap = "2.33"
 uucore = { version=">=0.0.8", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
+memchr = "2"
+bstr = "0.2"
 
 [[bin]]
 name = "cut"
