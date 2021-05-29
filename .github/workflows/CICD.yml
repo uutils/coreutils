@@ -614,3 +614,20 @@ jobs:
         flags: ${{ steps.vars.outputs.CODECOV_FLAGS }}
         name: codecov-umbrella
         fail_ci_if_error: false
+  spellcheck:
+    name: Spell Check
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      matrix:
+        job:
+          - { os: ubuntu-latest }
+    steps:
+    - uses: actions/checkout@v1
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        sudo apt-get -y update ; sudo apt-get -y install npm ; sudo npm install cspell -g;
+    - name: Run `cspell`
+      shell: bash
+      run: |
+        cspell --config .vscode/cSpell.json --no-summary --no-progress $( git ls-files | grep "\.\(rs\|md\)" ) | sed "s/\(.*\):\(.*\):\(.*\) - \(.*\)/::warning file=\1,line=\2,col=\3::cspell: \4/" || true
