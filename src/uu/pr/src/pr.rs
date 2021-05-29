@@ -12,7 +12,7 @@ extern crate quick_error;
 use chrono::offset::Local;
 use chrono::DateTime;
 use getopts::{HasArg, Occur};
-use getopts::{Matches, Options};
+use getopts::Matches;
 use itertools::structs::KMergeBy;
 use itertools::{GroupBy, Itertools};
 use quick_error::ResultExt;
@@ -35,31 +35,34 @@ static LINES_PER_PAGE: usize = 66;
 static LINES_PER_PAGE_FOR_FORM_FEED: usize = 63;
 static HEADER_LINES_PER_PAGE: usize = 5;
 static TRAILER_LINES_PER_PAGE: usize = 5;
-static STRING_HEADER_OPTION: &str = "h";
-static DOUBLE_SPACE_OPTION: &str = "d";
-static NUMBERING_MODE_OPTION: &str = "n";
-static FIRST_LINE_NUMBER_OPTION: &str = "N";
-static PAGE_RANGE_OPTION: &str = "pages";
-static NO_HEADER_TRAILER_OPTION: &str = "t";
-static PAGE_LENGTH_OPTION: &str = "l";
-static SUPPRESS_PRINTING_ERROR: &str = "r";
-static FORM_FEED_OPTION: &str = "F";
-static FORM_FEED_OPTION_SMALL: &str = "f";
-static COLUMN_WIDTH_OPTION: &str = "w";
-static PAGE_WIDTH_OPTION: &str = "W";
-static ACROSS_OPTION: &str = "a";
-static COLUMN_OPTION: &str = "column";
-static COLUMN_CHAR_SEPARATOR_OPTION: &str = "s";
-static COLUMN_STRING_SEPARATOR_OPTION: &str = "S";
-static MERGE_FILES_PRINT: &str = "m";
-static OFFSET_SPACES_OPTION: &str = "o";
-static JOIN_LINES_OPTION: &str = "J";
 static FILE_STDIN: &str = "-";
 static READ_BUFFER_SIZE: usize = 1024 * 64;
 static DEFAULT_COLUMN_WIDTH: usize = 72;
 static DEFAULT_COLUMN_WIDTH_WITH_S_OPTION: usize = 512;
 static DEFAULT_COLUMN_SEPARATOR: &char = &TAB;
 static FF: u8 = 0x0C as u8;
+
+mod options {
+    pub static STRING_HEADER_OPTION: &str = "h";
+    pub static DOUBLE_SPACE_OPTION: &str = "d";
+    pub static NUMBERING_MODE_OPTION: &str = "n";
+    pub static FIRST_LINE_NUMBER_OPTION: &str = "N";
+    pub static PAGE_RANGE_OPTION: &str = "pages";
+    pub static NO_HEADER_TRAILER_OPTION: &str = "t";
+    pub static PAGE_LENGTH_OPTION: &str = "l";
+    pub static SUPPRESS_PRINTING_ERROR: &str = "r";
+    pub static FORM_FEED_OPTION: &str = "F";
+    pub static FORM_FEED_OPTION_SMALL: &str = "f";
+    pub static COLUMN_WIDTH_OPTION: &str = "w";
+    pub static PAGE_WIDTH_OPTION: &str = "W";
+    pub static ACROSS_OPTION: &str = "a";
+    pub static COLUMN_OPTION: &str = "column";
+    pub static COLUMN_CHAR_SEPARATOR_OPTION: &str = "s";
+    pub static COLUMN_STRING_SEPARATOR_OPTION: &str = "S";
+    pub static MERGE_FILES_PRINT: &str = "m";
+    pub static OFFSET_SPACES_OPTION: &str = "o";
+    pub static JOIN_LINES_OPTION: &str = "J";
+}
 
 struct OutputOptions {
     /// Line numbering mode
@@ -184,7 +187,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     opts.opt(
         "",
-        PAGE_RANGE_OPTION,
+        options::PAGE_RANGE_OPTION,
         "Begin and stop printing with page FIRST_PAGE[:LAST_PAGE]",
         "FIRST_PAGE[:LAST_PAGE]",
         HasArg::Yes,
@@ -192,7 +195,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     );
 
     opts.opt(
-        STRING_HEADER_OPTION,
+        options::STRING_HEADER_OPTION,
         "header",
         "Use the string header to replace the file name \
          in the header line.",
@@ -202,7 +205,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     );
 
     opts.opt(
-        DOUBLE_SPACE_OPTION,
+        options::DOUBLE_SPACE_OPTION,
         "double-space",
         "Produce output that is double spaced. An extra <newline> character is output following every <newline>
            found in the input.",
@@ -212,7 +215,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     );
 
     opts.opt(
-        NUMBERING_MODE_OPTION,
+        options::NUMBERING_MODE_OPTION,
         "number-lines",
         "Provide width digit line numbering.  The default for width, if not specified, is 5.  The number occupies
            the first width column positions of each text column or each line of -m output.  If char (any nondigit
@@ -224,7 +227,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     );
 
     opts.opt(
-        FIRST_LINE_NUMBER_OPTION,
+        options::FIRST_LINE_NUMBER_OPTION,
         "first-line-number",
         "start counting with NUMBER at 1st line of first page printed",
         "NUMBER",
@@ -233,7 +236,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     );
 
     opts.opt(
-        NO_HEADER_TRAILER_OPTION,
+        options::NO_HEADER_TRAILER_OPTION,
         "omit-header",
         "Write neither the five-line identifying header nor the five-line trailer usually supplied for  each  page.  Quit
               writing after the last line of each file without spacing to the end of the page.",
@@ -243,7 +246,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     );
 
     opts.opt(
-        PAGE_LENGTH_OPTION,
+        options::PAGE_LENGTH_OPTION,
         "length",
         "Override the 66-line default (default number of lines of text 56, and with -F 63) and reset the page length to lines.  If lines is not greater than the sum  of  both
               the  header  and trailer depths (in lines), the pr utility shall suppress both the header and trailer, as if the
@@ -254,7 +257,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     );
 
     opts.opt(
-        SUPPRESS_PRINTING_ERROR,
+        options::SUPPRESS_PRINTING_ERROR,
         "no-file-warnings",
         "omit warning when a file cannot be opened",
         "",
@@ -263,7 +266,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     );
 
     opts.opt(
-        FORM_FEED_OPTION,
+        options::FORM_FEED_OPTION,
         "form-feed",
         "Use a <form-feed> for new pages, instead of the default behavior that uses a sequence of <newline>s.",
         "",
@@ -271,7 +274,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         Occur::Optional,
     );
     opts.opt(
-        FORM_FEED_OPTION_SMALL,
+        options::FORM_FEED_OPTION_SMALL,
         "form-feed",
         "Same as -F but pause before beginning the first page if standard output is a
            terminal.",
@@ -282,7 +285,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     opts.opt(
         "",
-        COLUMN_OPTION,
+        options::COLUMN_OPTION,
         "Produce multi-column output that is arranged in column columns (the default shall be 1) and is written down each
               column  in  the order in which the text is received from the input file. This option should not be used with -m.
               The options -e and -i shall be assumed for multiple text-column output.  Whether or not text  columns  are  pro‐
@@ -294,7 +297,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     );
 
     opts.opt(
-        COLUMN_WIDTH_OPTION,
+        options::COLUMN_WIDTH_OPTION,
         "width",
         "Set  the  width  of the line to width column positions for multiple text-column output only. If the -w option is
               not specified and the -s option is not specified, the default width shall be 72. If the -w option is not  speci‐
@@ -305,7 +308,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     );
 
     opts.opt(
-        PAGE_WIDTH_OPTION,
+        options::PAGE_WIDTH_OPTION,
         "page-width",
         "set page width to PAGE_WIDTH (72) characters always,
         truncate lines, except -J option is set, no interference
@@ -316,7 +319,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     );
 
     opts.opt(
-        ACROSS_OPTION,
+        options::ACROSS_OPTION,
         "across",
         "Modify the effect of the - column option so that the columns are filled across the page in a  round-robin  order
               (for example, when column is 2, the first input line heads column 1, the second heads column 2, the third is the
@@ -327,7 +330,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     );
 
     opts.opt(
-        COLUMN_CHAR_SEPARATOR_OPTION,
+        options::COLUMN_CHAR_SEPARATOR_OPTION,
         "separator",
         "Separate text columns by the single character char instead of by the appropriate number of <space>s
            (default for char is the <tab> character).",
@@ -337,7 +340,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     );
 
     opts.opt(
-        COLUMN_STRING_SEPARATOR_OPTION,
+        options::COLUMN_STRING_SEPARATOR_OPTION,
         "sep-string",
         "separate columns by STRING,
         without -S: Default separator <TAB> with -J and <space>
@@ -348,7 +351,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     );
 
     opts.opt(
-        MERGE_FILES_PRINT,
+        options::MERGE_FILES_PRINT,
         "merge",
         "Merge files. Standard output shall be formatted so the pr utility writes one line from each file specified by  a
               file  operand, side by side into text columns of equal fixed widths, in terms of the number of column positions.
@@ -359,7 +362,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     );
 
     opts.opt(
-        OFFSET_SPACES_OPTION,
+        options::OFFSET_SPACES_OPTION,
         "indent",
         "Each  line of output shall be preceded by offset <space>s. If the -o option is not specified, the default offset
               shall be zero. The space taken is in addition to the output line width (see the -w option below).",
@@ -369,7 +372,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     );
 
     opts.opt(
-        JOIN_LINES_OPTION,
+        options::JOIN_LINES_OPTION,
         "join-lines",
         "merge full lines, turns off -W line truncation, no column
     alignment, --sep-string[=STRING] sets separators",
@@ -403,7 +406,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         return print_usage(&mut opts, &matches);
     }
 
-    let file_groups: Vec<Vec<String>> = if matches.opt_present(MERGE_FILES_PRINT) {
+    let file_groups: Vec<Vec<String>> = if matches.opt_present(options::MERGE_FILES_PRINT) {
         vec![files]
     } else {
         files.into_iter().map(|i| vec![i]).collect()
@@ -477,12 +480,12 @@ fn recreate_arguments(args: &Vec<String>) -> Vec<String> {
 }
 
 fn print_error(matches: &Matches, err: PrError) {
-    if !matches.opt_present(SUPPRESS_PRINTING_ERROR) {
+    if !matches.opt_present(options::SUPPRESS_PRINTING_ERROR) {
         eprintln!("{}", err);
     }
 }
 
-fn print_usage(opts: &mut Options, matches: &Matches) -> i32 {
+fn print_usage(opts: &mut getopts::Options, matches: &Matches) -> i32 {
     println!("{} {} -- print files", NAME, VERSION);
     println!();
     println!(
@@ -517,7 +520,7 @@ fn print_usage(opts: &mut Options, matches: &Matches) -> i32 {
     println!("    +page \t\tBegin output at page number page of the formatted input.");
     println!(
         "    -column \t\tProduce multi-column output. Refer --{}",
-        COLUMN_OPTION
+        options::COLUMN_OPTION
     );
     if matches.free.is_empty() {
         return 1;
@@ -546,30 +549,30 @@ fn build_options(
     free_args: String,
 ) -> Result<OutputOptions, PrError> {
     let form_feed_used =
-        matches.opt_present(FORM_FEED_OPTION) || matches.opt_present(FORM_FEED_OPTION_SMALL);
+        matches.opt_present(options::FORM_FEED_OPTION) || matches.opt_present(options::FORM_FEED_OPTION_SMALL);
 
-    let is_merge_mode: bool = matches.opt_present(MERGE_FILES_PRINT);
+    let is_merge_mode: bool = matches.opt_present(options::MERGE_FILES_PRINT);
 
-    if is_merge_mode && matches.opt_present(COLUMN_OPTION) {
+    if is_merge_mode && matches.opt_present(options::COLUMN_OPTION) {
         let err_msg: String =
             String::from("cannot specify number of columns when printing in parallel");
         return Err(PrError::EncounteredErrors(err_msg));
     }
 
-    if is_merge_mode && matches.opt_present(ACROSS_OPTION) {
+    if is_merge_mode && matches.opt_present(options::ACROSS_OPTION) {
         let err_msg: String =
             String::from("cannot specify both printing across and printing in parallel");
         return Err(PrError::EncounteredErrors(err_msg));
     }
 
-    let merge_files_print: Option<usize> = if matches.opt_present(MERGE_FILES_PRINT) {
+    let merge_files_print: Option<usize> = if matches.opt_present(options::MERGE_FILES_PRINT) {
         Some(paths.len())
     } else {
         None
     };
 
     let header: String = matches
-        .opt_str(STRING_HEADER_OPTION)
+        .opt_str(options::STRING_HEADER_OPTION)
         .unwrap_or(if is_merge_mode {
             String::new()
         } else {
@@ -582,10 +585,10 @@ fn build_options(
 
     let default_first_number: usize = NumberingMode::default().first_number;
     let first_number: usize =
-        parse_usize(matches, FIRST_LINE_NUMBER_OPTION).unwrap_or(Ok(default_first_number))?;
+        parse_usize(matches, options::FIRST_LINE_NUMBER_OPTION).unwrap_or(Ok(default_first_number))?;
 
     let number: Option<NumberingMode> = matches
-        .opt_str(NUMBERING_MODE_OPTION)
+        .opt_str(options::NUMBERING_MODE_OPTION)
         .map(|i| {
             let parse_result: Result<usize, ParseIntError> = i.parse::<usize>();
 
@@ -610,14 +613,14 @@ fn build_options(
             }
         })
         .or_else(|| {
-            if matches.opt_present(NUMBERING_MODE_OPTION) {
+            if matches.opt_present(options::NUMBERING_MODE_OPTION) {
                 return Some(NumberingMode::default());
             }
 
             None
         });
 
-    let double_space: bool = matches.opt_present(DOUBLE_SPACE_OPTION);
+    let double_space: bool = matches.opt_present(options::DOUBLE_SPACE_OPTION);
 
     let content_line_separator: String = if double_space {
         "\n".repeat(2)
@@ -662,14 +665,14 @@ fn build_options(
     };
 
     let invalid_pages_map = |i: String| {
-        let unparsed_value: String = matches.opt_str(PAGE_RANGE_OPTION).unwrap();
+        let unparsed_value: String = matches.opt_str(options::PAGE_RANGE_OPTION).unwrap();
         i.parse::<usize>().map_err(|_e| {
             PrError::EncounteredErrors(format!("invalid --pages argument '{}'", unparsed_value))
         })
     };
 
     let start_page: usize = match matches
-        .opt_str(PAGE_RANGE_OPTION)
+        .opt_str(options::PAGE_RANGE_OPTION)
         .map(|i| {
             let x: Vec<&str> = i.split(':').collect();
             x[0].to_string()
@@ -681,7 +684,7 @@ fn build_options(
     };
 
     let end_page: Option<usize> = match matches
-        .opt_str(PAGE_RANGE_OPTION)
+        .opt_str(options::PAGE_RANGE_OPTION)
         .filter(|i: &String| i.contains(':'))
         .map(|i: String| {
             let x: Vec<&str> = i.split(':').collect();
@@ -708,12 +711,12 @@ fn build_options(
     };
 
     let page_length: usize =
-        parse_usize(matches, PAGE_LENGTH_OPTION).unwrap_or(Ok(default_lines_per_page))?;
+        parse_usize(matches, options::PAGE_LENGTH_OPTION).unwrap_or(Ok(default_lines_per_page))?;
 
     let page_length_le_ht: bool = page_length < (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE);
 
     let display_header_and_trailer: bool =
-        !(page_length_le_ht) && !matches.opt_present(NO_HEADER_TRAILER_OPTION);
+        !(page_length_le_ht) && !matches.opt_present(options::NO_HEADER_TRAILER_OPTION);
 
     let content_lines_per_page: usize = if page_length_le_ht {
         page_length
@@ -721,23 +724,23 @@ fn build_options(
         page_length - (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE)
     };
 
-    let page_separator_char: String = if matches.opt_present(FORM_FEED_OPTION) {
+    let page_separator_char: String = if matches.opt_present(options::FORM_FEED_OPTION) {
         let bytes = vec![FF];
         String::from_utf8(bytes).unwrap()
     } else {
         "\n".to_string()
     };
 
-    let across_mode: bool = matches.opt_present(ACROSS_OPTION);
+    let across_mode: bool = matches.opt_present(options::ACROSS_OPTION);
 
-    let column_separator: String = match matches.opt_str(COLUMN_STRING_SEPARATOR_OPTION) {
+    let column_separator: String = match matches.opt_str(options::COLUMN_STRING_SEPARATOR_OPTION) {
         Some(x) => Some(x),
-        None => matches.opt_str(COLUMN_CHAR_SEPARATOR_OPTION),
+        None => matches.opt_str(options::COLUMN_CHAR_SEPARATOR_OPTION),
     }
     .unwrap_or(DEFAULT_COLUMN_SEPARATOR.to_string());
 
-    let default_column_width = if matches.opt_present(COLUMN_WIDTH_OPTION)
-        && matches.opt_present(COLUMN_CHAR_SEPARATOR_OPTION)
+    let default_column_width = if matches.opt_present(options::COLUMN_WIDTH_OPTION)
+        && matches.opt_present(options::COLUMN_CHAR_SEPARATOR_OPTION)
     {
         DEFAULT_COLUMN_WIDTH_WITH_S_OPTION
     } else {
@@ -745,12 +748,12 @@ fn build_options(
     };
 
     let column_width: usize =
-        parse_usize(matches, COLUMN_WIDTH_OPTION).unwrap_or(Ok(default_column_width))?;
+        parse_usize(matches, options::COLUMN_WIDTH_OPTION).unwrap_or(Ok(default_column_width))?;
 
-    let page_width: Option<usize> = if matches.opt_present(JOIN_LINES_OPTION) {
+    let page_width: Option<usize> = if matches.opt_present(options::JOIN_LINES_OPTION) {
         None
     } else {
-        match parse_usize(matches, PAGE_WIDTH_OPTION) {
+        match parse_usize(matches, options::PAGE_WIDTH_OPTION) {
             Some(res) => Some(res?),
             None => None,
         }
@@ -770,7 +773,7 @@ fn build_options(
 
     // --column has more priority than -column
 
-    let column_option_value: Option<usize> = match parse_usize(matches, COLUMN_OPTION) {
+    let column_option_value: Option<usize> = match parse_usize(matches, options::COLUMN_OPTION) {
         Some(res) => Some(res?),
         _ => start_column_option,
     };
@@ -786,8 +789,8 @@ fn build_options(
     };
 
     let offset_spaces: String =
-        " ".repeat(parse_usize(matches, OFFSET_SPACES_OPTION).unwrap_or(Ok(0))?);
-    let join_lines: bool = matches.opt_present(JOIN_LINES_OPTION);
+        " ".repeat(parse_usize(matches, options::OFFSET_SPACES_OPTION).unwrap_or(Ok(0))?);
+    let join_lines: bool = matches.opt_present(options::JOIN_LINES_OPTION);
 
     let col_sep_for_printing = column_mode_options
         .as_ref()
