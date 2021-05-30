@@ -323,6 +323,7 @@ $ make UTILS='UTILITY_1 UTILITY_2' RUNTEST_ARGS='-v' busytest
 ![Evolution over time](https://github.com/uutils/coreutils-tracking/blob/main/gnu-results.png?raw=true)
 
 To run locally:
+
 ```bash
 $ bash util/build-gnu.sh
 $ bash util/run-gnu-test.sh
