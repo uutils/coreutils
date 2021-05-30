@@ -108,6 +108,7 @@ fn remove_dir(path: &Path, ignore: bool, verbose: bool) -> Result<(), i32> {
     let mut read_dir = match fs::read_dir(path) {
         Ok(m) => m,
         Err(e) if e.raw_os_error() == Some(ENOTDIR) => {
+        // To match the GNU output
             show_error!("failed to remove '{}': Not a directory", path.display());
             return Err(1);
         }
