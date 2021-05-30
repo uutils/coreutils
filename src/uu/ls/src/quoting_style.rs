@@ -304,6 +304,8 @@ pub(super) fn escape_name(name: &str, style: &QuotingStyle) -> String {
 
 #[cfg(test)]
 mod tests {
+    // spell-checker:ignore (tests/words) one\'two one'two
+
     use crate::quoting_style::{escape_name, Quotes, QuotingStyle};
     fn get_style(s: &str) -> QuotingStyle {
         match s {

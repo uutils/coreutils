@@ -83,7 +83,7 @@ pub(crate) fn version_cmp(a: &Path, b: &Path) -> Ordering {
                 Ordering::Equal => {}
                 x => return x,
             },
-            // Otherise, we compare the options (because None < Some(_))
+            // Otherwise, we compare the options (because None < Some(_))
             (a_opt, b_opt) => match a_opt.cmp(&b_opt) {
                 // If they are completely equal except for leading zeroes, we use the leading zeroes.
                 Ordering::Equal => return leading_zeroes,
@@ -203,6 +203,7 @@ mod tests {
         );
 
         assert_eq!(
+            // spell-checker:disable-next-line
             version_cmp(&PathBuf::from("file1000"), &PathBuf::from("fileapple")),
             Ordering::Less,
             "Numbers in the middle of the name are sorted before other characters"
