@@ -9,7 +9,7 @@ const BUF_SIZE: usize = 1024 * 16;
 
 /// This function is called from `write_fast()` on Linux and Android. The
 /// function `splice()` is used to move data between two file descriptors
-/// without copying between kernel- and userspace. This results in a large
+/// without copying between kernel and user spaces. This results in a large
 /// speedup.
 ///
 /// The `bool` in the result value indicates if we need to fall back to normal
