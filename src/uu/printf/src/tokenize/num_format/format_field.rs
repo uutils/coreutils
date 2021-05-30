@@ -1,4 +1,4 @@
-// spell-checker:ignore (ToDO) conv intf strf floatf scif charf fieldtype vals subparser unescaping submodule Cninety inprefix hexifying glibc floatnum rten rhex arrnum fprim interp
+// spell-checker:ignore (vars) charf decf floatf intf scif strf Cninety
 
 //! Primitives used by Sub Tokenizer
 //! and num_format modules

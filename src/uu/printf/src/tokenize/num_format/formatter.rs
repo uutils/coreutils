@@ -1,4 +1,3 @@
-// spell-checker:ignore (ToDO) inprefix for conv
 
 //! Primitives used by num_format and sub_modules.
 //! never dealt with above (e.g. Sub Tokenizer never uses these)
@@ -41,7 +40,7 @@ pub enum Base {
 
 // information from the beginning of a numeric argument
 // the precedes the beginning of a numeric value
-pub struct InPrefix {
+pub struct InitialPrefix {
     pub radix_in: Base,
     pub sign: i8,
     pub offset: usize,
@@ -54,7 +53,7 @@ pub trait Formatter {
     fn get_primitive(
         &self,
         field: &FormatField,
-        inprefix: &InPrefix,
+        in_prefix: &InitialPrefix,
         str_in: &str,
     ) -> Option<FormatPrimitive>;
     // return a string from a FormatPrimitive,
