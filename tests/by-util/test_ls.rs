@@ -899,6 +899,12 @@ fn test_ls_recursive() {
 
     scene.ucmd().arg("a").succeeds();
     scene.ucmd().arg("a/a").succeeds();
+    scene
+        .ucmd()
+        .arg("z")
+        .arg("-R")
+        .succeeds()
+        .stdout_contains(&"z:");
     let result = scene
         .ucmd()
         .arg("--color=never")
