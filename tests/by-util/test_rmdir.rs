@@ -108,3 +108,19 @@ fn test_rmdir_ignore_nonempty_directory_with_parents() {
 
     assert!(at.dir_exists(dir));
 }
+
+#[test]
+fn test_rmdir_remove_symlink_match_gnu_error() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file = "file";
+    let fl = "fl";
+    at.touch(file);
+    assert!(at.file_exists(file));
+    at.symlink_file(file, fl);
+    assert!(at.file_exists(fl));
+
+    ucmd.arg("fl/")
+        .fails()
+        .stderr_is("rmdir: failed to remove 'fl/': Not a directory");
+}
