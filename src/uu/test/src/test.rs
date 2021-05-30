@@ -6,7 +6,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) retval paren prec subprec cond
+// spell-checker:ignore (vars) FiletestOp StrlenOp
 
 mod parser;
 
@@ -122,7 +122,7 @@ fn eval(stack: &mut Vec<Symbol>) -> Result<bool, String> {
     }
 }
 
-fn integers(a: &OsStr, b: &OsStr, cond: &OsStr) -> Result<bool, String> {
+fn integers(a: &OsStr, b: &OsStr, op: &OsStr) -> Result<bool, String> {
     let format_err = |value| format!("invalid integer ‘{}’", value);
 
     let a = a.to_string_lossy();
@@ -131,15 +131,15 @@ fn integers(a: &OsStr, b: &OsStr, cond: &OsStr) -> Result<bool, String> {
     let b = b.to_string_lossy();
     let b: i64 = b.parse().map_err(|_| format_err(b))?;
 
-    let cond = cond.to_string_lossy();
-    Ok(match cond.as_ref() {
+    let operator = op.to_string_lossy();
+    Ok(match operator.as_ref() {
         "-eq" => a == b,
         "-ne" => a != b,
         "-gt" => a > b,
         "-ge" => a >= b,
         "-lt" => a < b,
         "-le" => a <= b,
-        _ => return Err(format!("unknown operator ‘{}’", cond)),
+        _ => return Err(format!("unknown operator ‘{}’", operator)),
     })
 }
 
@@ -177,7 +177,7 @@ enum PathCondition {
 }
 
 #[cfg(not(windows))]
-fn path(path: &OsStr, cond: PathCondition) -> bool {
+fn path(path: &OsStr, condition: PathCondition) -> bool {
     use std::fs::{self, Metadata};
     use std::os::unix::fs::{FileTypeExt, MetadataExt};
 
@@ -208,7 +208,7 @@ fn path(path: &OsStr, cond: PathCondition) -> bool {
         }
     };
 
-    let metadata = if cond == PathCondition::SymLink {
+    let metadata = if condition == PathCondition::SymLink {
         fs::symlink_metadata(path)
     } else {
         fs::metadata(path)
@@ -223,7 +223,7 @@ fn path(path: &OsStr, cond: PathCondition) -> bool {
 
     let file_type = metadata.file_type();
 
-    match cond {
+    match condition {
         PathCondition::BlockSpecial => file_type.is_block_device(),
         PathCondition::CharacterSpecial => file_type.is_char_device(),
         PathCondition::Directory => file_type.is_dir(),
@@ -242,7 +242,7 @@ fn path(path: &OsStr, cond: PathCondition) -> bool {
 }
 
 #[cfg(windows)]
-fn path(path: &OsStr, cond: PathCondition) -> bool {
+fn path(path: &OsStr, condition: PathCondition) -> bool {
     use std::fs::metadata;
 
     let stat = match metadata(path) {
@@ -250,7 +250,7 @@ fn path(path: &OsStr, cond: PathCondition) -> bool {
         _ => return false,
     };
 
-    match cond {
+    match condition {
         PathCondition::BlockSpecial => false,
         PathCondition::CharacterSpecial => false,
         PathCondition::Directory => stat.is_dir(),
