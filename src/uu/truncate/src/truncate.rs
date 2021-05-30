@@ -40,13 +40,13 @@ impl TruncateMode {
     /// ```
     fn to_size(&self, fsize: u64) -> u64 {
         match self {
-            TruncateMode::Absolute(modsize) => *modsize,
-            TruncateMode::Extend(modsize) => fsize + modsize,
-            TruncateMode::Reduce(modsize) => fsize - modsize,
-            TruncateMode::AtMost(modsize) => fsize.min(*modsize),
-            TruncateMode::AtLeast(modsize) => fsize.max(*modsize),
-            TruncateMode::RoundDown(modsize) => fsize - fsize % modsize,
-            TruncateMode::RoundUp(modsize) => fsize + fsize % modsize,
+            TruncateMode::Absolute(size) => *size,
+            TruncateMode::Extend(size) => fsize + size,
+            TruncateMode::Reduce(size) => fsize - size,
+            TruncateMode::AtMost(size) => fsize.min(*size),
+            TruncateMode::AtLeast(size) => fsize.max(*size),
+            TruncateMode::RoundDown(size) => fsize - fsize % size,
+            TruncateMode::RoundUp(size) => fsize + fsize % size,
         }
     }
 }
