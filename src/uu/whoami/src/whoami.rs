@@ -7,8 +7,6 @@
 
 /* last synced with: whoami (GNU coreutils) 8.21 */
 
-// spell-checker:ignore (ToDO) getusername
-
 #[macro_use]
 extern crate clap;
 #[macro_use]
@@ -38,7 +36,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
 pub fn exec() {
     unsafe {
-        match platform::getusername() {
+        match platform::get_username() {
             Ok(username) => println!("{}", username),
             Err(err) => match err.raw_os_error() {
                 Some(0) | None => crash!(1, "failed to get username"),
