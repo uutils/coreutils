@@ -1,3 +1,5 @@
+// spell-checker:ignore (vars) zline zlines
+
 //! Iterate over zero-terminated lines.
 use std::io::BufRead;
 

@@ -7,7 +7,7 @@ pub enum ParseError {
     Overflow,
 }
 /// Parses obsolete syntax
-/// head -NUM[kmzv]
+/// head -NUM[kmzv] // spell-checker:disable-line
 pub fn parse_obsolete(src: &str) -> Option<Result<impl Iterator<Item = OsString>, ParseError>> {
     let mut chars = src.char_indices();
     if let Some((_, '-')) = chars.next() {
@@ -242,7 +242,7 @@ mod tests {
         assert_eq!(obsolete("-1mmk"), obsolete_result(&["-c", "1024"]));
         assert_eq!(obsolete("-1vz"), obsolete_result(&["-v", "-z", "-n", "1"]));
         assert_eq!(
-            obsolete("-1vzqvq"),
+            obsolete("-1vzqvq"), // spell-checker:disable-line
             obsolete_result(&["-q", "-z", "-n", "1"])
         );
         assert_eq!(obsolete("-1vzc"), obsolete_result(&["-v", "-z", "-c", "1"]));
@@ -257,7 +257,7 @@ mod tests {
         assert_eq!(obsolete("-5c5"), Some(Err(ParseError::Syntax)));
     }
     #[test]
-    fn test_parse_obsolete_nomatch() {
+    fn test_parse_obsolete_no_match() {
         assert_eq!(obsolete("-k"), None);
         assert_eq!(obsolete("asd"), None);
     }
