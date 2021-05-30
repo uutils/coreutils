@@ -1223,7 +1223,7 @@ fn list(locs: Vec<String>, config: Config) -> i32 {
 
     sort_entries(&mut dirs, &config);
     for dir in dirs {
-        if locs.len() > 1 {
+        if locs.len() > 1 || config.recursive {
             let _ = writeln!(out, "\n{}:", dir.p_buf.display());
         }
         enter_directory(&dir, &config, &mut out);
