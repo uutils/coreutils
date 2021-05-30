@@ -4,14 +4,14 @@ fn test_helper(file_name: &str, possible_args: &[&str]) {
     for args in possible_args {
         new_ucmd!()
             .arg(format!("{}.txt", file_name))
-            .args(&args.split(' ').collect::<Vec<&str>>())
+            .args(&args.split_whitespace().collect::<Vec<&str>>())
             .succeeds()
             .stdout_is_fixture(format!("{}.expected", file_name));
 
         new_ucmd!()
             .arg(format!("{}.txt", file_name))
             .arg("--debug")
-            .args(&args.split(' ').collect::<Vec<&str>>())
+            .args(&args.split_whitespace().collect::<Vec<&str>>())
             .succeeds()
             .stdout_is_fixture(format!("{}.expected.debug", file_name));
     }
@@ -288,7 +288,7 @@ fn test_dictionary_order() {
 
 #[test]
 fn test_dictionary_order2() {
-    for non_dictionary_order2_param in vec!["-d"] {
+    for non_dictionary_order2_param in &["-d"] {
         new_ucmd!()
             .pipe_in("a👦🏻aa	b\naaaa	b")
             .arg(non_dictionary_order2_param)
@@ -299,7 +299,7 @@ fn test_dictionary_order2() {
 
 #[test]
 fn test_non_printing_chars() {
-    for non_printing_chars_param in vec!["-i"] {
+    for non_printing_chars_param in &["-i"] {
         new_ucmd!()
             .pipe_in("a👦🏻aa\naaaa")
             .arg(non_printing_chars_param)
@@ -361,7 +361,7 @@ fn test_mixed_floats_ints_chars_numeric_stable() {
 
 #[test]
 fn test_numeric_floats_and_ints2() {
-    for numeric_sort_param in vec!["-n", "--numeric-sort"] {
+    for numeric_sort_param in &["-n", "--numeric-sort"] {
         let input = "1.444\n8.013\n1\n-8\n1.04\n-1";
         new_ucmd!()
             .arg(numeric_sort_param)
@@ -373,7 +373,7 @@ fn test_numeric_floats_and_ints2() {
 
 #[test]
 fn test_numeric_floats2() {
-    for numeric_sort_param in vec!["-n", "--numeric-sort"] {
+    for numeric_sort_param in &["-n", "--numeric-sort"] {
         let input = "1.444\n8.013\n1.58590\n-8.90880\n1.040000000\n-.05";
         new_ucmd!()
             .arg(numeric_sort_param)
@@ -426,7 +426,7 @@ fn test_default_unsorted_ints2() {
 
 #[test]
 fn test_numeric_unique_ints2() {
-    for numeric_unique_sort_param in vec!["-nu"] {
+    for numeric_unique_sort_param in &["-nu"] {
         let input = "9\n9\n8\n1\n";
         new_ucmd!()
             .arg(numeric_unique_sort_param)
@@ -471,7 +471,7 @@ fn test_keys_invalid_field() {
     new_ucmd!()
         .args(&["-k", "1."])
         .fails()
-        .stderr_only("sort: failed to parse character index for key `1.`: cannot parse integer from empty string");
+        .stderr_only("sort: failed to parse key `1.`: failed to parse character index ``: cannot parse integer from empty string");
 }
 
 #[test]
@@ -479,7 +479,7 @@ fn test_keys_invalid_field_option() {
     new_ucmd!()
         .args(&["-k", "1.1x"])
         .fails()
-        .stderr_only("sort: invalid option for key: `x`");
+        .stderr_only("sort: failed to parse key `1.1x`: invalid option: `x`");
 }
 
 #[test]
@@ -487,7 +487,7 @@ fn test_keys_invalid_field_zero() {
     new_ucmd!()
         .args(&["-k", "0.1"])
         .fails()
-        .stderr_only("sort: field index was 0");
+        .stderr_only("sort: failed to parse key `0.1`: field index can not be 0");
 }
 
 #[test]
@@ -495,7 +495,7 @@ fn test_keys_invalid_char_zero() {
     new_ucmd!()
         .args(&["-k", "1.0"])
         .fails()
-        .stderr_only("sort: invalid character index 0 in `1.0` for the start position of a field");
+        .stderr_only("sort: failed to parse key `1.0`: invalid character index 0 for the start position of a field");
 }
 
 #[test]
@@ -524,6 +524,11 @@ fn test_keys_with_options_blanks_start() {
             .succeeds()
             .stdout_only("dd  1 ff\ngg         2 cc\naa   3 cc\n");
     }
+}
+
+#[test]
+fn test_keys_blanks_with_char_idx() {
+    test_helper("keys_blanks", &["-k 1.2b"])
 }
 
 #[test]
@@ -572,6 +577,54 @@ aaaa
         .pipe_in(input)
         .succeeds()
         .stdout_only(input);
+}
+
+#[test]
+fn test_keys_negative_size_match() {
+    // If the end of a field is before its start, we should not crash.
+    // Debug output should report "no match for key" at the start position (i.e. the later position).
+    test_helper("keys_negative_size", &["-k 3,1"]);
+}
+
+#[test]
+fn test_keys_ignore_flag() {
+    test_helper("keys_ignore_flag", &["-k 1n -b"])
+}
+
+#[test]
+fn test_doesnt_inherit_key_settings() {
+    let input = " 1
+2
+   10
+";
+    new_ucmd!()
+        .args(&["-k", "1b", "-n"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(
+            " 1
+   10
+2
+",
+        );
+}
+
+#[test]
+fn test_inherits_key_settings() {
+    let input = " 1
+2
+   10
+";
+    new_ucmd!()
+        .args(&["-k", "1", "-n"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(
+            " 1
+2
+   10
+",
+        );
 }
 
 #[test]
@@ -695,10 +748,9 @@ fn test_dictionary_and_nonprinting_conflicts() {
                 .succeeds();
         }
         for conflicting_arg in &conflicting_args {
-            // FIXME: this should ideally fail.
             new_ucmd!()
                 .args(&["-k", &format!("1{},1{}", restricted_arg, conflicting_arg)])
-                .succeeds();
+                .fails();
         }
     }
 }
@@ -710,4 +762,23 @@ fn test_trailing_separator() {
         .pipe_in("aax\naaa\n")
         .succeeds()
         .stdout_is("aax\naaa\n");
+}
+
+#[test]
+fn test_nonexistent_file() {
+    new_ucmd!()
+        .arg("nonexistent.txt")
+        .fails()
+        .status_code(2)
+        .stderr_only(
+            #[cfg(not(windows))]
+            "sort: cannot read: \"nonexistent.txt\": No such file or directory (os error 2)",
+            #[cfg(windows)]
+            "sort: cannot read: \"nonexistent.txt\": The system cannot find the file specified. (os error 2)",
+        );
+}
+
+#[test]
+fn test_blanks() {
+    test_helper("blanks", &["-b", "--ignore-blanks"]);
 }

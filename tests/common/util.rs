@@ -1,7 +1,4 @@
 #![allow(dead_code)]
-
-#[cfg(not(windows))]
-use libc;
 use pretty_assertions::assert_eq;
 use std::env;
 #[cfg(not(windows))]
@@ -16,7 +13,6 @@ use std::os::windows::fs::{symlink_dir, symlink_file};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::rc::Rc;
-use std::str::from_utf8;
 use std::thread::sleep;
 use std::time::Duration;
 use tempfile::TempDir;
@@ -40,7 +36,7 @@ static NO_STDIN_MEANINGLESS: &str = "Setting this flag has no effect if there is
 /// Test if the program is running under CI
 pub fn is_ci() -> bool {
     std::env::var("CI")
-        .unwrap_or(String::from("false"))
+        .unwrap_or_else(|_| String::from("false"))
         .eq_ignore_ascii_case("true")
 }
 
@@ -62,54 +58,54 @@ pub struct CmdResult {
     /// see [`success`]
     success: bool,
     /// captured standard output after running the Command
-    stdout: String,
+    stdout: Vec<u8>,
     /// captured standard error after running the Command
-    stderr: String,
+    stderr: Vec<u8>,
 }
 
 impl CmdResult {
     /// Returns a reference to the program's standard output as a slice of bytes
     pub fn stdout(&self) -> &[u8] {
-        &self.stdout.as_bytes()
+        &self.stdout
     }
 
     /// Returns the program's standard output as a string slice
     pub fn stdout_str(&self) -> &str {
-        &self.stdout
+        std::str::from_utf8(&self.stdout).unwrap()
     }
 
     /// Returns the program's standard output as a string
     /// consumes self
     pub fn stdout_move_str(self) -> String {
-        self.stdout
+        String::from_utf8(self.stdout).unwrap()
     }
 
     /// Returns the program's standard output as a vec of bytes
     /// consumes self
     pub fn stdout_move_bytes(self) -> Vec<u8> {
-        Vec::from(self.stdout)
+        self.stdout
     }
 
     /// Returns a reference to the program's standard error as a slice of bytes
     pub fn stderr(&self) -> &[u8] {
-        &self.stderr.as_bytes()
+        &self.stderr
     }
 
     /// Returns the program's standard error as a string slice
     pub fn stderr_str(&self) -> &str {
-        &self.stderr
+        std::str::from_utf8(&self.stderr).unwrap()
     }
 
     /// Returns the program's standard error as a string
     /// consumes self
     pub fn stderr_move_str(self) -> String {
-        self.stderr
+        String::from_utf8(self.stderr).unwrap()
     }
 
     /// Returns the program's standard error as a vec of bytes
     /// consumes self
     pub fn stderr_move_bytes(self) -> Vec<u8> {
-        Vec::from(self.stderr)
+        self.stderr
     }
 
     /// Returns the program's exit code
@@ -202,21 +198,21 @@ impl CmdResult {
     /// passed in value, trailing whitespace are kept to force strict comparison (#1235)
     /// stdout_only is a better choice unless stderr may or will be non-empty
     pub fn stdout_is<T: AsRef<str>>(&self, msg: T) -> &CmdResult {
-        assert_eq!(self.stdout, String::from(msg.as_ref()));
+        assert_eq!(self.stdout_str(), String::from(msg.as_ref()));
         self
     }
 
     /// Like `stdout_is` but newlines are normalized to `\n`.
     pub fn normalized_newlines_stdout_is<T: AsRef<str>>(&self, msg: T) -> &CmdResult {
         let msg = msg.as_ref().replace("\r\n", "\n");
-        assert_eq!(self.stdout.replace("\r\n", "\n"), msg);
+        assert_eq!(self.stdout_str().replace("\r\n", "\n"), msg);
         self
     }
 
     /// asserts that the command resulted in stdout stream output,
     /// whose bytes equal those of the passed in slice
     pub fn stdout_is_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &CmdResult {
-        assert_eq!(self.stdout.as_bytes(), msg.as_ref());
+        assert_eq!(self.stdout, msg.as_ref());
         self
     }
 
@@ -231,7 +227,7 @@ impl CmdResult {
     /// stderr_only is a better choice unless stdout may or will be non-empty
     pub fn stderr_is<T: AsRef<str>>(&self, msg: T) -> &CmdResult {
         assert_eq!(
-            self.stderr.trim_end(),
+            self.stderr_str().trim_end(),
             String::from(msg.as_ref()).trim_end()
         );
         self
@@ -240,7 +236,7 @@ impl CmdResult {
     /// asserts that the command resulted in stderr stream output,
     /// whose bytes equal those of the passed in slice
     pub fn stderr_is_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &CmdResult {
-        assert_eq!(self.stderr.as_bytes(), msg.as_ref());
+        assert_eq!(self.stderr, msg.as_ref());
         self
     }
 
@@ -465,7 +461,7 @@ impl AtPath {
             .append(true)
             .open(self.plus(name))
             .unwrap();
-        f.write(contents.as_bytes())
+        f.write_all(contents.as_bytes())
             .unwrap_or_else(|e| panic!("Couldn't write {}: {}", name, e));
     }
 
@@ -778,7 +774,7 @@ impl UCommand {
         if self.has_run {
             panic!("{}", ALREADY_RUN);
         }
-        self.comm_string.push_str(" ");
+        self.comm_string.push(' ');
         self.comm_string
             .push_str(arg.as_ref().to_str().unwrap_or_default());
         self.raw.arg(arg.as_ref());
@@ -798,7 +794,7 @@ impl UCommand {
             .accept_any();
 
         for s in strings {
-            self.comm_string.push_str(" ");
+            self.comm_string.push(' ');
             self.comm_string.push_str(&s);
         }
 
@@ -854,9 +850,9 @@ impl UCommand {
         log_info("run", &self.comm_string);
         let mut child = self
             .raw
-            .stdin(self.stdin.take().unwrap_or_else(|| Stdio::piped()))
-            .stdout(self.stdout.take().unwrap_or_else(|| Stdio::piped()))
-            .stderr(self.stderr.take().unwrap_or_else(|| Stdio::piped()))
+            .stdin(self.stdin.take().unwrap_or_else(Stdio::piped))
+            .stdout(self.stdout.take().unwrap_or_else(Stdio::piped))
+            .stderr(self.stderr.take().unwrap_or_else(Stdio::piped))
             .spawn()
             .unwrap();
 
@@ -886,8 +882,8 @@ impl UCommand {
             tmpd: self.tmpd.clone(),
             code: prog.status.code(),
             success: prog.status.success(),
-            stdout: from_utf8(&prog.stdout).unwrap().to_string(),
-            stderr: from_utf8(&prog.stderr).unwrap().to_string(),
+            stdout: prog.stdout,
+            stderr: prog.stderr,
         }
     }
 
@@ -930,10 +926,7 @@ pub fn read_size(child: &mut Child, size: usize) -> String {
 }
 
 pub fn vec_of_size(n: usize) -> Vec<u8> {
-    let mut result = Vec::new();
-    for _ in 0..n {
-        result.push('a' as u8);
-    }
+    let result = vec![b'a'; n];
     assert_eq!(result.len(), n);
     result
 }

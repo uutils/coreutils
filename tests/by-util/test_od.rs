@@ -9,7 +9,7 @@ use std::io::Write;
 use std::path::Path;
 
 // octal dump of 'abcdefghijklmnopqrstuvwxyz\n'
-static ALPHA_OUT: &'static str = "
+static ALPHA_OUT: &str = "
         0000000 061141 062143 063145 064147 065151 066153 067155 070157
         0000020 071161 072163 073165 074167 075171 000012
         0000033
@@ -563,7 +563,7 @@ fn test_dec_offset() {
 #[test]
 fn test_no_offset() {
     let input = [0u8; 31];
-    const LINE: &'static str = " 00000000 00000000 00000000 00000000\n";
+    const LINE: &str = " 00000000 00000000 00000000 00000000\n";
     let expected_output = [LINE, LINE, LINE, LINE].join("");
 
     new_ucmd!()

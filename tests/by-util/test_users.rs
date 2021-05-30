@@ -1,27 +1,23 @@
 use crate::common::util::*;
-use std::env;
 
 #[test]
 fn test_users_noarg() {
     new_ucmd!().succeeds();
 }
+
 #[test]
+#[cfg(any(target_vendor = "apple", target_os = "linux"))]
 fn test_users_check_name() {
-    let result = TestScenario::new(util_name!()).ucmd_keepenv().succeeds();
+    #[cfg(target_os = "linux")]
+    let util_name = util_name!();
+    #[cfg(target_vendor = "apple")]
+    let util_name = format!("g{}", util_name!());
 
-    // Expectation: USER is often set
-    let key = "USER";
+    let expected = TestScenario::new(&util_name)
+        .cmd_keepenv(util_name)
+        .env("LANGUAGE", "C")
+        .succeeds()
+        .stdout_move_str();
 
-    match env::var(key) {
-        Err(e) => println!("Key {} isn't set. Found {}", &key, e),
-        Ok(username) =>
-        // Check if "users" contains the name of the user
-        {
-            println!("username found {}", &username);
-            // println!("result.stdout {}", &result.stdout);
-            if !result.stdout_str().is_empty() {
-                result.stdout_contains(&username);
-            }
-        }
-    }
+    new_ucmd!().succeeds().stdout_is(&expected);
 }

@@ -29,7 +29,7 @@ pub fn merge<'a>(files: &[impl AsRef<OsStr>], settings: &'a GlobalSettings) -> F
     let (request_sender, request_receiver) = channel();
     let mut reader_files = Vec::with_capacity(files.len());
     let mut loaded_receivers = Vec::with_capacity(files.len());
-    for (file_number, file) in files.iter().filter_map(open).enumerate() {
+    for (file_number, file) in files.iter().map(open).enumerate() {
         let (sender, receiver) = sync_channel(2);
         loaded_receivers.push(receiver);
         reader_files.push(ReaderFile {

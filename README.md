@@ -39,7 +39,7 @@ to compile anywhere, and this is as good a way as any to try and learn it.
 ### Rust Version
 
 uutils follows Rust's release channels and is tested against stable, beta and nightly.
-The current oldest supported version of the Rust compiler is `1.40.0`.
+The current oldest supported version of the Rust compiler is `1.43.1`.
 
 On both Windows and Redox, only the nightly version is tested currently.
 

@@ -8,8 +8,8 @@ use self::chmod::strip_minus_from_mode;
 extern crate chmod;
 use self::libc::umask;
 
-static TEST_FILE: &'static str = "file";
-static REFERENCE_FILE: &'static str = "reference";
+static TEST_FILE: &str = "file";
+static REFERENCE_FILE: &str = "reference";
 static REFERENCE_PERMS: u32 = 0o247;
 lazy_static! {
     static ref UMASK_MUTEX: Mutex<()> = Mutex::new(());
@@ -69,6 +69,7 @@ fn run_tests(tests: Vec<TestCase>) {
 }
 
 #[test]
+#[allow(clippy::unreadable_literal)]
 fn test_chmod_octal() {
     let tests = vec![
         TestCase {
@@ -121,6 +122,7 @@ fn test_chmod_octal() {
 }
 
 #[test]
+#[allow(clippy::unreadable_literal)]
 fn test_chmod_ugoa() {
     let _guard = UMASK_MUTEX.lock();
 
@@ -216,6 +218,7 @@ fn test_chmod_ugoa() {
 }
 
 #[test]
+#[allow(clippy::unreadable_literal)]
 fn test_chmod_ugo_copy() {
     let tests = vec![
         TestCase {
@@ -248,6 +251,7 @@ fn test_chmod_ugo_copy() {
 }
 
 #[test]
+#[allow(clippy::unreadable_literal)]
 fn test_chmod_many_options() {
     let _guard = UMASK_MUTEX.lock();
 
@@ -264,6 +268,7 @@ fn test_chmod_many_options() {
 }
 
 #[test]
+#[allow(clippy::unreadable_literal)]
 fn test_chmod_reference_file() {
     let tests = vec![
         TestCase {
@@ -303,6 +308,7 @@ fn test_permission_denied() {
 }
 
 #[test]
+#[allow(clippy::unreadable_literal)]
 fn test_chmod_recursive() {
     let _guard = UMASK_MUTEX.lock();
 
@@ -477,7 +483,7 @@ fn test_chmod_strip_minus_from_mode() {
     ];
 
     for test in tests {
-        let mut args: Vec<String> = test.0.split(" ").map(|v| v.to_string()).collect();
+        let mut args: Vec<String> = test.0.split(' ').map(|v| v.to_string()).collect();
         let _mode_had_minus_prefix = strip_minus_from_mode(&mut args);
         assert_eq!(test.1, args.join(" "));
     }
