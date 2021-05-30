@@ -84,7 +84,7 @@ jobs:
     - name: Install `rust` toolchain
       uses: actions-rs/toolchain@v1
       with:
-        toolchain: stable
+        toolchain: nightly
         default: true
         profile: minimal # minimal component installation (ie, no documentation)
         components: clippy
@@ -94,7 +94,7 @@ jobs:
       run: |
         # `clippy` testing
         # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-        S=$(cargo +nightly clippy --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -- -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+(.*):([0-9]+):([0-9]+).*$/::warning file=\2,line=\3,col=\4::WARNING: \`cargo clippy\`: \1/p;" -e '}' ; }
+        S=$(cargo +nightly clippy --all-targets ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -- -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+(.*):([0-9]+):([0-9]+).*$/::warning file=\2,line=\3,col=\4::WARNING: \`cargo clippy\`: \1/p;" -e '}' ; }
 
   min_version:
     name: MinRustV # Minimum supported rust version
