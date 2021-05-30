@@ -390,8 +390,8 @@ mod tests {
             test: "C:/you/later",
         },
         NormalizePathTestCase {
-            path: "\\networkshare/a//foo//./bar",
-            test: "\\networkshare/a/foo/bar",
+            path: "\\networkShare/a//foo//./bar",
+            test: "\\networkShare/a/foo/bar",
         },
     ];
 
@@ -411,6 +411,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn test_display_permissions() {
+        // spell-checker:ignore (perms) brwsr drwxr rwxr
         assert_eq!(
             "drwxr-xr-x",
             display_permissions_unix(S_IFDIR | 0o755, true)
