@@ -12,7 +12,7 @@
 -----------------------------------------------
 
 <!-- markdownlint-disable commands-show-output no-duplicate-heading -->
-<!-- spell-checker:ignore markdownlint ; (jargon) multicall ; (misc) aarch riscv uutil uutils ; (names/acronyms) BusyBox BusyBox's BusyTest MSVC NixOS PowerPC WASI WASM ; (options) DESTDIR RUNTEST UTILNAME -->
+<!-- spell-checker:ignore markdownlint ; (options) DESTDIR RUNTEST UTILNAME -->
 
 uutils is an attempt at writing universal (as in cross-platform) CLI
 utilities in [Rust](http://www.rust-lang.org). This repository is intended to
@@ -300,13 +300,13 @@ $ make UTILS='UTILITY_1 UTILITY_2' SPEC=y test
 This testing functionality is only available on *nix operating systems and
 requires `make`.
 
-To run busybox's tests for all utilities for which busybox has tests
+To run busybox tests for all utilities for which busybox has tests
 
 ```bash
 $ make busytest
 ```
 
-To run busybox's tests for a few of the available utilities
+To run busybox tests for a few of the available utilities
 
 ```bash
 $ make UTILS='UTILITY_1 UTILITY_2' busytest
