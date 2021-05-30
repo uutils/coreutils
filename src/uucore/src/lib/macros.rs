@@ -21,7 +21,7 @@ macro_rules! executable(
     })
 );
 
-/// Show an error to stderr in a silimar style to GNU coreutils.
+/// Show an error to stderr in a similar style to GNU coreutils.
 #[macro_export]
 macro_rules! show_error(
     ($($args:tt)+) => ({
@@ -30,7 +30,7 @@ macro_rules! show_error(
     })
 );
 
-/// Show a warning to stderr in a silimar style to GNU coreutils.
+/// Show a warning to stderr in a similar style to GNU coreutils.
 #[macro_export]
 macro_rules! show_error_custom_description (
     ($err:expr,$($args:tt)+) => ({
@@ -47,7 +47,7 @@ macro_rules! show_warning(
     })
 );
 
-/// Show a bad inocation help message in a similar style to GNU coreutils.
+/// Show a bad invocation help message in a similar style to GNU coreutils.
 #[macro_export]
 macro_rules! show_usage_error(
     ($($args:tt)+) => ({

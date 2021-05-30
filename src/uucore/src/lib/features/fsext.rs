@@ -7,7 +7,7 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) strerror IFBLK IFCHR IFDIR IFLNK IFIFO IFMT IFREG IFSOCK subsec nanos gnulib statfs Sstatfs bitrig statvfs iosize blksize fnodes fsid namelen bsize bfree bavail ffree frsize namemax errno fstype adfs acfs aufs affs autofs befs bdevfs binfmt ceph cgroups cifs configfs cramfs cgroupfs debugfs devfs devpts ecryptfs btrfs efivarfs exofs fhgfs fuseblk fusectl futexfs gpfs hfsx hostfs hpfs inodefs ibrix inotifyfs isofs jffs logfs hugetlbfs mqueue nsfs ntfs ocfs panfs pipefs ramfs romfs nfsd nilfs pstorefs reiserfs securityfs smackfs snfs sockfs squashfs sysfs sysv tempfs tracefs ubifs usbdevfs vmhgfs tmpfs vxfs wslfs xenfs vzfs openprom overlayfs
+// spell-checker:ignore (arch) bitrig ; (fs) cifs smbfs
 
 extern crate time;
 
@@ -88,7 +88,7 @@ use std::time::UNIX_EPOCH;
     target_os = "android",
     target_os = "freebsd"
 ))]
-pub use libc::statfs as Sstatfs;
+pub use libc::statfs as StatFs;
 #[cfg(any(
     target_os = "openbsd",
     target_os = "netbsd",
@@ -96,7 +96,7 @@ pub use libc::statfs as Sstatfs;
     target_os = "bitrig",
     target_os = "dragonfly"
 ))]
-pub use libc::statvfs as Sstatfs;
+pub use libc::statvfs as StatFs;
 
 #[cfg(any(
     target_os = "linux",
@@ -168,6 +168,7 @@ impl MountInfo {
             }
         }
         // set MountInfo::dummy
+        // spell-checker:disable
         match self.fs_type.as_ref() {
             "autofs" | "proc" | "subfs"
             /* for Linux 2.6/3.x */
@@ -181,6 +182,7 @@ impl MountInfo {
             _ => self.dummy = self.fs_type == "none"
                 && !self.mount_option.contains(MOUNT_OPT_BIND)
         }
+        // spell-checker:enable
         // set MountInfo::remote
         #[cfg(windows)]
         {
@@ -203,6 +205,7 @@ impl MountInfo {
     #[cfg(target_os = "linux")]
     fn new(file_name: &str, raw: Vec<&str>) -> Option<MountInfo> {
         match file_name {
+            // spell-checker:ignore (word) noatime
             // Format: 36 35 98:0 /mnt1 /mnt2 rw,noatime master:1 - ext3 /dev/root rw,errors=continue
             // "man proc" for more details
             LINUX_MOUNTINFO => {
@@ -307,21 +310,24 @@ impl MountInfo {
 #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
 use std::ffi::CStr;
 #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
-impl From<Sstatfs> for MountInfo {
-    fn from(statfs: Sstatfs) -> Self {
+impl From<StatFs> for MountInfo {
+    fn from(statfs: StatFs) -> Self {
         let mut info = MountInfo {
             dev_id: "".to_string(),
             dev_name: unsafe {
+                // spell-checker:disable-next-line
                 CStr::from_ptr(&statfs.f_mntfromname[0])
                     .to_string_lossy()
                     .into_owned()
             },
             fs_type: unsafe {
+                // spell-checker:disable-next-line
                 CStr::from_ptr(&statfs.f_fstypename[0])
                     .to_string_lossy()
                     .into_owned()
             },
             mount_dir: unsafe {
+                // spell-checker:disable-next-line
                 CStr::from_ptr(&statfs.f_mntonname[0])
                     .to_string_lossy()
                     .into_owned()
@@ -341,14 +347,15 @@ use libc::c_int;
 #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
 extern "C" {
     #[cfg(all(target_vendor = "apple", target_arch = "x86_64"))]
-    #[link_name = "getmntinfo$INODE64"]
-    fn getmntinfo(mntbufp: *mut *mut Sstatfs, flags: c_int) -> c_int;
+    #[link_name = "getmntinfo$INODE64"] // spell-checker:disable-line
+    fn get_mount_info(mount_buffer_p: *mut *mut StatFs, flags: c_int) -> c_int;
 
     #[cfg(any(
         all(target_os = "freebsd"),
         all(target_vendor = "apple", target_arch = "aarch64")
     ))]
-    fn getmntinfo(mntbufp: *mut *mut Sstatfs, flags: c_int) -> c_int;
+    #[link_name = "getmntinfo"] // spell-checker:disable-line
+    fn get_mount_info(mount_buffer_p: *mut *mut StatFs, flags: c_int) -> c_int;
 }
 
 #[cfg(target_os = "linux")]
@@ -363,11 +370,11 @@ use std::slice;
 pub fn read_fs_list() -> Vec<MountInfo> {
     #[cfg(target_os = "linux")]
     {
-        let (file_name, fobj) = File::open(LINUX_MOUNTINFO)
+        let (file_name, f) = File::open(LINUX_MOUNTINFO)
             .map(|f| (LINUX_MOUNTINFO, f))
             .or_else(|_| File::open(LINUX_MTAB).map(|f| (LINUX_MTAB, f)))
             .expect("failed to find mount list files");
-        let reader = BufReader::new(fobj);
+        let reader = BufReader::new(f);
         reader
             .lines()
             .filter_map(|line| line.ok())
@@ -379,12 +386,12 @@ pub fn read_fs_list() -> Vec<MountInfo> {
     }
     #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
     {
-        let mut mptr: *mut Sstatfs = ptr::null_mut();
-        let len = unsafe { getmntinfo(&mut mptr, 1_i32) };
+        let mut mount_buffer_ptr: *mut StatFs = ptr::null_mut();
+        let len = unsafe { get_mount_info(&mut mount_buffer_ptr, 1_i32) };
         if len < 0 {
-            crash!(1, "getmntinfo failed");
+            crash!(1, "get_mount_info() failed");
         }
-        let mounts = unsafe { slice::from_raw_parts(mptr, len as usize) };
+        let mounts = unsafe { slice::from_raw_parts(mount_buffer_ptr, len as usize) };
         mounts
             .iter()
             .map(|m| MountInfo::from(*m))
@@ -446,7 +453,7 @@ pub struct FsUsage {
 
 impl FsUsage {
     #[cfg(unix)]
-    pub fn new(statvfs: Sstatfs) -> FsUsage {
+    pub fn new(statvfs: StatFs) -> FsUsage {
         {
             FsUsage {
                 blocksize: statvfs.f_bsize as u64, // or `statvfs.f_frsize` ?
@@ -523,20 +530,20 @@ impl FsUsage {
 #[cfg(unix)]
 pub trait FsMeta {
     fn fs_type(&self) -> i64;
-    fn iosize(&self) -> u64;
-    fn blksize(&self) -> i64;
+    fn io_size(&self) -> u64;
+    fn block_size(&self) -> i64;
     fn total_blocks(&self) -> u64;
     fn free_blocks(&self) -> u64;
     fn avail_blocks(&self) -> u64;
-    fn total_fnodes(&self) -> u64;
-    fn free_fnodes(&self) -> u64;
+    fn total_file_nodes(&self) -> u64;
+    fn free_file_nodes(&self) -> u64;
     fn fsid(&self) -> u64;
     fn namelen(&self) -> u64;
 }
 
 #[cfg(unix)]
-impl FsMeta for Sstatfs {
-    fn blksize(&self) -> i64 {
+impl FsMeta for StatFs {
+    fn block_size(&self) -> i64 {
         self.f_bsize as i64
     }
     fn total_blocks(&self) -> u64 {
@@ -548,10 +555,10 @@ impl FsMeta for Sstatfs {
     fn avail_blocks(&self) -> u64 {
         self.f_bavail as u64
     }
-    fn total_fnodes(&self) -> u64 {
+    fn total_file_nodes(&self) -> u64 {
         self.f_files as u64
     }
-    fn free_fnodes(&self) -> u64 {
+    fn free_file_nodes(&self) -> u64 {
         self.f_ffree as u64
     }
     #[cfg(any(target_os = "linux", target_vendor = "apple", target_os = "freebsd"))]
@@ -565,16 +572,16 @@ impl FsMeta for Sstatfs {
     }
 
     #[cfg(target_os = "linux")]
-    fn iosize(&self) -> u64 {
+    fn io_size(&self) -> u64 {
         self.f_frsize as u64
     }
     #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
-    fn iosize(&self) -> u64 {
+    fn io_size(&self) -> u64 {
         self.f_iosize as u64
     }
     // XXX: dunno if this is right
     #[cfg(not(any(target_vendor = "apple", target_os = "freebsd", target_os = "linux")))]
-    fn iosize(&self) -> u64 {
+    fn io_size(&self) -> u64 {
         self.f_bsize as u64
     }
 
@@ -605,23 +612,23 @@ impl FsMeta for Sstatfs {
     }
     #[cfg(target_os = "freebsd")]
     fn namelen(&self) -> u64 {
-        self.f_namemax as u64
+        self.f_namemax as u64   // spell-checker:disable-line
     }
     // XXX: should everything just use statvfs?
     #[cfg(not(any(target_vendor = "apple", target_os = "freebsd", target_os = "linux")))]
     fn namelen(&self) -> u64 {
-        self.f_namemax as u64
+        self.f_namemax as u64   // spell-checker:disable-line
     }
 }
 
 #[cfg(unix)]
-pub fn statfs<P: AsRef<Path>>(path: P) -> Result<Sstatfs, String>
+pub fn statfs<P: AsRef<Path>>(path: P) -> Result<StatFs, String>
 where
     Vec<u8>: From<P>,
 {
     match CString::new(path) {
         Ok(p) => {
-            let mut buffer: Sstatfs = unsafe { mem::zeroed() };
+            let mut buffer: StatFs = unsafe { mem::zeroed() };
             unsafe {
                 match statfs_fn(p.as_ptr(), &mut buffer) {
                     0 => Ok(buffer),
@@ -667,12 +674,13 @@ pub fn pretty_filetype<'a>(mode: mode_t, size: u64) -> &'a str {
         S_IFIFO => "fifo",
         S_IFSOCK => "socket",
         // TODO: Other file types
-        // See coreutils/gnulib/lib/file-type.c
+        // See coreutils/gnulib/lib/file-type.c // spell-checker:disable-line
         _ => "weird file",
     }
 }
 
 pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
+    // spell-checker:disable
     match fstype {
         0x6163_6673 => "acfs".into(),
         0xADF5 => "adfs".into(),
@@ -790,6 +798,7 @@ pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
         0x2FC1_2FC1 => "zfs".into(),
         other => format!("UNKNOWN ({:#x})", other).into(),
     }
+    // spell-checker:enable
 }
 
 #[cfg(test)]
@@ -808,6 +817,7 @@ mod tests {
 
     #[test]
     fn test_fs_type() {
+        // spell-checker:disable
         assert_eq!("ext2/ext3", pretty_fstype(0xEF53));
         assert_eq!("tmpfs", pretty_fstype(0x01021994));
         assert_eq!("nfs", pretty_fstype(0x6969));
@@ -817,5 +827,6 @@ mod tests {
         assert_eq!("ntfs", pretty_fstype(0x5346544e));
         assert_eq!("fat", pretty_fstype(0x4006));
         assert_eq!("UNKNOWN (0x1234)", pretty_fstype(0x1234));
+        // spell-checker:enable
     }
 }
