@@ -82,6 +82,7 @@ PROGS       := \
 	nproc \
 	od \
 	paste \
+	pr \
 	printenv \
 	printf \
 	ptx \
