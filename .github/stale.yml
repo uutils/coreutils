@@ -1,4 +1,5 @@
-# Number of days of inactivity before an issue/PR becomes stale
+# spell-checker:ignore (labels) wontfix
+ # Number of days of inactivity before an issue/PR becomes stale
 daysUntilStale: 365
 # Number of days of inactivity before a stale issue/PR is closed
 daysUntilClose: 365
