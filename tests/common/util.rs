@@ -632,7 +632,7 @@ impl TestScenario {
         let tmpd = Rc::new(TempDir::new().unwrap());
         let ts = TestScenario {
             bin_path: {
-                // Instead of hardcoding the path relative to the current
+                // Instead of hard coding the path relative to the current
                 // directory, use Cargo's OUT_DIR to find path to executable.
                 // This allows tests to be run using profiles other than debug.
                 let target_dir = path_concat!(env!("OUT_DIR"), "..", "..", "..", PROGNAME);
@@ -722,9 +722,10 @@ impl UCommand {
                 cmd.current_dir(curdir.as_ref());
                 if env_clear {
                     if cfg!(windows) {
+                        // spell-checker:ignore (dll) rsaenh
                         // %SYSTEMROOT% is required on Windows to initialize crypto provider
                         // ... and crypto provider is required for std::rand
-                        // From procmon: RegQueryValue HKLM\SOFTWARE\Microsoft\Cryptography\Defaults\Provider\Microsoft Strong Cryptographic Provider\Image Path
+                        // From `procmon`: RegQueryValue HKLM\SOFTWARE\Microsoft\Cryptography\Defaults\Provider\Microsoft Strong Cryptographic Provider\Image Path
                         // SUCCESS  Type: REG_SZ, Length: 66, Data: %SystemRoot%\system32\rsaenh.dll"
                         for (key, _) in env::vars_os() {
                             if key.as_os_str() != "SYSTEMROOT" {
@@ -802,7 +803,7 @@ impl UCommand {
         self
     }
 
-    /// provides stdinput to feed in to the command when spawned
+    /// provides standard input to feed in to the command when spawned
     pub fn pipe_in<T: Into<Vec<u8>>>(&mut self, input: T) -> &mut UCommand {
         if self.bytes_into_stdin.is_some() {
             panic!("{}", MULTIPLE_STDIN_MEANINGLESS);
@@ -934,6 +935,7 @@ pub fn vec_of_size(n: usize) -> Vec<u8> {
 /// Sanity checks for test utils
 #[cfg(test)]
 mod tests {
+    // spell-checker:ignore (tests) asdfsadfa
     use super::*;
 
     #[test]
@@ -1012,7 +1014,7 @@ mod tests {
     }
 
     #[test]
-    fn test_no_std_errout() {
+    fn test_no_stderr_output() {
         let res = CmdResult {
             tmpd: None,
             code: None,

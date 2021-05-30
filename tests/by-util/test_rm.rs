@@ -65,7 +65,7 @@ fn test_rm_interactive() {
         .arg("-i")
         .arg(file_a)
         .arg(file_b)
-        .pipe_in("Yesh")
+        .pipe_in("Yesh")    // spell-checker:disable-line
         .succeeds();
 
     assert!(!at.file_exists(file_a));

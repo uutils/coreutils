@@ -171,7 +171,7 @@ fn test_mv_interactive() {
         .arg("-i")
         .arg(file_a)
         .arg(file_b)
-        .pipe_in("Yesh")
+        .pipe_in("Yesh")    // spell-checker:disable-line
         .succeeds()
         .no_stderr();
 

@@ -1,3 +1,5 @@
+// spell-checker:ignore (words) araba merci
+
 use crate::common::util::*;
 
 #[test]
@@ -185,9 +187,9 @@ fn test_multiple_hyphen_values() {
 #[test]
 fn test_hyphen_values_inside_string() {
     new_ucmd!()
-        .arg("'\"\n'CXXFLAGS=-g -O2'\n\"'")
+        .arg("'\"\n'CXXFLAGS=-g -O2'\n\"'") // spell-checker:disable-line
         .succeeds()
-        .stdout_contains("CXXFLAGS");
+        .stdout_contains("CXXFLAGS");   // spell-checker:disable-line
 }
 
 #[test]

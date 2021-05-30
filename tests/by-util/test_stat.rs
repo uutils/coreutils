@@ -6,20 +6,20 @@ extern crate stat;
 pub use self::stat::*;
 
 #[test]
-fn test_scanutil() {
+fn test_scanners() {
     assert_eq!(Some((-5, 2)), "-5zxc".scan_num::<i32>());
     assert_eq!(Some((51, 2)), "51zxc".scan_num::<u32>());
     assert_eq!(Some((192, 4)), "+192zxc".scan_num::<i32>());
     assert_eq!(None, "z192zxc".scan_num::<i32>());
 
     assert_eq!(Some(('a', 3)), "141zxc".scan_char(8));
-    assert_eq!(Some(('\n', 2)), "12qzxc".scan_char(8));
-    assert_eq!(Some(('\r', 1)), "dqzxc".scan_char(16));
-    assert_eq!(None, "z2qzxc".scan_char(8));
+    assert_eq!(Some(('\n', 2)), "12qzxc".scan_char(8));     // spell-checker:disable-line
+    assert_eq!(Some(('\r', 1)), "dqzxc".scan_char(16));     // spell-checker:disable-line
+    assert_eq!(None, "z2qzxc".scan_char(8));    // spell-checker:disable-line
 }
 
 #[test]
-fn test_groupnum() {
+fn test_group_num() {
     assert_eq!("12,379,821,234", group_num("12379821234"));
     assert_eq!("21,234", group_num("21234"));
     assert_eq!("821,234", group_num("821234"));
@@ -97,13 +97,13 @@ fn test_invalid_option() {
 }
 
 #[cfg(any(target_os = "linux", target_vendor = "apple"))]
-const NORMAL_FMTSTR: &str =
+const NORMAL_FORMAT_STR: &str =
     "%a %A %b %B %d %D %f %F %g %G %h %i %m %n %o %s %u %U %x %X %y %Y %z %Z"; // avoid "%w %W" (birth/creation) due to `stat` limitations and linux kernel & rust version capability variations
 #[cfg(any(target_os = "linux"))]
-const DEV_FMTSTR: &str =
+const DEV_FORMAT_STR: &str =
     "%a %A %b %B %d %D %f %F %g %G %h %i %m %n %o %s (%t/%T) %u %U %w %W %x %X %y %Y %z %Z";
 #[cfg(target_os = "linux")]
-const FS_FMTSTR: &str = "%b %c %i %l %n %s %S %t %T"; // avoid "%a %d %f" which can cause test failure due to race conditions
+const FS_FORMAT_STR: &str = "%b %c %i %l %n %s %S %t %T"; // avoid "%a %d %f" which can cause test failure due to race conditions
 
 #[test]
 #[cfg(target_os = "linux")]
@@ -118,7 +118,7 @@ fn test_terse_fs_format() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_fs_format() {
-    let args = ["-f", "-c", FS_FMTSTR, "/dev/shm"];
+    let args = ["-f", "-c", FS_FORMAT_STR, "/dev/shm"];
     new_ucmd!()
         .args(&args)
         .run()
@@ -207,7 +207,7 @@ fn test_format_created_seconds() {
 #[cfg(any(target_os = "linux", target_vendor = "apple"))]
 #[test]
 fn test_normal_format() {
-    let args = ["-c", NORMAL_FMTSTR, "/bin"];
+    let args = ["-c", NORMAL_FORMAT_STR, "/bin"];
     new_ucmd!()
         .args(&args)
         .succeeds()
@@ -231,14 +231,14 @@ fn test_symlinks() {
     ] {
         if at.file_exists(file) && at.is_symlink(file) {
             tested = true;
-            let args = ["-c", NORMAL_FMTSTR, file];
+            let args = ["-c", NORMAL_FORMAT_STR, file];
             scene
                 .ucmd()
                 .args(&args)
                 .succeeds()
                 .stdout_is(expected_result(&args));
             // -L, --dereference    follow links
-            let args = ["-L", "-c", NORMAL_FMTSTR, file];
+            let args = ["-L", "-c", NORMAL_FORMAT_STR, file];
             scene
                 .ucmd()
                 .args(&args)
@@ -261,7 +261,7 @@ fn test_char() {
     let args = [
         "-c",
         #[cfg(target_os = "linux")]
-        DEV_FMTSTR,
+        DEV_FORMAT_STR,
         #[cfg(target_os = "linux")]
         "/dev/pts/ptmx",
         #[cfg(any(target_vendor = "apple"))]
@@ -280,7 +280,7 @@ fn test_char() {
 fn test_multi_files() {
     let args = [
         "-c",
-        NORMAL_FMTSTR,
+        NORMAL_FORMAT_STR,
         "/dev",
         "/usr/lib",
         #[cfg(target_os = "linux")]

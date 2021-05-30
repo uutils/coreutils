@@ -242,7 +242,7 @@ fn test_filter() {
         .succeeds();
 
     // assert all characters are 'i' / no character is not 'i'
-    // (assert that command succeded)
+    // (assert that command succeeded)
     let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
     assert!(
         glob.collate().iter().find(|&&c| {
@@ -265,7 +265,7 @@ fn test_filter_with_env_var_set() {
     let n_lines = 3;
     RandomFile::new(&at, name).add_lines(n_lines);
 
-    let env_var_value = "somevalue";
+    let env_var_value = "some-value";
     env::set_var("FILE", &env_var_value);
     ucmd.args(&[format!("--filter={}", "cat > $FILE").as_str(), name])
         .succeeds();

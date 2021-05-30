@@ -19,7 +19,7 @@ fn test_output_is_random_permutation() {
         .map(|x| x.parse().unwrap())
         .collect();
     result_seq.sort_unstable();
-    assert_ne!(result.stdout_str(), input, "Output is not randomised");
+    assert_ne!(result.stdout_str(), input, "Output is not randomized");
     assert_eq!(result_seq, input_seq, "Output is not a permutation");
 }
 

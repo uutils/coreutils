@@ -1,3 +1,5 @@
+// spell-checker:ignore (words) bamf chdir
+
 #[cfg(not(windows))]
 use std::fs;
 

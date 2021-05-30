@@ -1,3 +1,5 @@
+// spell-checker:ignore (words) agroupthatdoesntexist auserthatdoesntexist groupname notexisting passgrp
+
 use crate::common::util::*;
 #[cfg(target_os = "linux")]
 use rust_users::get_effective_uid;

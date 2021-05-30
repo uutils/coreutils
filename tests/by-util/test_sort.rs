@@ -1,3 +1,5 @@
+// spell-checker:ignore (words) ints
+
 use crate::common::util::*;
 
 fn test_helper(file_name: &str, possible_args: &[&str]) {
@@ -61,7 +63,7 @@ fn test_ext_sort_stable() {
 }
 
 #[test]
-fn test_extsort_zero_terminated() {
+fn test_ext_sort_zero_terminated() {
     new_ucmd!()
         .arg("-z")
         .arg("-S")
@@ -96,7 +98,7 @@ fn test_human_numeric_whitespace() {
 // This tests where serde often fails when reading back JSON
 // if it finds a null value
 #[test]
-fn test_extsort_as64_bailout() {
+fn test_ext_sort_as64_bailout() {
     new_ucmd!()
         .arg("-g")
         .arg("-S 5K")
@@ -290,10 +292,10 @@ fn test_dictionary_order() {
 fn test_dictionary_order2() {
     for non_dictionary_order2_param in &["-d"] {
         new_ucmd!()
-            .pipe_in("a👦🏻aa	b\naaaa	b")
-            .arg(non_dictionary_order2_param)
+            .pipe_in("a👦🏻aa	b\naaaa	b")   // spell-checker:disable-line
+            .arg(non_dictionary_order2_param)   // spell-checker:disable-line
             .succeeds()
-            .stdout_only("a👦🏻aa	b\naaaa	b\n");
+            .stdout_only("a👦🏻aa	b\naaaa	b\n");    // spell-checker:disable-line
     }
 }
 
@@ -301,10 +303,10 @@ fn test_dictionary_order2() {
 fn test_non_printing_chars() {
     for non_printing_chars_param in &["-i"] {
         new_ucmd!()
-            .pipe_in("a👦🏻aa\naaaa")
-            .arg(non_printing_chars_param)
+            .pipe_in("a👦🏻aa\naaaa")   // spell-checker:disable-line
+            .arg(non_printing_chars_param)  // spell-checker:disable-line
             .succeeds()
-            .stdout_only("a👦🏻aa\naaaa\n");
+            .stdout_only("a👦🏻aa\naaaa\n");    // spell-checker:disable-line
     }
 }
 
@@ -592,7 +594,7 @@ fn test_keys_ignore_flag() {
 }
 
 #[test]
-fn test_doesnt_inherit_key_settings() {
+fn test_does_not_inherit_key_settings() {
     let input = " 1
 2
    10

@@ -65,10 +65,10 @@ fn test_symlink_circular() {
 }
 
 #[test]
-fn test_symlink_dont_overwrite() {
+fn test_symlink_do_not_overwrite() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let file = "test_symlink_dont_overwrite";
-    let link = "test_symlink_dont_overwrite_link";
+    let file = "test_symlink_do_not_overwrite";
+    let link = "test_symlink_do_not_overwrite_link";
 
     at.touch(file);
     at.touch(link);
@@ -120,7 +120,7 @@ fn test_symlink_interactive() {
     scene
         .ucmd()
         .args(&["-i", "-s", file, link])
-        .pipe_in("Yesh")
+        .pipe_in("Yesh")    // spell-checker:disable-line
         .succeeds()
         .no_stderr();
 
