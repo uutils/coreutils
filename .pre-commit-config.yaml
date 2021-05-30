@@ -1,3 +1,4 @@
+repos:
 -   repo: local
     hooks:
     -   id: rust-linting
