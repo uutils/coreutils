@@ -6,6 +6,8 @@
 // that was distributed with this source code.
 //
 
+// spell-checker:ignore (ToDO) adFfmprt, kmerge
+
 #[macro_use]
 extern crate quick_error;
 
@@ -204,7 +206,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         options::NUMBERING_MODE_OPTION,
         "number-lines",
         "Provide width digit line numbering.  The default for width, if not specified, is 5.  The number occupies
-           the first width column positions of each text column or each line of -m output.  If char (any nondigit
+           the first width column positions of each text column or each line of -m output.  If char (any non-digit
            character) is given, it is appended to the line number to separate it from whatever follows.  The default
            for char is a <tab>.  Line numbers longer than width columns are truncated.",
         "[char][width]",
@@ -274,8 +276,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         options::COLUMN_OPTION,
         "Produce multi-column output that is arranged in column columns (the default shall be 1) and is written down each
               column  in  the order in which the text is received from the input file. This option should not be used with -m.
-              The options -e and -i shall be assumed for multiple text-column output.  Whether or not text  columns  are  pro‐
-              duced  with  identical  vertical  lengths is unspecified, but a text column shall never exceed the length of the
+              The options -e and -i shall be assumed for multiple text-column output.  Whether or not text columns are produced
+              with identical vertical lengths is unspecified, but a text column shall never exceed the length of the
               page (see the -l option). When used with -t, use the minimum number of lines to write the output.",
         "[column]",
         HasArg::Yes,
@@ -285,9 +287,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     opts.opt(
         options::COLUMN_WIDTH_OPTION,
         "width",
-        "Set  the  width  of the line to width column positions for multiple text-column output only. If the -w option is
-              not specified and the -s option is not specified, the default width shall be 72. If the -w option is not  speci‐
-              fied and the -s option is specified, the default width shall be 512.",
+        "Set the width of the line to width column positions for multiple text-column output only. If the -w option is
+              not specified and the -s option is not specified, the default width shall be 72. If the -w option is not specified
+              and the -s option is specified, the default width shall be 512.",
         "[width]",
         HasArg::Yes,
         Occur::Optional,
@@ -472,9 +474,9 @@ fn print_usage(opts: &mut getopts::Options, matches: &Matches) -> i32 {
     );
     println!();
     let usage: &str = "The pr utility is a printing and pagination filter
-     for text files.  When multiple input files are spec-
-     ified, each is read, formatted, and written to stan-
-     dard output.  By default, the input is separated
+     for text files.  When multiple input files are specified,
+     each is read, formatted, and written to standard
+     output.  By default, the input is separated
      into 66-line pages, each with
 
      o   A 5-line header with the page number, date,
@@ -486,8 +488,8 @@ fn print_usage(opts: &mut getopts::Options, matches: &Matches) -> i32 {
      diagnostic messages are suppressed until the pr
      utility has completed processing.
 
-     When multiple column output is specified, text col-
-     umns are of equal width.  By default text columns
+     When multiple column output is specified, text columns
+     are of equal width.  By default text columns
      are separated by at least one <blank>.  Input lines
      that do not fit into a text column are truncated.
      Lines are not truncated under single column output.";
@@ -599,8 +601,8 @@ fn build_options(
     let line_separator = "\n".to_string();
 
     let last_modified_time = if is_merge_mode || paths[0].eq(FILE_STDIN) {
-        let datetime = Local::now();
-        datetime.format("%b %d %H:%M %Y").to_string()
+        let date_time = Local::now();
+        date_time.format("%b %d %H:%M %Y").to_string()
     } else {
         file_last_modified_time(paths.get(0).unwrap())
     };
@@ -951,7 +953,7 @@ fn read_stream_and_create_pages(
 }
 
 fn mpr(paths: &[String], options: &OutputOptions) -> Result<i32, PrError> {
-    let nfiles = paths.len();
+    let n_files = paths.len();
 
     // Check if files exists
     for path in paths {
@@ -972,7 +974,7 @@ fn mpr(paths: &[String], options: &OutputOptions) -> Result<i32, PrError> {
                         .into_iter()
                         .map(|fl| FileLine {
                             page_number,
-                            group_key: page_number * nfiles + fl.file_id,
+                            group_key: page_number * n_files + fl.file_id,
                             ..fl
                         })
                         .collect::<Vec<_>>()
@@ -1147,11 +1149,11 @@ fn get_line_for_printing(
     indexes: usize,
 ) -> String {
     let blank_line = String::new();
-    let fmtd_line_number = get_fmtd_line_number(&options, file_line.line_number, index);
+    let formatted_line_number = get_formatted_line_number(&options, file_line.line_number, index);
 
     let mut complete_line = format!(
         "{}{}",
-        fmtd_line_number,
+        formatted_line_number,
         file_line.line_content.as_ref().unwrap()
     );
 
@@ -1186,7 +1188,7 @@ fn get_line_for_printing(
     )
 }
 
-fn get_fmtd_line_number(opts: &OutputOptions, line_number: usize, index: usize) -> String {
+fn get_formatted_line_number(opts: &OutputOptions, line_number: usize, index: usize) -> String {
     let should_show_line_number =
         opts.number.is_some() && (opts.merge_files_print.is_none() || index == 0);
     if should_show_line_number && line_number != 0 {
@@ -1234,8 +1236,8 @@ fn file_last_modified_time(path: &str) -> String {
         .map(|i| {
             i.modified()
                 .map(|x| {
-                    let datetime: DateTime<Local> = x.into();
-                    datetime.format("%b %d %H:%M %Y").to_string()
+                    let date_time: DateTime<Local> = x.into();
+                    date_time.format("%b %d %H:%M %Y").to_string()
                 })
                 .unwrap_or_default()
         })

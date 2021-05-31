@@ -1,3 +1,5 @@
+// spell-checker:ignore (ToDO) Sdivide
+
 use crate::common::util::*;
 use chrono::offset::Local;
 use chrono::DateTime;
@@ -11,8 +13,8 @@ fn file_last_modified_time(ucmd: &UCommand, path: &str) -> String {
             return i
                 .modified()
                 .map(|x| {
-                    let datetime: DateTime<Local> = x.into();
-                    datetime.format("%b %d %H:%M %Y").to_string()
+                    let date_time: DateTime<Local> = x.into();
+                    date_time.format("%b %d %H:%M %Y").to_string()
                 })
                 .unwrap_or(String::new());
         })
