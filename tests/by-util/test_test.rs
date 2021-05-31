@@ -210,7 +210,7 @@ fn test_pseudofloat_not_equal() {
 #[test]
 fn test_negative_arg_is_a_string() {
     new_ucmd!().arg("-12345").succeeds();
-    new_ucmd!().arg("--qwert").succeeds();  // spell-checker:disable-line
+    new_ucmd!().arg("--qwert").succeeds(); // spell-checker:disable-line
 }
 
 #[test]

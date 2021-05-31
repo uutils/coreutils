@@ -5,7 +5,8 @@ fn test_more_no_arg() {
     // Reading from stdin is now supported, so this must succeed
     if atty::is(atty::Stream::Stdout) {
         new_ucmd!().succeeds();
-    } else {}
+    } else {
+    }
 }
 
 #[test]
@@ -19,5 +20,6 @@ fn test_more_dir_arg() {
         const EXPECTED_ERROR_MESSAGE: &str =
             "more: '.' is a directory.\nTry 'more --help' for more information.";
         assert_eq!(result.stderr_str().trim(), EXPECTED_ERROR_MESSAGE);
-    } else {}
+    } else {
+    }
 }

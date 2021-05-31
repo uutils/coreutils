@@ -941,7 +941,7 @@ fn test_ls_color() {
 
     let a_with_colors = "\x1b[1;34ma\x1b[0m";
     let z_with_colors = "\x1b[1;34mz\x1b[0m";
-    let nested_dir_with_colors = "\x1b[1;34mnested_dir\x1b[0m";     // spell-checker:disable-line
+    let nested_dir_with_colors = "\x1b[1;34mnested_dir\x1b[0m"; // spell-checker:disable-line
 
     // Color is disabled by default
     let result = scene.ucmd().succeeds();

@@ -82,7 +82,7 @@ fn test_kill_set_bad_signal_name() {
     // spell-checker:disable-line
     new_ucmd!()
         .arg("-s")
-        .arg("IAMNOTASIGNAL")   // spell-checker:disable-line
+        .arg("IAMNOTASIGNAL") // spell-checker:disable-line
         .fails()
         .stderr_contains("unknown signal");
 }

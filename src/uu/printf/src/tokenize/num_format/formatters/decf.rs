@@ -76,11 +76,13 @@ impl Formatter for Decf {
             second_field as usize,
             None,
         );
-        Some(if get_len_fmt_primitive(&f_fl) >= get_len_fmt_primitive(&f_sci) {
-            f_sci
-        } else {
-            f_fl
-        })
+        Some(
+            if get_len_fmt_primitive(&f_fl) >= get_len_fmt_primitive(&f_sci) {
+                f_sci
+            } else {
+                f_fl
+            },
+        )
     }
     fn primitive_to_str(&self, prim: &FormatPrimitive, field: FormatField) -> String {
         primitive_to_str_common(prim, &field)

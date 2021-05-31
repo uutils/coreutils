@@ -25,8 +25,13 @@ impl Formatter for CninetyNineHexFloatf {
         str_in: &str,
     ) -> Option<FormatPrimitive> {
         let second_field = field.second_field.unwrap_or(6) + 1;
-        let analysis =
-            FloatAnalysis::analyze(&str_in, initial_prefix, Some(second_field as usize), None, true);
+        let analysis = FloatAnalysis::analyze(
+            &str_in,
+            initial_prefix,
+            Some(second_field as usize),
+            None,
+            true,
+        );
         let f = get_primitive_hex(
             initial_prefix,
             &str_in[initial_prefix.offset..],
@@ -51,7 +56,11 @@ fn get_primitive_hex(
     _last_dec_place: usize,
     capitalized: bool,
 ) -> FormatPrimitive {
-    let prefix = Some(String::from(if initial_prefix.sign == -1 { "-0x" } else { "0x" }));
+    let prefix = Some(String::from(if initial_prefix.sign == -1 {
+        "-0x"
+    } else {
+        "0x"
+    }));
 
     // TODO actual conversion, make sure to get back mantissa.
     // for hex to hex, it's really just a matter of moving the

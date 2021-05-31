@@ -13,9 +13,9 @@ fn test_scanners() {
     assert_eq!(None, "z192zxc".scan_num::<i32>());
 
     assert_eq!(Some(('a', 3)), "141zxc".scan_char(8));
-    assert_eq!(Some(('\n', 2)), "12qzxc".scan_char(8));     // spell-checker:disable-line
-    assert_eq!(Some(('\r', 1)), "dqzxc".scan_char(16));     // spell-checker:disable-line
-    assert_eq!(None, "z2qzxc".scan_char(8));    // spell-checker:disable-line
+    assert_eq!(Some(('\n', 2)), "12qzxc".scan_char(8)); // spell-checker:disable-line
+    assert_eq!(Some(('\r', 1)), "dqzxc".scan_char(16)); // spell-checker:disable-line
+    assert_eq!(None, "z2qzxc".scan_char(8)); // spell-checker:disable-line
 }
 
 #[test]

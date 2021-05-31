@@ -47,12 +47,7 @@ fn test_reference() {
 
     scene.ucmd().arg("-s").arg("+5KB").arg(FILE1).run();
 
-    scene
-        .ucmd()
-        .arg("--reference")
-        .arg(FILE1)
-        .arg(FILE2)
-        .run();
+    scene.ucmd().arg("--reference").arg(FILE1).arg(FILE2).run();
 
     file.seek(SeekFrom::End(0)).unwrap();
     let actual = file.seek(SeekFrom::Current(0)).unwrap();

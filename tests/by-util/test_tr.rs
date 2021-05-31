@@ -140,9 +140,9 @@ fn test_translate_and_squeeze() {
 fn test_translate_and_squeeze_multiple_lines() {
     new_ucmd!()
         .args(&["-s", "x", "y"])
-        .pipe_in("xxaax\nxaaxx")    // spell-checker:disable-line
+        .pipe_in("xxaax\nxaaxx") // spell-checker:disable-line
         .run()
-        .stdout_is("yaay\nyaay");   // spell-checker:disable-line
+        .stdout_is("yaay\nyaay"); // spell-checker:disable-line
 }
 
 #[test]
@@ -169,7 +169,7 @@ fn test_set1_longer_than_set2() {
         .args(&["abc", "xy"])
         .pipe_in("abcde")
         .run()
-        .stdout_is("xyyde");    // spell-checker:disable-line
+        .stdout_is("xyyde"); // spell-checker:disable-line
 }
 
 #[test]
@@ -178,7 +178,7 @@ fn test_set1_shorter_than_set2() {
         .args(&["ab", "xyz"])
         .pipe_in("abcde")
         .run()
-        .stdout_is("xycde");    // spell-checker:disable-line
+        .stdout_is("xycde"); // spell-checker:disable-line
 }
 
 #[test]
@@ -187,7 +187,7 @@ fn test_truncate() {
         .args(&["-t", "abc", "xy"])
         .pipe_in("abcde")
         .run()
-        .stdout_is("xycde");    // spell-checker:disable-line
+        .stdout_is("xycde"); // spell-checker:disable-line
 }
 
 #[test]
@@ -196,7 +196,7 @@ fn test_truncate_with_set1_shorter_than_set2() {
         .args(&["-t", "ab", "xyz"])
         .pipe_in("abcde")
         .run()
-        .stdout_is("xycde");    // spell-checker:disable-line
+        .stdout_is("xycde"); // spell-checker:disable-line
 }
 
 #[test]
@@ -216,8 +216,8 @@ fn missing_required_second_arg_fails() {
 #[test]
 fn test_interpret_backslash_escapes() {
     new_ucmd!()
-        .args(&["abfnrtv", r"\a\b\f\n\r\t\v"])  // spell-checker:disable-line
-        .pipe_in("abfnrtv")     // spell-checker:disable-line
+        .args(&["abfnrtv", r"\a\b\f\n\r\t\v"]) // spell-checker:disable-line
+        .pipe_in("abfnrtv") // spell-checker:disable-line
         .succeeds()
         .stdout_is("\u{7}\u{8}\u{c}\n\r\t\u{b}");
 }

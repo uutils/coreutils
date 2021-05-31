@@ -401,7 +401,7 @@ fn sub_any_asterisk_hex_arg() {
 #[test]
 fn sub_any_specifiers_no_params() {
     new_ucmd!()
-        .args(&["%ztlhLji", "3"])   //spell-checker:disable-line
+        .args(&["%ztlhLji", "3"]) //spell-checker:disable-line
         .succeeds()
         .stdout_only("3");
 }
@@ -409,7 +409,7 @@ fn sub_any_specifiers_no_params() {
 #[test]
 fn sub_any_specifiers_after_first_param() {
     new_ucmd!()
-        .args(&["%0ztlhLji", "3"])  //spell-checker:disable-line
+        .args(&["%0ztlhLji", "3"]) //spell-checker:disable-line
         .succeeds()
         .stdout_only("3");
 }
@@ -417,7 +417,7 @@ fn sub_any_specifiers_after_first_param() {
 #[test]
 fn sub_any_specifiers_after_period() {
     new_ucmd!()
-        .args(&["%0.ztlhLji", "3"])     //spell-checker:disable-line
+        .args(&["%0.ztlhLji", "3"]) //spell-checker:disable-line
         .succeeds()
         .stdout_only("3");
 }
@@ -425,7 +425,7 @@ fn sub_any_specifiers_after_period() {
 #[test]
 fn sub_any_specifiers_after_second_param() {
     new_ucmd!()
-        .args(&["%0.0ztlhLji", "3"])    //spell-checker:disable-line
+        .args(&["%0.0ztlhLji", "3"]) //spell-checker:disable-line
         .succeeds()
         .stdout_only("3");
 }

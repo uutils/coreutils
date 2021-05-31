@@ -38,7 +38,7 @@ fn test_decode() {
 
 #[test]
 fn test_garbage() {
-    let input = "aGVsbG8sIHdvcmxkIQ==\0";   // spell-checker:disable-line
+    let input = "aGVsbG8sIHdvcmxkIQ==\0"; // spell-checker:disable-line
     new_ucmd!()
         .arg("-d")
         .pipe_in(input)
@@ -49,7 +49,7 @@ fn test_garbage() {
 #[test]
 fn test_ignore_garbage() {
     for ignore_garbage_param in &["-i", "--ignore-garbage"] {
-        let input = "aGVsbG8sIHdvcmxkIQ==\0";   // spell-checker:disable-line
+        let input = "aGVsbG8sIHdvcmxkIQ==\0"; // spell-checker:disable-line
         new_ucmd!()
             .arg("-d")
             .arg(ignore_garbage_param)

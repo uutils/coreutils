@@ -120,7 +120,7 @@ fn test_symlink_interactive() {
     scene
         .ucmd()
         .args(&["-i", "-s", file, link])
-        .pipe_in("Yesh")    // spell-checker:disable-line
+        .pipe_in("Yesh") // spell-checker:disable-line
         .succeeds()
         .no_stderr();
 

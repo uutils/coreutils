@@ -282,7 +282,7 @@ fn test_backspace_is_not_word_boundary() {
         .args(&["-w10", "-s"])
         .pipe_in("foobar\x086789abcdef")
         .succeeds()
-        .stdout_is("foobar\x086789a\nbcdef");   // spell-checker:disable-line
+        .stdout_is("foobar\x086789a\nbcdef"); // spell-checker:disable-line
 }
 
 #[test]
@@ -308,9 +308,9 @@ fn test_carriage_return_should_reset_column_count() {
 fn test_carriage_return_is_not_word_boundary() {
     new_ucmd!()
         .args(&["-w6", "-s"])
-        .pipe_in("fizz\rbuzz\rfizzbuzz")    // spell-checker:disable-line
+        .pipe_in("fizz\rbuzz\rfizzbuzz") // spell-checker:disable-line
         .succeeds()
-        .stdout_is("fizz\rbuzz\rfizzbu\nzz");   // spell-checker:disable-line
+        .stdout_is("fizz\rbuzz\rfizzbu\nzz"); // spell-checker:disable-line
 }
 
 //
@@ -530,7 +530,7 @@ fn test_bytewise_carriage_return_should_not_reset_column_count() {
 fn test_bytewise_carriage_return_is_not_word_boundary() {
     new_ucmd!()
         .args(&["-w6", "-s", "-b"])
-        .pipe_in("fizz\rbuzz\rfizzbuzz")    // spell-checker:disable-line
+        .pipe_in("fizz\rbuzz\rfizzbuzz") // spell-checker:disable-line
         .succeeds()
         .stdout_is("fizz\rb\nuzz\rfi\nzzbuzz"); // spell-checker:disable-line
 }

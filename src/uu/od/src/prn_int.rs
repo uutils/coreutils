@@ -153,7 +153,10 @@ fn test_format_item_hex() {
     assert_eq!(" 00000000", format_item_hex32(0));
     assert_eq!(" ffffffff", format_item_hex32(0xffff_ffff));
     assert_eq!(" 0000000000000000", format_item_hex64(0));
-    assert_eq!(" ffffffffffffffff", format_item_hex64(0xffff_ffff_ffff_ffff));
+    assert_eq!(
+        " ffffffffffffffff",
+        format_item_hex64(0xffff_ffff_ffff_ffff)
+    );
 }
 
 #[test]

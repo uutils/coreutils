@@ -2,7 +2,9 @@
 // spell-checker:ignore (ToDO) arrnum
 
 use super::super::format_field::FormatField;
-use super::super::formatter::{get_it_at, warn_incomplete_conv, Base, FormatPrimitive, InitialPrefix};
+use super::super::formatter::{
+    get_it_at, warn_incomplete_conv, Base, FormatPrimitive, InitialPrefix,
+};
 use super::base_conv;
 use super::base_conv::RadixDef;
 

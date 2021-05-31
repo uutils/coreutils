@@ -612,12 +612,12 @@ impl FsMeta for StatFs {
     }
     #[cfg(target_os = "freebsd")]
     fn namelen(&self) -> u64 {
-        self.f_namemax as u64   // spell-checker:disable-line
+        self.f_namemax as u64 // spell-checker:disable-line
     }
     // XXX: should everything just use statvfs?
     #[cfg(not(any(target_vendor = "apple", target_os = "freebsd", target_os = "linux")))]
     fn namelen(&self) -> u64 {
-        self.f_namemax as u64   // spell-checker:disable-line
+        self.f_namemax as u64 // spell-checker:disable-line
     }
 }
 

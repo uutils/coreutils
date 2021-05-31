@@ -209,7 +209,10 @@ fn test_big_primes() {
 
 fn run(input_string: &[u8], output_string: &[u8]) {
     println!("STDIN='{}'", String::from_utf8_lossy(input_string));
-    println!("STDOUT(expected)='{}'", String::from_utf8_lossy(output_string));
+    println!(
+        "STDOUT(expected)='{}'",
+        String::from_utf8_lossy(output_string)
+    );
     // now run factor
     new_ucmd!()
         .pipe_in(input_string)

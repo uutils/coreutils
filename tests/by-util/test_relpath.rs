@@ -120,7 +120,7 @@ fn test_relpath_with_from_with_d() {
             .ucmd()
             .arg(to)
             .arg(from)
-            .arg("-dnon_existing")  // spell-checker:disable-line
+            .arg("-dnon_existing") // spell-checker:disable-line
             .succeeds()
             .stdout_move_str();
         assert!(Path::new(&_result_stdout).is_absolute());
@@ -170,7 +170,7 @@ fn test_relpath_no_from_with_d() {
         let result_stdout = scene
             .ucmd()
             .arg(to)
-            .arg("-dnon_existing")  // spell-checker:disable-line
+            .arg("-dnon_existing") // spell-checker:disable-line
             .succeeds()
             .stdout_move_str();
         assert!(Path::new(&result_stdout).is_absolute());

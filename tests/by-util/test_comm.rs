@@ -39,7 +39,7 @@ fn a_empty() {
     new_ucmd!()
         .args(&["a", "empty"])
         .succeeds()
-        .stdout_only_fixture("aempty.expected");    // spell-checker:disable-line
+        .stdout_only_fixture("aempty.expected"); // spell-checker:disable-line
 }
 
 #[test]

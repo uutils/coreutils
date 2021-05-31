@@ -475,12 +475,14 @@ impl Stater {
         let show_fs = matches.is_present(options::FILE_SYSTEM);
 
         let default_tokens = if format_str.is_empty() {
-            Stater::generate_tokens(&Stater::default_format(show_fs, terse, false), use_printf).unwrap()
+            Stater::generate_tokens(&Stater::default_format(show_fs, terse, false), use_printf)
+                .unwrap()
         } else {
             Stater::generate_tokens(&format_str, use_printf)?
         };
         let default_dev_tokens =
-            Stater::generate_tokens(&Stater::default_format(show_fs, terse, true), use_printf).unwrap();
+            Stater::generate_tokens(&Stater::default_format(show_fs, terse, true), use_printf)
+                .unwrap();
 
         let mount_list = if show_fs {
             // mount points aren't displayed when showing filesystem information
@@ -540,12 +542,13 @@ impl Stater {
             match result {
                 Ok(meta) => {
                     let file_type = meta.file_type();
-                    let tokens =
-                        if self.from_user || !(file_type.is_char_device() || file_type.is_block_device()) {
-                            &self.default_tokens
-                        } else {
-                            &self.default_dev_tokens
-                        };
+                    let tokens = if self.from_user
+                        || !(file_type.is_char_device() || file_type.is_block_device())
+                    {
+                        &self.default_tokens
+                    } else {
+                        &self.default_dev_tokens
+                    };
 
                     for t in tokens.iter() {
                         match *t {
@@ -867,7 +870,8 @@ impl Stater {
         } else {
             format_str.push_str("  File: %N\n  Size: %-10s\tBlocks: %-10b IO Block: %-6o %F\n");
             if show_dev_type {
-                format_str.push_str("Device: %Dh/%dd\tInode: %-10i  Links: %-5h Device type: %t,%T\n");
+                format_str
+                    .push_str("Device: %Dh/%dd\tInode: %-10i  Links: %-5h Device type: %t,%T\n");
             } else {
                 format_str.push_str("Device: %Dh/%dd\tInode: %-10i  Links: %h\n");
             }

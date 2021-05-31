@@ -268,7 +268,7 @@ fn test_parse_size() {
     assert!(parse_size("1Y").is_err());
 
     // Bad number
-    assert!(parse_size("328hdsf3290").is_err());    // spell-checker:disable-line
+    assert!(parse_size("328hdsf3290").is_err()); // spell-checker:disable-line
 }
 
 #[test]

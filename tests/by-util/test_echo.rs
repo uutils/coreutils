@@ -189,7 +189,7 @@ fn test_hyphen_values_inside_string() {
     new_ucmd!()
         .arg("'\"\n'CXXFLAGS=-g -O2'\n\"'") // spell-checker:disable-line
         .succeeds()
-        .stdout_contains("CXXFLAGS");   // spell-checker:disable-line
+        .stdout_contains("CXXFLAGS"); // spell-checker:disable-line
 }
 
 #[test]

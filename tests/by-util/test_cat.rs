@@ -9,7 +9,7 @@ fn test_output_simple() {
     new_ucmd!()
         .args(&["alpha.txt"])
         .succeeds()
-        .stdout_only("abcde\nfghij\nklmno\npqrst\nuvwxyz\n");   // spell-checker:disable-line
+        .stdout_only("abcde\nfghij\nklmno\npqrst\nuvwxyz\n"); // spell-checker:disable-line
 }
 
 #[test]
@@ -67,8 +67,8 @@ fn test_fifo_symlink() {
     assert!(s.fixtures.is_fifo("dir/pipe"));
 
     // Make cat read the pipe through a symlink
-    s.fixtures.symlink_file("dir/pipe", "sympipe");     // spell-checker:disable-line
-    let proc = s.ucmd().args(&["sympipe"]).run_no_wait();   // spell-checker:disable-line
+    s.fixtures.symlink_file("dir/pipe", "sympipe"); // spell-checker:disable-line
+    let proc = s.ucmd().args(&["sympipe"]).run_no_wait(); // spell-checker:disable-line
 
     let data = vec_of_size(128 * 1024);
     let data2 = data.clone();
@@ -111,7 +111,7 @@ fn test_piped_to_regular_file() {
                 .succeeds();
         }
         let contents = read_to_string(&file_path).unwrap();
-        assert_eq!(contents, "abcde\nfghij\nklmno\npqrst\nuvwxyz\n");   // spell-checker:disable-line
+        assert_eq!(contents, "abcde\nfghij\nklmno\npqrst\nuvwxyz\n"); // spell-checker:disable-line
     }
 }
 
@@ -193,7 +193,7 @@ fn test_three_directories_and_file_and_stdin() {
             "alpha.txt",
             "-",
             "file_which_does_not_exist.txt",
-            "nonewline.txt",    // spell-checker:disable-line
+            "nonewline.txt", // spell-checker:disable-line
             "test_directory3/test_directory5",
             "test_directory3/../test_directory3/test_directory5",
             "test_directory3",
@@ -202,7 +202,7 @@ fn test_three_directories_and_file_and_stdin() {
         .fails()
         .stderr_is_fixture("three_directories_and_file_and_stdin.stderr.expected")
         .stdout_is(
-            "abcde\nfghij\nklmno\npqrst\nuvwxyz\nstdout bytestext without a trailing newline",  // spell-checker:disable-line
+            "abcde\nfghij\nklmno\npqrst\nuvwxyz\nstdout bytestext without a trailing newline", // spell-checker:disable-line
         );
 }
 

@@ -292,10 +292,10 @@ fn test_dictionary_order() {
 fn test_dictionary_order2() {
     for non_dictionary_order2_param in &["-d"] {
         new_ucmd!()
-            .pipe_in("a👦🏻aa	b\naaaa	b")   // spell-checker:disable-line
-            .arg(non_dictionary_order2_param)   // spell-checker:disable-line
+            .pipe_in("a👦🏻aa	b\naaaa	b") // spell-checker:disable-line
+            .arg(non_dictionary_order2_param) // spell-checker:disable-line
             .succeeds()
-            .stdout_only("a👦🏻aa	b\naaaa	b\n");    // spell-checker:disable-line
+            .stdout_only("a👦🏻aa	b\naaaa	b\n"); // spell-checker:disable-line
     }
 }
 
@@ -303,10 +303,10 @@ fn test_dictionary_order2() {
 fn test_non_printing_chars() {
     for non_printing_chars_param in &["-i"] {
         new_ucmd!()
-            .pipe_in("a👦🏻aa\naaaa")   // spell-checker:disable-line
-            .arg(non_printing_chars_param)  // spell-checker:disable-line
+            .pipe_in("a👦🏻aa\naaaa") // spell-checker:disable-line
+            .arg(non_printing_chars_param) // spell-checker:disable-line
             .succeeds()
-            .stdout_only("a👦🏻aa\naaaa\n");    // spell-checker:disable-line
+            .stdout_only("a👦🏻aa\naaaa\n"); // spell-checker:disable-line
     }
 }
 

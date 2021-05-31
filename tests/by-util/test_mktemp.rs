@@ -10,8 +10,8 @@ static TEST_TEMPLATE2: &str = "temp";
 static TEST_TEMPLATE3: &str = "tempX";
 static TEST_TEMPLATE4: &str = "tempXX";
 static TEST_TEMPLATE5: &str = "tempXXX";
-static TEST_TEMPLATE6: &str = "tempXXXlate";    // spell-checker:disable-line
-static TEST_TEMPLATE7: &str = "XXXtemplate";    // spell-checker:disable-line
+static TEST_TEMPLATE6: &str = "tempXXXlate"; // spell-checker:disable-line
+static TEST_TEMPLATE7: &str = "XXXtemplate"; // spell-checker:disable-line
 #[cfg(unix)]
 static TEST_TEMPLATE8: &str = "tempXXXl/ate";
 #[cfg(windows)]

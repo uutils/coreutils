@@ -150,7 +150,12 @@ impl Intf {
     // - if the string falls outside bounds:
     //   for i64 output, the int minimum or int max (depending on sign)
     //   for u64 output, the u64 max in the output radix
-    fn conv_from_segment(segment: &str, radix_in: Base, field_char: char, sign: i8) -> FormatPrimitive {
+    fn conv_from_segment(
+        segment: &str,
+        radix_in: Base,
+        field_char: char,
+        sign: i8,
+    ) -> FormatPrimitive {
         match field_char {
             'i' | 'd' => match i64::from_str_radix(segment, radix_in as u32) {
                 Ok(i) => {
