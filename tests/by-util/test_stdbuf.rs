@@ -57,8 +57,15 @@ fn test_stdbuf_line_buffering_stdin_fails() {
 #[cfg(not(target_os = "windows"))]
 #[test]
 fn test_stdbuf_invalid_mode_fails() {
+    // TODO: GNU's `stdbuf` (8.32) does not return "\nTry 'stdbuf --help' for more information."
+    // for invalid modes.
     new_ucmd!()
         .args(&["-i", "1024R", "head"])
         .fails()
-        .stderr_is("stdbuf: invalid mode 1024R\nTry 'stdbuf --help' for more information.");
+        .stderr_contains("stdbuf: invalid mode ‘1024R’");
+    #[cfg(not(target_pointer_width = "128"))]
+    new_ucmd!()
+        .args(&["--error", "1Y", "head"])
+        .fails()
+        .stderr_contains("stdbuf: invalid mode ‘1Y’: Value too large to be stored in data type");
 }
