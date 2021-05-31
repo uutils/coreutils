@@ -355,6 +355,34 @@ fn test_touch_set_date() {
 }
 
 #[test]
+fn test_touch_set_date2() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_set_date";
+
+    ucmd.args(&["-d", "2000-01-23", file])
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file));
+
+    let start_of_year = str_to_filetime("%Y%m%d%H%M", "200001230000");
+    let (atime, mtime) = get_file_times(&at, file);
+    assert_eq!(atime, mtime);
+    assert_eq!(atime, start_of_year);
+    assert_eq!(mtime, start_of_year);
+}
+
+#[test]
+fn test_touch_set_date_wrong_format() {
+    let (_at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_set_date_wrong_format";
+
+    ucmd.args(&["-d", "2005-43-21", file])
+        .fails()
+        .stderr_contains("Unable to parse date: 2005-43-21");
+}
+
+#[test]
 fn test_touch_mtime_dst_succeeds() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_set_mtime_dst_succeeds";
