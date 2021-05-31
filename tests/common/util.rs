@@ -1,7 +1,4 @@
 #![allow(dead_code)]
-
-#[cfg(not(windows))]
-use libc;
 use pretty_assertions::assert_eq;
 use std::env;
 #[cfg(not(windows))]
@@ -39,7 +36,7 @@ static NO_STDIN_MEANINGLESS: &str = "Setting this flag has no effect if there is
 /// Test if the program is running under CI
 pub fn is_ci() -> bool {
     std::env::var("CI")
-        .unwrap_or(String::from("false"))
+        .unwrap_or_else(|_| String::from("false"))
         .eq_ignore_ascii_case("true")
 }
 
@@ -478,7 +475,7 @@ impl AtPath {
             .append(true)
             .open(self.plus(name))
             .unwrap();
-        f.write(contents.as_bytes())
+        f.write_all(contents.as_bytes())
             .unwrap_or_else(|e| panic!("Couldn't write {}: {}", name, e));
     }
 
@@ -791,7 +788,7 @@ impl UCommand {
         if self.has_run {
             panic!("{}", ALREADY_RUN);
         }
-        self.comm_string.push_str(" ");
+        self.comm_string.push(' ');
         self.comm_string
             .push_str(arg.as_ref().to_str().unwrap_or_default());
         self.raw.arg(arg.as_ref());
@@ -811,7 +808,7 @@ impl UCommand {
             .accept_any();
 
         for s in strings {
-            self.comm_string.push_str(" ");
+            self.comm_string.push(' ');
             self.comm_string.push_str(&s);
         }
 
@@ -867,9 +864,9 @@ impl UCommand {
         log_info("run", &self.comm_string);
         let mut child = self
             .raw
-            .stdin(self.stdin.take().unwrap_or_else(|| Stdio::piped()))
-            .stdout(self.stdout.take().unwrap_or_else(|| Stdio::piped()))
-            .stderr(self.stderr.take().unwrap_or_else(|| Stdio::piped()))
+            .stdin(self.stdin.take().unwrap_or_else(Stdio::piped))
+            .stdout(self.stdout.take().unwrap_or_else(Stdio::piped))
+            .stderr(self.stderr.take().unwrap_or_else(Stdio::piped))
             .spawn()
             .unwrap();
 
@@ -948,10 +945,7 @@ pub fn read_size(child: &mut Child, size: usize) -> String {
 }
 
 pub fn vec_of_size(n: usize) -> Vec<u8> {
-    let mut result = Vec::new();
-    for _ in 0..n {
-        result.push('a' as u8);
-    }
+    let result = vec![b'a'; n];
     assert_eq!(result.len(), n);
     result
 }

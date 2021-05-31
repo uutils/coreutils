@@ -73,6 +73,7 @@ impl Chunk {
 /// * `lines`: The recycled vector to fill with lines. Must be empty.
 /// * `settings`: The global settings.
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::borrowed_box)]
 pub fn read(
     sender_option: &mut Option<SyncSender<Chunk>>,
     mut buffer: Vec<u8>,
@@ -164,6 +165,7 @@ fn parse_lines<'a>(
 ///   The remaining bytes must be copied to the start of the buffer for the next invocation,
 ///   if another invocation is necessary, which is determined by the other return value.
 /// * Whether this function should be called again.
+#[allow(clippy::borrowed_box)]
 fn read_to_buffer(
     file: &mut Box<dyn Read + Send>,
     next_files: &mut impl Iterator<Item = Box<dyn Read + Send>>,

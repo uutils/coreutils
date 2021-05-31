@@ -108,7 +108,7 @@ const POSITIVE: char = '+';
 // available memory into consideration, instead of relying on this constant only.
 static DEFAULT_BUF_SIZE: usize = 1_000_000_000; // 1 GB
 
-#[derive(Eq, Ord, PartialEq, PartialOrd, Clone, Copy)]
+#[derive(Eq, Ord, PartialEq, PartialOrd, Clone, Copy, Debug)]
 enum SortMode {
     Numeric,
     HumanNumeric,
@@ -118,6 +118,21 @@ enum SortMode {
     Random,
     Default,
 }
+
+impl SortMode {
+    fn get_short_name(&self) -> Option<char> {
+        match self {
+            SortMode::Numeric => Some('n'),
+            SortMode::HumanNumeric => Some('h'),
+            SortMode::GeneralNumeric => Some('g'),
+            SortMode::Month => Some('M'),
+            SortMode::Version => Some('V'),
+            SortMode::Random => Some('R'),
+            SortMode::Default => None,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct GlobalSettings {
     mode: SortMode,
@@ -211,7 +226,7 @@ impl Default for GlobalSettings {
         }
     }
 }
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 struct KeySettings {
     mode: SortMode,
     ignore_blanks: bool,
@@ -219,6 +234,60 @@ struct KeySettings {
     dictionary_order: bool,
     ignore_non_printing: bool,
     reverse: bool,
+}
+
+impl KeySettings {
+    /// Checks if the supplied combination of `mode`, `ignore_non_printing` and `dictionary_order` is allowed.
+    fn check_compatibility(
+        mode: SortMode,
+        ignore_non_printing: bool,
+        dictionary_order: bool,
+    ) -> Result<(), String> {
+        if matches!(
+            mode,
+            SortMode::Numeric | SortMode::HumanNumeric | SortMode::GeneralNumeric | SortMode::Month
+        ) {
+            if dictionary_order {
+                return Err(format!(
+                    "options '-{}{}' are incompatible",
+                    'd',
+                    mode.get_short_name().unwrap()
+                ));
+            } else if ignore_non_printing {
+                return Err(format!(
+                    "options '-{}{}' are incompatible",
+                    'i',
+                    mode.get_short_name().unwrap()
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn set_sort_mode(&mut self, mode: SortMode) -> Result<(), String> {
+        if self.mode != SortMode::Default {
+            return Err(format!(
+                "options '-{}{}' are incompatible",
+                self.mode.get_short_name().unwrap(),
+                mode.get_short_name().unwrap()
+            ));
+        }
+        Self::check_compatibility(mode, self.ignore_non_printing, self.dictionary_order)?;
+        self.mode = mode;
+        Ok(())
+    }
+
+    fn set_dictionary_order(&mut self) -> Result<(), String> {
+        Self::check_compatibility(self.mode, self.ignore_non_printing, true)?;
+        self.dictionary_order = true;
+        Ok(())
+    }
+
+    fn set_ignore_non_printing(&mut self) -> Result<(), String> {
+        Self::check_compatibility(self.mode, true, self.dictionary_order)?;
+        self.ignore_non_printing = true;
+        Ok(())
+    }
 }
 
 impl From<&GlobalSettings> for KeySettings {
@@ -231,6 +300,12 @@ impl From<&GlobalSettings> for KeySettings {
             reverse: settings.reverse,
             dictionary_order: settings.dictionary_order,
         }
+    }
+}
+
+impl Default for KeySettings {
+    fn default() -> Self {
+        Self::from(&GlobalSettings::default())
     }
 }
 
@@ -296,10 +371,10 @@ impl<'a> Line<'a> {
     fn print(&self, writer: &mut impl Write, settings: &GlobalSettings) {
         if settings.zero_terminated && !settings.debug {
             crash_if_err!(1, writer.write_all(self.line.as_bytes()));
-            crash_if_err!(1, writer.write_all("\0".as_bytes()));
+            crash_if_err!(1, writer.write_all(b"\0"));
         } else if !settings.debug {
             crash_if_err!(1, writer.write_all(self.line.as_bytes()));
-            crash_if_err!(1, writer.write_all("\n".as_bytes()));
+            crash_if_err!(1, writer.write_all(b"\n"));
         } else {
             crash_if_err!(1, self.print_debug(settings, writer));
         }
@@ -412,14 +487,18 @@ impl<'a> Line<'a> {
                 }
             }
         }
-        if !(settings.mode == SortMode::Random
-            || settings.stable
-            || settings.unique
-            || !(settings.dictionary_order
+        if settings.mode != SortMode::Random
+            && !settings.stable
+            && !settings.unique
+            && (settings.dictionary_order
                 || settings.ignore_blanks
                 || settings.ignore_case
                 || settings.ignore_non_printing
-                || settings.mode != SortMode::Default))
+                || settings.mode != SortMode::Default
+                || settings
+                    .selectors
+                    .last()
+                    .map_or(true, |selector| selector != &Default::default()))
         {
             // A last resort comparator is in use, underline the whole line.
             if self.line.is_empty() {
@@ -483,7 +562,7 @@ fn tokenize_with_separator(line: &str, separator: char) -> Vec<Field> {
     tokens
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 struct KeyPosition {
     /// 1-indexed, 0 is invalid.
     field: usize,
@@ -493,87 +572,45 @@ struct KeyPosition {
 }
 
 impl KeyPosition {
-    fn parse(key: &str, default_char_index: usize, settings: &mut KeySettings) -> Self {
+    fn new(key: &str, default_char_index: usize, ignore_blanks: bool) -> Result<Self, String> {
         let mut field_and_char = key.split('.');
-        let mut field = field_and_char
+
+        let field = field_and_char
             .next()
-            .unwrap_or_else(|| crash!(1, "invalid key `{}`", key));
-        let mut char = field_and_char.next();
-
-        // If there is a char index, we expect options to appear after it. Otherwise we expect them after the field index.
-        let value_with_options = char.as_mut().unwrap_or(&mut field);
-
-        let mut ignore_blanks = settings.ignore_blanks;
-        if let Some(options_start) = value_with_options.chars().position(char::is_alphabetic) {
-            for option in value_with_options[options_start..].chars() {
-                // valid options: MbdfghinRrV
-                match option {
-                    'M' => settings.mode = SortMode::Month,
-                    'b' => ignore_blanks = true,
-                    'd' => settings.dictionary_order = true,
-                    'f' => settings.ignore_case = true,
-                    'g' => settings.mode = SortMode::GeneralNumeric,
-                    'h' => settings.mode = SortMode::HumanNumeric,
-                    'i' => settings.ignore_non_printing = true,
-                    'n' => settings.mode = SortMode::Numeric,
-                    'R' => settings.mode = SortMode::Random,
-                    'r' => settings.reverse = true,
-                    'V' => settings.mode = SortMode::Version,
-                    c => crash!(1, "invalid option for key: `{}`", c),
-                }
-                // All numeric sorts and month sort conflict with dictionary_order and ignore_non_printing.
-                // Instad of reporting an error, let them overwrite each other.
-
-                // FIXME: This should only override if the overridden flag is a global flag.
-                // If conflicting flags are attached to the key, GNU sort crashes and we should probably too.
-                match option {
-                    'h' | 'n' | 'g' | 'M' => {
-                        settings.dictionary_order = false;
-                        settings.ignore_non_printing = false;
-                    }
-                    'd' | 'i' => {
-                        settings.mode = match settings.mode {
-                            SortMode::Numeric
-                            | SortMode::HumanNumeric
-                            | SortMode::GeneralNumeric
-                            | SortMode::Month => SortMode::Default,
-                            // Only SortMode::Default and SortMode::Version work with dictionary_order and ignore_non_printing
-                            m @ SortMode::Default
-                            | m @ SortMode::Version
-                            | m @ SortMode::Random => m,
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            // Strip away option characters from the original value so we can parse it later
-            *value_with_options = &value_with_options[..options_start];
-        }
+            .ok_or_else(|| format!("invalid key `{}`", key))?;
+        let char = field_and_char.next();
 
         let field = field
             .parse()
-            .unwrap_or_else(|e| crash!(1, "failed to parse field index for key `{}`: {}", key, e));
+            .map_err(|e| format!("failed to parse field index `{}`: {}", field, e))?;
         if field == 0 {
-            crash!(1, "field index was 0");
+            return Err("field index can not be 0".to_string());
         }
-        let char = char.map_or(default_char_index, |char| {
-            char.parse().unwrap_or_else(|e| {
-                crash!(
-                    1,
-                    "failed to parse character index for key `{}`: {}",
-                    key,
-                    e
-                )
-            })
-        });
-        Self {
+
+        let char = char.map_or(Ok(default_char_index), |char| {
+            char.parse()
+                .map_err(|e| format!("failed to parse character index `{}`: {}", char, e))
+        })?;
+
+        Ok(Self {
             field,
             char,
             ignore_blanks,
+        })
+    }
+}
+
+impl Default for KeyPosition {
+    fn default() -> Self {
+        KeyPosition {
+            field: 1,
+            char: 1,
+            ignore_blanks: false,
         }
     }
 }
-#[derive(Clone)]
+
+#[derive(Clone, PartialEq, Debug)]
 struct FieldSelector {
     from: KeyPosition,
     to: Option<KeyPosition>,
@@ -583,20 +620,120 @@ struct FieldSelector {
     is_default_selection: bool,
 }
 
-impl FieldSelector {
-    fn new(from: KeyPosition, to: Option<KeyPosition>, settings: KeySettings) -> Self {
+impl Default for FieldSelector {
+    fn default() -> Self {
         Self {
-            is_default_selection: from.field == 1
-                && from.char == 1
-                && to.is_none()
-                && !matches!(
-                    settings.mode,
-                    SortMode::Numeric | SortMode::GeneralNumeric | SortMode::HumanNumeric
-                ),
-            needs_tokens: from.field != 1 || from.char == 0 || to.is_some(),
-            from,
-            to,
-            settings,
+            from: Default::default(),
+            to: None,
+            settings: Default::default(),
+            needs_tokens: false,
+            is_default_selection: true,
+        }
+    }
+}
+
+impl FieldSelector {
+    /// Splits this position into the actual position and the attached options.
+    fn split_key_options(position: &str) -> (&str, &str) {
+        if let Some((options_start, _)) = position.char_indices().find(|(_, c)| c.is_alphabetic()) {
+            position.split_at(options_start)
+        } else {
+            (position, "")
+        }
+    }
+
+    fn parse(key: &str, global_settings: &GlobalSettings) -> Self {
+        let mut from_to = key.split(',');
+        let (from, from_options) = Self::split_key_options(from_to.next().unwrap());
+        let to = from_to.next().map(|to| Self::split_key_options(to));
+        let options_are_empty = from_options.is_empty() && matches!(to, None | Some((_, "")));
+        crash_if_err!(
+            2,
+            if options_are_empty {
+                // Inherit the global settings if there are no options attached to this key.
+                (|| {
+                    // This would be ideal for a try block, I think. In the meantime this closure allows
+                    // to use the `?` operator here.
+                    Self::new(
+                        KeyPosition::new(from, 1, global_settings.ignore_blanks)?,
+                        to.map(|(to, _)| KeyPosition::new(to, 0, global_settings.ignore_blanks))
+                            .transpose()?,
+                        KeySettings::from(global_settings),
+                    )
+                })()
+            } else {
+                // Do not inherit from `global_settings`, as there are options attached to this key.
+                Self::parse_with_options((from, from_options), to)
+            }
+            .map_err(|e| format!("failed to parse key `{}`: {}", key, e))
+        )
+    }
+
+    fn parse_with_options(
+        (from, from_options): (&str, &str),
+        to: Option<(&str, &str)>,
+    ) -> Result<Self, String> {
+        /// Applies `options` to `key_settings`, returning if the 'b'-flag (ignore blanks) was present.
+        fn parse_key_settings(
+            options: &str,
+            key_settings: &mut KeySettings,
+        ) -> Result<bool, String> {
+            let mut ignore_blanks = false;
+            for option in options.chars() {
+                match option {
+                    'M' => key_settings.set_sort_mode(SortMode::Month)?,
+                    'b' => ignore_blanks = true,
+                    'd' => key_settings.set_dictionary_order()?,
+                    'f' => key_settings.ignore_case = true,
+                    'g' => key_settings.set_sort_mode(SortMode::GeneralNumeric)?,
+                    'h' => key_settings.set_sort_mode(SortMode::HumanNumeric)?,
+                    'i' => key_settings.set_ignore_non_printing()?,
+                    'n' => key_settings.set_sort_mode(SortMode::Numeric)?,
+                    'R' => key_settings.set_sort_mode(SortMode::Random)?,
+                    'r' => key_settings.reverse = true,
+                    'V' => key_settings.set_sort_mode(SortMode::Version)?,
+                    c => return Err(format!("invalid option: `{}`", c)),
+                }
+            }
+            Ok(ignore_blanks)
+        }
+
+        let mut key_settings = KeySettings::default();
+        let from = parse_key_settings(from_options, &mut key_settings)
+            .map(|ignore_blanks| KeyPosition::new(from, 1, ignore_blanks))??;
+        let to = if let Some((to, to_options)) = to {
+            Some(
+                parse_key_settings(to_options, &mut key_settings)
+                    .map(|ignore_blanks| KeyPosition::new(to, 0, ignore_blanks))??,
+            )
+        } else {
+            None
+        };
+        Self::new(from, to, key_settings)
+    }
+
+    fn new(
+        from: KeyPosition,
+        to: Option<KeyPosition>,
+        settings: KeySettings,
+    ) -> Result<Self, String> {
+        if from.char == 0 {
+            Err("invalid character index 0 for the start position of a field".to_string())
+        } else {
+            Ok(Self {
+                is_default_selection: from.field == 1
+                    && from.char == 1
+                    && to.is_none()
+                    && !matches!(
+                        settings.mode,
+                        SortMode::Numeric | SortMode::GeneralNumeric | SortMode::HumanNumeric
+                    )
+                    && !from.ignore_blanks,
+                needs_tokens: from.field != 1 || from.char == 0 || to.is_some(),
+                from,
+                to,
+                settings,
+            })
         }
     }
 
@@ -900,7 +1037,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(OPT_SEPARATOR)
                 .help("custom separator for -k")
                 .takes_value(true))
-            .arg(Arg::with_name(OPT_ZERO_TERMINATED)
+        .arg(
+            Arg::with_name(OPT_ZERO_TERMINATED)
                 .short("z")
                 .long(OPT_ZERO_TERMINATED)
                 .help("line delimiter is NUL, not newline"),
@@ -1053,43 +1191,27 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     if matches.is_present(OPT_KEY) {
         for key in &matches.args[OPT_KEY].vals {
-            let key = key.to_string_lossy();
-            let mut from_to = key.split(',');
-            let mut key_settings = KeySettings::from(&settings);
-            let from = KeyPosition::parse(
-                from_to
-                    .next()
-                    .unwrap_or_else(|| crash!(1, "invalid key `{}`", key)),
-                1,
-                &mut key_settings,
-            );
-            if from.char == 0 {
-                crash!(
-                    1,
-                    "invalid character index 0 in `{}` for the start position of a field",
-                    key
-                )
-            }
-            let to = from_to
-                .next()
-                .map(|to| KeyPosition::parse(to, 0, &mut key_settings));
-            let field_selector = FieldSelector::new(from, to, key_settings);
-            settings.selectors.push(field_selector);
+            settings
+                .selectors
+                .push(FieldSelector::parse(&key.to_string_lossy(), &settings));
         }
     }
 
-    if !settings.stable || !matches.is_present(OPT_KEY) {
+    if !matches.is_present(OPT_KEY) {
         // add a default selector matching the whole line
         let key_settings = KeySettings::from(&settings);
-        settings.selectors.push(FieldSelector::new(
-            KeyPosition {
-                field: 1,
-                char: 1,
-                ignore_blanks: key_settings.ignore_blanks,
-            },
-            None,
-            key_settings,
-        ));
+        settings.selectors.push(
+            FieldSelector::new(
+                KeyPosition {
+                    field: 1,
+                    char: 1,
+                    ignore_blanks: key_settings.ignore_blanks,
+                },
+                None,
+                key_settings,
+            )
+            .unwrap(),
+        );
     }
 
     exec(&files, &settings)
@@ -1437,7 +1559,7 @@ mod tests {
     fn test_get_hash() {
         let a = "Ted".to_string();
 
-        assert_eq!(2646829031758483623, get_hash(&a));
+        assert_eq!(2_646_829_031_758_483_623, get_hash(&a));
     }
 
     #[test]

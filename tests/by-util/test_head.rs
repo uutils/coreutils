@@ -1,6 +1,6 @@
 use crate::common::util::*;
 
-static INPUT: &'static str = "lorem_ipsum.txt";
+static INPUT: &str = "lorem_ipsum.txt";
 
 #[test]
 fn test_stdin_default() {

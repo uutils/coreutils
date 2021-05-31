@@ -34,7 +34,7 @@ fn test_base32_encode_file() {
 
 #[test]
 fn test_decode() {
-    for decode_param in vec!["-d", "--decode"] {
+    for decode_param in &["-d", "--decode"] {
         let input = "JBSWY3DPFQQFO33SNRSCC===\n";
         new_ucmd!()
             .arg(decode_param)
@@ -56,7 +56,7 @@ fn test_garbage() {
 
 #[test]
 fn test_ignore_garbage() {
-    for ignore_garbage_param in vec!["-i", "--ignore-garbage"] {
+    for ignore_garbage_param in &["-i", "--ignore-garbage"] {
         let input = "JBSWY\x013DPFQ\x02QFO33SNRSCC===\n";
         new_ucmd!()
             .arg("-d")
@@ -69,7 +69,7 @@ fn test_ignore_garbage() {
 
 #[test]
 fn test_wrap() {
-    for wrap_param in vec!["-w", "--wrap"] {
+    for wrap_param in &["-w", "--wrap"] {
         let input = "The quick brown fox jumps over the lazy dog.";
         new_ucmd!()
             .arg(wrap_param)
@@ -84,16 +84,21 @@ fn test_wrap() {
 
 #[test]
 fn test_wrap_no_arg() {
-    for wrap_param in vec!["-w", "--wrap"] {
-        new_ucmd!().arg(wrap_param).fails().stderr_only(format!(
-            "error: The argument '--wrap <wrap>\' requires a value but none was supplied\n\nUSAGE:\n    base32 [OPTION]... [FILE]\n\nFor more information try --help"
-        ));
+    for wrap_param in &["-w", "--wrap"] {
+        let expected_stderr = "error: The argument '--wrap <wrap>\' requires a value but none was \
+                               supplied\n\nUSAGE:\n    base32 [OPTION]... [FILE]\n\nFor more \
+                               information try --help"
+            .to_string();
+        new_ucmd!()
+            .arg(wrap_param)
+            .fails()
+            .stderr_only(expected_stderr);
     }
 }
 
 #[test]
 fn test_wrap_bad_arg() {
-    for wrap_param in vec!["-w", "--wrap"] {
+    for wrap_param in &["-w", "--wrap"] {
         new_ucmd!()
             .arg(wrap_param)
             .arg("b")

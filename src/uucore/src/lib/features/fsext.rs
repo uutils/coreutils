@@ -179,7 +179,7 @@ impl MountInfo {
             /* for Irix 6.5 */
             | "ignore" => self.dummy = true,
             _ => self.dummy = self.fs_type == "none"
-                && self.mount_option.find(MOUNT_OPT_BIND).is_none(),
+                && !self.mount_option.contains(MOUNT_OPT_BIND)
         }
         // set MountInfo::remote
         #[cfg(windows)]

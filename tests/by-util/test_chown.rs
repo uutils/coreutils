@@ -39,7 +39,7 @@ mod test_passgrp {
     #[test]
     fn test_usr2uid() {
         assert_eq!(0, usr2uid("root").unwrap());
-        assert!(usr2uid("88888888").is_err());
+        assert!(usr2uid("88_888_888").is_err());
         assert!(usr2uid("auserthatdoesntexist").is_err());
     }
 
@@ -50,14 +50,14 @@ mod test_passgrp {
         } else {
             assert_eq!(0, grp2gid("wheel").unwrap());
         }
-        assert!(grp2gid("88888888").is_err());
+        assert!(grp2gid("88_888_888").is_err());
         assert!(grp2gid("agroupthatdoesntexist").is_err());
     }
 
     #[test]
     fn test_uid2usr() {
         assert_eq!("root", uid2usr(0).unwrap());
-        assert!(uid2usr(88888888).is_err());
+        assert!(uid2usr(88_888_888).is_err());
     }
 
     #[test]
@@ -67,7 +67,7 @@ mod test_passgrp {
         } else {
             assert_eq!("wheel", gid2grp(0).unwrap());
         }
-        assert!(gid2grp(88888888).is_err());
+        assert!(gid2grp(88_888_888).is_err());
     }
 }
 

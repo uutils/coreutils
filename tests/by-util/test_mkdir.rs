@@ -1,12 +1,12 @@
 use crate::common::util::*;
 
-static TEST_DIR1: &'static str = "mkdir_test1";
-static TEST_DIR2: &'static str = "mkdir_test2";
-static TEST_DIR3: &'static str = "mkdir_test3";
-static TEST_DIR4: &'static str = "mkdir_test4/mkdir_test4_1";
-static TEST_DIR5: &'static str = "mkdir_test5/mkdir_test5_1";
-static TEST_DIR6: &'static str = "mkdir_test6";
-static TEST_FILE7: &'static str = "mkdir_test7";
+static TEST_DIR1: &str = "mkdir_test1";
+static TEST_DIR2: &str = "mkdir_test2";
+static TEST_DIR3: &str = "mkdir_test3";
+static TEST_DIR4: &str = "mkdir_test4/mkdir_test4_1";
+static TEST_DIR5: &str = "mkdir_test5/mkdir_test5_1";
+static TEST_DIR6: &str = "mkdir_test6";
+static TEST_FILE7: &str = "mkdir_test7";
 
 #[test]
 fn test_mkdir_mkdir() {

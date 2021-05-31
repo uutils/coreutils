@@ -14,7 +14,7 @@ pub fn parse_obsolete(src: &str) -> Option<Result<impl Iterator<Item = OsString>
         let mut num_end = 0usize;
         let mut has_num = false;
         let mut last_char = 0 as char;
-        while let Some((n, c)) = chars.next() {
+        for (n, c) in &mut chars {
             if c.is_numeric() {
                 has_num = true;
                 num_end = n;
@@ -109,7 +109,7 @@ pub fn parse_num(src: &str) -> Result<(usize, bool), ParseError> {
     let mut num_end = 0usize;
     let mut last_char = 0 as char;
     let mut num_count = 0usize;
-    while let Some((n, c)) = chars.next() {
+    for (n, c) in &mut chars {
         if c.is_numeric() {
             num_end = n;
             num_count += 1;

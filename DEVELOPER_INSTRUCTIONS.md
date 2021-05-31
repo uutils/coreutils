@@ -21,7 +21,7 @@ if changes are not reflected in the report then run `cargo clean`  and run the a
 
 ### Using Stable Rust
 
-If you are using stable version of Rust that doesn't enable code coverage instrumentation by default 
+If you are using stable version of Rust that doesn't enable code coverage instrumentation by default
 then add `-Z-Zinstrument-coverage` flag to `RUSTFLAGS` env variable specified above.
 
 
@@ -36,3 +36,7 @@ To use the provided hook:
 2. Run `pre-commit install` while in the repository directory
 
 Your git commits will then automatically be checked. If a check fails, an error message will explain why, and your commit will be canceled. You can then make the suggested changes, and run `git commit ...` again.
+
+### Using Clippy
+
+The `msrv` key in the clippy configuration file `clippy.toml` is used to disable lints pertaining to newer features by specifying the minimum supported Rust version (MSRV). However, this key is only supported on `nightly`. To invoke clippy without errors, use `cargo +nightly clippy`. In order to also check tests and non-default crate features, use `cargo +nightly clippy --all-targets --all-features`.
