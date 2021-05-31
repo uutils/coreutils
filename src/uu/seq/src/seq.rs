@@ -119,7 +119,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .multiple(true)
                 .takes_value(true)
                 .allow_hyphen_values(true)
-                .max_values(3),
+                .max_values(3)
+                .required(true),
         )
         .get_matches_from(args);
 
