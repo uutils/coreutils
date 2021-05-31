@@ -119,7 +119,7 @@ fn tee(options: Options) -> Result<()> {
 
     // TODO: replaced generic 'copy' call to be able to stop copying
     // if all outputs are closed (due to errors)
-    if copy(input, &mut output).is_err() || output.flush().is_err() || output.error_occured() {
+    if copy(input, &mut output).is_err() || output.flush().is_err() || output.error_occurred() {
         Err(Error::new(ErrorKind::Other, ""))
     } else {
         Ok(())
@@ -155,7 +155,7 @@ impl MultiWriter {
             writers,
         }
     }
-    fn error_occured(&self) -> bool {
+    fn error_occurred(&self) -> bool {
         self.writers.len() != self.initial_len
     }
 }

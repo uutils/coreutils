@@ -1,3 +1,5 @@
+// spell-checker:ignore (paths) sublink subwords
+
 use crate::common::util::*;
 
 const SUB_DIR: &str = "subdir/deeper";

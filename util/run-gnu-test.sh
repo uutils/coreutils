@@ -1,4 +1,5 @@
 #!/bin/bash
+# spell-checker:ignore (env/vars) BUILDDIR GNULIB SUBDIRS
 set -e
 BUILDDIR="${PWD}/uutils/target/release"
 GNULIB_DIR="${PWD}/gnulib"

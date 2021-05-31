@@ -1,3 +1,5 @@
+// spell-checker:ignore (formats) cymdhm cymdhms mdhm mdhms ymdhm ymdhms
+
 extern crate touch;
 use self::touch::filetime::{self, FileTime};
 
@@ -411,13 +413,13 @@ fn is_dst_switch_hour(ts: time::Timespec) -> bool {
     tm_after.tm_hour == tm.tm_hour + 2
 }
 
-// get_dstswitch_hour returns date string for which touch -m -t fails.
+// get_dst_switch_hour returns date string for which touch -m -t fails.
 // For example, in EST (UTC-5), that will be "202003080200" so
-// touch -m -t 202003080200 somefile
+// touch -m -t 202003080200 file
 // fails (that date/time does not exist).
 // In other locales it will be a different date/time, and in some locales
 // it doesn't exist at all, in which case this function will return None.
-fn get_dstswitch_hour() -> Option<String> {
+fn get_dst_switch_hour() -> Option<String> {
     let now = time::now();
     // Start from January 1, 2020, 00:00.
     let mut tm = time::strptime("20200101-0000", "%Y%m%d-%H%M").unwrap();
@@ -443,7 +445,7 @@ fn test_touch_mtime_dst_fails() {
     let (_at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_set_mtime_dst_fails";
 
-    if let Some(s) = get_dstswitch_hour() {
+    if let Some(s) = get_dst_switch_hour() {
         ucmd.args(&["-m", "-t", &s, file]).fails();
     }
 }

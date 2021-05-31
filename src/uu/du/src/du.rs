@@ -5,8 +5,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) BLOCKSIZE inode inodes ment strs
-
 #[macro_use]
 extern crate uucore;
 
@@ -62,14 +60,13 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 const NAME: &str = "du";
 const SUMMARY: &str = "estimate file space usage";
 const LONG_HELP: &str = "
- Display  values  are  in  units  of  the  first  available  SIZE from
- --block-size,  and the DU_BLOCK_SIZE, BLOCK_SIZE and BLOCKSIZE environ‐
- ment variables.  Otherwise, units default to  1024  bytes  (or  512  if
- POSIXLY_CORRECT is set).
+Display values are in units of the first available SIZE from --block-size,
+and the DU_BLOCK_SIZE, BLOCK_SIZE and BLOCKSIZE environment variables.
+Otherwise, units default to 1024 bytes (or 512 if POSIXLY_CORRECT is set).
 
- SIZE  is  an  integer and optional unit (example: 10M is 10*1024*1024).
- Units are K, M, G, T, P, E, Z, Y (powers of 1024) or KB, MB, ...  (pow‐
- ers of 1000).
+SIZE is an integer and optional unit (example: 10M is 10*1024*1024).
+Units are K, M, G, T, P, E, Z, Y (powers of 1024) or KB, MB,... (powers
+of 1000).
 ";
 
 // TODO: Support Z & Y (currently limited by size of u64)
@@ -588,7 +585,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         separate_dirs: matches.is_present(options::SEPARATE_DIRS),
     };
 
-    let strs = match matches.value_of(options::FILE) {
+    let files = match matches.value_of(options::FILE) {
         Some(_) => matches.values_of(options::FILE).unwrap().collect(),
         None => {
             vec!["./"] // TODO: gnu `du` doesn't use trailing "/" here
@@ -646,8 +643,8 @@ Try '{} --help' for more information.",
     };
 
     let mut grand_total = 0;
-    for path_str in strs {
-        let path = PathBuf::from(&path_str);
+    for path_string in files {
+        let path = PathBuf::from(&path_string);
         match Stat::new(path) {
             Ok(stat) => {
                 let mut inodes: HashSet<FileInfo> = HashSet::new();
@@ -709,13 +706,13 @@ Try '{} --help' for more information.",
                     }
                     if options.total && index == (len - 1) {
                         // The last element will be the total size of the the path under
-                        // path_str.  We add it to the grand total.
+                        // path_string.  We add it to the grand total.
                         grand_total += size;
                     }
                 }
             }
             Err(_) => {
-                show_error!("{}: {}", path_str, "No such file or directory");
+                show_error!("{}: {}", path_string, "No such file or directory");
             }
         }
     }

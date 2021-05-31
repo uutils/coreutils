@@ -5,17 +5,15 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) fpath
-
 #[macro_use]
 extern crate uucore;
 
 mod count_bytes;
 mod countable;
-mod wordcount;
+mod word_count;
 use count_bytes::count_bytes_fast;
 use countable::WordCountable;
-use wordcount::{TitledWordCount, WordCount};
+use word_count::{TitledWordCount, WordCount};
 
 use clap::{App, Arg, ArgMatches};
 use thiserror::Error;

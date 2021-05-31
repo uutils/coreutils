@@ -1,3 +1,5 @@
+// spell-checker:ignore (words) bogusfile emptyfile
+
 use crate::common::util::*;
 
 static INPUT: &str = "lorem_ipsum.txt";

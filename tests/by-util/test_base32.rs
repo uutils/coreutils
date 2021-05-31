@@ -14,14 +14,14 @@ fn test_encode() {
     new_ucmd!()
         .pipe_in(input)
         .succeeds()
-        .stdout_only("JBSWY3DPFQQFO33SNRSCC===\n");
+        .stdout_only("JBSWY3DPFQQFO33SNRSCC===\n"); // spell-checker:disable-line
 
     // Using '-' as our file
     new_ucmd!()
         .arg("-")
         .pipe_in(input)
         .succeeds()
-        .stdout_only("JBSWY3DPFQQFO33SNRSCC===\n");
+        .stdout_only("JBSWY3DPFQQFO33SNRSCC===\n"); // spell-checker:disable-line
 }
 
 #[test]
@@ -29,13 +29,13 @@ fn test_base32_encode_file() {
     new_ucmd!()
         .arg("input-simple.txt")
         .succeeds()
-        .stdout_only("JBSWY3DPFQQFO33SNRSCCCQ=\n");
+        .stdout_only("JBSWY3DPFQQFO33SNRSCCCQ=\n"); // spell-checker:disable-line
 }
 
 #[test]
 fn test_decode() {
     for decode_param in &["-d", "--decode"] {
-        let input = "JBSWY3DPFQQFO33SNRSCC===\n";
+        let input = "JBSWY3DPFQQFO33SNRSCC===\n"; // spell-checker:disable-line
         new_ucmd!()
             .arg(decode_param)
             .pipe_in(input)
@@ -46,7 +46,7 @@ fn test_decode() {
 
 #[test]
 fn test_garbage() {
-    let input = "aGVsbG8sIHdvcmxkIQ==\0";
+    let input = "aGVsbG8sIHdvcmxkIQ==\0"; // spell-checker:disable-line
     new_ucmd!()
         .arg("-d")
         .pipe_in(input)
@@ -57,7 +57,7 @@ fn test_garbage() {
 #[test]
 fn test_ignore_garbage() {
     for ignore_garbage_param in &["-i", "--ignore-garbage"] {
-        let input = "JBSWY\x013DPFQ\x02QFO33SNRSCC===\n";
+        let input = "JBSWY\x013DPFQ\x02QFO33SNRSCC===\n"; // spell-checker:disable-line
         new_ucmd!()
             .arg("-d")
             .arg(ignore_garbage_param)
@@ -77,7 +77,7 @@ fn test_wrap() {
             .pipe_in(input)
             .succeeds()
             .stdout_only(
-                "KRUGKIDROVUWG2ZAMJZG\n653OEBTG66BANJ2W24DT\nEBXXMZLSEB2GQZJANRQX\nU6JAMRXWOLQ=\n",
+                "KRUGKIDROVUWG2ZAMJZG\n653OEBTG66BANJ2W24DT\nEBXXMZLSEB2GQZJANRQX\nU6JAMRXWOLQ=\n", // spell-checker:disable-line
             );
     }
 }

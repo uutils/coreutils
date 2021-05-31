@@ -14,7 +14,7 @@ PROGS=$(ls -1d src/uu/*/Cargo.toml src/uu/stdbuf/src/libstdbuf/Cargo.toml Cargo.
 # update the version of all programs
 sed -i -e "s|version = \"$FROM\"|version = \"$TO\"|" $PROGS
 
-# Update the stbuff stuff
+# Update the stdbuf stuff
 sed -i -e "s|libstdbuf = { version=\"$FROM\"|libstdbuf = { version=\"$TO\"|" src/uu/stdbuf/Cargo.toml
 sed -i -e "s|= { optional=true, version=\"$FROM\", package=\"uu_|= { optional=true, version=\"$TO\", package=\"uu_|g" Cargo.toml
 
@@ -22,5 +22,3 @@ sed -i -e "s|= { optional=true, version=\"$FROM\", package=\"uu_|= { optional=tr
 #sed -i -e "s|version = \"$UUCORE_FROM\"|version = \"$UUCORE_TO\"|" src/uucore/Cargo.toml
 # Update crates using uucore
 #sed -i -e "s|uucore = { version=\">=$UUCORE_FROM\",|uucore = { version=\">=$UUCORE_TO\",|" $PROGS
-
-

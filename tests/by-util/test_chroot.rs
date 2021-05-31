@@ -1,3 +1,5 @@
+// spell-checker:ignore (words) araba newroot userspec
+
 use crate::common::util::*;
 
 #[test]

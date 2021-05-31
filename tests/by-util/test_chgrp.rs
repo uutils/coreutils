@@ -1,3 +1,5 @@
+// spell-checker:ignore (words) nosuchgroup
+
 use crate::common::util::*;
 use rust_users::*;
 

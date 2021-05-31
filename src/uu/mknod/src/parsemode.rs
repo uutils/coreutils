@@ -1,4 +1,4 @@
-// spell-checker:ignore (ToDO) fperm
+// spell-checker:ignore (path) osrelease
 
 use libc::{mode_t, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
 

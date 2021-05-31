@@ -8,7 +8,7 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 
-// octal dump of 'abcdefghijklmnopqrstuvwxyz\n'
+// octal dump of 'abcdefghijklmnopqrstuvwxyz\n'     // spell-checker:disable-line
 static ALPHA_OUT: &str = "
         0000000 061141 062143 063145 064147 065151 066153 067155 070157
         0000020 071161 072163 073165 074167 075171 000012
@@ -16,7 +16,7 @@ static ALPHA_OUT: &str = "
         ";
 
 // XXX We could do a better job of ensuring that we have a fresh temp dir to ourselves,
-// not a general one full of other proc's leftovers.
+// not a general one full of other process leftovers.
 
 // Test that od can read one file and dump with default format
 #[test]
@@ -29,6 +29,7 @@ fn test_file() {
 
     {
         let mut f = File::create(&file).unwrap();
+        // spell-checker:disable-next-line
         if f.write_all(b"abcdefghijklmnopqrstuvwxyz\n").is_err() {
             panic!("Test setup failed - could not write file");
         }
@@ -55,6 +56,7 @@ fn test_2files() {
         println!("number: {} letter:{}", n, a);
     }
 
+    // spell-checker:disable-next-line
     for &(path, data) in &[(&file1, "abcdefghijklmnop"), (&file2, "qrstuvwxyz\n")] {
         let mut f = File::create(&path).unwrap();
         if f.write_all(data.as_bytes()).is_err() {
@@ -79,7 +81,7 @@ fn test_2files() {
 fn test_no_file() {
     let temp = env::temp_dir();
     let tmpdir = Path::new(&temp);
-    let file = tmpdir.join("}surely'none'would'thus'a'file'name");
+    let file = tmpdir.join("}surely'none'would'thus'a'file'name"); // spell-checker:disable-line
 
     new_ucmd!().arg(file.as_os_str()).fails();
 }
@@ -87,7 +89,7 @@ fn test_no_file() {
 // Test that od reads from stdin instead of a file
 #[test]
 fn test_from_stdin() {
-    let input = "abcdefghijklmnopqrstuvwxyz\n";
+    let input = "abcdefghijklmnopqrstuvwxyz\n"; // spell-checker:disable-line
     new_ucmd!()
         .arg("--endian=little")
         .run_piped_stdin(input.as_bytes())
@@ -104,6 +106,7 @@ fn test_from_mixed() {
     let file1 = tmpdir.join("test-1");
     let file3 = tmpdir.join("test-3");
 
+    // spell-checker:disable-next-line
     let (data1, data2, data3) = ("abcdefg", "hijklmnop", "qrstuvwxyz\n");
     for &(path, data) in &[(&file1, data1), (&file3, data3)] {
         let mut f = File::create(&path).unwrap();
@@ -125,7 +128,7 @@ fn test_from_mixed() {
 
 #[test]
 fn test_multiple_formats() {
-    let input = "abcdefghijklmnopqrstuvwxyz\n";
+    let input = "abcdefghijklmnopqrstuvwxyz\n"; // spell-checker:disable-line
     new_ucmd!()
         .arg("-c")
         .arg("-b")
@@ -145,6 +148,7 @@ fn test_multiple_formats() {
 
 #[test]
 fn test_dec() {
+    // spell-checker:ignore (words) 0xffu8 xffu
     let input = [
         0u8, 0u8, 1u8, 0u8, 2u8, 0u8, 3u8, 0u8, 0xffu8, 0x7fu8, 0x00u8, 0x80u8, 0x01u8, 0x80u8,
     ];
@@ -166,12 +170,14 @@ fn test_dec() {
 #[test]
 fn test_hex16() {
     let input: [u8; 9] = [0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0xff];
+    // spell-checker:disable
     let expected_output = unindent(
         "
             0000000 2301 6745 ab89 efcd 00ff
             0000011
             ",
     );
+    // spell-checker:enable
     new_ucmd!()
         .arg("--endian=little")
         .arg("-x")
@@ -288,7 +294,7 @@ fn test_multibyte() {
     new_ucmd!()
         .arg("-c")
         .arg("-w12")
-        .run_piped_stdin("Universität Tübingen \u{1B000}".as_bytes())
+        .run_piped_stdin("Universität Tübingen \u{1B000}".as_bytes()) // spell-checker:disable-line
         .success()
         .no_stderr()
         .stdout_is(unindent(
@@ -487,7 +493,7 @@ fn test_alignment_Fx() {
 }
 
 #[test]
-fn test_maxuint() {
+fn test_max_uint() {
     let input = [0xFFu8; 8];
     let expected_output = unindent(
         "
@@ -505,7 +511,7 @@ fn test_maxuint() {
 
     new_ucmd!()
         .arg("--format=o8")
-        .arg("-Oobtu8")
+        .arg("-Oobtu8") // spell-checker:disable-line
         .arg("-Dd")
         .arg("--format=u1")
         .run_piped_stdin(&input[..])
@@ -583,7 +589,7 @@ fn test_invalid_offset() {
 
 #[test]
 fn test_skip_bytes() {
-    let input = "abcdefghijklmnopq";
+    let input = "abcdefghijklmnopq"; // spell-checker:disable-line
     new_ucmd!()
         .arg("-c")
         .arg("--skip-bytes=5")
@@ -609,7 +615,7 @@ fn test_skip_bytes_error() {
 
 #[test]
 fn test_read_bytes() {
-    let input = "abcdefghijklmnopqrstuvwxyz\n12345678";
+    let input = "abcdefghijklmnopqrstuvwxyz\n12345678"; // spell-checker:disable-line
     new_ucmd!()
         .arg("--endian=little")
         .arg("--read-bytes=27")
@@ -626,7 +632,7 @@ fn test_ascii_dump() {
         0xa0, 0xb0, 0xc0, 0xd0, 0xe0, 0xf0, 0xff,
     ];
     new_ucmd!()
-        .arg("-tx1zacz")
+        .arg("-tx1zacz")    // spell-checker:disable-line
         .run_piped_stdin(&input[..])
         .no_stderr()
         .success()
@@ -645,7 +651,7 @@ fn test_ascii_dump() {
 
 #[test]
 fn test_filename_parsing() {
-    // files "a" and "x" both exists, but are no filenames in the commandline below
+    // files "a" and "x" both exists, but are no filenames in the command line below
     // "-f" must be treated as a filename, it contains the text: minus lowercase f
     // so "-f" should not be interpreted as a formatting option.
     new_ucmd!()
@@ -668,7 +674,7 @@ fn test_filename_parsing() {
 
 #[test]
 fn test_stdin_offset() {
-    let input = "abcdefghijklmnopq";
+    let input = "abcdefghijklmnopq"; // spell-checker:disable-line
     new_ucmd!()
         .arg("-c")
         .arg("+5")
@@ -703,7 +709,7 @@ fn test_file_offset() {
 #[test]
 fn test_traditional() {
     // note gnu od does not align both lines
-    let input = "abcdefghijklmnopq";
+    let input = "abcdefghijklmnopq"; // spell-checker:disable-line
     new_ucmd!()
         .arg("--traditional")
         .arg("-a")
@@ -726,7 +732,7 @@ fn test_traditional() {
 #[test]
 fn test_traditional_with_skip_bytes_override() {
     // --skip-bytes is ignored in this case
-    let input = "abcdefghijklmnop";
+    let input = "abcdefghijklmnop"; // spell-checker:disable-line
     new_ucmd!()
         .arg("--traditional")
         .arg("--skip-bytes=10")
@@ -746,7 +752,7 @@ fn test_traditional_with_skip_bytes_override() {
 #[test]
 fn test_traditional_with_skip_bytes_non_override() {
     // no offset specified in the traditional way, so --skip-bytes is used
-    let input = "abcdefghijklmnop";
+    let input = "abcdefghijklmnop"; // spell-checker:disable-line
     new_ucmd!()
         .arg("--traditional")
         .arg("--skip-bytes=10")
@@ -776,7 +782,7 @@ fn test_traditional_error() {
 
 #[test]
 fn test_traditional_only_label() {
-    let input = "abcdefghijklmnopqrstuvwxyz";
+    let input = "abcdefghijklmnopqrstuvwxyz"; // spell-checker:disable-line
     new_ucmd!()
         .arg("-An")
         .arg("--traditional")

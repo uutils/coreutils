@@ -17,6 +17,7 @@ type Exponent = u8;
 #[derive(Clone, Debug)]
 struct Decomposition(SmallVec<[(u64, Exponent); NUM_FACTORS_INLINE]>);
 
+// spell-checker:ignore (names) Erdős–Kac * Erdős Kac
 // The number of factors to inline directly into a `Decomposition` object.
 // As a consequence of the Erdős–Kac theorem, the average number of prime factors
 // of integers < 10²⁵ ≃ 2⁸³ is 4, so we can use a slightly higher value.
@@ -250,6 +251,7 @@ impl Distribution<Factors> for Standard {
         let mut g = 1u64;
         let mut n = u64::MAX;
 
+        // spell-checker:ignore (names) Adam Kalai * Kalai's
         // Adam Kalai's algorithm for generating uniformly-distributed
         // integers and their factorization.
         //

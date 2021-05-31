@@ -47,11 +47,11 @@ impl<T> RingBuffer<T> {
     }
 
     pub fn from_iter(iter: impl Iterator<Item = T>, size: usize) -> RingBuffer<T> {
-        let mut ringbuf = RingBuffer::new(size);
+        let mut ring_buffer = RingBuffer::new(size);
         for value in iter {
-            ringbuf.push_back(value);
+            ring_buffer.push_back(value);
         }
-        ringbuf
+        ring_buffer
     }
 
     /// Append a value to the end of the ring buffer.

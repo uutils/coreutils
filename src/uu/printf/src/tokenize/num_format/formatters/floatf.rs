@@ -1,8 +1,9 @@
-// spell-checker:ignore (ToDO) floatf inprefix
+// spell-checker:ignore (vars) charf decf floatf intf scif strf Cninety
+// spell-checker:ignore (ToDO) arrnum
 
 //! formatter for %f %F common-notation floating-point subs
 use super::super::format_field::FormatField;
-use super::super::formatter::{FormatPrimitive, Formatter, InPrefix};
+use super::super::formatter::{FormatPrimitive, Formatter, InitialPrefix};
 use super::float_common::{get_primitive_dec, primitive_to_str_common, FloatAnalysis};
 
 pub struct Floatf;
@@ -15,15 +16,20 @@ impl Formatter for Floatf {
     fn get_primitive(
         &self,
         field: &FormatField,
-        inprefix: &InPrefix,
+        initial_prefix: &InitialPrefix,
         str_in: &str,
     ) -> Option<FormatPrimitive> {
         let second_field = field.second_field.unwrap_or(6) + 1;
-        let analysis =
-            FloatAnalysis::analyze(&str_in, inprefix, None, Some(second_field as usize), false);
+        let analysis = FloatAnalysis::analyze(
+            &str_in,
+            initial_prefix,
+            None,
+            Some(second_field as usize),
+            false,
+        );
         let f = get_primitive_dec(
-            inprefix,
-            &str_in[inprefix.offset..],
+            initial_prefix,
+            &str_in[initial_prefix.offset..],
             &analysis,
             second_field as usize,
             None,

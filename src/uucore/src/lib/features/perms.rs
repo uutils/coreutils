@@ -26,14 +26,14 @@ pub enum Verbosity {
 }
 
 /// Actually perform the change of group on a path
-fn chgrp<P: AsRef<Path>>(path: P, dgid: gid_t, follow: bool) -> IOResult<()> {
+fn chgrp<P: AsRef<Path>>(path: P, gid: gid_t, follow: bool) -> IOResult<()> {
     let path = path.as_ref();
     let s = CString::new(path.as_os_str().as_bytes()).unwrap();
     let ret = unsafe {
         if follow {
-            libc::chown(s.as_ptr(), 0_u32.wrapping_sub(1), dgid)
+            libc::chown(s.as_ptr(), 0_u32.wrapping_sub(1), gid)
         } else {
-            lchown(s.as_ptr(), 0_u32.wrapping_sub(1), dgid)
+            lchown(s.as_ptr(), 0_u32.wrapping_sub(1), gid)
         }
     };
     if ret == 0 {
@@ -100,14 +100,14 @@ pub fn wrap_chgrp<P: AsRef<Path>>(
 }
 
 /// Actually perform the change of owner on a path
-fn chown<P: AsRef<Path>>(path: P, duid: uid_t, dgid: gid_t, follow: bool) -> IOResult<()> {
+fn chown<P: AsRef<Path>>(path: P, uid: uid_t, gid: gid_t, follow: bool) -> IOResult<()> {
     let path = path.as_ref();
     let s = CString::new(path.as_os_str().as_bytes()).unwrap();
     let ret = unsafe {
         if follow {
-            libc::chown(s.as_ptr(), duid, dgid)
+            libc::chown(s.as_ptr(), uid, gid)
         } else {
-            lchown(s.as_ptr(), duid, dgid)
+            lchown(s.as_ptr(), uid, gid)
         }
     };
     if ret == 0 {

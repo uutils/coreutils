@@ -1,3 +1,5 @@
+// spell-checker:ignore (regex) diuox
+
 use regex::Regex;
 
 use crate::csplit_error::CsplitError;
@@ -225,6 +227,8 @@ impl SplitName {
 
 #[cfg(test)]
 mod tests {
+    // spell-checker:ignore (path) xxcst
+
     use super::*;
 
     #[test]
@@ -319,13 +323,13 @@ mod tests {
     }
 
     #[test]
-    fn zero_padding_lower_hexa() {
+    fn zero_padding_lower_hex() {
         let split_name = SplitName::new(None, Some(String::from("cst-%03x-")), None).unwrap();
         assert_eq!(split_name.get(42), "xxcst-02a-");
     }
 
     #[test]
-    fn zero_padding_upper_hexa() {
+    fn zero_padding_upper_hex() {
         let split_name = SplitName::new(None, Some(String::from("cst-%03X-")), None).unwrap();
         assert_eq!(split_name.get(42), "xxcst-02A-");
     }
@@ -337,13 +341,13 @@ mod tests {
     }
 
     #[test]
-    fn alternate_form_lower_hexa() {
+    fn alternate_form_lower_hex() {
         let split_name = SplitName::new(None, Some(String::from("cst-%#10x-")), None).unwrap();
         assert_eq!(split_name.get(42), "xxcst-      0x2a-");
     }
 
     #[test]
-    fn alternate_form_upper_hexa() {
+    fn alternate_form_upper_hex() {
         let split_name = SplitName::new(None, Some(String::from("cst-%#10X-")), None).unwrap();
         assert_eq!(split_name.get(42), "xxcst-      0x2A-");
     }
@@ -373,13 +377,13 @@ mod tests {
     }
 
     #[test]
-    fn left_adjusted_lower_hexa() {
+    fn left_adjusted_lower_hex() {
         let split_name = SplitName::new(None, Some(String::from("cst-%-10x-")), None).unwrap();
         assert_eq!(split_name.get(42), "xxcst-0x2a      -");
     }
 
     #[test]
-    fn left_adjusted_upper_hexa() {
+    fn left_adjusted_upper_hex() {
         let split_name = SplitName::new(None, Some(String::from("cst-%-10X-")), None).unwrap();
         assert_eq!(split_name.get(42), "xxcst-0x2A      -");
     }

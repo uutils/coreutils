@@ -1,4 +1,4 @@
-//! Rules to update the codebase using Rerast
+//! Rules to update the codebase using `rerast`
 
 /// Converts try!() to ?
 fn try_to_question_mark<T, E, X: From<E>>(r: Result<T, E>) -> Result<T, X> {

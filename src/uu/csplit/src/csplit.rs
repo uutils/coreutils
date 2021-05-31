@@ -13,10 +13,10 @@ use std::{
 
 mod csplit_error;
 mod patterns;
-mod splitname;
+mod split_name;
 
 use crate::csplit_error::CsplitError;
-use crate::splitname::SplitName;
+use crate::split_name::SplitName;
 use uucore::InvalidEncodingHandling;
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -77,7 +77,7 @@ impl CsplitOptions {
 /// # Errors
 ///
 /// - [`io::Error`] if there is some problem reading/writing from/to a file.
-/// - [`::CsplitError::LineOutOfRange`] if the linenum pattern is larger than the number of input
+/// - [`::CsplitError::LineOutOfRange`] if the line number pattern is larger than the number of input
 ///   lines.
 /// - [`::CsplitError::LineOutOfRangeOnRepetition`], like previous but after applying the pattern
 ///   more than once.

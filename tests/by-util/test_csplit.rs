@@ -904,7 +904,7 @@ fn test_no_match() {
 }
 
 #[test]
-fn test_too_small_linenum() {
+fn test_too_small_line_num() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "/20/", "10", "/40/"])
         .succeeds()
@@ -921,7 +921,7 @@ fn test_too_small_linenum() {
 }
 
 #[test]
-fn test_too_small_linenum_equal() {
+fn test_too_small_line_num_equal() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "/20/", "20"])
         .succeeds()
@@ -937,7 +937,7 @@ fn test_too_small_linenum_equal() {
 }
 
 #[test]
-fn test_too_small_linenum_elided() {
+fn test_too_small_line_num_elided() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "-z", "/20/", "10", "/40/"])
         .succeeds()
@@ -953,7 +953,7 @@ fn test_too_small_linenum_elided() {
 }
 
 #[test]
-fn test_too_small_linenum_negative_offset() {
+fn test_too_small_line_num_negative_offset() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "/20/-5", "10", "/40/"])
         .succeeds()
@@ -970,7 +970,7 @@ fn test_too_small_linenum_negative_offset() {
 }
 
 #[test]
-fn test_too_small_linenum_twice() {
+fn test_too_small_line_num_twice() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "/20/", "10", "15", "/40/"])
         .succeeds()
@@ -988,7 +988,7 @@ fn test_too_small_linenum_twice() {
 }
 
 #[test]
-fn test_too_small_linenum_repeat() {
+fn test_too_small_line_num_repeat() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "/20/", "10", "{*}"])
         .fails()
@@ -1020,7 +1020,7 @@ fn test_too_small_linenum_repeat() {
 }
 
 #[test]
-fn test_linenum_out_of_range1() {
+fn test_line_num_out_of_range1() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "100"])
         .fails()
@@ -1046,7 +1046,7 @@ fn test_linenum_out_of_range1() {
 }
 
 #[test]
-fn test_linenum_out_of_range2() {
+fn test_line_num_out_of_range2() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "10", "100"])
         .fails()
@@ -1073,7 +1073,7 @@ fn test_linenum_out_of_range2() {
 }
 
 #[test]
-fn test_linenum_out_of_range3() {
+fn test_line_num_out_of_range3() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "40", "{2}"])
         .fails()
@@ -1100,7 +1100,7 @@ fn test_linenum_out_of_range3() {
 }
 
 #[test]
-fn test_linenum_out_of_range4() {
+fn test_line_num_out_of_range4() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "40", "{*}"])
         .fails()
@@ -1141,7 +1141,7 @@ fn test_skip_to_match_negative_offset_before_a_match() {
 }
 
 #[test]
-fn test_skip_to_match_negative_offset_before_a_linenum() {
+fn test_skip_to_match_negative_offset_before_a_line_num() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "/20/-10", "15"])
         .succeeds()
@@ -1247,7 +1247,7 @@ fn test_up_to_match_context_underflow() {
 // the offset is out of range because of the first pattern
 // NOTE: output different than gnu's: the empty split is written but the rest of the input file is not
 #[test]
-fn test_linenum_range_with_up_to_match1() {
+fn test_line_num_range_with_up_to_match1() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "10", "/12/-5"])
         .fails()
@@ -1277,7 +1277,7 @@ fn test_linenum_range_with_up_to_match1() {
 // the offset is out of range because more lines are needed than physically available
 // NOTE: output different than gnu's: the empty split is not written but the rest of the input file is
 #[test]
-fn test_linenum_range_with_up_to_match2() {
+fn test_line_num_range_with_up_to_match2() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "10", "/12/-15"])
         .fails()
@@ -1306,7 +1306,7 @@ fn test_linenum_range_with_up_to_match2() {
 
 // NOTE: output different than gnu's: the pattern /10/ is matched but should not
 #[test]
-fn test_linenum_range_with_up_to_match3() {
+fn test_line_num_range_with_up_to_match3() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "10", "/10/", "-k"])
         .fails()

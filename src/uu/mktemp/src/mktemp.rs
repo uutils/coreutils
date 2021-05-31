@@ -6,7 +6,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) tempfile tempdir SUFF TMPDIR tmpname
+// spell-checker:ignore (paths) GPGHome
 
 #[macro_use]
 extern crate uucore;
@@ -67,10 +67,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(OPT_SUFFIX)
                 .long(OPT_SUFFIX)
                 .help(
-                    "append SUFF to TEMPLATE; SUFF must not contain a path separator. \
+                    "append SUFFIX to TEMPLATE; SUFFIX must not contain a path separator. \
                      This option is implied if TEMPLATE does not end with X.",
                 )
-                .value_name("SUFF"),
+                .value_name("SUFFIX"),
         )
         .arg(
             Arg::with_name(OPT_TMPDIR)

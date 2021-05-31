@@ -181,7 +181,7 @@ fn test_date_set_valid_2() {
     if get_effective_uid() == 0 {
         let result = new_ucmd!()
             .arg("--set")
-            .arg("Sat 20 Mar 2021 14:53:01 AWST")
+            .arg("Sat 20 Mar 2021 14:53:01 AWST") // spell-checker:disable-line
             .fails();
         result.no_stdout();
         assert!(result.stderr_str().starts_with("date: invalid date "));

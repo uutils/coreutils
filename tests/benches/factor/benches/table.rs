@@ -15,10 +15,10 @@ fn table(c: &mut Criterion) {
         CHUNK_SIZE
     );
     let inputs = {
-        // Deterministic RNG; use an explicitely-named RNG to guarantee stability
+        // Deterministic RNG; use an explicitly-named RNG to guarantee stability
         use rand::{RngCore, SeedableRng};
         use rand_chacha::ChaCha8Rng;
-        const SEED: u64 = 0xdead_bebe_ea75_cafe;
+        const SEED: u64 = 0xdead_bebe_ea75_cafe; // spell-checker:disable-line
         let mut rng = ChaCha8Rng::seed_from_u64(SEED);
 
         std::iter::repeat_with(move || array_init::<_, _, INPUT_SIZE>(|_| rng.next_u64()))

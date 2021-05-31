@@ -58,7 +58,7 @@ fn main() {
 
     // binary name equals prefixed util name?
     // * prefix/stem may be any string ending in a non-alphanumeric character
-    let utilname = if let Some(util) = utils.keys().find(|util| {
+    let util_name = if let Some(util) = utils.keys().find(|util| {
         binary_as_util.ends_with(*util)
             && !(&binary_as_util[..binary_as_util.len() - (*util).len()])
                 .ends_with(char::is_alphanumeric)
@@ -71,7 +71,7 @@ fn main() {
     };
 
     // 0th argument equals util name?
-    if let Some(util_os) = utilname {
+    if let Some(util_os) = util_name {
         let util = util_os.as_os_str().to_string_lossy();
 
         match utils.get(&util[..]) {

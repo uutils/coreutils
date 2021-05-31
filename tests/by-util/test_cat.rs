@@ -9,11 +9,12 @@ fn test_output_simple() {
     new_ucmd!()
         .args(&["alpha.txt"])
         .succeeds()
-        .stdout_only("abcde\nfghij\nklmno\npqrst\nuvwxyz\n");
+        .stdout_only("abcde\nfghij\nklmno\npqrst\nuvwxyz\n"); // spell-checker:disable-line
 }
 
 #[test]
 fn test_no_options() {
+    // spell-checker:disable-next-line
     for fixture in &["empty.txt", "alpha.txt", "nonewline.txt"] {
         // Give fixture through command line file argument
         new_ucmd!()
@@ -66,8 +67,8 @@ fn test_fifo_symlink() {
     assert!(s.fixtures.is_fifo("dir/pipe"));
 
     // Make cat read the pipe through a symlink
-    s.fixtures.symlink_file("dir/pipe", "sympipe");
-    let proc = s.ucmd().args(&["sympipe"]).run_no_wait();
+    s.fixtures.symlink_file("dir/pipe", "sympipe"); // spell-checker:disable-line
+    let proc = s.ucmd().args(&["sympipe"]).run_no_wait(); // spell-checker:disable-line
 
     let data = vec_of_size(128 * 1024);
     let data2 = data.clone();
@@ -110,7 +111,7 @@ fn test_piped_to_regular_file() {
                 .succeeds();
         }
         let contents = read_to_string(&file_path).unwrap();
-        assert_eq!(contents, "abcde\nfghij\nklmno\npqrst\nuvwxyz\n");
+        assert_eq!(contents, "abcde\nfghij\nklmno\npqrst\nuvwxyz\n"); // spell-checker:disable-line
     }
 }
 
@@ -169,6 +170,7 @@ fn test_directory() {
 fn test_directory_and_file() {
     let s = TestScenario::new(util_name!());
     s.fixtures.mkdir("test_directory2");
+    // spell-checker:disable-next-line
     for fixture in &["empty.txt", "alpha.txt", "nonewline.txt"] {
         s.ucmd()
             .args(&["test_directory2", fixture])
@@ -190,8 +192,8 @@ fn test_three_directories_and_file_and_stdin() {
             "test_directory3/test_directory4",
             "alpha.txt",
             "-",
-            "filewhichdoesnotexist.txt",
-            "nonewline.txt",
+            "file_which_does_not_exist.txt",
+            "nonewline.txt", // spell-checker:disable-line
             "test_directory3/test_directory5",
             "test_directory3/../test_directory3/test_directory5",
             "test_directory3",
@@ -200,12 +202,13 @@ fn test_three_directories_and_file_and_stdin() {
         .fails()
         .stderr_is_fixture("three_directories_and_file_and_stdin.stderr.expected")
         .stdout_is(
-            "abcde\nfghij\nklmno\npqrst\nuvwxyz\nstdout bytestext without a trailing newline",
+            "abcde\nfghij\nklmno\npqrst\nuvwxyz\nstdout bytestext without a trailing newline", // spell-checker:disable-line
         );
 }
 
 #[test]
 fn test_output_multi_files_print_all_chars() {
+    // spell-checker:disable
     new_ucmd!()
         .args(&["alpha.txt", "256.txt", "-A", "-n"])
         .succeeds()
@@ -222,10 +225,12 @@ fn test_output_multi_files_print_all_chars() {
              M-VM-WM-XM-YM-ZM-[M-\\M-]M-^M-_M-`M-aM-bM-cM-dM-eM-fM-gM-hM-iM-jM-kM-lM-mM-nM-oM-\
              pM-qM-rM-sM-tM-uM-vM-wM-xM-yM-zM-{M-|M-}M-~M-^?",
         );
+    // spell-checker:enable
 }
 
 #[test]
 fn test_numbered_lines_no_trailing_newline() {
+    // spell-checker:disable
     new_ucmd!()
         .args(&["nonewline.txt", "alpha.txt", "-n"])
         .succeeds()
@@ -233,6 +238,7 @@ fn test_numbered_lines_no_trailing_newline() {
             "     1\ttext without a trailing newlineabcde\n     2\tfghij\n     \
              3\tklmno\n     4\tpqrst\n     5\tuvwxyz\n",
         );
+    // spell-checker:enable
 }
 
 #[test]
@@ -310,6 +316,7 @@ fn test_stdin_squeeze_blank() {
 
 #[test]
 fn test_stdin_number_non_blank() {
+    // spell-checker:disable-next-line
     for same_param in &["-b", "--number-nonblank"] {
         new_ucmd!()
             .arg(same_param)
@@ -322,6 +329,7 @@ fn test_stdin_number_non_blank() {
 
 #[test]
 fn test_non_blank_overrides_number() {
+    // spell-checker:disable-next-line
     for &same_param in &["-b", "--number-nonblank"] {
         new_ucmd!()
             .args(&[same_param, "-"])

@@ -1,4 +1,4 @@
-// spell-checker:ignore (ToDO) conv cninetyninehexfloatf floatf intf scif
+// spell-checker:ignore (vars) charf cninetyninehexfloatf decf floatf intf scif strf Cninety
 
 mod base_conv;
 pub mod cninetyninehexfloatf;

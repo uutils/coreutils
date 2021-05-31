@@ -78,7 +78,7 @@ fn test_follow_multiple() {
     at.append(FOOBAR_2_TXT, first_append);
     assert_eq!(read_size(&mut child, first_append.len()), first_append);
 
-    let second_append = "doce\ntrece\n";
+    let second_append = "twenty\nthirty\n";
     let expected = at.read("foobar_follow_multiple_appended.expected");
     at.append(FOOBAR_TXT, second_append);
     assert_eq!(read_size(&mut child, expected.len()), expected);
@@ -95,7 +95,7 @@ fn test_follow_stdin() {
         .stdout_is_fixture("follow_stdin.expected");
 }
 
-// FixME: test PASSES for usual windows builds, but fails for coverage testing builds (likely related to the specific RUSTFLAGS '-Zpanic_abort_tests -Cpanic=abort')  This test also breaks tty settings under bash requiring a 'stty sane' or reset.
+// FixME: test PASSES for usual windows builds, but fails for coverage testing builds (likely related to the specific RUSTFLAGS '-Zpanic_abort_tests -Cpanic=abort')  This test also breaks tty settings under bash requiring a 'stty sane' or reset. // spell-checker:disable-line
 #[cfg(disable_until_fixed)]
 #[test]
 fn test_follow_with_pid() {
@@ -130,7 +130,7 @@ fn test_follow_with_pid() {
     at.append(FOOBAR_2_TXT, first_append);
     assert_eq!(read_size(&mut child, first_append.len()), first_append);
 
-    let second_append = "doce\ntrece\n";
+    let second_append = "twenty\nthirty\n";
     let expected = at.read("foobar_follow_multiple_appended.expected");
     at.append(FOOBAR_TXT, second_append);
     assert_eq!(read_size(&mut child, expected.len()), expected);
@@ -268,7 +268,7 @@ fn test_parse_size() {
     assert!(parse_size("1Y").is_err());
 
     // Bad number
-    assert!(parse_size("328hdsf3290").is_err());
+    assert!(parse_size("328hdsf3290").is_err()); // spell-checker:disable-line
 }
 
 #[test]

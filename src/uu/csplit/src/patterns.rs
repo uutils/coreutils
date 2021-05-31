@@ -1,3 +1,5 @@
+// spell-checker:ignore (regex) SKIPTO UPTO ; (vars) ntimes
+
 use crate::csplit_error::CsplitError;
 use regex::Regex;
 
@@ -167,7 +169,7 @@ fn validate_line_numbers(patterns: &[Pattern]) -> Result<(), CsplitError> {
         .try_fold(0, |prev_ln, &current_ln| match (prev_ln, current_ln) {
             // a line number cannot be zero
             (_, 0) => Err(CsplitError::LineNumberIsZero),
-            // two consecutifs numbers should not be equal
+            // two consecutive numbers should not be equal
             (n, m) if n == m => {
                 show_warning!("line number '{}' is the same as preceding line number", n);
                 Ok(n)

@@ -1,4 +1,4 @@
-// spell-checker:ignore (ToDO) conv arrnum mult shortcircuit
+// spell-checker:ignore (ToDO) arrnum mult
 
 #[cfg(test)]
 use super::*;
@@ -29,7 +29,7 @@ fn test_arrnum_int_non_base_10() {
 }
 
 #[test]
-fn test_arrnum_int_div_shortcircuit() {
+fn test_arrnum_int_div_short_circuit() {
     // (
     let arrnum: Vec<u8> = vec![5, 5, 5, 5, 0];
     let base_num = 10;
