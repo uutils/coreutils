@@ -5,7 +5,7 @@
 //  * For the full copyright and license information, please view the LICENSE file
 //  * that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) lflag ICANON tcgetattr tcsetattr TCSADRAIN
+// spell-checker:ignore (methods) isnt
 
 #[macro_use]
 extern crate uucore;
@@ -100,7 +100,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(options::LINES)
                 .value_name("number")
                 .takes_value(true)
-                .help("The number of lines per screenful"),
+                .help("The number of lines per screen full"),
         )
         .arg(
             Arg::with_name(options::NUMBER)
@@ -135,30 +135,27 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("Path to the files to be read"),
         )
         .get_matches_from(args);
-    
+
     let mut buff = String::new();
-    if let Some(filenames) = matches.values_of(options::FILES) {
+    if let Some(files) = matches.values_of(options::FILES) {
         let mut stdout = setup_term();
-        let length = filenames.len();
-        for (idx, fname) in filenames.enumerate() {
-            let fname = Path::new(fname);
-            if fname.is_dir() {
+        let length = files.len();
+        for (idx, file) in files.enumerate() {
+            let file = Path::new(file);
+            if file.is_dir() {
                 terminal::disable_raw_mode().unwrap();
-                show_usage_error!("'{}' is a directory.", fname.display());
+                show_usage_error!("'{}' is a directory.", file.display());
                 return 1;
             }
-            if !fname.exists() {
+            if !file.exists() {
                 terminal::disable_raw_mode().unwrap();
-                show_error!(
-                    "cannot open {}: No such file or directory",
-                    fname.display()
-                );
+                show_error!("cannot open {}: No such file or directory", file.display());
                 return 1;
             }
             if length > 1 {
-                buff.push_str(&MULTI_FILE_TOP_PROMPT.replace("{}", fname.to_str().unwrap()));
+                buff.push_str(&MULTI_FILE_TOP_PROMPT.replace("{}", file.to_str().unwrap()));
             }
-            let mut reader = BufReader::new(File::open(fname).unwrap());
+            let mut reader = BufReader::new(File::open(file).unwrap());
             reader.read_to_string(&mut buff).unwrap();
             let is_last = idx + 1 == length;
             more(&buff, &mut stdout, is_last);
@@ -220,7 +217,7 @@ fn more(buff: &str, mut stdout: &mut Stdout, is_last: bool) {
     );
 
     // Specifies whether we have reached the end of the file and should
-    // return on the next keypress. However, we immediately return when
+    // return on the next key press. However, we immediately return when
     // this is the last file.
     let mut to_be_done = false;
     if lines_left == 0 && is_last {
@@ -230,7 +227,7 @@ fn more(buff: &str, mut stdout: &mut Stdout, is_last: bool) {
             to_be_done = true;
         }
     }
-    
+
     loop {
         if event::poll(Duration::from_millis(10)).unwrap() {
             match event::read().unwrap() {
@@ -254,7 +251,6 @@ fn more(buff: &str, mut stdout: &mut Stdout, is_last: bool) {
                     modifiers: KeyModifiers::NONE,
                 }) => {
                     upper_mark = upper_mark.saturating_add(rows.saturating_sub(1));
-                    
                 }
                 Event::Key(KeyEvent {
                     code: KeyCode::Up,
@@ -275,7 +271,7 @@ fn more(buff: &str, mut stdout: &mut Stdout, is_last: bool) {
 
             if lines_left == 0 {
                 if to_be_done || is_last {
-                    return
+                    return;
                 }
                 to_be_done = true;
             }
