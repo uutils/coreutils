@@ -72,6 +72,23 @@ fn _du_basics_subdir(s: &str) {
 }
 
 #[test]
+fn test_du_invalid_size() {
+    new_ucmd!()
+        .arg("--block-size=1fb4t")
+        .arg("/tmp")
+        .fails()
+        .code_is(1)
+        .stderr_only("du: invalid suffix in --block-size argument '1fb4t'");
+    #[cfg(not(target_pointer_width = "128"))]
+    new_ucmd!()
+        .arg("--block-size=1Y")
+        .arg("/tmp")
+        .fails()
+        .code_is(1)
+        .stderr_only("du: --block-size argument '1Y' too large");
+}
+
+#[test]
 fn test_du_basics_bad_name() {
     new_ucmd!()
         .arg("bad_name")

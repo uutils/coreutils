@@ -14,6 +14,7 @@ use chrono::prelude::DateTime;
 use chrono::Local;
 use clap::{App, Arg};
 use std::collections::HashSet;
+use std::convert::TryFrom;
 use std::env;
 use std::fs;
 use std::io::{stderr, ErrorKind, Result, Write};
@@ -26,6 +27,7 @@ use std::os::windows::fs::MetadataExt;
 use std::os::windows::io::AsRawHandle;
 use std::path::PathBuf;
 use std::time::{Duration, UNIX_EPOCH};
+use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::InvalidEncodingHandling;
 #[cfg(windows)]
 use winapi::shared::minwindef::{DWORD, LPVOID};
@@ -211,64 +213,31 @@ fn get_file_info(path: &PathBuf) -> Option<FileInfo> {
     result
 }
 
-fn unit_string_to_number(s: &str) -> Option<u64> {
-    let mut offset = 0;
-    let mut s_chars = s.chars().rev();
-
-    let (mut ch, multiple) = match s_chars.next() {
-        Some('B') | Some('b') => ('B', 1000u64),
-        Some(ch) => (ch, 1024u64),
-        None => return None,
-    };
-    if ch == 'B' {
-        ch = s_chars.next()?;
-        offset += 1;
-    }
-    ch = ch.to_ascii_uppercase();
-
-    let unit = UNITS
-        .iter()
-        .rev()
-        .find(|&&(unit_ch, _)| unit_ch == ch)
-        .map(|&(_, val)| {
-            // we found a match, so increment offset
-            offset += 1;
-            val
-        })
-        .or_else(|| if multiple == 1024 { Some(0) } else { None })?;
-
-    let number = s[..s.len() - offset].parse::<u64>().ok()?;
-
-    Some(number * multiple.pow(unit))
-}
-
-fn translate_to_pure_number(s: &Option<&str>) -> Option<u64> {
-    match *s {
-        Some(ref s) => unit_string_to_number(s),
-        None => None,
-    }
-}
-
-fn read_block_size(s: Option<&str>) -> u64 {
-    match translate_to_pure_number(&s) {
-        Some(v) => v,
-        None => {
-            if let Some(value) = s {
-                show_error!("invalid --block-size argument '{}'", value);
-            };
-
-            for env_var in &["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
-                let env_size = env::var(env_var).ok();
-                if let Some(quantity) = translate_to_pure_number(&env_size.as_deref()) {
-                    return quantity;
+fn read_block_size(s: Option<&str>) -> usize {
+    if let Some(size_arg) = s {
+        match parse_size(size_arg) {
+            Ok(v) => v,
+            Err(e) => match e {
+                ParseSizeError::ParseFailure(_) => {
+                    crash!(1, "invalid suffix in --block-size argument '{}'", size_arg)
+                }
+                ParseSizeError::SizeTooBig(_) => {
+                    crash!(1, "--block-size argument '{}' too large", size_arg)
+                }
+            },
+        }
+    } else {
+        for env_var in &["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
+            if let Ok(env_size) = env::var(env_var) {
+                if let Ok(v) = parse_size(&env_size) {
+                    return v;
                 }
             }
-
-            if env::var("POSIXLY_CORRECT").is_ok() {
-                512
-            } else {
-                1024
-            }
+        }
+        if env::var("POSIXLY_CORRECT").is_ok() {
+            512
+        } else {
+            1024
         }
     }
 }
@@ -595,7 +564,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     };
 
-    let block_size = read_block_size(matches.value_of(options::BLOCK_SIZE));
+    let block_size = u64::try_from(read_block_size(matches.value_of(options::BLOCK_SIZE))).unwrap();
 
     let multiplier: u64 = if matches.is_present(options::SI) {
         1000
@@ -734,25 +703,11 @@ mod test_du {
     use super::*;
 
     #[test]
-    fn test_translate_to_pure_number() {
-        let test_data = [
-            (Some("10".to_string()), Some(10)),
-            (Some("10K".to_string()), Some(10 * 1024)),
-            (Some("5M".to_string()), Some(5 * 1024 * 1024)),
-            (Some("900KB".to_string()), Some(900 * 1000)),
-            (Some("BAD_STRING".to_string()), None),
-        ];
-        for it in test_data.iter() {
-            assert_eq!(translate_to_pure_number(&it.0.as_deref()), it.1);
-        }
-    }
-
-    #[test]
     fn test_read_block_size() {
         let test_data = [
-            (Some("10".to_string()), 10),
+            (Some("1024".to_string()), 1024),
+            (Some("K".to_string()), 1024),
             (None, 1024),
-            (Some("BAD_STRING".to_string()), 1024),
         ];
         for it in test_data.iter() {
             assert_eq!(read_block_size(it.0.as_deref()), it.1);
