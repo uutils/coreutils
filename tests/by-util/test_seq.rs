@@ -28,6 +28,18 @@ fn test_separator_and_terminator() {
         .args(&["-s", ",", "-t", "!", "2", "6"])
         .run()
         .stdout_is("2,3,4,5,6!");
+    new_ucmd!()
+        .args(&["-s", ",", "2", "6"])
+        .run()
+        .stdout_is("2,3,4,5,6\n");
+    new_ucmd!()
+        .args(&["-s", "\n", "2", "6"])
+        .run()
+        .stdout_is("2\n3\n4\n5\n6\n");
+    new_ucmd!()
+        .args(&["-s", "\\n", "2", "6"])
+        .run()
+        .stdout_is("2\\n3\\n4\\n5\\n6\n");
 }
 
 #[test]

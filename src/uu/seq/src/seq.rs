@@ -34,7 +34,7 @@ fn get_usage() -> String {
 #[derive(Clone)]
 struct SeqOptions {
     separator: String,
-    terminator: Option<String>,
+    terminator: String,
     widths: bool,
 }
 
@@ -81,10 +81,6 @@ impl FromStr for Number {
     }
 }
 
-fn escape_sequences(s: &str) -> String {
-    s.replace("\\n", "\n").replace("\\t", "\t")
-}
-
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let matches = App::new(executable!())
@@ -104,7 +100,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(OPT_TERMINATOR)
                 .short("t")
                 .long("terminator")
-                .help("Terminator character (defaults to separator)")
+                .help("Terminator character (defaults to \\n)")
                 .takes_value(true)
                 .number_of_values(1),
         )
@@ -126,14 +122,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let numbers = matches.values_of(ARG_NUMBERS).unwrap().collect::<Vec<_>>();
 
-    let mut options = SeqOptions {
-        separator: "\n".to_owned(),
-        terminator: None,
-        widths: false,
+    let options = SeqOptions {
+        separator: matches.value_of(OPT_SEPARATOR).unwrap_or("\n").to_string(),
+        terminator: matches.value_of(OPT_TERMINATOR).unwrap_or("\n").to_string(),
+        widths: matches.is_present(OPT_WIDTHS),
     };
-    options.separator = matches.value_of(OPT_SEPARATOR).unwrap_or("\n").to_string();
-    options.terminator = matches.value_of(OPT_TERMINATOR).map(String::from);
-    options.widths = matches.is_present(OPT_WIDTHS);
 
     let mut largest_dec = 0;
     let mut padding = 0;
@@ -187,11 +180,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if largest_dec > 0 {
         largest_dec -= 1;
     }
-    let separator = escape_sequences(&options.separator[..]);
-    let terminator = match options.terminator {
-        Some(term) => escape_sequences(&term[..]),
-        None => separator.clone(),
-    };
 
     match (first, last, increment) {
         (Number::BigInt(first), Number::BigInt(last), Number::BigInt(increment)) => {
@@ -199,8 +187,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 first,
                 increment,
                 last,
-                separator,
-                terminator,
+                options.separator,
+                options.terminator,
                 options.widths,
                 padding,
             )
@@ -210,8 +198,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             increment.into_f64(),
             last.into_f64(),
             largest_dec,
-            separator,
-            terminator,
+            options.separator,
+            options.terminator,
             options.widths,
             padding,
         ),
