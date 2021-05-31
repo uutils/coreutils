@@ -189,6 +189,7 @@ TEST_PROGS  := \
 	paste \
 	pathchk \
 	pinky \
+	pr \
 	printf \
 	ptx \
 	pwd \
