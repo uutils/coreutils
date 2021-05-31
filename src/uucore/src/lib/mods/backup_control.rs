@@ -33,7 +33,7 @@ pub fn determine_backup_suffix(supplied_suffix: Option<&str>) -> String {
     if let Some(suffix) = supplied_suffix {
         String::from(suffix)
     } else {
-        env::var("SIMPLE_BACKUP_SUFFIX").unwrap_or("~".to_owned())
+        env::var("SIMPLE_BACKUP_SUFFIX").unwrap_or_else(|_| "~".to_owned())
     }
 }
 

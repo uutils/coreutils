@@ -1,8 +1,8 @@
 use crate::common::util::*;
 use std::io::{Seek, SeekFrom, Write};
 
-static TFILE1: &'static str = "truncate_test_1";
-static TFILE2: &'static str = "truncate_test_2";
+static TFILE1: &str = "truncate_test_1";
+static TFILE2: &str = "truncate_test_2";
 
 #[test]
 fn test_increase_file_size() {
@@ -259,6 +259,14 @@ fn test_invalid_numbers() {
 fn test_reference_file_not_found() {
     new_ucmd!()
         .args(&["-r", "a", "b"])
+        .fails()
+        .stderr_contains("cannot stat 'a': No such file or directory");
+}
+
+#[test]
+fn test_reference_with_size_file_not_found() {
+    new_ucmd!()
+        .args(&["-r", "a", "-s", "+1", "b"])
         .fails()
         .stderr_contains("cannot stat 'a': No such file or directory");
 }

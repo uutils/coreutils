@@ -145,14 +145,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         || matches.is_present(options::sources::CURRENT)
     {
         let timestamp = if matches.is_present(options::sources::DATE) {
-            parse_date(matches.value_of(options::sources::DATE).unwrap().as_ref())
+            parse_date(matches.value_of(options::sources::DATE).unwrap())
         } else {
-            parse_timestamp(
-                matches
-                    .value_of(options::sources::CURRENT)
-                    .unwrap()
-                    .as_ref(),
-            )
+            parse_timestamp(matches.value_of(options::sources::CURRENT).unwrap())
         };
         (timestamp, timestamp)
     } else {

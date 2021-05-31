@@ -4,7 +4,7 @@ use std::ffi::OsStr;
 
 #[test]
 fn test_help() {
-    for help_flg in vec!["-h", "--help"] {
+    for help_flg in &["-h", "--help"] {
         new_ucmd!()
             .arg(&help_flg)
             .succeeds()
@@ -15,7 +15,7 @@ fn test_help() {
 
 #[test]
 fn test_version() {
-    for version_flg in vec!["-V", "--version"] {
+    for version_flg in &["-V", "--version"] {
         assert!(new_ucmd!()
             .arg(&version_flg)
             .succeeds()
@@ -59,7 +59,7 @@ fn test_dont_remove_suffix() {
 
 #[test]
 fn test_multiple_param() {
-    for multiple_param in vec!["-a", "--multiple"] {
+    for &multiple_param in &["-a", "--multiple"] {
         let path = "/foo/bar/baz";
         new_ucmd!()
             .args(&[multiple_param, path, path])
@@ -70,7 +70,7 @@ fn test_multiple_param() {
 
 #[test]
 fn test_suffix_param() {
-    for suffix_param in vec!["-s", "--suffix"] {
+    for &suffix_param in &["-s", "--suffix"] {
         let path = "/foo/bar/baz.exe";
         new_ucmd!()
             .args(&[suffix_param, ".exe", path, path])
@@ -81,7 +81,7 @@ fn test_suffix_param() {
 
 #[test]
 fn test_zero_param() {
-    for zero_param in vec!["-z", "--zero"] {
+    for &zero_param in &["-z", "--zero"] {
         let path = "/foo/bar/baz";
         new_ucmd!()
             .args(&[zero_param, "-a", path, path])
@@ -91,7 +91,12 @@ fn test_zero_param() {
 }
 
 fn expect_error(input: Vec<&str>) {
-    assert!(new_ucmd!().args(&input).fails().no_stdout().stderr().len() > 0);
+    assert!(!new_ucmd!()
+        .args(&input)
+        .fails()
+        .no_stdout()
+        .stderr_str()
+        .is_empty());
 }
 
 #[test]

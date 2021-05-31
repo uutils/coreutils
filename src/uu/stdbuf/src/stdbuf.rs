@@ -25,8 +25,7 @@ static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str =
     "Run COMMAND, with modified buffering operations for its standard streams.\n\n\
      Mandatory arguments to long options are mandatory for short options too.";
-static LONG_HELP: &str =
-    "If MODE is 'L' the corresponding stream will be line buffered.\n\
+static LONG_HELP: &str = "If MODE is 'L' the corresponding stream will be line buffered.\n\
      This option is invalid with standard input.\n\n\
      If MODE is '0' the corresponding stream will be unbuffered.\n\n\
      Otherwise MODE is a number which may be followed by one of the following:\n\n\

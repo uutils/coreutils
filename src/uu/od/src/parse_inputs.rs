@@ -76,7 +76,7 @@ pub fn parse_inputs(matches: &dyn CommandLineOpts) -> Result<CommandLineInputs, 
         input_strings.push("-");
     }
     Ok(CommandLineInputs::FileNames(
-        input_strings.iter().map(|s| s.to_string()).collect(),
+        input_strings.iter().map(|&s| s.to_string()).collect(),
     ))
 }
 
@@ -92,7 +92,7 @@ pub fn parse_inputs_traditional(input_strings: Vec<&str>) -> Result<CommandLineI
             Ok(match offset0 {
                 Ok(n) => CommandLineInputs::FileAndOffset(("-".to_string(), n, None)),
                 _ => CommandLineInputs::FileNames(
-                    input_strings.iter().map(|s| s.to_string()).collect(),
+                    input_strings.iter().map(|&s| s.to_string()).collect(),
                 ),
             })
         }
@@ -179,7 +179,7 @@ mod tests {
     impl<'a> MockOptions<'a> {
         fn new(inputs: Vec<&'a str>, option_names: Vec<&'a str>) -> MockOptions<'a> {
             MockOptions {
-                inputs: inputs.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
+                inputs: inputs.iter().map(|&s| s.to_string()).collect::<Vec<_>>(),
                 option_names,
             }
         }

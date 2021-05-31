@@ -108,10 +108,13 @@ impl WordFilter {
         // Ignore empty string regex from cmd-line-args
         let arg_reg: Option<String> = if matches.is_present(options::WORD_REGEXP) {
             match matches.value_of(options::WORD_REGEXP) {
-                Some(v) => match v.is_empty() {
-                    true => None,
-                    false => Some(v.to_string()),
-                },
+                Some(v) => {
+                    if v.is_empty() {
+                        None
+                    } else {
+                        Some(v.to_string())
+                    }
+                }
                 None => None,
             }
         } else {

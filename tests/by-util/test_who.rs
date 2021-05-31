@@ -3,7 +3,7 @@ use crate::common::util::*;
 #[cfg(any(target_vendor = "apple", target_os = "linux"))]
 #[test]
 fn test_count() {
-    for opt in vec!["-q", "--count"] {
+    for opt in &["-q", "--count"] {
         new_ucmd!()
             .arg(opt)
             .succeeds()
@@ -14,7 +14,7 @@ fn test_count() {
 #[cfg(any(target_vendor = "apple", target_os = "linux"))]
 #[test]
 fn test_boot() {
-    for opt in vec!["-b", "--boot"] {
+    for opt in &["-b", "--boot"] {
         new_ucmd!()
             .arg(opt)
             .succeeds()
@@ -25,7 +25,7 @@ fn test_boot() {
 #[cfg(any(target_vendor = "apple", target_os = "linux"))]
 #[test]
 fn test_heading() {
-    for opt in vec!["-H", "--heading"] {
+    for opt in &["-H", "--heading"] {
         // allow whitespace variation
         // * minor whitespace differences occur between platform built-in outputs;
         //   specifically number of TABs between "TIME" and "COMMENT" may be variant
@@ -42,7 +42,7 @@ fn test_heading() {
 #[cfg(any(target_vendor = "apple", target_os = "linux"))]
 #[test]
 fn test_short() {
-    for opt in vec!["-s", "--short"] {
+    for opt in &["-s", "--short"] {
         new_ucmd!()
             .arg(opt)
             .succeeds()
@@ -53,7 +53,7 @@ fn test_short() {
 #[cfg(any(target_vendor = "apple", target_os = "linux"))]
 #[test]
 fn test_login() {
-    for opt in vec!["-l", "--login"] {
+    for opt in &["-l", "--login"] {
         new_ucmd!()
             .arg(opt)
             .succeeds()
@@ -64,7 +64,7 @@ fn test_login() {
 #[cfg(any(target_vendor = "apple", target_os = "linux"))]
 #[test]
 fn test_m() {
-    for opt in vec!["-m"] {
+    for opt in &["-m"] {
         new_ucmd!()
             .arg(opt)
             .succeeds()
@@ -75,7 +75,7 @@ fn test_m() {
 #[cfg(any(target_vendor = "apple", target_os = "linux"))]
 #[test]
 fn test_process() {
-    for opt in vec!["-p", "--process"] {
+    for opt in &["-p", "--process"] {
         new_ucmd!()
             .arg(opt)
             .succeeds()
@@ -85,7 +85,7 @@ fn test_process() {
 
 #[test]
 fn test_runlevel() {
-    for opt in vec!["-r", "--runlevel"] {
+    for opt in &["-r", "--runlevel"] {
         #[cfg(any(target_vendor = "apple", target_os = "linux"))]
         new_ucmd!()
             .arg(opt)
@@ -100,7 +100,7 @@ fn test_runlevel() {
 #[cfg(any(target_vendor = "apple", target_os = "linux"))]
 #[test]
 fn test_time() {
-    for opt in vec!["-t", "--time"] {
+    for opt in &["-t", "--time"] {
         new_ucmd!()
             .arg(opt)
             .succeeds()
@@ -117,7 +117,7 @@ fn test_mesg() {
     //     same as -T
     // --writable
     //     same as -T
-    for opt in vec!["-T", "-w", "--mesg", "--message", "--writable"] {
+    for opt in &["-T", "-w", "--mesg", "--message", "--writable"] {
         new_ucmd!()
             .arg(opt)
             .succeeds()
@@ -147,7 +147,7 @@ fn test_too_many_args() {
 #[cfg(any(target_vendor = "apple", target_os = "linux"))]
 #[test]
 fn test_users() {
-    for opt in vec!["-u", "--users"] {
+    for opt in &["-u", "--users"] {
         let actual = new_ucmd!().arg(opt).succeeds().stdout_move_str();
         let expect = expected_result(&[opt]);
         println!("actual: {:?}", actual);
@@ -172,18 +172,17 @@ fn test_users() {
 #[cfg(any(target_vendor = "apple", target_os = "linux"))]
 #[test]
 fn test_lookup() {
-    for opt in vec!["--lookup"] {
-        new_ucmd!()
-            .arg(opt)
-            .succeeds()
-            .stdout_is(expected_result(&[opt]));
-    }
+    let opt = "--lookup";
+    new_ucmd!()
+        .arg(opt)
+        .succeeds()
+        .stdout_is(expected_result(&[opt]));
 }
 
 #[cfg(any(target_vendor = "apple", target_os = "linux"))]
 #[test]
 fn test_dead() {
-    for opt in vec!["-d", "--dead"] {
+    for opt in &["-d", "--dead"] {
         new_ucmd!()
             .arg(opt)
             .succeeds()
@@ -222,7 +221,7 @@ fn test_all() {
         return;
     }
 
-    for opt in vec!["-a", "--all"] {
+    for opt in &["-a", "--all"] {
         new_ucmd!()
             .arg(opt)
             .succeeds()
