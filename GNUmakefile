@@ -84,6 +84,7 @@ PROGS       := \
 	nproc \
 	od \
 	paste \
+	pr \
 	printenv \
 	printf \
 	ptx \
@@ -190,6 +191,7 @@ TEST_PROGS  := \
 	paste \
 	pathchk \
 	pinky \
+	pr \
 	printf \
 	ptx \
 	pwd \

@@ -338,12 +338,12 @@ To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 | Done      | Semi-Done | To Do  |
 |-----------|-----------|--------|
 | arch      | cp        | chcon  |
-| base32    | expr      | dd     |
-| base64    | install   | numfmt |
-| basename  | ls        | pr     |
-| cat       | more      | runcon |
-| chgrp     | od (`--strings` and 128-bit data types missing) | stty |
-| chmod     | printf    |        |
+| base32    | expr      | csplit |
+| base64    | install   | dd     |
+| basename  | ls        | df     |
+| cat       | more      | numfmt |
+| chgrp     | od (`--strings` and 128-bit data types missing) | runcon |
+| chmod     | printf    | stty   |
 | chown     | sort      |        |
 | chroot    | split     |        |
 | cksum     | tail      |        |
@@ -352,7 +352,7 @@ To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 | cut       | join      |        |
 | dircolors | df        |        |
 | dirname   | tac       |        |
-| du        |           |        |
+| du        | pr        |        |
 | echo      |           |        |
 | env       |           |        |
 | expand    |           |        |
