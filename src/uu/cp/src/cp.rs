@@ -1335,7 +1335,7 @@ fn copy_on_write_macos(source: &Path, dest: &Path, mode: ReflinkMode) -> CopyRes
     }
 
     if raw_pfn.is_null() || error != 0 {
-        // clonefile(2) is not supported or it error'ed out (possibly because the FS does not
+        // clonefile(2) is either not supported or it errored out (possibly because the FS does not
         // support COW).
         match mode {
             ReflinkMode::Always => {
