@@ -1,5 +1,6 @@
+# spell-checker:ignore (vars/env) SPHINXOPTS SPHINXBUILD SPHINXPROJ SOURCEDIR BUILDDIR
+
 # Minimal makefile for Sphinx documentation
-#
 
 # You can set these variables from the command line.
 SPHINXOPTS    =

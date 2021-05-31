@@ -10,6 +10,8 @@ from pathlib import Path
 # third party dependencies
 from tqdm import tqdm
 
+# spell-checker:ignore (libs) tqdm imap ; (shell/mac) xcrun ; (vars) nargs
+
 BINS_PATH=Path("../src/uu")
 CACHE_PATH=Path("compiles_table.csv")
 TARGETS = [
@@ -50,7 +52,7 @@ TARGETS = [
 class Target(str):
     def __new__(cls, content):
         obj = super().__new__(cls, content)
-        obj.arch, obj.platfrom, obj.os = Target.parse(content)
+        obj.arch, obj.platform, obj.os = Target.parse(content)
         return obj
 
     @staticmethod
