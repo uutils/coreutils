@@ -6,17 +6,16 @@ use std::fs::metadata;
 fn file_last_modified_time(ucmd: &UCommand, path: &str) -> String {
     let tmp_dir_path = ucmd.get_full_fixture_path(path);
     let file_metadata = metadata(tmp_dir_path);
-    return file_metadata
+    file_metadata
         .map(|i| {
-            return i
-                .modified()
+            i.modified()
                 .map(|x| {
                     let datetime: DateTime<Local> = x.into();
                     datetime.format("%b %d %H:%M %Y").to_string()
                 })
-                .unwrap_or(String::new());
+                .unwrap_or_default()
         })
-        .unwrap_or(String::new());
+        .unwrap_or_default()
 }
 
 fn now_time() -> String {
