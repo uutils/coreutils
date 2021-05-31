@@ -74,7 +74,7 @@ jobs:
     - name: Run `cspell`
       shell: bash
       run: |
-        cspell --config .vscode/cSpell.json --no-summary --no-progress **/* | sed "s/\(.*\):\(.*\):\(.*\) - \(.*\)/::warning file=\1,line=\2,col=\3::cspell: \4/" || true
+        cspell --config .vscode/cSpell.json --no-summary --no-progress "**/*" | sed "s/\(.*\):\(.*\):\(.*\) - \(.*\)/::warning file=\1,line=\2,col=\3::cspell: \4/" || true
 
   code_warnings:
     name: Style/warnings
