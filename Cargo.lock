@@ -2421,6 +2421,8 @@ name = "uu_seq"
 version = "0.0.6"
 dependencies = [
  "clap",
+ "num-bigint",
+ "num-traits",
  "uucore",
  "uucore_procs",
 ]
