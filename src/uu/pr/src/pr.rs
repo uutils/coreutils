@@ -140,7 +140,7 @@ quick_error! {
         Input(err: IOError, path: String) {
             context(path: &'a str, err: IOError) -> (err, path.to_owned())
             display("pr: Reading from input {0} gave error", path)
-            cause(err)
+            source(err)
         }
 
         UnknownFiletype(path: String) {
