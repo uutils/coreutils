@@ -33,6 +33,7 @@ pub use crate::mods::ranges;
 
 // * string parsing modules
 pub use crate::parser::parse_size;
+pub use crate::parser::parse_time;
 
 // * feature-gated modules
 #[cfg(feature = "encoding")]
@@ -41,8 +42,6 @@ pub use crate::features::encoding;
 pub use crate::features::fs;
 #[cfg(feature = "fsext")]
 pub use crate::features::fsext;
-#[cfg(feature = "parse_time")]
-pub use crate::features::parse_time;
 #[cfg(feature = "ringbuffer")]
 pub use crate::features::ringbuffer;
 #[cfg(feature = "zero-copy")]
