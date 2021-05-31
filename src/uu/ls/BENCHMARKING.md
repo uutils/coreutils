@@ -1,7 +1,7 @@
 # Benchmarking ls
 
 ls majorly involves fetching a lot of details (depending upon what details are requested, eg. time/date, inode details, etc) for each path using system calls. Ideally, any system call should be done only once for each of the paths - not adhering to this principle leads to a lot of system call overhead multiplying and bubbling up, especially for recursive ls, therefore it is important to always benchmark multiple scenarios.
-This is an overwiew over what was benchmarked, and if you make changes to `ls`, you are encouraged to check
+This is an overview over what was benchmarked, and if you make changes to `ls`, you are encouraged to check
 how performance was affected for the workloads listed below. Feel free to add other workloads to the
 list that we should improve / make sure not to regress.
 
@@ -55,5 +55,5 @@ However, if the `-R` option is given, the output becomes pretty much useless due
 #!/bin/bash
 cargo build --release --no-default-features --features ls
 perf record target/release/coreutils ls "$@"
-perf script | uniq | inferno-collapse-perf | inferno-flamegraph > flamegraph.svg 
+perf script | uniq | inferno-collapse-perf | inferno-flamegraph > flamegraph.svg
 ```
