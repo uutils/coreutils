@@ -606,7 +606,7 @@ jobs:
       with:
         crate: grcov
         version: latest
-        use-tool-cache: true
+        use-tool-cache: false
     - name: Generate coverage data (via `grcov`)
       id: coverage
       shell: bash
