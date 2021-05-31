@@ -551,10 +551,11 @@ impl Who {
             "  ?".into()
         };
 
-        let mut s = ut.host();
-        if self.do_lookup {
-            s = safe_unwrap!(ut.canon_host());
-        }
+        let s = if self.do_lookup {
+            safe_unwrap!(ut.canon_host())
+        } else {
+            ut.host()
+        };
         let hoststr = if s.is_empty() { s } else { format!("({})", s) };
 
         self.print_line(

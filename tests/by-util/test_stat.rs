@@ -97,13 +97,13 @@ fn test_invalid_option() {
 }
 
 #[cfg(any(target_os = "linux", target_vendor = "apple"))]
-const NORMAL_FMTSTR: &'static str =
+const NORMAL_FMTSTR: &str =
     "%a %A %b %B %d %D %f %F %g %G %h %i %m %n %o %s %u %U %x %X %y %Y %z %Z"; // avoid "%w %W" (birth/creation) due to `stat` limitations and linux kernel & rust version capability variations
 #[cfg(any(target_os = "linux"))]
-const DEV_FMTSTR: &'static str =
+const DEV_FMTSTR: &str =
     "%a %A %b %B %d %D %f %F %g %G %h %i %m %n %o %s (%t/%T) %u %U %w %W %x %X %y %Y %z %Z";
 #[cfg(target_os = "linux")]
-const FS_FMTSTR: &'static str = "%b %c %i %l %n %s %S %t %T"; // avoid "%a %d %f" which can cause test failure due to race conditions
+const FS_FMTSTR: &str = "%b %c %i %l %n %s %S %t %T"; // avoid "%a %d %f" which can cause test failure due to race conditions
 
 #[test]
 #[cfg(target_os = "linux")]
@@ -140,7 +140,7 @@ fn test_terse_normal_format() {
     assert!(!v_expect.is_empty());
 
     // uu_stat does not support selinux
-    if v_actual.len() == v_expect.len() - 1 && v_expect[v_expect.len() - 1].contains(":") {
+    if v_actual.len() == v_expect.len() - 1 && v_expect[v_expect.len() - 1].contains(':') {
         // assume last element contains: `SELinux security context string`
         v_expect.pop();
     }
@@ -222,7 +222,7 @@ fn test_symlinks() {
 
     let mut tested: bool = false;
     // arbitrarily chosen symlinks with hope that the CI environment provides at least one of them
-    for file in vec![
+    for file in &[
         "/bin/sh",
         "/bin/sudoedit",
         "/usr/bin/ex",

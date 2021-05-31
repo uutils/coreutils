@@ -74,7 +74,7 @@ fn output_delimiter_require_arg() {
 #[cfg_attr(not(feature = "test_unimplemented"), ignore)]
 #[test]
 fn zero_terminated() {
-    for param in vec!["-z", "--zero-terminated"] {
+    for &param in &["-z", "--zero-terminated"] {
         new_ucmd!()
             .args(&[param, "a", "b"])
             .fails()

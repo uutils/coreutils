@@ -148,15 +148,16 @@ pub trait Args: Iterator<Item = OsString> + Sized {
                 InvalidEncodingHandling::Ignore => s.is_ok(),
                 _ => true,
             })
-            .map(|s| match s.is_ok() {
-                true => s.unwrap(),
-                false => s.unwrap_err(),
+            .map(|s| match s {
+                Ok(v) => v,
+                Err(e) => e,
             })
             .collect();
 
-        match full_conversion {
-            true => ConversionResult::Complete(result_vector),
-            false => ConversionResult::Lossy(result_vector),
+        if full_conversion {
+            ConversionResult::Complete(result_vector)
+        } else {
+            ConversionResult::Lossy(result_vector)
         }
     }
 

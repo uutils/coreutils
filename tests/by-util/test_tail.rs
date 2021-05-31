@@ -4,9 +4,9 @@ use crate::common::util::*;
 use std::char::from_digit;
 use std::io::Write;
 
-static FOOBAR_TXT: &'static str = "foobar.txt";
-static FOOBAR_2_TXT: &'static str = "foobar2.txt";
-static FOOBAR_WITH_NULL_TXT: &'static str = "foobar_with_null.txt";
+static FOOBAR_TXT: &str = "foobar.txt";
+static FOOBAR_2_TXT: &str = "foobar2.txt";
+static FOOBAR_WITH_NULL_TXT: &str = "foobar_with_null.txt";
 
 #[test]
 fn test_stdin_default() {
@@ -152,8 +152,8 @@ fn test_follow_with_pid() {
 
 #[test]
 fn test_single_big_args() {
-    const FILE: &'static str = "single_big_args.txt";
-    const EXPECTED_FILE: &'static str = "single_big_args_expected.txt";
+    const FILE: &str = "single_big_args.txt";
+    const EXPECTED_FILE: &str = "single_big_args_expected.txt";
     const LINES: usize = 1_000_000;
     const N_ARG: usize = 100_000;
 
@@ -161,13 +161,13 @@ fn test_single_big_args() {
 
     let mut big_input = at.make_file(FILE);
     for i in 0..LINES {
-        write!(&mut big_input, "Line {}\n", i).expect("Could not write to FILE");
+        writeln!(&mut big_input, "Line {}", i).expect("Could not write to FILE");
     }
     big_input.flush().expect("Could not flush FILE");
 
     let mut big_expected = at.make_file(EXPECTED_FILE);
     for i in (LINES - N_ARG)..LINES {
-        write!(&mut big_expected, "Line {}\n", i).expect("Could not write to EXPECTED_FILE");
+        writeln!(&mut big_expected, "Line {}", i).expect("Could not write to EXPECTED_FILE");
     }
     big_expected.flush().expect("Could not flush EXPECTED_FILE");
 
@@ -200,8 +200,8 @@ fn test_bytes_stdin() {
 
 #[test]
 fn test_bytes_big() {
-    const FILE: &'static str = "test_bytes_big.txt";
-    const EXPECTED_FILE: &'static str = "test_bytes_big_expected.txt";
+    const FILE: &str = "test_bytes_big.txt";
+    const EXPECTED_FILE: &str = "test_bytes_big_expected.txt";
     const BYTES: usize = 1_000_000;
     const N_ARG: usize = 100_000;
 
@@ -237,8 +237,8 @@ fn test_bytes_big() {
 
 #[test]
 fn test_lines_with_size_suffix() {
-    const FILE: &'static str = "test_lines_with_size_suffix.txt";
-    const EXPECTED_FILE: &'static str = "test_lines_with_size_suffix_expected.txt";
+    const FILE: &str = "test_lines_with_size_suffix.txt";
+    const EXPECTED_FILE: &str = "test_lines_with_size_suffix_expected.txt";
     const LINES: usize = 3_000;
     const N_ARG: usize = 2 * 1024;
 

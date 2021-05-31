@@ -19,9 +19,7 @@ use std::path::PathBuf;
 #[cfg(not(windows))]
 use std::sync::Mutex;
 #[cfg(not(windows))]
-extern crate tempdir;
-#[cfg(not(windows))]
-use self::tempdir::TempDir;
+extern crate tempfile;
 
 #[cfg(not(windows))]
 lazy_static! {
@@ -53,6 +51,7 @@ fn test_ls_a() {
             .unwrap(),
     );
 
+    #[allow(clippy::trivial_regex)]
     let re_pwd = Regex::new(r"^\.\n").unwrap();
 
     // Using the present working directory
@@ -126,7 +125,7 @@ fn test_ls_width() {
     for option in &["-w 100", "-w=100", "--width=100", "--width 100"] {
         scene
             .ucmd()
-            .args(&option.split(" ").collect::<Vec<_>>())
+            .args(&option.split(' ').collect::<Vec<_>>())
             .succeeds()
             .stdout_only("test-width-1  test-width-2  test-width-3  test-width-4\n");
     }
@@ -134,7 +133,7 @@ fn test_ls_width() {
     for option in &["-w 50", "-w=50", "--width=50", "--width 50"] {
         scene
             .ucmd()
-            .args(&option.split(" ").collect::<Vec<_>>())
+            .args(&option.split(' ').collect::<Vec<_>>())
             .succeeds()
             .stdout_only("test-width-1  test-width-3\ntest-width-2  test-width-4\n");
     }
@@ -151,7 +150,7 @@ fn test_ls_width() {
     ] {
         scene
             .ucmd()
-            .args(&option.split(" ").collect::<Vec<_>>())
+            .args(&option.split(' ').collect::<Vec<_>>())
             .succeeds()
             .stdout_only("test-width-1\ntest-width-2\ntest-width-3\ntest-width-4\n");
     }
@@ -165,7 +164,7 @@ fn test_ls_width() {
     for option in &["-w 1a", "-w=1a", "--width=1a", "--width 1a"] {
         scene
             .ucmd()
-            .args(&option.split(" ").collect::<Vec<_>>())
+            .args(&option.split(' ').collect::<Vec<_>>())
             .fails()
             .stderr_only("ls: invalid line width: ‘1a’");
     }
@@ -419,7 +418,7 @@ fn test_ls_long_formats() {
     ] {
         let result = scene
             .ucmd()
-            .args(&arg.split(" ").collect::<Vec<_>>())
+            .args(&arg.split(' ').collect::<Vec<_>>())
             .arg("test-long-formats")
             .succeeds();
         assert!(re_two.is_match(result.stdout_str()));
@@ -429,7 +428,7 @@ fn test_ls_long_formats() {
             let result = scene
                 .ucmd()
                 .arg("-n")
-                .args(&arg.split(" ").collect::<Vec<_>>())
+                .args(&arg.split(' ').collect::<Vec<_>>())
                 .arg("test-long-formats")
                 .succeeds();
             assert!(re_two_num.is_match(result.stdout_str()));
@@ -448,7 +447,7 @@ fn test_ls_long_formats() {
     ] {
         let result = scene
             .ucmd()
-            .args(&arg.split(" ").collect::<Vec<_>>())
+            .args(&arg.split(' ').collect::<Vec<_>>())
             .arg("test-long-formats")
             .succeeds();
         assert!(re_one.is_match(result.stdout_str()));
@@ -458,7 +457,7 @@ fn test_ls_long_formats() {
             let result = scene
                 .ucmd()
                 .arg("-n")
-                .args(&arg.split(" ").collect::<Vec<_>>())
+                .args(&arg.split(' ').collect::<Vec<_>>())
                 .arg("test-long-formats")
                 .succeeds();
             assert!(re_one_num.is_match(result.stdout_str()));
@@ -480,7 +479,7 @@ fn test_ls_long_formats() {
     ] {
         let result = scene
             .ucmd()
-            .args(&arg.split(" ").collect::<Vec<_>>())
+            .args(&arg.split(' ').collect::<Vec<_>>())
             .arg("test-long-formats")
             .succeeds();
         assert!(re_zero.is_match(result.stdout_str()));
@@ -490,7 +489,7 @@ fn test_ls_long_formats() {
             let result = scene
                 .ucmd()
                 .arg("-n")
-                .args(&arg.split(" ").collect::<Vec<_>>())
+                .args(&arg.split(' ').collect::<Vec<_>>())
                 .arg("test-long-formats")
                 .succeeds();
             assert!(re_zero.is_match(result.stdout_str()));
@@ -900,6 +899,12 @@ fn test_ls_recursive() {
 
     scene.ucmd().arg("a").succeeds();
     scene.ucmd().arg("a/a").succeeds();
+    scene
+        .ucmd()
+        .arg("z")
+        .arg("-R")
+        .succeeds()
+        .stdout_contains(&"z:");
     let result = scene
         .ucmd()
         .arg("--color=never")
@@ -1065,7 +1070,7 @@ fn test_ls_indicator_style() {
     for opt in options {
         scene
             .ucmd()
-            .arg(format!("{}", opt))
+            .arg(opt.to_string())
             .succeeds()
             .stdout_contains(&"/");
     }
@@ -1087,7 +1092,10 @@ fn test_ls_indicator_style() {
     {
         use self::unix_socket::UnixListener;
 
-        let dir = TempDir::new("unix_socket").expect("failed to create dir");
+        let dir = tempfile::Builder::new()
+            .prefix("unix_socket")
+            .tempdir()
+            .expect("failed to create dir");
         let socket_path = dir.path().join("sock");
         let _listener = UnixListener::bind(&socket_path).expect("failed to create socket");
 

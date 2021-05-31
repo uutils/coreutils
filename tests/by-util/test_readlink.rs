@@ -1,6 +1,6 @@
 use crate::common::util::*;
 
-static GIBBERISH: &'static str = "supercalifragilisticexpialidocious";
+static GIBBERISH: &str = "supercalifragilisticexpialidocious";
 
 #[test]
 fn test_canonicalize() {

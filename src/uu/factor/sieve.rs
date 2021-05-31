@@ -30,7 +30,7 @@ impl Iterator for Sieve {
 
     #[inline]
     fn next(&mut self) -> Option<u64> {
-        while let Some(n) = self.inner.next() {
+        for n in &mut self.inner {
             let mut prime = true;
             while let Some((next, inc)) = self.filts.peek() {
                 // need to keep checking the min element of the heap

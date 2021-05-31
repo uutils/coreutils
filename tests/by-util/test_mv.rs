@@ -82,7 +82,7 @@ fn test_mv_strip_slashes() {
     let dir = "test_mv_strip_slashes_dir";
     let file = "test_mv_strip_slashes_file";
     let mut source = file.to_owned();
-    source.push_str("/");
+    source.push('/');
 
     at.mkdir(dir);
     at.touch(file);

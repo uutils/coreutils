@@ -11,7 +11,7 @@ env:
   PROJECT_NAME: coreutils
   PROJECT_DESC: "Core universal (cross-platform) utilities"
   PROJECT_AUTH: "uutils"
-  RUST_MIN_SRV: "1.40.0" ## v1.40.0
+  RUST_MIN_SRV: "1.43.1" ## v1.43.0
   RUST_COV_SRV: "2020-08-01" ## (~v1.47.0) supported rust version for code coverage; (date required/used by 'coverage') ## !maint: refactor when code coverage support is included in the stable channel
 
 on: [push, pull_request]
@@ -84,7 +84,7 @@ jobs:
     - name: Install `rust` toolchain
       uses: actions-rs/toolchain@v1
       with:
-        toolchain: stable
+        toolchain: nightly
         default: true
         profile: minimal # minimal component installation (ie, no documentation)
         components: clippy
@@ -94,7 +94,7 @@ jobs:
       run: |
         # `clippy` testing
         # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-        S=$(cargo clippy ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -- -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+(.*):([0-9]+):([0-9]+).*$/::warning file=\2,line=\3,col=\4::WARNING: \`cargo clippy\`: \1/p;" -e '}' ; }
+        S=$(cargo +nightly clippy --all-targets ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -- -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+(.*):([0-9]+):([0-9]+).*$/::warning file=\2,line=\3,col=\4::WARNING: \`cargo clippy\`: \1/p;" -e '}' ; }
 
   min_version:
     name: MinRustV # Minimum supported rust version
@@ -614,3 +614,20 @@ jobs:
         flags: ${{ steps.vars.outputs.CODECOV_FLAGS }}
         name: codecov-umbrella
         fail_ci_if_error: false
+  spellcheck:
+    name: Spell Check
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      matrix:
+        job:
+          - { os: ubuntu-latest }
+    steps:
+    - uses: actions/checkout@v1
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        sudo apt-get -y update ; sudo apt-get -y install npm ; sudo npm install cspell -g;
+    - name: Run `cspell`
+      shell: bash
+      run: |
+        cspell --config .vscode/cSpell.json --no-summary --no-progress $( git ls-files | grep "\.\(rs\|md\)" ) | sed "s/\(.*\):\(.*\):\(.*\) - \(.*\)/::warning file=\1,line=\2,col=\3::cspell: \4/" || true

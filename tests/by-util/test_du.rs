@@ -204,7 +204,7 @@ fn test_du_d_flag() {
                 // TODO: gnu `du` doesn't use trailing "/" here
                 // result.stdout_str(), result_reference.stdout_str()
                 result.stdout_str().trim_end_matches("/\n"),
-                result_reference.stdout_str().trim_end_matches("\n")
+                result_reference.stdout_str().trim_end_matches('\n')
             );
             return;
         }

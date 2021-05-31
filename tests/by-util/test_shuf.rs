@@ -14,11 +14,11 @@ fn test_output_is_random_permutation() {
 
     let mut result_seq: Vec<i32> = result
         .stdout_str()
-        .split("\n")
+        .split('\n')
         .filter(|x| !x.is_empty())
         .map(|x| x.parse().unwrap())
         .collect();
-    result_seq.sort();
+    result_seq.sort_unstable();
     assert_ne!(result.stdout_str(), input, "Output is not randomised");
     assert_eq!(result_seq, input_seq, "Output is not a permutation");
 }
@@ -31,11 +31,11 @@ fn test_zero_termination() {
 
     let mut result_seq: Vec<i32> = result
         .stdout_str()
-        .split("\0")
+        .split('\0')
         .filter(|x| !x.is_empty())
         .map(|x| x.parse().unwrap())
         .collect();
-    result_seq.sort();
+    result_seq.sort_unstable();
     assert_eq!(result_seq, input_seq, "Output is not a permutation");
 }
 
@@ -55,11 +55,11 @@ fn test_echo() {
 
     let mut result_seq: Vec<i32> = result
         .stdout_str()
-        .split("\n")
+        .split('\n')
         .filter(|x| !x.is_empty())
         .map(|x| x.parse().unwrap())
         .collect();
-    result_seq.sort();
+    result_seq.sort_unstable();
     assert_eq!(result_seq, input_seq, "Output is not a permutation");
 }
 
@@ -81,11 +81,11 @@ fn test_head_count() {
 
     let mut result_seq: Vec<i32> = result
         .stdout_str()
-        .split("\n")
+        .split('\n')
         .filter(|x| !x.is_empty())
         .map(|x| x.parse().unwrap())
         .collect();
-    result_seq.sort();
+    result_seq.sort_unstable();
     assert_eq!(result_seq.len(), repeat_limit, "Output is not limited");
     assert!(
         result_seq.iter().all(|x| input_seq.contains(x)),
@@ -113,7 +113,7 @@ fn test_repeat() {
 
     let result_seq: Vec<i32> = result
         .stdout_str()
-        .split("\n")
+        .split('\n')
         .filter(|x| !x.is_empty())
         .map(|x| x.parse().unwrap())
         .collect();
@@ -141,11 +141,11 @@ fn test_file_input() {
 
     let mut result_seq: Vec<i32> = result
         .stdout_str()
-        .split("\n")
+        .split('\n')
         .filter(|x| !x.is_empty())
         .map(|x| x.parse().unwrap())
         .collect();
-    result_seq.sort();
+    result_seq.sort_unstable();
     assert_eq!(result_seq, expected_seq, "Output is not a permutation");
 }
 

@@ -40,6 +40,7 @@ pub enum ExitStatus {
     Signal(i32),
 }
 
+#[allow(clippy::trivially_copy_pass_by_ref)]
 impl ExitStatus {
     fn from_std_status(status: StdExitStatus) -> Self {
         #[cfg(unix)]
