@@ -157,13 +157,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     settings.verbose = matches.occurrences_of("verbose") > 0;
     // check that the user is not specifying more than one strategy
-    // note: right now, this exact behaviour cannot be handled by ArgGroup since ArgGroup
+    // note: right now, this exact behavior cannot be handled by ArgGroup since ArgGroup
     // considers a default value Arg as "defined"
     let explicit_strategies =
         vec![OPT_LINE_BYTES, OPT_LINES, OPT_BYTES]
             .into_iter()
-            .fold(0, |count, strat| {
-                if matches.occurrences_of(strat) > 0 {
+            .fold(0, |count, strategy| {
+                if matches.occurrences_of(strategy) > 0 {
                     count + 1
                 } else {
                     count
@@ -177,10 +177,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     settings.strategy = String::from(OPT_LINES);
     settings.strategy_param = matches.value_of(OPT_LINES).unwrap().to_owned();
     // take any (other) defined strategy
-    for strat in vec![OPT_LINE_BYTES, OPT_BYTES].into_iter() {
-        if matches.occurrences_of(strat) > 0 {
-            settings.strategy = String::from(strat);
-            settings.strategy_param = matches.value_of(strat).unwrap().to_owned();
+    for strategy in vec![OPT_LINE_BYTES, OPT_BYTES].into_iter() {
+        if matches.occurrences_of(strategy) > 0 {
+            settings.strategy = String::from(strategy);
+            settings.strategy_param = matches.value_of(strategy).unwrap().to_owned();
         }
     }
 
