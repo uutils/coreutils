@@ -1,5 +1,55 @@
 use super::*;
 
+macro_rules! make_conv_test (
+    ( $test_id:ident, $test_name:expr, $src:expr, $ctable:expr, $spec:expr ) =>
+    {
+        make_spec_test!($test_id,
+                        $test_name,
+                        Input {
+                            src: $src,
+                            non_ascii: false,
+                            ibs: 512,
+                            xfer_stats: StatusLevel::None,
+                            cflags: icf!($ctable),
+                            iflags: DEFAULT_IFLAGS,
+                        },
+                        Output {
+                            dst: File::create(format!("./test-resources/FAILED-{}.test", $test_name)).unwrap(),
+                            obs: 512,
+                            cflags: DEFAULT_CFO,
+                            oflags: DEFAULT_OFLAGS,
+                        },
+                        $spec,
+                        format!("./test-resources/FAILED-{}.test", $test_name)
+        );
+    };
+);
+
+macro_rules! make_icf_test (
+    ( $test_id:ident, $test_name:expr, $src:expr, $icf:expr, $spec:expr ) =>
+    {
+        make_spec_test!($test_id,
+                        $test_name,
+                        Input {
+                            src: $src,
+                            non_ascii: false,
+                            ibs: 512,
+                            xfer_stats: StatusLevel::None,
+                            cflags: $icf,
+                            iflags: DEFAULT_IFLAGS,
+                        },
+                        Output {
+                            dst: File::create(format!("./test-resources/FAILED-{}.test", $test_name)).unwrap(),
+                            obs: 512,
+                            cflags: DEFAULT_CFO,
+                            oflags: DEFAULT_OFLAGS,
+                        },
+                        $spec,
+                        format!("./test-resources/FAILED-{}.test", $test_name)
+        );
+    };
+);
+
 make_conv_test!(
     atoe_conv_spec_test,
     "atoe-conv-spec-test",

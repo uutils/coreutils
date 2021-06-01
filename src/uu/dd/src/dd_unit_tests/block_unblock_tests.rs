@@ -3,6 +3,38 @@ use super::*;
 static NL: u8 = '\n' as u8;
 static SPACE: u8 = ' ' as u8;
 
+macro_rules! make_block_test (
+    ( $test_id:ident, $test_name:expr, $src:expr, $block:expr, $spec:expr ) =>
+    {
+        make_spec_test!($test_id,
+                        $test_name,
+                        Input {
+                            src: $src,
+                            non_ascii: false,
+                            ibs: 512,
+                            xfer_stats: StatusLevel::None,
+                            cflags: IConvFlags {
+                                ctable: None,
+                                block: $block,
+                                unblock: None,
+                                swab: false,
+                                sync: false,
+                                noerror: false,
+                            },
+                            iflags: DEFAULT_IFLAGS,
+                        },
+                        Output {
+                            dst: File::create(format!("./test-resources/FAILED-{}.test", $test_name)).unwrap(),
+                            obs: 512,
+                            cflags: DEFAULT_CFO,
+                            oflags: DEFAULT_OFLAGS,
+                        },
+                        $spec,
+                        format!("./test-resources/FAILED-{}.test", $test_name)
+        );
+    };
+);
+
 #[test]
 fn block_test_no_nl()
 {
