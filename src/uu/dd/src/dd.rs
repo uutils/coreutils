@@ -18,6 +18,7 @@ mod parseargs;
 mod conversion_tables;
 use conversion_tables::*;
 
+use std::cmp;
 use std::convert::TryInto;
 use std::error::Error;
 use std::fs::{
@@ -261,7 +262,7 @@ impl<R: Read> Input<R>
         let mut bytes_read = 0;
 
         // TODO: Fix this!
-        assert!(obs > ibs);
+        // assert!(obs > ibs);
 
         for n in 0..(obs/ibs) {
             // fill an ibs-len slice from src
@@ -458,37 +459,35 @@ fn gen_prog_updater(rx: mpsc::Receiver<usize>) -> impl Fn() -> ()
     }
 }
 
-fn pad(buf: &mut Vec<u8>, padding: u8)
+#[inline]
+fn pad(buf: &mut Vec<u8>, cbs: usize, pad: u8)
 {
-    unimplemented!()
+    buf.resize(cbs, pad)
 }
 
 /// Splits the content of buf into cbs-length blocks
 /// Appends padding as specified by conv=block and cbs=N
-///
-/// Example cases:
-///
-/// [a...b] -> [a...b]
-/// [a...b'\n'c...d] -> [a...b' '...], [c...d]
-/// [a...b'\n'c...d'\n'e...] -> [a...b' '...], [c...d' '...], [e...]
-///
-/// [a...b'\n'] -> [a...b' ']
-/// ['\n'a...b] -> [' '...], [a...b]
-///
-/// ['\n'a...b] -> [' '...], [a...b]
-/// ['\n''\n'a...b] -> [' '...], [' '...], [a...b]
-//
-fn block(buf: &[u8], cbs: usize) -> Vec<Vec<u8>>
+fn block(mut buf: Vec<u8>, cbs: usize) -> Vec<Vec<u8>>
 {
-    buf.split(| &c | c == '\n' as u8)
-       .fold(Vec::new(), | mut blocks, split | {
-           let mut block = Vec::with_capacity(cbs);
-           block.extend(split);
-           pad(&mut block, ' ' as u8);
-           blocks.push(block);
+    let mut blocks = buf.split(| &e | e == '\n' as u8)
+                    .fold(Vec::new(), | mut blocks, split |
+                        {
+                            let mut split = split.to_vec();
+                            split.resize(cbs, ' ' as u8);
+                            blocks.push(split);
 
-           blocks
-       })
+                            blocks
+                        });
+
+    if let Some(last) = blocks.last()
+    {
+        if last.iter().all(| &e | e == ' ' as u8)
+        {
+            blocks.pop();
+        }
+    }
+
+    blocks
 }
 
 // Trims padding from each cbs-length partition of buf
@@ -564,7 +563,7 @@ fn conv_block_unblock_helper<R: Read, W: Write>(mut buf: Vec<u8>, i: &mut Input<
     { // ascii input so perform the block first
         let cbs = i.cflags.block.unwrap();
 
-        let mut blocks = block(&mut buf, cbs);
+        let mut blocks = block(buf, cbs);
 
         if let Some(ct) = i.cflags.ctable
         {
@@ -589,11 +588,10 @@ fn conv_block_unblock_helper<R: Read, W: Write>(mut buf: Vec<u8>, i: &mut Input<
              apply_ct(&mut buf, &ct);
         }
 
-        let blocks = block(&mut buf, cbs);
-
-        let blocks = blocks.into_iter()
-                           .flatten()
-                           .collect();
+        let blocks = block(buf, cbs)
+            .into_iter()
+            .flatten()
+            .collect();
 
         Ok(blocks)
     }
@@ -639,6 +637,8 @@ fn read_write_helper<R: Read, W: Write>(i: &mut Input<R>, o: &mut Output<W>) -> 
     #[inline]
     fn is_fast_read<R: Read, W: Write>(i: &Input<R>, o: &Output<W>) -> bool
     {
+        // TODO: Enable this once fast_reads are implemented
+        false &&
         i.ibs == o.obs
             && !is_conv(i)
             && !is_block(i)
@@ -671,7 +671,8 @@ fn read_write_helper<R: Read, W: Write>(i: &mut Input<R>, o: &mut Output<W>) -> 
     else
     {
         // Read
-        let mut buf = Vec::with_capacity(o.obs);
+        // let mut buf = Vec::with_capacity(o.obs);
+        let mut buf = vec![DEFAULT_FILL_BYTE; o.obs];
         let rlen = i.fill_n(&mut buf, o.obs)?;
 
         if rlen == 0
