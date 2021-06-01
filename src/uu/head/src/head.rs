@@ -107,12 +107,7 @@ where
 {
     match parse::parse_num(src) {
         Ok((n, last)) => Ok((closure(n), last)),
-        Err(reason) => match reason {
-            parse::ParseError::Syntax => Err(format!("'{}'", src)),
-            parse::ParseError::Overflow => {
-                Err(format!("'{}': Value too large for defined datatype", src))
-            }
-        },
+        Err(e) => Err(e.to_string()),
     }
 }
 
@@ -473,7 +468,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = match HeadOptions::get_from(args) {
         Ok(o) => o,
         Err(s) => {
-            crash!(EXIT_FAILURE, "head: {}", s);
+            crash!(EXIT_FAILURE, "{}", s);
         }
     };
     match uu_head(&args) {

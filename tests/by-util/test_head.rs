@@ -242,3 +242,28 @@ hello
 ",
         );
 }
+#[test]
+fn test_head_invalid_num() {
+    new_ucmd!()
+        .args(&["-c", "1024R", "emptyfile.txt"])
+        .fails()
+        .stderr_is("head: invalid number of bytes: ‘1024R’");
+    new_ucmd!()
+        .args(&["-n", "1024R", "emptyfile.txt"])
+        .fails()
+        .stderr_is("head: invalid number of lines: ‘1024R’");
+    #[cfg(not(target_pointer_width = "128"))]
+    new_ucmd!()
+        .args(&["-c", "1Y", "emptyfile.txt"])
+        .fails()
+        .stderr_is(
+            "head: invalid number of bytes: ‘1Y’: Value too large to be stored in data type",
+        );
+    #[cfg(not(target_pointer_width = "128"))]
+    new_ucmd!()
+        .args(&["-n", "1Y", "emptyfile.txt"])
+        .fails()
+        .stderr_is(
+            "head: invalid number of lines: ‘1Y’: Value too large to be stored in data type",
+        );
+}
