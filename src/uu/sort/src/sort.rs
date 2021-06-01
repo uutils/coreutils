@@ -414,19 +414,29 @@ impl<'a> Line<'a> {
                     selection.start += num_range.start;
                     selection.end = selection.start + num_range.len();
 
-                    // include a trailing si unit
-                    if selector.settings.mode == SortMode::HumanNumeric
-                        && self.line[selection.end..initial_selection.end]
-                            .starts_with(&['k', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'][..])
-                    {
-                        selection.end += 1;
-                    }
+                    if num_range != (0..0) {
+                        // include a trailing si unit
+                        if selector.settings.mode == SortMode::HumanNumeric
+                            && self.line[selection.end..initial_selection.end]
+                                .starts_with(&['k', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'][..])
+                        {
+                            selection.end += 1;
+                        }
 
-                    // include leading zeroes, a leading minus or a leading decimal point
-                    while self.line[initial_selection.start..selection.start]
-                        .ends_with(&['-', '0', '.'][..])
-                    {
-                        selection.start -= 1;
+                        // include leading zeroes, a leading minus or a leading decimal point
+                        while self.line[initial_selection.start..selection.start]
+                            .ends_with(&['-', '0', '.'][..])
+                        {
+                            selection.start -= 1;
+                        }
+                    } else {
+                        // This was not a valid number.
+                        // Report no match at the first non-whitespace character.
+                        let leading_whitespace = self.line[selection.clone()]
+                            .find(|c: char| !c.is_whitespace())
+                            .unwrap_or(0);
+                        selection.start += leading_whitespace;
+                        selection.end += leading_whitespace;
                     }
                 }
                 SortMode::GeneralNumeric => {

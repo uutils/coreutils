@@ -46,7 +46,12 @@ impl Default for NumInfoParseSettings {
 
 impl NumInfo {
     /// Parse NumInfo for this number.
-    /// Also returns the range of num that should be passed to numeric_str_cmp later
+    /// Also returns the range of num that should be passed to numeric_str_cmp later.
+    ///
+    /// Leading zeros will be excluded from the returned range. If the number consists of only zeros,
+    /// an empty range (idx..idx) is returned so that idx is the char after the last zero.
+    /// If the input is not a number (which has to be treated as zero), the returned empty range
+    /// will be 0..0.
     pub fn parse(num: &str, parse_settings: NumInfoParseSettings) -> (Self, Range<usize>) {
         let mut exponent = -1;
         let mut had_decimal_pt = false;
@@ -105,7 +110,15 @@ impl NumInfo {
                             sign: if had_digit { sign } else { Sign::Positive },
                             exponent: 0,
                         },
-                        0..0,
+                        if had_digit {
+                            // In this case there were only zeroes.
+                            // For debug output to work properly, we have to match the character after the last zero.
+                            idx..idx
+                        } else {
+                            // This was no number at all.
+                            // For debug output to work properly, we have to match 0..0.
+                            0..0
+                        },
                     )
                 };
             }
