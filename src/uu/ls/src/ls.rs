@@ -785,6 +785,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(options::HIDE)
                 .takes_value(true)
                 .multiple(true)
+                .value_name("PATTERN")
+                .help("do not list implied entries matching shell PATTERN (overridden by -a or -A)")
         )
         .arg(
             Arg::with_name(options::IGNORE)
@@ -792,6 +794,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(options::IGNORE)
                 .takes_value(true)
                 .multiple(true)
+                .value_name("PATTERN")
+                .help("do not list implied entries matching shell PATTERN")
         )
         .arg(
             Arg::with_name(options::IGNORE_BACKUPS)
