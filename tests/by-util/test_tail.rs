@@ -352,3 +352,51 @@ fn test_positive_zero_lines() {
         .succeeds()
         .stdout_is("a\nb\nc\nd\ne\n");
 }
+
+#[test]
+fn test_tail_invalid_num() {
+    new_ucmd!()
+        .args(&["-c", "1024R", "emptyfile.txt"])
+        .fails()
+        .stderr_is("tail: invalid number of bytes: ‘1024R’");
+    new_ucmd!()
+        .args(&["-n", "1024R", "emptyfile.txt"])
+        .fails()
+        .stderr_is("tail: invalid number of lines: ‘1024R’");
+    #[cfg(not(target_pointer_width = "128"))]
+    new_ucmd!()
+        .args(&["-c", "1Y", "emptyfile.txt"])
+        .fails()
+        .stderr_is(
+            "tail: invalid number of bytes: ‘1Y’: Value too large to be stored in data type",
+        );
+    #[cfg(not(target_pointer_width = "128"))]
+    new_ucmd!()
+        .args(&["-n", "1Y", "emptyfile.txt"])
+        .fails()
+        .stderr_is(
+            "tail: invalid number of lines: ‘1Y’: Value too large to be stored in data type",
+        );
+}
+
+#[test]
+fn test_tail_num_with_undocumented_sign_bytes() {
+    // tail: '-' is not documented (8.32 man pages)
+    // head: '+' is not documented (8.32 man pages)
+    const ALPHABET: &str = "abcdefghijklmnopqrstuvwxyz";
+    new_ucmd!()
+        .args(&["-c", "5"])
+        .pipe_in(ALPHABET)
+        .succeeds()
+        .stdout_is("vwxyz");
+    new_ucmd!()
+        .args(&["-c", "-5"])
+        .pipe_in(ALPHABET)
+        .succeeds()
+        .stdout_is("vwxyz");
+    new_ucmd!()
+        .args(&["-c", "+5"])
+        .pipe_in(ALPHABET)
+        .succeeds()
+        .stdout_is("efghijklmnopqrstuvwxyz");
+}

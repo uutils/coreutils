@@ -97,9 +97,12 @@ pub fn parse_num(src: &str) -> Result<(usize, bool), ParseSizeError> {
     let mut all_but_last = false;
 
     if let Some(c) = size_string.chars().next() {
-        if c == '-' {
+        if c == '+' || c == '-' {
+            // head: '+' is not documented (8.32 man pages)
             size_string = &size_string[1..];
-            all_but_last = true;
+            if c == '-' {
+                all_but_last = true;
+            }
         }
     } else {
         return Err(ParseSizeError::ParseFailure(src.to_string()));

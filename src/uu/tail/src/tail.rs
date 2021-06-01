@@ -27,7 +27,7 @@ use std::io::{stdin, stdout, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
-use uucore::parse_size::parse_size;
+use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::ringbuffer::RingBuffer;
 
 pub mod options {
@@ -42,9 +42,8 @@ pub mod options {
     pub static PID: &str = "pid";
     pub static SLEEP_INT: &str = "sleep-interval";
     pub static ZERO_TERM: &str = "zero-terminated";
+    pub static ARG_FILES: &str = "files";
 }
-
-static ARG_FILES: &str = "files";
 
 enum FilterMode {
     Bytes(usize),
@@ -84,6 +83,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(options::BYTES)
                 .takes_value(true)
                 .allow_hyphen_values(true)
+                .overrides_with_all(&[options::BYTES, options::LINES])
                 .help("Number of bytes to print"),
         )
         .arg(
@@ -98,6 +98,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(options::LINES)
                 .takes_value(true)
                 .allow_hyphen_values(true)
+                .overrides_with_all(&[options::BYTES, options::LINES])
                 .help("Number of lines to print"),
         )
         .arg(
@@ -137,7 +138,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("Line delimiter is NUL, not newline"),
         )
         .arg(
-            Arg::with_name(ARG_FILES)
+            Arg::with_name(options::ARG_FILES)
                 .multiple(true)
                 .takes_value(true)
                 .min_values(1),
@@ -171,38 +172,21 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     }
 
-    match matches.value_of(options::LINES) {
-        Some(n) => {
-            let mut slice: &str = n;
-            let c = slice.chars().next().unwrap_or('_');
-            if c == '+' || c == '-' {
-                slice = &slice[1..];
-                if c == '+' {
-                    settings.beginning = true;
-                }
-            }
-            match parse_size(slice) {
-                Ok(m) => settings.mode = FilterMode::Lines(m, b'\n'),
-                Err(e) => crash!(1, "invalid number of bytes: {}", e.to_string()),
-            }
+    let mode_and_beginning = if let Some(arg) = matches.value_of(options::BYTES) {
+        match parse_num(arg) {
+            Ok((n, beginning)) => (FilterMode::Bytes(n), beginning),
+            Err(e) => crash!(1, "invalid number of bytes: {}", e.to_string()),
         }
-        None => {
-            if let Some(n) = matches.value_of(options::BYTES) {
-                let mut slice: &str = n;
-                let c = slice.chars().next().unwrap_or('_');
-                if c == '+' || c == '-' {
-                    slice = &slice[1..];
-                    if c == '+' {
-                        settings.beginning = true;
-                    }
-                }
-                match parse_size(slice) {
-                    Ok(m) => settings.mode = FilterMode::Bytes(m),
-                    Err(e) => crash!(1, "invalid number of bytes: {}", e.to_string()),
-                }
-            }
+    } else if let Some(arg) = matches.value_of(options::LINES) {
+        match parse_num(arg) {
+            Ok((n, beginning)) => (FilterMode::Lines(n, b'\n'), beginning),
+            Err(e) => crash!(1, "invalid number of lines: {}", e.to_string()),
         }
+    } else {
+        (FilterMode::Lines(10, b'\n'), false)
     };
+    settings.mode = mode_and_beginning.0;
+    settings.beginning = mode_and_beginning.1;
 
     if matches.is_present(options::ZERO_TERM) {
         if let FilterMode::Lines(count, _) = settings.mode {
@@ -215,7 +199,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         || matches.is_present(options::verbosity::SILENT);
 
     let files: Vec<String> = matches
-        .values_of(ARG_FILES)
+        .values_of(options::ARG_FILES)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
@@ -420,5 +404,27 @@ fn is_seekable<T: Seek>(file: &mut T) -> bool {
 fn print_byte<T: Write>(stdout: &mut T, ch: u8) {
     if let Err(err) = stdout.write(&[ch]) {
         crash!(1, "{}", err);
+    }
+}
+
+fn parse_num(src: &str) -> Result<(usize, bool), ParseSizeError> {
+    let mut size_string = src.trim();
+    let mut starting_with = false;
+
+    if let Some(c) = size_string.chars().next() {
+        if c == '+' || c == '-' {
+            // tail: '-' is not documented (8.32 man pages)
+            size_string = &size_string[1..];
+            if c == '+' {
+                starting_with = true;
+            }
+        }
+    } else {
+        return Err(ParseSizeError::ParseFailure(src.to_string()));
+    }
+
+    match parse_size(&size_string) {
+        Ok(n) => Ok((n, starting_with)),
+        Err(e) => Err(e),
     }
 }

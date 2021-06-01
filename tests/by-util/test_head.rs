@@ -267,3 +267,25 @@ fn test_head_invalid_num() {
             "head: invalid number of lines: ‘1Y’: Value too large to be stored in data type",
         );
 }
+
+#[test]
+fn test_head_num_with_undocumented_sign_bytes() {
+    // tail: '-' is not documented (8.32 man pages)
+    // head: '+' is not documented (8.32 man pages)
+    const ALPHABET: &str = "abcdefghijklmnopqrstuvwxyz";
+    new_ucmd!()
+        .args(&["-c", "5"])
+        .pipe_in(ALPHABET)
+        .succeeds()
+        .stdout_is("abcde");
+    new_ucmd!()
+        .args(&["-c", "-5"])
+        .pipe_in(ALPHABET)
+        .succeeds()
+        .stdout_is("abcdefghijklmnopqrstu");
+    new_ucmd!()
+        .args(&["-c", "+5"])
+        .pipe_in(ALPHABET)
+        .succeeds()
+        .stdout_is("abcde");
+}
