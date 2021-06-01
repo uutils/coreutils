@@ -53,14 +53,14 @@ pub fn parse_size(size: &str) -> Result<usize, ParseSizeError> {
     let (base, exponent): (u128, u32) = match unit {
         "" => (1, 0),
         "b" => (512, 1), // (`head` and `tail` use "b")
-        "KiB" | "K" | "k" => (1024, 1),
-        "MiB" | "M" | "m" => (1024, 2),
-        "GiB" | "G" | "g" => (1024, 3),
-        "TiB" | "T" | "t" => (1024, 4),
-        "PiB" | "P" | "p" => (1024, 5),
-        "EiB" | "E" | "e" => (1024, 6),
-        "ZiB" | "Z" | "z" => (1024, 7),
-        "YiB" | "Y" | "y" => (1024, 8),
+        "KiB" | "kiB" | "K" | "k" => (1024, 1),
+        "MiB" | "miB" | "M" | "m" => (1024, 2),
+        "GiB" | "giB" | "G" | "g" => (1024, 3),
+        "TiB" | "tiB" | "T" | "t" => (1024, 4),
+        "PiB" | "piB" | "P" | "p" => (1024, 5),
+        "EiB" | "eiB" | "E" | "e" => (1024, 6),
+        "ZiB" | "ziB" | "Z" | "z" => (1024, 7),
+        "YiB" | "yiB" | "Y" | "y" => (1024, 8),
         "KB" | "kB" => (1000, 1),
         "MB" | "mB" => (1000, 2),
         "GB" | "gB" => (1000, 3),
@@ -152,19 +152,23 @@ mod tests {
 
         for &(c, exp) in &suffixes {
             let s = format!("2{}B", c); // KB
-            assert_eq!(Ok((2 * (1000 as u128).pow(exp)) as usize), parse_size(&s));
+            assert_eq!(Ok((2 * (1000_u128).pow(exp)) as usize), parse_size(&s));
             let s = format!("2{}", c); // K
-            assert_eq!(Ok((2 * (1024 as u128).pow(exp)) as usize), parse_size(&s));
+            assert_eq!(Ok((2 * (1024_u128).pow(exp)) as usize), parse_size(&s));
             let s = format!("2{}iB", c); // KiB
-            assert_eq!(Ok((2 * (1024 as u128).pow(exp)) as usize), parse_size(&s));
+            assert_eq!(Ok((2 * (1024_u128).pow(exp)) as usize), parse_size(&s));
+            let s = format!("2{}iB", c.to_lowercase()); // kiB
+            assert_eq!(Ok((2 * (1024_u128).pow(exp)) as usize), parse_size(&s));
 
             // suffix only
             let s = format!("{}B", c); // KB
-            assert_eq!(Ok(((1000 as u128).pow(exp)) as usize), parse_size(&s));
+            assert_eq!(Ok(((1000_u128).pow(exp)) as usize), parse_size(&s));
             let s = format!("{}", c); // K
-            assert_eq!(Ok(((1024 as u128).pow(exp)) as usize), parse_size(&s));
+            assert_eq!(Ok(((1024_u128).pow(exp)) as usize), parse_size(&s));
             let s = format!("{}iB", c); // KiB
-            assert_eq!(Ok(((1024 as u128).pow(exp)) as usize), parse_size(&s));
+            assert_eq!(Ok(((1024_u128).pow(exp)) as usize), parse_size(&s));
+            let s = format!("{}iB", c.to_lowercase()); // kiB
+            assert_eq!(Ok(((1024_u128).pow(exp)) as usize), parse_size(&s));
         }
     }
 
