@@ -1,5 +1,21 @@
 use crate::common::util::*;
 
+#[test]
+fn test_rejects_nan() {
+    new_ucmd!()
+        .args(&["NaN"])
+        .fails()
+        .stderr_only("error: Invalid value for '<numbers>...': invalid floating point argument `NaN`: can not be NaN");
+}
+
+#[test]
+fn test_rejects_non_floats() {
+    new_ucmd!()
+        .args(&["foo"])
+        .fails()
+        .stderr_only("error: Invalid value for '<numbers>...': invalid floating point argument `foo`: invalid float literal");
+}
+
 // ---- Tests for the big integer based path ----
 
 #[test]
