@@ -107,7 +107,7 @@ impl NumInfo {
                 } else {
                     (
                         NumInfo {
-                            sign: if had_digit { sign } else { Sign::Positive },
+                            sign: Sign::Positive,
                             exponent: 0,
                         },
                         if had_digit {
@@ -147,7 +147,7 @@ impl NumInfo {
         } else {
             (
                 NumInfo {
-                    sign: if had_digit { sign } else { Sign::Positive },
+                    sign: Sign::Positive,
                     exponent: 0,
                 },
                 if had_digit {
@@ -187,11 +187,7 @@ impl NumInfo {
 pub fn numeric_str_cmp((a, a_info): (&str, &NumInfo), (b, b_info): (&str, &NumInfo)) -> Ordering {
     // check for a difference in the sign
     if a_info.sign != b_info.sign {
-        return if a.is_empty() && b.is_empty() {
-            Ordering::Equal
-        } else {
-            a_info.sign.cmp(&b_info.sign)
-        };
+        return a_info.sign.cmp(&b_info.sign);
     }
 
     // check for a difference in the exponent
