@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod test;
+mod unit_tests;
 
 use crate::conversion_tables::*;
 use crate::{
@@ -12,7 +12,7 @@ use crate::{
 
 use std::error::Error;
 
-/// Parser Errors describe errors with input
+/// Parser Errors describe errors with parser input
 #[derive(Debug)]
 pub enum ParseError
 {

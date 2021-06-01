@@ -11,7 +11,7 @@
 extern crate uucore;
 
 #[cfg(test)]
-mod dd_test;
+mod dd_unit_tests;
 
 mod parseargs;
 
