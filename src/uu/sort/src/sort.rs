@@ -63,6 +63,7 @@ static OPT_MONTH_SORT: &str = "month-sort";
 static OPT_NUMERIC_SORT: &str = "numeric-sort";
 static OPT_GENERAL_NUMERIC_SORT: &str = "general-numeric-sort";
 static OPT_VERSION_SORT: &str = "version-sort";
+static OPT_RANDOM: &str = "random-sort";
 
 static OPT_DICTIONARY_ORDER: &str = "dictionary-order";
 static OPT_MERGE: &str = "merge";
@@ -78,7 +79,6 @@ static OPT_STABLE: &str = "stable";
 static OPT_UNIQUE: &str = "unique";
 static OPT_KEY: &str = "key";
 static OPT_SEPARATOR: &str = "field-separator";
-static OPT_RANDOM: &str = "random-sort";
 static OPT_ZERO_TERMINATED: &str = "zero-terminated";
 static OPT_PARALLEL: &str = "parallel";
 static OPT_FILES0_FROM: &str = "files0-from";
@@ -102,6 +102,7 @@ enum SortMode {
     GeneralNumeric,
     Month,
     Version,
+    Random,
     Default,
 }
 #[derive(Clone)]
@@ -119,7 +120,6 @@ pub struct GlobalSettings {
     unique: bool,
     check: bool,
     check_silent: bool,
-    random: bool,
     salt: String,
     selectors: Vec<FieldSelector>,
     separator: Option<char>,
@@ -168,7 +168,6 @@ impl Default for GlobalSettings {
             unique: false,
             check: false,
             check_silent: false,
-            random: false,
             salt: String::new(),
             selectors: vec![],
             separator: None,
@@ -187,7 +186,6 @@ struct KeySettings {
     ignore_case: bool,
     dictionary_order: bool,
     ignore_non_printing: bool,
-    random: bool,
     reverse: bool,
 }
 
@@ -198,7 +196,6 @@ impl From<&GlobalSettings> for KeySettings {
             ignore_blanks: settings.ignore_blanks,
             ignore_case: settings.ignore_case,
             ignore_non_printing: settings.ignore_non_printing,
-            random: settings.random,
             reverse: settings.reverse,
             dictionary_order: settings.dictionary_order,
         }
@@ -409,8 +406,7 @@ impl Line {
                 }
             }
         }
-        if !(settings.random
-            || settings.stable
+        if !(settings.stable
             || settings.unique
             || !(settings.dictionary_order
                 || settings.ignore_blanks
@@ -513,7 +509,7 @@ impl KeyPosition {
                     'h' => settings.mode = SortMode::HumanNumeric,
                     'i' => settings.ignore_non_printing = true,
                     'n' => settings.mode = SortMode::Numeric,
-                    'R' => settings.random = true,
+                    'R' => settings.mode = SortMode::Random,
                     'r' => settings.reverse = true,
                     'V' => settings.mode = SortMode::Version,
                     c => {
@@ -535,6 +531,7 @@ impl KeyPosition {
                             SortMode::Numeric
                             | SortMode::HumanNumeric
                             | SortMode::GeneralNumeric
+                            | SortMode::Random
                             | SortMode::Month => SortMode::Default,
                             // Only SortMode::Default and SortMode::Version work with dictionary_order and ignore_non_printing
                             m @ SortMode::Default | m @ SortMode::Version => m,
@@ -1004,6 +1001,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         SortMode::Numeric
     } else if matches.is_present(OPT_VERSION_SORT) {
         SortMode::Version
+    } else if matches.is_present(OPT_RANDOM) {
+        SortMode::Random
     } else {
         SortMode::Default
     };
@@ -1061,7 +1060,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     settings.unique = matches.is_present(OPT_UNIQUE);
 
     if matches.is_present(OPT_RANDOM) {
-        settings.random = matches.is_present(OPT_RANDOM);
         settings.salt = get_rand_string();
     }
 
@@ -1266,9 +1264,7 @@ fn compare_by(a: &Line, b: &Line, global_settings: &GlobalSettings) -> Ordering 
         let b_str = b_selection.get_str(b);
         let settings = &selector.settings;
 
-        let cmp: Ordering = if settings.random {
-            random_shuffle(a_str, b_str, global_settings.salt.clone())
-        } else {
+        let cmp: Ordering = {
             match settings.mode {
                 SortMode::Numeric | SortMode::HumanNumeric => numeric_str_cmp(
                     (a_str, a_selection.num_cache.as_ref().unwrap().as_num_info()),
@@ -1287,6 +1283,7 @@ fn compare_by(a: &Line, b: &Line, global_settings: &GlobalSettings) -> Ordering 
                     settings.dictionary_order,
                     settings.ignore_case,
                 ),
+                SortMode::Random => random_shuffle(a_str, b_str, global_settings.salt.clone()),
             }
         };
         if cmp != Ordering::Equal {
@@ -1295,7 +1292,7 @@ fn compare_by(a: &Line, b: &Line, global_settings: &GlobalSettings) -> Ordering 
     }
 
     // Call "last resort compare" if all selectors returned Equal
-    let cmp = if global_settings.random || global_settings.stable || global_settings.unique {
+    let cmp = if global_settings.stable || global_settings.unique {
         Ordering::Equal
     } else {
         a.line.cmp(&b.line)
