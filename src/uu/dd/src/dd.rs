@@ -262,7 +262,7 @@ impl<R: Read> Input<R>
         let mut bytes_read = 0;
 
         // TODO: Fix this!
-        // assert!(obs > ibs);
+        // assert!(obs < ibs);
 
         for n in 0..(obs/ibs) {
             // fill an ibs-len slice from src
@@ -459,12 +459,6 @@ fn gen_prog_updater(rx: mpsc::Receiver<usize>) -> impl Fn() -> ()
     }
 }
 
-#[inline]
-fn pad(buf: &mut Vec<u8>, cbs: usize, pad: u8)
-{
-    buf.resize(cbs, pad)
-}
-
 /// Splits the content of buf into cbs-length blocks
 /// Appends padding as specified by conv=block and cbs=N
 fn block(mut buf: Vec<u8>, cbs: usize) -> Vec<Vec<u8>>
@@ -503,19 +497,6 @@ fn apply_ct(buf: &mut [u8], ct: &ConversionTable)
     for idx in 0..buf.len()
     {
         buf[idx] = ct[buf[idx] as usize];
-    }
-}
-
-#[inline]
-fn perform_swab(buf: &mut [u8])
-{
-    let mut tmp;
-
-    for base in (1..buf.len()).step_by(2)
-    {
-        tmp = buf[base];
-        buf[base] = buf[base-1];
-        buf[base-1] = tmp;
     }
 }
 
@@ -634,6 +615,7 @@ fn conv_block_unblock_helper<R: Read, W: Write>(mut buf: Vec<u8>, i: &mut Input<
 
 fn read_write_helper<R: Read, W: Write>(i: &mut Input<R>, o: &mut Output<W>) -> Result<(usize, Vec<u8>), Box<dyn Error>>
 {
+    // --------------------------------------------------------------------
     #[inline]
     fn is_fast_read<R: Read, W: Write>(i: &Input<R>, o: &Output<W>) -> bool
     {
@@ -661,6 +643,19 @@ fn read_write_helper<R: Read, W: Write>(i: &mut Input<R>, o: &mut Output<W>) -> 
         i.cflags.unblock.is_some()
     }
     // --------------------------------------------------------------------
+    #[inline]
+    fn perform_swab(buf: &mut [u8])
+    {
+        let mut tmp;
+
+        for base in (1..buf.len()).step_by(2)
+        {
+            tmp = buf[base];
+            buf[base] = buf[base-1];
+            buf[base-1] = tmp;
+        }
+    }
+    // --------------------------------------------------------------------
     if is_fast_read(&i, &o)
     {
         // TODO: fast reads are copies performed
@@ -671,20 +666,19 @@ fn read_write_helper<R: Read, W: Write>(i: &mut Input<R>, o: &mut Output<W>) -> 
     else
     {
         // Read
-        // let mut buf = Vec::with_capacity(o.obs);
         let mut buf = vec![DEFAULT_FILL_BYTE; o.obs];
         let rlen = i.fill_n(&mut buf, o.obs)?;
+        buf.resize(rlen, DEFAULT_FILL_BYTE);
 
         if rlen == 0
         {
             return Ok((0,Vec::new()));
         }
 
-
         // Conv etc...
         if i.cflags.swab
         {
-            perform_swab(&mut buf[..rlen]);
+            perform_swab(&mut buf);
         }
 
         if is_conv(&i) || is_block(&i) || is_unblock(&i)
