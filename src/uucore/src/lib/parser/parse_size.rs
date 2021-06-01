@@ -52,7 +52,7 @@ pub fn parse_size(size: &str) -> Result<usize, ParseSizeError> {
     let unit = &size[numeric_string.len()..];
     let (base, exponent): (u128, u32) = match unit {
         "" => (1, 0),
-        "b" => (512, 1), // (`head` and `tail` use "b")
+        "b" => (512, 1), // (`od`, `head` and `tail` use "b")
         "KiB" | "kiB" | "K" | "k" => (1024, 1),
         "MiB" | "miB" | "M" | "m" => (1024, 2),
         "GiB" | "giB" | "G" | "g" => (1024, 3),
@@ -210,7 +210,18 @@ mod tests {
 
     #[test]
     fn invalid_syntax() {
-        let test_strings = ["328hdsf3290", "5MiB nonsense", "5mib", "biB", "-", ""];
+        let test_strings = [
+            "328hdsf3290",
+            "5MiB nonsense",
+            "5mib",
+            "biB",
+            "-",
+            "+",
+            "",
+            "-1",
+            "1e2",
+            "∞",
+        ];
         for &test_string in &test_strings {
             assert_eq!(
                 parse_size(test_string).unwrap_err(),
@@ -228,6 +239,8 @@ mod tests {
     fn no_suffix() {
         assert_eq!(Ok(1234), parse_size("1234"));
         assert_eq!(Ok(0), parse_size("0"));
+        assert_eq!(Ok(5), parse_size("5"));
+        assert_eq!(Ok(999), parse_size("999"));
     }
 
     #[test]
@@ -239,6 +252,8 @@ mod tests {
         assert_eq!(Ok(0), parse_size("0KB"));
         assert_eq!(Ok(1000), parse_size("KB"));
         assert_eq!(Ok(1024), parse_size("K"));
+        assert_eq!(Ok(2000), parse_size("2kB"));
+        assert_eq!(Ok(4000), parse_size("4KB"));
     }
 
     #[test]
@@ -247,5 +262,26 @@ mod tests {
         assert_eq!(Ok(123 * 1000 * 1000), parse_size("123MB"));
         assert_eq!(Ok(1024 * 1024), parse_size("M"));
         assert_eq!(Ok(1000 * 1000), parse_size("MB"));
+        assert_eq!(Ok(2 * 1_048_576), parse_size("2m"));
+        assert_eq!(Ok(4 * 1_048_576), parse_size("4M"));
+        assert_eq!(Ok(2_000_000), parse_size("2mB"));
+        assert_eq!(Ok(4_000_000), parse_size("4MB"));
+    }
+
+    #[test]
+    fn gigabytes_suffix() {
+        assert_eq!(Ok(1_073_741_824), parse_size("1G"));
+        assert_eq!(Ok(2_000_000_000), parse_size("2GB"));
+    }
+
+    #[test]
+    #[cfg(target_pointer_width = "64")]
+    fn x64() {
+        assert_eq!(Ok(1_099_511_627_776), parse_size("1T"));
+        assert_eq!(Ok(1_125_899_906_842_624), parse_size("1P"));
+        assert_eq!(Ok(1_152_921_504_606_846_976), parse_size("1E"));
+        assert_eq!(Ok(2_000_000_000_000), parse_size("2TB"));
+        assert_eq!(Ok(2_000_000_000_000_000), parse_size("2PB"));
+        assert_eq!(Ok(2_000_000_000_000_000_000), parse_size("2EB"));
     }
 }
