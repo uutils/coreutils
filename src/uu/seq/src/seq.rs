@@ -13,6 +13,7 @@ use num_traits::Zero;
 use num_traits::{Num, ToPrimitive};
 use std::cmp;
 use std::io::{stdout, Write};
+use std::str::FromStr;
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Display numbers from FIRST to LAST, in steps of INCREMENT.";
@@ -43,18 +44,6 @@ enum Number {
 }
 
 impl Number {
-    fn new(mut s: &str) -> Self {
-        if s.starts_with('+') {
-            s = &s[1..];
-        }
-
-        match s.parse::<BigInt>() {
-            Ok(n) => Number::BigInt(n),
-            // The argument validator made sure this is a valid float.
-            Err(_) => Number::F64(s.parse::<f64>().unwrap()),
-        }
-    }
-
     fn is_zero(&self) -> bool {
         match self {
             Number::BigInt(n) => n.is_zero(),
@@ -67,6 +56,32 @@ impl Number {
             // BigInt::to_f64() can not return None.
             Number::BigInt(n) => n.to_f64().unwrap(),
             Number::F64(n) => n,
+        }
+    }
+}
+
+impl FromStr for Number {
+    type Err = String;
+    fn from_str(mut s: &str) -> Result<Self, Self::Err> {
+        if s.starts_with('+') {
+            s = &s[1..];
+        }
+
+        match s.parse::<BigInt>() {
+            Ok(n) => Ok(Number::BigInt(n)),
+            Err(_) => match s.parse::<f64>() {
+                Ok(value) if value.is_nan() => Err(format!(
+                    "invalid 'not-a-number' argument: '{}'\nTry '{} --help' for more information.",
+                    s,
+                    executable!(),
+                )),
+                Ok(value) => Ok(Number::F64(value)),
+                Err(_) => Err(format!(
+                    "invalid floating point argument: '{}'\nTry '{} --help' for more information.",
+                    s,
+                    executable!(),
+                )),
+            },
         }
     }
 }
@@ -106,15 +121,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .takes_value(true)
                 .allow_hyphen_values(true)
                 .max_values(3)
-                .required(true)
-                .validator(|value| {
-                    match value.parse::<f64>() {
-                        Ok(value) if value.is_nan() => Err("can not be NaN".to_string()),
-                        Ok(_) => Ok(()),
-                        Err(e) => Err(e.to_string()),
-                    }
-                    .map_err(|e| format!("invalid floating point argument `{}`: {}", value, e))
-                }),
+                .required(true),
         )
         .get_matches_from(args);
 
@@ -134,7 +141,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         let dec = slice.find('.').unwrap_or(len);
         largest_dec = len - dec;
         padding = dec;
-        Number::new(slice)
+        return_if_err!(1, slice.parse())
     } else {
         Number::BigInt(BigInt::one())
     };
@@ -144,18 +151,22 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         let dec = slice.find('.').unwrap_or(len);
         largest_dec = cmp::max(largest_dec, len - dec);
         padding = cmp::max(padding, dec);
-        Number::new(slice)
+        return_if_err!(1, slice.parse())
     } else {
         Number::BigInt(BigInt::one())
     };
     if increment.is_zero() {
-        show_error!("increment value: '{}'", numbers[1]);
+        show_error!(
+            "invalid Zero increment value: '{}'\nTry '{} --help' for more information.",
+            numbers[1],
+            executable!()
+        );
         return 1;
     }
     let last = {
         let slice = numbers[numbers.len() - 1];
         padding = cmp::max(padding, slice.find('.').unwrap_or_else(|| slice.len()));
-        Number::new(slice)
+        return_if_err!(1, slice.parse())
     };
     if largest_dec > 0 {
         largest_dec -= 1;
