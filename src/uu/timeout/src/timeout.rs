@@ -159,8 +159,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     )
 }
 
-/// TODO: Improve exit codes, and make them consistent with the GNU Coreutil
-/// exit codes.
+/// TODO: Improve exit codes, and make them consistent with the GNU Coreutils exit codes.
 
 fn timeout(
     cmdname: &str,

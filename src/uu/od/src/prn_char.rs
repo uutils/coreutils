@@ -1,5 +1,3 @@
-// spell-checker:ignore (ToDO) CHRS itembytes MUTF
-
 use std::str::from_utf8;
 
 use crate::formatteriteminfo::*;
@@ -16,7 +14,7 @@ pub static FORMAT_ITEM_C: FormatterItemInfo = FormatterItemInfo {
     formatter: FormatWriter::MultibyteWriter(format_item_c),
 };
 
-static A_CHRS: [&str; 128] = [
+static A_CHARS: [&str; 128] = [
     "nul", "soh", "stx", "etx", "eot", "enq", "ack", "bel", "bs", "ht", "nl", "vt", "ff", "cr",
     "so", "si", "dle", "dc1", "dc2", "dc3", "dc4", "nak", "syn", "etb", "can", "em", "sub", "esc",
     "fs", "gs", "rs", "us", "sp", "!", "\"", "#", "$", "%", "&", "'", "(", ")", "*", "+", ",", "-",
@@ -28,12 +26,12 @@ static A_CHRS: [&str; 128] = [
 ];
 
 fn format_item_a(p: u64) -> String {
-    // itembytes == 1
+    // item-bytes == 1
     let b = (p & 0x7f) as u8;
-    format!("{:>4}", A_CHRS.get(b as usize).unwrap_or(&"??"))
+    format!("{:>4}", A_CHARS.get(b as usize).unwrap_or(&"??"))
 }
 
-static C_CHRS: [&str; 128] = [
+static C_CHARS: [&str; 128] = [
     "\\0", "001", "002", "003", "004", "005", "006", "\\a", "\\b", "\\t", "\\n", "\\v", "\\f",
     "\\r", "016", "017", "020", "021", "022", "023", "024", "025", "026", "027", "030", "031",
     "032", "033", "034", "035", "036", "037", " ", "!", "\"", "#", "$", "%", "&", "'", "(", ")",
@@ -45,11 +43,11 @@ static C_CHRS: [&str; 128] = [
 ];
 
 fn format_item_c(bytes: &[u8]) -> String {
-    // itembytes == 1
+    // item-bytes == 1
     let b = bytes[0];
 
     if b & 0x80 == 0x00 {
-        match C_CHRS.get(b as usize) {
+        match C_CHARS.get(b as usize) {
             Some(s) => format!("{:>4}", s),
             None => format!("{:>4}", b),
         }
@@ -86,7 +84,7 @@ pub fn format_ascii_dump(bytes: &[u8]) -> String {
     result.push('>');
     for c in bytes.iter() {
         if *c >= 0x20 && *c <= 0x7e {
-            result.push_str(C_CHRS[*c as usize]);
+            result.push_str(C_CHARS[*c as usize]);
         } else {
             result.push('.');
         }
@@ -136,12 +134,12 @@ fn test_format_item_c() {
         format_item_c(&[0xf0, 0x9f, 0x92, 0x96, 0x21])
     );
 
-    assert_eq!(" 300", format_item_c(&[0xc0, 0x80])); // invalid utf-8 (MUTF-8 null)
+    assert_eq!(" 300", format_item_c(&[0xc0, 0x80])); // invalid utf-8 (UTF-8 null)
     assert_eq!(" 301", format_item_c(&[0xc1, 0xa1])); // invalid utf-8
     assert_eq!(" 303", format_item_c(&[0xc3, 0xc3])); // invalid utf-8
     assert_eq!(" 360", format_item_c(&[0xf0, 0x82, 0x82, 0xac])); // invalid utf-8 (overlong)
     assert_eq!(" 360", format_item_c(&[0xf0, 0x9f, 0x92])); // invalid utf-8 (missing octet)
-    assert_eq!("   \u{10FFFD}", format_item_c(&[0xf4, 0x8f, 0xbf, 0xbd])); // largest valid utf-8
+    assert_eq!("   \u{10FFFD}", format_item_c(&[0xf4, 0x8f, 0xbf, 0xbd])); // largest valid utf-8   // spell-checker:ignore 10FFFD FFFD
     assert_eq!(" 364", format_item_c(&[0xf4, 0x90, 0x00, 0x00])); // invalid utf-8
     assert_eq!(" 365", format_item_c(&[0xf5, 0x80, 0x80, 0x80])); // invalid utf-8
     assert_eq!(" 377", format_item_c(&[0xff])); // invalid utf-8

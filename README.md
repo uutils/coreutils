@@ -12,7 +12,7 @@
 -----------------------------------------------
 
 <!-- markdownlint-disable commands-show-output no-duplicate-heading -->
-<!-- spell-checker:ignore markdownlint ; (jargon) multicall ; (misc) aarch riscv uutil uutils ; (names/acronyms) BusyBox BusyBox's BusyTest MSVC NixOS PowerPC WASI WASM ; (options) DESTDIR RUNTEST UTILNAME -->
+<!-- spell-checker:ignore markdownlint ; (options) DESTDIR RUNTEST UTILNAME -->
 
 uutils is an attempt at writing universal (as in cross-platform) CLI
 utilities in [Rust](http://www.rust-lang.org). This repository is intended to
@@ -300,13 +300,13 @@ $ make UTILS='UTILITY_1 UTILITY_2' SPEC=y test
 This testing functionality is only available on *nix operating systems and
 requires `make`.
 
-To run busybox's tests for all utilities for which busybox has tests
+To run busybox tests for all utilities for which busybox has tests
 
 ```bash
 $ make busytest
 ```
 
-To run busybox's tests for a few of the available utilities
+To run busybox tests for a few of the available utilities
 
 ```bash
 $ make UTILS='UTILITY_1 UTILITY_2' busytest
@@ -323,6 +323,7 @@ $ make UTILS='UTILITY_1 UTILITY_2' RUNTEST_ARGS='-v' busytest
 ![Evolution over time](https://github.com/uutils/coreutils-tracking/blob/main/gnu-results.png?raw=true)
 
 To run locally:
+
 ```bash
 $ bash util/build-gnu.sh
 $ bash util/run-gnu-test.sh
@@ -337,12 +338,12 @@ To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 | Done      | Semi-Done | To Do  |
 |-----------|-----------|--------|
 | arch      | cp        | chcon  |
-| base32    | expr      | dd     |
-| base64    | install   | numfmt |
-| basename  | ls        | pr     |
-| cat       | more      | runcon |
-| chgrp     | od (`--strings` and 128-bit data types missing) | stty |
-| chmod     | printf    |        |
+| base32    | expr      | csplit |
+| base64    | install   | dd     |
+| basename  | ls        | df     |
+| cat       | more      | numfmt |
+| chgrp     | od (`--strings` and 128-bit data types missing) | runcon |
+| chmod     | printf    | stty   |
 | chown     | sort      |        |
 | chroot    | split     |        |
 | cksum     | tail      |        |
@@ -351,7 +352,7 @@ To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 | cut       | join      |        |
 | dircolors | df        |        |
 | dirname   | tac       |        |
-| du        |           |        |
+| du        | pr        |        |
 | echo      |           |        |
 | env       |           |        |
 | expand    |           |        |

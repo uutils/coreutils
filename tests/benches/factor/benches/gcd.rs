@@ -3,7 +3,7 @@ use uu_factor::numeric;
 
 fn gcd(c: &mut Criterion) {
     let inputs = {
-        // Deterministic RNG; use an explicitely-named RNG to guarantee stability
+        // Deterministic RNG; use an explicitly-named RNG to guarantee stability
         use rand::{RngCore, SeedableRng};
         use rand_chacha::ChaCha8Rng;
         const SEED: u64 = 0xa_b4d_1dea_dead_cafe;

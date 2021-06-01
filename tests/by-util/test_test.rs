@@ -8,6 +8,8 @@
 // file that was distributed with this source code.
 //
 
+// spell-checker:ignore (words) pseudofloat
+
 use crate::common::util::*;
 
 #[test]
@@ -73,13 +75,13 @@ fn test_negated_or() {
 }
 
 #[test]
-fn test_strlen_of_nothing() {
+fn test_string_length_of_nothing() {
     // odd but matches GNU, which must interpret -n as a literal here
     new_ucmd!().arg("-n").succeeds();
 }
 
 #[test]
-fn test_strlen_of_empty() {
+fn test_string_length_of_empty() {
     new_ucmd!().args(&["-n", ""]).run().status_code(1);
 
     // STRING equivalent to -n STRING
@@ -98,7 +100,7 @@ fn test_zero_len_of_empty() {
 }
 
 #[test]
-fn test_solo_paren_is_literal() {
+fn test_solo_parenthesis_is_literal() {
     let scenario = TestScenario::new(util_name!());
     let tests = [["("], [")"]];
 
@@ -167,7 +169,7 @@ fn test_dangling_string_comparison_is_error() {
 }
 
 #[test]
-fn test_stringop_is_literal_after_bang() {
+fn test_string_operator_is_literal_after_bang() {
     let scenario = TestScenario::new(util_name!());
     let tests = [
         ["!", "="],
@@ -208,7 +210,7 @@ fn test_pseudofloat_not_equal() {
 #[test]
 fn test_negative_arg_is_a_string() {
     new_ucmd!().arg("-12345").succeeds();
-    new_ucmd!().arg("--qwert").succeeds();
+    new_ucmd!().arg("--qwert").succeeds(); // spell-checker:disable-line
 }
 
 #[test]
@@ -475,12 +477,12 @@ fn test_nonexistent_file_is_not_symlink() {
 }
 
 #[test]
-fn test_op_prec_and_or_1() {
+fn test_op_precedence_and_or_1() {
     new_ucmd!().args(&[" ", "-o", "", "-a", ""]).succeeds();
 }
 
 #[test]
-fn test_op_prec_and_or_1_overridden_by_parentheses() {
+fn test_op_precedence_and_or_1_overridden_by_parentheses() {
     new_ucmd!()
         .args(&["(", " ", "-o", "", ")", "-a", ""])
         .run()
@@ -488,14 +490,14 @@ fn test_op_prec_and_or_1_overridden_by_parentheses() {
 }
 
 #[test]
-fn test_op_prec_and_or_2() {
+fn test_op_precedence_and_or_2() {
     new_ucmd!()
         .args(&["", "-a", "", "-o", " ", "-a", " "])
         .succeeds();
 }
 
 #[test]
-fn test_op_prec_and_or_2_overridden_by_parentheses() {
+fn test_op_precedence_and_or_2_overridden_by_parentheses() {
     new_ucmd!()
         .args(&["", "-a", "(", "", "-o", " ", ")", "-a", " "])
         .run()
@@ -529,7 +531,7 @@ fn test_negated_boolean_precedence() {
 }
 
 #[test]
-fn test_bang_boolop_precedence() {
+fn test_bang_bool_op_precedence() {
     // For a Boolean combination of two literals, bang inverts the entire expression
     new_ucmd!().args(&["!", "", "-a", ""]).succeeds();
     new_ucmd!().args(&["!", "", "-o", ""]).succeeds();
@@ -564,7 +566,7 @@ fn test_bang_boolop_precedence() {
 }
 
 #[test]
-fn test_inverted_parenthetical_boolop_precedence() {
+fn test_inverted_parenthetical_bool_op_precedence() {
     // For a Boolean combination of two literals, bang inverts the entire expression
     new_ucmd!()
         .args(&["!", "a value", "-o", "another value"])
@@ -618,6 +620,6 @@ fn test_or_as_filename() {
 
 #[test]
 #[ignore = "GNU considers this an error"]
-fn test_strlen_and_nothing() {
+fn test_string_length_and_nothing() {
     new_ucmd!().args(&["-n", "a", "-a"]).run().status_code(2);
 }

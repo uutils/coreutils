@@ -1,5 +1,7 @@
 # Benchmarking sort
 
+<!-- spell-checker:ignore (words) kbytes -->
+
 Most of the time when sorting is spent comparing lines. The comparison functions however differ based
 on which arguments are passed to `sort`, therefore it is important to always benchmark multiple scenarios.
 This is an overview over what was benchmarked, and if you make changes to `sort`, you are encouraged to check
@@ -96,7 +98,7 @@ When invoked with -c, we simply check if the input is already ordered. The input
 Try to run the above benchmarks by piping the input through stdin (standard input) and redirect the
 output through stdout (standard output):
 
--   Remove the input file from the arguments and add `cat [inputfile] | ` at the beginning.
+-   Remove the input file from the arguments and add `cat [input_file] | ` at the beginning.
 -   Remove `-o output.txt` and add `> output.txt` at the end.
 
 Example: `hyperfine "target/release/coreutils sort shuffled_numbers.txt -n -o output.txt"` becomes

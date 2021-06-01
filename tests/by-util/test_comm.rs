@@ -1,3 +1,5 @@
+// spell-checker:ignore (words) defaultcheck nocheck
+
 use crate::common::util::*;
 
 #[test]
@@ -33,19 +35,19 @@ fn ab_dash_three() {
 }
 
 #[test]
-fn aempty() {
+fn a_empty() {
     new_ucmd!()
         .args(&["a", "empty"])
         .succeeds()
-        .stdout_only_fixture("aempty.expected");
+        .stdout_only_fixture("aempty.expected"); // spell-checker:disable-line
 }
 
 #[test]
-fn emptyempty() {
+fn empty_empty() {
     new_ucmd!()
         .args(&["empty", "empty"])
         .succeeds()
-        .stdout_only_fixture("emptyempty.expected");
+        .stdout_only_fixture("emptyempty.expected"); // spell-checker:disable-line
 }
 
 #[cfg_attr(not(feature = "test_unimplemented"), ignore)]
@@ -68,8 +70,8 @@ fn output_delimiter_require_arg() {
 
 // even though (info) documentation suggests this is an option
 // in latest GNU Coreutils comm, it actually is not.
-// this test is essentially an alarm in case someone well-intendingly
-// implements it.
+// this test is essentially an alarm in case some well-intending
+// developer implements it.
 //marked as unimplemented as error message not set yet.
 #[cfg_attr(not(feature = "test_unimplemented"), ignore)]
 #[test]

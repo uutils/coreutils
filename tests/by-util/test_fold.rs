@@ -282,7 +282,7 @@ fn test_backspace_is_not_word_boundary() {
         .args(&["-w10", "-s"])
         .pipe_in("foobar\x086789abcdef")
         .succeeds()
-        .stdout_is("foobar\x086789a\nbcdef");
+        .stdout_is("foobar\x086789a\nbcdef"); // spell-checker:disable-line
 }
 
 #[test]
@@ -291,7 +291,7 @@ fn test_carriage_return_should_be_preserved() {
 }
 
 #[test]
-fn test_carriage_return_overwrriten_char_should_be_preserved() {
+fn test_carriage_return_overwritten_char_should_be_preserved() {
     new_ucmd!().pipe_in("x\ry").succeeds().stdout_is("x\ry");
 }
 
@@ -308,9 +308,9 @@ fn test_carriage_return_should_reset_column_count() {
 fn test_carriage_return_is_not_word_boundary() {
     new_ucmd!()
         .args(&["-w6", "-s"])
-        .pipe_in("fizz\rbuzz\rfizzbuzz")
+        .pipe_in("fizz\rbuzz\rfizzbuzz") // spell-checker:disable-line
         .succeeds()
-        .stdout_is("fizz\rbuzz\rfizzbu\nzz");
+        .stdout_is("fizz\rbuzz\rfizzbu\nzz"); // spell-checker:disable-line
 }
 
 //
@@ -496,7 +496,7 @@ fn test_bytewise_backspace_is_not_word_boundary() {
         .args(&["-w10", "-s", "-b"])
         .pipe_in("foobar\x0889abcdef")
         .succeeds()
-        .stdout_is("foobar\x0889a\nbcdef");
+        .stdout_is("foobar\x0889a\nbcdef"); // spell-checker:disable-line
 }
 
 #[test]
@@ -509,7 +509,7 @@ fn test_bytewise_carriage_return_should_be_preserved() {
 }
 
 #[test]
-fn test_bytewise_carriage_return_overwrriten_char_should_be_preserved() {
+fn test_bytewise_carriage_return_overwritten_char_should_be_preserved() {
     new_ucmd!()
         .arg("-b")
         .pipe_in("x\ry")
@@ -530,9 +530,9 @@ fn test_bytewise_carriage_return_should_not_reset_column_count() {
 fn test_bytewise_carriage_return_is_not_word_boundary() {
     new_ucmd!()
         .args(&["-w6", "-s", "-b"])
-        .pipe_in("fizz\rbuzz\rfizzbuzz")
+        .pipe_in("fizz\rbuzz\rfizzbuzz") // spell-checker:disable-line
         .succeeds()
-        .stdout_is("fizz\rb\nuzz\rfi\nzzbuzz");
+        .stdout_is("fizz\rb\nuzz\rfi\nzzbuzz"); // spell-checker:disable-line
 }
 #[test]
 fn test_obsolete_syntax() {

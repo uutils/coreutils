@@ -1,3 +1,5 @@
+// spell-checker:ignore (words) reallylongexecutable
+
 use crate::common::util::*;
 #[cfg(any(unix, target_os = "redox"))]
 use std::ffi::OsStr;
@@ -50,7 +52,7 @@ fn test_remove_suffix() {
 }
 
 #[test]
-fn test_dont_remove_suffix() {
+fn test_do_not_remove_suffix() {
     new_ucmd!()
         .args(&["/foo/bar/baz", "baz"])
         .succeeds()
@@ -64,7 +66,7 @@ fn test_multiple_param() {
         new_ucmd!()
             .args(&[multiple_param, path, path])
             .succeeds()
-            .stdout_only("baz\nbaz\n");
+            .stdout_only("baz\nbaz\n"); // spell-checker:disable-line
     }
 }
 
@@ -75,7 +77,7 @@ fn test_suffix_param() {
         new_ucmd!()
             .args(&[suffix_param, ".exe", path, path])
             .succeeds()
-            .stdout_only("baz\nbaz\n");
+            .stdout_only("baz\nbaz\n"); // spell-checker:disable-line
     }
 }
 

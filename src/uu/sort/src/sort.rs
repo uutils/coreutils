@@ -11,7 +11,8 @@
 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 
-// spell-checker:ignore (ToDO) outfile nondictionary
+// spell-checker:ignore (misc) HFKJFK Mbdfhn
+
 #[macro_use]
 extern crate uucore;
 
@@ -143,7 +144,7 @@ pub struct GlobalSettings {
     ignore_non_printing: bool,
     merge: bool,
     reverse: bool,
-    outfile: Option<String>,
+    output_file: Option<String>,
     stable: bool,
     unique: bool,
     check: bool,
@@ -187,7 +188,7 @@ impl GlobalSettings {
     }
 
     fn out_writer(&self) -> BufWriter<Box<dyn Write>> {
-        match self.outfile {
+        match self.output_file {
             Some(ref filename) => match File::create(Path::new(&filename)) {
                 Ok(f) => BufWriter::new(Box::new(f) as Box<dyn Write>),
                 Err(e) => {
@@ -211,7 +212,7 @@ impl Default for GlobalSettings {
             ignore_non_printing: false,
             merge: false,
             reverse: false,
-            outfile: None,
+            output_file: None,
             stable: false,
             unique: false,
             check: false,
@@ -1168,7 +1169,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     settings.ignore_blanks = matches.is_present(OPT_IGNORE_BLANKS);
 
-    settings.outfile = matches.value_of(OPT_OUTPUT).map(String::from);
+    settings.output_file = matches.value_of(OPT_OUTPUT).map(String::from);
     settings.reverse = matches.is_present(OPT_REVERSE);
     settings.stable = matches.is_present(OPT_STABLE);
     settings.unique = matches.is_present(OPT_UNIQUE);

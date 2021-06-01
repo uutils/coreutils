@@ -29,7 +29,7 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) ->
     // This vector holds error messages encountered.
     let mut errs: Vec<String> = vec![];
     settings.renumber = !opts.is_present(options::NO_RENUMBER);
-    match opts.value_of(options::NUMER_SEPARATOR) {
+    match opts.value_of(options::NUMBER_SEPARATOR) {
         None => {}
         Some(val) => {
             settings.number_separator = val.to_owned();
@@ -118,7 +118,7 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) ->
             }
         }
     }
-    match opts.value_of(options::STARTING_LINE_NUMER) {
+    match opts.value_of(options::STARTING_LINE_NUMBER) {
         None => {}
         Some(val) => {
             let conv: Option<u64> = val.parse().ok();

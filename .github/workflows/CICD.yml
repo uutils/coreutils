@@ -5,7 +5,7 @@ name: CICD
 # spell-checker:ignore (jargon) SHAs deps softprops toolchain
 # spell-checker:ignore (names) CodeCOV MacOS MinGW Peltoche rivy
 # spell-checker:ignore (shell/tools) choco clippy dmake dpkg esac fakeroot gmake grcov halium lcov libssl mkdir popd printf pushd rustc rustfmt rustup shopt xargs
-# spell-checker:ignore (misc) aarch alnum armhf coreutils gnueabihf issuecomment maint nullglob onexitbegin onexitend tempfile uutils
+# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils gnueabihf issuecomment maint nullglob onexitbegin onexitend tempfile testsuite uutils
 
 env:
   PROJECT_NAME: coreutils
@@ -57,6 +57,24 @@ jobs:
         # `fmt` testing of tests
         # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
         S=$(find tests -name "*.rs" -print0 | xargs -0 cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" | sed -E -n "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::warning file=\1,line=\2::WARNING: \`cargo fmt\`: style violation/p" ; }
+
+  code_spellcheck:
+    name: Style/spelling
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      matrix:
+        job:
+          - { os: ubuntu-latest }
+    steps:
+    - uses: actions/checkout@v1
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        sudo apt-get -y update ; sudo apt-get -y install npm ; sudo npm install cspell -g;
+    - name: Run `cspell`
+      shell: bash
+      run: |
+        cspell --config .vscode/cSpell.json --no-summary --no-progress "**/*" | sed "s/\(.*\):\(.*\):\(.*\) - \(.*\)/::warning file=\1,line=\2,col=\3::cspell: \4/" || true
 
   code_warnings:
     name: Style/warnings
@@ -614,20 +632,3 @@ jobs:
         flags: ${{ steps.vars.outputs.CODECOV_FLAGS }}
         name: codecov-umbrella
         fail_ci_if_error: false
-  spellcheck:
-    name: Spell Check
-    runs-on: ${{ matrix.job.os }}
-    strategy:
-      matrix:
-        job:
-          - { os: ubuntu-latest }
-    steps:
-    - uses: actions/checkout@v1
-    - name: Install/setup prerequisites
-      shell: bash
-      run: |
-        sudo apt-get -y update ; sudo apt-get -y install npm ; sudo npm install cspell -g;
-    - name: Run `cspell`
-      shell: bash
-      run: |
-        cspell --config .vscode/cSpell.json --no-summary --no-progress $( git ls-files | grep "\.\(rs\|md\)" ) | sed "s/\(.*\):\(.*\):\(.*\) - \(.*\)/::warning file=\1,line=\2,col=\3::cspell: \4/" || true

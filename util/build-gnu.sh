@@ -1,4 +1,7 @@
 #!/bin/bash
+
+# spell-checker:ignore (paths) abmon deref discrim getlimits getopt ginstall gnulib inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW ; (vars/env) BUILDDIR SRCDIR
+
 set -e
 if test ! -d ../gnu; then
     echo "Could not find ../gnu"
@@ -96,4 +99,3 @@ sed -i 's|seq \$|/usr/bin/timeout 0.1 seq \$|' tests/misc/seq-precision.sh tests
 sed -i 's|cat |/usr/bin/timeout 0.1 cat |' tests/misc/cat-self.sh
 
 test -f "${BUILDDIR}/getlimits" || cp src/getlimits "${BUILDDIR}"
-

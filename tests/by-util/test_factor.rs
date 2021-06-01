@@ -6,6 +6,8 @@
 // that was distributed with this source code.
 #![allow(clippy::unreadable_literal)]
 
+// spell-checker:ignore (methods) hexdigest
+
 use crate::common::util::*;
 use std::time::SystemTime;
 
@@ -27,13 +29,13 @@ fn test_first_100000_integers() {
     extern crate sha1;
 
     let n_integers = 100_000;
-    let mut instring = String::new();
+    let mut input_string = String::new();
     for i in 0..=n_integers {
-        instring.push_str(&(format!("{} ", i))[..]);
+        input_string.push_str(&(format!("{} ", i))[..]);
     }
 
-    println!("STDIN='{}'", instring);
-    let result = new_ucmd!().pipe_in(instring.as_bytes()).succeeds();
+    println!("STDIN='{}'", input_string);
+    let result = new_ucmd!().pipe_in(input_string.as_bytes()).succeeds();
 
     // `seq 0 100000 | factor | sha1sum` => "4ed2d8403934fa1c76fe4b84c5d4b8850299c359"
     let hash_check = sha1::Sha1::from(result.stdout()).hexdigest();
@@ -95,20 +97,20 @@ fn test_random() {
     };
 
     // build an input and expected output string from factor
-    let mut instring = String::new();
-    let mut outstring = String::new();
+    let mut input_string = String::new();
+    let mut output_string = String::new();
     for _ in 0..NUM_TESTS {
         let (product, factors) = rand_gt(1 << 63);
-        instring.push_str(&(format!("{} ", product))[..]);
+        input_string.push_str(&(format!("{} ", product))[..]);
 
-        outstring.push_str(&(format!("{}:", product))[..]);
+        output_string.push_str(&(format!("{}:", product))[..]);
         for factor in factors {
-            outstring.push_str(&(format!(" {}", factor))[..]);
+            output_string.push_str(&(format!(" {}", factor))[..]);
         }
-        outstring.push('\n');
+        output_string.push('\n');
     }
 
-    run(instring.as_bytes(), outstring.as_bytes());
+    run(input_string.as_bytes(), output_string.as_bytes());
 }
 
 #[test]
@@ -120,30 +122,30 @@ fn test_random_big() {
     println!("rng_seed={:?}", rng_seed);
     let mut rng = SmallRng::seed_from_u64(rng_seed);
 
-    let bitrange_1 = Uniform::new(14_usize, 51);
+    let bit_range_1 = Uniform::new(14_usize, 51);
     let mut rand_64 = move || {
         // first, choose a random number of bits for the first factor
-        let f_bit_1 = bitrange_1.sample(&mut rng);
+        let f_bit_1 = bit_range_1.sample(&mut rng);
         // how many more bits do we need?
         let rem = 64 - f_bit_1;
 
-        // we will have a number of additional factors equal to nfacts + 1
-        // where nfacts is in [0, floor(rem/14) )  NOTE half-open interval
+        // we will have a number of additional factors equal to n_facts + 1
+        // where n_facts is in [0, floor(rem/14) )  NOTE half-open interval
         // Each prime factor is at least 14 bits, hence floor(rem/14)
-        let nfacts = Uniform::new(0_usize, rem / 14).sample(&mut rng);
-        // we have to distribute extrabits among the (nfacts + 1) values
-        let extrabits = rem - (nfacts + 1) * 14;
+        let n_factors = Uniform::new(0_usize, rem / 14).sample(&mut rng);
+        // we have to distribute extra_bits among the (n_facts + 1) values
+        let extra_bits = rem - (n_factors + 1) * 14;
         // (remember, a Range is a half-open interval)
-        let extrarange = Uniform::new(0_usize, extrabits + 1);
+        let extra_range = Uniform::new(0_usize, extra_bits + 1);
 
         // to generate an even split of this range, generate n-1 random elements
         // in the range, add the desired total value to the end, sort this list,
         // and then compute the sequential differences.
         let mut f_bits = Vec::new();
-        for _ in 0..nfacts {
-            f_bits.push(extrarange.sample(&mut rng));
+        for _ in 0..n_factors {
+            f_bits.push(extra_range.sample(&mut rng));
         }
-        f_bits.push(extrabits);
+        f_bits.push(extra_bits);
         f_bits.sort_unstable();
 
         // compute sequential differences here. We leave off the +14 bits
@@ -160,59 +162,62 @@ fn test_random_big() {
         f_bits.push(f_bit_1 - 14); // index of f_bit_1 in PRIMES_BY_BITS
         let f_bits = f_bits;
 
-        let mut nbits = 0;
+        let mut n_bits = 0;
         let mut product = 1_u64;
         let mut factors = Vec::new();
         for bit in f_bits {
             assert!(bit < 37);
-            nbits += 14 + bit;
+            n_bits += 14 + bit;
             let elm = Uniform::new(0, PRIMES_BY_BITS[bit].len()).sample(&mut rng);
             let factor = PRIMES_BY_BITS[bit][elm];
             factors.push(factor);
             product *= factor;
         }
-        assert_eq!(nbits, 64);
+        assert_eq!(n_bits, 64);
 
         factors.sort_unstable();
         (product, factors)
     };
 
-    let mut instring = String::new();
-    let mut outstring = String::new();
+    let mut input_string = String::new();
+    let mut output_string = String::new();
     for _ in 0..NUM_TESTS {
         let (product, factors) = rand_64();
-        instring.push_str(&(format!("{} ", product))[..]);
+        input_string.push_str(&(format!("{} ", product))[..]);
 
-        outstring.push_str(&(format!("{}:", product))[..]);
+        output_string.push_str(&(format!("{}:", product))[..]);
         for factor in factors {
-            outstring.push_str(&(format!(" {}", factor))[..]);
+            output_string.push_str(&(format!(" {}", factor))[..]);
         }
-        outstring.push('\n');
+        output_string.push('\n');
     }
 
-    run(instring.as_bytes(), outstring.as_bytes());
+    run(input_string.as_bytes(), output_string.as_bytes());
 }
 
 #[test]
 fn test_big_primes() {
-    let mut instring = String::new();
-    let mut outstring = String::new();
+    let mut input_string = String::new();
+    let mut output_string = String::new();
     for prime in PRIMES64 {
-        instring.push_str(&(format!("{} ", prime))[..]);
-        outstring.push_str(&(format!("{0}: {0}\n", prime))[..]);
+        input_string.push_str(&(format!("{} ", prime))[..]);
+        output_string.push_str(&(format!("{0}: {0}\n", prime))[..]);
     }
 
-    run(instring.as_bytes(), outstring.as_bytes());
+    run(input_string.as_bytes(), output_string.as_bytes());
 }
 
-fn run(instring: &[u8], outstring: &[u8]) {
-    println!("STDIN='{}'", String::from_utf8_lossy(instring));
-    println!("STDOUT(expected)='{}'", String::from_utf8_lossy(outstring));
+fn run(input_string: &[u8], output_string: &[u8]) {
+    println!("STDIN='{}'", String::from_utf8_lossy(input_string));
+    println!(
+        "STDOUT(expected)='{}'",
+        String::from_utf8_lossy(output_string)
+    );
     // now run factor
     new_ucmd!()
-        .pipe_in(instring)
+        .pipe_in(input_string)
         .run()
-        .stdout_is(String::from_utf8(outstring.to_owned()).unwrap());
+        .stdout_is(String::from_utf8(output_string.to_owned()).unwrap());
 }
 
 const PRIMES_BY_BITS: &[&[u64]] = &[

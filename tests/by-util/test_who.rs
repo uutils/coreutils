@@ -1,5 +1,7 @@
 use crate::common::util::*;
 
+// spell-checker:ignore (flags) runlevel mesg
+
 #[cfg(any(target_vendor = "apple", target_os = "linux"))]
 #[test]
 fn test_count() {

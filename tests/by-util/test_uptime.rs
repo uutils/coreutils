@@ -22,5 +22,5 @@ fn test_uptime_since() {
 
 #[test]
 fn test_failed() {
-    new_ucmd!().arg("willfail").fails();
+    new_ucmd!().arg("will-fail").fails();
 }

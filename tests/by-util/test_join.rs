@@ -1,3 +1,5 @@
+// spell-checker:ignore (words) autoformat
+
 use crate::common::util::*;
 
 #[test]
@@ -141,7 +143,7 @@ fn new_line_separated() {
 }
 
 #[test]
-fn multitab_character() {
+fn tab_multi_character() {
     new_ucmd!()
         .arg("semicolon_fields_1.txt")
         .arg("semicolon_fields_2.txt")

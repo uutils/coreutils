@@ -6,9 +6,6 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) mountinfo BLOCKSIZE fobj mptr noatime Iused overmounted
-// spell-checker:ignore (libc/fs) asyncreads asyncwrites autofs bavail bfree bsize charspare cifs debugfs devfs devpts ffree frsize fsid fstypename fusectl inode inodes iosize kernfs mntbufp mntfromname mntonname mqueue namemax pipefs smbfs statvfs subfs syncreads syncwrites sysfs wcslen
-
 #[macro_use]
 extern crate uucore;
 #[cfg(unix)]
@@ -78,7 +75,7 @@ struct Options {
 
 #[derive(Debug, Clone)]
 struct Filesystem {
-    mountinfo: MountInfo,
+    mount_info: MountInfo,
     usage: FsUsage,
 }
 
@@ -131,19 +128,19 @@ impl Options {
 }
 
 impl Filesystem {
-    // TODO: resolve uuid in `mountinfo.dev_name` if exists
-    fn new(mountinfo: MountInfo) -> Option<Filesystem> {
-        let _stat_path = if !mountinfo.mount_dir.is_empty() {
-            mountinfo.mount_dir.clone()
+    // TODO: resolve uuid in `mount_info.dev_name` if exists
+    fn new(mount_info: MountInfo) -> Option<Filesystem> {
+        let _stat_path = if !mount_info.mount_dir.is_empty() {
+            mount_info.mount_dir.clone()
         } else {
             #[cfg(unix)]
             {
-                mountinfo.dev_name.clone()
+                mount_info.dev_name.clone()
             }
             #[cfg(windows)]
             {
                 // On windows, we expect the volume id
-                mountinfo.dev_id.clone()
+                mount_info.dev_id.clone()
             }
         };
         #[cfg(unix)]
@@ -154,14 +151,14 @@ impl Filesystem {
                 None
             } else {
                 Some(Filesystem {
-                    mountinfo,
+                    mount_info,
                     usage: FsUsage::new(statvfs),
                 })
             }
         }
         #[cfg(windows)]
         Some(Filesystem {
-            mountinfo,
+            mount_info,
             usage: FsUsage::new(Path::new(&_stat_path)),
         })
     }
@@ -205,7 +202,7 @@ fn filter_mount_list(vmi: Vec<MountInfo>, paths: &[String], opt: &Options) -> Ve
                         if (!mi.dev_name.starts_with('/') || seen.dev_name.starts_with('/'))
                             // let points towards the root of the device win.
                             && (!target_nearer_root || source_below_root)
-                            // let an entry overmounted on a new device win...
+                            // let an entry over-mounted on a new device win...
                             && (seen.dev_name == mi.dev_name
                             /* ... but only when matching an existing mnt point,
                             to avoid problematic replacement when given
@@ -431,6 +428,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         header.push("Type");
     }
     header.extend_from_slice(&if opt.show_inode_instead {
+        // spell-checker:disable-next-line
         ["Inodes", "Iused", "IFree", "IUses%"]
     } else {
         [
@@ -462,9 +460,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
     println!();
     for fs in fs_list.iter() {
-        print!("{0: <16} ", fs.mountinfo.dev_name);
+        print!("{0: <16} ", fs.mount_info.dev_name);
         if opt.show_fs_type {
-            print!("{0: <5} ", fs.mountinfo.fs_type);
+            print!("{0: <5} ", fs.mount_info.fs_type);
         }
         if opt.show_inode_instead {
             print!(
@@ -508,7 +506,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             }
             print!("{0: >5} ", use_size(free_size, total_size));
         }
-        print!("{0: <16}", fs.mountinfo.mount_dir);
+        print!("{0: <16}", fs.mount_info.mount_dir);
         println!();
     }
 

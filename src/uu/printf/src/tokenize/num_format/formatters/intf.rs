@@ -1,11 +1,12 @@
-// spell-checker:ignore (ToDO) fchar conv decr inprefix intf ints finalstr
+// spell-checker:ignore (vars) charf decf floatf intf scif strf Cninety
+// spell-checker:ignore (ToDO) arrnum
 
 //! formatter for unsigned and signed int subs
-//! unsigned ints: %X %x (hex u64) %o (octal u64) %u (base ten u64)
-//! signed ints: %i %d (both base ten i64)
+//! unsigned int: %X %x (hex u64) %o (octal u64) %u (base ten u64)
+//! signed int: %i %d (both base ten i64)
 use super::super::format_field::FormatField;
 use super::super::formatter::{
-    get_it_at, warn_incomplete_conv, Base, FormatPrimitive, Formatter, InPrefix,
+    get_it_at, warn_incomplete_conv, Base, FormatPrimitive, Formatter, InitialPrefix,
 };
 use std::i64;
 use std::u64;
@@ -38,19 +39,19 @@ impl Intf {
     // is_zero: true if number is zero, false otherwise
     // len_digits: length of digits used to create the int
     //   important, for example, if we run into a non-valid character
-    fn analyze(str_in: &str, signed_out: bool, inprefix: &InPrefix) -> IntAnalysis {
+    fn analyze(str_in: &str, signed_out: bool, initial_prefix: &InitialPrefix) -> IntAnalysis {
         // the maximum number of digits we could conceivably
         // have before the decimal point without exceeding the
         // max
-        let mut str_it = get_it_at(inprefix.offset, str_in);
+        let mut str_it = get_it_at(initial_prefix.offset, str_in);
         let max_sd_in = if signed_out {
-            match inprefix.radix_in {
+            match initial_prefix.radix_in {
                 Base::Ten => 19,
                 Base::Octal => 21,
                 Base::Hex => 16,
             }
         } else {
-            match inprefix.radix_in {
+            match initial_prefix.radix_in {
                 Base::Ten => 20,
                 Base::Octal => 22,
                 Base::Hex => 16,
@@ -118,13 +119,13 @@ impl Intf {
     }
     // get a FormatPrimitive of the maximum value for the field char
     //  and given sign
-    fn get_max(fchar: char, sign: i8) -> FormatPrimitive {
-        let mut fmt_prim: FormatPrimitive = Default::default();
-        fmt_prim.pre_decimal = Some(String::from(match fchar {
+    fn get_max(field_char: char, sign: i8) -> FormatPrimitive {
+        let mut fmt_primitive: FormatPrimitive = Default::default();
+        fmt_primitive.pre_decimal = Some(String::from(match field_char {
             'd' | 'i' => match sign {
                 1 => "9223372036854775807",
                 _ => {
-                    fmt_prim.prefix = Some(String::from("-"));
+                    fmt_primitive.prefix = Some(String::from("-"));
                     "9223372036854775808"
                 }
             },
@@ -132,7 +133,7 @@ impl Intf {
             'o' => "1777777777777777777777",
             /* 'u' | */ _ => "18446744073709551615",
         }));
-        fmt_prim
+        fmt_primitive
     }
     // conv_from_segment contract:
     // 1. takes
@@ -149,8 +150,13 @@ impl Intf {
     // - if the string falls outside bounds:
     //   for i64 output, the int minimum or int max (depending on sign)
     //   for u64 output, the u64 max in the output radix
-    fn conv_from_segment(segment: &str, radix_in: Base, fchar: char, sign: i8) -> FormatPrimitive {
-        match fchar {
+    fn conv_from_segment(
+        segment: &str,
+        radix_in: Base,
+        field_char: char,
+        sign: i8,
+    ) -> FormatPrimitive {
+        match field_char {
             'i' | 'd' => match i64::from_str_radix(segment, radix_in as u32) {
                 Ok(i) => {
                     let mut fmt_prim: FormatPrimitive = Default::default();
@@ -160,13 +166,13 @@ impl Intf {
                     fmt_prim.pre_decimal = Some(format!("{}", i));
                     fmt_prim
                 }
-                Err(_) => Intf::get_max(fchar, sign),
+                Err(_) => Intf::get_max(field_char, sign),
             },
             _ => match u64::from_str_radix(segment, radix_in as u32) {
                 Ok(u) => {
                     let mut fmt_prim: FormatPrimitive = Default::default();
                     let u_f = if sign == -1 { u64::MAX - (u - 1) } else { u };
-                    fmt_prim.pre_decimal = Some(match fchar {
+                    fmt_prim.pre_decimal = Some(match field_char {
                         'X' => format!("{:X}", u_f),
                         'x' => format!("{:x}", u_f),
                         'o' => format!("{:o}", u_f),
@@ -174,7 +180,7 @@ impl Intf {
                     });
                     fmt_prim
                 }
-                Err(_) => Intf::get_max(fchar, sign),
+                Err(_) => Intf::get_max(field_char, sign),
             },
         }
     }
@@ -183,17 +189,17 @@ impl Formatter for Intf {
     fn get_primitive(
         &self,
         field: &FormatField,
-        inprefix: &InPrefix,
+        initial_prefix: &InitialPrefix,
         str_in: &str,
     ) -> Option<FormatPrimitive> {
-        let begin = inprefix.offset;
+        let begin = initial_prefix.offset;
 
         // get information about the string. see Intf::Analyze
         // def above.
         let convert_hints = Intf::analyze(
             str_in,
             *field.field_char == 'i' || *field.field_char == 'd',
-            inprefix,
+            initial_prefix,
         );
         // We always will have a format primitive to return
         Some(if convert_hints.len_digits == 0 || convert_hints.is_zero {
@@ -209,22 +215,22 @@ impl Formatter for Intf {
                 'x' | 'X' => Base::Hex,
                 /* 'o' | */ _ => Base::Octal,
             };
-            let radix_mismatch = !radix_out.eq(&inprefix.radix_in);
-            let decr_from_max: bool = inprefix.sign == -1 && *field.field_char != 'i';
+            let radix_mismatch = !radix_out.eq(&initial_prefix.radix_in);
+            let decrease_from_max: bool = initial_prefix.sign == -1 && *field.field_char != 'i';
             let end = begin + convert_hints.len_digits as usize;
 
             // convert to int if any one of these is true:
             // - number of digits in int indicates it may be past max
             // - we're subtracting from the max
             // - we're converting the base
-            if convert_hints.check_past_max || decr_from_max || radix_mismatch {
+            if convert_hints.check_past_max || decrease_from_max || radix_mismatch {
                 // radix of in and out is the same.
                 let segment = String::from(&str_in[begin..end]);
                 Intf::conv_from_segment(
                     &segment,
-                    inprefix.radix_in.clone(),
+                    initial_prefix.radix_in.clone(),
                     *field.field_char,
-                    inprefix.sign,
+                    initial_prefix.sign,
                 )
             } else {
                 // otherwise just do a straight string copy.
@@ -233,20 +239,20 @@ impl Formatter for Intf {
                 // this is here and not earlier because
                 // zero doesn't get a sign, and conv_from_segment
                 // creates its format primitive separately
-                if inprefix.sign == -1 && *field.field_char == 'i' {
+                if initial_prefix.sign == -1 && *field.field_char == 'i' {
                     fmt_prim.prefix = Some(String::from("-"));
                 }
                 fmt_prim.pre_decimal = Some(String::from(&str_in[begin..end]));
                 fmt_prim
             }
         } else {
-            Intf::get_max(*field.field_char, inprefix.sign)
+            Intf::get_max(*field.field_char, initial_prefix.sign)
         })
     }
     fn primitive_to_str(&self, prim: &FormatPrimitive, field: FormatField) -> String {
-        let mut finalstr: String = String::new();
+        let mut final_str: String = String::new();
         if let Some(ref prefix) = prim.prefix {
-            finalstr.push_str(&prefix);
+            final_str.push_str(&prefix);
         }
         // integral second fields is zero-padded minimum-width
         // which gets handled before general minimum-width
@@ -256,11 +262,11 @@ impl Formatter for Intf {
                     let mut i = min;
                     let len = pre_decimal.len() as u32;
                     while i > len {
-                        finalstr.push('0');
+                        final_str.push('0');
                         i -= 1;
                     }
                 }
-                finalstr.push_str(&pre_decimal);
+                final_str.push_str(&pre_decimal);
             }
             None => {
                 panic!(
@@ -269,6 +275,6 @@ impl Formatter for Intf {
                 );
             }
         }
-        finalstr
+        final_str
     }
 }

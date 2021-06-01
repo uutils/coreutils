@@ -1,3 +1,5 @@
+// spell-checker:ignore (words) helloworld objdump
+
 use crate::common::util::*;
 use filetime::FileTime;
 use rust_users::*;

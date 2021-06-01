@@ -1,7 +1,7 @@
 use crate::common::util::*;
 
 #[test]
-fn test_users_noarg() {
+fn test_users_no_arg() {
     new_ucmd!().succeeds();
 }
 

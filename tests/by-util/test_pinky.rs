@@ -9,24 +9,24 @@ pub use self::pinky::*;
 
 #[test]
 fn test_capitalize() {
-    assert_eq!("Zbnmasd", "zbnmasd".capitalize());
-    assert_eq!("Abnmasd", "Abnmasd".capitalize());
-    assert_eq!("1masd", "1masd".capitalize());
+    assert_eq!("Zbnmasd", "zbnmasd".capitalize()); // spell-checker:disable-line
+    assert_eq!("Abnmasd", "Abnmasd".capitalize()); // spell-checker:disable-line
+    assert_eq!("1masd", "1masd".capitalize()); // spell-checker:disable-line
     assert_eq!("", "".capitalize());
 }
 
 #[test]
 fn test_long_format() {
-    let ulogin = "root";
-    let pw: Passwd = Passwd::locate(ulogin).unwrap();
+    let login = "root";
+    let pw: Passwd = Passwd::locate(login).unwrap();
     let real_name = pw.user_info().replace("&", &pw.name().capitalize());
     new_ucmd!()
         .arg("-l")
-        .arg(ulogin)
+        .arg(login)
         .succeeds()
         .stdout_is(format!(
             "Login name: {:<28}In real life:  {}\nDirectory: {:<29}Shell:  {}\n\n",
-            ulogin,
+            login,
             real_name,
             pw.user_dir(),
             pw.user_shell()
@@ -34,11 +34,11 @@ fn test_long_format() {
 
     new_ucmd!()
         .arg("-lb")
-        .arg(ulogin)
+        .arg(login)
         .succeeds()
         .stdout_is(format!(
             "Login name: {:<28}In real life:  {1}\n\n",
-            ulogin, real_name
+            login, real_name
         ));
 }
 

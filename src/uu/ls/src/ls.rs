@@ -60,7 +60,7 @@ fn get_usage() -> String {
 
 pub mod options {
     pub mod format {
-        pub static ONELINE: &str = "1";
+        pub static ONE_LINE: &str = "1";
         pub static LONG: &str = "long";
         pub static COLUMNS: &str = "C";
         pub static ACROSS: &str = "x";
@@ -248,7 +248,7 @@ impl Config {
         // -og should hide both owner and group. Furthermore, they are not
         // reset if -l or --format=long is used. So these should just show the
         // group: -gl or "-g --format=long". Finally, they are also not reset
-        // when switching to a different format option inbetween like this:
+        // when switching to a different format option in-between like this:
         // -ogCl or "-og --format=vertical --format=long".
         //
         // -1 has a similar issue: it does nothing if the format is long. This
@@ -275,7 +275,7 @@ impl Config {
             .any(|i| i >= idx)
             {
                 format = Format::Long;
-            } else if let Some(mut indices) = options.indices_of(options::format::ONELINE) {
+            } else if let Some(mut indices) = options.indices_of(options::format::ONE_LINE) {
                 if indices.any(|i| i > idx) {
                     format = Format::OneLine;
                 }
@@ -636,8 +636,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         // ls -1g1
         // even though `ls -11` and `ls -1 -g -1` work.
         .arg(
-            Arg::with_name(options::format::ONELINE)
-                .short(options::format::ONELINE)
+            Arg::with_name(options::format::ONE_LINE)
+                .short(options::format::ONE_LINE)
                 .help("List one file per line.")
                 .multiple(true)
         )
@@ -785,6 +785,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(options::HIDE)
                 .takes_value(true)
                 .multiple(true)
+                .value_name("PATTERN")
+                .help("do not list implied entries matching shell PATTERN (overridden by -a or -A)")
         )
         .arg(
             Arg::with_name(options::IGNORE)
@@ -792,6 +794,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(options::IGNORE)
                 .takes_value(true)
                 .multiple(true)
+                .value_name("PATTERN")
+                .help("do not list implied entries matching shell PATTERN")
         )
         .arg(
             Arg::with_name(options::IGNORE_BACKUPS)
@@ -1130,7 +1134,7 @@ impl PathData {
         let display_name = if let Some(name) = file_name {
             name
         } else {
-            let display_osstr = if command_line {
+            let display_os_str = if command_line {
                 p_buf.as_os_str()
             } else {
                 p_buf
@@ -1138,7 +1142,7 @@ impl PathData {
                     .unwrap_or_else(|| p_buf.iter().next_back().unwrap())
             };
 
-            display_osstr.to_string_lossy().into_owned()
+            display_os_str.to_string_lossy().into_owned()
         };
         let must_dereference = match &config.dereference {
             Dereference::All => true,
@@ -1624,6 +1628,7 @@ fn display_date(metadata: &Metadata, config: &Config) -> String {
                 TimeStyle::Locale => {
                     let fmt = if recent { "%b %e %H:%M" } else { "%b %e  %Y" };
 
+                    // spell-checker:ignore (word) datetime
                     //In this version of chrono translating can be done
                     //The function is chrono::datetime::DateTime::format_localized
                     //However it's currently still hard to get the current pure-rust-locale
@@ -1678,7 +1683,7 @@ fn display_size_or_rdev(metadata: &Metadata, config: &Config) -> String {
 }
 
 fn display_size(size: u64, config: &Config) -> String {
-    // NOTE: The human-readable behaviour deviates from the GNU ls.
+    // NOTE: The human-readable behavior deviates from the GNU ls.
     // The GNU ls uses binary prefixes by default.
     match config.size_format {
         SizeFormat::Binary => format_prefixed(NumberPrefix::binary(size as f64)),
@@ -1692,7 +1697,7 @@ fn file_is_executable(md: &Metadata) -> bool {
     // Mode always returns u32, but the flags might not be, based on the platform
     // e.g. linux has u32, mac has u16.
     // S_IXUSR -> user has execute permission
-    // S_IXGRP -> group has execute persmission
+    // S_IXGRP -> group has execute permission
     // S_IXOTH -> other users have execute permission
     md.mode() & ((S_IXUSR | S_IXGRP | S_IXOTH) as u32) != 0
 }

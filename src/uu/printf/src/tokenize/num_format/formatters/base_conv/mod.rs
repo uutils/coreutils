@@ -1,4 +1,4 @@
-// spell-checker:ignore (ToDO) arrnum mult basenum bufferval refd vals arrfloat conv intermed addl
+// spell-checker:ignore (ToDO) arrnum arr_num mult basenum bufferval refd vals arrfloat conv intermed addl
 
 pub fn arrnum_int_mult(arr_num: &[u8], basenum: u8, base_ten_int_fact: u8) -> Vec<u8> {
     let mut carry: u16 = 0;

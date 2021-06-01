@@ -1,3 +1,5 @@
+// spell-checker:ignore (paths) gnutest
+
 use crate::common::util::*;
 
 #[test]
@@ -231,7 +233,7 @@ fn test_should_skip_leading_space_from_stdin() {
         .run()
         .stdout_is("2048\n");
 
-    // multiline
+    // multi-line
     new_ucmd!()
         .args(&["--from=auto"])
         .pipe_in("\t1Ki\n  2K")

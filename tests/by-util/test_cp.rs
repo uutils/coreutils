@@ -1,3 +1,5 @@
+// spell-checker:ignore (flags) reflink (fs) tmpfs
+
 use crate::common::util::*;
 #[cfg(not(windows))]
 use std::fs::set_permissions;
@@ -926,7 +928,7 @@ fn test_cp_archive() {
     let (at, mut ucmd) = at_and_ucmd!();
     let ts = time::now().to_timespec();
     let previous = FileTime::from_unix_time(ts.sec as i64 - 3600, ts.nsec as u32);
-    // set the file creation/modif an hour ago
+    // set the file creation/modification an hour ago
     filetime::set_file_times(
         at.plus_as_string(TEST_HELLO_WORLD_SOURCE),
         previous,
@@ -1055,7 +1057,7 @@ fn test_cp_preserve_timestamps() {
     let (at, mut ucmd) = at_and_ucmd!();
     let ts = time::now().to_timespec();
     let previous = FileTime::from_unix_time(ts.sec as i64 - 3600, ts.nsec as u32);
-    // set the file creation/modif an hour ago
+    // set the file creation/modification an hour ago
     filetime::set_file_times(
         at.plus_as_string(TEST_HELLO_WORLD_SOURCE),
         previous,
@@ -1084,11 +1086,11 @@ fn test_cp_preserve_timestamps() {
 
 #[test]
 #[cfg(target_os = "linux")]
-fn test_cp_dont_preserve_timestamps() {
+fn test_cp_no_preserve_timestamps() {
     let (at, mut ucmd) = at_and_ucmd!();
     let ts = time::now().to_timespec();
     let previous = FileTime::from_unix_time(ts.sec as i64 - 3600, ts.nsec as u32);
-    // set the file creation/modif an hour ago
+    // set the file creation/modification an hour ago
     filetime::set_file_times(
         at.plus_as_string(TEST_HELLO_WORLD_SOURCE),
         previous,
@@ -1181,7 +1183,7 @@ fn test_cp_one_file_system() {
     scene.cmd("umount").arg(mountpoint_path).succeeds();
 
     assert!(!at_dst.file_exists(TEST_MOUNT_OTHER_FILESYSTEM_FILE));
-    // Check if the other files were copied from the source folder hirerarchy
+    // Check if the other files were copied from the source folder hierarchy
     for entry in WalkDir::new(at_src.as_string()) {
         let entry = entry.unwrap();
         let relative_src = entry

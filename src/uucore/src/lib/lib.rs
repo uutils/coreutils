@@ -132,7 +132,7 @@ pub trait Args: Iterator<Item = OsString> + Sized {
                     full_conversion = false;
                     let lossy_conversion = s_ret.to_string_lossy();
                     eprintln!(
-                        "Input with broken encoding occured! (s = '{}') ",
+                        "Input with broken encoding occurred! (s = '{}') ",
                         &lossy_conversion
                     );
                     match handling {
@@ -161,7 +161,7 @@ pub trait Args: Iterator<Item = OsString> + Sized {
         }
     }
 
-    /// convience function for a more slim interface
+    /// convenience function for a more slim interface
     fn collect_str_lossy(self) -> ConversionResult {
         self.collect_str(InvalidEncodingHandling::ConvertLossy)
     }

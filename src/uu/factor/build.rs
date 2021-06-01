@@ -13,8 +13,6 @@
 //! 2 has no multiplicative inverse mode 2^64 because 2 | 2^64,
 //! and in any case divisibility by two is trivial by checking the LSB.
 
-// spell-checker:ignore (ToDO) invs newr newrp newtp outstr
-
 #![cfg_attr(test, allow(dead_code))]
 
 use std::env::{self, args};
@@ -60,13 +58,13 @@ fn main() {
     let mut x = primes.next().unwrap();
     for next in primes {
         // format the table
-        let outstr = format!("({}, {}, {}),", x, modular_inverse(x), std::u64::MAX / x);
-        if cols + outstr.len() > MAX_WIDTH {
-            write!(file, "\n    {}", outstr).unwrap();
-            cols = 4 + outstr.len();
+        let output = format!("({}, {}, {}),", x, modular_inverse(x), std::u64::MAX / x);
+        if cols + output.len() > MAX_WIDTH {
+            write!(file, "\n    {}", output).unwrap();
+            cols = 4 + output.len();
         } else {
-            write!(file, " {}", outstr).unwrap();
-            cols += 1 + outstr.len();
+            write!(file, " {}", output).unwrap();
+            cols += 1 + output.len();
         }
 
         x = next;
@@ -81,7 +79,7 @@ fn main() {
 }
 
 #[test]
-fn test_generator_isprime() {
+fn test_generator_is_prime() {
     assert_eq!(Sieve::odd_primes.take(10_000).all(is_prime));
 }
 
@@ -106,5 +104,5 @@ const PREAMBLE: &str = r##"/*
 // re-run src/factor/gen_tables.rs.
 
 #[allow(clippy::unreadable_literal)]
-pub const P_INVS_U64: &[(u64, u64, u64)] = &[
+pub const PRIME_INVERSIONS_U64: &[(u64, u64, u64)] = &[
    "##;

@@ -1,6 +1,8 @@
 Code Coverage Report Generation
 ---------------------------------
 
+<!-- spell-checker:ignore (flags) Ccodegen Coverflow Cpanic Zinstrument Zpanic -->
+
 Code coverage report can be generated using [grcov](https://github.com/mozilla/grcov).
 
 ### Using Nightly Rust
@@ -17,7 +19,7 @@ $ grcov . -s . --binary-path ./target/debug/ -t html --branch --ignore-not-exist
 $ # open target/debug/coverage/index.html in browser
 ```
 
-if changes are not reflected in the report then run `cargo clean`  and run the above commands.
+if changes are not reflected in the report then run `cargo clean` and run the above commands.
 
 ### Using Stable Rust
 

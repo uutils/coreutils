@@ -1,8 +1,9 @@
-// spell-checker:ignore (ToDO) conv intf strf floatf scif charf fieldtype vals subparser unescaping submodule Cninety inprefix hexifying glibc floatnum rten rhex arrnum
+// spell-checker:ignore (vars) charf decf floatf intf scif strf Cninety
+// spell-checker:ignore (ToDO) arrnum
 
 //! formatter for %a %F C99 Hex-floating-point subs
 use super::super::format_field::FormatField;
-use super::super::formatter::{FormatPrimitive, Formatter, InPrefix};
+use super::super::formatter::{FormatPrimitive, Formatter, InitialPrefix};
 use super::base_conv;
 use super::base_conv::RadixDef;
 use super::float_common::{primitive_to_str_common, FloatAnalysis};
@@ -20,15 +21,20 @@ impl Formatter for CninetyNineHexFloatf {
     fn get_primitive(
         &self,
         field: &FormatField,
-        inprefix: &InPrefix,
+        initial_prefix: &InitialPrefix,
         str_in: &str,
     ) -> Option<FormatPrimitive> {
         let second_field = field.second_field.unwrap_or(6) + 1;
-        let analysis =
-            FloatAnalysis::analyze(&str_in, inprefix, Some(second_field as usize), None, true);
+        let analysis = FloatAnalysis::analyze(
+            &str_in,
+            initial_prefix,
+            Some(second_field as usize),
+            None,
+            true,
+        );
         let f = get_primitive_hex(
-            inprefix,
-            &str_in[inprefix.offset..],
+            initial_prefix,
+            &str_in[initial_prefix.offset..],
             &analysis,
             second_field as usize,
             *field.field_char == 'A',
@@ -44,13 +50,17 @@ impl Formatter for CninetyNineHexFloatf {
 
 // on the todo list is to have a trait for get_primitive that is implemented by each float formatter and can override a default. when that happens we can take the parts of get_primitive_dec specific to dec and spin them out to their own functions that can be overridden.
 fn get_primitive_hex(
-    inprefix: &InPrefix,
+    initial_prefix: &InitialPrefix,
     _str_in: &str,
     _analysis: &FloatAnalysis,
     _last_dec_place: usize,
     capitalized: bool,
 ) -> FormatPrimitive {
-    let prefix = Some(String::from(if inprefix.sign == -1 { "-0x" } else { "0x" }));
+    let prefix = Some(String::from(if initial_prefix.sign == -1 {
+        "-0x"
+    } else {
+        "0x"
+    }));
 
     // TODO actual conversion, make sure to get back mantissa.
     // for hex to hex, it's really just a matter of moving the
@@ -63,7 +73,7 @@ fn get_primitive_hex(
     // the difficult part of this (arrnum_int_div_step) is already implemented.
 
     // the hex float name may be a bit misleading in terms of how to go about the
-    // conversion. The best way to do it is to just convert the floatnum
+    // conversion. The best way to do it is to just convert the float number
     // directly to base 2 and then at the end translate back to hex.
     let mantissa = 0;
     let suffix = Some({
@@ -82,15 +92,15 @@ fn get_primitive_hex(
 }
 
 fn to_hex(src: &str, before_decimal: bool) -> String {
-    let rten = base_conv::RadixTen;
-    let rhex = base_conv::RadixHex;
+    let radix_ten = base_conv::RadixTen;
+    let radix_hex = base_conv::RadixHex;
     if before_decimal {
-        base_conv::base_conv_str(src, &rten, &rhex)
+        base_conv::base_conv_str(src, &radix_ten, &radix_hex)
     } else {
-        let as_arrnum_ten = base_conv::str_to_arrnum(src, &rten);
+        let as_arrnum_ten = base_conv::str_to_arrnum(src, &radix_ten);
         let s = format!(
             "{}",
-            base_conv::base_conv_float(&as_arrnum_ten, rten.get_max(), rhex.get_max())
+            base_conv::base_conv_float(&as_arrnum_ten, radix_ten.get_max(), radix_hex.get_max())
         );
         if s.len() > 2 {
             String::from(&s[2..])
