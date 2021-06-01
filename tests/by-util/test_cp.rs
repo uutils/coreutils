@@ -1,3 +1,5 @@
+// spell-checker:ignore (flags) reflink (fs) tmpfs
+
 use crate::common::util::*;
 #[cfg(not(windows))]
 use std::fs::set_permissions;
@@ -108,7 +110,7 @@ fn test_cp_multiple_files() {
 
 #[test]
 // FixME: for MacOS, this has intermittent failures; track repair progress at GH:uutils/coreutils/issues/1590
-#[cfg(not(macos))]
+#[cfg(not(target_os = "macos"))]
 fn test_cp_recurse() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg("-r")
@@ -132,7 +134,7 @@ fn test_cp_with_dirs_t() {
 
 #[test]
 // FixME: for MacOS, this has intermittent failures; track repair progress at GH:uutils/coreutils/issues/1590
-#[cfg(not(macos))]
+#[cfg(not(target_os = "macos"))]
 fn test_cp_with_dirs() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -214,8 +216,8 @@ fn test_cp_arg_symlink() {
 fn test_cp_arg_no_clobber() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
-        .arg("--no-clobber")
         .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .arg("--no-clobber")
         .succeeds();
 
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
@@ -305,7 +307,39 @@ fn test_cp_arg_backup() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
-        .arg("--backup")
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .arg("-b")
+        .succeeds();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert_eq!(
+        at.read(&*format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_arg_backup_with_other_args() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .arg("-vbL")
+        .succeeds();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert_eq!(
+        at.read(&*format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_arg_backup_arg_first() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("--backup")
+        .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_HOW_ARE_YOU_SOURCE)
         .succeeds();
 
@@ -321,6 +355,7 @@ fn test_cp_arg_suffix() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg("-b")
         .arg("--suffix")
         .arg(".bak")
         .arg(TEST_HOW_ARE_YOU_SOURCE)
@@ -331,6 +366,207 @@ fn test_cp_arg_suffix() {
         at.read(&*format!("{}.bak", TEST_HOW_ARE_YOU_SOURCE)),
         "How are you?\n"
     );
+}
+
+#[test]
+fn test_cp_custom_backup_suffix_via_env() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let suffix = "super-suffix-of-the-century";
+
+    ucmd.arg("-b")
+        .env("SIMPLE_BACKUP_SUFFIX", suffix)
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert_eq!(
+        at.read(&*format!("{}{}", TEST_HOW_ARE_YOU_SOURCE, suffix)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_backup_numbered_with_t() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("--backup=t")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert_eq!(
+        at.read(&*format!("{}.~1~", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_backup_numbered() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("--backup=numbered")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert_eq!(
+        at.read(&*format!("{}.~1~", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_backup_existing() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("--backup=existing")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert_eq!(
+        at.read(&*format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_backup_nil() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("--backup=nil")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert_eq!(
+        at.read(&*format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_numbered_if_existing_backup_existing() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let existing_backup = &*format!("{}.~1~", TEST_HOW_ARE_YOU_SOURCE);
+    at.touch(existing_backup);
+
+    ucmd.arg("--backup=existing")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(TEST_HOW_ARE_YOU_SOURCE));
+    assert!(at.file_exists(existing_backup));
+    assert_eq!(
+        at.read(&*format!("{}.~2~", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_numbered_if_existing_backup_nil() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let existing_backup = &*format!("{}.~1~", TEST_HOW_ARE_YOU_SOURCE);
+
+    at.touch(existing_backup);
+    ucmd.arg("--backup=nil")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(TEST_HOW_ARE_YOU_SOURCE));
+    assert!(at.file_exists(existing_backup));
+    assert_eq!(
+        at.read(&*format!("{}.~2~", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_backup_simple() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("--backup=simple")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert_eq!(
+        at.read(&*format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_backup_never() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("--backup=never")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert_eq!(
+        at.read(&*format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_backup_none() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("--backup=none")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert!(!at.file_exists(&format!("{}~", TEST_HOW_ARE_YOU_SOURCE)));
+}
+
+#[test]
+fn test_cp_backup_off() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("--backup=off")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert!(!at.file_exists(&format!("{}~", TEST_HOW_ARE_YOU_SOURCE)));
+}
+
+#[test]
+fn test_cp_backup_no_clobber_conflicting_options() {
+    let (_, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("--backup")
+        .arg("--no-clobber")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .fails()
+        .stderr_is("cp: options --backup and --no-clobber are mutually exclusive\nTry 'cp --help' for more information.");
 }
 
 #[test]
@@ -692,7 +928,7 @@ fn test_cp_archive() {
     let (at, mut ucmd) = at_and_ucmd!();
     let ts = time::now().to_timespec();
     let previous = FileTime::from_unix_time(ts.sec as i64 - 3600, ts.nsec as u32);
-    // set the file creation/modif an hour ago
+    // set the file creation/modification an hour ago
     filetime::set_file_times(
         at.plus_as_string(TEST_HELLO_WORLD_SOURCE),
         previous,
@@ -821,7 +1057,7 @@ fn test_cp_preserve_timestamps() {
     let (at, mut ucmd) = at_and_ucmd!();
     let ts = time::now().to_timespec();
     let previous = FileTime::from_unix_time(ts.sec as i64 - 3600, ts.nsec as u32);
-    // set the file creation/modif an hour ago
+    // set the file creation/modification an hour ago
     filetime::set_file_times(
         at.plus_as_string(TEST_HELLO_WORLD_SOURCE),
         previous,
@@ -850,11 +1086,11 @@ fn test_cp_preserve_timestamps() {
 
 #[test]
 #[cfg(target_os = "linux")]
-fn test_cp_dont_preserve_timestamps() {
+fn test_cp_no_preserve_timestamps() {
     let (at, mut ucmd) = at_and_ucmd!();
     let ts = time::now().to_timespec();
     let previous = FileTime::from_unix_time(ts.sec as i64 - 3600, ts.nsec as u32);
-    // set the file creation/modif an hour ago
+    // set the file creation/modification an hour ago
     filetime::set_file_times(
         at.plus_as_string(TEST_HELLO_WORLD_SOURCE),
         previous,
@@ -947,7 +1183,7 @@ fn test_cp_one_file_system() {
     scene.cmd("umount").arg(mountpoint_path).succeeds();
 
     assert!(!at_dst.file_exists(TEST_MOUNT_OTHER_FILESYSTEM_FILE));
-    // Check if the other files were copied from the source folder hirerarchy
+    // Check if the other files were copied from the source folder hierarchy
     for entry in WalkDir::new(at_src.as_string()) {
         let entry = entry.unwrap();
         let relative_src = entry

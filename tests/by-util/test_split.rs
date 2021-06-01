@@ -98,7 +98,7 @@ impl RandomFile {
             let to_write = std::cmp::min(remaining_size, buffer.len());
             let buf = &mut buffer[..to_write];
             rng.fill(buf);
-            writer.write(buf).unwrap();
+            writer.write_all(buf).unwrap();
 
             remaining_size -= to_write;
         }
@@ -179,6 +179,7 @@ fn test_split_bytes_prime_part_size() {
     let mut fns = glob.collect();
     // glob.collect() is not guaranteed to return in sorted order, so we sort.
     fns.sort();
+    #[allow(clippy::needless_range_loop)]
     for i in 0..5 {
         assert_eq!(glob.directory.metadata(&fns[i]).len(), 1753);
     }
@@ -241,14 +242,14 @@ fn test_filter() {
         .succeeds();
 
     // assert all characters are 'i' / no character is not 'i'
-    // (assert that command succeded)
+    // (assert that command succeeded)
     let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
     assert!(
         glob.collate().iter().find(|&&c| {
             // is not i
-            c != ('i' as u8)
+            c != (b'i')
             // is not newline
-            && c != ('\n' as u8)
+            && c != (b'\n')
         }) == None
     );
 }
@@ -264,14 +265,14 @@ fn test_filter_with_env_var_set() {
     let n_lines = 3;
     RandomFile::new(&at, name).add_lines(n_lines);
 
-    let env_var_value = "somevalue";
+    let env_var_value = "some-value";
     env::set_var("FILE", &env_var_value);
     ucmd.args(&[format!("--filter={}", "cat > $FILE").as_str(), name])
         .succeeds();
 
     let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
     assert_eq!(glob.collate(), at.read_bytes(name));
-    assert!(env::var("FILE").unwrap_or("var was unset".to_owned()) == env_var_value);
+    assert!(env::var("FILE").unwrap_or_else(|_| "var was unset".to_owned()) == env_var_value);
 }
 
 #[test]

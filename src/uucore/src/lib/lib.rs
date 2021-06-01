@@ -25,6 +25,7 @@ mod features; // feature-gated code modules
 mod mods; // core cross-platform modules
 
 // * cross-platform modules
+pub use crate::mods::backup_control;
 pub use crate::mods::coreopts;
 pub use crate::mods::os;
 pub use crate::mods::panic;
@@ -35,8 +36,12 @@ pub use crate::mods::ranges;
 pub use crate::features::encoding;
 #[cfg(feature = "fs")]
 pub use crate::features::fs;
+#[cfg(feature = "fsext")]
+pub use crate::features::fsext;
 #[cfg(feature = "parse_time")]
 pub use crate::features::parse_time;
+#[cfg(feature = "ringbuffer")]
+pub use crate::features::ringbuffer;
 #[cfg(feature = "zero-copy")]
 pub use crate::features::zero_copy;
 
@@ -125,7 +130,7 @@ pub trait Args: Iterator<Item = OsString> + Sized {
                     full_conversion = false;
                     let lossy_conversion = s_ret.to_string_lossy();
                     eprintln!(
-                        "Input with broken encoding occured! (s = '{}') ",
+                        "Input with broken encoding occurred! (s = '{}') ",
                         &lossy_conversion
                     );
                     match handling {
@@ -141,19 +146,20 @@ pub trait Args: Iterator<Item = OsString> + Sized {
                 InvalidEncodingHandling::Ignore => s.is_ok(),
                 _ => true,
             })
-            .map(|s| match s.is_ok() {
-                true => s.unwrap(),
-                false => s.unwrap_err(),
+            .map(|s| match s {
+                Ok(v) => v,
+                Err(e) => e,
             })
             .collect();
 
-        match full_conversion {
-            true => ConversionResult::Complete(result_vector),
-            false => ConversionResult::Lossy(result_vector),
+        if full_conversion {
+            ConversionResult::Complete(result_vector)
+        } else {
+            ConversionResult::Lossy(result_vector)
         }
     }
 
-    /// convience function for a more slim interface
+    /// convenience function for a more slim interface
     fn collect_str_lossy(self) -> ConversionResult {
         self.collect_str(InvalidEncodingHandling::ConvertLossy)
     }
@@ -187,6 +193,7 @@ mod tests {
         vec.into_iter().collect_str(handling)
     }
 
+    #[cfg(any(unix, target_os = "redox"))]
     fn test_invalid_utf8_args_lossy(os_str: &OsStr) {
         //assert our string is invalid utf8
         assert!(os_str.to_os_string().into_string().is_err());
@@ -210,6 +217,7 @@ mod tests {
         );
     }
 
+    #[cfg(any(unix, target_os = "redox"))]
     fn test_invalid_utf8_args_ignore(os_str: &OsStr) {
         //assert our string is invalid utf8
         assert!(os_str.to_os_string().into_string().is_err());
@@ -234,7 +242,7 @@ mod tests {
         //create a vector containing only correct encoding
         let test_vec = make_os_vec(&OsString::from("test2"));
         //expect complete conversion without losses, even when lossy conversion is accepted
-        let _ = collect_os_str(test_vec.clone(), InvalidEncodingHandling::ConvertLossy)
+        let _ = collect_os_str(test_vec, InvalidEncodingHandling::ConvertLossy)
             .expect_complete("Lossy conversion not expected in this test");
     }
 

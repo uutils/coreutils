@@ -1,22 +1,22 @@
-// spell-checker:ignore (ToDO) conv intf strf floatf scif charf fieldtype vals subparser unescaping submodule Cninety inprefix hexifying glibc floatnum rten rhex arrnum fprim interp
+// spell-checker:ignore (vars) charf decf floatf intf scif strf Cninety
 
 //! formatter for %g %G decimal subs
 use super::super::format_field::FormatField;
-use super::super::formatter::{FormatPrimitive, Formatter, InPrefix};
+use super::super::formatter::{FormatPrimitive, Formatter, InitialPrefix};
 use super::float_common::{get_primitive_dec, primitive_to_str_common, FloatAnalysis};
 
-fn get_len_fprim(fprim: &FormatPrimitive) -> usize {
+fn get_len_fmt_primitive(fmt: &FormatPrimitive) -> usize {
     let mut len = 0;
-    if let Some(ref s) = fprim.prefix {
+    if let Some(ref s) = fmt.prefix {
         len += s.len();
     }
-    if let Some(ref s) = fprim.pre_decimal {
+    if let Some(ref s) = fmt.pre_decimal {
         len += s.len();
     }
-    if let Some(ref s) = fprim.post_decimal {
+    if let Some(ref s) = fmt.post_decimal {
         len += s.len();
     }
-    if let Some(ref s) = fprim.suffix {
+    if let Some(ref s) = fmt.suffix {
         len += s.len();
     }
     len
@@ -33,22 +33,22 @@ impl Formatter for Decf {
     fn get_primitive(
         &self,
         field: &FormatField,
-        inprefix: &InPrefix,
+        initial_prefix: &InitialPrefix,
         str_in: &str,
     ) -> Option<FormatPrimitive> {
         let second_field = field.second_field.unwrap_or(6) + 1;
-        // default to scif interp. so as to not truncate input vals
+        // default to scif interpretation so as to not truncate input vals
         // (that would be displayed in scif) based on relation to decimal place
         let analysis = FloatAnalysis::analyze(
             str_in,
-            inprefix,
+            initial_prefix,
             Some(second_field as usize + 1),
             None,
             false,
         );
         let mut f_sci = get_primitive_dec(
-            inprefix,
-            &str_in[inprefix.offset..],
+            initial_prefix,
+            &str_in[initial_prefix.offset..],
             &analysis,
             second_field as usize,
             Some(*field.field_char == 'G'),
@@ -70,17 +70,19 @@ impl Formatter for Decf {
             }
         }
         let f_fl = get_primitive_dec(
-            inprefix,
-            &str_in[inprefix.offset..],
+            initial_prefix,
+            &str_in[initial_prefix.offset..],
             &analysis,
             second_field as usize,
             None,
         );
-        Some(if get_len_fprim(&f_fl) >= get_len_fprim(&f_sci) {
-            f_sci
-        } else {
-            f_fl
-        })
+        Some(
+            if get_len_fmt_primitive(&f_fl) >= get_len_fmt_primitive(&f_sci) {
+                f_sci
+            } else {
+                f_fl
+            },
+        )
     }
     fn primitive_to_str(&self, prim: &FormatPrimitive, field: FormatField) -> String {
         primitive_to_str_common(prim, &field)

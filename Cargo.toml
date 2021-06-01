@@ -65,6 +65,7 @@ feat_common_core = [
     "nl",
     "od",
     "paste",
+    "pr",
     "printenv",
     "printf",
     "ptx",
@@ -285,6 +286,7 @@ od       = { optional=true, version="0.0.6", package="uu_od", path="src/uu/od" }
 paste    = { optional=true, version="0.0.6", package="uu_paste", path="src/uu/paste" }
 pathchk  = { optional=true, version="0.0.6", package="uu_pathchk", path="src/uu/pathchk" }
 pinky    = { optional=true, version="0.0.6", package="uu_pinky", path="src/uu/pinky" }
+pr       = { optional=true, version="0.0.6", package="uu_pr", path="src/uu/pr" }
 printenv = { optional=true, version="0.0.6", package="uu_printenv", path="src/uu/printenv" }
 printf   = { optional=true, version="0.0.6", package="uu_printf", path="src/uu/printf" }
 ptx      = { optional=true, version="0.0.6", package="uu_ptx", path="src/uu/ptx" }
@@ -324,12 +326,17 @@ wc       = { optional=true, version="0.0.6", package="uu_wc", path="src/uu/wc" }
 who      = { optional=true, version="0.0.6", package="uu_who", path="src/uu/who" }
 whoami   = { optional=true, version="0.0.6", package="uu_whoami", path="src/uu/whoami" }
 yes      = { optional=true, version="0.0.6", package="uu_yes", path="src/uu/yes" }
+
+# this breaks clippy linting with: "tests/by-util/test_factor_benches.rs: No such file or directory (os error 2)"
+# factor_benches = { optional = true, version = "0.0.0", package = "uu_factor_benches", path = "tests/benches/factor" }
+
 #
 # * pinned transitive dependencies
 # Not needed for now. Keep as examples:
 #pin_cc = { version="1.0.61, < 1.0.62", package="cc" } ## cc v1.0.62 has compiler errors for MinRustV v1.32.0, requires 1.34 (for `std::str::split_ascii_whitespace()`)
 
 [dev-dependencies]
+chrono = "0.4.11"
 conv = "0.3"
 filetime = "0.2"
 glob = "0.3.0"
@@ -339,14 +346,12 @@ pretty_assertions = "0.7.2"
 rand = "0.7"
 regex = "1.0"
 sha1 = { version="0.6", features=["std"] }
-## tempfile 3.2 depends on recent version of rand which depends on getrandom v0.2 which has compiler errors for MinRustV v1.32.0
-## min dep for tempfile = Rustc 1.40
-tempfile = "= 3.1.0"
+tempfile = "3.2.0"
 time = "0.1"
 unindent = "0.1"
 uucore = { version=">=0.0.8", package="uucore", path="src/uucore", features=["entries"] }
 walkdir = "2.2"
-tempdir = "0.3"
+atty = "0.2.14"
 
 [target.'cfg(unix)'.dev-dependencies]
 rust-users = { version="0.10", package="users" }

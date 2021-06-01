@@ -1,3 +1,5 @@
+// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup somefile somegroup somehiddenbackup somehiddenfile
+
 #[cfg(unix)]
 extern crate unix_socket;
 use crate::common::util::*;
@@ -19,9 +21,7 @@ use std::path::PathBuf;
 #[cfg(not(windows))]
 use std::sync::Mutex;
 #[cfg(not(windows))]
-extern crate tempdir;
-#[cfg(not(windows))]
-use self::tempdir::TempDir;
+extern crate tempfile;
 
 #[cfg(not(windows))]
 lazy_static! {
@@ -53,6 +53,7 @@ fn test_ls_a() {
             .unwrap(),
     );
 
+    #[allow(clippy::trivial_regex)]
     let re_pwd = Regex::new(r"^\.\n").unwrap();
 
     // Using the present working directory
@@ -126,7 +127,7 @@ fn test_ls_width() {
     for option in &["-w 100", "-w=100", "--width=100", "--width 100"] {
         scene
             .ucmd()
-            .args(&option.split(" ").collect::<Vec<_>>())
+            .args(&option.split(' ').collect::<Vec<_>>())
             .succeeds()
             .stdout_only("test-width-1  test-width-2  test-width-3  test-width-4\n");
     }
@@ -134,7 +135,7 @@ fn test_ls_width() {
     for option in &["-w 50", "-w=50", "--width=50", "--width 50"] {
         scene
             .ucmd()
-            .args(&option.split(" ").collect::<Vec<_>>())
+            .args(&option.split(' ').collect::<Vec<_>>())
             .succeeds()
             .stdout_only("test-width-1  test-width-3\ntest-width-2  test-width-4\n");
     }
@@ -151,7 +152,7 @@ fn test_ls_width() {
     ] {
         scene
             .ucmd()
-            .args(&option.split(" ").collect::<Vec<_>>())
+            .args(&option.split(' ').collect::<Vec<_>>())
             .succeeds()
             .stdout_only("test-width-1\ntest-width-2\ntest-width-3\ntest-width-4\n");
     }
@@ -165,9 +166,9 @@ fn test_ls_width() {
     for option in &["-w 1a", "-w=1a", "--width=1a", "--width 1a"] {
         scene
             .ucmd()
-            .args(&option.split(" ").collect::<Vec<_>>())
+            .args(&option.split(' ').collect::<Vec<_>>())
             .fails()
-            .stderr_only("ls: error: invalid line width: ‘1a’");
+            .stderr_only("ls: invalid line width: ‘1a’");
     }
 }
 
@@ -419,7 +420,7 @@ fn test_ls_long_formats() {
     ] {
         let result = scene
             .ucmd()
-            .args(&arg.split(" ").collect::<Vec<_>>())
+            .args(&arg.split(' ').collect::<Vec<_>>())
             .arg("test-long-formats")
             .succeeds();
         assert!(re_two.is_match(result.stdout_str()));
@@ -429,7 +430,7 @@ fn test_ls_long_formats() {
             let result = scene
                 .ucmd()
                 .arg("-n")
-                .args(&arg.split(" ").collect::<Vec<_>>())
+                .args(&arg.split(' ').collect::<Vec<_>>())
                 .arg("test-long-formats")
                 .succeeds();
             assert!(re_two_num.is_match(result.stdout_str()));
@@ -448,7 +449,7 @@ fn test_ls_long_formats() {
     ] {
         let result = scene
             .ucmd()
-            .args(&arg.split(" ").collect::<Vec<_>>())
+            .args(&arg.split(' ').collect::<Vec<_>>())
             .arg("test-long-formats")
             .succeeds();
         assert!(re_one.is_match(result.stdout_str()));
@@ -458,7 +459,7 @@ fn test_ls_long_formats() {
             let result = scene
                 .ucmd()
                 .arg("-n")
-                .args(&arg.split(" ").collect::<Vec<_>>())
+                .args(&arg.split(' ').collect::<Vec<_>>())
                 .arg("test-long-formats")
                 .succeeds();
             assert!(re_one_num.is_match(result.stdout_str()));
@@ -480,7 +481,7 @@ fn test_ls_long_formats() {
     ] {
         let result = scene
             .ucmd()
-            .args(&arg.split(" ").collect::<Vec<_>>())
+            .args(&arg.split(' ').collect::<Vec<_>>())
             .arg("test-long-formats")
             .succeeds();
         assert!(re_zero.is_match(result.stdout_str()));
@@ -490,7 +491,7 @@ fn test_ls_long_formats() {
             let result = scene
                 .ucmd()
                 .arg("-n")
-                .args(&arg.split(" ").collect::<Vec<_>>())
+                .args(&arg.split(' ').collect::<Vec<_>>())
                 .arg("test-long-formats")
                 .succeeds();
             assert!(re_zero.is_match(result.stdout_str()));
@@ -685,7 +686,7 @@ fn test_ls_styles() {
     at.touch("test");
 
     let re_full = Regex::new(
-        r"[a-z-]* \d* \w* \w* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d* \+\d{4} test\n",
+        r"[a-z-]* \d* \w* \w* \d* \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d* (\+|\-)\d{4} test\n",
     )
     .unwrap();
     let re_long =
@@ -875,7 +876,7 @@ fn test_ls_files_dirs() {
         .ucmd()
         .arg("doesntexist")
         .fails()
-        .stderr_contains(&"error: 'doesntexist': No such file or directory");
+        .stderr_contains(&"'doesntexist': No such file or directory");
 
     // One exists, the other doesn't
     scene
@@ -883,7 +884,7 @@ fn test_ls_files_dirs() {
         .arg("a")
         .arg("doesntexist")
         .fails()
-        .stderr_contains(&"error: 'doesntexist': No such file or directory")
+        .stderr_contains(&"'doesntexist': No such file or directory")
         .stdout_contains(&"a:");
 }
 
@@ -900,6 +901,12 @@ fn test_ls_recursive() {
 
     scene.ucmd().arg("a").succeeds();
     scene.ucmd().arg("a/a").succeeds();
+    scene
+        .ucmd()
+        .arg("z")
+        .arg("-R")
+        .succeeds()
+        .stdout_contains(&"z:");
     let result = scene
         .ucmd()
         .arg("--color=never")
@@ -934,7 +941,7 @@ fn test_ls_color() {
 
     let a_with_colors = "\x1b[1;34ma\x1b[0m";
     let z_with_colors = "\x1b[1;34mz\x1b[0m";
-    let nested_dir_with_colors = "\x1b[1;34mnested_dir\x1b[0m";
+    let nested_dir_with_colors = "\x1b[1;34mnested_dir\x1b[0m"; // spell-checker:disable-line
 
     // Color is disabled by default
     let result = scene.ucmd().succeeds();
@@ -1065,7 +1072,7 @@ fn test_ls_indicator_style() {
     for opt in options {
         scene
             .ucmd()
-            .arg(format!("{}", opt))
+            .arg(opt.to_string())
             .succeeds()
             .stdout_contains(&"/");
     }
@@ -1087,7 +1094,10 @@ fn test_ls_indicator_style() {
     {
         use self::unix_socket::UnixListener;
 
-        let dir = TempDir::new("unix_socket").expect("failed to create dir");
+        let dir = tempfile::Builder::new()
+            .prefix("unix_socket")
+            .tempdir()
+            .expect("failed to create dir");
         let socket_path = dir.path().join("sock");
         let _listener = UnixListener::bind(&socket_path).expect("failed to create socket");
 
@@ -1965,4 +1975,49 @@ fn test_ls_sort_extension() {
         result.stdout_str().split('\n').collect::<Vec<_>>(),
         expected,
     );
+}
+
+#[test]
+fn test_ls_path() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file1 = "file1";
+    let file2 = "file2";
+    let dir = "dir";
+    let path = &format!("{}/{}", dir, file2);
+
+    at.mkdir(dir);
+    at.touch(file1);
+    at.touch(path);
+
+    let expected_stdout = &format!("{}\n", path);
+    scene.ucmd().arg(path).run().stdout_is(expected_stdout);
+
+    let expected_stdout = &format!("./{}\n", path);
+    scene
+        .ucmd()
+        .arg(format!("./{}", path))
+        .run()
+        .stdout_is(expected_stdout);
+
+    let abs_path = format!("{}/{}", at.as_string(), path);
+    let expected_stdout = if cfg!(windows) {
+        format!("\'{}\'\n", abs_path)
+    } else {
+        format!("{}\n", abs_path)
+    };
+    scene.ucmd().arg(&abs_path).run().stdout_is(expected_stdout);
+
+    let expected_stdout = if cfg!(windows) {
+        format!("{}  {}\n", path, file1)
+    } else {
+        format!("{}\n{}\n", path, file1)
+    };
+    scene
+        .ucmd()
+        .arg(file1)
+        .arg(path)
+        .run()
+        .stdout_is(expected_stdout);
 }

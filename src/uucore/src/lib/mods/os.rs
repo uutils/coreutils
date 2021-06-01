@@ -1,5 +1,8 @@
 /// Test if the program is running under WSL
 // ref: <https://github.com/microsoft/WSL/issues/4555> @@ <https://archive.is/dP0bz>
+
+// spell-checker:ignore (path) osrelease
+
 pub fn is_wsl_1() -> bool {
     #[cfg(target_os = "linux")]
     {

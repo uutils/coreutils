@@ -505,12 +505,12 @@ impl KeyPosition {
                     'b' => ignore_blanks = true,
                     'd' => settings.dictionary_order = true,
                     'f' => settings.ignore_case = true,
+                    'i' => settings.ignore_non_printing = true,
+                    'r' => settings.reverse = true,
                     'g' => settings.mode = SortMode::GeneralNumeric,
                     'h' => settings.mode = SortMode::HumanNumeric,
-                    'i' => settings.ignore_non_printing = true,
                     'n' => settings.mode = SortMode::Numeric,
                     'R' => settings.mode = SortMode::Random,
-                    'r' => settings.reverse = true,
                     'V' => settings.mode = SortMode::Version,
                     c => {
                         crash!(1, "invalid option for key: `{}`", c)

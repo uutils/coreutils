@@ -1,3 +1,5 @@
+// spell-checker:ignore (words) bamf chdir
+
 #[cfg(not(windows))]
 use std::fs;
 
@@ -118,7 +120,7 @@ fn test_null_delimiter() {
 
     let mut vars: Vec<_> = out.split('\0').collect();
     assert_eq!(vars.len(), 3);
-    vars.sort();
+    vars.sort_unstable();
     assert_eq!(vars[0], "");
     assert_eq!(vars[1], "ABC=xyz");
     assert_eq!(vars[2], "FOO=bar");
@@ -135,7 +137,7 @@ fn test_unset_variable() {
         .succeeds()
         .stdout_move_str();
 
-    assert_eq!(out.lines().any(|line| line.starts_with("HOME=")), false);
+    assert!(!out.lines().any(|line| line.starts_with("HOME=")));
 }
 
 #[test]
@@ -196,7 +198,7 @@ fn test_change_directory() {
 fn test_fail_change_directory() {
     let scene = TestScenario::new(util_name!());
     let some_non_existing_path = "some_nonexistent_path";
-    assert_eq!(Path::new(some_non_existing_path).is_dir(), false);
+    assert!(!Path::new(some_non_existing_path).is_dir());
 
     let out = scene
         .ucmd()

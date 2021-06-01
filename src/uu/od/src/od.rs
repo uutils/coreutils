@@ -5,6 +5,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
+// spell-checker:ignore (clap) DontDelimitTrailingValues
 // spell-checker:ignore (ToDO) formatteriteminfo inputdecoder inputoffset mockstream nrofbytes partialreader odfunc multifile exitcode
 
 #[macro_use]
@@ -455,7 +456,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         ]);
 
     let clap_matches = clap_opts
-        .clone() // Clone to reuse clap_otps to print help
+        .clone() // Clone to reuse clap_opts to print help
         .get_matches_from(args.clone());
 
     if clap_matches.is_present(options::VERSION) {

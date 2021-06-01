@@ -50,12 +50,12 @@ fn makedev(maj: u64, min: u64) -> dev_t {
 }
 
 #[cfg(windows)]
-fn _makenod(file_name: &str, mode: mode_t, dev: dev_t) -> i32 {
+fn _mknod(file_name: &str, mode: mode_t, dev: dev_t) -> i32 {
     panic!("Unsupported for windows platform")
 }
 
 #[cfg(unix)]
-fn _makenod(file_name: &str, mode: mode_t, dev: dev_t) -> i32 {
+fn _mknod(file_name: &str, mode: mode_t, dev: dev_t) -> i32 {
     let c_str = CString::new(file_name).expect("Failed to convert to CString");
 
     // the user supplied a mode
@@ -136,7 +136,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let mode = match get_mode(&matches) {
         Ok(mode) => mode,
         Err(err) => {
-            show_info!("{}", err);
+            show_error!("{}", err);
             return 1;
         }
     };
@@ -158,7 +158,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             eprintln!("Try '{} --help' for more information.", NAME);
             1
         } else {
-            _makenod(file_name, S_IFIFO | mode, 0)
+            _mknod(file_name, S_IFIFO | mode, 0)
         }
     } else {
         match (matches.value_of("major"), matches.value_of("minor")) {
@@ -174,10 +174,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 let dev = makedev(major, minor);
                 if ch == 'b' {
                     // block special file
-                    _makenod(file_name, S_IFBLK | mode, dev)
+                    _mknod(file_name, S_IFBLK | mode, dev)
                 } else if ch == 'c' || ch == 'u' {
                     // char special file
-                    _makenod(file_name, S_IFCHR | mode, dev)
+                    _mknod(file_name, S_IFCHR | mode, dev)
                 } else {
                     unreachable!("{} was validated to be only b, c or u", ch);
                 }

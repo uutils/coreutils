@@ -16,6 +16,7 @@ edition = "2018"
 path="src/lib/lib.rs"
 
 [dependencies]
+dns-lookup = "1.0.5"
 dunce = "1.0.0"
 getopts = "<= 0.2.21"
 wild = "2.0.4"
@@ -29,6 +30,9 @@ time = { version="<= 0.1.43", optional=true }
 data-encoding = { version="~2.1", optional=true } ## data-encoding: require v2.1; but v2.2.0 breaks the build for MinSRV v1.31.0
 libc = { version="0.2.15, <= 0.2.85", optional=true } ## libc: initial utmp support added in v0.2.15; but v0.2.68 breaks the build for MinSRV v1.31.0
 
+[target.'cfg(target_os = "windows")'.dependencies]
+winapi = { version = "0.3", features = ["errhandlingapi", "fileapi", "handleapi", "winerror"] }
+
 [target.'cfg(target_os = "redox")'.dependencies]
 termion = "1.5"
 
@@ -38,10 +42,12 @@ default = []
 encoding = ["data-encoding", "thiserror"]
 entries = ["libc"]
 fs = ["libc"]
+fsext = ["libc", "time"]
 mode = ["libc"]
 parse_time = []
 perms = ["libc"]
 process = ["libc"]
+ringbuffer = []
 signals = []
 utf8 = []
 utmpx = ["time", "libc"]

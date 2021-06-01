@@ -1,21 +1,23 @@
+// spell-checker:ignore (words) gpghome
+
 use crate::common::util::*;
 
 use std::path::PathBuf;
 use tempfile::tempdir;
 
-static TEST_TEMPLATE1: &'static str = "tempXXXXXX";
-static TEST_TEMPLATE2: &'static str = "temp";
-static TEST_TEMPLATE3: &'static str = "tempX";
-static TEST_TEMPLATE4: &'static str = "tempXX";
-static TEST_TEMPLATE5: &'static str = "tempXXX";
-static TEST_TEMPLATE6: &'static str = "tempXXXlate";
-static TEST_TEMPLATE7: &'static str = "XXXtemplate";
+static TEST_TEMPLATE1: &str = "tempXXXXXX";
+static TEST_TEMPLATE2: &str = "temp";
+static TEST_TEMPLATE3: &str = "tempX";
+static TEST_TEMPLATE4: &str = "tempXX";
+static TEST_TEMPLATE5: &str = "tempXXX";
+static TEST_TEMPLATE6: &str = "tempXXXlate"; // spell-checker:disable-line
+static TEST_TEMPLATE7: &str = "XXXtemplate"; // spell-checker:disable-line
 #[cfg(unix)]
-static TEST_TEMPLATE8: &'static str = "tempXXXl/ate";
+static TEST_TEMPLATE8: &str = "tempXXXl/ate";
 #[cfg(windows)]
-static TEST_TEMPLATE8: &'static str = "tempXXXl\\ate";
+static TEST_TEMPLATE8: &str = "tempXXXl\\ate";
 
-const TMPDIR: &'static str = "TMPDIR";
+const TMPDIR: &str = "TMPDIR";
 
 #[test]
 fn test_mktemp_mktemp() {
@@ -120,7 +122,7 @@ fn test_mktemp_mktemp_t() {
         .arg(TEST_TEMPLATE8)
         .fails()
         .no_stdout()
-        .stderr_contains("error: suffix cannot contain any path separators");
+        .stderr_contains("suffix cannot contain any path separators");
 }
 
 #[test]

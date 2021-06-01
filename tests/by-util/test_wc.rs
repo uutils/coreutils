@@ -1,5 +1,7 @@
 use crate::common::util::*;
 
+// spell-checker:ignore (flags) lwmcL clmwL ; (path) bogusfile emptyfile manyemptylines moby notrailingnewline onelongemptyline onelongword
+
 #[test]
 fn test_count_bytes_large_stdin() {
     for &n in &[
@@ -33,7 +35,16 @@ fn test_stdin_default() {
     new_ucmd!()
         .pipe_in_fixture("lorem_ipsum.txt")
         .run()
-        .stdout_is(" 13 109 772\n");
+        .stdout_is("     13     109     772\n");
+}
+
+#[test]
+fn test_stdin_explicit() {
+    new_ucmd!()
+        .pipe_in_fixture("lorem_ipsum.txt")
+        .arg("-")
+        .run()
+        .stdout_is("     13     109     772 -\n");
 }
 
 #[test]
@@ -42,9 +53,11 @@ fn test_utf8() {
         .args(&["-lwmcL"])
         .pipe_in_fixture("UTF_8_test.txt")
         .run()
-        .stdout_is("  300  4969 22781 22213    79\n");
-    // GNU returns "  300  2086 22219 22781    79"
-    // TODO: we should fix that to match GNU's behavior
+        .stdout_is("    300    4969   22781   22213      79\n");
+    // GNU returns "    300    2086   22219   22781      79"
+    //
+    // TODO: we should fix the word, character, and byte count to
+    // match the behavior of GNU wc
 }
 
 #[test]
@@ -71,7 +84,7 @@ fn test_stdin_all_counts() {
         .args(&["-c", "-m", "-l", "-L", "-w"])
         .pipe_in_fixture("alice_in_wonderland.txt")
         .run()
-        .stdout_is("  5  57 302 302  66\n");
+        .stdout_is("      5      57     302     302      66\n");
 }
 
 #[test]
@@ -158,4 +171,51 @@ fn test_file_one_long_word() {
         .args(&["-clmwL", "onelongword.txt"])
         .run()
         .stdout_is("    1     1 10001 10001 10000 onelongword.txt\n");
+}
+
+/// Test that the number of bytes in the file dictate the display width.
+///
+/// The width in digits of any count is the width in digits of the
+/// number of bytes in the file, regardless of whether the number of
+/// bytes are displayed.
+#[test]
+fn test_file_bytes_dictate_width() {
+    // This file has 10,001 bytes. Five digits are required to
+    // represent that. Even though the number of lines is 1 and the
+    // number of words is 0, each of those counts is formatted with
+    // five characters, filled with whitespace.
+    new_ucmd!()
+        .args(&["-lw", "onelongemptyline.txt"])
+        .run()
+        .stdout_is("    1     0 onelongemptyline.txt\n");
+
+    // This file has zero bytes. Only one digit is required to
+    // represent that.
+    new_ucmd!()
+        .args(&["-lw", "emptyfile.txt"])
+        .run()
+        .stdout_is("0 0 emptyfile.txt\n");
+}
+
+/// Test that getting counts from a directory is an error.
+#[test]
+fn test_read_from_directory_error() {
+    // TODO To match GNU `wc`, the `stdout` should be:
+    //
+    //     "      0       0       0 .\n"
+    //
+    new_ucmd!()
+        .args(&["."])
+        .fails()
+        .stderr_contains(".: Is a directory\n")
+        .stdout_is("0 0 0 .\n");
+}
+
+/// Test that getting counts from nonexistent file is an error.
+#[test]
+fn test_read_from_nonexistent_file() {
+    new_ucmd!()
+        .args(&["bogusfile"])
+        .fails()
+        .stderr_contains("bogusfile: No such file or directory\n");
 }

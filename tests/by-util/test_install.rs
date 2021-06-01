@@ -1,3 +1,5 @@
+// spell-checker:ignore (words) helloworld objdump
+
 use crate::common::util::*;
 use filetime::FileTime;
 use rust_users::*;
@@ -116,11 +118,11 @@ fn test_install_ancestors_mode_directories() {
     assert!(at.dir_exists(ancestor2));
     assert!(at.dir_exists(target_dir));
 
-    assert_ne!(0o40700 as u32, at.metadata(ancestor1).permissions().mode());
-    assert_ne!(0o40700 as u32, at.metadata(ancestor2).permissions().mode());
+    assert_ne!(0o40_700_u32, at.metadata(ancestor1).permissions().mode());
+    assert_ne!(0o40_700_u32, at.metadata(ancestor2).permissions().mode());
 
     // Expected mode only on the target_dir.
-    assert_eq!(0o40700 as u32, at.metadata(target_dir).permissions().mode());
+    assert_eq!(0o40_700_u32, at.metadata(target_dir).permissions().mode());
 }
 
 #[test]
@@ -184,7 +186,7 @@ fn test_install_mode_numeric() {
     assert!(at.file_exists(file));
     assert!(at.file_exists(dest_file));
     let permissions = at.metadata(dest_file).permissions();
-    assert_eq!(0o100333 as u32, PermissionsExt::mode(&permissions));
+    assert_eq!(0o100_333_u32, PermissionsExt::mode(&permissions));
 
     let mode_arg = "-m 0333";
     at.mkdir(dir2);
@@ -195,7 +197,7 @@ fn test_install_mode_numeric() {
     assert!(at.file_exists(file));
     assert!(at.file_exists(dest_file));
     let permissions = at.metadata(dest_file).permissions();
-    assert_eq!(0o100333 as u32, PermissionsExt::mode(&permissions));
+    assert_eq!(0o100_333_u32, PermissionsExt::mode(&permissions));
 }
 
 #[test]
@@ -213,7 +215,7 @@ fn test_install_mode_symbolic() {
     assert!(at.file_exists(file));
     assert!(at.file_exists(dest_file));
     let permissions = at.metadata(dest_file).permissions();
-    assert_eq!(0o100003 as u32, PermissionsExt::mode(&permissions));
+    assert_eq!(0o100_003_u32, PermissionsExt::mode(&permissions));
 }
 
 #[test]
@@ -251,7 +253,7 @@ fn test_install_mode_directories() {
 
     assert!(at.dir_exists(component));
     let permissions = at.metadata(component).permissions();
-    assert_eq!(0o040333 as u32, PermissionsExt::mode(&permissions));
+    assert_eq!(0o040_333_u32, PermissionsExt::mode(&permissions));
 }
 
 #[test]
@@ -301,7 +303,7 @@ fn test_install_target_new_file_with_group() {
         .arg(format!("{}/{}", dir, file))
         .run();
 
-    if is_ci() && result.stderr_str().contains("error: no such group:") {
+    if is_ci() && result.stderr_str().contains("no such group:") {
         // In the CI, some server are failing to return the group.
         // As seems to be a configuration issue, ignoring it
         return;
@@ -328,7 +330,7 @@ fn test_install_target_new_file_with_owner() {
         .arg(format!("{}/{}", dir, file))
         .run();
 
-    if is_ci() && result.stderr_str().contains("error: no such user:") {
+    if is_ci() && result.stderr_str().contains("no such user:") {
         // In the CI, some server are failing to return the user id.
         // As seems to be a configuration issue, ignoring it
         return;

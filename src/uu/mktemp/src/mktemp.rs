@@ -6,7 +6,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) tempfile tempdir SUFF TMPDIR tmpname
+// spell-checker:ignore (paths) GPGHome
 
 #[macro_use]
 extern crate uucore;
@@ -15,13 +15,10 @@ use clap::{App, Arg};
 
 use std::env;
 use std::iter;
-use std::mem::forget;
 use std::path::{is_separator, PathBuf};
 
 use rand::Rng;
 use tempfile::Builder;
-
-mod tempdir;
 
 static ABOUT: &str = "create a temporary file or directory.";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -70,10 +67,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(OPT_SUFFIX)
                 .long(OPT_SUFFIX)
                 .help(
-                    "append SUFF to TEMPLATE; SUFF must not contain a path separator. \
+                    "append SUFFIX to TEMPLATE; SUFFIX must not contain a path separator. \
                      This option is implied if TEMPLATE does not end with X.",
                 )
-                .value_name("SUFF"),
+                .value_name("SUFFIX"),
         )
         .arg(
             Arg::with_name(OPT_TMPDIR)
@@ -157,7 +154,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     if matches.is_present(OPT_TMPDIR) && PathBuf::from(prefix).is_absolute() {
-        show_info!(
+        show_error!(
             "invalid template, ‘{}’; with --tmpdir, it may not be absolute",
             template
         );
@@ -213,50 +210,48 @@ pub fn dry_exec(mut tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str) ->
     0
 }
 
-fn exec(
-    tmpdir: PathBuf,
-    prefix: &str,
-    rand: usize,
-    suffix: &str,
-    make_dir: bool,
-    quiet: bool,
-) -> i32 {
-    if make_dir {
-        match tempdir::new_in(&tmpdir, prefix, rand, suffix) {
-            Ok(ref f) => {
-                println!("{}", f);
-                return 0;
-            }
-            Err(e) => {
-                if !quiet {
-                    show_info!("{}: {}", e, tmpdir.display());
+fn exec(dir: PathBuf, prefix: &str, rand: usize, suffix: &str, make_dir: bool, quiet: bool) -> i32 {
+    let res = if make_dir {
+        let tmpdir = Builder::new()
+            .prefix(prefix)
+            .rand_bytes(rand)
+            .suffix(suffix)
+            .tempdir_in(&dir);
+
+        // `into_path` consumes the TempDir without removing it
+        tmpdir.map(|d| d.into_path().to_string_lossy().to_string())
+    } else {
+        let tmpfile = Builder::new()
+            .prefix(prefix)
+            .rand_bytes(rand)
+            .suffix(suffix)
+            .tempfile_in(&dir);
+
+        match tmpfile {
+            Ok(f) => {
+                // `keep` ensures that the file is not deleted
+                match f.keep() {
+                    Ok((_, p)) => Ok(p.to_string_lossy().to_string()),
+                    Err(e) => {
+                        show_error!("'{}': {}", dir.display(), e);
+                        return 1;
+                    }
                 }
-                return 1;
             }
-        }
-    }
-    let tmpfile = Builder::new()
-        .prefix(prefix)
-        .rand_bytes(rand)
-        .suffix(suffix)
-        .tempfile_in(tmpdir);
-    let tmpfile = match tmpfile {
-        Ok(f) => f,
-        Err(e) => {
-            if !quiet {
-                show_info!("failed to create tempfile: {}", e);
-            }
-            return 1;
+            Err(x) => Err(x),
         }
     };
 
-    let tmpname = tmpfile.path().to_string_lossy().to_string();
-
-    println!("{}", tmpname);
-
-    // CAUTION: Not to call `drop` of tmpfile, which removes the tempfile,
-    // I call a dangerous function `forget`.
-    forget(tmpfile);
-
-    0
+    match res {
+        Ok(ref f) => {
+            println!("{}", f);
+            0
+        }
+        Err(e) => {
+            if !quiet {
+                show_error!("{}: {}", e, dir.display());
+            }
+            1
+        }
+    }
 }

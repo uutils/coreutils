@@ -17,7 +17,7 @@ fn test_negative_adjustment() {
     let res = new_ucmd!().args(&["-n", "-1", "true"]).run();
     assert!(res
         .stderr_str()
-        .starts_with("nice: warning: setpriority: Permission denied"));
+        .starts_with("nice: warning: setpriority: Permission denied")); // spell-checker:disable-line
 }
 
 #[test]
@@ -25,7 +25,7 @@ fn test_adjustment_with_no_command_should_error() {
     new_ucmd!()
     .args(&["-n", "19"])
     .run()
-    .stderr_is("nice: error: A command must be given with an adjustment.\nTry \"nice --help\" for more information.\n");
+    .stderr_is("nice: A command must be given with an adjustment.\nTry \"nice --help\" for more information.\n");
 }
 
 #[test]

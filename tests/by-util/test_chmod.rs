@@ -8,8 +8,8 @@ use self::chmod::strip_minus_from_mode;
 extern crate chmod;
 use self::libc::umask;
 
-static TEST_FILE: &'static str = "file";
-static REFERENCE_FILE: &'static str = "reference";
+static TEST_FILE: &str = "file";
+static REFERENCE_FILE: &str = "reference";
 static REFERENCE_PERMS: u32 = 0o247;
 lazy_static! {
     static ref UMASK_MUTEX: Mutex<()> = Mutex::new(());
@@ -21,7 +21,7 @@ struct TestCase {
     after: u32,
 }
 
-fn mkfile(file: &str, mode: u32) {
+fn make_file(file: &str, mode: u32) {
     OpenOptions::new()
         .mode(mode)
         .create(true)
@@ -34,7 +34,7 @@ fn mkfile(file: &str, mode: u32) {
 }
 
 fn run_single_test(test: &TestCase, at: AtPath, mut ucmd: UCommand) {
-    mkfile(&at.plus_as_string(TEST_FILE), test.before);
+    make_file(&at.plus_as_string(TEST_FILE), test.before);
     let perms = at.metadata(TEST_FILE).permissions().mode();
     if perms != test.before {
         panic!(
@@ -69,6 +69,7 @@ fn run_tests(tests: Vec<TestCase>) {
 }
 
 #[test]
+#[allow(clippy::unreadable_literal)]
 fn test_chmod_octal() {
     let tests = vec![
         TestCase {
@@ -121,6 +122,8 @@ fn test_chmod_octal() {
 }
 
 #[test]
+#[allow(clippy::unreadable_literal)]
+// spell-checker:disable-next-line
 fn test_chmod_ugoa() {
     let _guard = UMASK_MUTEX.lock();
 
@@ -216,6 +219,7 @@ fn test_chmod_ugoa() {
 }
 
 #[test]
+#[allow(clippy::unreadable_literal)]
 fn test_chmod_ugo_copy() {
     let tests = vec![
         TestCase {
@@ -248,6 +252,7 @@ fn test_chmod_ugo_copy() {
 }
 
 #[test]
+#[allow(clippy::unreadable_literal)]
 fn test_chmod_many_options() {
     let _guard = UMASK_MUTEX.lock();
 
@@ -264,6 +269,7 @@ fn test_chmod_many_options() {
 }
 
 #[test]
+#[allow(clippy::unreadable_literal)]
 fn test_chmod_reference_file() {
     let tests = vec![
         TestCase {
@@ -278,11 +284,32 @@ fn test_chmod_reference_file() {
         },
     ];
     let (at, ucmd) = at_and_ucmd!();
-    mkfile(&at.plus_as_string(REFERENCE_FILE), REFERENCE_PERMS);
+    make_file(&at.plus_as_string(REFERENCE_FILE), REFERENCE_PERMS);
     run_single_test(&tests[0], at, ucmd);
 }
 
 #[test]
+fn test_permission_denied() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("d/");
+    at.mkdir("d/no-x");
+    at.mkdir("d/no-x/y");
+
+    scene.ucmd().arg("u=rw").arg("d/no-x").succeeds();
+
+    scene
+        .ucmd()
+        .arg("-R")
+        .arg("o=r")
+        .arg("d")
+        .fails()
+        .stderr_is("chmod: 'd/no-x/y': Permission denied");
+}
+
+#[test]
+#[allow(clippy::unreadable_literal)]
 fn test_chmod_recursive() {
     let _guard = UMASK_MUTEX.lock();
 
@@ -292,10 +319,10 @@ fn test_chmod_recursive() {
     at.mkdir("a/b");
     at.mkdir("a/b/c");
     at.mkdir("z");
-    mkfile(&at.plus_as_string("a/a"), 0o100444);
-    mkfile(&at.plus_as_string("a/b/b"), 0o100444);
-    mkfile(&at.plus_as_string("a/b/c/c"), 0o100444);
-    mkfile(&at.plus_as_string("z/y"), 0o100444);
+    make_file(&at.plus_as_string("a/a"), 0o100444);
+    make_file(&at.plus_as_string("a/b/b"), 0o100444);
+    make_file(&at.plus_as_string("a/b/c/c"), 0o100444);
+    make_file(&at.plus_as_string("z/y"), 0o100444);
 
     ucmd.arg("-R")
         .arg("--verbose")
@@ -325,9 +352,9 @@ fn test_chmod_non_existing_file() {
         .arg("-R")
         .arg("--verbose")
         .arg("-r,a+w")
-        .arg("dont-exist")
+        .arg("does-not-exist")
         .fails()
-        .stderr_contains(&"cannot access 'dont-exist': No such file or directory");
+        .stderr_contains(&"cannot access 'does-not-exist': No such file or directory");
 }
 
 #[test]
@@ -338,7 +365,7 @@ fn test_chmod_preserve_root() {
         .arg("755")
         .arg("/")
         .fails()
-        .stderr_contains(&"chmod: error: it is dangerous to operate recursively on '/'");
+        .stderr_contains(&"chmod: it is dangerous to operate recursively on '/'");
 }
 
 #[test]
@@ -406,6 +433,7 @@ fn test_chmod_symlink_non_existing_file_recursive() {
         .no_stdout();
 
     let expected_stdout = &format!(
+        // spell-checker:disable-next-line
         "mode of '{}' retained as 0755 (rwxr-xr-x)\nneither symbolic link '{}/{}' nor referent has been changed",
         test_directory, test_directory, test_symlink
     );
@@ -447,8 +475,8 @@ fn test_chmod_strip_minus_from_mode() {
         ("chmod -c -R +w FILE ", "chmod -c -R +w FILE "),
         ("chmod a=r,=xX FILE", "chmod a=r,=xX FILE"),
         (
-            "chmod -v --reference RFILE -R FILE",
-            "chmod -v --reference RFILE -R FILE",
+            "chmod -v --reference REF_FILE -R FILE",
+            "chmod -v --reference REF_FILE -R FILE",
         ),
         ("chmod -Rvc -w-x FILE", "chmod -Rvc w-x FILE"),
         ("chmod 755 -v FILE", "chmod 755 -v FILE"),
@@ -457,7 +485,7 @@ fn test_chmod_strip_minus_from_mode() {
     ];
 
     for test in tests {
-        let mut args: Vec<String> = test.0.split(" ").map(|v| v.to_string()).collect();
+        let mut args: Vec<String> = test.0.split(' ').map(|v| v.to_string()).collect();
         let _mode_had_minus_prefix = strip_minus_from_mode(&mut args);
         assert_eq!(test.1, args.join(" "));
     }

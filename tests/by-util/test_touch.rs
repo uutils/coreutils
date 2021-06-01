@@ -1,3 +1,5 @@
+// spell-checker:ignore (formats) cymdhm cymdhms mdhm mdhms ymdhm ymdhms
+
 extern crate touch;
 use self::touch::filetime::{self, FileTime};
 
@@ -355,6 +357,34 @@ fn test_touch_set_date() {
 }
 
 #[test]
+fn test_touch_set_date2() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_set_date";
+
+    ucmd.args(&["-d", "2000-01-23", file])
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file));
+
+    let start_of_year = str_to_filetime("%Y%m%d%H%M", "200001230000");
+    let (atime, mtime) = get_file_times(&at, file);
+    assert_eq!(atime, mtime);
+    assert_eq!(atime, start_of_year);
+    assert_eq!(mtime, start_of_year);
+}
+
+#[test]
+fn test_touch_set_date_wrong_format() {
+    let (_at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_set_date_wrong_format";
+
+    ucmd.args(&["-d", "2005-43-21", file])
+        .fails()
+        .stderr_contains("Unable to parse date: 2005-43-21");
+}
+
+#[test]
 fn test_touch_mtime_dst_succeeds() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_set_mtime_dst_succeeds";
@@ -383,13 +413,13 @@ fn is_dst_switch_hour(ts: time::Timespec) -> bool {
     tm_after.tm_hour == tm.tm_hour + 2
 }
 
-// get_dstswitch_hour returns date string for which touch -m -t fails.
+// get_dst_switch_hour returns date string for which touch -m -t fails.
 // For example, in EST (UTC-5), that will be "202003080200" so
-// touch -m -t 202003080200 somefile
+// touch -m -t 202003080200 file
 // fails (that date/time does not exist).
 // In other locales it will be a different date/time, and in some locales
 // it doesn't exist at all, in which case this function will return None.
-fn get_dstswitch_hour() -> Option<String> {
+fn get_dst_switch_hour() -> Option<String> {
     let now = time::now();
     // Start from January 1, 2020, 00:00.
     let mut tm = time::strptime("20200101-0000", "%Y%m%d-%H%M").unwrap();
@@ -401,8 +431,8 @@ fn get_dstswitch_hour() -> Option<String> {
     for _i in 0..(366 * 24) {
         if is_dst_switch_hour(ts) {
             let mut tm = time::at(ts);
-            tm.tm_hour = tm.tm_hour + 1;
-            let s = time::strftime("%Y%m%d%H%M", &tm).unwrap().to_string();
+            tm.tm_hour += 1;
+            let s = time::strftime("%Y%m%d%H%M", &tm).unwrap();
             return Some(s);
         }
         ts = ts + time::Duration::hours(1);
@@ -415,10 +445,7 @@ fn test_touch_mtime_dst_fails() {
     let (_at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_set_mtime_dst_fails";
 
-    match get_dstswitch_hour() {
-        Some(s) => {
-            ucmd.args(&["-m", "-t", &s, file]).fails();
-        }
-        None => (),
+    if let Some(s) = get_dst_switch_hour() {
+        ucmd.args(&["-m", "-t", &s, file]).fails();
     }
 }

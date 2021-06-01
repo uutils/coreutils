@@ -370,13 +370,13 @@ fn directory(paths: Vec<String>, b: Behavior) -> i32 {
                 // created ancestor directories will have the default mode. Hence it is safe to use
                 // fs::create_dir_all and then only modify the target's dir mode.
                 if let Err(e) = fs::create_dir_all(path) {
-                    show_info!("{}: {}", path.display(), e);
+                    show_error!("{}: {}", path.display(), e);
                     all_successful = false;
                     continue;
                 }
 
                 if b.verbose {
-                    show_info!("creating directory '{}'", path.display());
+                    show_error!("creating directory '{}'", path.display());
                 }
             }
 
@@ -461,7 +461,7 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> i3
     let mut all_successful = true;
     for sourcepath in files.iter() {
         if !sourcepath.exists() {
-            show_info!(
+            show_error!(
                 "cannot stat '{}': No such file or directory",
                 sourcepath.display()
             );
@@ -471,7 +471,7 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> i3
         }
 
         if sourcepath.is_dir() {
-            show_info!("omitting directory '{}'", sourcepath.display());
+            show_error!("omitting directory '{}'", sourcepath.display());
             all_successful = false;
             continue;
         }
@@ -520,6 +520,7 @@ fn copy_file_to_file(file: &Path, target: &Path, b: &Behavior) -> i32 {
 ///
 /// If the copy system call fails, we print a verbose error and return an empty error value.
 ///
+#[allow(clippy::cognitive_complexity)]
 fn copy(from: &Path, to: &Path, b: &Behavior) -> Result<(), ()> {
     if b.compare && !need_copy(from, to, b) {
         return Ok(());
@@ -588,10 +589,10 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> Result<(), ()> {
         ) {
             Ok(n) => {
                 if !n.is_empty() {
-                    show_info!("{}", n);
+                    show_error!("{}", n);
                 }
             }
-            Err(e) => show_info!("{}", e),
+            Err(e) => show_error!("{}", e),
         }
     }
 
@@ -608,10 +609,10 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> Result<(), ()> {
         match wrap_chgrp(to, &meta, group_id, false, Verbosity::Normal) {
             Ok(n) => {
                 if !n.is_empty() {
-                    show_info!("{}", n);
+                    show_error!("{}", n);
                 }
             }
-            Err(e) => show_info!("{}", e),
+            Err(e) => show_error!("{}", e),
         }
     }
 
@@ -626,12 +627,12 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> Result<(), ()> {
 
         match set_file_times(to, accessed_time, modified_time) {
             Ok(_) => {}
-            Err(e) => show_info!("{}", e),
+            Err(e) => show_error!("{}", e),
         }
     }
 
     if b.verbose {
-        show_info!("'{}' -> '{}'", from.display(), to.display());
+        show_error!("'{}' -> '{}'", from.display(), to.display());
     }
 
     Ok(())

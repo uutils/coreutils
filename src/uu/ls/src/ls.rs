@@ -60,7 +60,7 @@ fn get_usage() -> String {
 
 pub mod options {
     pub mod format {
-        pub static ONELINE: &str = "1";
+        pub static ONE_LINE: &str = "1";
         pub static LONG: &str = "long";
         pub static COLUMNS: &str = "C";
         pub static ACROSS: &str = "x";
@@ -218,6 +218,7 @@ struct LongFormat {
 }
 
 impl Config {
+    #[allow(clippy::cognitive_complexity)]
     fn from(options: clap::ArgMatches) -> Config {
         let (mut format, opt) = if let Some(format_) = options.value_of(options::FORMAT) {
             (
@@ -247,7 +248,7 @@ impl Config {
         // -og should hide both owner and group. Furthermore, they are not
         // reset if -l or --format=long is used. So these should just show the
         // group: -gl or "-g --format=long". Finally, they are also not reset
-        // when switching to a different format option inbetween like this:
+        // when switching to a different format option in-between like this:
         // -ogCl or "-og --format=vertical --format=long".
         //
         // -1 has a similar issue: it does nothing if the format is long. This
@@ -274,7 +275,7 @@ impl Config {
             .any(|i| i >= idx)
             {
                 format = Format::Long;
-            } else if let Some(mut indices) = options.indices_of(options::format::ONELINE) {
+            } else if let Some(mut indices) = options.indices_of(options::format::ONE_LINE) {
                 if indices.any(|i| i > idx) {
                     format = Format::OneLine;
                 }
@@ -635,8 +636,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         // ls -1g1
         // even though `ls -11` and `ls -1 -g -1` work.
         .arg(
-            Arg::with_name(options::format::ONELINE)
-                .short(options::format::ONELINE)
+            Arg::with_name(options::format::ONE_LINE)
+                .short(options::format::ONE_LINE)
                 .help("List one file per line.")
                 .multiple(true)
         )
@@ -1110,7 +1111,7 @@ struct PathData {
     md: OnceCell<Option<Metadata>>,
     ft: OnceCell<Option<FileType>>,
     // Name of the file - will be empty for . or ..
-    file_name: String,
+    display_name: String,
     // PathBuf that all above data corresponds to
     p_buf: PathBuf,
     must_dereference: bool,
@@ -1126,14 +1127,18 @@ impl PathData {
     ) -> Self {
         // We cannot use `Path::ends_with` or `Path::Components`, because they remove occurrences of '.'
         // For '..', the filename is None
-        let name = if let Some(name) = file_name {
+        let display_name = if let Some(name) = file_name {
             name
         } else {
-            p_buf
-                .file_name()
-                .unwrap_or_else(|| p_buf.iter().next_back().unwrap())
-                .to_string_lossy()
-                .into_owned()
+            let display_os_str = if command_line {
+                p_buf.as_os_str()
+            } else {
+                p_buf
+                    .file_name()
+                    .unwrap_or_else(|| p_buf.iter().next_back().unwrap())
+            };
+
+            display_os_str.to_string_lossy().into_owned()
         };
         let must_dereference = match &config.dereference {
             Dereference::All => true,
@@ -1159,7 +1164,7 @@ impl PathData {
         Self {
             md: OnceCell::new(),
             ft,
-            file_name: name,
+            display_name,
             p_buf,
             must_dereference,
         }
@@ -1218,7 +1223,7 @@ fn list(locs: Vec<String>, config: Config) -> i32 {
 
     sort_entries(&mut dirs, &config);
     for dir in dirs {
-        if locs.len() > 1 {
+        if locs.len() > 1 || config.recursive {
             let _ = writeln!(out, "\n{}:", dir.p_buf.display());
         }
         enter_directory(&dir, &config, &mut out);
@@ -1243,7 +1248,7 @@ fn sort_entries(entries: &mut Vec<PathData>, config: &Config) {
             entries.sort_by_key(|k| Reverse(k.md().as_ref().map(|md| md.len()).unwrap_or(0)))
         }
         // The default sort in GNU ls is case insensitive
-        Sort::Name => entries.sort_by(|a, b| a.file_name.cmp(&b.file_name)),
+        Sort::Name => entries.sort_by(|a, b| a.display_name.cmp(&b.display_name)),
         Sort::Version => entries.sort_by(|a, b| version_cmp::version_cmp(&a.p_buf, &b.p_buf)),
         Sort::Extension => entries.sort_by(|a, b| {
             a.p_buf
@@ -1413,11 +1418,11 @@ fn get_block_size(md: &Metadata, config: &Config) -> u64 {
     {
         // hard-coded for now - enabling setting this remains a TODO
         let ls_block_size = 1024;
-        return match config.size_format {
+        match config.size_format {
             SizeFormat::Binary => md.blocks() * 512,
             SizeFormat::Decimal => md.blocks() * 512,
             SizeFormat::Bytes => md.blocks() * 512 / ls_block_size,
-        };
+        }
     }
 
     #[cfg(not(unix))]
@@ -1610,7 +1615,7 @@ fn display_date(metadata: &Metadata, config: &Config) -> String {
         Some(time) => {
             //Date is recent if from past 6 months
             //According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
-            let recent = time + chrono::Duration::seconds(31556952 / 2) > chrono::Local::now();
+            let recent = time + chrono::Duration::seconds(31_556_952 / 2) > chrono::Local::now();
 
             match config.time_style {
                 TimeStyle::FullIso => time.format("%Y-%m-%d %H:%M:%S.%f %z"),
@@ -1619,6 +1624,7 @@ fn display_date(metadata: &Metadata, config: &Config) -> String {
                 TimeStyle::Locale => {
                     let fmt = if recent { "%b %e %H:%M" } else { "%b %e  %Y" };
 
+                    // spell-checker:ignore (word) datetime
                     //In this version of chrono translating can be done
                     //The function is chrono::datetime::DateTime::format_localized
                     //However it's currently still hard to get the current pure-rust-locale
@@ -1673,7 +1679,7 @@ fn display_size_or_rdev(metadata: &Metadata, config: &Config) -> String {
 }
 
 fn display_size(size: u64, config: &Config) -> String {
-    // NOTE: The human-readable behaviour deviates from the GNU ls.
+    // NOTE: The human-readable behavior deviates from the GNU ls.
     // The GNU ls uses binary prefixes by default.
     match config.size_format {
         SizeFormat::Binary => format_prefixed(NumberPrefix::binary(size as f64)),
@@ -1687,12 +1693,11 @@ fn file_is_executable(md: &Metadata) -> bool {
     // Mode always returns u32, but the flags might not be, based on the platform
     // e.g. linux has u32, mac has u16.
     // S_IXUSR -> user has execute permission
-    // S_IXGRP -> group has execute persmission
+    // S_IXGRP -> group has execute permission
     // S_IXOTH -> other users have execute permission
     md.mode() & ((S_IXUSR | S_IXGRP | S_IXOTH) as u32) != 0
 }
 
-#[allow(clippy::clippy::collapsible_else_if)]
 fn classify_file(path: &PathData) -> Option<char> {
     let file_type = path.file_type()?;
 
@@ -1719,7 +1724,7 @@ fn classify_file(path: &PathData) -> Option<char> {
 }
 
 fn display_file_name(path: &PathData, config: &Config) -> Option<Cell> {
-    let mut name = escape_name(&path.file_name, &config.quoting_style);
+    let mut name = escape_name(&path.display_name, &config.quoting_style);
 
     #[cfg(unix)]
     {

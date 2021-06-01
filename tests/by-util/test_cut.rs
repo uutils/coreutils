@@ -1,13 +1,13 @@
 use crate::common::util::*;
 
-static INPUT: &'static str = "lists.txt";
+static INPUT: &str = "lists.txt";
 
 struct TestedSequence<'b> {
     name: &'b str,
     sequence: &'b str,
 }
 
-static EXAMPLE_SEQUENCES: &'static [TestedSequence<'static>] = &[
+static EXAMPLE_SEQUENCES: &[TestedSequence] = &[
     TestedSequence {
         name: "singular",
         sequence: "2",
@@ -34,14 +34,14 @@ static EXAMPLE_SEQUENCES: &'static [TestedSequence<'static>] = &[
     },
 ];
 
-static COMPLEX_SEQUENCE: &'static TestedSequence<'static> = &TestedSequence {
+static COMPLEX_SEQUENCE: &TestedSequence = &TestedSequence {
     name: "",
     sequence: "9-,6-7,-2,4",
 };
 
 #[test]
 fn test_byte_sequence() {
-    for param in vec!["-b", "--bytes"] {
+    for &param in &["-b", "--bytes"] {
         for example_seq in EXAMPLE_SEQUENCES {
             new_ucmd!()
                 .args(&[param, example_seq.sequence, INPUT])
@@ -53,7 +53,7 @@ fn test_byte_sequence() {
 
 #[test]
 fn test_char_sequence() {
-    for param in vec!["-c", "--characters"] {
+    for &param in &["-c", "--characters"] {
         for example_seq in EXAMPLE_SEQUENCES {
             //as of coreutils 8.25 a char range is effectively the same as a byte range; there is no distinct treatment of utf8 chars.
             new_ucmd!()
@@ -66,7 +66,7 @@ fn test_char_sequence() {
 
 #[test]
 fn test_field_sequence() {
-    for param in vec!["-f", "--fields"] {
+    for &param in &["-f", "--fields"] {
         for example_seq in EXAMPLE_SEQUENCES {
             new_ucmd!()
                 .args(&[param, example_seq.sequence, INPUT])
@@ -78,7 +78,7 @@ fn test_field_sequence() {
 
 #[test]
 fn test_specify_delimiter() {
-    for param in vec!["-d", "--delimiter"] {
+    for &param in &["-d", "--delimiter"] {
         new_ucmd!()
             .args(&[param, ":", "-f", COMPLEX_SEQUENCE.sequence, INPUT])
             .succeeds()
@@ -122,7 +122,7 @@ fn test_zero_terminated() {
 
 #[test]
 fn test_only_delimited() {
-    for param in vec!["-s", "--only-delimited"] {
+    for param in &["-s", "--only-delimited"] {
         new_ucmd!()
             .args(&["-d_", param, "-f", "1"])
             .pipe_in("91\n82\n7_3")
@@ -149,11 +149,11 @@ fn test_directory_and_no_such_file() {
     ucmd.arg("-b1")
         .arg("some")
         .run()
-        .stderr_is("cut: error: some: Is a directory\n");
+        .stderr_is("cut: some: Is a directory\n");
 
     new_ucmd!()
         .arg("-b1")
         .arg("some")
         .run()
-        .stderr_is("cut: error: some: No such file or directory\n");
+        .stderr_is("cut: some: No such file or directory\n");
 }

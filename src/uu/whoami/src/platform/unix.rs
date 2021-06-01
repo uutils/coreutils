@@ -14,7 +14,7 @@ use std::io::Result;
 use uucore::entries::uid2usr;
 use uucore::libc::geteuid;
 
-pub unsafe fn getusername() -> Result<String> {
+pub unsafe fn get_username() -> Result<String> {
     // Get effective user id
     let uid = geteuid();
     uid2usr(uid)

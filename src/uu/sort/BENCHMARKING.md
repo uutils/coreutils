@@ -1,8 +1,10 @@
 # Benchmarking sort
 
+<!-- spell-checker:ignore (words) kbytes -->
+
 Most of the time when sorting is spent comparing lines. The comparison functions however differ based
 on which arguments are passed to `sort`, therefore it is important to always benchmark multiple scenarios.
-This is an overwiew over what was benchmarked, and if you make changes to `sort`, you are encouraged to check
+This is an overview over what was benchmarked, and if you make changes to `sort`, you are encouraged to check
 how performance was affected for the workloads listed below. Feel free to add other workloads to the
 list that we should improve / make sure not to regress.
 
@@ -72,17 +74,31 @@ Run `cargo build --release` before benchmarking after you make a change!
 ## External sorting
 
 Try running commands with the `-S` option set to an amount of memory to be used, such as `1M`. Additionally, you could try sorting
-huge files (ideally multiple Gigabytes) with `-S`. Creating such a large file can be achieved by running `cat shuffled_wordlist.txt | sort -R >> shuffled_wordlist.txt`
+huge files (ideally multiple Gigabytes) with `-S` (or without `-S` to benchmark with our default value).
+Creating such a large file can be achieved by running `cat shuffled_wordlist.txt | sort -R >> shuffled_wordlist.txt`
 multiple times (this will add the contents of `shuffled_wordlist.txt` to itself).
 Example: Run `hyperfine './target/release/coreutils sort shuffled_wordlist.txt -S 1M' 'sort shuffled_wordlist.txt -S 1M'`
-`
+
+## Merging
+
+"Merge" sort merges already sorted files. It is a sub-step of external sorting, so benchmarking it separately may be helpful.
+
+-   Splitting `shuffled_wordlist.txt` can be achieved by running `split shuffled_wordlist.txt shuffled_wordlist_slice_ --additional-suffix=.txt`
+-   Sort each part by running `for f in shuffled_wordlist_slice_*; do sort $f -o $f; done`
+-   Benchmark merging by running `hyperfine "target/release/coreutils sort -m shuffled_wordlist_slice_*"`
+
+## Check
+
+When invoked with -c, we simply check if the input is already ordered. The input for benchmarking should be an already sorted file.
+
+-   Benchmark checking by running `hyperfine "target/release/coreutils sort -c sorted_wordlist.txt"`
 
 ## Stdout and stdin performance
 
 Try to run the above benchmarks by piping the input through stdin (standard input) and redirect the
 output through stdout (standard output):
 
--   Remove the input file from the arguments and add `cat [inputfile] | ` at the beginning.
+-   Remove the input file from the arguments and add `cat [input_file] | ` at the beginning.
 -   Remove `-o output.txt` and add `> output.txt` at the end.
 
 Example: `hyperfine "target/release/coreutils sort shuffled_numbers.txt -n -o output.txt"` becomes

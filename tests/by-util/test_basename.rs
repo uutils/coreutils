@@ -1,9 +1,12 @@
+// spell-checker:ignore (words) reallylongexecutable
+
 use crate::common::util::*;
+#[cfg(any(unix, target_os = "redox"))]
 use std::ffi::OsStr;
 
 #[test]
 fn test_help() {
-    for help_flg in vec!["-h", "--help"] {
+    for help_flg in &["-h", "--help"] {
         new_ucmd!()
             .arg(&help_flg)
             .succeeds()
@@ -14,7 +17,7 @@ fn test_help() {
 
 #[test]
 fn test_version() {
-    for version_flg in vec!["-V", "--version"] {
+    for version_flg in &["-V", "--version"] {
         assert!(new_ucmd!()
             .arg(&version_flg)
             .succeeds()
@@ -49,7 +52,7 @@ fn test_remove_suffix() {
 }
 
 #[test]
-fn test_dont_remove_suffix() {
+fn test_do_not_remove_suffix() {
     new_ucmd!()
         .args(&["/foo/bar/baz", "baz"])
         .succeeds()
@@ -58,29 +61,29 @@ fn test_dont_remove_suffix() {
 
 #[test]
 fn test_multiple_param() {
-    for multiple_param in vec!["-a", "--multiple"] {
+    for &multiple_param in &["-a", "--multiple"] {
         let path = "/foo/bar/baz";
         new_ucmd!()
             .args(&[multiple_param, path, path])
             .succeeds()
-            .stdout_only("baz\nbaz\n");
+            .stdout_only("baz\nbaz\n"); // spell-checker:disable-line
     }
 }
 
 #[test]
 fn test_suffix_param() {
-    for suffix_param in vec!["-s", "--suffix"] {
+    for &suffix_param in &["-s", "--suffix"] {
         let path = "/foo/bar/baz.exe";
         new_ucmd!()
             .args(&[suffix_param, ".exe", path, path])
             .succeeds()
-            .stdout_only("baz\nbaz\n");
+            .stdout_only("baz\nbaz\n"); // spell-checker:disable-line
     }
 }
 
 #[test]
 fn test_zero_param() {
-    for zero_param in vec!["-z", "--zero"] {
+    for &zero_param in &["-z", "--zero"] {
         let path = "/foo/bar/baz";
         new_ucmd!()
             .args(&[zero_param, "-a", path, path])
@@ -90,7 +93,12 @@ fn test_zero_param() {
 }
 
 fn expect_error(input: Vec<&str>) {
-    assert!(new_ucmd!().args(&input).fails().no_stdout().stderr().len() > 0);
+    assert!(!new_ucmd!()
+        .args(&input)
+        .fails()
+        .no_stdout()
+        .stderr_str()
+        .is_empty());
 }
 
 #[test]
@@ -108,7 +116,7 @@ fn test_no_args() {
 fn test_no_args_output() {
     new_ucmd!()
         .fails()
-        .stderr_is("basename: error: missing operand\nTry 'basename --help' for more information.");
+        .stderr_is("basename: missing operand\nTry 'basename --help' for more information.");
 }
 
 #[test]
@@ -118,11 +126,13 @@ fn test_too_many_args() {
 
 #[test]
 fn test_too_many_args_output() {
-    new_ucmd!().args(&["a", "b", "c"]).fails().stderr_is(
-        "basename: error: extra operand 'c'\nTry 'basename --help' for more information.",
-    );
+    new_ucmd!()
+        .args(&["a", "b", "c"])
+        .fails()
+        .stderr_is("basename: extra operand 'c'\nTry 'basename --help' for more information.");
 }
 
+#[cfg(any(unix, target_os = "redox"))]
 fn test_invalid_utf8_args(os_str: &OsStr) {
     let test_vec = vec![os_str.to_os_string()];
     new_ucmd!().args(&test_vec).succeeds().stdout_is("fo�o\n");

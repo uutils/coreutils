@@ -1,4 +1,7 @@
+@setLocal
 @ECHO OFF
+
+rem spell-checker:ignore (vars/env) BUILDDIR SOURCEDIR SPHINXBUILD SPHINXOPTS SPHINXPROJ
 
 pushd %~dp0
 
@@ -14,7 +17,7 @@ set SPHINXPROJ=uutils
 if "%1" == "" goto help
 
 %SPHINXBUILD% >NUL 2>NUL
-if errorlevel 9009 (
+if ErrorLevel 9009 (
     echo.
     echo.The 'sphinx-build' command was not found. Make sure you have Sphinx
     echo.installed, then set the SPHINXBUILD environment variable to point

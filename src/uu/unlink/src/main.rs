@@ -1,1 +1,1 @@
-uucore_procs::main!(uu_unlink); // spell-checker:ignore procs uucore
+uucore_procs::main!(uu_unlink);

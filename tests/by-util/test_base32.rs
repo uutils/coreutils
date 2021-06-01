@@ -14,14 +14,14 @@ fn test_encode() {
     new_ucmd!()
         .pipe_in(input)
         .succeeds()
-        .stdout_only("JBSWY3DPFQQFO33SNRSCC===\n");
+        .stdout_only("JBSWY3DPFQQFO33SNRSCC===\n"); // spell-checker:disable-line
 
     // Using '-' as our file
     new_ucmd!()
         .arg("-")
         .pipe_in(input)
         .succeeds()
-        .stdout_only("JBSWY3DPFQQFO33SNRSCC===\n");
+        .stdout_only("JBSWY3DPFQQFO33SNRSCC===\n"); // spell-checker:disable-line
 }
 
 #[test]
@@ -29,13 +29,13 @@ fn test_base32_encode_file() {
     new_ucmd!()
         .arg("input-simple.txt")
         .succeeds()
-        .stdout_only("JBSWY3DPFQQFO33SNRSCCCQ=\n");
+        .stdout_only("JBSWY3DPFQQFO33SNRSCCCQ=\n"); // spell-checker:disable-line
 }
 
 #[test]
 fn test_decode() {
-    for decode_param in vec!["-d", "--decode"] {
-        let input = "JBSWY3DPFQQFO33SNRSCC===\n";
+    for decode_param in &["-d", "--decode"] {
+        let input = "JBSWY3DPFQQFO33SNRSCC===\n"; // spell-checker:disable-line
         new_ucmd!()
             .arg(decode_param)
             .pipe_in(input)
@@ -46,7 +46,7 @@ fn test_decode() {
 
 #[test]
 fn test_garbage() {
-    let input = "aGVsbG8sIHdvcmxkIQ==\0";
+    let input = "aGVsbG8sIHdvcmxkIQ==\0"; // spell-checker:disable-line
     new_ucmd!()
         .arg("-d")
         .pipe_in(input)
@@ -56,8 +56,8 @@ fn test_garbage() {
 
 #[test]
 fn test_ignore_garbage() {
-    for ignore_garbage_param in vec!["-i", "--ignore-garbage"] {
-        let input = "JBSWY\x013DPFQ\x02QFO33SNRSCC===\n";
+    for ignore_garbage_param in &["-i", "--ignore-garbage"] {
+        let input = "JBSWY\x013DPFQ\x02QFO33SNRSCC===\n"; // spell-checker:disable-line
         new_ucmd!()
             .arg("-d")
             .arg(ignore_garbage_param)
@@ -69,7 +69,7 @@ fn test_ignore_garbage() {
 
 #[test]
 fn test_wrap() {
-    for wrap_param in vec!["-w", "--wrap"] {
+    for wrap_param in &["-w", "--wrap"] {
         let input = "The quick brown fox jumps over the lazy dog.";
         new_ucmd!()
             .arg(wrap_param)
@@ -77,28 +77,33 @@ fn test_wrap() {
             .pipe_in(input)
             .succeeds()
             .stdout_only(
-                "KRUGKIDROVUWG2ZAMJZG\n653OEBTG66BANJ2W24DT\nEBXXMZLSEB2GQZJANRQX\nU6JAMRXWOLQ=\n",
+                "KRUGKIDROVUWG2ZAMJZG\n653OEBTG66BANJ2W24DT\nEBXXMZLSEB2GQZJANRQX\nU6JAMRXWOLQ=\n", // spell-checker:disable-line
             );
     }
 }
 
 #[test]
 fn test_wrap_no_arg() {
-    for wrap_param in vec!["-w", "--wrap"] {
-        new_ucmd!().arg(wrap_param).fails().stderr_only(format!(
-            "error: The argument '--wrap <wrap>\' requires a value but none was supplied\n\nUSAGE:\n    base32 [OPTION]... [FILE]\n\nFor more information try --help"
-        ));
+    for wrap_param in &["-w", "--wrap"] {
+        let expected_stderr = "error: The argument '--wrap <wrap>\' requires a value but none was \
+                               supplied\n\nUSAGE:\n    base32 [OPTION]... [FILE]\n\nFor more \
+                               information try --help"
+            .to_string();
+        new_ucmd!()
+            .arg(wrap_param)
+            .fails()
+            .stderr_only(expected_stderr);
     }
 }
 
 #[test]
 fn test_wrap_bad_arg() {
-    for wrap_param in vec!["-w", "--wrap"] {
+    for wrap_param in &["-w", "--wrap"] {
         new_ucmd!()
             .arg(wrap_param)
             .arg("b")
             .fails()
-            .stderr_only("base32: error: Invalid wrap size: ‘b’: invalid digit found in string\n");
+            .stderr_only("base32: Invalid wrap size: ‘b’: invalid digit found in string\n");
     }
 }
 
@@ -109,7 +114,7 @@ fn test_base32_extra_operand() {
         .arg("a.txt")
         .arg("a.txt")
         .fails()
-        .stderr_only("base32: error: extra operand ‘a.txt’");
+        .stderr_only("base32: extra operand ‘a.txt’");
 }
 
 #[test]
@@ -117,5 +122,5 @@ fn test_base32_file_not_found() {
     new_ucmd!()
         .arg("a.txt")
         .fails()
-        .stderr_only("base32: error: a.txt: No such file or directory");
+        .stderr_only("base32: a.txt: No such file or directory");
 }

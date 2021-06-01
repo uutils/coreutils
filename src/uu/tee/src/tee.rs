@@ -119,7 +119,7 @@ fn tee(options: Options) -> Result<()> {
 
     // TODO: replaced generic 'copy' call to be able to stop copying
     // if all outputs are closed (due to errors)
-    if copy(input, &mut output).is_err() || output.flush().is_err() || output.error_occured() {
+    if copy(input, &mut output).is_err() || output.flush().is_err() || output.error_occurred() {
         Err(Error::new(ErrorKind::Other, ""))
     } else {
         Ok(())
@@ -155,7 +155,7 @@ impl MultiWriter {
             writers,
         }
     }
-    fn error_occured(&self) -> bool {
+    fn error_occurred(&self) -> bool {
         self.writers.len() != self.initial_len
     }
 }
@@ -166,7 +166,7 @@ impl Write for MultiWriter {
             let result = writer.write_all(buf);
             match result {
                 Err(f) => {
-                    show_info!("{}: {}", writer.name, f.to_string());
+                    show_error!("{}: {}", writer.name, f.to_string());
                     false
                 }
                 _ => true,
@@ -180,7 +180,7 @@ impl Write for MultiWriter {
             let result = writer.flush();
             match result {
                 Err(f) => {
-                    show_info!("{}: {}", writer.name, f.to_string());
+                    show_error!("{}: {}", writer.name, f.to_string());
                     false
                 }
                 _ => true,
@@ -213,7 +213,7 @@ impl Read for NamedReader {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         match self.inner.read(buf) {
             Err(f) => {
-                show_info!("{}: {}", Path::new("stdin").display(), f.to_string());
+                show_error!("{}: {}", Path::new("stdin").display(), f.to_string());
                 Err(f)
             }
             okay => okay,

@@ -5,13 +5,13 @@ name: CICD
 # spell-checker:ignore (jargon) SHAs deps softprops toolchain
 # spell-checker:ignore (names) CodeCOV MacOS MinGW Peltoche rivy
 # spell-checker:ignore (shell/tools) choco clippy dmake dpkg esac fakeroot gmake grcov halium lcov libssl mkdir popd printf pushd rustc rustfmt rustup shopt xargs
-# spell-checker:ignore (misc) aarch alnum armhf coreutils gnueabihf issuecomment maint nullglob onexitbegin onexitend tempfile uutils
+# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils gnueabihf issuecomment maint nullglob onexitbegin onexitend tempfile testsuite uutils
 
 env:
   PROJECT_NAME: coreutils
   PROJECT_DESC: "Core universal (cross-platform) utilities"
   PROJECT_AUTH: "uutils"
-  RUST_MIN_SRV: "1.40.0" ## v1.40.0
+  RUST_MIN_SRV: "1.43.1" ## v1.43.0
   RUST_COV_SRV: "2020-08-01" ## (~v1.47.0) supported rust version for code coverage; (date required/used by 'coverage') ## !maint: refactor when code coverage support is included in the stable channel
 
 on: [push, pull_request]
@@ -58,6 +58,24 @@ jobs:
         # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
         S=$(find tests -name "*.rs" -print0 | xargs -0 cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" | sed -E -n "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::warning file=\1,line=\2::WARNING: \`cargo fmt\`: style violation/p" ; }
 
+  code_spellcheck:
+    name: Style/spelling
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      matrix:
+        job:
+          - { os: ubuntu-latest }
+    steps:
+    - uses: actions/checkout@v1
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        sudo apt-get -y update ; sudo apt-get -y install npm ; sudo npm install cspell -g;
+    - name: Run `cspell`
+      shell: bash
+      run: |
+        cspell --config .vscode/cSpell.json --no-summary --no-progress "**/*" | sed "s/\(.*\):\(.*\):\(.*\) - \(.*\)/::warning file=\1,line=\2,col=\3::cspell: \4/" || true
+
   code_warnings:
     name: Style/warnings
     runs-on: ${{ matrix.job.os }}
@@ -84,7 +102,7 @@ jobs:
     - name: Install `rust` toolchain
       uses: actions-rs/toolchain@v1
       with:
-        toolchain: stable
+        toolchain: nightly
         default: true
         profile: minimal # minimal component installation (ie, no documentation)
         components: clippy
@@ -94,7 +112,7 @@ jobs:
       run: |
         # `clippy` testing
         # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-        S=$(cargo clippy ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -- -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+(.*):([0-9]+):([0-9]+).*$/::warning file=\2,line=\3,col=\4::WARNING: \`cargo clippy\`: \1/p;" -e '}' ; }
+        S=$(cargo +nightly clippy --all-targets ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -- -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+(.*):([0-9]+):([0-9]+).*$/::warning file=\2,line=\3,col=\4::WARNING: \`cargo clippy\`: \1/p;" -e '}' ; }
 
   min_version:
     name: MinRustV # Minimum supported rust version
@@ -235,6 +253,9 @@ jobs:
           arm-unknown-linux-gnueabihf) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf ;;
           aarch64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu ;;
         esac
+        case '${{ matrix.job.os }}' in
+          macos-latest) brew install coreutils ;; # needed for testing
+        esac
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -360,6 +381,10 @@ jobs:
         mkdir -p '${{ steps.vars.outputs.STAGING }}/dpkg'
     - name: rust toolchain ~ install
       uses: actions-rs/toolchain@v1
+      env:
+        # Override auto-detection of RAM for Rustc install.
+        # https://github.com/rust-lang/rustup/issues/2229#issuecomment-585855925
+        RUSTUP_UNPACK_RAM: "21474836480"
       with:
         toolchain: ${{ steps.vars.outputs.TOOLCHAIN }}
         target: ${{ matrix.job.target }}
@@ -486,6 +511,13 @@ jobs:
           - { os: windows-latest , features: windows }
     steps:
     - uses: actions/checkout@v1
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        ## install/setup prerequisites
+        case '${{ matrix.job.os }}' in
+          macos-latest) brew install coreutils ;; # needed for testing
+        esac
     # - name: Reattach HEAD ## may be needed for accurate code coverage info
     #   run: git checkout ${{ github.head_ref }}
     - name: Initialize workflow variables

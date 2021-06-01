@@ -61,6 +61,7 @@ const TESTS: [TestCase; 10] = [
     },
 ];
 
+#[allow(clippy::needless_lifetimes)]
 fn convert_path<'a>(path: &'a str) -> Cow<'a, str> {
     #[cfg(windows)]
     return path.replace("/", "\\").into();
@@ -114,12 +115,12 @@ fn test_relpath_with_from_with_d() {
         #[cfg(not(windows))]
         assert!(Path::new(&_result_stdout).is_relative());
 
-        // d is not part of subpath -> expect absolut path
+        // d is not part of subpath -> expect absolute path
         _result_stdout = scene
             .ucmd()
             .arg(to)
             .arg(from)
-            .arg("-dnon_existing")
+            .arg("-dnon_existing") // spell-checker:disable-line
             .succeeds()
             .stdout_move_str();
         assert!(Path::new(&_result_stdout).is_absolute());
@@ -155,7 +156,7 @@ fn test_relpath_no_from_with_d() {
         at.mkdir_all(to);
 
         // d is part of subpath -> expect relative path
-        let mut result_stdout = scene
+        let _result_stdout = scene
             .ucmd()
             .arg(to)
             .arg(&format!("-d{}", pwd))
@@ -163,13 +164,13 @@ fn test_relpath_no_from_with_d() {
             .stdout_move_str();
         // relax rules for windows test environment
         #[cfg(not(windows))]
-        assert!(Path::new(&result_stdout).is_relative());
+        assert!(Path::new(&_result_stdout).is_relative());
 
-        // d is not part of subpath -> expect absolut path
-        result_stdout = scene
+        // d is not part of subpath -> expect absolute path
+        let result_stdout = scene
             .ucmd()
             .arg(to)
-            .arg("-dnon_existing")
+            .arg("-dnon_existing") // spell-checker:disable-line
             .succeeds()
             .stdout_move_str();
         assert!(Path::new(&result_stdout).is_absolute());

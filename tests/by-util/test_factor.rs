@@ -4,6 +4,9 @@
 //
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
+#![allow(clippy::unreadable_literal)]
+
+// spell-checker:ignore (methods) hexdigest
 
 use crate::common::util::*;
 use std::time::SystemTime;
@@ -26,17 +29,29 @@ fn test_first_100000_integers() {
     extern crate sha1;
 
     let n_integers = 100_000;
-    let mut instring = String::new();
+    let mut input_string = String::new();
     for i in 0..=n_integers {
-        instring.push_str(&(format!("{} ", i))[..]);
+        input_string.push_str(&(format!("{} ", i))[..]);
     }
 
-    println!("STDIN='{}'", instring);
-    let result = new_ucmd!().pipe_in(instring.as_bytes()).succeeds();
+    println!("STDIN='{}'", input_string);
+    let result = new_ucmd!().pipe_in(input_string.as_bytes()).succeeds();
 
     // `seq 0 100000 | factor | sha1sum` => "4ed2d8403934fa1c76fe4b84c5d4b8850299c359"
     let hash_check = sha1::Sha1::from(result.stdout()).hexdigest();
     assert_eq!(hash_check, "4ed2d8403934fa1c76fe4b84c5d4b8850299c359");
+}
+
+#[test]
+fn test_cli_args() {
+    // Make sure that factor works with CLI arguments as well.
+    new_ucmd!().args(&["3"]).succeeds().stdout_contains("3: 3");
+
+    new_ucmd!()
+        .args(&["3", "6"])
+        .succeeds()
+        .stdout_contains("3: 3")
+        .stdout_contains("6: 2 3");
 }
 
 #[test]
@@ -77,25 +92,25 @@ fn test_random() {
             };
         }
 
-        factors.sort();
+        factors.sort_unstable();
         (product, factors)
     };
 
     // build an input and expected output string from factor
-    let mut instring = String::new();
-    let mut outstring = String::new();
+    let mut input_string = String::new();
+    let mut output_string = String::new();
     for _ in 0..NUM_TESTS {
         let (product, factors) = rand_gt(1 << 63);
-        instring.push_str(&(format!("{} ", product))[..]);
+        input_string.push_str(&(format!("{} ", product))[..]);
 
-        outstring.push_str(&(format!("{}:", product))[..]);
+        output_string.push_str(&(format!("{}:", product))[..]);
         for factor in factors {
-            outstring.push_str(&(format!(" {}", factor))[..]);
+            output_string.push_str(&(format!(" {}", factor))[..]);
         }
-        outstring.push_str("\n");
+        output_string.push('\n');
     }
 
-    run(instring.as_bytes(), outstring.as_bytes());
+    run(input_string.as_bytes(), output_string.as_bytes());
 }
 
 #[test]
@@ -107,31 +122,31 @@ fn test_random_big() {
     println!("rng_seed={:?}", rng_seed);
     let mut rng = SmallRng::seed_from_u64(rng_seed);
 
-    let bitrange_1 = Uniform::new(14_usize, 51);
+    let bit_range_1 = Uniform::new(14_usize, 51);
     let mut rand_64 = move || {
         // first, choose a random number of bits for the first factor
-        let f_bit_1 = bitrange_1.sample(&mut rng);
+        let f_bit_1 = bit_range_1.sample(&mut rng);
         // how many more bits do we need?
         let rem = 64 - f_bit_1;
 
-        // we will have a number of additional factors equal to nfacts + 1
-        // where nfacts is in [0, floor(rem/14) )  NOTE half-open interval
+        // we will have a number of additional factors equal to n_facts + 1
+        // where n_facts is in [0, floor(rem/14) )  NOTE half-open interval
         // Each prime factor is at least 14 bits, hence floor(rem/14)
-        let nfacts = Uniform::new(0_usize, rem / 14).sample(&mut rng);
-        // we have to distribute extrabits among the (nfacts + 1) values
-        let extrabits = rem - (nfacts + 1) * 14;
+        let n_factors = Uniform::new(0_usize, rem / 14).sample(&mut rng);
+        // we have to distribute extra_bits among the (n_facts + 1) values
+        let extra_bits = rem - (n_factors + 1) * 14;
         // (remember, a Range is a half-open interval)
-        let extrarange = Uniform::new(0_usize, extrabits + 1);
+        let extra_range = Uniform::new(0_usize, extra_bits + 1);
 
         // to generate an even split of this range, generate n-1 random elements
         // in the range, add the desired total value to the end, sort this list,
         // and then compute the sequential differences.
         let mut f_bits = Vec::new();
-        for _ in 0..nfacts {
-            f_bits.push(extrarange.sample(&mut rng));
+        for _ in 0..n_factors {
+            f_bits.push(extra_range.sample(&mut rng));
         }
-        f_bits.push(extrabits);
-        f_bits.sort();
+        f_bits.push(extra_bits);
+        f_bits.sort_unstable();
 
         // compute sequential differences here. We leave off the +14 bits
         // so we can just index PRIMES_BY_BITS
@@ -147,62 +162,65 @@ fn test_random_big() {
         f_bits.push(f_bit_1 - 14); // index of f_bit_1 in PRIMES_BY_BITS
         let f_bits = f_bits;
 
-        let mut nbits = 0;
+        let mut n_bits = 0;
         let mut product = 1_u64;
         let mut factors = Vec::new();
         for bit in f_bits {
             assert!(bit < 37);
-            nbits += 14 + bit;
+            n_bits += 14 + bit;
             let elm = Uniform::new(0, PRIMES_BY_BITS[bit].len()).sample(&mut rng);
             let factor = PRIMES_BY_BITS[bit][elm];
             factors.push(factor);
             product *= factor;
         }
-        assert_eq!(nbits, 64);
+        assert_eq!(n_bits, 64);
 
-        factors.sort();
+        factors.sort_unstable();
         (product, factors)
     };
 
-    let mut instring = String::new();
-    let mut outstring = String::new();
+    let mut input_string = String::new();
+    let mut output_string = String::new();
     for _ in 0..NUM_TESTS {
         let (product, factors) = rand_64();
-        instring.push_str(&(format!("{} ", product))[..]);
+        input_string.push_str(&(format!("{} ", product))[..]);
 
-        outstring.push_str(&(format!("{}:", product))[..]);
+        output_string.push_str(&(format!("{}:", product))[..]);
         for factor in factors {
-            outstring.push_str(&(format!(" {}", factor))[..]);
+            output_string.push_str(&(format!(" {}", factor))[..]);
         }
-        outstring.push_str("\n");
+        output_string.push('\n');
     }
 
-    run(instring.as_bytes(), outstring.as_bytes());
+    run(input_string.as_bytes(), output_string.as_bytes());
 }
 
 #[test]
 fn test_big_primes() {
-    let mut instring = String::new();
-    let mut outstring = String::new();
+    let mut input_string = String::new();
+    let mut output_string = String::new();
     for prime in PRIMES64 {
-        instring.push_str(&(format!("{} ", prime))[..]);
-        outstring.push_str(&(format!("{0}: {0}\n", prime))[..]);
+        input_string.push_str(&(format!("{} ", prime))[..]);
+        output_string.push_str(&(format!("{0}: {0}\n", prime))[..]);
     }
 
-    run(instring.as_bytes(), outstring.as_bytes());
+    run(input_string.as_bytes(), output_string.as_bytes());
 }
 
-fn run(instring: &[u8], outstring: &[u8]) {
-    println!("STDIN='{}'", String::from_utf8_lossy(instring));
-    println!("STDOUT(expected)='{}'", String::from_utf8_lossy(outstring));
+fn run(input_string: &[u8], output_string: &[u8]) {
+    println!("STDIN='{}'", String::from_utf8_lossy(input_string));
+    println!(
+        "STDOUT(expected)='{}'",
+        String::from_utf8_lossy(output_string)
+    );
     // now run factor
     new_ucmd!()
-        .pipe_in(instring)
+        .pipe_in(input_string)
         .run()
-        .stdout_is(String::from_utf8(outstring.to_owned()).unwrap());
+        .stdout_is(String::from_utf8(output_string.to_owned()).unwrap());
 }
 
-const PRIMES_BY_BITS: &'static [&'static [u64]] = &[
+const PRIMES_BY_BITS: &[&[u64]] = &[
     PRIMES14, PRIMES15, PRIMES16, PRIMES17, PRIMES18, PRIMES19, PRIMES20, PRIMES21, PRIMES22,
     PRIMES23, PRIMES24, PRIMES25, PRIMES26, PRIMES27, PRIMES28, PRIMES29, PRIMES30, PRIMES31,
     PRIMES32, PRIMES33, PRIMES34, PRIMES35, PRIMES36, PRIMES37, PRIMES38, PRIMES39, PRIMES40,
@@ -210,7 +228,7 @@ const PRIMES_BY_BITS: &'static [&'static [u64]] = &[
     PRIMES50,
 ];
 
-const PRIMES64: &'static [u64] = &[
+const PRIMES64: &[u64] = &[
     18446744073709551557,
     18446744073709551533,
     18446744073709551521,
@@ -262,7 +280,7 @@ const PRIMES64: &'static [u64] = &[
     18446744073709549571,
 ];
 
-const PRIMES14: &'static [u64] = &[
+const PRIMES14: &[u64] = &[
     16381, 16369, 16363, 16361, 16349, 16339, 16333, 16319, 16301, 16273, 16267, 16253, 16249,
     16231, 16229, 16223, 16217, 16193, 16189, 16187, 16183, 16141, 16139, 16127, 16111, 16103,
     16097, 16091, 16087, 16073, 16069, 16067, 16063, 16061, 16057, 16033, 16007, 16001, 15991,
@@ -274,7 +292,7 @@ const PRIMES14: &'static [u64] = &[
     15373,
 ];
 
-const PRIMES15: &'static [u64] = &[
+const PRIMES15: &[u64] = &[
     32749, 32719, 32717, 32713, 32707, 32693, 32687, 32653, 32647, 32633, 32621, 32611, 32609,
     32603, 32587, 32579, 32573, 32569, 32563, 32561, 32537, 32533, 32531, 32507, 32503, 32497,
     32491, 32479, 32467, 32443, 32441, 32429, 32423, 32413, 32411, 32401, 32381, 32377, 32371,
@@ -285,7 +303,7 @@ const PRIMES15: &'static [u64] = &[
     31847, 31817, 31799, 31793, 31771, 31769, 31751,
 ];
 
-const PRIMES16: &'static [u64] = &[
+const PRIMES16: &[u64] = &[
     65521, 65519, 65497, 65479, 65449, 65447, 65437, 65423, 65419, 65413, 65407, 65393, 65381,
     65371, 65357, 65353, 65327, 65323, 65309, 65293, 65287, 65269, 65267, 65257, 65239, 65213,
     65203, 65183, 65179, 65173, 65171, 65167, 65147, 65141, 65129, 65123, 65119, 65111, 65101,
@@ -295,7 +313,7 @@ const PRIMES16: &'static [u64] = &[
     64627, 64621, 64613, 64609, 64601, 64591, 64579, 64577, 64567, 64553,
 ];
 
-const PRIMES17: &'static [u64] = &[
+const PRIMES17: &[u64] = &[
     131071, 131063, 131059, 131041, 131023, 131011, 131009, 130987, 130981, 130973, 130969, 130957,
     130927, 130873, 130859, 130843, 130841, 130829, 130817, 130811, 130807, 130787, 130783, 130769,
     130729, 130699, 130693, 130687, 130681, 130657, 130651, 130649, 130643, 130639, 130633, 130631,
@@ -306,7 +324,7 @@ const PRIMES17: &'static [u64] = &[
     130073, 130069, 130057, 130051,
 ];
 
-const PRIMES18: &'static [u64] = &[
+const PRIMES18: &[u64] = &[
     262139, 262133, 262127, 262121, 262111, 262109, 262103, 262079, 262069, 262051, 262049, 262027,
     262007, 261983, 261977, 261973, 261971, 261959, 261917, 261887, 261881, 261847, 261823, 261799,
     261791, 261787, 261773, 261761, 261757, 261739, 261721, 261713, 261707, 261697, 261673, 261643,
@@ -316,7 +334,7 @@ const PRIMES18: &'static [u64] = &[
     261169, 261167, 261127,
 ];
 
-const PRIMES19: &'static [u64] = &[
+const PRIMES19: &[u64] = &[
     524287, 524269, 524261, 524257, 524243, 524231, 524221, 524219, 524203, 524201, 524197, 524189,
     524171, 524149, 524123, 524119, 524113, 524099, 524087, 524081, 524071, 524063, 524057, 524053,
     524047, 523997, 523987, 523969, 523949, 523937, 523927, 523907, 523903, 523877, 523867, 523847,
@@ -326,7 +344,7 @@ const PRIMES19: &'static [u64] = &[
     523403, 523387, 523357, 523351, 523349, 523333, 523307, 523297,
 ];
 
-const PRIMES20: &'static [u64] = &[
+const PRIMES20: &[u64] = &[
     1048573, 1048571, 1048559, 1048549, 1048517, 1048507, 1048447, 1048433, 1048423, 1048391,
     1048387, 1048367, 1048361, 1048357, 1048343, 1048309, 1048291, 1048273, 1048261, 1048219,
     1048217, 1048213, 1048193, 1048189, 1048139, 1048129, 1048127, 1048123, 1048063, 1048051,
@@ -336,7 +354,7 @@ const PRIMES20: &'static [u64] = &[
     1047691, 1047689, 1047671, 1047667, 1047653, 1047649, 1047647, 1047589, 1047587, 1047559,
 ];
 
-const PRIMES21: &'static [u64] = &[
+const PRIMES21: &[u64] = &[
     2097143, 2097133, 2097131, 2097097, 2097091, 2097083, 2097047, 2097041, 2097031, 2097023,
     2097013, 2096993, 2096987, 2096971, 2096959, 2096957, 2096947, 2096923, 2096911, 2096909,
     2096893, 2096881, 2096873, 2096867, 2096851, 2096837, 2096807, 2096791, 2096789, 2096777,
@@ -346,7 +364,7 @@ const PRIMES21: &'static [u64] = &[
     2096221, 2096209, 2096191, 2096183, 2096147,
 ];
 
-const PRIMES22: &'static [u64] = &[
+const PRIMES22: &[u64] = &[
     4194301, 4194287, 4194277, 4194271, 4194247, 4194217, 4194199, 4194191, 4194187, 4194181,
     4194173, 4194167, 4194143, 4194137, 4194131, 4194107, 4194103, 4194023, 4194011, 4194007,
     4193977, 4193971, 4193963, 4193957, 4193939, 4193929, 4193909, 4193869, 4193807, 4193803,
@@ -356,7 +374,7 @@ const PRIMES22: &'static [u64] = &[
     4193297,
 ];
 
-const PRIMES23: &'static [u64] = &[
+const PRIMES23: &[u64] = &[
     8388593, 8388587, 8388581, 8388571, 8388547, 8388539, 8388473, 8388461, 8388451, 8388449,
     8388439, 8388427, 8388421, 8388409, 8388377, 8388371, 8388319, 8388301, 8388287, 8388283,
     8388277, 8388239, 8388209, 8388187, 8388113, 8388109, 8388091, 8388071, 8388059, 8388019,
@@ -365,7 +383,7 @@ const PRIMES23: &'static [u64] = &[
     8387723, 8387707, 8387671, 8387611, 8387609, 8387591,
 ];
 
-const PRIMES24: &'static [u64] = &[
+const PRIMES24: &[u64] = &[
     16777213, 16777199, 16777183, 16777153, 16777141, 16777139, 16777127, 16777121, 16777099,
     16777049, 16777027, 16776989, 16776973, 16776971, 16776967, 16776961, 16776941, 16776937,
     16776931, 16776919, 16776901, 16776899, 16776869, 16776857, 16776839, 16776833, 16776817,
@@ -375,7 +393,7 @@ const PRIMES24: &'static [u64] = &[
     16776317, 16776313, 16776289, 16776217, 16776211,
 ];
 
-const PRIMES25: &'static [u64] = &[
+const PRIMES25: &[u64] = &[
     33554393, 33554383, 33554371, 33554347, 33554341, 33554317, 33554291, 33554273, 33554267,
     33554249, 33554239, 33554221, 33554201, 33554167, 33554159, 33554137, 33554123, 33554093,
     33554083, 33554077, 33554051, 33554021, 33554011, 33554009, 33553999, 33553991, 33553969,
@@ -385,7 +403,7 @@ const PRIMES25: &'static [u64] = &[
     33553519, 33553517, 33553511, 33553489, 33553463, 33553451, 33553417,
 ];
 
-const PRIMES26: &'static [u64] = &[
+const PRIMES26: &[u64] = &[
     67108859, 67108837, 67108819, 67108777, 67108763, 67108757, 67108753, 67108747, 67108739,
     67108729, 67108721, 67108709, 67108693, 67108669, 67108667, 67108661, 67108649, 67108633,
     67108597, 67108579, 67108529, 67108511, 67108507, 67108493, 67108471, 67108463, 67108453,
@@ -396,7 +414,7 @@ const PRIMES26: &'static [u64] = &[
     67107863,
 ];
 
-const PRIMES27: &'static [u64] = &[
+const PRIMES27: &[u64] = &[
     134217689, 134217649, 134217617, 134217613, 134217593, 134217541, 134217529, 134217509,
     134217497, 134217493, 134217487, 134217467, 134217439, 134217437, 134217409, 134217403,
     134217401, 134217367, 134217361, 134217353, 134217323, 134217301, 134217277, 134217257,
@@ -407,7 +425,7 @@ const PRIMES27: &'static [u64] = &[
     134216737, 134216729,
 ];
 
-const PRIMES28: &'static [u64] = &[
+const PRIMES28: &[u64] = &[
     268435399, 268435367, 268435361, 268435337, 268435331, 268435313, 268435291, 268435273,
     268435243, 268435183, 268435171, 268435157, 268435147, 268435133, 268435129, 268435121,
     268435109, 268435091, 268435067, 268435043, 268435039, 268435033, 268435019, 268435009,
@@ -418,7 +436,7 @@ const PRIMES28: &'static [u64] = &[
     268434479, 268434461,
 ];
 
-const PRIMES29: &'static [u64] = &[
+const PRIMES29: &[u64] = &[
     536870909, 536870879, 536870869, 536870849, 536870839, 536870837, 536870819, 536870813,
     536870791, 536870779, 536870767, 536870743, 536870729, 536870723, 536870717, 536870701,
     536870683, 536870657, 536870641, 536870627, 536870611, 536870603, 536870599, 536870573,
@@ -428,7 +446,7 @@ const PRIMES29: &'static [u64] = &[
     536870027, 536869999, 536869951, 536869943, 536869937, 536869919, 536869901, 536869891,
 ];
 
-const PRIMES30: &'static [u64] = &[
+const PRIMES30: &[u64] = &[
     1073741789, 1073741783, 1073741741, 1073741723, 1073741719, 1073741717, 1073741689, 1073741671,
     1073741663, 1073741651, 1073741621, 1073741567, 1073741561, 1073741527, 1073741503, 1073741477,
     1073741467, 1073741441, 1073741419, 1073741399, 1073741387, 1073741381, 1073741371, 1073741329,
@@ -437,7 +455,7 @@ const PRIMES30: &'static [u64] = &[
     1073740853, 1073740847, 1073740819, 1073740807,
 ];
 
-const PRIMES31: &'static [u64] = &[
+const PRIMES31: &[u64] = &[
     2147483647, 2147483629, 2147483587, 2147483579, 2147483563, 2147483549, 2147483543, 2147483497,
     2147483489, 2147483477, 2147483423, 2147483399, 2147483353, 2147483323, 2147483269, 2147483249,
     2147483237, 2147483179, 2147483171, 2147483137, 2147483123, 2147483077, 2147483069, 2147483059,
@@ -446,7 +464,7 @@ const PRIMES31: &'static [u64] = &[
     2147482763, 2147482739, 2147482697, 2147482693, 2147482681, 2147482663, 2147482661,
 ];
 
-const PRIMES32: &'static [u64] = &[
+const PRIMES32: &[u64] = &[
     4294967291, 4294967279, 4294967231, 4294967197, 4294967189, 4294967161, 4294967143, 4294967111,
     4294967087, 4294967029, 4294966997, 4294966981, 4294966943, 4294966927, 4294966909, 4294966877,
     4294966829, 4294966813, 4294966769, 4294966667, 4294966661, 4294966657, 4294966651, 4294966639,
@@ -454,7 +472,7 @@ const PRIMES32: &'static [u64] = &[
     4294966373, 4294966367, 4294966337, 4294966297,
 ];
 
-const PRIMES33: &'static [u64] = &[
+const PRIMES33: &[u64] = &[
     8589934583, 8589934567, 8589934543, 8589934513, 8589934487, 8589934307, 8589934291, 8589934289,
     8589934271, 8589934237, 8589934211, 8589934207, 8589934201, 8589934187, 8589934151, 8589934141,
     8589934139, 8589934117, 8589934103, 8589934099, 8589934091, 8589934069, 8589934049, 8589934027,
@@ -463,7 +481,7 @@ const PRIMES33: &'static [u64] = &[
     8589933647, 8589933641, 8589933637, 8589933631, 8589933629, 8589933619, 8589933601, 8589933581,
 ];
 
-const PRIMES34: &'static [u64] = &[
+const PRIMES34: &[u64] = &[
     17179869143,
     17179869107,
     17179869071,
@@ -514,7 +532,7 @@ const PRIMES34: &'static [u64] = &[
     17179868183,
 ];
 
-const PRIMES35: &'static [u64] = &[
+const PRIMES35: &[u64] = &[
     34359738337,
     34359738319,
     34359738307,
@@ -547,7 +565,7 @@ const PRIMES35: &'static [u64] = &[
     34359737371,
 ];
 
-const PRIMES36: &'static [u64] = &[
+const PRIMES36: &[u64] = &[
     68719476731,
     68719476719,
     68719476713,
@@ -599,7 +617,7 @@ const PRIMES36: &'static [u64] = &[
     68719475729,
 ];
 
-const PRIMES37: &'static [u64] = &[
+const PRIMES37: &[u64] = &[
     137438953447,
     137438953441,
     137438953427,
@@ -625,7 +643,7 @@ const PRIMES37: &'static [u64] = &[
     137438952491,
 ];
 
-const PRIMES38: &'static [u64] = &[
+const PRIMES38: &[u64] = &[
     274877906899,
     274877906857,
     274877906837,
@@ -665,7 +683,7 @@ const PRIMES38: &'static [u64] = &[
     274877905931,
 ];
 
-const PRIMES39: &'static [u64] = &[
+const PRIMES39: &[u64] = &[
     549755813881,
     549755813869,
     549755813821,
@@ -711,7 +729,7 @@ const PRIMES39: &'static [u64] = &[
     549755812867,
 ];
 
-const PRIMES40: &'static [u64] = &[
+const PRIMES40: &[u64] = &[
     1099511627689,
     1099511627609,
     1099511627581,
@@ -741,7 +759,7 @@ const PRIMES40: &'static [u64] = &[
     1099511626771,
 ];
 
-const PRIMES41: &'static [u64] = &[
+const PRIMES41: &[u64] = &[
     2199023255531,
     2199023255521,
     2199023255497,
@@ -780,7 +798,7 @@ const PRIMES41: &'static [u64] = &[
     2199023254567,
 ];
 
-const PRIMES42: &'static [u64] = &[
+const PRIMES42: &[u64] = &[
     4398046511093,
     4398046511087,
     4398046511071,
@@ -820,7 +838,7 @@ const PRIMES42: &'static [u64] = &[
     4398046510093,
 ];
 
-const PRIMES43: &'static [u64] = &[
+const PRIMES43: &[u64] = &[
     8796093022151,
     8796093022141,
     8796093022091,
@@ -855,7 +873,7 @@ const PRIMES43: &'static [u64] = &[
     8796093021269,
 ];
 
-const PRIMES44: &'static [u64] = &[
+const PRIMES44: &[u64] = &[
     17592186044399,
     17592186044299,
     17592186044297,
@@ -888,7 +906,7 @@ const PRIMES44: &'static [u64] = &[
     17592186043409,
 ];
 
-const PRIMES45: &'static [u64] = &[
+const PRIMES45: &[u64] = &[
     35184372088777,
     35184372088763,
     35184372088751,
@@ -929,7 +947,7 @@ const PRIMES45: &'static [u64] = &[
     35184372087869,
 ];
 
-const PRIMES46: &'static [u64] = &[
+const PRIMES46: &[u64] = &[
     70368744177643,
     70368744177607,
     70368744177601,
@@ -964,7 +982,7 @@ const PRIMES46: &'static [u64] = &[
     70368744176711,
 ];
 
-const PRIMES47: &'static [u64] = &[
+const PRIMES47: &[u64] = &[
     140737488355213,
     140737488355201,
     140737488355181,
@@ -986,7 +1004,7 @@ const PRIMES47: &'static [u64] = &[
     140737488354329,
 ];
 
-const PRIMES48: &'static [u64] = &[
+const PRIMES48: &[u64] = &[
     281474976710597,
     281474976710591,
     281474976710567,
@@ -1019,7 +1037,7 @@ const PRIMES48: &'static [u64] = &[
     281474976709637,
 ];
 
-const PRIMES49: &'static [u64] = &[
+const PRIMES49: &[u64] = &[
     562949953421231,
     562949953421201,
     562949953421189,
@@ -1053,7 +1071,7 @@ const PRIMES49: &'static [u64] = &[
     562949953420297,
 ];
 
-const PRIMES50: &'static [u64] = &[
+const PRIMES50: &[u64] = &[
     1125899906842597,
     1125899906842589,
     1125899906842573,
