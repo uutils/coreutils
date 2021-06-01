@@ -108,13 +108,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(
             Arg::with_name(options::BSD_COMPATIBLE)
                 .short(options::BSD_COMPATIBLE)
-                .help("use the BSD compatible algorithm (default)"),
+                .help("use the BSD sum algorithm, use 1K blocks (default)"),
         )
         .arg(
             Arg::with_name(options::SYSTEM_V_COMPATIBLE)
                 .short("s")
                 .long(options::SYSTEM_V_COMPATIBLE)
-                .help("use the BSD compatible algorithm (default)"),
+                .help("use System V sum algorithm, use 512 bytes blocks"),
         )
         .get_matches_from(args);
 
