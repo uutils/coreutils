@@ -1261,13 +1261,15 @@ fn copy_helper(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> 
 fn copy_on_write_linux(source: &Path, dest: &Path, mode: ReflinkMode) -> CopyResult<()> {
     debug_assert!(mode != ReflinkMode::Never);
 
-    let src_file = File::open(source).unwrap().into_raw_fd();
+    let src_file = File::open(source)
+        .context(&*context_for(source, dest))?
+        .into_raw_fd();
     let dst_file = OpenOptions::new()
         .write(true)
         .truncate(false)
         .create(true)
         .open(dest)
-        .unwrap()
+        .context(&*context_for(source, dest))?
         .into_raw_fd();
     match mode {
         ReflinkMode::Always => unsafe {

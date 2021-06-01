@@ -7,6 +7,8 @@ use std::fs::set_permissions;
 #[cfg(not(windows))]
 use std::os::unix::fs;
 
+#[cfg(target_os = "linux")]
+use std::os::unix::fs::PermissionsExt;
 #[cfg(windows)]
 use std::os::windows::fs::symlink_file;
 
@@ -1256,4 +1258,21 @@ fn test_cp_reflink_bad() {
         .arg(TEST_EXISTING_FILE)
         .fails()
         .stderr_contains("invalid argument");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_reflink_insufficient_permission() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.make_file("unreadable")
+        .set_permissions(PermissionsExt::from_mode(0o000))
+        .unwrap();
+
+    ucmd.arg("-r")
+        .arg("--reflink=auto")
+        .arg("unreadable")
+        .arg(TEST_EXISTING_FILE)
+        .fails()
+        .stderr_only("cp: 'unreadable' -> 'existing_file.txt': Permission denied (os error 13)");
 }
