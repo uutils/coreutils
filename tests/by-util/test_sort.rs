@@ -21,9 +21,7 @@ fn test_helper(file_name: &str, possible_args: &[&str]) {
 
 #[test]
 fn test_buffer_sizes() {
-    let buffer_sizes = [
-        "0", "50K", "50k", "1M", "100M", "1000G", "10T", "500E", "1Y",
-    ];
+    let buffer_sizes = ["0", "50K", "50k", "1M", "100M"];
     for buffer_size in &buffer_sizes {
         new_ucmd!()
             .arg("-n")
@@ -32,6 +30,20 @@ fn test_buffer_sizes() {
             .arg("ext_sort.txt")
             .succeeds()
             .stdout_is_fixture("ext_sort.expected");
+
+        #[cfg(not(target_pointer_width = "32"))]
+        {
+            let buffer_sizes = ["1000G", "10T"];
+            for buffer_size in &buffer_sizes {
+                new_ucmd!()
+                    .arg("-n")
+                    .arg("-S")
+                    .arg(buffer_size)
+                    .arg("ext_sort.txt")
+                    .succeeds()
+                    .stdout_is_fixture("ext_sort.expected");
+            }
+        }
     }
 }
 
@@ -43,10 +55,35 @@ fn test_invalid_buffer_size() {
             .arg("-S")
             .arg(invalid_buffer_size)
             .fails()
+            .code_is(2)
             .stderr_only(format!(
-                "sort: failed to parse buffer size `{}`: invalid digit found in string",
+                "sort: invalid -S argument '{}'",
                 invalid_buffer_size
             ));
+    }
+    #[cfg(not(target_pointer_width = "128"))]
+    new_ucmd!()
+        .arg("-n")
+        .arg("-S")
+        .arg("1Y")
+        .arg("ext_sort.txt")
+        .fails()
+        .code_is(2)
+        .stderr_only("sort: -S argument '1Y' too large");
+
+    #[cfg(target_pointer_width = "32")]
+    {
+        let buffer_sizes = ["1000G", "10T"];
+        for buffer_size in &buffer_sizes {
+            new_ucmd!()
+                .arg("-n")
+                .arg("-S")
+                .arg(buffer_size)
+                .arg("ext_sort.txt")
+                .fails()
+                .code_is(2)
+                .stderr_only(format!("sort: -S argument '{}' too large", buffer_size));
+        }
     }
 }
 
