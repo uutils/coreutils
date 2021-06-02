@@ -1893,6 +1893,7 @@ dependencies = [
 name = "uu_dircolors"
 version = "0.0.6"
 dependencies = [
+ "clap",
  "glob 0.3.0",
  "uucore",
  "uucore_procs",

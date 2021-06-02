@@ -1,6 +1,7 @@
 // This file is part of the uutils coreutils package.
 //
 // (c) Jian Zeng <anonymousknight96@gmail.com>
+// (c) Mitchell Mebane <mitchell.mebane@gmail.com>
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
@@ -14,6 +15,17 @@ use std::borrow::Borrow;
 use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
+
+use clap::{App, Arg, crate_version};
+
+mod options {
+    pub const SH: &str = "sh";
+    pub const BOURNE_SHELL: &str = "bourne-shell";
+    pub const CSH: &str = "csh";
+    pub const C_SHELL: &str = "c-shell";
+    pub const PRINT_DATABASE: &str = "print-database";
+    pub const FILE: &str = "FILE";
+}
 
 static SYNTAX: &str = "[OPTION]... [FILE]";
 static SUMMARY: &str = "Output commands to set the LS_COLORS environment variable.";
@@ -52,28 +64,80 @@ pub fn guess_syntax() -> OutputFmt {
     }
 }
 
+fn get_usage() -> String {
+    format!(
+        "{0} {1}",
+        executable!(),
+        SYNTAX
+    )
+}
+
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
-        .optflag("b", "sh", "output Bourne shell code to set LS_COLORS")
-        .optflag(
-            "",
-            "bourne-shell",
-            "output Bourne shell code to set LS_COLORS",
-        )
-        .optflag("c", "csh", "output C shell code to set LS_COLORS")
-        .optflag("", "c-shell", "output C shell code to set LS_COLORS")
-        .optflag("p", "print-database", "print the byte counts")
-        .parse(args);
+    let usage = get_usage();
 
-    if (matches.opt_present("csh")
-        || matches.opt_present("c-shell")
-        || matches.opt_present("sh")
-        || matches.opt_present("bourne-shell"))
-        && matches.opt_present("print-database")
+    /* Clap has .visible_alias, but it generates help like this
+     *     -b, --sh                output Bourne shell code to set LS_COLORS [aliases: bourne-shell]
+     * whereas we want help like this
+     *     -b, --sh                output Bourne shell code to set LS_COLORS
+     *         --bourne-shell      output Bourne shell code to set LS_COLORS
+     * (or preferably like the original, but that doesn't seem possible with clap:)
+     *     -b, --sh, --bourne-shell    output Bourne shell code to set LS_COLORS
+     * therefore, command aliases are defined manually as multiple commands
+     */
+    let matches = App::new(executable!())
+        .version(crate_version!())
+        .about(SUMMARY)
+        .usage(&usage[..])
+        .after_help(LONG_HELP)
+        .arg(Arg::with_name(options::SH)
+            .long("sh")
+            .short("b")
+            .help("output Bourne shell code to set LS_COLORS")
+            .display_order(1)
+        )
+        .arg(Arg::with_name(options::BOURNE_SHELL)
+            .long("bourne-shell")
+            .help("output Bourne shell code to set LS_COLORS")
+            .display_order(2)
+        )
+        .arg(Arg::with_name(options::CSH)
+            .long("csh")
+            .short("c")
+            .help("output C shell code to set LS_COLORS")
+            .display_order(3)
+        )
+        .arg(Arg::with_name(options::C_SHELL)
+            .long("c-shell")
+            .help("output C shell code to set LS_COLORS")
+            .display_order(4)
+        )
+        .arg(Arg::with_name(options::PRINT_DATABASE)
+            .long("print-database")
+            .short("p")
+            .help("print the byte counts")
+            .display_order(5)
+        )
+        .arg(Arg::with_name(options::FILE)
+                .hidden(true)
+                .multiple(true)
+        )
+        .get_matches_from(&args);
+
+    let files =  matches.values_of(options::FILE)
+        .map_or(vec![], |file_values| file_values.collect());
+
+    // clap provides .conflicts_with / .conflicts_with_all, but we want to
+    // manually handle conflicts so we can match the output of GNU coreutils
+    if (matches.is_present(options::CSH)
+            || matches.is_present(options::C_SHELL)
+            || matches.is_present(options::SH)
+            || matches.is_present(options::BOURNE_SHELL)
+        )
+        && matches.is_present(options::PRINT_DATABASE)
     {
         show_usage_error!(
             "the options to output dircolors' internal database and\nto select a shell \
@@ -82,12 +146,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         return 1;
     }
 
-    if matches.opt_present("print-database") {
-        if !matches.free.is_empty() {
+    if matches.is_present(options::PRINT_DATABASE) {
+        if !files.is_empty() {
             show_usage_error!(
                 "extra operand ‘{}’\nfile operands cannot be combined with \
                  --print-database (-p)",
-                matches.free[0]
+                files[0]
             );
             return 1;
         }
@@ -96,9 +160,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     let mut out_format = OutputFmt::Unknown;
-    if matches.opt_present("csh") || matches.opt_present("c-shell") {
+    if matches.is_present(options::CSH) || matches.is_present(options::C_SHELL) {
         out_format = OutputFmt::CShell;
-    } else if matches.opt_present("sh") || matches.opt_present("bourne-shell") {
+    } else if matches.is_present(options::SH) || matches.is_present(options::BOURNE_SHELL) {
         out_format = OutputFmt::Shell;
     }
 
@@ -113,24 +177,24 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     let result;
-    if matches.free.is_empty() {
+    if files.is_empty() {
         result = parse(INTERNAL_DB.lines(), out_format, "")
     } else {
-        if matches.free.len() > 1 {
-            show_usage_error!("extra operand ‘{}’", matches.free[1]);
+        if files.len() > 1 {
+            show_usage_error!("extra operand ‘{}’", files[1]);
             return 1;
         }
-        match File::open(matches.free[0].as_str()) {
+        match File::open(files[0]) {
             Ok(f) => {
                 let fin = BufReader::new(f);
                 result = parse(
                     fin.lines().filter_map(Result::ok),
                     out_format,
-                    matches.free[0].as_str(),
+                    files[0],
                 )
             }
             Err(e) => {
-                show_error!("{}: {}", matches.free[0], e);
+                show_error!("{}: {}", files[0], e);
                 return 1;
             }
         }
