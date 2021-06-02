@@ -27,7 +27,6 @@ use uucore::fs::{canonicalize, CanonicalizeMode};
 pub struct Settings {
     overwrite: OverwriteMode,
     backup: BackupMode,
-    force: bool,
     suffix: String,
     symbolic: bool,
     relative: bool,
@@ -244,7 +243,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let settings = Settings {
         overwrite: overwrite_mode,
         backup: backup_mode,
-        force: matches.is_present(OPT_FORCE),
         suffix: backup_suffix.to_string(),
         symbolic: matches.is_present(OPT_SYMBOLIC),
         relative: matches.is_present(OPT_RELATIVE),
@@ -311,47 +309,48 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
 
     let mut all_successful = true;
     for srcpath in files.iter() {
-        let targetpath = if settings.no_dereference && settings.force {
-            // In that case, we don't want to do link resolution
-            // We need to clean the target
-            if is_symlink(target_dir) {
-                if target_dir.is_file() {
-                    if let Err(e) = fs::remove_file(target_dir) {
-                        show_error!("Could not update {}: {}", target_dir.display(), e)
-                    };
-                }
-                if target_dir.is_dir() {
-                    // Not sure why but on Windows, the symlink can be
-                    // considered as a dir
-                    // See test_ln::test_symlink_no_deref_dir
-                    if let Err(e) = fs::remove_dir(target_dir) {
-                        show_error!("Could not update {}: {}", target_dir.display(), e)
-                    };
-                }
-            }
-            target_dir.to_path_buf()
-        } else {
-            match srcpath.as_os_str().to_str() {
-                Some(name) => {
-                    match Path::new(name).file_name() {
-                        Some(basename) => target_dir.join(basename),
-                        // This can be None only for "." or "..". Trying
-                        // to create a link with such name will fail with
-                        // EEXIST, which agrees with the behavior of GNU
-                        // coreutils.
-                        None => target_dir.join(name),
+        let targetpath =
+            if settings.no_dereference && matches!(settings.overwrite, OverwriteMode::Force) {
+                // In that case, we don't want to do link resolution
+                // We need to clean the target
+                if is_symlink(target_dir) {
+                    if target_dir.is_file() {
+                        if let Err(e) = fs::remove_file(target_dir) {
+                            show_error!("Could not update {}: {}", target_dir.display(), e)
+                        };
+                    }
+                    if target_dir.is_dir() {
+                        // Not sure why but on Windows, the symlink can be
+                        // considered as a dir
+                        // See test_ln::test_symlink_no_deref_dir
+                        if let Err(e) = fs::remove_dir(target_dir) {
+                            show_error!("Could not update {}: {}", target_dir.display(), e)
+                        };
                     }
                 }
-                None => {
-                    show_error!(
-                        "cannot stat '{}': No such file or directory",
-                        srcpath.display()
-                    );
-                    all_successful = false;
-                    continue;
+                target_dir.to_path_buf()
+            } else {
+                match srcpath.as_os_str().to_str() {
+                    Some(name) => {
+                        match Path::new(name).file_name() {
+                            Some(basename) => target_dir.join(basename),
+                            // This can be None only for "." or "..". Trying
+                            // to create a link with such name will fail with
+                            // EEXIST, which agrees with the behavior of GNU
+                            // coreutils.
+                            None => target_dir.join(name),
+                        }
+                    }
+                    None => {
+                        show_error!(
+                            "cannot stat '{}': No such file or directory",
+                            srcpath.display()
+                        );
+                        all_successful = false;
+                        continue;
+                    }
                 }
-            }
-        };
+            };
 
         if let Err(e) = link(srcpath, &targetpath, settings) {
             show_error!(
@@ -422,7 +421,8 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> Result<()> {
         }
     }
 
-    if settings.no_dereference && settings.force && dst.exists() {
+    if settings.no_dereference && matches!(settings.overwrite, OverwriteMode::Force) && dst.exists()
+    {
         fs::remove_file(dst)?;
     }
 
