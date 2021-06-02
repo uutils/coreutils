@@ -61,9 +61,8 @@ pub mod options {
     pub static NO_CREATE: &str = "no-create";
     pub static REFERENCE: &str = "reference";
     pub static SIZE: &str = "size";
+    pub static ARG_FILES: &str = "files";
 }
-
-static ARG_FILES: &str = "files";
 
 fn get_usage() -> String {
     format!("{0} [OPTION]... [FILE]...", executable!())
@@ -116,21 +115,23 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(options::REFERENCE)
             .short("r")
             .long(options::REFERENCE)
+            .required_unless(options::SIZE)
             .help("base the size of each file on the size of RFILE")
             .value_name("RFILE")
         )
         .arg(
             Arg::with_name(options::SIZE)
             .short("s")
-            .long("size")
+            .long(options::SIZE)
+            .required_unless(options::REFERENCE)
             .help("set or adjust the size of each file according to SIZE, which is in bytes unless --io-blocks is specified")
             .value_name("SIZE")
         )
-        .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true).min_values(1))
+        .arg(Arg::with_name(options::ARG_FILES).value_name("FILE").multiple(true).takes_value(true).required(true).min_values(1))
         .get_matches_from(args);
 
     let files: Vec<String> = matches
-        .values_of(ARG_FILES)
+        .values_of(options::ARG_FILES)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
@@ -152,8 +153,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     crash!(
                         1,
                         "cannot stat '{}': No such file or directory",
-                        reference.unwrap()
-                    );
+                        reference.unwrap_or("".to_string())
+                    ); // TODO: fix '--no-create' see test_reference and test_truncate_bytes_size
                 }
                 _ => crash!(1, "{}", e.to_string()),
             }
@@ -209,8 +210,7 @@ fn truncate_reference_and_size(
             }
             _ => m,
         },
-        // TODO: handle errors ParseFailure(String)/SizeTooBig(String)
-        Err(_) => crash!(1, "Invalid number: ‘{}’", size_string),
+        Err(e) => crash!(1, "Invalid number: {}", e.to_string()),
     };
     let fsize = usize::try_from(metadata(rfilename)?.len()).unwrap();
     let tsize = mode.to_size(fsize);
@@ -265,7 +265,7 @@ fn truncate_size_only(
 ) -> std::io::Result<()> {
     let mode = match parse_mode_and_size(size_string) {
         Ok(m) => m,
-        Err(_) => crash!(1, "Invalid number: ‘{}’", size_string),
+        Err(e) => crash!(1, "Invalid number: {}", e.to_string()),
     };
     for filename in &filenames {
         let fsize = usize::try_from(metadata(filename)?.len()).unwrap();
@@ -294,7 +294,7 @@ fn truncate(
         }
         (Some(rfilename), None) => truncate_reference_file_only(&rfilename, filenames, create),
         (None, Some(size_string)) => truncate_size_only(&size_string, filenames, create),
-        (None, None) => crash!(1, "you must specify either --reference or --size"),
+        (None, None) => crash!(1, "you must specify either --reference or --size"), // this case cannot happen anymore because it's handled by clap
     }
 }
 

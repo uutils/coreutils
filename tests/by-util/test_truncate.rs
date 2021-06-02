@@ -48,7 +48,7 @@ fn test_reference() {
     // manpage: "A FILE argument that does not exist is created."
     // TODO: 'truncate' does not create the file in this case,
     //        but should because '--no-create' wasn't specified.
-    at.touch(FILE1); // TODO: remove this when fixed
+    at.touch(FILE1); // TODO: remove this when 'no-create' is fixed
     scene.ucmd().arg("-s").arg("+5KB").arg(FILE1).succeeds();
 
     scene
@@ -241,10 +241,17 @@ fn test_size_and_reference() {
 }
 
 #[test]
+fn test_error_filename_only() {
+    // truncate: you must specify either ‘--size’ or ‘--reference’
+    new_ucmd!().args(&["file"]).fails().stderr_contains(
+        "error: The following required arguments were not provided:
+    --reference <RFILE>
+    --size <SIZE>",
+    );
+}
+
+#[test]
 fn test_invalid_numbers() {
-    // TODO For compatibility with GNU, `truncate -s 0X` should cause
-    // the same error as `truncate -s 0X file`, but currently it returns
-    // a different error.
     new_ucmd!()
         .args(&["-s", "0X", "file"])
         .fails()
@@ -273,4 +280,37 @@ fn test_reference_with_size_file_not_found() {
         .args(&["-r", "a", "-s", "+1", "b"])
         .fails()
         .stderr_contains("cannot stat 'a': No such file or directory");
+}
+
+#[test]
+fn test_truncate_bytes_size() {
+    // TODO: this should succeed without error, uncomment when '--no-create' is fixed
+    // new_ucmd!()
+    //     .args(&["--no-create", "--size", "K", "file"])
+    //     .succeeds();
+    new_ucmd!()
+        .args(&["--size", "1024R", "file"])
+        .fails()
+        .code_is(1)
+        .stderr_only("truncate: Invalid number: ‘1024R’");
+    #[cfg(not(target_pointer_width = "128"))]
+    new_ucmd!()
+        .args(&["--size", "1Y", "file"])
+        .fails()
+        .code_is(1)
+        .stderr_only("truncate: Invalid number: ‘1Y’: Value too large for defined data type");
+    #[cfg(target_pointer_width = "32")]
+    {
+        let sizes = ["1000G", "10T"];
+        for size in &sizes {
+            new_ucmd!()
+                .args(&["--size", size, "file"])
+                .fails()
+                .code_is(1)
+                .stderr_only(format!(
+                    "truncate: Invalid number: ‘{}’: Value too large for defined data type",
+                    size
+                ));
+        }
+    }
 }
