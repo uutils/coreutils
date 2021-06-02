@@ -29,6 +29,9 @@ use crossterm::{
     terminal,
 };
 
+use unicode_segmentation::UnicodeSegmentation;
+use unicode_width::UnicodeWidthStr;
+
 pub mod options {
     pub const SILENT: &str = "silent";
     pub const LOGICAL: &str = "logical";
@@ -313,23 +316,30 @@ fn break_buff(buff: &str, cols: usize) -> Vec<String> {
     lines
 }
 
-fn break_line(mut line: &str, cols: usize) -> Vec<String> {
-    let breaks = (line.len() / cols).saturating_add(1);
-    let mut lines = Vec::with_capacity(breaks);
-    // TODO: Use unicode width instead of the length in bytes.
-    if line.len() < cols {
+fn break_line(line: &str, cols: usize) -> Vec<String> {
+    let width = UnicodeWidthStr::width(line);
+    let mut lines = Vec::new();
+    if width < cols {
         lines.push(line.to_string());
         return lines;
     }
 
-    for _ in 1..=breaks {
-        let (line1, line2) = line.split_at(cols);
-        lines.push(line1.to_string());
-        if line2.len() < cols {
-            lines.push(line2.to_string());
-            break;
+    let gr_idx = UnicodeSegmentation::grapheme_indices(line, true);
+    let mut last_index = 0;
+    let mut total_width = 0;
+    for (index, grapheme) in gr_idx {
+        let width = UnicodeWidthStr::width(grapheme);
+        total_width += width;
+
+        if total_width > cols {
+            lines.push(line[last_index..index].to_string());
+            last_index = index;
+            total_width = width;
         }
-        line = line2;
+    }
+
+    if last_index != line.len() {
+        lines.push(line[last_index..].to_string());
     }
     lines
 }
@@ -363,6 +373,7 @@ fn make_prompt_and_flush(stdout: &mut Stdout, lower_mark: u16, lc: u16) {
 #[cfg(test)]
 mod tests {
     use super::{break_line, calc_range};
+    use unicode_width::UnicodeWidthStr;
 
     // It is good to test the above functions
     #[test]
@@ -379,11 +390,12 @@ mod tests {
         }
 
         let lines = break_line(&test_string, 80);
+        let widths: Vec<usize> = lines
+            .iter()
+            .map(|s| UnicodeWidthStr::width(&s[..]))
+            .collect();
 
-        assert_eq!(
-            (80, 80, 40),
-            (lines[0].len(), lines[1].len(), lines[2].len())
-        );
+        assert_eq!((80, 80, 40), (widths[0], widths[1], widths[2]));
     }
 
     #[test]
@@ -396,5 +408,23 @@ mod tests {
         let lines = break_line(&test_string, 80);
 
         assert_eq!(20, lines[0].len());
+    }
+
+    #[test]
+    fn test_break_line_zwj() {
+        let mut test_string = String::with_capacity(1100);
+        for _ in 0..20 {
+            test_string.push_str("👩🏻‍🔬");
+        }
+
+        let lines = break_line(&test_string, 80);
+
+        let widths: Vec<usize> = lines
+            .iter()
+            .map(|s| UnicodeWidthStr::width(&s[..]))
+            .collect();
+
+        // Each 👩🏻‍🔬 is 6 character width it break line to the closest number to 80 => 6 * 13 = 78
+        assert_eq!((78, 42), (widths[0], widths[1]));
     }
 }

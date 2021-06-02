@@ -2204,6 +2204,8 @@ dependencies = [
  "nix 0.13.1",
  "redox_syscall 0.1.57",
  "redox_termios",
+ "unicode-segmentation",
+ "unicode-width",
  "uucore",
  "uucore_procs",
 ]
