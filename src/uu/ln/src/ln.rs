@@ -184,7 +184,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(OPT_RELATIVE)
                 .short("r")
                 .long(OPT_RELATIVE)
-                .help("create symbolic links relative to link location"),
+                .help("create symbolic links relative to link location")
+                .requires(OPT_SYMBOLIC),
         )
         .arg(
             Arg::with_name(OPT_VERBOSE)
