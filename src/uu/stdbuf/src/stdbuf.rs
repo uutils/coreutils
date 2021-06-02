@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, AppSettings, Arg, ArgMatches};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use std::convert::TryFrom;
 use std::fs::File;
 use std::io::{self, Write};
@@ -21,7 +21,6 @@ use tempfile::tempdir;
 use tempfile::TempDir;
 use uucore::InvalidEncodingHandling;
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str =
     "Run COMMAND, with modified buffering operations for its standard streams.\n\n\
      Mandatory arguments to long options are mandatory for short options too.";
@@ -193,7 +192,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .after_help(LONG_HELP)

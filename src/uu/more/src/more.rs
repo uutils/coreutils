@@ -21,7 +21,7 @@ use std::{
 #[cfg(all(unix, not(target_os = "fuchsia")))]
 extern crate nix;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
     execute, queue,
@@ -49,7 +49,7 @@ const MULTI_FILE_TOP_PROMPT: &str = "::::::::::::::\n{}\n::::::::::::::\n";
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let matches = App::new(executable!())
         .about("A file perusal filter for CRT viewing.")
-        .version(env!("CARGO_PKG_VERSION"))
+        .version(crate_version!())
         // The commented arguments below are unimplemented:
         /*
         .arg(

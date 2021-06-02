@@ -25,7 +25,7 @@ use winapi::um::fileapi::GetFileInformationByHandle;
 
 use std::borrow::Cow;
 
-use clap::{App, Arg, ArgMatches};
+use clap::{crate_version, App, Arg, ArgMatches};
 use filetime::FileTime;
 use quick_error::ResultExt;
 use std::collections::HashSet;
@@ -213,7 +213,6 @@ pub struct Options {
     verbose: bool,
 }
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.";
 static LONG_HELP: &str = "";
 static EXIT_OK: i32 = 0;
@@ -294,7 +293,7 @@ static DEFAULT_ATTRIBUTES: &[Attribute] = &[
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .after_help(&*format!("{}\n{}", LONG_HELP, backup_control::BACKUP_CONTROL_LONG_HELP))
         .usage(&usage[..])

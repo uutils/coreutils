@@ -8,13 +8,12 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::env;
 use std::io;
 use std::path::{Path, PathBuf};
 
 static ABOUT: &str = "Display the full filename of the current working directory.";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static OPT_LOGICAL: &str = "logical";
 static OPT_PHYSICAL: &str = "physical";
 
@@ -41,7 +40,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .arg(

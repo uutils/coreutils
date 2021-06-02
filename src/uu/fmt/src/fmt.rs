@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::cmp;
 use std::fs::File;
 use std::io::{stdin, stdout, Write};
@@ -32,7 +32,6 @@ mod linebreak;
 mod parasplit;
 
 static ABOUT: &str = "Reformat paragraphs from input files (or stdin) to stdout.";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static MAX_WIDTH: usize = 2500;
 
 static OPT_CROWN_MARGIN: &str = "crown-margin";
@@ -79,7 +78,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .arg(

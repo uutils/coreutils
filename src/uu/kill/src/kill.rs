@@ -10,13 +10,12 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use libc::{c_int, pid_t};
 use std::io::Error;
 use uucore::signals::ALL_SIGNALS;
 use uucore::InvalidEncodingHandling;
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Send signal to processes or list information about signals.";
 
 static EXIT_OK: i32 = 0;
@@ -45,7 +44,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let usage = format!("{} [OPTIONS]... PID...", executable!());
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .arg(

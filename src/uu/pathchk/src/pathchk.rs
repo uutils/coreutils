@@ -12,7 +12,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::fs;
 use std::io::{ErrorKind, Write};
 use uucore::InvalidEncodingHandling;
@@ -26,7 +26,6 @@ enum Mode {
 }
 
 static NAME: &str = "pathchk";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Check whether file names are valid or portable";
 
 mod options {
@@ -51,7 +50,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .accept_any();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .arg(

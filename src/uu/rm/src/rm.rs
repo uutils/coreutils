@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use remove_dir_all::remove_dir_all;
 use std::collections::VecDeque;
 use std::fs;
@@ -38,7 +38,6 @@ struct Options {
 }
 
 static ABOUT: &str = "Remove (unlink) the FILE(s)";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static OPT_DIR: &str = "dir";
 static OPT_INTERACTIVE: &str = "interactive";
 static OPT_FORCE: &str = "force";
@@ -79,7 +78,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let long_usage = get_long_usage();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .after_help(&long_usage[..])

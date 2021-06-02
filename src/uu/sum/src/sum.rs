@@ -10,14 +10,13 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::fs::File;
 use std::io::{stdin, Read, Result};
 use std::path::Path;
 use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "sum";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static USAGE: &str =
     "[OPTION]... [FILE]...\nWith no FILE, or when  FILE is -, read standard input.";
 static SUMMARY: &str = "Checksum and count the blocks in a file.";
@@ -101,7 +100,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let matches = App::new(executable!())
         .name(NAME)
-        .version(VERSION)
+        .version(crate_version!())
         .usage(USAGE)
         .about(SUMMARY)
         .arg(Arg::with_name(options::FILE).multiple(true).hidden(true))

@@ -8,12 +8,11 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::path::Path;
 use uucore::InvalidEncodingHandling;
 
 static ABOUT: &str = "strip last component from file name";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 mod options {
     pub const ZERO: &str = "zero";
@@ -43,7 +42,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .about(ABOUT)
         .usage(&usage[..])
         .after_help(&after_help[..])
-        .version(VERSION)
+        .version(crate_version!())
         .arg(
             Arg::with_name(options::ZERO)
                 .long(options::ZERO)

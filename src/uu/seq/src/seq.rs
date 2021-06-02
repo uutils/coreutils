@@ -6,7 +6,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, AppSettings, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use num_bigint::BigInt;
 use num_traits::One;
 use num_traits::Zero;
@@ -15,7 +15,6 @@ use std::cmp;
 use std::io::{stdout, Write};
 use std::str::FromStr;
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Display numbers from FIRST to LAST, in steps of INCREMENT.";
 static OPT_SEPARATOR: &str = "separator";
 static OPT_TERMINATOR: &str = "terminator";
@@ -90,7 +89,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let matches = App::new(executable!())
         .setting(AppSettings::AllowLeadingHyphen)
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .arg(

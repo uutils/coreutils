@@ -8,7 +8,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use retain_mut::RetainMut;
 use std::fs::OpenOptions;
 use std::io::{copy, sink, stdin, stdout, Error, ErrorKind, Read, Result, Write};
@@ -17,7 +17,6 @@ use std::path::{Path, PathBuf};
 #[cfg(unix)]
 use uucore::libc;
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Copy standard input to each FILE, and also to standard output.";
 
 mod options {
@@ -41,7 +40,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .after_help("If a FILE is -, it refers to a file named - .")

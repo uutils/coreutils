@@ -10,11 +10,10 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::path::{is_separator, PathBuf};
 use uucore::InvalidEncodingHandling;
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static SUMMARY: &str = "Print NAME with any leading directory components removed
 If specified, also remove a trailing SUFFIX";
 
@@ -42,7 +41,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     // Argument parsing
     //
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(SUMMARY)
         .usage(&usage[..])
         .arg(

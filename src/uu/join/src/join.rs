@@ -10,13 +10,12 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::cmp::{min, Ordering};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Lines, Stdin};
 
 static NAME: &str = "join";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Copy, Clone, PartialEq)]
 enum FileNum {
@@ -444,7 +443,7 @@ impl<'a> State<'a> {
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let matches = App::new(NAME)
-        .version(VERSION)
+        .version(crate_version!())
         .about(
             "For each pair of input lines with identical join fields, write a line to
 standard output. The default join field is the first, delimited by blanks.

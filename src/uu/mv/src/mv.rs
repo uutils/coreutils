@@ -11,7 +11,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg, ArgMatches};
+use clap::{crate_version, App, Arg, ArgMatches};
 use std::env;
 use std::fs;
 use std::io::{self, stdin};
@@ -42,7 +42,6 @@ pub enum OverwriteMode {
 }
 
 static ABOUT: &str = "Move SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static LONG_HELP: &str = "";
 
 static OPT_BACKUP: &str = "backup";
@@ -72,7 +71,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .after_help(&*format!("{}\n{}", LONG_HELP, backup_control::BACKUP_CONTROL_LONG_HELP))
         .usage(&usage[..])

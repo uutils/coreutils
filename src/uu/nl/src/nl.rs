@@ -11,7 +11,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::iter::repeat;
@@ -21,7 +21,6 @@ use uucore::InvalidEncodingHandling;
 mod helper;
 
 static NAME: &str = "nl";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static USAGE: &str = "nl [OPTION]... [FILE]...";
 // A regular expression matching everything.
 
@@ -91,7 +90,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let matches = App::new(executable!())
         .name(NAME)
-        .version(VERSION)
+        .version(crate_version!())
         .usage(USAGE)
         .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
         .arg(

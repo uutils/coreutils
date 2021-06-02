@@ -14,7 +14,7 @@ extern crate uucore;
 use chrono::{DateTime, FixedOffset, Local, Offset, Utc};
 #[cfg(windows)]
 use chrono::{Datelike, Timelike};
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 #[cfg(all(unix, not(target_os = "macos")))]
 use libc::{clock_settime, timespec, CLOCK_REALTIME};
 use std::fs::File;
@@ -37,7 +37,6 @@ const SECOND: &str = "second";
 const NS: &str = "ns";
 
 const NAME: &str = "date";
-const VERSION: &str = env!("CARGO_PKG_VERSION");
 const ABOUT: &str = "print or set the system date and time";
 
 const OPT_DATE: &str = "date";
@@ -144,7 +143,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         NAME
     );
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&syntax[..])
         .arg(

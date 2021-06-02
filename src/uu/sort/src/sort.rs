@@ -23,7 +23,7 @@ mod ext_sort;
 mod merge;
 mod numeric_str_cmp;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
@@ -47,7 +47,6 @@ use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "sort";
 static ABOUT: &str = "Display sorted concatenation of all FILE(s).";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const LONG_HELP_KEYS: &str = "The key format is FIELD[.CHAR][OPTIONS][,FIELD[.CHAR]][OPTIONS].
 
@@ -874,13 +873,13 @@ impl FieldSelector {
 
 fn get_usage() -> String {
     format!(
-        "{0} {1}
+        "{0}
 Usage:
  {0} [OPTION]... [FILE]...
 Write the sorted concatenation of all FILE(s) to standard output.
 Mandatory arguments for long options are mandatory for short options too.
 With no FILE, or when FILE is -, read standard input.",
-        NAME, VERSION
+        NAME
     )
 }
 
@@ -902,7 +901,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let mut settings: GlobalSettings = Default::default();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .arg(

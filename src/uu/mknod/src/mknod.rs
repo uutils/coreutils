@@ -12,14 +12,13 @@ extern crate uucore;
 
 use std::ffi::CString;
 
-use clap::{App, Arg, ArgMatches};
+use clap::{crate_version, App, Arg, ArgMatches};
 use libc::{dev_t, mode_t};
 use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
 
 use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "mknod";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Create the special file NAME of the given TYPE.";
 static USAGE: &str = "mknod [OPTION]... NAME TYPE [MAJOR MINOR]";
 static LONG_HELP: &str = "Mandatory arguments to long options are mandatory for short options too.
@@ -91,7 +90,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     // opts.optopt("", "context", "like -Z, or if CTX is specified then set the SELinux or SMACK security context to CTX");
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .usage(USAGE)
         .after_help(LONG_HELP)
         .about(ABOUT)

@@ -11,15 +11,14 @@ extern crate uucore;
 
 use platform_info::*;
 
-use clap::App;
+use clap::{crate_version, App};
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Display machine architecture";
 static SUMMARY: &str = "Determine architecture name for current machine.";
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .after_help(SUMMARY)
         .get_matches_from(args);
