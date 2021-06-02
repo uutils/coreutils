@@ -459,3 +459,10 @@ fn test_touch_system_fails() {
         .fails()
         .stderr_contains("setting times of '/'");
 }
+
+#[test]
+fn test_touch_trailing_slash() {
+    let (_at, mut ucmd) = at_and_ucmd!();
+    let file = "no-file/";
+    ucmd.args(&[file]).fails();
+}

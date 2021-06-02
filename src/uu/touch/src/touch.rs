@@ -168,6 +168,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
             if let Err(e) = File::create(path) {
                 show_warning!("cannot touch '{}': {}", path, e);
+                error_code = 1;
                 continue;
             };
 
