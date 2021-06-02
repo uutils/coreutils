@@ -436,32 +436,9 @@ impl Write for Output<io::Stdout>
     }
 }
 
-fn gen_prog_updater(rx: mpsc::Receiver<usize>) -> impl Fn() -> ()
-{
-    move || {
-
-        // TODO: Replace ?? with accurate info
-        print!("\rProgress ({}/??)", 0);
-
-        loop
-        {
-            match rx.recv()
-            {
-                Ok(wr_total) => {
-                    print!("\rProgress ({}/??)", wr_total);
-                },
-                Err(_) => {
-                    println!("");
-                    break
-                },
-            }
-        }
-    }
-}
-
 /// Splits the content of buf into cbs-length blocks
 /// Appends padding as specified by conv=block and cbs=N
-fn block(mut buf: Vec<u8>, cbs: usize) -> Vec<Vec<u8>>
+fn block(buf: Vec<u8>, cbs: usize) -> Vec<Vec<u8>>
 {
     let mut blocks = buf.split(| &e | e == '\n' as u8)
                     .fold(Vec::new(), | mut blocks, split |
@@ -484,24 +461,63 @@ fn block(mut buf: Vec<u8>, cbs: usize) -> Vec<Vec<u8>>
     blocks
 }
 
-// Trims padding from each cbs-length partition of buf
-// as specified by conv=unblock and cbs=N
-fn unblock(buf: &[u8], cbs: usize)
+/// Trims padding from each cbs-length partition of buf
+/// as specified by conv=unblock and cbs=N
+fn unblock(buf: Vec<u8>, cbs: usize) -> Vec<u8>
 {
-    unimplemented!()
-}
-
-#[inline]
-fn apply_ct(buf: &mut [u8], ct: &ConversionTable)
-{
-    for idx in 0..buf.len()
+    // Local Helper Fns ----------------------------------------------------
+    #[inline]
+    fn build_blocks(buf: Vec<u8>, cbs: usize) -> Vec<Vec<u8>>
     {
-        buf[idx] = ct[buf[idx] as usize];
+        let mut blocks = Vec::new();
+        let mut curr = buf;
+        let mut next;
+        let mut width;
+
+        while !curr.is_empty()
+        {
+            width = cmp::min(cbs, curr.len());
+            next = curr.split_off(width);
+
+            blocks.push(curr);
+
+            curr = next;
+        }
+
+        blocks
     }
+    // ---------------------------------------------------------------------
+    build_blocks(buf, cbs)
+        .into_iter()
+        .fold(Vec::new(), | mut unblocks, mut block | {
+            let block = if let Some(last_char_idx) = block.iter().rposition(| &e | e != ' ' as u8)
+            {
+                block.truncate(last_char_idx+1);
+                block.push('\n' as u8);
+
+                block
+            }
+            else if let Some(32u8) = block.get(0)
+            {
+                vec!['\n' as u8]
+            }
+            else
+            {
+                block
+            };
+
+            unblocks.push(block);
+
+            unblocks
+        })
+        .into_iter()
+        .flatten()
+        .collect()
 }
 
 fn conv_block_unblock_helper<R: Read, W: Write>(mut buf: Vec<u8>, i: &mut Input<R>, o: &Output<W>) -> Result<Vec<u8>, Box<dyn Error>>
 {
+    // Local Predicate Fns -------------------------------------------------
     #[inline]
     fn should_block_then_conv<R: Read>(i: &Input<R>) -> bool
     {
@@ -531,6 +547,15 @@ fn conv_block_unblock_helper<R: Read, W: Write>(mut buf: Vec<u8>, i: &mut Input<
         i.cflags.ctable.is_some()
             && i.cflags.block.is_none()
             && i.cflags.unblock.is_none()
+    }
+    // Local Helper Fns ----------------------------------------------------
+    #[inline]
+    fn apply_ct(buf: &mut [u8], ct: &ConversionTable)
+    {
+        for idx in 0..buf.len()
+        {
+            buf[idx] = ct[buf[idx] as usize];
+        }
     }
     // --------------------------------------------------------------------
     if conv_only(&i)
@@ -580,7 +605,7 @@ fn conv_block_unblock_helper<R: Read, W: Write>(mut buf: Vec<u8>, i: &mut Input<
     { // ascii input so perform the unblock first
         let cbs = i.cflags.unblock.unwrap();
 
-        unblock(&mut buf, cbs);
+        let mut buf = unblock(buf, cbs);
 
         if let Some(ct) = i.cflags.ctable
         {
@@ -598,7 +623,7 @@ fn conv_block_unblock_helper<R: Read, W: Write>(mut buf: Vec<u8>, i: &mut Input<
              apply_ct(&mut buf, &ct);
         }
 
-        unblock(&buf, cbs);
+        let buf = unblock(buf, cbs);
 
         Ok(buf)
     }
@@ -615,7 +640,7 @@ fn conv_block_unblock_helper<R: Read, W: Write>(mut buf: Vec<u8>, i: &mut Input<
 
 fn read_write_helper<R: Read, W: Write>(i: &mut Input<R>, o: &mut Output<W>) -> Result<(usize, Vec<u8>), Box<dyn Error>>
 {
-    // --------------------------------------------------------------------
+    // Local Predicate Fns -----------------------------------------------
     #[inline]
     fn is_fast_read<R: Read, W: Write>(i: &Input<R>, o: &Output<W>) -> bool
     {
@@ -642,7 +667,7 @@ fn read_write_helper<R: Read, W: Write>(i: &mut Input<R>, o: &mut Output<W>) -> 
     {
         i.cflags.unblock.is_some()
     }
-    // --------------------------------------------------------------------
+    // Local Helper Fns -------------------------------------------------
     #[inline]
     fn perform_swab(buf: &mut [u8])
     {
@@ -655,7 +680,7 @@ fn read_write_helper<R: Read, W: Write>(i: &mut Input<R>, o: &mut Output<W>) -> 
             buf[base-1] = tmp;
         }
     }
-    // --------------------------------------------------------------------
+    // ------------------------------------------------------------------
     if is_fast_read(&i, &o)
     {
         // TODO: fast reads are copies performed
@@ -689,6 +714,30 @@ fn read_write_helper<R: Read, W: Write>(i: &mut Input<R>, o: &mut Output<W>) -> 
         else
         {
             Ok((rlen, buf))
+        }
+    }
+}
+
+/// Generate a progress updater that tracks progress, receives updates, and TODO: responds to signals.
+fn gen_prog_updater(rx: mpsc::Receiver<usize>) -> impl Fn() -> ()
+{
+    move || {
+
+        // TODO: Replace ?? with accurate info
+        print!("\rProgress ({}/??)", 0);
+
+        loop
+        {
+            match rx.recv()
+            {
+                Ok(wr_total) => {
+                    print!("\rProgress ({}/??)", wr_total);
+                },
+                Err(_) => {
+                    println!("");
+                    break
+                },
+            }
         }
     }
 }
