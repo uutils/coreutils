@@ -449,3 +449,13 @@ fn test_touch_mtime_dst_fails() {
         ucmd.args(&["-m", "-t", &s, file]).fails();
     }
 }
+
+#[test]
+#[cfg(unix)]
+fn test_touch_system_fails() {
+    let (_at, mut ucmd) = at_and_ucmd!();
+    let file = "/";
+    ucmd.args(&[file])
+        .fails()
+        .stderr_contains("setting times of '/'");
+}
