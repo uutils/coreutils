@@ -62,7 +62,6 @@ impl Number {
 
 impl FromStr for Number {
     type Err = String;
-    /// Tries to parse this string as a BigInt, or if that fails as an f64.
     fn from_str(mut s: &str) -> Result<Self, Self::Err> {
         if s.starts_with('+') {
             s = &s[1..];
@@ -71,10 +70,16 @@ impl FromStr for Number {
         match s.parse::<BigInt>() {
             Ok(n) => Ok(Number::BigInt(n)),
             Err(_) => match s.parse::<f64>() {
-                Ok(n) => Ok(Number::F64(n)),
-                Err(e) => Err(format!(
-                    "seq: invalid floating point argument `{}`: {}",
-                    s, e
+                Ok(value) if value.is_nan() => Err(format!(
+                    "invalid 'not-a-number' argument: '{}'\nTry '{} --help' for more information.",
+                    s,
+                    executable!(),
+                )),
+                Ok(value) => Ok(Number::F64(value)),
+                Err(_) => Err(format!(
+                    "invalid floating point argument: '{}'\nTry '{} --help' for more information.",
+                    s,
+                    executable!(),
                 )),
             },
         }
@@ -136,13 +141,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         let dec = slice.find('.').unwrap_or(len);
         largest_dec = len - dec;
         padding = dec;
-        match slice.parse() {
-            Ok(n) => n,
-            Err(s) => {
-                show_error!("{}", s);
-                return 1;
-            }
-        }
+        return_if_err!(1, slice.parse())
     } else {
         Number::BigInt(BigInt::one())
     };
@@ -152,30 +151,22 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         let dec = slice.find('.').unwrap_or(len);
         largest_dec = cmp::max(largest_dec, len - dec);
         padding = cmp::max(padding, dec);
-        match slice.parse() {
-            Ok(n) => n,
-            Err(s) => {
-                show_error!("{}", s);
-                return 1;
-            }
-        }
+        return_if_err!(1, slice.parse())
     } else {
         Number::BigInt(BigInt::one())
     };
     if increment.is_zero() {
-        show_error!("increment value: '{}'", numbers[1]);
+        show_error!(
+            "invalid Zero increment value: '{}'\nTry '{} --help' for more information.",
+            numbers[1],
+            executable!()
+        );
         return 1;
     }
     let last = {
         let slice = numbers[numbers.len() - 1];
         padding = cmp::max(padding, slice.find('.').unwrap_or_else(|| slice.len()));
-        match slice.parse::<Number>() {
-            Ok(n) => n,
-            Err(s) => {
-                show_error!("{}", s);
-                return 1;
-            }
-        }
+        return_if_err!(1, slice.parse())
     };
     if largest_dec > 0 {
         largest_dec -= 1;
