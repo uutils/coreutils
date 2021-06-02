@@ -288,13 +288,14 @@ fn test_with_suppress_error_option() {
 fn test_with_stdin() {
     let expected_file_path = "stdin.log.expected";
     let mut scenario = new_ucmd!();
+    let now = now_time();
     scenario
         .pipe_in_fixture("stdin.log")
         .args(&["--pages=1:2", "-n", "-"])
         .run()
         .stdout_is_templated_fixture(
             expected_file_path,
-            vec![(&"{last_modified_time}".to_string(), &now_time())],
+            vec![(&"{last_modified_time}".to_string(), &now)],
         );
 }
 
@@ -381,22 +382,25 @@ fn test_with_mpr() {
     let expected_test_file_path = "mpr.log.expected";
     let expected_test_file_path1 = "mpr1.log.expected";
     let expected_test_file_path2 = "mpr2.log.expected";
+    let now = now_time();
     new_ucmd!()
         .args(&["--pages=1:2", "-m", "-n", test_file_path, test_file_path1])
         .succeeds()
         .stdout_is_templated_fixture(
             expected_test_file_path,
-            vec![(&"{last_modified_time}".to_string(), &now_time())],
+            vec![(&"{last_modified_time}".to_string(), &now)],
         );
 
+    let now = now_time();
     new_ucmd!()
         .args(&["--pages=2:4", "-m", "-n", test_file_path, test_file_path1])
         .succeeds()
         .stdout_is_templated_fixture(
             expected_test_file_path1,
-            vec![(&"{last_modified_time}".to_string(), &now_time())],
+            vec![(&"{last_modified_time}".to_string(), &now)],
         );
 
+    let now = now_time();
     new_ucmd!()
         .args(&[
             "--pages=1:2",
@@ -411,7 +415,7 @@ fn test_with_mpr() {
         .succeeds()
         .stdout_is_templated_fixture(
             expected_test_file_path2,
-            vec![(&"{last_modified_time}".to_string(), &now_time())],
+            vec![(&"{last_modified_time}".to_string(), &now)],
         );
 }
 
@@ -507,11 +511,12 @@ fn test_with_join_lines_option() {
     let test_file_2 = "test.log";
     let expected_file_path = "joined.log.expected";
     let mut scenario = new_ucmd!();
+    let now = now_time();
     scenario
         .args(&["+1:2", "-J", "-m", test_file_1, test_file_2])
         .run()
         .stdout_is_templated_fixture(
             expected_file_path,
-            vec![(&"{last_modified_time}".to_string(), &now_time())],
+            vec![(&"{last_modified_time}".to_string(), &now)],
         );
 }
