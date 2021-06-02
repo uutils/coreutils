@@ -372,7 +372,8 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
 
 fn relative_path<'a>(src: &Path, dst: &Path) -> Result<Cow<'a, Path>> {
     let src_abs = canonicalize(src, CanonicalizeMode::Normal)?;
-    let dst_abs = canonicalize(dst, CanonicalizeMode::Normal)?;
+    let mut dst_abs = canonicalize(dst.parent().unwrap(), CanonicalizeMode::Normal)?;
+    dst_abs.push(dst.components().last().unwrap());
     let suffix_pos = src_abs
         .components()
         .zip(dst_abs.components())
