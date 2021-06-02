@@ -16,7 +16,7 @@ use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
-use clap::{App, Arg, crate_version};
+use clap::{crate_version, App, Arg};
 
 mod options {
     pub const SH: &str = "sh";
@@ -65,11 +65,7 @@ pub fn guess_syntax() -> OutputFmt {
 }
 
 fn get_usage() -> String {
-    format!(
-        "{0} {1}",
-        executable!(),
-        SYNTAX
-    )
+    format!("{0} {1}", executable!(), SYNTAX)
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
@@ -93,50 +89,52 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .about(SUMMARY)
         .usage(&usage[..])
         .after_help(LONG_HELP)
-        .arg(Arg::with_name(options::SH)
-            .long("sh")
-            .short("b")
-            .help("output Bourne shell code to set LS_COLORS")
-            .display_order(1)
+        .arg(
+            Arg::with_name(options::SH)
+                .long("sh")
+                .short("b")
+                .help("output Bourne shell code to set LS_COLORS")
+                .display_order(1),
         )
-        .arg(Arg::with_name(options::BOURNE_SHELL)
-            .long("bourne-shell")
-            .help("output Bourne shell code to set LS_COLORS")
-            .display_order(2)
+        .arg(
+            Arg::with_name(options::BOURNE_SHELL)
+                .long("bourne-shell")
+                .help("output Bourne shell code to set LS_COLORS")
+                .display_order(2),
         )
-        .arg(Arg::with_name(options::CSH)
-            .long("csh")
-            .short("c")
-            .help("output C shell code to set LS_COLORS")
-            .display_order(3)
+        .arg(
+            Arg::with_name(options::CSH)
+                .long("csh")
+                .short("c")
+                .help("output C shell code to set LS_COLORS")
+                .display_order(3),
         )
-        .arg(Arg::with_name(options::C_SHELL)
-            .long("c-shell")
-            .help("output C shell code to set LS_COLORS")
-            .display_order(4)
+        .arg(
+            Arg::with_name(options::C_SHELL)
+                .long("c-shell")
+                .help("output C shell code to set LS_COLORS")
+                .display_order(4),
         )
-        .arg(Arg::with_name(options::PRINT_DATABASE)
-            .long("print-database")
-            .short("p")
-            .help("print the byte counts")
-            .display_order(5)
+        .arg(
+            Arg::with_name(options::PRINT_DATABASE)
+                .long("print-database")
+                .short("p")
+                .help("print the byte counts")
+                .display_order(5),
         )
-        .arg(Arg::with_name(options::FILE)
-                .hidden(true)
-                .multiple(true)
-        )
+        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
         .get_matches_from(&args);
 
-    let files =  matches.values_of(options::FILE)
+    let files = matches
+        .values_of(options::FILE)
         .map_or(vec![], |file_values| file_values.collect());
 
     // clap provides .conflicts_with / .conflicts_with_all, but we want to
     // manually handle conflicts so we can match the output of GNU coreutils
     if (matches.is_present(options::CSH)
-            || matches.is_present(options::C_SHELL)
-            || matches.is_present(options::SH)
-            || matches.is_present(options::BOURNE_SHELL)
-        )
+        || matches.is_present(options::C_SHELL)
+        || matches.is_present(options::SH)
+        || matches.is_present(options::BOURNE_SHELL))
         && matches.is_present(options::PRINT_DATABASE)
     {
         show_usage_error!(
@@ -187,11 +185,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         match File::open(files[0]) {
             Ok(f) => {
                 let fin = BufReader::new(f);
-                result = parse(
-                    fin.lines().filter_map(Result::ok),
-                    out_format,
-                    files[0],
-                )
+                result = parse(fin.lines().filter_map(Result::ok), out_format, files[0])
             }
             Err(e) => {
                 show_error!("{}: {}", files[0], e);
