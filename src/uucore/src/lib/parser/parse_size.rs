@@ -117,7 +117,9 @@ impl ParseSizeError {
     fn size_too_big(s: &str) -> ParseSizeError {
         // has to be handled in the respective uutils because strings differ, e.g.
         // truncate: Invalid number: ‘1Y’: Value too large to be stored in data type
-        // tail: invalid number of bytes: ‘1Y’: Value too large to be stored in data type
+        // tail:     invalid number of bytes: ‘1Y’: Value too large to be stored in data type
+        // split:    invalid number of bytes: ‘1Y’: Value too large for defined data type
+        // etc.
         ParseSizeError::SizeTooBig(format!(
             "‘{}’: Value too large to be stored in data type",
             s
