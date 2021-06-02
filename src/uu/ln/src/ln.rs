@@ -54,7 +54,7 @@ pub enum BackupMode {
 
 fn get_usage() -> String {
     format!(
-        "{0} [OPTION]... [-T] TARGET LINK_executable!()   (1st form)
+        "{0} [OPTION]... [-T] TARGET LINK_NAME   (1st form)
        {0} [OPTION]... TARGET                  (2nd form)
        {0} [OPTION]... TARGET... DIRECTORY     (3rd form)
        {0} [OPTION]... -t DIRECTORY TARGET...  (4th form)",
@@ -64,7 +64,7 @@ fn get_usage() -> String {
 
 fn get_long_usage() -> String {
     String::from(
-        " In the 1st form, create a link to TARGET with the name LINK_executable!().
+        " In the 1st form, create a link to TARGET with the name LINK_NAME.
         In the 2nd form, create a link to TARGET in the current directory.
         In the 3rd and 4th forms, create links to each TARGET in DIRECTORY.
         Create hard links by default, symbolic links with --symbolic.
@@ -144,7 +144,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .short("n")
                 .long(OPT_NO_DEREFERENCE)
                 .help(
-                    "treat LINK_executable!() as a normal file if it is a \
+                    "treat LINK_NAME as a normal file if it is a \
                      symbolic link to a directory",
                 ),
         )
@@ -179,7 +179,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(OPT_NO_TARGET_DIRECTORY)
                 .short("T")
                 .long(OPT_NO_TARGET_DIRECTORY)
-                .help("treat LINK_executable!() as a normal file always"),
+                .help("treat LINK_NAME as a normal file always"),
         )
         .arg(
             Arg::with_name(OPT_RELATIVE)
