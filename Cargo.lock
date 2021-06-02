@@ -233,6 +233,7 @@ dependencies = [
  "pretty_assertions",
  "rand 0.7.3",
  "regex",
+ "rlimit",
  "sha1",
  "tempfile",
  "textwrap",
@@ -1409,6 +1410,16 @@ name = "retain_mut"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e9c17925a9027d298a4603d286befe3f9dc0e8ed02523141914eb628798d6e5b"
+
+[[package]]
+name = "rlimit"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "49b02d62c38353a6fce45c25ca19783e25dd5f495ca681c674a4ee15aa4c1536"
+dependencies = [
+ "cfg-if 0.1.10",
+ "libc",
+]
 
 [[package]]
 name = "rust-ini"
