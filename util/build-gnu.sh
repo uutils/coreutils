@@ -44,7 +44,7 @@ sed -i 's|"\$@|/usr/bin/timeout 600 "\$@|' build-aux/test-driver
 # Change the PATH in the Makefile to test the uutils coreutils instead of the GNU coreutils
 sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${BUILDDIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
 sed -i 's| tr | /usr/bin/tr |' tests/init.sh
-make
+make -j "$(nproc)"
 # Generate the factor tests, so they can be fixed
 # Used to be 36. Reduced to 20 to decrease the log size
 for i in {00..20}
