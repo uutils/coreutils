@@ -244,3 +244,24 @@ hello
 ",
         );
 }
+
+#[test]
+fn test_bad_utf8() {
+    let bytes = b"\xfc\x80\x80\x80\x80\xaf";
+    new_ucmd!()
+        .args(&["-c", "6"])
+        .pipe_in(*bytes)
+        .succeeds()
+        .stdout_is_bytes(bytes);
+}
+
+#[test]
+fn test_bad_utf8_lines() {
+    let input = b"\xfc\x80\x80\x80\x80\xaf\nb\xfc\x80\x80\x80\x80\xaf\nb\xfc\x80\x80\x80\x80\xaf";
+    let output = b"\xfc\x80\x80\x80\x80\xaf\nb\xfc\x80\x80\x80\x80\xaf\n";
+    new_ucmd!()
+        .args(&["-n", "2"])
+        .pipe_in(*input)
+        .succeeds()
+        .stdout_is_bytes(output);
+}
