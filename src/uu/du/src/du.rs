@@ -10,7 +10,7 @@ extern crate uucore;
 
 use chrono::prelude::DateTime;
 use chrono::Local;
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::collections::HashSet;
 use std::env;
 use std::fs;
@@ -58,7 +58,6 @@ mod options {
     pub const FILE: &str = "FILE";
 }
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
 const NAME: &str = "du";
 const SUMMARY: &str = "estimate file space usage";
 const LONG_HELP: &str = "
@@ -414,7 +413,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(SUMMARY)
         .usage(&usage[..])
         .after_help(LONG_HELP)

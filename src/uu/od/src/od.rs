@@ -42,10 +42,9 @@ use crate::parse_nrofbytes::parse_number_of_bytes;
 use crate::partialreader::*;
 use crate::peekreader::*;
 use crate::prn_char::format_ascii_dump;
-use clap::{self, AppSettings, Arg, ArgMatches};
+use clap::{self, crate_version, AppSettings, Arg, ArgMatches};
 use uucore::InvalidEncodingHandling;
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 const PEEK_BUFFER_SIZE: usize = 4; // utf-8 can be 4 bytes
 static ABOUT: &str = "dump files in octal and other formats";
 
@@ -103,7 +102,6 @@ pub(crate) mod options {
     pub const OUTPUT_DUPLICATES: &str = "output-duplicates";
     pub const TRADITIONAL: &str = "traditional";
     pub const WIDTH: &str = "width";
-    pub const VERSION: &str = "version";
     pub const FILENAME: &str = "FILENAME";
 }
 
@@ -228,7 +226,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .accept_any();
 
     let clap_opts = clap::App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(USAGE)
         .after_help(LONG_HELP)
@@ -432,12 +430,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .value_name("BYTES"),
         )
         .arg(
-            Arg::with_name(options::VERSION)
-                .long(options::VERSION)
-                .help("output version information and exit.")
-                .takes_value(false),
-        )
-        .arg(
             Arg::with_name(options::TRADITIONAL)
                 .long(options::TRADITIONAL)
                 .help("compatibility mode with one input, offset and label.")
@@ -458,11 +450,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let clap_matches = clap_opts
         .clone() // Clone to reuse clap_opts to print help
         .get_matches_from(args.clone());
-
-    if clap_matches.is_present(options::VERSION) {
-        println!("{} {}", executable!(), VERSION);
-        return 0;
-    }
 
     let od_options = match OdOptions::new(clap_matches, args) {
         Err(s) => {

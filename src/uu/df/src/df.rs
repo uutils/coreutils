@@ -12,7 +12,7 @@ extern crate uucore;
 use uucore::fsext::statfs_fn;
 use uucore::fsext::{read_fs_list, FsUsage, MountInfo};
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 
 use number_prefix::NumberPrefix;
 use std::cell::Cell;
@@ -30,7 +30,6 @@ use uucore::libc::{c_char, fsid_t, uid_t};
 #[cfg(windows)]
 use std::path::Path;
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Show information about the file system on which each FILE resides,\n\
                       or all file systems by default.";
 
@@ -260,7 +259,7 @@ fn use_size(free_size: u64, total_size: u64) -> String {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .arg(

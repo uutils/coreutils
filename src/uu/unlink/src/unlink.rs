@@ -12,14 +12,13 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use libc::{lstat, stat, unlink};
 use libc::{S_IFLNK, S_IFMT, S_IFREG};
 use std::ffi::CString;
 use std::io::{Error, ErrorKind};
 use uucore::InvalidEncodingHandling;
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Unlink the file at [FILE].";
 static OPT_PATH: &str = "FILE";
 
@@ -35,7 +34,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .arg(Arg::with_name(OPT_PATH).hidden(true).multiple(true))

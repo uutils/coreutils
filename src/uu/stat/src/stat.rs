@@ -14,7 +14,7 @@ use uucore::fsext::{
 };
 use uucore::libc::mode_t;
 
-use clap::{App, Arg, ArgMatches};
+use clap::{crate_version, App, Arg, ArgMatches};
 use std::borrow::Cow;
 use std::convert::AsRef;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
@@ -82,7 +82,6 @@ macro_rules! print_adjusted {
 }
 
 static ABOUT: &str = "Display file or file system status.";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub mod options {
     pub static DEREFERENCE: &str = "dereference";
@@ -949,7 +948,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let long_usage = get_long_usage();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .after_help(&long_usage[..])

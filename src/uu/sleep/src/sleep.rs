@@ -11,9 +11,8 @@ extern crate uucore;
 use std::thread;
 use std::time::Duration;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Pause for NUMBER seconds.";
 static LONG_HELP: &str = "Pause for NUMBER seconds.  SUFFIX may be 's' for seconds (the default),
 'm' for minutes, 'h' for hours or 'd' for days.  Unlike most implementations
@@ -37,7 +36,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .after_help(LONG_HELP)

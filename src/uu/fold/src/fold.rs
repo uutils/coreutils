@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
@@ -19,7 +19,6 @@ use uucore::InvalidEncodingHandling;
 const TAB_WIDTH: usize = 8;
 
 static NAME: &str = "fold";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static SYNTAX: &str = "[OPTION]... [FILE]...";
 static SUMMARY: &str = "Writes each file (or standard input if no files are given)
  to standard output whilst breaking long lines";
@@ -39,7 +38,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let (args, obs_width) = handle_obsolete(&args[..]);
     let matches = App::new(executable!())
         .name(NAME)
-        .version(VERSION)
+        .version(crate_version!())
         .usage(SYNTAX)
         .about(SUMMARY)
         .arg(

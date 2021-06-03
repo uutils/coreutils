@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 
 use std::borrow::Cow;
 use std::ffi::OsStr;
@@ -77,7 +77,6 @@ fn get_long_usage() -> String {
 }
 
 static ABOUT: &str = "change file owner and group";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 static OPT_B: &str = "b";
 static OPT_BACKUP: &str = "backup";
@@ -98,7 +97,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let long_usage = get_long_usage();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .after_help(&long_usage[..])

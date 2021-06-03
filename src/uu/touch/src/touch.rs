@@ -13,14 +13,13 @@ pub extern crate filetime;
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg, ArgGroup};
+use clap::{crate_version, App, Arg, ArgGroup};
 use filetime::*;
 use std::fs::{self, File};
 use std::io::Error;
 use std::path::Path;
 use std::process;
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Update the access and modification times of each FILE to the current time.";
 pub mod options {
     // Both SOURCES and sources are needed as we need to be able to refer to the ArgGroup.
@@ -57,7 +56,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .arg(

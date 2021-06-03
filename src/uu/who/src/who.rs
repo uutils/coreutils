@@ -12,7 +12,7 @@ extern crate uucore;
 use uucore::libc::{ttyname, STDIN_FILENO, S_IWGRP};
 use uucore::utmpx::{self, time, Utmpx};
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::borrow::Cow;
 use std::ffi::CStr;
 use std::os::unix::fs::MetadataExt;
@@ -37,7 +37,6 @@ mod options {
     pub const FILE: &str = "FILE"; // if length=1: FILE, if length=2: ARG1 ARG2
 }
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Print information about users who are currently logged in.";
 
 #[cfg(any(target_os = "linux"))]
@@ -66,7 +65,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let after_help = get_long_usage();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .after_help(&after_help[..])

@@ -8,12 +8,11 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::fs;
 use std::path::Path;
 
 static ABOUT: &str = "Create the given DIRECTORY(ies) if they do not exist";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static OPT_MODE: &str = "mode";
 static OPT_PARENTS: &str = "parents";
 static OPT_VERBOSE: &str = "verbose";
@@ -34,7 +33,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     // opts.optflag("Z", "context", "set SELinux security context" +
     // " of each created directory to CTX"),
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .arg(

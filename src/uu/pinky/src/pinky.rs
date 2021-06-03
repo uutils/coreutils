@@ -19,13 +19,12 @@ use std::io::BufReader;
 use std::fs::File;
 use std::os::unix::fs::MetadataExt;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::path::PathBuf;
 use uucore::InvalidEncodingHandling;
 
 const BUFSIZE: usize = 1024;
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "pinky - lightweight finger";
 
 mod options {
@@ -62,7 +61,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let after_help = get_long_usage();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .after_help(&after_help[..])

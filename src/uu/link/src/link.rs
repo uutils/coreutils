@@ -8,12 +8,11 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::fs::hard_link;
 use std::io::Error;
 use std::path::Path;
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Call the link function to create a link named FILE2 to an existing FILE1.";
 
 pub mod options {
@@ -34,7 +33,7 @@ pub fn normalize_error_message(e: Error) -> String {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .arg(

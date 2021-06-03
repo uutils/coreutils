@@ -2,18 +2,16 @@ use crate::common::util::*;
 
 #[test]
 fn test_rejects_nan() {
-    new_ucmd!()
-        .args(&["NaN"])
-        .fails()
-        .stderr_only("seq: invalid 'not-a-number' argument: 'NaN'\nTry 'seq --help' for more information.");
+    new_ucmd!().args(&["NaN"]).fails().stderr_only(
+        "seq: invalid 'not-a-number' argument: 'NaN'\nTry 'seq --help' for more information.",
+    );
 }
 
 #[test]
 fn test_rejects_non_floats() {
-    new_ucmd!()
-        .args(&["foo"])
-        .fails()
-        .stderr_only("seq: invalid floating point argument: 'foo'\nTry 'seq --help' for more information.");
+    new_ucmd!().args(&["foo"]).fails().stderr_only(
+        "seq: invalid floating point argument: 'foo'\nTry 'seq --help' for more information.",
+    );
 }
 
 // ---- Tests for the big integer based path ----

@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use regex::Regex;
 use std::cmp;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -20,7 +20,6 @@ use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "ptx";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static BRIEF: &str = "Usage: ptx [OPTION]... [INPUT]...   (without -G) or: \
                  ptx -G [OPTION]... [INPUT [OUTPUT]] \n Output a permuted index, \
                  including context, of the words in the input files. \n\n Mandatory \
@@ -641,7 +640,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     // let mut opts = Options::new();
     let matches = App::new(executable!())
         .name(NAME)
-        .version(VERSION)
+        .version(crate_version!())
         .usage(BRIEF)
         .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
         .arg(

@@ -16,7 +16,7 @@ extern crate lazy_static;
 mod quoting_style;
 mod version_cmp;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use globset::{self, Glob, GlobSet, GlobSetBuilder};
 use lscolors::LsColors;
 use number_prefix::NumberPrefix;
@@ -45,7 +45,6 @@ use unicode_width::UnicodeWidthStr;
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "
  By default, ls will list the files and contents of any directories on
  the command line, expect that it will ignore files and directories
@@ -559,7 +558,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
     let app = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
 
