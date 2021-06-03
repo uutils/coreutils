@@ -155,6 +155,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         (now, now)
     };
 
+    let mut error_code = 0;
+
     for filename in &files {
         let path = &filename[..];
 
@@ -166,6 +168,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
             if let Err(e) = File::create(path) {
                 show_warning!("cannot touch '{}': {}", path, e);
+                error_code = 1;
                 continue;
             };
 
@@ -202,14 +205,28 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
         if matches.is_present(options::NO_DEREF) {
             if let Err(e) = set_symlink_file_times(path, atime, mtime) {
-                show_warning!("cannot touch '{}': {}", path, e);
+                // we found an error, it should fail in any case
+                error_code = 1;
+                if e.kind() == std::io::ErrorKind::PermissionDenied {
+                    // GNU compatibility (not-owner.sh)
+                    show_error!("setting times of '{}': {}", path, "Permission denied");
+                } else {
+                    show_error!("setting times of '{}': {}", path, e);
+                }
             }
         } else if let Err(e) = filetime::set_file_times(path, atime, mtime) {
-            show_warning!("cannot touch '{}': {}", path, e);
+            // we found an error, it should fail in any case
+            error_code = 1;
+
+            if e.kind() == std::io::ErrorKind::PermissionDenied {
+                // GNU compatibility (not-owner.sh)
+                show_error!("setting times of '{}': {}", path, "Permission denied");
+            } else {
+                show_error!("setting times of '{}': {}", path, e);
+            }
         }
     }
-
-    0
+    error_code
 }
 
 fn stat(path: &str, follow: bool) -> (FileTime, FileTime) {

@@ -327,7 +327,11 @@ To run locally:
 ```bash
 $ bash util/build-gnu.sh
 $ bash util/run-gnu-test.sh
+# To run a single test:
+$ bash util/run-gnu-test.sh tests/touch/not-owner.sh # for example
 ```
+
+Note that it relies on individual utilities (not the multicall binary).
 
 ## Contribute
 
