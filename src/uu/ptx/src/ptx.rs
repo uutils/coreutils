@@ -17,6 +17,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::default::Default;
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
+use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "ptx";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -107,10 +108,13 @@ impl WordFilter {
         // Ignore empty string regex from cmd-line-args
         let arg_reg: Option<String> = if matches.is_present(options::WORD_REGEXP) {
             match matches.value_of(options::WORD_REGEXP) {
-                Some(v) => match v.is_empty() {
-                    true => None,
-                    false => Some(v.to_string()),
-                },
+                Some(v) => {
+                    if v.is_empty() {
+                        None
+                    } else {
+                        Some(v.to_string())
+                    }
+                }
                 None => None,
             }
         } else {
@@ -242,7 +246,7 @@ fn read_input(input_files: &[String], config: &Config) -> FileMap {
     file_map
 }
 
-/// Go through every lines in the input files and record each match occurance as a `WordRef`.
+/// Go through every lines in the input files and record each match occurrence as a `WordRef`.
 fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> BTreeSet<WordRef> {
     let reg = Regex::new(&filter.word_regex).unwrap();
     let ref_reg = Regex::new(&config.context_regex).unwrap();
@@ -408,7 +412,7 @@ fn get_output_chunks(
         0,
     ) as usize;
 
-    // the tail chunk takes text starting from where the after chunk ends (with whitespaces trimmed).
+    // the tail chunk takes text starting from where the after chunk ends (with whitespace trimmed).
     let (tail_beg, _) = trim_idx(all_after, after_end, all_after.len());
 
     // end = begin + max length
@@ -489,10 +493,10 @@ fn format_tex_line(
     output.push_str(&format!("\\{} ", config.macro_name));
     let all_before = if config.input_ref {
         let before = &line[0..word_ref.position];
-        let before_start_trimoff =
+        let before_start_trim_offset =
             word_ref.position - before.trim_start_matches(reference).trim_start().len();
         let before_end_index = before.len();
-        &chars_line[before_start_trimoff..cmp::max(before_end_index, before_start_trimoff)]
+        &chars_line[before_start_trim_offset..cmp::max(before_end_index, before_start_trim_offset)]
     } else {
         let before_chars_trim_idx = (0, word_ref.position);
         &chars_line[before_chars_trim_idx.0..before_chars_trim_idx.1]
@@ -532,10 +536,10 @@ fn format_roff_line(
     output.push_str(&format!(".{}", config.macro_name));
     let all_before = if config.input_ref {
         let before = &line[0..word_ref.position];
-        let before_start_trimoff =
+        let before_start_trim_offset =
             word_ref.position - before.trim_start_matches(reference).trim_start().len();
         let before_end_index = before.len();
-        &chars_line[before_start_trimoff..cmp::max(before_end_index, before_start_trimoff)]
+        &chars_line[before_start_trim_offset..cmp::max(before_end_index, before_start_trim_offset)]
     } else {
         let before_chars_trim_idx = (0, word_ref.position);
         &chars_line[before_chars_trim_idx.0..before_chars_trim_idx.1]
@@ -630,7 +634,9 @@ mod options {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
 
     // let mut opts = Options::new();
     let matches = App::new(executable!())

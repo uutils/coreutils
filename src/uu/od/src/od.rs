@@ -5,6 +5,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
+// spell-checker:ignore (clap) DontDelimitTrailingValues
 // spell-checker:ignore (ToDO) formatteriteminfo inputdecoder inputoffset mockstream nrofbytes partialreader odfunc multifile exitcode
 
 #[macro_use]
@@ -42,6 +43,7 @@ use crate::partialreader::*;
 use crate::peekreader::*;
 use crate::prn_char::format_ascii_dump;
 use clap::{self, AppSettings, Arg, ArgMatches};
+use uucore::InvalidEncodingHandling;
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 const PEEK_BUFFER_SIZE: usize = 4; // utf-8 can be 4 bytes
@@ -221,7 +223,9 @@ impl OdOptions {
 /// parses and validates command line parameters, prepares data structures,
 /// opens the input and calls `odfunc` to process the input.
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
 
     let clap_opts = clap::App::new(executable!())
         .version(VERSION)
@@ -452,7 +456,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         ]);
 
     let clap_matches = clap_opts
-        .clone() // Clone to reuse clap_otps to print help
+        .clone() // Clone to reuse clap_opts to print help
         .get_matches_from(args.clone());
 
     if clap_matches.is_present(options::VERSION) {

@@ -6,21 +6,13 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) mountinfo mtab BLOCKSIZE getmntinfo fobj mptr noatime Iused overmounted
-// spell-checker:ignore (libc/fs) asyncreads asyncwrites autofs bavail bfree bsize charspare cifs debugfs devfs devpts ffree frsize fsid fstypename fusectl inode inodes iosize kernfs mntbufp mntfromname mntonname mqueue namemax pipefs smbfs statfs statvfs subfs syncreads syncwrites sysfs wcslen
-
 #[macro_use]
 extern crate uucore;
+#[cfg(unix)]
+use uucore::fsext::statfs_fn;
+use uucore::fsext::{read_fs_list, FsUsage, MountInfo};
 
 use clap::{App, Arg};
-
-#[cfg(windows)]
-use winapi::um::errhandlingapi::GetLastError;
-#[cfg(windows)]
-use winapi::um::fileapi::{
-    FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, GetDriveTypeW, GetVolumeInformationW,
-    GetVolumePathNamesForVolumeNameW, QueryDosDeviceW,
-};
 
 use number_prefix::NumberPrefix;
 use std::cell::Cell;
@@ -32,41 +24,11 @@ use std::ffi::CString;
 #[cfg(unix)]
 use std::mem;
 
-#[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
-use libc::c_int;
-#[cfg(target_vendor = "apple")]
-use libc::statfs;
-#[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
-use std::ffi::CStr;
-#[cfg(any(target_vendor = "apple", target_os = "freebsd", target_os = "windows"))]
-use std::ptr;
-#[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
-use std::slice;
-
 #[cfg(target_os = "freebsd")]
-use libc::{c_char, fsid_t, uid_t};
+use uucore::libc::{c_char, fsid_t, uid_t};
 
-#[cfg(target_os = "linux")]
-use std::fs::File;
-#[cfg(target_os = "linux")]
-use std::io::{BufRead, BufReader};
-
-#[cfg(windows)]
-use std::ffi::OsString;
-#[cfg(windows)]
-use std::os::windows::ffi::OsStrExt;
-#[cfg(windows)]
-use std::os::windows::ffi::OsStringExt;
 #[cfg(windows)]
 use std::path::Path;
-#[cfg(windows)]
-use winapi::shared::minwindef::DWORD;
-#[cfg(windows)]
-use winapi::um::fileapi::GetDiskFreeSpaceW;
-#[cfg(windows)]
-use winapi::um::handleapi::INVALID_HANDLE_VALUE;
-#[cfg(windows)]
-use winapi::um::winbase::DRIVE_REMOTE;
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Show information about the file system on which each FILE resides,\n\
@@ -74,14 +36,6 @@ static ABOUT: &str = "Show information about the file system on which each FILE 
 
 static EXIT_OK: i32 = 0;
 static EXIT_ERR: i32 = 1;
-
-#[cfg(windows)]
-const MAX_PATH: usize = 266;
-
-#[cfg(target_os = "linux")]
-static LINUX_MOUNTINFO: &str = "/proc/self/mountinfo";
-#[cfg(target_os = "linux")]
-static LINUX_MTAB: &str = "/etc/mtab";
 
 static OPT_ALL: &str = "all";
 static OPT_BLOCKSIZE: &str = "blocksize";
@@ -100,8 +54,6 @@ static OPT_SYNC: &str = "sync";
 static OPT_TYPE: &str = "type";
 static OPT_PRINT_TYPE: &str = "print-type";
 static OPT_EXCLUDE_TYPE: &str = "exclude-type";
-
-static MOUNT_OPT_BIND: &str = "bind";
 
 /// Store names of file systems as a selector.
 /// Note: `exclude` takes priority over `include`.
@@ -122,133 +74,13 @@ struct Options {
 }
 
 #[derive(Debug, Clone)]
-struct MountInfo {
-    // it stores `volume_name` in windows platform and `dev_id` in unix platform
-    dev_id: String,
-    dev_name: String,
-    fs_type: String,
-    mount_dir: String,
-    mount_option: String, // we only care "bind" option
-    mount_root: String,
-    remote: bool,
-    dummy: bool,
-}
-
-#[cfg(all(
-    target_os = "freebsd",
-    not(all(target_vendor = "apple", target_arch = "x86_64"))
-))]
-#[repr(C)]
-#[derive(Copy, Clone)]
-#[allow(non_camel_case_types)]
-struct statfs {
-    f_version: u32,
-    f_type: u32,
-    f_flags: u64,
-    f_bsize: u64,
-    f_iosize: u64,
-    f_blocks: u64,
-    f_bfree: u64,
-    f_bavail: i64,
-    f_files: u64,
-    f_ffree: i64,
-    f_syncwrites: u64,
-    f_asyncwrites: u64,
-    f_syncreads: u64,
-    f_asyncreads: u64,
-    f_spare: [u64; 10usize],
-    f_namemax: u32,
-    f_owner: uid_t,
-    f_fsid: fsid_t,
-    f_charspare: [c_char; 80usize],
-    f_fstypename: [c_char; 16usize],
-    f_mntfromname: [c_char; 88usize],
-    f_mntonname: [c_char; 88usize],
-}
-
-#[derive(Debug, Clone)]
-struct FsUsage {
-    blocksize: u64,
-    blocks: u64,
-    bfree: u64,
-    bavail: u64,
-    bavail_top_bit_set: bool,
-    files: u64,
-    ffree: u64,
-}
-
-#[derive(Debug, Clone)]
 struct Filesystem {
-    mountinfo: MountInfo,
+    mount_info: MountInfo,
     usage: FsUsage,
-}
-
-#[cfg(windows)]
-macro_rules! String2LPWSTR {
-    ($str: expr) => {
-        OsString::from($str.clone())
-            .as_os_str()
-            .encode_wide()
-            .chain(Some(0))
-            .collect::<Vec<u16>>()
-            .as_ptr()
-    };
-}
-
-#[cfg(windows)]
-#[allow(non_snake_case)]
-fn LPWSTR2String(buf: &[u16]) -> String {
-    let len = unsafe { libc::wcslen(buf.as_ptr()) };
-    OsString::from_wide(&buf[..len as usize])
-        .into_string()
-        .unwrap()
 }
 
 fn get_usage() -> String {
     format!("{0} [OPTION]... [FILE]...", executable!())
-}
-
-#[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
-extern "C" {
-    #[cfg(all(target_vendor = "apple", target_arch = "x86_64"))]
-    #[link_name = "getmntinfo$INODE64"]
-    fn getmntinfo(mntbufp: *mut *mut statfs, flags: c_int) -> c_int;
-
-    #[cfg(any(
-        all(target_os = "freebsd"),
-        all(target_vendor = "apple", target_arch = "aarch64")
-    ))]
-    fn getmntinfo(mntbufp: *mut *mut statfs, flags: c_int) -> c_int;
-}
-
-#[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
-impl From<statfs> for MountInfo {
-    fn from(statfs: statfs) -> Self {
-        let mut info = MountInfo {
-            dev_id: "".to_string(),
-            dev_name: unsafe {
-                CStr::from_ptr(&statfs.f_mntfromname[0])
-                    .to_string_lossy()
-                    .into_owned()
-            },
-            fs_type: unsafe {
-                CStr::from_ptr(&statfs.f_fstypename[0])
-                    .to_string_lossy()
-                    .into_owned()
-            },
-            mount_dir: unsafe {
-                CStr::from_ptr(&statfs.f_mntonname[0])
-                    .to_string_lossy()
-                    .into_owned()
-            },
-            mount_root: "".to_string(),
-            mount_option: "".to_string(),
-            remote: false,
-            dummy: false,
-        };
-        info.set_missing_fields();
-        info
-    }
 }
 
 impl FsSelector {
@@ -295,347 +127,40 @@ impl Options {
     }
 }
 
-impl MountInfo {
-    fn set_missing_fields(&mut self) {
-        #[cfg(unix)]
-        {
-            // We want to keep the dev_id on Windows
-            // but set dev_id
-            let path = CString::new(self.mount_dir.clone()).unwrap();
-            unsafe {
-                let mut stat = mem::zeroed();
-                if libc::stat(path.as_ptr(), &mut stat) == 0 {
-                    self.dev_id = (stat.st_dev as i32).to_string();
-                } else {
-                    self.dev_id = "".to_string();
-                }
-            }
-        }
-        // set MountInfo::dummy
-        match self.fs_type.as_ref() {
-            "autofs" | "proc" | "subfs"
-            /* for Linux 2.6/3.x */
-            | "debugfs" | "devpts" | "fusectl" | "mqueue" | "rpc_pipefs" | "sysfs"
-            /* FreeBSD, Linux 2.4 */
-            | "devfs"
-            /* for NetBSD 3.0 */
-            | "kernfs"
-            /* for Irix 6.5 */
-            | "ignore" => self.dummy = true,
-            _ => self.dummy = self.fs_type == "none"
-                && self.mount_option.find(MOUNT_OPT_BIND).is_none(),
-        }
-        // set MountInfo::remote
-        #[cfg(windows)]
-        {
-            self.remote = DRIVE_REMOTE == unsafe { GetDriveTypeW(String2LPWSTR!(self.mount_root)) };
-        }
-        #[cfg(unix)]
-        {
-            if self.dev_name.find(':').is_some()
-                || (self.dev_name.starts_with("//") && self.fs_type == "smbfs"
-                    || self.fs_type == "cifs")
-                || self.dev_name == "-hosts"
-            {
-                self.remote = true;
-            } else {
-                self.remote = false;
-            }
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    fn new(file_name: &str, raw: Vec<&str>) -> Option<MountInfo> {
-        match file_name {
-            // Format: 36 35 98:0 /mnt1 /mnt2 rw,noatime master:1 - ext3 /dev/root rw,errors=continue
-            // "man proc" for more details
-            "/proc/self/mountinfo" => {
-                let mut m = MountInfo {
-                    dev_id: "".to_string(),
-                    dev_name: raw[9].to_string(),
-                    fs_type: raw[8].to_string(),
-                    mount_root: raw[3].to_string(),
-                    mount_dir: raw[4].to_string(),
-                    mount_option: raw[5].to_string(),
-                    remote: false,
-                    dummy: false,
-                };
-                m.set_missing_fields();
-                Some(m)
-            }
-            "/etc/mtab" => {
-                let mut m = MountInfo {
-                    dev_id: "".to_string(),
-                    dev_name: raw[0].to_string(),
-                    fs_type: raw[2].to_string(),
-                    mount_root: "".to_string(),
-                    mount_dir: raw[1].to_string(),
-                    mount_option: raw[3].to_string(),
-                    remote: false,
-                    dummy: false,
-                };
-                m.set_missing_fields();
-                Some(m)
-            }
-            _ => None,
-        }
-    }
-    #[cfg(windows)]
-    fn new(mut volume_name: String) -> Option<MountInfo> {
-        let mut dev_name_buf = [0u16; MAX_PATH];
-        volume_name.pop();
-        unsafe {
-            QueryDosDeviceW(
-                OsString::from(volume_name.clone())
-                    .as_os_str()
-                    .encode_wide()
-                    .chain(Some(0))
-                    .skip(4)
-                    .collect::<Vec<u16>>()
-                    .as_ptr(),
-                dev_name_buf.as_mut_ptr(),
-                dev_name_buf.len() as DWORD,
-            )
-        };
-        volume_name.push('\\');
-        let dev_name = LPWSTR2String(&dev_name_buf);
-
-        let mut mount_root_buf = [0u16; MAX_PATH];
-        let success = unsafe {
-            GetVolumePathNamesForVolumeNameW(
-                String2LPWSTR!(volume_name),
-                mount_root_buf.as_mut_ptr(),
-                mount_root_buf.len() as DWORD,
-                ptr::null_mut(),
-            )
-        };
-        if 0 == success {
-            // TODO: support the case when `GetLastError()` returns `ERROR_MORE_DATA`
-            return None;
-        }
-        let mount_root = LPWSTR2String(&mount_root_buf);
-
-        let mut fs_type_buf = [0u16; MAX_PATH];
-        let success = unsafe {
-            GetVolumeInformationW(
-                String2LPWSTR!(mount_root),
-                ptr::null_mut(),
-                0 as DWORD,
-                ptr::null_mut(),
-                ptr::null_mut(),
-                ptr::null_mut(),
-                fs_type_buf.as_mut_ptr(),
-                fs_type_buf.len() as DWORD,
-            )
-        };
-        let fs_type = if 0 != success {
-            Some(LPWSTR2String(&fs_type_buf))
-        } else {
-            None
-        };
-        let mut mn_info = MountInfo {
-            dev_id: volume_name,
-            dev_name,
-            fs_type: fs_type.unwrap_or_else(|| "".to_string()),
-            mount_root,
-            mount_dir: "".to_string(),
-            mount_option: "".to_string(),
-            remote: false,
-            dummy: false,
-        };
-        mn_info.set_missing_fields();
-        Some(mn_info)
-    }
-}
-
-impl FsUsage {
-    #[cfg(unix)]
-    fn new(statvfs: libc::statvfs) -> FsUsage {
-        {
-            FsUsage {
-                blocksize: if statvfs.f_frsize != 0 {
-                    statvfs.f_frsize as u64
-                } else {
-                    statvfs.f_bsize as u64
-                },
-                blocks: statvfs.f_blocks as u64,
-                bfree: statvfs.f_bfree as u64,
-                bavail: statvfs.f_bavail as u64,
-                bavail_top_bit_set: ((statvfs.f_bavail as u64) & (1u64.rotate_right(1))) != 0,
-                files: statvfs.f_files as u64,
-                ffree: statvfs.f_ffree as u64,
-            }
-        }
-    }
-    #[cfg(not(unix))]
-    fn new(path: &Path) -> FsUsage {
-        let mut root_path = [0u16; MAX_PATH];
-        let success = unsafe {
-            GetVolumePathNamesForVolumeNameW(
-                //path_utf8.as_ptr(),
-                String2LPWSTR!(path.as_os_str()),
-                root_path.as_mut_ptr(),
-                root_path.len() as DWORD,
-                ptr::null_mut(),
-            )
-        };
-        if 0 == success {
-            crash!(
-                EXIT_ERR,
-                "GetVolumePathNamesForVolumeNameW failed: {}",
-                unsafe { GetLastError() }
-            );
-        }
-
-        let mut sectors_per_cluster = 0;
-        let mut bytes_per_sector = 0;
-        let mut number_of_free_clusters = 0;
-        let mut total_number_of_clusters = 0;
-
-        let success = unsafe {
-            GetDiskFreeSpaceW(
-                String2LPWSTR!(path.as_os_str()),
-                &mut sectors_per_cluster,
-                &mut bytes_per_sector,
-                &mut number_of_free_clusters,
-                &mut total_number_of_clusters,
-            )
-        };
-        if 0 == success {
-            // Fails in case of CD for example
-            //crash!(EXIT_ERR, "GetDiskFreeSpaceW failed: {}", unsafe {
-            //GetLastError()
-            //});
-        }
-
-        let bytes_per_cluster = sectors_per_cluster as u64 * bytes_per_sector as u64;
-        FsUsage {
-            // f_bsize      File system block size.
-            blocksize: bytes_per_cluster as u64,
-            // f_blocks - Total number of blocks on the file system, in units of f_frsize.
-            // frsize =     Fundamental file system block size (fragment size).
-            blocks: total_number_of_clusters as u64,
-            //  Total number of free blocks.
-            bfree: number_of_free_clusters as u64,
-            //  Total number of free blocks available to non-privileged processes.
-            bavail: 0 as u64,
-            bavail_top_bit_set: ((bytes_per_sector as u64) & (1u64.rotate_right(1))) != 0,
-            // Total number of file nodes (inodes) on the file system.
-            files: 0 as u64, // Not available on windows
-            // Total number of free file nodes (inodes).
-            ffree: 4096 as u64, // Meaningless on Windows
-        }
-    }
-}
-
 impl Filesystem {
-    // TODO: resolve uuid in `mountinfo.dev_name` if exists
-    fn new(mountinfo: MountInfo) -> Option<Filesystem> {
-        let _stat_path = if !mountinfo.mount_dir.is_empty() {
-            mountinfo.mount_dir.clone()
+    // TODO: resolve uuid in `mount_info.dev_name` if exists
+    fn new(mount_info: MountInfo) -> Option<Filesystem> {
+        let _stat_path = if !mount_info.mount_dir.is_empty() {
+            mount_info.mount_dir.clone()
         } else {
             #[cfg(unix)]
             {
-                mountinfo.dev_name.clone()
+                mount_info.dev_name.clone()
             }
             #[cfg(windows)]
             {
                 // On windows, we expect the volume id
-                mountinfo.dev_id.clone()
+                mount_info.dev_id.clone()
             }
         };
         #[cfg(unix)]
         unsafe {
             let path = CString::new(_stat_path).unwrap();
             let mut statvfs = mem::zeroed();
-            if libc::statvfs(path.as_ptr(), &mut statvfs) < 0 {
+            if statfs_fn(path.as_ptr(), &mut statvfs) < 0 {
                 None
             } else {
                 Some(Filesystem {
-                    mountinfo,
+                    mount_info,
                     usage: FsUsage::new(statvfs),
                 })
             }
         }
         #[cfg(windows)]
         Some(Filesystem {
-            mountinfo,
+            mount_info,
             usage: FsUsage::new(Path::new(&_stat_path)),
         })
-    }
-}
-
-/// Read file system list.
-fn read_fs_list() -> Vec<MountInfo> {
-    #[cfg(target_os = "linux")]
-    {
-        let (file_name, fobj) = File::open(LINUX_MOUNTINFO)
-            .map(|f| (LINUX_MOUNTINFO, f))
-            .or_else(|_| File::open(LINUX_MTAB).map(|f| (LINUX_MTAB, f)))
-            .expect("failed to find mount list files");
-        let reader = BufReader::new(fobj);
-        reader
-            .lines()
-            .filter_map(|line| line.ok())
-            .filter_map(|line| {
-                let raw_data = line.split_whitespace().collect::<Vec<&str>>();
-                MountInfo::new(file_name, raw_data)
-            })
-            .collect::<Vec<_>>()
-    }
-    #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
-    {
-        let mut mptr: *mut statfs = ptr::null_mut();
-        let len = unsafe { getmntinfo(&mut mptr, 1 as c_int) };
-        if len < 0 {
-            crash!(EXIT_ERR, "getmntinfo failed");
-        }
-        let mounts = unsafe { slice::from_raw_parts(mptr, len as usize) };
-        mounts
-            .iter()
-            .map(|m| MountInfo::from(*m))
-            .collect::<Vec<_>>()
-    }
-    #[cfg(windows)]
-    {
-        let mut volume_name_buf = [0u16; MAX_PATH];
-        // As recommended in the MS documentation, retrieve the first volume before the others
-        let find_handle = unsafe {
-            FindFirstVolumeW(volume_name_buf.as_mut_ptr(), volume_name_buf.len() as DWORD)
-        };
-        if INVALID_HANDLE_VALUE == find_handle {
-            crash!(EXIT_ERR, "FindFirstVolumeW failed: {}", unsafe {
-                GetLastError()
-            });
-        }
-        let mut mounts = Vec::<MountInfo>::new();
-        loop {
-            let volume_name = LPWSTR2String(&volume_name_buf);
-            if !volume_name.starts_with("\\\\?\\") || !volume_name.ends_with('\\') {
-                show_warning!("A bad path was skipped: {}", volume_name);
-                continue;
-            }
-            if let Some(m) = MountInfo::new(volume_name) {
-                mounts.push(m);
-            }
-            if 0 == unsafe {
-                FindNextVolumeW(
-                    find_handle,
-                    volume_name_buf.as_mut_ptr(),
-                    volume_name_buf.len() as DWORD,
-                )
-            } {
-                let err = unsafe { GetLastError() };
-                if err != winapi::shared::winerror::ERROR_NO_MORE_FILES {
-                    crash!(EXIT_ERR, "FindNextVolumeW failed: {}", err);
-                }
-                break;
-            }
-        }
-        unsafe {
-            FindVolumeClose(find_handle);
-        }
-        mounts
     }
 }
 
@@ -677,7 +202,7 @@ fn filter_mount_list(vmi: Vec<MountInfo>, paths: &[String], opt: &Options) -> Ve
                         if (!mi.dev_name.starts_with('/') || seen.dev_name.starts_with('/'))
                             // let points towards the root of the device win.
                             && (!target_nearer_root || source_below_root)
-                            // let an entry overmounted on a new device win...
+                            // let an entry over-mounted on a new device win...
                             && (seen.dev_name == mi.dev_name
                             /* ... but only when matching an existing mnt point,
                             to avoid problematic replacement when given
@@ -903,6 +428,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         header.push("Type");
     }
     header.extend_from_slice(&if opt.show_inode_instead {
+        // spell-checker:disable-next-line
         ["Inodes", "Iused", "IFree", "IUses%"]
     } else {
         [
@@ -916,6 +442,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             "Use%",
         ]
     });
+    if cfg!(target_os = "macos") && !opt.show_inode_instead {
+        header.insert(header.len() - 1, "Capacity");
+    }
     header.push("Mounted on");
 
     for (idx, title) in header.iter().enumerate() {
@@ -931,9 +460,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
     println!();
     for fs in fs_list.iter() {
-        print!("{0: <16} ", fs.mountinfo.dev_name);
+        print!("{0: <16} ", fs.mount_info.dev_name);
         if opt.show_fs_type {
-            print!("{0: <5} ", fs.mountinfo.fs_type);
+            print!("{0: <5} ", fs.mount_info.fs_type);
         }
         if opt.show_inode_instead {
             print!(
@@ -970,9 +499,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 "{0: >12} ",
                 human_readable(free_size, opt.human_readable_base)
             );
+            if cfg!(target_os = "macos") {
+                let used = fs.usage.blocks - fs.usage.bfree;
+                let blocks = used + fs.usage.bavail;
+                print!("{0: >12} ", use_size(used, blocks));
+            }
             print!("{0: >5} ", use_size(free_size, total_size));
         }
-        print!("{0: <16}", fs.mountinfo.mount_dir);
+        print!("{0: <16}", fs.mount_info.mount_dir);
         println!();
     }
 

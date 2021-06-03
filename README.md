@@ -6,14 +6,13 @@
 [![LOC](https://tokei.rs/b1/github/uutils/coreutils?category=code)](https://github.com/Aaronepower/tokei)
 [![dependency status](https://deps.rs/repo/github/uutils/coreutils/status.svg)](https://deps.rs/repo/github/uutils/coreutils)
 
-[![Build Status](https://api.travis-ci.org/uutils/coreutils.svg?branch=master)](https://travis-ci.org/uutils/coreutils)
 [![Build Status (FreeBSD)](https://api.cirrus-ci.com/github/uutils/coreutils.svg)](https://cirrus-ci.com/github/uutils/coreutils/master)
 [![CodeCov](https://codecov.io/gh/uutils/coreutils/branch/master/graph/badge.svg)](https://codecov.io/gh/uutils/coreutils)
 
 -----------------------------------------------
 
 <!-- markdownlint-disable commands-show-output no-duplicate-heading -->
-<!-- spell-checker:ignore markdownlint ; (jargon) multicall ; (misc) aarch riscv uutil uutils ; (names/acronyms) BusyBox BusyBox's BusyTest MSVC NixOS PowerPC WASI WASM ; (options) DESTDIR RUNTEST UTILNAME -->
+<!-- spell-checker:ignore markdownlint ; (options) DESTDIR RUNTEST UTILNAME -->
 
 uutils is an attempt at writing universal (as in cross-platform) CLI
 utilities in [Rust](http://www.rust-lang.org). This repository is intended to
@@ -40,7 +39,7 @@ to compile anywhere, and this is as good a way as any to try and learn it.
 ### Rust Version
 
 uutils follows Rust's release channels and is tested against stable, beta and nightly.
-The current oldest supported version of the Rust compiler is `1.40.0`.
+The current oldest supported version of the Rust compiler is `1.43.1`.
 
 On both Windows and Redox, only the nightly version is tested currently.
 
@@ -301,13 +300,13 @@ $ make UTILS='UTILITY_1 UTILITY_2' SPEC=y test
 This testing functionality is only available on *nix operating systems and
 requires `make`.
 
-To run busybox's tests for all utilities for which busybox has tests
+To run busybox tests for all utilities for which busybox has tests
 
 ```bash
 $ make busytest
 ```
 
-To run busybox's tests for a few of the available utilities
+To run busybox tests for a few of the available utilities
 
 ```bash
 $ make UTILS='UTILITY_1 UTILITY_2' busytest
@@ -319,6 +318,17 @@ To pass an argument like "-v" to the busybox test runtime
 $ make UTILS='UTILITY_1 UTILITY_2' RUNTEST_ARGS='-v' busytest
 ```
 
+## Comparing with GNU
+
+![Evolution over time](https://github.com/uutils/coreutils-tracking/blob/main/gnu-results.png?raw=true)
+
+To run locally:
+
+```bash
+$ bash util/build-gnu.sh
+$ bash util/run-gnu-test.sh
+```
+
 ## Contribute
 
 To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
@@ -328,12 +338,12 @@ To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 | Done      | Semi-Done | To Do  |
 |-----------|-----------|--------|
 | arch      | cp        | chcon  |
-| base32    | expr      | dd     |
-| base64    | install   | numfmt |
-| basename  | ls        | pr     |
-| cat       | more      | runcon |
-| chgrp     | od (`--strings` and 128-bit data types missing) | stty |
-| chmod     | printf    |        |
+| base32    | expr      | csplit |
+| base64    | install   | dd     |
+| basename  | ls        | df     |
+| cat       | more      | numfmt |
+| chgrp     | od (`--strings` and 128-bit data types missing) | runcon |
+| chmod     | printf    | stty   |
 | chown     | sort      |        |
 | chroot    | split     |        |
 | cksum     | tail      |        |
@@ -342,7 +352,7 @@ To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 | cut       | join      |        |
 | dircolors | df        |        |
 | dirname   | tac       |        |
-| du        |           |        |
+| du        | pr        |        |
 | echo      |           |        |
 | env       |           |        |
 | expand    |           |        |
@@ -429,6 +439,7 @@ This is an auto-generated table showing which binaries compile for each target-t
 |windows-msvc|i686|y|y|y|y|y| | | | |y|y|y|y|y|y|y|y|y| |y|y|y| |y|y|y|y| |y|y|y|y| | |y| |y|y|y|y|y| | |y|y|y| |y| |y|y|y|y| | |y|y|y|y|y|y|y|y|y|y|y|y|y|y|y| | |y|y|y|y|y|y| |y|y|y|y|y| |y|y|y| |y| |y| |y|y|
 |windows-gnu|x86_64|y|y|y|y|y| | | | |y|y|y|y|y|y|y|y|y| |y|y|y| |y|y|y|y| |y|y|y|y| | |y| |y|y|y|y|y| | |y|y|y| |y| |y|y|y|y| | |y|y|y|y|y|y|y|y|y|y|y|y|y|y|y| | |y|y|y|y|y|y| |y|y|y|y|y|y|y|y|y| |y| |y| |y|y|
 |windows-msvc|x86_64|y|y|y|y|y| | | | |y|y|y|y|y|y|y|y|y| |y|y|y| |y|y|y|y| |y|y|y|y| | |y| |y|y|y|y|y| | |y|y|y| |y| |y|y|y|y| | |y|y|y|y|y|y|y|y|y|y|y|y|y|y|y| | |y|y|y|y|y|y| |y|y|y|y|y| |y|y|y| |y| |y| |y|y|
+|apple MacOS|aarch64|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y| |y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|
 |apple MacOS|x86_64|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y| |y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|
 |freebsd|x86_64|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|
 |netbsd|x86_64|y|y|y|y|y|y|y|y| |y|y|y|y|y|y| |y|y|y|y|y|y| |y|y|y|y|y|y|y|y|y| |y|y| |y|y|y|y|y|y|y|y|y|y|y|y| |y|y|y|y|y| |y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y|y| |y|y|y|y|y|y| |y|y|y| | |y| |y|y|

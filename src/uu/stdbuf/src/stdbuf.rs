@@ -19,22 +19,23 @@ use std::path::PathBuf;
 use std::process::Command;
 use tempfile::tempdir;
 use tempfile::TempDir;
+use uucore::InvalidEncodingHandling;
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str =
     "Run COMMAND, with modified buffering operations for its standard streams.\n\n\
-                      Mandatory arguments to long options are mandatory for short options too.";
+     Mandatory arguments to long options are mandatory for short options too.";
 static LONG_HELP: &str = "If MODE is 'L' the corresponding stream will be line buffered.\n\
-                          This option is invalid with standard input.\n\n\
-                          If MODE is '0' the corresponding stream will be unbuffered.\n\n\
-                          Otherwise MODE is a number which may be followed by one of the following:\n\n\
-                          KB 1000, K 1024, MB 1000*1000, M 1024*1024, and so on for G, T, P, E, Z, Y.\n\
-                          In this case the corresponding stream will be fully buffered with the buffer size set to \
-                          MODE bytes.\n\n\
-                          NOTE: If COMMAND adjusts the buffering of its standard streams ('tee' does for e.g.) then \
-                          that will override corresponding settings changed by 'stdbuf'.\n\
-                          Also some filters (like 'dd' and 'cat' etc.) don't use streams for I/O, \
-                          and are thus unaffected by 'stdbuf' settings.\n";
+     This option is invalid with standard input.\n\n\
+     If MODE is '0' the corresponding stream will be unbuffered.\n\n\
+     Otherwise MODE is a number which may be followed by one of the following:\n\n\
+     KB 1000, K 1024, MB 1000*1000, M 1024*1024, and so on for G, T, P, E, Z, Y.\n\
+     In this case the corresponding stream will be fully buffered with the buffer size set to \
+     MODE bytes.\n\n\
+     NOTE: If COMMAND adjusts the buffering of its standard streams ('tee' does for e.g.) then \
+     that will override corresponding settings changed by 'stdbuf'.\n\
+     Also some filters (like 'dd' and 'cat' etc.) don't use streams for I/O, \
+     and are thus unaffected by 'stdbuf' settings.\n";
 
 mod options {
     pub const INPUT: &str = "input";
@@ -186,6 +187,9 @@ fn get_preload_env(tmp_dir: &mut TempDir) -> io::Result<(String, PathBuf)> {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
     let usage = get_usage();
 
     let matches = App::new(executable!())

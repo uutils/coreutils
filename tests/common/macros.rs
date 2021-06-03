@@ -50,14 +50,14 @@ macro_rules! new_ucmd {
 /// Convenience macro for acquiring a [`UCommand`] builder and a test path.
 ///
 /// Returns a tuple containing the following:
-/// - an [`AsPath`] that points to a unique temporary test directory
+/// - an [`AtPath`] that points to a unique temporary test directory
 /// - a [`UCommand`] builder for invoking the binary to be tested
 ///
 /// This macro is intended for quick, single-call tests. For more complex tests
 /// that require multiple invocations of the tested binary, see [`TestScenario`]
 ///
 /// [`UCommand`]: crate::tests::common::util::UCommand
-/// [`AsPath`]: crate::tests::common::util::AsPath
+/// [`AtPath`]: crate::tests::common::util::AtPath
 /// [`TestScenario]: crate::tests::common::util::TestScenario
 #[macro_export]
 macro_rules! at_and_ucmd {

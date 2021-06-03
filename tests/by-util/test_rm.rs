@@ -65,7 +65,7 @@ fn test_rm_interactive() {
         .arg("-i")
         .arg(file_a)
         .arg(file_b)
-        .pipe_in("Yesh")
+        .pipe_in("Yesh") // spell-checker:disable-line
         .succeeds();
 
     assert!(!at.file_exists(file_a));
@@ -258,7 +258,7 @@ fn test_rm_no_operand() {
     let mut ucmd = new_ucmd!();
 
     ucmd.fails()
-        .stderr_is("rm: error: missing an argument\nrm: error: for help, try 'rm --help'\n");
+        .stderr_is("rm: missing an argument\nrm: for help, try 'rm --help'\n");
 }
 
 #[test]

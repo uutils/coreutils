@@ -1,3 +1,5 @@
+// spell-checker:ignore (words) autoformat
+
 use crate::common::util::*;
 
 #[test]
@@ -141,14 +143,14 @@ fn new_line_separated() {
 }
 
 #[test]
-fn multitab_character() {
+fn tab_multi_character() {
     new_ucmd!()
         .arg("semicolon_fields_1.txt")
         .arg("semicolon_fields_2.txt")
         .arg("-t")
         .arg("э")
         .fails()
-        .stderr_is("join: error: multi-character tab э");
+        .stderr_is("join: multi-character tab э");
 }
 
 #[test]
@@ -211,7 +213,7 @@ fn empty_format() {
         .arg("-o")
         .arg("")
         .fails()
-        .stderr_is("join: error: invalid file number in field spec: ''");
+        .stderr_is("join: invalid file number in field spec: ''");
 }
 
 #[test]

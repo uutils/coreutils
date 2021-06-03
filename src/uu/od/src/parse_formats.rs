@@ -85,12 +85,7 @@ fn od_format_type(type_char: FormatType, byte_size: u8) -> Option<FormatterItemI
 }
 
 fn od_argument_with_option(ch: char) -> bool {
-    #[allow(clippy::match_like_matches_macro)]
-    // `matches!(...)` macro not stabilized until rust v1.42
-    match ch {
-        'A' | 'j' | 'N' | 'S' | 'w' => true,
-        _ => false,
-    }
+    matches!(ch, 'A' | 'j' | 'N' | 'S' | 'w')
 }
 
 /// Parses format flags from command line

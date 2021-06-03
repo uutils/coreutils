@@ -51,14 +51,23 @@ struct Options {
 }
 
 fn is_custom_binary(program: &str) -> bool {
-    #[allow(clippy::match_like_matches_macro)]
-    // `matches!(...)` macro not stabilized until rust v1.42
-    match program {
-        "md5sum" | "sha1sum" | "sha224sum" | "sha256sum" | "sha384sum" | "sha512sum"
-        | "sha3sum" | "sha3-224sum" | "sha3-256sum" | "sha3-384sum" | "sha3-512sum"
-        | "shake128sum" | "shake256sum" | "b2sum" => true,
-        _ => false,
-    }
+    matches!(
+        program,
+        "md5sum"
+            | "sha1sum"
+            | "sha224sum"
+            | "sha256sum"
+            | "sha384sum"
+            | "sha512sum"
+            | "sha3sum"
+            | "sha3-224sum"
+            | "sha3-256sum"
+            | "sha3-384sum"
+            | "sha3-512sum"
+            | "shake128sum"
+            | "shake256sum"
+            | "b2sum"
+    )
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -361,7 +370,7 @@ pub fn uumain(mut args: impl uucore::Args) -> i32 {
         );
 
     if !is_custom_binary(&binary_name) {
-        let algos = &[
+        let algorithms = &[
             ("md5", "work with MD5"),
             ("sha1", "work with SHA1"),
             ("sha224", "work with SHA224"),
@@ -384,7 +393,7 @@ pub fn uumain(mut args: impl uucore::Args) -> i32 {
             ("b2sum", "work with BLAKE2"),
         ];
 
-        for (name, desc) in algos {
+        for (name, desc) in algorithms {
             app = app.arg(Arg::with_name(name).long(name).help(desc));
         }
     }

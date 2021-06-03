@@ -53,7 +53,9 @@ pub fn guess_syntax() -> OutputFmt {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
 
     let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
         .optflag("b", "sh", "output Bourne shell code to set LS_COLORS")
@@ -103,7 +105,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if out_format == OutputFmt::Unknown {
         match guess_syntax() {
             OutputFmt::Unknown => {
-                show_info!("no SHELL environment variable, and no shell type option given");
+                show_error!("no SHELL environment variable, and no shell type option given");
                 return 1;
             }
             fmt => out_format = fmt,
@@ -128,7 +130,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 )
             }
             Err(e) => {
-                show_info!("{}: {}", matches.free[0], e);
+                show_error!("{}: {}", matches.free[0], e);
                 return 1;
             }
         }
@@ -139,7 +141,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             0
         }
         Err(s) => {
-            show_info!("{}", s);
+            show_error!("{}", s);
             1
         }
     }
@@ -202,6 +204,8 @@ enum ParseState {
     Pass,
 }
 use std::collections::HashMap;
+use uucore::InvalidEncodingHandling;
+
 fn parse<T>(lines: T, fmt: OutputFmt, fp: &str) -> Result<String, String>
 where
     T: IntoIterator,

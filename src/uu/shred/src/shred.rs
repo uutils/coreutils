@@ -6,7 +6,7 @@
 // * For the full copyright and license information, please view the LICENSE
 // * file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) NAMESET FILESIZE fstab coeff journaling writeback REiser journaled
+// spell-checker:ignore (words) writeback wipesync
 
 use clap::{App, Arg};
 use rand::{Rng, ThreadRng};
@@ -17,6 +17,7 @@ use std::io;
 use std::io::prelude::*;
 use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
+use uucore::InvalidEncodingHandling;
 
 #[macro_use]
 extern crate uucore;
@@ -24,7 +25,7 @@ extern crate uucore;
 static NAME: &str = "shred";
 static VERSION_STR: &str = "1.0.0";
 const BLOCK_SIZE: usize = 512;
-const NAMESET: &str = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_.";
+const NAME_CHARSET: &str = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_.";
 
 // Patterns as shown in the GNU coreutils shred implementation
 const PATTERNS: [&[u8]; 22] = [
@@ -58,10 +59,10 @@ enum PassType<'a> {
     Random,
 }
 
-// Used to generate all possible filenames of a certain length using NAMESET as an alphabet
+// Used to generate all possible filenames of a certain length using NAME_CHARSET as an alphabet
 struct FilenameGenerator {
     name_len: usize,
-    nameset_indices: RefCell<Vec<usize>>, // Store the indices of the letters of our filename in NAMESET
+    name_charset_indices: RefCell<Vec<usize>>, // Store the indices of the letters of our filename in NAME_CHARSET
     exhausted: Cell<bool>,
 }
 
@@ -70,7 +71,7 @@ impl FilenameGenerator {
         let indices: Vec<usize> = vec![0; name_len];
         FilenameGenerator {
             name_len,
-            nameset_indices: RefCell::new(indices),
+            name_charset_indices: RefCell::new(indices),
             exhausted: Cell::new(false),
         }
     }
@@ -84,25 +85,25 @@ impl Iterator for FilenameGenerator {
             return None;
         }
 
-        let mut nameset_indices = self.nameset_indices.borrow_mut();
+        let mut name_charset_indices = self.name_charset_indices.borrow_mut();
 
         // Make the return value, then increment
         let mut ret = String::new();
-        for i in nameset_indices.iter() {
-            let c: char = NAMESET.chars().nth(*i).unwrap();
+        for i in name_charset_indices.iter() {
+            let c: char = NAME_CHARSET.chars().nth(*i).unwrap();
             ret.push(c);
         }
 
-        if nameset_indices[0] == NAMESET.len() - 1 {
+        if name_charset_indices[0] == NAME_CHARSET.len() - 1 {
             self.exhausted.set(true)
         }
         // Now increment the least significant index
         for i in (0..self.name_len).rev() {
-            if nameset_indices[i] == NAMESET.len() - 1 {
-                nameset_indices[i] = 0; // Carry the 1
+            if name_charset_indices[i] == NAME_CHARSET.len() - 1 {
+                name_charset_indices[i] = 0; // Carry the 1
                 continue;
             } else {
-                nameset_indices[i] += 1;
+                name_charset_indices[i] += 1;
                 break;
             }
         }
@@ -232,7 +233,7 @@ static AFTER_HELP: &str =
      assumption.  The following are examples of file systems on which shred is\n\
      not effective, or is not guaranteed to be effective in all file system modes:\n\
      \n\
-     * log-structured or journaled file systems, such as those supplied with\n\
+     * log-structured or journal file systems, such as those supplied with\n\
      AIX and Solaris (and JFS, ReiserFS, XFS, Ext3, etc.)\n\
      \n\
      * file systems that write redundant data and carry on even if some writes\n\
@@ -249,7 +250,7 @@ static AFTER_HELP: &str =
      and shred is thus of limited effectiveness) only in data=journal mode,\n\
      which journals file data in addition to just metadata.  In both the\n\
      data=ordered (default) and data=writeback modes, shred works as usual.\n\
-     Ext3 journaling modes can be changed by adding the data=something option\n\
+     Ext3 journal modes can be changed by adding the data=something option\n\
      to the mount options for a particular file system in the /etc/fstab file,\n\
      as documented in the mount man page (man mount).\n\
      \n\
@@ -270,7 +271,9 @@ pub mod options {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
 
     let usage = get_usage();
 
@@ -409,7 +412,7 @@ fn get_size(size_str_opt: Option<String>) -> Option<u64> {
         _ => 1u64,
     };
 
-    let coeff = match size_str.parse::<u64>() {
+    let coefficient = match size_str.parse::<u64>() {
         Ok(u) => u,
         Err(_) => {
             println!("{}: {}: Invalid file size", NAME, size_str_opt.unwrap());
@@ -417,7 +420,7 @@ fn get_size(size_str_opt: Option<String>) -> Option<u64> {
         }
     };
 
-    Some(coeff * unit)
+    Some(coefficient * unit)
 }
 
 fn pass_name(pass_type: PassType) -> String {

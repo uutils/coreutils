@@ -13,6 +13,7 @@ extern crate uucore;
 use clap::{App, Arg};
 use std::io::{stdin, stdout, BufReader, Read, Stdout, Write};
 use std::{fs::File, path::Path};
+use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "tac";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -27,7 +28,9 @@ mod options {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     let matches = App::new(executable!())
         .name(NAME)

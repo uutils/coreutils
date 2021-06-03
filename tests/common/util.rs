@@ -1,13 +1,15 @@
+//spell-checker: ignore (linux) rlimit prlimit Rlim
+
 #![allow(dead_code)]
 
-#[cfg(not(windows))]
-use libc;
 use pretty_assertions::assert_eq;
+#[cfg(target_os = "linux")]
+use rlimit::{prlimit, rlim};
 use std::env;
 #[cfg(not(windows))]
 use std::ffi::CString;
 use std::ffi::OsStr;
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, hard_link, File, OpenOptions};
 use std::io::{Read, Result, Write};
 #[cfg(unix)]
 use std::os::unix::fs::{symlink as symlink_dir, symlink as symlink_file};
@@ -16,10 +18,10 @@ use std::os::windows::fs::{symlink_dir, symlink_file};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::rc::Rc;
-use std::str::from_utf8;
 use std::thread::sleep;
 use std::time::Duration;
 use tempfile::TempDir;
+use uucore::{Args, InvalidEncodingHandling};
 
 #[cfg(windows)]
 static PROGNAME: &str = concat!(env!("CARGO_PKG_NAME"), ".exe");
@@ -39,7 +41,7 @@ static NO_STDIN_MEANINGLESS: &str = "Setting this flag has no effect if there is
 /// Test if the program is running under CI
 pub fn is_ci() -> bool {
     std::env::var("CI")
-        .unwrap_or(String::from("false"))
+        .unwrap_or_else(|_| String::from("false"))
         .eq_ignore_ascii_case("true")
 }
 
@@ -61,54 +63,54 @@ pub struct CmdResult {
     /// see [`success`]
     success: bool,
     /// captured standard output after running the Command
-    stdout: String,
+    stdout: Vec<u8>,
     /// captured standard error after running the Command
-    stderr: String,
+    stderr: Vec<u8>,
 }
 
 impl CmdResult {
     /// Returns a reference to the program's standard output as a slice of bytes
     pub fn stdout(&self) -> &[u8] {
-        &self.stdout.as_bytes()
+        &self.stdout
     }
 
     /// Returns the program's standard output as a string slice
     pub fn stdout_str(&self) -> &str {
-        &self.stdout
+        std::str::from_utf8(&self.stdout).unwrap()
     }
 
     /// Returns the program's standard output as a string
     /// consumes self
     pub fn stdout_move_str(self) -> String {
-        self.stdout
+        String::from_utf8(self.stdout).unwrap()
     }
 
     /// Returns the program's standard output as a vec of bytes
     /// consumes self
     pub fn stdout_move_bytes(self) -> Vec<u8> {
-        Vec::from(self.stdout)
+        self.stdout
     }
 
     /// Returns a reference to the program's standard error as a slice of bytes
     pub fn stderr(&self) -> &[u8] {
-        &self.stderr.as_bytes()
+        &self.stderr
     }
 
     /// Returns the program's standard error as a string slice
     pub fn stderr_str(&self) -> &str {
-        &self.stderr
+        std::str::from_utf8(&self.stderr).unwrap()
     }
 
     /// Returns the program's standard error as a string
     /// consumes self
     pub fn stderr_move_str(self) -> String {
-        self.stderr
+        String::from_utf8(self.stderr).unwrap()
     }
 
     /// Returns the program's standard error as a vec of bytes
     /// consumes self
     pub fn stderr_move_bytes(self) -> Vec<u8> {
-        Vec::from(self.stderr)
+        self.stderr
     }
 
     /// Returns the program's exit code
@@ -162,7 +164,7 @@ impl CmdResult {
 
     /// asserts that the command's exit code is the same as the given one
     pub fn status_code(&self, code: i32) -> &CmdResult {
-        assert!(self.code == Some(code));
+        assert_eq!(self.code, Some(code));
         self
     }
 
@@ -201,21 +203,21 @@ impl CmdResult {
     /// passed in value, trailing whitespace are kept to force strict comparison (#1235)
     /// stdout_only is a better choice unless stderr may or will be non-empty
     pub fn stdout_is<T: AsRef<str>>(&self, msg: T) -> &CmdResult {
-        assert_eq!(self.stdout, String::from(msg.as_ref()));
+        assert_eq!(self.stdout_str(), String::from(msg.as_ref()));
         self
     }
 
     /// Like `stdout_is` but newlines are normalized to `\n`.
     pub fn normalized_newlines_stdout_is<T: AsRef<str>>(&self, msg: T) -> &CmdResult {
         let msg = msg.as_ref().replace("\r\n", "\n");
-        assert_eq!(self.stdout.replace("\r\n", "\n"), msg);
+        assert_eq!(self.stdout_str().replace("\r\n", "\n"), msg);
         self
     }
 
     /// asserts that the command resulted in stdout stream output,
     /// whose bytes equal those of the passed in slice
     pub fn stdout_is_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &CmdResult {
-        assert_eq!(self.stdout.as_bytes(), msg.as_ref());
+        assert_eq!(self.stdout, msg.as_ref());
         self
     }
 
@@ -224,13 +226,27 @@ impl CmdResult {
         let contents = read_scenario_fixture(&self.tmpd, file_rel_path);
         self.stdout_is(String::from_utf8(contents).unwrap())
     }
+    /// like stdout_is_fixture(...), but replaces the data in fixture file based on values provided in template_vars
+    /// command output
+    pub fn stdout_is_templated_fixture<T: AsRef<OsStr>>(
+        &self,
+        file_rel_path: T,
+        template_vars: Vec<(&String, &String)>,
+    ) -> &CmdResult {
+        let mut contents =
+            String::from_utf8(read_scenario_fixture(&self.tmpd, file_rel_path)).unwrap();
+        for kv in template_vars {
+            contents = contents.replace(kv.0, kv.1);
+        }
+        self.stdout_is(contents)
+    }
 
     /// asserts that the command resulted in stderr stream output that equals the
     /// passed in value, when both are trimmed of trailing whitespace
     /// stderr_only is a better choice unless stdout may or will be non-empty
     pub fn stderr_is<T: AsRef<str>>(&self, msg: T) -> &CmdResult {
         assert_eq!(
-            self.stderr.trim_end(),
+            self.stderr_str().trim_end(),
             String::from(msg.as_ref()).trim_end()
         );
         self
@@ -239,7 +255,7 @@ impl CmdResult {
     /// asserts that the command resulted in stderr stream output,
     /// whose bytes equal those of the passed in slice
     pub fn stderr_is_bytes<T: AsRef<[u8]>>(&self, msg: T) -> &CmdResult {
-        assert_eq!(self.stderr.as_bytes(), msg.as_ref());
+        assert_eq!(self.stderr, msg.as_ref());
         self
     }
 
@@ -294,17 +310,32 @@ impl CmdResult {
     }
 
     pub fn stdout_contains<T: AsRef<str>>(&self, cmp: T) -> &CmdResult {
-        assert!(self.stdout_str().contains(cmp.as_ref()));
+        assert!(
+            self.stdout_str().contains(cmp.as_ref()),
+            "'{}' does not contain '{}'",
+            self.stdout_str(),
+            cmp.as_ref()
+        );
         self
     }
 
     pub fn stderr_contains<T: AsRef<str>>(&self, cmp: T) -> &CmdResult {
-        assert!(self.stderr_str().contains(cmp.as_ref()));
+        assert!(
+            self.stderr_str().contains(cmp.as_ref()),
+            "'{}' does not contain '{}'",
+            self.stderr_str(),
+            cmp.as_ref()
+        );
         self
     }
 
     pub fn stdout_does_not_contain<T: AsRef<str>>(&self, cmp: T) -> &CmdResult {
-        assert!(!self.stdout_str().contains(cmp.as_ref()));
+        assert!(
+            !self.stdout_str().contains(cmp.as_ref()),
+            "'{}' contains '{}' but should not",
+            self.stdout_str(),
+            cmp.as_ref(),
+        );
         self
     }
 
@@ -449,7 +480,7 @@ impl AtPath {
             .append(true)
             .open(self.plus(name))
             .unwrap();
-        f.write(contents.as_bytes())
+        f.write_all(contents.as_bytes())
             .unwrap_or_else(|e| panic!("Couldn't write {}: {}", name, e));
     }
 
@@ -506,6 +537,14 @@ impl AtPath {
                 false
             }
         }
+    }
+
+    pub fn hard_link(&self, src: &str, dst: &str) {
+        log_info(
+            "hard_link",
+            &format!("{},{}", self.plus_as_string(src), self.plus_as_string(dst)),
+        );
+        hard_link(&self.plus(src), &self.plus(dst)).unwrap();
     }
 
     pub fn symlink_file(&self, src: &str, dst: &str) {
@@ -612,7 +651,7 @@ impl TestScenario {
         let tmpd = Rc::new(TempDir::new().unwrap());
         let ts = TestScenario {
             bin_path: {
-                // Instead of hardcoding the path relative to the current
+                // Instead of hard coding the path relative to the current
                 // directory, use Cargo's OUT_DIR to find path to executable.
                 // This allows tests to be run using profiles other than debug.
                 let target_dir = path_concat!(env!("OUT_DIR"), "..", "..", "..", PROGNAME);
@@ -664,6 +703,10 @@ impl TestScenario {
         cmd
     }
 
+    /// Returns builder for invoking any system command. Paths given are treated
+    /// relative to the environment's unique temporary test directory.
+    /// Differs from the builder returned by `cmd` in that `cmd_keepenv` does not call
+    /// `Command::env_clear` (Clears the entire environment map for the child process.)
     pub fn cmd_keepenv<S: AsRef<OsStr>>(&self, bin: S) -> UCommand {
         UCommand::new_from_tmp(bin, self.tmpd.clone(), false)
     }
@@ -686,6 +729,8 @@ pub struct UCommand {
     stdout: Option<Stdio>,
     stderr: Option<Stdio>,
     bytes_into_stdin: Option<Vec<u8>>,
+    #[cfg(target_os = "linux")]
+    limits: Vec<(rlimit::Resource, rlim, rlim)>,
 }
 
 impl UCommand {
@@ -698,9 +743,10 @@ impl UCommand {
                 cmd.current_dir(curdir.as_ref());
                 if env_clear {
                     if cfg!(windows) {
+                        // spell-checker:ignore (dll) rsaenh
                         // %SYSTEMROOT% is required on Windows to initialize crypto provider
                         // ... and crypto provider is required for std::rand
-                        // From procmon: RegQueryValue HKLM\SOFTWARE\Microsoft\Cryptography\Defaults\Provider\Microsoft Strong Cryptographic Provider\Image Path
+                        // From `procmon`: RegQueryValue HKLM\SOFTWARE\Microsoft\Cryptography\Defaults\Provider\Microsoft Strong Cryptographic Provider\Image Path
                         // SUCCESS  Type: REG_SZ, Length: 66, Data: %SystemRoot%\system32\rsaenh.dll"
                         for (key, _) in env::vars_os() {
                             if key.as_os_str() != "SYSTEMROOT" {
@@ -719,6 +765,8 @@ impl UCommand {
             stdin: None,
             stdout: None,
             stderr: None,
+            #[cfg(target_os = "linux")]
+            limits: vec![],
         }
     }
 
@@ -750,8 +798,9 @@ impl UCommand {
         if self.has_run {
             panic!("{}", ALREADY_RUN);
         }
-        self.comm_string.push_str(" ");
-        self.comm_string.push_str(arg.as_ref().to_str().unwrap());
+        self.comm_string.push(' ');
+        self.comm_string
+            .push_str(arg.as_ref().to_str().unwrap_or_default());
         self.raw.arg(arg.as_ref());
         self
     }
@@ -762,16 +811,22 @@ impl UCommand {
         if self.has_run {
             panic!("{}", MULTIPLE_STDIN_MEANINGLESS);
         }
-        for s in args {
-            self.comm_string.push_str(" ");
-            self.comm_string.push_str(s.as_ref().to_str().unwrap());
+        let strings = args
+            .iter()
+            .map(|s| s.as_ref().to_os_string())
+            .collect_str(InvalidEncodingHandling::Ignore)
+            .accept_any();
+
+        for s in strings {
+            self.comm_string.push(' ');
+            self.comm_string.push_str(&s);
         }
 
         self.raw.args(args.as_ref());
         self
     }
 
-    /// provides stdinput to feed in to the command when spawned
+    /// provides standard input to feed in to the command when spawned
     pub fn pipe_in<T: Into<Vec<u8>>>(&mut self, input: T) -> &mut UCommand {
         if self.bytes_into_stdin.is_some() {
             panic!("{}", MULTIPLE_STDIN_MEANINGLESS);
@@ -809,6 +864,17 @@ impl UCommand {
         self
     }
 
+    #[cfg(target_os = "linux")]
+    pub fn with_limit(
+        &mut self,
+        resource: rlimit::Resource,
+        soft_limit: rlim,
+        hard_limit: rlim,
+    ) -> &mut Self {
+        self.limits.push((resource, soft_limit, hard_limit));
+        self
+    }
+
     /// Spawns the command, feeds the stdin if any, and returns the
     /// child process immediately.
     pub fn run_no_wait(&mut self) -> Child {
@@ -819,11 +885,22 @@ impl UCommand {
         log_info("run", &self.comm_string);
         let mut child = self
             .raw
-            .stdin(self.stdin.take().unwrap_or_else(|| Stdio::piped()))
-            .stdout(self.stdout.take().unwrap_or_else(|| Stdio::piped()))
-            .stderr(self.stderr.take().unwrap_or_else(|| Stdio::piped()))
+            .stdin(self.stdin.take().unwrap_or_else(Stdio::piped))
+            .stdout(self.stdout.take().unwrap_or_else(Stdio::piped))
+            .stderr(self.stderr.take().unwrap_or_else(Stdio::piped))
             .spawn()
             .unwrap();
+
+        #[cfg(target_os = "linux")]
+        for &(resource, soft_limit, hard_limit) in &self.limits {
+            prlimit(
+                child.id() as i32,
+                resource,
+                Some((soft_limit, hard_limit)),
+                None,
+            )
+            .unwrap();
+        }
 
         if let Some(ref input) = self.bytes_into_stdin {
             let write_result = child
@@ -851,8 +928,8 @@ impl UCommand {
             tmpd: self.tmpd.clone(),
             code: prog.status.code(),
             success: prog.status.success(),
-            stdout: from_utf8(&prog.stdout).unwrap().to_string(),
-            stderr: from_utf8(&prog.stderr).unwrap().to_string(),
+            stdout: prog.stdout,
+            stderr: prog.stderr,
         }
     }
 
@@ -879,6 +956,11 @@ impl UCommand {
         cmd_result.failure();
         cmd_result
     }
+
+    pub fn get_full_fixture_path(&self, file_rel_path: &str) -> String {
+        let tmpdir_path = self.tmpd.as_ref().unwrap().path();
+        format!("{}/{}", tmpdir_path.to_str().unwrap(), file_rel_path)
+    }
 }
 
 pub fn read_size(child: &mut Child, size: usize) -> String {
@@ -895,10 +977,7 @@ pub fn read_size(child: &mut Child, size: usize) -> String {
 }
 
 pub fn vec_of_size(n: usize) -> Vec<u8> {
-    let mut result = Vec::new();
-    for _ in 0..n {
-        result.push('a' as u8);
-    }
+    let result = vec![b'a'; n];
     assert_eq!(result.len(), n);
     result
 }
@@ -906,6 +985,7 @@ pub fn vec_of_size(n: usize) -> Vec<u8> {
 /// Sanity checks for test utils
 #[cfg(test)]
 mod tests {
+    // spell-checker:ignore (tests) asdfsadfa
     use super::*;
 
     #[test]
@@ -984,7 +1064,7 @@ mod tests {
     }
 
     #[test]
-    fn test_no_std_errout() {
+    fn test_no_stderr_output() {
         let res = CmdResult {
             tmpd: None,
             code: None,

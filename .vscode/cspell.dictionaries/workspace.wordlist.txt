@@ -1,0 +1,296 @@
+# * cargo
+cdylib
+rlib
+
+# * crates
+advapi
+advapi32-sys
+aho-corasick
+backtrace
+bstr
+byteorder
+chacha
+chrono
+conv
+corasick
+crossterm
+filetime
+formatteriteminfo
+fsext
+getopts
+getrandom
+globset
+itertools
+lscolors
+memchr
+multifilereader
+onig
+ouroboros
+peekreader
+quickcheck
+rand_chacha
+ringbuffer
+rlimit
+smallvec
+tempdir
+tempfile
+termion
+termios
+termsize
+termwidth
+textwrap
+thiserror
+walkdir
+winapi
+xattr
+
+# * rust/rustc
+RUSTDOCFLAGS
+RUSTFLAGS
+bitxor # BitXor trait function
+clippy
+concat
+fract
+powi
+println
+repr
+rfind
+rustc
+rustfmt
+struct
+structs
+substr
+splitn
+trunc
+
+# * uutils
+chcon
+chgrp
+chmod
+chown
+chroot
+cksum
+csplit
+dircolors
+hashsum
+hostid
+logname
+mkdir
+mkfifo
+mknod
+mktemp
+nohup
+nproc
+numfmt
+pathchk
+printenv
+printf
+readlink
+realpath
+relpath
+rmdir
+runcon
+shuf
+sprintf
+stdbuf
+stty
+tsort
+uname
+unexpand
+whoami
+
+# * vars/errno
+errno
+EEXIST
+ENOENT
+ENOSYS
+EPERM
+EOPNOTSUPP
+
+# * vars/fcntl
+F_GETFL
+    GETFL
+fcntl
+vmsplice
+
+# * vars/libc
+FILENO
+HOSTSIZE
+IDSIZE
+IFBLK
+IFCHR
+IFDIR
+IFIFO
+IFLNK
+IFMT
+IFREG
+IFSOCK
+IRGRP
+IROTH
+IRUSR
+ISGID
+ISUID
+ISVTX
+IWGRP
+IWOTH
+IWUSR
+IXGRP
+IXOTH
+IXUSR
+LINESIZE
+NAMESIZE
+RTLD_NEXT
+    RTLD
+SIGINT
+SIGKILL
+SIGTERM
+SYS_fdatasync
+SYS_syncfs
+USERSIZE
+addrinfo
+addrlen
+blocksize
+canonname
+chroot
+dlsym
+fdatasync
+freeaddrinfo
+getaddrinfo
+getegid
+geteuid
+getgid
+getgrgid
+getgrnam
+getgrouplist
+getgroups
+getpwnam
+getpwuid
+getuid
+inode
+inodes
+isatty
+lchown
+setgid
+setgroups
+settime
+setuid
+socktype
+statfs
+statvfs
+strcmp
+strerror
+syncfs
+umask
+waitpid
+wcslen
+
+# * vars/nix
+iovec
+unistd
+
+# * vars/signals
+SIGPIPE
+
+# * vars/std
+CString
+pathbuf
+
+# * vars/stat
+bavail
+bfree
+bsize
+ffree
+frsize
+fsid
+fstat
+fstype
+namelen
+# unix::fs::MetadataExt
+atime # access time
+blksize # blocksize for file system I/O
+blocks # number of blocks allocated to file
+ctime # creation time
+dev # ID of device containing the file
+gid # group ID of file owner
+ino # inode number
+mode # permissions
+mtime # modification time
+nlink # number of hard links to file
+rdev # device ID if file is a character/block special file
+size # total size of file in bytes
+uid # user ID of file owner
+nsec # nanosecond measurement scale
+# freebsd::MetadataExt
+iosize
+
+# * vars/time
+Timespec
+isdst
+nanos
+nsec
+nsecs
+strftime
+strptime
+subsec
+usec
+usecs
+utcoff
+
+# * vars/utmpx
+endutxent
+getutxent
+getutxid
+getutxline
+pututxline
+setutxent
+utmp
+utmpx
+utmpxname
+
+# * vars/winapi
+DWORD
+SYSTEMTIME
+LPVOID
+LPWSTR
+ULONG
+ULONGLONG
+UNLEN
+WCHAR
+errhandlingapi
+fileapi
+handleapi
+lmcons
+minwinbase
+minwindef
+processthreadsapi
+synchapi
+sysinfoapi
+winbase
+winerror
+winnt
+winsock
+
+# * vars/uucore
+optflag
+optflagmulti
+optflagopt
+optmulti
+optopt
+
+# * uutils
+ccmd
+coreopts
+coreutils
+keepenv
+libc
+libstdbuf
+musl
+tmpd
+ucmd
+ucommand
+utmpx
+uucore
+uucore_procs
+uumain
+uutil
+uutils

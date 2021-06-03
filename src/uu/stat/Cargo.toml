@@ -16,8 +16,7 @@ path = "src/stat.rs"
 
 [dependencies]
 clap = "2.33"
-time = "0.1.40"
-uucore = { version=">=0.0.8", package="uucore", path="../../uucore", features=["entries", "libc"] }
+uucore = { version=">=0.0.8", package="uucore", path="../../uucore", features=["entries", "libc", "fs", "fsext"] }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]

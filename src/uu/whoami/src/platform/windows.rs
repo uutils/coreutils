@@ -7,8 +7,6 @@
  * file that was distributed with this source code.
  */
 
-// spell-checker:ignore (ToDO) advapi lmcons winnt getusername WCHAR UNLEN
-
 extern crate winapi;
 
 use self::winapi::shared::lmcons;
@@ -18,7 +16,7 @@ use std::io::{Error, Result};
 use std::mem;
 use uucore::wide::FromWide;
 
-pub unsafe fn getusername() -> Result<String> {
+pub unsafe fn get_username() -> Result<String> {
     #[allow(deprecated)]
     let mut buffer: [winnt::WCHAR; lmcons::UNLEN as usize + 1] = mem::uninitialized();
     let mut len = buffer.len() as minwindef::DWORD;

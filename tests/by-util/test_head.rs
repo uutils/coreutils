@@ -1,6 +1,8 @@
+// spell-checker:ignore (words) bogusfile emptyfile
+
 use crate::common::util::*;
 
-static INPUT: &'static str = "lorem_ipsum.txt";
+static INPUT: &str = "lorem_ipsum.txt";
 
 #[test]
 fn test_stdin_default() {
@@ -130,6 +132,15 @@ fn test_zero_terminated_syntax_2() {
 }
 
 #[test]
+fn test_zero_terminated_negative_lines() {
+    new_ucmd!()
+        .args(&["-z", "-n", "-1"])
+        .pipe_in("x\0y\0z\0")
+        .run()
+        .stdout_is("x\0y\0");
+}
+
+#[test]
 fn test_negative_byte_syntax() {
     new_ucmd!()
         .args(&["--bytes=-2"])
@@ -160,6 +171,18 @@ fn test_no_such_file_or_directory() {
         .arg("no_such_file.toml")
         .fails()
         .stderr_contains("cannot open 'no_such_file.toml' for reading: No such file or directory");
+}
+
+/// Test that each non-existent files gets its own error message printed.
+#[test]
+fn test_multiple_nonexistent_files() {
+    new_ucmd!()
+        .args(&["bogusfile1", "bogusfile2"])
+        .fails()
+        .stdout_does_not_contain("==> bogusfile1 <==")
+        .stderr_contains("cannot open 'bogusfile1' for reading: No such file or directory")
+        .stdout_does_not_contain("==> bogusfile2 <==")
+        .stderr_contains("cannot open 'bogusfile2' for reading: No such file or directory");
 }
 
 // there was a bug not caught by previous tests
@@ -195,4 +218,29 @@ fn test_obsolete_extras() {
         .pipe_in("1\02\03\04\05\06")
         .succeeds()
         .stdout_is("==> standard input <==\n1\02\03\04\05\0");
+}
+
+#[test]
+fn test_multiple_files() {
+    new_ucmd!()
+        .args(&["emptyfile.txt", "emptyfile.txt"])
+        .succeeds()
+        .stdout_is("==> emptyfile.txt <==\n\n==> emptyfile.txt <==\n");
+}
+
+#[test]
+fn test_multiple_files_with_stdin() {
+    new_ucmd!()
+        .args(&["emptyfile.txt", "-", "emptyfile.txt"])
+        .pipe_in("hello\n")
+        .succeeds()
+        .stdout_is(
+            "==> emptyfile.txt <==
+
+==> standard input <==
+hello
+
+==> emptyfile.txt <==
+",
+        );
 }

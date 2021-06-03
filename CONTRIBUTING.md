@@ -71,10 +71,6 @@ README: add help
 ```
 
 ```
-travis: fix build
-```
-
-```
 uucore: add new modules
 ```
 

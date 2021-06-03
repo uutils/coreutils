@@ -17,7 +17,7 @@ fn test_uname_processor() {
 }
 
 #[test]
-fn test_uname_hwplatform() {
+fn test_uname_hardware_platform() {
     let result = new_ucmd!().arg("-i").succeeds();
     assert_eq!(result.stdout_str().trim_end(), "unknown");
 }
@@ -36,7 +36,12 @@ fn test_uname_kernel_version() {
 fn test_uname_kernel() {
     let (_, mut ucmd) = at_and_ucmd!();
 
-    let result = ucmd.arg("-o").succeeds();
     #[cfg(target_os = "linux")]
-    assert!(result.stdout_str().to_lowercase().contains("linux"));
+    {
+        let result = ucmd.arg("-o").succeeds();
+        assert!(result.stdout_str().to_lowercase().contains("linux"));
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    ucmd.arg("-o").succeeds();
 }

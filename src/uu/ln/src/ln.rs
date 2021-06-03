@@ -371,21 +371,21 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
 }
 
 fn relative_path<'a>(src: &Path, dst: &Path) -> Result<Cow<'a, Path>> {
-    let abssrc = canonicalize(src, CanonicalizeMode::Normal)?;
-    let absdst = canonicalize(dst, CanonicalizeMode::Normal)?;
-    let suffix_pos = abssrc
+    let src_abs = canonicalize(src, CanonicalizeMode::Normal)?;
+    let dst_abs = canonicalize(dst, CanonicalizeMode::Normal)?;
+    let suffix_pos = src_abs
         .components()
-        .zip(absdst.components())
+        .zip(dst_abs.components())
         .take_while(|(s, d)| s == d)
         .count();
 
-    let srciter = abssrc.components().skip(suffix_pos).map(|x| x.as_os_str());
+    let src_iter = src_abs.components().skip(suffix_pos).map(|x| x.as_os_str());
 
-    let result: PathBuf = absdst
+    let result: PathBuf = dst_abs
         .components()
         .skip(suffix_pos + 1)
         .map(|_| OsStr::new(".."))
-        .chain(srciter)
+        .chain(src_iter)
         .collect();
     Ok(result.into())
 }

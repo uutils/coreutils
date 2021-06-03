@@ -1,23 +1,81 @@
+// spell-checker:ignore (words) ints
+
 use crate::common::util::*;
 
-fn test_helper(file_name: &str, args: &str) {
-    new_ucmd!()
-        .arg(format!("{}.txt", file_name))
-        .args(&args.split(' ').collect::<Vec<&str>>())
-        .succeeds()
-        .stdout_is_fixture(format!("{}.expected", file_name));
+fn test_helper(file_name: &str, possible_args: &[&str]) {
+    for args in possible_args {
+        new_ucmd!()
+            .arg(format!("{}.txt", file_name))
+            .args(&args.split_whitespace().collect::<Vec<&str>>())
+            .succeeds()
+            .stdout_is_fixture(format!("{}.expected", file_name));
 
+        new_ucmd!()
+            .arg(format!("{}.txt", file_name))
+            .arg("--debug")
+            .args(&args.split_whitespace().collect::<Vec<&str>>())
+            .succeeds()
+            .stdout_is_fixture(format!("{}.expected.debug", file_name));
+    }
+}
+
+#[test]
+fn test_buffer_sizes() {
+    let buffer_sizes = [
+        "0", "50K", "50k", "1M", "100M", "1000G", "10T", "500E", "1Y",
+    ];
+    for buffer_size in &buffer_sizes {
+        new_ucmd!()
+            .arg("-n")
+            .arg("-S")
+            .arg(buffer_size)
+            .arg("ext_sort.txt")
+            .succeeds()
+            .stdout_is_fixture("ext_sort.expected");
+    }
+}
+
+#[test]
+fn test_invalid_buffer_size() {
+    let buffer_sizes = ["asd", "100f"];
+    for invalid_buffer_size in &buffer_sizes {
+        new_ucmd!()
+            .arg("-S")
+            .arg(invalid_buffer_size)
+            .fails()
+            .stderr_only(format!(
+                "sort: failed to parse buffer size `{}`: invalid digit found in string",
+                invalid_buffer_size
+            ));
+    }
+}
+
+#[test]
+fn test_ext_sort_stable() {
     new_ucmd!()
-        .arg(format!("{}.txt", file_name))
-        .arg("--debug")
-        .args(&args.split(' ').collect::<Vec<&str>>())
+        .arg("-n")
+        .arg("--stable")
+        .arg("-S")
+        .arg("0M")
+        .arg("ext_stable.txt")
         .succeeds()
-        .stdout_is_fixture(format!("{}.expected.debug", file_name));
+        .stdout_only_fixture("ext_stable.expected");
+}
+
+#[test]
+fn test_ext_sort_zero_terminated() {
+    new_ucmd!()
+        .arg("-z")
+        .arg("-S")
+        .arg("10K")
+        .arg("zero-terminated.txt")
+        .succeeds()
+        .stdout_is_fixture("zero-terminated.expected");
 }
 
 #[test]
 fn test_months_whitespace() {
-    test_helper("months-whitespace", "-M");
+    test_helper("months-whitespace", &["-M", "--month-sort", "--sort=month"]);
 }
 
 #[test]
@@ -31,17 +89,46 @@ fn test_version_empty_lines() {
 
 #[test]
 fn test_human_numeric_whitespace() {
-    test_helper("human-numeric-whitespace", "-h");
+    test_helper(
+        "human-numeric-whitespace",
+        &["-h", "--human-numeric-sort", "--sort=human-numeric"],
+    );
+}
+
+// This tests where serde often fails when reading back JSON
+// if it finds a null value
+#[test]
+fn test_ext_sort_as64_bailout() {
+    new_ucmd!()
+        .arg("-g")
+        .arg("-S 5K")
+        .arg("multiple_decimals_general.txt")
+        .succeeds()
+        .stdout_is_fixture("multiple_decimals_general.expected");
 }
 
 #[test]
 fn test_multiple_decimals_general() {
-    test_helper("multiple_decimals_general", "-g")
+    test_helper(
+        "multiple_decimals_general",
+        &["-g", "--general-numeric-sort", "--sort=general-numeric"],
+    )
 }
 
 #[test]
 fn test_multiple_decimals_numeric() {
-    test_helper("multiple_decimals_numeric", "-n")
+    test_helper(
+        "multiple_decimals_numeric",
+        &["-n", "--numeric-sort", "--sort=numeric"],
+    )
+}
+
+#[test]
+fn test_numeric_with_trailing_invalid_chars() {
+    test_helper(
+        "numeric_trailing_chars",
+        &["-n", "--numeric-sort", "--sort=numeric"],
+    )
 }
 
 #[test]
@@ -51,7 +138,7 @@ fn test_check_zero_terminated_failure() {
         .arg("-c")
         .arg("zero-terminated.txt")
         .fails()
-        .stdout_is("sort: disorder in line 0\n");
+        .stdout_is("sort: zero-terminated.txt:2: disorder: ../../fixtures/du\n");
 }
 
 #[test]
@@ -120,144 +207,171 @@ fn test_random_shuffle_contains_two_runs_not_the_same() {
 
 #[test]
 fn test_numeric_floats_and_ints() {
-    test_helper("numeric_floats_and_ints", "-n");
+    test_helper(
+        "numeric_floats_and_ints",
+        &["-n", "--numeric-sort", "--sort=numeric"],
+    );
 }
 
 #[test]
 fn test_numeric_floats() {
-    test_helper("numeric_floats", "-n");
+    test_helper(
+        "numeric_floats",
+        &["-n", "--numeric-sort", "--sort=numeric"],
+    );
 }
 
 #[test]
 fn test_numeric_floats_with_nan() {
-    test_helper("numeric_floats_with_nan", "-n");
+    test_helper(
+        "numeric_floats_with_nan",
+        &["-n", "--numeric-sort", "--sort=numeric"],
+    );
 }
 
 #[test]
 fn test_numeric_unfixed_floats() {
-    test_helper("numeric_unfixed_floats", "-n");
+    test_helper(
+        "numeric_unfixed_floats",
+        &["-n", "--numeric-sort", "--sort=numeric"],
+    );
 }
 
 #[test]
 fn test_numeric_fixed_floats() {
-    test_helper("numeric_fixed_floats", "-n");
+    test_helper(
+        "numeric_fixed_floats",
+        &["-n", "--numeric-sort", "--sort=numeric"],
+    );
 }
 
 #[test]
 fn test_numeric_unsorted_ints() {
-    test_helper("numeric_unsorted_ints", "-n");
+    test_helper(
+        "numeric_unsorted_ints",
+        &["-n", "--numeric-sort", "--sort=numeric"],
+    );
 }
 
 #[test]
 fn test_human_block_sizes() {
-    test_helper("human_block_sizes", "-h");
+    test_helper(
+        "human_block_sizes",
+        &["-h", "--human-numeric-sort", "--sort=human-numeric"],
+    );
 }
 
 #[test]
 fn test_month_default() {
-    test_helper("month_default", "-M");
+    test_helper("month_default", &["-M", "--month-sort", "--sort=month"]);
 }
 
 #[test]
 fn test_month_stable() {
-    test_helper("month_stable", "-Ms");
+    test_helper("month_stable", &["-Ms"]);
 }
 
 #[test]
 fn test_default_unsorted_ints() {
-    test_helper("default_unsorted_ints", "");
+    test_helper("default_unsorted_ints", &[""]);
 }
 
 #[test]
 fn test_numeric_unique_ints() {
-    test_helper("numeric_unsorted_ints_unique", "-nu");
+    test_helper("numeric_unsorted_ints_unique", &["-nu"]);
 }
 
 #[test]
 fn test_version() {
-    test_helper("version", "-V");
+    test_helper("version", &["-V"]);
 }
 
 #[test]
 fn test_ignore_case() {
-    test_helper("ignore_case", "-f");
+    test_helper("ignore_case", &["-f"]);
 }
 
 #[test]
 fn test_dictionary_order() {
-    test_helper("dictionary_order", "-d");
+    test_helper("dictionary_order", &["-d"]);
 }
 
 #[test]
 fn test_dictionary_order2() {
-    for non_dictionary_order2_param in vec!["-d"] {
+    for non_dictionary_order2_param in &["-d"] {
         new_ucmd!()
-            .pipe_in("a👦🏻aa	b\naaaa	b")
-            .arg(non_dictionary_order2_param)
+            .pipe_in("a👦🏻aa	b\naaaa	b") // spell-checker:disable-line
+            .arg(non_dictionary_order2_param) // spell-checker:disable-line
             .succeeds()
-            .stdout_only("a👦🏻aa	b\naaaa	b\n");
+            .stdout_only("a👦🏻aa	b\naaaa	b\n"); // spell-checker:disable-line
     }
 }
 
 #[test]
 fn test_non_printing_chars() {
-    for non_printing_chars_param in vec!["-i"] {
+    for non_printing_chars_param in &["-i"] {
         new_ucmd!()
-            .pipe_in("a👦🏻aa\naaaa")
-            .arg(non_printing_chars_param)
+            .pipe_in("a👦🏻aa\naaaa") // spell-checker:disable-line
+            .arg(non_printing_chars_param) // spell-checker:disable-line
             .succeeds()
-            .stdout_only("a👦🏻aa\naaaa\n");
+            .stdout_only("a👦🏻aa\naaaa\n"); // spell-checker:disable-line
     }
 }
 
 #[test]
 fn test_exponents_positive_general_fixed() {
-    test_helper("exponents_general", "-g");
+    test_helper("exponents_general", &["-g"]);
 }
 
 #[test]
 fn test_exponents_positive_numeric() {
-    test_helper("exponents-positive-numeric", "-n");
+    test_helper(
+        "exponents-positive-numeric",
+        &["-n", "--numeric-sort", "--sort=numeric"],
+    );
 }
 
 #[test]
 fn test_months_dedup() {
-    test_helper("months-dedup", "-Mu");
+    test_helper("months-dedup", &["-Mu"]);
 }
 
 #[test]
 fn test_mixed_floats_ints_chars_numeric() {
-    test_helper("mixed_floats_ints_chars_numeric", "-n");
+    test_helper(
+        "mixed_floats_ints_chars_numeric",
+        &["-n", "--numeric-sort", "--sort=numeric"],
+    );
 }
 
 #[test]
 fn test_mixed_floats_ints_chars_numeric_unique() {
-    test_helper("mixed_floats_ints_chars_numeric_unique", "-nu");
+    test_helper("mixed_floats_ints_chars_numeric_unique", &["-nu"]);
 }
 
 #[test]
 fn test_words_unique() {
-    test_helper("words_unique", "-u");
+    test_helper("words_unique", &["-u"]);
 }
 
 #[test]
 fn test_numeric_unique() {
-    test_helper("numeric_unique", "-nu");
+    test_helper("numeric_unique", &["-nu"]);
 }
 
 #[test]
 fn test_mixed_floats_ints_chars_numeric_reverse() {
-    test_helper("mixed_floats_ints_chars_numeric_unique_reverse", "-nur");
+    test_helper("mixed_floats_ints_chars_numeric_unique_reverse", &["-nur"]);
 }
 
 #[test]
 fn test_mixed_floats_ints_chars_numeric_stable() {
-    test_helper("mixed_floats_ints_chars_numeric_stable", "-ns");
+    test_helper("mixed_floats_ints_chars_numeric_stable", &["-ns"]);
 }
 
 #[test]
 fn test_numeric_floats_and_ints2() {
-    for numeric_sort_param in vec!["-n", "--numeric-sort"] {
+    for numeric_sort_param in &["-n", "--numeric-sort"] {
         let input = "1.444\n8.013\n1\n-8\n1.04\n-1";
         new_ucmd!()
             .arg(numeric_sort_param)
@@ -269,7 +383,7 @@ fn test_numeric_floats_and_ints2() {
 
 #[test]
 fn test_numeric_floats2() {
-    for numeric_sort_param in vec!["-n", "--numeric-sort"] {
+    for numeric_sort_param in &["-n", "--numeric-sort"] {
         let input = "1.444\n8.013\n1.58590\n-8.90880\n1.040000000\n-.05";
         new_ucmd!()
             .arg(numeric_sort_param)
@@ -281,12 +395,15 @@ fn test_numeric_floats2() {
 
 #[test]
 fn test_numeric_floats_with_nan2() {
-    test_helper("numeric-floats-with-nan2", "-n");
+    test_helper(
+        "numeric-floats-with-nan2",
+        &["-n", "--numeric-sort", "--sort=numeric"],
+    );
 }
 
 #[test]
 fn test_human_block_sizes2() {
-    for human_numeric_sort_param in vec!["-h", "--human-numeric-sort"] {
+    for human_numeric_sort_param in &["-h", "--human-numeric-sort", "--sort=human-numeric"] {
         let input = "8981K\n909991M\n-8T\n21G\n0.8M";
         new_ucmd!()
             .arg(human_numeric_sort_param)
@@ -298,7 +415,7 @@ fn test_human_block_sizes2() {
 
 #[test]
 fn test_month_default2() {
-    for month_sort_param in vec!["-M", "--month-sort"] {
+    for month_sort_param in &["-M", "--month-sort", "--sort=month"] {
         let input = "JAn\nMAY\n000may\nJun\nFeb";
         new_ucmd!()
             .arg(month_sort_param)
@@ -319,7 +436,7 @@ fn test_default_unsorted_ints2() {
 
 #[test]
 fn test_numeric_unique_ints2() {
-    for numeric_unique_sort_param in vec!["-nu"] {
+    for numeric_unique_sort_param in &["-nu"] {
         let input = "9\n9\n8\n1\n";
         new_ucmd!()
             .arg(numeric_unique_sort_param)
@@ -331,32 +448,32 @@ fn test_numeric_unique_ints2() {
 
 #[test]
 fn test_keys_open_ended() {
-    test_helper("keys_open_ended", "-k 2.3");
+    test_helper("keys_open_ended", &["-k 2.3"]);
 }
 
 #[test]
 fn test_keys_closed_range() {
-    test_helper("keys_closed_range", "-k 2.2,2.2");
+    test_helper("keys_closed_range", &["-k 2.2,2.2"]);
 }
 
 #[test]
 fn test_keys_multiple_ranges() {
-    test_helper("keys_multiple_ranges", "-k 2,2 -k 3,3");
+    test_helper("keys_multiple_ranges", &["-k 2,2 -k 3,3"]);
 }
 
 #[test]
 fn test_keys_no_field_match() {
-    test_helper("keys_no_field_match", "-k 4,4");
+    test_helper("keys_no_field_match", &["-k 4,4"]);
 }
 
 #[test]
 fn test_keys_no_char_match() {
-    test_helper("keys_no_char_match", "-k 1.2");
+    test_helper("keys_no_char_match", &["-k 1.2"]);
 }
 
 #[test]
 fn test_keys_custom_separator() {
-    test_helper("keys_custom_separator", "-k 2.2,2.2 -t x");
+    test_helper("keys_custom_separator", &["-k 2.2,2.2 -t x"]);
 }
 
 #[test]
@@ -364,7 +481,7 @@ fn test_keys_invalid_field() {
     new_ucmd!()
         .args(&["-k", "1."])
         .fails()
-        .stderr_only("sort: error: failed to parse character index for key `1.`: cannot parse integer from empty string");
+        .stderr_only("sort: failed to parse key `1.`: failed to parse character index ``: cannot parse integer from empty string");
 }
 
 #[test]
@@ -372,7 +489,7 @@ fn test_keys_invalid_field_option() {
     new_ucmd!()
         .args(&["-k", "1.1x"])
         .fails()
-        .stderr_only("sort: error: invalid option for key: `x`");
+        .stderr_only("sort: failed to parse key `1.1x`: invalid option: `x`");
 }
 
 #[test]
@@ -380,14 +497,15 @@ fn test_keys_invalid_field_zero() {
     new_ucmd!()
         .args(&["-k", "0.1"])
         .fails()
-        .stderr_only("sort: error: field index was 0");
+        .stderr_only("sort: failed to parse key `0.1`: field index can not be 0");
 }
 
 #[test]
 fn test_keys_invalid_char_zero() {
-    new_ucmd!().args(&["-k", "1.0"]).fails().stderr_only(
-        "sort: error: invalid character index 0 in `1.0` for the start position of a field",
-    );
+    new_ucmd!()
+        .args(&["-k", "1.0"])
+        .fails()
+        .stderr_only("sort: failed to parse key `1.0`: invalid character index 0 for the start position of a field");
 }
 
 #[test]
@@ -416,6 +534,11 @@ fn test_keys_with_options_blanks_start() {
             .succeeds()
             .stdout_only("dd  1 ff\ngg         2 cc\naa   3 cc\n");
     }
+}
+
+#[test]
+fn test_keys_blanks_with_char_idx() {
+    test_helper("keys_blanks", &["-k 1.2b"])
 }
 
 #[test]
@@ -467,8 +590,56 @@ aaaa
 }
 
 #[test]
+fn test_keys_negative_size_match() {
+    // If the end of a field is before its start, we should not crash.
+    // Debug output should report "no match for key" at the start position (i.e. the later position).
+    test_helper("keys_negative_size", &["-k 3,1"]);
+}
+
+#[test]
+fn test_keys_ignore_flag() {
+    test_helper("keys_ignore_flag", &["-k 1n -b"])
+}
+
+#[test]
+fn test_does_not_inherit_key_settings() {
+    let input = " 1
+2
+   10
+";
+    new_ucmd!()
+        .args(&["-k", "1b", "-n"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(
+            " 1
+   10
+2
+",
+        );
+}
+
+#[test]
+fn test_inherits_key_settings() {
+    let input = " 1
+2
+   10
+";
+    new_ucmd!()
+        .args(&["-k", "1", "-n"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(
+            " 1
+2
+   10
+",
+        );
+}
+
+#[test]
 fn test_zero_terminated() {
-    test_helper("zero-terminated", "-z");
+    test_helper("zero-terminated", &["-z"]);
 }
 
 #[test]
@@ -508,6 +679,18 @@ fn test_merge_unique() {
 }
 
 #[test]
+fn test_merge_stable() {
+    new_ucmd!()
+        .arg("-m")
+        .arg("--stable")
+        .arg("-n")
+        .arg("merge_stable_1.txt")
+        .arg("merge_stable_2.txt")
+        .succeeds()
+        .stdout_only_fixture("merge_stable.expected");
+}
+
+#[test]
 fn test_merge_reversed() {
     new_ucmd!()
         .arg("-m")
@@ -538,7 +721,7 @@ fn test_check() {
         .arg("-c")
         .arg("check_fail.txt")
         .fails()
-        .stdout_is("sort: disorder in line 4\n");
+        .stdout_is("sort: check_fail.txt:6: disorder: 5\n");
 
     new_ucmd!()
         .arg("-c")
@@ -575,10 +758,9 @@ fn test_dictionary_and_nonprinting_conflicts() {
                 .succeeds();
         }
         for conflicting_arg in &conflicting_args {
-            // FIXME: this should ideally fail.
             new_ucmd!()
                 .args(&["-k", &format!("1{},1{}", restricted_arg, conflicting_arg)])
-                .succeeds();
+                .fails();
         }
     }
 }
@@ -590,4 +772,23 @@ fn test_trailing_separator() {
         .pipe_in("aax\naaa\n")
         .succeeds()
         .stdout_is("aax\naaa\n");
+}
+
+#[test]
+fn test_nonexistent_file() {
+    new_ucmd!()
+        .arg("nonexistent.txt")
+        .fails()
+        .status_code(2)
+        .stderr_only(
+            #[cfg(not(windows))]
+            "sort: cannot read: \"nonexistent.txt\": No such file or directory (os error 2)",
+            #[cfg(windows)]
+            "sort: cannot read: \"nonexistent.txt\": The system cannot find the file specified. (os error 2)",
+        );
+}
+
+#[test]
+fn test_blanks() {
+    test_helper("blanks", &["-b", "--ignore-blanks"]);
 }

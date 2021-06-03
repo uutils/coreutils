@@ -14,6 +14,7 @@ use clap::{App, Arg};
 use std::fs::File;
 use std::io::{stdin, Read, Result};
 use std::path::Path;
+use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "sum";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -94,7 +95,9 @@ mod options {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     let matches = App::new(executable!())
         .name(NAME)
@@ -105,13 +108,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(
             Arg::with_name(options::BSD_COMPATIBLE)
                 .short(options::BSD_COMPATIBLE)
-                .help("use the BSD compatible algorithm (default)"),
+                .help("use the BSD sum algorithm, use 1K blocks (default)"),
         )
         .arg(
             Arg::with_name(options::SYSTEM_V_COMPATIBLE)
                 .short("s")
                 .long(options::SYSTEM_V_COMPATIBLE)
-                .help("use the BSD compatible algorithm (default)"),
+                .help("use System V sum algorithm, use 512 bytes blocks"),
         )
         .get_matches_from(args);
 

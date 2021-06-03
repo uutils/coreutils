@@ -3,22 +3,38 @@
 # * top-most EditorConfig file
 root = true
 
-# Unix-style newlines with a newline ending every file
 [*]
+# default ~ utf-8, unix-style newlines with a newline ending every file, 4 space indentation
 charset = utf-8
 end_of_line = lf
 indent_size = 4
 indent_style = space
 insert_final_newline = true
+max_line_length = 100
 trim_trailing_whitespace = true
 
-[*.{bat,cmd,[Bb][Aa][Tt],[Cc][Mm][Dd]}]
-# DOS/Win requires BAT/CMD files to have CRLF EOLNs
-end_of_line = crlf
-
-[[Mm]akefile{,.*}]
-# TAB-style indentation
+[[Mm]akefile{,.*}, *.{mk,[Mm][Kk]}]
+# makefiles ~ TAB-style indentation
 indent_style = tab
 
-[*.{yml,[Yy][Mm][Ll]}]
+[*.{bat,cmd,[Bb][Aa][Tt],[Cc][Mm][Dd]}]
+# BAT/CMD ~ DOS/Win requires BAT/CMD files to have CRLF EOLNs
+end_of_line = crlf
+
+[*.go]
+# go ~ TAB-style indentation (SPACE-style alignment); ref: <https://blog.golang.org/gofmt>@@<https://archive.is/wip/9B6FC>
+indent_style = tab
+
+[*.{cjs,js,json,mjs,ts}]
+# js/ts
 indent_size = 2
+
+[*.{markdown,md,mkd,[Mm][Dd],[Mm][Kk][Dd],[Mm][Dd][Oo][Ww][Nn],[Mm][Kk][Dd][Oo][Ww][Nn],[Mm][Aa][Rr][Kk][Dd][Oo][Ww][Nn]}]
+# markdown
+indent_size = 2
+indent_style = space
+
+[*.{yaml,yml,[Yy][Mm][Ll],[Yy][Aa][Mm][Ll]}]
+# YAML
+indent_size = 2
+indent_style = space

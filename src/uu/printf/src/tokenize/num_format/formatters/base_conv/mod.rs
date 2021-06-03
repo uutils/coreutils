@@ -1,4 +1,4 @@
-// spell-checker:ignore (ToDO) arrnum mult basenum bufferval refd vals arrfloat conv intermed addl
+// spell-checker:ignore (ToDO) arrnum arr_num mult basenum bufferval refd vals arrfloat conv intermed addl
 
 pub fn arrnum_int_mult(arr_num: &[u8], basenum: u8, base_ten_int_fact: u8) -> Vec<u8> {
     let mut carry: u16 = 0;
@@ -158,7 +158,6 @@ pub fn base_conv_float(src: &[u8], radix_src: u8, _radix_dest: u8) -> f64 {
     // to implement this for arbitrary string input.
     // until then, the below operates as an outline
     // of how it would work.
-    let result: Vec<u8> = vec![0];
     let mut factor: f64 = 1_f64;
     let radix_src_float: f64 = f64::from(radix_src);
     let mut r: f64 = 0_f64;

@@ -23,7 +23,7 @@ pub fn parse(mode_string: &str, considering_dir: bool) -> Result<u32, String> {
 pub fn chmod(path: &Path, mode: u32) -> Result<(), ()> {
     use std::os::unix::fs::PermissionsExt;
     fs::set_permissions(path, fs::Permissions::from_mode(mode)).map_err(|err| {
-        show_info!("{}: chmod failed with error {}", path.display(), err);
+        show_error!("{}: chmod failed with error {}", path.display(), err);
     })
 }
 

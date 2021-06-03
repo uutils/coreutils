@@ -14,6 +14,7 @@ use clap::{App, Arg};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
+use uucore::InvalidEncodingHandling;
 
 const TAB_WIDTH: usize = 8;
 
@@ -31,7 +32,9 @@ mod options {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     let (args, obs_width) = handle_obsolete(&args[..]);
     let matches = App::new(executable!())

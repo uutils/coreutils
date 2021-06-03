@@ -14,6 +14,7 @@ use clap::{App, Arg};
 use std::fs::File;
 use std::io::{self, stdin, BufReader, Read};
 use std::path::Path;
+use uucore::InvalidEncodingHandling;
 
 // NOTE: CRC_TABLE_LEN *must* be <= 256 as we cast 0..CRC_TABLE_LEN to u8
 const CRC_TABLE_LEN: usize = 256;
@@ -98,15 +99,15 @@ const fn crc_entry(input: u8) -> u32 {
     //    i += 1;
     //}
     unroll!(8, |_i| {
-        let if_cond = crc & 0x8000_0000;
+        let if_condition = crc & 0x8000_0000;
         let if_body = (crc << 1) ^ 0x04c1_1db7;
         let else_body = crc << 1;
 
         // NOTE: i feel like this is easier to understand than emulating an if statement in bitwise
         //       ops
-        let cond_table = [else_body, if_body];
+        let condition_table = [else_body, if_body];
 
-        crc = cond_table[(if_cond != 0) as usize];
+        crc = condition_table[(if_condition != 0) as usize];
     });
 
     crc
@@ -180,7 +181,9 @@ mod options {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
 
     let matches = App::new(executable!())
         .name(NAME)

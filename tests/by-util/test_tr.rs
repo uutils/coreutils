@@ -1,7 +1,7 @@
 use crate::common::util::*;
 
 #[test]
-fn test_toupper() {
+fn test_to_upper() {
     new_ucmd!()
         .args(&["a-z", "A-Z"])
         .pipe_in("!abcd!")
@@ -46,6 +46,70 @@ fn test_delete_complement() {
 }
 
 #[test]
+fn test_delete_complement_2() {
+    new_ucmd!()
+        .args(&["-d", "-C", "0-9"])
+        .pipe_in("Phone: 01234 567890")
+        .succeeds()
+        .stdout_is("01234567890");
+    new_ucmd!()
+        .args(&["-d", "--complement", "0-9"])
+        .pipe_in("Phone: 01234 567890")
+        .succeeds()
+        .stdout_is("01234567890");
+}
+
+#[test]
+fn test_complement1() {
+    new_ucmd!()
+        .args(&["-c", "a", "X"])
+        .pipe_in("ab")
+        .run()
+        .stdout_is("aX");
+}
+
+#[test]
+fn test_complement2() {
+    new_ucmd!()
+        .args(&["-c", "0-9", "x"])
+        .pipe_in("Phone: 01234 567890")
+        .run()
+        .stdout_is("xxxxxxx01234x567890");
+}
+
+#[test]
+fn test_complement3() {
+    new_ucmd!()
+        .args(&["-c", "abcdefgh", "123"]) // spell-checker:disable-line
+        .pipe_in("the cat and the bat")
+        .run()
+        .stdout_is("3he3ca33a3d33he3ba3"); // spell-checker:disable-line
+}
+
+#[test]
+fn test_complement4() {
+    // $ echo -n '0x1y2z3' | tr -c '0-@' '*-~'
+    // 0~1~2~3
+    new_ucmd!()
+        .args(&["-c", "0-@", "*-~"])
+        .pipe_in("0x1y2z3")
+        .run()
+        .stdout_is("0~1~2~3");
+}
+
+#[test]
+#[ignore = "fixme: GNU tr returns '0a1b2c3' instead of '0~1~2~3', see #2158"]
+fn test_complement5() {
+    // $ echo '0x1y2z3' | tr -c '\0-@' '*-~'
+    // 0a1b2c3
+    new_ucmd!()
+        .args(&["-c", "\\0-@", "*-~"])
+        .pipe_in("0x1y2z3")
+        .run()
+        .stdout_is("0a1b2c3");
+}
+
+#[test]
 fn test_squeeze() {
     new_ucmd!()
         .args(&["-s", "a-z"])
@@ -61,6 +125,24 @@ fn test_squeeze_complement() {
         .pipe_in("aaBBcDcc")
         .run()
         .stdout_is("aaBcDcc");
+}
+
+#[test]
+fn test_translate_and_squeeze() {
+    new_ucmd!()
+        .args(&["-s", "x", "y"])
+        .pipe_in("xx")
+        .run()
+        .stdout_is("y");
+}
+
+#[test]
+fn test_translate_and_squeeze_multiple_lines() {
+    new_ucmd!()
+        .args(&["-s", "x", "y"])
+        .pipe_in("xxaax\nxaaxx") // spell-checker:disable-line
+        .run()
+        .stdout_is("yaay\nyaay"); // spell-checker:disable-line
 }
 
 #[test]
@@ -87,7 +169,7 @@ fn test_set1_longer_than_set2() {
         .args(&["abc", "xy"])
         .pipe_in("abcde")
         .run()
-        .stdout_is("xyyde");
+        .stdout_is("xyyde"); // spell-checker:disable-line
 }
 
 #[test]
@@ -96,7 +178,7 @@ fn test_set1_shorter_than_set2() {
         .args(&["ab", "xyz"])
         .pipe_in("abcde")
         .run()
-        .stdout_is("xycde");
+        .stdout_is("xycde"); // spell-checker:disable-line
 }
 
 #[test]
@@ -105,7 +187,7 @@ fn test_truncate() {
         .args(&["-t", "abc", "xy"])
         .pipe_in("abcde")
         .run()
-        .stdout_is("xycde");
+        .stdout_is("xycde"); // spell-checker:disable-line
 }
 
 #[test]
@@ -114,7 +196,7 @@ fn test_truncate_with_set1_shorter_than_set2() {
         .args(&["-t", "ab", "xyz"])
         .pipe_in("abcde")
         .run()
-        .stdout_is("xycde");
+        .stdout_is("xycde"); // spell-checker:disable-line
 }
 
 #[test]
@@ -134,8 +216,8 @@ fn missing_required_second_arg_fails() {
 #[test]
 fn test_interpret_backslash_escapes() {
     new_ucmd!()
-        .args(&["abfnrtv", r"\a\b\f\n\r\t\v"])
-        .pipe_in("abfnrtv")
+        .args(&["abfnrtv", r"\a\b\f\n\r\t\v"]) // spell-checker:disable-line
+        .pipe_in("abfnrtv") // spell-checker:disable-line
         .succeeds()
         .stdout_is("\u{7}\u{8}\u{c}\n\r\t\u{b}");
 }

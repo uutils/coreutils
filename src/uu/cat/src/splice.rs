@@ -9,7 +9,7 @@ const BUF_SIZE: usize = 1024 * 16;
 
 /// This function is called from `write_fast()` on Linux and Android. The
 /// function `splice()` is used to move data between two file descriptors
-/// without copying between kernel- and userspace. This results in a large
+/// without copying between kernel and user spaces. This results in a large
 /// speedup.
 ///
 /// The `bool` in the result value indicates if we need to fall back to normal
@@ -81,7 +81,7 @@ fn copy_exact(read_fd: RawFd, write_fd: RawFd, num_bytes: usize) -> nix::Result<
     let mut buf = [0; BUF_SIZE];
     loop {
         let read = unistd::read(read_fd, &mut buf[..left])?;
-        let written = unistd::write(write_fd, &mut buf[..read])?;
+        let written = unistd::write(write_fd, &buf[..read])?;
         left -= written;
         if left == 0 {
             break;

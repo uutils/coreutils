@@ -1,7 +1,7 @@
 use crate::common::util::*;
 
 #[test]
-fn test_stdin_nonewline() {
+fn test_stdin_no_newline() {
     new_ucmd!()
         .pipe_in("No Newline")
         .run()
@@ -41,6 +41,7 @@ fn test_padding_with_overflow() {
 
 #[test]
 fn test_sections_and_styles() {
+    // spell-checker:disable
     for &(fixture, output) in &[
         (
             "section.txt",
@@ -63,4 +64,5 @@ fn test_sections_and_styles() {
             .run()
             .stdout_is(output);
     }
+    // spell-checker:enable
 }

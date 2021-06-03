@@ -16,18 +16,18 @@
 
 use std::{cmp::Ordering, ops::Range};
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 enum Sign {
     Negative,
     Positive,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct NumInfo {
     exponent: i64,
     sign: Sign,
 }
-
+#[derive(Debug, PartialEq, Clone)]
 pub struct NumInfoParseSettings {
     pub accept_si_units: bool,
     pub thousands_separator: Option<char>,
@@ -46,7 +46,12 @@ impl Default for NumInfoParseSettings {
 
 impl NumInfo {
     /// Parse NumInfo for this number.
-    /// Also returns the range of num that should be passed to numeric_str_cmp later
+    /// Also returns the range of num that should be passed to numeric_str_cmp later.
+    ///
+    /// Leading zeros will be excluded from the returned range. If the number consists of only zeros,
+    /// an empty range (idx..idx) is returned so that idx is the char after the last zero.
+    /// If the input is not a number (which has to be treated as zero), the returned empty range
+    /// will be 0..0.
     pub fn parse(num: &str, parse_settings: NumInfoParseSettings) -> (Self, Range<usize>) {
         let mut exponent = -1;
         let mut had_decimal_pt = false;
@@ -68,10 +73,10 @@ impl NumInfo {
             }
             first_char = false;
 
-            if parse_settings
-                .thousands_separator
-                .map_or(false, |c| c == char)
-            {
+            if matches!(
+                parse_settings.thousands_separator,
+                Some(c) if c == char
+            ) {
                 continue;
             }
 
@@ -102,10 +107,18 @@ impl NumInfo {
                 } else {
                     (
                         NumInfo {
-                            sign: if had_digit { sign } else { Sign::Positive },
+                            sign: Sign::Positive,
                             exponent: 0,
                         },
-                        0..0,
+                        if had_digit {
+                            // In this case there were only zeroes.
+                            // For debug output to work properly, we have to match the character after the last zero.
+                            idx..idx
+                        } else {
+                            // This was no number at all.
+                            // For debug output to work properly, we have to match 0..0.
+                            0..0
+                        },
                     )
                 };
             }
@@ -134,7 +147,7 @@ impl NumInfo {
         } else {
             (
                 NumInfo {
-                    sign: if had_digit { sign } else { Sign::Positive },
+                    sign: Sign::Positive,
                     exponent: 0,
                 },
                 if had_digit {
@@ -419,8 +432,8 @@ mod tests {
     #[test]
     fn minus_zero() {
         // This matches GNU sort behavior.
-        test_helper("-0", "0", Ordering::Less);
-        test_helper("-0x", "0", Ordering::Less);
+        test_helper("-0", "0", Ordering::Equal);
+        test_helper("-0x", "0", Ordering::Equal);
     }
     #[test]
     fn double_minus() {

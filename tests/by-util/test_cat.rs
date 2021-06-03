@@ -9,11 +9,12 @@ fn test_output_simple() {
     new_ucmd!()
         .args(&["alpha.txt"])
         .succeeds()
-        .stdout_only("abcde\nfghij\nklmno\npqrst\nuvwxyz\n");
+        .stdout_only("abcde\nfghij\nklmno\npqrst\nuvwxyz\n"); // spell-checker:disable-line
 }
 
 #[test]
 fn test_no_options() {
+    // spell-checker:disable-next-line
     for fixture in &["empty.txt", "alpha.txt", "nonewline.txt"] {
         // Give fixture through command line file argument
         new_ucmd!()
@@ -66,8 +67,8 @@ fn test_fifo_symlink() {
     assert!(s.fixtures.is_fifo("dir/pipe"));
 
     // Make cat read the pipe through a symlink
-    s.fixtures.symlink_file("dir/pipe", "sympipe");
-    let proc = s.ucmd().args(&["sympipe"]).run_no_wait();
+    s.fixtures.symlink_file("dir/pipe", "sympipe"); // spell-checker:disable-line
+    let proc = s.ucmd().args(&["sympipe"]).run_no_wait(); // spell-checker:disable-line
 
     let data = vec_of_size(128 * 1024);
     let data2 = data.clone();
@@ -110,7 +111,7 @@ fn test_piped_to_regular_file() {
                 .succeeds();
         }
         let contents = read_to_string(&file_path).unwrap();
-        assert_eq!(contents, "abcde\nfghij\nklmno\npqrst\nuvwxyz\n");
+        assert_eq!(contents, "abcde\nfghij\nklmno\npqrst\nuvwxyz\n"); // spell-checker:disable-line
     }
 }
 
@@ -169,6 +170,7 @@ fn test_directory() {
 fn test_directory_and_file() {
     let s = TestScenario::new(util_name!());
     s.fixtures.mkdir("test_directory2");
+    // spell-checker:disable-next-line
     for fixture in &["empty.txt", "alpha.txt", "nonewline.txt"] {
         s.ucmd()
             .args(&["test_directory2", fixture])
@@ -190,8 +192,8 @@ fn test_three_directories_and_file_and_stdin() {
             "test_directory3/test_directory4",
             "alpha.txt",
             "-",
-            "filewhichdoesnotexist.txt",
-            "nonewline.txt",
+            "file_which_does_not_exist.txt",
+            "nonewline.txt", // spell-checker:disable-line
             "test_directory3/test_directory5",
             "test_directory3/../test_directory3/test_directory5",
             "test_directory3",
@@ -200,12 +202,13 @@ fn test_three_directories_and_file_and_stdin() {
         .fails()
         .stderr_is_fixture("three_directories_and_file_and_stdin.stderr.expected")
         .stdout_is(
-            "abcde\nfghij\nklmno\npqrst\nuvwxyz\nstdout bytestext without a trailing newline",
+            "abcde\nfghij\nklmno\npqrst\nuvwxyz\nstdout bytestext without a trailing newline", // spell-checker:disable-line
         );
 }
 
 #[test]
 fn test_output_multi_files_print_all_chars() {
+    // spell-checker:disable
     new_ucmd!()
         .args(&["alpha.txt", "256.txt", "-A", "-n"])
         .succeeds()
@@ -222,10 +225,12 @@ fn test_output_multi_files_print_all_chars() {
              M-VM-WM-XM-YM-ZM-[M-\\M-]M-^M-_M-`M-aM-bM-cM-dM-eM-fM-gM-hM-iM-jM-kM-lM-mM-nM-oM-\
              pM-qM-rM-sM-tM-uM-vM-wM-xM-yM-zM-{M-|M-}M-~M-^?",
         );
+    // spell-checker:enable
 }
 
 #[test]
 fn test_numbered_lines_no_trailing_newline() {
+    // spell-checker:disable
     new_ucmd!()
         .args(&["nonewline.txt", "alpha.txt", "-n"])
         .succeeds()
@@ -233,11 +238,12 @@ fn test_numbered_lines_no_trailing_newline() {
             "     1\ttext without a trailing newlineabcde\n     2\tfghij\n     \
              3\tklmno\n     4\tpqrst\n     5\tuvwxyz\n",
         );
+    // spell-checker:enable
 }
 
 #[test]
 fn test_stdin_show_nonprinting() {
-    for same_param in vec!["-v", "--show-nonprinting"] {
+    for same_param in &["-v", "--show-nonprinting"] {
         new_ucmd!()
             .args(&[same_param])
             .pipe_in("\t\0\n")
@@ -248,7 +254,7 @@ fn test_stdin_show_nonprinting() {
 
 #[test]
 fn test_stdin_show_tabs() {
-    for same_param in vec!["-T", "--show-tabs"] {
+    for same_param in &["-T", "--show-tabs"] {
         new_ucmd!()
             .args(&[same_param])
             .pipe_in("\t\0\n")
@@ -259,7 +265,7 @@ fn test_stdin_show_tabs() {
 
 #[test]
 fn test_stdin_show_ends() {
-    for same_param in vec!["-E", "--show-ends"] {
+    for &same_param in &["-E", "--show-ends"] {
         new_ucmd!()
             .args(&[same_param, "-"])
             .pipe_in("\t\0\n\t")
@@ -270,7 +276,7 @@ fn test_stdin_show_ends() {
 
 #[test]
 fn test_stdin_show_all() {
-    for same_param in vec!["-A", "--show-all"] {
+    for same_param in &["-A", "--show-all"] {
         new_ucmd!()
             .args(&[same_param])
             .pipe_in("\t\0\n")
@@ -299,7 +305,7 @@ fn test_stdin_nonprinting_and_tabs() {
 
 #[test]
 fn test_stdin_squeeze_blank() {
-    for same_param in vec!["-s", "--squeeze-blank"] {
+    for same_param in &["-s", "--squeeze-blank"] {
         new_ucmd!()
             .arg(same_param)
             .pipe_in("\n\na\n\n\n\n\nb\n\n\n")
@@ -310,7 +316,8 @@ fn test_stdin_squeeze_blank() {
 
 #[test]
 fn test_stdin_number_non_blank() {
-    for same_param in vec!["-b", "--number-nonblank"] {
+    // spell-checker:disable-next-line
+    for same_param in &["-b", "--number-nonblank"] {
         new_ucmd!()
             .arg(same_param)
             .arg("-")
@@ -322,7 +329,8 @@ fn test_stdin_number_non_blank() {
 
 #[test]
 fn test_non_blank_overrides_number() {
-    for same_param in vec!["-b", "--number-nonblank"] {
+    // spell-checker:disable-next-line
+    for &same_param in &["-b", "--number-nonblank"] {
         new_ucmd!()
             .args(&[same_param, "-"])
             .pipe_in("\na\nb\n\n\nc")
@@ -333,7 +341,7 @@ fn test_non_blank_overrides_number() {
 
 #[test]
 fn test_squeeze_blank_before_numbering() {
-    for same_param in vec!["-s", "--squeeze-blank"] {
+    for &same_param in &["-s", "--squeeze-blank"] {
         new_ucmd!()
             .args(&[same_param, "-n", "-"])
             .pipe_in("a\n\n\nb")
@@ -347,7 +355,13 @@ fn test_squeeze_blank_before_numbering() {
 #[cfg(unix)]
 fn test_dev_random() {
     let mut buf = [0; 2048];
-    let mut proc = new_ucmd!().args(&["/dev/random"]).run_no_wait();
+    #[cfg(target_os = "linux")]
+    const DEV_RANDOM: &str = "/dev/urandom";
+
+    #[cfg(not(target_os = "linux"))]
+    const DEV_RANDOM: &str = "/dev/random";
+
+    let mut proc = new_ucmd!().args(&[DEV_RANDOM]).run_no_wait();
     let mut proc_stdout = proc.stdout.take().unwrap();
     proc_stdout.read_exact(&mut buf).unwrap();
 
@@ -395,14 +409,17 @@ fn test_dev_full_show_all() {
 
 #[test]
 #[cfg(unix)]
+#[ignore]
 fn test_domain_socket() {
     use std::io::prelude::*;
     use std::sync::{Arc, Barrier};
     use std::thread;
-    use tempdir::TempDir;
     use unix_socket::UnixListener;
 
-    let dir = TempDir::new("unix_socket").expect("failed to create dir");
+    let dir = tempfile::Builder::new()
+        .prefix("unix_socket")
+        .tempdir()
+        .expect("failed to create dir");
     let socket_path = dir.path().join("sock");
     let listener = UnixListener::bind(&socket_path).expect("failed to create socket");
 
@@ -420,7 +437,7 @@ fn test_domain_socket() {
 
     let child = new_ucmd!().args(&[socket_path]).run_no_wait();
     barrier.wait();
-    let stdout = &child.wait_with_output().unwrap().stdout.clone();
+    let stdout = &child.wait_with_output().unwrap().stdout;
     let output = String::from_utf8_lossy(&stdout);
     assert_eq!("a\tb", output);
 

@@ -39,7 +39,7 @@ fn test_rmdir_nonempty_directory_no_parents() {
     assert!(at.file_exists(file));
 
     ucmd.arg(dir).fails().stderr_is(
-        "rmdir: error: failed to remove 'test_rmdir_nonempty_no_parents': Directory not \
+        "rmdir: failed to remove 'test_rmdir_nonempty_no_parents': Directory not \
          empty\n",
     );
 
@@ -59,9 +59,9 @@ fn test_rmdir_nonempty_directory_with_parents() {
     assert!(at.file_exists(file));
 
     ucmd.arg("-p").arg(dir).fails().stderr_is(
-        "rmdir: error: failed to remove 'test_rmdir_nonempty/with/parents': Directory not \
-         empty\nrmdir: error: failed to remove 'test_rmdir_nonempty/with': Directory not \
-         empty\nrmdir: error: failed to remove 'test_rmdir_nonempty': Directory not \
+        "rmdir: failed to remove 'test_rmdir_nonempty/with/parents': Directory not \
+         empty\nrmdir: failed to remove 'test_rmdir_nonempty/with': Directory not \
+         empty\nrmdir: failed to remove 'test_rmdir_nonempty': Directory not \
          empty\n",
     );
 
@@ -107,4 +107,20 @@ fn test_rmdir_ignore_nonempty_directory_with_parents() {
         .no_stderr();
 
     assert!(at.dir_exists(dir));
+}
+
+#[test]
+fn test_rmdir_remove_symlink_match_gnu_error() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let file = "file";
+    let fl = "fl";
+    at.touch(file);
+    assert!(at.file_exists(file));
+    at.symlink_file(file, fl);
+    assert!(at.file_exists(fl));
+
+    ucmd.arg("fl/")
+        .fails()
+        .stderr_is("rmdir: failed to remove 'fl/': Not a directory");
 }

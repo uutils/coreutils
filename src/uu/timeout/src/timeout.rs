@@ -18,6 +18,7 @@ use std::process::{Command, Stdio};
 use std::time::Duration;
 use uucore::process::ChildExt;
 use uucore::signals::signal_by_name_or_value;
+use uucore::InvalidEncodingHandling;
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Start COMMAND, and kill it if still running after DURATION.";
@@ -98,7 +99,10 @@ impl Config {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
+
     let usage = get_usage();
 
     let app = App::new("timeout")
@@ -155,8 +159,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     )
 }
 
-/// TODO: Improve exit codes, and make them consistent with the GNU Coreutil
-/// exit codes.
+/// TODO: Improve exit codes, and make them consistent with the GNU Coreutils exit codes.
 
 fn timeout(
     cmdname: &str,

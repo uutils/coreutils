@@ -1,3 +1,5 @@
+// spell-checker:ignore (words) asdf
+
 use crate::common::util::*;
 
 #[test]
@@ -40,7 +42,7 @@ fn test_empty() {
 #[test]
 fn test_arg_overrides_stdin() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let input = "foobarfoobar";
+    let input = "foobarfoobar"; // spell-checker:disable-line
 
     at.touch("a");
 
@@ -66,7 +68,7 @@ fn test_invalid_file() {
         .arg(folder_name)
         .fails()
         .no_stdout()
-        .stderr_contains("cksum: error: 'asdf' No such file or directory");
+        .stderr_contains("cksum: 'asdf' No such file or directory");
 
     // Then check when the file is of an invalid type
     at.mkdir(folder_name);
@@ -74,23 +76,23 @@ fn test_invalid_file() {
         .arg(folder_name)
         .fails()
         .no_stdout()
-        .stderr_contains("cksum: error: 'asdf' Is a directory");
+        .stderr_contains("cksum: 'asdf' Is a directory");
 }
 
 // Make sure crc is correct for files larger than 32 bytes
-// but <128 bytes (1 fold pclmul)
+// but <128 bytes (1 fold pclmul) // spell-checker:disable-line
 #[test]
 fn test_crc_for_bigger_than_32_bytes() {
     let (_, mut ucmd) = at_and_ucmd!();
 
     let result = ucmd.arg("chars.txt").succeeds();
 
-    let mut stdout_splitted = result.stdout_str().split(" ");
+    let mut stdout_split = result.stdout_str().split(' ');
 
-    let cksum: i64 = stdout_splitted.next().unwrap().parse().unwrap();
-    let bytes_cnt: i64 = stdout_splitted.next().unwrap().parse().unwrap();
+    let cksum: i64 = stdout_split.next().unwrap().parse().unwrap();
+    let bytes_cnt: i64 = stdout_split.next().unwrap().parse().unwrap();
 
-    assert_eq!(cksum, 586047089);
+    assert_eq!(cksum, 586_047_089);
     assert_eq!(bytes_cnt, 16);
 }
 
@@ -100,11 +102,11 @@ fn test_stdin_larger_than_128_bytes() {
 
     let result = ucmd.arg("larger_than_2056_bytes.txt").succeeds();
 
-    let mut stdout_splitted = result.stdout_str().split(" ");
+    let mut stdout_split = result.stdout_str().split(' ');
 
-    let cksum: i64 = stdout_splitted.next().unwrap().parse().unwrap();
-    let bytes_cnt: i64 = stdout_splitted.next().unwrap().parse().unwrap();
+    let cksum: i64 = stdout_split.next().unwrap().parse().unwrap();
+    let bytes_cnt: i64 = stdout_split.next().unwrap().parse().unwrap();
 
-    assert_eq!(cksum, 945881979);
+    assert_eq!(cksum, 945_881_979);
     assert_eq!(bytes_cnt, 2058);
 }

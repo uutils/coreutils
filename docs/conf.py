@@ -21,6 +21,8 @@
 # import sys
 # sys.path.insert(0, os.path.abspath('.'))
 
+# spell-checker:ignore (words) howto htbp imgmath toctree todos uutilsdoc
+
 import glob
 import os
 import re
@@ -180,6 +182,6 @@ for name in glob.glob('*.rst'):
 #  dir menu entry, description, category)
 texinfo_documents = [
     (master_doc, 'uutils', 'uutils Documentation',
-     author, 'uutils', 'A cross-platform reimplementation of GNU coreutils in Rust.',
+     author, 'uutils', 'A cross-platform implementation of GNU coreutils, written in Rust.',
      'Miscellaneous'),
 ]

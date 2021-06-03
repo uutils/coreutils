@@ -16,6 +16,7 @@ use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::iter::repeat;
 use std::path::Path;
+use uucore::InvalidEncodingHandling;
 
 mod helper;
 
@@ -78,13 +79,15 @@ pub mod options {
     pub const JOIN_BLANK_LINES: &str = "join-blank-lines";
     pub const NUMBER_FORMAT: &str = "number-format";
     pub const NO_RENUMBER: &str = "no-renumber";
-    pub const NUMER_SEPARATOR: &str = "number-separator";
-    pub const STARTING_LINE_NUMER: &str = "starting-line-number";
+    pub const NUMBER_SEPARATOR: &str = "number-separator";
+    pub const STARTING_LINE_NUMBER: &str = "starting-line-number";
     pub const NUMBER_WIDTH: &str = "number-width";
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     let matches = App::new(executable!())
         .name(NAME)
@@ -147,16 +150,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("do not reset line numbers at logical pages"),
         )
         .arg(
-            Arg::with_name(options::NUMER_SEPARATOR)
+            Arg::with_name(options::NUMBER_SEPARATOR)
                 .short("s")
-                .long(options::NUMER_SEPARATOR)
+                .long(options::NUMBER_SEPARATOR)
                 .help("add STRING after (possible) line number")
                 .value_name("STRING"),
         )
         .arg(
-            Arg::with_name(options::STARTING_LINE_NUMER)
+            Arg::with_name(options::STARTING_LINE_NUMBER)
                 .short("v")
-                .long(options::STARTING_LINE_NUMER)
+                .long(options::STARTING_LINE_NUMBER)
                 .help("first line number on each logical page")
                 .value_name("NUMBER"),
         )

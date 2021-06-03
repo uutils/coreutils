@@ -6,8 +6,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (format) MMDDhhmm
-// spell-checker:ignore (ToDO) DATEFILE
+// spell-checker:ignore (chrono) Datelike Timelike ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes
 
 #[macro_use]
 extern crate uucore;
@@ -207,11 +206,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .alias(OPT_UNIVERSAL_2)
                 .help("print or set Coordinated Universal Time (UTC)"),
         )
-        .arg(Arg::with_name(OPT_FORMAT).multiple(true))
+        .arg(Arg::with_name(OPT_FORMAT).multiple(false))
         .get_matches_from(args);
 
     let format = if let Some(form) = matches.value_of(OPT_FORMAT) {
-        let form = form[1..].into();
+        if !form.starts_with('+') {
+            eprintln!("date: invalid date ‘{}’", form);
+            return 1;
+        }
+        let form = form[1..].to_string();
         Format::Custom(form)
     } else if let Some(fmt) = matches
         .values_of(OPT_ISO_8601)
@@ -237,7 +240,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let set_to = match matches.value_of(OPT_SET).map(parse_date) {
         None => None,
         Some(Err((input, _err))) => {
-            eprintln!("date: invalid date '{}'", input);
+            eprintln!("date: invalid date ‘{}’", input);
             return 1;
         }
         Some(Ok(date)) => Some(date),
@@ -297,11 +300,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         for date in dates {
             match date {
                 Ok(date) => {
-                    let formatted = date.format(format_string);
+                    // GNU `date` uses `%N` for nano seconds, however crate::chrono uses `%f`
+                    let format_string = &format_string.replace("%N", "%f");
+                    let formatted = date.format(format_string).to_string().replace("%f", "%N");
                     println!("{}", formatted);
                 }
                 Err((input, _err)) => {
-                    println!("date: invalid date '{}'", input);
+                    println!("date: invalid date ‘{}’", input);
                 }
             }
         }
@@ -348,7 +353,7 @@ fn set_system_datetime(_date: DateTime<Utc>) -> i32 {
 #[cfg(target_os = "macos")]
 fn set_system_datetime(_date: DateTime<Utc>) -> i32 {
     eprintln!("date: setting the date is not supported by macOS");
-    return 1;
+    1
 }
 
 #[cfg(all(unix, not(target_os = "macos")))]

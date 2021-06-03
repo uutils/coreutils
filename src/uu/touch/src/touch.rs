@@ -145,14 +145,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         || matches.is_present(options::sources::CURRENT)
     {
         let timestamp = if matches.is_present(options::sources::DATE) {
-            parse_date(matches.value_of(options::sources::DATE).unwrap().as_ref())
+            parse_date(matches.value_of(options::sources::DATE).unwrap())
         } else {
-            parse_timestamp(
-                matches
-                    .value_of(options::sources::CURRENT)
-                    .unwrap()
-                    .as_ref(),
-            )
+            parse_timestamp(matches.value_of(options::sources::CURRENT).unwrap())
         };
         (timestamp, timestamp)
     } else {
@@ -243,10 +238,14 @@ fn parse_date(str: &str) -> FileTime {
     // be any simple specification for what format this parameter allows and I'm
     // not about to implement GNU parse_datetime.
     // http://git.savannah.gnu.org/gitweb/?p=gnulib.git;a=blob_plain;f=lib/parse-datetime.y
-    match time::strptime(str, "%c") {
-        Ok(tm) => local_tm_to_filetime(to_local(tm)),
-        Err(e) => panic!("Unable to parse date\n{}", e),
+    let formats = vec!["%c", "%F"];
+    for f in formats {
+        if let Ok(tm) = time::strptime(str, f) {
+            return local_tm_to_filetime(to_local(tm));
+        }
     }
+    show_error!("Unable to parse date: {}\n", str);
+    process::exit(1);
 }
 
 fn parse_timestamp(s: &str) -> FileTime {

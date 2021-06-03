@@ -1,3 +1,5 @@
+# spell-checker:ignore (misc) testsuite runtest (targets) busytest distclean manpages pkgs ; (vars/env) BINDIR BUILDDIR CARGOFLAGS DESTDIR DOCSDIR INSTALLDIR INSTALLEES MANDIR MULTICALL
+
 # Config options
 PROFILE         ?= debug
 MULTICALL       ?= n
@@ -82,6 +84,7 @@ PROGS       := \
 	nproc \
 	od \
 	paste \
+	pr \
 	printenv \
 	printf \
 	ptx \
@@ -188,6 +191,7 @@ TEST_PROGS  := \
 	paste \
 	pathchk \
 	pinky \
+	pr \
 	printf \
 	ptx \
 	pwd \
@@ -274,7 +278,7 @@ busybox-src:
 $(BUILDDIR)/.config: $(BASEDIR)/.busybox-config
 	cp $< $@
 
-# Test under the busybox testsuite
+# Test under the busybox test suite
 $(BUILDDIR)/busybox: busybox-src build-coreutils $(BUILDDIR)/.config
 	cp $(BUILDDIR)/coreutils $(BUILDDIR)/busybox; \
 	chmod +x $@;

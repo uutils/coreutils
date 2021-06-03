@@ -1,3 +1,5 @@
+// spell-checker:ignore (paths) sublink subwords
+
 use crate::common::util::*;
 
 const SUB_DIR: &str = "subdir/deeper";
@@ -53,7 +55,15 @@ fn _du_basics_subdir(s: &str) {
 fn _du_basics_subdir(s: &str) {
     assert_eq!(s, "0\tsubdir/deeper\n");
 }
-#[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))]
+#[cfg(target_os = "freebsd")]
+fn _du_basics_subdir(s: &str) {
+    assert_eq!(s, "8\tsubdir/deeper\n");
+}
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "freebsd")
+))]
 fn _du_basics_subdir(s: &str) {
     // MS-WSL linux has altered expected output
     if !uucore::os::is_wsl_1() {
@@ -68,7 +78,7 @@ fn test_du_basics_bad_name() {
     new_ucmd!()
         .arg("bad_name")
         .succeeds() // TODO: replace with ".fails()" once `du` is fixed
-        .stderr_only("du: error: bad_name: No such file or directory\n");
+        .stderr_only("du: bad_name: No such file or directory\n");
 }
 
 #[test]
@@ -100,7 +110,15 @@ fn _du_soft_link(s: &str) {
 fn _du_soft_link(s: &str) {
     assert_eq!(s, "8\tsubdir/links\n");
 }
-#[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))]
+#[cfg(target_os = "freebsd")]
+fn _du_soft_link(s: &str) {
+    assert_eq!(s, "16\tsubdir/links\n");
+}
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "freebsd")
+))]
 fn _du_soft_link(s: &str) {
     // MS-WSL linux has altered expected output
     if !uucore::os::is_wsl_1() {
@@ -113,11 +131,9 @@ fn _du_soft_link(s: &str) {
 #[test]
 fn test_du_hard_link() {
     let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
 
-    let result_ln = scene.cmd("ln").arg(SUB_FILE).arg(SUB_LINK).run();
-    if !result_ln.succeeded() {
-        scene.ccmd("ln").arg(SUB_FILE).arg(SUB_LINK).succeeds();
-    }
+    at.hard_link(SUB_FILE, SUB_LINK);
 
     let result = scene.ucmd().arg(SUB_DIR_LINKS).succeeds();
 
@@ -141,7 +157,15 @@ fn _du_hard_link(s: &str) {
 fn _du_hard_link(s: &str) {
     assert_eq!(s, "8\tsubdir/links\n")
 }
-#[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))]
+#[cfg(target_os = "freebsd")]
+fn _du_hard_link(s: &str) {
+    assert_eq!(s, "16\tsubdir/links\n")
+}
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "freebsd")
+))]
 fn _du_hard_link(s: &str) {
     // MS-WSL linux has altered expected output
     if !uucore::os::is_wsl_1() {
@@ -165,7 +189,7 @@ fn test_du_d_flag() {
                 // TODO: gnu `du` doesn't use trailing "/" here
                 // result.stdout_str(), result_reference.stdout_str()
                 result.stdout_str().trim_end_matches("/\n"),
-                result_reference.stdout_str().trim_end_matches("\n")
+                result_reference.stdout_str().trim_end_matches('\n')
             );
             return;
         }
@@ -181,7 +205,15 @@ fn _du_d_flag(s: &str) {
 fn _du_d_flag(s: &str) {
     assert_eq!(s, "8\t./subdir\n8\t./\n");
 }
-#[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))]
+#[cfg(target_os = "freebsd")]
+fn _du_d_flag(s: &str) {
+    assert_eq!(s, "28\t./subdir\n36\t./\n");
+}
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "freebsd")
+))]
 fn _du_d_flag(s: &str) {
     // MS-WSL linux has altered expected output
     if !uucore::os::is_wsl_1() {
@@ -208,18 +240,37 @@ fn test_du_time() {
     scene
         .ccmd("touch")
         .arg("-a")
-        .arg("-m")
         .arg("-t")
         .arg("201505150000")
         .arg("date_test")
         .succeeds();
 
     scene
-        .ucmd()
-        .arg("--time")
+        .ccmd("touch")
+        .arg("-m")
+        .arg("-t")
+        .arg("201606160000")
         .arg("date_test")
-        .succeeds()
-        .stdout_only("0\t2015-05-15 00:00\tdate_test\n");
+        .succeeds();
+
+    let result = scene.ucmd().arg("--time").arg("date_test").succeeds();
+    result.stdout_only("0\t2016-06-16 00:00\tdate_test\n");
+
+    let result = scene.ucmd().arg("--time=atime").arg("date_test").succeeds();
+    result.stdout_only("0\t2015-05-15 00:00\tdate_test\n");
+
+    let result = scene.ucmd().arg("--time=ctime").arg("date_test").succeeds();
+    result.stdout_only("0\t2016-06-16 00:00\tdate_test\n");
+
+    #[cfg(not(target_env = "musl"))]
+    {
+        use regex::Regex;
+
+        let re_birth =
+            Regex::new(r"0\t[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}\tdate_test").unwrap();
+        let result = scene.ucmd().arg("--time=birth").arg("date_test").succeeds();
+        result.stdout_matches(&re_birth);
+    }
 }
 
 #[cfg(not(target_os = "windows"))]
