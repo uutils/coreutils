@@ -1,4 +1,4 @@
-// spell-checker:ignore (flags) reflink (fs) tmpfs
+// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE
 
 use crate::common::util::*;
 #[cfg(not(windows))]
@@ -14,6 +14,8 @@ use std::os::windows::fs::symlink_file;
 
 #[cfg(target_os = "linux")]
 use filetime::FileTime;
+#[cfg(target_os = "linux")]
+use rlimit::Resource;
 #[cfg(not(windows))]
 use std::env;
 #[cfg(target_os = "linux")]
@@ -1275,4 +1277,16 @@ fn test_cp_reflink_insufficient_permission() {
         .arg(TEST_EXISTING_FILE)
         .fails()
         .stderr_only("cp: 'unreadable' -> 'existing_file.txt': Permission denied (os error 13)");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_closes_file_descriptors() {
+    new_ucmd!()
+        .arg("-r")
+        .arg("--reflink=auto")
+        .arg("dir_with_10_files/")
+        .arg("dir_with_10_files_new/")
+        .with_limit(Resource::NOFILE, 9, 9)
+        .succeeds();
 }
