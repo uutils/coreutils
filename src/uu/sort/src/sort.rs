@@ -1148,12 +1148,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     settings.buffer_size = matches
         .value_of(OPT_BUF_SIZE)
-        .map(|v| match GlobalSettings::parse_byte_count(v) {
-            Ok(n) => n,
-            Err(ParseSizeError::ParseFailure(_)) => crash!(2, "invalid -S argument '{}'", v),
-            Err(ParseSizeError::SizeTooBig(_)) => crash!(2, "-S argument '{}' too large", v),
-        })
-        .unwrap_or(DEFAULT_BUF_SIZE);
+        .map_or(DEFAULT_BUF_SIZE, |s| {
+            GlobalSettings::parse_byte_count(s).map_or_else(
+                |e| crash!(2, "{}", format_error_message(e, s, OPT_BUF_SIZE)),
+                |n| n,
+            )
+        });
 
     settings.tmp_dir = matches
         .value_of(OPT_TMP_DIR)
@@ -1555,6 +1555,16 @@ fn open(path: impl AsRef<OsStr>) -> Box<dyn Read + Send> {
     }
 }
 
+fn format_error_message(error: ParseSizeError, s: &str, option: &str) -> String {
+    // NOTE:
+    // GNU's sort echos affected flag, -S or --buffer-size, depending user's selection
+    // GNU's sort distinguishs between "invalid (suffix in) argument"
+    match error {
+        ParseSizeError::ParseFailure(_) => format!("invalid --{} argument '{}'", option, s),
+        ParseSizeError::SizeTooBig(_) => format!("--{} argument '{}' too large", option, s),
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -1659,7 +1669,7 @@ mod tests {
             ("10T", 10 * 1024 * 1024 * 1024 * 1024),
             ("1b", 1),
             ("1024b", 1024),
-            ("1024Mb", 1024 * 1024 * 1024), // TODO: This might not be what GNU `sort` does?
+            ("1024Mb", 1024 * 1024 * 1024), // NOTE: This might not be how GNU `sort` behaves for 'Mb'
             ("1", 1024),                    // K is default
             ("50", 50 * 1024),
             ("K", 1024),

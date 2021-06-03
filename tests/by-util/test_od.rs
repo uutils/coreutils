@@ -804,3 +804,37 @@ fn test_traditional_only_label() {
             ",
         ));
 }
+
+#[test]
+fn test_od_invalid_bytes() {
+    const INVALID_SIZE: &str = "1fb4t";
+    const BIG_SIZE: &str = "1Y";
+
+    let input: [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+
+    let options = [
+        "--read-bytes",
+        "--skip-bytes",
+        "--width",
+        // "--strings", // TODO: consider testing here once '--strings' is implemented
+    ];
+    for option in &options {
+        new_ucmd!()
+            .arg(format!("{}={}", option, INVALID_SIZE))
+            .run_piped_stdin(&input[..])
+            .failure()
+            .code_is(1)
+            .stderr_only(format!(
+                "od: invalid {} argument '{}'",
+                option, INVALID_SIZE
+            ));
+
+        #[cfg(not(target_pointer_width = "128"))]
+        new_ucmd!()
+            .arg(format!("{}={}", option, BIG_SIZE))
+            .run_piped_stdin(&input[..])
+            .failure()
+            .code_is(1)
+            .stderr_only(format!("od: {} argument '{}' too large", option, BIG_SIZE));
+    }
+}

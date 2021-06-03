@@ -80,7 +80,7 @@ fn test_du_invalid_size() {
         .arg("/tmp")
         .fails()
         .code_is(1)
-        .stderr_only("du: invalid suffix in --block-size argument '1fb4t'");
+        .stderr_only("du: invalid --block-size argument '1fb4t'");
     #[cfg(not(target_pointer_width = "128"))]
     new_ucmd!()
         .arg("--block-size=1Y")

@@ -57,7 +57,7 @@ fn test_invalid_buffer_size() {
             .fails()
             .code_is(2)
             .stderr_only(format!(
-                "sort: invalid -S argument '{}'",
+                "sort: invalid --buffer-size argument '{}'",
                 invalid_buffer_size
             ));
     }
@@ -69,7 +69,7 @@ fn test_invalid_buffer_size() {
         .arg("ext_sort.txt")
         .fails()
         .code_is(2)
-        .stderr_only("sort: -S argument '1Y' too large");
+        .stderr_only("sort: --buffer-size argument '1Y' too large");
 
     #[cfg(target_pointer_width = "32")]
     {
@@ -82,7 +82,10 @@ fn test_invalid_buffer_size() {
                 .arg("ext_sort.txt")
                 .fails()
                 .code_is(2)
-                .stderr_only(format!("sort: -S argument '{}' too large", buffer_size));
+                .stderr_only(format!(
+                    "sort: --buffer-size argument '{}' too large",
+                    buffer_size
+                ));
         }
     }
 }

@@ -42,7 +42,7 @@ mod options {
     pub const NULL: &str = "0";
     pub const ALL: &str = "all";
     pub const APPARENT_SIZE: &str = "apparent-size";
-    pub const BLOCK_SIZE: &str = "B";
+    pub const BLOCK_SIZE: &str = "block-size";
     pub const BYTES: &str = "b";
     pub const TOTAL: &str = "c";
     pub const MAX_DEPTH: &str = "d";
@@ -211,18 +211,11 @@ fn get_file_info(path: &PathBuf) -> Option<FileInfo> {
 }
 
 fn read_block_size(s: Option<&str>) -> usize {
-    if let Some(size_arg) = s {
-        match parse_size(size_arg) {
-            Ok(v) => v,
-            Err(e) => match e {
-                ParseSizeError::ParseFailure(_) => {
-                    crash!(1, "invalid suffix in --block-size argument '{}'", size_arg)
-                }
-                ParseSizeError::SizeTooBig(_) => {
-                    crash!(1, "--block-size argument '{}' too large", size_arg)
-                }
-            },
-        }
+    if let Some(s) = s {
+        parse_size(s).map_or_else(
+            |e| crash!(1, "{}", format_error_message(e, s, options::BLOCK_SIZE)),
+            |n| n,
+        )
     } else {
         for env_var in &["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
             if let Ok(env_size) = env::var(env_var) {
@@ -389,7 +382,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(
             Arg::with_name(options::BLOCK_SIZE)
                 .short("B")
-                .long("block-size")
+                .long(options::BLOCK_SIZE)
                 .value_name("SIZE")
                 .help(
                     "scale sizes  by  SIZE before printing them. \
@@ -692,6 +685,16 @@ Try '{} --help' for more information.",
     }
 
     0
+}
+
+fn format_error_message(error: ParseSizeError, s: &str, option: &str) -> String {
+    // NOTE:
+    // GNU's du echos affected flag, -B or --block-size (-t or --threshold), depending user's selection
+    // GNU's du distinguishs between "invalid (suffix in) argument"
+    match error {
+        ParseSizeError::ParseFailure(_) => format!("invalid --{} argument '{}'", option, s),
+        ParseSizeError::SizeTooBig(_) => format!("--{} argument '{}' too large", option, s),
+    }
 }
 
 #[cfg(test)]
