@@ -76,7 +76,7 @@ fn app<'a>() -> App<'a, 'a> {
         .arg(
             Arg::with_name(options::QUIET_NAME)
                 .short("q")
-                .long("--quiet")
+                .long("quiet")
                 .visible_alias("silent")
                 .help("never print headers giving file names")
                 .overrides_with_all(&[options::VERBOSE_NAME, options::QUIET_NAME]),

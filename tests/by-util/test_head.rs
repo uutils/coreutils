@@ -244,6 +244,7 @@ hello
 ",
         );
 }
+
 #[test]
 fn test_head_invalid_num() {
     new_ucmd!()
@@ -258,16 +259,26 @@ fn test_head_invalid_num() {
     new_ucmd!()
         .args(&["-c", "1Y", "emptyfile.txt"])
         .fails()
-        .stderr_is(
-            "head: invalid number of bytes: ‘1Y’: Value too large to be stored in data type",
-        );
+        .stderr_is("head: invalid number of bytes: ‘1Y’: Value too large for defined data type");
     #[cfg(not(target_pointer_width = "128"))]
     new_ucmd!()
         .args(&["-n", "1Y", "emptyfile.txt"])
         .fails()
-        .stderr_is(
-            "head: invalid number of lines: ‘1Y’: Value too large to be stored in data type",
-        );
+        .stderr_is("head: invalid number of lines: ‘1Y’: Value too large for defined data type");
+    #[cfg(target_pointer_width = "32")]
+    {
+        let sizes = ["1000G", "10T"];
+        for size in &sizes {
+            new_ucmd!()
+                .args(&["-c", size])
+                .fails()
+                .code_is(1)
+                .stderr_only(format!(
+                    "head: invalid number of bytes: ‘{}’: Value too large for defined data type",
+                    size
+                ));
+        }
+    }
 }
 
 #[test]

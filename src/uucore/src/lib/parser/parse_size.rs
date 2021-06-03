@@ -75,10 +75,9 @@ pub fn parse_size(size: &str) -> Result<usize, ParseSizeError> {
         Ok(n) => n,
         Err(_) => return Err(ParseSizeError::size_too_big(size)),
     };
-    match number.checked_mul(factor) {
-        Some(n) => Ok(n),
-        None => Err(ParseSizeError::size_too_big(size)),
-    }
+    number
+        .checked_mul(factor)
+        .ok_or(ParseSizeError::size_too_big(size))
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -108,22 +107,58 @@ impl fmt::Display for ParseSizeError {
 
 impl ParseSizeError {
     fn parse_failure(s: &str) -> ParseSizeError {
-        // has to be handled in the respective uutils because strings differ, e.g.
-        // truncate: Invalid number: ‘fb’
-        // tail: invalid number of bytes: ‘fb’
+        // stderr on linux (GNU coreutils 8.32)
+        // has to be handled in the respective uutils because strings differ, e.g.:
+        //
+        // `NUM`
+        // head:     invalid number of bytes: ‘1fb’
+        // tail:     invalid number of bytes: ‘1fb’
+        //
+        // `SIZE`
+        // split:    invalid number of bytes: ‘1fb’
+        // truncate: Invalid number: ‘1fb’
+        //
+        // `MODE`
+        // stdbuf:   invalid mode ‘1fb’
+        //
+        // `SIZE`
+        // sort:     invalid suffix in --buffer-size argument '1fb'
+        // sort:     invalid --buffer-size argument 'fb'
+        //
+        // `SIZE`
+        // du:       invalid suffix in --buffer-size argument '1fb'
+        // du:       invalid suffix in --threshold argument '1fb'
+        // du:       invalid --buffer-size argument 'fb'
+        // du:       invalid --threshold argument 'fb'
+        //
+        // `BYTES`
+        // od:       invalid suffix in --read-bytes argument '1fb'
+        // od:       invalid --read-bytes argument  argument 'fb'
+        //                   --skip-bytes
+        //                   --width
+        //                   --strings
+        // etc.
         ParseSizeError::ParseFailure(format!("‘{}’", s))
     }
 
     fn size_too_big(s: &str) -> ParseSizeError {
-        // has to be handled in the respective uutils because strings differ, e.g.
-        // truncate: Invalid number: ‘1Y’: Value too large to be stored in data type
-        // tail:     invalid number of bytes: ‘1Y’: Value too large to be stored in data type
+        // stderr on linux (GNU coreutils 8.32)
+        // has to be handled in the respective uutils because strings differ, e.g.:
+        //
+        // head:     invalid number of bytes: ‘1Y’: Value too large for defined data type
+        // tail:     invalid number of bytes: ‘1Y’: Value too large for defined data type
         // split:    invalid number of bytes: ‘1Y’: Value too large for defined data type
+        // truncate:          Invalid number: ‘1Y’: Value too large for defined data type
+        // stdbuf:               invalid mode ‘1Y’: Value too large for defined data type
+        // sort:     -S argument '1Y' too large
+        // du:       -B argument '1Y' too large
+        // od:       -N argument '1Y' too large
         // etc.
-        ParseSizeError::SizeTooBig(format!(
-            "‘{}’: Value too large to be stored in data type",
-            s
-        ))
+        //
+        // stderr on macos (brew - GNU coreutils 8.32) also differs for the same version, e.g.:
+        // ghead:   invalid number of bytes: ‘1Y’: Value too large to be stored in data type
+        // gtail:   invalid number of bytes: ‘1Y’: Value too large to be stored in data type
+        ParseSizeError::SizeTooBig(format!("‘{}’: Value too large for defined data type", s))
     }
 }
 

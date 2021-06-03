@@ -19,7 +19,7 @@ use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 use std::{char, fs::remove_file};
-use uucore::parse_size::{parse_size, ParseSizeError};
+use uucore::parse_size::parse_size;
 
 static NAME: &str = "split";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -281,16 +281,7 @@ impl ByteSplitter {
         let size_string = &settings.strategy_param;
         let size_num = match parse_size(&size_string) {
             Ok(n) => n,
-            Err(e) => match e {
-                ParseSizeError::ParseFailure(_) => {
-                    crash!(1, "invalid number of bytes: {}", e.to_string())
-                }
-                ParseSizeError::SizeTooBig(_) => crash!(
-                    1,
-                    "invalid number of bytes: ‘{}’: Value too large for defined data type",
-                    size_string
-                ),
-            },
+            Err(e) => crash!(1, "invalid number of bytes: {}", e.to_string()),
         };
 
         ByteSplitter {

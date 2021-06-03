@@ -108,10 +108,7 @@ pub fn parse_num(src: &str) -> Result<(usize, bool), ParseSizeError> {
         return Err(ParseSizeError::ParseFailure(src.to_string()));
     }
 
-    match parse_size(&size_string) {
-        Ok(n) => Ok((n, all_but_last)),
-        Err(e) => Err(e),
-    }
+    parse_size(&size_string).map(|n| (n, all_but_last))
 }
 
 #[cfg(test)]

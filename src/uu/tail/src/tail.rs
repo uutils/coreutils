@@ -33,7 +33,6 @@ use uucore::ringbuffer::RingBuffer;
 pub mod options {
     pub mod verbosity {
         pub static QUIET: &str = "quiet";
-        pub static SILENT: &str = "silent";
         pub static VERBOSE: &str = "verbose";
     }
     pub static BYTES: &str = "bytes";
@@ -77,6 +76,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let app = App::new(executable!())
         .version(crate_version!())
         .about("output the last part of files")
+        // TODO: add usage
         .arg(
             Arg::with_name(options::BYTES)
                 .short("c")
@@ -111,12 +111,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(options::verbosity::QUIET)
                 .short("q")
                 .long(options::verbosity::QUIET)
+                .visible_alias("silent")
+                .overrides_with_all(&[options::verbosity::QUIET, options::verbosity::VERBOSE])
                 .help("never output headers giving file names"),
-        )
-        .arg(
-            Arg::with_name(options::verbosity::SILENT)
-                .long(options::verbosity::SILENT)
-                .help("synonym of --quiet"),
         )
         .arg(
             Arg::with_name(options::SLEEP_INT)
@@ -129,6 +126,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(options::verbosity::VERBOSE)
                 .short("v")
                 .long(options::verbosity::VERBOSE)
+                .overrides_with_all(&[options::verbosity::QUIET, options::verbosity::VERBOSE])
                 .help("always output headers giving file names"),
         )
         .arg(
@@ -195,8 +193,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     let verbose = matches.is_present(options::verbosity::VERBOSE);
-    let quiet = matches.is_present(options::verbosity::QUIET)
-        || matches.is_present(options::verbosity::SILENT);
+    let quiet = matches.is_present(options::verbosity::QUIET);
 
     let files: Vec<String> = matches
         .values_of(options::ARG_FILES)
@@ -423,8 +420,5 @@ fn parse_num(src: &str) -> Result<(usize, bool), ParseSizeError> {
         return Err(ParseSizeError::ParseFailure(src.to_string()));
     }
 
-    match parse_size(&size_string) {
-        Ok(n) => Ok((n, starting_with)),
-        Err(e) => Err(e),
-    }
+    parse_size(&size_string).map(|n| (n, starting_with))
 }
