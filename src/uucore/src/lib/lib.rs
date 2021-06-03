@@ -22,7 +22,7 @@ pub extern crate winapi;
 mod features; // feature-gated code modules
 mod macros; // crate macros (macro_rules-type; exported to `crate::...`)
 mod mods; // core cross-platform modules
-mod parser; // string parsing moduls
+mod parser; // string parsing modules
 
 // * cross-platform modules
 pub use crate::mods::backup_control;

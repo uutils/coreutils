@@ -3,6 +3,8 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
+// spell-checker:ignore (ToDO) hdsf ghead gtail
+
 use std::convert::TryFrom;
 use std::error::Error;
 use std::fmt;
@@ -77,7 +79,7 @@ pub fn parse_size(size: &str) -> Result<usize, ParseSizeError> {
     };
     number
         .checked_mul(factor)
-        .ok_or(ParseSizeError::size_too_big(size))
+        .ok_or_else(|| ParseSizeError::size_too_big(size))
 }
 
 #[derive(Debug, PartialEq, Eq)]

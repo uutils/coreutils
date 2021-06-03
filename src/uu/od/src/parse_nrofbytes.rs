@@ -71,7 +71,7 @@ pub fn parse_number_of_bytes(s: &str) -> Result<usize, ParseSizeError> {
     };
     factor
         .checked_mul(multiply)
-        .ok_or(ParseSizeError::SizeTooBig(s.to_string()))
+        .ok_or_else(|| ParseSizeError::SizeTooBig(s.to_string()))
 }
 
 #[test]
@@ -80,12 +80,12 @@ fn test_parse_number_of_bytes() {
     assert_eq!(8, parse_number_of_bytes("010").unwrap());
     assert_eq!(8 * 512, parse_number_of_bytes("010b").unwrap());
     assert_eq!(8 * 1024, parse_number_of_bytes("010k").unwrap());
-    assert_eq!(8 * 1048576, parse_number_of_bytes("010m").unwrap());
+    assert_eq!(8 * 1_048_576, parse_number_of_bytes("010m").unwrap());
 
     // hex input
     assert_eq!(15, parse_number_of_bytes("0xf").unwrap());
     assert_eq!(15, parse_number_of_bytes("0XF").unwrap());
     assert_eq!(27, parse_number_of_bytes("0x1b").unwrap());
     assert_eq!(16 * 1024, parse_number_of_bytes("0x10k").unwrap());
-    assert_eq!(16 * 1048576, parse_number_of_bytes("0x10m").unwrap());
+    assert_eq!(16 * 1_048_576, parse_number_of_bytes("0x10m").unwrap());
 }

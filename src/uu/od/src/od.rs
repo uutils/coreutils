@@ -643,7 +643,7 @@ fn open_input_peek_reader(
 fn format_error_message(error: ParseSizeError, s: &str, option: &str) -> String {
     // NOTE:
     // GNU's od echos affected flag, -N or --read-bytes (-j or --skip-bytes, etc.), depending user's selection
-    // GNU's od distinguishs between "invalid (suffix in) argument"
+    // GNU's od does distinguish between "invalid (suffix in) argument"
     match error {
         ParseSizeError::ParseFailure(_) => format!("invalid --{} argument '{}'", option, s),
         ParseSizeError::SizeTooBig(_) => format!("--{} argument '{}' too large", option, s),

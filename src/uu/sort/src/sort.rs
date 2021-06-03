@@ -1567,7 +1567,7 @@ fn open(path: impl AsRef<OsStr>) -> Box<dyn Read + Send> {
 fn format_error_message(error: ParseSizeError, s: &str, option: &str) -> String {
     // NOTE:
     // GNU's sort echos affected flag, -S or --buffer-size, depending user's selection
-    // GNU's sort distinguishs between "invalid (suffix in) argument"
+    // GNU's sort does distinguish between "invalid (suffix in) argument"
     match error {
         ParseSizeError::ParseFailure(_) => format!("invalid --{} argument '{}'", option, s),
         ParseSizeError::SizeTooBig(_) => format!("--{} argument '{}' too large", option, s),

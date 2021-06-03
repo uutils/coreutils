@@ -1,9 +1,9 @@
-// This file is part of the uutils coreutils package.
-//
-// (c) Derek Chiang <derekchiang93@gmail.com>
-//
-// For the full copyright and license information, please view the LICENSE
-// file that was distributed with this source code.
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * (c) Derek Chiang <derekchiang93@gmail.com>
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
 
 #[macro_use]
 extern crate uucore;
@@ -25,6 +25,8 @@ use std::os::unix::fs::MetadataExt;
 use std::os::windows::fs::MetadataExt;
 #[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
+#[cfg(windows)]
+use std::path::Path;
 use std::path::PathBuf;
 use std::time::{Duration, UNIX_EPOCH};
 use uucore::parse_size::{parse_size, ParseSizeError};
@@ -161,7 +163,7 @@ fn birth_u64(meta: &Metadata) -> Option<u64> {
 }
 
 #[cfg(windows)]
-fn get_size_on_disk(path: &PathBuf) -> u64 {
+fn get_size_on_disk(path: &Path) -> u64 {
     let mut size_on_disk = 0;
 
     // bind file so it stays in scope until end of function
@@ -193,7 +195,7 @@ fn get_size_on_disk(path: &PathBuf) -> u64 {
 }
 
 #[cfg(windows)]
-fn get_file_info(path: &PathBuf) -> Option<FileInfo> {
+fn get_file_info(path: &Path) -> Option<FileInfo> {
     let mut result = None;
 
     let file = match fs::File::open(path) {
@@ -709,7 +711,7 @@ Try '{} --help' for more information.",
 fn format_error_message(error: ParseSizeError, s: &str, option: &str) -> String {
     // NOTE:
     // GNU's du echos affected flag, -B or --block-size (-t or --threshold), depending user's selection
-    // GNU's du distinguishs between "invalid (suffix in) argument"
+    // GNU's du does distinguish between "invalid (suffix in) argument"
     match error {
         ParseSizeError::ParseFailure(_) => format!("invalid --{} argument '{}'", option, s),
         ParseSizeError::SizeTooBig(_) => format!("--{} argument '{}' too large", option, s),

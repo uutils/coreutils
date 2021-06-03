@@ -152,7 +152,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     crash!(
                         1,
                         "cannot stat '{}': No such file or directory",
-                        reference.unwrap_or("".to_string())
+                        reference.unwrap_or_else(|| "".to_string())
                     ); // TODO: fix '--no-create' see test_reference and test_truncate_bytes_size
                 }
                 _ => crash!(1, "{}", e.to_string()),
