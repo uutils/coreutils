@@ -422,11 +422,6 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> Result<()> {
         }
     }
 
-    if settings.no_dereference && matches!(settings.overwrite, OverwriteMode::Force) && dst.exists()
-    {
-        fs::remove_file(dst)?;
-    }
-
     if settings.symbolic {
         symlink(&source, dst)?;
     } else {
