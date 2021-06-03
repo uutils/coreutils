@@ -59,7 +59,7 @@ do
 done
 
 
-grep -rl 'path_prepend_' tests/* | xargs sed -i 's|path_prepend_ ./src||'
+grep -rl 'path_prepend_' tests/* | xargs sed -i 's| path_prepend_ ./src||'
 sed -i -e 's|^seq |/usr/bin/seq |' -e 's|sha1sum |/usr/bin/sha1sum |' tests/factor/t*sh
 
 # Remove tests checking for --version & --help
@@ -94,10 +94,13 @@ sed -i 's|cp |/usr/bin/cp |' tests/mv/hard-2.sh
 sed -i 's|paste |/usr/bin/paste |' tests/misc/od-endian.sh
 sed -i 's|seq |/usr/bin/seq |' tests/misc/sort-discrim.sh
 
-#Add specific timeout to tests that currently hang to limit time spent waiting
+# Add specific timeout to tests that currently hang to limit time spent waiting
 sed -i 's|seq \$|/usr/bin/timeout 0.1 seq \$|' tests/misc/seq-precision.sh tests/misc/seq-long-double.sh
 sed -i 's|cat |/usr/bin/timeout 0.1 cat |' tests/misc/cat-self.sh
 
+
+# Remove dup of /usr/bin/ when executed several times
+grep -rl '/usr/bin//usr/bin/' tests/* | xargs --no-run-if-empty sed -i 's|/usr/bin//usr/bin/|/usr/bin/|g'
 
 
 #### Adjust tests to make them work with Rust/coreutils
