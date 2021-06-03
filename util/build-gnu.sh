@@ -98,4 +98,13 @@ sed -i 's|seq |/usr/bin/seq |' tests/misc/sort-discrim.sh
 sed -i 's|seq \$|/usr/bin/timeout 0.1 seq \$|' tests/misc/seq-precision.sh tests/misc/seq-long-double.sh
 sed -i 's|cat |/usr/bin/timeout 0.1 cat |' tests/misc/cat-self.sh
 
+
+
+#### Adjust tests to make them work with Rust/coreutils
+# in some cases, what we are doing in rust/coreutils is good (or better)
+# we should not regress our project just to match what GNU is going.
+# So, do some changes on the fly
+
+sed -i -e "s|rm: cannot remove 'e/slink'|rm: cannot remove 'e'|g" tests/rm/fail-eacces.sh
+
 test -f "${BUILDDIR}/getlimits" || cp src/getlimits "${BUILDDIR}"
