@@ -15,7 +15,7 @@ use count_bytes::count_bytes_fast;
 use countable::WordCountable;
 use word_count::{TitledWordCount, WordCount};
 
-use clap::{App, Arg, ArgMatches};
+use clap::{crate_version, App, Arg, ArgMatches};
 use thiserror::Error;
 
 use std::fs::{self, File};
@@ -84,7 +84,6 @@ impl Settings {
 
 static ABOUT: &str = "Display newline, word, and byte counts for each FILE, and a total line if
 more than one FILE is specified.";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub mod options {
     pub static BYTES: &str = "bytes";
@@ -136,7 +135,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .arg(

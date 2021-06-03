@@ -14,7 +14,7 @@ use uucore::fs::resolve_relative_path;
 use uucore::libc::{gid_t, uid_t};
 use uucore::perms::{wrap_chown, Verbosity};
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 
 use walkdir::WalkDir;
 
@@ -26,7 +26,6 @@ use std::path::Path;
 use uucore::InvalidEncodingHandling;
 
 static ABOUT: &str = "change file owner and group";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub mod options {
     pub mod verbosity {
@@ -75,7 +74,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .arg(

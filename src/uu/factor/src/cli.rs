@@ -13,7 +13,7 @@ use std::error::Error;
 use std::io::{self, stdin, stdout, BufRead, Write};
 
 mod factor;
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 pub use factor::*;
 
 mod miller_rabin;
@@ -21,7 +21,6 @@ pub mod numeric;
 mod rho;
 pub mod table;
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static SUMMARY: &str = "Print the prime factors of the given NUMBER(s).
 If none are specified, read from standard input.";
 
@@ -38,7 +37,7 @@ fn print_factors_str(num_str: &str, w: &mut impl io::Write) -> Result<(), Box<dy
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(SUMMARY)
         .arg(Arg::with_name(options::NUMBER).multiple(true))
         .get_matches_from(args);

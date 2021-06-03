@@ -10,11 +10,13 @@ extern crate uucore;
 
 use chrono::prelude::DateTime;
 use chrono::Local;
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::env;
 use std::fs;
+#[cfg(not(windows))]
+use std::fs::Metadata;
 use std::io::{stderr, ErrorKind, Result, Write};
 use std::iter;
 #[cfg(not(windows))]
@@ -58,7 +60,6 @@ mod options {
     pub const FILE: &str = "FILE";
 }
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
 const NAME: &str = "du";
 const SUMMARY: &str = "estimate file space usage";
 const LONG_HELP: &str = "
@@ -94,7 +95,7 @@ struct Stat {
     size: u64,
     blocks: u64,
     inode: Option<FileInfo>,
-    created: u64,
+    created: Option<u64>,
     accessed: u64,
     modified: u64,
 }
@@ -115,7 +116,7 @@ impl Stat {
             size: metadata.len(),
             blocks: metadata.blocks() as u64,
             inode: Some(file_info),
-            created: metadata.mtime() as u64,
+            created: birth_u64(&metadata),
             accessed: metadata.atime() as u64,
             modified: metadata.mtime() as u64,
         });
@@ -131,7 +132,7 @@ impl Stat {
             size: metadata.len(),
             blocks: size_on_disk / 1024 * 2,
             inode: file_info,
-            created: windows_time_to_unix_time(metadata.creation_time()),
+            created: windows_creation_time_to_unix_time(metadata.creation_time()),
             accessed: windows_time_to_unix_time(metadata.last_access_time()),
             modified: windows_time_to_unix_time(metadata.last_write_time()),
         })
@@ -139,10 +140,24 @@ impl Stat {
 }
 
 #[cfg(windows)]
-// https://doc.rust-lang.org/std/os/windows/fs/trait.MetadataExt.html#tymethod.creation_time
+// https://doc.rust-lang.org/std/os/windows/fs/trait.MetadataExt.html#tymethod.last_access_time
 // "The returned 64-bit value [...] which represents the number of 100-nanosecond intervals since January 1, 1601 (UTC)."
+// "If the underlying filesystem does not support last access time, the returned value is 0."
 fn windows_time_to_unix_time(win_time: u64) -> u64 {
-    win_time / 10_000_000 - 11_644_473_600
+    (win_time / 10_000_000).saturating_sub(11_644_473_600)
+}
+
+#[cfg(windows)]
+fn windows_creation_time_to_unix_time(win_time: u64) -> Option<u64> {
+    (win_time / 10_000_000).checked_sub(11_644_473_600)
+}
+
+#[cfg(not(windows))]
+fn birth_u64(meta: &Metadata) -> Option<u64> {
+    meta.created()
+        .ok()
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map(|e| e.as_secs() as u64)
 }
 
 #[cfg(windows)]
@@ -360,7 +375,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(SUMMARY)
         .usage(&usage[..])
         .after_help(LONG_HELP)
@@ -501,10 +516,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .value_name("WORD")
                 .require_equals(true)
                 .min_values(0)
+                .possible_values(&["atime", "access", "use", "ctime", "status", "birth", "creation"])
                 .help(
                     "show time of the last modification of any file in the \
                     directory, or any of its subdirectories.  If WORD is given, show time as WORD instead \
-                    of modification time: atime, access, use, ctime or status"
+                    of modification time: atime, access, use, ctime, status, birth or creation"
                 )
         )
         .arg(
@@ -629,19 +645,22 @@ Try '{} --help' for more information.",
                             let secs = {
                                 match matches.value_of(options::TIME) {
                                     Some(s) => match s {
-                                        "accessed" => stat.accessed,
-                                        "created" => stat.created,
-                                        "modified" => stat.modified,
-                                        _ => {
-                                            show_error!(
-                                                "invalid argument 'modified' for '--time'
-    Valid arguments are:
-      - 'accessed', 'created', 'modified'
-    Try '{} --help' for more information.",
-                                                NAME
-                                            );
-                                            return 1;
+                                        "ctime" | "status" => stat.modified,
+                                        "access" | "atime" | "use" => stat.accessed,
+                                        "birth" | "creation" => {
+                                            if let Some(time) = stat.created {
+                                                time
+                                            } else {
+                                                show_error!(
+                                                    "Invalid argument ‘{}‘ for --time.
+‘birth‘ and ‘creation‘ arguments are not supported on this platform.",
+                                                    s
+                                                );
+                                                return 1;
+                                            }
                                         }
+                                        // below should never happen as clap already restricts the values.
+                                        _ => unreachable!("Invalid field for --time"),
                                     },
                                     None => stat.modified,
                                 }

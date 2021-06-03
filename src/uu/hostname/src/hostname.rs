@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg, ArgMatches};
+use clap::{crate_version, App, Arg, ArgMatches};
 use std::collections::hash_set::HashSet;
 use std::net::ToSocketAddrs;
 use std::str;
@@ -21,7 +21,6 @@ use winapi::shared::minwindef::MAKEWORD;
 use winapi::um::winsock2::{WSACleanup, WSAStartup};
 
 static ABOUT: &str = "Display or set the system's host name.";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 static OPT_DOMAIN: &str = "domain";
 static OPT_IP_ADDRESS: &str = "ip-address";
@@ -54,7 +53,7 @@ fn get_usage() -> String {
 fn execute(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .arg(

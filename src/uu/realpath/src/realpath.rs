@@ -10,12 +10,11 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::path::{Path, PathBuf};
 use uucore::fs::{canonicalize, CanonicalizeMode};
 
 static ABOUT: &str = "print the resolved path";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 static OPT_QUIET: &str = "quiet";
 static OPT_STRIP: &str = "strip";
@@ -31,7 +30,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .arg(

@@ -12,7 +12,7 @@ extern crate uucore;
 
 mod platform;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::convert::TryFrom;
 use std::env;
 use std::fs::File;
@@ -22,7 +22,6 @@ use std::{char, fs::remove_file};
 use uucore::parse_size::parse_size;
 
 static NAME: &str = "split";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 static OPT_BYTES: &str = "bytes";
 static OPT_LINE_BYTES: &str = "line-bytes";
@@ -58,7 +57,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let default_suffix_length_str = OPT_DEFAULT_SUFFIX_LENGTH.to_string();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about("Create output files containing consecutive or interleaved sections of input")
         .usage(&usage[..])
         .after_help(&long_usage[..])

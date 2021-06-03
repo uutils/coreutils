@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::convert::TryFrom;
 use std::fs::{metadata, OpenOptions};
 use std::io::ErrorKind;
@@ -54,7 +54,6 @@ impl TruncateMode {
 }
 
 static ABOUT: &str = "Shrink or extend the size of each file to the specified size.";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub mod options {
     pub static IO_BLOCKS: &str = "io-blocks";
@@ -95,7 +94,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let long_usage = get_long_usage();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .after_help(&long_usage[..])

@@ -16,7 +16,7 @@ extern crate unix_socket;
 extern crate uucore;
 
 // last synced with: cat (GNU coreutils) 8.13
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::fs::{metadata, File};
 use std::io::{self, Read, Write};
 use thiserror::Error;
@@ -38,7 +38,6 @@ use unix_socket::UnixStream;
 use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "cat";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static SYNTAX: &str = "[OPTION]... [FILE]...";
 static SUMMARY: &str = "Concatenate FILE(s), or standard input, to standard output
  With no FILE, or when FILE is -, read standard input.";
@@ -173,7 +172,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let matches = App::new(executable!())
         .name(NAME)
-        .version(VERSION)
+        .version(crate_version!())
         .usage(SYNTAX)
         .about(SUMMARY)
         .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))

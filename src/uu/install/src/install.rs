@@ -12,7 +12,7 @@ mod mode;
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg, ArgMatches};
+use clap::{crate_version, App, Arg, ArgMatches};
 use file_diff::diff;
 use filetime::{set_file_times, FileTime};
 use uucore::entries::{grp2gid, usr2uid};
@@ -64,7 +64,6 @@ impl Behavior {
 
 static ABOUT: &str = "Copy SOURCE to DEST or multiple SOURCE(s) to the existing
  DIRECTORY, while setting permission modes and owner/group";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 static OPT_COMPARE: &str = "compare";
 static OPT_BACKUP: &str = "backup";
@@ -99,7 +98,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .arg(

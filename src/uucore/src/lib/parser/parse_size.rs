@@ -225,9 +225,7 @@ mod tests {
         ));
 
         assert_eq!(
-            ParseSizeError::SizeTooBig(
-                "‘1Y’: Value too large to be stored in data type".to_string()
-            ),
+            ParseSizeError::SizeTooBig("‘1Y’: Value too large for defined data type".to_string()),
             parse_size("1Y").unwrap_err()
         );
     }

@@ -23,7 +23,7 @@ mod ext_sort;
 mod merge;
 mod numeric_str_cmp;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
@@ -48,7 +48,6 @@ use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "sort";
 static ABOUT: &str = "Display sorted concatenation of all FILE(s).";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const LONG_HELP_KEYS: &str = "The key format is FIELD[.CHAR][OPTIONS][,FIELD[.CHAR]][OPTIONS].
 
@@ -414,19 +413,29 @@ impl<'a> Line<'a> {
                     selection.start += num_range.start;
                     selection.end = selection.start + num_range.len();
 
-                    // include a trailing si unit
-                    if selector.settings.mode == SortMode::HumanNumeric
-                        && self.line[selection.end..initial_selection.end]
-                            .starts_with(&['k', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'][..])
-                    {
-                        selection.end += 1;
-                    }
+                    if num_range != (0..0) {
+                        // include a trailing si unit
+                        if selector.settings.mode == SortMode::HumanNumeric
+                            && self.line[selection.end..initial_selection.end]
+                                .starts_with(&['k', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'][..])
+                        {
+                            selection.end += 1;
+                        }
 
-                    // include leading zeroes, a leading minus or a leading decimal point
-                    while self.line[initial_selection.start..selection.start]
-                        .ends_with(&['-', '0', '.'][..])
-                    {
-                        selection.start -= 1;
+                        // include leading zeroes, a leading minus or a leading decimal point
+                        while self.line[initial_selection.start..selection.start]
+                            .ends_with(&['-', '0', '.'][..])
+                        {
+                            selection.start -= 1;
+                        }
+                    } else {
+                        // This was not a valid number.
+                        // Report no match at the first non-whitespace character.
+                        let leading_whitespace = self.line[selection.clone()]
+                            .find(|c: char| !c.is_whitespace())
+                            .unwrap_or(0);
+                        selection.start += leading_whitespace;
+                        selection.end += leading_whitespace;
                     }
                 }
                 SortMode::GeneralNumeric => {
@@ -864,13 +873,13 @@ impl FieldSelector {
 
 fn get_usage() -> String {
     format!(
-        "{0} {1}
+        "{0}
 Usage:
  {0} [OPTION]... [FILE]...
 Write the sorted concatenation of all FILE(s) to standard output.
 Mandatory arguments for long options are mandatory for short options too.
 With no FILE, or when FILE is -, read standard input.",
-        NAME, VERSION
+        NAME
     )
 }
 
@@ -892,7 +901,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let mut settings: GlobalSettings = Default::default();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .arg(

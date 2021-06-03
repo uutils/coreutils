@@ -10,7 +10,7 @@
 
 #[macro_use]
 extern crate uucore;
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::ffi::CString;
 use std::io::Error;
 use std::path::Path;
@@ -18,7 +18,6 @@ use std::process::Command;
 use uucore::libc::{self, chroot, setgid, setgroups, setuid};
 use uucore::{entries, InvalidEncodingHandling};
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static NAME: &str = "chroot";
 static ABOUT: &str = "Run COMMAND with root directory set to NEWROOT.";
 static SYNTAX: &str = "[OPTION]... NEWROOT [COMMAND [ARG]...]";
@@ -37,7 +36,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .accept_any();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(SYNTAX)
         .arg(Arg::with_name(options::NEWROOT).hidden(true).required(true))

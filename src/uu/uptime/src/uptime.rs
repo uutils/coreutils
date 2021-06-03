@@ -9,7 +9,7 @@
 // spell-checker:ignore (ToDO) getloadavg upsecs updays nusers loadavg boottime uphours upmins
 
 use chrono::{Local, TimeZone, Utc};
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 
 #[macro_use]
 extern crate uucore;
@@ -17,7 +17,6 @@ extern crate uucore;
 pub use uucore::libc;
 use uucore::libc::time_t;
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Display the current time, the length of time the system has been up,\n\
                       the number of users on the system, and the average number of jobs\n\
                       in the run queue over the last 1, 5 and 15 minutes.";
@@ -40,7 +39,7 @@ fn get_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .arg(

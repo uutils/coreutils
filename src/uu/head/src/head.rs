@@ -1,6 +1,6 @@
 // spell-checker:ignore (vars) zlines
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::convert::TryFrom;
 use std::ffi::OsString;
 use std::io::{self, ErrorKind, Read, Seek, SeekFrom, Write};
@@ -10,7 +10,6 @@ const EXIT_FAILURE: i32 = 1;
 const EXIT_SUCCESS: i32 = 0;
 const BUF_SIZE: usize = 65536;
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
 const ABOUT: &str = "\
                      Print the first 10 lines of each FILE to standard output.\n\
                      With more than one FILE, precede each with a header giving the file name.\n\
@@ -38,7 +37,7 @@ use take::take_all_but;
 
 fn app<'a>() -> App<'a, 'a> {
     App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(USAGE)
         .arg(

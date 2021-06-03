@@ -12,12 +12,11 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::ffi::CStr;
 use uucore::fs::is_stdin_interactive;
 use uucore::InvalidEncodingHandling;
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Print the file name of the terminal connected to standard input.";
 
 mod options {
@@ -35,7 +34,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .accept_any();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .arg(

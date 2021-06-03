@@ -289,15 +289,19 @@ fn test_filter_command_fails() {
 #[test]
 fn test_split_lines_number() {
     // Test if stdout/stderr for '--lines' option is correct
-    new_ucmd!()
-        .args(&["--lines", "2"])
-        .pipe_in("abcde")
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+
+    scene
+        .ucmd()
+        .args(&["--lines", "2", "file"])
         .succeeds()
         .no_stderr()
         .no_stdout();
-    new_ucmd!()
-        .args(&["--lines", "2fb"])
-        .pipe_in("abcde")
+    scene
+        .ucmd()
+        .args(&["--lines", "2fb", "file"])
         .fails()
         .code_is(1)
         .stderr_only("split: invalid number of lines: ‘2fb’");

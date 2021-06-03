@@ -8,13 +8,12 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use libc::mkfifo;
 use std::ffi::CString;
 use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "mkfifo";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static USAGE: &str = "mkfifo [OPTION]... NAME...";
 static SUMMARY: &str = "Create a FIFO with the given name.";
 
@@ -32,7 +31,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let matches = App::new(executable!())
         .name(NAME)
-        .version(VERSION)
+        .version(crate_version!())
         .usage(USAGE)
         .about(SUMMARY)
         .arg(

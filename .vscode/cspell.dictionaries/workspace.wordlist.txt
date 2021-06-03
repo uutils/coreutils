@@ -30,6 +30,7 @@ peekreader
 quickcheck
 rand_chacha
 ringbuffer
+rlimit
 smallvec
 tempdir
 tempfile

@@ -16,9 +16,8 @@ use std::io::{self, stdin, BufRead, BufReader, Stdin};
 use std::path::Path;
 use uucore::InvalidEncodingHandling;
 
-use clap::{App, Arg, ArgMatches};
+use clap::{crate_version, App, Arg, ArgMatches};
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "compare two sorted files line by line";
 static LONG_HELP: &str = "";
 
@@ -140,7 +139,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .accept_any();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .after_help(LONG_HELP)

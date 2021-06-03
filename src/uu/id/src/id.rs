@@ -18,7 +18,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::ffi::CStr;
 use uucore::entries::{self, Group, Locate, Passwd};
 pub use uucore::libc;
@@ -71,7 +71,6 @@ mod audit {
 }
 
 static ABOUT: &str = "Display user and group information for the specified USER,\n or (when USER omitted) for the current user.";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 static OPT_AUDIT: &str = "audit";
 static OPT_EFFECTIVE_USER: &str = "effective-user";
@@ -92,7 +91,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .arg(

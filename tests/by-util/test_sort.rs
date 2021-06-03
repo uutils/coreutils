@@ -164,6 +164,14 @@ fn test_multiple_decimals_numeric() {
 }
 
 #[test]
+fn test_numeric_with_trailing_invalid_chars() {
+    test_helper(
+        "numeric_trailing_chars",
+        &["-n", "--numeric-sort", "--sort=numeric"],
+    )
+}
+
+#[test]
 fn test_check_zero_terminated_failure() {
     new_ucmd!()
         .arg("-z")

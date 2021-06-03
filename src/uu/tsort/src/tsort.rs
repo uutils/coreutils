@@ -9,14 +9,13 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
 use uucore::InvalidEncodingHandling;
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static SUMMARY: &str = "Topological sort the strings in FILE.
 Strings are defined as any sequence of tokens separated by whitespace (tab, space, or newline).
 If FILE is not passed in, stdin is used instead.";
@@ -32,7 +31,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .accept_any();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .usage(USAGE)
         .about(SUMMARY)
         .arg(

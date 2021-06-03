@@ -13,10 +13,9 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use platform_info::*;
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
 const ABOUT: &str = "Print certain system information.  With no OPTION, same as -s.";
 
 pub mod options {
@@ -49,7 +48,7 @@ const HOST_OS: &str = "Redox";
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = format!("{} [OPTION]...", executable!());
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .arg(Arg::with_name(options::ALL)
