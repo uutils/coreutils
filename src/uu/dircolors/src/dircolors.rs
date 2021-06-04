@@ -19,9 +19,7 @@ use std::io::{BufRead, BufReader};
 use clap::{crate_version, App, Arg};
 
 mod options {
-    pub const SH: &str = "sh";
     pub const BOURNE_SHELL: &str = "bourne-shell";
-    pub const CSH: &str = "csh";
     pub const C_SHELL: &str = "c-shell";
     pub const PRINT_DATABASE: &str = "print-database";
     pub const FILE: &str = "FILE";
@@ -75,52 +73,33 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let usage = get_usage();
 
-    /* Clap has .visible_alias, but it generates help like this
-     *     -b, --sh                output Bourne shell code to set LS_COLORS [aliases: bourne-shell]
-     * whereas we want help like this
-     *     -b, --sh                output Bourne shell code to set LS_COLORS
-     *         --bourne-shell      output Bourne shell code to set LS_COLORS
-     * (or preferably like the original, but that doesn't seem possible with clap:)
-     *     -b, --sh, --bourne-shell    output Bourne shell code to set LS_COLORS
-     * therefore, command aliases are defined manually as multiple commands
-     */
     let matches = App::new(executable!())
         .version(crate_version!())
         .about(SUMMARY)
         .usage(&usage[..])
         .after_help(LONG_HELP)
         .arg(
-            Arg::with_name(options::SH)
+            Arg::with_name(options::BOURNE_SHELL)
                 .long("sh")
                 .short("b")
+                .visible_alias("bourne-shell")
                 .help("output Bourne shell code to set LS_COLORS")
                 .display_order(1),
         )
         .arg(
-            Arg::with_name(options::BOURNE_SHELL)
-                .long("bourne-shell")
-                .help("output Bourne shell code to set LS_COLORS")
-                .display_order(2),
-        )
-        .arg(
-            Arg::with_name(options::CSH)
+            Arg::with_name(options::C_SHELL)
                 .long("csh")
                 .short("c")
+                .visible_alias("c-shell")
                 .help("output C shell code to set LS_COLORS")
-                .display_order(3),
-        )
-        .arg(
-            Arg::with_name(options::C_SHELL)
-                .long("c-shell")
-                .help("output C shell code to set LS_COLORS")
-                .display_order(4),
+                .display_order(2),
         )
         .arg(
             Arg::with_name(options::PRINT_DATABASE)
                 .long("print-database")
                 .short("p")
                 .help("print the byte counts")
-                .display_order(5),
+                .display_order(3),
         )
         .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
         .get_matches_from(&args);
@@ -131,10 +110,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     // clap provides .conflicts_with / .conflicts_with_all, but we want to
     // manually handle conflicts so we can match the output of GNU coreutils
-    if (matches.is_present(options::CSH)
-        || matches.is_present(options::C_SHELL)
-        || matches.is_present(options::SH)
-        || matches.is_present(options::BOURNE_SHELL))
+    if (matches.is_present(options::C_SHELL) || matches.is_present(options::BOURNE_SHELL))
         && matches.is_present(options::PRINT_DATABASE)
     {
         show_usage_error!(
@@ -158,9 +134,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     let mut out_format = OutputFmt::Unknown;
-    if matches.is_present(options::CSH) || matches.is_present(options::C_SHELL) {
+    if matches.is_present(options::C_SHELL) {
         out_format = OutputFmt::CShell;
-    } else if matches.is_present(options::SH) || matches.is_present(options::BOURNE_SHELL) {
+    } else if matches.is_present(options::BOURNE_SHELL) {
         out_format = OutputFmt::Shell;
     }
 
