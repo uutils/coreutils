@@ -10,13 +10,12 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::iter::repeat;
 use std::path::Path;
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Write lines consisting of the sequentially corresponding lines from each
 FILE, separated by TABs, to standard output.";
 
@@ -39,7 +38,7 @@ fn read_line<R: Read>(
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .arg(
             Arg::with_name(options::SERIAL)

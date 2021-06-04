@@ -1,5 +1,10 @@
+//spell-checker: ignore (linux) rlimit prlimit Rlim
+
 #![allow(dead_code)]
+
 use pretty_assertions::assert_eq;
+#[cfg(target_os = "linux")]
+use rlimit::{prlimit, rlim};
 use std::env;
 #[cfg(not(windows))]
 use std::ffi::CString;
@@ -724,6 +729,8 @@ pub struct UCommand {
     stdout: Option<Stdio>,
     stderr: Option<Stdio>,
     bytes_into_stdin: Option<Vec<u8>>,
+    #[cfg(target_os = "linux")]
+    limits: Vec<(rlimit::Resource, rlim, rlim)>,
 }
 
 impl UCommand {
@@ -758,6 +765,8 @@ impl UCommand {
             stdin: None,
             stdout: None,
             stderr: None,
+            #[cfg(target_os = "linux")]
+            limits: vec![],
         }
     }
 
@@ -855,6 +864,17 @@ impl UCommand {
         self
     }
 
+    #[cfg(target_os = "linux")]
+    pub fn with_limit(
+        &mut self,
+        resource: rlimit::Resource,
+        soft_limit: rlim,
+        hard_limit: rlim,
+    ) -> &mut Self {
+        self.limits.push((resource, soft_limit, hard_limit));
+        self
+    }
+
     /// Spawns the command, feeds the stdin if any, and returns the
     /// child process immediately.
     pub fn run_no_wait(&mut self) -> Child {
@@ -870,6 +890,17 @@ impl UCommand {
             .stderr(self.stderr.take().unwrap_or_else(Stdio::piped))
             .spawn()
             .unwrap();
+
+        #[cfg(target_os = "linux")]
+        for &(resource, soft_limit, hard_limit) in &self.limits {
+            prlimit(
+                child.id() as i32,
+                resource,
+                Some((soft_limit, hard_limit)),
+                None,
+            )
+            .unwrap();
+        }
 
         if let Some(ref input) = self.bytes_into_stdin {
             let write_result = child

@@ -8,7 +8,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg, ArgMatches};
+use clap::{crate_version, App, Arg, ArgMatches};
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Result, Write};
 use std::path::Path;
@@ -16,7 +16,6 @@ use std::str::FromStr;
 use strum_macros::{AsRefStr, EnumString};
 
 static ABOUT: &str = "Report or omit repeated lines.";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 pub mod options {
     pub static ALL_REPEATED: &str = "all-repeated";
     pub static CHECK_CHARS: &str = "check-chars";
@@ -240,7 +239,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let long_usage = get_long_usage();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .after_help(&long_usage[..])

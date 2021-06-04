@@ -16,14 +16,13 @@ extern crate uucore;
 mod expand;
 
 use bit_set::BitSet;
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use fnv::FnvHashMap;
 use std::io::{stdin, stdout, BufRead, BufWriter, Write};
 
 use crate::expand::ExpandSet;
 use uucore::InvalidEncodingHandling;
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "translate or delete characters";
 
 const BUFFER_LEN: usize = 1024;
@@ -251,7 +250,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let after_help = get_long_usage();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .after_help(&after_help[..])

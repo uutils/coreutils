@@ -12,7 +12,7 @@ extern crate uucore;
 
 extern crate clap;
 
-use clap::{App, AppSettings, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use std::io::ErrorKind;
 use std::process::{Command, Stdio};
 use std::time::Duration;
@@ -20,7 +20,6 @@ use uucore::process::ChildExt;
 use uucore::signals::signal_by_name_or_value;
 use uucore::InvalidEncodingHandling;
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Start COMMAND, and kill it if still running after DURATION.";
 
 fn get_usage() -> String {
@@ -33,7 +32,6 @@ pub mod options {
     pub static FOREGROUND: &str = "foreground";
     pub static KILL_AFTER: &str = "kill-after";
     pub static SIGNAL: &str = "signal";
-    pub static VERSION: &str = "version";
     pub static PRESERVE_STATUS: &str = "preserve-status";
 
     // Positional args.
@@ -106,7 +104,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
     let app = App::new("timeout")
-        .version(VERSION)
+        .version(crate_version!())
         .usage(&usage[..])
         .about(ABOUT)
         .arg(

@@ -11,7 +11,7 @@
 
 #[macro_use]
 extern crate uucore;
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Stdout, Write};
 use std::str::from_utf8;
@@ -19,7 +19,6 @@ use unicode_width::UnicodeWidthChar;
 use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "unexpand";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static USAGE: &str = "unexpand [OPTION]... [FILE]...";
 static SUMMARY: &str = "Convert blanks in each FILE to tabs, writing to standard output.\n
                  With no FILE, or when FILE is -, read standard input.";
@@ -97,7 +96,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let matches = App::new(executable!())
         .name(NAME)
-        .version(VERSION)
+        .version(crate_version!())
         .usage(USAGE)
         .about(SUMMARY)
         .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))

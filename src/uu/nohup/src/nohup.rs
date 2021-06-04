@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, AppSettings, Arg};
+use clap::{crate_version, App, AppSettings, Arg};
 use libc::{c_char, dup2, execvp, signal};
 use libc::{SIGHUP, SIG_IGN};
 use std::env;
@@ -22,7 +22,6 @@ use std::path::{Path, PathBuf};
 use uucore::fs::{is_stderr_interactive, is_stdin_interactive, is_stdout_interactive};
 use uucore::InvalidEncodingHandling;
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Run COMMAND ignoring hangup signals.";
 static LONG_HELP: &str = "
 If standard input is terminal, it'll be replaced with /dev/null.
@@ -48,7 +47,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .accept_any();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .after_help(LONG_HELP)

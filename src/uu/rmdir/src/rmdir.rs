@@ -10,11 +10,10 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::fs;
 use std::path::Path;
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Remove the DIRECTORY(ies), if they are empty.";
 static OPT_IGNORE_FAIL_NON_EMPTY: &str = "ignore-fail-on-non-empty";
 static OPT_PARENTS: &str = "parents";
@@ -35,7 +34,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .arg(

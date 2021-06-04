@@ -2,7 +2,7 @@
 
 #[macro_use]
 extern crate uucore;
-use clap::{App, Arg, ArgMatches};
+use clap::{crate_version, App, Arg, ArgMatches};
 use regex::Regex;
 use std::cmp::Ordering;
 use std::io::{self, BufReader};
@@ -19,7 +19,6 @@ use crate::csplit_error::CsplitError;
 use crate::split_name::SplitName;
 use uucore::InvalidEncodingHandling;
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static SUMMARY: &str = "split a file into sections determined by context lines";
 static LONG_HELP: &str = "Output pieces of FILE separated by PATTERN(s) to files 'xx00', 'xx01', ..., and output byte counts of each piece to standard output.";
 
@@ -713,7 +712,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .accept_any();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(SUMMARY)
         .usage(&usage[..])
         .arg(

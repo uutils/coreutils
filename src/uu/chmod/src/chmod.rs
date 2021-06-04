@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
@@ -21,7 +21,6 @@ use uucore::mode;
 use uucore::InvalidEncodingHandling;
 use walkdir::WalkDir;
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Change the mode of each FILE to MODE.
  With --reference, change the mode of each FILE to that of RFILE.";
 
@@ -63,7 +62,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let after_help = get_long_usage();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .after_help(&after_help[..])

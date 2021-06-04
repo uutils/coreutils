@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use rand::Rng;
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
@@ -23,7 +23,6 @@ enum Mode {
 }
 
 static NAME: &str = "shuf";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static USAGE: &str = r#"shuf [OPTION]... [FILE]
   or:  shuf -e [OPTION]... [ARG]...
   or:  shuf -i LO-HI [OPTION]...
@@ -59,7 +58,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let matches = App::new(executable!())
         .name(NAME)
-        .version(VERSION)
+        .version(crate_version!())
         .template(TEMPLATE)
         .usage(USAGE)
         .arg(

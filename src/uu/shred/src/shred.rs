@@ -8,7 +8,7 @@
 
 // spell-checker:ignore (words) writeback wipesync
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use rand::{Rng, ThreadRng};
 use std::cell::{Cell, RefCell};
 use std::fs;
@@ -23,7 +23,6 @@ use uucore::InvalidEncodingHandling;
 extern crate uucore;
 
 static NAME: &str = "shred";
-static VERSION_STR: &str = "1.0.0";
 const BLOCK_SIZE: usize = 512;
 const NAME_CHARSET: &str = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_.";
 
@@ -278,7 +277,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
     let app = App::new(executable!())
-        .version(VERSION_STR)
+        .version(crate_version!())
         .about(ABOUT)
         .after_help(AFTER_HELP)
         .usage(&usage[..])

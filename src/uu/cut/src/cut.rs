@@ -11,7 +11,7 @@
 extern crate uucore;
 
 use bstr::io::BufReadExt;
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
 use std::path::Path;
@@ -24,7 +24,6 @@ use uucore::InvalidEncodingHandling;
 mod searcher;
 
 static NAME: &str = "cut";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static SYNTAX: &str =
     "[-d] [-s] [-z] [--output-delimiter] ((-f|-b|-c) {{sequence}}) {{sourcefile}}+";
 static SUMMARY: &str =
@@ -400,7 +399,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let matches = App::new(executable!())
         .name(NAME)
-        .version(VERSION)
+        .version(crate_version!())
         .usage(SYNTAX)
         .about(SUMMARY)
         .after_help(LONG_HELP)

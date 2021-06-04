@@ -10,13 +10,12 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::io::{stdin, stdout, BufReader, Read, Stdout, Write};
 use std::{fs::File, path::Path};
 use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "tac";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static USAGE: &str = "[OPTION]... [FILE]...";
 static SUMMARY: &str = "Write each file to standard output, last line first.";
 
@@ -34,7 +33,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let matches = App::new(executable!())
         .name(NAME)
-        .version(VERSION)
+        .version(crate_version!())
         .usage(USAGE)
         .about(SUMMARY)
         .arg(

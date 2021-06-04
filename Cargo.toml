@@ -354,6 +354,7 @@ walkdir = "2.2"
 atty = "0.2.14"
 
 [target.'cfg(unix)'.dev-dependencies]
+rlimit = "0.4.0"
 rust-users = { version="0.10", package="users" }
 unix_socket = "0.5.0"
 

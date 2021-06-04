@@ -15,8 +15,7 @@ use std::ffi::CString;
 use std::io::Error;
 use std::ptr;
 
-use clap::{App, AppSettings, Arg};
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+use clap::{crate_version, App, AppSettings, Arg};
 
 // XXX: PRIO_PROCESS is 0 on at least FreeBSD and Linux.  Don't know about Mac OS X.
 const PRIO_PROCESS: c_int = 0;
@@ -49,7 +48,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let matches = App::new(executable!())
         .setting(AppSettings::TrailingVarArg)
-        .version(VERSION)
+        .version(crate_version!())
         .usage(&usage[..])
         .arg(
             Arg::with_name(options::ADJUSTMENT)

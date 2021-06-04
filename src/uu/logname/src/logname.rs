@@ -15,7 +15,7 @@ extern crate uucore;
 use std::ffi::CStr;
 use uucore::InvalidEncodingHandling;
 
-use clap::App;
+use clap::{crate_version, App};
 
 extern "C" {
     // POSIX requires using getlogin (or equivalent code)
@@ -34,7 +34,6 @@ fn get_userlogin() -> Option<String> {
 }
 
 static SUMMARY: &str = "Print user's login name";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn get_usage() -> String {
     String::from(executable!())
@@ -47,7 +46,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let usage = get_usage();
     let _ = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(SUMMARY)
         .usage(&usage[..])
         .get_matches_from(args);

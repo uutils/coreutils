@@ -11,10 +11,9 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use uucore::utmpx::{self, Utmpx};
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Print the user names of users currently logged in to the current host";
 
 static ARG_FILES: &str = "files";
@@ -36,7 +35,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let after_help = get_long_usage();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .after_help(&after_help[..])

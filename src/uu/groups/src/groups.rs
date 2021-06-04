@@ -12,9 +12,8 @@
 extern crate uucore;
 use uucore::entries::{get_groups, gid2grp, Locate, Passwd};
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "display current group names";
 static OPT_USER: &str = "user";
 
@@ -26,7 +25,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .arg(Arg::with_name(OPT_USER))

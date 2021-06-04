@@ -11,7 +11,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 
 use std::env;
 use std::iter;
@@ -21,7 +21,6 @@ use rand::Rng;
 use tempfile::Builder;
 
 static ABOUT: &str = "create a temporary file or directory.";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 static DEFAULT_TEMPLATE: &str = "tmp.XXXXXXXXXX";
 
@@ -42,7 +41,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .arg(

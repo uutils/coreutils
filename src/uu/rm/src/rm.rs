@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use remove_dir_all::remove_dir_all;
 use std::collections::VecDeque;
 use std::fs;
@@ -38,7 +38,6 @@ struct Options {
 }
 
 static ABOUT: &str = "Remove (unlink) the FILE(s)";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static OPT_DIR: &str = "dir";
 static OPT_INTERACTIVE: &str = "interactive";
 static OPT_FORCE: &str = "force";
@@ -79,7 +78,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let long_usage = get_long_usage();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .after_help(&long_usage[..])
@@ -256,7 +255,18 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
             // correctly on Windows
             if let Err(e) = remove_dir_all(path) {
                 had_err = true;
-                show_error!("could not remove '{}': {}", path.display(), e);
+                if e.kind() == std::io::ErrorKind::PermissionDenied {
+                    // GNU compatibility (rm/fail-eacces.sh)
+                    // here, GNU doesn't use some kind of remove_dir_all
+                    // It will show directory+file
+                    show_error!(
+                        "cannot remove '{}': {}",
+                        path.display(),
+                        "Permission denied"
+                    );
+                } else {
+                    show_error!("cannot remove '{}': {}", path.display(), e);
+                }
             }
         } else {
             let mut dirs: VecDeque<DirEntry> = VecDeque::new();
@@ -315,7 +325,16 @@ fn remove_dir(path: &Path, options: &Options) -> bool {
                             }
                         }
                         Err(e) => {
-                            show_error!("cannot remove '{}': {}", path.display(), e);
+                            if e.kind() == std::io::ErrorKind::PermissionDenied {
+                                // GNU compatibility (rm/fail-eacces.sh)
+                                show_error!(
+                                    "cannot remove '{}': {}",
+                                    path.display(),
+                                    "Permission denied"
+                                );
+                            } else {
+                                show_error!("cannot remove '{}': {}", path.display(), e);
+                            }
                             return true;
                         }
                     }
@@ -353,7 +372,16 @@ fn remove_file(path: &Path, options: &Options) -> bool {
                 }
             }
             Err(e) => {
-                show_error!("removing '{}': {}", path.display(), e);
+                if e.kind() == std::io::ErrorKind::PermissionDenied {
+                    // GNU compatibility (rm/fail-eacces.sh)
+                    show_error!(
+                        "cannot remove '{}': {}",
+                        path.display(),
+                        "Permission denied"
+                    );
+                } else {
+                    show_error!("cannot remove '{}': {}", path.display(), e);
+                }
                 return true;
             }
         }

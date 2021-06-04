@@ -12,13 +12,12 @@ extern crate libc;
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::path::Path;
 
 static EXIT_ERR: i32 = 1;
 
 static ABOUT: &str = "Synchronize cached writes to persistent storage";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 pub mod options {
     pub static FILE_SYSTEM: &str = "file-system";
     pub static DATA: &str = "data";
@@ -168,7 +167,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .arg(

@@ -11,7 +11,7 @@ extern crate uucore;
 use crate::format::format_and_print;
 use crate::options::*;
 use crate::units::{Result, Transform, Unit};
-use clap::{App, AppSettings, Arg, ArgMatches};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use std::io::{BufRead, Write};
 use uucore::ranges::Range;
 
@@ -19,7 +19,6 @@ pub mod format;
 mod options;
 mod units;
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Convert numbers from/to human-readable strings";
 static LONG_HELP: &str = "UNIT options:
    none   no auto-scaling is done; suffixes will trigger an error
@@ -149,7 +148,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
         .after_help(LONG_HELP)

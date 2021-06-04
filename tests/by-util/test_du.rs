@@ -240,18 +240,37 @@ fn test_du_time() {
     scene
         .ccmd("touch")
         .arg("-a")
-        .arg("-m")
         .arg("-t")
         .arg("201505150000")
         .arg("date_test")
         .succeeds();
 
     scene
-        .ucmd()
-        .arg("--time")
+        .ccmd("touch")
+        .arg("-m")
+        .arg("-t")
+        .arg("201606160000")
         .arg("date_test")
-        .succeeds()
-        .stdout_only("0\t2015-05-15 00:00\tdate_test\n");
+        .succeeds();
+
+    let result = scene.ucmd().arg("--time").arg("date_test").succeeds();
+    result.stdout_only("0\t2016-06-16 00:00\tdate_test\n");
+
+    let result = scene.ucmd().arg("--time=atime").arg("date_test").succeeds();
+    result.stdout_only("0\t2015-05-15 00:00\tdate_test\n");
+
+    let result = scene.ucmd().arg("--time=ctime").arg("date_test").succeeds();
+    result.stdout_only("0\t2016-06-16 00:00\tdate_test\n");
+
+    #[cfg(not(target_env = "musl"))]
+    {
+        use regex::Regex;
+
+        let re_birth =
+            Regex::new(r"0\t[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}\tdate_test").unwrap();
+        let result = scene.ucmd().arg("--time=birth").arg("date_test").succeeds();
+        result.stdout_matches(&re_birth);
+    }
 }
 
 #[cfg(not(target_os = "windows"))]

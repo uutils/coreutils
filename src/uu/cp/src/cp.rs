@@ -25,7 +25,7 @@ use winapi::um::fileapi::GetFileInformationByHandle;
 
 use std::borrow::Cow;
 
-use clap::{App, Arg, ArgMatches};
+use clap::{crate_version, App, Arg, ArgMatches};
 use filetime::FileTime;
 use quick_error::ResultExt;
 use std::collections::HashSet;
@@ -41,7 +41,7 @@ use std::io;
 use std::io::{stdin, stdout, Write};
 use std::mem;
 #[cfg(target_os = "linux")]
-use std::os::unix::io::IntoRawFd;
+use std::os::unix::io::AsRawFd;
 #[cfg(windows)]
 use std::os::windows::ffi::OsStrExt;
 use std::path::{Path, PathBuf, StripPrefixError};
@@ -213,7 +213,6 @@ pub struct Options {
     verbose: bool,
 }
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.";
 static LONG_HELP: &str = "";
 static EXIT_OK: i32 = 0;
@@ -294,7 +293,7 @@ static DEFAULT_ATTRIBUTES: &[Attribute] = &[
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let matches = App::new(executable!())
-        .version(VERSION)
+        .version(crate_version!())
         .about(ABOUT)
         .after_help(&*format!("{}\n{}", LONG_HELP, backup_control::BACKUP_CONTROL_LONG_HELP))
         .usage(&usage[..])
@@ -1261,19 +1260,16 @@ fn copy_helper(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> 
 fn copy_on_write_linux(source: &Path, dest: &Path, mode: ReflinkMode) -> CopyResult<()> {
     debug_assert!(mode != ReflinkMode::Never);
 
-    let src_file = File::open(source)
-        .context(&*context_for(source, dest))?
-        .into_raw_fd();
+    let src_file = File::open(source).context(&*context_for(source, dest))?;
     let dst_file = OpenOptions::new()
         .write(true)
         .truncate(false)
         .create(true)
         .open(dest)
-        .context(&*context_for(source, dest))?
-        .into_raw_fd();
+        .context(&*context_for(source, dest))?;
     match mode {
         ReflinkMode::Always => unsafe {
-            let result = ficlone(dst_file, src_file as *const i32);
+            let result = ficlone(dst_file.as_raw_fd(), src_file.as_raw_fd() as *const i32);
             if result != 0 {
                 return Err(format!(
                     "failed to clone {:?} from {:?}: {}",
@@ -1287,7 +1283,7 @@ fn copy_on_write_linux(source: &Path, dest: &Path, mode: ReflinkMode) -> CopyRes
             }
         },
         ReflinkMode::Auto => unsafe {
-            let result = ficlone(dst_file, src_file as *const i32);
+            let result = ficlone(dst_file.as_raw_fd(), src_file.as_raw_fd() as *const i32);
             if result != 0 {
                 fs::copy(source, dest).context(&*context_for(source, dest))?;
             }
