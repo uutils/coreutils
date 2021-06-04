@@ -475,6 +475,18 @@ pub fn parse_conv_flag_input(matches: &getopts::Matches) -> Result<IConvFlags, P
     }
 
     let ctable = parse_ctable(fmt, case);
+    let sync = if sync && (block.is_some() || unblock.is_some())
+    {
+        Some(' ' as u8)
+    }
+    else if sync
+    {
+        Some(0u8)
+    }
+    else
+    {
+        None
+    };
 
     Ok(IConvFlags {
         ctable,

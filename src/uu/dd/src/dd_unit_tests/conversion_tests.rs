@@ -201,7 +201,7 @@ make_icf_test!(
         block: None,
         unblock: None,
         swab: true,
-        sync: false,
+        sync: None,
         noerror: false,
     },
     File::open("./test-resources/seq-byte-values-swapped.test").unwrap()
@@ -216,7 +216,7 @@ make_icf_test!(
         block: None,
         unblock: None,
         swab: true,
-        sync: false,
+        sync: None,
         noerror: false,
     },
     File::open("./test-resources/seq-byte-values-odd.spec").unwrap()

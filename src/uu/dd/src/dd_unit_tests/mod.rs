@@ -3,6 +3,7 @@ use super::*;
 mod sanity_tests;
 mod conversion_tests;
 mod block_unblock_tests;
+mod conv_sync_tests;
 
 use std::io::prelude::*;
 use std::io::BufReader;
@@ -72,7 +73,7 @@ macro_rules! icf (
             block: None,
             unblock: None,
             swab: false,
-            sync: false,
+            sync: None,
             noerror: false,
         }
     };
@@ -115,9 +116,10 @@ macro_rules! make_spec_test (
             dd_fileout($i,$o).unwrap();
 
             let res = File::open($tmp_fname).unwrap();
-            let res = BufReader::new(res);
+            assert_eq!(res.metadata().unwrap().len(), $spec.metadata().unwrap().len());
 
             let spec = BufReader::new($spec);
+            let res = BufReader::new(res);
 
             for (b_res, b_spec) in res.bytes().zip(spec.bytes())
             {

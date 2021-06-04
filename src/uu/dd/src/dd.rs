@@ -36,27 +36,23 @@ const SYNTAX: &str = "dd [OPERAND]...\ndd OPTION";
 const SUMMARY: &str = "convert, and optionally copy, a file";
 const LONG_HELP: &str = "";
 
-const DEFAULT_FILL_BYTE: u8 = 0xDD;
-const DEFAULT_SKIP_TRIES: u8 = 3;
+const DEFAULT_INIT_BYTE: u8 = 0xDD;
 
 const RTN_SUCCESS: i32 = 0;
 const RTN_FAILURE: i32 = 1;
 
 // ----- Datatypes -----
-enum SrcStat
-{
-    Read(usize),
-    EOF,
-}
+
+type Cbs = usize;
 
 /// Stores all Conv Flags that apply to the input
 pub struct IConvFlags
 {
     ctable: Option<&'static ConversionTable>,
-    block: Option<usize>,
-    unblock: Option<usize>,
+    block: Option<Cbs>,
+    unblock: Option<Cbs>,
     swab: bool,
-    sync: bool,
+    sync: Option<u8>,
     noerror: bool,
 }
 
@@ -179,7 +175,7 @@ impl Input<io::Stdin>
 
         if let Some(amt) = skip
         {
-            let mut buf = vec![DEFAULT_FILL_BYTE; amt];
+            let mut buf = vec![DEFAULT_INIT_BYTE; amt];
 
             i.force_fill(&mut buf, amt)?;
         }
@@ -233,43 +229,64 @@ impl<R: Read> Read for Input<R>
     fn read(&mut self, mut buf: &mut [u8]) -> io::Result<usize>
     {
         // Read from source, ignore read errors if conv=noerror
-        let len = match self.src.read(&mut buf)
+        match self.src.read(&mut buf)
         {
             Ok(len) =>
-                len,
+                Ok(len),
             Err(e) =>
                 if !self.cflags.noerror
                 {
-                    return Err(e);
+                    Err(e)
                 }
                 else
                 {
-                    return Ok(0);
+                    Ok(0)
                 },
-        };
-
-        Ok(len)
+        }
     }
 }
 
 impl<R: Read> Input<R>
 {
-    /// Fills to a given size n, which is expected to be 'obs'.
+    /// Fills a given obs-sized buffer.
     /// Reads in increments of 'self.ibs'.
-    fn fill_n(&mut self, buf: &mut [u8], obs: usize) -> Result<usize, Box<dyn Error>>
+    fn fill_consecutive(&mut self, buf: &mut [u8]) -> Result<usize, Box<dyn Error>>
+    {
+        let mut base_idx = 0;
+
+        while base_idx < buf.len()
+        {
+            let low_idx = base_idx;
+            let up_idx = cmp::min(low_idx+self.ibs, buf.len()-1);
+
+            let rlen = self.read(&mut buf[low_idx..=up_idx])?;
+            if rlen > 0
+            {
+                base_idx += rlen;
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        Ok(base_idx)
+   }
+
+    /// Fills a given obs-sized buffer.
+    /// Reads in increments of 'self.ibs'.
+    fn fill_blocks(&mut self, buf: &mut [u8]) -> Result<usize, Box<dyn Error>>
     {
         let ibs = self.ibs;
+        let obs = buf.len();
         let mut bytes_read = 0;
 
-        // TODO: Fix this!
-        // assert!(obs < ibs);
-
-        for n in 0..(obs/ibs) {
+        for n in 0..cmp::max(obs/ibs, 1) {
             // fill an ibs-len slice from src
-            let this_read = self.read(&mut buf[n*ibs..(n+1)*ibs])?;
+            let rlen = self.read(&mut buf[n*ibs..(n+1)*ibs])?;
 
-            if this_read != 0 {
-                bytes_read += this_read;
+            if rlen != 0 {
+                bytes_read += rlen;
             } else {
                 break;
             }
@@ -691,13 +708,20 @@ fn read_write_helper<R: Read, W: Write>(i: &mut Input<R>, o: &mut Output<W>) -> 
     else
     {
         // Read
-        let mut buf = vec![DEFAULT_FILL_BYTE; o.obs];
-        let rlen = i.fill_n(&mut buf, o.obs)?;
-        buf.resize(rlen, DEFAULT_FILL_BYTE);
+        let mut buf = vec![DEFAULT_INIT_BYTE; o.obs];
+        let rlen = if let Some(ch) = i.cflags.sync
+        {
+            i.fill_blocks(&mut buf)?
+        }
+        else
+        {
+            i.fill_consecutive(&mut buf)?
+        };
+        buf.truncate(rlen);
 
         if rlen == 0
         {
-            return Ok((0,Vec::new()));
+            return Ok((0,buf));
         }
 
         // Conv etc...

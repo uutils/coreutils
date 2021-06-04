@@ -10,31 +10,6 @@ use crate::{
 // ----- IConvFlags/Output -----
 
 #[test]
-fn build_icf()
-{
-    let icf_expd = IConvFlags {
-        ctable: Some(&ASCII_TO_IBM),
-        block: None,
-        unblock: None,
-        swab: false,
-        sync: false,
-        noerror: false,
-    };
-
-    let args = vec![
-        String::from("dd"),
-        String::from("--conv=ibm"),
-    ];
-
-    let matches = build_app!().parse(args);
-
-    let icf_parsed = parse_conv_flag_input(&matches).unwrap();
-
-    unimplemented!()
-    // assert_eq!(icf_expd, icf_parsed);
-}
-
-#[test]
 #[should_panic]
 fn icf_ctable_error()
 {

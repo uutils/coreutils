@@ -23,3 +23,45 @@ make_spec_test!(
     "random-73k",
     File::open("./test-resources/random-5828891cb1230748e146f34223bbd3b5.test").unwrap()
 );
+
+make_spec_test!(
+    random_73k_test_not_a_multiple_obs_gt_ibs,
+    "random-73k-not-a-multiple-obs-gt-ibs",
+    Input {
+        src: File::open("./test-resources/random-5828891cb1230748e146f34223bbd3b5.test").unwrap(),
+        non_ascii: false,
+        ibs: 521,
+        xfer_stats: StatusLevel::None,
+        cflags: icf!(),
+        iflags: DEFAULT_IFLAGS,
+    },
+    Output {
+        dst: File::create(format!("./test-resources/FAILED-{}.test", "random-73k-not-a-multiple-obs-gt-ibs")).unwrap(),
+        obs: 1031,
+        cflags: DEFAULT_CFO,
+        oflags: DEFAULT_OFLAGS,
+    },
+    File::open("./test-resources/random-5828891cb1230748e146f34223bbd3b5.test").unwrap(),
+    format!("./test-resources/FAILED-{}.test", "random-73k-not-a-multiple-obs-gt-ibs")
+);
+
+make_spec_test!(
+    random_73k_test_obs_lt_not_a_multiple_ibs,
+    "random-73k-obs-lt-not-a-multiple-ibs",
+    Input {
+        src: File::open("./test-resources/random-5828891cb1230748e146f34223bbd3b5.test").unwrap(),
+        non_ascii: false,
+        ibs: 1031,
+        xfer_stats: StatusLevel::None,
+        cflags: icf!(),
+        iflags: DEFAULT_IFLAGS,
+    },
+    Output {
+        dst: File::create(format!("./test-resources/FAILED-{}.test", "random-73k-obs-lt-not-a-multiple-ibs")).unwrap(),
+        obs: 521,
+        cflags: DEFAULT_CFO,
+        oflags: DEFAULT_OFLAGS,
+    },
+    File::open("./test-resources/random-5828891cb1230748e146f34223bbd3b5.test").unwrap(),
+    format!("./test-resources/FAILED-{}.test", "random-73k-obs-lt-not-a-multiple-ibs")
+);
