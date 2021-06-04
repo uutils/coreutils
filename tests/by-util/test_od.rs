@@ -815,7 +815,10 @@ fn test_od_invalid_bytes() {
     const INVALID_SIZE: &str = "1fb4t";
     const BIG_SIZE: &str = "1Y";
 
-    let input: [u8; 8] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+    // NOTE:
+    // GNU's od (8.32) with option '--width' does not accept 'Y' as valid suffix.
+    // According to the man page it should be valid in the same way it is valid for
+    // '--read-bytes' and '--skip-bytes'.
 
     let options = [
         "--read-bytes",
@@ -826,8 +829,8 @@ fn test_od_invalid_bytes() {
     for option in &options {
         new_ucmd!()
             .arg(format!("{}={}", option, INVALID_SIZE))
-            .run_piped_stdin(&input[..])
-            .failure()
+            .arg("file")
+            .fails()
             .code_is(1)
             .stderr_only(format!(
                 "od: invalid {} argument '{}'",
@@ -837,8 +840,8 @@ fn test_od_invalid_bytes() {
         #[cfg(not(target_pointer_width = "128"))]
         new_ucmd!()
             .arg(format!("{}={}", option, BIG_SIZE))
-            .run_piped_stdin(&input[..])
-            .failure()
+            .arg("file")
+            .fails()
             .code_is(1)
             .stderr_only(format!("od: {} argument '{}' too large", option, BIG_SIZE));
     }
