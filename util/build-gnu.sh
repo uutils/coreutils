@@ -116,4 +116,6 @@ sed -i -e "s|rm: cannot remove directory 'b/a/p'|rm: cannot remove 'b'|g" tests/
 
 sed -i -e "s|rm: cannot remove 'a/1'|rm: cannot remove 'a'|g" tests/rm/rm2.sh
 
+sed -i -e "s|removed directory 'a/'|removed directory 'a'|g" tests/rm/v-slash.sh
+
 test -f "${BUILDDIR}/getlimits" || cp src/getlimits "${BUILDDIR}"
