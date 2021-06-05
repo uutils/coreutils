@@ -380,7 +380,7 @@ mod tests {
     fn test_calc_range() {
         assert_eq!((0, 24), calc_range(0, 25, 100));
         assert_eq!((50, 74), calc_range(50, 25, 100));
-        assert_eq!((75, 100), calc_range(85, 25, 100));
+        assert_eq!((76, 100), calc_range(85, 25, 100));
     }
     #[test]
     fn test_break_lines_long() {
