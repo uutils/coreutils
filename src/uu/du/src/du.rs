@@ -433,7 +433,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     although  the apparent  size is usually smaller, it may be larger due to holes \
                     in ('sparse') files, internal  fragmentation,  indirect  blocks, and the like"
                 )
-                .alias("app") // The GNU testsuite uses this alias
+                .alias("app") // The GNU test suite uses this alias
         )
         .arg(
             Arg::with_name(options::BLOCK_SIZE)
