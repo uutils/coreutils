@@ -8,7 +8,7 @@
 // file that was distributed with this source code.
 //
 
-// spell-checker:ignore (words) pseudofloat
+// spell-checker:ignore (words) egid euid pseudofloat
 
 use crate::common::util::*;
 
@@ -473,6 +473,52 @@ fn test_nonexistent_file_is_not_symlink() {
     scenario
         .ucmd()
         .args(&["!", "-L", "nonexistent_file"])
+        .succeeds();
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_file_owned_by_euid() {
+    new_ucmd!().args(&["-O", "regular_file"]).succeeds();
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_nonexistent_file_not_owned_by_euid() {
+    new_ucmd!()
+        .args(&["-O", "nonexistent_file"])
+        .run()
+        .status_code(1);
+}
+
+#[test]
+#[cfg(all(not(windows), not(target_os = "freebsd")))]
+fn test_file_not_owned_by_euid() {
+    new_ucmd!()
+        .args(&["-f", "/bin/sh", "-a", "!", "-O", "/bin/sh"])
+        .succeeds();
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_file_owned_by_egid() {
+    new_ucmd!().args(&["-G", "regular_file"]).succeeds();
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_nonexistent_file_not_owned_by_egid() {
+    new_ucmd!()
+        .args(&["-G", "nonexistent_file"])
+        .run()
+        .status_code(1);
+}
+
+#[test]
+#[cfg(all(not(windows), not(target_os = "freebsd")))]
+fn test_file_not_owned_by_egid() {
+    new_ucmd!()
+        .args(&["-f", "/bin/sh", "-a", "!", "-G", "/bin/sh"])
         .succeeds();
 }
 
