@@ -96,11 +96,19 @@ fn test_id_group() {
 
     let mut result = scene.ucmd().arg("-g").succeeds();
     let s1 = result.stdout_str().trim();
-    assert!(s1.parse::<f64>().is_ok());
+    assert!(s1.parse::<u64>().is_ok());
 
     result = scene.ucmd().arg("--group").succeeds();
     let s1 = result.stdout_str().trim();
-    assert!(s1.parse::<f64>().is_ok());
+    assert!(s1.parse::<u64>().is_ok());
+
+    #[cfg(any(target_vendor = "apple", target_os = "linux"))]
+    for flag in &["-g", "--group"] {
+        new_ucmd!()
+            .arg(flag)
+            .succeeds()
+            .stdout_is(expected_result(&[flag], false));
+    }
 }
 
 #[test]
@@ -110,13 +118,22 @@ fn test_id_groups() {
     let result = scene.ucmd().arg("-G").succeeds();
     let groups = result.stdout_str().trim().split_whitespace();
     for s in groups {
-        assert!(s.parse::<f64>().is_ok());
+        assert!(s.parse::<u64>().is_ok());
     }
 
     let result = scene.ucmd().arg("--groups").succeeds();
     let groups = result.stdout_str().trim().split_whitespace();
     for s in groups {
-        assert!(s.parse::<f64>().is_ok());
+        assert!(s.parse::<u64>().is_ok());
+    }
+
+    #[cfg(any(target_vendor = "apple", target_os = "linux"))]
+    for args in &["-G", "--groups"] {
+        let expect = expected_result(&[args], false);
+        let actual = new_ucmd!().arg(&args).succeeds().stdout_move_str();
+        let mut v_actual: Vec<&str> = actual.split_whitespace().collect();
+        let mut v_expect: Vec<&str> = expect.split_whitespace().collect();
+        assert_eq!(v_actual.sort_unstable(), v_expect.sort_unstable());
     }
 }
 
@@ -126,11 +143,19 @@ fn test_id_user() {
 
     let result = scene.ucmd().arg("-u").succeeds();
     let s1 = result.stdout_str().trim();
-    assert!(s1.parse::<f64>().is_ok());
+    assert!(s1.parse::<u64>().is_ok());
 
     let result = scene.ucmd().arg("--user").succeeds();
     let s1 = result.stdout_str().trim();
-    assert!(s1.parse::<f64>().is_ok());
+    assert!(s1.parse::<u64>().is_ok());
+
+    #[cfg(any(target_vendor = "apple", target_os = "linux"))]
+    for flag in &["-u", "--user"] {
+        new_ucmd!()
+            .arg(flag)
+            .succeeds()
+            .stdout_is(expected_result(&[flag], false));
+    }
 }
 
 #[test]
@@ -166,4 +191,90 @@ fn test_id_password_style() {
     let result = new_ucmd!().arg("-P").succeeds();
 
     assert!(result.stdout_str().starts_with(&username));
+}
+
+#[test]
+#[cfg(any(target_vendor = "apple", target_os = "linux"))]
+fn test_id_default_format() {
+    // -ugG
+    for flag in &["--name", "--real"] {
+        new_ucmd!()
+            .arg(flag)
+            .fails()
+            .stderr_is(expected_result(&[flag], true));
+        for &opt in &["--user", "--group", "--groups"] {
+            if is_ci() && *flag == "--name" {
+                // '--name' does not work in CI:
+                // id: cannot find name for user ID 1001
+                // id: cannot find name for group ID 116
+                println!("test skipped:");
+                continue;
+            }
+            let args = [opt, flag];
+            let expect = expected_result(&args, false);
+            let actual = new_ucmd!().args(&args).succeeds().stdout_move_str();
+            let mut v_actual: Vec<&str> = actual.split_whitespace().collect();
+            let mut v_expect: Vec<&str> = expect.split_whitespace().collect();
+            assert_eq!(v_actual.sort_unstable(), v_expect.sort_unstable());
+        }
+    }
+}
+
+#[test]
+#[cfg(any(target_vendor = "apple", target_os = "linux"))]
+fn test_id_zero() {
+    for z_flag in &["-z", "--zero"] {
+        for &opt in &["-n", "--name", "-r", "--real"] {
+            let args = [opt, z_flag];
+            new_ucmd!()
+                .args(&args)
+                .fails()
+                .stderr_is(expected_result(&args, true));
+        }
+        for &opt in &["-u", "--user", "-g", "--group"] {
+            let args = [opt, z_flag];
+            new_ucmd!()
+                .args(&args)
+                .succeeds()
+                .stdout_is(expected_result(&args, false));
+        }
+        // '--groups' ids are in no particular order and when paired with '--zero' there's no
+        // delimiter which makes the split_whitespace-collect-into-vector comparison impossible.
+        for opt in &["-G", "--groups"] {
+            let args = [opt, z_flag];
+            let result = new_ucmd!().args(&args).succeeds().stdout_move_str();
+            assert!(!result.contains(" "));
+            assert!(result.ends_with('\0'));
+        }
+    }
+}
+
+#[cfg(any(target_vendor = "apple", target_os = "linux"))]
+fn expected_result(args: &[&str], exp_fail: bool) -> String {
+    #[cfg(target_os = "linux")]
+    let util_name = util_name!();
+    #[cfg(target_vendor = "apple")]
+    let util_name = format!("g{}", util_name!());
+
+    let result = if !exp_fail {
+        TestScenario::new(&util_name)
+            .cmd_keepenv(util_name)
+            .env("LANGUAGE", "C")
+            .args(args)
+            .succeeds()
+            .stdout_move_str()
+    } else {
+        TestScenario::new(&util_name)
+            .cmd_keepenv(util_name)
+            .env("LANGUAGE", "C")
+            .args(args)
+            .fails()
+            .stderr_move_str()
+    };
+    // #[cfg(target_vendor = "apple")]
+    return if cfg!(target_os = "macos") && result.starts_with("gid") {
+        result[1..].to_string()
+    } else {
+        result
+    };
 }

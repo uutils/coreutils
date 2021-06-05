@@ -13,8 +13,10 @@
 // This is not based on coreutils (8.32) GNU's `id`.
 // This is based on BSD's `id` (noticeable in functionality, usage text, options text, etc.)
 //
+// Option '--zero' does not exist for BSD's `id`, therefor '--zero' is only allowed together
+// with other options that are available on GNU's `id`.
 
-// spell-checker:ignore (ToDO) asid auditid auditinfo auid cstr egid emod euid getaudit getlogin gflag nflag pline rflag termid uflag
+// spell-checker:ignore (ToDO) asid auditid auditinfo auid cstr egid emod euid getaudit getlogin gflag nflag pline rflag termid uflag gsflag zflag
 
 #![allow(non_camel_case_types)]
 #![allow(dead_code)]
@@ -85,6 +87,7 @@ mod options {
     pub const OPT_NAME: &str = "name";
     pub const OPT_PASSWORD: &str = "password"; // GNU's id does not have this
     pub const OPT_REAL_ID: &str = "real";
+    pub const OPT_ZERO: &str = "zero"; // BSD's id does not have this
     pub const ARG_USERS: &str = "USER";
 }
 
@@ -102,26 +105,28 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(
             Arg::with_name(options::OPT_AUDIT)
                 .short("A")
+                .conflicts_with_all(&[options::OPT_GROUP, options::OPT_EFFECTIVE_USER, options::OPT_HUMAN_READABLE, options::OPT_PASSWORD, options::OPT_GROUPS, options::OPT_ZERO])
                 .help("Display the process audit user ID and other process audit properties, which requires privilege (not available on Linux)."),
         )
         .arg(
             Arg::with_name(options::OPT_EFFECTIVE_USER)
                 .short("u")
                 .long(options::OPT_EFFECTIVE_USER)
-                .help("Display the effective user ID as a number."),
+                .conflicts_with(options::OPT_GROUP)
+                .help("Display only the effective user ID as a number."),
         )
         .arg(
             Arg::with_name(options::OPT_GROUP)
                 .short("g")
                 .long(options::OPT_GROUP)
-                .help("Display the effective group ID as a number"),
+                .help("Display only the effective group ID as a number"),
         )
         .arg(
             Arg::with_name(options::OPT_GROUPS)
                 .short("G")
                 .long(options::OPT_GROUPS)
                 .conflicts_with_all(&[options::OPT_GROUP, options::OPT_EFFECTIVE_USER, options::OPT_HUMAN_READABLE, options::OPT_PASSWORD, options::OPT_AUDIT])
-                .help("Display the different group IDs as white-space separated numbers, in no particular order."),
+                .help("Display only the different group IDs as white-space separated numbers, in no particular order."),
         )
         .arg(
             Arg::with_name(options::OPT_HUMAN_READABLE)
@@ -146,6 +151,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("Display the real ID for the -g and -u options instead of the effective ID."),
         )
         .arg(
+            Arg::with_name(options::OPT_ZERO)
+                .short("z")
+                .long(options::OPT_ZERO)
+                .help("delimit entries with NUL characters, not whitespace;\nnot permitted in default format"),
+        )
+        .arg(
             Arg::with_name(options::ARG_USERS)
                 .multiple(true)
                 .takes_value(true)
@@ -158,10 +169,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let gflag = matches.is_present(options::OPT_GROUP);
     let gsflag = matches.is_present(options::OPT_GROUPS);
     let rflag = matches.is_present(options::OPT_REAL_ID);
+    let zflag = matches.is_present(options::OPT_ZERO);
 
-    // -ugG
+    // "default format" is when none of '-ugG' was used
+    // could not implement these "required" rules with just clap
     if (nflag || rflag) && !(uflag || gflag || gsflag) {
         crash!(1, "cannot print only names or real IDs in default format");
+    }
+    if (zflag) && !(uflag || gflag || gsflag) {
+        crash!(1, "option --zero not permitted in default format");
     }
 
     let users: Vec<String> = matches
@@ -183,17 +199,20 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     };
 
+    let line_ending = if zflag { '\0' } else { '\n' };
+
     if gflag {
         let id = possible_pw
             .map(|p| p.gid())
             .unwrap_or(if rflag { getgid() } else { getegid() });
-        println!(
-            "{}",
+        print!(
+            "{}{}",
             if nflag {
                 entries::gid2grp(id).unwrap_or_else(|_| id.to_string())
             } else {
                 id.to_string()
-            }
+            },
+            line_ending
         );
         return 0;
     }
@@ -202,20 +221,22 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         let id = possible_pw
             .map(|p| p.uid())
             .unwrap_or(if rflag { getuid() } else { geteuid() });
-        println!(
-            "{}",
+        print!(
+            "{}{}",
             if nflag {
                 entries::uid2usr(id).unwrap_or_else(|_| id.to_string())
             } else {
                 id.to_string()
-            }
+            },
+            line_ending
         );
         return 0;
     }
 
     if gsflag {
-        println!(
-            "{}",
+        let delimiter = if zflag { "" } else { " " };
+        print!(
+            "{}{}",
             if nflag {
                 possible_pw
                     .map(|p| p.belongs_to())
@@ -223,7 +244,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     .iter()
                     .map(|&id| entries::gid2grp(id).unwrap())
                     .collect::<Vec<_>>()
-                    .join(" ")
+                    .join(delimiter)
             } else {
                 possible_pw
                     .map(|p| p.belongs_to())
@@ -231,8 +252,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     .iter()
                     .map(|&id| id.to_string())
                     .collect::<Vec<_>>()
-                    .join(" ")
-            }
+                    .join(delimiter)
+            },
+            line_ending
         );
         return 0;
     }
@@ -398,3 +420,5 @@ fn id_print(possible_pw: Option<Passwd>, p_euid: bool, p_egid: bool) {
             .join(",")
     );
 }
+
+fn get_groups() ->
