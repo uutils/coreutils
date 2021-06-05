@@ -9,6 +9,10 @@
 // Synced with:
 //  http://ftp-archive.freebsd.org/mirror/FreeBSD-Archive/old-releases/i386/1.0-RELEASE/ports/shellutils/src/id.c
 //  http://www.opensource.apple.com/source/shell_cmds/shell_cmds-118/id/id.c
+//
+// This is not based on coreutils (8.32) GNU's `id`.
+// This is based on BSD's `id` (noticeable in functionality, usage text, options text, etc.)
+//
 
 // spell-checker:ignore (ToDO) asid auditid auditinfo auid cstr egid emod euid getaudit getlogin gflag nflag pline rflag termid uflag
 
@@ -70,18 +74,19 @@ mod audit {
     }
 }
 
-static ABOUT: &str = "Display user and group information for the specified USER,\n or (when USER omitted) for the current user.";
+static ABOUT: &str = "The id utility displays the user and group names and numeric IDs, of the calling process, to the standard output. If the real and effective IDs are different, both are displayed, otherwise only the real ID is displayed.\n\nIf a user (login name or user ID) is specified, the user and group IDs of that user are displayed. In this case, the real and effective IDs are assumed to be the same.";
 
-static OPT_AUDIT: &str = "audit";
-static OPT_EFFECTIVE_USER: &str = "effective-user";
-static OPT_GROUP: &str = "group";
-static OPT_GROUPS: &str = "groups";
-static OPT_HUMAN_READABLE: &str = "human-readable";
-static OPT_NAME: &str = "name";
-static OPT_PASSWORD: &str = "password";
-static OPT_REAL_ID: &str = "real-id";
-
-static ARG_USERS: &str = "users";
+mod options {
+    pub const OPT_AUDIT: &str = "audit"; // GNU's id does not have this
+    pub const OPT_EFFECTIVE_USER: &str = "user";
+    pub const OPT_GROUP: &str = "group";
+    pub const OPT_GROUPS: &str = "groups";
+    pub const OPT_HUMAN_READABLE: &str = "human-readable"; // GNU's id does not have this
+    pub const OPT_NAME: &str = "name";
+    pub const OPT_PASSWORD: &str = "password"; // GNU's id does not have this
+    pub const OPT_REAL_ID: &str = "real";
+    pub const ARG_USERS: &str = "USER";
+}
 
 fn get_usage() -> String {
     format!("{0} [OPTION]... [USER]", executable!())
@@ -95,57 +100,76 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .about(ABOUT)
         .usage(&usage[..])
         .arg(
-            Arg::with_name(OPT_AUDIT)
+            Arg::with_name(options::OPT_AUDIT)
                 .short("A")
-                .help("Display the process audit (not available on Linux)"),
+                .help("Display the process audit user ID and other process audit properties, which requires privilege (not available on Linux)."),
         )
         .arg(
-            Arg::with_name(OPT_EFFECTIVE_USER)
+            Arg::with_name(options::OPT_EFFECTIVE_USER)
                 .short("u")
-                .long("user")
-                .help("Display the effective user ID as a number"),
+                .long(options::OPT_EFFECTIVE_USER)
+                .help("Display the effective user ID as a number."),
         )
         .arg(
-            Arg::with_name(OPT_GROUP)
+            Arg::with_name(options::OPT_GROUP)
                 .short("g")
-                .long(OPT_GROUP)
+                .long(options::OPT_GROUP)
                 .help("Display the effective group ID as a number"),
         )
         .arg(
-            Arg::with_name(OPT_GROUPS)
+            Arg::with_name(options::OPT_GROUPS)
                 .short("G")
-                .long(OPT_GROUPS)
-                .help("Display the different group IDs"),
+                .long(options::OPT_GROUPS)
+                .conflicts_with_all(&[options::OPT_GROUP, options::OPT_EFFECTIVE_USER, options::OPT_HUMAN_READABLE, options::OPT_PASSWORD, options::OPT_AUDIT])
+                .help("Display the different group IDs as white-space separated numbers, in no particular order."),
         )
         .arg(
-            Arg::with_name(OPT_HUMAN_READABLE)
+            Arg::with_name(options::OPT_HUMAN_READABLE)
                 .short("p")
-                .help("Make the output human-readable"),
+                .help("Make the output human-readable. Each display is on a separate line."),
         )
         .arg(
-            Arg::with_name(OPT_NAME)
+            Arg::with_name(options::OPT_NAME)
                 .short("n")
-                .help("Display the name of the user or group ID for the -G, -g and -u options"),
+                .long(options::OPT_NAME)
+                .help("Display the name of the user or group ID for the -G, -g and -u options instead of the number. If any of the ID numbers cannot be mapped into names, the number will be displayed as usual."),
         )
         .arg(
-            Arg::with_name(OPT_PASSWORD)
+            Arg::with_name(options::OPT_PASSWORD)
                 .short("P")
-                .help("Display the id as a password file entry"),
+                .help("Display the id as a password file entry."),
         )
         .arg(
-            Arg::with_name(OPT_REAL_ID)
+            Arg::with_name(options::OPT_REAL_ID)
                 .short("r")
-                .help("Display the real ID for the -g and -u options"),
+                .long(options::OPT_REAL_ID)
+                .help("Display the real ID for the -g and -u options instead of the effective ID."),
         )
-        .arg(Arg::with_name(ARG_USERS).multiple(true).takes_value(true))
+        .arg(
+            Arg::with_name(options::ARG_USERS)
+                .multiple(true)
+                .takes_value(true)
+                .value_name(options::ARG_USERS),
+        )
         .get_matches_from(args);
 
+    let nflag = matches.is_present(options::OPT_NAME);
+    let uflag = matches.is_present(options::OPT_EFFECTIVE_USER);
+    let gflag = matches.is_present(options::OPT_GROUP);
+    let gsflag = matches.is_present(options::OPT_GROUPS);
+    let rflag = matches.is_present(options::OPT_REAL_ID);
+
+    // -ugG
+    if (nflag || rflag) && !(uflag || gflag || gsflag) {
+        crash!(1, "cannot print only names or real IDs in default format");
+    }
+
     let users: Vec<String> = matches
-        .values_of(ARG_USERS)
+        .values_of(options::ARG_USERS)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    if matches.is_present(OPT_AUDIT) {
+    if matches.is_present(options::OPT_AUDIT) {
         auditid();
         return 0;
     }
@@ -158,11 +182,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Err(_) => crash!(1, "No such user/group: {}", users[0]),
         }
     };
-
-    let nflag = matches.is_present(OPT_NAME);
-    let uflag = matches.is_present(OPT_EFFECTIVE_USER);
-    let gflag = matches.is_present(OPT_GROUP);
-    let rflag = matches.is_present(OPT_REAL_ID);
 
     if gflag {
         let id = possible_pw
@@ -194,7 +213,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         return 0;
     }
 
-    if matches.is_present(OPT_GROUPS) {
+    if gsflag {
         println!(
             "{}",
             if nflag {
@@ -218,12 +237,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         return 0;
     }
 
-    if matches.is_present(OPT_PASSWORD) {
+    if matches.is_present(options::OPT_PASSWORD) {
         pline(possible_pw.map(|v| v.uid()));
         return 0;
     };
 
-    if matches.is_present(OPT_HUMAN_READABLE) {
+    if matches.is_present(options::OPT_HUMAN_READABLE) {
         pretty(possible_pw);
         return 0;
     }
