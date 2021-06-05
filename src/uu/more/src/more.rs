@@ -349,7 +349,7 @@ fn calc_range(mut upper_mark: u16, rows: u16, line_count: u16) -> (u16, u16) {
     let mut lower_mark = upper_mark.saturating_add(rows);
 
     if lower_mark >= line_count {
-        upper_mark = line_count.saturating_sub(rows);
+        upper_mark = line_count.saturating_sub(rows).saturating_add(1);
         lower_mark = line_count;
     } else {
         lower_mark = lower_mark.saturating_sub(1)
@@ -380,7 +380,7 @@ mod tests {
     fn test_calc_range() {
         assert_eq!((0, 24), calc_range(0, 25, 100));
         assert_eq!((50, 74), calc_range(50, 25, 100));
-        assert_eq!((75, 100), calc_range(85, 25, 100));
+        assert_eq!((76, 100), calc_range(85, 25, 100));
     }
     #[test]
     fn test_break_lines_long() {
