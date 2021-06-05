@@ -143,7 +143,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if let Some(files) = matches.values_of(options::FILES) {
         let mut stdout = setup_term();
         let length = files.len();
-        for (idx, file) in files.enumerate() {
+
+        let mut files_iter = files.peekable();
+        while let (Some(file), next_file) = (files_iter.next(), files_iter.peek()) {
             let file = Path::new(file);
             if file.is_dir() {
                 terminal::disable_raw_mode().unwrap();
@@ -160,15 +162,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             }
             let mut reader = BufReader::new(File::open(file).unwrap());
             reader.read_to_string(&mut buff).unwrap();
-            let is_last = idx + 1 == length;
-            more(&buff, &mut stdout, is_last);
+            more(&buff, &mut stdout, next_file.copied());
             buff.clear();
         }
         reset_term(&mut stdout);
     } else if atty::isnt(atty::Stream::Stdin) {
         stdin().read_to_string(&mut buff).unwrap();
         let mut stdout = setup_term();
-        more(&buff, &mut stdout, true);
+        more(&buff, &mut stdout, None);
         reset_term(&mut stdout);
     } else {
         show_usage_error!("bad usage");
@@ -203,7 +204,7 @@ fn reset_term(stdout: &mut std::io::Stdout) {
 #[inline(always)]
 fn reset_term(_: &mut usize) {}
 
-fn more(buff: &str, mut stdout: &mut Stdout, is_last: bool) {
+fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>) {
     let (cols, rows) = terminal::size().unwrap();
     let lines = break_buff(buff, usize::from(cols));
     let line_count: u16 = lines.len().try_into().unwrap();
@@ -217,7 +218,10 @@ fn more(buff: &str, mut stdout: &mut Stdout, is_last: bool) {
         &mut stdout,
         lines.clone(),
         line_count,
+        next_file,
     );
+
+    let is_last = next_file.is_none();
 
     // Specifies whether we have reached the end of the file and should
     // return on the next key press. However, we immediately return when
@@ -270,6 +274,7 @@ fn more(buff: &str, mut stdout: &mut Stdout, is_last: bool) {
                 &mut stdout,
                 lines.clone(),
                 line_count,
+                next_file,
             );
 
             if lines_left == 0 {
@@ -288,6 +293,7 @@ fn draw(
     mut stdout: &mut std::io::Stdout,
     lines: Vec<String>,
     lc: u16,
+    next_file: Option<&str>,
 ) {
     execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine)).unwrap();
     let (up_mark, lower_mark) = calc_range(*upper_mark, rows, lc);
@@ -302,7 +308,7 @@ fn draw(
             .write_all(format!("\r{}\n", line).as_bytes())
             .unwrap();
     }
-    make_prompt_and_flush(&mut stdout, lower_mark, lc);
+    make_prompt_and_flush(&mut stdout, lower_mark, lc, next_file);
     *upper_mark = up_mark;
 }
 
@@ -358,12 +364,20 @@ fn calc_range(mut upper_mark: u16, rows: u16, line_count: u16) -> (u16, u16) {
 }
 
 // Make a prompt similar to original more
-fn make_prompt_and_flush(stdout: &mut Stdout, lower_mark: u16, lc: u16) {
+fn make_prompt_and_flush(stdout: &mut Stdout, lower_mark: u16, lc: u16, next_file: Option<&str>) {
+    let status = if lower_mark == lc {
+        format!("Next file: {}", next_file.unwrap_or_default())
+    } else {
+        format!(
+            "{}%",
+            (lower_mark as f64 / lc as f64 * 100.0).round() as u16
+        )
+    };
     write!(
         stdout,
-        "\r{}--More--({}%){}",
+        "\r{}--More--({}){}",
         Attribute::Reverse,
-        ((lower_mark as f64 / lc as f64) * 100.0).round() as u16,
+        status,
         Attribute::Reset
     )
     .unwrap();
