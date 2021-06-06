@@ -1,7 +1,7 @@
 use crate::common::util::*;
 
 #[test]
-fn test_arch() {
+fn test_arch()   {
     new_ucmd!().succeeds();
 }
 
