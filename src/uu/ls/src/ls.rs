@@ -1243,7 +1243,7 @@ fn sort_entries(entries: &mut Vec<PathData>, config: &Config) {
         Sort::Time => entries.sort_by_key(|k| {
             Reverse(
                 k.md()
-                    .and_then(|md| get_system_time(&md, config))
+                    .and_then(|md| get_system_time(md, config))
                     .unwrap_or(UNIX_EPOCH),
             )
         }),
@@ -1323,7 +1323,7 @@ fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>)
             .filter(|p| p.file_type().map(|ft| ft.is_dir()).unwrap_or(false))
         {
             let _ = writeln!(out, "\n{}:", e.p_buf.display());
-            enter_directory(&e, config, out);
+            enter_directory(e, config, out);
         }
     }
 }
@@ -1339,8 +1339,8 @@ fn get_metadata(entry: &Path, dereference: bool) -> std::io::Result<Metadata> {
 fn display_dir_entry_size(entry: &PathData, config: &Config) -> (usize, usize) {
     if let Some(md) = entry.md() {
         (
-            display_symlink_count(&md).len(),
-            display_size_or_rdev(&md, config).len(),
+            display_symlink_count(md).len(),
+            display_size_or_rdev(md, config).len(),
         )
     } else {
         (0, 0)
@@ -1371,7 +1371,7 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             display_item_long(item, max_links, max_width, config, out);
         }
     } else {
-        let names = items.iter().filter_map(|i| display_file_name(&i, config));
+        let names = items.iter().filter_map(|i| display_file_name(i, config));
 
         match (&config.format, config.width) {
             (Format::Columns, Some(width)) => {
@@ -1482,40 +1482,40 @@ fn display_item_long(
     #[cfg(unix)]
     {
         if config.inode {
-            let _ = write!(out, "{} ", get_inode(&md));
+            let _ = write!(out, "{} ", get_inode(md));
         }
     }
 
     let _ = write!(
         out,
         "{} {}",
-        display_permissions(&md, true),
-        pad_left(display_symlink_count(&md), max_links),
+        display_permissions(md, true),
+        pad_left(display_symlink_count(md), max_links),
     );
 
     if config.long.owner {
-        let _ = write!(out, " {}", display_uname(&md, config));
+        let _ = write!(out, " {}", display_uname(md, config));
     }
 
     if config.long.group {
-        let _ = write!(out, " {}", display_group(&md, config));
+        let _ = write!(out, " {}", display_group(md, config));
     }
 
     // Author is only different from owner on GNU/Hurd, so we reuse
     // the owner, since GNU/Hurd is not currently supported by Rust.
     if config.long.author {
-        let _ = write!(out, " {}", display_uname(&md, config));
+        let _ = write!(out, " {}", display_uname(md, config));
     }
 
     let _ = writeln!(
         out,
         " {} {} {}",
         pad_left(display_size_or_rdev(md, config), max_size),
-        display_date(&md, config),
+        display_date(md, config),
         // unwrap is fine because it fails when metadata is not available
         // but we already know that it is because it's checked at the
         // start of the function.
-        display_file_name(&item, config).unwrap().contents,
+        display_file_name(item, config).unwrap().contents,
     );
 }
 
@@ -1741,7 +1741,7 @@ fn display_file_name(path: &PathData, config: &Config) -> Option<Cell> {
     let mut width = name.width();
 
     if let Some(ls_colors) = &config.color {
-        name = color_name(&ls_colors, &path.p_buf, name, path.md()?);
+        name = color_name(ls_colors, &path.p_buf, name, path.md()?);
     }
 
     if config.indicator_style != IndicatorStyle::None {
@@ -1786,7 +1786,7 @@ fn display_file_name(path: &PathData, config: &Config) -> Option<Cell> {
 }
 
 fn color_name(ls_colors: &LsColors, path: &Path, name: String, md: &Metadata) -> String {
-    match ls_colors.style_for_path_with_metadata(path, Some(&md)) {
+    match ls_colors.style_for_path_with_metadata(path, Some(md)) {
         Some(style) => style.to_ansi_term_style().paint(name).to_string(),
         None => name,
     }
