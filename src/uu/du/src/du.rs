@@ -73,7 +73,7 @@ of 1000).
 // TODO: Support Z & Y (currently limited by size of u64)
 const UNITS: [(char, u32); 6] = [('E', 6), ('P', 5), ('T', 4), ('G', 3), ('M', 2), ('K', 1)];
 
-struct Options   {  
+struct Options {
     all: bool,
     program_name: String,
     max_depth: Option<usize>,
