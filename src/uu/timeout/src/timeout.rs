@@ -55,7 +55,7 @@ impl Config {
     fn from(options: clap::ArgMatches) -> Config {
         let signal = match options.value_of(options::SIGNAL) {
             Some(signal_) => {
-                let signal_result = signal_by_name_or_value(&signal_);
+                let signal_result = signal_by_name_or_value(signal_);
                 match signal_result {
                     None => {
                         unreachable!("invalid signal '{}'", signal_);
@@ -67,7 +67,7 @@ impl Config {
         };
 
         let kill_after: Duration = match options.value_of(options::KILL_AFTER) {
-            Some(time) => uucore::parse_time::from_str(&time).unwrap(),
+            Some(time) => uucore::parse_time::from_str(time).unwrap(),
             None => Duration::new(0, 0),
         };
 
