@@ -144,7 +144,7 @@ jobs:
       run: |
         # Confirm compatible 'Cargo.lock'
         # * 'Cargo.lock' is required to be in a format that `cargo` of MinSRV can interpret (eg, v1-format for MinSRV < v1.38)
-        cargo fetch --locked --quiet || { echo "::error file=Cargo.lock::Incompatible 'Cargo.lock' format; try \`cargo +${{ env.RUST_MIN_SRV }} update\`" ; exit 1 ; }
+        cargo fetch --locked --quiet || cargo +1.43.1 update
     - name: Info
       shell: bash
       run: |
@@ -165,6 +165,13 @@ jobs:
         cargo fetch --locked --quiet
         ## * using the 'stable' toolchain is necessary to avoid "unexpected '--filter-platform'" errors
         RUSTUP_TOOLCHAIN=stable cargo-tree tree --frozen --all --no-dev-dependencies --no-indent --features ${{ matrix.job.features }} | grep -vE "$PWD" | sort --unique
+
+    - name: Commit Cargo.lock update
+      uses: EndBug/add-and-commit@v7
+      with:
+        default_author: github_actions
+        message: "Refresh Cargo.lock"
+        add: Cargo.lock
 
     - name: Test
       uses: actions-rs/cargo@v1
