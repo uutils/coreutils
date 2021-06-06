@@ -283,7 +283,7 @@ impl Pinky {
             }
         }
 
-        print!(" {}", time_string(&ut));
+        print!(" {}", time_string(ut));
 
         let mut s = ut.host();
         if self.include_where && !s.is_empty() {
