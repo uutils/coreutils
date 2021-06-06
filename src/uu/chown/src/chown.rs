@@ -220,7 +220,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     };
 
     let filter = if let Some(spec) = matches.value_of(options::FROM) {
-        match parse_spec(&spec) {
+        match parse_spec(spec) {
             Ok((Some(uid), None)) => IfFrom::User(uid),
             Ok((None, Some(gid))) => IfFrom::Group(gid),
             Ok((Some(uid), Some(gid))) => IfFrom::UserGroup(uid, gid),
@@ -248,7 +248,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             }
         }
     } else {
-        match parse_spec(&owner) {
+        match parse_spec(owner) {
             Ok((u, g)) => {
                 dest_uid = u;
                 dest_gid = g;
