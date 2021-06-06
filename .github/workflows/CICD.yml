@@ -45,18 +45,20 @@ jobs:
         default: true
         profile: minimal # minimal component installation (ie, no documentation)
         components: rustfmt
-    - name: "`fmt` testing"
+    - name: "`cargo fmt` run"
       shell: bash
       run: |
-        # `fmt` testing
-        # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-        S=$(cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" | sed -E -n -e "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::warning file=\1,line=\2::WARNING: \`cargo fmt\`: style violation/p" ; }
+        cargo fmt
     - name: "`fmt` testing of tests"
       shell: bash
       run: |
-        # `fmt` testing of tests
-        # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-        S=$(find tests -name "*.rs" -print0 | xargs -0 cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" | sed -E -n "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::warning file=\1,line=\2::WARNING: \`cargo fmt\`: style violation/p" ; }
+        # `cargo fmt` of tests
+        find tests -name "*.rs" -print0 | xargs -0 cargo fmt --
+    - name: Commit rustfmt changes
+      uses: EndBug/add-and-commit@v7
+      with:
+        default_author: github_actions
+        message: "rustfmt the recent changes"
 
   code_spellcheck:
     name: Style/spelling
