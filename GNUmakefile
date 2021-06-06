@@ -284,6 +284,8 @@ $(BUILDDIR)/busybox: busybox-src build-coreutils $(BUILDDIR)/.config
 	chmod +x $@
 
 prepare-busytest: $(BUILDDIR)/busybox
+	# disable inapplicable tests
+	-( cd "$(BUSYBOX_SRC)/testsuite" ; if [ -e "busybox.tests" ] ; then mv busybox.tests busybox.tests- ; fi ; )
 
 ifeq ($(EXES),)
 busytest:
