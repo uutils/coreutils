@@ -312,3 +312,20 @@ fn _du_no_permission(s: &str) {
 fn _du_no_permission(s: &str) {
     assert_eq!(s, "4\tsubdir/links\n");
 }
+
+#[test]
+fn test_du_one_file_system() {
+    let scene = TestScenario::new(util_name!());
+
+    let result = scene.ucmd().arg("-x").arg(SUB_DIR).succeeds();
+
+    #[cfg(target_os = "linux")]
+    {
+        let result_reference = scene.cmd("du").arg("-x").arg(SUB_DIR).run();
+        if result_reference.succeeded() {
+            assert_eq!(result.stdout_str(), result_reference.stdout_str());
+            return;
+        }
+    }
+    _du_basics_subdir(result.stdout_str());
+}
