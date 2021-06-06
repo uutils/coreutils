@@ -1158,10 +1158,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     settings.buffer_size = matches
         .value_of(OPT_BUF_SIZE)
         .map_or(DEFAULT_BUF_SIZE, |s| {
-            GlobalSettings::parse_byte_count(s).map_or_else(
-                |e| crash!(2, "{}", format_error_message(e, s, OPT_BUF_SIZE)),
-                |n| n,
-            )
+            GlobalSettings::parse_byte_count(s)
+                .unwrap_or_else(|e| crash!(2, "{}", format_error_message(e, s, OPT_BUF_SIZE)))
         });
 
     settings.tmp_dir = matches

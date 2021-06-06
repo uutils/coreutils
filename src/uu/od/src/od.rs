@@ -134,10 +134,9 @@ impl OdOptions {
         }
 
         let mut skip_bytes = matches.value_of(options::SKIP_BYTES).map_or(0, |s| {
-            parse_number_of_bytes(s).map_or_else(
-                |e| crash!(1, "{}", format_error_message(e, s, options::SKIP_BYTES)),
-                |n| n,
-            )
+            parse_number_of_bytes(s).unwrap_or_else(|e| {
+                crash!(1, "{}", format_error_message(e, s, options::SKIP_BYTES))
+            })
         });
 
         let mut label: Option<usize> = None;
@@ -165,10 +164,8 @@ impl OdOptions {
             if matches.occurrences_of(options::WIDTH) == 0 {
                 return 16;
             };
-            parse_number_of_bytes(s).map_or_else(
-                |e| crash!(1, "{}", format_error_message(e, s, options::WIDTH)),
-                |n| n,
-            )
+            parse_number_of_bytes(s)
+                .unwrap_or_else(|e| crash!(1, "{}", format_error_message(e, s, options::WIDTH)))
         });
 
         let min_bytes = formats.iter().fold(1, |max, next| {
@@ -182,10 +179,9 @@ impl OdOptions {
         let output_duplicates = matches.is_present(options::OUTPUT_DUPLICATES);
 
         let read_bytes = matches.value_of(options::READ_BYTES).map(|s| {
-            parse_number_of_bytes(s).map_or_else(
-                |e| crash!(1, "{}", format_error_message(e, s, options::READ_BYTES)),
-                |n| n,
-            )
+            parse_number_of_bytes(s).unwrap_or_else(|e| {
+                crash!(1, "{}", format_error_message(e, s, options::READ_BYTES))
+            })
         });
 
         let radix = match matches.value_of(options::ADDRESS_RADIX) {
