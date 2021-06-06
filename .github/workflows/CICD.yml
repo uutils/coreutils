@@ -197,7 +197,11 @@ jobs:
       run: |
         bindir=$(pwd)/target/debug
         cd tmp/busybox-*/testsuite
-        S=$(bindir=$bindir ./runtest) && printf "%s\n" "$S" || { printf "%s\n" "$S" | grep "FAIL:" | sed -e "s/FAIL: /::warning ::Test failure:/g" ; }
+        ## S=$(bindir=$bindir ./runtest) && printf "%s\n" "$S" || { printf "%s\n" "$S" | grep "FAIL:" | sed -e "s/FAIL: /::warning ::Test failure:/g" ; }
+        output=$(bindir=$bindir ./runtest 2>&1 || true)
+        printf "%s\n" "${output}"
+        n_fails=$(echo "$output" | grep "^FAIL:\s" | wc --lines)
+        if [ $n_fails -gt 0 ] ; then echo "::warning ::${n_fails}+ test failures" ; fi
 
   makefile_build:
     name: Test the build target of the Makefile
