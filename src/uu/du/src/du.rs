@@ -258,7 +258,7 @@ fn unit_string_to_number(s: &str) -> Option<u64> {
 
 fn translate_to_pure_number(s: &Option<&str>) -> Option<u64> {
     match *s {
-        Some(ref s) => unit_string_to_number(s),
+        Some(s) => unit_string_to_number(s),
         None => None,
     }
 }
@@ -585,12 +585,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let max_depth_str = matches.value_of(options::MAX_DEPTH);
     let max_depth = max_depth_str.as_ref().and_then(|s| s.parse::<usize>().ok());
     match (max_depth_str, max_depth) {
-        (Some(ref s), _) if summarize => {
-            show_error!("summarizing conflicts with --max-depth={}", *s);
+        (Some(s), _) if summarize => {
+            show_error!("summarizing conflicts with --max-depth={}", s);
             return 1;
         }
-        (Some(ref s), None) => {
-            show_error!("invalid maximum depth '{}'", *s);
+        (Some(s), None) => {
+            show_error!("invalid maximum depth '{}'", s);
             return 1;
         }
         (Some(_), Some(_)) | (None, _) => { /* valid */ }
