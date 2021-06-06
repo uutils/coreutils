@@ -258,7 +258,7 @@ pub fn num_format(field: &FormatField, in_str_opt: Option<&String>) -> Option<St
             // any formatter (int or float)
             let initial_prefix = get_initial_prefix(
                 in_str,
-                &field.field_type
+                field.field_type
             );
             // then get the FormatPrimitive from the Formatter
             formatter.get_primitive(field, &initial_prefix, in_str)
