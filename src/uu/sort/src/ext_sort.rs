@@ -12,8 +12,12 @@
 //! The buffers for the individual chunks are recycled. There are two buffers.
 
 use std::cmp::Ordering;
+use std::fs::File;
+use std::io::BufReader;
 use std::io::{BufWriter, Write};
 use std::path::Path;
+use std::process::Child;
+use std::process::{Command, Stdio};
 use std::{
     fs::OpenOptions,
     io::Read,
@@ -25,12 +29,13 @@ use itertools::Itertools;
 
 use tempfile::TempDir;
 
+use crate::Line;
 use crate::{
     chunks::{self, Chunk},
     compare_by, merge, output_sorted_lines, sort_by, GlobalSettings,
 };
 
-const MIN_BUFFER_SIZE: usize = 8_000;
+const START_BUFFER_SIZE: usize = 8_000;
 
 /// Sort files by using auxiliary files for storing intermediate chunks (if needed), and output the result.
 pub fn ext_sort(files: &mut impl Iterator<Item = Box<dyn Read + Send>>, settings: &GlobalSettings) {
@@ -63,10 +68,31 @@ pub fn ext_sort(files: &mut impl Iterator<Item = Box<dyn Read + Send>>, settings
     );
     match read_result {
         ReadResult::WroteChunksToFile { chunks_written } => {
-            let files = (0..chunks_written)
-                .map(|chunk_num| tmp_dir.path().join(chunk_num.to_string()))
-                .collect::<Vec<_>>();
-            let mut merger = merge::merge(&files, settings);
+            let mut children = Vec::new();
+            let files = (0..chunks_written).map(|chunk_num| {
+                let file_path = tmp_dir.path().join(chunk_num.to_string());
+                let file = File::open(file_path).unwrap();
+                if let Some(compress_prog) = &settings.compress_prog {
+                    let mut command = Command::new(compress_prog);
+                    command.stdin(file).stdout(Stdio::piped()).arg("-d");
+                    let mut child = crash_if_err!(
+                        2,
+                        command.spawn().map_err(|err| format!(
+                            "couldn't execute compress program: errno {}",
+                            err.raw_os_error().unwrap()
+                        ))
+                    );
+                    let child_stdout = child.stdout.take().unwrap();
+                    children.push(child);
+                    Box::new(BufReader::new(child_stdout)) as Box<dyn Read + Send>
+                } else {
+                    Box::new(BufReader::new(file)) as Box<dyn Read + Send>
+                }
+            });
+            let mut merger = merge::merge_with_file_limit(files, settings);
+            for child in children {
+                assert_child_success(child, settings.compress_prog.as_ref().unwrap());
+            }
             merger.write_all(settings);
         }
         ReadResult::SortedSingleChunk(chunk) => {
@@ -132,7 +158,14 @@ fn reader_writer(
     for _ in 0..2 {
         chunks::read(
             &mut sender_option,
-            vec![0; MIN_BUFFER_SIZE],
+            vec![
+                0;
+                if START_BUFFER_SIZE < buffer_size {
+                    START_BUFFER_SIZE
+                } else {
+                    buffer_size
+                }
+            ],
             Some(buffer_size),
             &mut carry_over,
             &mut file,
@@ -171,6 +204,7 @@ fn reader_writer(
         write(
             &mut chunk,
             &tmp_dir.path().join(file_number.to_string()),
+            settings.compress_prog.as_deref(),
             separator,
         );
 
@@ -193,14 +227,45 @@ fn reader_writer(
 }
 
 /// Write the lines in `chunk` to `file`, separated by `separator`.
-fn write(chunk: &mut Chunk, file: &Path, separator: u8) {
+/// `compress_prog` is used to optionally compress file contents.
+fn write(chunk: &mut Chunk, file: &Path, compress_prog: Option<&str>, separator: u8) {
     chunk.with_lines_mut(|lines| {
         // Write the lines to the file
         let file = crash_if_err!(1, OpenOptions::new().create(true).write(true).open(file));
-        let mut writer = BufWriter::new(file);
-        for s in lines.iter() {
-            crash_if_err!(1, writer.write_all(s.line.as_bytes()));
-            crash_if_err!(1, writer.write_all(&[separator]));
-        }
+        if let Some(compress_prog) = compress_prog {
+            let mut command = Command::new(compress_prog);
+            command.stdin(Stdio::piped()).stdout(file);
+            let mut child = crash_if_err!(
+                2,
+                command.spawn().map_err(|err| format!(
+                    "couldn't execute compress program: errno {}",
+                    err.raw_os_error().unwrap()
+                ))
+            );
+            let mut writer = BufWriter::new(child.stdin.take().unwrap());
+            write_lines(lines, &mut writer, separator);
+            writer.flush().unwrap();
+            drop(writer);
+            assert_child_success(child, compress_prog);
+        } else {
+            let mut writer = BufWriter::new(file);
+            write_lines(lines, &mut writer, separator);
+        };
     });
+}
+
+fn write_lines<'a, T: Write>(lines: &[Line<'a>], writer: &mut T, separator: u8) {
+    for s in lines {
+        crash_if_err!(1, writer.write_all(s.line.as_bytes()));
+        crash_if_err!(1, writer.write_all(&[separator]));
+    }
+}
+
+fn assert_child_success(mut child: Child, program: &str) {
+    if !matches!(
+        child.wait().map(|e| e.code()),
+        Ok(Some(0)) | Ok(None) | Err(_)
+    ) {
+        crash!(2, "'{}' terminated abnormally", program)
+    }
 }
