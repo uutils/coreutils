@@ -849,7 +849,7 @@ fn sort_multiple() {
 #[test]
 fn sort_empty_chunk() {
     new_ucmd!()
-        .args(&["-S", "40B"])
+        .args(&["-S", "40b"])
         .pipe_in("a\na\n")
         .succeeds()
         .stdout_is("a\na\n");
@@ -889,12 +889,7 @@ fn test_compress_fail() {
 #[test]
 fn test_merge_batches() {
     new_ucmd!()
-        .args(&[
-            "ext_sort.txt",
-            "-n",
-            "-S",
-            "150B",
-        ])
+        .args(&["ext_sort.txt", "-n", "-S", "150b"])
         .succeeds()
         .stdout_only_fixture("ext_sort.expected");
 }
