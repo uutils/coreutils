@@ -800,3 +800,12 @@ fn sort_multiple() {
         .succeeds()
         .stdout_is("a\nb\nb\n");
 }
+
+#[test]
+fn sort_empty_chunk() {
+    new_ucmd!()
+        .args(&["-S", "40B"])
+        .pipe_in("a\na\n")
+        .succeeds()
+        .stdout_is("a\na\n");
+}

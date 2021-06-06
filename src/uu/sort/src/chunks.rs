@@ -102,17 +102,17 @@ pub fn read(
         carry_over.clear();
         carry_over.extend_from_slice(&buffer[read..]);
 
-        let payload = Chunk::new(buffer, |buf| {
-            let mut lines = unsafe {
-                // SAFETY: It is safe to transmute to a vector of lines with shorter lifetime,
-                // because it was only temporarily transmuted to a Vec<Line<'static>> to make recycling possible.
-                std::mem::transmute::<Vec<Line<'static>>, Vec<Line<'_>>>(lines)
-            };
-            let read = crash_if_err!(1, std::str::from_utf8(&buf[..read]));
-            parse_lines(read, &mut lines, separator, &settings);
-            lines
-        });
-        if !payload.borrow_lines().is_empty() {
+        if read != 0 {
+            let payload = Chunk::new(buffer, |buf| {
+                let mut lines = unsafe {
+                    // SAFETY: It is safe to transmute to a vector of lines with shorter lifetime,
+                    // because it was only temporarily transmuted to a Vec<Line<'static>> to make recycling possible.
+                    std::mem::transmute::<Vec<Line<'static>>, Vec<Line<'_>>>(lines)
+                };
+                let read = crash_if_err!(1, std::str::from_utf8(&buf[..read]));
+                parse_lines(read, &mut lines, separator, &settings);
+                lines
+            });
             sender.send(payload).unwrap();
         }
         if !should_continue {
