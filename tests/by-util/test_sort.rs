@@ -792,3 +792,11 @@ fn test_nonexistent_file() {
 fn test_blanks() {
     test_helper("blanks", &["-b", "--ignore-blanks"]);
 }
+
+#[test]
+fn sort_multiple() {
+    new_ucmd!()
+        .args(&["no_trailing_newline1.txt", "no_trailing_newline2.txt"])
+        .succeeds()
+        .stdout_is("a\nb\nb\n");
+}
