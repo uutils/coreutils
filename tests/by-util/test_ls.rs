@@ -1143,7 +1143,7 @@ fn test_ls_indicator_style() {
     for opt in options {
         scene
             .ucmd()
-            .arg(format!("{}", opt))
+            .arg(opt.to_string())
             .succeeds()
             .stdout_contains(&"/");
     }
