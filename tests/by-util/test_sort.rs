@@ -840,3 +840,16 @@ fn test_compress_fail() {
         .fails()
         .stderr_only("sort: couldn't execute compress program: errno 2");
 }
+
+#[test]
+fn test_merge_batches() {
+    new_ucmd!()
+        .args(&[
+            "ext_sort.txt",
+            "-n",
+            "-S",
+            "150B",
+        ])
+        .succeeds()
+        .stdout_only_fixture("ext_sort.expected");
+}

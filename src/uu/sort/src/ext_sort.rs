@@ -89,7 +89,7 @@ pub fn ext_sort(files: &mut impl Iterator<Item = Box<dyn Read + Send>>, settings
                     Box::new(BufReader::new(file)) as Box<dyn Read + Send>
                 }
             });
-            let mut merger = merge::merge(files, settings);
+            let mut merger = merge::merge_with_file_limit(files, settings);
             for child in children {
                 assert_child_success(child, settings.compress_prog.as_ref().unwrap());
             }

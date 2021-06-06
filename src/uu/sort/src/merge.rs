@@ -9,7 +9,8 @@
 
 use std::{
     cmp::Ordering,
-    io::{Read, Write},
+    fs::File,
+    io::{BufWriter, Read, Write},
     iter,
     rc::Rc,
     sync::mpsc::{channel, sync_channel, Receiver, Sender, SyncSender},
@@ -17,6 +18,7 @@ use std::{
 };
 
 use compare::Compare;
+use itertools::Itertools;
 
 use crate::{
     chunks::{self, Chunk},
@@ -24,13 +26,60 @@ use crate::{
 };
 
 // Merge already sorted files.
-pub fn merge<F: ExactSizeIterator<Item = Box<dyn Read + Send>>>(
+pub fn merge_with_file_limit<F: ExactSizeIterator<Item = Box<dyn Read + Send>>>(
+    files: F,
+    settings: &GlobalSettings,
+) -> FileMerger {
+    if files.len() > settings.merge_batch_size {
+        let tmp_dir = tempfile::Builder::new()
+            .prefix("uutils_sort")
+            .tempdir_in(&settings.tmp_dir)
+            .unwrap();
+        let mut batch_number = 0;
+        let mut remaining_files = files.len();
+        let batches = files.chunks(settings.merge_batch_size);
+        let mut batches = batches.into_iter();
+        while batch_number + remaining_files > settings.merge_batch_size && remaining_files != 0 {
+            remaining_files = remaining_files.saturating_sub(settings.merge_batch_size);
+            let mut merger = merge_without_limit(batches.next().unwrap(), settings);
+            let tmp_file = File::create(tmp_dir.path().join(batch_number.to_string())).unwrap();
+            merger.write_all_to(settings, &mut BufWriter::new(tmp_file));
+            batch_number += 1;
+        }
+        let batch_files = (0..batch_number).map(|n| {
+            Box::new(File::open(tmp_dir.path().join(n.to_string())).unwrap())
+                as Box<dyn Read + Send>
+        });
+        if batch_number > settings.merge_batch_size {
+            assert!(batches.next().is_none());
+            merge_with_file_limit(
+                Box::new(batch_files) as Box<dyn ExactSizeIterator<Item = Box<dyn Read + Send>>>,
+                settings,
+            )
+        } else {
+            let final_batch = batches.next();
+            assert!(batches.next().is_none());
+            merge_without_limit(
+                batch_files.chain(final_batch.into_iter().flatten()),
+                settings,
+            )
+        }
+    } else {
+        merge_without_limit(files, settings)
+    }
+}
+
+/// Merge files without limiting how many files are concurrently open
+///
+/// It is the responsibility of the caller to ensure that `files` yields only
+/// as many files as we are allowed to open concurrently.
+fn merge_without_limit<F: Iterator<Item = Box<dyn Read + Send>>>(
     files: F,
     settings: &GlobalSettings,
 ) -> FileMerger {
     let (request_sender, request_receiver) = channel();
-    let mut reader_files = Vec::with_capacity(files.len());
-    let mut loaded_receivers = Vec::with_capacity(files.len());
+    let mut reader_files = Vec::with_capacity(files.size_hint().0);
+    let mut loaded_receivers = Vec::with_capacity(files.size_hint().0);
     for (file_number, file) in files.enumerate() {
         let (sender, receiver) = sync_channel(2);
         loaded_receivers.push(receiver);
@@ -148,7 +197,11 @@ impl<'a> FileMerger<'a> {
     /// Write the merged contents to the output file.
     pub fn write_all(&mut self, settings: &GlobalSettings) {
         let mut out = settings.out_writer();
-        while self.write_next(settings, &mut out) {}
+        self.write_all_to(settings, &mut out);
+    }
+
+    pub fn write_all_to(&mut self, settings: &GlobalSettings, out: &mut impl Write) {
+        while self.write_next(settings, out) {}
     }
 
     fn write_next(&mut self, settings: &GlobalSettings, out: &mut impl Write) -> bool {
