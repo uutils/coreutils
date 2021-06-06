@@ -245,7 +245,7 @@ fn run_env(args: impl uucore::Args) -> Result<(), i32> {
     }
 
     // set specified env vars
-    for &(ref name, ref val) in &opts.sets {
+    for &(name, val) in &opts.sets {
         // FIXME: set_var() panics if name is an empty string
         env::set_var(name, val);
     }
