@@ -236,7 +236,7 @@ fn expand(options: Options) {
 
                         // now dump out either spaces if we're expanding, or a literal tab if we're not
                         if init || !options.iflag {
-                            safe_unwrap!(output.write_all(&options.tspaces[..nts].as_bytes()));
+                            safe_unwrap!(output.write_all(options.tspaces[..nts].as_bytes()));
                         } else {
                             safe_unwrap!(output.write_all(&buf[byte..byte + nbytes]));
                         }
