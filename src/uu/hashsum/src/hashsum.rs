@@ -19,7 +19,6 @@ mod digest;
 
 use self::digest::Digest;
 
-use blake2_rfc::blake2b::Blake2b;
 use clap::{App, Arg, ArgMatches};
 use hex::ToHex;
 use md5::Context as Md5;
@@ -85,7 +84,11 @@ fn detect_algo<'a>(
         "sha256sum" => ("SHA256", Box::new(Sha256::new()) as Box<dyn Digest>, 256),
         "sha384sum" => ("SHA384", Box::new(Sha384::new()) as Box<dyn Digest>, 384),
         "sha512sum" => ("SHA512", Box::new(Sha512::new()) as Box<dyn Digest>, 512),
-        "b2sum" => ("BLAKE2", Box::new(Blake2b::new(64)) as Box<dyn Digest>, 512),
+        "b2sum" => (
+            "BLAKE2",
+            Box::new(blake2b_simd::State::new()) as Box<dyn Digest>,
+            512,
+        ),
         "sha3sum" => match matches.value_of("bits") {
             Some(bits_str) => match (&bits_str).parse::<usize>() {
                 Ok(224) => (
@@ -187,7 +190,7 @@ fn detect_algo<'a>(
                     set_or_crash("SHA512", Box::new(Sha512::new()), 512)
                 }
                 if matches.is_present("b2sum") {
-                    set_or_crash("BLAKE2", Box::new(Blake2b::new(64)), 512)
+                    set_or_crash("BLAKE2", Box::new(blake2b_simd::State::new()), 512)
                 }
                 if matches.is_present("sha3") {
                     match matches.value_of("bits") {

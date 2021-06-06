@@ -255,7 +255,18 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
             // correctly on Windows
             if let Err(e) = remove_dir_all(path) {
                 had_err = true;
-                show_error!("could not remove '{}': {}", path.display(), e);
+                if e.kind() == std::io::ErrorKind::PermissionDenied {
+                    // GNU compatibility (rm/fail-eacces.sh)
+                    // here, GNU doesn't use some kind of remove_dir_all
+                    // It will show directory+file
+                    show_error!(
+                        "cannot remove '{}': {}",
+                        path.display(),
+                        "Permission denied"
+                    );
+                } else {
+                    show_error!("cannot remove '{}': {}", path.display(), e);
+                }
             }
         } else {
             let mut dirs: VecDeque<DirEntry> = VecDeque::new();
@@ -314,7 +325,16 @@ fn remove_dir(path: &Path, options: &Options) -> bool {
                             }
                         }
                         Err(e) => {
-                            show_error!("cannot remove '{}': {}", path.display(), e);
+                            if e.kind() == std::io::ErrorKind::PermissionDenied {
+                                // GNU compatibility (rm/fail-eacces.sh)
+                                show_error!(
+                                    "cannot remove '{}': {}",
+                                    path.display(),
+                                    "Permission denied"
+                                );
+                            } else {
+                                show_error!("cannot remove '{}': {}", path.display(), e);
+                            }
                             return true;
                         }
                     }
@@ -352,7 +372,16 @@ fn remove_file(path: &Path, options: &Options) -> bool {
                 }
             }
             Err(e) => {
-                show_error!("removing '{}': {}", path.display(), e);
+                if e.kind() == std::io::ErrorKind::PermissionDenied {
+                    // GNU compatibility (rm/fail-eacces.sh)
+                    show_error!(
+                        "cannot remove '{}': {}",
+                        path.display(),
+                        "Permission denied"
+                    );
+                } else {
+                    show_error!("cannot remove '{}': {}", path.display(), e);
+                }
                 return true;
             }
         }
