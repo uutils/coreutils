@@ -165,9 +165,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     };
 
     if dry_run {
-        dry_exec(tmpdir, prefix, rand, &suffix)
+        dry_exec(tmpdir, prefix, rand, suffix)
     } else {
-        exec(tmpdir, prefix, rand, &suffix, make_dir, suppress_file_err)
+        exec(tmpdir, prefix, rand, suffix, make_dir, suppress_file_err)
     }
 }
 
