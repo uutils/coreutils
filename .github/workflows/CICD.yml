@@ -26,7 +26,7 @@ jobs:
         job:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -66,7 +66,7 @@ jobs:
         job:
           - { os: ubuntu-latest }
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -87,7 +87,7 @@ jobs:
           - { os: macos-latest   , features: feat_os_macos }
           - { os: windows-latest , features: feat_os_windows }
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -122,7 +122,7 @@ jobs:
         job:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
     - name: Install `rust` toolchain (v${{ env.RUST_MIN_SRV }})
       uses: actions-rs/toolchain@v1
       with:
@@ -181,7 +181,7 @@ jobs:
         job:
           - { os: ubuntu-latest }
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
     - name: Install `rust` toolchain
       uses: actions-rs/toolchain@v1
       with:
@@ -212,7 +212,7 @@ jobs:
         job:
           - { os: ubuntu-latest }
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
     - name: Install `rust` toolchain
       uses: actions-rs/toolchain@v1
       with:
@@ -249,7 +249,7 @@ jobs:
           - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows }  ## note: requires rust >= 1.43.0 to link correctly
           - { os: windows-latest , target: x86_64-pc-windows-msvc      , features: feat_os_windows }
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
     - name: Install/setup prerequisites
       shell: bash
       run: |
@@ -488,7 +488,7 @@ jobs:
           - { os: macos-latest   , features: macos }
           - { os: windows-latest , features: windows }
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
     - name: Install/setup prerequisites
       shell: bash
       run: |
