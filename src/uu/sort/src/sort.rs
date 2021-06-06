@@ -95,6 +95,7 @@ static OPT_PARALLEL: &str = "parallel";
 static OPT_FILES0_FROM: &str = "files0-from";
 static OPT_BUF_SIZE: &str = "buffer-size";
 static OPT_TMP_DIR: &str = "temporary-directory";
+static OPT_COMPRESS_PROG: &str = "compress-program";
 
 static ARG_FILES: &str = "files";
 
@@ -155,6 +156,7 @@ pub struct GlobalSettings {
     zero_terminated: bool,
     buffer_size: usize,
     tmp_dir: PathBuf,
+    compress_prog: Option<String>,
 }
 
 impl GlobalSettings {
@@ -223,6 +225,7 @@ impl Default for GlobalSettings {
             zero_terminated: false,
             buffer_size: DEFAULT_BUF_SIZE,
             tmp_dir: PathBuf::new(),
+            compress_prog: None,
         }
     }
 }
@@ -1077,6 +1080,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .value_name("DIR"),
         )
         .arg(
+            Arg::with_name(OPT_COMPRESS_PROG)
+                .long(OPT_COMPRESS_PROG)
+                .help("compress temporary files with PROG, decompress with PROG -d")
+                .long_help("PROG has to take input from stdin and output to stdout")
+                .value_name("PROG")
+        )
+        .arg(
             Arg::with_name(OPT_FILES0_FROM)
                 .long(OPT_FILES0_FROM)
                 .help("read input from the files specified by NUL-terminated NUL_FILES")
@@ -1165,6 +1175,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .map(PathBuf::from)
         .unwrap_or_else(env::temp_dir);
 
+    settings.compress_prog = matches.value_of(OPT_COMPRESS_PROG).map(String::from);
+
     settings.zero_terminated = matches.is_present(OPT_ZERO_TERMINATED);
     settings.merge = matches.is_present(OPT_MERGE);
 
@@ -1240,7 +1252,7 @@ fn output_sorted_lines<'a>(iter: impl Iterator<Item = &'a Line<'a>>, settings: &
 
 fn exec(files: &[String], settings: &GlobalSettings) -> i32 {
     if settings.merge {
-        let mut file_merger = merge::merge(files, settings);
+        let mut file_merger = merge::merge(files.iter().map(open), settings);
         file_merger.write_all(settings);
     } else if settings.check {
         if files.len() > 1 {

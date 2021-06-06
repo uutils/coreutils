@@ -9,7 +9,6 @@
 
 use std::{
     cmp::Ordering,
-    ffi::OsStr,
     io::{Read, Write},
     iter,
     rc::Rc,
@@ -21,15 +20,18 @@ use compare::Compare;
 
 use crate::{
     chunks::{self, Chunk},
-    compare_by, open, GlobalSettings,
+    compare_by, GlobalSettings,
 };
 
 // Merge already sorted files.
-pub fn merge<'a>(files: &[impl AsRef<OsStr>], settings: &'a GlobalSettings) -> FileMerger<'a> {
+pub fn merge<F: ExactSizeIterator<Item = Box<dyn Read + Send>>>(
+    files: F,
+    settings: &GlobalSettings,
+) -> FileMerger {
     let (request_sender, request_receiver) = channel();
     let mut reader_files = Vec::with_capacity(files.len());
     let mut loaded_receivers = Vec::with_capacity(files.len());
-    for (file_number, file) in files.iter().map(open).enumerate() {
+    for (file_number, file) in files.enumerate() {
         let (sender, receiver) = sync_channel(2);
         loaded_receivers.push(receiver);
         reader_files.push(ReaderFile {

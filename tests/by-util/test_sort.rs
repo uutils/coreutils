@@ -809,3 +809,34 @@ fn sort_empty_chunk() {
         .succeeds()
         .stdout_is("a\na\n");
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_compress() {
+    new_ucmd!()
+        .args(&[
+            "ext_sort.txt",
+            "-n",
+            "--compress-program",
+            "gzip",
+            "-S",
+            "10",
+        ])
+        .succeeds()
+        .stdout_only_fixture("ext_sort.expected");
+}
+
+#[test]
+fn test_compress_fail() {
+    new_ucmd!()
+        .args(&[
+            "ext_sort.txt",
+            "-n",
+            "--compress-program",
+            "nonexistent-program",
+            "-S",
+            "10",
+        ])
+        .fails()
+        .stderr_only("sort: couldn't execute compress program: errno 2");
+}
