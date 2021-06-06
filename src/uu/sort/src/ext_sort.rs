@@ -262,7 +262,10 @@ fn write_lines<'a, T: Write>(lines: &[Line<'a>], writer: &mut T, separator: u8) 
 }
 
 fn assert_child_success(mut child: Child, program: &str) {
-    if !matches!(child.wait().map(|e| e.code()), Ok(Some(0)) | Ok(None)) {
+    if !matches!(
+        child.wait().map(|e| e.code()),
+        Ok(Some(0)) | Ok(None) | Err(_)
+    ) {
         crash!(2, "'{}' terminated abnormally", program)
     }
 }
