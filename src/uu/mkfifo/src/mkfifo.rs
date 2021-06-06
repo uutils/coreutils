@@ -59,7 +59,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     let mode = match matches.value_of(options::MODE) {
-        Some(m) => match usize::from_str_radix(&m, 8) {
+        Some(m) => match usize::from_str_radix(m, 8) {
             Ok(m) => m,
             Err(e) => {
                 show_error!("invalid mode: {}", e);
