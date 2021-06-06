@@ -379,7 +379,7 @@ fn directory(paths: Vec<String>, b: Behavior) -> i32 {
                 }
             }
 
-            if mode::chmod(&path, b.mode()).is_err() {
+            if mode::chmod(path, b.mode()).is_err() {
                 all_successful = false;
                 continue;
             }
@@ -422,7 +422,7 @@ fn standard(paths: Vec<String>, b: Behavior) -> i32 {
                     return 1;
                 }
 
-                if mode::chmod(&parent, b.mode()).is_err() {
+                if mode::chmod(parent, b.mode()).is_err() {
                     show_error!("failed to chmod {}", parent.display());
                     return 1;
                 }
@@ -501,7 +501,7 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> i3
 /// _target_ must be a non-directory
 ///
 fn copy_file_to_file(file: &Path, target: &Path, b: &Behavior) -> i32 {
-    if copy(file, &target, b).is_err() {
+    if copy(file, target, b).is_err() {
         1
     } else {
         0
@@ -563,7 +563,7 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> Result<(), ()> {
         }
     }
 
-    if mode::chmod(&to, b.mode()).is_err() {
+    if mode::chmod(to, b.mode()).is_err() {
         return Err(());
     }
 
