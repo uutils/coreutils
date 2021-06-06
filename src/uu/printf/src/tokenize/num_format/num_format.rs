@@ -235,7 +235,7 @@ pub fn num_format(field: &FormatField, in_str_opt: Option<&String>) -> Option<St
                     let as_str = format!("{}", provided_num);
                     let initial_prefix = get_initial_prefix(
                         &as_str,
-                        &field.field_type
+                        field.field_type
                     );
                     tmp=formatter.get_primitive(field, &initial_prefix, &as_str)
                         .expect("err during default provided num");

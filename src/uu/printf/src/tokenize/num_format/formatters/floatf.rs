@@ -21,7 +21,7 @@ impl Formatter for Floatf {
     ) -> Option<FormatPrimitive> {
         let second_field = field.second_field.unwrap_or(6) + 1;
         let analysis = FloatAnalysis::analyze(
-            &str_in,
+            str_in,
             initial_prefix,
             None,
             Some(second_field as usize),
