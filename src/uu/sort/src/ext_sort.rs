@@ -30,7 +30,7 @@ use crate::{
     compare_by, merge, output_sorted_lines, sort_by, GlobalSettings,
 };
 
-const MIN_BUFFER_SIZE: usize = 8_000;
+const START_BUFFER_SIZE: usize = 8_000;
 
 /// Sort files by using auxiliary files for storing intermediate chunks (if needed), and output the result.
 pub fn ext_sort(files: &mut impl Iterator<Item = Box<dyn Read + Send>>, settings: &GlobalSettings) {
@@ -132,7 +132,14 @@ fn reader_writer(
     for _ in 0..2 {
         chunks::read(
             &mut sender_option,
-            vec![0; MIN_BUFFER_SIZE],
+            vec![
+                0;
+                if START_BUFFER_SIZE < buffer_size {
+                    START_BUFFER_SIZE
+                } else {
+                    buffer_size
+                }
+            ],
             Some(buffer_size),
             &mut carry_over,
             &mut file,
