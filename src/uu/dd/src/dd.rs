@@ -36,7 +36,7 @@ const SYNTAX: &str = "dd [OPERAND]...\ndd OPTION";
 const SUMMARY: &str = "convert, and optionally copy, a file";
 const LONG_HELP: &str = "";
 
-const DEFAULT_INIT_BYTE: u8 = 0xDD;
+const BUF_INIT_BYTE: u8 = 0xDD;
 
 const RTN_SUCCESS: i32 = 0;
 const RTN_FAILURE: i32 = 1;
@@ -175,7 +175,7 @@ impl Input<io::Stdin>
 
         if let Some(amt) = skip
         {
-            let mut buf = vec![DEFAULT_INIT_BYTE; amt];
+            let mut buf = vec![BUF_INIT_BYTE; amt];
 
             i.force_fill(&mut buf, amt)?;
         }
@@ -250,16 +250,16 @@ impl<R: Read> Input<R>
 {
     /// Fills a given obs-sized buffer.
     /// Reads in increments of 'self.ibs'.
-    fn fill_consecutive(&mut self, buf: &mut [u8]) -> Result<usize, Box<dyn Error>>
+    /// The start of each ibs-sized read follows the previous one.
+    fn fill_consecutive(&mut self, buf: &mut Vec<u8>) -> Result<usize, Box<dyn Error>>
     {
         let mut base_idx = 0;
 
         while base_idx < buf.len()
         {
-            let low_idx = base_idx;
-            let up_idx = cmp::min(low_idx+self.ibs, buf.len()-1);
+            let next_blk = cmp::min(base_idx+self.ibs, buf.len());
 
-            let rlen = self.read(&mut buf[low_idx..=up_idx])?;
+            let rlen = self.read(&mut buf[base_idx..next_blk])?;
             if rlen > 0
             {
                 base_idx += rlen;
@@ -270,29 +270,41 @@ impl<R: Read> Input<R>
             }
         }
 
+        buf.truncate(base_idx);
         Ok(base_idx)
    }
 
     /// Fills a given obs-sized buffer.
     /// Reads in increments of 'self.ibs'.
-    fn fill_blocks(&mut self, buf: &mut [u8]) -> Result<usize, Box<dyn Error>>
+    /// The start of each ibs-sized read is aligned to multiples of ibs; remaing space is filled with the 'pad' byte.
+    fn fill_blocks(&mut self, buf: &mut Vec<u8>, obs: usize, pad: u8) -> Result<usize, Box<dyn Error>>
     {
-        let ibs = self.ibs;
-        let obs = buf.len();
-        let mut bytes_read = 0;
+        let mut base_idx = 0;
+        let mut rbytes = 0;
 
-        for n in 0..cmp::max(obs/ibs, 1) {
-            // fill an ibs-len slice from src
-            let rlen = self.read(&mut buf[n*ibs..(n+1)*ibs])?;
+        while base_idx < buf.len()
+        {
+            let next_blk = cmp::min(base_idx+self.ibs, buf.len());
+            let plen = next_blk - base_idx;
 
-            if rlen != 0 {
-                bytes_read += rlen;
-            } else {
+            let rlen = self.read(&mut buf[base_idx..next_blk])?;
+
+            if rlen < plen
+            {
+                let padding = vec![pad; plen-rlen];
+                buf.splice(base_idx+rlen..next_blk, padding.into_iter());
+            }
+            if rlen == 0
+            {
                 break;
             }
+
+            rbytes += rlen;
+            base_idx += self.ibs;
         }
 
-        Ok(bytes_read)
+        buf.truncate(base_idx);
+        Ok(rbytes)
    }
 
     /// Force-fills a buffer, ignoring zero-length reads which would otherwise be
@@ -451,6 +463,40 @@ impl Write for Output<io::Stdout>
     {
         self.dst.flush()
     }
+}
+
+impl Output<io::Stdout>
+{
+    fn write_blocks(&mut self, buf: Vec<u8>) -> io::Result<usize>
+    {
+        let mut base_idx = 0;
+
+        while base_idx < buf.len()
+        {
+            let next_blk = cmp::min(base_idx+self.obs, buf.len());
+            let wlen = self.write(&buf[base_idx..next_blk])?;
+            base_idx += wlen;
+        }
+
+        Ok(base_idx)
+   }
+}
+
+impl Output<File>
+{
+    fn write_blocks(&mut self, buf: Vec<u8>) -> io::Result<usize>
+    {
+        let mut base_idx = 0;
+
+        while base_idx < buf.len()
+        {
+            let next_blk = cmp::min(base_idx+self.obs, buf.len());
+            let wlen = self.write(&buf[base_idx..next_blk])?;
+            base_idx += wlen;
+        }
+
+        Ok(base_idx)
+   }
 }
 
 /// Splits the content of buf into cbs-length blocks
@@ -655,7 +701,7 @@ fn conv_block_unblock_helper<R: Read, W: Write>(mut buf: Vec<u8>, i: &mut Input<
     }
 }
 
-fn read_write_helper<R: Read, W: Write>(i: &mut Input<R>, o: &mut Output<W>) -> Result<(usize, Vec<u8>), Box<dyn Error>>
+fn read_helper<R: Read, W: Write>(i: &mut Input<R>, o: &mut Output<W>, bsize: usize) -> Result<(usize, Vec<u8>), Box<dyn Error>>
 {
     // Local Predicate Fns -----------------------------------------------
     #[inline]
@@ -697,7 +743,7 @@ fn read_write_helper<R: Read, W: Write>(i: &mut Input<R>, o: &mut Output<W>) -> 
             buf[base-1] = tmp;
         }
     }
-    // ------------------------------------------------------------------
+   // ------------------------------------------------------------------
     if is_fast_read(&i, &o)
     {
         // TODO: fast reads are copies performed
@@ -708,17 +754,13 @@ fn read_write_helper<R: Read, W: Write>(i: &mut Input<R>, o: &mut Output<W>) -> 
     else
     {
         // Read
-        let mut buf = vec![DEFAULT_INIT_BYTE; o.obs];
-        let rlen = if let Some(ch) = i.cflags.sync
-        {
-            i.fill_blocks(&mut buf)?
-        }
-        else
-        {
-            i.fill_consecutive(&mut buf)?
+        let mut buf = vec![BUF_INIT_BYTE; bsize];
+        let rlen = match i.cflags.sync {
+            Some(ch) =>
+                i.fill_blocks(&mut buf, o.obs, ch)?,
+            _ =>
+                i.fill_consecutive(&mut buf)?,
         };
-        buf.truncate(rlen);
-
         if rlen == 0
         {
             return Ok((0,buf));
@@ -729,7 +771,6 @@ fn read_write_helper<R: Read, W: Write>(i: &mut Input<R>, o: &mut Output<W>) -> 
         {
             perform_swab(&mut buf);
         }
-
         if is_conv(&i) || is_block(&i) || is_unblock(&i)
         {
             let buf = conv_block_unblock_helper(buf, i, o)?;
@@ -741,6 +782,21 @@ fn read_write_helper<R: Read, W: Write>(i: &mut Input<R>, o: &mut Output<W>) -> 
         }
     }
 }
+
+/// Write obs-size blocks
+// fn write_helper<W: Write>(o: &mut Output<W>, buf: Vec<u8>) -> Result<usize, Box<dyn Error>>
+// {
+//     let mut base_idx = 0;
+//
+//     while base_idx < buf.len()
+//     {
+//         let width = cmp::min(base_idx+o.obs, buf.len());
+//         let wlen = o.write(&mut buf[base_idx..width])?;
+//         base_idx += wlen;
+//     }
+//
+//     Ok(base_idx)
+// }
 
 /// Generate a progress updater that tracks progress, receives updates, and TODO: responds to signals.
 fn gen_prog_updater(rx: mpsc::Receiver<usize>) -> impl Fn() -> ()
@@ -766,13 +822,22 @@ fn gen_prog_updater(rx: mpsc::Receiver<usize>) -> impl Fn() -> ()
     }
 }
 
-/// Perform the copy/convert opertaions. Non file backed output version
+/// Find the greatest common factor for the pair of integers.
+fn gcf(u: usize, v: usize) -> usize
+{
+    // TODO: 1 is not the gcf of all pairs of integers...
+    1
+}
+
+/// Perform the copy/convert opertaions. Stdout version
 // Note: Some of dd's functionality depends on whether the output is actually a file. This breaks the Output<Write> abstraction,
 // and should be fixed in the future.
 fn dd_stdout<R: Read>(mut i: Input<R>, mut o: Output<io::Stdout>) -> Result<(usize, usize), Box<dyn Error>>
 {
     let mut bytes_in  = 0;
     let mut bytes_out = 0;
+    let gcf = gcf(i.ibs, o.obs);
+    let buf_size = (i.ibs/gcf)*(o.obs/gcf);
 
     let prog_tx = if i.xfer_stats == StatusLevel::Progress
     {
@@ -787,13 +852,13 @@ fn dd_stdout<R: Read>(mut i: Input<R>, mut o: Output<io::Stdout>) -> Result<(usi
 
     loop
     {
-        match read_write_helper(&mut i, &mut o)?
+        match read_helper(&mut i, &mut o, buf_size)?
         {
             (0, _) =>
                 break,
             (rlen, buf) =>
             {
-                let wlen = o.write(&buf)?;
+                let wlen = o.write_blocks(buf)?;
 
                 bytes_in += rlen;
                 bytes_out += wlen;
@@ -826,6 +891,8 @@ fn dd_fileout<R: Read>(mut i: Input<R>, mut o: Output<File>) -> Result<(usize, u
 {
     let mut bytes_in  = 0;
     let mut bytes_out = 0;
+    let gcf = gcf(i.ibs, o.obs);
+    let buf_size = (i.ibs/gcf)*(o.obs/gcf);
 
     let prog_tx = if i.xfer_stats == StatusLevel::Progress
     {
@@ -840,7 +907,7 @@ fn dd_fileout<R: Read>(mut i: Input<R>, mut o: Output<File>) -> Result<(usize, u
 
     loop
     {
-        match read_write_helper(&mut i, &mut o)?
+        match read_helper(&mut i, &mut o, buf_size)?
         {
             (0, _) =>
                 break,
