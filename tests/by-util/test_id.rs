@@ -104,19 +104,23 @@ fn test_id_group() {
 }
 
 #[test]
+#[cfg(any(target_vendor = "apple", target_os = "linux"))]
 fn test_id_groups() {
     let scene = TestScenario::new(util_name!());
-
-    let result = scene.ucmd().arg("-G").succeeds();
-    let groups = result.stdout_str().trim().split_whitespace();
-    for s in groups {
-        assert!(s.parse::<f64>().is_ok());
-    }
-
-    let result = scene.ucmd().arg("--groups").succeeds();
-    let groups = result.stdout_str().trim().split_whitespace();
-    for s in groups {
-        assert!(s.parse::<f64>().is_ok());
+    for g_flag in &["-G", "--groups"] {
+        scene
+            .ucmd()
+            .arg(g_flag)
+            .succeeds()
+            .stdout_is(expected_result(&[g_flag], false));
+        for &r_flag in &["-r", "--real"] {
+            let args = [g_flag, r_flag];
+            scene
+                .ucmd()
+                .args(&args)
+                .succeeds()
+                .stdout_is(expected_result(&args, false));
+        }
     }
 }
 
@@ -166,4 +170,33 @@ fn test_id_password_style() {
     let result = new_ucmd!().arg("-P").succeeds();
 
     assert!(result.stdout_str().starts_with(&username));
+}
+
+#[cfg(any(target_vendor = "apple", target_os = "linux"))]
+fn expected_result(args: &[&str], exp_fail: bool) -> String {
+    #[cfg(target_os = "linux")]
+    let util_name = util_name!();
+    #[cfg(target_vendor = "apple")]
+    let util_name = format!("g{}", util_name!());
+
+    let result = if !exp_fail {
+        TestScenario::new(&util_name)
+            .cmd_keepenv(util_name)
+            .env("LANGUAGE", "C")
+            .args(args)
+            .succeeds()
+            .stdout_move_str()
+    } else {
+        TestScenario::new(&util_name)
+            .cmd_keepenv(util_name)
+            .env("LANGUAGE", "C")
+            .args(args)
+            .fails()
+            .stderr_move_str()
+    };
+    return if cfg!(target_os = "macos") && result.starts_with("gid") {
+        result[1..].to_string()
+    } else {
+        result
+    };
 }
