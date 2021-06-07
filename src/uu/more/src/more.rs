@@ -209,33 +209,43 @@ struct LineStateMachine {
     upper_mark: usize,
     lower_mark: usize,
     line_count: usize,
-    usable_rows: usize,
+    usable_row: usize,
+    terminal_row: usize,
+    terminal_col: usize,
 }
 
 impl LineStateMachine {
-    pub fn new(terminal_rows: usize, line_count: usize) -> Self {
+    pub fn new(terminal_col: usize, terminal_row: usize, line_count: usize) -> Self {
         LineStateMachine {
             upper_mark: 0,
-            lower_mark: terminal_rows.saturating_sub(1).min(line_count),
-            usable_rows: terminal_rows.saturating_sub(1),
+            lower_mark: terminal_row.saturating_sub(1).min(line_count),
             line_count,
+            usable_row: terminal_row.saturating_sub(1),
+            terminal_row,
+            terminal_col,
         }
     }
 
     pub fn advance_mark(&mut self) {
         self.upper_mark = self
             .upper_mark
-            .saturating_add(self.usable_rows)
-            .min(self.line_count.saturating_sub(self.usable_rows));
-        self.lower_mark = self
-            .upper_mark
-            .saturating_add(self.usable_rows)
-            .min(self.line_count);
+            .saturating_add(self.usable_row)
+            .min(self.line_count.saturating_sub(self.usable_row));
+        self.lower_mark = self.upper_mark.saturating_add(self.usable_row);
     }
 
     pub fn retreat_mark(&mut self) {
-        self.upper_mark = self.upper_mark.saturating_sub(self.usable_rows).max(0);
-        self.lower_mark = self.upper_mark.saturating_add(self.usable_rows);
+        self.upper_mark = self.upper_mark.saturating_sub(self.usable_row).max(0);
+        self.lower_mark = self.upper_mark.saturating_add(self.usable_row);
+    }
+
+    pub fn set_col(&mut self, new_col: usize) {
+        self.terminal_col = new_col;
+    }
+
+    pub fn set_row(&mut self, new_row: usize) {
+        self.terminal_row = new_row;
+        self.usable_row = new_row.saturating_sub(1);
     }
 
     pub fn line_marks(&self) -> (usize, usize, usize) {
@@ -248,17 +258,17 @@ impl LineStateMachine {
 }
 
 fn more(buff: &str, mut stdout: &mut Stdout) {
-    let (terminal_cols, terminal_rows) = {
+    let (terminal_col, terminal_row) = {
         let (col, row) = terminal::size().unwrap();
         (usize::from(col), usize::from(row))
     };
-    let lines = break_buff(buff, terminal_cols);
+    let lines = break_buff(buff, terminal_col);
     let line_count = lines.len();
 
-    let mut line_mark = LineStateMachine::new(terminal_rows, line_count);
+    let mut fsm = LineStateMachine::new(terminal_col, terminal_row, line_count);
     let mut last_command = None;
     loop {
-        let (upper_mark, lower_mark, lines_left) = line_mark.line_marks();
+        let (upper_mark, lower_mark, lines_left) = fsm.line_marks();
         // The conversion below is safe as long as `line_count` is non-zero since we should have exited if it is.
         // The castign below is also safe as long as `lower_mark` << `line_count`.
         let percent_complete = ((lower_mark as f64 / line_count as f64) * 100.0) as u16;
@@ -285,15 +295,19 @@ fn more(buff: &str, mut stdout: &mut Stdout) {
                     code: KeyCode::Char(' '),
                     modifiers: KeyModifiers::NONE,
                 }) => {
-                    line_mark.advance_mark();
+                    fsm.advance_mark();
                 }
                 Event::Key(KeyEvent {
                     code: KeyCode::Up,
                     modifiers: KeyModifiers::NONE,
                 }) => {
-                    line_mark.retreat_mark();
+                    fsm.retreat_mark();
                 }
                 Event::Key(v) => last_command = Some(v.code),
+                Event::Resize(new_col, new_row) => {
+                    fsm.set_col(new_col.into());
+                    fsm.set_row(new_row.into());
+                }
                 _ => (),
             }
         }
@@ -302,7 +316,7 @@ fn more(buff: &str, mut stdout: &mut Stdout) {
             format!(
                 "{}% terminal-rows:{} line-count:{} lines-left:{} upper-mark:{}=>{:?} lower-mark:{}=>{:?} Unknown command:{:?}",
                 percent_complete,
-                terminal_rows,
+                terminal_row,
                 line_count,
                 lines_left,
                 upper_mark,
@@ -364,6 +378,7 @@ fn break_line(line: &str, cols: usize) -> Vec<String> {
 
 // Make a prompt similar to original more
 fn draw_prompt(stdout: &mut Stdout, status: &str) {
+    queue!(stdout, terminal::Clear(terminal::ClearType::CurrentLine)).unwrap();
     write!(
         stdout,
         "\r{}{}{}",
