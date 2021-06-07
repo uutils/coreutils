@@ -49,7 +49,7 @@ pub mod options {
     pub const FILES: &str = "files";
 }
 
-const MULTI_FILE_TOP_PROMPT: &str = "::::::::::::::\n{}\n::::::::::::::\n";
+const MULTI_FILE_TOP_PROMPT: &str = "\n\r::::::::::::::\n\r{}\n\r::::::::::::::\n\r";
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let matches = App::new(executable!())
