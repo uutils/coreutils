@@ -47,8 +47,6 @@ pub mod options {
     pub const FILES: &str = "files";
 }
 
-const MULTI_FILE_TOP_PROMPT: &str = "::::::::::::::\n{}\n::::::::::::::\n";
-
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let matches = App::new(executable!())
         .about("A file perusal filter for CRT viewing.")
@@ -142,11 +140,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let mut buff = String::new();
     if let Some(files) = matches.values_of(options::FILES) {
         let mut stdout = setup_term();
-        let length = files.len();
 
         let mut files_iter = files.peekable();
-        while let (Some(file), next_file) = (files_iter.next(), files_iter.peek()) {
-            let file = Path::new(file);
+        while let (Some(filename), next_filename) = (files_iter.next(), files_iter.peek()) {
+            let file = Path::new(filename);
             if file.is_dir() {
                 terminal::disable_raw_mode().unwrap();
                 show_usage_error!("'{}' is a directory.", file.display());
@@ -157,19 +154,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 show_error!("cannot open {}: No such file or directory", file.display());
                 return 1;
             }
-            if length > 1 {
-                buff.push_str(&MULTI_FILE_TOP_PROMPT.replace("{}", file.to_str().unwrap()));
-            }
             let mut reader = BufReader::new(File::open(file).unwrap());
             reader.read_to_string(&mut buff).unwrap();
-            more(&buff, &mut stdout, next_file.copied());
+            more(&buff, &mut stdout, Some(filename), next_filename.copied());
             buff.clear();
         }
         reset_term(&mut stdout);
     } else if atty::isnt(atty::Stream::Stdin) {
         stdin().read_to_string(&mut buff).unwrap();
         let mut stdout = setup_term();
-        more(&buff, &mut stdout, None);
+        more(&buff, &mut stdout, None, None);
         reset_term(&mut stdout);
     } else {
         show_usage_error!("bad usage");
@@ -204,7 +198,12 @@ fn reset_term(stdout: &mut std::io::Stdout) {
 #[inline(always)]
 fn reset_term(_: &mut usize) {}
 
-fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>) {
+fn more(
+    buff: &str,
+    mut stdout: &mut Stdout,
+    current_filename: Option<&str>,
+    next_filename: Option<&str>,
+) {
     let (cols, rows) = terminal::size().unwrap();
     let lines = break_buff(buff, usize::from(cols));
     let line_count: u16 = lines.len().try_into().unwrap();
@@ -218,10 +217,11 @@ fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>) {
         &mut stdout,
         lines.clone(),
         line_count,
-        next_file,
+        current_filename,
+        next_filename,
     );
 
-    let is_last = next_file.is_none();
+    let is_last = next_filename.is_none();
 
     // Specifies whether we have reached the end of the file and should
     // return on the next key press. However, we immediately return when
@@ -274,7 +274,8 @@ fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>) {
                 &mut stdout,
                 lines.clone(),
                 line_count,
-                next_file,
+                current_filename,
+                next_filename,
             );
 
             if lines_left == 0 {
@@ -293,6 +294,7 @@ fn draw(
     mut stdout: &mut std::io::Stdout,
     lines: Vec<String>,
     lc: u16,
+    current_file: Option<&str>,
     next_file: Option<&str>,
 ) {
     execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine)).unwrap();
@@ -308,7 +310,7 @@ fn draw(
             .write_all(format!("\r{}\n", line).as_bytes())
             .unwrap();
     }
-    make_prompt_and_flush(&mut stdout, lower_mark, lc, next_file);
+    make_prompt_and_flush(&mut stdout, lower_mark, lc, current_file, next_file);
     *upper_mark = up_mark;
 }
 
@@ -364,13 +366,20 @@ fn calc_range(mut upper_mark: u16, rows: u16, line_count: u16) -> (u16, u16) {
 }
 
 // Make a prompt similar to original more
-fn make_prompt_and_flush(stdout: &mut Stdout, lower_mark: u16, lc: u16, next_file: Option<&str>) {
+fn make_prompt_and_flush(
+    stdout: &mut Stdout,
+    lower_mark: u16,
+    lc: u16,
+    current_filename: Option<&str>,
+    next_filename: Option<&str>,
+) {
     let status = if lower_mark == lc {
-        format!("Next file: {}", next_file.unwrap_or_default())
+        format!("Next file: {}", next_filename.unwrap_or_default())
     } else {
         format!(
-            "{}%",
-            (lower_mark as f64 / lc as f64 * 100.0).round() as u16
+            "{}% Current file: {}",
+            (lower_mark as f64 / lc as f64 * 100.0).round() as u16,
+            current_filename.unwrap_or_default()
         )
     };
     write!(
