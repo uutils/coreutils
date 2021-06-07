@@ -11,7 +11,6 @@
 extern crate uucore;
 
 use std::{
-    convert::TryInto,
     fs::File,
     io::{stdin, stdout, BufReader, Read, Stdout, Write},
     path::Path,
@@ -23,16 +22,15 @@ extern crate nix;
 
 use clap::{crate_version, App, Arg};
 use crossterm::{
+    cursor,
     event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
-    execute, queue,
+    queue,
     style::Attribute,
     terminal,
 };
 
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
-
-const BELL: &str = "\x07";
 
 pub mod options {
     pub const SILENT: &str = "silent";
@@ -142,13 +140,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .get_matches_from(args);
 
     let mut buff = String::new();
-    let silent = matches.is_present(options::SILENT);
     if let Some(files) = matches.values_of(options::FILES) {
         let mut stdout = setup_term();
         let length = files.len();
 
         let mut files_iter = files.peekable();
-        while let (Some(file), next_file) = (files_iter.next(), files_iter.peek()) {
+        while let Some(file) = files_iter.next() {
             let file = Path::new(file);
             if file.is_dir() {
                 terminal::disable_raw_mode().unwrap();
@@ -165,14 +162,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             }
             let mut reader = BufReader::new(File::open(file).unwrap());
             reader.read_to_string(&mut buff).unwrap();
-            more(&buff, &mut stdout, next_file.copied(), silent);
+            more(&buff, &mut stdout);
             buff.clear();
         }
         reset_term(&mut stdout);
     } else if atty::isnt(atty::Stream::Stdin) {
         stdin().read_to_string(&mut buff).unwrap();
         let mut stdout = setup_term();
-        more(&buff, &mut stdout, None, silent);
+        more(&buff, &mut stdout);
         reset_term(&mut stdout);
     } else {
         show_usage_error!("bad usage");
@@ -182,8 +179,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
 #[cfg(not(target_os = "fuchsia"))]
 fn setup_term() -> std::io::Stdout {
-    let stdout = stdout();
+    let mut stdout = stdout();
     terminal::enable_raw_mode().unwrap();
+    queue!(stdout, terminal::Clear(terminal::ClearType::CurrentLine)).unwrap();
     stdout
 }
 
@@ -207,43 +205,66 @@ fn reset_term(stdout: &mut std::io::Stdout) {
 #[inline(always)]
 fn reset_term(_: &mut usize) {}
 
-fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>, silent: bool) {
-    let (cols, rows) = terminal::size().unwrap();
-    let lines = break_buff(buff, usize::from(cols));
-    let line_count: u16 = lines.len().try_into().unwrap();
+struct LineStateMachine {
+    upper_mark: usize,
+    lower_mark: usize,
+    line_count: usize,
+    usable_rows: usize,
+}
 
-    let mut upper_mark = 0;
-    let mut lines_left = line_count.saturating_sub(upper_mark + rows);
-    let mut wrong_key = false;
-
-    draw(
-        &mut upper_mark,
-        rows,
-        &mut stdout,
-        lines.clone(),
-        line_count,
-        next_file,
-        silent,
-        wrong_key,
-    );
-
-    let is_last = next_file.is_none();
-
-    // Specifies whether we have reached the end of the file and should
-    // return on the next key press. However, we immediately return when
-    // this is the last file.
-    let mut to_be_done = false;
-    if lines_left == 0 && is_last {
-        if is_last {
-            return;
-        } else {
-            to_be_done = true;
+impl LineStateMachine {
+    pub fn new(terminal_rows: usize, line_count: usize) -> Self {
+        LineStateMachine {
+            upper_mark: 0,
+            lower_mark: terminal_rows.saturating_sub(1).min(line_count),
+            usable_rows: terminal_rows.saturating_sub(1),
+            line_count,
         }
     }
 
+    pub fn advance_mark(&mut self) {
+        self.upper_mark = self
+            .upper_mark
+            .saturating_add(self.usable_rows)
+            .min(self.line_count.saturating_sub(self.usable_rows));
+        self.lower_mark = self
+            .upper_mark
+            .saturating_add(self.usable_rows)
+            .min(self.line_count);
+    }
+
+    pub fn retreat_mark(&mut self) {
+        self.upper_mark = self.upper_mark.saturating_sub(self.usable_rows).min(0);
+        self.lower_mark = self.upper_mark.saturating_add(self.usable_rows);
+    }
+
+    pub fn line_marks(&self) -> (usize, usize, usize) {
+        (
+            self.upper_mark,
+            self.lower_mark,
+            self.line_count.saturating_sub(self.lower_mark),
+        )
+    }
+}
+
+fn more(buff: &str, mut stdout: &mut Stdout) {
+    let (terminal_cols, terminal_rows) = {
+        let (col, row) = terminal::size().unwrap();
+        (usize::from(col), usize::from(row))
+    };
+    let lines = break_buff(buff, terminal_cols);
+    let line_count = lines.len();
+
+    let mut line_mark = LineStateMachine::new(terminal_rows, line_count);
+    let mut last_command = None;
     loop {
+        let (upper_mark, lower_mark, lines_left) = line_mark.line_marks();
+        // The conversion below is safe as long as `line_count` is non-zero since we should have exited if it is.
+        // The castign below is also safe as long as `lower_mark` << `line_count`.
+        let percent_complete = ((lower_mark as f64 / line_count as f64) * 100.0) as u16;
+        queue!(stdout, cursor::SavePosition).unwrap();
+        draw_content(&mut stdout, &lines[upper_mark..lower_mark]);
         if event::poll(Duration::from_millis(10)).unwrap() {
-            wrong_key = false;
             match event::read().unwrap() {
                 Event::Key(KeyEvent {
                     code: KeyCode::Char('q'),
@@ -264,72 +285,49 @@ fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>, silent: bo
                     code: KeyCode::Char(' '),
                     modifiers: KeyModifiers::NONE,
                 }) => {
-                    upper_mark = upper_mark.saturating_add(rows.saturating_sub(1));
+                    line_mark.advance_mark();
                 }
                 Event::Key(KeyEvent {
                     code: KeyCode::Up,
                     modifiers: KeyModifiers::NONE,
                 }) => {
-                    upper_mark = upper_mark.saturating_sub(rows.saturating_sub(1));
+                    line_mark.retreat_mark();
                 }
-                _ => {
-                    wrong_key = true;
-                }
-            }
-            lines_left = line_count.saturating_sub(upper_mark + rows);
-            draw(
-                &mut upper_mark,
-                rows,
-                &mut stdout,
-                lines.clone(),
-                line_count,
-                next_file,
-                silent,
-                wrong_key,
-            );
-
-            if lines_left == 0 {
-                if to_be_done || is_last {
-                    return;
-                }
-                to_be_done = true;
+                Event::Key(v) => last_command = Some(v.code),
+                _ => (),
             }
         }
+        draw_prompt(
+            &mut stdout,
+            format!(
+                "{}% terminal-rows:{} line-count:{} lines-left:{} upper-mark:{}=>{:?} lower-mark:{}=>{:?} Unknown command:{:?}",
+                percent_complete,
+                terminal_rows,
+                line_count,
+                lines_left,
+                upper_mark,
+                lines.get(upper_mark),
+                lower_mark,
+                lines.get(lower_mark),
+                last_command
+            )
+            .as_str(),
+        );
+        queue!(stdout, cursor::RestorePosition).unwrap();
+        stdout.flush().unwrap();
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn draw(
-    upper_mark: &mut u16,
-    rows: u16,
-    mut stdout: &mut std::io::Stdout,
-    lines: Vec<String>,
-    lc: u16,
-    next_file: Option<&str>,
-    silent: bool,
-    wrong_key: bool,
-) {
-    execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine)).unwrap();
-    let (up_mark, lower_mark) = calc_range(*upper_mark, rows, lc);
-    // Reduce the row by 1 for the prompt
-    let displayed_lines = lines
-        .iter()
-        .skip(up_mark.into())
-        .take(usize::from(rows.saturating_sub(1)));
-
-    for line in displayed_lines {
-        stdout
-            .write_all(format!("\r{}\n", line).as_bytes())
-            .unwrap();
+fn draw_content(stdout: &mut std::io::Stdout, lines: &[String]) {
+    for line in lines {
+        queue!(stdout, terminal::Clear(terminal::ClearType::CurrentLine)).unwrap();
+        write!(stdout, "\r{}\n", line).unwrap();
     }
-    make_prompt_and_flush(&mut stdout, lower_mark, lc, next_file, silent, wrong_key);
-    *upper_mark = up_mark;
 }
 
 // Break the lines on the cols of the terminal
 fn break_buff(buff: &str, cols: usize) -> Vec<String> {
     let mut lines = Vec::new();
-
     for l in buff.lines() {
         lines.append(&mut break_line(l, cols));
     }
@@ -364,69 +362,23 @@ fn break_line(line: &str, cols: usize) -> Vec<String> {
     lines
 }
 
-// Calculate upper_mark based on certain parameters
-fn calc_range(mut upper_mark: u16, rows: u16, line_count: u16) -> (u16, u16) {
-    let mut lower_mark = upper_mark.saturating_add(rows);
-
-    if lower_mark >= line_count {
-        upper_mark = line_count.saturating_sub(rows).saturating_add(1);
-        lower_mark = line_count;
-    } else {
-        lower_mark = lower_mark.saturating_sub(1)
-    }
-    (upper_mark, lower_mark)
-}
-
 // Make a prompt similar to original more
-fn make_prompt_and_flush(
-    stdout: &mut Stdout,
-    lower_mark: u16,
-    lc: u16,
-    next_file: Option<&str>,
-    silent: bool,
-    wrong_key: bool,
-) {
-    let status_inner = if lower_mark == lc {
-        format!("Next file: {}", next_file.unwrap_or_default())
-    } else {
-        format!(
-            "{}%",
-            (lower_mark as f64 / lc as f64 * 100.0).round() as u16
-        )
-    };
-
-    let status = format!("--More--({})", status_inner);
-
-    let banner = match (silent, wrong_key) {
-        (true, true) => "[Press 'h' for instructions. (unimplemented)]".to_string(),
-        (true, false) => format!("{}[Press space to continue, 'q' to quit.]", status),
-        (false, true) => format!("{}{}", status, BELL),
-        (false, false) => status,
-    };
-
+fn draw_prompt(stdout: &mut Stdout, status: &str) {
     write!(
         stdout,
         "\r{}{}{}",
         Attribute::Reverse,
-        banner,
-        Attribute::Reset
+        status,
+        Attribute::Reset,
     )
     .unwrap();
-    stdout.flush().unwrap();
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{break_line, calc_range};
+    use super::break_line;
     use unicode_width::UnicodeWidthStr;
 
-    // It is good to test the above functions
-    #[test]
-    fn test_calc_range() {
-        assert_eq!((0, 24), calc_range(0, 25, 100));
-        assert_eq!((50, 74), calc_range(50, 25, 100));
-        assert_eq!((76, 100), calc_range(85, 25, 100));
-    }
     #[test]
     fn test_break_lines_long() {
         let mut test_string = String::with_capacity(100);
