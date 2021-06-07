@@ -234,7 +234,7 @@ impl LineStateMachine {
     }
 
     pub fn retreat_mark(&mut self) {
-        self.upper_mark = self.upper_mark.saturating_sub(self.usable_rows).min(0);
+        self.upper_mark = self.upper_mark.saturating_sub(self.usable_rows).max(0);
         self.lower_mark = self.upper_mark.saturating_add(self.usable_rows);
     }
 
