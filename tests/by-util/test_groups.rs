@@ -1,7 +1,7 @@
 use crate::common::util::*;
 
 #[test]
-#[cfg(any(target_vendor = "apple", target_os = "linux"))]
+#[cfg(unix)]
 fn test_groups() {
     if !is_ci() {
         new_ucmd!().succeeds().stdout_is(expected_result(&[]));
@@ -13,7 +13,7 @@ fn test_groups() {
 }
 
 #[test]
-#[cfg(any(target_vendor = "apple", target_os = "linux"))]
+#[cfg(unix)]
 #[ignore = "fixme: 'groups USERNAME' needs more debugging"]
 fn test_groups_username() {
     let scene = TestScenario::new(util_name!());
@@ -37,9 +37,14 @@ fn test_groups_username() {
         .stdout_is(expected_result(&[&username]));
 }
 
-#[cfg(any(target_vendor = "apple", target_os = "linux"))]
+#[cfg(unix)]
 fn expected_result(args: &[&str]) -> String {
+    // We want to use GNU id. On most linux systems, this is "id", but on
+    // bsd-like systems (e.g. FreeBSD, MacOS), it is commonly "gid".
+    #[cfg(any(target_os = "linux"))]
     let util_name = "id";
+    #[cfg(not(target_os = "linux"))]
+    let util_name = "gid";
 
     TestScenario::new(&util_name)
         .cmd_keepenv(util_name)
