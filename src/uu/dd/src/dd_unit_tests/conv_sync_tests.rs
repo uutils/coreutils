@@ -1,5 +1,19 @@
 use super::*;
 
+struct LazyReader<R: Read>
+{
+    src: R,
+}
+
+impl<R: Read> Read for LazyReader<R>
+{
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize>
+    {
+        let half = buf.len() / 2;
+        self.src.read(&mut buf[..half])
+    }
+}
+
 macro_rules! make_sync_test (
     ( $test_id:ident, $test_name:expr, $src:expr, $sync:expr, $ibs:expr, $obs:expr, $spec:expr ) =>
     {
@@ -95,3 +109,12 @@ make_sync_test!(
     File::open("./test-resources/gnudd-conv-sync-ibs-1031-obs-521-random.spec").unwrap()
 );
 
+make_sync_test!(
+    deadbeef_16_delayed,
+    "deadbeef-16-delayed",
+    LazyReader { src: File::open("./test-resources/deadbeef-16.test").unwrap() },
+    Some(0u8),
+    16,
+    32,
+    File::open("./test-resources/deadbeef-16.spec").unwrap()
+);
