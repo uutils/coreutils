@@ -792,3 +792,64 @@ fn test_nonexistent_file() {
 fn test_blanks() {
     test_helper("blanks", &["-b", "--ignore-blanks"]);
 }
+
+#[test]
+fn sort_multiple() {
+    new_ucmd!()
+        .args(&["no_trailing_newline1.txt", "no_trailing_newline2.txt"])
+        .succeeds()
+        .stdout_is("a\nb\nb\n");
+}
+
+#[test]
+fn sort_empty_chunk() {
+    new_ucmd!()
+        .args(&["-S", "40B"])
+        .pipe_in("a\na\n")
+        .succeeds()
+        .stdout_is("a\na\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_compress() {
+    new_ucmd!()
+        .args(&[
+            "ext_sort.txt",
+            "-n",
+            "--compress-program",
+            "gzip",
+            "-S",
+            "10",
+        ])
+        .succeeds()
+        .stdout_only_fixture("ext_sort.expected");
+}
+
+#[test]
+fn test_compress_fail() {
+    new_ucmd!()
+        .args(&[
+            "ext_sort.txt",
+            "-n",
+            "--compress-program",
+            "nonexistent-program",
+            "-S",
+            "10",
+        ])
+        .fails()
+        .stderr_only("sort: couldn't execute compress program: errno 2");
+}
+
+#[test]
+fn test_merge_batches() {
+    new_ucmd!()
+        .args(&[
+            "ext_sort.txt",
+            "-n",
+            "-S",
+            "150B",
+        ])
+        .succeeds()
+        .stdout_only_fixture("ext_sort.expected");
+}

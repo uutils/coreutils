@@ -148,7 +148,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(options::OPT_REAL_ID)
                 .short("r")
                 .long(options::OPT_REAL_ID)
-                .help("Display the real ID for the -g and -u options instead of the effective ID."),
+                .help("Display the real ID for the -G, -g and -u options instead of the effective ID."),
         )
         .arg(
             Arg::with_name(options::OPT_ZERO)
@@ -234,26 +234,23 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     if gsflag {
-        let delimiter = if zflag { "" } else { " " };
+        let delimiter = if zflag { "\0" } else { " " };
+        let id = possible_pw
+            .map(|p| p.gid())
+            .unwrap_or(if rflag { getgid() } else { getegid() });
         print!(
             "{}{}",
-            if nflag {
-                possible_pw
-                    .map(|p| p.belongs_to())
-                    .unwrap_or_else(|| entries::get_groups().unwrap())
-                    .iter()
-                    .map(|&id| entries::gid2grp(id).unwrap())
-                    .collect::<Vec<_>>()
-                    .join(delimiter)
-            } else {
-                possible_pw
-                    .map(|p| p.belongs_to())
-                    .unwrap_or_else(|| entries::get_groups().unwrap())
-                    .iter()
-                    .map(|&id| id.to_string())
-                    .collect::<Vec<_>>()
-                    .join(delimiter)
-            },
+            possible_pw
+                .map(|p| p.belongs_to())
+                .unwrap_or_else(|| entries::get_groups_gnu(Some(id)).unwrap())
+                .iter()
+                .map(|&id| if nflag {
+                    entries::gid2grp(id).unwrap_or_else(|_| id.to_string())
+                } else {
+                    id.to_string()
+                })
+                .collect::<Vec<_>>()
+                .join(delimiter),
             line_ending
         );
         return 0;
@@ -321,7 +318,7 @@ fn pretty(possible_pw: Option<Passwd>) {
 
         println!(
             "groups\t{}",
-            entries::get_groups()
+            entries::get_groups_gnu(None)
                 .unwrap()
                 .iter()
                 .map(|&gr| entries::gid2grp(gr).unwrap())
@@ -420,5 +417,3 @@ fn id_print(possible_pw: Option<Passwd>, p_euid: bool, p_egid: bool) {
             .join(",")
     );
 }
-
-fn get_groups() ->
