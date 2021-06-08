@@ -18,6 +18,7 @@ mod parseargs;
 mod conversion_tables;
 use conversion_tables::*;
 
+use gcd::Gcd;
 use std::cmp;
 use std::convert::TryInto;
 use std::error::Error;
@@ -783,21 +784,6 @@ fn read_helper<R: Read, W: Write>(i: &mut Input<R>, o: &mut Output<W>, bsize: us
     }
 }
 
-/// Write obs-size blocks
-// fn write_helper<W: Write>(o: &mut Output<W>, buf: Vec<u8>) -> Result<usize, Box<dyn Error>>
-// {
-//     let mut base_idx = 0;
-//
-//     while base_idx < buf.len()
-//     {
-//         let width = cmp::min(base_idx+o.obs, buf.len());
-//         let wlen = o.write(&mut buf[base_idx..width])?;
-//         base_idx += wlen;
-//     }
-//
-//     Ok(base_idx)
-// }
-
 /// Generate a progress updater that tracks progress, receives updates, and TODO: responds to signals.
 fn gen_prog_updater(rx: mpsc::Receiver<usize>) -> impl Fn() -> ()
 {
@@ -822,11 +808,13 @@ fn gen_prog_updater(rx: mpsc::Receiver<usize>) -> impl Fn() -> ()
     }
 }
 
-/// Find the greatest common factor for the pair of integers.
-fn gcf(u: usize, v: usize) -> usize
+#[inline]
+fn calc_bsize(ibs: usize, obs: usize) -> usize
 {
-    // TODO: 1 is not the gcf of all pairs of integers...
-    1
+    let gcd = Gcd::gcd(ibs, obs);
+    let lcm = (ibs*obs)/gcd;
+
+    lcm
 }
 
 /// Perform the copy/convert opertaions. Stdout version
@@ -836,8 +824,7 @@ fn dd_stdout<R: Read>(mut i: Input<R>, mut o: Output<io::Stdout>) -> Result<(usi
 {
     let mut bytes_in  = 0;
     let mut bytes_out = 0;
-    let gcf = gcf(i.ibs, o.obs);
-    let buf_size = (i.ibs/gcf)*(o.obs/gcf);
+    let bsize = calc_bsize(i.ibs, o.obs);
 
     let prog_tx = if i.xfer_stats == StatusLevel::Progress
     {
@@ -852,7 +839,7 @@ fn dd_stdout<R: Read>(mut i: Input<R>, mut o: Output<io::Stdout>) -> Result<(usi
 
     loop
     {
-        match read_helper(&mut i, &mut o, buf_size)?
+        match read_helper(&mut i, &mut o, bsize)?
         {
             (0, _) =>
                 break,
@@ -891,8 +878,7 @@ fn dd_fileout<R: Read>(mut i: Input<R>, mut o: Output<File>) -> Result<(usize, u
 {
     let mut bytes_in  = 0;
     let mut bytes_out = 0;
-    let gcf = gcf(i.ibs, o.obs);
-    let buf_size = (i.ibs/gcf)*(o.obs/gcf);
+    let bsize = calc_bsize(i.ibs, o.obs);
 
     let prog_tx = if i.xfer_stats == StatusLevel::Progress
     {
@@ -907,13 +893,13 @@ fn dd_fileout<R: Read>(mut i: Input<R>, mut o: Output<File>) -> Result<(usize, u
 
     loop
     {
-        match read_helper(&mut i, &mut o, buf_size)?
+        match read_helper(&mut i, &mut o, bsize)?
         {
             (0, _) =>
                 break,
             (rlen, buf) =>
             {
-                let wlen = o.write(&buf)?;
+                let wlen = o.write_blocks(buf)?;
 
                 bytes_in += rlen;
                 bytes_out += wlen;
