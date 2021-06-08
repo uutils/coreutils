@@ -812,7 +812,7 @@ fn gen_prog_updater(rx: mpsc::Receiver<usize>) -> impl Fn() -> ()
 fn calc_bsize(ibs: usize, obs: usize) -> usize
 {
     let gcd = Gcd::gcd(ibs, obs);
-    let lcm = (ibs*obs)/gcd;
+    let lcm = (ibs/gcd)*obs;
 
     lcm
 }
