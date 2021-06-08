@@ -10,7 +10,7 @@
 //  http://ftp-archive.freebsd.org/mirror/FreeBSD-Archive/old-releases/i386/1.0-RELEASE/ports/shellutils/src/id.c
 //  http://www.opensource.apple.com/source/shell_cmds/shell_cmds-118/id/id.c
 
-// spell-checker:ignore (ToDO) asid auditid auditinfo auid cstr egid emod euid getaudit getlogin gflag nflag pline rflag termid uflag
+// spell-checker:ignore (ToDO) asid auditid auditinfo auid cstr egid emod euid getaudit getlogin gflag nflag pline rflag termid uflag gsflag
 
 #![allow(non_camel_case_types)]
 #![allow(dead_code)]
@@ -79,7 +79,7 @@ static OPT_GROUPS: &str = "groups";
 static OPT_HUMAN_READABLE: &str = "human-readable";
 static OPT_NAME: &str = "name";
 static OPT_PASSWORD: &str = "password";
-static OPT_REAL_ID: &str = "real-id";
+static OPT_REAL_ID: &str = "real";
 
 static ARG_USERS: &str = "users";
 
@@ -135,7 +135,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(
             Arg::with_name(OPT_REAL_ID)
                 .short("r")
-                .help("Display the real ID for the -g and -u options"),
+                .long(OPT_REAL_ID)
+                .help(
+                "Display the real ID for the -G, -g and -u options instead of the effective ID.",
+            ),
         )
         .arg(Arg::with_name(ARG_USERS).multiple(true).takes_value(true))
         .get_matches_from(args);
@@ -162,6 +165,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let nflag = matches.is_present(OPT_NAME);
     let uflag = matches.is_present(OPT_EFFECTIVE_USER);
     let gflag = matches.is_present(OPT_GROUP);
+    let gsflag = matches.is_present(OPT_GROUPS);
     let rflag = matches.is_present(OPT_REAL_ID);
 
     if gflag {
@@ -194,26 +198,23 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         return 0;
     }
 
-    if matches.is_present(OPT_GROUPS) {
+    if gsflag {
+        let id = possible_pw
+            .map(|p| p.gid())
+            .unwrap_or(if rflag { getgid() } else { getegid() });
         println!(
             "{}",
-            if nflag {
-                possible_pw
-                    .map(|p| p.belongs_to())
-                    .unwrap_or_else(|| entries::get_groups().unwrap())
-                    .iter()
-                    .map(|&id| entries::gid2grp(id).unwrap())
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            } else {
-                possible_pw
-                    .map(|p| p.belongs_to())
-                    .unwrap_or_else(|| entries::get_groups().unwrap())
-                    .iter()
-                    .map(|&id| id.to_string())
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            }
+            possible_pw
+                .map(|p| p.belongs_to())
+                .unwrap_or_else(|| entries::get_groups_gnu(Some(id)).unwrap())
+                .iter()
+                .map(|&id| if nflag {
+                    entries::gid2grp(id).unwrap_or_else(|_| id.to_string())
+                } else {
+                    id.to_string()
+                })
+                .collect::<Vec<_>>()
+                .join(" ")
         );
         return 0;
     }
@@ -280,7 +281,7 @@ fn pretty(possible_pw: Option<Passwd>) {
 
         println!(
             "groups\t{}",
-            entries::get_groups()
+            entries::get_groups_gnu(None)
                 .unwrap()
                 .iter()
                 .map(|&gr| entries::gid2grp(gr).unwrap())

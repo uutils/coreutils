@@ -10,7 +10,7 @@
 
 #[macro_use]
 extern crate uucore;
-use uucore::entries::{get_groups, gid2grp, Locate, Passwd};
+use uucore::entries::{get_groups_gnu, gid2grp, Locate, Passwd};
 
 use clap::{crate_version, App, Arg};
 
@@ -35,7 +35,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         None => {
             println!(
                 "{}",
-                get_groups()
+                get_groups_gnu(None)
                     .unwrap()
                     .iter()
                     .map(|&g| gid2grp(g).unwrap())
