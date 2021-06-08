@@ -7,6 +7,7 @@ advapi
 advapi32-sys
 aho-corasick
 backtrace
+blake2b_simd
 bstr
 byteorder
 chacha
@@ -47,6 +48,7 @@ xattr
 # * rust/rustc
 RUSTDOCFLAGS
 RUSTFLAGS
+bitor # BitOr trait function
 bitxor # BitXor trait function
 clippy
 concat

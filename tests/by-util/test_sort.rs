@@ -844,12 +844,7 @@ fn test_compress_fail() {
 #[test]
 fn test_merge_batches() {
     new_ucmd!()
-        .args(&[
-            "ext_sort.txt",
-            "-n",
-            "-S",
-            "150B",
-        ])
+        .args(&["ext_sort.txt", "-n", "-S", "150B"])
         .succeeds()
         .stdout_only_fixture("ext_sort.expected");
 }

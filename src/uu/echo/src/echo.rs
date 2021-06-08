@@ -181,7 +181,7 @@ fn execute(no_newline: bool, escaped: bool, free: Vec<String>) -> io::Result<()>
             write!(output, " ")?;
         }
         if escaped {
-            let should_stop = print_escaped(&input, &mut output)?;
+            let should_stop = print_escaped(input, &mut output)?;
             if should_stop {
                 break;
             }

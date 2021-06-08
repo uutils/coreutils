@@ -38,7 +38,7 @@ fn test_posix_mode() {
 
     // fail on long path
     new_ucmd!()
-        .args(&["-p", &"dir".repeat(libc::PATH_MAX as usize + 1).as_str()])
+        .args(&["-p", "dir".repeat(libc::PATH_MAX as usize + 1).as_str()])
         .fails()
         .no_stdout();
 
@@ -46,7 +46,7 @@ fn test_posix_mode() {
     new_ucmd!()
         .args(&[
             "-p",
-            &format!("dir/{}", "file".repeat(libc::FILENAME_MAX as usize + 1)).as_str(),
+            format!("dir/{}", "file".repeat(libc::FILENAME_MAX as usize + 1)).as_str(),
         ])
         .fails()
         .no_stdout();
@@ -76,7 +76,7 @@ fn test_posix_special() {
 
     // fail on long path
     new_ucmd!()
-        .args(&["-P", &"dir".repeat(libc::PATH_MAX as usize + 1).as_str()])
+        .args(&["-P", "dir".repeat(libc::PATH_MAX as usize + 1).as_str()])
         .fails()
         .no_stdout();
 
@@ -84,7 +84,7 @@ fn test_posix_special() {
     new_ucmd!()
         .args(&[
             "-P",
-            &format!("dir/{}", "file".repeat(libc::FILENAME_MAX as usize + 1)).as_str(),
+            format!("dir/{}", "file".repeat(libc::FILENAME_MAX as usize + 1)).as_str(),
         ])
         .fails()
         .no_stdout();
@@ -117,7 +117,7 @@ fn test_posix_all() {
         .args(&[
             "-p",
             "-P",
-            &"dir".repeat(libc::PATH_MAX as usize + 1).as_str(),
+            "dir".repeat(libc::PATH_MAX as usize + 1).as_str(),
         ])
         .fails()
         .no_stdout();
@@ -127,7 +127,7 @@ fn test_posix_all() {
         .args(&[
             "-p",
             "-P",
-            &format!("dir/{}", "file".repeat(libc::FILENAME_MAX as usize + 1)).as_str(),
+            format!("dir/{}", "file".repeat(libc::FILENAME_MAX as usize + 1)).as_str(),
         ])
         .fails()
         .no_stdout();

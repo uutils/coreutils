@@ -92,7 +92,7 @@ where
     T: BufRead,
 {
     let mut input_iter = InputSplitter::new(input.lines().enumerate());
-    let mut split_writer = SplitWriter::new(&options);
+    let mut split_writer = SplitWriter::new(options);
     let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
 
     // consume the rest

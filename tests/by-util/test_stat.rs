@@ -313,6 +313,8 @@ fn expected_result(args: &[&str]) -> String {
     #[cfg(target_vendor = "apple")]
     let util_name = format!("g{}", util_name!());
 
+    // note: clippy::needless_borrow *false positive*
+    #[allow(clippy::needless_borrow)]
     TestScenario::new(&util_name)
         .cmd_keepenv(util_name)
         .env("LANGUAGE", "C")

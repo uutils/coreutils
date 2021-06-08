@@ -115,7 +115,7 @@ impl<'a> MemoryDecoder<'a> {
 
     /// Creates a clone of the internal buffer. The clone only contain the valid data.
     pub fn clone_buffer(&self, other: &mut Vec<u8>) {
-        other.clone_from(&self.data);
+        other.clone_from(self.data);
         other.resize(self.used_normal_length, 0);
     }
 
