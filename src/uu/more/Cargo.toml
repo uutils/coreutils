@@ -19,7 +19,7 @@ clap = "2.33"
 uucore = { version = ">=0.0.7", package = "uucore", path = "../../uucore" }
 uucore_procs = { version = ">=0.0.5", package = "uucore_procs", path = "../../uucore_procs" }
 crossterm = ">=0.19"
-atty = "0.2.14"
+atty = "0.2"
 unicode-width = "0.1.7"
 unicode-segmentation = "1.7.1"
 
