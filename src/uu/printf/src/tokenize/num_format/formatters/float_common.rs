@@ -298,11 +298,11 @@ pub fn get_primitive_dec(
 pub fn primitive_to_str_common(prim: &FormatPrimitive, field: &FormatField) -> String {
     let mut final_str = String::new();
     if let Some(ref prefix) = prim.prefix {
-        final_str.push_str(&prefix);
+        final_str.push_str(prefix);
     }
     match prim.pre_decimal {
         Some(ref pre_decimal) => {
-            final_str.push_str(&pre_decimal);
+            final_str.push_str(pre_decimal);
         }
         None => {
             panic!(

@@ -275,7 +275,7 @@ impl SubParser {
                 }
                 None => {
                     text_so_far.push('%');
-                    err_conv(&text_so_far);
+                    err_conv(text_so_far);
                     false
                 }
             }

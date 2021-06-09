@@ -109,7 +109,7 @@ fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
 
 fn fold(filenames: Vec<String>, bytes: bool, spaces: bool, width: usize) {
     for filename in &filenames {
-        let filename: &str = &filename;
+        let filename: &str = filename;
         let mut stdin_buf;
         let mut file_buf;
         let buffer = BufReader::new(if filename == "-" {

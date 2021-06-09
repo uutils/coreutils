@@ -252,7 +252,7 @@ impl Formatter for Intf {
     fn primitive_to_str(&self, prim: &FormatPrimitive, field: FormatField) -> String {
         let mut final_str: String = String::new();
         if let Some(ref prefix) = prim.prefix {
-            final_str.push_str(&prefix);
+            final_str.push_str(prefix);
         }
         // integral second fields is zero-padded minimum-width
         // which gets handled before general minimum-width
@@ -266,7 +266,7 @@ impl Formatter for Intf {
                         i -= 1;
                     }
                 }
-                final_str.push_str(&pre_decimal);
+                final_str.push_str(pre_decimal);
             }
             None => {
                 panic!(

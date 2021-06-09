@@ -213,7 +213,7 @@ fn read_input(input_files: &[String], config: &Config) -> FileMap {
         files.push("-");
     } else if config.gnu_ext {
         for file in input_files {
-            files.push(&file);
+            files.push(file);
         }
     } else {
         files.push(&input_files[0]);
@@ -503,7 +503,7 @@ fn format_tex_line(
     let keyword = &line[word_ref.position..word_ref.position_end];
     let after_chars_trim_idx = (word_ref.position_end, chars_line.len());
     let all_after = &chars_line[after_chars_trim_idx.0..after_chars_trim_idx.1];
-    let (tail, before, after, head) = get_output_chunks(&all_before, &keyword, &all_after, &config);
+    let (tail, before, after, head) = get_output_chunks(all_before, keyword, all_after, config);
     output.push_str(&format!(
         "{5}{0}{6}{5}{1}{6}{5}{2}{6}{5}{3}{6}{5}{4}{6}",
         format_tex_field(&tail),
@@ -515,7 +515,7 @@ fn format_tex_line(
         "}"
     ));
     if config.auto_ref || config.input_ref {
-        output.push_str(&format!("{}{}{}", "{", format_tex_field(&reference), "}"));
+        output.push_str(&format!("{}{}{}", "{", format_tex_field(reference), "}"));
     }
     output
 }
@@ -546,7 +546,7 @@ fn format_roff_line(
     let keyword = &line[word_ref.position..word_ref.position_end];
     let after_chars_trim_idx = (word_ref.position_end, chars_line.len());
     let all_after = &chars_line[after_chars_trim_idx.0..after_chars_trim_idx.1];
-    let (tail, before, after, head) = get_output_chunks(&all_before, &keyword, &all_after, &config);
+    let (tail, before, after, head) = get_output_chunks(all_before, keyword, all_after, config);
     output.push_str(&format!(
         " \"{}\" \"{}\" \"{}{}\" \"{}\"",
         format_roff_field(&tail),
@@ -556,7 +556,7 @@ fn format_roff_line(
         format_roff_field(&head)
     ));
     if config.auto_ref || config.input_ref {
-        output.push_str(&format!(" \"{}\"", format_roff_field(&reference)));
+        output.push_str(&format!(" \"{}\"", format_roff_field(reference)));
     }
     output
 }

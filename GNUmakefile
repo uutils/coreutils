@@ -268,11 +268,11 @@ test:
 	${CARGO} test ${CARGOFLAGS} --features "$(TESTS) $(TEST_SPEC_FEATURE)" --no-default-features $(TEST_NO_FAIL_FAST)
 
 busybox-src:
-	if [ ! -e $(BUSYBOX_SRC) ]; then \
-	mkdir -p $(BUSYBOX_ROOT); \
-	wget https://busybox.net/downloads/busybox-$(BUSYBOX_VER).tar.bz2 -P $(BUSYBOX_ROOT); \
-	tar -C $(BUSYBOX_ROOT) -xf $(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER).tar.bz2; \
-	fi; \
+	if [ ! -e "$(BUSYBOX_SRC)" ] ; then \
+		mkdir -p "$(BUSYBOX_ROOT)" ; \
+		wget "https://busybox.net/downloads/busybox-$(BUSYBOX_VER).tar.bz2" -P "$(BUSYBOX_ROOT)" ; \
+		tar -C "$(BUSYBOX_ROOT)" -xf "$(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER).tar.bz2" ; \
+	fi ;
 
 # This is a busybox-specific config file their test suite wants to parse.
 $(BUILDDIR)/.config: $(BASEDIR)/.busybox-config
@@ -280,10 +280,12 @@ $(BUILDDIR)/.config: $(BASEDIR)/.busybox-config
 
 # Test under the busybox test suite
 $(BUILDDIR)/busybox: busybox-src build-coreutils $(BUILDDIR)/.config
-	cp $(BUILDDIR)/coreutils $(BUILDDIR)/busybox; \
-	chmod +x $@;
+	cp "$(BUILDDIR)/coreutils" "$(BUILDDIR)/busybox"
+	chmod +x $@
 
 prepare-busytest: $(BUILDDIR)/busybox
+	# disable inapplicable tests
+	-( cd "$(BUSYBOX_SRC)/testsuite" ; if [ -e "busybox.tests" ] ; then mv busybox.tests busybox.tests- ; fi ; )
 
 ifeq ($(EXES),)
 busytest:

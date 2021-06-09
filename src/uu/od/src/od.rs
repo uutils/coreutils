@@ -130,7 +130,7 @@ impl OdOptions {
 
         let mut skip_bytes = match matches.value_of(options::SKIP_BYTES) {
             None => 0,
-            Some(s) => match parse_number_of_bytes(&s) {
+            Some(s) => match parse_number_of_bytes(s) {
                 Ok(i) => i,
                 Err(_) => {
                     return Err(format!("Invalid argument --skip-bytes={}", s));
@@ -176,7 +176,7 @@ impl OdOptions {
 
         let read_bytes = match matches.value_of(options::READ_BYTES) {
             None => None,
-            Some(s) => match parse_number_of_bytes(&s) {
+            Some(s) => match parse_number_of_bytes(s) {
                 Ok(i) => Some(i),
                 Err(_) => {
                     return Err(format!("Invalid argument --read-bytes={}", s));
@@ -537,7 +537,7 @@ where
                     print_bytes(
                         &input_offset.format_byte_offset(),
                         &memory_decoder,
-                        &output_info,
+                        output_info,
                     );
                 }
 

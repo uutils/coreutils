@@ -90,7 +90,7 @@ pub fn read(
         if buffer.len() < carry_over.len() {
             buffer.resize(carry_over.len() + 10 * 1024, 0);
         }
-        buffer[..carry_over.len()].copy_from_slice(&carry_over);
+        buffer[..carry_over.len()].copy_from_slice(carry_over);
         let (read, should_continue) = read_to_buffer(
             file,
             next_files,
@@ -110,7 +110,7 @@ pub fn read(
                     std::mem::transmute::<Vec<Line<'static>>, Vec<Line<'_>>>(lines)
                 };
                 let read = crash_if_err!(1, std::str::from_utf8(&buf[..read]));
-                parse_lines(read, &mut lines, separator, &settings);
+                parse_lines(read, &mut lines, separator, settings);
                 lines
             });
             sender.send(payload).unwrap();
@@ -194,7 +194,7 @@ fn read_to_buffer(
                             continue;
                         }
                     }
-                    let mut sep_iter = memchr_iter(separator, &buffer).rev();
+                    let mut sep_iter = memchr_iter(separator, buffer).rev();
                     let last_line_end = sep_iter.next();
                     if sep_iter.next().is_some() {
                         // We read enough lines.

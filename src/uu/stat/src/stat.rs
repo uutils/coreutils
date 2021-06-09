@@ -477,7 +477,7 @@ impl Stater {
             Stater::generate_tokens(&Stater::default_format(show_fs, terse, false), use_printf)
                 .unwrap()
         } else {
-            Stater::generate_tokens(&format_str, use_printf)?
+            Stater::generate_tokens(format_str, use_printf)?
         };
         let default_dev_tokens =
             Stater::generate_tokens(&Stater::default_format(show_fs, terse, true), use_printf)

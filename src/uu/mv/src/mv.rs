@@ -389,7 +389,7 @@ fn rename_with_fallback(from: &Path, to: &Path) -> io::Result<()> {
         let file_type = metadata.file_type();
 
         if file_type.is_symlink() {
-            rename_symlink_fallback(&from, &to)?;
+            rename_symlink_fallback(from, to)?;
         } else if file_type.is_dir() {
             // We remove the destination directory if it exists to match the
             // behavior of `fs::rename`. As far as I can tell, `fs_extra`'s

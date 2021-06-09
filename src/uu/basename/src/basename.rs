@@ -110,7 +110,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let line_ending = if opt_zero { "\0" } else { "\n" };
     for path in paths {
-        print!("{}{}", basename(&path, &suffix), line_ending);
+        print!("{}{}", basename(path, suffix), line_ending);
     }
 
     0

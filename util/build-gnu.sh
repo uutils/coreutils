@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# spell-checker:ignore (paths) abmon deref discrim getlimits getopt ginstall gnulib inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW ; (vars/env) BUILDDIR SRCDIR
+# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall gnulib inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW ; (vars/env) BUILDDIR SRCDIR
 
 set -e
 if test ! -d ../gnu; then

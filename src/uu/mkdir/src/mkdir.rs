@@ -77,7 +77,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let mode_match = matches.value_of(OPT_MODE);
     let mode: u16 = match mode_match {
         Some(m) => {
-            let res: Option<u16> = u16::from_str_radix(&m, 8).ok();
+            let res: Option<u16> = u16::from_str_radix(m, 8).ok();
             match res {
                 Some(r) => r,
                 _ => crash!(1, "no mode given"),
