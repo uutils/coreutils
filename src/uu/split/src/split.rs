@@ -278,7 +278,7 @@ struct ByteSplitter {
 impl ByteSplitter {
     fn new(settings: &Settings) -> ByteSplitter {
         let size_string = &settings.strategy_param;
-        let size_num = match parse_size(&size_string) {
+        let size_num = match parse_size(size_string) {
             Ok(n) => n,
             Err(e) => crash!(1, "invalid number of bytes: {}", e.to_string()),
         };

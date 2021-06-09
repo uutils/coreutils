@@ -419,5 +419,5 @@ fn parse_num(src: &str) -> Result<(usize, bool), ParseSizeError> {
         return Err(ParseSizeError::ParseFailure(src.to_string()));
     }
 
-    parse_size(&size_string).map(|n| (n, starting_with))
+    parse_size(size_string).map(|n| (n, starting_with))
 }
