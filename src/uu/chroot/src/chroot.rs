@@ -111,6 +111,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         None => vec![],
     };
 
+    // TODO: refactor the args and command matching
+    // See: https://github.com/uutils/coreutils/pull/2365#discussion_r647849967
     let command: Vec<&str> = match commands.len() {
         1 => {
             let shell: &str = match user_shell {
