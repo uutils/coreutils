@@ -209,10 +209,9 @@ fn test_id_default_format() {
             // u/g/G n/r
             let args = [opt2, opt1];
             let result = scene.ucmd().args(&args).run();
-
-            if !result.succeeded() && is_ci()
-            // && (result.stderr_str().contains("cannot find name for")
-            //     || result.stdout_str().contains("cannot find name for"))
+            if !result.succeeded()
+                && is_ci()
+                && result.stderr_str().contains("cannot find name for")
             {
                 // '--name' does not work on CICD ubuntu-16/ubuntu-18
                 // id: cannot find name for user ID 1001
@@ -255,10 +254,9 @@ fn test_id_zero() {
                 // u/g/G n/r z
                 let args = [opt2, z_flag, opt1];
                 let result = scene.ucmd().args(&args).run();
-
-                if !result.succeeded() && is_ci()
-                // && (result.stderr_str().contains("cannot find name for")
-                //     || result.stdout_str().contains("cannot find name for"))
+                if !result.succeeded()
+                    && is_ci()
+                    && result.stderr_str().contains("cannot find name for")
                 {
                     // '--name' does not work on CICD ubuntu-16/ubuntu-18
                     // id: cannot find name for user ID 1001

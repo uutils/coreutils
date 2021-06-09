@@ -201,6 +201,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     };
 
     let line_ending = if zflag { '\0' } else { '\n' };
+    let mut exit_code = 0;
 
     if gflag {
         let id = possible_pw
@@ -209,13 +210,17 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         print!(
             "{}{}",
             if nflag {
-                entries::gid2grp(id).unwrap_or_else(|_| id.to_string())
+                entries::gid2grp(id).unwrap_or_else(|_| {
+                    show_error!("cannot find name for group ID {}", id);
+                    exit_code = 1;
+                    id.to_string()
+                })
             } else {
                 id.to_string()
             },
             line_ending
         );
-        return 0;
+        return exit_code;
     }
 
     if uflag {
@@ -225,13 +230,17 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         print!(
             "{}{}",
             if nflag {
-                entries::uid2usr(id).unwrap_or_else(|_| id.to_string())
+                entries::uid2usr(id).unwrap_or_else(|_| {
+                    show_error!("cannot find name for user ID {}", id);
+                    exit_code = 1;
+                    id.to_string()
+                })
             } else {
                 id.to_string()
             },
             line_ending
         );
-        return 0;
+        return exit_code;
     }
 
     if gsflag {
@@ -246,7 +255,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .unwrap_or_else(|| entries::get_groups_gnu(Some(id)).unwrap())
                 .iter()
                 .map(|&id| if nflag {
-                    entries::gid2grp(id).unwrap_or_else(|_| id.to_string())
+                    entries::gid2grp(id).unwrap_or_else(|_| {
+                        show_error!("cannot find name for group ID {}", id);
+                        exit_code = 1;
+                        id.to_string()
+                    })
                 } else {
                     id.to_string()
                 })
@@ -254,7 +267,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .join(delimiter),
             line_ending
         );
-        return 0;
+        return exit_code;
     }
 
     if matches.is_present(options::OPT_PASSWORD) {
