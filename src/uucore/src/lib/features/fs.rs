@@ -225,51 +225,6 @@ pub fn canonicalize<P: AsRef<Path>>(original: P, can_mode: CanonicalizeMode) -> 
     Ok(result)
 }
 
-#[cfg(unix)]
-pub fn is_stdin_interactive() -> bool {
-    unsafe { libc::isatty(libc::STDIN_FILENO) == 1 }
-}
-
-#[cfg(windows)]
-pub fn is_stdin_interactive() -> bool {
-    false
-}
-
-#[cfg(target_os = "redox")]
-pub fn is_stdin_interactive() -> bool {
-    termion::is_tty(&io::stdin())
-}
-
-#[cfg(unix)]
-pub fn is_stdout_interactive() -> bool {
-    unsafe { libc::isatty(libc::STDOUT_FILENO) == 1 }
-}
-
-#[cfg(windows)]
-pub fn is_stdout_interactive() -> bool {
-    false
-}
-
-#[cfg(target_os = "redox")]
-pub fn is_stdout_interactive() -> bool {
-    termion::is_tty(&io::stdout())
-}
-
-#[cfg(unix)]
-pub fn is_stderr_interactive() -> bool {
-    unsafe { libc::isatty(libc::STDERR_FILENO) == 1 }
-}
-
-#[cfg(windows)]
-pub fn is_stderr_interactive() -> bool {
-    false
-}
-
-#[cfg(target_os = "redox")]
-pub fn is_stderr_interactive() -> bool {
-    termion::is_tty(&io::stderr())
-}
-
 #[cfg(not(unix))]
 #[allow(unused_variables)]
 pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> String {

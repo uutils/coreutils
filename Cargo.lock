@@ -1772,6 +1772,7 @@ dependencies = [
 name = "uu_cat"
 version = "0.0.6"
 dependencies = [
+ "atty",
  "clap",
  "nix 0.20.0",
  "thiserror",
@@ -1872,6 +1873,7 @@ dependencies = [
 name = "uu_cut"
 version = "0.0.6"
 dependencies = [
+ "atty",
  "bstr",
  "clap",
  "memchr 2.4.0",
@@ -2262,6 +2264,7 @@ dependencies = [
 name = "uu_nohup"
 version = "0.0.6"
 dependencies = [
+ "atty",
  "clap",
  "libc",
  "uucore",
@@ -2660,6 +2663,7 @@ dependencies = [
 name = "uu_tty"
 version = "0.0.6"
 dependencies = [
+ "atty",
  "clap",
  "libc",
  "uucore",
