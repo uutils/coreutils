@@ -1516,8 +1516,6 @@ fn get_hash<T: Hash>(t: &T) -> u64 {
 }
 
 fn random_shuffle(a: &str, b: &str, salt: &str) -> Ordering {
-    #![allow(clippy::comparison_chain)]
-
     let da = get_hash(&[a, salt].concat());
     let db = get_hash(&[b, salt].concat());
 
