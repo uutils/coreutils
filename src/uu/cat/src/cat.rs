@@ -20,7 +20,6 @@ use clap::{crate_version, App, Arg};
 use std::fs::{metadata, File};
 use std::io::{self, Read, Write};
 use thiserror::Error;
-use uucore::fs::is_stdin_interactive;
 
 /// Linux splice support
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -306,7 +305,7 @@ fn cat_path(path: &str, options: &OutputOptions, state: &mut OutputState) -> Cat
             #[cfg(any(target_os = "linux", target_os = "android"))]
             file_descriptor: stdin.as_raw_fd(),
             reader: stdin,
-            is_interactive: is_stdin_interactive(),
+            is_interactive: atty::is(atty::Stream::Stdin),
         };
         return cat_handle(&mut handle, options, state);
     }

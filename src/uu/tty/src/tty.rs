@@ -14,7 +14,6 @@ extern crate uucore;
 
 use clap::{crate_version, App, Arg};
 use std::ffi::CStr;
-use uucore::fs::is_stdin_interactive;
 use uucore::InvalidEncodingHandling;
 
 static ABOUT: &str = "Print the file name of the terminal connected to standard input.";
@@ -67,7 +66,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     }
 
-    if is_stdin_interactive() {
+    if atty::is(atty::Stream::Stdin) {
         libc::EXIT_SUCCESS
     } else {
         libc::EXIT_FAILURE
