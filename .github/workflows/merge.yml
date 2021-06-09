@@ -1,0 +1,112 @@
+name: Various autofixes on the code
+
+env:
+  RUST_MIN_SRV: "1.43.1" ## v1.43.0
+
+# only trigger on pull request closed events
+on:
+  pull_request:
+    types: [ closed ]
+
+jobs:
+
+  code_format_commit:
+    if: github.event.pull_request.merged == true
+    name: Style/format
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: ubuntu-latest , features: feat_os_unix }
+    steps:
+    - uses: actions/checkout@v2
+    - name: Initialize workflow variables
+      id: vars
+      shell: bash
+      run: |
+        ## VARs setup
+        outputs() { for var in "$@" ; do echo steps.vars.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
+        # target-specific options
+        # * CARGO_FEATURES_OPTION
+        CARGO_FEATURES_OPTION='' ;
+        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
+        outputs CARGO_FEATURES_OPTION
+    - name: Install `rust` toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        default: true
+        profile: minimal # minimal component installation (ie, no documentation)
+        components: rustfmt
+    - name: "`cargo fmt` run"
+      shell: bash
+      run: |
+        cargo fmt
+    - name: "`fmt` testing of tests"
+      shell: bash
+      run: |
+        find tests -name "*.rs" -print0 | xargs -0 cargo fmt --
+    - name: Commit rustfmt changes
+      uses: EndBug/add-and-commit@v7
+      with:
+        default_author: github_actions
+        message: "maint ~ rustfmt (`cargo fmt`)"
+
+  min_version:
+    if: github.event.pull_request.merged == true
+    name: MinRustV # Minimum supported rust version
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      matrix:
+        job:
+          - { os: ubuntu-latest , features: feat_os_unix }
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install `rust` toolchain (v${{ env.RUST_MIN_SRV }})
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: ${{ env.RUST_MIN_SRV }}
+        default: true
+        profile: minimal # minimal component installation (ie, no documentation)
+    - name: Install `cargo-tree` # for dependency information
+      uses: actions-rs/install@v0.1
+      with:
+        crate: cargo-tree
+        version: latest
+        use-tool-cache: true
+      env:
+        RUSTUP_TOOLCHAIN: stable
+    - name: Confirm compatible 'Cargo.lock'
+      shell: bash
+      run: |
+        # Confirm compatible 'Cargo.lock'
+        # * 'Cargo.lock' is required to be in a format that `cargo` of MinSRV can interpret (eg, v1-format for MinSRV < v1.38)
+        cargo fetch --locked --quiet || cargo +${RUST_MIN_SRV} update
+    - name: Info
+      shell: bash
+      run: |
+        # Info
+        ## environment
+        echo "## environment"
+        echo "CI='${CI}'"
+        ## tooling info display
+        echo "## tooling"
+        which gcc >/dev/null 2>&1 && (gcc --version | head -1) || true
+        rustup -V
+        rustup show active-toolchain
+        cargo -V
+        rustc -V
+        cargo-tree tree -V
+        ## dependencies
+        echo "## dependency list"
+        cargo fetch --locked --quiet
+        ## * using the 'stable' toolchain is necessary to avoid "unexpected '--filter-platform'" errors
+        RUSTUP_TOOLCHAIN=stable cargo-tree tree --frozen --all --no-dev-dependencies --no-indent --features ${{ matrix.job.features }} | grep -vE "$PWD" | sort --unique
+
+    - name: Commit Cargo.lock update
+      uses: EndBug/add-and-commit@v7
+      with:
+        default_author: github_actions
+        message: "maint ~ refresh 'Cargo.lock'"
+        add: Cargo.lock

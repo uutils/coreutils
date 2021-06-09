@@ -17,46 +17,6 @@ env:
 on: [push, pull_request]
 
 jobs:
-  code_format:
-    name: Style/format
-    runs-on: ${{ matrix.job.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - { os: ubuntu-latest , features: feat_os_unix }
-    steps:
-    - uses: actions/checkout@v2
-    - name: Initialize workflow variables
-      id: vars
-      shell: bash
-      run: |
-        ## VARs setup
-        outputs() { for var in "$@" ; do echo steps.vars.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
-        # target-specific options
-        # * CARGO_FEATURES_OPTION
-        CARGO_FEATURES_OPTION='' ;
-        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
-        outputs CARGO_FEATURES_OPTION
-    - name: Install `rust` toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
-        components: rustfmt
-    - name: "`fmt` testing"
-      shell: bash
-      run: |
-        # `fmt` testing
-        # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-        S=$(cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" | sed -E -n -e "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::warning file=\1,line=\2::WARNING: \`cargo fmt\`: style violation/p" ; }
-    - name: "`fmt` testing of tests"
-      shell: bash
-      run: |
-        # `fmt` testing of tests
-        # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-        S=$(find tests -name "*.rs" -print0 | xargs -0 cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" | sed -E -n "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::warning file=\1,line=\2::WARNING: \`cargo fmt\`: style violation/p" ; }
 
   code_spellcheck:
     name: Style/spelling
@@ -113,64 +73,6 @@ jobs:
         # `clippy` testing
         # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
         S=$(cargo +nightly clippy --all-targets ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -- -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+(.*):([0-9]+):([0-9]+).*$/::warning file=\2,line=\3,col=\4::WARNING: \`cargo clippy\`: \1/p;" -e '}' ; }
-
-  min_version:
-    name: MinRustV # Minimum supported rust version
-    runs-on: ${{ matrix.job.os }}
-    strategy:
-      matrix:
-        job:
-          - { os: ubuntu-latest , features: feat_os_unix }
-    steps:
-    - uses: actions/checkout@v2
-    - name: Install `rust` toolchain (v${{ env.RUST_MIN_SRV }})
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: ${{ env.RUST_MIN_SRV }}
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
-    - name: Install `cargo-tree` # for dependency information
-      uses: actions-rs/install@v0.1
-      with:
-        crate: cargo-tree
-        version: latest
-        use-tool-cache: true
-      env:
-        RUSTUP_TOOLCHAIN: stable
-    - name: Confirm compatible 'Cargo.lock'
-      shell: bash
-      run: |
-        # Confirm compatible 'Cargo.lock'
-        # * 'Cargo.lock' is required to be in a format that `cargo` of MinSRV can interpret (eg, v1-format for MinSRV < v1.38)
-        cargo fetch --locked --quiet || { echo "::error file=Cargo.lock::Incompatible 'Cargo.lock' format; try \`cargo +${{ env.RUST_MIN_SRV }} update\`" ; exit 1 ; }
-    - name: Info
-      shell: bash
-      run: |
-        # Info
-        ## environment
-        echo "## environment"
-        echo "CI='${CI}'"
-        ## tooling info display
-        echo "## tooling"
-        which gcc >/dev/null 2>&1 && (gcc --version | head -1) || true
-        rustup -V
-        rustup show active-toolchain
-        cargo -V
-        rustc -V
-        cargo-tree tree -V
-        ## dependencies
-        echo "## dependency list"
-        cargo fetch --locked --quiet
-        ## * using the 'stable' toolchain is necessary to avoid "unexpected '--filter-platform'" errors
-        RUSTUP_TOOLCHAIN=stable cargo-tree tree --frozen --all --no-dev-dependencies --no-indent --features ${{ matrix.job.features }} | grep -vE "$PWD" | sort --unique
-
-    - name: Test
-      uses: actions-rs/cargo@v1
-      with:
-        command: test
-        args: --features "feat_os_unix" -p uucore -p coreutils
-      env:
-        RUSTFLAGS: '-Awarnings'
 
   busybox_test:
     name: Busybox test suite
