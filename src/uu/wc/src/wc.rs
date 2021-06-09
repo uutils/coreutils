@@ -374,8 +374,8 @@ fn wc(inputs: Vec<Input>, settings: &Settings) -> Result<(), u32> {
     let num_inputs = inputs.len();
 
     for input in &inputs {
-        let word_count = word_count_from_input(&input, settings).unwrap_or_else(|err| {
-            show_error(&input, err);
+        let word_count = word_count_from_input(input, settings).unwrap_or_else(|err| {
+            show_error(input, err);
             error_count += 1;
             WordCount::default()
         });

@@ -349,7 +349,7 @@ sha1 = { version="0.6", features=["std"] }
 tempfile = "3.2.0"
 time = "0.1"
 unindent = "0.1"
-uucore = { version=">=0.0.8", package="uucore", path="src/uucore", features=["entries"] }
+uucore = { version=">=0.0.8", package="uucore", path="src/uucore", features=["entries", "process"] }
 walkdir = "2.2"
 atty = "0.2.14"
 

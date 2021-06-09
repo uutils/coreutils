@@ -2420,6 +2420,7 @@ dependencies = [
  "uucore",
  "uucore_procs",
  "walkdir",
+ "winapi 0.3.9",
 ]
 
 [[package]]

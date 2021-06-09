@@ -129,10 +129,6 @@ impl OdOptions {
             }
         };
 
-        if matches.occurrences_of(options::STRINGS) > 0 {
-            crash!(1, "Option '{}' not yet implemented.", options::STRINGS);
-        }
-
         let mut skip_bytes = matches.value_of(options::SKIP_BYTES).map_or(0, |s| {
             parse_number_of_bytes(s).unwrap_or_else(|e| {
                 crash!(1, "{}", format_error_message(e, s, options::SKIP_BYTES))
@@ -536,7 +532,7 @@ where
                     print_bytes(
                         &input_offset.format_byte_offset(),
                         &memory_decoder,
-                        &output_info,
+                        output_info,
                     );
                 }
 

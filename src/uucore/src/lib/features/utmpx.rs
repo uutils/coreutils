@@ -207,7 +207,7 @@ impl Utmpx {
                 flags: AI_CANONNAME,
                 ..AddrInfoHints::default()
             };
-            let sockets = getaddrinfo(Some(&hostname), None, Some(hints))
+            let sockets = getaddrinfo(Some(hostname), None, Some(hints))
                 .unwrap()
                 .collect::<IOResult<Vec<_>>>()?;
             for socket in sockets {

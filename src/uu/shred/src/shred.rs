@@ -381,7 +381,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     for path_str in matches.values_of(options::FILE).unwrap() {
         wipe_file(
-            &path_str, iterations, remove, size, exact, zero, verbose, force,
+            path_str, iterations, remove, size, exact, zero, verbose, force,
         );
     }
 
@@ -659,7 +659,7 @@ fn do_remove(path: &Path, orig_filename: &str, verbose: bool) -> Result<(), io::
         println!("{}: {}: removing", NAME, orig_filename);
     }
 
-    let renamed_path: Option<PathBuf> = wipe_name(&path, verbose);
+    let renamed_path: Option<PathBuf> = wipe_name(path, verbose);
     if let Some(rp) = renamed_path {
         fs::remove_file(rp)?;
     }

@@ -118,10 +118,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 // check a path, given as a slice of it's components and an operating mode
 fn check_path(mode: &Mode, path: &[String]) -> bool {
     match *mode {
-        Mode::Basic => check_basic(&path),
-        Mode::Extra => check_default(&path) && check_extra(&path),
-        Mode::Both => check_basic(&path) && check_extra(&path),
-        _ => check_default(&path),
+        Mode::Basic => check_basic(path),
+        Mode::Extra => check_default(path) && check_extra(path),
+        Mode::Both => check_basic(path) && check_extra(path),
+        _ => check_default(path),
     }
 }
 
@@ -156,7 +156,7 @@ fn check_basic(path: &[String]) -> bool {
             );
             return false;
         }
-        if !check_portable_chars(&p) {
+        if !check_portable_chars(p) {
             return false;
         }
     }
@@ -168,7 +168,7 @@ fn check_basic(path: &[String]) -> bool {
 fn check_extra(path: &[String]) -> bool {
     // components: leading hyphens
     for p in path {
-        if !no_leading_hyphen(&p) {
+        if !no_leading_hyphen(p) {
             writeln!(
                 &mut std::io::stderr(),
                 "leading hyphen in file name component '{}'",

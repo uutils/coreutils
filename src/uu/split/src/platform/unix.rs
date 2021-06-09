@@ -66,7 +66,7 @@ impl FilterWriter {
     /// * `filepath` - Path of the output file (forwarded to command as $FILE)
     fn new(command: &str, filepath: &str) -> FilterWriter {
         // set $FILE, save previous value (if there was one)
-        let _with_env_var_set = WithEnvVarSet::new("FILE", &filepath);
+        let _with_env_var_set = WithEnvVarSet::new("FILE", filepath);
 
         let shell_process =
             Command::new(env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_owned()))
@@ -117,7 +117,7 @@ pub fn instantiate_current_writer(
         ) as Box<dyn Write>),
         Some(ref filter_command) => BufWriter::new(Box::new(
             // spawn a shell command and write to it
-            FilterWriter::new(&filter_command, &filename),
+            FilterWriter::new(filter_command, filename),
         ) as Box<dyn Write>),
     }
 }

@@ -88,7 +88,7 @@ fn remove(dirs: Vec<String>, ignore: bool, parents: bool, verbose: bool) -> Resu
 
     for dir in &dirs {
         let path = Path::new(&dir[..]);
-        r = remove_dir(&path, ignore, verbose).and(r);
+        r = remove_dir(path, ignore, verbose).and(r);
         if parents {
             let mut p = path;
             while let Some(new_p) = p.parent() {

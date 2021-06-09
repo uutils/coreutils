@@ -393,7 +393,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     although  the apparent  size is usually smaller, it may be larger due to holes \
                     in ('sparse') files, internal  fragmentation,  indirect  blocks, and the like"
                 )
-                .alias("app") // The GNU testsuite uses this alias
+                .alias("app") // The GNU test suite uses this alias
         )
         .arg(
             Arg::with_name(options::BLOCK_SIZE)
@@ -545,12 +545,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let max_depth_str = matches.value_of(options::MAX_DEPTH);
     let max_depth = max_depth_str.as_ref().and_then(|s| s.parse::<usize>().ok());
     match (max_depth_str, max_depth) {
-        (Some(ref s), _) if summarize => {
-            show_error!("summarizing conflicts with --max-depth={}", *s);
+        (Some(s), _) if summarize => {
+            show_error!("summarizing conflicts with --max-depth={}", s);
             return 1;
         }
-        (Some(ref s), None) => {
-            show_error!("invalid maximum depth '{}'", *s);
+        (Some(s), None) => {
+            show_error!("invalid maximum depth '{}'", s);
             return 1;
         }
         (Some(_), Some(_)) | (None, _) => { /* valid */ }

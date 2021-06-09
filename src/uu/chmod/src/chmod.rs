@@ -127,13 +127,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let verbose = matches.is_present(options::VERBOSE);
     let preserve_root = matches.is_present(options::PRESERVE_ROOT);
     let recursive = matches.is_present(options::RECURSIVE);
-    let fmode =
-        matches
-            .value_of(options::REFERENCE)
-            .and_then(|ref fref| match fs::metadata(fref) {
-                Ok(meta) => Some(meta.mode()),
-                Err(err) => crash!(1, "cannot stat attributes of '{}': {}", fref, err),
-            });
+    let fmode = matches
+        .value_of(options::REFERENCE)
+        .and_then(|fref| match fs::metadata(fref) {
+            Ok(meta) => Some(meta.mode()),
+            Err(err) => crash!(1, "cannot stat attributes of '{}': {}", fref, err),
+        });
     let modes = matches.value_of(options::MODE).unwrap(); // should always be Some because required
     let mut cmode = if mode_had_minus_prefix {
         // clap parsing is finished, now put prefix back
@@ -230,11 +229,11 @@ impl Chmoder {
                 return Err(1);
             }
             if !self.recursive {
-                r = self.chmod_file(&file).and(r);
+                r = self.chmod_file(file).and(r);
             } else {
                 for entry in WalkDir::new(&filename).into_iter().filter_map(|e| e.ok()) {
                     let file = entry.path();
-                    r = self.chmod_file(&file).and(r);
+                    r = self.chmod_file(file).and(r);
                 }
             }
         }

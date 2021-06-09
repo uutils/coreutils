@@ -37,7 +37,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 fn process_expr(token_strings: &[String]) -> Result<String, String> {
-    let maybe_tokens = tokens::strings_to_tokens(&token_strings);
+    let maybe_tokens = tokens::strings_to_tokens(token_strings);
     let maybe_ast = syntax_tree::tokens_to_ast(maybe_tokens);
     evaluate_ast(maybe_ast)
 }

@@ -400,9 +400,9 @@ impl<'a> Line<'a> {
         let line = self.line.replace('\t', ">");
         writeln!(writer, "{}", line)?;
 
-        let fields = tokenize(&self.line, settings.separator);
+        let fields = tokenize(self.line, settings.separator);
         for selector in settings.selectors.iter() {
-            let mut selection = selector.get_range(&self.line, Some(&fields));
+            let mut selection = selector.get_range(self.line, Some(&fields));
             match selector.settings.mode {
                 SortMode::Numeric | SortMode::HumanNumeric => {
                     // find out which range is used for numeric comparisons
@@ -756,7 +756,7 @@ impl FieldSelector {
     /// Get the selection that corresponds to this selector for the line.
     /// If needs_fields returned false, tokens may be None.
     fn get_selection<'a>(&self, line: &'a str, tokens: Option<&[Field]>) -> Selection<'a> {
-        let mut range = &line[self.get_range(&line, tokens)];
+        let mut range = &line[self.get_range(line, tokens)];
         let num_cache = if self.settings.mode == SortMode::Numeric
             || self.settings.mode == SortMode::HumanNumeric
         {
@@ -846,7 +846,7 @@ impl FieldSelector {
 
         match resolve_index(line, tokens, &self.from) {
             Resolution::StartOfChar(from) => {
-                let to = self.to.as_ref().map(|to| resolve_index(line, tokens, &to));
+                let to = self.to.as_ref().map(|to| resolve_index(line, tokens, to));
 
                 let mut range = match to {
                     Some(Resolution::StartOfChar(mut to)) => {
@@ -1259,11 +1259,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 fn output_sorted_lines<'a>(iter: impl Iterator<Item = &'a Line<'a>>, settings: &GlobalSettings) {
     if settings.unique {
         print_sorted(
-            iter.dedup_by(|a, b| compare_by(a, b, &settings) == Ordering::Equal),
-            &settings,
+            iter.dedup_by(|a, b| compare_by(a, b, settings) == Ordering::Equal),
+            settings,
         );
     } else {
-        print_sorted(iter, &settings);
+        print_sorted(iter, settings);
     }
 }
 
@@ -1279,16 +1279,16 @@ fn exec(files: &[String], settings: &GlobalSettings) -> i32 {
     } else {
         let mut lines = files.iter().map(open);
 
-        ext_sort(&mut lines, &settings);
+        ext_sort(&mut lines, settings);
     }
     0
 }
 
 fn sort_by<'a>(unsorted: &mut Vec<Line<'a>>, settings: &GlobalSettings) {
     if settings.stable || settings.unique {
-        unsorted.par_sort_by(|a, b| compare_by(a, b, &settings))
+        unsorted.par_sort_by(|a, b| compare_by(a, b, settings))
     } else {
-        unsorted.par_sort_unstable_by(|a, b| compare_by(a, b, &settings))
+        unsorted.par_sort_unstable_by(|a, b| compare_by(a, b, settings))
     }
 }
 
