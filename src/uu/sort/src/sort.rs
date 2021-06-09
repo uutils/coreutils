@@ -236,7 +236,7 @@ impl Default for GlobalSettings {
             buffer_size: DEFAULT_BUF_SIZE,
             tmp_dir: PathBuf::new(),
             compress_prog: None,
-            merge_batch_size: 16,
+            merge_batch_size: 32,
         }
     }
 }
