@@ -177,6 +177,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         crash!(1, "cannot print only names or real IDs in default format");
     }
     if (zflag) && !(uflag || gflag || gsflag) {
+        // GNU testsuite "id/zero.sh" needs this stderr output
         crash!(1, "option --zero not permitted in default format");
     }
 
