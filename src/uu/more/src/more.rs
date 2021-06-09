@@ -11,7 +11,6 @@
 extern crate uucore;
 
 use std::{
-    convert::TryInto,
     fs::File,
     io::{stdin, stdout, BufReader, Read, Stdout, Write},
     path::Path,
@@ -207,32 +206,11 @@ fn reset_term(_: &mut usize) {}
 fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>) {
     let (cols, rows) = terminal::size().unwrap();
     let lines = break_buff(buff, usize::from(cols));
-    let line_count: u16 = lines.len().try_into().unwrap();
 
-    let mut upper_mark = 0;
-    let mut lines_left = line_count.saturating_sub(upper_mark + rows);
-
-    draw(
-        &mut upper_mark,
-        rows,
-        &mut stdout,
-        lines.clone(),
-        line_count,
-        next_file,
-    );
-
-    let is_last = next_file.is_none();
-
-    // Specifies whether we have reached the end of the file and should
-    // return on the next key press. However, we immediately return when
-    // this is the last file.
-    let mut to_be_done = false;
-    if lines_left == 0 && is_last {
-        if is_last {
-            return;
-        } else {
-            to_be_done = true;
-        }
+    let mut pager = Pager::new(rows as usize, lines, next_file);
+    pager.draw(stdout);
+    if pager.should_close() {
+        return;
     }
 
     loop {
@@ -257,59 +235,116 @@ fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>) {
                     code: KeyCode::Char(' '),
                     modifiers: KeyModifiers::NONE,
                 }) => {
-                    upper_mark = upper_mark.saturating_add(rows.saturating_sub(1));
+                    pager.page_down();
                 }
                 Event::Key(KeyEvent {
                     code: KeyCode::Up,
                     modifiers: KeyModifiers::NONE,
                 }) => {
-                    upper_mark = upper_mark.saturating_sub(rows.saturating_sub(1));
+                    pager.page_up();
                 }
                 _ => continue,
             }
-            lines_left = line_count.saturating_sub(upper_mark + rows);
-            draw(
-                &mut upper_mark,
-                rows,
-                &mut stdout,
-                lines.clone(),
-                line_count,
-                next_file,
-            );
 
-            if lines_left == 0 {
-                if to_be_done || is_last {
-                    return;
-                }
-                to_be_done = true;
+            pager.draw(stdout);
+            if pager.should_close() {
+                return;
             }
         }
     }
 }
 
-fn draw(
-    upper_mark: &mut u16,
-    rows: u16,
-    mut stdout: &mut std::io::Stdout,
+struct Pager<'a> {
+    // The current line at the top of the screen
+    upper_mark: usize,
+    // The number of rows that fit on the screen
+    content_rows: usize,
     lines: Vec<String>,
-    lc: u16,
-    next_file: Option<&str>,
-) {
-    execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine)).unwrap();
-    let (up_mark, lower_mark) = calc_range(*upper_mark, rows, lc);
-    // Reduce the row by 1 for the prompt
-    let displayed_lines = lines
-        .iter()
-        .skip(up_mark.into())
-        .take(usize::from(rows.saturating_sub(1)));
+    next_file: Option<&'a str>,
+    line_count: usize,
+    close_on_down: bool,
+}
 
-    for line in displayed_lines {
-        stdout
-            .write_all(format!("\r{}\n", line).as_bytes())
-            .unwrap();
+impl<'a> Pager<'a> {
+    fn new(rows: usize, lines: Vec<String>, next_file: Option<&'a str>) -> Self {
+        let line_count = lines.len();
+        Self {
+            upper_mark: 0,
+            content_rows: rows - 1,
+            lines,
+            next_file,
+            line_count,
+            close_on_down: false,
+        }
     }
-    make_prompt_and_flush(&mut stdout, lower_mark, lc, next_file);
-    *upper_mark = up_mark;
+
+    fn should_close(&mut self) -> bool {
+        if self.upper_mark + self.content_rows >= self.line_count {
+            if self.close_on_down {
+                return true;
+            }
+            if self.next_file.is_none() {
+                return true;
+            } else {
+                self.close_on_down = true;
+            }
+        } else {
+            self.close_on_down = false;
+        }
+        false
+    }
+
+    fn page_down(&mut self) {
+        self.upper_mark = self
+            .line_count
+            .saturating_sub(self.content_rows)
+            .min(self.upper_mark + self.content_rows);
+    }
+
+    fn page_up(&mut self) {
+        self.upper_mark = self.upper_mark.saturating_sub(self.content_rows);
+    }
+
+    fn draw(&self, stdout: &mut std::io::Stdout) {
+        let lower_mark = self.line_count.min(self.upper_mark + self.content_rows);
+        self.draw_lines(stdout);
+        self.draw_prompt(stdout, lower_mark);
+        stdout.flush().unwrap();
+    }
+
+    fn draw_lines(&self, stdout: &mut std::io::Stdout) {
+        execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine)).unwrap();
+        let displayed_lines = self
+            .lines
+            .iter()
+            .skip(self.upper_mark)
+            .take(self.content_rows);
+
+        for line in displayed_lines {
+            stdout
+                .write_all(format!("\r{}\n", line).as_bytes())
+                .unwrap();
+        }
+    }
+
+    fn draw_prompt(&self, stdout: &mut Stdout, lower_mark: usize) {
+        let status = if lower_mark == self.line_count {
+            format!("Next file: {}", self.next_file.unwrap_or_default())
+        } else {
+            format!(
+                "{}%",
+                (lower_mark as f64 / self.line_count as f64 * 100.0).round() as usize
+            )
+        };
+        write!(
+            stdout,
+            "\r{}--More--({}){}",
+            Attribute::Reverse,
+            status,
+            Attribute::Reset
+        )
+        .unwrap();
+    }
 }
 
 // Break the lines on the cols of the terminal
@@ -350,52 +385,11 @@ fn break_line(line: &str, cols: usize) -> Vec<String> {
     lines
 }
 
-// Calculate upper_mark based on certain parameters
-fn calc_range(mut upper_mark: u16, rows: u16, line_count: u16) -> (u16, u16) {
-    let mut lower_mark = upper_mark.saturating_add(rows);
-
-    if lower_mark >= line_count {
-        upper_mark = line_count.saturating_sub(rows).saturating_add(1);
-        lower_mark = line_count;
-    } else {
-        lower_mark = lower_mark.saturating_sub(1)
-    }
-    (upper_mark, lower_mark)
-}
-
-// Make a prompt similar to original more
-fn make_prompt_and_flush(stdout: &mut Stdout, lower_mark: u16, lc: u16, next_file: Option<&str>) {
-    let status = if lower_mark == lc {
-        format!("Next file: {}", next_file.unwrap_or_default())
-    } else {
-        format!(
-            "{}%",
-            (lower_mark as f64 / lc as f64 * 100.0).round() as u16
-        )
-    };
-    write!(
-        stdout,
-        "\r{}--More--({}){}",
-        Attribute::Reverse,
-        status,
-        Attribute::Reset
-    )
-    .unwrap();
-    stdout.flush().unwrap();
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{break_line, calc_range};
+    use super::break_line;
     use unicode_width::UnicodeWidthStr;
 
-    // It is good to test the above functions
-    #[test]
-    fn test_calc_range() {
-        assert_eq!((0, 24), calc_range(0, 25, 100));
-        assert_eq!((50, 74), calc_range(50, 25, 100));
-        assert_eq!((76, 100), calc_range(85, 25, 100));
-    }
     #[test]
     fn test_break_lines_long() {
         let mut test_string = String::with_capacity(100);
