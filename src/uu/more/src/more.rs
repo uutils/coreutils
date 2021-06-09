@@ -355,7 +355,7 @@ fn calc_range(mut upper_mark: u16, rows: u16, line_count: u16) -> (u16, u16) {
     let mut lower_mark = upper_mark.saturating_add(rows);
 
     if lower_mark >= line_count {
-        upper_mark = line_count.saturating_sub(rows).saturating_add(1);
+        upper_mark = line_count.saturating_sub(rows);
         lower_mark = line_count;
     } else {
         lower_mark = lower_mark.saturating_sub(1)
