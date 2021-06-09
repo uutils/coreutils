@@ -205,16 +205,18 @@ fn reset_term(stdout: &mut std::io::Stdout) {
 fn reset_term(_: &mut usize) {}
 
 fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>) {
-    let (cols, rows) = terminal::size().unwrap();
+    let (cols, mut content_rows) = terminal::size().unwrap();
+    // We reserve one line for showing "More" at the bottom
+    content_rows -= 1;
     let lines = break_buff(buff, usize::from(cols));
     let line_count: u16 = lines.len().try_into().unwrap();
 
     let mut upper_mark = 0;
-    let mut lines_left = line_count.saturating_sub(upper_mark + rows);
+    let mut lines_left = line_count.saturating_sub(upper_mark + content_rows);
 
     draw(
         upper_mark,
-        rows,
+        content_rows,
         &mut stdout,
         lines.clone(),
         line_count,
@@ -257,20 +259,20 @@ fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>) {
                     code: KeyCode::Char(' '),
                     modifiers: KeyModifiers::NONE,
                 }) => {
-                    upper_mark = upper_mark.saturating_add(rows.saturating_sub(1));
+                    upper_mark = upper_mark.saturating_add(content_rows);
                 }
                 Event::Key(KeyEvent {
                     code: KeyCode::Up,
                     modifiers: KeyModifiers::NONE,
                 }) => {
-                    upper_mark = upper_mark.saturating_sub(rows.saturating_sub(1));
+                    upper_mark = upper_mark.saturating_sub(content_rows);
                 }
                 _ => continue,
             }
-            lines_left = line_count.saturating_sub(upper_mark + rows);
+            lines_left = line_count.saturating_sub(upper_mark + content_rows);
             draw(
                 upper_mark,
-                rows,
+                content_rows,
                 &mut stdout,
                 lines.clone(),
                 line_count,
@@ -289,19 +291,19 @@ fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>) {
 
 fn draw(
     upper_mark: u16,
-    rows: u16,
+    content_rows: u16,
     mut stdout: &mut std::io::Stdout,
     lines: Vec<String>,
     lc: u16,
     next_file: Option<&str>,
 ) {
     execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine)).unwrap();
-    let lower_mark = calc_lower_mark(upper_mark, rows, lc);
+    let lower_mark = calc_lower_mark(upper_mark, content_rows, lc);
     // Reduce the row by 1 for the prompt
     let displayed_lines = lines
         .iter()
         .skip(upper_mark.into())
-        .take(usize::from(rows.saturating_sub(1)));
+        .take(content_rows.into());
 
     for line in displayed_lines {
         stdout
@@ -350,8 +352,8 @@ fn break_line(line: &str, cols: usize) -> Vec<String> {
 }
 
 // Calculate upper_mark based on certain parameters
-fn calc_lower_mark(upper_mark: u16, rows: u16, line_count: u16) -> u16 {
-    line_count.min(upper_mark + rows - 1)
+fn calc_lower_mark(upper_mark: u16, content_rows: u16, line_count: u16) -> u16 {
+    line_count.min(upper_mark + content_rows)
 }
 
 // Make a prompt similar to original more
@@ -383,12 +385,12 @@ mod tests {
     // It is good to test the above functions
     #[test]
     fn test_calc_range() {
-        assert_eq!(24, calc_lower_mark(0, 25, 100));
-        assert_eq!(74, calc_lower_mark(50, 25, 100));
-        assert_eq!(100, calc_lower_mark(85, 25, 100));
-        assert_eq!(1, calc_lower_mark(0, 25, 1));
-        assert_eq!(24, calc_lower_mark(0, 25, 24));
-        assert_eq!(23, calc_lower_mark(0, 25, 23));
+        assert_eq!(24, calc_lower_mark(0, 24, 100));
+        assert_eq!(74, calc_lower_mark(50, 24, 100));
+        assert_eq!(100, calc_lower_mark(85, 24, 100));
+        assert_eq!(1, calc_lower_mark(0, 24, 1));
+        assert_eq!(24, calc_lower_mark(0, 24, 24));
+        assert_eq!(23, calc_lower_mark(0, 24, 23));
     }
     #[test]
     fn test_break_lines_long() {
