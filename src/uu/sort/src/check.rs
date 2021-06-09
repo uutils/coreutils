@@ -36,7 +36,7 @@ pub fn check(path: &str, settings: &GlobalSettings) -> i32 {
     for _ in 0..2 {
         recycled_sender
             .send(Chunk::new(vec![0; 100 * 1024], |_| Vec::new()))
-            .unwrap();
+            .ok();
     }
 
     let mut prev_chunk: Option<Chunk> = None;
@@ -80,12 +80,11 @@ fn reader(
     sender: SyncSender<Chunk>,
     settings: &GlobalSettings,
 ) {
-    let mut sender = Some(sender);
     let mut carry_over = vec![];
     for chunk in receiver.iter() {
         let (recycled_lines, recycled_buffer) = chunk.recycle();
-        chunks::read(
-            &mut sender,
+        let should_continue = chunks::read(
+            &sender,
             recycled_buffer,
             None,
             &mut carry_over,
@@ -98,6 +97,9 @@ fn reader(
             },
             recycled_lines,
             settings,
-        )
+        );
+        if !should_continue {
+            break;
+        }
     }
 }
