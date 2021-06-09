@@ -213,7 +213,7 @@ fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>) {
     let mut lines_left = line_count.saturating_sub(upper_mark + rows);
 
     draw(
-        &mut upper_mark,
+        upper_mark,
         rows,
         &mut stdout,
         lines.clone(),
@@ -269,7 +269,7 @@ fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>) {
             }
             lines_left = line_count.saturating_sub(upper_mark + rows);
             draw(
-                &mut upper_mark,
+                upper_mark,
                 rows,
                 &mut stdout,
                 lines.clone(),
@@ -288,7 +288,7 @@ fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>) {
 }
 
 fn draw(
-    upper_mark: &mut u16,
+    upper_mark: u16,
     rows: u16,
     mut stdout: &mut std::io::Stdout,
     lines: Vec<String>,
@@ -296,11 +296,11 @@ fn draw(
     next_file: Option<&str>,
 ) {
     execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine)).unwrap();
-    let (up_mark, lower_mark) = calc_range(*upper_mark, rows, lc);
+    let lower_mark = calc_lower_mark(upper_mark, rows, lc);
     // Reduce the row by 1 for the prompt
     let displayed_lines = lines
         .iter()
-        .skip(up_mark.into())
+        .skip(upper_mark.into())
         .take(usize::from(rows.saturating_sub(1)));
 
     for line in displayed_lines {
@@ -309,7 +309,6 @@ fn draw(
             .unwrap();
     }
     make_prompt_and_flush(&mut stdout, lower_mark, lc, next_file);
-    *upper_mark = up_mark;
 }
 
 // Break the lines on the cols of the terminal
@@ -351,16 +350,8 @@ fn break_line(line: &str, cols: usize) -> Vec<String> {
 }
 
 // Calculate upper_mark based on certain parameters
-fn calc_range(mut upper_mark: u16, rows: u16, line_count: u16) -> (u16, u16) {
-    let mut lower_mark = upper_mark.saturating_add(rows);
-
-    if lower_mark >= line_count {
-        upper_mark = line_count.saturating_sub(rows).saturating_add(1);
-        lower_mark = line_count;
-    } else {
-        lower_mark = lower_mark.saturating_sub(1)
-    }
-    (upper_mark, lower_mark)
+fn calc_lower_mark(upper_mark: u16, rows: u16, line_count: u16) -> u16 {
+    line_count.min(upper_mark + rows - 1)
 }
 
 // Make a prompt similar to original more
@@ -386,15 +377,18 @@ fn make_prompt_and_flush(stdout: &mut Stdout, lower_mark: u16, lc: u16, next_fil
 
 #[cfg(test)]
 mod tests {
-    use super::{break_line, calc_range};
+    use super::{break_line, calc_lower_mark};
     use unicode_width::UnicodeWidthStr;
 
     // It is good to test the above functions
     #[test]
     fn test_calc_range() {
-        assert_eq!((0, 24), calc_range(0, 25, 100));
-        assert_eq!((50, 74), calc_range(50, 25, 100));
-        assert_eq!((76, 100), calc_range(85, 25, 100));
+        assert_eq!(24, calc_lower_mark(0, 25, 100));
+        assert_eq!(74, calc_lower_mark(50, 25, 100));
+        assert_eq!(100, calc_lower_mark(85, 25, 100));
+        assert_eq!(1, calc_lower_mark(0, 25, 1));
+        assert_eq!(24, calc_lower_mark(0, 25, 24));
+        assert_eq!(23, calc_lower_mark(0, 25, 23));
     }
     #[test]
     fn test_break_lines_long() {
