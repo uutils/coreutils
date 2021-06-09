@@ -13,7 +13,7 @@ fn test_groups() {
 }
 
 #[test]
-#[cfg(any(target_vendor = "apple", target_os = "linux"))]
+#[cfg(any(target_os = "linux"))]
 #[ignore = "fixme: 'groups USERNAME' needs more debugging"]
 fn test_groups_username() {
     let scene = TestScenario::new(util_name!());
@@ -39,13 +39,15 @@ fn test_groups_username() {
 
 #[cfg(any(target_vendor = "apple", target_os = "linux"))]
 fn expected_result(args: &[&str]) -> String {
-    let util_name = "id";
+    #[cfg(target_os = "linux")]
+    let util_name = util_name!();
+    #[cfg(target_vendor = "apple")]
+    let util_name = format!("g{}", util_name!());
 
     TestScenario::new(&util_name)
         .cmd_keepenv(util_name)
         .env("LANGUAGE", "C")
         .args(args)
-        .args(&["-Gn"])
         .succeeds()
         .stdout_move_str()
 }
