@@ -94,6 +94,7 @@ pub fn get_groups() -> IOResult<Vec<gid_t>> {
 /// groups is the same (in the mathematical sense of ``set''). (The
 /// history of a process and its parents could affect the details of
 /// the result.)
+#[cfg(all(unix, feature = "process"))]
 pub fn get_groups_gnu(arg_id: Option<u32>) -> IOResult<Vec<gid_t>> {
     let mut groups = get_groups()?;
     let egid = arg_id.unwrap_or_else(crate::features::process::getegid);
