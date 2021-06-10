@@ -175,23 +175,14 @@ impl AstNode {
 pub fn tokens_to_ast(
     maybe_tokens: Result<Vec<(usize, Token)>, String>,
 ) -> Result<Box<AstNode>, String> {
-    if maybe_tokens.is_err() {
-        Err(maybe_tokens.err().unwrap())
-    } else {
-        let tokens = maybe_tokens.ok().unwrap();
+    maybe_tokens.and_then(|tokens| {
         let mut out_stack: TokenStack = Vec::new();
         let mut op_stack: TokenStack = Vec::new();
 
         for (token_idx, token) in tokens {
-            if let Err(reason) =
-                push_token_to_either_stack(token_idx, &token, &mut out_stack, &mut op_stack)
-            {
-                return Err(reason);
-            }
+            push_token_to_either_stack(token_idx, &token, &mut out_stack, &mut op_stack)?;
         }
-        if let Err(reason) = move_rest_of_ops_to_out(&mut out_stack, &mut op_stack) {
-            return Err(reason);
-        }
+        move_rest_of_ops_to_out(&mut out_stack, &mut op_stack)?;
         assert!(op_stack.is_empty());
 
         maybe_dump_rpn(&out_stack);
@@ -205,7 +196,7 @@ pub fn tokens_to_ast(
             maybe_dump_ast(&result);
             result
         }
-    }
+    })
 }
 
 fn maybe_dump_ast(result: &Result<Box<AstNode>, String>) {
