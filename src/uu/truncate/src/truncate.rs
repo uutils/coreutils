@@ -363,10 +363,7 @@ fn parse_size(size: &str) -> Result<u64, ()> {
     // Get the numeric part of the size argument. For example, if the
     // argument is "123K", then the numeric part is "123".
     let numeric_string: String = size.chars().take_while(|c| c.is_digit(10)).collect();
-    let number: u64 = match numeric_string.parse() {
-        Ok(n) => n,
-        Err(_) => return Err(()),
-    };
+    let number: u64 = numeric_string.parse().map_err(|_| ())?;
 
     // Get the alphabetic units part of the size argument and compute
     // the factor it represents. For example, if the argument is "123K",
