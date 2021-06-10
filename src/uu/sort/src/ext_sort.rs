@@ -83,7 +83,7 @@ fn reader_writer<F: Iterator<Item = Box<dyn Read + Send>>, Tmp: WriteableTmpFile
         // Heuristically chosen: Dividing by 10 seems to keep our memory usage roughly
         // around settings.buffer_size as a whole.
         buffer_size,
-        &settings,
+        settings,
         receiver,
         sender,
     );
@@ -92,22 +92,22 @@ fn reader_writer<F: Iterator<Item = Box<dyn Read + Send>>, Tmp: WriteableTmpFile
             let tmp_dir_size = tmp_files.len();
             let mut merger = merge::merge_with_file_limit::<_, _, Tmp>(
                 tmp_files.into_iter().map(|c| c.reopen()),
-                &settings,
+                settings,
                 Some((tmp_dir, tmp_dir_size)),
             );
-            merger.write_all(&settings);
+            merger.write_all(settings);
         }
         ReadResult::SortedSingleChunk(chunk) => {
-            output_sorted_lines(chunk.borrow_lines().iter(), &settings);
+            output_sorted_lines(chunk.borrow_lines().iter(), settings);
         }
         ReadResult::SortedTwoChunks([a, b]) => {
             let merged_iter = a
                 .borrow_lines()
                 .iter()
                 .merge_by(b.borrow_lines().iter(), |line_a, line_b| {
-                    compare_by(line_a, line_b, &settings) != Ordering::Greater
+                    compare_by(line_a, line_b, settings) != Ordering::Greater
                 });
-            output_sorted_lines(merged_iter, &settings);
+            output_sorted_lines(merged_iter, settings);
         }
         ReadResult::EmptyInput => {
             // don't output anything
@@ -220,7 +220,7 @@ fn read_write_loop<I: WriteableTmpFile>(
 
         if let Some(sender) = &sender_option {
             let should_continue = chunks::read(
-                &sender,
+                sender,
                 recycled_buffer,
                 None,
                 &mut carry_over,
