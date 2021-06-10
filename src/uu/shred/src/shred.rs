@@ -163,16 +163,14 @@ impl<'a> BytesGenerator<'a> {
             return None;
         }
 
-        let this_block_size = {
-            if !self.exact {
+        let this_block_size = if !self.exact {
+            self.block_size
+        } else {
+            let bytes_left = self.total_bytes - self.bytes_generated.get();
+            if bytes_left >= self.block_size as u64 {
                 self.block_size
             } else {
-                let bytes_left = self.total_bytes - self.bytes_generated.get();
-                if bytes_left >= self.block_size as u64 {
-                    self.block_size
-                } else {
-                    (bytes_left % self.block_size as u64) as usize
-                }
+                (bytes_left % self.block_size as u64) as usize
             }
         };
 
@@ -184,12 +182,10 @@ impl<'a> BytesGenerator<'a> {
                 rng.fill(bytes);
             }
             PassType::Pattern(pattern) => {
-                let skip = {
-                    if self.bytes_generated.get() == 0 {
-                        0
-                    } else {
-                        (pattern.len() as u64 % self.bytes_generated.get()) as usize
-                    }
+                let skip = if self.bytes_generated.get() == 0 {
+                    0
+                } else {
+                    (pattern.len() as u64 % self.bytes_generated.get()) as usize
                 };
 
                 // Copy the pattern in chunks rather than simply one byte at a time
