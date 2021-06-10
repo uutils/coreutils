@@ -5,7 +5,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) tstr sigstr cmdname setpgid
+// spell-checker:ignore (ToDO) tstr sigstr cmdname setpgid sigchld
 
 #[macro_use]
 extern crate uucore;
@@ -161,6 +161,17 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     )
 }
 
+/// Remove pre-existing SIGCHLD handlers that would make waiting for the child's exit code fail.
+fn unblock_sigchld() {
+    unsafe {
+        nix::sys::signal::signal(
+            nix::sys::signal::Signal::SIGCHLD,
+            nix::sys::signal::SigHandler::SigDfl,
+        )
+        .unwrap();
+    }
+}
+
 /// TODO: Improve exit codes, and make them consistent with the GNU Coreutils exit codes.
 
 fn timeout(
@@ -194,6 +205,7 @@ fn timeout(
             }
         }
     };
+    unblock_sigchld();
     match process.wait_or_timeout(duration) {
         Ok(Some(status)) => status.code().unwrap_or_else(|| status.signal().unwrap()),
         Ok(None) => {
