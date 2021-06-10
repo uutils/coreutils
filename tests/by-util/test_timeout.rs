@@ -31,3 +31,17 @@ fn test_verbose() {
             .stderr_only("timeout: sending signal EXIT to command 'sleep'\ntimeout: sending signal KILL to command 'sleep'");
     }
 }
+
+#[test]
+fn test_zero_timeout() {
+    new_ucmd!()
+        .args(&["-v", "0", "sleep", ".1"])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+    new_ucmd!()
+        .args(&["-v", "0", "-s0", "-k0", "sleep", ".1"])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+}

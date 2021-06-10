@@ -93,6 +93,7 @@ pub trait ChildExt {
     fn send_signal(&mut self, signal: usize) -> io::Result<()>;
 
     /// Wait for a process to finish or return after the specified duration.
+    /// A `timeout` of zero disables the timeout.
     fn wait_or_timeout(&mut self, timeout: Duration) -> io::Result<Option<ExitStatus>>;
 }
 
@@ -106,6 +107,11 @@ impl ChildExt for Child {
     }
 
     fn wait_or_timeout(&mut self, timeout: Duration) -> io::Result<Option<ExitStatus>> {
+        if timeout == Duration::from_micros(0) {
+            return self
+                .wait()
+                .map(|status| Some(ExitStatus::from_std_status(status)));
+        }
         // .try_wait() doesn't drop stdin, so we do it manually
         drop(self.stdin.take());
 

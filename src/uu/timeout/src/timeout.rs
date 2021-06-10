@@ -214,10 +214,6 @@ fn timeout(
                     }
                 }
                 Ok(None) => {
-                    if kill_after == Duration::new(0, 0) {
-                        // XXX: this may not be right
-                        return 124;
-                    }
                     if verbose {
                         show_error!("sending signal KILL to command '{}'", cmd[0]);
                     }
