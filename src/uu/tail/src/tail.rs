@@ -174,7 +174,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     match matches.value_of(options::LINES) {
         Some(n) => {
             let mut slice: &str = n;
-            if slice.chars().next().unwrap_or('_') == '+' {
+            if slice.as_bytes().first() == Some(&b'+') {
                 settings.beginning = true;
                 slice = &slice[1..];
             }
@@ -189,7 +189,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         None => {
             if let Some(n) = matches.value_of(options::BYTES) {
                 let mut slice: &str = n;
-                if slice.chars().next().unwrap_or('_') == '+' {
+                if slice.as_bytes().first() == Some(&b'+') {
                     settings.beginning = true;
                     slice = &slice[1..];
                 }
@@ -305,41 +305,35 @@ impl ParseSizeErr {
 pub type ParseSizeResult = Result<u64, ParseSizeErr>;
 
 pub fn parse_size(mut size_slice: &str) -> Result<u64, ParseSizeErr> {
-    let mut base = if size_slice.chars().last().unwrap_or('_') == 'B' {
+    let mut base = if size_slice.as_bytes().last() == Some(&b'B') {
         size_slice = &size_slice[..size_slice.len() - 1];
         1000u64
     } else {
         1024u64
     };
 
-    let exponent = if !size_slice.is_empty() {
-        let mut has_suffix = true;
-        let exp = match size_slice.chars().last().unwrap_or('_') {
-            'K' | 'k' => 1u64,
-            'M' => 2u64,
-            'G' => 3u64,
-            'T' => 4u64,
-            'P' => 5u64,
-            'E' => 6u64,
-            'Z' | 'Y' => {
+    let exponent = match size_slice.as_bytes().last() {
+        Some(unit) => match unit {
+            b'K' | b'k' => 1u64,
+            b'M' => 2u64,
+            b'G' => 3u64,
+            b'T' => 4u64,
+            b'P' => 5u64,
+            b'E' => 6u64,
+            b'Z' | b'Y' => {
                 return Err(ParseSizeErr::size_too_big(size_slice));
             }
-            'b' => {
+            b'b' => {
                 base = 512u64;
                 1u64
             }
-            _ => {
-                has_suffix = false;
-                0u64
-            }
-        };
-        if has_suffix {
-            size_slice = &size_slice[..size_slice.len() - 1];
-        }
-        exp
-    } else {
-        0u64
+            _ => 0u64,
+        },
+        None => 0u64,
     };
+    if exponent != 0 {
+        size_slice = &size_slice[..size_slice.len() - 1];
+    }
 
     let mut multiplier = 1u64;
     for _ in 0u64..exponent {
