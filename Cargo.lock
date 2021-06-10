@@ -2605,7 +2605,6 @@ name = "uu_timeout"
 version = "0.0.6"
 dependencies = [
  "clap",
- "getopts",
  "libc",
  "uucore",
  "uucore_procs",
