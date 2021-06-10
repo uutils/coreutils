@@ -5,8 +5,9 @@ use crate::common::util::*;
 // considered okay. If we are not inside the CI this calls assert!(result.success).
 //
 // From the Logs: "Build (ubuntu-18.04, x86_64-unknown-linux-gnu, feat_os_unix, use-cross)"
-// stderr: "whoami: cannot find name for user ID 1001"
-// stderr: "id: Could not find uid 1001: No such id: 1001"
+//    whoami: cannot find name for user ID 1001
+// id --name: cannot find name for user ID 1001
+// id --name: cannot find name for group ID 116
 //
 // However, when running "id" from within "/bin/bash" it looks fine:
 // id: "uid=1001(runner) gid=118(docker) groups=118(docker),4(adm),101(systemd-journal)"
@@ -95,69 +96,6 @@ fn test_id_name_from_id() {
 }
 
 #[test]
-fn test_id_group() {
-    let scene = TestScenario::new(util_name!());
-
-    let mut result = scene.ucmd().arg("-g").succeeds();
-    let s1 = result.stdout_str().trim();
-    assert!(s1.parse::<u64>().is_ok());
-
-    result = scene.ucmd().arg("--group").succeeds();
-    let s1 = result.stdout_str().trim();
-    assert!(s1.parse::<u64>().is_ok());
-
-    #[cfg(any(target_vendor = "apple", target_os = "linux"))]
-    for flag in &["-g", "--group"] {
-        new_ucmd!()
-            .arg(flag)
-            .succeeds()
-            .stdout_is(expected_result(&[flag], false));
-    }
-}
-
-#[test]
-#[cfg(any(target_vendor = "apple", target_os = "linux"))]
-fn test_id_groups() {
-    let scene = TestScenario::new(util_name!());
-    for g_flag in &["-G", "--groups"] {
-        scene
-            .ucmd()
-            .arg(g_flag)
-            .succeeds()
-            .stdout_is(expected_result(&[g_flag], false));
-        for &r_flag in &["-r", "--real"] {
-            let args = [g_flag, r_flag];
-            scene
-                .ucmd()
-                .args(&args)
-                .succeeds()
-                .stdout_is(expected_result(&args, false));
-        }
-    }
-}
-
-#[test]
-fn test_id_user() {
-    let scene = TestScenario::new(util_name!());
-
-    let result = scene.ucmd().arg("-u").succeeds();
-    let s1 = result.stdout_str().trim();
-    assert!(s1.parse::<u64>().is_ok());
-
-    let result = scene.ucmd().arg("--user").succeeds();
-    let s1 = result.stdout_str().trim();
-    assert!(s1.parse::<u64>().is_ok());
-
-    #[cfg(any(target_vendor = "apple", target_os = "linux"))]
-    for flag in &["-u", "--user"] {
-        new_ucmd!()
-            .arg(flag)
-            .succeeds()
-            .stdout_is(expected_result(&[flag], false));
-    }
-}
-
-#[test]
 fn test_id_pretty_print() {
     let username = return_whoami_username();
     if username.is_empty() {
@@ -193,52 +131,13 @@ fn test_id_password_style() {
 }
 
 #[test]
-#[cfg(any(target_vendor = "apple", target_os = "linux"))]
+#[cfg(unix)]
 fn test_id_default_format() {
-    // These are the same tests like in test_id_zero but without --zero flag.
-    let scene = TestScenario::new(util_name!());
-    for &opt1 in &["--name", "--real"] {
-        // id: cannot print only names or real IDs in default format
-        let args = [opt1];
-        scene
-            .ucmd()
-            .args(&args)
-            .fails()
-            .stderr_only(expected_result(&args, true));
-        for &opt2 in &["--user", "--group", "--groups"] {
-            // u/g/G n/r
-            let args = [opt2, opt1];
-            let result = scene.ucmd().args(&args).run();
-            if !result.succeeded()
-                && is_ci()
-                && result.stderr_str().contains("cannot find name for")
-            {
-                // '--name' does not work on CICD ubuntu-16/ubuntu-18
-                // id: cannot find name for user ID 1001
-                // id: cannot find name for group ID 116
-                scene
-                    .ucmd()
-                    .args(&args)
-                    .fails()
-                    .stderr_only(expected_result(&args, true));
-            } else {
-                result.stdout_only(expected_result(&args, false));
-            }
-        }
-    }
-    // u/g/G
-    for &opt2 in &["--user", "--group", "--groups"] {
-        let args = [opt2];
-        scene
-            .ucmd()
-            .args(&args)
-            .succeeds()
-            .stdout_only(expected_result(&args, false));
-    }
+    // TODO: These are the same tests like in test_id_zero but without --zero flag.
 }
 
 #[test]
-#[cfg(any(target_vendor = "apple", target_os = "linux"))]
+#[cfg(unix)]
 fn test_id_zero() {
     let scene = TestScenario::new(util_name!());
     for z_flag in &["-z", "--zero"] {
@@ -249,26 +148,15 @@ fn test_id_zero() {
                 .ucmd()
                 .args(&args)
                 .fails()
-                .stderr_only(expected_result(&args, true));
+                .stderr_only(expected_result(&args).stderr_str());
             for &opt2 in &["--user", "--group", "--groups"] {
                 // u/g/G n/r z
                 let args = [opt2, z_flag, opt1];
                 let result = scene.ucmd().args(&args).run();
-                if !result.succeeded()
-                    && is_ci()
-                    && result.stderr_str().contains("cannot find name for")
-                {
-                    // '--name' does not work on CICD ubuntu-16/ubuntu-18
-                    // id: cannot find name for user ID 1001
-                    // id: cannot find name for group ID 116
-                    scene
-                        .ucmd()
-                        .args(&args)
-                        .fails()
-                        .stderr_only(expected_result(&args, true));
-                } else {
-                    result.stdout_only(expected_result(&args, false));
-                }
+                let expected_result = expected_result(&args);
+                result
+                    .stdout_is_bytes(expected_result.stdout())
+                    .stderr_is_bytes(expected_result.stderr());
             }
         }
         // u/g/G z
@@ -278,37 +166,46 @@ fn test_id_zero() {
                 .ucmd()
                 .args(&args)
                 .succeeds()
-                .stdout_only(expected_result(&args, false));
+                .stdout_only_bytes(expected_result(&args).stdout());
         }
     }
 }
 
 #[allow(clippy::needless_borrow)]
-#[cfg(any(target_vendor = "apple", target_os = "linux"))]
-fn expected_result(args: &[&str], exp_fail: bool) -> String {
+#[cfg(unix)]
+fn expected_result(args: &[&str]) -> CmdResult {
     #[cfg(target_os = "linux")]
     let util_name = util_name!();
-    #[cfg(target_vendor = "apple")]
+    #[cfg(all(unix, not(target_os = "linux")))]
     let util_name = format!("g{}", util_name!());
 
-    let result = if !exp_fail {
-        TestScenario::new(&util_name)
-            .cmd_keepenv(util_name)
-            .env("LANGUAGE", "C")
-            .args(args)
-            .succeeds()
-            .stdout_move_str()
-    } else {
-        TestScenario::new(&util_name)
-            .cmd_keepenv(util_name)
-            .env("LANGUAGE", "C")
-            .args(args)
-            .fails()
-            .stderr_move_str()
-    };
-    if cfg!(target_os = "macos") && result.starts_with("gid") {
-        result[1..].to_string()
-    } else {
-        result
+    let result = TestScenario::new(&util_name)
+        .cmd_keepenv(&util_name)
+        .env("LANGUAGE", "C")
+        .args(args)
+        .run();
+
+    let mut _o = 0;
+    let mut _e = 0;
+    #[cfg(all(unix, not(target_os = "linux")))]
+    {
+        _o = if result.stdout_str().starts_with(&util_name) {
+            1
+        } else {
+            0
+        };
+        _e = if result.stderr_str().starts_with(&util_name) {
+            1
+        } else {
+            0
+        };
     }
+
+    CmdResult::new(
+        Some(result.tmpd()),
+        Some(result.code()),
+        result.succeeded(),
+        &result.stdout()[_o..],
+        &result.stderr()[_e..],
+    )
 }
