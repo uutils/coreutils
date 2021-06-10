@@ -241,13 +241,14 @@ fn no_leading_hyphen(path_segment: &str) -> bool {
 
 // check whether a path segment contains only valid (read: portable) characters
 fn check_portable_chars(path_segment: &str) -> bool {
-    let valid_str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-".to_string();
-    for ch in path_segment.chars() {
-        if !valid_str.contains(ch) {
+    const VALID_CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-";
+    for (i, ch) in path_segment.as_bytes().iter().enumerate() {
+        if !VALID_CHARS.contains(ch) {
+            let invalid = path_segment[i..].chars().next().unwrap();
             writeln!(
                 &mut std::io::stderr(),
                 "nonportable character '{}' in file name component '{}'",
-                ch,
+                invalid,
                 path_segment
             );
             return false;
