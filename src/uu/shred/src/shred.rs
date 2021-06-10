@@ -24,7 +24,7 @@ extern crate uucore;
 
 static NAME: &str = "shred";
 const BLOCK_SIZE: usize = 512;
-const NAME_CHARSET: &str = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_.";
+const NAME_CHARSET: &[u8] = b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_.";
 
 // Patterns as shown in the GNU coreutils shred implementation
 const PATTERNS: [&[u8]; 22] = [
@@ -89,7 +89,7 @@ impl Iterator for FilenameGenerator {
         // Make the return value, then increment
         let mut ret = String::new();
         for i in name_charset_indices.iter() {
-            let c: char = NAME_CHARSET.chars().nth(*i).unwrap();
+            let c = char::from(NAME_CHARSET[*i]);
             ret.push(c);
         }
 
