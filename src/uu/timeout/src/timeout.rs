@@ -37,7 +37,6 @@ pub mod options {
     // Positional args.
     pub static DURATION: &str = "duration";
     pub static COMMAND: &str = "command";
-    pub static ARGS: &str = "args";
 }
 
 struct Config {
@@ -47,8 +46,7 @@ struct Config {
     duration: Duration,
     preserve_status: bool,
 
-    command: String,
-    command_args: Vec<String>,
+    command: Vec<String>,
 }
 
 impl Config {
@@ -77,12 +75,11 @@ impl Config {
         let preserve_status: bool = options.is_present(options::PRESERVE_STATUS);
         let foreground = options.is_present(options::FOREGROUND);
 
-        let command: String = options.value_of(options::COMMAND).unwrap().to_string();
-
-        let command_args: Vec<String> = match options.values_of(options::ARGS) {
-            Some(values) => values.map(|x| x.to_owned()).collect(),
-            None => vec![],
-        };
+        let command = options
+            .values_of(options::COMMAND)
+            .unwrap()
+            .map(String::from)
+            .collect::<Vec<_>>();
 
         Config {
             foreground,
@@ -91,7 +88,6 @@ impl Config {
             duration,
             preserve_status,
             command,
-            command_args,
         }
     }
 }
@@ -137,9 +133,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(options::COMMAND)
                 .index(2)
                 .required(true)
-        )
-        .arg(
-            Arg::with_name(options::ARGS).multiple(true)
+                .multiple(true)
         )
         .setting(AppSettings::TrailingVarArg);
 
@@ -148,7 +142,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let config = Config::from(matches);
     timeout(
         &config.command,
-        &config.command_args,
         config.duration,
         config.signal,
         config.kill_after,
@@ -160,8 +153,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 /// TODO: Improve exit codes, and make them consistent with the GNU Coreutils exit codes.
 
 fn timeout(
-    cmdname: &str,
-    args: &[String],
+    cmd: &[String],
     duration: Duration,
     signal: usize,
     kill_after: Duration,
@@ -171,8 +163,8 @@ fn timeout(
     if !foreground {
         unsafe { libc::setpgid(0, 0) };
     }
-    let mut process = match Command::new(cmdname)
-        .args(args)
+    let mut process = match Command::new(&cmd[0])
+        .args(&cmd[1..])
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())

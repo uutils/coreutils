@@ -9,3 +9,11 @@ fn test_subcommand_return_code() {
 
     new_ucmd!().arg("1").arg("false").run().status_code(1);
 }
+
+#[test]
+fn test_command_with_args() {
+    new_ucmd!()
+        .args(&["1700", "echo", "-n", "abcd"])
+        .succeeds()
+        .stdout_only("abcd");
+}
