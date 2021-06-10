@@ -17,7 +17,7 @@ use std::io::ErrorKind;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 use uucore::process::ChildExt;
-use uucore::signals::signal_by_name_or_value;
+use uucore::signals::{signal_by_name_or_value, signal_name_by_value};
 use uucore::InvalidEncodingHandling;
 
 static ABOUT: &str = "Start COMMAND, and kill it if still running after DURATION.";
@@ -33,6 +33,7 @@ pub mod options {
     pub static KILL_AFTER: &str = "kill-after";
     pub static SIGNAL: &str = "signal";
     pub static PRESERVE_STATUS: &str = "preserve-status";
+    pub static VERBOSE: &str = "verbose";
 
     // Positional args.
     pub static DURATION: &str = "duration";
@@ -45,6 +46,7 @@ struct Config {
     signal: usize,
     duration: Duration,
     preserve_status: bool,
+    verbose: bool,
 
     command: Vec<String>,
 }
@@ -74,6 +76,7 @@ impl Config {
 
         let preserve_status: bool = options.is_present(options::PRESERVE_STATUS);
         let foreground = options.is_present(options::FOREGROUND);
+        let verbose = options.is_present(options::VERBOSE);
 
         let command = options
             .values_of(options::COMMAND)
@@ -88,6 +91,7 @@ impl Config {
             duration,
             preserve_status,
             command,
+            verbose,
         }
     }
 }
@@ -125,6 +129,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .takes_value(true)
         )
         .arg(
+            Arg::with_name(options::VERBOSE)
+              .short("v")
+              .long(options::VERBOSE)
+              .help("diagnose to stderr any signal sent upon timeout")
+        )
+        .arg(
             Arg::with_name(options::DURATION)
                 .index(1)
                 .required(true)
@@ -147,6 +157,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         config.kill_after,
         config.foreground,
         config.preserve_status,
+        config.verbose,
     )
 }
 
@@ -159,6 +170,7 @@ fn timeout(
     kill_after: Duration,
     foreground: bool,
     preserve_status: bool,
+    verbose: bool,
 ) -> i32 {
     if !foreground {
         unsafe { libc::setpgid(0, 0) };
@@ -185,6 +197,13 @@ fn timeout(
     match process.wait_or_timeout(duration) {
         Ok(Some(status)) => status.code().unwrap_or_else(|| status.signal().unwrap()),
         Ok(None) => {
+            if verbose {
+                show_error!(
+                    "sending signal {} to command '{}'",
+                    signal_name_by_value(signal).unwrap(),
+                    cmd[0]
+                );
+            }
             return_if_err!(ERR_EXIT_STATUS, process.send_signal(signal));
             match process.wait_or_timeout(kill_after) {
                 Ok(Some(status)) => {
@@ -198,6 +217,9 @@ fn timeout(
                     if kill_after == Duration::new(0, 0) {
                         // XXX: this may not be right
                         return 124;
+                    }
+                    if verbose {
+                        show_error!("sending signal KILL to command '{}'", cmd[0]);
                     }
                     return_if_err!(
                         ERR_EXIT_STATUS,

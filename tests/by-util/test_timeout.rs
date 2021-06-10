@@ -17,3 +17,17 @@ fn test_command_with_args() {
         .succeeds()
         .stdout_only("abcd");
 }
+
+#[test]
+fn test_verbose() {
+    for &verbose_flag in &["-v", "--verbose"] {
+        new_ucmd!()
+            .args(&[verbose_flag, ".1", "sleep", "10"])
+            .fails()
+            .stderr_only("timeout: sending signal TERM to command 'sleep'");
+        new_ucmd!()
+            .args(&[verbose_flag, "-s0", "-k.1", ".1", "sleep", "10"])
+            .fails()
+            .stderr_only("timeout: sending signal EXIT to command 'sleep'\ntimeout: sending signal KILL to command 'sleep'");
+    }
+}
