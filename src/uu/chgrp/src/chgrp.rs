@@ -70,25 +70,23 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let mut bit_flag = FTS_PHYSICAL;
     let mut preserve_root = false;
     let mut derefer = -1;
-    let flags: &[char] = &['H', 'L', 'P'];
+    const FLAGS: &[u8] = &[b'H', b'L', b'P'];
     for opt in &args {
-        match opt.as_str() {
+        let opt = opt.as_str();
+        // byte search is safe for utf-8 string
+        match opt.as_bytes().iter().rfind(|x| FLAGS.contains(x)) {
             // If more than one is specified, only the final one takes effect.
-            s if s.contains(flags) => {
-                if let Some(idx) = s.rfind(flags) {
-                    match s.chars().nth(idx).unwrap() {
-                        'H' => bit_flag = FTS_COMFOLLOW | FTS_PHYSICAL,
-                        'L' => bit_flag = FTS_LOGICAL,
-                        'P' => bit_flag = FTS_PHYSICAL,
-                        _ => (),
-                    }
-                }
-            }
-            "--no-preserve-root" => preserve_root = false,
-            "--preserve-root" => preserve_root = true,
-            "--dereference" => derefer = 1,
-            "--no-dereference" => derefer = 0,
-            _ => (),
+            Some(b'H') => bit_flag = FTS_COMFOLLOW | FTS_PHYSICAL,
+            Some(b'L') => bit_flag = FTS_LOGICAL,
+            Some(b'P') => bit_flag = FTS_PHYSICAL,
+            None => match opt {
+                "--no-preserve-root" => preserve_root = false,
+                "--preserve-root" => preserve_root = true,
+                "--dereference" => derefer = 1,
+                "--no-dereference" => derefer = 0,
+                _ => (),
+            },
+            _ => unreachable!(),
         }
     }
 
