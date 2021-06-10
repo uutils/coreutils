@@ -401,18 +401,18 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     for file_group in file_groups {
         let result_options = build_options(&matches, &file_group, args.join(" "));
+        let options = match result_options {
+            Ok(options) => options,
+            Err(err) => {
+                print_error(&matches, err);
+                return 1;
+            }
+        };
 
-        if result_options.is_err() {
-            print_error(&matches, result_options.err().unwrap());
-            return 1;
-        }
-
-        let options = &result_options.unwrap();
-
-        let cmd_result = if file_group.len() == 1 {
-            pr(file_group.get(0).unwrap(), options)
+        let cmd_result = if let Ok(group) = file_group.iter().exactly_one() {
+            pr(group, &options)
         } else {
-            mpr(&file_group, options)
+            mpr(&file_group, &options)
         };
 
         let status = match cmd_result {
@@ -442,11 +442,12 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
     let mut arguments = args.to_owned();
     let num_option = args.iter().find_position(|x| n_regex.is_match(x.trim()));
     if let Some((pos, _value)) = num_option {
-        let num_val_opt = args.get(pos + 1);
-        if num_val_opt.is_some() && !num_regex.is_match(num_val_opt.unwrap()) {
-            let could_be_file = arguments.remove(pos + 1);
-            arguments.insert(pos + 1, format!("{}", NumberingMode::default().width));
-            arguments.insert(pos + 2, could_be_file);
+        if let Some(num_val_opt) = args.get(pos + 1) {
+            if !num_regex.is_match(num_val_opt) {
+                let could_be_file = arguments.remove(pos + 1);
+                arguments.insert(pos + 1, format!("{}", NumberingMode::default().width));
+                arguments.insert(pos + 2, could_be_file);
+            }
         }
     }
 
@@ -666,12 +667,14 @@ fn build_options(
         None => end_page_in_plus_option,
     };
 
-    if end_page.is_some() && start_page > end_page.unwrap() {
-        return Err(PrError::EncounteredErrors(format!(
-            "invalid --pages argument '{}:{}'",
-            start_page,
-            end_page.unwrap()
-        )));
+    if let Some(end_page) = end_page {
+        if start_page > end_page {
+            return Err(PrError::EncounteredErrors(format!(
+                "invalid --pages argument '{}:{}'",
+                start_page,
+                end_page
+            )));
+        }
     }
 
     let default_lines_per_page = if form_feed_used {
@@ -947,7 +950,7 @@ fn read_stream_and_create_pages(
                 let current_page = x + 1;
 
                 current_page >= start_page
-                    && (last_page.is_none() || current_page <= last_page.unwrap())
+                    && last_page.map_or(true, |last_page| current_page <= last_page)
             }),
     )
 }
@@ -1030,8 +1033,7 @@ fn print_page(lines: &[FileLine], options: &OutputOptions, page: usize) -> Resul
 
     let lines_written = write_columns(lines, options, out)?;
 
-    for index in 0..trailer_content.len() {
-        let x = trailer_content.get(index).unwrap();
+    for (index, x) in trailer_content.iter().enumerate() {
         out.write_all(x.as_bytes())?;
         if index + 1 != trailer_content.len() {
             out.write_all(line_separator)?;
@@ -1074,8 +1076,7 @@ fn write_columns(
         let mut offset = 0;
         for col in 0..columns {
             let mut inserted = 0;
-            for i in offset..lines.len() {
-                let line = lines.get(i).unwrap();
+            for line in &lines[offset..] {
                 if line.file_id != col {
                     break;
                 }
