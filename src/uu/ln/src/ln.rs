@@ -77,17 +77,19 @@ fn get_long_usage() -> String {
 
 static ABOUT: &str = "change file owner and group";
 
-static OPT_B: &str = "b";
-static OPT_BACKUP: &str = "backup";
-static OPT_FORCE: &str = "force";
-static OPT_INTERACTIVE: &str = "interactive";
-static OPT_NO_DEREFERENCE: &str = "no-dereference";
-static OPT_SYMBOLIC: &str = "symbolic";
-static OPT_SUFFIX: &str = "suffix";
-static OPT_TARGET_DIRECTORY: &str = "target-directory";
-static OPT_NO_TARGET_DIRECTORY: &str = "no-target-directory";
-static OPT_RELATIVE: &str = "relative";
-static OPT_VERBOSE: &str = "verbose";
+mod options {
+    pub const B: &str = "b";
+    pub const BACKUP: &str = "backup";
+    pub const FORCE: &str = "force";
+    pub const INTERACTIVE: &str = "interactive";
+    pub const NO_DEREFERENCE: &str = "no-dereference";
+    pub const SYMBOLIC: &str = "symbolic";
+    pub const SUFFIX: &str = "suffix";
+    pub const TARGET_DIRECTORY: &str = "target-directory";
+    pub const NO_TARGET_DIRECTORY: &str = "no-target-directory";
+    pub const RELATIVE: &str = "relative";
+    pub const VERBOSE: &str = "verbose";
+}
 
 static ARG_FILES: &str = "files";
 
@@ -100,47 +102,42 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .about(ABOUT)
         .usage(&usage[..])
         .after_help(&long_usage[..])
-        .arg(Arg::with_name(OPT_B).short(OPT_B).help(
+        .arg(Arg::with_name(options::B).short(options::B).help(
             "make a backup of each file that would otherwise be overwritten or \
              removed",
         ))
         .arg(
-            Arg::with_name(OPT_BACKUP)
-                .long(OPT_BACKUP)
+            Arg::with_name(options::BACKUP)
+                .long(options::BACKUP)
                 .help(
                     "make a backup of each file that would otherwise be overwritten \
                      or removed",
                 )
                 .takes_value(true)
-                .possible_value("simple")
-                .possible_value("never")
-                .possible_value("numbered")
-                .possible_value("t")
-                .possible_value("existing")
-                .possible_value("nil")
-                .possible_value("none")
-                .possible_value("off")
+                .possible_values(&[
+                    "simple", "never", "numbered", "t", "existing", "nil", "none", "off",
+                ])
                 .value_name("METHOD"),
         )
         // TODO: opts.arg(
         //    Arg::with_name(("d", "directory", "allow users with appropriate privileges to attempt \
         //                                       to make hard links to directories");
         .arg(
-            Arg::with_name(OPT_FORCE)
+            Arg::with_name(options::FORCE)
                 .short("f")
-                .long(OPT_FORCE)
+                .long(options::FORCE)
                 .help("remove existing destination files"),
         )
         .arg(
-            Arg::with_name(OPT_INTERACTIVE)
+            Arg::with_name(options::INTERACTIVE)
                 .short("i")
-                .long(OPT_INTERACTIVE)
+                .long(options::INTERACTIVE)
                 .help("prompt whether to remove existing destination files"),
         )
         .arg(
-            Arg::with_name(OPT_NO_DEREFERENCE)
+            Arg::with_name(options::NO_DEREFERENCE)
                 .short("n")
-                .long(OPT_NO_DEREFERENCE)
+                .long(options::NO_DEREFERENCE)
                 .help(
                     "treat LINK_NAME as a normal file if it is a \
                      symbolic link to a directory",
@@ -152,44 +149,46 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         // TODO: opts.arg(
         //    Arg::with_name(("P", "physical", "make hard links directly to symbolic links");
         .arg(
-            Arg::with_name(OPT_SYMBOLIC)
+            Arg::with_name(options::SYMBOLIC)
                 .short("s")
                 .long("symbolic")
-                .help("make symbolic links instead of hard links"),
+                .help("make symbolic links instead of hard links")
+                // override added for https://github.com/uutils/coreutils/issues/2359
+                .overrides_with(options::SYMBOLIC),
         )
         .arg(
-            Arg::with_name(OPT_SUFFIX)
+            Arg::with_name(options::SUFFIX)
                 .short("S")
-                .long(OPT_SUFFIX)
+                .long(options::SUFFIX)
                 .help("override the usual backup suffix")
                 .value_name("SUFFIX")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name(OPT_TARGET_DIRECTORY)
+            Arg::with_name(options::TARGET_DIRECTORY)
                 .short("t")
-                .long(OPT_TARGET_DIRECTORY)
+                .long(options::TARGET_DIRECTORY)
                 .help("specify the DIRECTORY in which to create the links")
                 .value_name("DIRECTORY")
-                .conflicts_with(OPT_NO_TARGET_DIRECTORY),
+                .conflicts_with(options::NO_TARGET_DIRECTORY),
         )
         .arg(
-            Arg::with_name(OPT_NO_TARGET_DIRECTORY)
+            Arg::with_name(options::NO_TARGET_DIRECTORY)
                 .short("T")
-                .long(OPT_NO_TARGET_DIRECTORY)
+                .long(options::NO_TARGET_DIRECTORY)
                 .help("treat LINK_NAME as a normal file always"),
         )
         .arg(
-            Arg::with_name(OPT_RELATIVE)
+            Arg::with_name(options::RELATIVE)
                 .short("r")
-                .long(OPT_RELATIVE)
+                .long(options::RELATIVE)
                 .help("create symbolic links relative to link location")
-                .requires(OPT_SYMBOLIC),
+                .requires(options::SYMBOLIC),
         )
         .arg(
-            Arg::with_name(OPT_VERBOSE)
+            Arg::with_name(options::VERBOSE)
                 .short("v")
-                .long(OPT_VERBOSE)
+                .long(options::VERBOSE)
                 .help("print name of each linked file"),
         )
         .arg(
@@ -209,18 +208,18 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .map(PathBuf::from)
         .collect();
 
-    let overwrite_mode = if matches.is_present(OPT_FORCE) {
+    let overwrite_mode = if matches.is_present(options::FORCE) {
         OverwriteMode::Force
-    } else if matches.is_present(OPT_INTERACTIVE) {
+    } else if matches.is_present(options::INTERACTIVE) {
         OverwriteMode::Interactive
     } else {
         OverwriteMode::NoClobber
     };
 
-    let backup_mode = if matches.is_present(OPT_B) {
+    let backup_mode = if matches.is_present(options::B) {
         BackupMode::ExistingBackup
-    } else if matches.is_present(OPT_BACKUP) {
-        match matches.value_of(OPT_BACKUP) {
+    } else if matches.is_present(options::BACKUP) {
+        match matches.value_of(options::BACKUP) {
             None => BackupMode::ExistingBackup,
             Some(mode) => match mode {
                 "simple" | "never" => BackupMode::SimpleBackup,
@@ -234,8 +233,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         BackupMode::NoBackup
     };
 
-    let backup_suffix = if matches.is_present(OPT_SUFFIX) {
-        matches.value_of(OPT_SUFFIX).unwrap()
+    let backup_suffix = if matches.is_present(options::SUFFIX) {
+        matches.value_of(options::SUFFIX).unwrap()
     } else {
         "~"
     };
@@ -244,12 +243,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         overwrite: overwrite_mode,
         backup: backup_mode,
         suffix: backup_suffix.to_string(),
-        symbolic: matches.is_present(OPT_SYMBOLIC),
-        relative: matches.is_present(OPT_RELATIVE),
-        target_dir: matches.value_of(OPT_TARGET_DIRECTORY).map(String::from),
-        no_target_dir: matches.is_present(OPT_NO_TARGET_DIRECTORY),
-        no_dereference: matches.is_present(OPT_NO_DEREFERENCE),
-        verbose: matches.is_present(OPT_VERBOSE),
+        symbolic: matches.is_present(options::SYMBOLIC),
+        relative: matches.is_present(options::RELATIVE),
+        target_dir: matches
+            .value_of(options::TARGET_DIRECTORY)
+            .map(String::from),
+        no_target_dir: matches.is_present(options::NO_TARGET_DIRECTORY),
+        no_dereference: matches.is_present(options::NO_DEREFERENCE),
+        verbose: matches.is_present(options::VERBOSE),
     };
 
     exec(&paths[..], &settings)

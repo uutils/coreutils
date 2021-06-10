@@ -229,10 +229,9 @@ fn unit_string_to_number(s: &str) -> Option<u64> {
     let mut offset = 0;
     let mut s_chars = s.chars().rev();
 
-    let (mut ch, multiple) = match s_chars.next() {
-        Some('B') | Some('b') => ('B', 1000u64),
-        Some(ch) => (ch, 1024u64),
-        None => return None,
+    let (mut ch, multiple) = match s_chars.next()? {
+        'B' | 'b' => ('B', 1000u64),
+        ch => (ch, 1024u64),
     };
     if ch == 'B' {
         ch = s_chars.next()?;
