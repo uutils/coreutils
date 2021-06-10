@@ -1,4 +1,3 @@
-extern crate blake2_rfc;
 extern crate digest;
 extern crate md5;
 extern crate sha1;
@@ -49,9 +48,9 @@ impl Digest for md5::Context {
     }
 }
 
-impl Digest for blake2_rfc::blake2b::Blake2b {
+impl Digest for blake2b_simd::State {
     fn new() -> Self {
-        blake2_rfc::blake2b::Blake2b::new(64)
+        Self::new()
     }
 
     fn input(&mut self, input: &[u8]) {
@@ -59,12 +58,12 @@ impl Digest for blake2_rfc::blake2b::Blake2b {
     }
 
     fn result(&mut self, out: &mut [u8]) {
-        let hash_result = &self.clone().finalize();
-        out.copy_from_slice(&hash_result.as_bytes());
+        let hash_result = &self.finalize();
+        out.copy_from_slice(hash_result.as_bytes());
     }
 
     fn reset(&mut self) {
-        *self = blake2_rfc::blake2b::Blake2b::new(64);
+        *self = Self::new();
     }
 
     fn output_bits(&self) -> usize {

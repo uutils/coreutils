@@ -37,7 +37,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 fn process_expr(token_strings: &[String]) -> Result<String, String> {
-    let maybe_tokens = tokens::strings_to_tokens(&token_strings);
+    let maybe_tokens = tokens::strings_to_tokens(token_strings);
     let maybe_ast = syntax_tree::tokens_to_ast(maybe_tokens);
     evaluate_ast(maybe_ast)
 }
@@ -56,11 +56,7 @@ fn print_expr_error(expr_error: &str) -> ! {
 }
 
 fn evaluate_ast(maybe_ast: Result<Box<syntax_tree::AstNode>, String>) -> Result<String, String> {
-    if maybe_ast.is_err() {
-        Err(maybe_ast.err().unwrap())
-    } else {
-        maybe_ast.ok().unwrap().evaluate()
-    }
+    maybe_ast.and_then(|ast| ast.evaluate())
 }
 
 fn maybe_handle_help_or_version(args: &[String]) -> bool {

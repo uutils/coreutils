@@ -618,7 +618,7 @@ fn test_cp_deref() {
     // Check the content of the destination file that was copied.
     assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
     let path_to_check = path_to_new_symlink.to_str().unwrap();
-    assert_eq!(at.read(&path_to_check), "Hello, World!\n");
+    assert_eq!(at.read(path_to_check), "Hello, World!\n");
 }
 #[test]
 fn test_cp_no_deref() {
@@ -655,7 +655,7 @@ fn test_cp_no_deref() {
     // Check the content of the destination file that was copied.
     assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
     let path_to_check = path_to_new_symlink.to_str().unwrap();
-    assert_eq!(at.read(&path_to_check), "Hello, World!\n");
+    assert_eq!(at.read(path_to_check), "Hello, World!\n");
 }
 
 #[test]
@@ -823,7 +823,7 @@ fn test_cp_deref_folder_to_folder() {
 
     // Check the content of the symlink
     let path_to_check = path_to_new_symlink.to_str().unwrap();
-    assert_eq!(at.read(&path_to_check), "Hello, World!\n");
+    assert_eq!(at.read(path_to_check), "Hello, World!\n");
 }
 
 #[test]
@@ -923,7 +923,7 @@ fn test_cp_no_deref_folder_to_folder() {
 
     // Check the content of the symlink
     let path_to_check = path_to_new_symlink.to_str().unwrap();
-    assert_eq!(at.read(&path_to_check), "Hello, World!\n");
+    assert_eq!(at.read(path_to_check), "Hello, World!\n");
 }
 
 #[test]

@@ -2,6 +2,7 @@
 
 use std::fmt;
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Copy)]
 pub enum FormatWriter {
     IntWriter(fn(u64) -> String),

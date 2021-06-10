@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# spell-checker:ignore (paths) abmon deref discrim getlimits getopt ginstall gnulib inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW ; (vars/env) BUILDDIR SRCDIR
+# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall gnulib inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW ; (vars/env) BUILDDIR SRCDIR
 
 set -e
 if test ! -d ../gnu; then
@@ -115,5 +115,7 @@ sed -i -e "s|rm: cannot remove 'a/b/file'|rm: cannot remove 'a'|g" tests/rm/cycl
 sed -i -e "s|rm: cannot remove directory 'b/a/p'|rm: cannot remove 'b'|g" tests/rm/rm1.sh
 
 sed -i -e "s|rm: cannot remove 'a/1'|rm: cannot remove 'a'|g" tests/rm/rm2.sh
+
+sed -i -e "s|removed directory 'a/'|removed directory 'a'|g" tests/rm/v-slash.sh
 
 test -f "${BUILDDIR}/getlimits" || cp src/getlimits "${BUILDDIR}"

@@ -55,7 +55,7 @@ pub fn parse_inputs(matches: &dyn CommandLineOpts) -> Result<CommandLineInputs, 
         // if any of the options -A, -j, -N, -t, -v or -w are present there is no offset
         if !matches.opts_present(&["A", "j", "N", "t", "v", "w"]) {
             // test if the last input can be parsed as an offset.
-            let offset = parse_offset_operand(&input_strings[input_strings.len() - 1]);
+            let offset = parse_offset_operand(input_strings[input_strings.len() - 1]);
             if let Ok(n) = offset {
                 // if there is just 1 input (stdin), an offset must start with '+'
                 if input_strings.len() == 1 && input_strings[0].starts_with('+') {
@@ -88,7 +88,7 @@ pub fn parse_inputs_traditional(input_strings: Vec<&str>) -> Result<CommandLineI
     match input_strings.len() {
         0 => Ok(CommandLineInputs::FileNames(vec!["-".to_string()])),
         1 => {
-            let offset0 = parse_offset_operand(&input_strings[0]);
+            let offset0 = parse_offset_operand(input_strings[0]);
             Ok(match offset0 {
                 Ok(n) => CommandLineInputs::FileAndOffset(("-".to_string(), n, None)),
                 _ => CommandLineInputs::FileNames(
@@ -97,8 +97,8 @@ pub fn parse_inputs_traditional(input_strings: Vec<&str>) -> Result<CommandLineI
             })
         }
         2 => {
-            let offset0 = parse_offset_operand(&input_strings[0]);
-            let offset1 = parse_offset_operand(&input_strings[1]);
+            let offset0 = parse_offset_operand(input_strings[0]);
+            let offset1 = parse_offset_operand(input_strings[1]);
             match (offset0, offset1) {
                 (Ok(n), Ok(m)) => Ok(CommandLineInputs::FileAndOffset((
                     "-".to_string(),
@@ -114,8 +114,8 @@ pub fn parse_inputs_traditional(input_strings: Vec<&str>) -> Result<CommandLineI
             }
         }
         3 => {
-            let offset = parse_offset_operand(&input_strings[1]);
-            let label = parse_offset_operand(&input_strings[2]);
+            let offset = parse_offset_operand(input_strings[1]);
+            let label = parse_offset_operand(input_strings[2]);
             match (offset, label) {
                 (Ok(n), Ok(m)) => Ok(CommandLineInputs::FileAndOffset((
                     input_strings[0].to_string(),

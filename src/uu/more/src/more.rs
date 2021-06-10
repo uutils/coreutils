@@ -29,6 +29,9 @@ use crossterm::{
     terminal,
 };
 
+use unicode_segmentation::UnicodeSegmentation;
+use unicode_width::UnicodeWidthStr;
+
 pub mod options {
     pub const SILENT: &str = "silent";
     pub const LOGICAL: &str = "logical";
@@ -140,7 +143,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if let Some(files) = matches.values_of(options::FILES) {
         let mut stdout = setup_term();
         let length = files.len();
-        for (idx, file) in files.enumerate() {
+
+        let mut files_iter = files.peekable();
+        while let (Some(file), next_file) = (files_iter.next(), files_iter.peek()) {
             let file = Path::new(file);
             if file.is_dir() {
                 terminal::disable_raw_mode().unwrap();
@@ -157,15 +162,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             }
             let mut reader = BufReader::new(File::open(file).unwrap());
             reader.read_to_string(&mut buff).unwrap();
-            let is_last = idx + 1 == length;
-            more(&buff, &mut stdout, is_last);
+            more(&buff, &mut stdout, next_file.copied());
             buff.clear();
         }
         reset_term(&mut stdout);
     } else if atty::isnt(atty::Stream::Stdin) {
         stdin().read_to_string(&mut buff).unwrap();
         let mut stdout = setup_term();
-        more(&buff, &mut stdout, true);
+        more(&buff, &mut stdout, None);
         reset_term(&mut stdout);
     } else {
         show_usage_error!("bad usage");
@@ -200,7 +204,7 @@ fn reset_term(stdout: &mut std::io::Stdout) {
 #[inline(always)]
 fn reset_term(_: &mut usize) {}
 
-fn more(buff: &str, mut stdout: &mut Stdout, is_last: bool) {
+fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>) {
     let (cols, rows) = terminal::size().unwrap();
     let lines = break_buff(buff, usize::from(cols));
     let line_count: u16 = lines.len().try_into().unwrap();
@@ -214,7 +218,10 @@ fn more(buff: &str, mut stdout: &mut Stdout, is_last: bool) {
         &mut stdout,
         lines.clone(),
         line_count,
+        next_file,
     );
+
+    let is_last = next_file.is_none();
 
     // Specifies whether we have reached the end of the file and should
     // return on the next key press. However, we immediately return when
@@ -267,6 +274,7 @@ fn more(buff: &str, mut stdout: &mut Stdout, is_last: bool) {
                 &mut stdout,
                 lines.clone(),
                 line_count,
+                next_file,
             );
 
             if lines_left == 0 {
@@ -285,6 +293,7 @@ fn draw(
     mut stdout: &mut std::io::Stdout,
     lines: Vec<String>,
     lc: u16,
+    next_file: Option<&str>,
 ) {
     execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine)).unwrap();
     let (up_mark, lower_mark) = calc_range(*upper_mark, rows, lc);
@@ -299,7 +308,7 @@ fn draw(
             .write_all(format!("\r{}\n", line).as_bytes())
             .unwrap();
     }
-    make_prompt_and_flush(&mut stdout, lower_mark, lc);
+    make_prompt_and_flush(&mut stdout, lower_mark, lc, next_file);
     *upper_mark = up_mark;
 }
 
@@ -313,23 +322,30 @@ fn break_buff(buff: &str, cols: usize) -> Vec<String> {
     lines
 }
 
-fn break_line(mut line: &str, cols: usize) -> Vec<String> {
-    let breaks = (line.len() / cols).saturating_add(1);
-    let mut lines = Vec::with_capacity(breaks);
-    // TODO: Use unicode width instead of the length in bytes.
-    if line.len() < cols {
+fn break_line(line: &str, cols: usize) -> Vec<String> {
+    let width = UnicodeWidthStr::width(line);
+    let mut lines = Vec::new();
+    if width < cols {
         lines.push(line.to_string());
         return lines;
     }
 
-    for _ in 1..=breaks {
-        let (line1, line2) = line.split_at(cols);
-        lines.push(line1.to_string());
-        if line2.len() < cols {
-            lines.push(line2.to_string());
-            break;
+    let gr_idx = UnicodeSegmentation::grapheme_indices(line, true);
+    let mut last_index = 0;
+    let mut total_width = 0;
+    for (index, grapheme) in gr_idx {
+        let width = UnicodeWidthStr::width(grapheme);
+        total_width += width;
+
+        if total_width > cols {
+            lines.push(line[last_index..index].to_string());
+            last_index = index;
+            total_width = width;
         }
-        line = line2;
+    }
+
+    if last_index != line.len() {
+        lines.push(line[last_index..].to_string());
     }
     lines
 }
@@ -339,7 +355,7 @@ fn calc_range(mut upper_mark: u16, rows: u16, line_count: u16) -> (u16, u16) {
     let mut lower_mark = upper_mark.saturating_add(rows);
 
     if lower_mark >= line_count {
-        upper_mark = line_count.saturating_sub(rows);
+        upper_mark = line_count.saturating_sub(rows).saturating_add(1);
         lower_mark = line_count;
     } else {
         lower_mark = lower_mark.saturating_sub(1)
@@ -348,12 +364,20 @@ fn calc_range(mut upper_mark: u16, rows: u16, line_count: u16) -> (u16, u16) {
 }
 
 // Make a prompt similar to original more
-fn make_prompt_and_flush(stdout: &mut Stdout, lower_mark: u16, lc: u16) {
+fn make_prompt_and_flush(stdout: &mut Stdout, lower_mark: u16, lc: u16, next_file: Option<&str>) {
+    let status = if lower_mark == lc {
+        format!("Next file: {}", next_file.unwrap_or_default())
+    } else {
+        format!(
+            "{}%",
+            (lower_mark as f64 / lc as f64 * 100.0).round() as u16
+        )
+    };
     write!(
         stdout,
-        "\r{}--More--({}%){}",
+        "\r{}--More--({}){}",
         Attribute::Reverse,
-        ((lower_mark as f64 / lc as f64) * 100.0).round() as u16,
+        status,
         Attribute::Reset
     )
     .unwrap();
@@ -363,13 +387,14 @@ fn make_prompt_and_flush(stdout: &mut Stdout, lower_mark: u16, lc: u16) {
 #[cfg(test)]
 mod tests {
     use super::{break_line, calc_range};
+    use unicode_width::UnicodeWidthStr;
 
     // It is good to test the above functions
     #[test]
     fn test_calc_range() {
         assert_eq!((0, 24), calc_range(0, 25, 100));
         assert_eq!((50, 74), calc_range(50, 25, 100));
-        assert_eq!((75, 100), calc_range(85, 25, 100));
+        assert_eq!((76, 100), calc_range(85, 25, 100));
     }
     #[test]
     fn test_break_lines_long() {
@@ -379,11 +404,12 @@ mod tests {
         }
 
         let lines = break_line(&test_string, 80);
+        let widths: Vec<usize> = lines
+            .iter()
+            .map(|s| UnicodeWidthStr::width(&s[..]))
+            .collect();
 
-        assert_eq!(
-            (80, 80, 40),
-            (lines[0].len(), lines[1].len(), lines[2].len())
-        );
+        assert_eq!((80, 80, 40), (widths[0], widths[1], widths[2]));
     }
 
     #[test]
@@ -396,5 +422,23 @@ mod tests {
         let lines = break_line(&test_string, 80);
 
         assert_eq!(20, lines[0].len());
+    }
+
+    #[test]
+    fn test_break_line_zwj() {
+        let mut test_string = String::with_capacity(1100);
+        for _ in 0..20 {
+            test_string.push_str("👩🏻‍🔬");
+        }
+
+        let lines = break_line(&test_string, 80);
+
+        let widths: Vec<usize> = lines
+            .iter()
+            .map(|s| UnicodeWidthStr::width(&s[..]))
+            .collect();
+
+        // Each 👩🏻‍🔬 is 6 character width it break line to the closest number to 80 => 6 * 13 = 78
+        assert_eq!((78, 42), (widths[0], widths[1]));
     }
 }

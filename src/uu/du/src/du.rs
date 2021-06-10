@@ -24,6 +24,8 @@ use std::os::unix::fs::MetadataExt;
 use std::os::windows::fs::MetadataExt;
 #[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
+#[cfg(windows)]
+use std::path::Path;
 use std::path::PathBuf;
 use std::time::{Duration, UNIX_EPOCH};
 use uucore::InvalidEncodingHandling;
@@ -159,7 +161,7 @@ fn birth_u64(meta: &Metadata) -> Option<u64> {
 }
 
 #[cfg(windows)]
-fn get_size_on_disk(path: &PathBuf) -> u64 {
+fn get_size_on_disk(path: &Path) -> u64 {
     let mut size_on_disk = 0;
 
     // bind file so it stays in scope until end of function
@@ -191,7 +193,7 @@ fn get_size_on_disk(path: &PathBuf) -> u64 {
 }
 
 #[cfg(windows)]
-fn get_file_info(path: &PathBuf) -> Option<FileInfo> {
+fn get_file_info(path: &Path) -> Option<FileInfo> {
     let mut result = None;
 
     let file = match fs::File::open(path) {
@@ -256,7 +258,7 @@ fn unit_string_to_number(s: &str) -> Option<u64> {
 
 fn translate_to_pure_number(s: &Option<&str>) -> Option<u64> {
     match *s {
-        Some(ref s) => unit_string_to_number(s),
+        Some(s) => unit_string_to_number(s),
         None => None,
     }
 }
@@ -318,8 +320,7 @@ fn du(
                         if this_stat.is_dir {
                             futures.push(du(this_stat, options, depth + 1, inodes));
                         } else {
-                            if this_stat.inode.is_some() {
-                                let inode = this_stat.inode.unwrap();
+                            if let Some(inode) = this_stat.inode {
                                 if inodes.contains(&inode) {
                                     continue;
                                 }
@@ -358,7 +359,9 @@ fn du(
             my_stat.size += stat.size;
             my_stat.blocks += stat.blocks;
         }
-        options.max_depth == None || depth < options.max_depth.unwrap()
+        options
+            .max_depth
+            .map_or(true, |max_depth| depth < max_depth)
     }));
     stats.push(my_stat);
     Box::new(stats.into_iter())
@@ -431,6 +434,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     although  the apparent  size is usually smaller, it may be larger due to holes \
                     in ('sparse') files, internal  fragmentation,  indirect  blocks, and the like"
                 )
+                .alias("app") // The GNU test suite uses this alias
         )
         .arg(
             Arg::with_name(options::BLOCK_SIZE)
@@ -582,12 +586,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let max_depth_str = matches.value_of(options::MAX_DEPTH);
     let max_depth = max_depth_str.as_ref().and_then(|s| s.parse::<usize>().ok());
     match (max_depth_str, max_depth) {
-        (Some(ref s), _) if summarize => {
-            show_error!("summarizing conflicts with --max-depth={}", *s);
+        (Some(s), _) if summarize => {
+            show_error!("summarizing conflicts with --max-depth={}", s);
             return 1;
         }
-        (Some(ref s), None) => {
-            show_error!("invalid maximum depth '{}'", *s);
+        (Some(s), None) => {
+            show_error!("invalid maximum depth '{}'", s);
             return 1;
         }
         (Some(_), Some(_)) | (None, _) => { /* valid */ }

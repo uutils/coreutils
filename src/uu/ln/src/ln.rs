@@ -259,17 +259,17 @@ fn exec(files: &[PathBuf], settings: &Settings) -> i32 {
     // Handle cases where we create links in a directory first.
     if let Some(ref name) = settings.target_dir {
         // 4th form: a directory is specified by -t.
-        return link_files_in_dir(files, &PathBuf::from(name), &settings);
+        return link_files_in_dir(files, &PathBuf::from(name), settings);
     }
     if !settings.no_target_dir {
         if files.len() == 1 {
             // 2nd form: the target directory is the current directory.
-            return link_files_in_dir(files, &PathBuf::from("."), &settings);
+            return link_files_in_dir(files, &PathBuf::from("."), settings);
         }
         let last_file = &PathBuf::from(files.last().unwrap());
         if files.len() > 2 || last_file.is_dir() {
             // 3rd form: create links in the last argument.
-            return link_files_in_dir(&files[0..files.len() - 1], last_file, &settings);
+            return link_files_in_dir(&files[0..files.len() - 1], last_file, settings);
         }
     }
 
@@ -393,7 +393,7 @@ fn relative_path<'a>(src: &Path, dst: &Path) -> Result<Cow<'a, Path>> {
 fn link(src: &Path, dst: &Path, settings: &Settings) -> Result<()> {
     let mut backup_path = None;
     let source: Cow<'_, Path> = if settings.relative {
-        relative_path(&src, dst)?
+        relative_path(src, dst)?
     } else {
         src.into()
     };

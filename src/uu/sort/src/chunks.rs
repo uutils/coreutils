@@ -90,7 +90,7 @@ pub fn read(
         if buffer.len() < carry_over.len() {
             buffer.resize(carry_over.len() + 10 * 1024, 0);
         }
-        buffer[..carry_over.len()].copy_from_slice(&carry_over);
+        buffer[..carry_over.len()].copy_from_slice(carry_over);
         let (read, should_continue) = read_to_buffer(
             file,
             next_files,
@@ -102,17 +102,17 @@ pub fn read(
         carry_over.clear();
         carry_over.extend_from_slice(&buffer[read..]);
 
-        let payload = Chunk::new(buffer, |buf| {
-            let mut lines = unsafe {
-                // SAFETY: It is safe to transmute to a vector of lines with shorter lifetime,
-                // because it was only temporarily transmuted to a Vec<Line<'static>> to make recycling possible.
-                std::mem::transmute::<Vec<Line<'static>>, Vec<Line<'_>>>(lines)
-            };
-            let read = crash_if_err!(1, std::str::from_utf8(&buf[..read]));
-            parse_lines(read, &mut lines, separator, &settings);
-            lines
-        });
-        if !payload.borrow_lines().is_empty() {
+        if read != 0 {
+            let payload = Chunk::new(buffer, |buf| {
+                let mut lines = unsafe {
+                    // SAFETY: It is safe to transmute to a vector of lines with shorter lifetime,
+                    // because it was only temporarily transmuted to a Vec<Line<'static>> to make recycling possible.
+                    std::mem::transmute::<Vec<Line<'static>>, Vec<Line<'_>>>(lines)
+                };
+                let read = crash_if_err!(1, std::str::from_utf8(&buf[..read]));
+                parse_lines(read, &mut lines, separator, settings);
+                lines
+            });
             sender.send(payload).unwrap();
         }
         if !should_continue {
@@ -175,6 +175,7 @@ fn read_to_buffer(
     separator: u8,
 ) -> (usize, bool) {
     let mut read_target = &mut buffer[start_offset..];
+    let mut last_file_target_size = read_target.len();
     loop {
         match file.read(read_target) {
             Ok(0) => {
@@ -193,7 +194,7 @@ fn read_to_buffer(
                             continue;
                         }
                     }
-                    let mut sep_iter = memchr_iter(separator, &buffer).rev();
+                    let mut sep_iter = memchr_iter(separator, buffer).rev();
                     let last_line_end = sep_iter.next();
                     if sep_iter.next().is_some() {
                         // We read enough lines.
@@ -208,14 +209,27 @@ fn read_to_buffer(
                         read_target = &mut buffer[len..];
                     }
                 } else {
-                    // This file is empty.
+                    // This file has been fully read.
+                    let mut leftover_len = read_target.len();
+                    if last_file_target_size != leftover_len {
+                        // The file was not empty.
+                        let read_len = buffer.len() - leftover_len;
+                        if buffer[read_len - 1] != separator {
+                            // The file did not end with a separator. We have to insert one.
+                            buffer[read_len] = separator;
+                            leftover_len -= 1;
+                        }
+                        let read_len = buffer.len() - leftover_len;
+                        read_target = &mut buffer[read_len..];
+                    }
                     if let Some(next_file) = next_files.next() {
                         // There is another file.
+                        last_file_target_size = leftover_len;
                         *file = next_file;
                     } else {
                         // This was the last file.
-                        let leftover_len = read_target.len();
-                        return (buffer.len() - leftover_len, false);
+                        let read_len = buffer.len() - leftover_len;
+                        return (read_len, false);
                     }
                 }
             }

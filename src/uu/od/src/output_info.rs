@@ -68,7 +68,7 @@ impl OutputInfo {
         let print_width_line = print_width_block * (line_bytes / byte_size_block);
 
         let spaced_formatters =
-            OutputInfo::create_spaced_formatter_info(&formats, byte_size_block, print_width_block);
+            OutputInfo::create_spaced_formatter_info(formats, byte_size_block, print_width_block);
 
         OutputInfo {
             byte_size_line: line_bytes,

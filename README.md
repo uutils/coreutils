@@ -342,22 +342,22 @@ To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 | Done      | Semi-Done | To Do  |
 |-----------|-----------|--------|
 | arch      | cp        | chcon  |
-| base32    | expr      | csplit |
-| base64    | install   | dd     |
-| basename  | ls        | df     |
-| cat       | more      | numfmt |
-| chgrp     | od (`--strings` and 128-bit data types missing) | runcon |
-| chmod     | printf    | stty   |
-| chown     | sort      |        |
-| chroot    | split     |        |
-| cksum     | tail      |        |
-| comm      | test      |        |
-| csplit    | date      |        |
-| cut       | join      |        |
-| dircolors | df        |        |
+| base32    | date      | dd     |
+| base64    | df        | runcon |
+| basename  | expr      | stty   |
+| cat       | install   |        |
+| chgrp     | join      |        |
+| chmod     | ls        |        |
+| chown     | more      |        |
+| chroot    | numfmt    |        |
+| cksum     | od (`--strings` and 128-bit data types missing) | |
+| comm      | pr        |        |
+| csplit    | printf    |        |
+| cut       | sort      |        |
+| dircolors | split     |        |
 | dirname   | tac       |        |
-| du        | pr        |        |
-| echo      |           |        |
+| du        | tail      |        |
+| echo      | test      |        |
 | env       |           |        |
 | expand    |           |        |
 | factor    |           |        |
@@ -374,12 +374,12 @@ To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 | link      |           |        |
 | ln        |           |        |
 | logname   |           |        |
-| ~~md5sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | |
-| ~~sha1sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | |
-| ~~sha224sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | |
-| ~~sha256sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | |
-| ~~sha384sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | |
-| ~~sha512sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | |
+| ~~md5sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | | |
+| ~~sha1sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | | |
+| ~~sha224sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | | |
+| ~~sha256sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | | |
+| ~~sha384sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | | |
+| ~~sha512sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | | |
 | mkdir     |           |        |
 | mkfifo    |           |        |
 | mknod     |           |        |

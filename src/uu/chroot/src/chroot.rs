@@ -106,13 +106,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             let mut vector: Vec<&str> = Vec::new();
             for (&k, v) in matches.args.iter() {
                 vector.push(k);
-                vector.push(&v.vals[0].to_str().unwrap());
+                vector.push(v.vals[0].to_str().unwrap());
             }
             vector
         }
     };
 
-    set_context(&newroot, &matches);
+    set_context(newroot, &matches);
 
     let pstatus = Command::new(command[0])
         .args(&command[1..])
@@ -132,7 +132,7 @@ fn set_context(root: &Path, options: &clap::ArgMatches) {
     let group_str = options.value_of(options::GROUP).unwrap_or_default();
     let groups_str = options.value_of(options::GROUPS).unwrap_or_default();
     let userspec = match userspec_str {
-        Some(ref u) => {
+        Some(u) => {
             let s: Vec<&str> = u.split(':').collect();
             if s.len() != 2 || s.iter().any(|&spec| spec.is_empty()) {
                 crash!(1, "invalid userspec: `{}`", u)

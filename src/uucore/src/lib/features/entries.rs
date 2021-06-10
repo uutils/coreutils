@@ -5,7 +5,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars) Passwd cstr fnam gecos ngroups
+// spell-checker:ignore (vars) Passwd cstr fnam gecos ngroups egid
 
 //! Get password/group file entry
 //!
@@ -72,6 +72,45 @@ pub fn get_groups() -> IOResult<Vec<gid_t>> {
     }
 }
 
+/// The list of group IDs returned from GNU's `groups` and GNU's `id --groups`
+/// starts with the effective group ID (egid).
+/// This is a wrapper for `get_groups()` to mimic this behavior.
+///
+/// If `arg_id` is `None` (default), `get_groups_gnu` moves the effective
+/// group id (egid) to the first entry in the returned Vector.
+/// If `arg_id` is `Some(x)`, `get_groups_gnu` moves the id with value `x`
+/// to the first entry in the returned Vector. This might be necessary
+/// for `id --groups --real` if `gid` and `egid` are not equal.
+///
+/// From: https://www.man7.org/linux/man-pages/man3/getgroups.3p.html
+/// As implied by the definition of supplementary groups, the
+/// effective group ID may appear in the array returned by
+/// getgroups() or it may be returned only by getegid().  Duplication
+/// may exist, but the application needs to call getegid() to be sure
+/// of getting all of the information. Various implementation
+/// variations and administrative sequences cause the set of groups
+/// appearing in the result of getgroups() to vary in order and as to
+/// whether the effective group ID is included, even when the set of
+/// groups is the same (in the mathematical sense of ``set''). (The
+/// history of a process and its parents could affect the details of
+/// the result.)
+#[cfg(all(unix, feature = "process"))]
+pub fn get_groups_gnu(arg_id: Option<u32>) -> IOResult<Vec<gid_t>> {
+    let groups = get_groups()?;
+    let egid = arg_id.unwrap_or_else(crate::features::process::getegid);
+    Ok(sort_groups(groups, egid))
+}
+
+fn sort_groups(mut groups: Vec<gid_t>, egid: gid_t) -> Vec<gid_t> {
+    if let Some(index) = groups.iter().position(|&x| x == egid) {
+        groups[..=index].rotate_right(1);
+    } else {
+        groups.insert(0, egid);
+    }
+    groups
+}
+
+#[derive(Copy, Clone)]
 pub struct Passwd {
     inner: passwd,
 }
@@ -267,4 +306,28 @@ pub fn usr2uid(name: &str) -> IOResult<uid_t> {
 #[inline]
 pub fn grp2gid(name: &str) -> IOResult<gid_t> {
     Group::locate(name).map(|p| p.gid())
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_sort_groups() {
+        assert_eq!(sort_groups(vec![1, 2, 3], 4), vec![4, 1, 2, 3]);
+        assert_eq!(sort_groups(vec![1, 2, 3], 3), vec![3, 1, 2]);
+        assert_eq!(sort_groups(vec![1, 2, 3], 2), vec![2, 1, 3]);
+        assert_eq!(sort_groups(vec![1, 2, 3], 1), vec![1, 2, 3]);
+        assert_eq!(sort_groups(vec![1, 2, 3], 0), vec![0, 1, 2, 3]);
+    }
+
+    #[test]
+    fn test_entries_get_groups_gnu() {
+        if let Ok(mut groups) = get_groups() {
+            if let Some(last) = groups.pop() {
+                groups.insert(0, last);
+                assert_eq!(get_groups_gnu(Some(last)).unwrap(), groups);
+            }
+        }
+    }
 }

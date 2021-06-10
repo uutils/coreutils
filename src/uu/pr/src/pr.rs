@@ -410,7 +410,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         let options = &result_options.unwrap();
 
         let cmd_result = if file_group.len() == 1 {
-            pr(&file_group.get(0).unwrap(), options)
+            pr(file_group.get(0).unwrap(), options)
         } else {
             mpr(&file_group, options)
         };
@@ -1114,7 +1114,7 @@ fn write_columns(
         for (i, cell) in row.iter().enumerate() {
             if cell.is_none() && options.merge_files_print.is_some() {
                 out.write_all(
-                    get_line_for_printing(&options, &blank_line, columns, i, &line_width, indexes)
+                    get_line_for_printing(options, &blank_line, columns, i, &line_width, indexes)
                         .as_bytes(),
                 )?;
             } else if cell.is_none() {
@@ -1124,7 +1124,7 @@ fn write_columns(
                 let file_line = cell.unwrap();
 
                 out.write_all(
-                    get_line_for_printing(&options, file_line, columns, i, &line_width, indexes)
+                    get_line_for_printing(options, file_line, columns, i, &line_width, indexes)
                         .as_bytes(),
                 )?;
                 lines_printed += 1;
@@ -1149,7 +1149,7 @@ fn get_line_for_printing(
     indexes: usize,
 ) -> String {
     let blank_line = String::new();
-    let formatted_line_number = get_formatted_line_number(&options, file_line.line_number, index);
+    let formatted_line_number = get_formatted_line_number(options, file_line.line_number, index);
 
     let mut complete_line = format!(
         "{}{}",

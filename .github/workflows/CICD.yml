@@ -5,7 +5,7 @@ name: CICD
 # spell-checker:ignore (jargon) SHAs deps softprops toolchain
 # spell-checker:ignore (names) CodeCOV MacOS MinGW Peltoche rivy
 # spell-checker:ignore (shell/tools) choco clippy dmake dpkg esac fakeroot gmake grcov halium lcov libssl mkdir popd printf pushd rustc rustfmt rustup shopt xargs
-# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils gnueabihf issuecomment maint nullglob onexitbegin onexitend tempfile testsuite uutils
+# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils gnueabihf issuecomment maint nullglob onexitbegin onexitend runtest tempfile testsuite uutils
 
 env:
   PROJECT_NAME: coreutils
@@ -32,12 +32,12 @@ jobs:
       shell: bash
       run: |
         ## VARs setup
+        outputs() { for var in "$@" ; do echo steps.vars.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
         # target-specific options
         # * CARGO_FEATURES_OPTION
         CARGO_FEATURES_OPTION='' ;
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
-        echo set-output name=CARGO_FEATURES_OPTION::${CARGO_FEATURES_OPTION}
-        echo ::set-output name=CARGO_FEATURES_OPTION::${CARGO_FEATURES_OPTION}
+        outputs CARGO_FEATURES_OPTION
     - name: Install `rust` toolchain
       uses: actions-rs/toolchain@v1
       with:
@@ -93,12 +93,12 @@ jobs:
       shell: bash
       run: |
         ## VARs setup
+        outputs() { for var in "$@" ; do echo steps.vars.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
         # target-specific options
         # * CARGO_FEATURES_OPTION
         CARGO_FEATURES_OPTION='' ;
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
-        echo set-output name=CARGO_FEATURES_OPTION::${CARGO_FEATURES_OPTION}
-        echo ::set-output name=CARGO_FEATURES_OPTION::${CARGO_FEATURES_OPTION}
+        outputs CARGO_FEATURES_OPTION
     - name: Install `rust` toolchain
       uses: actions-rs/toolchain@v1
       with:
@@ -197,7 +197,11 @@ jobs:
       run: |
         bindir=$(pwd)/target/debug
         cd tmp/busybox-*/testsuite
-        S=$(bindir=$bindir ./runtest) && printf "%s\n" "$S" || { printf "%s\n" "$S" | grep "FAIL:" | sed -e "s/FAIL: /::warning ::Test failure:/g" ; }
+        ## S=$(bindir=$bindir ./runtest) && printf "%s\n" "$S" || { printf "%s\n" "$S" | grep "FAIL:" | sed -e "s/FAIL: /::warning ::Test failure:/g" ; }
+        output=$(bindir=$bindir ./runtest 2>&1 || true)
+        printf "%s\n" "${output}"
+        n_fails=$(echo "$output" | grep "^FAIL:\s" | wc --lines)
+        if [ $n_fails -gt 0 ] ; then echo "::warning ::${n_fails}+ test failures" ; fi
 
   makefile_build:
     name: Test the build target of the Makefile
@@ -261,22 +265,20 @@ jobs:
       shell: bash
       run: |
         ## VARs setup
+        outputs() { for var in "$@" ; do echo steps.vars.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
         # toolchain
         TOOLCHAIN="stable" ## default to "stable" toolchain
         # * specify alternate/non-default TOOLCHAIN for *-pc-windows-gnu targets; gnu targets on Windows are broken for the standard *-pc-windows-msvc toolchain (refs: GH:rust-lang/rust#47048, GH:rust-lang/rust#53454, GH:rust-lang/cargo#6754)
         case ${{ matrix.job.target }} in *-pc-windows-gnu) TOOLCHAIN="stable-${{ matrix.job.target }}" ;; esac;
         # * use requested TOOLCHAIN if specified
         if [ -n "${{ matrix.job.toolchain }}" ]; then TOOLCHAIN="${{ matrix.job.toolchain }}" ; fi
-        echo set-output name=TOOLCHAIN::${TOOLCHAIN:-<empty>/false}
-        echo ::set-output name=TOOLCHAIN::${TOOLCHAIN}
+        outputs TOOLCHAIN
         # staging directory
         STAGING='_staging'
-        echo set-output name=STAGING::${STAGING}
-        echo ::set-output name=STAGING::${STAGING}
+        outputs STAGING
         # determine EXE suffix
         EXE_suffix="" ; case '${{ matrix.job.target }}' in *-pc-windows-*) EXE_suffix=".exe" ;; esac;
-        echo set-output name=EXE_suffix::${EXE_suffix}
-        echo ::set-output name=EXE_suffix::${EXE_suffix}
+        outputs EXE_suffix
         # parse commit reference info
         echo GITHUB_REF=${GITHUB_REF}
         echo GITHUB_SHA=${GITHUB_SHA}
@@ -284,14 +286,7 @@ jobs:
         unset REF_BRANCH ; case "${GITHUB_REF}" in refs/heads/*) REF_BRANCH=${GITHUB_REF#refs/heads/} ;; esac;
         unset REF_TAG ; case "${GITHUB_REF}" in refs/tags/*) REF_TAG=${GITHUB_REF#refs/tags/} ;; esac;
         REF_SHAS=${GITHUB_SHA:0:8}
-        echo set-output name=REF_NAME::${REF_NAME}
-        echo set-output name=REF_BRANCH::${REF_BRANCH}
-        echo set-output name=REF_TAG::${REF_TAG}
-        echo set-output name=REF_SHAS::${REF_SHAS}
-        echo ::set-output name=REF_NAME::${REF_NAME}
-        echo ::set-output name=REF_BRANCH::${REF_BRANCH}
-        echo ::set-output name=REF_TAG::${REF_TAG}
-        echo ::set-output name=REF_SHAS::${REF_SHAS}
+        outputs REF_NAME REF_BRANCH REF_TAG REF_SHAS
         # parse target
         unset TARGET_ARCH
         case '${{ matrix.job.target }}' in
@@ -301,68 +296,50 @@ jobs:
           i686-*) TARGET_ARCH=i686 ;;
           x86_64-*) TARGET_ARCH=x86_64 ;;
         esac;
-        echo set-output name=TARGET_ARCH::${TARGET_ARCH}
-        echo ::set-output name=TARGET_ARCH::${TARGET_ARCH}
         unset TARGET_OS ; case '${{ matrix.job.target }}' in *-linux-*) TARGET_OS=linux ;; *-apple-*) TARGET_OS=macos ;; *-windows-*) TARGET_OS=windows ;; esac;
-        echo set-output name=TARGET_OS::${TARGET_OS}
-        echo ::set-output name=TARGET_OS::${TARGET_OS}
+        outputs TARGET_ARCH TARGET_OS
         # package name
         PKG_suffix=".tar.gz" ; case '${{ matrix.job.target }}' in *-pc-windows-*) PKG_suffix=".zip" ;; esac;
         PKG_BASENAME=${PROJECT_NAME}-${REF_TAG:-$REF_SHAS}-${{ matrix.job.target }}
         PKG_NAME=${PKG_BASENAME}${PKG_suffix}
-        echo set-output name=PKG_suffix::${PKG_suffix}
-        echo set-output name=PKG_BASENAME::${PKG_BASENAME}
-        echo set-output name=PKG_NAME::${PKG_NAME}
-        echo ::set-output name=PKG_suffix::${PKG_suffix}
-        echo ::set-output name=PKG_BASENAME::${PKG_BASENAME}
-        echo ::set-output name=PKG_NAME::${PKG_NAME}
+        outputs PKG_suffix PKG_BASENAME PKG_NAME
         # deployable tag? (ie, leading "vM" or "M"; M == version number)
         unset DEPLOY ; if [[ $REF_TAG =~ ^[vV]?[0-9].* ]]; then DEPLOY='true' ; fi
-        echo set-output name=DEPLOY::${DEPLOY:-<empty>/false}
-        echo ::set-output name=DEPLOY::${DEPLOY}
+        outputs DEPLOY
         # DPKG architecture?
         unset DPKG_ARCH
         case ${{ matrix.job.target }} in
           x86_64-*-linux-*) DPKG_ARCH=amd64 ;;
           *-linux-*) DPKG_ARCH=${TARGET_ARCH} ;;
         esac
-        echo set-output name=DPKG_ARCH::${DPKG_ARCH}
-        echo ::set-output name=DPKG_ARCH::${DPKG_ARCH}
+        outputs DPKG_ARCH
         # DPKG version?
         unset DPKG_VERSION ; if [[ $REF_TAG =~ ^[vV]?[0-9].* ]]; then DPKG_VERSION=${REF_TAG/#[vV]/} ; fi
-        echo set-output name=DPKG_VERSION::${DPKG_VERSION}
-        echo ::set-output name=DPKG_VERSION::${DPKG_VERSION}
+        outputs DPKG_VERSION
         # DPKG base name/conflicts?
         DPKG_BASENAME=${PROJECT_NAME}
         DPKG_CONFLICTS=${PROJECT_NAME}-musl
         case ${{ matrix.job.target }} in *-musl) DPKG_BASENAME=${PROJECT_NAME}-musl ; DPKG_CONFLICTS=${PROJECT_NAME} ;; esac;
-        echo set-output name=DPKG_BASENAME::${DPKG_BASENAME}
-        echo set-output name=DPKG_CONFLICTS::${DPKG_CONFLICTS}
-        echo ::set-output name=DPKG_BASENAME::${DPKG_BASENAME}
-        echo ::set-output name=DPKG_CONFLICTS::${DPKG_CONFLICTS}
+        outputs DPKG_BASENAME DPKG_CONFLICTS
         # DPKG name
         unset DPKG_NAME;
         if [[ -n $DPKG_ARCH && -n $DPKG_VERSION ]]; then DPKG_NAME="${DPKG_BASENAME}_${DPKG_VERSION}_${DPKG_ARCH}.deb" ; fi
-        echo set-output name=DPKG_NAME::${DPKG_NAME}
-        echo ::set-output name=DPKG_NAME::${DPKG_NAME}
+        outputs DPKG_NAME
         # target-specific options
         # * CARGO_FEATURES_OPTION
         CARGO_FEATURES_OPTION='' ;
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
-        echo set-output name=CARGO_FEATURES_OPTION::${CARGO_FEATURES_OPTION}
-        echo ::set-output name=CARGO_FEATURES_OPTION::${CARGO_FEATURES_OPTION}
+        outputs CARGO_FEATURES_OPTION
         # * CARGO_USE_CROSS (truthy)
         CARGO_USE_CROSS='true' ; case '${{ matrix.job.use-cross }}' in ''|0|f|false|n|no) unset CARGO_USE_CROSS ;; esac;
-        echo set-output name=CARGO_USE_CROSS::${CARGO_USE_CROSS:-<empty>/false}
-        echo ::set-output name=CARGO_USE_CROSS::${CARGO_USE_CROSS}
+        outputs CARGO_USE_CROSS
         # ** pass needed environment into `cross` container (iff `cross` not already configured via "Cross.toml")
         if [ -n "${CARGO_USE_CROSS}" ] && [ ! -e "Cross.toml" ] ; then
           printf "[build.env]\npassthrough = [\"CI\"]\n" > Cross.toml
         fi
         # * test only library and/or binaries for arm-type targets
         unset CARGO_TEST_OPTIONS ; case '${{ matrix.job.target }}' in aarch64-* | arm-*) CARGO_TEST_OPTIONS="--bins" ;; esac;
-        echo set-output name=CARGO_TEST_OPTIONS::${CARGO_TEST_OPTIONS}
-        echo ::set-output name=CARGO_TEST_OPTIONS::${CARGO_TEST_OPTIONS}
+        outputs CARGO_TEST_OPTIONS
         # * executable for `strip`?
         STRIP="strip"
         case ${{ matrix.job.target }} in
@@ -370,8 +347,7 @@ jobs:
           arm-*-linux-gnueabihf) STRIP="arm-linux-gnueabihf-strip" ;;
           *-pc-windows-msvc) STRIP="" ;;
         esac;
-        echo set-output name=STRIP::${STRIP:-<empty>/false}
-        echo ::set-output name=STRIP::${STRIP}
+        outputs STRIP
     - name: Create all needed build/work directories
       shell: bash
       run: |
@@ -395,11 +371,12 @@ jobs:
       shell: bash
       run: |
         ## Dependent VARs setup
+        outputs() { for var in "$@" ; do echo steps.vars.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
         # * determine sub-crate utility list
         UTILITY_LIST="$(./util/show-utils.sh ${CARGO_FEATURES_OPTION})"
+        echo UTILITY_LIST=${UTILITY_LIST}
         CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo "-puu_${u}"; done;)"
-        echo set-output name=UTILITY_LIST::${UTILITY_LIST}
-        echo ::set-output name=CARGO_UTILITY_LIST_OPTIONS::${CARGO_UTILITY_LIST_OPTIONS}
+        outputs CARGO_UTILITY_LIST_OPTIONS
     - name: Install `cargo-tree` # for dependency information
       uses: actions-rs/install@v0.1
       with:
@@ -524,34 +501,31 @@ jobs:
       id: vars
       shell: bash
       run: |
+        ## VARs setup
+        outputs() { for var in "$@" ; do echo steps.vars.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
         # toolchain
         TOOLCHAIN="nightly-${{ env.RUST_COV_SRV }}" ## default to "nightly" toolchain (required for certain required unstable compiler flags) ## !maint: refactor when stable channel has needed support
         # * specify gnu-type TOOLCHAIN for windows; `grcov` requires gnu-style code coverage data files
         case ${{ matrix.job.os }} in windows-*) TOOLCHAIN="$TOOLCHAIN-x86_64-pc-windows-gnu" ;; esac;
         # * use requested TOOLCHAIN if specified
         if [ -n "${{ matrix.job.toolchain }}" ]; then TOOLCHAIN="${{ matrix.job.toolchain }}" ; fi
-        echo set-output name=TOOLCHAIN::${TOOLCHAIN}
-        echo ::set-output name=TOOLCHAIN::${TOOLCHAIN}
+        outputs TOOLCHAIN
         # staging directory
         STAGING='_staging'
-        echo set-output name=STAGING::${STAGING}
-        echo ::set-output name=STAGING::${STAGING}
+        outputs STAGING
         ## # check for CODECOV_TOKEN availability (work-around for inaccessible 'secrets' object for 'if'; see <https://github.community/t5/GitHub-Actions/jobs-lt-job-id-gt-if-does-not-work-with-env-secrets/m-p/38549>)
         ## # note: CODECOV_TOKEN / HAS_CODECOV_TOKEN is not needed for public repositories when using AppVeyor, Azure Pipelines, CircleCI, GitHub Actions, Travis (see <https://docs.codecov.io/docs/about-the-codecov-bash-uploader#section-upload-token>)
         ## unset HAS_CODECOV_TOKEN
         ## if [ -n $CODECOV_TOKEN ]; then HAS_CODECOV_TOKEN='true' ; fi
-        ## echo set-output name=HAS_CODECOV_TOKEN::${HAS_CODECOV_TOKEN}
-        ## echo ::set-output name=HAS_CODECOV_TOKEN::${HAS_CODECOV_TOKEN}
+        ## outputs HAS_CODECOV_TOKEN
         # target-specific options
         # * CARGO_FEATURES_OPTION
         CARGO_FEATURES_OPTION='--all-features' ;  ## default to '--all-features' for code coverage
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
-        echo set-output name=CARGO_FEATURES_OPTION::${CARGO_FEATURES_OPTION}
-        echo ::set-output name=CARGO_FEATURES_OPTION::${CARGO_FEATURES_OPTION}
+        outputs CARGO_FEATURES_OPTION
         # * CODECOV_FLAGS
         CODECOV_FLAGS=$( echo "${{ matrix.job.os }}" | sed 's/[^[:alnum:]]/_/g' )
-        echo set-output name=CODECOV_FLAGS::${CODECOV_FLAGS}
-        echo ::set-output name=CODECOV_FLAGS::${CODECOV_FLAGS}
+        outputs CODECOV_FLAGS
     - name: rust toolchain ~ install
       uses: actions-rs/toolchain@v1
       with:
@@ -563,11 +537,11 @@ jobs:
       shell: bash
       run: |
         ## Dependent VARs setup
+        outputs() { for var in "$@" ; do echo steps.vars.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
         # * determine sub-crate utility list
         UTILITY_LIST="$(./util/show-utils.sh ${CARGO_FEATURES_OPTION})"
         CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo "-puu_${u}"; done;)"
-        echo set-output name=UTILITY_LIST::${UTILITY_LIST}
-        echo ::set-output name=CARGO_UTILITY_LIST_OPTIONS::${CARGO_UTILITY_LIST_OPTIONS}
+        outputs CARGO_UTILITY_LIST_OPTIONS
     - name: Test uucore
       uses: actions-rs/cargo@v1
       with:
@@ -606,7 +580,7 @@ jobs:
       with:
         crate: grcov
         version: latest
-        use-tool-cache: true
+        use-tool-cache: false
     - name: Generate coverage data (via `grcov`)
       id: coverage
       shell: bash

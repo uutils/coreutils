@@ -19,7 +19,6 @@ mod digest;
 
 use self::digest::Digest;
 
-use blake2_rfc::blake2b::Blake2b;
 use clap::{App, Arg, ArgMatches};
 use hex::ToHex;
 use md5::Context as Md5;
@@ -85,9 +84,13 @@ fn detect_algo<'a>(
         "sha256sum" => ("SHA256", Box::new(Sha256::new()) as Box<dyn Digest>, 256),
         "sha384sum" => ("SHA384", Box::new(Sha384::new()) as Box<dyn Digest>, 384),
         "sha512sum" => ("SHA512", Box::new(Sha512::new()) as Box<dyn Digest>, 512),
-        "b2sum" => ("BLAKE2", Box::new(Blake2b::new(64)) as Box<dyn Digest>, 512),
+        "b2sum" => (
+            "BLAKE2",
+            Box::new(blake2b_simd::State::new()) as Box<dyn Digest>,
+            512,
+        ),
         "sha3sum" => match matches.value_of("bits") {
-            Some(bits_str) => match (&bits_str).parse::<usize>() {
+            Some(bits_str) => match (bits_str).parse::<usize>() {
                 Ok(224) => (
                     "SHA3-224",
                     Box::new(Sha3_224::new()) as Box<dyn Digest>,
@@ -137,7 +140,7 @@ fn detect_algo<'a>(
             512,
         ),
         "shake128sum" => match matches.value_of("bits") {
-            Some(bits_str) => match (&bits_str).parse::<usize>() {
+            Some(bits_str) => match (bits_str).parse::<usize>() {
                 Ok(bits) => (
                     "SHAKE128",
                     Box::new(Shake128::new()) as Box<dyn Digest>,
@@ -148,7 +151,7 @@ fn detect_algo<'a>(
             None => crash!(1, "--bits required for SHAKE-128"),
         },
         "shake256sum" => match matches.value_of("bits") {
-            Some(bits_str) => match (&bits_str).parse::<usize>() {
+            Some(bits_str) => match (bits_str).parse::<usize>() {
                 Ok(bits) => (
                     "SHAKE256",
                     Box::new(Shake256::new()) as Box<dyn Digest>,
@@ -187,11 +190,11 @@ fn detect_algo<'a>(
                     set_or_crash("SHA512", Box::new(Sha512::new()), 512)
                 }
                 if matches.is_present("b2sum") {
-                    set_or_crash("BLAKE2", Box::new(Blake2b::new(64)), 512)
+                    set_or_crash("BLAKE2", Box::new(blake2b_simd::State::new()), 512)
                 }
                 if matches.is_present("sha3") {
                     match matches.value_of("bits") {
-                        Some(bits_str) => match (&bits_str).parse::<usize>() {
+                        Some(bits_str) => match (bits_str).parse::<usize>() {
                             Ok(224) => set_or_crash(
                                 "SHA3-224",
                                 Box::new(Sha3_224::new()) as Box<dyn Digest>,
@@ -235,7 +238,7 @@ fn detect_algo<'a>(
                 }
                 if matches.is_present("shake128") {
                     match matches.value_of("bits") {
-                        Some(bits_str) => match (&bits_str).parse::<usize>() {
+                        Some(bits_str) => match (bits_str).parse::<usize>() {
                             Ok(bits) => set_or_crash("SHAKE128", Box::new(Shake128::new()), bits),
                             Err(err) => crash!(1, "{}", err),
                         },
@@ -244,7 +247,7 @@ fn detect_algo<'a>(
                 }
                 if matches.is_present("shake256") {
                     match matches.value_of("bits") {
-                        Some(bits_str) => match (&bits_str).parse::<usize>() {
+                        Some(bits_str) => match (bits_str).parse::<usize>() {
                             Ok(bits) => set_or_crash("SHAKE256", Box::new(Shake256::new()), bits),
                             Err(err) => crash!(1, "{}", err),
                         },
@@ -252,10 +255,8 @@ fn detect_algo<'a>(
                     }
                 }
             }
-            if alg.is_none() {
-                crash!(1, "You must specify hash algorithm!")
-            };
-            (name, alg.unwrap(), output_bits)
+            let alg = alg.unwrap_or_else(|| crash!(1, "You must specify hash algorithm!"));
+            (name, alg, output_bits)
         }
     }
 }

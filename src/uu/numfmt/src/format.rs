@@ -238,7 +238,7 @@ fn format_and_print_delimited(s: &str, options: &NumfmtOptions) -> Result<()> {
         }
 
         if field_selected {
-            print!("{}", format_string(&field.trim_start(), options, None)?);
+            print!("{}", format_string(field.trim_start(), options, None)?);
         } else {
             // print unselected field without conversion
             print!("{}", field);
@@ -271,7 +271,7 @@ fn format_and_print_whitespace(s: &str, options: &NumfmtOptions) -> Result<()> {
                 None
             };
 
-            print!("{}", format_string(&field, options, implicit_padding)?);
+            print!("{}", format_string(field, options, implicit_padding)?);
         } else {
             // print unselected field without conversion
             print!("{}{}", prefix, field);
