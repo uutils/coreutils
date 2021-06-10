@@ -794,7 +794,7 @@ fn test_nonexistent_file() {
 
 #[test]
 fn test_blanks() {
-    test_helper("blanks", &["-b", "--ignore-blanks"]);
+    test_helper("blanks", &["-b", "--ignore-leading-blanks"]);
 }
 
 #[test]

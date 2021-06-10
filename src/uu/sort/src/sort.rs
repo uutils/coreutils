@@ -91,7 +91,7 @@ mod options {
     pub const MERGE: &str = "merge";
     pub const DEBUG: &str = "debug";
     pub const IGNORE_CASE: &str = "ignore-case";
-    pub const IGNORE_BLANKS: &str = "ignore-blanks";
+    pub const IGNORE_LEADING_BLANKS: &str = "ignore-leading-blanks";
     pub const IGNORE_NONPRINTING: &str = "ignore-nonprinting";
     pub const OUTPUT: &str = "output";
     pub const REVERSE: &str = "reverse";
@@ -149,7 +149,7 @@ impl SortMode {
 pub struct GlobalSettings {
     mode: SortMode,
     debug: bool,
-    ignore_blanks: bool,
+    ignore_leading_blanks: bool,
     ignore_case: bool,
     dictionary_order: bool,
     ignore_non_printing: bool,
@@ -219,7 +219,7 @@ impl Default for GlobalSettings {
         GlobalSettings {
             mode: SortMode::Default,
             debug: false,
-            ignore_blanks: false,
+            ignore_leading_blanks: false,
             ignore_case: false,
             dictionary_order: false,
             ignore_non_printing: false,
@@ -310,7 +310,7 @@ impl From<&GlobalSettings> for KeySettings {
     fn from(settings: &GlobalSettings) -> Self {
         Self {
             mode: settings.mode,
-            ignore_blanks: settings.ignore_blanks,
+            ignore_blanks: settings.ignore_leading_blanks,
             ignore_case: settings.ignore_case,
             ignore_non_printing: settings.ignore_non_printing,
             reverse: settings.reverse,
@@ -517,7 +517,7 @@ impl<'a> Line<'a> {
             && !settings.stable
             && !settings.unique
             && (settings.dictionary_order
-                || settings.ignore_blanks
+                || settings.ignore_leading_blanks
                 || settings.ignore_case
                 || settings.ignore_non_printing
                 || settings.mode != SortMode::Default
@@ -681,9 +681,11 @@ impl FieldSelector {
                     // This would be ideal for a try block, I think. In the meantime this closure allows
                     // to use the `?` operator here.
                     Self::new(
-                        KeyPosition::new(from, 1, global_settings.ignore_blanks)?,
-                        to.map(|(to, _)| KeyPosition::new(to, 0, global_settings.ignore_blanks))
-                            .transpose()?,
+                        KeyPosition::new(from, 1, global_settings.ignore_leading_blanks)?,
+                        to.map(|(to, _)| {
+                            KeyPosition::new(to, 0, global_settings.ignore_leading_blanks)
+                        })
+                        .transpose()?,
                         KeySettings::from(global_settings),
                     )
                 })()
@@ -1040,9 +1042,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 ),
         )
         .arg(
-            Arg::with_name(options::IGNORE_BLANKS)
+            Arg::with_name(options::IGNORE_LEADING_BLANKS)
                 .short("b")
-                .long(options::IGNORE_BLANKS)
+                .long(options::IGNORE_LEADING_BLANKS)
                 .help("ignore leading blanks when finding sort keys in each line"),
         )
         .arg(
@@ -1247,7 +1249,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     settings.ignore_case = matches.is_present(options::IGNORE_CASE);
 
-    settings.ignore_blanks = matches.is_present(options::IGNORE_BLANKS);
+    settings.ignore_leading_blanks = matches.is_present(options::IGNORE_LEADING_BLANKS);
 
     settings.output_file = matches.value_of(options::OUTPUT).map(String::from);
     settings.reverse = matches.is_present(options::REVERSE);
