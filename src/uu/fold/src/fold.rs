@@ -98,7 +98,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
     for (i, arg) in args.iter().enumerate() {
         let slice = &arg;
-        if slice.starts_with('-') && slice.len() > 1 && slice.chars().nth(1).unwrap().is_digit(10) {
+        if slice.starts_with('-') && slice.chars().nth(1).map_or(false, |c| c.is_digit(10)) {
             let mut v = args.to_vec();
             v.remove(i);
             return (v, Some(slice[1..].to_owned()));
