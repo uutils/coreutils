@@ -56,11 +56,7 @@ fn print_expr_error(expr_error: &str) -> ! {
 }
 
 fn evaluate_ast(maybe_ast: Result<Box<syntax_tree::AstNode>, String>) -> Result<String, String> {
-    if maybe_ast.is_err() {
-        Err(maybe_ast.err().unwrap())
-    } else {
-        maybe_ast.ok().unwrap().evaluate()
-    }
+    maybe_ast.and_then(|ast| ast.evaluate())
 }
 
 fn maybe_handle_help_or_version(args: &[String]) -> bool {

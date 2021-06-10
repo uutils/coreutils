@@ -320,8 +320,7 @@ fn du(
                         if this_stat.is_dir {
                             futures.push(du(this_stat, options, depth + 1, inodes));
                         } else {
-                            if this_stat.inode.is_some() {
-                                let inode = this_stat.inode.unwrap();
+                            if let Some(inode) = this_stat.inode {
                                 if inodes.contains(&inode) {
                                     continue;
                                 }
@@ -360,7 +359,9 @@ fn du(
             my_stat.size += stat.size;
             my_stat.blocks += stat.blocks;
         }
-        options.max_depth == None || depth < options.max_depth.unwrap()
+        options
+            .max_depth
+            .map_or(true, |max_depth| depth < max_depth)
     }));
     stats.push(my_stat);
     Box::new(stats.into_iter())
