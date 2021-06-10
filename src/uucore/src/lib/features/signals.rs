@@ -29,7 +29,11 @@ Linux Programmer's Manual
 */
 
 #[cfg(target_os = "linux")]
-pub static ALL_SIGNALS: [Signal<'static>; 31] = [
+pub static ALL_SIGNALS: [Signal<'static>; 32] = [
+    Signal {
+        name: "EXIT",
+        value: 0,
+    },
     Signal {
         name: "HUP",
         value: 1,
@@ -198,7 +202,11 @@ No    Name         Default Action       Description
 */
 
 #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
-pub static ALL_SIGNALS: [Signal<'static>; 31] = [
+pub static ALL_SIGNALS: [Signal<'static>; 32] = [
+    Signal {
+        name: "EXIT",
+        value: 0,
+    },
     Signal {
         name: "HUP",
         value: 1,
