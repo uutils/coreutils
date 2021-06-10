@@ -23,7 +23,7 @@ use uucore::InvalidEncodingHandling;
 static ABOUT: &str = "Start COMMAND, and kill it if still running after DURATION.";
 
 fn get_usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", executable!())
+    format!("{0} [OPTION] DURATION COMMAND...", executable!())
 }
 
 const ERR_EXIT_STATUS: i32 = 125;
