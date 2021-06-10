@@ -79,10 +79,16 @@ mod options {
         ];
     }
 
+    pub mod check {
+        pub const CHECK: &str = "check";
+        pub const CHECK_SILENT: &str = "check-silent";
+        pub const SILENT: &str = "silent";
+        pub const QUIET: &str = "quiet";
+        pub const DIAGNOSE_FIRST: &str = "diagnose-first";
+    }
+
     pub const DICTIONARY_ORDER: &str = "dictionary-order";
     pub const MERGE: &str = "merge";
-    pub const CHECK: &str = "check";
-    pub const CHECK_SILENT: &str = "check-silent";
     pub const DEBUG: &str = "debug";
     pub const IGNORE_CASE: &str = "ignore-case";
     pub const IGNORE_BLANKS: &str = "ignore-blanks";
@@ -994,15 +1000,23 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("merge already sorted files; do not sort"),
         )
         .arg(
-            Arg::with_name(options::CHECK)
+            Arg::with_name(options::check::CHECK)
                 .short("c")
-                .long(options::CHECK)
+                .long(options::check::CHECK)
+                .takes_value(true)
+                .require_equals(true)
+                .min_values(0)
+                .possible_values(&[
+                    options::check::SILENT,
+                    options::check::QUIET,
+                    options::check::DIAGNOSE_FIRST,
+                ])
                 .help("check for sorted input; do not sort"),
         )
         .arg(
-            Arg::with_name(options::CHECK_SILENT)
+            Arg::with_name(options::check::CHECK_SILENT)
                 .short("C")
-                .long(options::CHECK_SILENT)
+                .long(options::check::CHECK_SILENT)
                 .help("exit successfully if the given file is already sorted, and exit with status 1 otherwise."),
         )
         .arg(
@@ -1220,9 +1234,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     settings.zero_terminated = matches.is_present(options::ZERO_TERMINATED);
     settings.merge = matches.is_present(options::MERGE);
 
-    settings.check = matches.is_present(options::CHECK);
-    if matches.is_present(options::CHECK_SILENT) {
-        settings.check_silent = matches.is_present(options::CHECK_SILENT);
+    settings.check = matches.is_present(options::check::CHECK);
+    if matches.is_present(options::check::CHECK_SILENT)
+        || matches!(
+            matches.value_of(options::check::CHECK),
+            Some(options::check::SILENT) | Some(options::check::QUIET)
+        )
+    {
+        settings.check_silent = true;
         settings.check = true;
     };
 

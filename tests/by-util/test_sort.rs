@@ -717,26 +717,30 @@ fn test_pipe() {
 
 #[test]
 fn test_check() {
-    new_ucmd!()
-        .arg("-c")
-        .arg("check_fail.txt")
-        .fails()
-        .stdout_is("sort: check_fail.txt:6: disorder: 5\n");
+    for diagnose_arg in &["-c", "--check", "--check=diagnose-first"] {
+        new_ucmd!()
+            .arg(diagnose_arg)
+            .arg("check_fail.txt")
+            .fails()
+            .stdout_is("sort: check_fail.txt:6: disorder: 5\n");
 
-    new_ucmd!()
-        .arg("-c")
-        .arg("multiple_files.expected")
-        .succeeds()
-        .stdout_is("");
+        new_ucmd!()
+            .arg(diagnose_arg)
+            .arg("multiple_files.expected")
+            .succeeds()
+            .stdout_is("");
+    }
 }
 
 #[test]
 fn test_check_silent() {
-    new_ucmd!()
-        .arg("-C")
-        .arg("check_fail.txt")
-        .fails()
-        .stdout_is("");
+    for silent_arg in &["-C", "--check=silent", "--check=quiet"] {
+        new_ucmd!()
+            .arg(silent_arg)
+            .arg("check_fail.txt")
+            .fails()
+            .stdout_is("");
+    }
 }
 
 #[test]
