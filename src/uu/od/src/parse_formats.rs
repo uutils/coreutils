@@ -275,17 +275,13 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
     let mut chars = params.chars();
     let mut ch = chars.next();
 
-    while ch.is_some() {
-        let type_char = ch.unwrap();
-        let type_char = match format_type(type_char) {
-            Some(t) => t,
-            None => {
-                return Err(format!(
-                    "unexpected char '{}' in format specification '{}'",
-                    type_char, params
-                ));
-            }
-        };
+    while let Some(type_char) = ch {
+        let type_char = format_type(type_char).ok_or_else(|| {
+            format!(
+                "unexpected char '{}' in format specification '{}'",
+                type_char, params
+            )
+        })?;
 
         let type_cat = format_type_category(type_char);
 
