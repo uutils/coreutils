@@ -278,42 +278,25 @@ fn parse_spec(spec: &str) -> Result<(Option<u32>, Option<u32>), String> {
     let usr_only = args.len() == 1 && !args[0].is_empty();
     let grp_only = args.len() == 2 && args[0].is_empty();
     let usr_grp = args.len() == 2 && !args[0].is_empty() && !args[1].is_empty();
-
-    let r = if usr_only {
-        (
-            Some(
-                Passwd::locate(args[0])
-                    .map_err(|_| format!("invalid user: ‘{}’", spec))?
-                    .uid(),
-            ),
-            None,
-        )
-    } else if grp_only {
-        (
-            None,
-            Some(
-                Group::locate(args[1])
-                    .map_err(|_| format!("invalid group: ‘{}’", spec))?
-                    .gid(),
-            ),
-        )
-    } else if usr_grp {
-        (
-            Some(
-                Passwd::locate(args[0])
-                    .map_err(|_| format!("invalid user: ‘{}’", spec))?
-                    .uid(),
-            ),
-            Some(
-                Group::locate(args[1])
-                    .map_err(|_| format!("invalid group: ‘{}’", spec))?
-                    .gid(),
-            ),
+    let uid = if usr_only || usr_grp {
+        Some(
+            Passwd::locate(args[0])
+                .map_err(|_| format!("invalid user: ‘{}’", spec))?
+                .uid(),
         )
     } else {
-        (None, None)
+        None
     };
-    Ok(r)
+    let gid = if grp_only || usr_grp {
+        Some(
+            Group::locate(args[1])
+                .map_err(|_| format!("invalid group: ‘{}’", spec))?
+                .gid(),
+        )
+    } else {
+        None
+    };
+    Ok((uid, gid))
 }
 
 enum IfFrom {
@@ -500,5 +483,19 @@ impl Chowner {
             IfFrom::Group(g) => g == gid,
             IfFrom::UserGroup(u, g) => u == uid && g == gid,
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_parse_spec() {
+        assert_eq!(parse_spec(":"), Ok((None, None)));
+        assert!(parse_spec("::")
+            .err()
+            .unwrap()
+            .starts_with("invalid group: "));
     }
 }
