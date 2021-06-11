@@ -167,27 +167,27 @@ impl GlobalSettings {
     /// If there is no trailing si unit, the implicit unit is K.
     /// The suffix B causes the number to be interpreted as a byte count.
     fn parse_byte_count(input: &str) -> usize {
-        const SI_UNITS: &[char] = &['B', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'];
-
         let input = input.trim();
-
-        let (num_str, si_unit) =
-            if input.ends_with(|c: char| SI_UNITS.contains(&c.to_ascii_uppercase())) {
-                let mut chars = input.chars();
-                let si_suffix = chars.next_back().unwrap().to_ascii_uppercase();
-                let si_unit = SI_UNITS.iter().position(|&c| c == si_suffix).unwrap();
-                let num_str = chars.as_str();
-                (num_str, si_unit)
-            } else {
-                (input, 1)
-            };
+        let (mut num_str, size_unit) = uucore::parse_size_unit(input, [
+            &[b'K'][..],
+            &[b'M'][..],
+            &[b'G'][..],
+            &[b'T'][..],
+            &[b'P'][..],
+            &[b'E'][..],
+            &[b'Z'][..],
+            &[b'Y'][..],
+        ].iter().copied(), &[]);
+        if size_unit.exp == 0 && num_str.as_bytes().last() == Some(&b'B') {
+            num_str = &num_str[..num_str.len()];
+        }
 
         let num_usize: usize = num_str
             .trim()
             .parse()
             .unwrap_or_else(|e| crash!(1, "failed to parse buffer size `{}`: {}", num_str, e));
 
-        num_usize.saturating_mul(1000usize.saturating_pow(si_unit as u32))
+        num_usize.saturating_mul(1000usize.saturating_pow(size_unit.exp as u32))
     }
 
     fn out_writer(&self) -> BufWriter<Box<dyn Write>> {
