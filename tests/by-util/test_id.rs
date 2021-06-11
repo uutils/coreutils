@@ -1,8 +1,6 @@
 use crate::common::util::*;
 
 // Apparently some CI environments have configuration issues, e.g. with 'whoami' and 'id'.
-// If we are running inside the CI and "needle" is in "stderr" skipping this test is
-// considered okay. If we are not inside the CI this calls assert!(result.success).
 //
 // From the Logs: "Build (ubuntu-18.04, x86_64-unknown-linux-gnu, feat_os_unix, use-cross)"
 //    whoami: cannot find name for user ID 1001
@@ -13,97 +11,99 @@ use crate::common::util::*;
 // id: "uid=1001(runner) gid=118(docker) groups=118(docker),4(adm),101(systemd-journal)"
 // whoami: "runner"
 //
-fn skipping_test_is_okay(result: &CmdResult, needle: &str) -> bool {
-    if !result.succeeded() {
-        println!("result.stdout = {}", result.stdout_str());
-        println!("result.stderr = {}", result.stderr_str());
-        if is_ci() && result.stderr_str().contains(needle) {
-            println!("test skipped:");
-            return true;
-        } else {
-            result.success();
-        }
-    }
-    false
-}
 
-fn return_whoami_username() -> String {
-    let scene = TestScenario::new("whoami");
-    let result = scene.cmd("whoami").run();
-    if skipping_test_is_okay(&result, "whoami: cannot find name for user ID") {
-        println!("test skipped:");
-        return String::from("");
-    }
-
-    result.stdout_str().trim().to_string()
+fn whoami() -> String {
+    std::env::var("USER").unwrap_or_else(|e| {
+        println!("warning: {}, using \"nobody\" instead", e);
+        "nobody".to_string()
+    })
 }
 
 #[test]
-fn test_id() {
-    let scene = TestScenario::new(util_name!());
+#[cfg(unix)]
+fn test_id_no_argument() {
+    let result = new_ucmd!().run();
+    let expected_result = expected_result(&[]);
+    let mut exp_stdout = expected_result.stdout_str().to_string();
 
-    let result = scene.ucmd().arg("-u").succeeds();
-    let uid = result.stdout_str().trim();
-
-    let result = scene.ucmd().run();
-    if skipping_test_is_okay(&result, "Could not find uid") {
-        return;
-    }
-
-    // Verify that the id found by --user/-u exists in the list
-    result.stdout_contains(uid);
-}
-
-#[test]
-fn test_id_from_name() {
-    let username = return_whoami_username();
-    if username.is_empty() {
-        return;
-    }
-
-    let scene = TestScenario::new(util_name!());
-    let result = scene.ucmd().arg(&username).run();
-    if skipping_test_is_okay(&result, "Could not find uid") {
-        return;
-    }
-
-    let uid = result.stdout_str().trim();
-
-    let result = scene.ucmd().run();
-    if skipping_test_is_okay(&result, "Could not find uid") {
-        return;
-    }
+    // uu_stid does not support selinux context. Remove 'context' part from exp_stdout:
+    let context_offset = expected_result
+        .stdout_str()
+        .find(" context")
+        .unwrap_or(exp_stdout.len());
+    exp_stdout.replace_range(context_offset.., "\n");
 
     result
-        // Verify that the id found by --user/-u exists in the list
-        .stdout_contains(uid)
-        // Verify that the username found by whoami exists in the list
-        .stdout_contains(username);
+        .stdout_is(exp_stdout)
+        .stderr_is(expected_result.stderr_str())
+        .code_is(expected_result.code());
 }
 
 #[test]
-fn test_id_name_from_id() {
-    let result = new_ucmd!().arg("-nu").run();
-
-    let username_id = result.stdout_str().trim();
-
-    let username_whoami = return_whoami_username();
-    if username_whoami.is_empty() {
-        return;
-    }
-
-    assert_eq!(username_id, username_whoami);
+#[cfg(unix)]
+fn test_id_single_user() {
+    let args = &[&whoami()[..]];
+    let result = new_ucmd!().args(args).run();
+    let expected_result = expected_result(args);
+    result
+        .stdout_is(expected_result.stdout_str())
+        .stderr_is(expected_result.stderr_str())
+        .code_is(expected_result.code());
 }
 
 #[test]
-fn test_id_pretty_print() {
-    let username = return_whoami_username();
-    if username.is_empty() {
-        return;
-    }
+#[cfg(unix)]
+fn test_id_single_invalid_user() {
+    let args = &["hopefully_non_existing_username"];
+    let result = new_ucmd!().args(args).run();
+    let expected_result = expected_result(args);
+    result
+        .stdout_is(expected_result.stdout_str())
+        .stderr_is(expected_result.stderr_str())
+        .code_is(expected_result.code());
+}
 
+#[test]
+#[cfg(unix)]
+fn test_id_name() {
     let scene = TestScenario::new(util_name!());
-    let result = scene.ucmd().arg("-p").run();
+    for &opt in &["--user", "--group", "--groups"] {
+        let args = [opt, "--name"];
+        let result = scene.ucmd().args(&args).run();
+        let expected_result = expected_result(&args);
+        result
+            .stdout_is(expected_result.stdout_str())
+            .stderr_is(expected_result.stderr_str())
+            .code_is(expected_result.code());
+
+        if opt == "--user" {
+            assert_eq!(result.stdout_str().trim_end(), whoami());
+        }
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_id_real() {
+    let scene = TestScenario::new(util_name!());
+    for &opt in &["--user", "--group", "--groups"] {
+        let args = [opt, "--real"];
+        let result = scene.ucmd().args(&args).run();
+        let expected_result = expected_result(&args);
+        result
+            .stdout_is(expected_result.stdout_str())
+            .stderr_is(expected_result.stderr_str())
+            .code_is(expected_result.code());
+    }
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "linux")))]
+fn test_id_pretty_print() {
+    // `-p` is BSD only and not supported on GNU's `id`
+    let username = whoami();
+
+    let result = new_ucmd!().arg("-p").run();
     if result.stdout_str().trim().is_empty() {
         // this fails only on: "MinRustV (ubuntu-latest, feat_os_unix)"
         // `rustc 1.40.0 (73528e339 2019-12-16)`
@@ -113,20 +113,17 @@ fn test_id_pretty_print() {
         // stderr = ', tests/common/util.rs:157:13
         println!("test skipped:");
         return;
+    } else {
+        result.success().stdout_contains(username);
     }
-
-    result.success().stdout_contains(username);
 }
 
 #[test]
+#[cfg(all(unix, not(target_os = "linux")))]
 fn test_id_password_style() {
-    let username = return_whoami_username();
-    if username.is_empty() {
-        return;
-    }
-
-    let result = new_ucmd!().arg("-P").succeeds();
-
+    // `-P` is BSD only and not supported on GNU's `id`
+    let username = whoami();
+    let result = new_ucmd!().arg("-P").arg(&username).succeeds();
     assert!(result.stdout_str().starts_with(&username));
 }
 
@@ -134,6 +131,39 @@ fn test_id_password_style() {
 #[cfg(unix)]
 fn test_id_default_format() {
     // TODO: These are the same tests like in test_id_zero but without --zero flag.
+}
+
+#[test]
+#[cfg(unix)]
+fn test_id_multiple_users() {
+    // Same typical users that GNU testsuite is using.
+    let test_users = ["root", "man", "postfix", "sshd", &whoami()];
+
+    let result = new_ucmd!().args(&test_users).run();
+    let expected_result = expected_result(&test_users);
+    result
+        .stdout_is(expected_result.stdout_str())
+        .stderr_is(expected_result.stderr_str());
+}
+
+#[test]
+#[cfg(unix)]
+fn test_id_multiple_invalid_users() {
+    let test_users = [
+        "root",
+        "hopefully_non_existing_username1",
+        "man",
+        "postfix",
+        "sshd",
+        "hopefully_non_existing_username2",
+        &whoami(),
+    ];
+
+    let result = new_ucmd!().args(&test_users).run();
+    let expected_result = expected_result(&test_users);
+    result
+        .stdout_is(expected_result.stdout_str())
+        .stderr_is(expected_result.stderr_str());
 }
 
 #[test]
@@ -155,8 +185,8 @@ fn test_id_zero() {
                 let result = scene.ucmd().args(&args).run();
                 let expected_result = expected_result(&args);
                 result
-                    .stdout_is_bytes(expected_result.stdout())
-                    .stderr_is_bytes(expected_result.stderr());
+                    .stdout_is(expected_result.stdout_str())
+                    .stderr_is(expected_result.stderr_str());
             }
         }
         // u/g/G z
@@ -166,7 +196,7 @@ fn test_id_zero() {
                 .ucmd()
                 .args(&args)
                 .succeeds()
-                .stdout_only_bytes(expected_result(&args).stdout());
+                .stdout_only(expected_result(&args).stdout_str());
         }
     }
 }
