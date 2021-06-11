@@ -247,7 +247,7 @@ impl CmdResult {
     pub fn stdout_is_templated_fixture<T: AsRef<OsStr>>(
         &self,
         file_rel_path: T,
-        template_vars: Vec<(&String, &String)>,
+        template_vars: &[(&str, &str)],
     ) -> &CmdResult {
         let mut contents =
             String::from_utf8(read_scenario_fixture(&self.tmpd, file_rel_path)).unwrap();
