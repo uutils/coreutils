@@ -17,6 +17,7 @@ path = "src/tty.rs"
 [dependencies]
 clap = "2.33"
 libc = "0.2.42"
+atty = "0.2"
 uucore = { version=">=0.0.8", package="uucore", path="../../uucore", features=["fs"] }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 

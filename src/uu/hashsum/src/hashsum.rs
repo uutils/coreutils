@@ -255,10 +255,8 @@ fn detect_algo<'a>(
                     }
                 }
             }
-            if alg.is_none() {
-                crash!(1, "You must specify hash algorithm!")
-            };
-            (name, alg.unwrap(), output_bits)
+            let alg = alg.unwrap_or_else(|| crash!(1, "You must specify hash algorithm!"));
+            (name, alg, output_bits)
         }
     }
 }
