@@ -304,50 +304,46 @@ impl ParseSizeErr {
 
 pub type ParseSizeResult = Result<u64, ParseSizeErr>;
 
-pub fn parse_size(mut size_slice: &str) -> Result<u64, ParseSizeErr> {
-    let mut base = if size_slice.as_bytes().last() == Some(&b'B') {
-        size_slice = &size_slice[..size_slice.len() - 1];
-        1000u64
-    } else {
-        1024u64
-    };
+pub fn parse_size(size_slice: &str) -> Result<u64, ParseSizeErr> {
+    let (mut size_slice, mut size_unit) = uucore::parse_size_unit(
+        size_slice,
+        [
+            &[b'K', b'k'][..],
+            &[b'M'][..],
+            &[b'G'][..],
+            &[b'T'][..],
+            &[b'P'][..],
+            &[b'E'][..],
+            &[b'Z'][..],
+            &[b'Y'][..],
+        ]
+        .iter()
+        .copied(),
+        &[b'B'],
+    );
 
-    let exponent = match size_slice.as_bytes().last() {
-        Some(unit) => match unit {
-            b'K' | b'k' => 1u64,
-            b'M' => 2u64,
-            b'G' => 3u64,
-            b'T' => 4u64,
-            b'P' => 5u64,
-            b'E' => 6u64,
-            b'Z' | b'Y' => {
-                return Err(ParseSizeErr::size_too_big(size_slice));
+    if size_unit.is_empty() {
+        match size_slice.as_bytes().last() {
+            Some(&b'b') => {
+                size_unit.base = 512;
+                size_unit.exp = 1;
+                size_slice = &size_slice[..size_slice.len() - 1];
             }
-            b'b' => {
-                base = 512u64;
-                1u64
+            Some(&b'B') => {
+                // sole B is not a valid suffix
+                return Err(ParseSizeErr::parse_failure(size_slice));
             }
-            _ => 0u64,
-        },
-        None => 0u64,
-    };
-    if exponent != 0 {
-        size_slice = &size_slice[..size_slice.len() - 1];
+            _ => (),
+        }
     }
 
-    let mut multiplier = 1u64;
-    for _ in 0u64..exponent {
-        multiplier *= base;
-    }
-    if base == 1000u64 && exponent == 0u64 {
-        // sole B is not a valid suffix
-        Err(ParseSizeErr::parse_failure(size_slice))
-    } else {
-        let value: Option<i64> = size_slice.parse().ok();
-        value
-            .map(|v| Ok((multiplier as i64 * v.abs()) as u64))
-            .unwrap_or_else(|| Err(ParseSizeErr::parse_failure(size_slice)))
-    }
+    let unit_value = size_unit
+        .to_u64()
+        .ok_or_else(|| ParseSizeErr::size_too_big(size_slice))?;
+    let value: Option<i64> = size_slice.parse().ok();
+    value
+        .map(|v| Ok((unit_value as i64 * v.abs()) as u64))
+        .unwrap_or_else(|| Err(ParseSizeErr::parse_failure(size_slice)))
 }
 
 fn follow<T: Read>(readers: &mut [BufReader<T>], filenames: &[String], settings: &Settings) {
