@@ -152,10 +152,8 @@ fn check_option(matches: &ArgMatches, name: &str) -> Result<BufferType, ProgramO
                 }
             }
             x => {
-                let size = match parse_size(x) {
-                    Some(m) => m,
-                    None => return Err(ProgramOptionsError(format!("invalid mode {}", x))),
-                };
+                let size = parse_size(x)
+                    .ok_or_else(|| ProgramOptionsError(format!("invalid mode {}", x)))?;
                 Ok(BufferType::Size(size))
             }
         },
