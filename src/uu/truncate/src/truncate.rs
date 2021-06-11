@@ -360,38 +360,25 @@ fn parse_mode_and_size(size_string: &str) -> Result<TruncateMode, ()> {
 /// assert_eq!(parse_size("123KB").unwrap(), 123 * 1000);
 /// ```
 fn parse_size(size: &str) -> Result<u64, ()> {
-    // Get the numeric part of the size argument. For example, if the
-    // argument is "123K", then the numeric part is "123".
-    let numeric_string: String = size.chars().take_while(|c| c.is_digit(10)).collect();
-    let number: u64 = numeric_string.parse().map_err(|_| ())?;
+    let (numeric_string, size_unit) = uucore::parse_size_unit(
+        size,
+        [
+            &[b'k', b'K'][..],
+            &[b'm', b'M'][..],
+            &[b'g', b'G'][..],
+            &[b't', b'T'][..],
+            &[b'p', b'P'][..],
+            &[b'e', b'E'][..],
+            &[b'z', b'Z'][..],
+            &[b'y', b'Y'][..],
+        ]
+        .iter()
+        .copied(),
+        &[b'B'],
+    );
 
-    // Get the alphabetic units part of the size argument and compute
-    // the factor it represents. For example, if the argument is "123K",
-    // then the unit part is "K" and the factor is 1024. This may be the
-    // empty string, in which case, the factor is 1.
-    let n = numeric_string.len();
-    let (base, exponent): (u64, u32) = match &size[n..] {
-        "" => (1, 0),
-        "K" | "k" => (1024, 1),
-        "M" | "m" => (1024, 2),
-        "G" | "g" => (1024, 3),
-        "T" | "t" => (1024, 4),
-        "P" | "p" => (1024, 5),
-        "E" | "e" => (1024, 6),
-        "Z" | "z" => (1024, 7),
-        "Y" | "y" => (1024, 8),
-        "KB" | "kB" => (1000, 1),
-        "MB" | "mB" => (1000, 2),
-        "GB" | "gB" => (1000, 3),
-        "TB" | "tB" => (1000, 4),
-        "PB" | "pB" => (1000, 5),
-        "EB" | "eB" => (1000, 6),
-        "ZB" | "zB" => (1000, 7),
-        "YB" | "yB" => (1000, 8),
-        _ => return Err(()),
-    };
-    let factor = base.pow(exponent);
-    Ok(number * factor)
+    let number: u64 = numeric_string.parse().map_err(|_| ())?;
+    Ok(number * size_unit.to_u64().ok_or(())?)
 }
 
 #[cfg(test)]
