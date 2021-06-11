@@ -1044,7 +1044,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(OPT_KEY)
                 .help("sort by a key")
                 .long_help(LONG_HELP_KEYS)
-                .multiple(true)
+                .use_delimiter(true)
                 .takes_value(true),
         )
         .arg(
