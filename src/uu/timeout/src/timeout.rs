@@ -42,7 +42,7 @@ pub mod options {
 
 struct Config {
     foreground: bool,
-    kill_after: Duration,
+    kill_after: Option<Duration>,
     signal: usize,
     duration: Duration,
     preserve_status: bool,
@@ -66,10 +66,9 @@ impl Config {
             _ => uucore::signals::signal_by_name_or_value("TERM").unwrap(),
         };
 
-        let kill_after: Duration = match options.value_of(options::KILL_AFTER) {
-            Some(time) => uucore::parse_time::from_str(time).unwrap(),
-            None => Duration::new(0, 0),
-        };
+        let kill_after = options
+            .value_of(options::KILL_AFTER)
+            .map(|time| uucore::parse_time::from_str(time).unwrap());
 
         let duration: Duration =
             uucore::parse_time::from_str(options.value_of(options::DURATION).unwrap()).unwrap();
@@ -178,7 +177,7 @@ fn timeout(
     cmd: &[String],
     duration: Duration,
     signal: usize,
-    kill_after: Duration,
+    kill_after: Option<Duration>,
     foreground: bool,
     preserve_status: bool,
     verbose: bool,
@@ -217,27 +216,32 @@ fn timeout(
                 );
             }
             return_if_err!(ERR_EXIT_STATUS, process.send_signal(signal));
-            match process.wait_or_timeout(kill_after) {
-                Ok(Some(status)) => {
-                    if preserve_status {
-                        status.code().unwrap_or_else(|| status.signal().unwrap())
-                    } else {
-                        124
+            if let Some(kill_after) = kill_after {
+                match process.wait_or_timeout(kill_after) {
+                    Ok(Some(status)) => {
+                        if preserve_status {
+                            status.code().unwrap_or_else(|| status.signal().unwrap())
+                        } else {
+                            124
+                        }
                     }
-                }
-                Ok(None) => {
-                    if verbose {
-                        show_error!("sending signal KILL to command '{}'", cmd[0]);
+                    Ok(None) => {
+                        if verbose {
+                            show_error!("sending signal KILL to command '{}'", cmd[0]);
+                        }
+                        return_if_err!(
+                            ERR_EXIT_STATUS,
+                            process.send_signal(
+                                uucore::signals::signal_by_name_or_value("KILL").unwrap()
+                            )
+                        );
+                        return_if_err!(ERR_EXIT_STATUS, process.wait());
+                        137
                     }
-                    return_if_err!(
-                        ERR_EXIT_STATUS,
-                        process
-                            .send_signal(uucore::signals::signal_by_name_or_value("KILL").unwrap())
-                    );
-                    return_if_err!(ERR_EXIT_STATUS, process.wait());
-                    137
+                    Err(_) => 124,
                 }
-                Err(_) => 124,
+            } else {
+                124
             }
         }
         Err(_) => {
