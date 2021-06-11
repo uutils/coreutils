@@ -94,17 +94,15 @@ pub fn parse_obsolete(src: &str) -> Option<Result<impl Iterator<Item = OsString>
 /// the bool specifies whether to read from the end
 pub fn parse_num(src: &str) -> Result<(usize, bool), ParseError> {
     let mut num_start = 0;
-    let mut chars = src.char_indices();
-    let (mut chars, all_but_last) = match chars.next() {
-        Some((_, c)) => {
-            if c == '-' {
-                num_start += 1;
-                (chars, true)
-            } else {
-                (src.char_indices(), false)
-            }
+    let (mut chars, all_but_last) = {
+        let mut chars = src.char_indices();
+        let (_, c) = chars.next().ok_or(ParseError::Syntax)?;
+        if c == '-' {
+            num_start += 1;
+            (chars, true)
+        } else {
+            (src.char_indices(), false)
         }
-        None => return Err(ParseError::Syntax),
     };
     let mut num_end = 0usize;
     let mut last_char = 0 as char;
@@ -120,10 +118,11 @@ pub fn parse_num(src: &str) -> Result<(usize, bool), ParseError> {
     }
 
     let num = if num_count > 0 {
-        match src[num_start..=num_end].parse::<usize>() {
-            Ok(n) => Some(n),
-            Err(_) => return Err(ParseError::Overflow),
-        }
+        Some(
+            src[num_start..=num_end]
+                .parse::<usize>()
+                .map_err(|_| ParseError::Overflow)?,
+        )
     } else {
         None
     };
@@ -168,10 +167,7 @@ pub fn parse_num(src: &str) -> Result<(usize, bool), ParseError> {
             'y' => base.pow(8),
             _ => return Err(ParseError::Syntax),
         };
-        let mul = match usize::try_from(mul) {
-            Ok(n) => n,
-            Err(_) => return Err(ParseError::Overflow),
-        };
+        let mul = usize::try_from(mul).map_err(|_| ParseError::Overflow)?;
         match num.unwrap_or(1).checked_mul(mul) {
             Some(n) => Ok((n, all_but_last)),
             None => Err(ParseError::Overflow),
