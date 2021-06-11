@@ -3,6 +3,7 @@
 use crate::common::util::*;
 use chrono::offset::Local;
 use chrono::DateTime;
+use chrono::Duration;
 use std::fs::metadata;
 
 fn file_last_modified_time(ucmd: &UCommand, path: &str) -> String {
@@ -20,8 +21,22 @@ fn file_last_modified_time(ucmd: &UCommand, path: &str) -> String {
         .unwrap_or_default()
 }
 
-fn now_time() -> String {
-    Local::now().format("%b %d %H:%M %Y").to_string()
+fn all_minutes(from: DateTime<Local>, to: DateTime<Local>) -> Vec<String> {
+    const FORMAT: &str = "%b %d %H:%M %Y";
+    let mut vec = vec![];
+    let mut current = from;
+    while current < to {
+        vec.push(current.format(FORMAT).to_string());
+        current = current + Duration::minutes(1);
+    }
+    vec
+}
+
+fn valid_last_modified_template_vars(from: DateTime<Local>) -> Vec<Vec<(String, String)>> {
+    all_minutes(from, Local::now())
+        .into_iter()
+        .map(|time| vec![("{last_modified_time}".to_string(), time)])
+        .collect()
 }
 
 #[test]
@@ -246,12 +261,12 @@ fn test_with_suppress_error_option() {
 fn test_with_stdin() {
     let expected_file_path = "stdin.log.expected";
     let mut scenario = new_ucmd!();
-    let now = now_time();
+    let start = Local::now();
     scenario
         .pipe_in_fixture("stdin.log")
         .args(&["--pages=1:2", "-n", "-"])
         .run()
-        .stdout_is_templated_fixture(expected_file_path, &[("{last_modified_time}", &now)]);
+        .stdout_is_templated_fixture_any(expected_file_path, &valid_last_modified_template_vars(start));
 }
 
 #[test]
@@ -325,19 +340,19 @@ fn test_with_mpr() {
     let expected_test_file_path = "mpr.log.expected";
     let expected_test_file_path1 = "mpr1.log.expected";
     let expected_test_file_path2 = "mpr2.log.expected";
-    let now = now_time();
+    let start = Local::now();
     new_ucmd!()
         .args(&["--pages=1:2", "-m", "-n", test_file_path, test_file_path1])
         .succeeds()
-        .stdout_is_templated_fixture(expected_test_file_path, &[("{last_modified_time}", &now)]);
+        .stdout_is_templated_fixture_any(expected_test_file_path, &valid_last_modified_template_vars(start));
 
-    let now = now_time();
+    let start = Local::now();
     new_ucmd!()
         .args(&["--pages=2:4", "-m", "-n", test_file_path, test_file_path1])
         .succeeds()
-        .stdout_is_templated_fixture(expected_test_file_path1, &[("{last_modified_time}", &now)]);
+        .stdout_is_templated_fixture_any(expected_test_file_path1, &valid_last_modified_template_vars(start));
 
-    let now = now_time();
+    let start = Local::now();
     new_ucmd!()
         .args(&[
             "--pages=1:2",
@@ -350,7 +365,7 @@ fn test_with_mpr() {
             test_file_path,
         ])
         .succeeds()
-        .stdout_is_templated_fixture(expected_test_file_path2, &[("{last_modified_time}", &now)]);
+        .stdout_is_templated_fixture_any(expected_test_file_path2, &valid_last_modified_template_vars(start));
 }
 
 #[test]
@@ -442,9 +457,9 @@ fn test_with_join_lines_option() {
     let test_file_2 = "test.log";
     let expected_file_path = "joined.log.expected";
     let mut scenario = new_ucmd!();
-    let now = now_time();
+    let start = Local::now();
     scenario
         .args(&["+1:2", "-J", "-m", test_file_1, test_file_2])
         .run()
-        .stdout_is_templated_fixture(expected_file_path, &[("{last_modified_time}", &now)]);
+        .stdout_is_templated_fixture_any(expected_file_path, &valid_last_modified_template_vars(start));
 }
