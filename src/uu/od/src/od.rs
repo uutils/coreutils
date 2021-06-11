@@ -128,36 +128,27 @@ impl OdOptions {
             }
         };
 
-        let mut skip_bytes = match matches.value_of(options::SKIP_BYTES) {
-            None => 0,
-            Some(s) => match parse_number_of_bytes(s) {
-                Ok(i) => i,
-                Err(_) => {
-                    return Err(format!("Invalid argument --skip-bytes={}", s));
-                }
-            },
-        };
+        let mut skip_bytes = matches
+            .value_of(options::SKIP_BYTES)
+            .map(|s| {
+                parse_number_of_bytes(s).map_err(|_| format!("Invalid argument --skip-bytes={}", s))
+            })
+            .transpose()?
+            .unwrap_or(0);
 
         let mut label: Option<usize> = None;
 
-        let input_strings = match parse_inputs(&matches) {
-            Ok(CommandLineInputs::FileNames(v)) => v,
-            Ok(CommandLineInputs::FileAndOffset((f, s, l))) => {
+        let parsed_input = parse_inputs(&matches).map_err(|e| format!("Invalid inputs: {}", e))?;
+        let input_strings = match parsed_input {
+            CommandLineInputs::FileNames(v) => v,
+            CommandLineInputs::FileAndOffset((f, s, l)) => {
                 skip_bytes = s;
                 label = l;
                 vec![f]
             }
-            Err(e) => {
-                return Err(format!("Invalid inputs: {}", e));
-            }
         };
 
-        let formats = match parse_format_flags(&args) {
-            Ok(f) => f,
-            Err(e) => {
-                return Err(e);
-            }
-        };
+        let formats = parse_format_flags(&args)?;
 
         let mut line_bytes = match matches.value_of(options::WIDTH) {
             None => 16,
@@ -174,15 +165,12 @@ impl OdOptions {
 
         let output_duplicates = matches.is_present(options::OUTPUT_DUPLICATES);
 
-        let read_bytes = match matches.value_of(options::READ_BYTES) {
-            None => None,
-            Some(s) => match parse_number_of_bytes(s) {
-                Ok(i) => Some(i),
-                Err(_) => {
-                    return Err(format!("Invalid argument --read-bytes={}", s));
-                }
-            },
-        };
+        let read_bytes = matches
+            .value_of(options::READ_BYTES)
+            .map(|s| {
+                parse_number_of_bytes(s).map_err(|_| format!("Invalid argument --read-bytes={}", s))
+            })
+            .transpose()?;
 
         let radix = match matches.value_of(options::ADDRESS_RADIX) {
             None => Radix::Octal,
