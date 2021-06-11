@@ -277,39 +277,30 @@ struct ByteSplitter {
 impl ByteSplitter {
     fn new(settings: &Settings) -> ByteSplitter {
         // These multipliers are the same as supported by GNU coreutils.
-        let modifiers: Vec<(&str, u128)> = vec![
-            ("K", 1024u128),
-            ("M", 1024 * 1024),
-            ("G", 1024 * 1024 * 1024),
-            ("T", 1024 * 1024 * 1024 * 1024),
-            ("P", 1024 * 1024 * 1024 * 1024 * 1024),
-            ("E", 1024 * 1024 * 1024 * 1024 * 1024 * 1024),
-            ("Z", 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024),
-            ("Y", 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024),
-            ("KB", 1000),
-            ("MB", 1000 * 1000),
-            ("GB", 1000 * 1000 * 1000),
-            ("TB", 1000 * 1000 * 1000 * 1000),
-            ("PB", 1000 * 1000 * 1000 * 1000 * 1000),
-            ("EB", 1000 * 1000 * 1000 * 1000 * 1000 * 1000),
-            ("ZB", 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000),
-            ("YB", 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000),
-        ];
-
-        // This sequential find is acceptable since none of the modifiers are
-        // suffixes of any other modifiers, a la Huffman codes.
-        let (suffix, multiplier) = modifiers
+        let (size_slice, size_unit) = uucore::parse_size_unit(
+            &settings.strategy_param,
+            [
+                &[b'K'][..],
+                &[b'M'][..],
+                &[b'G'][..],
+                &[b'T'][..],
+                &[b'P'][..],
+                &[b'E'][..],
+                &[b'Z'][..],
+                &[b'Y'][..],
+            ]
             .iter()
-            .find(|(suffix, _)| settings.strategy_param.ends_with(suffix))
-            .unwrap_or(&("", 1));
+            .copied(),
+            &[b'B'],
+        );
 
         // Try to parse the actual numeral.
-        let n = &settings.strategy_param[0..(settings.strategy_param.len() - suffix.len())]
+        let n = size_slice
             .parse::<u128>()
             .unwrap_or_else(|e| crash!(1, "invalid number of bytes: {}", e));
-
+        let unit_value = size_unit.to_u128().unwrap();
         ByteSplitter {
-            bytes_per_split: n * multiplier,
+            bytes_per_split: n * unit_value,
         }
     }
 }
