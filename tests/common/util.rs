@@ -223,6 +223,18 @@ impl CmdResult {
         self
     }
 
+    /// like `stdout_is`, but succeeds if any elements of `expected` matches stdout.
+    pub fn stdout_is_any<T: AsRef<str> + std::fmt::Debug>(&self, expected: Vec<T>) -> &CmdResult {
+        if !expected.iter().any(|msg| self.stdout_str() == msg.as_ref()) {
+            panic!(
+                "stdout was {}\nExpected any of {:#?}",
+                self.stdout_str(),
+                expected
+            )
+        }
+        self
+    }
+
     /// Like `stdout_is` but newlines are normalized to `\n`.
     pub fn normalized_newlines_stdout_is<T: AsRef<str>>(&self, msg: T) -> &CmdResult {
         let msg = msg.as_ref().replace("\r\n", "\n");
@@ -255,6 +267,23 @@ impl CmdResult {
             contents = contents.replace(kv.0, kv.1);
         }
         self.stdout_is(contents)
+    }
+
+    /// like `stdout_is_templated_fixture`, but succeeds if any replacement by `template_vars` results in the actual stdout.
+    pub fn stdout_is_templated_fixture_any<T: AsRef<OsStr>>(
+        &self,
+        file_rel_path: T,
+        template_vars: &[Vec<(String, String)>],
+    ) {
+        let contents = String::from_utf8(read_scenario_fixture(&self.tmpd, file_rel_path)).unwrap();
+        let possible_values = template_vars.iter().map(|vars| {
+            let mut contents = contents.clone();
+            for kv in vars.iter() {
+                contents = contents.replace(&kv.0, &kv.1);
+            }
+            contents
+        });
+        self.stdout_is_any(possible_values.collect());
     }
 
     /// asserts that the command resulted in stderr stream output that equals the
