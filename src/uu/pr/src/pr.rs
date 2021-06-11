@@ -671,8 +671,7 @@ fn build_options(
         if start_page > end_page {
             return Err(PrError::EncounteredErrors(format!(
                 "invalid --pages argument '{}:{}'",
-                start_page,
-                end_page
+                start_page, end_page
             )));
         }
     }
@@ -999,8 +998,8 @@ fn mpr(paths: &[String], options: &OutputOptions) -> Result<i32, PrError> {
 
     for (_key, file_line_group) in file_line_groups.into_iter() {
         for file_line in file_line_group {
-            if file_line.line_content.is_err() {
-                return Err(file_line.line_content.unwrap_err().into());
+            if let Err(e) = file_line.line_content {
+                return Err(e.into());
             }
             let new_page_number = file_line.page_number;
             if page_counter != new_page_number {
