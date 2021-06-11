@@ -1,71 +1,45 @@
-pub fn parse_number_of_bytes(s: &str) -> Result<usize, &'static str> {
-    let mut start = 0;
-    let mut len = s.len();
-    let mut radix = 10;
-    let mut multiply = 1;
-
-    if s.starts_with("0x") || s.starts_with("0X") {
-        start = 2;
-        radix = 16;
+pub fn parse_number_of_bytes(mut s: &str) -> Result<usize, &'static str> {
+    let radix = if s.starts_with("0x") || s.starts_with("0X") {
+        s = &s[2..];
+        16
     } else if s.starts_with('0') {
-        radix = 8;
-    }
+        8
+    } else {
+        10
+    };
 
-    let mut ends_with = s.chars().rev();
-    match ends_with.next() {
-        Some('b') if radix != 16 => {
-            multiply = 512;
-            len -= 1;
-        }
-        Some('k') | Some('K') => {
-            multiply = 1024;
-            len -= 1;
-        }
-        Some('m') | Some('M') => {
-            multiply = 1024 * 1024;
-            len -= 1;
-        }
-        Some('G') => {
-            multiply = 1024 * 1024 * 1024;
-            len -= 1;
-        }
-        #[cfg(target_pointer_width = "64")]
-        Some('T') => {
-            multiply = 1024 * 1024 * 1024 * 1024;
-            len -= 1;
-        }
-        #[cfg(target_pointer_width = "64")]
-        Some('P') => {
-            multiply = 1024 * 1024 * 1024 * 1024 * 1024;
-            len -= 1;
-        }
-        #[cfg(target_pointer_width = "64")]
-        Some('E') => {
-            multiply = 1024 * 1024 * 1024 * 1024 * 1024 * 1024;
-            len -= 1;
-        }
-        Some('B') if radix != 16 => {
-            len -= 2;
-            multiply = match ends_with.next() {
-                Some('k') | Some('K') => 1000,
-                Some('m') | Some('M') => 1000 * 1000,
-                Some('G') => 1000 * 1000 * 1000,
-                #[cfg(target_pointer_width = "64")]
-                Some('T') => 1000 * 1000 * 1000 * 1000,
-                #[cfg(target_pointer_width = "64")]
-                Some('P') => 1000 * 1000 * 1000 * 1000 * 1000,
-                #[cfg(target_pointer_width = "64")]
-                Some('E') => 1000 * 1000 * 1000 * 1000 * 1000 * 1000,
-                _ => return Err("parse failed"),
+    let (mut s, mut size_unit) = uucore::parse_size_unit(
+        s,
+        [
+            &[b'k', b'K'][..],
+            &[b'm', b'M'][..],
+            &[b'G'][..],
+            #[cfg(target_pointer_width = "64")]
+            &[b'T'][..],
+            #[cfg(target_pointer_width = "64")]
+            &[b'P'][..],
+            #[cfg(target_pointer_width = "64")]
+            &[b'E'][..],
+        ]
+        .iter()
+        .copied(),
+        if radix != 16 { &[b'B'] } else { &[] },
+    );
+
+    if size_unit.is_empty() && radix != 16 {
+        match s.as_bytes().last() {
+            Some(b'b') => {
+                size_unit.base = 512;
+                size_unit.exp = 1;
+                s = &s[..s.len() - 1];
             }
+            Some(b'B') => return Err("parse failed"),
+            _ => (),
         }
-        _ => {}
     }
 
-    match usize::from_str_radix(&s[start..len], radix) {
-        Ok(i) => Ok(i * multiply),
-        Err(_) => Err("parse failed"),
-    }
+    let i = usize::from_str_radix(s, radix).map_err("parse failed")?;
+    Ok(i * size_unit.to_usize().unwrap())
 }
 
 #[allow(dead_code)]

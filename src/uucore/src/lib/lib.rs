@@ -183,11 +183,17 @@ pub struct SizeUnit {
 }
 
 impl SizeUnit {
+    pub fn is_empty(&self) -> bool {
+        self.base == 1024 && self.exp == 0
+    }
     pub fn to_u64(self) -> Option<u64> {
         (self.base as u64).checked_pow(self.exp)
     }
     pub fn to_u128(self) -> Option<u128> {
         (self.base as u128).checked_pow(self.exp)
+    }
+    pub fn to_usize(self) -> Option<usize> {
+        (self.base as usize).checked_pow(self.exp)
     }
 }
 
