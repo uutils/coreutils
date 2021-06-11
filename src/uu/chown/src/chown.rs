@@ -279,36 +279,41 @@ fn parse_spec(spec: &str) -> Result<(Option<u32>, Option<u32>), String> {
     let grp_only = args.len() == 2 && args[0].is_empty();
     let usr_grp = args.len() == 2 && !args[0].is_empty() && !args[1].is_empty();
 
-    if usr_only {
-        Ok((
-            Some(match Passwd::locate(args[0]) {
-                Ok(v) => v.uid(),
-                _ => return Err(format!("invalid user: ‘{}’", spec)),
-            }),
+    let r = if usr_only {
+        (
+            Some(
+                Passwd::locate(args[0])
+                    .map_err(|_| format!("invalid user: ‘{}’", spec))?
+                    .uid(),
+            ),
             None,
-        ))
+        )
     } else if grp_only {
-        Ok((
+        (
             None,
-            Some(match Group::locate(args[1]) {
-                Ok(v) => v.gid(),
-                _ => return Err(format!("invalid group: ‘{}’", spec)),
-            }),
-        ))
+            Some(
+                Group::locate(args[1])
+                    .map_err(|_| format!("invalid group: ‘{}’", spec))?
+                    .gid(),
+            ),
+        )
     } else if usr_grp {
-        Ok((
-            Some(match Passwd::locate(args[0]) {
-                Ok(v) => v.uid(),
-                _ => return Err(format!("invalid user: ‘{}’", spec)),
-            }),
-            Some(match Group::locate(args[1]) {
-                Ok(v) => v.gid(),
-                _ => return Err(format!("invalid group: ‘{}’", spec)),
-            }),
-        ))
+        (
+            Some(
+                Passwd::locate(args[0])
+                    .map_err(|_| format!("invalid user: ‘{}’", spec))?
+                    .uid(),
+            ),
+            Some(
+                Group::locate(args[1])
+                    .map_err(|_| format!("invalid group: ‘{}’", spec))?
+                    .gid(),
+            ),
+        )
     } else {
-        Ok((None, None))
-    }
+        (None, None)
+    };
+    Ok(r)
 }
 
 enum IfFrom {
