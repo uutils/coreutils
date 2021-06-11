@@ -118,14 +118,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
 fn basename(fullname: &str, suffix: &str) -> String {
     // Remove all platform-specific path separators from the end
-    let mut path: String = fullname
-        .chars()
-        .rev()
-        .skip_while(|&ch| is_separator(ch))
-        .collect();
-
-    // Undo reverse
-    path = path.chars().rev().collect();
+    let path = fullname.trim_end_matches(is_separator);
 
     // Convert to path buffer and get last path component
     let pb = PathBuf::from(path);
