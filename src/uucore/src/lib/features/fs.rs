@@ -113,22 +113,14 @@ fn resolve<P: AsRef<Path>>(original: P) -> IOResult<PathBuf> {
             ));
         }
 
-        match fs::symlink_metadata(&result) {
-            Err(e) => return Err(e),
-            Ok(ref m) if !m.file_type().is_symlink() => break,
-            Ok(..) => {
-                followed += 1;
-                match fs::read_link(&result) {
-                    Ok(path) => {
-                        result.pop();
-                        result.push(path);
-                    }
-                    Err(e) => {
-                        return Err(e);
-                    }
-                }
-            }
+        if !fs::symlink_metadata(&result)?.file_type().is_symlink() {
+            break;
         }
+
+        followed += 1;
+        let path = fs::read_link(&result)?;
+        result.pop();
+        result.push(path);
     }
     Ok(result)
 }
@@ -193,10 +185,8 @@ pub fn canonicalize<P: AsRef<Path>>(original: P, can_mode: CanonicalizeMode) -> 
             }
 
             match resolve(&result) {
-                Err(e) => match can_mode {
-                    CanonicalizeMode::Missing => continue,
-                    _ => return Err(e),
-                },
+                Err(_) if can_mode == CanonicalizeMode::Missing => continue,
+                Err(e) => return Err(e),
                 Ok(path) => {
                     result.pop();
                     result.push(path);
@@ -211,15 +201,14 @@ pub fn canonicalize<P: AsRef<Path>>(original: P, can_mode: CanonicalizeMode) -> 
         }
 
         match resolve(&result) {
-            Err(e) => {
-                if can_mode == CanonicalizeMode::Existing {
-                    return Err(e);
-                }
+            Err(e) if can_mode == CanonicalizeMode::Existing => {
+                return Err(e);
             }
             Ok(path) => {
                 result.pop();
                 result.push(path);
             }
+            Err(_) => (),
         }
     }
     Ok(result)
