@@ -361,8 +361,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let force = matches.is_present(options::FORCE);
     let remove = matches.is_present(options::REMOVE);
-    let size_arg = matches.value_of(options::SIZE).map(|s| s.to_string());
-    let size = get_size(size_arg);
+    let size = matches.value_of(options::SIZE).map(get_size);
     let exact = matches.is_present(options::EXACT) && size.is_none(); // if -s is given, ignore -x
     let zero = matches.is_present(options::ZERO);
     let verbose = matches.is_present(options::VERBOSE);
@@ -386,36 +385,22 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
 // TODO: Add support for all postfixes here up to and including EiB
 //       http://www.gnu.org/software/coreutils/manual/coreutils.html#Block-size
-fn get_size(size_str_opt: Option<String>) -> Option<u64> {
-    size_str_opt.as_ref()?;
+fn get_size(size_str: &str) -> u64 {
+    let (value_str, size_unit) = uucore::parse_size_unit(
+        size_str,
+        [&[b'K'][..], &[b'M'][..], &[b'G'][..]].iter().copied(),
+        &[],
+    );
 
-    let mut size_str = size_str_opt.as_ref().unwrap().clone();
-    // Immutably look at last character of size string
-    let unit = match size_str.chars().last().unwrap() {
-        'K' => {
-            size_str.pop();
-            1024u64
-        }
-        'M' => {
-            size_str.pop();
-            (1024 * 1024) as u64
-        }
-        'G' => {
-            size_str.pop();
-            (1024 * 1024 * 1024) as u64
-        }
-        _ => 1u64,
-    };
-
-    let coefficient = match size_str.parse::<u64>() {
+    let coefficient = match value_str.parse::<u64>() {
         Ok(u) => u,
         Err(_) => {
-            println!("{}: {}: Invalid file size", NAME, size_str_opt.unwrap());
+            println!("{}: {}: Invalid file size", NAME, size_str);
             exit!(1);
         }
     };
 
-    Some(coefficient * unit)
+    coefficient * size_unit.to_u64().unwrap()
 }
 
 fn pass_name(pass_type: PassType) -> String {

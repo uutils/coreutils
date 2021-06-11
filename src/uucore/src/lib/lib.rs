@@ -176,6 +176,52 @@ pub fn args_os() -> impl Iterator<Item = OsString> {
     wild::args_os()
 }
 
+#[derive(Copy, Clone)]
+pub struct SizeUnit {
+    pub base: u32,
+    pub exp: u32,
+}
+
+impl SizeUnit {
+    pub fn to_u64(self) -> Option<u64> {
+        (self.base as u64).checked_pow(self.exp)
+    }
+    pub fn to_u128(self) -> Option<u128> {
+        (self.base as u128).checked_pow(self.exp)
+    }
+}
+
+// s: size including unit suffix
+// b_suffixes: b'B' or b'b' when 1000 base is supported
+pub fn parse_size_unit<'a, 'b>(
+    s: &'a str,
+    unit_suffixes: impl std::iter::Iterator<Item = &'b [u8]>,
+    b_suffixes: &[u8],
+) -> (&'a str, SizeUnit) {
+    let mut bytes = s.as_bytes();
+    let base = if bytes.last().map_or(false, |ch| b_suffixes.contains(ch)) {
+        bytes = &bytes[..bytes.len() - 1];
+        1000
+    } else {
+        1024
+    };
+    let mut exp = 0;
+    if let Some(unit) = bytes.last() {
+        for (exp_1, suffixes) in unit_suffixes.enumerate() {
+            if suffixes.contains(unit) {
+                bytes = &bytes[..bytes.len() - 1];
+                exp = exp_1 as u32 + 1;
+                break;
+            }
+        }
+    }
+    if base == 1000 && exp == 0 {
+        (s, SizeUnit { base: 1024, exp: 0 })
+    } else {
+        (&s[..bytes.len()], SizeUnit { base, exp })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
