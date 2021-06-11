@@ -31,6 +31,8 @@ use crossterm::{
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
+const BELL: &str = "\x07";
+
 pub mod options {
     pub const SILENT: &str = "silent";
     pub const LOGICAL: &str = "logical";
@@ -52,14 +54,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let matches = App::new(executable!())
         .about("A file perusal filter for CRT viewing.")
         .version(crate_version!())
-        // The commented arguments below are unimplemented:
-        /*
         .arg(
             Arg::with_name(options::SILENT)
                 .short("d")
                 .long(options::SILENT)
                 .help("Display help instead of ringing bell"),
         )
+        // The commented arguments below are unimplemented:
+        /*
         .arg(
             Arg::with_name(options::LOGICAL)
                 .short("f")
@@ -139,6 +141,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .get_matches_from(args);
 
     let mut buff = String::new();
+    let silent = matches.is_present(options::SILENT);
     if let Some(files) = matches.values_of(options::FILES) {
         let mut stdout = setup_term();
         let length = files.len();
@@ -161,14 +164,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             }
             let mut reader = BufReader::new(File::open(file).unwrap());
             reader.read_to_string(&mut buff).unwrap();
-            more(&buff, &mut stdout, next_file.copied());
+            more(&buff, &mut stdout, next_file.copied(), silent);
             buff.clear();
         }
         reset_term(&mut stdout);
     } else if atty::isnt(atty::Stream::Stdin) {
         stdin().read_to_string(&mut buff).unwrap();
         let mut stdout = setup_term();
-        more(&buff, &mut stdout, None);
+        more(&buff, &mut stdout, None, silent);
         reset_term(&mut stdout);
     } else {
         show_usage_error!("bad usage");
@@ -203,17 +206,18 @@ fn reset_term(stdout: &mut std::io::Stdout) {
 #[inline(always)]
 fn reset_term(_: &mut usize) {}
 
-fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>) {
+fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>, silent: bool) {
     let (cols, rows) = terminal::size().unwrap();
     let lines = break_buff(buff, usize::from(cols));
 
-    let mut pager = Pager::new(rows as usize, lines, next_file);
-    pager.draw(stdout);
+    let mut pager = Pager::new(rows as usize, lines, next_file, silent);
+    pager.draw(stdout, false);
     if pager.should_close() {
         return;
     }
 
     loop {
+        let mut wrong_key = false;
         if event::poll(Duration::from_millis(10)).unwrap() {
             match event::read().unwrap() {
                 Event::Key(KeyEvent {
@@ -243,10 +247,12 @@ fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>) {
                 }) => {
                     pager.page_up();
                 }
-                _ => continue,
+                _ => {
+                    wrong_key = true;
+                }
             }
 
-            pager.draw(stdout);
+            pager.draw(stdout, wrong_key);
             if pager.should_close() {
                 return;
             }
@@ -263,10 +269,11 @@ struct Pager<'a> {
     next_file: Option<&'a str>,
     line_count: usize,
     close_on_down: bool,
+    silent: bool,
 }
 
 impl<'a> Pager<'a> {
-    fn new(rows: usize, lines: Vec<String>, next_file: Option<&'a str>) -> Self {
+    fn new(rows: usize, lines: Vec<String>, next_file: Option<&'a str>, silent: bool) -> Self {
         let line_count = lines.len();
         Self {
             upper_mark: 0,
@@ -275,6 +282,7 @@ impl<'a> Pager<'a> {
             next_file,
             line_count,
             close_on_down: false,
+            silent,
         }
     }
 
@@ -302,10 +310,10 @@ impl<'a> Pager<'a> {
         self.upper_mark = self.upper_mark.saturating_sub(self.content_rows);
     }
 
-    fn draw(&self, stdout: &mut std::io::Stdout) {
+    fn draw(&self, stdout: &mut std::io::Stdout, wrong_key: bool) {
         let lower_mark = self.line_count.min(self.upper_mark + self.content_rows);
         self.draw_lines(stdout);
-        self.draw_prompt(stdout, lower_mark);
+        self.draw_prompt(stdout, lower_mark, wrong_key);
         stdout.flush().unwrap();
     }
 
@@ -324,20 +332,30 @@ impl<'a> Pager<'a> {
         }
     }
 
-    fn draw_prompt(&self, stdout: &mut Stdout, lower_mark: usize) {
-        let status = if lower_mark == self.line_count {
+    fn draw_prompt(&self, stdout: &mut Stdout, lower_mark: usize, wrong_key: bool) {
+        let status_inner = if lower_mark == self.line_count {
             format!("Next file: {}", self.next_file.unwrap_or_default())
         } else {
             format!(
                 "{}%",
-                (lower_mark as f64 / self.line_count as f64 * 100.0).round() as usize
+                (lower_mark as f64 / self.line_count as f64 * 100.0).round() as u16
             )
         };
+
+        let status = format!("--More--({})", status_inner);
+
+        let banner = match (self.silent, wrong_key) {
+            (true, true) => "[Press 'h' for instructions. (unimplemented)]".to_string(),
+            (true, false) => format!("{}[Press space to continue, 'q' to quit.]", status),
+            (false, true) => format!("{}{}", status, BELL),
+            (false, false) => status,
+        };
+
         write!(
             stdout,
-            "\r{}--More--({}){}",
+            "\r{}{}{}",
             Attribute::Reverse,
-            status,
+            banner,
             Attribute::Reset
         )
         .unwrap();

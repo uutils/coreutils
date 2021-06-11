@@ -275,17 +275,13 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
     let mut chars = params.chars();
     let mut ch = chars.next();
 
-    while ch.is_some() {
-        let type_char = ch.unwrap();
-        let type_char = match format_type(type_char) {
-            Some(t) => t,
-            None => {
-                return Err(format!(
-                    "unexpected char '{}' in format specification '{}'",
-                    type_char, params
-                ));
-            }
-        };
+    while let Some(type_char) = ch {
+        let type_char = format_type(type_char).ok_or_else(|| {
+            format!(
+                "unexpected char '{}' in format specification '{}'",
+                type_char, params
+            )
+        })?;
 
         let type_cat = format_type_category(type_char);
 
@@ -301,30 +297,25 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
                 ch = chars.next();
             }
             if !decimal_size.is_empty() {
-                byte_size = match decimal_size.parse() {
-                    Err(_) => {
-                        return Err(format!(
-                            "invalid number '{}' in format specification '{}'",
-                            decimal_size, params
-                        ))
-                    }
-                    Ok(n) => n,
-                }
+                byte_size = decimal_size.parse().map_err(|_| {
+                    format!(
+                        "invalid number '{}' in format specification '{}'",
+                        decimal_size, params
+                    )
+                })?;
             }
         }
         if is_format_dump_char(ch, &mut show_ascii_dump) {
             ch = chars.next();
         }
 
-        match od_format_type(type_char, byte_size) {
-            Some(ft) => formats.push(ParsedFormatterItemInfo::new(ft, show_ascii_dump)),
-            None => {
-                return Err(format!(
-                    "invalid size '{}' in format specification '{}'",
-                    byte_size, params
-                ))
-            }
-        }
+        let ft = od_format_type(type_char, byte_size).ok_or_else(|| {
+            format!(
+                "invalid size '{}' in format specification '{}'",
+                byte_size, params
+            )
+        })?;
+        formats.push(ParsedFormatterItemInfo::new(ft, show_ascii_dump));
     }
 
     Ok(formats)
@@ -335,16 +326,13 @@ pub fn parse_format_flags_str(
     args_str: &Vec<&'static str>,
 ) -> Result<Vec<FormatterItemInfo>, String> {
     let args: Vec<String> = args_str.iter().map(|s| s.to_string()).collect();
-    match parse_format_flags(&args) {
-        Err(e) => Err(e),
-        Ok(v) => {
-            // tests using this function assume add_ascii_dump is not set
-            Ok(v.into_iter()
-                .inspect(|f| assert!(!f.add_ascii_dump))
-                .map(|f| f.formatter_item_info)
-                .collect())
-        }
-    }
+    parse_format_flags(&args).map(|v| {
+        // tests using this function assume add_ascii_dump is not set
+        v.into_iter()
+            .inspect(|f| assert!(!f.add_ascii_dump))
+            .map(|f| f.formatter_item_info)
+            .collect()
+    })
 }
 
 #[test]

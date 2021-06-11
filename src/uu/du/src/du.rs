@@ -57,6 +57,7 @@ mod options {
     pub const SI: &str = "si";
     pub const TIME: &str = "time";
     pub const TIME_STYLE: &str = "time-style";
+    pub const ONE_FILE_SYSTEM: &str = "one-file-system";
     pub const FILE: &str = "FILE";
 }
 
@@ -81,6 +82,7 @@ struct Options {
     max_depth: Option<usize>,
     total: bool,
     separate_dirs: bool,
+    one_file_system: bool,
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
@@ -229,10 +231,9 @@ fn unit_string_to_number(s: &str) -> Option<u64> {
     let mut offset = 0;
     let mut s_chars = s.chars().rev();
 
-    let (mut ch, multiple) = match s_chars.next() {
-        Some('B') | Some('b') => ('B', 1000u64),
-        Some(ch) => (ch, 1024u64),
-        None => return None,
+    let (mut ch, multiple) = match s_chars.next()? {
+        'B' | 'b' => ('B', 1000u64),
+        ch => (ch, 1024u64),
     };
     if ch == 'B' {
         ch = s_chars.next()?;
@@ -318,10 +319,18 @@ fn du(
                 Ok(entry) => match Stat::new(entry.path()) {
                     Ok(this_stat) => {
                         if this_stat.is_dir {
+                            if options.one_file_system {
+                                if let (Some(this_inode), Some(my_inode)) =
+                                    (this_stat.inode, my_stat.inode)
+                                {
+                                    if this_inode.dev_id != my_inode.dev_id {
+                                        continue;
+                                    }
+                                }
+                            }
                             futures.push(du(this_stat, options, depth + 1, inodes));
                         } else {
-                            if this_stat.inode.is_some() {
-                                let inode = this_stat.inode.unwrap();
+                            if let Some(inode) = this_stat.inode {
                                 if inodes.contains(&inode) {
                                     continue;
                                 }
@@ -360,7 +369,9 @@ fn du(
             my_stat.size += stat.size;
             my_stat.blocks += stat.blocks;
         }
-        options.max_depth == None || depth < options.max_depth.unwrap()
+        options
+            .max_depth
+            .map_or(true, |max_depth| depth < max_depth)
     }));
     stats.push(my_stat);
     Box::new(stats.into_iter())
@@ -532,12 +543,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(options::SI)
                 .help("like -h, but use powers of 1000 not 1024")
         )
-        // .arg(
-        //     Arg::with_name("one-file-system")
-        //         .short("x")
-        //         .long("one-file-system")
-        //         .help("skip directories on different file systems")
-        // )
+        .arg(
+            Arg::with_name(options::ONE_FILE_SYSTEM)
+                .short("x")
+                .long(options::ONE_FILE_SYSTEM)
+                .help("skip directories on different file systems")
+        )
         // .arg(
         //     Arg::with_name("")
         //         .short("x")
@@ -602,6 +613,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         max_depth,
         total: matches.is_present(options::TOTAL),
         separate_dirs: matches.is_present(options::SEPARATE_DIRS),
+        one_file_system: matches.is_present(options::ONE_FILE_SYSTEM),
     };
 
     let files = match matches.value_of(options::FILE) {

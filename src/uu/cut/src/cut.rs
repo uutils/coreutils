@@ -17,7 +17,6 @@ use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 
 use self::searcher::Searcher;
-use uucore::fs::is_stdout_interactive;
 use uucore::ranges::Range;
 use uucore::InvalidEncodingHandling;
 
@@ -127,7 +126,7 @@ enum Mode {
 }
 
 fn stdout_writer() -> Box<dyn Write> {
-    if is_stdout_interactive() {
+    if atty::is(atty::Stream::Stdout) {
         Box::new(stdout())
     } else {
         Box::new(BufWriter::new(stdout())) as Box<dyn Write>

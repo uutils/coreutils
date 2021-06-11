@@ -134,23 +134,25 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Err(err) => crash!(1, "cannot stat attributes of '{}': {}", fref, err),
         });
     let modes = matches.value_of(options::MODE).unwrap(); // should always be Some because required
-    let mut cmode = if mode_had_minus_prefix {
+    let cmode = if mode_had_minus_prefix {
         // clap parsing is finished, now put prefix back
-        Some(format!("-{}", modes))
+        format!("-{}", modes)
     } else {
-        Some(modes.to_string())
+        modes.to_string()
     };
     let mut files: Vec<String> = matches
         .values_of(options::FILE)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
-    if fmode.is_some() {
+    let cmode = if fmode.is_some() {
         // "--reference" and MODE are mutually exclusive
         // if "--reference" was used MODE needs to be interpreted as another FILE
         // it wasn't possible to implement this behavior directly with clap
-        files.push(cmode.unwrap());
-        cmode = None;
-    }
+        files.push(cmode);
+        None
+    } else {
+        Some(cmode)
+    };
 
     let chmoder = Chmoder {
         changes,
