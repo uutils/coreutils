@@ -160,18 +160,14 @@ fn cksum(fname: &str) -> io::Result<(u32, usize)> {
 
     let mut bytes = init_byte_array();
     loop {
-        match rd.read(&mut bytes) {
-            Ok(num_bytes) => {
-                if num_bytes == 0 {
-                    return Ok((crc_final(crc, size), size));
-                }
-                for &b in bytes[..num_bytes].iter() {
-                    crc = crc_update(crc, b);
-                }
-                size += num_bytes;
-            }
-            Err(err) => return Err(err),
+        let num_bytes = rd.read(&mut bytes)?;
+        if num_bytes == 0 {
+            return Ok((crc_final(crc, size), size));
         }
+        for &b in bytes[..num_bytes].iter() {
+            crc = crc_update(crc, b);
+        }
+        size += num_bytes;
     }
 }
 
