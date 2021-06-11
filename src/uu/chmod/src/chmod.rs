@@ -177,11 +177,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 pub fn strip_minus_from_mode(args: &mut Vec<String>) -> bool {
     for arg in args {
         if arg.starts_with('-') {
-            if let Some(second) = arg.chars().nth(1) {
+            if let Some(second) = arg.as_bytes().get(1) {
                 match second {
-                    'r' | 'w' | 'x' | 'X' | 's' | 't' | 'u' | 'g' | 'o' | '0'..='7' => {
+                    b'r' | b'w' | b'x' | b'X' | b's' | b't' | b'u' | b'g' | b'o' | b'0'..=b'7' => {
                         // TODO: use strip_prefix() once minimum rust version reaches 1.45.0
-                        *arg = arg[1..arg.len()].to_string();
+                        *arg = arg[1..].to_string();
                         return true;
                     }
                     _ => {}
