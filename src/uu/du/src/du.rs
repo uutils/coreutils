@@ -73,7 +73,7 @@ of 1000).
 ";
 
 // TODO: Support Z & Y (currently limited by size of u64)
-const UNITS: [(char, u32); 6] = [('E', 6), ('P', 5), ('T', 4), ('G', 3), ('M', 2), ('K', 1)];
+const UNITS: [&[u8]; 6] = [b"Kk", b"Mm", b"Gg", b"Tt", b"Pp", b"Ee"];
 
 struct Options {
     all: bool,
@@ -226,33 +226,9 @@ fn get_file_info(path: &Path) -> Option<FileInfo> {
 }
 
 fn unit_string_to_number(s: &str) -> Option<u64> {
-    let mut offset = 0;
-    let mut s_chars = s.chars().rev();
-
-    let (mut ch, multiple) = match s_chars.next()? {
-        'B' | 'b' => ('B', 1000u64),
-        ch => (ch, 1024u64),
-    };
-    if ch == 'B' {
-        ch = s_chars.next()?;
-        offset += 1;
-    }
-    ch = ch.to_ascii_uppercase();
-
-    let unit = UNITS
-        .iter()
-        .rev()
-        .find(|&&(unit_ch, _)| unit_ch == ch)
-        .map(|&(_, val)| {
-            // we found a match, so increment offset
-            offset += 1;
-            val
-        })
-        .or_else(|| if multiple == 1024 { Some(0) } else { None })?;
-
-    let number = s[..s.len() - offset].parse::<u64>().ok()?;
-
-    Some(number * multiple.pow(unit))
+    let (s, size_unit) = uucore::parse_size_unit(s, UNITS.iter().copied(), &[b'B', b'b']);
+    let number = s.parse::<u64>().ok()?;
+    Some(number * size_unit.to_u64().unwrap())
 }
 
 fn translate_to_pure_number(s: &Option<&str>) -> Option<u64> {
@@ -367,10 +343,10 @@ fn du(
 }
 
 fn convert_size_human(size: u64, multiplier: u64, _block_size: u64) -> String {
-    for &(unit, power) in &UNITS {
-        let limit = multiplier.pow(power);
+    for (power_1, units) in UNITS.iter().enumerate().rev() {
+        let limit = multiplier.pow(power_1 as u32 + 1);
         if size >= limit {
-            return format!("{:.1}{}", (size as f64) / (limit as f64), unit);
+            return format!("{:.1}{}", (size as f64) / (limit as f64), units[0]);
         }
     }
     if size == 0 {
