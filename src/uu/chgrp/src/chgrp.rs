@@ -251,7 +251,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     } else {
         let group = matches.value_of(options::ARG_GROUP).unwrap_or_default();
-        match entries::grp2gid(&group) {
+        match entries::grp2gid(group) {
             Ok(g) => {
                 dest_gid = g;
             }

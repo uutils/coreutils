@@ -1,4 +1,4 @@
-// spell-checker:ignore (words) nosuchgroup
+// spell-checker:ignore (words) nosuchgroup groupname
 
 use crate::common::util::*;
 use rust_users::*;
@@ -10,7 +10,7 @@ fn test_invalid_option() {
 
 static DIR: &str = "/tmp";
 
-// we should always get both arguments, regardless of whether --refernce was used
+// we should always get both arguments, regardless of whether --reference was used
 #[test]
 fn test_help() {
     new_ucmd!()
