@@ -1,5 +1,7 @@
 name: GNU
 
+# spell-checker:ignore (names) gnulib ; (utils) autopoint gperf pyinotify texinfo ; (vars) XPASS
+
 on: [push, pull_request]
 
 jobs:
@@ -7,7 +9,6 @@ jobs:
     name: Run GNU tests
     runs-on: ubuntu-latest
     steps:
-      # Checks out a copy of your repository on the ubuntu-latest machine
     - name: Checkout code uutil
       uses: actions/checkout@v2
       with:
@@ -18,7 +19,7 @@ jobs:
         repository: 'coreutils/coreutils'
         path: 'gnu'
         ref: v8.32
-    - name: Checkout GNU corelib
+    - name: Checkout GNU coreutils library (gnulib)
       uses: actions/checkout@v2
       with:
         repository: 'coreutils/gnulib'
@@ -32,23 +33,26 @@ jobs:
         default: true
         profile: minimal # minimal component installation (ie, no documentation)
         components: rustfmt
-    - name: Install deps
+    - name: Install dependencies
       shell: bash
       run: |
+        ## Install dependencies
         sudo apt-get update
         sudo apt-get install autoconf autopoint bison texinfo gperf gcc g++ gdb python-pyinotify python3-sphinx jq
     - name: Build binaries
       shell: bash
       run: |
-       cd uutils
-       bash util/build-gnu.sh
+        ## Build binaries
+        cd uutils
+        bash util/build-gnu.sh
     - name: Run GNU tests
       shell: bash
       run: |
         bash uutils/util/run-gnu-test.sh
-    - name: Extract tests info
+    - name: Extract testing info
       shell: bash
       run: |
+        ## Extract testing info
         LOG_FILE=gnu/tests/test-suite.log
         if test -f "$LOG_FILE"
         then
@@ -58,7 +62,9 @@ jobs:
             FAIL=$(sed -n "s/.*# FAIL: \(.*\)/\1/p" "$LOG_FILE"|tr -d '\r'|head -n1)
             XPASS=$(sed -n "s/.*# XPASS: \(.*\)/\1/p" "$LOG_FILE"|tr -d '\r'|head -n1)
             ERROR=$(sed -n "s/.*# ERROR: \(.*\)/\1/p" "$LOG_FILE"|tr -d '\r'|head -n1)
-            echo "::warning ::GNU testsuite = TOTAL: $TOTAL / PASS: $PASS / FAIL: $FAIL / ERROR: $ERROR"
+            output="GNU tests summary = TOTAL: $TOTAL / PASS: $PASS / FAIL: $FAIL / ERROR: $ERROR"
+            echo "${output}"
+            if [[ "$FAIL" -gt 0 || "$ERROR" -gt 0 ]]; then echo "::warning ::${output}" ; fi
             jq -n \
                   --arg date "$(date --rfc-email)" \
                   --arg sha "$GITHUB_SHA" \
@@ -72,12 +78,10 @@ jobs:
           else
             echo "::error ::Failed to get summary of test results"
           fi
-
     - uses: actions/upload-artifact@v2
       with:
         name: test-report
         path: gnu/tests/**/*.log
-
     - uses: actions/upload-artifact@v2
       with:
         name: gnu-result
