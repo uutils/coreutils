@@ -27,7 +27,6 @@ use uucore::fs::{canonicalize, CanonicalizeMode};
 pub struct Settings {
     overwrite: OverwriteMode,
     backup: BackupMode,
-    force: bool,
     suffix: String,
     symbolic: bool,
     relative: bool,
@@ -54,7 +53,7 @@ pub enum BackupMode {
 
 fn get_usage() -> String {
     format!(
-        "{0} [OPTION]... [-T] TARGET LINK_executable!()   (1st form)
+        "{0} [OPTION]... [-T] TARGET LINK_NAME   (1st form)
        {0} [OPTION]... TARGET                  (2nd form)
        {0} [OPTION]... TARGET... DIRECTORY     (3rd form)
        {0} [OPTION]... -t DIRECTORY TARGET...  (4th form)",
@@ -64,7 +63,7 @@ fn get_usage() -> String {
 
 fn get_long_usage() -> String {
     String::from(
-        " In the 1st form, create a link to TARGET with the name LINK_executable!().
+        " In the 1st form, create a link to TARGET with the name LINK_NAME.
         In the 2nd form, create a link to TARGET in the current directory.
         In the 3rd and 4th forms, create links to each TARGET in DIRECTORY.
         Create hard links by default, symbolic links with --symbolic.
@@ -140,7 +139,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .short("n")
                 .long(options::NO_DEREFERENCE)
                 .help(
-                    "treat LINK_executable!() as a normal file if it is a \
+                    "treat LINK_NAME as a normal file if it is a \
                      symbolic link to a directory",
                 ),
         )
@@ -177,13 +176,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(options::NO_TARGET_DIRECTORY)
                 .short("T")
                 .long(options::NO_TARGET_DIRECTORY)
-                .help("treat LINK_executable!() as a normal file always"),
+                .help("treat LINK_NAME as a normal file always"),
         )
         .arg(
             Arg::with_name(options::RELATIVE)
                 .short("r")
                 .long(options::RELATIVE)
-                .help("create symbolic links relative to link location"),
+                .help("create symbolic links relative to link location")
+                .requires(options::SYMBOLIC),
         )
         .arg(
             Arg::with_name(options::VERBOSE)
@@ -242,7 +242,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let settings = Settings {
         overwrite: overwrite_mode,
         backup: backup_mode,
-        force: matches.is_present(options::FORCE),
         suffix: backup_suffix.to_string(),
         symbolic: matches.is_present(options::SYMBOLIC),
         relative: matches.is_present(options::RELATIVE),
@@ -311,47 +310,48 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
 
     let mut all_successful = true;
     for srcpath in files.iter() {
-        let targetpath = if settings.no_dereference && settings.force {
-            // In that case, we don't want to do link resolution
-            // We need to clean the target
-            if is_symlink(target_dir) {
-                if target_dir.is_file() {
-                    if let Err(e) = fs::remove_file(target_dir) {
-                        show_error!("Could not update {}: {}", target_dir.display(), e)
-                    };
-                }
-                if target_dir.is_dir() {
-                    // Not sure why but on Windows, the symlink can be
-                    // considered as a dir
-                    // See test_ln::test_symlink_no_deref_dir
-                    if let Err(e) = fs::remove_dir(target_dir) {
-                        show_error!("Could not update {}: {}", target_dir.display(), e)
-                    };
-                }
-            }
-            target_dir.to_path_buf()
-        } else {
-            match srcpath.as_os_str().to_str() {
-                Some(name) => {
-                    match Path::new(name).file_name() {
-                        Some(basename) => target_dir.join(basename),
-                        // This can be None only for "." or "..". Trying
-                        // to create a link with such name will fail with
-                        // EEXIST, which agrees with the behavior of GNU
-                        // coreutils.
-                        None => target_dir.join(name),
+        let targetpath =
+            if settings.no_dereference && matches!(settings.overwrite, OverwriteMode::Force) {
+                // In that case, we don't want to do link resolution
+                // We need to clean the target
+                if is_symlink(target_dir) {
+                    if target_dir.is_file() {
+                        if let Err(e) = fs::remove_file(target_dir) {
+                            show_error!("Could not update {}: {}", target_dir.display(), e)
+                        };
+                    }
+                    if target_dir.is_dir() {
+                        // Not sure why but on Windows, the symlink can be
+                        // considered as a dir
+                        // See test_ln::test_symlink_no_deref_dir
+                        if let Err(e) = fs::remove_dir(target_dir) {
+                            show_error!("Could not update {}: {}", target_dir.display(), e)
+                        };
                     }
                 }
-                None => {
-                    show_error!(
-                        "cannot stat '{}': No such file or directory",
-                        srcpath.display()
-                    );
-                    all_successful = false;
-                    continue;
+                target_dir.to_path_buf()
+            } else {
+                match srcpath.as_os_str().to_str() {
+                    Some(name) => {
+                        match Path::new(name).file_name() {
+                            Some(basename) => target_dir.join(basename),
+                            // This can be None only for "." or "..". Trying
+                            // to create a link with such name will fail with
+                            // EEXIST, which agrees with the behavior of GNU
+                            // coreutils.
+                            None => target_dir.join(name),
+                        }
+                    }
+                    None => {
+                        show_error!(
+                            "cannot stat '{}': No such file or directory",
+                            srcpath.display()
+                        );
+                        all_successful = false;
+                        continue;
+                    }
                 }
-            }
-        };
+            };
 
         if let Err(e) = link(srcpath, &targetpath, settings) {
             show_error!(
@@ -372,7 +372,8 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
 
 fn relative_path<'a>(src: &Path, dst: &Path) -> Result<Cow<'a, Path>> {
     let src_abs = canonicalize(src, CanonicalizeMode::Normal)?;
-    let dst_abs = canonicalize(dst, CanonicalizeMode::Normal)?;
+    let mut dst_abs = canonicalize(dst.parent().unwrap(), CanonicalizeMode::Normal)?;
+    dst_abs.push(dst.components().last().unwrap());
     let suffix_pos = src_abs
         .components()
         .zip(dst_abs.components())
@@ -420,10 +421,6 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> Result<()> {
         if let Some(ref p) = backup_path {
             fs::rename(dst, p)?;
         }
-    }
-
-    if settings.no_dereference && settings.force && dst.exists() {
-        fs::remove_file(dst)?;
     }
 
     if settings.symbolic {

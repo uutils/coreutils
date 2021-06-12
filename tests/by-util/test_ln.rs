@@ -429,20 +429,6 @@ fn test_symlink_relative() {
 }
 
 #[test]
-fn test_hardlink_relative() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file_a = "test_hardlink_relative_a";
-    let link = "test_hardlink_relative_link";
-
-    at.touch(file_a);
-
-    // relative hardlink
-    ucmd.args(&["-r", "-v", file_a, link])
-        .succeeds()
-        .stdout_only(format!("'{}' -> '{}'\n", link, file_a));
-}
-
-#[test]
 fn test_symlink_relative_path() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_symlink_existing_dir";
@@ -570,4 +556,27 @@ fn test_symlink_no_deref_file() {
     assert!(at.file_exists(file2));
     assert!(at.is_symlink(link));
     assert_eq!(at.resolve_link(link), file1);
+}
+
+#[test]
+fn test_relative_requires_symbolic() {
+    new_ucmd!().args(&["-r", "foo", "bar"]).fails();
+}
+
+#[test]
+fn test_relative_dst_already_symlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file1");
+    at.symlink_file("file1", "file2");
+    ucmd.arg("-srf").arg("file1").arg("file2").succeeds();
+    at.is_symlink("file2");
+}
+
+#[test]
+fn test_relative_src_already_symlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file1");
+    at.symlink_file("file1", "file2");
+    ucmd.arg("-sr").arg("file2").arg("file3").succeeds();
+    assert!(at.resolve_link("file3").ends_with("file1"));
 }
