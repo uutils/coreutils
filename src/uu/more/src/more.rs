@@ -293,7 +293,7 @@ impl<'a> Pager<'a> {
     fn should_close(&mut self) -> bool {
         self.upper_mark
             .saturating_add(self.content_rows.into())
-            .eq(&self.line_count)
+            .ge(&self.line_count)
     }
 
     fn page_down(&mut self) {
