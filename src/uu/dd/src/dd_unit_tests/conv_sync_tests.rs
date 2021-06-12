@@ -9,8 +9,8 @@ impl<R: Read> Read for LazyReader<R>
 {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize>
     {
-        let half = buf.len() / 2;
-        self.src.read(&mut buf[..half])
+        let reduced = cmp::max(buf.len() / 2, 1);
+        self.src.read(&mut buf[..reduced])
     }
 }
 
@@ -23,7 +23,7 @@ macro_rules! make_sync_test (
                             src: $src,
                             non_ascii: false,
                             ibs: $ibs,
-                            xfer_stats: StatusLevel::None,
+                            xfer_stats: None,
                             cflags: IConvFlags {
                                 ctable: None,
                                 block: None,

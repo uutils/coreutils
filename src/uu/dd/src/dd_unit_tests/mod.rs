@@ -94,7 +94,7 @@ macro_rules! make_spec_test (
                             src: $src,
                             non_ascii: false,
                             ibs: 512,
-                            xfer_stats: StatusLevel::None,
+                            xfer_stats: None,
                             cflags: icf!(),
                             iflags: DEFAULT_IFLAGS,
                         },

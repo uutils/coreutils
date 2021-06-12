@@ -297,7 +297,7 @@ fn parse_cbs(matches: &getopts::Matches) -> Result<Option<usize>, ParseError>
     }
 }
 
-pub fn parse_status_level(matches: &getopts::Matches) -> Result<StatusLevel, ParseError>
+pub fn parse_status_level(matches: &getopts::Matches) -> Result<Option<StatusLevel>, ParseError>
 {
     unimplemented!()
 }
