@@ -396,6 +396,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
              .multiple(true)
              .use_delimiter(true)
              .possible_values(PRESERVABLE_ATTRIBUTES)
+             .min_values(0)
              .value_name("ATTR_LIST")
              .conflicts_with_all(&[OPT_PRESERVE_DEFAULT_ATTRIBUTES, OPT_NO_PRESERVE])
              // -d sets this option
