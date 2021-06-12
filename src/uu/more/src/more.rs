@@ -297,10 +297,7 @@ impl<'a> Pager<'a> {
     }
 
     fn page_down(&mut self) {
-        self.upper_mark = self
-            .upper_mark
-            .saturating_add(self.content_rows.into())
-            .min(self.line_count.saturating_sub(self.content_rows.into()));
+        self.upper_mark = self.upper_mark.saturating_add(self.content_rows.into());
     }
 
     fn page_up(&mut self) {
