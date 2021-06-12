@@ -48,36 +48,19 @@ jobs:
     - name: "`fmt` testing"
       shell: bash
       run: |
-        # `fmt` testing
+        ## `fmt` testing
         # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-        S=$(cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" | sed -E -n -e "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::warning file=\1,line=\2::WARNING: \`cargo fmt\`: style violation/p" ; }
+        S=$(cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s\n" "$S" | sed -E -n -e "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::error file=\1,line=\2::ERROR: \`cargo fmt\`: style violation (file:'\1', line:\2; use \`cargo fmt \"\1\"\`)/p" ; exit 1 ; }
     - name: "`fmt` testing of tests"
+      if: success() || failure() # run regardless of prior step success/failure
       shell: bash
       run: |
-        # `fmt` testing of tests
+        ## `fmt` testing of tests
         # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-        S=$(find tests -name "*.rs" -print0 | xargs -0 cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" | sed -E -n "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::warning file=\1,line=\2::WARNING: \`cargo fmt\`: style violation/p" ; }
+        S=$(find tests -name "*.rs" -print0 | xargs -0 cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s\n" "$S" | sed -E -n "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::error file=\1,line=\2::ERROR: \`cargo fmt\`: style violation (file:'\1', line:\2; use \`cargo fmt \"\1\"\`)/p" ; exit 1 ; }
 
-  code_spellcheck:
-    name: Style/spelling
-    runs-on: ${{ matrix.job.os }}
-    strategy:
-      matrix:
-        job:
-          - { os: ubuntu-latest }
-    steps:
-    - uses: actions/checkout@v2
-    - name: Install/setup prerequisites
-      shell: bash
-      run: |
-        sudo apt-get -y update ; sudo apt-get -y install npm ; sudo npm install cspell -g;
-    - name: Run `cspell`
-      shell: bash
-      run: |
-        cspell --config .vscode/cSpell.json --no-summary --no-progress "**/*" | sed "s/\(.*\):\(.*\):\(.*\) - \(.*\)/::warning file=\1,line=\2,col=\3::cspell: \4/" || true
-
-  code_warnings:
-    name: Style/warnings
+  code_lint:
+    name: Style/lint
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
@@ -106,13 +89,32 @@ jobs:
         default: true
         profile: minimal # minimal component installation (ie, no documentation)
         components: clippy
-    - name: "`clippy` testing"
-      if: success() || failure() # run regardless of prior step success/failure
+    - name: "`clippy` lint testing"
       shell: bash
       run: |
-        # `clippy` testing
+        ## `clippy` lint testing
         # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-        S=$(cargo +nightly clippy --all-targets ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -- -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+(.*):([0-9]+):([0-9]+).*$/::warning file=\2,line=\3,col=\4::WARNING: \`cargo clippy\`: \1/p;" -e '}' ; }
+        S=$(cargo +nightly clippy --all-targets ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -- -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+${PWD//\//\\/}\/(.*):([0-9]+):([0-9]+).*$/::error file=\2,line=\3,col=\4::ERROR: \`cargo clippy\`: \1 (file:'\2', line:\3)/p;" -e '}' ; exit 1 ; }
+
+  code_spellcheck:
+    name: Style/spelling
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      matrix:
+        job:
+          - { os: ubuntu-latest }
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        ## Install/setup prerequisites
+        sudo apt-get -y update ; sudo apt-get -y install npm ; sudo npm install cspell -g ;
+    - name: Run `cspell`
+      shell: bash
+      run: |
+        ## Run `cspell`
+        cspell --config .vscode/cSpell.json --no-summary --no-progress "**/*" | sed -E -n "s/${PWD//\//\\/}\/(.*):(.*):(.*) - (.*)/::error file=\1,line=\2,col=\3::ERROR: \4 (file:'\1', line:\2)/p"
 
   min_version:
     name: MinRustV # Minimum supported rust version
@@ -137,20 +139,20 @@ jobs:
         use-tool-cache: true
       env:
         RUSTUP_TOOLCHAIN: stable
-    - name: Confirm compatible 'Cargo.lock'
+    - name: Confirm MinSRV compatible 'Cargo.lock'
       shell: bash
       run: |
-        # Confirm compatible 'Cargo.lock'
+        ## Confirm MinSRV compatible 'Cargo.lock'
         # * 'Cargo.lock' is required to be in a format that `cargo` of MinSRV can interpret (eg, v1-format for MinSRV < v1.38)
-        cargo fetch --locked --quiet || { echo "::error file=Cargo.lock::Incompatible 'Cargo.lock' format; try \`cargo +${{ env.RUST_MIN_SRV }} update\`" ; exit 1 ; }
+        cargo fetch --locked --quiet || { echo "::error file=Cargo.lock::Incompatible (or out-of-date) 'Cargo.lock' file; update using \`cargo +${{ env.RUST_MIN_SRV }} update\`" ; exit 1 ; }
     - name: Info
       shell: bash
       run: |
-        # Info
-        ## environment
+        ## Info
+        # environment
         echo "## environment"
         echo "CI='${CI}'"
-        ## tooling info display
+        # tooling info display
         echo "## tooling"
         which gcc >/dev/null 2>&1 && (gcc --version | head -1) || true
         rustup -V
@@ -158,12 +160,11 @@ jobs:
         cargo -V
         rustc -V
         cargo-tree tree -V
-        ## dependencies
+        # dependencies
         echo "## dependency list"
         cargo fetch --locked --quiet
         ## * using the 'stable' toolchain is necessary to avoid "unexpected '--filter-platform'" errors
         RUSTUP_TOOLCHAIN=stable cargo-tree tree --frozen --all --no-dev-dependencies --no-indent --features ${{ matrix.job.features }} | grep -vE "$PWD" | sort --unique
-
     - name: Test
       uses: actions-rs/cargo@v1
       with:
@@ -172,8 +173,8 @@ jobs:
       env:
         RUSTFLAGS: '-Awarnings'
 
-  busybox_test:
-    name: Busybox test suite
+  build_makefile:
+    name: Build/Makefile
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
@@ -188,42 +189,19 @@ jobs:
         toolchain: stable
         default: true
         profile: minimal # minimal component installation (ie, no documentation)
-    - name: "prepare busytest"
+    - name: Install/setup prerequisites
       shell: bash
       run: |
-        make prepare-busytest
-    - name: "run busybox testsuite"
+        ## Install/setup prerequisites
+        sudo apt-get -y update ; sudo apt-get -y install python3-sphinx ;
+    - name: "`make build`"
       shell: bash
       run: |
-        bindir=$(pwd)/target/debug
-        cd tmp/busybox-*/testsuite
-        ## S=$(bindir=$bindir ./runtest) && printf "%s\n" "$S" || { printf "%s\n" "$S" | grep "FAIL:" | sed -e "s/FAIL: /::warning ::Test failure:/g" ; }
-        output=$(bindir=$bindir ./runtest 2>&1 || true)
-        printf "%s\n" "${output}"
-        n_fails=$(echo "$output" | grep "^FAIL:\s" | wc --lines)
-        if [ $n_fails -gt 0 ] ; then echo "::warning ::${n_fails}+ test failures" ; fi
-
-  makefile_build:
-    name: Test the build target of the Makefile
-    runs-on: ${{ matrix.job.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - { os: ubuntu-latest }
-    steps:
-    - uses: actions/checkout@v2
-    - name: Install `rust` toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
-    - name: "Run make build"
-      shell: bash
-      run: |
-        sudo apt-get -y update ; sudo apt-get -y install python3-sphinx;
         make build
+    - name: "`make test`"
+      shell: bash
+      run: |
+        make test
 
   build:
     name: Build
@@ -251,7 +229,7 @@ jobs:
     - name: Install/setup prerequisites
       shell: bash
       run: |
-        ## install/setup prerequisites
+        ## Install/setup prerequisites
         case '${{ matrix.job.target }}' in
           arm-unknown-linux-gnueabihf) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf ;;
           aarch64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu ;;
@@ -350,7 +328,7 @@ jobs:
     - name: Create all needed build/work directories
       shell: bash
       run: |
-        ## create build/work space
+        ## Create build/work space
         mkdir -p '${{ steps.vars.outputs.STAGING }}'
         mkdir -p '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}'
         mkdir -p '${{ steps.vars.outputs.STAGING }}/dpkg'
@@ -387,15 +365,15 @@ jobs:
     - name: Info
       shell: bash
       run: |
-        # Info
-        ## commit info
+        ## Info
+        # commit info
         echo "## commit"
         echo GITHUB_REF=${GITHUB_REF}
         echo GITHUB_SHA=${GITHUB_SHA}
-        ## environment
+        # environment
         echo "## environment"
         echo "CI='${CI}'"
-        ## tooling info display
+        # tooling info display
         echo "## tooling"
         which gcc >/dev/null 2>&1 && (gcc --version | head -1) || true
         rustup -V
@@ -403,7 +381,7 @@ jobs:
         cargo -V
         rustc -V
         cargo-tree tree -V
-        ## dependencies
+        # dependencies
         echo "## dependency list"
         cargo fetch --locked --quiet
         cargo-tree tree --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --all --no-dev-dependencies --no-indent | grep -vE "$PWD" | sort --unique
@@ -433,7 +411,7 @@ jobs:
     - name: Package
       shell: bash
       run: |
-        ## package artifact(s)
+        ## Package artifact(s)
         # binary
         cp 'target/${{ matrix.job.target }}/release/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}' '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/'
         # `strip` binary (if needed)
@@ -474,6 +452,37 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  test_busybox:
+    name: Tests/BusyBox test suite
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: ubuntu-latest }
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install `rust` toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        default: true
+        profile: minimal # minimal component installation (ie, no documentation)
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        make prepare-busytest
+    - name: "Run BusyBox test suite"
+      shell: bash
+      run: |
+        ## Run BusyBox test suite
+        bindir=$(pwd)/target/debug
+        cd tmp/busybox-*/testsuite
+        output=$(bindir=$bindir ./runtest 2>&1 || true)
+        printf "%s\n" "${output}"
+        n_fails=$(echo "$output" | grep "^FAIL:\s" | wc --lines)
+        if [ $n_fails -gt 0 ] ; then echo "::warning ::${n_fails}+ test failures" ; fi
+
   coverage:
     name: Code Coverage
     runs-on: ${{ matrix.job.os }}
@@ -490,7 +499,7 @@ jobs:
     - name: Install/setup prerequisites
       shell: bash
       run: |
-        ## install/setup prerequisites
+        ## Install/setup prerequisites
         case '${{ matrix.job.os }}' in
           macos-latest) brew install coreutils ;; # needed for testing
         esac
@@ -584,7 +593,7 @@ jobs:
       id: coverage
       shell: bash
       run: |
-        # generate coverage data
+        ## Generate coverage data
         COVERAGE_REPORT_DIR="target/debug"
         COVERAGE_REPORT_FILE="${COVERAGE_REPORT_DIR}/lcov.info"
         # GRCOV_IGNORE_OPTION='--ignore build.rs --ignore "/*" --ignore "[a-zA-Z]:/*"' ## `grcov` ignores these params when passed as an environment variable (why?)
