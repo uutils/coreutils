@@ -211,13 +211,13 @@ fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>, silent: bo
     let lines = break_buff(buff, usize::from(cols));
 
     let mut pager = Pager::new(rows, lines, next_file, silent);
-    pager.draw(stdout, false);
+    pager.draw(stdout, None);
     if pager.should_close() {
         return;
     }
 
     loop {
-        let mut wrong_key = false;
+        let mut wrong_key = None;
         if event::poll(Duration::from_millis(10)).unwrap() {
             match event::read().unwrap() {
                 Event::Key(KeyEvent {
@@ -254,10 +254,11 @@ fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>, silent: bo
                 Event::Resize(col, row) => {
                     pager.page_resize(col, row);
                 }
-                // FIXME: Need to fix, there are more than just unknown keys.
-                _ => {
-                    wrong_key = true;
-                }
+                Event::Key(KeyEvent {
+                    code: KeyCode::Char(k),
+                    ..
+                }) => wrong_key = Some(k),
+                _ => continue,
             }
 
             pager.draw(stdout, wrong_key);
@@ -311,7 +312,7 @@ impl<'a> Pager<'a> {
         self.content_rows = row.saturating_sub(1);
     }
 
-    fn draw(&self, stdout: &mut std::io::Stdout, wrong_key: bool) {
+    fn draw(&self, stdout: &mut std::io::Stdout, wrong_key: Option<char>) {
         let lower_mark = self
             .line_count
             .min(self.upper_mark.saturating_add(self.content_rows.into()));
@@ -335,7 +336,7 @@ impl<'a> Pager<'a> {
         }
     }
 
-    fn draw_prompt(&self, stdout: &mut Stdout, lower_mark: usize, wrong_key: bool) {
+    fn draw_prompt(&self, stdout: &mut Stdout, lower_mark: usize, wrong_key: Option<char>) {
         let status_inner = if lower_mark == self.line_count {
             format!("Next file: {}", self.next_file.unwrap_or_default())
         } else {
@@ -348,10 +349,15 @@ impl<'a> Pager<'a> {
         let status = format!("--More--({})", status_inner);
 
         let banner = match (self.silent, wrong_key) {
-            (true, true) => "[Press 'h' for instructions. (unimplemented)]".to_string(),
-            (true, false) => format!("{}[Press space to continue, 'q' to quit.]", status),
-            (false, true) => format!("{}{}", status, BELL),
-            (false, false) => status,
+            (true, Some(key)) => {
+                format!(
+                    "{} [Unknown key: '{}'. Press 'h' for instructions. (unimplemented)]",
+                    status, key
+                )
+            }
+            (true, None) => format!("{}[Press space to continue, 'q' to quit.]", status),
+            (false, Some(_)) => format!("{}{}", status, BELL),
+            (false, None) => status,
         };
 
         write!(
