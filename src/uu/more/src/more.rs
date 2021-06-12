@@ -239,7 +239,11 @@ fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>, silent: bo
                     code: KeyCode::Char(' '),
                     modifiers: KeyModifiers::NONE,
                 }) => {
-                    pager.page_down();
+                    if pager.should_close() {
+                        return;
+                    } else {
+                        pager.page_down();
+                    }
                 }
                 Event::Key(KeyEvent {
                     code: KeyCode::Up,
@@ -253,9 +257,6 @@ fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>, silent: bo
             }
 
             pager.draw(stdout, wrong_key);
-            if pager.should_close() {
-                return;
-            }
         }
     }
 }
@@ -268,7 +269,6 @@ struct Pager<'a> {
     lines: Vec<String>,
     next_file: Option<&'a str>,
     line_count: usize,
-    close_on_down: bool,
     silent: bool,
 }
 
@@ -277,33 +277,25 @@ impl<'a> Pager<'a> {
         let line_count = lines.len();
         Self {
             upper_mark: 0,
-            content_rows: rows - 1,
+            content_rows: rows.saturating_sub(1),
             lines,
             next_file,
             line_count,
-            close_on_down: false,
             silent,
         }
     }
 
     fn should_close(&mut self) -> bool {
-        if self.upper_mark + self.content_rows >= self.line_count {
-            if self.close_on_down {
-                return true;
-            }
-            if self.next_file.is_none() {
-                return true;
-            } else {
-                self.close_on_down = true;
-            }
-        } else {
-            self.close_on_down = false;
-        }
-        false
+        self.upper_mark
+            .saturating_add(self.content_rows)
+            .eq(&self.line_count)
     }
 
     fn page_down(&mut self) {
-        self.upper_mark += self.content_rows;
+        self.upper_mark = self
+            .upper_mark
+            .saturating_add(self.content_rows)
+            .min(self.line_count.saturating_sub(self.content_rows));
     }
 
     fn page_up(&mut self) {
@@ -364,7 +356,7 @@ impl<'a> Pager<'a> {
 
 // Break the lines on the cols of the terminal
 fn break_buff(buff: &str, cols: usize) -> Vec<String> {
-    let mut lines = Vec::new();
+    let mut lines = Vec::with_capacity(buff.lines().count());
 
     for l in buff.lines() {
         lines.append(&mut break_line(l, cols));
