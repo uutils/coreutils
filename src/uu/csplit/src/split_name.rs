@@ -33,13 +33,13 @@ impl SplitName {
         // get the prefix
         let prefix = prefix_opt.unwrap_or_else(|| "xx".to_string());
         // the width for the split offset
-        let n_digits = match n_digits_opt {
-            None => 2,
-            Some(opt) => match opt.parse::<usize>() {
-                Ok(digits) => digits,
-                Err(_) => return Err(CsplitError::InvalidNumber(opt)),
-            },
-        };
+        let n_digits = n_digits_opt
+            .map(|opt| {
+                opt.parse::<usize>()
+                    .map_err(|_| CsplitError::InvalidNumber(opt))
+            })
+            .transpose()?
+            .unwrap_or(2);
         // translate the custom format into a function
         let fn_split_name: Box<dyn Fn(usize) -> String> = match format_opt {
             None => Box::new(move |n: usize| -> String {

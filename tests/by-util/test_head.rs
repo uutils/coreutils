@@ -1,4 +1,9 @@
-// spell-checker:ignore (words) bogusfile emptyfile
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
+
+// spell-checker:ignore (words) bogusfile emptyfile abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstu
 
 use crate::common::util::*;
 
@@ -243,4 +248,62 @@ hello
 ==> emptyfile.txt <==
 ",
         );
+}
+
+#[test]
+fn test_head_invalid_num() {
+    new_ucmd!()
+        .args(&["-c", "1024R", "emptyfile.txt"])
+        .fails()
+        .stderr_is("head: invalid number of bytes: ‘1024R’");
+    new_ucmd!()
+        .args(&["-n", "1024R", "emptyfile.txt"])
+        .fails()
+        .stderr_is("head: invalid number of lines: ‘1024R’");
+    #[cfg(not(target_pointer_width = "128"))]
+    new_ucmd!()
+        .args(&["-c", "1Y", "emptyfile.txt"])
+        .fails()
+        .stderr_is("head: invalid number of bytes: ‘1Y’: Value too large for defined data type");
+    #[cfg(not(target_pointer_width = "128"))]
+    new_ucmd!()
+        .args(&["-n", "1Y", "emptyfile.txt"])
+        .fails()
+        .stderr_is("head: invalid number of lines: ‘1Y’: Value too large for defined data type");
+    #[cfg(target_pointer_width = "32")]
+    {
+        let sizes = ["1000G", "10T"];
+        for size in &sizes {
+            new_ucmd!()
+                .args(&["-c", size])
+                .fails()
+                .code_is(1)
+                .stderr_only(format!(
+                    "head: invalid number of bytes: ‘{}’: Value too large for defined data type",
+                    size
+                ));
+        }
+    }
+}
+
+#[test]
+fn test_head_num_with_undocumented_sign_bytes() {
+    // tail: '-' is not documented (8.32 man pages)
+    // head: '+' is not documented (8.32 man pages)
+    const ALPHABET: &str = "abcdefghijklmnopqrstuvwxyz";
+    new_ucmd!()
+        .args(&["-c", "5"])
+        .pipe_in(ALPHABET)
+        .succeeds()
+        .stdout_is("abcde");
+    new_ucmd!()
+        .args(&["-c", "-5"])
+        .pipe_in(ALPHABET)
+        .succeeds()
+        .stdout_is("abcdefghijklmnopqrstu");
+    new_ucmd!()
+        .args(&["-c", "+5"])
+        .pipe_in(ALPHABET)
+        .succeeds()
+        .stdout_is("abcde");
 }

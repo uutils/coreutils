@@ -1,4 +1,4 @@
-// spell-checker:ignore (words) nosuchgroup
+// spell-checker:ignore (words) nosuchgroup groupname
 
 use crate::common::util::*;
 use rust_users::*;
@@ -9,6 +9,33 @@ fn test_invalid_option() {
 }
 
 static DIR: &str = "/tmp";
+
+// we should always get both arguments, regardless of whether --reference was used
+#[test]
+fn test_help() {
+    new_ucmd!()
+        .arg("--help")
+        .succeeds()
+        .stdout_contains("ARGS:\n    <GROUP>      \n    <FILE>...    ");
+}
+
+#[test]
+fn test_help_ref() {
+    new_ucmd!()
+        .arg("--help")
+        .arg("--reference=ref_file")
+        .succeeds()
+        .stdout_contains("ARGS:\n    <GROUP>      \n    <FILE>...    ");
+}
+
+#[test]
+fn test_ref_help() {
+    new_ucmd!()
+        .arg("--reference=ref_file")
+        .arg("--help")
+        .succeeds()
+        .stdout_contains("ARGS:\n    <GROUP>      \n    <FILE>...    ");
+}
 
 #[test]
 fn test_invalid_group() {
@@ -121,9 +148,52 @@ fn test_reference() {
 fn test_reference() {
     new_ucmd!()
         .arg("-v")
-        .arg("--reference=/etc/passwd")
+        .arg("--reference=ref_file")
         .arg("/etc")
-        .succeeds();
+        .fails()
+        // group name can differ, so just check the first part of the message
+        .stderr_contains("chgrp: changing group of '/etc': Operation not permitted (os error 1)\nfailed to change group of '/etc' from ");
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+fn test_reference_multi_no_equal() {
+    new_ucmd!()
+        .arg("-v")
+        .arg("--reference")
+        .arg("ref_file")
+        .arg("file1")
+        .arg("file2")
+        .succeeds()
+        .stderr_contains("chgrp: group of 'file1' retained as ")
+        .stderr_contains("\nchgrp: group of 'file2' retained as ");
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+fn test_reference_last() {
+    new_ucmd!()
+        .arg("-v")
+        .arg("file1")
+        .arg("file2")
+        .arg("file3")
+        .arg("--reference")
+        .arg("ref_file")
+        .succeeds()
+        .stderr_contains("chgrp: group of 'file1' retained as ")
+        .stderr_contains("\nchgrp: group of 'file2' retained as ")
+        .stderr_contains("\nchgrp: group of 'file3' retained as ");
+}
+
+#[test]
+fn test_missing_files() {
+    new_ucmd!()
+        .arg("-v")
+        .arg("groupname")
+        .fails()
+        .stderr_contains(
+            "error: The following required arguments were not provided:\n    <FILE>...\n",
+        );
 }
 
 #[test]
@@ -135,7 +205,7 @@ fn test_big_p() {
             .arg("bin")
             .arg("/proc/self/cwd")
             .fails()
-            .stderr_is(
+            .stderr_contains(
                 "chgrp: changing group of '/proc/self/cwd': Operation not permitted (os error 1)\n",
             );
     }

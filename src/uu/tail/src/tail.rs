@@ -5,7 +5,6 @@
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
-//  *
 
 // spell-checker:ignore (ToDO) seekable seek'd tail'ing ringbuffer ringbuf
 
@@ -21,19 +20,18 @@ use chunks::ReverseChunks;
 
 use clap::{App, Arg};
 use std::collections::VecDeque;
-use std::error::Error;
 use std::fmt;
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
+use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::ringbuffer::RingBuffer;
 
 pub mod options {
     pub mod verbosity {
         pub static QUIET: &str = "quiet";
-        pub static SILENT: &str = "silent";
         pub static VERBOSE: &str = "verbose";
     }
     pub static BYTES: &str = "bytes";
@@ -42,13 +40,12 @@ pub mod options {
     pub static PID: &str = "pid";
     pub static SLEEP_INT: &str = "sleep-interval";
     pub static ZERO_TERM: &str = "zero-terminated";
+    pub static ARG_FILES: &str = "files";
 }
 
-static ARG_FILES: &str = "files";
-
 enum FilterMode {
-    Bytes(u64),
-    Lines(u64, u8), // (number of lines, delimiter)
+    Bytes(usize),
+    Lines(usize, u8), // (number of lines, delimiter)
 }
 
 struct Settings {
@@ -78,12 +75,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let app = App::new(executable!())
         .version(crate_version!())
         .about("output the last part of files")
+        // TODO: add usage
         .arg(
             Arg::with_name(options::BYTES)
                 .short("c")
                 .long(options::BYTES)
                 .takes_value(true)
                 .allow_hyphen_values(true)
+                .overrides_with_all(&[options::BYTES, options::LINES])
                 .help("Number of bytes to print"),
         )
         .arg(
@@ -98,6 +97,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(options::LINES)
                 .takes_value(true)
                 .allow_hyphen_values(true)
+                .overrides_with_all(&[options::BYTES, options::LINES])
                 .help("Number of lines to print"),
         )
         .arg(
@@ -110,12 +110,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(options::verbosity::QUIET)
                 .short("q")
                 .long(options::verbosity::QUIET)
+                .visible_alias("silent")
+                .overrides_with_all(&[options::verbosity::QUIET, options::verbosity::VERBOSE])
                 .help("never output headers giving file names"),
-        )
-        .arg(
-            Arg::with_name(options::verbosity::SILENT)
-                .long(options::verbosity::SILENT)
-                .help("synonym of --quiet"),
         )
         .arg(
             Arg::with_name(options::SLEEP_INT)
@@ -128,6 +125,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(options::verbosity::VERBOSE)
                 .short("v")
                 .long(options::verbosity::VERBOSE)
+                .overrides_with_all(&[options::verbosity::QUIET, options::verbosity::VERBOSE])
                 .help("always output headers giving file names"),
         )
         .arg(
@@ -137,7 +135,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("Line delimiter is NUL, not newline"),
         )
         .arg(
-            Arg::with_name(ARG_FILES)
+            Arg::with_name(options::ARG_FILES)
                 .multiple(true)
                 .takes_value(true)
                 .min_values(1),
@@ -171,38 +169,21 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     }
 
-    match matches.value_of(options::LINES) {
-        Some(n) => {
-            let mut slice: &str = n;
-            if slice.as_bytes().first() == Some(&b'+') {
-                settings.beginning = true;
-                slice = &slice[1..];
-            }
-            match parse_size(slice) {
-                Ok(m) => settings.mode = FilterMode::Lines(m, b'\n'),
-                Err(e) => {
-                    show_error!("{}", e.to_string());
-                    return 1;
-                }
-            }
+    let mode_and_beginning = if let Some(arg) = matches.value_of(options::BYTES) {
+        match parse_num(arg) {
+            Ok((n, beginning)) => (FilterMode::Bytes(n), beginning),
+            Err(e) => crash!(1, "invalid number of bytes: {}", e.to_string()),
         }
-        None => {
-            if let Some(n) = matches.value_of(options::BYTES) {
-                let mut slice: &str = n;
-                if slice.as_bytes().first() == Some(&b'+') {
-                    settings.beginning = true;
-                    slice = &slice[1..];
-                }
-                match parse_size(slice) {
-                    Ok(m) => settings.mode = FilterMode::Bytes(m),
-                    Err(e) => {
-                        show_error!("{}", e.to_string());
-                        return 1;
-                    }
-                }
-            }
+    } else if let Some(arg) = matches.value_of(options::LINES) {
+        match parse_num(arg) {
+            Ok((n, beginning)) => (FilterMode::Lines(n, b'\n'), beginning),
+            Err(e) => crash!(1, "invalid number of lines: {}", e.to_string()),
         }
+    } else {
+        (FilterMode::Lines(10, b'\n'), false)
     };
+    settings.mode = mode_and_beginning.0;
+    settings.beginning = mode_and_beginning.1;
 
     if matches.is_present(options::ZERO_TERM) {
         if let FilterMode::Lines(count, _) = settings.mode {
@@ -211,11 +192,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     let verbose = matches.is_present(options::verbosity::VERBOSE);
-    let quiet = matches.is_present(options::verbosity::QUIET)
-        || matches.is_present(options::verbosity::SILENT);
+    let quiet = matches.is_present(options::verbosity::QUIET);
 
     let files: Vec<String> = matches
-        .values_of(ARG_FILES)
+        .values_of(options::ARG_FILES)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
@@ -262,92 +242,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     0
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum ParseSizeErr {
-    ParseFailure(String),
-    SizeTooBig(String),
-}
-
-impl Error for ParseSizeErr {
-    fn description(&self) -> &str {
-        match *self {
-            ParseSizeErr::ParseFailure(ref s) => &*s,
-            ParseSizeErr::SizeTooBig(ref s) => &*s,
-        }
-    }
-}
-
-impl fmt::Display for ParseSizeErr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        let s = match self {
-            ParseSizeErr::ParseFailure(s) => s,
-            ParseSizeErr::SizeTooBig(s) => s,
-        };
-        write!(f, "{}", s)
-    }
-}
-
-impl ParseSizeErr {
-    fn parse_failure(s: &str) -> ParseSizeErr {
-        ParseSizeErr::ParseFailure(format!("invalid size: '{}'", s))
-    }
-
-    fn size_too_big(s: &str) -> ParseSizeErr {
-        ParseSizeErr::SizeTooBig(format!(
-            "invalid size: '{}': Value too large to be stored in data type",
-            s
-        ))
-    }
-}
-
-pub type ParseSizeResult = Result<u64, ParseSizeErr>;
-
-pub fn parse_size(mut size_slice: &str) -> Result<u64, ParseSizeErr> {
-    let mut base = if size_slice.as_bytes().last() == Some(&b'B') {
-        size_slice = &size_slice[..size_slice.len() - 1];
-        1000u64
-    } else {
-        1024u64
-    };
-
-    let exponent = match size_slice.as_bytes().last() {
-        Some(unit) => match unit {
-            b'K' | b'k' => 1u64,
-            b'M' => 2u64,
-            b'G' => 3u64,
-            b'T' => 4u64,
-            b'P' => 5u64,
-            b'E' => 6u64,
-            b'Z' | b'Y' => {
-                return Err(ParseSizeErr::size_too_big(size_slice));
-            }
-            b'b' => {
-                base = 512u64;
-                1u64
-            }
-            _ => 0u64,
-        },
-        None => 0u64,
-    };
-    if exponent != 0 {
-        size_slice = &size_slice[..size_slice.len() - 1];
-    }
-
-    let mut multiplier = 1u64;
-    for _ in 0u64..exponent {
-        multiplier *= base;
-    }
-    if base == 1000u64 && exponent == 0u64 {
-        // sole B is not a valid suffix
-        Err(ParseSizeErr::parse_failure(size_slice))
-    } else {
-        let value: Option<i64> = size_slice.parse().ok();
-        value
-            .map(|v| Ok((multiplier as i64 * v.abs()) as u64))
-            .unwrap_or_else(|| Err(ParseSizeErr::parse_failure(size_slice)))
-    }
 }
 
 fn follow<T: Read>(readers: &mut [BufReader<T>], filenames: &[String], settings: &Settings) {
@@ -463,7 +357,7 @@ fn bounded_tail(file: &mut File, settings: &Settings) {
 /// If any element of `iter` is an [`Err`], then this function panics.
 fn unbounded_tail_collect<T, E>(
     iter: impl Iterator<Item = Result<T, E>>,
-    count: u64,
+    count: usize,
     beginning: bool,
 ) -> VecDeque<T>
 where
@@ -507,4 +401,23 @@ fn print_byte<T: Write>(stdout: &mut T, ch: u8) {
     if let Err(err) = stdout.write(&[ch]) {
         crash!(1, "{}", err);
     }
+}
+
+fn parse_num(src: &str) -> Result<(usize, bool), ParseSizeError> {
+    let mut size_string = src.trim();
+    let mut starting_with = false;
+
+    if let Some(c) = size_string.chars().next() {
+        if c == '+' || c == '-' {
+            // tail: '-' is not documented (8.32 man pages)
+            size_string = &size_string[1..];
+            if c == '+' {
+                starting_with = true;
+            }
+        }
+    } else {
+        return Err(ParseSizeError::ParseFailure(src.to_string()));
+    }
+
+    parse_size(size_string).map(|n| (n, starting_with))
 }

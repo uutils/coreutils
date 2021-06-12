@@ -247,7 +247,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
     let mut line_filter: fn(&str, &regex::Regex) -> bool = pass_regex;
     for mut l in reader.lines().map(|r| r.unwrap()) {
         // Sanitize the string. We want to print the newline ourselves.
-        if l.chars().last() == Some('\n') {
+        if l.ends_with('\n') {
             l.pop();
         }
         // Next we iterate through the individual chars to see if this

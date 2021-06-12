@@ -1,3 +1,8 @@
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
+
 // spell-checker:ignore (paths) sublink subwords
 
 use crate::common::util::*;
@@ -71,6 +76,23 @@ fn _du_basics_subdir(s: &str) {
     } else {
         assert_eq!(s, "0\tsubdir/deeper\n");
     }
+}
+
+#[test]
+fn test_du_invalid_size() {
+    new_ucmd!()
+        .arg("--block-size=1fb4t")
+        .arg("/tmp")
+        .fails()
+        .code_is(1)
+        .stderr_only("du: invalid --block-size argument '1fb4t'");
+    #[cfg(not(target_pointer_width = "128"))]
+    new_ucmd!()
+        .arg("--block-size=1Y")
+        .arg("/tmp")
+        .fails()
+        .code_is(1)
+        .stderr_only("du: --block-size argument '1Y' too large");
 }
 
 #[test]

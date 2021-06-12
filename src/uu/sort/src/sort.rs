@@ -43,6 +43,7 @@ use std::ops::Range;
 use std::path::Path;
 use std::path::PathBuf;
 use unicode_width::UnicodeWidthStr;
+use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::InvalidEncodingHandling;
 
 const NAME: &str = "sort";
@@ -172,32 +173,29 @@ pub struct GlobalSettings {
 }
 
 impl GlobalSettings {
-    /// Interpret this `&str` as a number with an optional trailing si unit.
-    ///
-    /// If there is no trailing si unit, the implicit unit is K.
-    /// The suffix B causes the number to be interpreted as a byte count.
-    fn parse_byte_count(input: &str) -> usize {
-        const SI_UNITS: &[char] = &['B', 'K', 'M', 'G', 'T', 'P', 'E', 'Z', 'Y'];
+    /// Parse a SIZE string into a number of bytes.
+    /// A size string comprises an integer and an optional unit.
+    /// The unit may be k, K, m, M, g, G, t, T, P, E, Z, Y (powers of 1024), or b which is 1.
+    /// Default is K.
+    fn parse_byte_count(input: &str) -> Result<usize, ParseSizeError> {
+        // GNU sort (8.32)   valid: 1b,        k, K, m, M, g, G, t, T, P, E, Z, Y
+        // GNU sort (8.32) invalid:  b, B, 1B,                         p, e, z, y
+        const ALLOW_LIST: &[char] = &[
+            'b', 'k', 'K', 'm', 'M', 'g', 'G', 't', 'T', 'P', 'E', 'Z', 'Y',
+        ];
+        let mut size_string = input.trim().to_string();
 
-        let input = input.trim();
-
-        let (num_str, si_unit) =
-            if input.ends_with(|c: char| SI_UNITS.contains(&c.to_ascii_uppercase())) {
-                let mut chars = input.chars();
-                let si_suffix = chars.next_back().unwrap().to_ascii_uppercase();
-                let si_unit = SI_UNITS.iter().position(|&c| c == si_suffix).unwrap();
-                let num_str = chars.as_str();
-                (num_str, si_unit)
-            } else {
-                (input, 1)
-            };
-
-        let num_usize: usize = num_str
-            .trim()
-            .parse()
-            .unwrap_or_else(|e| crash!(1, "failed to parse buffer size `{}`: {}", num_str, e));
-
-        num_usize.saturating_mul(1000usize.saturating_pow(si_unit as u32))
+        if size_string.ends_with(|c: char| ALLOW_LIST.contains(&c) || c.is_digit(10)) {
+            // b 1, K 1024 (default)
+            if size_string.ends_with(|c: char| c.is_digit(10)) {
+                size_string.push('K');
+            } else if size_string.ends_with('b') {
+                size_string.pop();
+            }
+            parse_size(&size_string)
+        } else {
+            Err(ParseSizeError::ParseFailure("invalid suffix".to_string()))
+        }
     }
 
     fn out_writer(&self) -> BufWriter<Box<dyn Write>> {
@@ -1217,8 +1215,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     settings.buffer_size = matches
         .value_of(options::BUF_SIZE)
-        .map(GlobalSettings::parse_byte_count)
-        .unwrap_or(DEFAULT_BUF_SIZE);
+        .map_or(DEFAULT_BUF_SIZE, |s| {
+            GlobalSettings::parse_byte_count(s)
+                .unwrap_or_else(|e| crash!(2, "{}", format_error_message(e, s, options::BUF_SIZE)))
+        });
 
     settings.tmp_dir = matches
         .value_of(options::TMP_DIR)
@@ -1633,6 +1633,16 @@ fn open(path: impl AsRef<OsStr>) -> Box<dyn Read + Send> {
     }
 }
 
+fn format_error_message(error: ParseSizeError, s: &str, option: &str) -> String {
+    // NOTE:
+    // GNU's sort echos affected flag, -S or --buffer-size, depending user's selection
+    // GNU's sort does distinguish between "invalid (suffix in) argument"
+    match error {
+        ParseSizeError::ParseFailure(_) => format!("invalid --{} argument '{}'", option, s),
+        ParseSizeError::SizeTooBig(_) => format!("--{} argument '{}' too large", option, s),
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -1721,5 +1731,49 @@ mod tests {
 
         // How big is a selection? Constant cost all lines pay when we need selections.
         assert_eq!(std::mem::size_of::<Selection>(), 24);
+    }
+
+    #[test]
+    fn test_parse_byte_count() {
+        let valid_input = [
+            ("0", 0),
+            ("50K", 50 * 1024),
+            ("50k", 50 * 1024),
+            ("1M", 1024 * 1024),
+            ("100M", 100 * 1024 * 1024),
+            #[cfg(not(target_pointer_width = "32"))]
+            ("1000G", 1000 * 1024 * 1024 * 1024),
+            #[cfg(not(target_pointer_width = "32"))]
+            ("10T", 10 * 1024 * 1024 * 1024 * 1024),
+            ("1b", 1),
+            ("1024b", 1024),
+            ("1024Mb", 1024 * 1024 * 1024), // NOTE: This might not be how GNU `sort` behaves for 'Mb'
+            ("1", 1024),                    // K is default
+            ("50", 50 * 1024),
+            ("K", 1024),
+            ("k", 1024),
+            ("m", 1024 * 1024),
+            #[cfg(not(target_pointer_width = "32"))]
+            ("E", 1024 * 1024 * 1024 * 1024 * 1024 * 1024),
+        ];
+        for (input, expected_output) in &valid_input {
+            assert_eq!(
+                GlobalSettings::parse_byte_count(input),
+                Ok(*expected_output)
+            );
+        }
+
+        // SizeTooBig
+        let invalid_input = ["500E", "1Y"];
+        for input in &invalid_input {
+            #[cfg(not(target_pointer_width = "128"))]
+            assert!(GlobalSettings::parse_byte_count(input).is_err());
+        }
+
+        // ParseFailure
+        let invalid_input = ["nonsense", "1B", "B", "b", "p", "e", "z", "y"];
+        for input in &invalid_input {
+            assert!(GlobalSettings::parse_byte_count(input).is_err());
+        }
     }
 }
