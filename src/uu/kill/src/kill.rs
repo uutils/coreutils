@@ -132,13 +132,13 @@ fn table() {
     let mut name_width = 0;
     /* Compute the maximum width of a signal name. */
     for s in &ALL_SIGNALS {
-        if s.name.len() > name_width {
-            name_width = s.name.len()
+        if s.len() > name_width {
+            name_width = s.len()
         }
     }
 
     for (idx, signal) in ALL_SIGNALS.iter().enumerate() {
-        print!("{0: >#2} {1: <#8}", idx + 1, signal.name);
+        print!("{0: >#2} {1: <#8}", idx + 1, signal);
         //TODO: obtain max signal width here
 
         if (idx + 1) % 7 == 0 {
@@ -148,14 +148,12 @@ fn table() {
 }
 
 fn print_signal(signal_name_or_value: &str) {
-    for signal in &ALL_SIGNALS {
-        if signal.name == signal_name_or_value
-            || (format!("SIG{}", signal.name)) == signal_name_or_value
-        {
-            println!("{}", signal.value);
+    for (value, &signal) in ALL_SIGNALS.iter().enumerate() {
+        if signal == signal_name_or_value || (format!("SIG{}", signal)) == signal_name_or_value {
+            println!("{}", value);
             exit!(EXIT_OK as i32)
-        } else if signal_name_or_value == signal.value.to_string() {
-            println!("{}", signal.name);
+        } else if signal_name_or_value == value.to_string() {
+            println!("{}", signal);
             exit!(EXIT_OK as i32)
         }
     }
@@ -165,8 +163,8 @@ fn print_signal(signal_name_or_value: &str) {
 fn print_signals() {
     let mut pos = 0;
     for (idx, signal) in ALL_SIGNALS.iter().enumerate() {
-        pos += signal.name.len();
-        print!("{}", signal.name);
+        pos += signal.len();
+        print!("{}", signal);
         if idx > 0 && pos > 73 {
             println!();
             pos = 0;

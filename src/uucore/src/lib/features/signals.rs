@@ -10,11 +10,6 @@
 
 pub static DEFAULT_SIGNAL: usize = 15;
 
-pub struct Signal<'a> {
-    pub name: &'a str,
-    pub value: usize,
-}
-
 /*
 
 Linux Programmer's Manual
@@ -29,135 +24,10 @@ Linux Programmer's Manual
 */
 
 #[cfg(target_os = "linux")]
-pub static ALL_SIGNALS: [Signal<'static>; 32] = [
-    Signal {
-        name: "EXIT",
-        value: 0,
-    },
-    Signal {
-        name: "HUP",
-        value: 1,
-    },
-    Signal {
-        name: "INT",
-        value: 2,
-    },
-    Signal {
-        name: "QUIT",
-        value: 3,
-    },
-    Signal {
-        name: "ILL",
-        value: 4,
-    },
-    Signal {
-        name: "TRAP",
-        value: 5,
-    },
-    Signal {
-        name: "ABRT",
-        value: 6,
-    },
-    Signal {
-        name: "BUS",
-        value: 7,
-    },
-    Signal {
-        name: "FPE",
-        value: 8,
-    },
-    Signal {
-        name: "KILL",
-        value: 9,
-    },
-    Signal {
-        name: "USR1",
-        value: 10,
-    },
-    Signal {
-        name: "SEGV",
-        value: 11,
-    },
-    Signal {
-        name: "USR2",
-        value: 12,
-    },
-    Signal {
-        name: "PIPE",
-        value: 13,
-    },
-    Signal {
-        name: "ALRM",
-        value: 14,
-    },
-    Signal {
-        name: "TERM",
-        value: 15,
-    },
-    Signal {
-        name: "STKFLT",
-        value: 16,
-    },
-    Signal {
-        name: "CHLD",
-        value: 17,
-    },
-    Signal {
-        name: "CONT",
-        value: 18,
-    },
-    Signal {
-        name: "STOP",
-        value: 19,
-    },
-    Signal {
-        name: "TSTP",
-        value: 20,
-    },
-    Signal {
-        name: "TTIN",
-        value: 21,
-    },
-    Signal {
-        name: "TTOU",
-        value: 22,
-    },
-    Signal {
-        name: "URG",
-        value: 23,
-    },
-    Signal {
-        name: "XCPU",
-        value: 24,
-    },
-    Signal {
-        name: "XFSZ",
-        value: 25,
-    },
-    Signal {
-        name: "VTALRM",
-        value: 26,
-    },
-    Signal {
-        name: "PROF",
-        value: 27,
-    },
-    Signal {
-        name: "WINCH",
-        value: 28,
-    },
-    Signal {
-        name: "POLL",
-        value: 29,
-    },
-    Signal {
-        name: "PWR",
-        value: 30,
-    },
-    Signal {
-        name: "SYS",
-        value: 31,
-    },
+pub static ALL_SIGNALS: [&str; 32] = [
+    "EXIT", "HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "BUS", "FPE", "KILL", "USR1", "SEGV",
+    "USR2", "PIPE", "ALRM", "TERM", "STKFLT", "CHLD", "CONT", "STOP", "TSTP", "TTIN", "TTOU",
+    "URG", "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH", "POLL", "PWR", "SYS",
 ];
 
 /*
@@ -202,135 +72,10 @@ No    Name         Default Action       Description
 */
 
 #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
-pub static ALL_SIGNALS: [Signal<'static>; 32] = [
-    Signal {
-        name: "EXIT",
-        value: 0,
-    },
-    Signal {
-        name: "HUP",
-        value: 1,
-    },
-    Signal {
-        name: "INT",
-        value: 2,
-    },
-    Signal {
-        name: "QUIT",
-        value: 3,
-    },
-    Signal {
-        name: "ILL",
-        value: 4,
-    },
-    Signal {
-        name: "TRAP",
-        value: 5,
-    },
-    Signal {
-        name: "ABRT",
-        value: 6,
-    },
-    Signal {
-        name: "EMT",
-        value: 7,
-    },
-    Signal {
-        name: "FPE",
-        value: 8,
-    },
-    Signal {
-        name: "KILL",
-        value: 9,
-    },
-    Signal {
-        name: "BUS",
-        value: 10,
-    },
-    Signal {
-        name: "SEGV",
-        value: 11,
-    },
-    Signal {
-        name: "SYS",
-        value: 12,
-    },
-    Signal {
-        name: "PIPE",
-        value: 13,
-    },
-    Signal {
-        name: "ALRM",
-        value: 14,
-    },
-    Signal {
-        name: "TERM",
-        value: 15,
-    },
-    Signal {
-        name: "URG",
-        value: 16,
-    },
-    Signal {
-        name: "STOP",
-        value: 17,
-    },
-    Signal {
-        name: "TSTP",
-        value: 18,
-    },
-    Signal {
-        name: "CONT",
-        value: 19,
-    },
-    Signal {
-        name: "CHLD",
-        value: 20,
-    },
-    Signal {
-        name: "TTIN",
-        value: 21,
-    },
-    Signal {
-        name: "TTOU",
-        value: 22,
-    },
-    Signal {
-        name: "IO",
-        value: 23,
-    },
-    Signal {
-        name: "XCPU",
-        value: 24,
-    },
-    Signal {
-        name: "XFSZ",
-        value: 25,
-    },
-    Signal {
-        name: "VTALRM",
-        value: 26,
-    },
-    Signal {
-        name: "PROF",
-        value: 27,
-    },
-    Signal {
-        name: "WINCH",
-        value: 28,
-    },
-    Signal {
-        name: "INFO",
-        value: 29,
-    },
-    Signal {
-        name: "USR1",
-        value: 30,
-    },
-    Signal {
-        name: "USR2",
-        value: 31,
-    },
+pub static ALL_SIGNALS: [&str; 32] = [
+    "EXIT", "HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "EMT", "FPE", "KILL", "BUS", "SEGV",
+    "SYS", "PIPE", "ALRM", "TERM", "URG", "STOP", "TSTP", "CONT", "CHLD", "TTIN", "TTOU", "IO",
+    "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH", "INFO", "USR1", "USR2",
 ];
 
 pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
@@ -343,70 +88,45 @@ pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
     }
     let signal_name = signal_name_or_value.trim_start_matches("SIG");
 
-    ALL_SIGNALS
-        .iter()
-        .find(|s| s.name == signal_name)
-        .map(|s| s.value)
+    ALL_SIGNALS.iter().position(|&s| s == signal_name)
+}
+
+pub fn is_signal(num: usize) -> bool {
+    num < ALL_SIGNALS.len()
 }
 
 pub fn signal_name_by_value(signal_value: usize) -> Option<&'static str> {
-    ALL_SIGNALS
-        .iter()
-        .find(|signal| signal.value == signal_value)
-        .map(|signal| signal.name)
-}
-
-#[inline(always)]
-pub fn is_signal(num: usize) -> bool {
-    // Named signals start at 1
-    num <= ALL_SIGNALS.len()
-}
-
-#[test]
-fn signals_all_contiguous() {
-    for (i, signal) in ALL_SIGNALS.iter().enumerate() {
-        assert_eq!(signal.value, i);
-    }
-}
-
-#[test]
-fn signals_all_are_signal() {
-    for signal in &ALL_SIGNALS {
-        assert!(is_signal(signal.value));
-    }
+    ALL_SIGNALS.get(signal_value).copied()
 }
 
 #[test]
 fn signal_by_value() {
     assert_eq!(signal_by_name_or_value("0"), Some(0));
-    for signal in &ALL_SIGNALS {
-        assert_eq!(
-            signal_by_name_or_value(&signal.value.to_string()),
-            Some(signal.value)
-        );
+    for (value, _signal) in ALL_SIGNALS.iter().enumerate() {
+        assert_eq!(signal_by_name_or_value(&value.to_string()), Some(value));
     }
 }
 
 #[test]
 fn signal_by_short_name() {
-    for signal in &ALL_SIGNALS {
-        assert_eq!(signal_by_name_or_value(signal.name), Some(signal.value));
+    for (value, signal) in ALL_SIGNALS.iter().enumerate() {
+        assert_eq!(signal_by_name_or_value(signal), Some(value));
     }
 }
 
 #[test]
 fn signal_by_long_name() {
-    for signal in &ALL_SIGNALS {
+    for (value, signal) in ALL_SIGNALS.iter().enumerate() {
         assert_eq!(
-            signal_by_name_or_value(&format!("SIG{}", signal.name)),
-            Some(signal.value)
+            signal_by_name_or_value(&format!("SIG{}", signal)),
+            Some(value)
         );
     }
 }
 
 #[test]
 fn name() {
-    for signal in &ALL_SIGNALS {
-        assert_eq!(signal_name_by_value(signal.value), Some(signal.name));
+    for (value, signal) in ALL_SIGNALS.iter().enumerate() {
+        assert_eq!(signal_name_by_value(value), Some(*signal));
     }
 }
