@@ -36,16 +36,15 @@ impl<R: Read> Read for PartialReader<R> {
             while self.skip > 0 {
                 let skip_count = cmp::min(self.skip, MAX_SKIP_BUFFER);
 
-                match self.inner.read(&mut bytes[..skip_count]) {
-                    Ok(0) => {
+                match self.inner.read(&mut bytes[..skip_count])? {
+                    0 => {
                         // this is an error as we still have more to skip
                         return Err(io::Error::new(
                             io::ErrorKind::UnexpectedEof,
                             "tried to skip past end of input",
                         ));
                     }
-                    Ok(n) => self.skip -= n,
-                    Err(e) => return Err(e),
+                    n => self.skip -= n,
                 }
             }
         }

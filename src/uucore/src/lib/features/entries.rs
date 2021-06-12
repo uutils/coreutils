@@ -94,16 +94,21 @@ pub fn get_groups() -> IOResult<Vec<gid_t>> {
 /// groups is the same (in the mathematical sense of ``set''). (The
 /// history of a process and its parents could affect the details of
 /// the result.)
+#[cfg(all(unix, feature = "process"))]
 pub fn get_groups_gnu(arg_id: Option<u32>) -> IOResult<Vec<gid_t>> {
-    let mut groups = get_groups()?;
+    let groups = get_groups()?;
     let egid = arg_id.unwrap_or_else(crate::features::process::getegid);
-    if !groups.is_empty() && *groups.first().unwrap() == egid {
-        return Ok(groups);
-    } else if let Some(index) = groups.iter().position(|&x| x == egid) {
-        groups.remove(index);
+    Ok(sort_groups(groups, egid))
+}
+
+#[cfg(all(unix, feature = "process"))]
+fn sort_groups(mut groups: Vec<gid_t>, egid: gid_t) -> Vec<gid_t> {
+    if let Some(index) = groups.iter().position(|&x| x == egid) {
+        groups[..=index].rotate_right(1);
+    } else {
+        groups.insert(0, egid);
     }
-    groups.insert(0, egid);
-    Ok(groups)
+    groups
 }
 
 #[derive(Copy, Clone)]
@@ -307,6 +312,15 @@ pub fn grp2gid(name: &str) -> IOResult<gid_t> {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn test_sort_groups() {
+        assert_eq!(sort_groups(vec![1, 2, 3], 4), vec![4, 1, 2, 3]);
+        assert_eq!(sort_groups(vec![1, 2, 3], 3), vec![3, 1, 2]);
+        assert_eq!(sort_groups(vec![1, 2, 3], 2), vec![2, 1, 3]);
+        assert_eq!(sort_groups(vec![1, 2, 3], 1), vec![1, 2, 3]);
+        assert_eq!(sort_groups(vec![1, 2, 3], 0), vec![0, 1, 2, 3]);
+    }
 
     #[test]
     fn test_entries_get_groups_gnu() {

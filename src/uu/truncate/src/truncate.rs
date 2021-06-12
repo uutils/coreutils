@@ -126,7 +126,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             .help("set or adjust the size of each file according to SIZE, which is in bytes unless --io-blocks is specified")
             .value_name("SIZE")
         )
-        .arg(Arg::with_name(options::ARG_FILES).value_name("FILE").multiple(true).takes_value(true).required(true).min_values(1))
+        .arg(Arg::with_name(options::ARG_FILES)
+             .value_name("FILE")
+             .multiple(true)
+             .takes_value(true)
+             .required(true)
+             .min_values(1))
         .get_matches_from(args);
 
     let files: Vec<String> = matches

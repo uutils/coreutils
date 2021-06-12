@@ -22,14 +22,15 @@ use std::ops::RangeInclusive;
 /// character; octal escape sequences consume 1 to 3 octal digits.
 #[inline]
 fn parse_sequence(s: &str) -> (char, usize) {
-    let c = s.chars().next().expect("invalid escape: empty string");
+    let mut s = s.chars();
+    let c = s.next().expect("invalid escape: empty string");
 
     if ('0'..='7').contains(&c) {
         let mut v = c.to_digit(8).unwrap();
         let mut consumed = 1;
         let bits_per_digit = 3;
 
-        for c in s.chars().skip(1).take(2) {
+        for c in s.take(2) {
             match c.to_digit(8) {
                 Some(c) => {
                     v = (v << bits_per_digit) | c;

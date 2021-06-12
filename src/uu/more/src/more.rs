@@ -32,6 +32,8 @@ use crossterm::{
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
+const BELL: &str = "\x07";
+
 pub mod options {
     pub const SILENT: &str = "silent";
     pub const LOGICAL: &str = "logical";
@@ -53,14 +55,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let matches = App::new(executable!())
         .about("A file perusal filter for CRT viewing.")
         .version(crate_version!())
-        // The commented arguments below are unimplemented:
-        /*
         .arg(
             Arg::with_name(options::SILENT)
                 .short("d")
                 .long(options::SILENT)
                 .help("Display help instead of ringing bell"),
         )
+        // The commented arguments below are unimplemented:
+        /*
         .arg(
             Arg::with_name(options::LOGICAL)
                 .short("f")
@@ -140,6 +142,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .get_matches_from(args);
 
     let mut buff = String::new();
+    let silent = matches.is_present(options::SILENT);
     if let Some(files) = matches.values_of(options::FILES) {
         let mut stdout = setup_term();
         let length = files.len();
@@ -162,14 +165,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             }
             let mut reader = BufReader::new(File::open(file).unwrap());
             reader.read_to_string(&mut buff).unwrap();
-            more(&buff, &mut stdout, next_file.copied());
+            more(&buff, &mut stdout, next_file.copied(), silent);
             buff.clear();
         }
         reset_term(&mut stdout);
     } else if atty::isnt(atty::Stream::Stdin) {
         stdin().read_to_string(&mut buff).unwrap();
         let mut stdout = setup_term();
-        more(&buff, &mut stdout, None);
+        more(&buff, &mut stdout, None, silent);
         reset_term(&mut stdout);
     } else {
         show_usage_error!("bad usage");
@@ -204,13 +207,14 @@ fn reset_term(stdout: &mut std::io::Stdout) {
 #[inline(always)]
 fn reset_term(_: &mut usize) {}
 
-fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>) {
+fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>, silent: bool) {
     let (cols, rows) = terminal::size().unwrap();
     let lines = break_buff(buff, usize::from(cols));
     let line_count: u16 = lines.len().try_into().unwrap();
 
     let mut upper_mark = 0;
     let mut lines_left = line_count.saturating_sub(upper_mark + rows);
+    let mut wrong_key = false;
 
     draw(
         &mut upper_mark,
@@ -219,6 +223,8 @@ fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>) {
         lines.clone(),
         line_count,
         next_file,
+        silent,
+        wrong_key,
     );
 
     let is_last = next_file.is_none();
@@ -237,6 +243,7 @@ fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>) {
 
     loop {
         if event::poll(Duration::from_millis(10)).unwrap() {
+            wrong_key = false;
             match event::read().unwrap() {
                 Event::Key(KeyEvent {
                     code: KeyCode::Char('q'),
@@ -265,7 +272,9 @@ fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>) {
                 }) => {
                     upper_mark = upper_mark.saturating_sub(rows.saturating_sub(1));
                 }
-                _ => continue,
+                _ => {
+                    wrong_key = true;
+                }
             }
             lines_left = line_count.saturating_sub(upper_mark + rows);
             draw(
@@ -275,6 +284,8 @@ fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>) {
                 lines.clone(),
                 line_count,
                 next_file,
+                silent,
+                wrong_key,
             );
 
             if lines_left == 0 {
@@ -287,6 +298,7 @@ fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>) {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn draw(
     upper_mark: &mut u16,
     rows: u16,
@@ -294,6 +306,8 @@ fn draw(
     lines: Vec<String>,
     lc: u16,
     next_file: Option<&str>,
+    silent: bool,
+    wrong_key: bool,
 ) {
     execute!(stdout, terminal::Clear(terminal::ClearType::CurrentLine)).unwrap();
     let (up_mark, lower_mark) = calc_range(*upper_mark, rows, lc);
@@ -308,7 +322,7 @@ fn draw(
             .write_all(format!("\r{}\n", line).as_bytes())
             .unwrap();
     }
-    make_prompt_and_flush(&mut stdout, lower_mark, lc, next_file);
+    make_prompt_and_flush(&mut stdout, lower_mark, lc, next_file, silent, wrong_key);
     *upper_mark = up_mark;
 }
 
@@ -364,8 +378,15 @@ fn calc_range(mut upper_mark: u16, rows: u16, line_count: u16) -> (u16, u16) {
 }
 
 // Make a prompt similar to original more
-fn make_prompt_and_flush(stdout: &mut Stdout, lower_mark: u16, lc: u16, next_file: Option<&str>) {
-    let status = if lower_mark == lc {
+fn make_prompt_and_flush(
+    stdout: &mut Stdout,
+    lower_mark: u16,
+    lc: u16,
+    next_file: Option<&str>,
+    silent: bool,
+    wrong_key: bool,
+) {
+    let status_inner = if lower_mark == lc {
         format!("Next file: {}", next_file.unwrap_or_default())
     } else {
         format!(
@@ -373,11 +394,21 @@ fn make_prompt_and_flush(stdout: &mut Stdout, lower_mark: u16, lc: u16, next_fil
             (lower_mark as f64 / lc as f64 * 100.0).round() as u16
         )
     };
+
+    let status = format!("--More--({})", status_inner);
+
+    let banner = match (silent, wrong_key) {
+        (true, true) => "[Press 'h' for instructions. (unimplemented)]".to_string(),
+        (true, false) => format!("{}[Press space to continue, 'q' to quit.]", status),
+        (false, true) => format!("{}{}", status, BELL),
+        (false, false) => status,
+    };
+
     write!(
         stdout,
-        "\r{}--More--({}){}",
+        "\r{}{}{}",
         Attribute::Reverse,
-        status,
+        banner,
         Attribute::Reset
     )
     .unwrap();

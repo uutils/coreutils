@@ -69,6 +69,22 @@ pub struct CmdResult {
 }
 
 impl CmdResult {
+    pub fn new(
+        tmpd: Option<Rc<TempDir>>,
+        code: Option<i32>,
+        success: bool,
+        stdout: &[u8],
+        stderr: &[u8],
+    ) -> CmdResult {
+        CmdResult {
+            tmpd,
+            code,
+            success,
+            stdout: stdout.to_vec(),
+            stderr: stderr.to_vec(),
+        }
+    }
+
     /// Returns a reference to the program's standard output as a slice of bytes
     pub fn stdout(&self) -> &[u8] {
         &self.stdout

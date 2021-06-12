@@ -137,24 +137,17 @@ impl OdOptions {
 
         let mut label: Option<usize> = None;
 
-        let input_strings = match parse_inputs(&matches) {
-            Ok(CommandLineInputs::FileNames(v)) => v,
-            Ok(CommandLineInputs::FileAndOffset((f, s, l))) => {
+        let parsed_input = parse_inputs(&matches).map_err(|e| format!("Invalid inputs: {}", e))?;
+        let input_strings = match parsed_input {
+            CommandLineInputs::FileNames(v) => v,
+            CommandLineInputs::FileAndOffset((f, s, l)) => {
                 skip_bytes = s;
                 label = l;
                 vec![f]
             }
-            Err(e) => {
-                return Err(format!("Invalid inputs: {}", e));
-            }
         };
 
-        let formats = match parse_format_flags(&args) {
-            Ok(f) => f,
-            Err(e) => {
-                return Err(e);
-            }
-        };
+        let formats = parse_format_flags(&args)?;
 
         let mut line_bytes = matches.value_of(options::WIDTH).map_or(16, |s| {
             if matches.occurrences_of(options::WIDTH) == 0 {

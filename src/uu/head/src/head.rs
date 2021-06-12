@@ -176,19 +176,11 @@ impl HeadOptions {
         options.zeroed = matches.is_present(options::ZERO_NAME);
 
         let mode_and_from_end = if let Some(v) = matches.value_of(options::BYTES_NAME) {
-            match parse_mode(v, Modes::Bytes) {
-                Ok(v) => v,
-                Err(err) => {
-                    return Err(format!("invalid number of bytes: {}", err));
-                }
-            }
+            parse_mode(v, Modes::Bytes)
+                .map_err(|err| format!("invalid number of bytes: {}", err))?
         } else if let Some(v) = matches.value_of(options::LINES_NAME) {
-            match parse_mode(v, Modes::Lines) {
-                Ok(v) => v,
-                Err(err) => {
-                    return Err(format!("invalid number of lines: {}", err));
-                }
-            }
+            parse_mode(v, Modes::Lines)
+                .map_err(|err| format!("invalid number of lines: {}", err))?
         } else {
             (Modes::Lines(10), false)
         };
