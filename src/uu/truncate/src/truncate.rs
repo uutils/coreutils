@@ -11,19 +11,21 @@
 extern crate uucore;
 
 use clap::{crate_version, App, Arg};
+use std::convert::TryFrom;
 use std::fs::{metadata, OpenOptions};
 use std::io::ErrorKind;
 use std::path::Path;
+use uucore::parse_size::{parse_size, ParseSizeError};
 
 #[derive(Debug, Eq, PartialEq)]
 enum TruncateMode {
-    Absolute(u64),
-    Extend(u64),
-    Reduce(u64),
-    AtMost(u64),
-    AtLeast(u64),
-    RoundDown(u64),
-    RoundUp(u64),
+    Absolute(usize),
+    Extend(usize),
+    Reduce(usize),
+    AtMost(usize),
+    AtLeast(usize),
+    RoundDown(usize),
+    RoundUp(usize),
 }
 
 impl TruncateMode {
@@ -38,7 +40,7 @@ impl TruncateMode {
     /// let fsize = 10;
     /// assert_eq!(mode.to_size(fsize), 15);
     /// ```
-    fn to_size(&self, fsize: u64) -> u64 {
+    fn to_size(&self, fsize: usize) -> usize {
         match self {
             TruncateMode::Absolute(size) => *size,
             TruncateMode::Extend(size) => fsize + size,
@@ -58,9 +60,8 @@ pub mod options {
     pub static NO_CREATE: &str = "no-create";
     pub static REFERENCE: &str = "reference";
     pub static SIZE: &str = "size";
+    pub static ARG_FILES: &str = "files";
 }
-
-static ARG_FILES: &str = "files";
 
 fn get_usage() -> String {
     format!("{0} [OPTION]... [FILE]...", executable!())
@@ -113,21 +114,28 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(options::REFERENCE)
             .short("r")
             .long(options::REFERENCE)
+            .required_unless(options::SIZE)
             .help("base the size of each file on the size of RFILE")
             .value_name("RFILE")
         )
         .arg(
             Arg::with_name(options::SIZE)
             .short("s")
-            .long("size")
+            .long(options::SIZE)
+            .required_unless(options::REFERENCE)
             .help("set or adjust the size of each file according to SIZE, which is in bytes unless --io-blocks is specified")
             .value_name("SIZE")
         )
-        .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true).min_values(1))
+        .arg(Arg::with_name(options::ARG_FILES)
+             .value_name("FILE")
+             .multiple(true)
+             .takes_value(true)
+             .required(true)
+             .min_values(1))
         .get_matches_from(args);
 
     let files: Vec<String> = matches
-        .values_of(ARG_FILES)
+        .values_of(options::ARG_FILES)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
@@ -149,8 +157,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     crash!(
                         1,
                         "cannot stat '{}': No such file or directory",
-                        reference.unwrap()
-                    );
+                        reference.unwrap_or_else(|| "".to_string())
+                    ); // TODO: fix '--no-create' see test_reference and test_truncate_bytes_size
                 }
                 _ => crash!(1, "{}", e.to_string()),
             }
@@ -172,10 +180,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 ///
 /// If the file could not be opened, or there was a problem setting the
 /// size of the file.
-fn file_truncate(filename: &str, create: bool, size: u64) -> std::io::Result<()> {
+fn file_truncate(filename: &str, create: bool, size: usize) -> std::io::Result<()> {
     let path = Path::new(filename);
     let f = OpenOptions::new().write(true).create(create).open(path)?;
-    f.set_len(size)
+    f.set_len(u64::try_from(size).unwrap())
 }
 
 /// Truncate files to a size relative to a given file.
@@ -206,9 +214,9 @@ fn truncate_reference_and_size(
             }
             _ => m,
         },
-        Err(_) => crash!(1, "Invalid number: ‘{}’", size_string),
+        Err(e) => crash!(1, "Invalid number: {}", e.to_string()),
     };
-    let fsize = metadata(rfilename)?.len();
+    let fsize = usize::try_from(metadata(rfilename)?.len()).unwrap();
     let tsize = mode.to_size(fsize);
     for filename in &filenames {
         file_truncate(filename, create, tsize)?;
@@ -232,7 +240,7 @@ fn truncate_reference_file_only(
     filenames: Vec<String>,
     create: bool,
 ) -> std::io::Result<()> {
-    let tsize = metadata(rfilename)?.len();
+    let tsize = usize::try_from(metadata(rfilename)?.len()).unwrap();
     for filename in &filenames {
         file_truncate(filename, create, tsize)?;
     }
@@ -261,10 +269,10 @@ fn truncate_size_only(
 ) -> std::io::Result<()> {
     let mode = match parse_mode_and_size(size_string) {
         Ok(m) => m,
-        Err(_) => crash!(1, "Invalid number: ‘{}’", size_string),
+        Err(e) => crash!(1, "Invalid number: {}", e.to_string()),
     };
     for filename in &filenames {
-        let fsize = metadata(filename).map(|m| m.len()).unwrap_or(0);
+        let fsize = usize::try_from(metadata(filename)?.len()).unwrap();
         let tsize = mode.to_size(fsize);
         file_truncate(filename, create, tsize)?;
     }
@@ -290,7 +298,7 @@ fn truncate(
         }
         (Some(rfilename), None) => truncate_reference_file_only(&rfilename, filenames, create),
         (None, Some(size_string)) => truncate_size_only(&size_string, filenames, create),
-        (None, None) => crash!(1, "you must specify either --reference or --size"),
+        (None, None) => crash!(1, "you must specify either --reference or --size"), // this case cannot happen anymore because it's handled by clap
     }
 }
 
@@ -317,113 +325,34 @@ fn is_modifier(c: char) -> bool {
 /// ```rust,ignore
 /// assert_eq!(parse_mode_and_size("+123"), (TruncateMode::Extend, 123));
 /// ```
-fn parse_mode_and_size(size_string: &str) -> Result<TruncateMode, ()> {
+fn parse_mode_and_size(size_string: &str) -> Result<TruncateMode, ParseSizeError> {
     // Trim any whitespace.
-    let size_string = size_string.trim();
+    let mut size_string = size_string.trim();
 
     // Get the modifier character from the size string, if any. For
     // example, if the argument is "+123", then the modifier is '+'.
-    let c = size_string.chars().next().unwrap();
-    let size_string = if is_modifier(c) {
-        &size_string[1..]
+    if let Some(c) = size_string.chars().next() {
+        if is_modifier(c) {
+            size_string = &size_string[1..];
+        }
+        parse_size(size_string).map(match c {
+            '+' => TruncateMode::Extend,
+            '-' => TruncateMode::Reduce,
+            '<' => TruncateMode::AtMost,
+            '>' => TruncateMode::AtLeast,
+            '/' => TruncateMode::RoundDown,
+            '%' => TruncateMode::RoundUp,
+            _ => TruncateMode::Absolute,
+        })
     } else {
-        size_string
-    };
-    parse_size(size_string).map(match c {
-        '+' => TruncateMode::Extend,
-        '-' => TruncateMode::Reduce,
-        '<' => TruncateMode::AtMost,
-        '>' => TruncateMode::AtLeast,
-        '/' => TruncateMode::RoundDown,
-        '%' => TruncateMode::RoundUp,
-        _ => TruncateMode::Absolute,
-    })
-}
-
-/// Parse a size string into a number of bytes.
-///
-/// A size string comprises an integer and an optional unit. The unit
-/// may be K, M, G, T, P, E, Z, or Y (powers of 1024) or KB, MB,
-/// etc. (powers of 1000).
-///
-/// # Errors
-///
-/// This function returns an error if the string does not begin with a
-/// numeral, or if the unit is not one of the supported units described
-/// in the preceding section.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// assert_eq!(parse_size("123").unwrap(), 123);
-/// assert_eq!(parse_size("123K").unwrap(), 123 * 1024);
-/// assert_eq!(parse_size("123KB").unwrap(), 123 * 1000);
-/// ```
-fn parse_size(size: &str) -> Result<u64, ()> {
-    // Get the numeric part of the size argument. For example, if the
-    // argument is "123K", then the numeric part is "123".
-    let numeric_string: String = size.chars().take_while(|c| c.is_digit(10)).collect();
-    let number: u64 = numeric_string.parse().map_err(|_| ())?;
-
-    // Get the alphabetic units part of the size argument and compute
-    // the factor it represents. For example, if the argument is "123K",
-    // then the unit part is "K" and the factor is 1024. This may be the
-    // empty string, in which case, the factor is 1.
-    let n = numeric_string.len();
-    let (base, exponent): (u64, u32) = match &size[n..] {
-        "" => (1, 0),
-        "K" | "k" => (1024, 1),
-        "M" | "m" => (1024, 2),
-        "G" | "g" => (1024, 3),
-        "T" | "t" => (1024, 4),
-        "P" | "p" => (1024, 5),
-        "E" | "e" => (1024, 6),
-        "Z" | "z" => (1024, 7),
-        "Y" | "y" => (1024, 8),
-        "KB" | "kB" => (1000, 1),
-        "MB" | "mB" => (1000, 2),
-        "GB" | "gB" => (1000, 3),
-        "TB" | "tB" => (1000, 4),
-        "PB" | "pB" => (1000, 5),
-        "EB" | "eB" => (1000, 6),
-        "ZB" | "zB" => (1000, 7),
-        "YB" | "yB" => (1000, 8),
-        _ => return Err(()),
-    };
-    let factor = base.pow(exponent);
-    Ok(number * factor)
+        Err(ParseSizeError::ParseFailure(size_string.to_string()))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::parse_mode_and_size;
-    use crate::parse_size;
     use crate::TruncateMode;
-
-    #[test]
-    fn test_parse_size_zero() {
-        assert_eq!(parse_size("0").unwrap(), 0);
-        assert_eq!(parse_size("0K").unwrap(), 0);
-        assert_eq!(parse_size("0KB").unwrap(), 0);
-    }
-
-    #[test]
-    fn test_parse_size_without_factor() {
-        assert_eq!(parse_size("123").unwrap(), 123);
-    }
-
-    #[test]
-    fn test_parse_size_kilobytes() {
-        assert_eq!(parse_size("123K").unwrap(), 123 * 1024);
-        assert_eq!(parse_size("123KB").unwrap(), 123 * 1000);
-    }
-
-    #[test]
-    fn test_parse_size_megabytes() {
-        assert_eq!(parse_size("123").unwrap(), 123);
-        assert_eq!(parse_size("123M").unwrap(), 123 * 1024 * 1024);
-        assert_eq!(parse_size("123MB").unwrap(), 123 * 1000 * 1000);
-    }
 
     #[test]
     fn test_parse_mode_and_size() {

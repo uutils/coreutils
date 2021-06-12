@@ -1,3 +1,8 @@
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
+
 // spell-checker:ignore (vars) zlines
 
 use clap::{crate_version, App, Arg};
@@ -75,7 +80,7 @@ fn app<'a>() -> App<'a, 'a> {
         .arg(
             Arg::with_name(options::QUIET_NAME)
                 .short("q")
-                .long("--quiet")
+                .long("quiet")
                 .visible_alias("silent")
                 .help("never print headers giving file names")
                 .overrides_with_all(&[options::VERBOSE_NAME, options::QUIET_NAME]),
@@ -108,12 +113,7 @@ where
 {
     match parse::parse_num(src) {
         Ok((n, last)) => Ok((closure(n), last)),
-        Err(reason) => match reason {
-            parse::ParseError::Syntax => Err(format!("'{}'", src)),
-            parse::ParseError::Overflow => {
-                Err(format!("'{}': Value too large for defined datatype", src))
-            }
-        },
+        Err(e) => Err(e.to_string()),
     }
 }
 
@@ -466,7 +466,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = match HeadOptions::get_from(args) {
         Ok(o) => o,
         Err(s) => {
-            crash!(EXIT_FAILURE, "head: {}", s);
+            crash!(EXIT_FAILURE, "{}", s);
         }
     };
     match uu_head(&args) {

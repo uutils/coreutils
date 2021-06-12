@@ -43,6 +43,7 @@ use crate::partialreader::*;
 use crate::peekreader::*;
 use crate::prn_char::format_ascii_dump;
 use clap::{self, crate_version, AppSettings, Arg, ArgMatches};
+use uucore::parse_size::ParseSizeError;
 use uucore::InvalidEncodingHandling;
 
 const PEEK_BUFFER_SIZE: usize = 4; // utf-8 can be 4 bytes
@@ -128,13 +129,11 @@ impl OdOptions {
             }
         };
 
-        let mut skip_bytes = matches
-            .value_of(options::SKIP_BYTES)
-            .map(|s| {
-                parse_number_of_bytes(s).map_err(|_| format!("Invalid argument --skip-bytes={}", s))
+        let mut skip_bytes = matches.value_of(options::SKIP_BYTES).map_or(0, |s| {
+            parse_number_of_bytes(s).unwrap_or_else(|e| {
+                crash!(1, "{}", format_error_message(e, s, options::SKIP_BYTES))
             })
-            .transpose()?
-            .unwrap_or(0);
+        });
 
         let mut label: Option<usize> = None;
 
@@ -150,11 +149,14 @@ impl OdOptions {
 
         let formats = parse_format_flags(&args)?;
 
-        let mut line_bytes = match matches.value_of(options::WIDTH) {
-            None => 16,
-            Some(_) if matches.occurrences_of(options::WIDTH) == 0 => 16,
-            Some(s) => s.parse::<usize>().unwrap_or(0),
-        };
+        let mut line_bytes = matches.value_of(options::WIDTH).map_or(16, |s| {
+            if matches.occurrences_of(options::WIDTH) == 0 {
+                return 16;
+            };
+            parse_number_of_bytes(s)
+                .unwrap_or_else(|e| crash!(1, "{}", format_error_message(e, s, options::WIDTH)))
+        });
+
         let min_bytes = formats.iter().fold(1, |max, next| {
             cmp::max(max, next.formatter_item_info.byte_size)
         });
@@ -165,12 +167,11 @@ impl OdOptions {
 
         let output_duplicates = matches.is_present(options::OUTPUT_DUPLICATES);
 
-        let read_bytes = matches
-            .value_of(options::READ_BYTES)
-            .map(|s| {
-                parse_number_of_bytes(s).map_err(|_| format!("Invalid argument --read-bytes={}", s))
+        let read_bytes = matches.value_of(options::READ_BYTES).map(|s| {
+            parse_number_of_bytes(s).unwrap_or_else(|e| {
+                crash!(1, "{}", format_error_message(e, s, options::READ_BYTES))
             })
-            .transpose()?;
+        });
 
         let radix = match matches.value_of(options::ADDRESS_RADIX) {
             None => Radix::Octal,
@@ -251,7 +252,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .short("S")
                 .long(options::STRINGS)
                 .help(
-                    "output strings of at least BYTES graphic chars. 3 is assumed when \
+                    "NotImplemented: output strings of at least BYTES graphic chars. 3 is assumed when \
                      BYTES is not specified.",
                 )
                 .default_value("3")
@@ -441,8 +442,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let od_options = match OdOptions::new(clap_matches, args) {
         Err(s) => {
-            show_usage_error!("{}", s);
-            return 1;
+            crash!(1, "{}", s);
         }
         Ok(o) => o,
     };
@@ -623,4 +623,14 @@ fn open_input_peek_reader(
     let mf = MultifileReader::new(inputs);
     let pr = PartialReader::new(mf, skip_bytes, read_bytes);
     PeekReader::new(pr)
+}
+
+fn format_error_message(error: ParseSizeError, s: &str, option: &str) -> String {
+    // NOTE:
+    // GNU's od echos affected flag, -N or --read-bytes (-j or --skip-bytes, etc.), depending user's selection
+    // GNU's od does distinguish between "invalid (suffix in) argument"
+    match error {
+        ParseSizeError::ParseFailure(_) => format!("invalid --{} argument '{}'", option, s),
+        ParseSizeError::SizeTooBig(_) => format!("--{} argument '{}' too large", option, s),
+    }
 }

@@ -1,5 +1,10 @@
-use std::convert::TryFrom;
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
+
 use std::ffi::OsString;
+use uucore::parse_size::{parse_size, ParseSizeError};
 
 #[derive(PartialEq, Debug)]
 pub enum ParseError {
@@ -92,88 +97,25 @@ pub fn parse_obsolete(src: &str) -> Option<Result<impl Iterator<Item = OsString>
 }
 /// Parses an -c or -n argument,
 /// the bool specifies whether to read from the end
-pub fn parse_num(src: &str) -> Result<(usize, bool), ParseError> {
-    let mut num_start = 0;
-    let (mut chars, all_but_last) = {
-        let mut chars = src.char_indices();
-        let (_, c) = chars.next().ok_or(ParseError::Syntax)?;
-        if c == '-' {
-            num_start += 1;
-            (chars, true)
-        } else {
-            (src.char_indices(), false)
-        }
-    };
-    let mut num_end = 0usize;
-    let mut last_char = 0 as char;
-    let mut num_count = 0usize;
-    for (n, c) in &mut chars {
-        if c.is_numeric() {
-            num_end = n;
-            num_count += 1;
-        } else {
-            last_char = c;
-            break;
-        }
-    }
+pub fn parse_num(src: &str) -> Result<(usize, bool), ParseSizeError> {
+    let mut size_string = src.trim();
+    let mut all_but_last = false;
 
-    let num = if num_count > 0 {
-        Some(
-            src[num_start..=num_end]
-                .parse::<usize>()
-                .map_err(|_| ParseError::Overflow)?,
-        )
-    } else {
-        None
-    };
-
-    if last_char == 0 as char {
-        if let Some(n) = num {
-            Ok((n, all_but_last))
-        } else {
-            Err(ParseError::Syntax)
-        }
-    } else {
-        let base: u128 = match chars.next() {
-            Some((_, c)) => {
-                let b = match c {
-                    'B' if last_char != 'b' => 1000,
-                    'i' if last_char != 'b' => {
-                        if let Some((_, 'B')) = chars.next() {
-                            1024
-                        } else {
-                            return Err(ParseError::Syntax);
-                        }
-                    }
-                    _ => return Err(ParseError::Syntax),
-                };
-                if chars.next().is_some() {
-                    return Err(ParseError::Syntax);
-                } else {
-                    b
-                }
+    if let Some(c) = size_string.chars().next() {
+        if c == '+' || c == '-' {
+            // head: '+' is not documented (8.32 man pages)
+            size_string = &size_string[1..];
+            if c == '-' {
+                all_but_last = true;
             }
-            None => 1024,
-        };
-        let mul = match last_char.to_lowercase().next().unwrap() {
-            'b' => 512,
-            'k' => base.pow(1),
-            'm' => base.pow(2),
-            'g' => base.pow(3),
-            't' => base.pow(4),
-            'p' => base.pow(5),
-            'e' => base.pow(6),
-            'z' => base.pow(7),
-            'y' => base.pow(8),
-            _ => return Err(ParseError::Syntax),
-        };
-        let mul = usize::try_from(mul).map_err(|_| ParseError::Overflow)?;
-        match num.unwrap_or(1).checked_mul(mul) {
-            Some(n) => Ok((n, all_but_last)),
-            None => Err(ParseError::Overflow),
         }
+    } else {
+        return Err(ParseSizeError::ParseFailure(src.to_string()));
     }
+
+    parse_size(size_string).map(|n| (n, all_but_last))
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -189,44 +131,6 @@ mod tests {
     }
     fn obsolete_result(src: &[&str]) -> Option<Result<Vec<String>, ParseError>> {
         Some(Ok(src.iter().map(|s| s.to_string()).collect()))
-    }
-    #[test]
-    #[cfg(not(target_pointer_width = "128"))]
-    fn test_parse_overflow_x64() {
-        assert_eq!(parse_num("1Y"), Err(ParseError::Overflow));
-        assert_eq!(parse_num("1Z"), Err(ParseError::Overflow));
-        assert_eq!(parse_num("100E"), Err(ParseError::Overflow));
-        assert_eq!(parse_num("100000P"), Err(ParseError::Overflow));
-        assert_eq!(parse_num("1000000000T"), Err(ParseError::Overflow));
-        assert_eq!(
-            parse_num("10000000000000000000000"),
-            Err(ParseError::Overflow)
-        );
-    }
-    #[test]
-    #[cfg(target_pointer_width = "32")]
-    fn test_parse_overflow_x32() {
-        assert_eq!(parse_num("1T"), Err(ParseError::Overflow));
-        assert_eq!(parse_num("1000G"), Err(ParseError::Overflow));
-    }
-    #[test]
-    fn test_parse_bad_syntax() {
-        assert_eq!(parse_num("5MiB nonsense"), Err(ParseError::Syntax));
-        assert_eq!(parse_num("Nonsense string"), Err(ParseError::Syntax));
-        assert_eq!(parse_num("5mib"), Err(ParseError::Syntax));
-        assert_eq!(parse_num("biB"), Err(ParseError::Syntax));
-        assert_eq!(parse_num("-"), Err(ParseError::Syntax));
-        assert_eq!(parse_num(""), Err(ParseError::Syntax));
-    }
-    #[test]
-    fn test_parse_numbers() {
-        assert_eq!(parse_num("k"), Ok((1024, false)));
-        assert_eq!(parse_num("MiB"), Ok((1024 * 1024, false)));
-        assert_eq!(parse_num("-5"), Ok((5, true)));
-        assert_eq!(parse_num("b"), Ok((512, false)));
-        assert_eq!(parse_num("-2GiB"), Ok((2 * 1024 * 1024 * 1024, true)));
-        assert_eq!(parse_num("5M"), Ok((5 * 1024 * 1024, false)));
-        assert_eq!(parse_num("5MB"), Ok((5 * 1000 * 1000, false)));
     }
     #[test]
     fn test_parse_numbers_obsolete() {

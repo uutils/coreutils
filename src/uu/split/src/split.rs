@@ -13,11 +13,13 @@ extern crate uucore;
 mod platform;
 
 use clap::{crate_version, App, Arg};
+use std::convert::TryFrom;
 use std::env;
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 use std::{char, fs::remove_file};
+use uucore::parse_size::parse_size;
 
 static NAME: &str = "split";
 
@@ -231,10 +233,9 @@ struct LineSplitter {
 impl LineSplitter {
     fn new(settings: &Settings) -> LineSplitter {
         LineSplitter {
-            lines_per_split: settings
-                .strategy_param
-                .parse()
-                .unwrap_or_else(|e| crash!(1, "invalid number of lines: {}", e)),
+            lines_per_split: settings.strategy_param.parse().unwrap_or_else(|_| {
+                crash!(1, "invalid number of lines: ‘{}’", settings.strategy_param)
+            }),
         }
     }
 }
@@ -276,40 +277,14 @@ struct ByteSplitter {
 
 impl ByteSplitter {
     fn new(settings: &Settings) -> ByteSplitter {
-        // These multipliers are the same as supported by GNU coreutils.
-        let modifiers: Vec<(&str, u128)> = vec![
-            ("K", 1024u128),
-            ("M", 1024 * 1024),
-            ("G", 1024 * 1024 * 1024),
-            ("T", 1024 * 1024 * 1024 * 1024),
-            ("P", 1024 * 1024 * 1024 * 1024 * 1024),
-            ("E", 1024 * 1024 * 1024 * 1024 * 1024 * 1024),
-            ("Z", 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024),
-            ("Y", 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024),
-            ("KB", 1000),
-            ("MB", 1000 * 1000),
-            ("GB", 1000 * 1000 * 1000),
-            ("TB", 1000 * 1000 * 1000 * 1000),
-            ("PB", 1000 * 1000 * 1000 * 1000 * 1000),
-            ("EB", 1000 * 1000 * 1000 * 1000 * 1000 * 1000),
-            ("ZB", 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000),
-            ("YB", 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000),
-        ];
-
-        // This sequential find is acceptable since none of the modifiers are
-        // suffixes of any other modifiers, a la Huffman codes.
-        let (suffix, multiplier) = modifiers
-            .iter()
-            .find(|(suffix, _)| settings.strategy_param.ends_with(suffix))
-            .unwrap_or(&("", 1));
-
-        // Try to parse the actual numeral.
-        let n = &settings.strategy_param[0..(settings.strategy_param.len() - suffix.len())]
-            .parse::<u128>()
-            .unwrap_or_else(|e| crash!(1, "invalid number of bytes: {}", e));
+        let size_string = &settings.strategy_param;
+        let size_num = match parse_size(size_string) {
+            Ok(n) => n,
+            Err(e) => crash!(1, "invalid number of bytes: {}", e.to_string()),
+        };
 
         ByteSplitter {
-            bytes_per_split: n * multiplier,
+            bytes_per_split: u128::try_from(size_num).unwrap(),
         }
     }
 }
