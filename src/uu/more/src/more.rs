@@ -208,12 +208,12 @@ fn reset_term(_: &mut usize) {}
 struct LineStateMachine {
     begin_line: usize,
     total_line: usize,
-    terminal_col: usize,
-    terminal_row: usize,
+    terminal_col: u16,
+    terminal_row: u16,
 }
 
 impl LineStateMachine {
-    pub fn new(terminal_col: usize, terminal_row: usize, total_line: usize) -> Self {
+    pub fn new(terminal_col: u16, terminal_row: u16, total_line: usize) -> Self {
         LineStateMachine {
             begin_line: 0,
             total_line,
@@ -226,28 +226,29 @@ impl LineStateMachine {
         let usable_row = self.terminal_row.saturating_sub(1);
         self.begin_line = self
             .begin_line
-            .saturating_add(usable_row)
-            .min(self.total_line.saturating_sub(usable_row));
+            .saturating_add(usable_row.into())
+            .min(self.total_line.saturating_sub(usable_row.into()));
     }
 
     pub fn retreat_mark(&mut self) {
         let usable_row = self.terminal_row.saturating_sub(1);
-        self.begin_line = self.begin_line.saturating_sub(usable_row).max(0);
+        self.begin_line = self.begin_line.saturating_sub(usable_row.into()).max(0);
     }
 
-    pub fn set_col(&mut self, new_col: usize) {
+    pub fn set_col(&mut self, new_col: u16) {
         self.terminal_col = new_col;
     }
 
-    pub fn set_row(&mut self, new_row: usize) {
+    pub fn set_row(&mut self, new_row: u16) {
         self.terminal_row = new_row;
     }
 
-    pub fn line_marks(&self) -> (usize, usize, usize, usize) {
+    pub fn line_marks(&self) -> (usize, usize, usize, u16) {
         let end_line = self
             .begin_line
-            .saturating_add(self.terminal_row)
-            .saturating_sub(1);
+            .saturating_add(self.terminal_row.into())
+            .saturating_sub(1)
+            .min(self.total_line);
         (
             self.begin_line,
             end_line,
@@ -260,7 +261,7 @@ impl LineStateMachine {
 fn more(buff: &str, mut stdout: &mut Stdout) {
     let (init_term_col, init_term_row) = {
         let (col, row) = terminal::size().unwrap();
-        (usize::from(col), usize::from(row))
+        (col, row)
     };
     let lines = break_buff(buff, init_term_col);
     let line_count = lines.len();
@@ -272,8 +273,11 @@ fn more(buff: &str, mut stdout: &mut Stdout) {
         // The conversion below is safe as long as `line_count` is non-zero since we should have exited if it is.
         // The castign below is also safe as long as `lower_mark` << `line_count`.
         let percent_complete = ((end_line as f64 / line_count as f64) * 100.0) as u16;
-        queue!(stdout, cursor::SavePosition).unwrap();
-        draw_content(&mut stdout, &lines[begin_line..end_line]);
+        queue!(stdout, cursor::MoveTo(0, 0)).unwrap();
+        draw_content(
+            &mut stdout,
+            &lines[begin_line.max(0)..end_line.min(lines.len())],
+        );
         if event::poll(Duration::from_millis(10)).unwrap() {
             match event::read().unwrap() {
                 Event::Key(KeyEvent {
@@ -307,6 +311,7 @@ fn more(buff: &str, mut stdout: &mut Stdout) {
                 Event::Resize(new_col, new_row) => {
                     fsm.set_col(new_col.into());
                     fsm.set_row(new_row.into());
+                    queue!(stdout, terminal::Clear(terminal::ClearType::All)).unwrap();
                 }
                 _ => (),
             }
@@ -327,7 +332,6 @@ fn more(buff: &str, mut stdout: &mut Stdout) {
             )
             .as_str(),
         );
-        queue!(stdout, cursor::RestorePosition).unwrap();
         stdout.flush().unwrap();
     }
 }
@@ -340,7 +344,7 @@ fn draw_content(stdout: &mut std::io::Stdout, lines: &[String]) {
 }
 
 // Break the lines on the cols of the terminal
-fn break_buff(buff: &str, cols: usize) -> Vec<String> {
+fn break_buff(buff: &str, cols: u16) -> Vec<String> {
     let mut lines = Vec::new();
     for l in buff.lines() {
         lines.append(&mut break_line(l, cols));
@@ -348,10 +352,10 @@ fn break_buff(buff: &str, cols: usize) -> Vec<String> {
     lines
 }
 
-fn break_line(line: &str, cols: usize) -> Vec<String> {
+fn break_line(line: &str, cols: u16) -> Vec<String> {
     let width = UnicodeWidthStr::width(line);
     let mut lines = Vec::new();
-    if width < cols {
+    if width < cols.into() {
         lines.push(line.to_string());
         return lines;
     }
@@ -363,7 +367,7 @@ fn break_line(line: &str, cols: usize) -> Vec<String> {
         let width = UnicodeWidthStr::width(grapheme);
         total_width += width;
 
-        if total_width > cols {
+        if total_width > cols.into() {
             lines.push(line[last_index..index].to_string());
             last_index = index;
             total_width = width;
