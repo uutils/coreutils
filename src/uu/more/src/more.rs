@@ -210,7 +210,7 @@ fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>, silent: bo
     let (cols, rows) = terminal::size().unwrap();
     let lines = break_buff(buff, usize::from(cols));
 
-    let mut pager = Pager::new(rows as usize, lines, next_file, silent);
+    let mut pager = Pager::new(rows, lines, next_file, silent);
     pager.draw(stdout, false);
     if pager.should_close() {
         return;
@@ -265,7 +265,7 @@ struct Pager<'a> {
     // The current line at the top of the screen
     upper_mark: usize,
     // The number of rows that fit on the screen
-    content_rows: usize,
+    content_rows: u16,
     lines: Vec<String>,
     next_file: Option<&'a str>,
     line_count: usize,
@@ -273,7 +273,7 @@ struct Pager<'a> {
 }
 
 impl<'a> Pager<'a> {
-    fn new(rows: usize, lines: Vec<String>, next_file: Option<&'a str>, silent: bool) -> Self {
+    fn new(rows: u16, lines: Vec<String>, next_file: Option<&'a str>, silent: bool) -> Self {
         let line_count = lines.len();
         Self {
             upper_mark: 0,
@@ -287,23 +287,25 @@ impl<'a> Pager<'a> {
 
     fn should_close(&mut self) -> bool {
         self.upper_mark
-            .saturating_add(self.content_rows)
+            .saturating_add(self.content_rows.into())
             .eq(&self.line_count)
     }
 
     fn page_down(&mut self) {
         self.upper_mark = self
             .upper_mark
-            .saturating_add(self.content_rows)
-            .min(self.line_count.saturating_sub(self.content_rows));
+            .saturating_add(self.content_rows.into())
+            .min(self.line_count.saturating_sub(self.content_rows.into()));
     }
 
     fn page_up(&mut self) {
-        self.upper_mark = self.upper_mark.saturating_sub(self.content_rows);
+        self.upper_mark = self.upper_mark.saturating_sub(self.content_rows.into());
     }
 
     fn draw(&self, stdout: &mut std::io::Stdout, wrong_key: bool) {
-        let lower_mark = self.line_count.min(self.upper_mark + self.content_rows);
+        let lower_mark = self
+            .line_count
+            .min(self.upper_mark.saturating_add(self.content_rows.into()));
         self.draw_lines(stdout);
         self.draw_prompt(stdout, lower_mark, wrong_key);
         stdout.flush().unwrap();
@@ -315,7 +317,7 @@ impl<'a> Pager<'a> {
             .lines
             .iter()
             .skip(self.upper_mark)
-            .take(self.content_rows);
+            .take(self.content_rows.into());
 
         for line in displayed_lines {
             stdout
