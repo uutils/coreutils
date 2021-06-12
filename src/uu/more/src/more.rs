@@ -251,6 +251,10 @@ fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>, silent: bo
                 }) => {
                     pager.page_up();
                 }
+                Event::Resize(col, row) => {
+                    pager.page_resize(col, row);
+                }
+                // FIXME: Need to fix, there are more than just unknown keys.
                 _ => {
                     wrong_key = true;
                 }
@@ -300,6 +304,11 @@ impl<'a> Pager<'a> {
 
     fn page_up(&mut self) {
         self.upper_mark = self.upper_mark.saturating_sub(self.content_rows.into());
+    }
+
+    // TODO: Deal with column size changes.
+    fn page_resize(&mut self, _: u16, row: u16) {
+        self.content_rows = row.saturating_sub(1);
     }
 
     fn draw(&self, stdout: &mut std::io::Stdout, wrong_key: bool) {
