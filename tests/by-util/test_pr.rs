@@ -266,7 +266,10 @@ fn test_with_stdin() {
         .pipe_in_fixture("stdin.log")
         .args(&["--pages=1:2", "-n", "-"])
         .run()
-        .stdout_is_templated_fixture_any(expected_file_path, &valid_last_modified_template_vars(start));
+        .stdout_is_templated_fixture_any(
+            expected_file_path,
+            &valid_last_modified_template_vars(start),
+        );
 }
 
 #[test]
@@ -344,13 +347,19 @@ fn test_with_mpr() {
     new_ucmd!()
         .args(&["--pages=1:2", "-m", "-n", test_file_path, test_file_path1])
         .succeeds()
-        .stdout_is_templated_fixture_any(expected_test_file_path, &valid_last_modified_template_vars(start));
+        .stdout_is_templated_fixture_any(
+            expected_test_file_path,
+            &valid_last_modified_template_vars(start),
+        );
 
     let start = Local::now();
     new_ucmd!()
         .args(&["--pages=2:4", "-m", "-n", test_file_path, test_file_path1])
         .succeeds()
-        .stdout_is_templated_fixture_any(expected_test_file_path1, &valid_last_modified_template_vars(start));
+        .stdout_is_templated_fixture_any(
+            expected_test_file_path1,
+            &valid_last_modified_template_vars(start),
+        );
 
     let start = Local::now();
     new_ucmd!()
@@ -365,7 +374,10 @@ fn test_with_mpr() {
             test_file_path,
         ])
         .succeeds()
-        .stdout_is_templated_fixture_any(expected_test_file_path2, &valid_last_modified_template_vars(start));
+        .stdout_is_templated_fixture_any(
+            expected_test_file_path2,
+            &valid_last_modified_template_vars(start),
+        );
 }
 
 #[test]
@@ -461,5 +473,8 @@ fn test_with_join_lines_option() {
     scenario
         .args(&["+1:2", "-J", "-m", test_file_1, test_file_2])
         .run()
-        .stdout_is_templated_fixture_any(expected_file_path, &valid_last_modified_template_vars(start));
+        .stdout_is_templated_fixture_any(
+            expected_file_path,
+            &valid_last_modified_template_vars(start),
+        );
 }
