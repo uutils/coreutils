@@ -599,11 +599,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let block_size = u64::try_from(read_block_size(matches.value_of(options::BLOCK_SIZE))).unwrap();
 
-    let threshold = match matches.value_of(options::THRESHOLD) {
-        Some(s) => Threshold::from_str(s)
-            .unwrap_or_else(|e| crash!(1, "{}", format_error_message(e, s, options::THRESHOLD))),
-        None => Threshold(None, false),
-    };
+    let threshold = matches.value_of(options::THRESHOLD).map(|s| {
+        Threshold::from_str(s)
+            .unwrap_or_else(|e| crash!(1, "{}", format_error_message(e, s, options::THRESHOLD)))
+    });
 
     let multiplier: u64 = if matches.is_present(options::SI) {
         1000
@@ -673,7 +672,8 @@ Try '{} --help' for more information.",
                         // See: http://linux.die.net/man/2/stat
                         stat.blocks * 512
                     };
-                    if threshold.should_exclude(size) {
+
+                    if threshold.map_or(false, |threshold| threshold.should_exclude(size)) {
                         continue;
                     }
 
@@ -743,31 +743,33 @@ Try '{} --help' for more information.",
     0
 }
 
-struct Threshold(Option<u64>, bool);
+#[derive(Clone, Copy)]
+enum Threshold {
+    Lower(u64),
+    Upper(u64),
+}
 
 impl FromStr for Threshold {
     type Err = ParseSizeError;
 
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        let offset = if s.starts_with('-') || s.starts_with('+') {
-            1
-        } else {
-            0
-        };
-        let sz = parse_size(&s[offset..])?;
+        let offset = if s.starts_with(&['-', '+'][..]) { 1 } else { 0 };
 
-        Ok(Threshold(
-            Some(u64::try_from(sz).unwrap()),
-            s.starts_with('-'),
-        ))
+        let size = u64::try_from(parse_size(&s[offset..])?).unwrap();
+
+        if s.starts_with('-') {
+            Ok(Threshold::Upper(size))
+        } else {
+            Ok(Threshold::Lower(size))
+        }
     }
 }
 
 impl Threshold {
-    fn should_exclude(&self, sz: u64) -> bool {
+    fn should_exclude(&self, size: u64) -> bool {
         match *self {
-            Threshold(Some(th), is_upper) => (is_upper && sz > th) || (!is_upper && sz < th),
-            Threshold(None, _) => false,
+            Threshold::Upper(threshold) => size > threshold,
+            Threshold::Lower(threshold) => size < threshold,
         }
     }
 }
