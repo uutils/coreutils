@@ -285,14 +285,12 @@ fn parse_range(input_range: &str) -> Result<(usize, usize), String> {
     if split.len() != 2 {
         Err(format!("invalid input range: '{}'", input_range))
     } else {
-        let begin = match split[0].parse::<usize>() {
-            Ok(m) => m,
-            Err(_) => return Err(format!("invalid input range: '{}'", split[0])),
-        };
-        let end = match split[1].parse::<usize>() {
-            Ok(m) => m,
-            Err(_) => return Err(format!("invalid input range: '{}'", split[1])),
-        };
+        let begin = split[0]
+            .parse::<usize>()
+            .map_err(|_| format!("invalid input range: '{}'", split[0]))?;
+        let end = split[1]
+            .parse::<usize>()
+            .map_err(|_| format!("invalid input range: '{}'", split[1]))?;
         Ok((begin, end + 1))
     }
 }

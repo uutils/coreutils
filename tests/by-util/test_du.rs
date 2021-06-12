@@ -1,3 +1,8 @@
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
+
 // spell-checker:ignore (paths) sublink subwords
 
 use crate::common::util::*;
@@ -71,6 +76,23 @@ fn _du_basics_subdir(s: &str) {
     } else {
         assert_eq!(s, "0\tsubdir/deeper\n");
     }
+}
+
+#[test]
+fn test_du_invalid_size() {
+    new_ucmd!()
+        .arg("--block-size=1fb4t")
+        .arg("/tmp")
+        .fails()
+        .code_is(1)
+        .stderr_only("du: invalid --block-size argument '1fb4t'");
+    #[cfg(not(target_pointer_width = "128"))]
+    new_ucmd!()
+        .arg("--block-size=1Y")
+        .arg("/tmp")
+        .fails()
+        .code_is(1)
+        .stderr_only("du: --block-size argument '1Y' too large");
 }
 
 #[test]
@@ -311,4 +333,21 @@ fn _du_no_permission(s: &str) {
 #[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))]
 fn _du_no_permission(s: &str) {
     assert_eq!(s, "4\tsubdir/links\n");
+}
+
+#[test]
+fn test_du_one_file_system() {
+    let scene = TestScenario::new(util_name!());
+
+    let result = scene.ucmd().arg("-x").arg(SUB_DIR).succeeds();
+
+    #[cfg(target_os = "linux")]
+    {
+        let result_reference = scene.cmd("du").arg("-x").arg(SUB_DIR).run();
+        if result_reference.succeeded() {
+            assert_eq!(result.stdout_str(), result_reference.stdout_str());
+            return;
+        }
+    }
+    _du_basics_subdir(result.stdout_str());
 }

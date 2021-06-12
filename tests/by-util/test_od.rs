@@ -1,3 +1,8 @@
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
+
 extern crate unindent;
 
 use self::unindent::*;
@@ -803,4 +808,41 @@ fn test_traditional_only_label() {
             (0000042)
             ",
         ));
+}
+
+#[test]
+fn test_od_invalid_bytes() {
+    const INVALID_SIZE: &str = "1fb4t";
+    const BIG_SIZE: &str = "1Y";
+
+    // NOTE:
+    // GNU's od (8.32) with option '--width' does not accept 'Y' as valid suffix.
+    // According to the man page it should be valid in the same way it is valid for
+    // '--read-bytes' and '--skip-bytes'.
+
+    let options = [
+        "--read-bytes",
+        "--skip-bytes",
+        "--width",
+        // "--strings", // TODO: consider testing here once '--strings' is implemented
+    ];
+    for option in &options {
+        new_ucmd!()
+            .arg(format!("{}={}", option, INVALID_SIZE))
+            .arg("file")
+            .fails()
+            .code_is(1)
+            .stderr_only(format!(
+                "od: invalid {} argument '{}'",
+                option, INVALID_SIZE
+            ));
+
+        #[cfg(not(target_pointer_width = "128"))]
+        new_ucmd!()
+            .arg(format!("{}={}", option, BIG_SIZE))
+            .arg("file")
+            .fails()
+            .code_is(1)
+            .stderr_only(format!("od: {} argument '{}' too large", option, BIG_SIZE));
+    }
 }

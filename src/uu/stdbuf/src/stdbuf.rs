@@ -19,6 +19,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use tempfile::tempdir;
 use tempfile::TempDir;
+use uucore::parse_size::parse_size;
 use uucore::InvalidEncodingHandling;
 
 static ABOUT: &str =
@@ -55,7 +56,7 @@ const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf
 enum BufferType {
     Default,
     Line,
-    Size(u64),
+    Size(usize),
 }
 
 struct ProgramOptions {
@@ -104,41 +105,6 @@ fn preload_strings() -> (&'static str, &'static str) {
     crash!(1, "Command not supported for this operating system!")
 }
 
-fn parse_size(size: &str) -> Option<u64> {
-    let ext = size.trim_start_matches(|c: char| c.is_digit(10));
-    let num = size.trim_end_matches(char::is_alphabetic);
-    let mut recovered = num.to_owned();
-    recovered.push_str(ext);
-    if recovered != size {
-        return None;
-    }
-    let buf_size: u64 = match num.parse().ok() {
-        Some(m) => m,
-        None => return None,
-    };
-    let (power, base): (u32, u64) = match ext {
-        "" => (0, 0),
-        "KB" => (1, 1024),
-        "K" => (1, 1000),
-        "MB" => (2, 1024),
-        "M" => (2, 1000),
-        "GB" => (3, 1024),
-        "G" => (3, 1000),
-        "TB" => (4, 1024),
-        "T" => (4, 1000),
-        "PB" => (5, 1024),
-        "P" => (5, 1000),
-        "EB" => (6, 1024),
-        "E" => (6, 1000),
-        "ZB" => (7, 1024),
-        "Z" => (7, 1000),
-        "YB" => (8, 1024),
-        "Y" => (8, 1000),
-        _ => return None,
-    };
-    Some(buf_size * base.pow(power))
-}
-
 fn check_option(matches: &ArgMatches, name: &str) -> Result<BufferType, ProgramOptionsError> {
     match matches.value_of(name) {
         Some(value) => match value {
@@ -151,13 +117,10 @@ fn check_option(matches: &ArgMatches, name: &str) -> Result<BufferType, ProgramO
                     Ok(BufferType::Line)
                 }
             }
-            x => {
-                let size = match parse_size(x) {
-                    Some(m) => m,
-                    None => return Err(ProgramOptionsError(format!("invalid mode {}", x))),
-                };
-                Ok(BufferType::Size(size))
-            }
+            x => parse_size(x).map_or_else(
+                |e| crash!(125, "invalid mode {}", e),
+                |m| Ok(BufferType::Size(m)),
+            ),
         },
         None => Ok(BufferType::Default),
     }

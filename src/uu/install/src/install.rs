@@ -299,29 +299,17 @@ fn behavior(matches: &ArgMatches) -> Result<Behavior, i32> {
     let considering_dir: bool = MainFunction::Directory == main_function;
 
     let specified_mode: Option<u32> = if matches.is_present(OPT_MODE) {
-        match matches.value_of(OPT_MODE) {
-            Some(x) => match mode::parse(x, considering_dir) {
-                Ok(y) => Some(y),
-                Err(err) => {
-                    show_error!("Invalid mode string: {}", err);
-                    return Err(1);
-                }
-            },
-            None => {
-                return Err(1);
-            }
-        }
+        let x = matches.value_of(OPT_MODE).ok_or(1)?;
+        Some(mode::parse(x, considering_dir).map_err(|err| {
+            show_error!("Invalid mode string: {}", err);
+            1
+        })?)
     } else {
         None
     };
 
     let backup_suffix = if matches.is_present(OPT_SUFFIX) {
-        match matches.value_of(OPT_SUFFIX) {
-            Some(x) => x,
-            None => {
-                return Err(1);
-            }
-        }
+        matches.value_of(OPT_SUFFIX).ok_or(1)?
     } else {
         "~"
     };

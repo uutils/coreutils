@@ -82,13 +82,10 @@ fn load_config_file(opts: &mut Options) -> Result<(), i32> {
             Ini::load_from_file(file)
         };
 
-        let conf = match conf {
-            Ok(config) => config,
-            Err(error) => {
-                eprintln!("env: error: \"{}\": {}", file, error);
-                return Err(1);
-            }
-        };
+        let conf = conf.map_err(|error| {
+            eprintln!("env: error: \"{}\": {}", file, error);
+            1
+        })?;
 
         for (_, prop) in &conf {
             // ignore all INI section lines (treat them as comments)
@@ -256,13 +253,10 @@ fn run_env(args: impl uucore::Args) -> Result<(), i32> {
 
         // FIXME: this should just use execvp() (no fork()) on Unix-like systems
         match Command::new(&*prog).args(args).status() {
-            Ok(exit) => {
-                if !exit.success() {
-                    return Err(exit.code().unwrap());
-                }
-            }
+            Ok(exit) if !exit.success() => return Err(exit.code().unwrap()),
             Err(ref err) if err.kind() == io::ErrorKind::NotFound => return Err(127),
             Err(_) => return Err(126),
+            Ok(_) => (),
         }
     } else {
         // no program provided, so just dump all env vars to stdout
