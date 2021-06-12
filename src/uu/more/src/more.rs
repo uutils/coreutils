@@ -206,37 +206,33 @@ fn reset_term(stdout: &mut std::io::Stdout) {
 fn reset_term(_: &mut usize) {}
 
 struct LineStateMachine {
-    upper_mark: usize,
-    lower_mark: usize,
-    line_count: usize,
-    usable_row: usize,
-    terminal_row: usize,
+    begin_line: usize,
+    total_line: usize,
     terminal_col: usize,
+    terminal_row: usize,
 }
 
 impl LineStateMachine {
-    pub fn new(terminal_col: usize, terminal_row: usize, line_count: usize) -> Self {
+    pub fn new(terminal_col: usize, terminal_row: usize, total_line: usize) -> Self {
         LineStateMachine {
-            upper_mark: 0,
-            lower_mark: terminal_row.saturating_sub(1).min(line_count),
-            line_count,
-            usable_row: terminal_row.saturating_sub(1),
-            terminal_row,
+            begin_line: 0,
+            total_line,
             terminal_col,
+            terminal_row,
         }
     }
 
     pub fn advance_mark(&mut self) {
-        self.upper_mark = self
-            .upper_mark
-            .saturating_add(self.usable_row)
-            .min(self.line_count.saturating_sub(self.usable_row));
-        self.lower_mark = self.upper_mark.saturating_add(self.usable_row);
+        let usable_row = self.terminal_row.saturating_sub(1);
+        self.begin_line = self
+            .begin_line
+            .saturating_add(usable_row)
+            .min(self.total_line.saturating_sub(usable_row));
     }
 
     pub fn retreat_mark(&mut self) {
-        self.upper_mark = self.upper_mark.saturating_sub(self.usable_row).max(0);
-        self.lower_mark = self.upper_mark.saturating_add(self.usable_row);
+        let usable_row = self.terminal_row.saturating_sub(1);
+        self.begin_line = self.begin_line.saturating_sub(usable_row).max(0);
     }
 
     pub fn set_col(&mut self, new_col: usize) {
@@ -245,35 +241,39 @@ impl LineStateMachine {
 
     pub fn set_row(&mut self, new_row: usize) {
         self.terminal_row = new_row;
-        self.usable_row = new_row.saturating_sub(1);
     }
 
-    pub fn line_marks(&self) -> (usize, usize, usize) {
+    pub fn line_marks(&self) -> (usize, usize, usize, usize) {
+        let end_line = self
+            .begin_line
+            .saturating_add(self.terminal_row)
+            .saturating_sub(1);
         (
-            self.upper_mark,
-            self.lower_mark,
-            self.line_count.saturating_sub(self.lower_mark),
+            self.begin_line,
+            end_line,
+            self.total_line.saturating_sub(end_line),
+            self.terminal_row,
         )
     }
 }
 
 fn more(buff: &str, mut stdout: &mut Stdout) {
-    let (terminal_col, terminal_row) = {
+    let (init_term_col, init_term_row) = {
         let (col, row) = terminal::size().unwrap();
         (usize::from(col), usize::from(row))
     };
-    let lines = break_buff(buff, terminal_col);
+    let lines = break_buff(buff, init_term_col);
     let line_count = lines.len();
 
-    let mut fsm = LineStateMachine::new(terminal_col, terminal_row, line_count);
+    let mut fsm = LineStateMachine::new(init_term_col, init_term_row, line_count);
     let mut last_command = None;
     loop {
-        let (upper_mark, lower_mark, lines_left) = fsm.line_marks();
+        let (begin_line, end_line, lines_left, terminal_row) = fsm.line_marks();
         // The conversion below is safe as long as `line_count` is non-zero since we should have exited if it is.
         // The castign below is also safe as long as `lower_mark` << `line_count`.
-        let percent_complete = ((lower_mark as f64 / line_count as f64) * 100.0) as u16;
+        let percent_complete = ((end_line as f64 / line_count as f64) * 100.0) as u16;
         queue!(stdout, cursor::SavePosition).unwrap();
-        draw_content(&mut stdout, &lines[upper_mark..lower_mark]);
+        draw_content(&mut stdout, &lines[begin_line..end_line]);
         if event::poll(Duration::from_millis(10)).unwrap() {
             match event::read().unwrap() {
                 Event::Key(KeyEvent {
@@ -314,15 +314,15 @@ fn more(buff: &str, mut stdout: &mut Stdout) {
         draw_prompt(
             &mut stdout,
             format!(
-                "{}% terminal-rows:{} line-count:{} lines-left:{} upper-mark:{}=>{:?} lower-mark:{}=>{:?} Unknown command:{:?}",
+                "{}% terminal-rows:{} line-count:{} lines-left:{} begin-line:{}=>{:?} end-line:{}=>{:?} Unknown command:{:?}",
                 percent_complete,
                 terminal_row,
                 line_count,
                 lines_left,
-                upper_mark,
-                lines.get(upper_mark),
-                lower_mark,
-                lines.get(lower_mark),
+                begin_line,
+                lines.get(begin_line),
+                end_line,
+                lines.get(end_line),
                 last_command
             )
             .as_str(),
