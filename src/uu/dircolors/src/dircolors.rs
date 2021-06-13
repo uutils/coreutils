@@ -16,25 +16,15 @@ use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
-use clap::{crate_version, App, Arg};
-
-mod options {
-    pub const BOURNE_SHELL: &str = "bourne-shell";
-    pub const C_SHELL: &str = "c-shell";
-    pub const PRINT_DATABASE: &str = "print-database";
-    pub const FILE: &str = "FILE";
-}
-
-static SYNTAX: &str = "[OPTION]... [FILE]";
-static SUMMARY: &str = "Output commands to set the LS_COLORS environment variable.";
-static LONG_HELP: &str = "
- If FILE is specified, read it to determine which colors to use for which
- file types and extensions.  Otherwise, a precompiled database is used.
- For details on the format of these files, run 'dircolors --print-database'
-";
-
+mod app;
 mod colors;
+
+use crate::app::get_app;
+use crate::app::options;
+
 use self::colors::INTERNAL_DB;
+
+const SYNTAX: &str = "[OPTION]... [FILE]";
 
 #[derive(PartialEq, Debug)]
 pub enum OutputFmt {
@@ -73,35 +63,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let usage = get_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(SUMMARY)
+    let matches = get_app(executable!())
         .usage(&usage[..])
-        .after_help(LONG_HELP)
-        .arg(
-            Arg::with_name(options::BOURNE_SHELL)
-                .long("sh")
-                .short("b")
-                .visible_alias("bourne-shell")
-                .help("output Bourne shell code to set LS_COLORS")
-                .display_order(1),
-        )
-        .arg(
-            Arg::with_name(options::C_SHELL)
-                .long("csh")
-                .short("c")
-                .visible_alias("c-shell")
-                .help("output C shell code to set LS_COLORS")
-                .display_order(2),
-        )
-        .arg(
-            Arg::with_name(options::PRINT_DATABASE)
-                .long("print-database")
-                .short("p")
-                .help("print the byte counts")
-                .display_order(3),
-        )
-        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
         .get_matches_from(&args);
 
     let files = matches
