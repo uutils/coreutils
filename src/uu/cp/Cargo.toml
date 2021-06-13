@@ -27,6 +27,10 @@ uucore = { version=">=0.0.8", package="uucore", path="../../uucore", features=["
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 walkdir = "2.2"
 
+[build-dependencies]
+clap = "2.33"
+uucore = { version=">=0.0.8", package="uucore", path="../../uucore", features=["fs"] }
+
 [target.'cfg(target_os = "linux")'.dependencies]
 ioctl-sys = "0.5.2"
 
