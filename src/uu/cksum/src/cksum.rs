@@ -7,22 +7,21 @@
 
 // spell-checker:ignore (ToDO) fname
 
+mod app;
+
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
 use std::fs::File;
 use std::io::{self, stdin, BufReader, Read};
 use std::path::Path;
 use uucore::InvalidEncodingHandling;
 
+use crate::app::{get_app, options};
+
 // NOTE: CRC_TABLE_LEN *must* be <= 256 as we cast 0..CRC_TABLE_LEN to u8
 const CRC_TABLE_LEN: usize = 256;
 const CRC_TABLE: [u32; CRC_TABLE_LEN] = generate_crc_table();
-
-const NAME: &str = "cksum";
-const SYNTAX: &str = "[OPTIONS] [FILE]...";
-const SUMMARY: &str = "Print CRC and size for each file";
 
 // this is basically a hack to get "loops" to work on Rust 1.33.  Once we update to Rust 1.46 or
 // greater, we can just use while loops
@@ -171,22 +170,12 @@ fn cksum(fname: &str) -> io::Result<(u32, usize)> {
     }
 }
 
-mod options {
-    pub static FILE: &str = "file";
-}
-
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let matches = App::new(executable!())
-        .name(NAME)
-        .version(crate_version!())
-        .about(SUMMARY)
-        .usage(SYNTAX)
-        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
-        .get_matches_from(args);
+    let matches = get_app(executable!()).get_matches_from(args);
 
     let files: Vec<String> = match matches.values_of(options::FILE) {
         Some(v) => v.clone().map(|v| v.to_owned()).collect(),
