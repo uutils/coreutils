@@ -21,6 +21,9 @@ rust-ini = "0.13.0"
 uucore = { version=">=0.0.8", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
+[build-dependencies]
+clap = "2.33"
+
 [[bin]]
 name = "env"
 path = "src/main.rs"
