@@ -10,25 +10,16 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
 use uucore::InvalidEncodingHandling;
 
+use crate::app::{get_app, options};
+
 const TAB_WIDTH: usize = 8;
 
-static NAME: &str = "fold";
-static SYNTAX: &str = "[OPTION]... [FILE]...";
-static SUMMARY: &str = "Writes each file (or standard input if no files are given)
- to standard output whilst breaking long lines";
-
-mod options {
-    pub const BYTES: &str = "bytes";
-    pub const SPACES: &str = "spaces";
-    pub const WIDTH: &str = "width";
-    pub const FILE: &str = "file";
-}
+mod app;
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args
@@ -36,39 +27,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .accept_any();
 
     let (args, obs_width) = handle_obsolete(&args[..]);
-    let matches = App::new(executable!())
-        .name(NAME)
-        .version(crate_version!())
-        .usage(SYNTAX)
-        .about(SUMMARY)
-        .arg(
-            Arg::with_name(options::BYTES)
-                .long(options::BYTES)
-                .short("b")
-                .help(
-                    "count using bytes rather than columns (meaning control characters \
-                     such as newline are not treated specially)",
-                )
-                .takes_value(false),
-        )
-        .arg(
-            Arg::with_name(options::SPACES)
-                .long(options::SPACES)
-                .short("s")
-                .help("break lines at word boundaries rather than a hard cut-off")
-                .takes_value(false),
-        )
-        .arg(
-            Arg::with_name(options::WIDTH)
-                .long(options::WIDTH)
-                .short("w")
-                .help("set WIDTH as the maximum line width rather than 80")
-                .value_name("WIDTH")
-                .allow_hyphen_values(true)
-                .takes_value(true),
-        )
-        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
-        .get_matches_from(args);
+    let matches = get_app(executable!()).get_matches_from(args);
 
     let bytes = matches.is_present(options::BYTES);
     let spaces = matches.is_present(options::SPACES);
