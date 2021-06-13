@@ -5,19 +5,15 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+mod app;
+
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
 use std::path::Path;
 use uucore::InvalidEncodingHandling;
 
-static ABOUT: &str = "strip last component from file name";
-
-mod options {
-    pub const ZERO: &str = "zero";
-    pub const DIR: &str = "dir";
-}
+use crate::app::{get_app, options};
 
 fn get_usage() -> String {
     format!("{0} [OPTION] NAME...", executable!())
@@ -38,18 +34,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let after_help = get_long_usage();
 
-    let matches = App::new(executable!())
-        .about(ABOUT)
+    let matches = get_app(executable!())
         .usage(&usage[..])
         .after_help(&after_help[..])
-        .version(crate_version!())
-        .arg(
-            Arg::with_name(options::ZERO)
-                .long(options::ZERO)
-                .short("z")
-                .help("separate output with NUL rather than newline"),
-        )
-        .arg(Arg::with_name(options::DIR).hidden(true).multiple(true))
         .get_matches_from(args);
 
     let separator = if matches.is_present(options::ZERO) {
