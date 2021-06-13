@@ -22,6 +22,9 @@ memchr = "2"
 bstr = "0.2"
 atty = "0.2"
 
+[build-dependencies]
+clap = "2.33"
+
 [[bin]]
 name = "cut"
 path = "src/main.rs"
