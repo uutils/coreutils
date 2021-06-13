@@ -311,6 +311,13 @@ ifeq (${MULTICALL}, y)
 else
 	$(foreach prog, $(INSTALLEES), \
 		$(INSTALL) $(BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog);)
+	$(foreach prog, $(INSTALLEES), \
+		$(if $(wildcard $(BUILDDIR)/build/*/out/$(PROG_PREFIX)$(prog).bash), \
+			$(INSTALL) $(wildcard $(BUILDDIR)/build/*/out/_$(PROG_PREFIX)$(prog)) $(DESTDIR)$(PREFIX)/share/zsh/site-functions/_$(PROG_PREFIX)$(prog); \
+			$(INSTALL) $(wildcard $(BUILDDIR)/build/*/out/$(PROG_PREFIX)$(prog).bash) $(DESTDIR)$(PREFIX)/share/bash-completion/completions/$(PROG_PREFIX)$(prog); \
+			$(INSTALL) $(wildcard $(BUILDDIR)/build/*/out/$(PROG_PREFIX)$(prog).fish) $(DESTDIR)$(PREFIX)/share/fish/vendor_completions.d/$(PROG_PREFIX)$(prog).fish; \
+		) \
+	)
 endif
 	$(foreach man, $(filter $(INSTALLEES), $(basename $(notdir $(wildcard $(DOCSDIR)/_build/man/*)))), \
 		cat $(DOCSDIR)/_build/man/$(man).1 | gzip > $(INSTALLDIR_MAN)/$(PROG_PREFIX)$(man).1.gz &&) :
