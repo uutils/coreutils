@@ -16,7 +16,8 @@ use std::fs::File;
 use std::io::{BufReader, Stdin};
 use std::path::Path;
 
-use clap::{App, Arg};
+pub use crate::app::get_app;
+use crate::app::options;
 
 // Config.
 pub struct Config {
@@ -24,13 +25,6 @@ pub struct Config {
     pub ignore_garbage: bool,
     pub wrap_cols: Option<usize>,
     pub to_read: Option<String>,
-}
-
-pub mod options {
-    pub static DECODE: &str = "decode";
-    pub static WRAP: &str = "wrap";
-    pub static IGNORE_GARBAGE: &str = "ignore-garbage";
-    pub static FILE: &str = "file";
 }
 
 impl Config {
@@ -78,35 +72,7 @@ pub fn parse_base_cmd_args(
     about: &str,
     usage: &str,
 ) -> Result<Config, String> {
-    let app = App::new(name)
-        .version(version)
-        .about(about)
-        .usage(usage)
-        // Format arguments.
-        .arg(
-            Arg::with_name(options::DECODE)
-                .short("d")
-                .long(options::DECODE)
-                .help("decode data"),
-        )
-        .arg(
-            Arg::with_name(options::IGNORE_GARBAGE)
-                .short("i")
-                .long(options::IGNORE_GARBAGE)
-                .help("when decoding, ignore non-alphabetic characters"),
-        )
-        .arg(
-            Arg::with_name(options::WRAP)
-                .short("w")
-                .long(options::WRAP)
-                .takes_value(true)
-                .help(
-                    "wrap encoded lines after COLS character (default 76, 0 to disable wrapping)",
-                ),
-        )
-        // "multiple" arguments are used to check whether there is more than one
-        // file passed in.
-        .arg(Arg::with_name(options::FILE).index(1).multiple(true));
+    let app = get_app(name).version(version).about(about).usage(usage);
     let arg_list = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
