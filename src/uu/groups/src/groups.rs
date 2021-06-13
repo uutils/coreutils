@@ -12,10 +12,9 @@
 extern crate uucore;
 use uucore::entries::{get_groups_gnu, gid2grp, Locate, Passwd};
 
-use clap::{crate_version, App, Arg};
+use crate::app::{get_app, OPT_USER};
 
-static ABOUT: &str = "display current group names";
-static OPT_USER: &str = "user";
+mod app;
 
 fn get_usage() -> String {
     format!("{0} [USERNAME]", executable!())
@@ -24,11 +23,8 @@ fn get_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = get_app(executable!())
         .usage(&usage[..])
-        .arg(Arg::with_name(OPT_USER))
         .get_matches_from(args);
 
     match matches.value_of(OPT_USER) {
