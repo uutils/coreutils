@@ -24,7 +24,7 @@
 // * Help text based on BSD's `id`.
 //
 
-// spell-checker:ignore (ToDO) asid auditid auditinfo auid cstr egid emod euid getaudit getlogin gflag nflag pline rflag termid uflag gsflag zflag
+// spell-checker:ignore (ToDO) asid auditid auditinfo auid cstr egid emod euid getaudit getlogin gflag nflag pline rflag termid uflag gsflag zflag testsuite
 
 #![allow(non_camel_case_types)]
 #![allow(dead_code)]
@@ -92,7 +92,7 @@ struct State {
     rflag: bool,  // --real
     zflag: bool,  // --zero
     ids: Option<Ids>,
-    // The behaviour for calling GNU's `id` and calling GNU's `id $USER` is similar but different.
+    // The behavior for calling GNU's `id` and calling GNU's `id $USER` is similar but different.
     // * The SELinux context is only displayed without a specified user.
     // * The `getgroups` system call is only used without a specified user, this causes
     //   the order of the displayed groups to be different between `id` and `id $USER`.
@@ -336,12 +336,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             );
         }
 
+        let groups = entries::get_groups_gnu(Some(gid)).unwrap();
         let groups = if state.user_specified {
-            possible_pw
-                .map(|p| p.belongs_to())
-                .unwrap_or_else(|| entries::get_groups_gnu(Some(gid)).unwrap())
+            possible_pw.map(|p| p.belongs_to()).unwrap()
         } else {
-            entries::get_groups_gnu(Some(gid)).unwrap()
+            groups.clone()
         };
 
         if state.gsflag {
@@ -517,7 +516,7 @@ fn id_print(state: &State, groups: Vec<u32>) {
             .join(",")
     );
 
-    // placeholder ("-Z" is NotImplemented):
+    // NOTE: placeholder ("-Z" is NotImplemented):
     // if !state.user_specified {
     //     // print SElinux context (does not depend on "-Z")
     //     print!(" context={}", get_selinux_contexts().join(":"));

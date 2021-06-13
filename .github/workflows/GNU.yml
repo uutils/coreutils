@@ -45,8 +45,14 @@ jobs:
     - name: Run GNU tests
       shell: bash
       run: |
+        # bash uutils/util/run-gnu-test.sh
+        bash uutils/util/run-gnu-test.sh tests/id/context.sh # TODO: remove after debugging
+        sudo bash uutils/util/run-gnu-test.sh tests/id/setgid.sh # TODO: remove after debugging
+        bash uutils/util/run-gnu-test.sh tests/id/smack.sh # TODO: remove after debugging
         bash uutils/util/run-gnu-test.sh tests/id/uid.sh # TODO: remove after debugging
         bash uutils/util/run-gnu-test.sh tests/id/zero.sh # TODO: remove after debugging
+        bash uutils/util/run-gnu-test.sh tests/id/no-context.sh # TODO: remove after debugging
+        bash uutils/util/run-gnu-test.sh tests/id/gnu-zero-uids.sh # todo: remove after debugging
     - name: Extract tests info
       shell: bash
       run: |
