@@ -179,6 +179,13 @@ impl Passwd {
         self.inner
     }
 
+    /// This is a wrapper function for `libc::getgrouplist`.
+    ///
+    /// From: https://man7.org/linux/man-pages/man3/getgrouplist.3.html
+    /// If the user is a member of more than *ngroups groups, then
+    /// getgrouplist() returns -1.  In this case, the value returned in
+    /// *ngroups can be used to resize the buffer passed to a further
+    /// call getgrouplist().
     pub fn belongs_to(&self) -> Vec<gid_t> {
         let mut ngroups: c_int = 8;
         let mut groups = Vec::with_capacity(ngroups as usize);
