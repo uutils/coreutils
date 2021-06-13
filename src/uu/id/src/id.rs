@@ -18,12 +18,15 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
 use std::ffi::CStr;
 use uucore::entries::{self, Group, Locate, Passwd};
 pub use uucore::libc;
 use uucore::libc::{getlogin, uid_t};
 use uucore::process::{getegid, geteuid, getgid, getuid};
+
+use crate::app::*;
+
+mod app;
 
 macro_rules! cstr2cow {
     ($v:expr) => {
@@ -70,19 +73,6 @@ mod audit {
     }
 }
 
-static ABOUT: &str = "Display user and group information for the specified USER,\n or (when USER omitted) for the current user.";
-
-static OPT_AUDIT: &str = "audit";
-static OPT_EFFECTIVE_USER: &str = "effective-user";
-static OPT_GROUP: &str = "group";
-static OPT_GROUPS: &str = "groups";
-static OPT_HUMAN_READABLE: &str = "human-readable";
-static OPT_NAME: &str = "name";
-static OPT_PASSWORD: &str = "password";
-static OPT_REAL_ID: &str = "real";
-
-static ARG_USERS: &str = "users";
-
 fn get_usage() -> String {
     format!("{0} [OPTION]... [USER]", executable!())
 }
@@ -90,57 +80,8 @@ fn get_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = get_app(executable!())
         .usage(&usage[..])
-        .arg(
-            Arg::with_name(OPT_AUDIT)
-                .short("A")
-                .help("Display the process audit (not available on Linux)"),
-        )
-        .arg(
-            Arg::with_name(OPT_EFFECTIVE_USER)
-                .short("u")
-                .long("user")
-                .help("Display the effective user ID as a number"),
-        )
-        .arg(
-            Arg::with_name(OPT_GROUP)
-                .short("g")
-                .long(OPT_GROUP)
-                .help("Display the effective group ID as a number"),
-        )
-        .arg(
-            Arg::with_name(OPT_GROUPS)
-                .short("G")
-                .long(OPT_GROUPS)
-                .help("Display the different group IDs"),
-        )
-        .arg(
-            Arg::with_name(OPT_HUMAN_READABLE)
-                .short("p")
-                .help("Make the output human-readable"),
-        )
-        .arg(
-            Arg::with_name(OPT_NAME)
-                .short("n")
-                .help("Display the name of the user or group ID for the -G, -g and -u options"),
-        )
-        .arg(
-            Arg::with_name(OPT_PASSWORD)
-                .short("P")
-                .help("Display the id as a password file entry"),
-        )
-        .arg(
-            Arg::with_name(OPT_REAL_ID)
-                .short("r")
-                .long(OPT_REAL_ID)
-                .help(
-                "Display the real ID for the -G, -g and -u options instead of the effective ID.",
-            ),
-        )
-        .arg(Arg::with_name(ARG_USERS).multiple(true).takes_value(true))
         .get_matches_from(args);
 
     let users: Vec<String> = matches
