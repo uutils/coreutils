@@ -20,6 +20,9 @@ number_prefix = "0.4"
 uucore = { version=">=0.0.8", package="uucore", path="../../uucore", features=["libc", "fsext"] }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
+[build-dependencies]
+clap = "2.33"
+
 [[bin]]
 name = "df"
 path = "src/main.rs"
