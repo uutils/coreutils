@@ -1,4 +1,4 @@
-name: GNU
+name: GnuTests
 
 # spell-checker:ignore (names) gnulib ; (utils) autopoint gperf pyinotify texinfo ; (vars) XPASS
 
