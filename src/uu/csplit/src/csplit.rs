@@ -1,8 +1,8 @@
-#![crate_name = "uu_csplit"]
+mod app;
 
 #[macro_use]
 extern crate uucore;
-use clap::{crate_version, App, Arg, ArgMatches};
+use clap::ArgMatches;
 use regex::Regex;
 use std::cmp::Ordering;
 use std::io::{self, BufReader};
@@ -15,24 +15,10 @@ mod csplit_error;
 mod patterns;
 mod split_name;
 
+use crate::app::{get_app, options};
 use crate::csplit_error::CsplitError;
 use crate::split_name::SplitName;
 use uucore::InvalidEncodingHandling;
-
-static SUMMARY: &str = "split a file into sections determined by context lines";
-static LONG_HELP: &str = "Output pieces of FILE separated by PATTERN(s) to files 'xx00', 'xx01', ..., and output byte counts of each piece to standard output.";
-
-mod options {
-    pub const SUFFIX_FORMAT: &str = "suffix-format";
-    pub const SUPPRESS_MATCHED: &str = "suppress-matched";
-    pub const DIGITS: &str = "digits";
-    pub const PREFIX: &str = "prefix";
-    pub const KEEP_FILES: &str = "keep-files";
-    pub const QUIET: &str = "quiet";
-    pub const ELIDE_EMPTY_FILES: &str = "elide-empty-files";
-    pub const FILE: &str = "file";
-    pub const PATTERN: &str = "pattern";
-}
 
 fn get_usage() -> String {
     format!("{0} [OPTION]... FILE PATTERN...", executable!())
@@ -711,63 +697,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(SUMMARY)
+    let matches = get_app(executable!())
         .usage(&usage[..])
-        .arg(
-            Arg::with_name(options::SUFFIX_FORMAT)
-                .short("b")
-                .long(options::SUFFIX_FORMAT)
-                .value_name("FORMAT")
-                .help("use sprintf FORMAT instead of %02d"),
-        )
-        .arg(
-            Arg::with_name(options::PREFIX)
-                .short("f")
-                .long(options::PREFIX)
-                .value_name("PREFIX")
-                .help("use PREFIX instead of 'xx'"),
-        )
-        .arg(
-            Arg::with_name(options::KEEP_FILES)
-                .short("k")
-                .long(options::KEEP_FILES)
-                .help("do not remove output files on errors"),
-        )
-        .arg(
-            Arg::with_name(options::SUPPRESS_MATCHED)
-                .long(options::SUPPRESS_MATCHED)
-                .help("suppress the lines matching PATTERN"),
-        )
-        .arg(
-            Arg::with_name(options::DIGITS)
-                .short("n")
-                .long(options::DIGITS)
-                .value_name("DIGITS")
-                .help("use specified number of digits instead of 2"),
-        )
-        .arg(
-            Arg::with_name(options::QUIET)
-                .short("s")
-                .long(options::QUIET)
-                .visible_alias("silent")
-                .help("do not print counts of output file sizes"),
-        )
-        .arg(
-            Arg::with_name(options::ELIDE_EMPTY_FILES)
-                .short("z")
-                .long(options::ELIDE_EMPTY_FILES)
-                .help("remove empty output files"),
-        )
-        .arg(Arg::with_name(options::FILE).hidden(true).required(true))
-        .arg(
-            Arg::with_name(options::PATTERN)
-                .hidden(true)
-                .multiple(true)
-                .required(true),
-        )
-        .after_help(LONG_HELP)
         .get_matches_from(args);
 
     // get the file to split
