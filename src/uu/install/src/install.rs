@@ -7,12 +7,13 @@
 
 // spell-checker:ignore (ToDO) rwxr sourcepath targetpath
 
+mod app;
 mod mode;
 
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg, ArgMatches};
+use clap::ArgMatches;
 use file_diff::diff;
 use filetime::{set_file_times, FileTime};
 use uucore::entries::{grp2gid, usr2uid};
@@ -25,6 +26,8 @@ use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::result::Result;
+
+use crate::app::*;
 
 const DEFAULT_MODE: u32 = 0o755;
 const DEFAULT_STRIP_PROGRAM: &str = "strip";
@@ -62,30 +65,6 @@ impl Behavior {
     }
 }
 
-static ABOUT: &str = "Copy SOURCE to DEST or multiple SOURCE(s) to the existing
- DIRECTORY, while setting permission modes and owner/group";
-
-static OPT_COMPARE: &str = "compare";
-static OPT_BACKUP: &str = "backup";
-static OPT_BACKUP_2: &str = "backup2";
-static OPT_DIRECTORY: &str = "directory";
-static OPT_IGNORED: &str = "ignored";
-static OPT_CREATE_LEADING: &str = "create-leading";
-static OPT_GROUP: &str = "group";
-static OPT_MODE: &str = "mode";
-static OPT_OWNER: &str = "owner";
-static OPT_PRESERVE_TIMESTAMPS: &str = "preserve-timestamps";
-static OPT_STRIP: &str = "strip";
-static OPT_STRIP_PROGRAM: &str = "strip-program";
-static OPT_SUFFIX: &str = "suffix";
-static OPT_TARGET_DIRECTORY: &str = "target-directory";
-static OPT_NO_TARGET_DIRECTORY: &str = "no-target-directory";
-static OPT_VERBOSE: &str = "verbose";
-static OPT_PRESERVE_CONTEXT: &str = "preserve-context";
-static OPT_CONTEXT: &str = "context";
-
-static ARG_FILES: &str = "files";
-
 fn get_usage() -> String {
     format!("{0} [OPTION]... [FILE]...", executable!())
 }
@@ -97,136 +76,8 @@ fn get_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = get_app(executable!())
         .usage(&usage[..])
-        .arg(
-                Arg::with_name(OPT_BACKUP)
-                .long(OPT_BACKUP)
-                .help("(unimplemented) make a backup of each existing destination file")
-                .value_name("CONTROL")
-        )
-        .arg(
-            // TODO implement flag
-            Arg::with_name(OPT_BACKUP_2)
-            .short("b")
-            .help("(unimplemented) like --backup but does not accept an argument")
-        )
-        .arg(
-            Arg::with_name(OPT_IGNORED)
-            .short("c")
-            .help("ignored")
-        )
-        .arg(
-            Arg::with_name(OPT_COMPARE)
-            .short("C")
-            .long(OPT_COMPARE)
-            .help("compare each pair of source and destination files, and in some cases, do not modify the destination at all")
-        )
-        .arg(
-            Arg::with_name(OPT_DIRECTORY)
-                .short("d")
-                .long(OPT_DIRECTORY)
-                .help("treat all arguments as directory names. create all components of the specified directories")
-        )
-
-        .arg(
-            // TODO implement flag
-            Arg::with_name(OPT_CREATE_LEADING)
-                .short("D")
-                .help("create all leading components of DEST except the last, then copy SOURCE to DEST")
-        )
-        .arg(
-            Arg::with_name(OPT_GROUP)
-                .short("g")
-                .long(OPT_GROUP)
-                .help("set group ownership, instead of process's current group")
-                .value_name("GROUP")
-                .takes_value(true)
-        )
-        .arg(
-            Arg::with_name(OPT_MODE)
-                .short("m")
-                .long(OPT_MODE)
-                .help("set permission mode (as in chmod), instead of rwxr-xr-x")
-                .value_name("MODE")
-                .takes_value(true)
-        )
-        .arg(
-            Arg::with_name(OPT_OWNER)
-                .short("o")
-                .long(OPT_OWNER)
-                .help("set ownership (super-user only)")
-                .value_name("OWNER")
-                .takes_value(true)
-        )
-        .arg(
-            Arg::with_name(OPT_PRESERVE_TIMESTAMPS)
-                .short("p")
-                .long(OPT_PRESERVE_TIMESTAMPS)
-                .help("apply access/modification times of SOURCE files to corresponding destination files")
-        )
-        .arg(
-            Arg::with_name(OPT_STRIP)
-            .short("s")
-            .long(OPT_STRIP)
-            .help("strip symbol tables (no action Windows)")
-        )
-        .arg(
-            Arg::with_name(OPT_STRIP_PROGRAM)
-                .long(OPT_STRIP_PROGRAM)
-                .help("program used to strip binaries (no action Windows)")
-                .value_name("PROGRAM")
-        )
-        .arg(
-            // TODO implement flag
-            Arg::with_name(OPT_SUFFIX)
-                .short("S")
-                .long(OPT_SUFFIX)
-                .help("(unimplemented) override the usual backup suffix")
-                .value_name("SUFFIX")
-                .takes_value(true)
-                .min_values(1)
-        )
-        .arg(
-            // TODO implement flag
-            Arg::with_name(OPT_TARGET_DIRECTORY)
-                .short("t")
-                .long(OPT_TARGET_DIRECTORY)
-                .help("(unimplemented) move all SOURCE arguments into DIRECTORY")
-                .value_name("DIRECTORY")
-        )
-        .arg(
-            // TODO implement flag
-            Arg::with_name(OPT_NO_TARGET_DIRECTORY)
-                .short("T")
-                .long(OPT_NO_TARGET_DIRECTORY)
-                .help("(unimplemented) treat DEST as a normal file")
-
-        )
-        .arg(
-            Arg::with_name(OPT_VERBOSE)
-            .short("v")
-            .long(OPT_VERBOSE)
-            .help("explain what is being done")
-        )
-        .arg(
-            // TODO implement flag
-            Arg::with_name(OPT_PRESERVE_CONTEXT)
-                .short("P")
-                .long(OPT_PRESERVE_CONTEXT)
-                .help("(unimplemented) preserve security context")
-        )
-        .arg(
-            // TODO implement flag
-            Arg::with_name(OPT_CONTEXT)
-                .short("Z")
-                .long(OPT_CONTEXT)
-                .help("(unimplemented) set security context of files and directories")
-                .value_name("CONTEXT")
-        )
-        .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true).min_values(1))
         .get_matches_from(args);
 
     let paths: Vec<String> = matches
