@@ -11,11 +11,10 @@
 extern crate uucore;
 
 use libc::c_long;
-use uucore::InvalidEncodingHandling;
 
-static SYNTAX: &str = "[options]";
-static SUMMARY: &str = "";
-static LONG_HELP: &str = "";
+use crate::app::get_app;
+
+mod app;
 
 // currently rust libc interface doesn't include gethostid
 extern "C" {
@@ -23,10 +22,7 @@ extern "C" {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    app!(SYNTAX, SUMMARY, LONG_HELP).parse(
-        args.collect_str(InvalidEncodingHandling::ConvertLossy)
-            .accept_any(),
-    );
+    get_app(executable!()).get_matches_from(args);
     hostid();
     0
 }
