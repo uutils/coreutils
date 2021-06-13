@@ -8,13 +8,15 @@
 
 // spell-checker:ignore (chrono) Datelike Timelike ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes
 
+mod app;
+
 #[macro_use]
 extern crate uucore;
 
+use app::*;
 use chrono::{DateTime, FixedOffset, Local, Offset, Utc};
 #[cfg(windows)]
 use chrono::{Datelike, Timelike};
-use clap::{crate_version, App, Arg};
 #[cfg(all(unix, not(target_os = "macos")))]
 use libc::{clock_settime, timespec, CLOCK_REALTIME};
 use std::fs::File;
@@ -25,52 +27,6 @@ use winapi::{
     shared::minwindef::WORD,
     um::{minwinbase::SYSTEMTIME, sysinfoapi::SetSystemTime},
 };
-
-// Options
-const DATE: &str = "date";
-const HOURS: &str = "hours";
-const MINUTES: &str = "minutes";
-const SECONDS: &str = "seconds";
-const HOUR: &str = "hour";
-const MINUTE: &str = "minute";
-const SECOND: &str = "second";
-const NS: &str = "ns";
-
-const NAME: &str = "date";
-const ABOUT: &str = "print or set the system date and time";
-
-const OPT_DATE: &str = "date";
-const OPT_FORMAT: &str = "format";
-const OPT_FILE: &str = "file";
-const OPT_DEBUG: &str = "debug";
-const OPT_ISO_8601: &str = "iso-8601";
-const OPT_RFC_EMAIL: &str = "rfc-email";
-const OPT_RFC_3339: &str = "rfc-3339";
-const OPT_SET: &str = "set";
-const OPT_REFERENCE: &str = "reference";
-const OPT_UNIVERSAL: &str = "universal";
-const OPT_UNIVERSAL_2: &str = "utc";
-
-// Help strings
-
-static ISO_8601_HELP_STRING: &str = "output date/time in ISO 8601 format.
- FMT='date' for date only (the default),
- 'hours', 'minutes', 'seconds', or 'ns'
- for date and time to the indicated precision.
- Example: 2006-08-14T02:34:56-06:00";
-
-static RFC_5322_HELP_STRING: &str = "output date and time in RFC 5322 format.
- Example: Mon, 14 Aug 2006 02:34:56 -0600";
-
-static RFC_3339_HELP_STRING: &str = "output date/time in RFC 3339 format.
- FMT='date', 'seconds', or 'ns'
- for date and time to the indicated precision.
- Example: 2006-08-14 02:34:56-06:00";
-
-#[cfg(not(target_os = "macos"))]
-static OPT_SET_HELP_STRING: &str = "set time described by STRING";
-#[cfg(target_os = "macos")]
-static OPT_SET_HELP_STRING: &str = "set time described by STRING (not available on mac yet)";
 
 /// Settings for this program, parsed from the command line
 struct Settings {
@@ -142,70 +98,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
  {0} [OPTION]... [MMDDhhmm[[CC]YY][.ss]]",
         NAME
     );
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = get_app(executable!())
         .usage(&syntax[..])
-        .arg(
-            Arg::with_name(OPT_DATE)
-                .short("d")
-                .long(OPT_DATE)
-                .takes_value(true)
-                .help("display time described by STRING, not 'now'"),
-        )
-        .arg(
-            Arg::with_name(OPT_FILE)
-                .short("f")
-                .long(OPT_FILE)
-                .takes_value(true)
-                .help("like --date; once for each line of DATEFILE"),
-        )
-        .arg(
-            Arg::with_name(OPT_ISO_8601)
-                .short("I")
-                .long(OPT_ISO_8601)
-                .takes_value(true)
-                .help(ISO_8601_HELP_STRING),
-        )
-        .arg(
-            Arg::with_name(OPT_RFC_EMAIL)
-                .short("R")
-                .long(OPT_RFC_EMAIL)
-                .help(RFC_5322_HELP_STRING),
-        )
-        .arg(
-            Arg::with_name(OPT_RFC_3339)
-                .long(OPT_RFC_3339)
-                .takes_value(true)
-                .help(RFC_3339_HELP_STRING),
-        )
-        .arg(
-            Arg::with_name(OPT_DEBUG)
-                .long(OPT_DEBUG)
-                .help("annotate the parsed date, and warn about questionable usage to stderr"),
-        )
-        .arg(
-            Arg::with_name(OPT_REFERENCE)
-                .short("r")
-                .long(OPT_REFERENCE)
-                .takes_value(true)
-                .help("display the last modification time of FILE"),
-        )
-        .arg(
-            Arg::with_name(OPT_SET)
-                .short("s")
-                .long(OPT_SET)
-                .takes_value(true)
-                .help(OPT_SET_HELP_STRING),
-        )
-        .arg(
-            Arg::with_name(OPT_UNIVERSAL)
-                .short("u")
-                .long(OPT_UNIVERSAL)
-                .alias(OPT_UNIVERSAL_2)
-                .help("print or set Coordinated Universal Time (UTC)"),
-        )
-        .arg(Arg::with_name(OPT_FORMAT).multiple(false))
         .get_matches_from(args);
 
     let format = if let Some(form) = matches.value_of(OPT_FORMAT) {
