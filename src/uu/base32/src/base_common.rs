@@ -54,15 +54,13 @@ impl Config {
             None => None,
         };
 
-        let cols = match options.value_of(options::WRAP) {
-            Some(num) => match num.parse::<usize>() {
-                Ok(n) => Some(n),
-                Err(e) => {
-                    return Err(format!("Invalid wrap size: ‘{}’: {}", num, e));
-                }
-            },
-            None => None,
-        };
+        let cols = options
+            .value_of(options::WRAP)
+            .map(|num| {
+                num.parse::<usize>()
+                    .map_err(|e| format!("Invalid wrap size: ‘{}’: {}", num, e))
+            })
+            .transpose()?;
 
         Ok(Config {
             decode: options.is_present(options::DECODE),

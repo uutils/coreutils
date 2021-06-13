@@ -59,7 +59,7 @@ impl Digest for blake2b_simd::State {
 
     fn result(&mut self, out: &mut [u8]) {
         let hash_result = &self.finalize();
-        out.copy_from_slice(&hash_result.as_bytes());
+        out.copy_from_slice(hash_result.as_bytes());
     }
 
     fn reset(&mut self) {

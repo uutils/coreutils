@@ -38,7 +38,7 @@ pub fn custom_str_cmp(
 ) -> Ordering {
     if !(ignore_case || ignore_non_dictionary || ignore_non_printing) {
         // There are no custom settings. Fall back to the default strcmp, which is faster.
-        return a.cmp(&b);
+        return a.cmp(b);
     }
     let mut a_chars = a
         .chars()

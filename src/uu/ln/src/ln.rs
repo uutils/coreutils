@@ -27,7 +27,6 @@ use uucore::fs::{canonicalize, CanonicalizeMode};
 pub struct Settings {
     overwrite: OverwriteMode,
     backup: BackupMode,
-    force: bool,
     suffix: String,
     symbolic: bool,
     relative: bool,
@@ -54,7 +53,7 @@ pub enum BackupMode {
 
 fn get_usage() -> String {
     format!(
-        "{0} [OPTION]... [-T] TARGET LINK_executable!()   (1st form)
+        "{0} [OPTION]... [-T] TARGET LINK_NAME   (1st form)
        {0} [OPTION]... TARGET                  (2nd form)
        {0} [OPTION]... TARGET... DIRECTORY     (3rd form)
        {0} [OPTION]... -t DIRECTORY TARGET...  (4th form)",
@@ -64,7 +63,7 @@ fn get_usage() -> String {
 
 fn get_long_usage() -> String {
     String::from(
-        " In the 1st form, create a link to TARGET with the name LINK_executable!().
+        " In the 1st form, create a link to TARGET with the name LINK_NAME.
         In the 2nd form, create a link to TARGET in the current directory.
         In the 3rd and 4th forms, create links to each TARGET in DIRECTORY.
         Create hard links by default, symbolic links with --symbolic.
@@ -78,17 +77,19 @@ fn get_long_usage() -> String {
 
 static ABOUT: &str = "change file owner and group";
 
-static OPT_B: &str = "b";
-static OPT_BACKUP: &str = "backup";
-static OPT_FORCE: &str = "force";
-static OPT_INTERACTIVE: &str = "interactive";
-static OPT_NO_DEREFERENCE: &str = "no-dereference";
-static OPT_SYMBOLIC: &str = "symbolic";
-static OPT_SUFFIX: &str = "suffix";
-static OPT_TARGET_DIRECTORY: &str = "target-directory";
-static OPT_NO_TARGET_DIRECTORY: &str = "no-target-directory";
-static OPT_RELATIVE: &str = "relative";
-static OPT_VERBOSE: &str = "verbose";
+mod options {
+    pub const B: &str = "b";
+    pub const BACKUP: &str = "backup";
+    pub const FORCE: &str = "force";
+    pub const INTERACTIVE: &str = "interactive";
+    pub const NO_DEREFERENCE: &str = "no-dereference";
+    pub const SYMBOLIC: &str = "symbolic";
+    pub const SUFFIX: &str = "suffix";
+    pub const TARGET_DIRECTORY: &str = "target-directory";
+    pub const NO_TARGET_DIRECTORY: &str = "no-target-directory";
+    pub const RELATIVE: &str = "relative";
+    pub const VERBOSE: &str = "verbose";
+}
 
 static ARG_FILES: &str = "files";
 
@@ -101,49 +102,44 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .about(ABOUT)
         .usage(&usage[..])
         .after_help(&long_usage[..])
-        .arg(Arg::with_name(OPT_B).short(OPT_B).help(
+        .arg(Arg::with_name(options::B).short(options::B).help(
             "make a backup of each file that would otherwise be overwritten or \
              removed",
         ))
         .arg(
-            Arg::with_name(OPT_BACKUP)
-                .long(OPT_BACKUP)
+            Arg::with_name(options::BACKUP)
+                .long(options::BACKUP)
                 .help(
                     "make a backup of each file that would otherwise be overwritten \
                      or removed",
                 )
                 .takes_value(true)
-                .possible_value("simple")
-                .possible_value("never")
-                .possible_value("numbered")
-                .possible_value("t")
-                .possible_value("existing")
-                .possible_value("nil")
-                .possible_value("none")
-                .possible_value("off")
+                .possible_values(&[
+                    "simple", "never", "numbered", "t", "existing", "nil", "none", "off",
+                ])
                 .value_name("METHOD"),
         )
         // TODO: opts.arg(
         //    Arg::with_name(("d", "directory", "allow users with appropriate privileges to attempt \
         //                                       to make hard links to directories");
         .arg(
-            Arg::with_name(OPT_FORCE)
+            Arg::with_name(options::FORCE)
                 .short("f")
-                .long(OPT_FORCE)
+                .long(options::FORCE)
                 .help("remove existing destination files"),
         )
         .arg(
-            Arg::with_name(OPT_INTERACTIVE)
+            Arg::with_name(options::INTERACTIVE)
                 .short("i")
-                .long(OPT_INTERACTIVE)
+                .long(options::INTERACTIVE)
                 .help("prompt whether to remove existing destination files"),
         )
         .arg(
-            Arg::with_name(OPT_NO_DEREFERENCE)
+            Arg::with_name(options::NO_DEREFERENCE)
                 .short("n")
-                .long(OPT_NO_DEREFERENCE)
+                .long(options::NO_DEREFERENCE)
                 .help(
-                    "treat LINK_executable!() as a normal file if it is a \
+                    "treat LINK_NAME as a normal file if it is a \
                      symbolic link to a directory",
                 ),
         )
@@ -153,43 +149,46 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         // TODO: opts.arg(
         //    Arg::with_name(("P", "physical", "make hard links directly to symbolic links");
         .arg(
-            Arg::with_name(OPT_SYMBOLIC)
+            Arg::with_name(options::SYMBOLIC)
                 .short("s")
                 .long("symbolic")
-                .help("make symbolic links instead of hard links"),
+                .help("make symbolic links instead of hard links")
+                // override added for https://github.com/uutils/coreutils/issues/2359
+                .overrides_with(options::SYMBOLIC),
         )
         .arg(
-            Arg::with_name(OPT_SUFFIX)
+            Arg::with_name(options::SUFFIX)
                 .short("S")
-                .long(OPT_SUFFIX)
+                .long(options::SUFFIX)
                 .help("override the usual backup suffix")
                 .value_name("SUFFIX")
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name(OPT_TARGET_DIRECTORY)
+            Arg::with_name(options::TARGET_DIRECTORY)
                 .short("t")
-                .long(OPT_TARGET_DIRECTORY)
+                .long(options::TARGET_DIRECTORY)
                 .help("specify the DIRECTORY in which to create the links")
                 .value_name("DIRECTORY")
-                .conflicts_with(OPT_NO_TARGET_DIRECTORY),
+                .conflicts_with(options::NO_TARGET_DIRECTORY),
         )
         .arg(
-            Arg::with_name(OPT_NO_TARGET_DIRECTORY)
+            Arg::with_name(options::NO_TARGET_DIRECTORY)
                 .short("T")
-                .long(OPT_NO_TARGET_DIRECTORY)
-                .help("treat LINK_executable!() as a normal file always"),
+                .long(options::NO_TARGET_DIRECTORY)
+                .help("treat LINK_NAME as a normal file always"),
         )
         .arg(
-            Arg::with_name(OPT_RELATIVE)
+            Arg::with_name(options::RELATIVE)
                 .short("r")
-                .long(OPT_RELATIVE)
-                .help("create symbolic links relative to link location"),
+                .long(options::RELATIVE)
+                .help("create symbolic links relative to link location")
+                .requires(options::SYMBOLIC),
         )
         .arg(
-            Arg::with_name(OPT_VERBOSE)
+            Arg::with_name(options::VERBOSE)
                 .short("v")
-                .long(OPT_VERBOSE)
+                .long(options::VERBOSE)
                 .help("print name of each linked file"),
         )
         .arg(
@@ -209,18 +208,18 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .map(PathBuf::from)
         .collect();
 
-    let overwrite_mode = if matches.is_present(OPT_FORCE) {
+    let overwrite_mode = if matches.is_present(options::FORCE) {
         OverwriteMode::Force
-    } else if matches.is_present(OPT_INTERACTIVE) {
+    } else if matches.is_present(options::INTERACTIVE) {
         OverwriteMode::Interactive
     } else {
         OverwriteMode::NoClobber
     };
 
-    let backup_mode = if matches.is_present(OPT_B) {
+    let backup_mode = if matches.is_present(options::B) {
         BackupMode::ExistingBackup
-    } else if matches.is_present(OPT_BACKUP) {
-        match matches.value_of(OPT_BACKUP) {
+    } else if matches.is_present(options::BACKUP) {
+        match matches.value_of(options::BACKUP) {
             None => BackupMode::ExistingBackup,
             Some(mode) => match mode {
                 "simple" | "never" => BackupMode::SimpleBackup,
@@ -234,8 +233,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         BackupMode::NoBackup
     };
 
-    let backup_suffix = if matches.is_present(OPT_SUFFIX) {
-        matches.value_of(OPT_SUFFIX).unwrap()
+    let backup_suffix = if matches.is_present(options::SUFFIX) {
+        matches.value_of(options::SUFFIX).unwrap()
     } else {
         "~"
     };
@@ -243,14 +242,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let settings = Settings {
         overwrite: overwrite_mode,
         backup: backup_mode,
-        force: matches.is_present(OPT_FORCE),
         suffix: backup_suffix.to_string(),
-        symbolic: matches.is_present(OPT_SYMBOLIC),
-        relative: matches.is_present(OPT_RELATIVE),
-        target_dir: matches.value_of(OPT_TARGET_DIRECTORY).map(String::from),
-        no_target_dir: matches.is_present(OPT_NO_TARGET_DIRECTORY),
-        no_dereference: matches.is_present(OPT_NO_DEREFERENCE),
-        verbose: matches.is_present(OPT_VERBOSE),
+        symbolic: matches.is_present(options::SYMBOLIC),
+        relative: matches.is_present(options::RELATIVE),
+        target_dir: matches
+            .value_of(options::TARGET_DIRECTORY)
+            .map(String::from),
+        no_target_dir: matches.is_present(options::NO_TARGET_DIRECTORY),
+        no_dereference: matches.is_present(options::NO_DEREFERENCE),
+        verbose: matches.is_present(options::VERBOSE),
     };
 
     exec(&paths[..], &settings)
@@ -260,17 +260,17 @@ fn exec(files: &[PathBuf], settings: &Settings) -> i32 {
     // Handle cases where we create links in a directory first.
     if let Some(ref name) = settings.target_dir {
         // 4th form: a directory is specified by -t.
-        return link_files_in_dir(files, &PathBuf::from(name), &settings);
+        return link_files_in_dir(files, &PathBuf::from(name), settings);
     }
     if !settings.no_target_dir {
         if files.len() == 1 {
             // 2nd form: the target directory is the current directory.
-            return link_files_in_dir(files, &PathBuf::from("."), &settings);
+            return link_files_in_dir(files, &PathBuf::from("."), settings);
         }
         let last_file = &PathBuf::from(files.last().unwrap());
         if files.len() > 2 || last_file.is_dir() {
             // 3rd form: create links in the last argument.
-            return link_files_in_dir(&files[0..files.len() - 1], last_file, &settings);
+            return link_files_in_dir(&files[0..files.len() - 1], last_file, settings);
         }
     }
 
@@ -310,47 +310,48 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
 
     let mut all_successful = true;
     for srcpath in files.iter() {
-        let targetpath = if settings.no_dereference && settings.force {
-            // In that case, we don't want to do link resolution
-            // We need to clean the target
-            if is_symlink(target_dir) {
-                if target_dir.is_file() {
-                    if let Err(e) = fs::remove_file(target_dir) {
-                        show_error!("Could not update {}: {}", target_dir.display(), e)
-                    };
-                }
-                if target_dir.is_dir() {
-                    // Not sure why but on Windows, the symlink can be
-                    // considered as a dir
-                    // See test_ln::test_symlink_no_deref_dir
-                    if let Err(e) = fs::remove_dir(target_dir) {
-                        show_error!("Could not update {}: {}", target_dir.display(), e)
-                    };
-                }
-            }
-            target_dir.to_path_buf()
-        } else {
-            match srcpath.as_os_str().to_str() {
-                Some(name) => {
-                    match Path::new(name).file_name() {
-                        Some(basename) => target_dir.join(basename),
-                        // This can be None only for "." or "..". Trying
-                        // to create a link with such name will fail with
-                        // EEXIST, which agrees with the behavior of GNU
-                        // coreutils.
-                        None => target_dir.join(name),
+        let targetpath =
+            if settings.no_dereference && matches!(settings.overwrite, OverwriteMode::Force) {
+                // In that case, we don't want to do link resolution
+                // We need to clean the target
+                if is_symlink(target_dir) {
+                    if target_dir.is_file() {
+                        if let Err(e) = fs::remove_file(target_dir) {
+                            show_error!("Could not update {}: {}", target_dir.display(), e)
+                        };
+                    }
+                    if target_dir.is_dir() {
+                        // Not sure why but on Windows, the symlink can be
+                        // considered as a dir
+                        // See test_ln::test_symlink_no_deref_dir
+                        if let Err(e) = fs::remove_dir(target_dir) {
+                            show_error!("Could not update {}: {}", target_dir.display(), e)
+                        };
                     }
                 }
-                None => {
-                    show_error!(
-                        "cannot stat '{}': No such file or directory",
-                        srcpath.display()
-                    );
-                    all_successful = false;
-                    continue;
+                target_dir.to_path_buf()
+            } else {
+                match srcpath.as_os_str().to_str() {
+                    Some(name) => {
+                        match Path::new(name).file_name() {
+                            Some(basename) => target_dir.join(basename),
+                            // This can be None only for "." or "..". Trying
+                            // to create a link with such name will fail with
+                            // EEXIST, which agrees with the behavior of GNU
+                            // coreutils.
+                            None => target_dir.join(name),
+                        }
+                    }
+                    None => {
+                        show_error!(
+                            "cannot stat '{}': No such file or directory",
+                            srcpath.display()
+                        );
+                        all_successful = false;
+                        continue;
+                    }
                 }
-            }
-        };
+            };
 
         if let Err(e) = link(srcpath, &targetpath, settings) {
             show_error!(
@@ -371,7 +372,8 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
 
 fn relative_path<'a>(src: &Path, dst: &Path) -> Result<Cow<'a, Path>> {
     let src_abs = canonicalize(src, CanonicalizeMode::Normal)?;
-    let dst_abs = canonicalize(dst, CanonicalizeMode::Normal)?;
+    let mut dst_abs = canonicalize(dst.parent().unwrap(), CanonicalizeMode::Normal)?;
+    dst_abs.push(dst.components().last().unwrap());
     let suffix_pos = src_abs
         .components()
         .zip(dst_abs.components())
@@ -392,7 +394,7 @@ fn relative_path<'a>(src: &Path, dst: &Path) -> Result<Cow<'a, Path>> {
 fn link(src: &Path, dst: &Path, settings: &Settings) -> Result<()> {
     let mut backup_path = None;
     let source: Cow<'_, Path> = if settings.relative {
-        relative_path(&src, dst)?
+        relative_path(src, dst)?
     } else {
         src.into()
     };
@@ -419,10 +421,6 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> Result<()> {
         if let Some(ref p) = backup_path {
             fs::rename(dst, p)?;
         }
-    }
-
-    if settings.no_dereference && settings.force && dst.exists() {
-        fs::remove_file(dst)?;
     }
 
     if settings.symbolic {

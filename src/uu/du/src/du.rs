@@ -1,9 +1,9 @@
-// This file is part of the uutils coreutils package.
-//
-// (c) Derek Chiang <derekchiang93@gmail.com>
-//
-// For the full copyright and license information, please view the LICENSE
-// file that was distributed with this source code.
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * (c) Derek Chiang <derekchiang93@gmail.com>
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
 
 #[macro_use]
 extern crate uucore;
@@ -12,6 +12,7 @@ use chrono::prelude::DateTime;
 use chrono::Local;
 use clap::{crate_version, App, Arg};
 use std::collections::HashSet;
+use std::convert::TryFrom;
 use std::env;
 use std::fs;
 #[cfg(not(windows))]
@@ -24,8 +25,11 @@ use std::os::unix::fs::MetadataExt;
 use std::os::windows::fs::MetadataExt;
 #[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
+#[cfg(windows)]
+use std::path::Path;
 use std::path::PathBuf;
 use std::time::{Duration, UNIX_EPOCH};
+use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::InvalidEncodingHandling;
 #[cfg(windows)]
 use winapi::shared::minwindef::{DWORD, LPVOID};
@@ -42,7 +46,7 @@ mod options {
     pub const NULL: &str = "0";
     pub const ALL: &str = "all";
     pub const APPARENT_SIZE: &str = "apparent-size";
-    pub const BLOCK_SIZE: &str = "B";
+    pub const BLOCK_SIZE: &str = "block-size";
     pub const BYTES: &str = "b";
     pub const TOTAL: &str = "c";
     pub const MAX_DEPTH: &str = "d";
@@ -55,6 +59,7 @@ mod options {
     pub const SI: &str = "si";
     pub const TIME: &str = "time";
     pub const TIME_STYLE: &str = "time-style";
+    pub const ONE_FILE_SYSTEM: &str = "one-file-system";
     pub const FILE: &str = "FILE";
 }
 
@@ -79,6 +84,7 @@ struct Options {
     max_depth: Option<usize>,
     total: bool,
     separate_dirs: bool,
+    one_file_system: bool,
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
@@ -159,7 +165,7 @@ fn birth_u64(meta: &Metadata) -> Option<u64> {
 }
 
 #[cfg(windows)]
-fn get_size_on_disk(path: &PathBuf) -> u64 {
+fn get_size_on_disk(path: &Path) -> u64 {
     let mut size_on_disk = 0;
 
     // bind file so it stays in scope until end of function
@@ -191,7 +197,7 @@ fn get_size_on_disk(path: &PathBuf) -> u64 {
 }
 
 #[cfg(windows)]
-fn get_file_info(path: &PathBuf) -> Option<FileInfo> {
+fn get_file_info(path: &Path) -> Option<FileInfo> {
     let mut result = None;
 
     let file = match fs::File::open(path) {
@@ -223,64 +229,22 @@ fn get_file_info(path: &PathBuf) -> Option<FileInfo> {
     result
 }
 
-fn unit_string_to_number(s: &str) -> Option<u64> {
-    let mut offset = 0;
-    let mut s_chars = s.chars().rev();
-
-    let (mut ch, multiple) = match s_chars.next() {
-        Some('B') | Some('b') => ('B', 1000u64),
-        Some(ch) => (ch, 1024u64),
-        None => return None,
-    };
-    if ch == 'B' {
-        ch = s_chars.next()?;
-        offset += 1;
-    }
-    ch = ch.to_ascii_uppercase();
-
-    let unit = UNITS
-        .iter()
-        .rev()
-        .find(|&&(unit_ch, _)| unit_ch == ch)
-        .map(|&(_, val)| {
-            // we found a match, so increment offset
-            offset += 1;
-            val
-        })
-        .or_else(|| if multiple == 1024 { Some(0) } else { None })?;
-
-    let number = s[..s.len() - offset].parse::<u64>().ok()?;
-
-    Some(number * multiple.pow(unit))
-}
-
-fn translate_to_pure_number(s: &Option<&str>) -> Option<u64> {
-    match *s {
-        Some(ref s) => unit_string_to_number(s),
-        None => None,
-    }
-}
-
-fn read_block_size(s: Option<&str>) -> u64 {
-    match translate_to_pure_number(&s) {
-        Some(v) => v,
-        None => {
-            if let Some(value) = s {
-                show_error!("invalid --block-size argument '{}'", value);
-            };
-
-            for env_var in &["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
-                let env_size = env::var(env_var).ok();
-                if let Some(quantity) = translate_to_pure_number(&env_size.as_deref()) {
-                    return quantity;
+fn read_block_size(s: Option<&str>) -> usize {
+    if let Some(s) = s {
+        parse_size(s)
+            .unwrap_or_else(|e| crash!(1, "{}", format_error_message(e, s, options::BLOCK_SIZE)))
+    } else {
+        for env_var in &["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
+            if let Ok(env_size) = env::var(env_var) {
+                if let Ok(v) = parse_size(&env_size) {
+                    return v;
                 }
             }
-
-            if env::var("POSIXLY_CORRECT").is_ok() {
-                512
-            } else {
-                1024
-            }
+        }
+        if env::var("POSIXLY_CORRECT").is_ok() {
+            512
+        } else {
+            1024
         }
     }
 }
@@ -316,10 +280,18 @@ fn du(
                 Ok(entry) => match Stat::new(entry.path()) {
                     Ok(this_stat) => {
                         if this_stat.is_dir {
+                            if options.one_file_system {
+                                if let (Some(this_inode), Some(my_inode)) =
+                                    (this_stat.inode, my_stat.inode)
+                                {
+                                    if this_inode.dev_id != my_inode.dev_id {
+                                        continue;
+                                    }
+                                }
+                            }
                             futures.push(du(this_stat, options, depth + 1, inodes));
                         } else {
-                            if this_stat.inode.is_some() {
-                                let inode = this_stat.inode.unwrap();
+                            if let Some(inode) = this_stat.inode {
                                 if inodes.contains(&inode) {
                                     continue;
                                 }
@@ -358,7 +330,9 @@ fn du(
             my_stat.size += stat.size;
             my_stat.blocks += stat.blocks;
         }
-        options.max_depth == None || depth < options.max_depth.unwrap()
+        options
+            .max_depth
+            .map_or(true, |max_depth| depth < max_depth)
     }));
     stats.push(my_stat);
     Box::new(stats.into_iter())
@@ -431,12 +405,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     although  the apparent  size is usually smaller, it may be larger due to holes \
                     in ('sparse') files, internal  fragmentation,  indirect  blocks, and the like"
                 )
-                .alias("app") // The GNU testsuite uses this alias
+                .alias("app") // The GNU test suite uses this alias
         )
         .arg(
             Arg::with_name(options::BLOCK_SIZE)
                 .short("B")
-                .long("block-size")
+                .long(options::BLOCK_SIZE)
                 .value_name("SIZE")
                 .help(
                     "scale sizes  by  SIZE before printing them. \
@@ -530,12 +504,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(options::SI)
                 .help("like -h, but use powers of 1000 not 1024")
         )
-        // .arg(
-        //     Arg::with_name("one-file-system")
-        //         .short("x")
-        //         .long("one-file-system")
-        //         .help("skip directories on different file systems")
-        // )
+        .arg(
+            Arg::with_name(options::ONE_FILE_SYSTEM)
+                .short("x")
+                .long(options::ONE_FILE_SYSTEM)
+                .help("skip directories on different file systems")
+        )
         // .arg(
         //     Arg::with_name("")
         //         .short("x")
@@ -583,12 +557,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let max_depth_str = matches.value_of(options::MAX_DEPTH);
     let max_depth = max_depth_str.as_ref().and_then(|s| s.parse::<usize>().ok());
     match (max_depth_str, max_depth) {
-        (Some(ref s), _) if summarize => {
-            show_error!("summarizing conflicts with --max-depth={}", *s);
+        (Some(s), _) if summarize => {
+            show_error!("summarizing conflicts with --max-depth={}", s);
             return 1;
         }
-        (Some(ref s), None) => {
-            show_error!("invalid maximum depth '{}'", *s);
+        (Some(s), None) => {
+            show_error!("invalid maximum depth '{}'", s);
             return 1;
         }
         (Some(_), Some(_)) | (None, _) => { /* valid */ }
@@ -600,6 +574,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         max_depth,
         total: matches.is_present(options::TOTAL),
         separate_dirs: matches.is_present(options::SEPARATE_DIRS),
+        one_file_system: matches.is_present(options::ONE_FILE_SYSTEM),
     };
 
     let files = match matches.value_of(options::FILE) {
@@ -609,7 +584,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     };
 
-    let block_size = read_block_size(matches.value_of(options::BLOCK_SIZE));
+    let block_size = u64::try_from(read_block_size(matches.value_of(options::BLOCK_SIZE))).unwrap();
 
     let multiplier: u64 = if matches.is_present(options::SI) {
         1000
@@ -745,31 +720,27 @@ Try '{} --help' for more information.",
     0
 }
 
+fn format_error_message(error: ParseSizeError, s: &str, option: &str) -> String {
+    // NOTE:
+    // GNU's du echos affected flag, -B or --block-size (-t or --threshold), depending user's selection
+    // GNU's du does distinguish between "invalid (suffix in) argument"
+    match error {
+        ParseSizeError::ParseFailure(_) => format!("invalid --{} argument '{}'", option, s),
+        ParseSizeError::SizeTooBig(_) => format!("--{} argument '{}' too large", option, s),
+    }
+}
+
 #[cfg(test)]
 mod test_du {
     #[allow(unused_imports)]
     use super::*;
 
     #[test]
-    fn test_translate_to_pure_number() {
-        let test_data = [
-            (Some("10".to_string()), Some(10)),
-            (Some("10K".to_string()), Some(10 * 1024)),
-            (Some("5M".to_string()), Some(5 * 1024 * 1024)),
-            (Some("900KB".to_string()), Some(900 * 1000)),
-            (Some("BAD_STRING".to_string()), None),
-        ];
-        for it in test_data.iter() {
-            assert_eq!(translate_to_pure_number(&it.0.as_deref()), it.1);
-        }
-    }
-
-    #[test]
     fn test_read_block_size() {
         let test_data = [
-            (Some("10".to_string()), 10),
+            (Some("1024".to_string()), 1024),
+            (Some("K".to_string()), 1024),
             (None, 1024),
-            (Some("BAD_STRING".to_string()), 1024),
         ];
         for it in test_data.iter() {
             assert_eq!(read_block_size(it.0.as_deref()), it.1);

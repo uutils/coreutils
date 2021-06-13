@@ -38,18 +38,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let config_result: Result<base_common::Config, String> =
         base_common::parse_base_cmd_args(args, name, VERSION, ABOUT, &usage);
-
-    if config_result.is_err() {
-        match config_result {
-            Ok(_) => panic!(),
-            Err(s) => crash!(BASE_CMD_PARSE_ERROR, "{}", s),
-        }
-    }
+    let config = config_result.unwrap_or_else(|s| crash!(BASE_CMD_PARSE_ERROR, "{}", s));
 
     // Create a reference to stdin so we can return a locked stdin from
     // parse_base_cmd_args
     let stdin_raw = stdin();
-    let config = config_result.unwrap();
     let mut input: Box<dyn Read> = base_common::get_input(&config, &stdin_raw);
 
     base_common::handle_input(

@@ -55,18 +55,9 @@ impl Formatter for Decf {
         );
         // strip trailing zeroes
         if let Some(ref post_dec) = f_sci.post_decimal {
-            let mut i = post_dec.len();
-            {
-                let mut it = post_dec.chars();
-                while let Some(c) = it.next_back() {
-                    if c != '0' {
-                        break;
-                    }
-                    i -= 1;
-                }
-            }
-            if i != post_dec.len() {
-                f_sci.post_decimal = Some(String::from(&post_dec[0..i]));
+            let trimmed = post_dec.trim_end_matches('0');
+            if trimmed.len() != post_dec.len() {
+                f_sci.post_decimal = Some(trimmed.to_owned());
             }
         }
         let f_fl = get_primitive_dec(

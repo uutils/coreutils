@@ -160,10 +160,8 @@ impl AstNode {
         if let AstNode::Node { operands, .. } = self {
             let mut out = Vec::with_capacity(operands.len());
             for operand in operands {
-                match operand.evaluate() {
-                    Ok(value) => out.push(value),
-                    Err(reason) => return Err(reason),
-                }
+                let value = operand.evaluate()?;
+                out.push(value);
             }
             Ok(out)
         } else {
@@ -175,23 +173,14 @@ impl AstNode {
 pub fn tokens_to_ast(
     maybe_tokens: Result<Vec<(usize, Token)>, String>,
 ) -> Result<Box<AstNode>, String> {
-    if maybe_tokens.is_err() {
-        Err(maybe_tokens.err().unwrap())
-    } else {
-        let tokens = maybe_tokens.ok().unwrap();
+    maybe_tokens.and_then(|tokens| {
         let mut out_stack: TokenStack = Vec::new();
         let mut op_stack: TokenStack = Vec::new();
 
         for (token_idx, token) in tokens {
-            if let Err(reason) =
-                push_token_to_either_stack(token_idx, &token, &mut out_stack, &mut op_stack)
-            {
-                return Err(reason);
-            }
+            push_token_to_either_stack(token_idx, &token, &mut out_stack, &mut op_stack)?;
         }
-        if let Err(reason) = move_rest_of_ops_to_out(&mut out_stack, &mut op_stack) {
-            return Err(reason);
-        }
+        move_rest_of_ops_to_out(&mut out_stack, &mut op_stack)?;
         assert!(op_stack.is_empty());
 
         maybe_dump_rpn(&out_stack);
@@ -205,7 +194,7 @@ pub fn tokens_to_ast(
             maybe_dump_ast(&result);
             result
         }
-    }
+    })
 }
 
 fn maybe_dump_ast(result: &Result<Box<AstNode>, String>) {
@@ -261,10 +250,8 @@ fn maybe_ast_node(
 ) -> Result<Box<AstNode>, String> {
     let mut operands = Vec::with_capacity(arity);
     for _ in 0..arity {
-        match ast_from_rpn(rpn) {
-            Err(reason) => return Err(reason),
-            Ok(operand) => operands.push(operand),
-        }
+        let operand = ast_from_rpn(rpn)?;
+        operands.push(operand);
     }
     operands.reverse();
     Ok(AstNode::new_node(token_idx, op_type, operands))
@@ -408,10 +395,12 @@ fn move_till_match_paren(
     op_stack: &mut TokenStack,
 ) -> Result<(), String> {
     loop {
-        match op_stack.pop() {
-            None => return Err("syntax error (Mismatched close-parenthesis)".to_string()),
-            Some((_, Token::ParOpen)) => return Ok(()),
-            Some(other) => out_stack.push(other),
+        let op = op_stack
+            .pop()
+            .ok_or_else(|| "syntax error (Mismatched close-parenthesis)".to_string())?;
+        match op {
+            (_, Token::ParOpen) => return Ok(()),
+            other => out_stack.push(other),
         }
     }
 }
@@ -471,22 +460,17 @@ fn infix_operator_and(values: &[String]) -> String {
 
 fn operator_match(values: &[String]) -> Result<String, String> {
     assert!(values.len() == 2);
-    let re = match Regex::with_options(&values[1], RegexOptions::REGEX_OPTION_NONE, Syntax::grep())
-    {
-        Ok(m) => m,
-        Err(err) => return Err(err.description().to_string()),
-    };
-    if re.captures_len() > 0 {
-        Ok(match re.captures(&values[0]) {
-            Some(captures) => captures.at(1).unwrap().to_string(),
-            None => "".to_string(),
-        })
+    let re = Regex::with_options(&values[1], RegexOptions::REGEX_OPTION_NONE, Syntax::grep())
+        .map_err(|err| err.description().to_string())?;
+    Ok(if re.captures_len() > 0 {
+        re.captures(&values[0])
+            .map(|captures| captures.at(1).unwrap())
+            .unwrap_or("")
+            .to_string()
     } else {
-        Ok(match re.find(&values[0]) {
-            Some((start, end)) => (end - start).to_string(),
-            None => "0".to_string(),
-        })
-    }
+        re.find(&values[0])
+            .map_or("0".to_string(), |(start, end)| (end - start).to_string())
+    })
 }
 
 fn prefix_operator_length(values: &[String]) -> String {

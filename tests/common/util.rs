@@ -641,11 +641,20 @@ impl AtPath {
         // Source:
         // http://stackoverflow.com/questions/31439011/getfinalpathnamebyhandle-without-prepended
         let prefix = "\\\\?\\";
+        // FixME: replace ...
+        #[allow(clippy::manual_strip)]
         if s.starts_with(prefix) {
             String::from(&s[prefix.len()..])
         } else {
             s
         }
+        // ... with ...
+        // if let Some(stripped) = s.strip_prefix(prefix) {
+        //     String::from(stripped)
+        // } else {
+        //     s
+        // }
+        // ... when using MSRV with stabilized `strip_prefix()`
     }
 }
 

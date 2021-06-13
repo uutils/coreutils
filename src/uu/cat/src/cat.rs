@@ -20,7 +20,6 @@ use clap::{crate_version, App, Arg};
 use std::fs::{metadata, File};
 use std::io::{self, Read, Write};
 use thiserror::Error;
-use uucore::fs::is_stdin_interactive;
 
 /// Linux splice support
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -295,7 +294,7 @@ fn cat_handle<R: Read>(
     if options.can_write_fast() {
         write_fast(handle)
     } else {
-        write_lines(handle, &options, state)
+        write_lines(handle, options, state)
     }
 }
 
@@ -306,9 +305,9 @@ fn cat_path(path: &str, options: &OutputOptions, state: &mut OutputState) -> Cat
             #[cfg(any(target_os = "linux", target_os = "android"))]
             file_descriptor: stdin.as_raw_fd(),
             reader: stdin,
-            is_interactive: is_stdin_interactive(),
+            is_interactive: atty::is(atty::Stream::Stdin),
         };
-        return cat_handle(&mut handle, &options, state);
+        return cat_handle(&mut handle, options, state);
     }
     match get_input_type(path)? {
         InputType::Directory => Err(CatError::IsDirectory),
@@ -322,7 +321,7 @@ fn cat_path(path: &str, options: &OutputOptions, state: &mut OutputState) -> Cat
                 reader: socket,
                 is_interactive: false,
             };
-            cat_handle(&mut handle, &options, state)
+            cat_handle(&mut handle, options, state)
         }
         _ => {
             let file = File::open(path)?;
@@ -332,7 +331,7 @@ fn cat_path(path: &str, options: &OutputOptions, state: &mut OutputState) -> Cat
                 reader: file,
                 is_interactive: false,
             };
-            cat_handle(&mut handle, &options, state)
+            cat_handle(&mut handle, options, state)
         }
     }
 }
@@ -345,7 +344,7 @@ fn cat_files(files: Vec<String>, options: &OutputOptions) -> Result<(), u32> {
     };
 
     for path in &files {
-        if let Err(err) = cat_path(path, &options, &mut state) {
+        if let Err(err) = cat_path(path, options, &mut state) {
             show_error!("{}: {}", path, err);
             error_count += 1;
         }

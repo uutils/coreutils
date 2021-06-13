@@ -328,8 +328,8 @@ impl<'a> State<'a> {
                     });
                 } else {
                     repr.print_field(key);
-                    repr.print_fields(&line1, self.key, self.max_fields);
-                    repr.print_fields(&line2, other.key, other.max_fields);
+                    repr.print_fields(line1, self.key, self.max_fields);
+                    repr.print_fields(line2, other.key, other.max_fields);
                 }
 
                 println!();
@@ -611,7 +611,7 @@ fn exec(file1: &str, file2: &str, settings: &Settings) -> i32 {
 
     let mut state1 = State::new(
         FileNum::File1,
-        &file1,
+        file1,
         &stdin,
         settings.key1,
         settings.print_unpaired,
@@ -619,7 +619,7 @@ fn exec(file1: &str, file2: &str, settings: &Settings) -> i32 {
 
     let mut state2 = State::new(
         FileNum::File2,
-        &file2,
+        file2,
         &stdin,
         settings.key2,
         settings.print_unpaired,

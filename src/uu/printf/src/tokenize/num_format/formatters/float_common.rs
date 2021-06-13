@@ -247,8 +247,12 @@ pub fn get_primitive_dec(
                 first_segment.len() as isize - 1,
             )
         } else {
-            match first_segment.chars().next() {
-                Some('0') => {
+            match first_segment
+                .chars()
+                .next()
+                .expect("float_common: no chars in first segment.")
+            {
+                '0' => {
                     let it = second_segment.chars().enumerate();
                     let mut m: isize = 0;
                     let mut pre = String::from("0");
@@ -266,10 +270,7 @@ pub fn get_primitive_dec(
                     }
                     (pre, post, m)
                 }
-                Some(_) => (first_segment, second_segment, 0),
-                None => {
-                    panic!("float_common: no chars in first segment.");
-                }
+                _ => (first_segment, second_segment, 0),
             }
         }
     } else {
@@ -298,11 +299,11 @@ pub fn get_primitive_dec(
 pub fn primitive_to_str_common(prim: &FormatPrimitive, field: &FormatField) -> String {
     let mut final_str = String::new();
     if let Some(ref prefix) = prim.prefix {
-        final_str.push_str(&prefix);
+        final_str.push_str(prefix);
     }
     match prim.pre_decimal {
         Some(ref pre_decimal) => {
-            final_str.push_str(&pre_decimal);
+            final_str.push_str(pre_decimal);
         }
         None => {
             panic!(

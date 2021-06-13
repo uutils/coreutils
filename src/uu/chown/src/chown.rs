@@ -220,7 +220,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     };
 
     let filter = if let Some(spec) = matches.value_of(options::FROM) {
-        match parse_spec(&spec) {
+        match parse_spec(spec) {
             Ok((Some(uid), None)) => IfFrom::User(uid),
             Ok((None, Some(gid))) => IfFrom::Group(gid),
             Ok((Some(uid), Some(gid))) => IfFrom::UserGroup(uid, gid),
@@ -248,7 +248,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             }
         }
     } else {
-        match parse_spec(&owner) {
+        match parse_spec(owner) {
             Ok((u, g)) => {
                 dest_uid = u;
                 dest_gid = g;
@@ -278,37 +278,25 @@ fn parse_spec(spec: &str) -> Result<(Option<u32>, Option<u32>), String> {
     let usr_only = args.len() == 1 && !args[0].is_empty();
     let grp_only = args.len() == 2 && args[0].is_empty();
     let usr_grp = args.len() == 2 && !args[0].is_empty() && !args[1].is_empty();
-
-    if usr_only {
-        Ok((
-            Some(match Passwd::locate(args[0]) {
-                Ok(v) => v.uid(),
-                _ => return Err(format!("invalid user: ‘{}’", spec)),
-            }),
-            None,
-        ))
-    } else if grp_only {
-        Ok((
-            None,
-            Some(match Group::locate(args[1]) {
-                Ok(v) => v.gid(),
-                _ => return Err(format!("invalid group: ‘{}’", spec)),
-            }),
-        ))
-    } else if usr_grp {
-        Ok((
-            Some(match Passwd::locate(args[0]) {
-                Ok(v) => v.uid(),
-                _ => return Err(format!("invalid user: ‘{}’", spec)),
-            }),
-            Some(match Group::locate(args[1]) {
-                Ok(v) => v.gid(),
-                _ => return Err(format!("invalid group: ‘{}’", spec)),
-            }),
-        ))
+    let uid = if usr_only || usr_grp {
+        Some(
+            Passwd::locate(args[0])
+                .map_err(|_| format!("invalid user: ‘{}’", spec))?
+                .uid(),
+        )
     } else {
-        Ok((None, None))
-    }
+        None
+    };
+    let gid = if grp_only || usr_grp {
+        Some(
+            Group::locate(args[1])
+                .map_err(|_| format!("invalid group: ‘{}’", spec))?
+                .gid(),
+        )
+    } else {
+        None
+    };
+    Ok((uid, gid))
 }
 
 enum IfFrom {
@@ -495,5 +483,19 @@ impl Chowner {
             IfFrom::Group(g) => g == gid,
             IfFrom::UserGroup(u, g) => u == uid && g == gid,
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_parse_spec() {
+        assert_eq!(parse_spec(":"), Ok((None, None)));
+        assert!(parse_spec("::")
+            .err()
+            .unwrap()
+            .starts_with("invalid group: "));
     }
 }

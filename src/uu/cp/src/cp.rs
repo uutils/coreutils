@@ -709,27 +709,26 @@ fn parse_path_args(path_args: &[String], options: &Options) -> CopyResult<(Vec<S
         return Err(format!("extra operand {:?}", paths[2]).into());
     }
 
-    let (mut sources, target) = match options.target_dir {
+    let target = match options.target_dir {
         Some(ref target) => {
             // All path args are sources, and the target dir was
             // specified separately
-            (paths, PathBuf::from(target))
+            PathBuf::from(target)
         }
         None => {
             // If there was no explicit target-dir, then use the last
             // path_arg
-            let target = paths.pop().unwrap();
-            (paths, target)
+            paths.pop().unwrap()
         }
     };
 
     if options.strip_trailing_slashes {
-        for source in sources.iter_mut() {
+        for source in paths.iter_mut() {
             *source = source.components().as_path().to_owned()
         }
     }
 
-    Ok((sources, target))
+    Ok((paths, target))
 }
 
 fn preserve_hardlinks(
@@ -1088,7 +1087,7 @@ fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResu
 }
 
 #[cfg(not(windows))]
-#[allow(clippy::unnecessary_unwrap)] // needed for windows version
+#[allow(clippy::unnecessary_wraps)] // needed for windows version
 fn symlink_file(source: &Path, dest: &Path, context: &str) -> CopyResult<()> {
     match std::os::unix::fs::symlink(source, dest).context(context) {
         Ok(_) => Ok(()),
@@ -1271,15 +1270,15 @@ fn copy_on_write_linux(source: &Path, dest: &Path, mode: ReflinkMode) -> CopyRes
         ReflinkMode::Always => unsafe {
             let result = ficlone(dst_file.as_raw_fd(), src_file.as_raw_fd() as *const i32);
             if result != 0 {
-                return Err(format!(
+                Err(format!(
                     "failed to clone {:?} from {:?}: {}",
                     source,
                     dest,
                     std::io::Error::last_os_error()
                 )
-                .into());
+                .into())
             } else {
-                return Ok(());
+                Ok(())
             }
         },
         ReflinkMode::Auto => unsafe {
@@ -1287,11 +1286,10 @@ fn copy_on_write_linux(source: &Path, dest: &Path, mode: ReflinkMode) -> CopyRes
             if result != 0 {
                 fs::copy(source, dest).context(&*context_for(source, dest))?;
             }
+            Ok(())
         },
         ReflinkMode::Never => unreachable!(),
     }
-
-    Ok(())
 }
 
 /// Copies `source` to `dest` using copy-on-write if possible.

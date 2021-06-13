@@ -50,9 +50,8 @@ fn mkdelim(col: usize, opts: &ArgMatches) -> String {
 }
 
 fn ensure_nl(line: &mut String) {
-    match line.chars().last() {
-        Some('\n') => (),
-        _ => line.push('\n'),
+    if !line.ends_with('\n') {
+        line.push('\n');
     }
 }
 

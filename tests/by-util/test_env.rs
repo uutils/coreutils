@@ -187,11 +187,10 @@ fn test_change_directory() {
         .arg(&temporary_path)
         .succeeds()
         .stdout_move_str();
-    assert_eq!(
-        out.lines()
-            .any(|line| line.ends_with(temporary_path.file_name().unwrap().to_str().unwrap())),
-        false
-    );
+
+    assert!(!out
+        .lines()
+        .any(|line| line.ends_with(temporary_path.file_name().unwrap().to_str().unwrap())));
 }
 
 #[test]

@@ -78,27 +78,27 @@ pub fn strings_to_tokens(strings: &[String]) -> Result<Vec<(usize, Token)>, Stri
             "(" => Token::ParOpen,
             ")" => Token::ParClose,
 
-            "^" => Token::new_infix_op(&s, false, 7),
+            "^" => Token::new_infix_op(s, false, 7),
 
-            ":" => Token::new_infix_op(&s, true, 6),
+            ":" => Token::new_infix_op(s, true, 6),
 
-            "*" => Token::new_infix_op(&s, true, 5),
-            "/" => Token::new_infix_op(&s, true, 5),
-            "%" => Token::new_infix_op(&s, true, 5),
+            "*" => Token::new_infix_op(s, true, 5),
+            "/" => Token::new_infix_op(s, true, 5),
+            "%" => Token::new_infix_op(s, true, 5),
 
-            "+" => Token::new_infix_op(&s, true, 4),
-            "-" => Token::new_infix_op(&s, true, 4),
+            "+" => Token::new_infix_op(s, true, 4),
+            "-" => Token::new_infix_op(s, true, 4),
 
-            "=" => Token::new_infix_op(&s, true, 3),
-            "!=" => Token::new_infix_op(&s, true, 3),
-            "<" => Token::new_infix_op(&s, true, 3),
-            ">" => Token::new_infix_op(&s, true, 3),
-            "<=" => Token::new_infix_op(&s, true, 3),
-            ">=" => Token::new_infix_op(&s, true, 3),
+            "=" => Token::new_infix_op(s, true, 3),
+            "!=" => Token::new_infix_op(s, true, 3),
+            "<" => Token::new_infix_op(s, true, 3),
+            ">" => Token::new_infix_op(s, true, 3),
+            "<=" => Token::new_infix_op(s, true, 3),
+            ">=" => Token::new_infix_op(s, true, 3),
 
-            "&" => Token::new_infix_op(&s, true, 2),
+            "&" => Token::new_infix_op(s, true, 2),
 
-            "|" => Token::new_infix_op(&s, true, 1),
+            "|" => Token::new_infix_op(s, true, 1),
 
             "match" => Token::PrefixOp {
                 arity: 2,
@@ -117,9 +117,9 @@ pub fn strings_to_tokens(strings: &[String]) -> Result<Vec<(usize, Token)>, Stri
                 value: s.clone(),
             },
 
-            _ => Token::new_value(&s),
+            _ => Token::new_value(s),
         };
-        push_token_if_not_escaped(&mut tokens_acc, tok_idx, token_if_not_escaped, &s);
+        push_token_if_not_escaped(&mut tokens_acc, tok_idx, token_if_not_escaped, s);
         tok_idx += 1;
     }
     maybe_dump_tokens_acc(&tokens_acc);

@@ -49,7 +49,7 @@ pub fn check(path: &str, settings: &GlobalSettings) -> i32 {
             let prev_last = prev_chunk.borrow_lines().last().unwrap();
             let new_first = chunk.borrow_lines().first().unwrap();
 
-            if compare_by(prev_last, new_first, &settings) == Ordering::Greater {
+            if compare_by(prev_last, new_first, settings) == Ordering::Greater {
                 if !settings.check_silent {
                     println!("sort: {}:{}: disorder: {}", path, line_idx, new_first.line);
                 }
@@ -60,7 +60,7 @@ pub fn check(path: &str, settings: &GlobalSettings) -> i32 {
 
         for (a, b) in chunk.borrow_lines().iter().tuple_windows() {
             line_idx += 1;
-            if compare_by(a, b, &settings) == Ordering::Greater {
+            if compare_by(a, b, settings) == Ordering::Greater {
                 if !settings.check_silent {
                     println!("sort: {}:{}: disorder: {}", path, line_idx, b.line);
                 }

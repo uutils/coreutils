@@ -1,16 +1,16 @@
 #!/bin/bash
 
-# spell-checker:ignore (paths) abmon deref discrim getlimits getopt ginstall gnulib inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW ; (vars/env) BUILDDIR SRCDIR
+# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall gnulib inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW ; (vars/env) BUILDDIR SRCDIR
 
 set -e
 if test ! -d ../gnu; then
     echo "Could not find ../gnu"
-    echo "git clone git@github.com:coreutils/coreutils.git ../gnu"
+    echo "git clone git@github.com:coreutils/coreutils.git gnu"
     exit 1
 fi
 if test ! -d ../gnulib; then
     echo "Could not find ../gnulib"
-    echo "git clone git@github.com:coreutils/gnulib.git ../gnulib"
+    echo "git clone git@github.com:coreutils/gnulib.git gnulib"
     exit 1
 fi
 

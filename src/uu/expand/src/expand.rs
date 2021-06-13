@@ -15,7 +15,6 @@ extern crate uucore;
 use clap::{crate_version, App, Arg, ArgMatches};
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
-use std::iter::repeat;
 use std::str::from_utf8;
 use unicode_width::UnicodeWidthChar;
 
@@ -90,7 +89,7 @@ impl Options {
             })
             .max()
             .unwrap(); // length of tabstops is guaranteed >= 1
-        let tspaces = repeat(' ').take(nspaces).collect();
+        let tspaces = " ".repeat(nspaces);
 
         let files: Vec<String> = match matches.values_of(options::FILES) {
             Some(s) => s.map(|v| v.to_string()).collect(),
@@ -236,7 +235,7 @@ fn expand(options: Options) {
 
                         // now dump out either spaces if we're expanding, or a literal tab if we're not
                         if init || !options.iflag {
-                            safe_unwrap!(output.write_all(&options.tspaces[..nts].as_bytes()));
+                            safe_unwrap!(output.write_all(options.tspaces[..nts].as_bytes()));
                         } else {
                             safe_unwrap!(output.write_all(&buf[byte..byte + nbytes]));
                         }

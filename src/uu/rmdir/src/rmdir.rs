@@ -88,7 +88,7 @@ fn remove(dirs: Vec<String>, ignore: bool, parents: bool, verbose: bool) -> Resu
 
     for dir in &dirs {
         let path = Path::new(&dir[..]);
-        r = remove_dir(&path, ignore, verbose).and(r);
+        r = remove_dir(path, ignore, verbose).and(r);
         if parents {
             let mut p = path;
             while let Some(new_p) = p.parent() {
@@ -109,17 +109,14 @@ fn remove(dirs: Vec<String>, ignore: bool, parents: bool, verbose: bool) -> Resu
 }
 
 fn remove_dir(path: &Path, ignore: bool, verbose: bool) -> Result<(), i32> {
-    let mut read_dir = match fs::read_dir(path) {
-        Ok(m) => m,
-        Err(e) if e.raw_os_error() == Some(ENOTDIR) => {
+    let mut read_dir = fs::read_dir(path).map_err(|e| {
+        if e.raw_os_error() == Some(ENOTDIR) {
             show_error!("failed to remove '{}': Not a directory", path.display());
-            return Err(1);
-        }
-        Err(e) => {
+        } else {
             show_error!("reading directory '{}': {}", path.display(), e);
-            return Err(1);
         }
-    };
+        1
+    })?;
 
     let mut r = Ok(());
 
