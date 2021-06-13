@@ -564,7 +564,8 @@ jobs:
       run: |
         ## Dependent VARs setup
         # * determine sub-crate utility list
-        UTILITY_LIST="$(./util/show-utils.sh ${CARGO_FEATURES_OPTION})"
+        # UTILITY_LIST="$(./util/show-utils.sh ${CARGO_FEATURES_OPTION})"
+        UTILITY_LIST="id" # TODO: remove after debugging
         CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo "-puu_${u}"; done;)"
         echo set-output name=UTILITY_LIST::${UTILITY_LIST}
         echo ::set-output name=CARGO_UTILITY_LIST_OPTIONS::${CARGO_UTILITY_LIST_OPTIONS}

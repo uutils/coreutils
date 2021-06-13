@@ -45,7 +45,8 @@ jobs:
     - name: Run GNU tests
       shell: bash
       run: |
-        bash uutils/util/run-gnu-test.sh
+        bash uutils/util/run-gnu-test.sh tests/id/uid.sh # TODO: remove after debugging
+        bash uutils/util/run-gnu-test.sh tests/id/zero.sh # TODO: remove after debugging
     - name: Extract tests info
       shell: bash
       run: |
