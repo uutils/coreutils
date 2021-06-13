@@ -78,6 +78,7 @@ symlinks
 syscall
 syscalls
 tokenize
+toolchain
 truthy
 unbuffered
 unescape
