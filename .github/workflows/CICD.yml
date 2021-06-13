@@ -17,6 +17,40 @@ env:
 on: [push, pull_request]
 
 jobs:
+  code_deps:
+    name: Style/dependencies
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: ubuntu-latest , features: feat_os_unix }
+    steps:
+    - uses: actions/checkout@v2
+    - name: Initialize workflow variables
+      id: vars
+      shell: bash
+      run: |
+        ## VARs setup
+        outputs() { for var in "$@" ; do echo steps.vars.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
+        # target-specific options
+        # * CARGO_FEATURES_OPTION
+        CARGO_FEATURES_OPTION='' ;
+        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
+        outputs CARGO_FEATURES_OPTION
+    - name: Install `rust` toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        default: true
+        profile: minimal # minimal component installation (ie, no documentation)
+    - name: "`cargo update` testing"
+      shell: bash
+      run: |
+        ## `cargo update` testing
+        # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
+        cargo fetch --locked --quiet || { echo "::error file=Cargo.lock::'Cargo.lock' file requires update (use \`cargo +${{ env.RUST_MIN_SRV }} update\`)" ; exit 1 ; }
+
   code_format:
     name: Style/format
     runs-on: ${{ matrix.job.os }}
