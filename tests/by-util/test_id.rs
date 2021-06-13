@@ -13,6 +13,8 @@ use crate::common::util::*;
 //
 
 fn whoami() -> String {
+    // Use environment variable to get current user instead of invoking `whoami`
+    // and fall back to user "nobody" on error.
     std::env::var("USER").unwrap_or_else(|e| {
         println!("warning: {}, using \"nobody\" instead", e);
         "nobody".to_string()
@@ -21,12 +23,12 @@ fn whoami() -> String {
 
 #[test]
 #[cfg(unix)]
-fn test_id_no_argument() {
+fn test_id_no_specified_user() {
     let result = new_ucmd!().run();
     let expected_result = expected_result(&[]);
     let mut exp_stdout = expected_result.stdout_str().to_string();
 
-    // uu_stid does not support selinux context. Remove 'context' part from exp_stdout:
+    // uu_id does not support selinux context. Remove 'context' part from exp_stdout:
     let context_offset = expected_result
         .stdout_str()
         .find(" context")
@@ -42,18 +44,63 @@ fn test_id_no_argument() {
 #[test]
 #[cfg(unix)]
 fn test_id_single_user() {
-    let args = &[&whoami()[..]];
-    let result = new_ucmd!().args(args).run();
-    let expected_result = expected_result(args);
-    result
-        .stdout_is(expected_result.stdout_str())
-        .stderr_is(expected_result.stderr_str())
-        .code_is(expected_result.code());
+    let test_users = [&whoami()[..]];
+
+    let scene = TestScenario::new(util_name!());
+    let mut exp_result = expected_result(&test_users);
+    scene
+        .ucmd()
+        .args(&test_users)
+        .run()
+        .stdout_is(exp_result.stdout_str())
+        .stderr_is(exp_result.stderr_str())
+        .code_is(exp_result.code());
+
+    // u/g/G z/n
+    for &opt in &["--user", "--group", "--groups"] {
+        let mut args = vec![opt];
+        args.extend_from_slice(&test_users);
+        exp_result = expected_result(&args);
+        scene
+            .ucmd()
+            .args(&args)
+            .run()
+            .stdout_is(exp_result.stdout_str())
+            .stderr_is(exp_result.stderr_str())
+            .code_is(exp_result.code());
+        args.push("--zero");
+        exp_result = expected_result(&args);
+        scene
+            .ucmd()
+            .args(&args)
+            .run()
+            .stdout_is(exp_result.stdout_str())
+            .stderr_is(exp_result.stderr_str())
+            .code_is(exp_result.code());
+        args.push("--name");
+        exp_result = expected_result(&args);
+        scene
+            .ucmd()
+            .args(&args)
+            .run()
+            .stdout_is(exp_result.stdout_str())
+            .stderr_is(exp_result.stderr_str())
+            .code_is(exp_result.code());
+        args.pop();
+        exp_result = expected_result(&args);
+        scene
+            .ucmd()
+            .args(&args)
+            .run()
+            .stdout_is(exp_result.stdout_str())
+            .stderr_is(exp_result.stderr_str())
+            .code_is(exp_result.code());
+    }
 }
 
 #[test]
 #[cfg(unix)]
-fn test_id_single_invalid_user() {
+fn test_id_single_user_non_existing() {
     let args = &["hopefully_non_existing_username"];
     let result = new_ucmd!().args(args).run();
     let expected_result = expected_result(args);
@@ -129,41 +176,162 @@ fn test_id_password_style() {
 
 #[test]
 #[cfg(unix)]
-fn test_id_default_format() {
-    // TODO: These are the same tests like in test_id_zero but without --zero flag.
-}
-
-#[test]
-#[cfg(unix)]
 fn test_id_multiple_users() {
     // Same typical users that GNU testsuite is using.
     let test_users = ["root", "man", "postfix", "sshd", &whoami()];
 
-    let result = new_ucmd!().args(&test_users).run();
-    let expected_result = expected_result(&test_users);
-    result
-        .stdout_is(expected_result.stdout_str())
-        .stderr_is(expected_result.stderr_str());
+    let scene = TestScenario::new(util_name!());
+    let mut exp_result = expected_result(&test_users);
+    scene
+        .ucmd()
+        .args(&test_users)
+        .run()
+        .stdout_is(exp_result.stdout_str())
+        .stderr_is(exp_result.stderr_str())
+        .code_is(exp_result.code());
+
+    // u/g/G z/n
+    for &opt in &["--user", "--group", "--groups"] {
+        let mut args = vec![opt];
+        args.extend_from_slice(&test_users);
+        exp_result = expected_result(&args);
+        scene
+            .ucmd()
+            .args(&args)
+            .run()
+            .stdout_is(exp_result.stdout_str())
+            .stderr_is(exp_result.stderr_str())
+            .code_is(exp_result.code());
+        args.push("--zero");
+        exp_result = expected_result(&args);
+        scene
+            .ucmd()
+            .args(&args)
+            .run()
+            .stdout_is(exp_result.stdout_str())
+            .stderr_is(exp_result.stderr_str())
+            .code_is(exp_result.code());
+        args.push("--name");
+        exp_result = expected_result(&args);
+        scene
+            .ucmd()
+            .args(&args)
+            .run()
+            .stdout_is(exp_result.stdout_str())
+            .stderr_is(exp_result.stderr_str())
+            .code_is(exp_result.code());
+        args.pop();
+        exp_result = expected_result(&args);
+        scene
+            .ucmd()
+            .args(&args)
+            .run()
+            .stdout_is(exp_result.stdout_str())
+            .stderr_is(exp_result.stderr_str())
+            .code_is(exp_result.code());
+    }
 }
 
 #[test]
 #[cfg(unix)]
-fn test_id_multiple_invalid_users() {
+fn test_id_multiple_users_non_existing() {
     let test_users = [
         "root",
         "hopefully_non_existing_username1",
+        &whoami(),
         "man",
+        "hopefully_non_existing_username2",
+        "hopefully_non_existing_username3",
         "postfix",
         "sshd",
-        "hopefully_non_existing_username2",
+        "hopefully_non_existing_username4",
         &whoami(),
     ];
 
-    let result = new_ucmd!().args(&test_users).run();
-    let expected_result = expected_result(&test_users);
-    result
-        .stdout_is(expected_result.stdout_str())
-        .stderr_is(expected_result.stderr_str());
+    let scene = TestScenario::new(util_name!());
+    let mut exp_result = expected_result(&test_users);
+    scene
+        .ucmd()
+        .args(&test_users)
+        .run()
+        .stdout_is(exp_result.stdout_str())
+        .stderr_is(exp_result.stderr_str())
+        .code_is(exp_result.code());
+
+    // u/g/G z/n
+    for &opt in &["--user", "--group", "--groups"] {
+        let mut args = vec![opt];
+        args.extend_from_slice(&test_users);
+        exp_result = expected_result(&args);
+        scene
+            .ucmd()
+            .args(&args)
+            .run()
+            .stdout_is(exp_result.stdout_str())
+            .stderr_is(exp_result.stderr_str())
+            .code_is(exp_result.code());
+        args.push("--zero");
+        exp_result = expected_result(&args);
+        scene
+            .ucmd()
+            .args(&args)
+            .run()
+            .stdout_is(exp_result.stdout_str())
+            .stderr_is(exp_result.stderr_str())
+            .code_is(exp_result.code());
+        args.push("--name");
+        exp_result = expected_result(&args);
+        scene
+            .ucmd()
+            .args(&args)
+            .run()
+            .stdout_is(exp_result.stdout_str())
+            .stderr_is(exp_result.stderr_str())
+            .code_is(exp_result.code());
+        args.pop();
+        exp_result = expected_result(&args);
+        scene
+            .ucmd()
+            .args(&args)
+            .run()
+            .stdout_is(exp_result.stdout_str())
+            .stderr_is(exp_result.stderr_str())
+            .code_is(exp_result.code());
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_id_default_format() {
+    let scene = TestScenario::new(util_name!());
+    for &opt1 in &["--name", "--real"] {
+        // id: cannot print only names or real IDs in default format
+        let args = [opt1];
+        scene
+            .ucmd()
+            .args(&args)
+            .fails()
+            .stderr_only(expected_result(&args).stderr_str());
+        for &opt2 in &["--user", "--group", "--groups"] {
+            // u/g/G n/r
+            let args = [opt2, opt1];
+            let result = scene.ucmd().args(&args).run();
+            let exp_result = expected_result(&args);
+            result
+                .stdout_is(exp_result.stdout_str())
+                .stderr_is(exp_result.stderr_str())
+                .code_is(exp_result.code());
+        }
+    }
+    for &opt2 in &["--user", "--group", "--groups"] {
+        // u/g/G
+        let args = [opt2];
+        scene
+            .ucmd()
+            .args(&args)
+            .succeeds()
+            .stdout_only(expected_result(&args).stdout_str());
+    }
 }
 
 #[test]
@@ -171,6 +339,12 @@ fn test_id_multiple_invalid_users() {
 fn test_id_zero() {
     let scene = TestScenario::new(util_name!());
     for z_flag in &["-z", "--zero"] {
+        // id: option --zero not permitted in default format
+        scene
+            .ucmd()
+            .args(&[z_flag])
+            .fails()
+            .stderr_only(expected_result(&[z_flag]).stderr_str());
         for &opt1 in &["--name", "--real"] {
             // id: cannot print only names or real IDs in default format
             let args = [opt1, z_flag];
@@ -183,14 +357,15 @@ fn test_id_zero() {
                 // u/g/G n/r z
                 let args = [opt2, z_flag, opt1];
                 let result = scene.ucmd().args(&args).run();
-                let expected_result = expected_result(&args);
+                let exp_result = expected_result(&args);
                 result
-                    .stdout_is(expected_result.stdout_str())
-                    .stderr_is(expected_result.stderr_str());
+                    .stdout_is(exp_result.stdout_str())
+                    .stderr_is(exp_result.stderr_str())
+                    .code_is(exp_result.code());
             }
         }
-        // u/g/G z
         for &opt2 in &["--user", "--group", "--groups"] {
+            // u/g/G z
             let args = [opt2, z_flag];
             scene
                 .ucmd()
