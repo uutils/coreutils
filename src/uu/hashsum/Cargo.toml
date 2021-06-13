@@ -29,6 +29,9 @@ blake2b_simd = "0.5.11"
 uucore = { version=">=0.0.8", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
+[build-dependencies]
+clap = "2.33"
+
 [[bin]]
 name = "hashsum"
 path = "src/main.rs"
