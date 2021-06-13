@@ -16,10 +16,11 @@ extern crate unix_socket;
 extern crate uucore;
 
 // last synced with: cat (GNU coreutils) 8.13
-use clap::{crate_version, App, Arg};
 use std::fs::{metadata, File};
 use std::io::{self, Read, Write};
 use thiserror::Error;
+
+mod app;
 
 /// Linux splice support
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -36,10 +37,7 @@ use std::os::unix::fs::FileTypeExt;
 use unix_socket::UnixStream;
 use uucore::InvalidEncodingHandling;
 
-static NAME: &str = "cat";
-static SYNTAX: &str = "[OPTION]... [FILE]...";
-static SUMMARY: &str = "Concatenate FILE(s), or standard input, to standard output
- With no FILE, or when FILE is -, read standard input.";
+use crate::app::{get_app, options};
 
 #[derive(Error, Debug)]
 enum CatError {
@@ -151,85 +149,12 @@ enum InputType {
     Socket,
 }
 
-mod options {
-    pub static FILE: &str = "file";
-    pub static SHOW_ALL: &str = "show-all";
-    pub static NUMBER_NONBLANK: &str = "number-nonblank";
-    pub static SHOW_NONPRINTING_ENDS: &str = "e";
-    pub static SHOW_ENDS: &str = "show-ends";
-    pub static NUMBER: &str = "number";
-    pub static SQUEEZE_BLANK: &str = "squeeze-blank";
-    pub static SHOW_NONPRINTING_TABS: &str = "t";
-    pub static SHOW_TABS: &str = "show-tabs";
-    pub static SHOW_NONPRINTING: &str = "show-nonprinting";
-}
-
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let matches = App::new(executable!())
-        .name(NAME)
-        .version(crate_version!())
-        .usage(SYNTAX)
-        .about(SUMMARY)
-        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
-        .arg(
-            Arg::with_name(options::SHOW_ALL)
-                .short("A")
-                .long(options::SHOW_ALL)
-                .help("equivalent to -vET"),
-        )
-        .arg(
-            Arg::with_name(options::NUMBER_NONBLANK)
-                .short("b")
-                .long(options::NUMBER_NONBLANK)
-                .help("number nonempty output lines, overrides -n")
-                .overrides_with(options::NUMBER),
-        )
-        .arg(
-            Arg::with_name(options::SHOW_NONPRINTING_ENDS)
-                .short("e")
-                .help("equivalent to -vE"),
-        )
-        .arg(
-            Arg::with_name(options::SHOW_ENDS)
-                .short("E")
-                .long(options::SHOW_ENDS)
-                .help("display $ at end of each line"),
-        )
-        .arg(
-            Arg::with_name(options::NUMBER)
-                .short("n")
-                .long(options::NUMBER)
-                .help("number all output lines"),
-        )
-        .arg(
-            Arg::with_name(options::SQUEEZE_BLANK)
-                .short("s")
-                .long(options::SQUEEZE_BLANK)
-                .help("suppress repeated empty output lines"),
-        )
-        .arg(
-            Arg::with_name(options::SHOW_NONPRINTING_TABS)
-                .short("t")
-                .long(options::SHOW_NONPRINTING_TABS)
-                .help("equivalent to -vT"),
-        )
-        .arg(
-            Arg::with_name(options::SHOW_TABS)
-                .short("T")
-                .long(options::SHOW_TABS)
-                .help("display TAB characters at ^I"),
-        )
-        .arg(
-            Arg::with_name(options::SHOW_NONPRINTING)
-                .short("v")
-                .long(options::SHOW_NONPRINTING)
-                .help("use ^ and M- notation, except for LF (\\n) and TAB (\\t)"),
-        )
-        .get_matches_from(args);
+    let matches = get_app(executable!()).get_matches_from(args);
 
     let number_mode = if matches.is_present(options::NUMBER_NONBLANK) {
         NumberingMode::NonEmpty
