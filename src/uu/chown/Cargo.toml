@@ -21,6 +21,9 @@ uucore = { version=">=0.0.8", package="uucore", path="../../uucore", features=["
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 walkdir = "2.2"
 
+[build-dependencies]
+clap = "2.33"
+
 [[bin]]
 name = "chown"
 path = "src/main.rs"
