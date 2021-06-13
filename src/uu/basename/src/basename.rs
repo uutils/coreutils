@@ -10,12 +10,12 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
+mod app;
+
 use std::path::{is_separator, PathBuf};
 use uucore::InvalidEncodingHandling;
 
-static SUMMARY: &str = "Print NAME with any leading directory components removed
-If specified, also remove a trailing SUFFIX";
+use crate::app::get_app;
 
 fn get_usage() -> String {
     format!(
@@ -40,30 +40,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     //
     // Argument parsing
     //
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(SUMMARY)
+    let matches = get_app(executable!())
         .usage(&usage[..])
-        .arg(
-            Arg::with_name(options::MULTIPLE)
-                .short("a")
-                .long(options::MULTIPLE)
-                .help("support multiple arguments and treat each as a NAME"),
-        )
-        .arg(Arg::with_name(options::NAME).multiple(true).hidden(true))
-        .arg(
-            Arg::with_name(options::SUFFIX)
-                .short("s")
-                .long(options::SUFFIX)
-                .value_name("SUFFIX")
-                .help("remove a trailing SUFFIX; implies -a"),
-        )
-        .arg(
-            Arg::with_name(options::ZERO)
-                .short("z")
-                .long(options::ZERO)
-                .help("end each output line with NUL, not newline"),
-        )
         .get_matches_from(args);
 
     // too few arguments
