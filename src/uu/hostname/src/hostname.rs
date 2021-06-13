@@ -10,23 +10,18 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg, ArgMatches};
+use clap::ArgMatches;
 use std::collections::hash_set::HashSet;
 use std::net::ToSocketAddrs;
-use std::str;
 
 #[cfg(windows)]
 use winapi::shared::minwindef::MAKEWORD;
 #[cfg(windows)]
 use winapi::um::winsock2::{WSACleanup, WSAStartup};
 
-static ABOUT: &str = "Display or set the system's host name.";
+use crate::app::*;
 
-static OPT_DOMAIN: &str = "domain";
-static OPT_IP_ADDRESS: &str = "ip-address";
-static OPT_FQDN: &str = "fqdn";
-static OPT_SHORT: &str = "short";
-static OPT_HOST: &str = "host";
+mod app;
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     #![allow(clippy::let_and_return)]
@@ -52,34 +47,8 @@ fn get_usage() -> String {
 }
 fn execute(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = get_app(executable!())
         .usage(&usage[..])
-        .arg(
-            Arg::with_name(OPT_DOMAIN)
-                .short("d")
-                .long("domain")
-                .help("Display the name of the DNS domain if possible"),
-        )
-        .arg(
-            Arg::with_name(OPT_IP_ADDRESS)
-                .short("i")
-                .long("ip-address")
-                .help("Display the network address(es) of the host"),
-        )
-        // TODO: support --long
-        .arg(
-            Arg::with_name(OPT_FQDN)
-                .short("f")
-                .long("fqdn")
-                .help("Display the FQDN (Fully Qualified Domain Name) (default)"),
-        )
-        .arg(Arg::with_name(OPT_SHORT).short("s").long("short").help(
-            "Display the short hostname (the portion before the first dot) if \
-             possible",
-        ))
-        .arg(Arg::with_name(OPT_HOST))
         .get_matches_from(args);
 
     match matches.value_of(OPT_HOST) {
