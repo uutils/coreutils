@@ -313,9 +313,9 @@ else
 		$(INSTALL) $(BUILDDIR)/$(prog) $(INSTALLDIR_BIN)/$(PROG_PREFIX)$(prog);)
 	$(foreach prog, $(INSTALLEES), \
 		$(if $(wildcard $(BUILDDIR)/build/*/out/$(PROG_PREFIX)$(prog).bash), \
-			$(INSTALL) $(wildcard $(BUILDDIR)/build/*/out/_$(PROG_PREFIX)$(prog)) $(DESTDIR)$(PREFIX)/share/zsh/site-functions/_$(PROG_PREFIX)$(prog); \
-			$(INSTALL) $(wildcard $(BUILDDIR)/build/*/out/$(PROG_PREFIX)$(prog).bash) $(DESTDIR)$(PREFIX)/share/bash-completion/completions/$(PROG_PREFIX)$(prog); \
-			$(INSTALL) $(wildcard $(BUILDDIR)/build/*/out/$(PROG_PREFIX)$(prog).fish) $(DESTDIR)$(PREFIX)/share/fish/vendor_completions.d/$(PROG_PREFIX)$(prog).fish; \
+			$(INSTALL) $(firstword $(wildcard $(BUILDDIR)/build/*/out/_$(PROG_PREFIX)$(prog))) $(DESTDIR)$(PREFIX)/share/zsh/site-functions/_$(PROG_PREFIX)$(prog); \
+			$(INSTALL) $(firstword $(wildcard $(BUILDDIR)/build/*/out/$(PROG_PREFIX)$(prog).bash)) $(DESTDIR)$(PREFIX)/share/bash-completion/completions/$(PROG_PREFIX)$(prog); \
+			$(INSTALL) $(firstword $(wildcard $(BUILDDIR)/build/*/out/$(PROG_PREFIX)$(prog).fish)) $(DESTDIR)$(PREFIX)/share/fish/vendor_completions.d/$(PROG_PREFIX)$(prog).fish; \
 		) \
 	)
 endif
