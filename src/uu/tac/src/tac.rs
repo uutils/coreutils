@@ -10,55 +10,20 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
 use std::io::{stdin, stdout, BufReader, Read, Stdout, Write};
 use std::{fs::File, path::Path};
 use uucore::InvalidEncodingHandling;
 
-static NAME: &str = "tac";
-static USAGE: &str = "[OPTION]... [FILE]...";
-static SUMMARY: &str = "Write each file to standard output, last line first.";
+use crate::app::{get_app, options};
 
-mod options {
-    pub static BEFORE: &str = "before";
-    pub static REGEX: &str = "regex";
-    pub static SEPARATOR: &str = "separator";
-    pub static FILE: &str = "file";
-}
+mod app;
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let matches = App::new(executable!())
-        .name(NAME)
-        .version(crate_version!())
-        .usage(USAGE)
-        .about(SUMMARY)
-        .arg(
-            Arg::with_name(options::BEFORE)
-                .short("b")
-                .long(options::BEFORE)
-                .help("attach the separator before instead of after")
-                .takes_value(false),
-        )
-        .arg(
-            Arg::with_name(options::REGEX)
-                .short("r")
-                .long(options::REGEX)
-                .help("interpret the sequence as a regular expression (NOT IMPLEMENTED)")
-                .takes_value(false),
-        )
-        .arg(
-            Arg::with_name(options::SEPARATOR)
-                .short("s")
-                .long(options::SEPARATOR)
-                .help("use STRING as the separator instead of newline")
-                .takes_value(true),
-        )
-        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
-        .get_matches_from(args);
+    let matches = get_app(executable!()).get_matches_from(args);
 
     let before = matches.is_present(options::BEFORE);
     let regex = matches.is_present(options::REGEX);
