@@ -8,47 +8,26 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
 use libc::mkfifo;
 use std::ffi::CString;
 use uucore::InvalidEncodingHandling;
 
-static NAME: &str = "mkfifo";
-static USAGE: &str = "mkfifo [OPTION]... NAME...";
-static SUMMARY: &str = "Create a FIFO with the given name.";
+use crate::app::{get_app, options};
 
-mod options {
-    pub static MODE: &str = "mode";
-    pub static SE_LINUX_SECURITY_CONTEXT: &str = "Z";
-    pub static CONTEXT: &str = "context";
-    pub static FIFO: &str = "fifo";
+mod app;
+
+fn get_usage() -> String {
+    format!("{} [OPTION]... NAME...", executable!())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
+    let usage = get_usage();
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let matches = App::new(executable!())
-        .name(NAME)
-        .version(crate_version!())
-        .usage(USAGE)
-        .about(SUMMARY)
-        .arg(
-            Arg::with_name(options::MODE)
-                .short("m")
-                .long(options::MODE)
-                .help("file permissions for the fifo")
-                .default_value("0666")
-                .value_name("0666"),
-        )
-        .arg(
-            Arg::with_name(options::SE_LINUX_SECURITY_CONTEXT)
-                .short(options::SE_LINUX_SECURITY_CONTEXT)
-                .help("set the SELinux security context to default type")
-        )
-        .arg(Arg::with_name(options::CONTEXT).long(options::CONTEXT).value_name("CTX").help("like -Z, or if CTX is specified then set the SELinux\nor SMACK security context to CTX"))
-        .arg(Arg::with_name(options::FIFO).hidden(true).multiple(true))
+    let matches = get_app(executable!())
+        .usage(usage.as_str())
         .get_matches_from(args);
 
     if matches.is_present(options::CONTEXT) {
