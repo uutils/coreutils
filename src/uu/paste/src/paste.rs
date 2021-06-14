@@ -10,20 +10,14 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::iter::repeat;
 use std::path::Path;
 
-static ABOUT: &str = "Write lines consisting of the sequentially corresponding lines from each
-FILE, separated by TABs, to standard output.";
+use crate::app::{get_app, options};
 
-mod options {
-    pub const DELIMITER: &str = "delimiters";
-    pub const SERIAL: &str = "serial";
-    pub const FILE: &str = "file";
-}
+mod app;
 
 // Wraps BufReader and stdin
 fn read_line<R: Read>(
@@ -37,31 +31,7 @@ fn read_line<R: Read>(
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
-        .arg(
-            Arg::with_name(options::SERIAL)
-                .long(options::SERIAL)
-                .short("s")
-                .help("paste one file at a time instead of in parallel"),
-        )
-        .arg(
-            Arg::with_name(options::DELIMITER)
-                .long(options::DELIMITER)
-                .short("d")
-                .help("reuse characters from LIST instead of TABs")
-                .value_name("LIST")
-                .default_value("\t")
-                .hide_default_value(true),
-        )
-        .arg(
-            Arg::with_name(options::FILE)
-                .value_name("FILE")
-                .multiple(true)
-                .default_value("-"),
-        )
-        .get_matches_from(args);
+    let matches = get_app(executable!()).get_matches_from(args);
 
     let serial = matches.is_present(options::SERIAL);
     let delimiters = matches.value_of(options::DELIMITER).unwrap().to_owned();
