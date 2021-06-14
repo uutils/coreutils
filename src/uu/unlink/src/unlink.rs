@@ -12,16 +12,15 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
 use libc::{lstat, stat, unlink};
 use libc::{S_IFLNK, S_IFMT, S_IFREG};
 use std::ffi::CString;
 use std::io::{Error, ErrorKind};
 use uucore::InvalidEncodingHandling;
 
-static ABOUT: &str = "Unlink the file at [FILE].";
-static OPT_PATH: &str = "FILE";
+use crate::app::{get_app, OPT_PATH};
 
+mod app;
 fn get_usage() -> String {
     format!("{} [OPTION]... FILE", executable!())
 }
@@ -33,11 +32,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let usage = get_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = get_app(executable!())
         .usage(&usage[..])
-        .arg(Arg::with_name(OPT_PATH).hidden(true).multiple(true))
         .get_matches_from(args);
 
     let paths: Vec<String> = matches
