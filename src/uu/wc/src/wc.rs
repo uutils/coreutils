@@ -11,16 +11,21 @@ extern crate uucore;
 mod count_bytes;
 mod countable;
 mod word_count;
+use app::options;
 use count_bytes::count_bytes_fast;
 use countable::WordCountable;
 use word_count::{TitledWordCount, WordCount};
 
-use clap::{crate_version, App, Arg, ArgMatches};
+use clap::ArgMatches;
 use thiserror::Error;
 
 use std::fs::{self, File};
 use std::io::{self, ErrorKind, Write};
 use std::path::Path;
+
+use crate::app::{get_app, ARG_FILES};
+
+mod app;
 
 /// The minimum character width for formatting counts when reading from stdin.
 const MINIMUM_WIDTH: usize = 7;
@@ -82,19 +87,6 @@ impl Settings {
     }
 }
 
-static ABOUT: &str = "Display newline, word, and byte counts for each FILE, and a total line if
-more than one FILE is specified.";
-
-pub mod options {
-    pub static BYTES: &str = "bytes";
-    pub static CHAR: &str = "chars";
-    pub static LINES: &str = "lines";
-    pub static MAX_LINE_LENGTH: &str = "max-line-length";
-    pub static WORDS: &str = "words";
-}
-
-static ARG_FILES: &str = "files";
-
 fn get_usage() -> String {
     format!(
         "{0} [OPTION]... [FILE]...
@@ -134,41 +126,8 @@ impl Input {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = get_app(executable!())
         .usage(&usage[..])
-        .arg(
-            Arg::with_name(options::BYTES)
-                .short("c")
-                .long(options::BYTES)
-                .help("print the byte counts"),
-        )
-        .arg(
-            Arg::with_name(options::CHAR)
-                .short("m")
-                .long(options::CHAR)
-                .help("print the character counts"),
-        )
-        .arg(
-            Arg::with_name(options::LINES)
-                .short("l")
-                .long(options::LINES)
-                .help("print the newline counts"),
-        )
-        .arg(
-            Arg::with_name(options::MAX_LINE_LENGTH)
-                .short("L")
-                .long(options::MAX_LINE_LENGTH)
-                .help("print the length of the longest line"),
-        )
-        .arg(
-            Arg::with_name(options::WORDS)
-                .short("w")
-                .long(options::WORDS)
-                .help("print the word counts"),
-        )
-        .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true))
         .get_matches_from(args);
 
     let mut inputs: Vec<Input> = matches
