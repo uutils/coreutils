@@ -8,45 +8,19 @@
 #[macro_use]
 extern crate uucore;
 
+use crate::app::*;
 use crate::format::format_and_print;
-use crate::options::*;
+use crate::options::TransformOptions;
 use crate::units::{Result, Transform, Unit};
-use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
+use clap::ArgMatches;
+use options::NumfmtOptions;
 use std::io::{BufRead, Write};
 use uucore::ranges::Range;
 
+mod app;
 pub mod format;
 mod options;
 mod units;
-
-static ABOUT: &str = "Convert numbers from/to human-readable strings";
-static LONG_HELP: &str = "UNIT options:
-   none   no auto-scaling is done; suffixes will trigger an error
-
-   auto   accept optional single/two letter suffix:
-
-          1K = 1000, 1Ki = 1024, 1M = 1000000, 1Mi = 1048576,
-
-   si     accept optional single letter suffix:
-
-          1K = 1000, 1M = 1000000, ...
-
-   iec    accept optional single letter suffix:
-
-          1K = 1024, 1M = 1048576, ...
-
-   iec-i  accept optional two-letter suffix:
-
-          1Ki = 1024, 1Mi = 1048576, ...
-
-FIELDS supports cut(1) style field ranges:
-  N    N'th field, counted from 1
-  N-   from N'th field, to end of line
-  N-M  from N'th to M'th field (inclusive)
-  -M   from first to M'th field (inclusive)
-  -    all fields
-Multiple fields/ranges can be separated with commas
-";
 
 fn get_usage() -> String {
     format!("{0} [OPTION]... [NUMBER]...", executable!())
@@ -89,23 +63,23 @@ fn parse_unit(s: &str) -> Result<Unit> {
 }
 
 fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
-    let from = parse_unit(args.value_of(options::FROM).unwrap())?;
-    let to = parse_unit(args.value_of(options::TO).unwrap())?;
+    let from = parse_unit(args.value_of(FROM).unwrap())?;
+    let to = parse_unit(args.value_of(TO).unwrap())?;
 
     let transform = TransformOptions {
         from: Transform { unit: from },
         to: Transform { unit: to },
     };
 
-    let padding = match args.value_of(options::PADDING) {
+    let padding = match args.value_of(PADDING) {
         Some(s) => s.parse::<isize>().map_err(|err| err.to_string()),
         None => Ok(0),
     }?;
 
-    let header = match args.occurrences_of(options::HEADER) {
+    let header = match args.occurrences_of(HEADER) {
         0 => Ok(0),
         _ => {
-            let value = args.value_of(options::HEADER).unwrap();
+            let value = args.value_of(HEADER).unwrap();
 
             value
                 .parse::<usize>()
@@ -118,7 +92,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         }
     }?;
 
-    let fields = match args.value_of(options::FIELD) {
+    let fields = match args.value_of(FIELD) {
         Some("-") => vec![Range {
             low: 1,
             high: std::usize::MAX,
@@ -127,7 +101,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         None => unreachable!(),
     };
 
-    let delimiter = args.value_of(options::DELIMITER).map_or(Ok(None), |arg| {
+    let delimiter = args.value_of(DELIMITER).map_or(Ok(None), |arg| {
         if arg.len() == 1 {
             Ok(Some(arg.to_string()))
         } else {
@@ -147,70 +121,14 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = get_app(executable!())
         .usage(&usage[..])
-        .after_help(LONG_HELP)
-        .setting(AppSettings::AllowNegativeNumbers)
-        .arg(
-            Arg::with_name(options::DELIMITER)
-                .short("d")
-                .long(options::DELIMITER)
-                .value_name("X")
-                .help("use X instead of whitespace for field delimiter"),
-        )
-        .arg(
-            Arg::with_name(options::FIELD)
-                .long(options::FIELD)
-                .help("replace the numbers in these input fields (default=1) see FIELDS below")
-                .value_name("FIELDS")
-                .default_value(options::FIELD_DEFAULT),
-        )
-        .arg(
-            Arg::with_name(options::FROM)
-                .long(options::FROM)
-                .help("auto-scale input numbers to UNITs; see UNIT below")
-                .value_name("UNIT")
-                .default_value(options::FROM_DEFAULT),
-        )
-        .arg(
-            Arg::with_name(options::TO)
-                .long(options::TO)
-                .help("auto-scale output numbers to UNITs; see UNIT below")
-                .value_name("UNIT")
-                .default_value(options::TO_DEFAULT),
-        )
-        .arg(
-            Arg::with_name(options::PADDING)
-                .long(options::PADDING)
-                .help(
-                    "pad the output to N characters; positive N will \
-                     right-align; negative N will left-align; padding is \
-                     ignored if the output is wider than N; the default is \
-                     to automatically pad if a whitespace is found",
-                )
-                .value_name("N"),
-        )
-        .arg(
-            Arg::with_name(options::HEADER)
-                .long(options::HEADER)
-                .help(
-                    "print (without converting) the first N header lines; \
-                     N defaults to 1 if not specified",
-                )
-                .value_name("N")
-                .default_value(options::HEADER_DEFAULT)
-                .hide_default_value(true),
-        )
-        .arg(Arg::with_name(options::NUMBER).hidden(true).multiple(true))
         .get_matches_from(args);
 
-    let result =
-        parse_options(&matches).and_then(|options| match matches.values_of(options::NUMBER) {
-            Some(values) => handle_args(values, options),
-            None => handle_stdin(options),
-        });
+    let result = parse_options(&matches).and_then(|options| match matches.values_of(NUMBER) {
+        Some(values) => handle_args(values, options),
+        None => handle_stdin(options),
+    });
 
     match result {
         Err(e) => {
