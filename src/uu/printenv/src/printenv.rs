@@ -10,14 +10,11 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
 use std::env;
 
-static ABOUT: &str = "Display the values of the specified environment VARIABLE(s), or (with no VARIABLE) display name and value pairs for them all.";
+use crate::app::{get_app, ARG_VARIABLES, OPT_NULL};
 
-static OPT_NULL: &str = "null";
-
-static ARG_VARIABLES: &str = "variables";
+mod app;
 
 fn get_usage() -> String {
     format!("{0} [VARIABLE]... [OPTION]...", executable!())
@@ -25,23 +22,8 @@ fn get_usage() -> String {
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
-
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = get_app(executable!())
         .usage(&usage[..])
-        .arg(
-            Arg::with_name(OPT_NULL)
-                .short("0")
-                .long(OPT_NULL)
-                .help("end each output line with 0 byte rather than newline"),
-        )
-        .arg(
-            Arg::with_name(ARG_VARIABLES)
-                .multiple(true)
-                .takes_value(true)
-                .min_values(1),
-        )
         .get_matches_from(args);
 
     let variables: Vec<String> = matches
