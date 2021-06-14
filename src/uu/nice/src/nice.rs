@@ -15,7 +15,9 @@ use std::ffi::CString;
 use std::io::Error;
 use std::ptr;
 
-use clap::{crate_version, App, AppSettings, Arg};
+use crate::app::{get_app, options};
+
+mod app;
 
 // XXX: PRIO_PROCESS is 0 on at least FreeBSD and Linux.  Don't know about Mac OS X.
 const PRIO_PROCESS: c_int = 0;
@@ -23,11 +25,6 @@ const PRIO_PROCESS: c_int = 0;
 extern "C" {
     fn getpriority(which: c_int, who: c_int) -> c_int;
     fn setpriority(which: c_int, who: c_int, prio: c_int) -> c_int;
-}
-
-pub mod options {
-    pub static ADJUSTMENT: &str = "adjustment";
-    pub static COMMAND: &str = "COMMAND";
 }
 
 fn get_usage() -> String {
@@ -46,19 +43,8 @@ process).",
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
-        .setting(AppSettings::TrailingVarArg)
-        .version(crate_version!())
+    let matches = get_app(executable!())
         .usage(&usage[..])
-        .arg(
-            Arg::with_name(options::ADJUSTMENT)
-                .short("n")
-                .long(options::ADJUSTMENT)
-                .help("add N to the niceness (default is 10)")
-                .takes_value(true)
-                .allow_hyphen_values(true),
-        )
-        .arg(Arg::with_name(options::COMMAND).multiple(true))
         .get_matches_from(args);
 
     let mut niceness = unsafe {
