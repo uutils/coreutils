@@ -11,8 +11,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg, ArgMatches};
-use std::env;
+use clap::ArgMatches;
 use std::fs;
 use std::io::{self, stdin};
 #[cfg(unix)]
@@ -23,6 +22,10 @@ use std::path::{Path, PathBuf};
 use uucore::backup_control::{self, BackupMode};
 
 use fs_extra::dir::{move_dir, CopyOptions as DirCopyOptions};
+
+use crate::app::*;
+
+mod app;
 
 pub struct Behavior {
     overwrite: OverwriteMode,
@@ -41,22 +44,7 @@ pub enum OverwriteMode {
     Force,
 }
 
-static ABOUT: &str = "Move SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.";
-static LONG_HELP: &str = "";
-
-static OPT_BACKUP: &str = "backup";
-static OPT_BACKUP_NO_ARG: &str = "b";
-static OPT_FORCE: &str = "force";
-static OPT_INTERACTIVE: &str = "interactive";
-static OPT_NO_CLOBBER: &str = "no-clobber";
-static OPT_STRIP_TRAILING_SLASHES: &str = "strip-trailing-slashes";
-static OPT_SUFFIX: &str = "suffix";
-static OPT_TARGET_DIRECTORY: &str = "target-directory";
-static OPT_NO_TARGET_DIRECTORY: &str = "no-target-directory";
-static OPT_UPDATE: &str = "update";
-static OPT_VERBOSE: &str = "verbose";
-
-static ARG_FILES: &str = "files";
+const LONG_HELP: &str = "";
 
 fn get_usage() -> String {
     format!(
@@ -70,90 +58,14 @@ fn get_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
-        .after_help(&*format!("{}\n{}", LONG_HELP, backup_control::BACKUP_CONTROL_LONG_HELP))
+    let matches = get_app(executable!())
         .usage(&usage[..])
-    .arg(
-            Arg::with_name(OPT_BACKUP)
-            .long(OPT_BACKUP)
-            .help("make a backup of each existing destination file")
-            .takes_value(true)
-            .require_equals(true)
-            .min_values(0)
-            .possible_values(backup_control::BACKUP_CONTROL_VALUES)
-            .value_name("CONTROL")
-    )
-    .arg(
-            Arg::with_name(OPT_BACKUP_NO_ARG)
-            .short(OPT_BACKUP_NO_ARG)
-            .help("like --backup but does not accept an argument")
-    )
-    .arg(
-            Arg::with_name(OPT_FORCE)
-            .short("f")
-            .long(OPT_FORCE)
-            .help("do not prompt before overwriting")
-    )
-    .arg(
-            Arg::with_name(OPT_INTERACTIVE)
-            .short("i")
-            .long(OPT_INTERACTIVE)
-            .help("prompt before override")
-    )
-    .arg(
-            Arg::with_name(OPT_NO_CLOBBER).short("n")
-            .long(OPT_NO_CLOBBER)
-            .help("do not overwrite an existing file")
-    )
-    .arg(
-            Arg::with_name(OPT_STRIP_TRAILING_SLASHES)
-            .long(OPT_STRIP_TRAILING_SLASHES)
-            .help("remove any trailing slashes from each SOURCE argument")
-    )
-    .arg(
-            Arg::with_name(OPT_SUFFIX)
-            .short("S")
-            .long(OPT_SUFFIX)
-            .help("override the usual backup suffix")
-            .takes_value(true)
-            .value_name("SUFFIX")
-    )
-    .arg(
-        Arg::with_name(OPT_TARGET_DIRECTORY)
-        .short("t")
-        .long(OPT_TARGET_DIRECTORY)
-        .help("move all SOURCE arguments into DIRECTORY")
-        .takes_value(true)
-        .value_name("DIRECTORY")
-        .conflicts_with(OPT_NO_TARGET_DIRECTORY)
-    )
-    .arg(
-            Arg::with_name(OPT_NO_TARGET_DIRECTORY)
-            .short("T")
-            .long(OPT_NO_TARGET_DIRECTORY).
-            help("treat DEST as a normal file")
-    )
-    .arg(
-            Arg::with_name(OPT_UPDATE)
-            .short("u")
-            .long(OPT_UPDATE)
-            .help("move only when the SOURCE file is newer than the destination file or when the destination file is missing")
-    )
-    .arg(
-            Arg::with_name(OPT_VERBOSE)
-            .short("v")
-            .long(OPT_VERBOSE).help("explain what is being done")
-    )
-    .arg(
-        Arg::with_name(ARG_FILES)
-            .multiple(true)
-            .takes_value(true)
-            .min_values(2)
-            .required(true)
-        )
-    .get_matches_from(args);
+        .after_help(&*format!(
+            "{}\n{}",
+            LONG_HELP,
+            backup_control::BACKUP_CONTROL_LONG_HELP
+        ))
+        .get_matches_from(args);
 
     let files: Vec<String> = matches
         .values_of(ARG_FILES)
