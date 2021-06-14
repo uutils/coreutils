@@ -1,6 +1,6 @@
 // spell-checker:ignore (ToDO) conv
 
-use crate::options;
+use crate::app::options;
 
 // parse_style parses a style string into a NumberingStyle.
 fn parse_style(chars: &[char]) -> Result<crate::NumberingStyle, String> {
