@@ -28,6 +28,7 @@ use std::os::windows::io::AsRawHandle;
 #[cfg(windows)]
 use std::path::Path;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::time::{Duration, UNIX_EPOCH};
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::InvalidEncodingHandling;
@@ -56,6 +57,7 @@ mod options {
     pub const BLOCK_SIZE_1M: &str = "m";
     pub const SEPARATE_DIRS: &str = "S";
     pub const SUMMARIZE: &str = "s";
+    pub const THRESHOLD: &str = "threshold";
     pub const SI: &str = "si";
     pub const TIME: &str = "time";
     pub const TIME_STYLE: &str = "time-style";
@@ -510,6 +512,17 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(options::ONE_FILE_SYSTEM)
                 .help("skip directories on different file systems")
         )
+        .arg(
+            Arg::with_name(options::THRESHOLD)
+                .short("t")
+                .long(options::THRESHOLD)
+                .alias("th")
+                .value_name("SIZE")
+                .number_of_values(1)
+                .allow_hyphen_values(true)
+                .help("exclude entries smaller than SIZE if positive, \
+                          or entries greater than SIZE if negative")
+        )
         // .arg(
         //     Arg::with_name("")
         //         .short("x")
@@ -586,6 +599,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let block_size = u64::try_from(read_block_size(matches.value_of(options::BLOCK_SIZE))).unwrap();
 
+    let threshold = matches.value_of(options::THRESHOLD).map(|s| {
+        Threshold::from_str(s)
+            .unwrap_or_else(|e| crash!(1, "{}", format_error_message(e, s, options::THRESHOLD)))
+    });
+
     let multiplier: u64 = if matches.is_present(options::SI) {
         1000
     } else {
@@ -654,6 +672,11 @@ Try '{} --help' for more information.",
                         // See: http://linux.die.net/man/2/stat
                         stat.blocks * 512
                     };
+
+                    if threshold.map_or(false, |threshold| threshold.should_exclude(size)) {
+                        continue;
+                    }
+
                     if matches.is_present(options::TIME) {
                         let tm = {
                             let secs = {
@@ -718,6 +741,37 @@ Try '{} --help' for more information.",
     }
 
     0
+}
+
+#[derive(Clone, Copy)]
+enum Threshold {
+    Lower(u64),
+    Upper(u64),
+}
+
+impl FromStr for Threshold {
+    type Err = ParseSizeError;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        let offset = if s.starts_with(&['-', '+'][..]) { 1 } else { 0 };
+
+        let size = u64::try_from(parse_size(&s[offset..])?).unwrap();
+
+        if s.starts_with('-') {
+            Ok(Threshold::Upper(size))
+        } else {
+            Ok(Threshold::Lower(size))
+        }
+    }
+}
+
+impl Threshold {
+    fn should_exclude(&self, size: u64) -> bool {
+        match *self {
+            Threshold::Upper(threshold) => size > threshold,
+            Threshold::Lower(threshold) => size < threshold,
+        }
+    }
 }
 
 fn format_error_message(error: ParseSizeError, s: &str, option: &str) -> String {

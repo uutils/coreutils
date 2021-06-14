@@ -80,19 +80,22 @@ fn _du_basics_subdir(s: &str) {
 
 #[test]
 fn test_du_invalid_size() {
-    new_ucmd!()
-        .arg("--block-size=1fb4t")
-        .arg("/tmp")
-        .fails()
-        .code_is(1)
-        .stderr_only("du: invalid --block-size argument '1fb4t'");
-    #[cfg(not(target_pointer_width = "128"))]
-    new_ucmd!()
-        .arg("--block-size=1Y")
-        .arg("/tmp")
-        .fails()
-        .code_is(1)
-        .stderr_only("du: --block-size argument '1Y' too large");
+    let args = &["block-size", "threshold"];
+    for s in args {
+        new_ucmd!()
+            .arg(format!("--{}=1fb4t", s))
+            .arg("/tmp")
+            .fails()
+            .code_is(1)
+            .stderr_only(format!("du: invalid --{} argument '1fb4t'", s));
+        #[cfg(not(target_pointer_width = "128"))]
+        new_ucmd!()
+            .arg(format!("--{}=1Y", s))
+            .arg("/tmp")
+            .fails()
+            .code_is(1)
+            .stderr_only(format!("du: --{} argument '1Y' too large", s));
+    }
 }
 
 #[test]
@@ -350,4 +353,25 @@ fn test_du_one_file_system() {
         }
     }
     _du_basics_subdir(result.stdout_str());
+}
+
+#[test]
+fn test_du_threshold() {
+    let scene = TestScenario::new(util_name!());
+
+    let threshold = if cfg!(windows) { "7K" } else { "10K" };
+
+    scene
+        .ucmd()
+        .arg(format!("--threshold={}", threshold))
+        .succeeds()
+        .stdout_contains("links")
+        .stdout_does_not_contain("deeper");
+
+    scene
+        .ucmd()
+        .arg(format!("--threshold=-{}", threshold))
+        .succeeds()
+        .stdout_does_not_contain("links")
+        .stdout_contains("deeper");
 }
