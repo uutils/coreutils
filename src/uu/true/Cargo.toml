@@ -18,6 +18,9 @@ path = "src/true.rs"
 uucore = { version=">=0.0.8", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
+[build-dependencies]
+clap = "2.33"
+
 [[bin]]
 name = "true"
 path = "src/main.rs"
