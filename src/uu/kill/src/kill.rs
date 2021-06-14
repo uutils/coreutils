@@ -10,24 +10,18 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
 use libc::{c_int, pid_t};
 use std::io::Error;
 use uucore::signals::ALL_SIGNALS;
 use uucore::InvalidEncodingHandling;
 
-static ABOUT: &str = "Send signal to processes or list information about signals.";
+use crate::app::get_app;
+use crate::app::options;
+
+mod app;
 
 static EXIT_OK: i32 = 0;
 static EXIT_ERR: i32 = 1;
-
-pub mod options {
-    pub static PIDS_OR_SIGNALS: &str = "pids_of_signals";
-    pub static LIST: &str = "list";
-    pub static TABLE: &str = "table";
-    pub static TABLE_OLD: &str = "table_old";
-    pub static SIGNAL: &str = "signal";
-}
 
 #[derive(Clone, Copy)]
 pub enum Mode {
@@ -43,37 +37,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let (args, obs_signal) = handle_obsolete(args);
 
     let usage = format!("{} [OPTIONS]... PID...", executable!());
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = get_app(executable!())
         .usage(&usage[..])
-        .arg(
-            Arg::with_name(options::LIST)
-                .short("l")
-                .long(options::LIST)
-                .help("Lists signals")
-                .conflicts_with(options::TABLE)
-                .conflicts_with(options::TABLE_OLD),
-        )
-        .arg(
-            Arg::with_name(options::TABLE)
-                .short("t")
-                .long(options::TABLE)
-                .help("Lists table of signals"),
-        )
-        .arg(Arg::with_name(options::TABLE_OLD).short("L").hidden(true))
-        .arg(
-            Arg::with_name(options::SIGNAL)
-                .short("s")
-                .long(options::SIGNAL)
-                .help("Sends given signal")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name(options::PIDS_OR_SIGNALS)
-                .hidden(true)
-                .multiple(true),
-        )
         .get_matches_from(args);
 
     let mode = if matches.is_present(options::TABLE) || matches.is_present(options::TABLE_OLD) {
