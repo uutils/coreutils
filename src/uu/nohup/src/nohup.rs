@@ -10,7 +10,6 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, AppSettings, Arg};
 use libc::{c_char, dup2, execvp, signal};
 use libc::{SIGHUP, SIG_IGN};
 use std::env;
@@ -21,13 +20,10 @@ use std::os::unix::prelude::*;
 use std::path::{Path, PathBuf};
 use uucore::InvalidEncodingHandling;
 
-static ABOUT: &str = "Run COMMAND ignoring hangup signals.";
-static LONG_HELP: &str = "
-If standard input is terminal, it'll be replaced with /dev/null.
-If standard output is terminal, it'll be appended to nohup.out instead,
-or $HOME/nohup.out, if nohup.out open failed.
-If standard error is terminal, it'll be redirected to stdout.
-";
+use crate::app::{get_app, options};
+
+mod app;
+
 static NOHUP_OUT: &str = "nohup.out";
 // exit codes that match the GNU implementation
 static EXIT_CANCELED: i32 = 125;
@@ -35,28 +31,14 @@ static EXIT_CANNOT_INVOKE: i32 = 126;
 static EXIT_ENOENT: i32 = 127;
 static POSIX_NOHUP_FAILURE: i32 = 127;
 
-mod options {
-    pub const CMD: &str = "cmd";
-}
-
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = get_app(executable!())
         .usage(&usage[..])
-        .after_help(LONG_HELP)
-        .arg(
-            Arg::with_name(options::CMD)
-                .hidden(true)
-                .required(true)
-                .multiple(true),
-        )
-        .setting(AppSettings::TrailingVarArg)
         .get_matches_from(args);
 
     replace_fds();
