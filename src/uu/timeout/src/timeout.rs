@@ -12,7 +12,7 @@ extern crate uucore;
 
 extern crate clap;
 
-use clap::{crate_version, App, AppSettings, Arg};
+use app::get_app;
 use std::io::ErrorKind;
 use std::process::{Command, Stdio};
 use std::time::Duration;
@@ -20,25 +20,15 @@ use uucore::process::ChildExt;
 use uucore::signals::signal_by_name_or_value;
 use uucore::InvalidEncodingHandling;
 
-static ABOUT: &str = "Start COMMAND, and kill it if still running after DURATION.";
+use crate::app::options;
+
+mod app;
 
 fn get_usage() -> String {
     format!("{0} [OPTION]... [FILE]...", executable!())
 }
 
 const ERR_EXIT_STATUS: i32 = 125;
-
-pub mod options {
-    pub static FOREGROUND: &str = "foreground";
-    pub static KILL_AFTER: &str = "kill-after";
-    pub static SIGNAL: &str = "signal";
-    pub static PRESERVE_STATUS: &str = "preserve-status";
-
-    // Positional args.
-    pub static DURATION: &str = "duration";
-    pub static COMMAND: &str = "command";
-    pub static ARGS: &str = "args";
-}
 
 struct Config {
     foreground: bool,
@@ -103,45 +93,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let usage = get_usage();
 
-    let app = App::new("timeout")
-        .version(crate_version!())
-        .usage(&usage[..])
-        .about(ABOUT)
-        .arg(
-            Arg::with_name(options::FOREGROUND)
-                .long(options::FOREGROUND)
-                .help("when not running timeout directly from a shell prompt, allow COMMAND to read from the TTY and get TTY signals; in this mode, children of COMMAND will not be timed out")
-        )
-        .arg(
-            Arg::with_name(options::KILL_AFTER)
-                .short("k")
-                .takes_value(true))
-        .arg(
-            Arg::with_name(options::PRESERVE_STATUS)
-                .long(options::PRESERVE_STATUS)
-                .help("exit with the same status as COMMAND, even when the command times out")
-        )
-        .arg(
-            Arg::with_name(options::SIGNAL)
-                .short("s")
-                .long(options::SIGNAL)
-                .help("specify the signal to be sent on timeout; SIGNAL may be a name like 'HUP' or a number; see 'kill -l' for a list of signals")
-                .takes_value(true)
-        )
-        .arg(
-            Arg::with_name(options::DURATION)
-                .index(1)
-                .required(true)
-        )
-        .arg(
-            Arg::with_name(options::COMMAND)
-                .index(2)
-                .required(true)
-        )
-        .arg(
-            Arg::with_name(options::ARGS).multiple(true)
-        )
-        .setting(AppSettings::TrailingVarArg);
+    let app = get_app(executable!()).usage(&usage[..]);
 
     let matches = app.get_matches_from(args);
 
