@@ -5,6 +5,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+use clap::{App, Shell};
 use std::cmp;
 use std::collections::hash_map::HashMap;
 use std::ffi::OsString;
@@ -15,6 +16,7 @@ use std::process;
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
+include!(concat!(env!("OUT_DIR"), "/apps_map.rs"));
 
 fn usage<T>(utils: &UtilityMap<T>, name: &str) {
     println!("{} {} (multi-call binary)\n", name, VERSION);
@@ -74,6 +76,10 @@ fn main() {
     if let Some(util_os) = util_name {
         let util = util_os.as_os_str().to_string_lossy();
 
+        if util == "completion" {
+            gen_completions(args);
+        }
+
         match utils.get(&util[..]) {
             Some(&uumain) => {
                 process::exit(uumain((vec![util_os].into_iter()).chain(args)));
@@ -112,4 +118,42 @@ fn main() {
         usage(&utils, binary_as_util);
         process::exit(0);
     }
+}
+
+/// Prints completions for the utility in the first parameter for the shell in the second parameter to stdout
+fn gen_completions(mut args: impl Iterator<Item = OsString>) -> ! {
+    let app_map = app_map();
+    let utility = args
+        .next()
+        .expect("expected utility as the first parameter")
+        .to_str()
+        .expect("utility name was not valid utf-8")
+        .to_owned();
+    let shell = args
+        .next()
+        .expect("expected shell as the second parameter")
+        .to_str()
+        .expect("shell name was not valid utf-8")
+        .to_owned();
+    let mut app = if utility == "coreutils" {
+        gen_coreutils_app()
+    } else if let Some(app) = app_map.get(utility.as_str()) {
+        app(&utility)
+    } else {
+        eprintln!("{} is not a valid utility", utility);
+        process::exit(1)
+    };
+    let shell: Shell = shell.parse().unwrap();
+    let bin_name = std::env::var("PROG_PREFIX").unwrap_or_default() + &utility;
+    app.gen_completions_to(bin_name, shell, &mut io::stdout());
+    io::stdout().flush().unwrap();
+    process::exit(0);
+}
+
+fn gen_coreutils_app<'a, 'b>() -> App<'a, 'b> {
+    let mut app = App::new("coreutils");
+    for (name, sub_app) in app_map() {
+        app = app.subcommand(sub_app(name));
+    }
+    app
 }

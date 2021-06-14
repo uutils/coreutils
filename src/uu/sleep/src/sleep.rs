@@ -14,7 +14,7 @@ use std::time::Duration;
 use crate::app::get_app;
 use crate::app::options;
 
-mod app;
+pub mod app;
 
 fn get_usage() -> String {
     format!(

@@ -8,7 +8,7 @@
 
 // spell-checker:ignore (chrono) Datelike Timelike ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes
 
-mod app;
+pub mod app;
 
 #[macro_use]
 extern crate uucore;

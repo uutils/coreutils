@@ -12,7 +12,7 @@ extern crate uucore;
 
 use crate::app::get_app;
 
-mod app;
+pub mod app;
 mod platform;
 
 pub fn uumain(args: impl uucore::Args) -> i32 {

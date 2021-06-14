@@ -22,7 +22,7 @@ use uucore::InvalidEncodingHandling;
 
 use crate::app::{get_app, options};
 
-mod app;
+pub mod app;
 
 static NOHUP_OUT: &str = "nohup.out";
 // exit codes that match the GNU implementation

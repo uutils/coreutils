@@ -16,7 +16,7 @@ use uucore::zero_copy::ZeroCopyWriter;
 
 use crate::app::get_app;
 
-mod app;
+pub mod app;
 
 // it's possible that using a smaller or larger buffer might provide better performance on some
 // systems, but honestly this is good enough

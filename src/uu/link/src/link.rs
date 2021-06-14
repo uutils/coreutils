@@ -14,7 +14,7 @@ use std::path::Path;
 
 use crate::app::{get_app, options};
 
-mod app;
+pub mod app;
 
 fn get_usage() -> String {
     format!("{0} FILE1 FILE2", executable!())

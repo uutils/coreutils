@@ -20,7 +20,7 @@ use std::fs::{metadata, File};
 use std::io::{self, Read, Write};
 use thiserror::Error;
 
-mod app;
+pub mod app;
 
 /// Linux splice support
 #[cfg(any(target_os = "linux", target_os = "android"))]

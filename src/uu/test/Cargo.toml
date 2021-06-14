@@ -15,12 +15,10 @@ edition = "2018"
 path = "src/test.rs"
 
 [dependencies]
+clap = "2.33"
 libc = "0.2.42"
 uucore = { version=">=0.0.8", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
-
-[build-dependencies]
-clap = "2.33"
 
 [target.'cfg(target_os = "redox")'.dependencies]
 redox_syscall = "0.1"

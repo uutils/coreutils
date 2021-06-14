@@ -17,7 +17,7 @@ use platform_info::*;
 
 use crate::app::{get_app, options};
 
-mod app;
+pub mod app;
 
 #[cfg(target_os = "linux")]
 const HOST_OS: &str = "GNU/Linux";

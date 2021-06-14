@@ -14,7 +14,7 @@ use std::env;
 
 use crate::app::*;
 
-mod app;
+pub mod app;
 
 #[cfg(target_os = "linux")]
 pub const _SC_NPROCESSORS_CONF: libc::c_int = 83;

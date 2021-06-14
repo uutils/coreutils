@@ -14,7 +14,7 @@ const EXIT_FAILURE: i32 = 1;
 const EXIT_SUCCESS: i32 = 0;
 const BUF_SIZE: usize = 65536;
 
-mod app;
+pub mod app;
 mod lines;
 mod parse;
 mod split;

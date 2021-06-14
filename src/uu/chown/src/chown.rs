@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (ToDO) COMFOLLOW Chowner Passwd RFILE RFILE's derefer dgid duid
 
-mod app;
+pub mod app;
 
 #[macro_use]
 extern crate uucore;

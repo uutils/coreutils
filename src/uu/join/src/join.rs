@@ -16,7 +16,7 @@ use std::io::{stdin, BufRead, BufReader, Lines, Stdin};
 
 use crate::app::get_app;
 
-mod app;
+pub mod app;
 
 #[derive(Copy, Clone, PartialEq)]
 enum FileNum {

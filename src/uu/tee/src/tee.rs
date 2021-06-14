@@ -13,7 +13,7 @@ use std::fs::OpenOptions;
 use std::io::{copy, sink, stdin, stdout, Error, ErrorKind, Read, Result, Write};
 use std::path::{Path, PathBuf};
 
-mod app;
+pub mod app;
 
 #[cfg(unix)]
 use uucore::libc;

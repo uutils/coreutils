@@ -14,7 +14,7 @@ use std::env;
 
 use crate::app::{get_app, ARG_VARIABLES, OPT_NULL};
 
-mod app;
+pub mod app;
 
 fn get_usage() -> String {
     format!("{0} [VARIABLE]... [OPTION]...", executable!())

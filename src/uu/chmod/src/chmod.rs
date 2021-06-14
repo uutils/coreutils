@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-mod app;
+pub mod app;
 
 use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};

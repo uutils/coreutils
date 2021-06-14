@@ -16,7 +16,7 @@
 #[macro_use]
 extern crate uucore;
 
-mod app;
+pub mod app;
 mod check;
 mod chunks;
 mod custom_str_cmp;

@@ -16,7 +16,7 @@ extern crate uucore;
 pub use uucore::libc;
 use uucore::libc::time_t;
 
-mod app;
+pub mod app;
 
 #[cfg(unix)]
 use uucore::libc::getloadavg;

@@ -15,15 +15,13 @@ edition = "2018"
 path = "src/expr.rs"
 
 [dependencies]
+clap = "2.33"
 libc = "0.2.42"
 num-bigint = "0.4.0"
 num-traits = "0.2.14"
 onig = "~4.3.2"
 uucore = { version=">=0.0.8", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
-
-[build-dependencies]
-clap = "2.33"
 
 [[bin]]
 name = "expr"

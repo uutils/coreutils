@@ -17,7 +17,7 @@ use uucore::InvalidEncodingHandling;
 
 use crate::app::{get_app, options};
 
-mod app;
+pub mod app;
 
 fn bsd_sum(mut reader: Box<dyn Read>) -> (usize, u16) {
     let mut buf = [0; 1024];

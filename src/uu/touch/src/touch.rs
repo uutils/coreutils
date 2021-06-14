@@ -21,7 +21,7 @@ use std::process;
 
 use crate::app::{get_app, options, ARG_FILES};
 
-mod app;
+pub mod app;
 
 fn to_local(mut tm: time::Tm) -> time::Tm {
     tm.tm_utcoff = time::now().tm_utcoff;

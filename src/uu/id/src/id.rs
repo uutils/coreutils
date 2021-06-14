@@ -26,7 +26,7 @@ use uucore::process::{getegid, geteuid, getgid, getuid};
 
 use crate::app::*;
 
-mod app;
+pub mod app;
 
 macro_rules! cstr2cow {
     ($v:expr) => {

@@ -20,9 +20,6 @@ platform-info = "0.1"
 uucore = { version=">=0.0.8", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
-[build-dependencies]
-clap = "2.33"
-
 [[bin]]
 name = "uname"
 path = "src/main.rs"

@@ -21,7 +21,7 @@ use winapi::um::winsock2::{WSACleanup, WSAStartup};
 
 use crate::app::*;
 
-mod app;
+pub mod app;
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     #![allow(clippy::let_and_return)]

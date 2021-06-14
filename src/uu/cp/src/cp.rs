@@ -10,7 +10,7 @@
 
 // spell-checker:ignore (ToDO) ficlone linkgs lstat nlink nlinks pathbuf reflink strs xattrs
 
-mod app;
+pub mod app;
 
 #[cfg(target_os = "linux")]
 #[macro_use]

@@ -19,7 +19,7 @@ use crate::app::{get_app, options};
 
 const TAB_WIDTH: usize = 8;
 
-mod app;
+pub mod app;
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args

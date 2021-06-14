@@ -16,7 +16,7 @@ use std::path::Path;
 
 use crate::app::{get_app, options, ARG_FILES};
 
-mod app;
+pub mod app;
 
 static EXIT_ERR: i32 = 1;
 

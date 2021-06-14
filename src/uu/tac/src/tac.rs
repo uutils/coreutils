@@ -16,7 +16,7 @@ use uucore::InvalidEncodingHandling;
 
 use crate::app::{get_app, options};
 
-mod app;
+pub mod app;
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args

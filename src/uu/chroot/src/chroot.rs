@@ -8,7 +8,7 @@
 
 // spell-checker:ignore (ToDO) NEWROOT Userspec pstatus
 
-mod app;
+pub mod app;
 
 #[macro_use]
 extern crate uucore;

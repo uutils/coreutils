@@ -20,7 +20,7 @@ use walkdir::{DirEntry, WalkDir};
 
 use crate::app::*;
 
-mod app;
+pub mod app;
 
 #[derive(Eq, PartialEq, Clone, Copy)]
 enum InteractiveMode {

@@ -14,7 +14,7 @@ use uucore::entries::{get_groups_gnu, gid2grp, Locate, Passwd};
 
 use crate::app::{get_app, OPT_USER};
 
-mod app;
+pub mod app;
 
 fn get_usage() -> String {
     format!("{0} [USERNAME]", executable!())

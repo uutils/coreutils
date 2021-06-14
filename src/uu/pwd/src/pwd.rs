@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use crate::app::get_app;
 use crate::app::OPT_LOGICAL;
 
-mod app;
+pub mod app;
 
 pub fn absolute_path(path: &Path) -> io::Result<PathBuf> {
     let path_buf = path.canonicalize()?;

@@ -16,7 +16,7 @@ use std::str::FromStr;
 
 use crate::app::{get_app, options, Delimiters, ARG_FILES};
 
-mod app;
+pub mod app;
 
 struct Uniq {
     repeats_only: bool,

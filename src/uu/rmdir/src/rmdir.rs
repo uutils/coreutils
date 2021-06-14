@@ -15,7 +15,7 @@ use std::path::Path;
 
 use crate::app::*;
 
-mod app;
+pub mod app;
 
 #[cfg(unix)]
 static ENOTDIR: i32 = 20;

@@ -21,9 +21,6 @@ uucore = { version=">=0.0.8", package="uucore", path="../../uucore", features=["
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 winapi = { version="0.3", features=["fileapi", "handleapi", "processthreadsapi", "synchapi", "winbase"] }
 
-[build-dependencies]
-clap = "2.33"
-
 [target.'cfg(target_os = "redox")'.dependencies]
 redox_syscall = "0.1"
 

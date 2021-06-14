@@ -9,7 +9,7 @@
 
 // spell-checker:ignore (ToDO) chdir execvp progname subcommand subcommands unsets
 
-mod app;
+pub mod app;
 
 #[macro_use]
 extern crate clap;

@@ -1,4 +1,4 @@
-mod app;
+pub mod app;
 
 #[macro_use]
 extern crate uucore;

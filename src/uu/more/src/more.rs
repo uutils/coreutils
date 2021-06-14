@@ -32,7 +32,7 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::app::{get_app, options};
 
-mod app;
+pub mod app;
 
 const BELL: &str = "\x07";
 

@@ -21,7 +21,7 @@ use uucore::parse_size::parse_size;
 
 use crate::app::*;
 
-mod app;
+pub mod app;
 
 fn get_usage() -> String {
     format!("{0} [OPTION]... [INPUT [PREFIX]]", executable!())

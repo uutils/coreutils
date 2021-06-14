@@ -20,7 +20,7 @@ use uucore::InvalidEncodingHandling;
 
 use crate::app::{get_app, OPT_PATH};
 
-mod app;
+pub mod app;
 fn get_usage() -> String {
     format!("{} [OPTION]... FILE", executable!())
 }

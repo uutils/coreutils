@@ -24,7 +24,7 @@ use uucore::InvalidEncodingHandling;
 
 use crate::app::{get_app, options};
 
-mod app;
+pub mod app;
 
 const BUFSIZE: usize = 1024;
 

@@ -16,7 +16,7 @@ use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
-mod app;
+pub mod app;
 mod colors;
 
 use crate::app::get_app;

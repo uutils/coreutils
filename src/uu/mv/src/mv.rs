@@ -25,7 +25,7 @@ use fs_extra::dir::{move_dir, CopyOptions as DirCopyOptions};
 
 use crate::app::*;
 
-mod app;
+pub mod app;
 
 pub struct Behavior {
     overwrite: OverwriteMode,

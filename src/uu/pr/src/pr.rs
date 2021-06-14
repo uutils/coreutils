@@ -24,6 +24,8 @@ use std::io::{stdin, stdout, BufRead, BufReader, Lines, Read, Stdout, Write};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 
+pub mod app;
+
 type IOError = std::io::Error;
 
 const NAME: &str = "pr";

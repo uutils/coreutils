@@ -25,7 +25,7 @@ use std::path::Path;
 
 use crate::app::{get_app, ARG_FILES};
 
-mod app;
+pub mod app;
 
 /// The minimum character width for formatting counts when reading from stdin.
 const MINIMUM_WIDTH: usize = 7;

@@ -16,7 +16,7 @@ use std::str::FromStr;
 
 use crate::app::*;
 
-mod app;
+pub mod app;
 
 fn get_usage() -> String {
     format!(

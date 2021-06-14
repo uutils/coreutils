@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-mod app;
+pub mod app;
 mod byteorder_io;
 mod formatteriteminfo;
 mod inputdecoder;

@@ -12,7 +12,7 @@ extern crate uucore;
 use std::error::Error;
 use std::io::{self, stdin, stdout, BufRead, Write};
 
-mod app;
+pub mod app;
 mod factor;
 pub use factor::*;
 

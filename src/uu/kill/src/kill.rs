@@ -18,7 +18,7 @@ use uucore::InvalidEncodingHandling;
 use crate::app::get_app;
 use crate::app::options;
 
-mod app;
+pub mod app;
 
 static EXIT_OK: i32 = 0;
 static EXIT_ERR: i32 = 1;

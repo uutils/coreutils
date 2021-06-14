@@ -29,7 +29,7 @@ macro_rules! silent_unwrap(
     )
 );
 
-mod app;
+pub mod app;
 mod linebreak;
 mod parasplit;
 

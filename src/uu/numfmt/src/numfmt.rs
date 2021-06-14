@@ -17,7 +17,7 @@ use options::NumfmtOptions;
 use std::io::{BufRead, Write};
 use uucore::ranges::Range;
 
-mod app;
+pub mod app;
 pub mod format;
 mod options;
 mod units;

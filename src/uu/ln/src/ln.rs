@@ -24,7 +24,7 @@ use uucore::fs::{canonicalize, CanonicalizeMode};
 
 use crate::app::{get_app, options, ARG_FILES};
 
-mod app;
+pub mod app;
 
 pub struct Settings {
     overwrite: OverwriteMode,

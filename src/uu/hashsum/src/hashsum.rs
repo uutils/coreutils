@@ -12,7 +12,7 @@
 #[macro_use]
 extern crate uucore;
 
-mod app;
+pub mod app;
 mod digest;
 
 use crate::app::get_app;

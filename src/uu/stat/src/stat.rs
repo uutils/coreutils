@@ -25,7 +25,7 @@ use std::{cmp, fs, iter};
 
 use crate::app::get_app;
 
-mod app;
+pub mod app;
 
 macro_rules! check_bound {
     ($str: ident, $bound:expr, $beg: expr, $end: expr) => {

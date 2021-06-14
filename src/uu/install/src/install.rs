@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (ToDO) rwxr sourcepath targetpath
 
-mod app;
+pub mod app;
 mod mode;
 
 #[macro_use]

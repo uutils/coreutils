@@ -30,9 +30,6 @@ unicode-width = "0.1.8"
 uucore = { version=">=0.0.8", package="uucore", path="../../uucore", features=["fs"] }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
-[build-dependencies]
-clap = "2.33"
-
 [[bin]]
 name = "sort"
 path = "src/main.rs"

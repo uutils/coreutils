@@ -41,6 +41,7 @@ pub fn main() {
 
     let mut mf = File::create(Path::new(&out_dir).join("uutils_map.rs")).unwrap();
     let mut tf = File::create(Path::new(&out_dir).join("test_modules.rs")).unwrap();
+    let mut af = File::create(Path::new(&out_dir).join("apps_map.rs")).unwrap();
 
     mf.write_all(
         "type UtilityMap<T> = HashMap<&'static str, fn(T) -> i32>;\n\
@@ -52,12 +53,31 @@ pub fn main() {
     )
     .unwrap();
 
+    af.write_all(
+        "type AppMap = HashMap<&'static str, fn(&str) -> App>;\n\
+    \n\
+    fn app_map() -> AppMap {\n\
+    \tlet mut map = AppMap::new();\n\
+    "
+        .as_bytes(),
+    )
+    .unwrap();
+
     for krate in crates {
         match krate.as_ref() {
             k if k.starts_with(override_prefix) => {
                 mf.write_all(
                     format!(
                         "\tmap.insert(\"{k}\", {krate}::uumain);\n",
+                        k = krate[override_prefix.len()..].to_string(),
+                        krate = krate
+                    )
+                    .as_bytes(),
+                )
+                .unwrap();
+                af.write_all(
+                    format!(
+                        "\tmap.insert(\"{k}\", {krate}::app::get_app);\n",
                         k = krate[override_prefix.len()..].to_string(),
                         krate = krate
                     )
@@ -78,6 +98,14 @@ pub fn main() {
                 mf.write_all(
                     format!(
                         "\tmap.insert(\"{krate}\", r#{krate}::uumain);\n",
+                        krate = krate
+                    )
+                    .as_bytes(),
+                )
+                .unwrap();
+                af.write_all(
+                    format!(
+                        "\tmap.insert(\"{krate}\", r#{krate}::app::get_app);\n",
                         krate = krate
                     )
                     .as_bytes(),
@@ -117,6 +145,29 @@ pub fn main() {
                     .as_bytes(),
                 )
                 .unwrap();
+                af.write_all(
+                    format!(
+                        "\
+                         \tmap.insert(\"{krate}\", {krate}::app::get_app);\n\
+                         \t\tmap.insert(\"md5sum\", {krate}::app::get_app);\n\
+                         \t\tmap.insert(\"sha1sum\", {krate}::app::get_app);\n\
+                         \t\tmap.insert(\"sha224sum\", {krate}::app::get_app);\n\
+                         \t\tmap.insert(\"sha256sum\", {krate}::app::get_app);\n\
+                         \t\tmap.insert(\"sha384sum\", {krate}::app::get_app);\n\
+                         \t\tmap.insert(\"sha512sum\", {krate}::app::get_app);\n\
+                         \t\tmap.insert(\"sha3sum\", {krate}::app::get_app);\n\
+                         \t\tmap.insert(\"sha3-224sum\", {krate}::app::get_app);\n\
+                         \t\tmap.insert(\"sha3-256sum\", {krate}::app::get_app);\n\
+                         \t\tmap.insert(\"sha3-384sum\", {krate}::app::get_app);\n\
+                         \t\tmap.insert(\"sha3-512sum\", {krate}::app::get_app);\n\
+                         \t\tmap.insert(\"shake128sum\", {krate}::app::get_app);\n\
+                         \t\tmap.insert(\"shake256sum\", {krate}::app::get_app);\n\
+                         ",
+                        krate = krate
+                    )
+                    .as_bytes(),
+                )
+                .unwrap();
                 tf.write_all(
                     format!(
                         "#[path=\"{dir}/test_{krate}.rs\"]\nmod test_{krate};\n",
@@ -136,6 +187,14 @@ pub fn main() {
                     .as_bytes(),
                 )
                 .unwrap();
+                af.write_all(
+                    format!(
+                        "\tmap.insert(\"{krate}\", {krate}::app::get_app);\n",
+                        krate = krate
+                    )
+                    .as_bytes(),
+                )
+                .unwrap();
                 tf.write_all(
                     format!(
                         "#[path=\"{dir}/test_{krate}.rs\"]\nmod test_{krate};\n",
@@ -150,7 +209,9 @@ pub fn main() {
     }
 
     mf.write_all(b"map\n}\n").unwrap();
+    af.write_all(b"map\n}\n").unwrap();
 
     mf.flush().unwrap();
+    af.flush().unwrap();
     tf.flush().unwrap();
 }

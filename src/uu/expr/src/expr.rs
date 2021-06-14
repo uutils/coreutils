@@ -10,6 +10,7 @@ extern crate uucore;
 
 use uucore::InvalidEncodingHandling;
 
+pub mod app;
 mod syntax_tree;
 mod tokens;
 

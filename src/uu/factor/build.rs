@@ -34,9 +34,6 @@ use modular_inverse::modular_inverse;
 
 mod sieve;
 
-include!("src/app.rs");
-include!("../../build_completions.rs");
-
 #[cfg_attr(test, allow(dead_code))]
 fn main() {
     let out_dir = env::var("OUT_DIR").unwrap();
@@ -79,8 +76,6 @@ fn main() {
         x
     )
     .unwrap();
-
-    completions::gen_completions()
 }
 
 #[test]

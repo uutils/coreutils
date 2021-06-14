@@ -28,9 +28,6 @@ uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_p
 [dev-dependencies]
 time = "0.1.40"
 
-[build-dependencies]
-clap = "2.33"
-
 [[bin]]
 name = "install"
 path = "src/main.rs"

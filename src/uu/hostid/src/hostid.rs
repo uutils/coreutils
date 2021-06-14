@@ -14,7 +14,7 @@ use libc::c_long;
 
 use crate::app::get_app;
 
-mod app;
+pub mod app;
 
 // currently rust libc interface doesn't include gethostid
 extern "C" {

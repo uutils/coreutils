@@ -12,7 +12,7 @@ use std::io::{stdin, Read};
 
 use uucore::encoding::Format;
 
-mod app;
+pub mod app;
 pub mod base_common;
 
 static ABOUT: &str = "

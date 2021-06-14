@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (ToDO) fname
 
-mod app;
+pub mod app;
 
 #[macro_use]
 extern crate uucore;

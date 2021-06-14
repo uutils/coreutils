@@ -15,7 +15,7 @@ use uucore::fs::{canonicalize, CanonicalizeMode};
 
 use crate::app::*;
 
-mod app;
+pub mod app;
 
 fn get_usage() -> String {
     format!("{0} [OPTION]... FILE...", executable!())

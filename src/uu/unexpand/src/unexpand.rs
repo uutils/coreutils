@@ -19,7 +19,7 @@ use uucore::InvalidEncodingHandling;
 
 use crate::app::{get_app, options};
 
-mod app;
+pub mod app;
 
 const DEFAULT_TABSTOP: usize = 8;
 

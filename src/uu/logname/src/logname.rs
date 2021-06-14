@@ -17,7 +17,7 @@ use uucore::InvalidEncodingHandling;
 
 use crate::app::get_app;
 
-mod app;
+pub mod app;
 extern "C" {
     // POSIX requires using getlogin (or equivalent code)
     pub fn getlogin() -> *const libc::c_char;

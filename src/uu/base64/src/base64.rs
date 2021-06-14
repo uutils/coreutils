@@ -15,6 +15,8 @@ use uucore::encoding::Format;
 
 use std::io::{stdin, Read};
 
+pub use uu_base32::app;
+
 static ABOUT: &str = "
  With no FILE, or when FILE is -, read standard input.
 

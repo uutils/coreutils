@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (ToDO) COMFOLLOW Chgrper RFILE RFILE's derefer dgid nonblank nonprint nonprinting
 
-mod app;
+pub mod app;
 
 #[macro_use]
 extern crate uucore;

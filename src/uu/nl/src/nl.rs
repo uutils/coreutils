@@ -19,7 +19,7 @@ use uucore::InvalidEncodingHandling;
 
 use crate::app::{get_app, options};
 
-mod app;
+pub mod app;
 mod helper;
 
 // A regular expression matching everything.

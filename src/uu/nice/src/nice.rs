@@ -17,7 +17,7 @@ use std::ptr;
 
 use crate::app::{get_app, options};
 
-mod app;
+pub mod app;
 
 // XXX: PRIO_PROCESS is 0 on at least FreeBSD and Linux.  Don't know about Mac OS X.
 const PRIO_PROCESS: c_int = 0;

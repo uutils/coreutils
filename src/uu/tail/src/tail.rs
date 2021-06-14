@@ -27,7 +27,7 @@ use uucore::ringbuffer::RingBuffer;
 use crate::app::get_app;
 use crate::app::options;
 
-mod app;
+pub mod app;
 
 enum FilterMode {
     Bytes(usize),

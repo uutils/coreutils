@@ -4,6 +4,7 @@
 
 use uucore::InvalidEncodingHandling;
 
+pub mod app;
 mod cli;
 mod memo;
 mod tokenize;

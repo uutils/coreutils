@@ -9,7 +9,7 @@
 
 // spell-checker:ignore (ToDO) ctype cwidth iflag nbytes nspaces nums tspaces uflag
 
-mod app;
+pub mod app;
 
 #[macro_use]
 extern crate uucore;

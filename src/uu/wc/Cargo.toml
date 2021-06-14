@@ -20,9 +20,6 @@ uucore = { version=">=0.0.8", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 thiserror = "1.0"
 
-[build-dependencies]
-clap = "2.33"
-
 [target.'cfg(unix)'.dependencies]
 nix = "0.20"
 libc = "0.2"

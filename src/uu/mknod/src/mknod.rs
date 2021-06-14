@@ -20,7 +20,7 @@ use uucore::InvalidEncodingHandling;
 
 use crate::app::get_app;
 
-mod app;
+pub mod app;
 
 const MODE_RW_UGO: mode_t = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
 

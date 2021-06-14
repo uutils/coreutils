@@ -18,7 +18,7 @@ use uucore::parse_size::{parse_size, ParseSizeError};
 
 use crate::app::{get_app, options};
 
-mod app;
+pub mod app;
 
 #[derive(Debug, Eq, PartialEq)]
 enum TruncateMode {

@@ -20,10 +20,6 @@ uucore = { version=">=0.0.8", package="uucore", path="../../uucore", features = 
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 uu_base32 = { version=">=0.0.6", package="uu_base32", path="../base32"}
 
-[build-dependencies]
-clap = "2.33"
-uu_base32 = { version=">=0.0.6", package="uu_base32", path="../base32"}
-
 [[bin]]
 name = "base64"
 path = "src/main.rs"

@@ -15,7 +15,7 @@ use uucore::utmpx::{self, Utmpx};
 
 use crate::app::{get_app, ARG_FILES};
 
-mod app;
+pub mod app;
 
 fn get_usage() -> String {
     format!("{0} [FILE]", executable!())

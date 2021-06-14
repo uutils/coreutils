@@ -17,7 +17,7 @@ use std::path::Path;
 
 use crate::app::{get_app, options};
 
-mod app;
+pub mod app;
 
 // Wraps BufReader and stdin
 fn read_line<R: Read>(

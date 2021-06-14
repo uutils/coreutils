@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-mod app;
+pub mod app;
 
 use std::path::{is_separator, PathBuf};
 use uucore::InvalidEncodingHandling;

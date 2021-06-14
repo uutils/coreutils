@@ -20,7 +20,7 @@ use uucore::InvalidEncodingHandling;
 
 use crate::app::{get_app, options};
 
-mod app;
+pub mod app;
 
 #[derive(Debug)]
 enum OutFormat {

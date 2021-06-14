@@ -21,7 +21,7 @@ use self::searcher::Searcher;
 use uucore::ranges::Range;
 use uucore::InvalidEncodingHandling;
 
-mod app;
+pub mod app;
 mod searcher;
 
 struct Options {

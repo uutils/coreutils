@@ -13,7 +13,7 @@ use std::path::Path;
 
 use crate::app::*;
 
-mod app;
+pub mod app;
 
 fn get_usage() -> String {
     format!("{0} [OPTION]... [USER]", executable!())

@@ -218,6 +218,7 @@ version = "0.0.6"
 dependencies = [
  "atty",
  "chrono",
+ "clap",
  "conv",
  "filetime",
  "glob 0.3.0",
@@ -2340,6 +2341,7 @@ name = "uu_pr"
 version = "0.0.6"
 dependencies = [
  "chrono",
+ "clap",
  "getopts",
  "itertools 0.10.1",
  "quick-error 2.0.1",

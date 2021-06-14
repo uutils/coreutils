@@ -13,7 +13,7 @@ extern crate uucore;
 #[macro_use]
 extern crate lazy_static;
 
-mod app;
+pub mod app;
 mod quoting_style;
 mod version_cmp;
 

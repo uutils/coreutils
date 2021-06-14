@@ -7,6 +7,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (vars) FiletestOp StrlenOp
+pub mod app;
 mod parser;
 
 use parser::{parse, Symbol};

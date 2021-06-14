@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (ToDO) delim mkdelim
 
-mod app;
+pub mod app;
 
 #[macro_use]
 extern crate uucore;
