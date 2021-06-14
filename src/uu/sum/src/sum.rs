@@ -10,16 +10,14 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
 use std::fs::File;
 use std::io::{stdin, Read, Result};
 use std::path::Path;
 use uucore::InvalidEncodingHandling;
 
-static NAME: &str = "sum";
-static USAGE: &str =
-    "[OPTION]... [FILE]...\nWith no FILE, or when  FILE is -, read standard input.";
-static SUMMARY: &str = "Checksum and count the blocks in a file.";
+use crate::app::{get_app, options};
+
+mod app;
 
 fn bsd_sum(mut reader: Box<dyn Read>) -> (usize, u16) {
     let mut buf = [0; 1024];
@@ -87,35 +85,12 @@ fn open(name: &str) -> Result<Box<dyn Read>> {
     }
 }
 
-mod options {
-    pub static FILE: &str = "file";
-    pub static BSD_COMPATIBLE: &str = "r";
-    pub static SYSTEM_V_COMPATIBLE: &str = "sysv";
-}
-
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let matches = App::new(executable!())
-        .name(NAME)
-        .version(crate_version!())
-        .usage(USAGE)
-        .about(SUMMARY)
-        .arg(Arg::with_name(options::FILE).multiple(true).hidden(true))
-        .arg(
-            Arg::with_name(options::BSD_COMPATIBLE)
-                .short(options::BSD_COMPATIBLE)
-                .help("use the BSD sum algorithm, use 1K blocks (default)"),
-        )
-        .arg(
-            Arg::with_name(options::SYSTEM_V_COMPATIBLE)
-                .short("s")
-                .long(options::SYSTEM_V_COMPATIBLE)
-                .help("use System V sum algorithm, use 512 bytes blocks"),
-        )
-        .get_matches_from(args);
+    let matches = get_app(executable!()).get_matches_from(args);
 
     let files: Vec<String> = match matches.values_of(options::FILE) {
         Some(v) => v.clone().map(|v| v.to_owned()).collect(),
