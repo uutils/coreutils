@@ -6,37 +6,22 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) filetime strptime utcoff strs datetime MMDDhhmm
+// spell-checker:ignore (ToDO) filetime strptime utcoff strs datetime
 
 pub extern crate filetime;
 
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg, ArgGroup};
 use filetime::*;
 use std::fs::{self, File};
 use std::io::Error;
 use std::path::Path;
 use std::process;
 
-static ABOUT: &str = "Update the access and modification times of each FILE to the current time.";
-pub mod options {
-    // Both SOURCES and sources are needed as we need to be able to refer to the ArgGroup.
-    pub static SOURCES: &str = "sources";
-    pub mod sources {
-        pub static DATE: &str = "date";
-        pub static REFERENCE: &str = "reference";
-        pub static CURRENT: &str = "current";
-    }
-    pub static ACCESS: &str = "access";
-    pub static MODIFICATION: &str = "modification";
-    pub static NO_CREATE: &str = "no-create";
-    pub static NO_DEREF: &str = "no-dereference";
-    pub static TIME: &str = "time";
-}
+use crate::app::{get_app, options, ARG_FILES};
 
-static ARG_FILES: &str = "files";
+mod app;
 
 fn to_local(mut tm: time::Tm) -> time::Tm {
     tm.tm_utcoff = time::now().tm_utcoff;
@@ -55,79 +40,8 @@ fn get_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = get_app(executable!())
         .usage(&usage[..])
-        .arg(
-            Arg::with_name(options::ACCESS)
-                .short("a")
-                .help("change only the access time"),
-        )
-        .arg(
-            Arg::with_name(options::sources::CURRENT)
-                .short("t")
-                .help("use [[CC]YY]MMDDhhmm[.ss] instead of the current time")
-                .value_name("STAMP")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name(options::sources::DATE)
-                .short("d")
-                .long(options::sources::DATE)
-                .help("parse argument and use it instead of current time")
-                .value_name("STRING"),
-        )
-        .arg(
-            Arg::with_name(options::MODIFICATION)
-                .short("m")
-                .help("change only the modification time"),
-        )
-        .arg(
-            Arg::with_name(options::NO_CREATE)
-                .short("c")
-                .long(options::NO_CREATE)
-                .help("do not create any files"),
-        )
-        .arg(
-            Arg::with_name(options::NO_DEREF)
-                .short("h")
-                .long(options::NO_DEREF)
-                .help(
-                    "affect each symbolic link instead of any referenced file \
-                     (only for systems that can change the timestamps of a symlink)",
-                ),
-        )
-        .arg(
-            Arg::with_name(options::sources::REFERENCE)
-                .short("r")
-                .long(options::sources::REFERENCE)
-                .help("use this file's times instead of the current time")
-                .value_name("FILE"),
-        )
-        .arg(
-            Arg::with_name(options::TIME)
-                .long(options::TIME)
-                .help(
-                    "change only the specified time: \"access\", \"atime\", or \
-                     \"use\" are equivalent to -a; \"modify\" or \"mtime\" are \
-                     equivalent to -m",
-                )
-                .value_name("WORD")
-                .possible_values(&["access", "atime", "use"])
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name(ARG_FILES)
-                .multiple(true)
-                .takes_value(true)
-                .min_values(1),
-        )
-        .group(ArgGroup::with_name(options::SOURCES).args(&[
-            options::sources::CURRENT,
-            options::sources::DATE,
-            options::sources::REFERENCE,
-        ]))
         .get_matches_from(args);
 
     let files: Vec<String> = matches
