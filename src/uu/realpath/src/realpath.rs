@@ -10,17 +10,12 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
 use std::path::{Path, PathBuf};
 use uucore::fs::{canonicalize, CanonicalizeMode};
 
-static ABOUT: &str = "print the resolved path";
+use crate::app::*;
 
-static OPT_QUIET: &str = "quiet";
-static OPT_STRIP: &str = "strip";
-static OPT_ZERO: &str = "zero";
-
-static ARG_FILES: &str = "files";
+mod app;
 
 fn get_usage() -> String {
     format!("{0} [OPTION]... FILE...", executable!())
@@ -29,35 +24,8 @@ fn get_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = get_app(executable!())
         .usage(&usage[..])
-        .arg(
-            Arg::with_name(OPT_QUIET)
-                .short("q")
-                .long(OPT_QUIET)
-                .help("Do not print warnings for invalid paths"),
-        )
-        .arg(
-            Arg::with_name(OPT_STRIP)
-                .short("s")
-                .long(OPT_STRIP)
-                .help("Only strip '.' and '..' components, but don't resolve symbolic links"),
-        )
-        .arg(
-            Arg::with_name(OPT_ZERO)
-                .short("z")
-                .long(OPT_ZERO)
-                .help("Separate output filenames with \\0 rather than newline"),
-        )
-        .arg(
-            Arg::with_name(ARG_FILES)
-                .multiple(true)
-                .takes_value(true)
-                .required(true)
-                .min_values(1),
-        )
         .get_matches_from(args);
 
     /*  the list of files */
