@@ -11,18 +11,10 @@ extern crate uucore;
 use std::thread;
 use std::time::Duration;
 
-use clap::{crate_version, App, Arg};
+use crate::app::get_app;
+use crate::app::options;
 
-static ABOUT: &str = "Pause for NUMBER seconds.";
-static LONG_HELP: &str = "Pause for NUMBER seconds.  SUFFIX may be 's' for seconds (the default),
-'m' for minutes, 'h' for hours or 'd' for days.  Unlike most implementations
-that require NUMBER be an integer, here NUMBER may be an arbitrary floating
-point number.  Given two or more arguments, pause for the amount of time
-specified by the sum of their values.";
-
-mod options {
-    pub const NUMBER: &str = "NUMBER";
-}
+mod app;
 
 fn get_usage() -> String {
     format!(
@@ -35,20 +27,8 @@ fn get_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = get_app(executable!())
         .usage(&usage[..])
-        .after_help(LONG_HELP)
-        .arg(
-            Arg::with_name(options::NUMBER)
-                .long(options::NUMBER)
-                .help("pause for NUMBER seconds")
-                .value_name(options::NUMBER)
-                .index(1)
-                .multiple(true)
-                .required(true),
-        )
         .get_matches_from(args);
 
     if let Some(values) = matches.values_of(options::NUMBER) {
