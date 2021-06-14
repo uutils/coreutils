@@ -8,22 +8,17 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
 use retain_mut::RetainMut;
 use std::fs::OpenOptions;
 use std::io::{copy, sink, stdin, stdout, Error, ErrorKind, Read, Result, Write};
 use std::path::{Path, PathBuf};
 
+mod app;
+
 #[cfg(unix)]
 use uucore::libc;
 
-static ABOUT: &str = "Copy standard input to each FILE, and also to standard output.";
-
-mod options {
-    pub const APPEND: &str = "append";
-    pub const IGNORE_INTERRUPTS: &str = "ignore-interrupts";
-    pub const FILE: &str = "file";
-}
+use crate::app::{get_app, options};
 
 #[allow(dead_code)]
 struct Options {
@@ -39,24 +34,8 @@ fn get_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = get_app(executable!())
         .usage(&usage[..])
-        .after_help("If a FILE is -, it refers to a file named - .")
-        .arg(
-            Arg::with_name(options::APPEND)
-                .long(options::APPEND)
-                .short("a")
-                .help("append to the given FILEs, do not overwrite"),
-        )
-        .arg(
-            Arg::with_name(options::IGNORE_INTERRUPTS)
-                .long(options::IGNORE_INTERRUPTS)
-                .short("i")
-                .help("ignore interrupt signals (ignored on non-Unix platforms)"),
-        )
-        .arg(Arg::with_name(options::FILE).multiple(true))
         .get_matches_from(args);
 
     let options = Options {
