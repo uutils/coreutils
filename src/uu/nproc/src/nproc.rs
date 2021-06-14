@@ -10,8 +10,11 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
 use std::env;
+
+use crate::app::*;
+
+mod app;
 
 #[cfg(target_os = "linux")]
 pub const _SC_NPROCESSORS_CONF: libc::c_int = 83;
@@ -22,34 +25,14 @@ pub const _SC_NPROCESSORS_CONF: libc::c_int = 57;
 #[cfg(target_os = "netbsd")]
 pub const _SC_NPROCESSORS_CONF: libc::c_int = 1001;
 
-static OPT_ALL: &str = "all";
-static OPT_IGNORE: &str = "ignore";
-
-static ABOUT: &str = "Print the number of cores available to the current process.";
-
 fn get_usage() -> String {
     format!("{0} [OPTIONS]...", executable!())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = get_app(executable!())
         .usage(&usage[..])
-        .arg(
-            Arg::with_name(OPT_ALL)
-                .short("")
-                .long(OPT_ALL)
-                .help("print the number of cores available to the system"),
-        )
-        .arg(
-            Arg::with_name(OPT_IGNORE)
-                .short("")
-                .long(OPT_IGNORE)
-                .takes_value(true)
-                .help("ignore up to N cores"),
-        )
         .get_matches_from(args);
 
     let mut ignore = match matches.value_of(OPT_IGNORE) {
