@@ -23,6 +23,9 @@ atty = "0.2"
 unicode-width = "0.1.7"
 unicode-segmentation = "1.7.1"
 
+[build-dependencies]
+clap = "2.33"
+
 [target.'cfg(target_os = "redox")'.dependencies]
 redox_termios = "0.1"
 redox_syscall = "0.1"
