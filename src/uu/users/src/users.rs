@@ -11,12 +11,11 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
 use uucore::utmpx::{self, Utmpx};
 
-static ABOUT: &str = "Print the user names of users currently logged in to the current host";
+use crate::app::{get_app, ARG_FILES};
 
-static ARG_FILES: &str = "files";
+mod app;
 
 fn get_usage() -> String {
     format!("{0} [FILE]", executable!())
@@ -34,12 +33,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let after_help = get_long_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = get_app(executable!())
         .usage(&usage[..])
         .after_help(&after_help[..])
-        .arg(Arg::with_name(ARG_FILES).takes_value(true).max_values(1))
         .get_matches_from(args);
 
     let files: Vec<String> = matches
