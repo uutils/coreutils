@@ -4,6 +4,9 @@ use std::env;
 use std::fs;
 use std::path::Path;
 
+include!("src/app.rs");
+include!("../../build_completions.rs");
+
 #[cfg(not(any(target_vendor = "apple", target_os = "windows")))]
 mod platform {
     pub const DYLIB_EXT: &str = ".so";
@@ -33,16 +36,5 @@ fn main() {
     );
 
     fs::copy(libstdbuf, Path::new(&out_dir).join("libstdbuf.so")).unwrap();
-    create_completions();
-}
-
-fn create_completions() {
-    mod completions {
-        include!("src/app.rs");
-        include!("../../build_completions.rs");
-        pub fn run_generation() {
-            main();
-        }
-    }
-    completions::run_generation();
+    completions::gen_completions();
 }
