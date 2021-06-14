@@ -8,14 +8,15 @@
 /* last synced with: whoami (GNU coreutils) 8.21 */
 
 #[macro_use]
-extern crate clap;
-#[macro_use]
 extern crate uucore;
 
+use crate::app::get_app;
+
+mod app;
 mod platform;
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let app = app_from_crate!();
+    let app = get_app(executable!());
 
     if let Err(err) = app.get_matches_from_safe(args) {
         if err.kind == clap::ErrorKind::HelpDisplayed
