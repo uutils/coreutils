@@ -11,8 +11,6 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
-
 use std::env;
 use std::iter;
 use std::path::{is_separator, PathBuf};
@@ -20,18 +18,9 @@ use std::path::{is_separator, PathBuf};
 use rand::Rng;
 use tempfile::Builder;
 
-static ABOUT: &str = "create a temporary file or directory.";
+use crate::app::*;
 
-static DEFAULT_TEMPLATE: &str = "tmp.XXXXXXXXXX";
-
-static OPT_DIRECTORY: &str = "directory";
-static OPT_DRY_RUN: &str = "dry-run";
-static OPT_QUIET: &str = "quiet";
-static OPT_SUFFIX: &str = "suffix";
-static OPT_TMPDIR: &str = "tmpdir";
-static OPT_T: &str = "t";
-
-static ARG_TEMPLATE: &str = "template";
+mod app;
 
 fn get_usage() -> String {
     format!("{0} [OPTION]... [TEMPLATE]", executable!())
@@ -40,60 +29,8 @@ fn get_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = get_app(executable!())
         .usage(&usage[..])
-        .arg(
-            Arg::with_name(OPT_DIRECTORY)
-                .short("d")
-                .long(OPT_DIRECTORY)
-                .help("Make a directory instead of a file"),
-        )
-        .arg(
-            Arg::with_name(OPT_DRY_RUN)
-                .short("u")
-                .long(OPT_DRY_RUN)
-                .help("do not create anything; merely print a name (unsafe)"),
-        )
-        .arg(
-            Arg::with_name(OPT_QUIET)
-                .short("q")
-                .long("quiet")
-                .help("Fail silently if an error occurs."),
-        )
-        .arg(
-            Arg::with_name(OPT_SUFFIX)
-                .long(OPT_SUFFIX)
-                .help(
-                    "append SUFFIX to TEMPLATE; SUFFIX must not contain a path separator. \
-                     This option is implied if TEMPLATE does not end with X.",
-                )
-                .value_name("SUFFIX"),
-        )
-        .arg(
-            Arg::with_name(OPT_TMPDIR)
-                .short("p")
-                .long(OPT_TMPDIR)
-                .help(
-                    "interpret TEMPLATE relative to DIR; if DIR is not specified, use \
-                     $TMPDIR if set, else /tmp. With this option, TEMPLATE must not \
-                     be an absolute name; unlike with -t, TEMPLATE may contain \
-                     slashes, but mktemp creates only the final component",
-                )
-                .value_name("DIR"),
-        )
-        .arg(Arg::with_name(OPT_T).short(OPT_T).help(
-            "Generate a template (using the supplied prefix and TMPDIR if set) \
-             to create a filename template [deprecated]",
-        ))
-        .arg(
-            Arg::with_name(ARG_TEMPLATE)
-                .multiple(false)
-                .takes_value(true)
-                .max_values(1)
-                .default_value(DEFAULT_TEMPLATE),
-        )
         .get_matches_from(args);
 
     let template = matches.value_of(ARG_TEMPLATE).unwrap();
