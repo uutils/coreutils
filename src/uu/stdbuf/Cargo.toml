@@ -22,6 +22,7 @@ uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_p
 
 [build-dependencies]
 libstdbuf = { version="0.0.6", package="uu_stdbuf_libstdbuf", path="src/libstdbuf" }
+clap = "2.33"
 
 [[bin]]
 name = "stdbuf"
