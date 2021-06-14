@@ -10,20 +10,14 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
 use std::env;
 use std::path::{Path, PathBuf};
 use uucore::fs::{canonicalize, CanonicalizeMode};
 use uucore::InvalidEncodingHandling;
 
-static ABOUT: &str = "Convert TO destination to the relative path from the FROM dir.
-If FROM path is omitted, current working dir will be used.";
+use crate::app::{get_app, options};
 
-mod options {
-    pub const DIR: &str = "DIR";
-    pub const TO: &str = "TO";
-    pub const FROM: &str = "FROM";
-}
+mod app;
 
 fn get_usage() -> String {
     format!("{} [-d DIR] TO [FROM]", executable!())
@@ -35,25 +29,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .accept_any();
     let usage = get_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = get_app(executable!())
         .usage(&usage[..])
-        .arg(
-            Arg::with_name(options::DIR)
-                .short("d")
-                .takes_value(true)
-                .help("If any of FROM and TO is not subpath of DIR, output absolute path instead of relative"),
-        )
-        .arg(
-            Arg::with_name(options::TO)
-                .required(true)
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name(options::FROM)
-                .takes_value(true),
-        )
         .get_matches_from(args);
 
     let to = Path::new(matches.value_of(options::TO).unwrap()).to_path_buf(); // required
