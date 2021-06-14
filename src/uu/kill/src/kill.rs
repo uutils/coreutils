@@ -129,22 +129,15 @@ fn handle_obsolete(mut args: Vec<String>) -> (Vec<String>, Option<String>) {
 }
 
 fn table() {
-    let mut name_width = 0;
-    /* Compute the maximum width of a signal name. */
-    for s in &ALL_SIGNALS {
-        if s.len() > name_width {
-            name_width = s.len()
-        }
-    }
+    let name_width = ALL_SIGNALS.iter().map(|n| n.len()).max().unwrap();
 
     for (idx, signal) in ALL_SIGNALS.iter().enumerate() {
-        print!("{0: >#2} {1: <#8}", idx + 1, signal);
-        //TODO: obtain max signal width here
-
+        print!("{0: >#2} {1: <#2$}", idx, signal, name_width + 2);
         if (idx + 1) % 7 == 0 {
             println!();
         }
     }
+    println!()
 }
 
 fn print_signal(signal_name_or_value: &str) {
