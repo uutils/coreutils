@@ -8,14 +8,14 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
 use std::env;
 use std::io;
 use std::path::{Path, PathBuf};
 
-static ABOUT: &str = "Display the full filename of the current working directory.";
-static OPT_LOGICAL: &str = "logical";
-static OPT_PHYSICAL: &str = "physical";
+use crate::app::get_app;
+use crate::app::OPT_LOGICAL;
+
+mod app;
 
 pub fn absolute_path(path: &Path) -> io::Result<PathBuf> {
     let path_buf = path.canonicalize()?;
@@ -39,22 +39,8 @@ fn get_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = get_app(executable!())
         .usage(&usage[..])
-        .arg(
-            Arg::with_name(OPT_LOGICAL)
-                .short("L")
-                .long(OPT_LOGICAL)
-                .help("use PWD from environment, even if it contains symlinks"),
-        )
-        .arg(
-            Arg::with_name(OPT_PHYSICAL)
-                .short("P")
-                .long(OPT_PHYSICAL)
-                .help("avoid all symlinks"),
-        )
         .get_matches_from(args);
 
     match env::current_dir() {
