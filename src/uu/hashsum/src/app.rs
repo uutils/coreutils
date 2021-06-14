@@ -33,16 +33,14 @@ fn is_custom_binary(program: &str) -> bool {
 }
 
 pub fn get_app(app_name: &str) -> App {
-    const BINARY_HELP: &str = if cfg!(windows) {
-        "read in binary mode (default)"
-    } else {
-        "read in binary mode"
-    };
-    const TEXT_HELP: &str = if cfg!(windows) {
-        "read in text mode"
-    } else {
-        "read in text mode (default)"
-    };
+    #[cfg(windows)]
+    const BINARY_HELP: &str = "read in binary mode (default)";
+    #[cfg(not(windows))]
+    const BINARY_HELP: &str = "read in binary mode";
+    #[cfg(windows)]
+    const TEXT_HELP: &str = "read in text mode";
+    #[cfg(not(windows))]
+    const TEXT_HELP: &str = "read in text mode (default)";
     let mut app = App::new(app_name)
         .version(crate_version!())
         .about("Compute and check message digests.")
