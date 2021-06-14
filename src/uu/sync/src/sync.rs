@@ -12,18 +12,13 @@ extern crate libc;
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
 use std::path::Path;
 
+use crate::app::{get_app, options, ARG_FILES};
+
+mod app;
+
 static EXIT_ERR: i32 = 1;
-
-static ABOUT: &str = "Synchronize cached writes to persistent storage";
-pub mod options {
-    pub static FILE_SYSTEM: &str = "file-system";
-    pub static DATA: &str = "data";
-}
-
-static ARG_FILES: &str = "files";
 
 #[cfg(unix)]
 mod platform {
@@ -166,25 +161,8 @@ fn get_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = get_app(executable!())
         .usage(&usage[..])
-        .arg(
-            Arg::with_name(options::FILE_SYSTEM)
-                .short("f")
-                .long(options::FILE_SYSTEM)
-                .conflicts_with(options::DATA)
-                .help("sync the file systems that contain the files (Linux and Windows only)"),
-        )
-        .arg(
-            Arg::with_name(options::DATA)
-                .short("d")
-                .long(options::DATA)
-                .conflicts_with(options::FILE_SYSTEM)
-                .help("sync only file data, no unneeded metadata (Linux only)"),
-        )
-        .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true))
         .get_matches_from(args);
 
     let files: Vec<String> = matches
