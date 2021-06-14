@@ -7,6 +7,8 @@
 
 #[macro_use]
 extern crate uucore;
+use app::options;
+use app::ARG_FILES;
 use uucore::entries;
 use uucore::fs::display_permissions;
 use uucore::fsext::{
@@ -14,12 +16,16 @@ use uucore::fsext::{
 };
 use uucore::libc::mode_t;
 
-use clap::{crate_version, App, Arg, ArgMatches};
+use clap::ArgMatches;
 use std::borrow::Cow;
 use std::convert::AsRef;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::Path;
 use std::{cmp, fs, iter};
+
+use crate::app::get_app;
+
+mod app;
 
 macro_rules! check_bound {
     ($str: ident, $bound:expr, $beg: expr, $end: expr) => {
@@ -80,18 +86,6 @@ macro_rules! print_adjusted {
         pad_and_print!(result, $str, $left, field_width, $padding);
     };
 }
-
-static ABOUT: &str = "Display file or file system status.";
-
-pub mod options {
-    pub static DEREFERENCE: &str = "dereference";
-    pub static FILE_SYSTEM: &str = "file-system";
-    pub static FORMAT: &str = "format";
-    pub static PRINTF: &str = "printf";
-    pub static TERSE: &str = "terse";
-}
-
-static ARG_FILES: &str = "files";
 
 pub const F_ALTER: u8 = 1;
 pub const F_ZERO: u8 = 1 << 1;
@@ -947,55 +941,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let long_usage = get_long_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = get_app(executable!())
         .usage(&usage[..])
         .after_help(&long_usage[..])
-        .arg(
-            Arg::with_name(options::DEREFERENCE)
-                .short("L")
-                .long(options::DEREFERENCE)
-                .help("follow links"),
-        )
-        .arg(
-            Arg::with_name(options::FILE_SYSTEM)
-                .short("f")
-                .long(options::FILE_SYSTEM)
-                .help("display file system status instead of file status"),
-        )
-        .arg(
-            Arg::with_name(options::TERSE)
-                .short("t")
-                .long(options::TERSE)
-                .help("print the information in terse form"),
-        )
-        .arg(
-            Arg::with_name(options::FORMAT)
-                .short("c")
-                .long(options::FORMAT)
-                .help(
-                    "use the specified FORMAT instead of the default;
- output a newline after each use of FORMAT",
-                )
-                .value_name("FORMAT"),
-        )
-        .arg(
-            Arg::with_name(options::PRINTF)
-                .long(options::PRINTF)
-                .value_name("FORMAT")
-                .help(
-                    "like --format, but interpret backslash escapes,
-            and do not output a mandatory trailing newline;
-            if you want a newline, include \n in FORMAT",
-                ),
-        )
-        .arg(
-            Arg::with_name(ARG_FILES)
-                .multiple(true)
-                .takes_value(true)
-                .min_values(1),
-        )
         .get_matches_from(args);
 
     match Stater::new(matches) {
