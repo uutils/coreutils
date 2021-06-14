@@ -8,21 +8,22 @@
 /* last synced with: yes (GNU coreutils) 8.13 */
 
 #[macro_use]
-extern crate clap;
-#[macro_use]
 extern crate uucore;
 
-use clap::Arg;
 use std::borrow::Cow;
 use std::io::{self, Write};
 use uucore::zero_copy::ZeroCopyWriter;
+
+use crate::app::get_app;
+
+mod app;
 
 // it's possible that using a smaller or larger buffer might provide better performance on some
 // systems, but honestly this is good enough
 const BUF_SIZE: usize = 16 * 1024;
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let app = app_from_crate!().arg(Arg::with_name("STRING").index(1).multiple(true));
+    let app = get_app(executable!());
 
     let matches = match app.get_matches_from_safe(args) {
         Ok(m) => m,
