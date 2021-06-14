@@ -19,6 +19,9 @@ uucore = { version=">=0.0.8", package="uucore", path="../../uucore", features=["
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 clap = "2.33.3"
 
+[build-dependencies]
+clap = "2.33"
+
 [[bin]]
 name = "pinky"
 path = "src/main.rs"
