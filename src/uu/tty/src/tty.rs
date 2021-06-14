@@ -12,15 +12,12 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
 use std::ffi::CStr;
 use uucore::InvalidEncodingHandling;
 
-static ABOUT: &str = "Print the file name of the terminal connected to standard input.";
+use crate::app::{get_app, options};
 
-mod options {
-    pub const SILENT: &str = "silent";
-}
+mod app;
 
 fn get_usage() -> String {
     format!("{0} [OPTION]...", executable!())
@@ -32,18 +29,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = get_app(executable!())
         .usage(&usage[..])
-        .arg(
-            Arg::with_name(options::SILENT)
-                .long(options::SILENT)
-                .visible_alias("quiet")
-                .short("s")
-                .help("print nothing, only return an exit status")
-                .required(false),
-        )
         .get_matches_from(args);
 
     let silent = matches.is_present(options::SILENT);
