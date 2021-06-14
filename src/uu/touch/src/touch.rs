@@ -166,7 +166,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             }
 
             if let Err(e) = File::create(path) {
-                show_warning!("cannot touch '{}': {}", path, e);
+                match e.kind() {
+                    std::io::ErrorKind::NotFound => {
+                        show_error!("cannot touch '{}': {}", path, "No such file or directory")
+                    }
+                    std::io::ErrorKind::PermissionDenied => {
+                        show_error!("cannot touch '{}': {}", path, "Permission denied")
+                    }
+                    _ => show_error!("cannot touch '{}': {}", path, e),
+                }
                 error_code = 1;
                 continue;
             };
