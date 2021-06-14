@@ -897,3 +897,19 @@ fn test_merge_batches() {
         .succeeds()
         .stdout_only_fixture("ext_sort.expected");
 }
+
+#[test]
+fn test_merge_batch_size() {
+    new_ucmd!()
+        .arg("--batch-size=2")
+        .arg("-m")
+        .arg("--unique")
+        .arg("merge_ints_interleaved_1.txt")
+        .arg("merge_ints_interleaved_2.txt")
+        .arg("merge_ints_interleaved_3.txt")
+        .arg("merge_ints_interleaved_3.txt")
+        .arg("merge_ints_interleaved_2.txt")
+        .arg("merge_ints_interleaved_1.txt")
+        .succeeds()
+        .stdout_only_fixture("merge_ints_interleaved.expected");
+}
