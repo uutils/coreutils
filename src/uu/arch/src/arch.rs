@@ -6,22 +6,17 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+mod app;
+
 #[macro_use]
 extern crate uucore;
 
 use platform_info::*;
 
-use clap::{crate_version, App};
-
-static ABOUT: &str = "Display machine architecture";
-static SUMMARY: &str = "Determine architecture name for current machine.";
+use crate::app::get_app;
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
-        .after_help(SUMMARY)
-        .get_matches_from(args);
+    get_app(executable!()).get_matches_from(args);
 
     let uts = return_if_err!(1, PlatformInfo::new());
     println!("{}", uts.machine().trim());
