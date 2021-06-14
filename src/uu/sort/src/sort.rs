@@ -1272,11 +1272,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         settings.separator = Some(separator.chars().next().unwrap())
     }
 
-    if matches.is_present(options::KEY) {
-        for key in &matches.args[options::KEY].vals {
+    if let Some(values) = matches.values_of(options::KEY) {
+        for value in values {
             settings
                 .selectors
-                .push(FieldSelector::parse(&key.to_string_lossy(), &settings));
+                .push(FieldSelector::parse(value, &settings));
         }
     }
 
