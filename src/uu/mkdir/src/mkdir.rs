@@ -8,16 +8,12 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
 use std::fs;
 use std::path::Path;
 
-static ABOUT: &str = "Create the given DIRECTORY(ies) if they do not exist";
-static OPT_MODE: &str = "mode";
-static OPT_PARENTS: &str = "parents";
-static OPT_VERBOSE: &str = "verbose";
+use crate::app::*;
 
-static ARG_DIRS: &str = "dirs";
+mod app;
 
 fn get_usage() -> String {
     format!("{0} [OPTION]... [USER]", executable!())
@@ -32,36 +28,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     // Linux-specific options, not implemented
     // opts.optflag("Z", "context", "set SELinux security context" +
     // " of each created directory to CTX"),
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = get_app(executable!())
         .usage(&usage[..])
-        .arg(
-            Arg::with_name(OPT_MODE)
-                .short("m")
-                .long(OPT_MODE)
-                .help("set file mode")
-                .default_value("755"),
-        )
-        .arg(
-            Arg::with_name(OPT_PARENTS)
-                .short("p")
-                .long(OPT_PARENTS)
-                .alias("parent")
-                .help("make parent directories as needed"),
-        )
-        .arg(
-            Arg::with_name(OPT_VERBOSE)
-                .short("v")
-                .long(OPT_VERBOSE)
-                .help("print a message for each printed directory"),
-        )
-        .arg(
-            Arg::with_name(ARG_DIRS)
-                .multiple(true)
-                .takes_value(true)
-                .min_values(1),
-        )
         .get_matches_from(args);
 
     let dirs: Vec<String> = matches
