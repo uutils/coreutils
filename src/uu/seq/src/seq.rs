@@ -6,7 +6,6 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, AppSettings, Arg};
 use num_bigint::BigInt;
 use num_traits::One;
 use num_traits::Zero;
@@ -15,12 +14,9 @@ use std::cmp;
 use std::io::{stdout, Write};
 use std::str::FromStr;
 
-static ABOUT: &str = "Display numbers from FIRST to LAST, in steps of INCREMENT.";
-static OPT_SEPARATOR: &str = "separator";
-static OPT_TERMINATOR: &str = "terminator";
-static OPT_WIDTHS: &str = "widths";
+use crate::app::*;
 
-static ARG_NUMBERS: &str = "numbers";
+mod app;
 
 fn get_usage() -> String {
     format!(
@@ -87,41 +83,8 @@ impl FromStr for Number {
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
-    let matches = App::new(executable!())
-        .setting(AppSettings::AllowLeadingHyphen)
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = get_app(executable!())
         .usage(&usage[..])
-        .arg(
-            Arg::with_name(OPT_SEPARATOR)
-                .short("s")
-                .long("separator")
-                .help("Separator character (defaults to \\n)")
-                .takes_value(true)
-                .number_of_values(1),
-        )
-        .arg(
-            Arg::with_name(OPT_TERMINATOR)
-                .short("t")
-                .long("terminator")
-                .help("Terminator character (defaults to \\n)")
-                .takes_value(true)
-                .number_of_values(1),
-        )
-        .arg(
-            Arg::with_name(OPT_WIDTHS)
-                .short("w")
-                .long("widths")
-                .help("Equalize widths of all numbers by padding with zeros"),
-        )
-        .arg(
-            Arg::with_name(ARG_NUMBERS)
-                .multiple(true)
-                .takes_value(true)
-                .allow_hyphen_values(true)
-                .max_values(3)
-                .required(true),
-        )
         .get_matches_from(args);
 
     let numbers = matches.values_of(ARG_NUMBERS).unwrap().collect::<Vec<_>>();
