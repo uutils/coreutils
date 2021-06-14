@@ -12,10 +12,13 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
 use std::fs;
 use std::io::{ErrorKind, Write};
 use uucore::InvalidEncodingHandling;
+
+use crate::app::{get_app, options};
+
+mod app;
 
 // operating mode
 enum Mode {
@@ -23,16 +26,6 @@ enum Mode {
     Basic,   // check basic compatibility with POSIX
     Extra,   // check for leading dashes and empty names
     Both,    // a combination of `Basic` and `Extra`
-}
-
-static NAME: &str = "pathchk";
-static ABOUT: &str = "Check whether file names are valid or portable";
-
-mod options {
-    pub const POSIX: &str = "posix";
-    pub const POSIX_SPECIAL: &str = "posix-special";
-    pub const PORTABILITY: &str = "portability";
-    pub const PATH: &str = "path";
 }
 
 // a few global constants as used in the GNU implementation
@@ -49,26 +42,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = get_app(executable!())
         .usage(&usage[..])
-        .arg(
-            Arg::with_name(options::POSIX)
-                .short("p")
-                .help("check for most POSIX systems"),
-        )
-        .arg(
-            Arg::with_name(options::POSIX_SPECIAL)
-                .short("P")
-                .help(r#"check for empty names and leading "-""#),
-        )
-        .arg(
-            Arg::with_name(options::PORTABILITY)
-                .long(options::PORTABILITY)
-                .help("check for all POSIX systems (equivalent to -p -P)"),
-        )
-        .arg(Arg::with_name(options::PATH).hidden(true).multiple(true))
         .get_matches_from(args);
 
     // set working mode
@@ -89,7 +64,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     // take necessary actions
     let paths = matches.values_of(options::PATH);
     let mut res = if paths.is_none() {
-        show_error!("missing operand\nTry {} --help for more information", NAME);
+        show_error!(
+            "missing operand\nTry {} --help for more information",
+            executable!()
+        );
         false
     } else {
         true
