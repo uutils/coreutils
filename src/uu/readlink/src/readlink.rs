@@ -10,24 +10,14 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
 use std::fs;
 use std::io::{stdout, Write};
 use std::path::{Path, PathBuf};
 use uucore::fs::{canonicalize, CanonicalizeMode};
 
-const NAME: &str = "readlink";
-const ABOUT: &str = "Print value of a symbolic link or canonical file name.";
-const OPT_CANONICALIZE: &str = "canonicalize";
-const OPT_CANONICALIZE_MISSING: &str = "canonicalize-missing";
-const OPT_CANONICALIZE_EXISTING: &str = "canonicalize-existing";
-const OPT_NO_NEWLINE: &str = "no-newline";
-const OPT_QUIET: &str = "quiet";
-const OPT_SILENT: &str = "silent";
-const OPT_VERBOSE: &str = "verbose";
-const OPT_ZERO: &str = "zero";
+use crate::app::*;
 
-const ARG_FILES: &str = "files";
+mod app;
 
 fn get_usage() -> String {
     format!("{0} [OPTION]... [FILE]...", executable!())
@@ -35,68 +25,8 @@ fn get_usage() -> String {
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = get_app(executable!())
         .usage(&usage[..])
-        .arg(
-            Arg::with_name(OPT_CANONICALIZE)
-                .short("f")
-                .long(OPT_CANONICALIZE)
-                .help(
-                    "canonicalize by following every symlink in every component of the \
-                     given name recursively; all but the last component must exist",
-                ),
-        )
-        .arg(
-            Arg::with_name(OPT_CANONICALIZE_EXISTING)
-                .short("e")
-                .long("canonicalize-existing")
-                .help(
-                    "canonicalize by following every symlink in every component of the \
-                     given name recursively, all components must exist",
-                ),
-        )
-        .arg(
-            Arg::with_name(OPT_CANONICALIZE_MISSING)
-                .short("m")
-                .long(OPT_CANONICALIZE_MISSING)
-                .help(
-                    "canonicalize by following every symlink in every component of the \
-                     given name recursively, without requirements on components existence",
-                ),
-        )
-        .arg(
-            Arg::with_name(OPT_NO_NEWLINE)
-                .short("n")
-                .long(OPT_NO_NEWLINE)
-                .help("do not output the trailing delimiter"),
-        )
-        .arg(
-            Arg::with_name(OPT_QUIET)
-                .short("q")
-                .long(OPT_QUIET)
-                .help("suppress most error messages"),
-        )
-        .arg(
-            Arg::with_name(OPT_SILENT)
-                .short("s")
-                .long(OPT_SILENT)
-                .help("suppress most error messages"),
-        )
-        .arg(
-            Arg::with_name(OPT_VERBOSE)
-                .short("v")
-                .long(OPT_VERBOSE)
-                .help("report error message"),
-        )
-        .arg(
-            Arg::with_name(OPT_ZERO)
-                .short("z")
-                .long(OPT_ZERO)
-                .help("separate output with NUL rather than newline"),
-        )
-        .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true))
         .get_matches_from(args);
 
     let mut no_newline = matches.is_present(OPT_NO_NEWLINE);
@@ -122,12 +52,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         crash!(
             1,
             "missing operand\nTry {} --help for more information",
-            NAME
+            executable!()
         );
     }
 
     if no_newline && files.len() > 1 && !silent {
-        eprintln!("{}: ignoring --no-newline with multiple arguments", NAME);
+        eprintln!(
+            "{}: ignoring --no-newline with multiple arguments",
+            executable!()
+        );
         no_newline = false;
     }
 
@@ -138,7 +71,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 Ok(path) => show(&path, no_newline, use_zero),
                 Err(err) => {
                     if verbose {
-                        eprintln!("{}: {}: errno {}", NAME, f, err.raw_os_error().unwrap());
+                        eprintln!(
+                            "{}: {}: errno {}",
+                            executable!(),
+                            f,
+                            err.raw_os_error().unwrap()
+                        );
                     }
                     return 1;
                 }
@@ -148,7 +86,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 Ok(path) => show(&path, no_newline, use_zero),
                 Err(err) => {
                     if verbose {
-                        eprintln!("{}: {}: errno {:?}", NAME, f, err.raw_os_error().unwrap());
+                        eprintln!(
+                            "{}: {}: errno {:?}",
+                            executable!(),
+                            f,
+                            err.raw_os_error().unwrap()
+                        );
                     }
                     return 1;
                 }
