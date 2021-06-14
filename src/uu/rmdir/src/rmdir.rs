@@ -10,16 +10,12 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
 use std::fs;
 use std::path::Path;
 
-static ABOUT: &str = "Remove the DIRECTORY(ies), if they are empty.";
-static OPT_IGNORE_FAIL_NON_EMPTY: &str = "ignore-fail-on-non-empty";
-static OPT_PARENTS: &str = "parents";
-static OPT_VERBOSE: &str = "verbose";
+use crate::app::*;
 
-static ARG_DIRS: &str = "dirs";
+mod app;
 
 #[cfg(unix)]
 static ENOTDIR: i32 = 20;
@@ -33,37 +29,8 @@ fn get_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = get_app(executable!())
         .usage(&usage[..])
-        .arg(
-            Arg::with_name(OPT_IGNORE_FAIL_NON_EMPTY)
-                .long(OPT_IGNORE_FAIL_NON_EMPTY)
-                .help("ignore each failure that is solely because a directory is non-empty"),
-        )
-        .arg(
-            Arg::with_name(OPT_PARENTS)
-                .short("p")
-                .long(OPT_PARENTS)
-                .help(
-                    "remove DIRECTORY and its ancestors; e.g.,
-                  'rmdir -p a/b/c' is similar to rmdir a/b/c a/b a",
-                ),
-        )
-        .arg(
-            Arg::with_name(OPT_VERBOSE)
-                .short("v")
-                .long(OPT_VERBOSE)
-                .help("output a diagnostic for every directory processed"),
-        )
-        .arg(
-            Arg::with_name(ARG_DIRS)
-                .multiple(true)
-                .takes_value(true)
-                .min_values(1)
-                .required(true),
-        )
         .get_matches_from(args);
 
     let dirs: Vec<String> = matches
