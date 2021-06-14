@@ -10,12 +10,15 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{crate_version, App, Arg};
 use std::convert::TryFrom;
 use std::fs::{metadata, OpenOptions};
 use std::io::ErrorKind;
 use std::path::Path;
 use uucore::parse_size::{parse_size, ParseSizeError};
+
+use crate::app::{get_app, options};
+
+mod app;
 
 #[derive(Debug, Eq, PartialEq)]
 enum TruncateMode {
@@ -53,16 +56,6 @@ impl TruncateMode {
     }
 }
 
-static ABOUT: &str = "Shrink or extend the size of each file to the specified size.";
-
-pub mod options {
-    pub static IO_BLOCKS: &str = "io-blocks";
-    pub static NO_CREATE: &str = "no-create";
-    pub static REFERENCE: &str = "reference";
-    pub static SIZE: &str = "size";
-    pub static ARG_FILES: &str = "files";
-}
-
 fn get_usage() -> String {
     format!("{0} [OPTION]... [FILE]...", executable!())
 }
@@ -93,45 +86,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let long_usage = get_long_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = get_app(executable!())
         .usage(&usage[..])
         .after_help(&long_usage[..])
-        .arg(
-            Arg::with_name(options::IO_BLOCKS)
-            .short("o")
-            .long(options::IO_BLOCKS)
-            .help("treat SIZE as the number of I/O blocks of the file rather than bytes (NOT IMPLEMENTED)")
-        )
-        .arg(
-            Arg::with_name(options::NO_CREATE)
-            .short("c")
-            .long(options::NO_CREATE)
-            .help("do not create files that do not exist")
-        )
-        .arg(
-            Arg::with_name(options::REFERENCE)
-            .short("r")
-            .long(options::REFERENCE)
-            .required_unless(options::SIZE)
-            .help("base the size of each file on the size of RFILE")
-            .value_name("RFILE")
-        )
-        .arg(
-            Arg::with_name(options::SIZE)
-            .short("s")
-            .long(options::SIZE)
-            .required_unless(options::REFERENCE)
-            .help("set or adjust the size of each file according to SIZE, which is in bytes unless --io-blocks is specified")
-            .value_name("SIZE")
-        )
-        .arg(Arg::with_name(options::ARG_FILES)
-             .value_name("FILE")
-             .multiple(true)
-             .takes_value(true)
-             .required(true)
-             .min_values(1))
         .get_matches_from(args);
 
     let files: Vec<String> = matches
