@@ -218,6 +218,7 @@ version = "0.0.6"
 dependencies = [
  "atty",
  "chrono",
+ "clap",
  "conv",
  "filetime",
  "glob 0.3.0",

@@ -5,6 +5,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+use clap::App;
+use clap::Shell;
 use std::cmp;
 use std::collections::hash_map::HashMap;
 use std::ffi::OsString;
@@ -52,7 +54,7 @@ fn main() {
     let binary_as_util = name(&binary);
 
     // binary name equals util name?
-    if let Some(&uumain) = utils.get(binary_as_util) {
+    if let Some(&(uumain, _)) = utils.get(binary_as_util) {
         process::exit(uumain((vec![binary.into()].into_iter()).chain(args)));
     }
 
@@ -74,8 +76,12 @@ fn main() {
     if let Some(util_os) = util_name {
         let util = util_os.as_os_str().to_string_lossy();
 
+        if util == "completion" {
+            gen_completions(args, utils);
+        }
+
         match utils.get(&util[..]) {
-            Some(&uumain) => {
+            Some(&(uumain, _)) => {
                 process::exit(uumain((vec![util_os].into_iter()).chain(args)));
             }
             None => {
@@ -85,7 +91,7 @@ fn main() {
                         let util = util_os.as_os_str().to_string_lossy();
 
                         match utils.get(&util[..]) {
-                            Some(&uumain) => {
+                            Some(&(uumain, _)) => {
                                 let code = uumain(
                                     (vec![util_os, OsString::from("--help")].into_iter())
                                         .chain(args),
@@ -112,4 +118,44 @@ fn main() {
         usage(&utils, binary_as_util);
         process::exit(0);
     }
+}
+
+/// Prints completions for the utility in the first parameter for the shell in the second parameter to stdout
+fn gen_completions<T: uucore::Args>(
+    mut args: impl Iterator<Item = OsString>,
+    util_map: UtilityMap<T>,
+) -> ! {
+    let utility = args
+        .next()
+        .expect("expected utility as the first parameter")
+        .to_str()
+        .expect("utility name was not valid utf-8")
+        .to_owned();
+    let shell = args
+        .next()
+        .expect("expected shell as the second parameter")
+        .to_str()
+        .expect("shell name was not valid utf-8")
+        .to_owned();
+    let mut app = if utility == "coreutils" {
+        gen_coreutils_app(util_map)
+    } else if let Some((_, app)) = util_map.get(utility.as_str()) {
+        app()
+    } else {
+        eprintln!("{} is not a valid utility", utility);
+        process::exit(1)
+    };
+    let shell: Shell = shell.parse().unwrap();
+    let bin_name = std::env::var("PROG_PREFIX").unwrap_or_default() + &utility;
+    app.gen_completions_to(bin_name, shell, &mut io::stdout());
+    io::stdout().flush().unwrap();
+    process::exit(0);
+}
+
+fn gen_coreutils_app<T: uucore::Args>(util_map: UtilityMap<T>) -> App<'static, 'static> {
+    let mut app = App::new("coreutils");
+    for (_, (_, sub_app)) in util_map {
+        app = app.subcommand(sub_app());
+    }
+    app
 }
