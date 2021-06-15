@@ -94,7 +94,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let matches = App::new(executable!())
+    let matches = uu_app().get_matches_from(args);
+
+    unexpand(Options::new(matches));
+
+    0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .name(NAME)
         .version(crate_version!())
         .usage(USAGE)
@@ -126,11 +134,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(options::NO_UTF8)
                 .takes_value(false)
                 .help("interpret input file as 8-bit ASCII rather than UTF-8"))
-        .get_matches_from(args);
-
-    unexpand(Options::new(matches));
-
-    0
 }
 
 fn open(path: String) -> BufReader<Box<dyn Read + 'static>> {

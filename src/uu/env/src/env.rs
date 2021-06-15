@@ -114,7 +114,7 @@ fn build_command<'a, 'b>(args: &'a mut Vec<&'b str>) -> (Cow<'b, str>, &'a [&'b 
     (progname, &args[..])
 }
 
-fn create_app() -> App<'static, 'static> {
+pub fn uu_app() -> App<'static, 'static> {
     App::new(crate_name!())
         .version(crate_version!())
         .author(crate_authors!())
@@ -158,7 +158,7 @@ fn create_app() -> App<'static, 'static> {
 }
 
 fn run_env(args: impl uucore::Args) -> Result<(), i32> {
-    let app = create_app();
+    let app = uu_app();
     let matches = app.get_matches_from(args);
 
     let ignore_env = matches.is_present("ignore-environment");

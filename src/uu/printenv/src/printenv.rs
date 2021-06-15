@@ -26,23 +26,7 @@ fn get_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
-        .usage(&usage[..])
-        .arg(
-            Arg::with_name(OPT_NULL)
-                .short("0")
-                .long(OPT_NULL)
-                .help("end each output line with 0 byte rather than newline"),
-        )
-        .arg(
-            Arg::with_name(ARG_VARIABLES)
-                .multiple(true)
-                .takes_value(true)
-                .min_values(1),
-        )
-        .get_matches_from(args);
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     let variables: Vec<String> = matches
         .values_of(ARG_VARIABLES)
@@ -68,4 +52,22 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     }
     0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
+        .arg(
+            Arg::with_name(OPT_NULL)
+                .short("0")
+                .long(OPT_NULL)
+                .help("end each output line with 0 byte rather than newline"),
+        )
+        .arg(
+            Arg::with_name(ARG_VARIABLES)
+                .multiple(true)
+                .takes_value(true)
+                .min_values(1),
+        )
 }

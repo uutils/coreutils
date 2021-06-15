@@ -156,10 +156,28 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+
+    let result =
+        parse_options(&matches).and_then(|options| match matches.values_of(options::NUMBER) {
+            Some(values) => handle_args(values, options),
+            None => handle_stdin(options),
+        });
+
+    match result {
+        Err(e) => {
+            std::io::stdout().flush().expect("error flushing stdout");
+            show_error!("{}", e);
+            1
+        }
+        _ => 0,
+    }
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .version(crate_version!())
         .about(ABOUT)
-        .usage(&usage[..])
         .after_help(LONG_HELP)
         .setting(AppSettings::AllowNegativeNumbers)
         .arg(
@@ -224,20 +242,4 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .possible_values(&["up", "down", "from-zero", "towards-zero", "nearest"]),
         )
         .arg(Arg::with_name(options::NUMBER).hidden(true).multiple(true))
-        .get_matches_from(args);
-
-    let result =
-        parse_options(&matches).and_then(|options| match matches.values_of(options::NUMBER) {
-            Some(values) => handle_args(values, options),
-            None => handle_stdin(options),
-        });
-
-    match result {
-        Err(e) => {
-            std::io::stdout().flush().expect("error flushing stdout");
-            show_error!("{}", e);
-            1
-        }
-        _ => 0,
-    }
 }

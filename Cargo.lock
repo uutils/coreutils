@@ -1959,6 +1959,7 @@ dependencies = [
 name = "uu_expr"
 version = "0.0.6"
 dependencies = [
+ "clap",
  "libc",
  "num-bigint",
  "num-traits",
@@ -1986,6 +1987,7 @@ dependencies = [
 name = "uu_false"
 version = "0.0.6"
 dependencies = [
+ "clap",
  "uucore",
  "uucore_procs",
 ]
@@ -2051,6 +2053,7 @@ dependencies = [
 name = "uu_hostid"
 version = "0.0.6"
 dependencies = [
+ "clap",
  "libc",
  "uucore",
  "uucore_procs",
@@ -2327,6 +2330,7 @@ name = "uu_pr"
 version = "0.0.6"
 dependencies = [
  "chrono",
+ "clap",
  "getopts",
  "itertools 0.10.0",
  "quick-error 2.0.1",
@@ -2349,6 +2353,7 @@ dependencies = [
 name = "uu_printf"
 version = "0.0.6"
 dependencies = [
+ "clap",
  "itertools 0.8.2",
  "uucore",
  "uucore_procs",
@@ -2585,6 +2590,7 @@ dependencies = [
 name = "uu_test"
 version = "0.0.6"
 dependencies = [
+ "clap",
  "libc",
  "redox_syscall 0.1.57",
  "uucore",
@@ -2628,6 +2634,7 @@ dependencies = [
 name = "uu_true"
 version = "0.0.6"
 dependencies = [
+ "clap",
  "uucore",
  "uucore_procs",
 ]

@@ -51,7 +51,49 @@ pub mod options {
 const MULTI_FILE_TOP_PROMPT: &str = "::::::::::::::\n{}\n::::::::::::::\n";
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let matches = App::new(executable!())
+    let matches = uu_app().get_matches_from(args);
+
+    let mut buff = String::new();
+    let silent = matches.is_present(options::SILENT);
+    if let Some(files) = matches.values_of(options::FILES) {
+        let mut stdout = setup_term();
+        let length = files.len();
+
+        let mut files_iter = files.peekable();
+        while let (Some(file), next_file) = (files_iter.next(), files_iter.peek()) {
+            let file = Path::new(file);
+            if file.is_dir() {
+                terminal::disable_raw_mode().unwrap();
+                show_usage_error!("'{}' is a directory.", file.display());
+                return 1;
+            }
+            if !file.exists() {
+                terminal::disable_raw_mode().unwrap();
+                show_error!("cannot open {}: No such file or directory", file.display());
+                return 1;
+            }
+            if length > 1 {
+                buff.push_str(&MULTI_FILE_TOP_PROMPT.replace("{}", file.to_str().unwrap()));
+            }
+            let mut reader = BufReader::new(File::open(file).unwrap());
+            reader.read_to_string(&mut buff).unwrap();
+            more(&buff, &mut stdout, next_file.copied(), silent);
+            buff.clear();
+        }
+        reset_term(&mut stdout);
+    } else if atty::isnt(atty::Stream::Stdin) {
+        stdin().read_to_string(&mut buff).unwrap();
+        let mut stdout = setup_term();
+        more(&buff, &mut stdout, None, silent);
+        reset_term(&mut stdout);
+    } else {
+        show_usage_error!("bad usage");
+    }
+    0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .about("A file perusal filter for CRT viewing.")
         .version(crate_version!())
         .arg(
@@ -138,45 +180,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .multiple(true)
                 .help("Path to the files to be read"),
         )
-        .get_matches_from(args);
-
-    let mut buff = String::new();
-    let silent = matches.is_present(options::SILENT);
-    if let Some(files) = matches.values_of(options::FILES) {
-        let mut stdout = setup_term();
-        let length = files.len();
-
-        let mut files_iter = files.peekable();
-        while let (Some(file), next_file) = (files_iter.next(), files_iter.peek()) {
-            let file = Path::new(file);
-            if file.is_dir() {
-                terminal::disable_raw_mode().unwrap();
-                show_usage_error!("'{}' is a directory.", file.display());
-                return 1;
-            }
-            if !file.exists() {
-                terminal::disable_raw_mode().unwrap();
-                show_error!("cannot open {}: No such file or directory", file.display());
-                return 1;
-            }
-            if length > 1 {
-                buff.push_str(&MULTI_FILE_TOP_PROMPT.replace("{}", file.to_str().unwrap()));
-            }
-            let mut reader = BufReader::new(File::open(file).unwrap());
-            reader.read_to_string(&mut buff).unwrap();
-            more(&buff, &mut stdout, next_file.copied(), silent);
-            buff.clear();
-        }
-        reset_term(&mut stdout);
-    } else if atty::isnt(atty::Stream::Stdin) {
-        stdin().read_to_string(&mut buff).unwrap();
-        let mut stdout = setup_term();
-        more(&buff, &mut stdout, None, silent);
-        reset_term(&mut stdout);
-    } else {
-        show_usage_error!("bad usage");
-    }
-    0
 }
 
 #[cfg(not(target_os = "fuchsia"))]

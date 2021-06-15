@@ -8,13 +8,20 @@
 #[macro_use]
 extern crate uucore;
 
+use clap::{crate_version, App, Arg};
 use uucore::InvalidEncodingHandling;
 
 mod syntax_tree;
 mod tokens;
 
-static NAME: &str = "expr";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
+const VERSION: &str = "version";
+const HELP: &str = "help";
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .arg(Arg::with_name(VERSION).long(VERSION))
+        .arg(Arg::with_name(HELP).long(HELP))
+}
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args
@@ -133,5 +140,5 @@ Environment variables:
 }
 
 fn print_version() {
-    println!("{} {}", NAME, VERSION);
+    println!("{} {}", executable!(), crate_version!());
 }

@@ -60,62 +60,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let after_help = get_long_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = uu_app()
         .usage(&usage[..])
         .after_help(&after_help[..])
-        .arg(
-            Arg::with_name(options::LONG_FORMAT)
-                .short("l")
-                .requires(options::USER)
-                .help("produce long format output for the specified USERs"),
-        )
-        .arg(
-            Arg::with_name(options::OMIT_HOME_DIR)
-                .short("b")
-                .help("omit the user's home directory and shell in long format"),
-        )
-        .arg(
-            Arg::with_name(options::OMIT_PROJECT_FILE)
-                .short("h")
-                .help("omit the user's project file in long format"),
-        )
-        .arg(
-            Arg::with_name(options::OMIT_PLAN_FILE)
-                .short("p")
-                .help("omit the user's plan file in long format"),
-        )
-        .arg(
-            Arg::with_name(options::SHORT_FORMAT)
-                .short("s")
-                .help("do short format output, this is the default"),
-        )
-        .arg(
-            Arg::with_name(options::OMIT_HEADINGS)
-                .short("f")
-                .help("omit the line of column headings in short format"),
-        )
-        .arg(
-            Arg::with_name(options::OMIT_NAME)
-                .short("w")
-                .help("omit the user's full name in short format"),
-        )
-        .arg(
-            Arg::with_name(options::OMIT_NAME_HOST)
-                .short("i")
-                .help("omit the user's full name and remote host in short format"),
-        )
-        .arg(
-            Arg::with_name(options::OMIT_NAME_HOST_TIME)
-                .short("q")
-                .help("omit the user's full name, remote host and idle time in short format"),
-        )
-        .arg(
-            Arg::with_name(options::USER)
-                .takes_value(true)
-                .multiple(true),
-        )
         .get_matches_from(args);
 
     let users: Vec<String> = matches
@@ -180,6 +127,63 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     } else {
         pk.long_pinky()
     }
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
+        .arg(
+            Arg::with_name(options::LONG_FORMAT)
+                .short("l")
+                .requires(options::USER)
+                .help("produce long format output for the specified USERs"),
+        )
+        .arg(
+            Arg::with_name(options::OMIT_HOME_DIR)
+                .short("b")
+                .help("omit the user's home directory and shell in long format"),
+        )
+        .arg(
+            Arg::with_name(options::OMIT_PROJECT_FILE)
+                .short("h")
+                .help("omit the user's project file in long format"),
+        )
+        .arg(
+            Arg::with_name(options::OMIT_PLAN_FILE)
+                .short("p")
+                .help("omit the user's plan file in long format"),
+        )
+        .arg(
+            Arg::with_name(options::SHORT_FORMAT)
+                .short("s")
+                .help("do short format output, this is the default"),
+        )
+        .arg(
+            Arg::with_name(options::OMIT_HEADINGS)
+                .short("f")
+                .help("omit the line of column headings in short format"),
+        )
+        .arg(
+            Arg::with_name(options::OMIT_NAME)
+                .short("w")
+                .help("omit the user's full name in short format"),
+        )
+        .arg(
+            Arg::with_name(options::OMIT_NAME_HOST)
+                .short("i")
+                .help("omit the user's full name and remote host in short format"),
+        )
+        .arg(
+            Arg::with_name(options::OMIT_NAME_HOST_TIME)
+                .short("q")
+                .help("omit the user's full name, remote host and idle time in short format"),
+        )
+        .arg(
+            Arg::with_name(options::USER)
+                .takes_value(true)
+                .multiple(true),
+        )
 }
 
 struct Pinky {

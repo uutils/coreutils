@@ -46,20 +46,7 @@ process).",
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
-        .setting(AppSettings::TrailingVarArg)
-        .version(crate_version!())
-        .usage(&usage[..])
-        .arg(
-            Arg::with_name(options::ADJUSTMENT)
-                .short("n")
-                .long(options::ADJUSTMENT)
-                .help("add N to the niceness (default is 10)")
-                .takes_value(true)
-                .allow_hyphen_values(true),
-        )
-        .arg(Arg::with_name(options::COMMAND).multiple(true))
-        .get_matches_from(args);
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     let mut niceness = unsafe {
         nix::errno::Errno::clear();
@@ -119,4 +106,19 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     } else {
         126
     }
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .setting(AppSettings::TrailingVarArg)
+        .version(crate_version!())
+        .arg(
+            Arg::with_name(options::ADJUSTMENT)
+                .short("n")
+                .long(options::ADJUSTMENT)
+                .help("add N to the niceness (default is 10)")
+                .takes_value(true)
+                .allow_hyphen_values(true),
+        )
+        .arg(Arg::with_name(options::COMMAND).multiple(true))
 }

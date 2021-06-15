@@ -93,45 +93,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let long_usage = get_long_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = uu_app()
         .usage(&usage[..])
         .after_help(&long_usage[..])
-        .arg(
-            Arg::with_name(options::IO_BLOCKS)
-            .short("o")
-            .long(options::IO_BLOCKS)
-            .help("treat SIZE as the number of I/O blocks of the file rather than bytes (NOT IMPLEMENTED)")
-        )
-        .arg(
-            Arg::with_name(options::NO_CREATE)
-            .short("c")
-            .long(options::NO_CREATE)
-            .help("do not create files that do not exist")
-        )
-        .arg(
-            Arg::with_name(options::REFERENCE)
-            .short("r")
-            .long(options::REFERENCE)
-            .required_unless(options::SIZE)
-            .help("base the size of each file on the size of RFILE")
-            .value_name("RFILE")
-        )
-        .arg(
-            Arg::with_name(options::SIZE)
-            .short("s")
-            .long(options::SIZE)
-            .required_unless(options::REFERENCE)
-            .help("set or adjust the size of each file according to SIZE, which is in bytes unless --io-blocks is specified")
-            .value_name("SIZE")
-        )
-        .arg(Arg::with_name(options::ARG_FILES)
-             .value_name("FILE")
-             .multiple(true)
-             .takes_value(true)
-             .required(true)
-             .min_values(1))
         .get_matches_from(args);
 
     let files: Vec<String> = matches
@@ -166,6 +130,46 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
+        .arg(
+            Arg::with_name(options::IO_BLOCKS)
+            .short("o")
+            .long(options::IO_BLOCKS)
+            .help("treat SIZE as the number of I/O blocks of the file rather than bytes (NOT IMPLEMENTED)")
+        )
+        .arg(
+            Arg::with_name(options::NO_CREATE)
+            .short("c")
+            .long(options::NO_CREATE)
+            .help("do not create files that do not exist")
+        )
+        .arg(
+            Arg::with_name(options::REFERENCE)
+            .short("r")
+            .long(options::REFERENCE)
+            .required_unless(options::SIZE)
+            .help("base the size of each file on the size of RFILE")
+            .value_name("RFILE")
+        )
+        .arg(
+            Arg::with_name(options::SIZE)
+            .short("s")
+            .long(options::SIZE)
+            .required_unless(options::REFERENCE)
+            .help("set or adjust the size of each file according to SIZE, which is in bytes unless --io-blocks is specified")
+            .value_name("SIZE")
+        )
+        .arg(Arg::with_name(options::ARG_FILES)
+             .value_name("FILE")
+             .multiple(true)
+             .takes_value(true)
+             .required(true)
+             .min_values(1))
 }
 
 /// Truncate the named file to the specified size.

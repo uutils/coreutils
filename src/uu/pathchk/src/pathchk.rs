@@ -49,27 +49,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
-        .usage(&usage[..])
-        .arg(
-            Arg::with_name(options::POSIX)
-                .short("p")
-                .help("check for most POSIX systems"),
-        )
-        .arg(
-            Arg::with_name(options::POSIX_SPECIAL)
-                .short("P")
-                .help(r#"check for empty names and leading "-""#),
-        )
-        .arg(
-            Arg::with_name(options::PORTABILITY)
-                .long(options::PORTABILITY)
-                .help("check for all POSIX systems (equivalent to -p -P)"),
-        )
-        .arg(Arg::with_name(options::PATH).hidden(true).multiple(true))
-        .get_matches_from(args);
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     // set working mode
     let is_posix = matches.values_of(options::POSIX).is_some();
@@ -113,6 +93,28 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     } else {
         1
     }
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
+        .arg(
+            Arg::with_name(options::POSIX)
+                .short("p")
+                .help("check for most POSIX systems"),
+        )
+        .arg(
+            Arg::with_name(options::POSIX_SPECIAL)
+                .short("P")
+                .help(r#"check for empty names and leading "-""#),
+        )
+        .arg(
+            Arg::with_name(options::PORTABILITY)
+                .long(options::PORTABILITY)
+                .help("check for all POSIX systems (equivalent to -p -P)"),
+        )
+        .arg(Arg::with_name(options::PATH).hidden(true).multiple(true))
 }
 
 // check a path, given as a slice of it's components and an operating mode

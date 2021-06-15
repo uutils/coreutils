@@ -638,7 +638,28 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .accept_any();
 
     // let mut opts = Options::new();
-    let matches = App::new(executable!())
+    let matches = uu_app().get_matches_from(args);
+
+    let input_files: Vec<String> = match &matches.values_of(options::FILE) {
+        Some(v) => v.clone().map(|v| v.to_owned()).collect(),
+        None => vec!["-".to_string()],
+    };
+
+    let config = get_config(&matches);
+    let word_filter = WordFilter::new(&matches, &config);
+    let file_map = read_input(&input_files, &config);
+    let word_set = create_word_set(&config, &word_filter, &file_map);
+    let output_file = if !config.gnu_ext && matches.args.len() == 2 {
+        matches.value_of(options::FILE).unwrap_or("-").to_string()
+    } else {
+        "-".to_owned()
+    };
+    write_traditional_output(&config, &file_map, &word_set, &output_file);
+    0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .name(NAME)
         .version(crate_version!())
         .usage(BRIEF)
@@ -762,22 +783,4 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .value_name("NUMBER")
                 .takes_value(true),
         )
-        .get_matches_from(args);
-
-    let input_files: Vec<String> = match &matches.values_of(options::FILE) {
-        Some(v) => v.clone().map(|v| v.to_owned()).collect(),
-        None => vec!["-".to_string()],
-    };
-
-    let config = get_config(&matches);
-    let word_filter = WordFilter::new(&matches, &config);
-    let file_map = read_input(&input_files, &config);
-    let word_set = create_word_set(&config, &word_filter, &file_map);
-    let output_file = if !config.gnu_ext && matches.args.len() == 2 {
-        matches.value_of(options::FILE).unwrap_or("-").to_string()
-    } else {
-        "-".to_owned()
-    };
-    write_traditional_output(&config, &file_map, &word_set, &output_file);
-    0
 }

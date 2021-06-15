@@ -10,9 +10,17 @@
 
 mod parser;
 
+use clap::{App, AppSettings};
 use parser::{parse, Symbol};
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
+use uucore::executable;
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .setting(AppSettings::DisableHelpFlags)
+        .setting(AppSettings::DisableVersion)
+}
 
 pub fn uumain(mut args: impl uucore::Args) -> i32 {
     let program = args.next().unwrap_or_else(|| OsString::from("test"));

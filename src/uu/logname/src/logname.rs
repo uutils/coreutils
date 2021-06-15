@@ -45,11 +45,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .accept_any();
 
     let usage = get_usage();
-    let _ = App::new(executable!())
-        .version(crate_version!())
-        .about(SUMMARY)
-        .usage(&usage[..])
-        .get_matches_from(args);
+    let _ = uu_app().usage(&usage[..]).get_matches_from(args);
 
     match get_userlogin() {
         Some(userlogin) => println!("{}", userlogin),
@@ -57,4 +53,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(SUMMARY)
 }

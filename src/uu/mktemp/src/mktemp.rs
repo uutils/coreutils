@@ -40,61 +40,7 @@ fn get_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
-        .usage(&usage[..])
-        .arg(
-            Arg::with_name(OPT_DIRECTORY)
-                .short("d")
-                .long(OPT_DIRECTORY)
-                .help("Make a directory instead of a file"),
-        )
-        .arg(
-            Arg::with_name(OPT_DRY_RUN)
-                .short("u")
-                .long(OPT_DRY_RUN)
-                .help("do not create anything; merely print a name (unsafe)"),
-        )
-        .arg(
-            Arg::with_name(OPT_QUIET)
-                .short("q")
-                .long("quiet")
-                .help("Fail silently if an error occurs."),
-        )
-        .arg(
-            Arg::with_name(OPT_SUFFIX)
-                .long(OPT_SUFFIX)
-                .help(
-                    "append SUFFIX to TEMPLATE; SUFFIX must not contain a path separator. \
-                     This option is implied if TEMPLATE does not end with X.",
-                )
-                .value_name("SUFFIX"),
-        )
-        .arg(
-            Arg::with_name(OPT_TMPDIR)
-                .short("p")
-                .long(OPT_TMPDIR)
-                .help(
-                    "interpret TEMPLATE relative to DIR; if DIR is not specified, use \
-                     $TMPDIR ($TMP on windows) if set, else /tmp. With this option, TEMPLATE must not \
-                     be an absolute name; unlike with -t, TEMPLATE may contain \
-                     slashes, but mktemp creates only the final component",
-                )
-                .value_name("DIR"),
-        )
-        .arg(Arg::with_name(OPT_T).short(OPT_T).help(
-            "Generate a template (using the supplied prefix and TMPDIR (TMP on windows) if set) \
-             to create a filename template [deprecated]",
-        ))
-        .arg(
-            Arg::with_name(ARG_TEMPLATE)
-                .multiple(false)
-                .takes_value(true)
-                .max_values(1)
-                .default_value(DEFAULT_TEMPLATE),
-        )
-        .get_matches_from(args);
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     let template = matches.value_of(ARG_TEMPLATE).unwrap();
     let tmpdir = matches.value_of(OPT_TMPDIR).unwrap_or_default();
@@ -169,6 +115,62 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     } else {
         exec(tmpdir, prefix, rand, suffix, make_dir, suppress_file_err)
     }
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
+        .arg(
+            Arg::with_name(OPT_DIRECTORY)
+                .short("d")
+                .long(OPT_DIRECTORY)
+                .help("Make a directory instead of a file"),
+        )
+        .arg(
+            Arg::with_name(OPT_DRY_RUN)
+                .short("u")
+                .long(OPT_DRY_RUN)
+                .help("do not create anything; merely print a name (unsafe)"),
+        )
+        .arg(
+            Arg::with_name(OPT_QUIET)
+                .short("q")
+                .long("quiet")
+                .help("Fail silently if an error occurs."),
+        )
+        .arg(
+            Arg::with_name(OPT_SUFFIX)
+                .long(OPT_SUFFIX)
+                .help(
+                    "append SUFFIX to TEMPLATE; SUFFIX must not contain a path separator. \
+                     This option is implied if TEMPLATE does not end with X.",
+                )
+                .value_name("SUFFIX"),
+        )
+        .arg(
+            Arg::with_name(OPT_TMPDIR)
+                .short("p")
+                .long(OPT_TMPDIR)
+                .help(
+                    "interpret TEMPLATE relative to DIR; if DIR is not specified, use \
+                     $TMPDIR ($TMP on windows) if set, else /tmp. With this option, TEMPLATE must not \
+                     be an absolute name; unlike with -t, TEMPLATE may contain \
+                     slashes, but mktemp creates only the final component",
+                )
+                .value_name("DIR"),
+        )
+        .arg(Arg::with_name(OPT_T).short(OPT_T).help(
+            "Generate a template (using the supplied prefix and TMPDIR (TMP on windows) if set) \
+             to create a filename template [deprecated]",
+        ))
+        .arg(
+            Arg::with_name(ARG_TEMPLATE)
+                .multiple(false)
+                .takes_value(true)
+                .max_values(1)
+                .default_value(DEFAULT_TEMPLATE),
+        )
 }
 
 fn parse_template(temp: &str) -> Option<(&str, usize, &str)> {
