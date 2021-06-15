@@ -3,6 +3,7 @@ mod unit_tests;
 
 use crate::conversion_tables::*;
 use crate::{
+    CountType,
     IConvFlags, OConvFlags,
     StatusLevel,
 };
@@ -751,6 +752,27 @@ pub fn parse_seek_amt(obs: &usize, oflags: &OFlags, matches: &getopts::Matches) 
         {
             let n = parse_bytes_with_opt_multiplier(amt)?;
             Ok(Some(obs*n))
+        }
+    }
+    else
+    {
+        Ok(None)
+    }
+}
+
+/// Parse the value of count=N and the type of N implied by iflags
+pub fn parse_count(iflags: &IFlags, matches:  &getopts::Matches) -> Result<Option<CountType>, ParseError>
+{
+    if let Some(amt) = matches.opt_str("count")
+    {
+        let n = parse_bytes_with_opt_multiplier(amt)?;
+        if iflags.count_bytes
+        {
+            Ok(Some(CountType::Bytes(n)))
+        }
+        else
+        {
+            Ok(Some(CountType::Reads(n)))
         }
     }
     else

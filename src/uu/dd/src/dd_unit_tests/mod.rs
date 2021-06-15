@@ -95,6 +95,7 @@ macro_rules! make_spec_test (
                             non_ascii: false,
                             ibs: 512,
                             xfer_stats: None,
+                            count: None,
                             cflags: icf!(),
                             iflags: DEFAULT_IFLAGS,
                         },
@@ -116,11 +117,13 @@ macro_rules! make_spec_test (
             dd_fileout($i,$o).unwrap();
 
             let res = File::open($tmp_fname).unwrap();
+            // Check test file isn't empty (unless spec file is too)
             assert_eq!(res.metadata().unwrap().len(), $spec.metadata().unwrap().len());
 
             let spec = BufReader::new($spec);
             let res = BufReader::new(res);
 
+            // Check all bytes match
             for (b_res, b_spec) in res.bytes().zip(spec.bytes())
             {
                 assert_eq!(b_res.unwrap(),

@@ -24,6 +24,7 @@ macro_rules! make_block_test (
                             non_ascii: false,
                             ibs: 512,
                             xfer_stats: None,
+                            count: None,
                             cflags: IConvFlags {
                                 ctable: None,
                                 block: $block,
@@ -56,6 +57,7 @@ macro_rules! make_unblock_test (
                             non_ascii: false,
                             ibs: 512,
                             xfer_stats: None,
+                            count: None,
                             cflags: IConvFlags {
                                 ctable: None,
                                 block: None,

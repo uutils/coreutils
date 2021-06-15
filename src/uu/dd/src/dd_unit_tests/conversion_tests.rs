@@ -10,6 +10,7 @@ macro_rules! make_conv_test (
                             non_ascii: false,
                             ibs: 512,
                             xfer_stats: None,
+                            count: None,
                             cflags: icf!($ctable),
                             iflags: DEFAULT_IFLAGS,
                         },
@@ -35,6 +36,7 @@ macro_rules! make_icf_test (
                             non_ascii: false,
                             ibs: 512,
                             xfer_stats: None,
+                            count: None,
                             cflags: $icf,
                             iflags: DEFAULT_IFLAGS,
                         },
@@ -138,6 +140,7 @@ fn all_valid_ascii_ebcdic_ascii_roundtrip_conv_test()
         non_ascii: false,
         ibs: 128,
         xfer_stats: None,
+        count: None,
         cflags: icf!(Some(&ASCII_TO_EBCDIC)),
         iflags: DEFAULT_IFLAGS,
     };
@@ -160,6 +163,7 @@ fn all_valid_ascii_ebcdic_ascii_roundtrip_conv_test()
         non_ascii: false,
         ibs: 256,
         xfer_stats: None,
+        count: None,
         cflags: icf!(Some(&EBCDIC_TO_ASCII)),
         iflags: DEFAULT_IFLAGS,
     };

@@ -66,12 +66,34 @@ struct ReadStat
     reads_partial: u64,
     records_truncated: u32,
 }
+impl std::ops::AddAssign for ReadStat
+{
+    fn add_assign(&mut self, other: Self)
+    {
+        *self = Self {
+            reads_complete: self.reads_complete + other.reads_complete,
+            reads_partial: self.reads_partial + other.reads_partial,
+            records_truncated: self.records_truncated + other.records_truncated,
+        }
+    }
+}
 
 struct WriteStat
 {
     writes_complete: u64,
     writes_partial: u64,
     bytes_total: u128,
+}
+impl std::ops::AddAssign for WriteStat
+{
+    fn add_assign(&mut self, other: Self)
+    {
+        *self = Self {
+            writes_complete: self.writes_complete + other.writes_complete,
+            writes_partial: self.writes_partial + other.writes_partial,
+            bytes_total: self.bytes_total + other.bytes_total,
+        }
+    }
 }
 
 type Cbs = usize;
@@ -150,6 +172,16 @@ pub enum StatusLevel
     None,
 }
 
+/// The value of count=N
+/// Defaults to Reads(N)
+/// if iflag=count_bytes
+/// then becomes Bytes(N)
+pub enum CountType
+{
+    Reads(usize),
+    Bytes(usize),
+}
+
 #[derive(Debug)]
 enum InternalError
 {
@@ -180,6 +212,7 @@ struct Input<R: Read>
     non_ascii: bool,
     ibs: usize,
     xfer_stats: Option<StatusLevel>,
+    count: Option<CountType>,
     cflags: IConvFlags,
     iflags: IFlags,
 }
@@ -194,12 +227,14 @@ impl Input<io::Stdin>
         let cflags = parseargs::parse_conv_flag_input(matches)?;
         let iflags = parseargs::parse_iflags(matches)?;
         let skip = parseargs::parse_skip_amt(&ibs, &iflags, matches)?;
+        let count = parseargs::parse_count(&iflags, matches)?;
 
         let mut i = Input {
             src: io::stdin(),
             non_ascii,
             ibs,
             xfer_stats,
+            count,
             cflags,
             iflags,
         };
@@ -225,6 +260,7 @@ impl Input<File>
         let cflags = parseargs::parse_conv_flag_input(matches)?;
         let iflags = parseargs::parse_iflags(matches)?;
         let skip = parseargs::parse_skip_amt(&ibs, &iflags, matches)?;
+        let count = parseargs::parse_count(&iflags, matches)?;
 
         if let Some(fname) = matches.opt_str("if")
         {
@@ -241,6 +277,7 @@ impl Input<File>
                 non_ascii,
                 ibs,
                 xfer_stats,
+                count,
                 cflags,
                 iflags,
             };
@@ -279,7 +316,7 @@ impl<R: Read> Read for Input<R>
 
 impl<R: Read> Input<R>
 {
-    /// Fills a given obs-sized buffer.
+    /// Fills a given buffer.
     /// Reads in increments of 'self.ibs'.
     /// The start of each ibs-sized read follows the previous one.
     fn fill_consecutive(&mut self, buf: &mut Vec<u8>) -> Result<ReadStat, Box<dyn Error>>
@@ -317,7 +354,7 @@ impl<R: Read> Input<R>
         })
    }
 
-    /// Fills a given obs-sized buffer.
+    /// Fills a given buffer.
     /// Reads in increments of 'self.ibs'.
     /// The start of each ibs-sized read is aligned to multiples of ibs; remaing space is filled with the 'pad' byte.
     fn fill_blocks(&mut self, buf: &mut Vec<u8>, obs: usize, pad: u8) -> Result<ReadStat, Box<dyn Error>>
@@ -375,23 +412,19 @@ impl<R: Read> Input<R>
    }
 
     /// Force-fills a buffer, ignoring zero-length reads which would otherwise be
-    /// interpreted as EOF. Does not continue after errors.
-    /// Note: This may never return.
-    fn force_fill(&mut self, mut buf: &mut [u8], target_len: usize) -> Result<(), Box<dyn Error>>
+    /// interpreted as EOF.
+    /// Note: This will not return unless the source (eventually) produces
+    /// enough bytes to meet target_len.
+    fn force_fill(&mut self, mut buf: &mut [u8], target_len: usize) -> Result<usize, Box<dyn Error>>
     {
-        let mut total_len = 0;
-
-        loop
+        let mut base_idx = 0;
+        while base_idx < target_len
         {
-            total_len += self.read(&mut buf)?;
-
-            if total_len == target_len
-            {
-                return Ok(());
-            }
+            base_idx += self.read(&mut buf[base_idx..target_len])?;
         }
-    }
 
+    Ok(base_idx)
+    }
 }
 
 struct Output<W: Write>
@@ -602,7 +635,7 @@ impl Output<File>
 
 /// Splits the content of buf into cbs-length blocks
 /// Appends padding as specified by conv=block and cbs=N
-fn block(buf: Vec<u8>, cbs: usize, rstats: &mut ReadStat) -> Vec<Vec<u8>>
+fn block(buf: Vec<u8>, cbs: usize, rstat: &mut ReadStat) -> Vec<Vec<u8>>
 {
     let mut blocks = buf.split(| &e | e == '\n' as u8)
                     .fold(Vec::new(), | mut blocks, split |
@@ -610,7 +643,7 @@ fn block(buf: Vec<u8>, cbs: usize, rstats: &mut ReadStat) -> Vec<Vec<u8>>
                             let mut split = split.to_vec();
                             if split.len() > cbs
                             {
-                                rstats.records_truncated += 1;
+                                rstat.records_truncated += 1;
                             }
                             split.resize(cbs, ' ' as u8);
                             blocks.push(split);
@@ -683,7 +716,7 @@ fn unblock(buf: Vec<u8>, cbs: usize) -> Vec<u8>
         .collect()
 }
 
-fn conv_block_unblock_helper<R: Read, W: Write>(mut buf: Vec<u8>, i: &mut Input<R>, o: &Output<W>, rstats: &mut ReadStat) -> Result<Vec<u8>, Box<dyn Error>>
+fn conv_block_unblock_helper<R: Read, W: Write>(mut buf: Vec<u8>, i: &mut Input<R>, o: &Output<W>, rstat: &mut ReadStat) -> Result<Vec<u8>, Box<dyn Error>>
 {
     // Local Predicate Fns -------------------------------------------------
     #[inline]
@@ -737,7 +770,7 @@ fn conv_block_unblock_helper<R: Read, W: Write>(mut buf: Vec<u8>, i: &mut Input<
     { // ascii input so perform the block first
         let cbs = i.cflags.block.unwrap();
 
-        let mut blocks = block(buf, cbs, rstats);
+        let mut blocks = block(buf, cbs, rstat);
 
         if let Some(ct) = i.cflags.ctable
         {
@@ -762,7 +795,7 @@ fn conv_block_unblock_helper<R: Read, W: Write>(mut buf: Vec<u8>, i: &mut Input<
              apply_ct(&mut buf, &ct);
         }
 
-        let blocks = block(buf, cbs, rstats)
+        let blocks = block(buf, cbs, rstat)
             .into_iter()
             .flatten()
             .collect();
@@ -860,7 +893,7 @@ fn read_helper<R: Read, W: Write>(i: &mut Input<R>, o: &mut Output<W>, bsize: us
     {
         // Read
         let mut buf = vec![BUF_INIT_BYTE; bsize];
-        let mut rstats = match i.cflags.sync
+        let mut rstat = match i.cflags.sync
         {
             Some(ch) =>
                 i.fill_blocks(&mut buf, o.obs, ch)?,
@@ -868,9 +901,9 @@ fn read_helper<R: Read, W: Write>(i: &mut Input<R>, o: &mut Output<W>, bsize: us
                 i.fill_consecutive(&mut buf)?,
         };
         // Return early if no data
-        if rstats.reads_complete == 0 && rstats.reads_partial == 0
+        if rstat.reads_complete == 0 && rstat.reads_partial == 0
         {
-            return Ok((rstats,buf));
+            return Ok((rstat,buf));
         }
 
         // Perform any conv=x[,x...] options
@@ -880,12 +913,12 @@ fn read_helper<R: Read, W: Write>(i: &mut Input<R>, o: &mut Output<W>, bsize: us
         }
         if is_conv(&i) || is_block(&i) || is_unblock(&i)
         {
-            let buf = conv_block_unblock_helper(buf, i, o, &mut rstats)?;
-            Ok((rstats, buf))
+            let buf = conv_block_unblock_helper(buf, i, o, &mut rstat)?;
+            Ok((rstat, buf))
         }
         else
         {
-            Ok((rstats, buf))
+            Ok((rstat, buf))
         }
     }
 }
@@ -935,13 +968,13 @@ fn print_xfer_stats(update: &ProgUpdate)
 
 }
 
-/// Generate a progress updater that tracks progress, receives updates, and TODO: responds to signals.
+/// Generate a progress updater that tracks progress, receives updates, and responds to signals.
 fn gen_prog_updater(rx: mpsc::Receiver<ProgUpdate>, xfer_stats: Option<StatusLevel>) -> impl Fn() -> ()
 {
     // --------------------------------------------------------------
     fn posixly_correct() -> bool
     {
-        !env::var("POSIXLY_CORRECT").is_err()
+        env::var("POSIXLY_CORRECT").is_ok()
     }
     // --------------------------------------------------------------
     move || {
@@ -951,7 +984,7 @@ fn gen_prog_updater(rx: mpsc::Receiver<ProgUpdate>, xfer_stats: Option<StatusLev
 
         // TODO: SIGINFO seems to only exist for BSD (and therefore MACOS)
         // I will probably want put this behind a feature-gate and may need to pass the value to handle as my own constant.
-        // This may involve some finagling with the library.
+        // This may involve some finagling with the signals library.
         // see -> https://unix.stackexchange.com/questions/179481/siginfo-on-gnu-linux-arch-linux-missing
         // if let Err(e) = signal_hook::flag::register_usize(signal::SIGINFO, sigval.clone(), signal::SIGINFO as usize)
         // {
@@ -980,12 +1013,9 @@ fn gen_prog_updater(rx: mpsc::Receiver<ProgUpdate>, xfer_stats: Option<StatusLev
                 {
                     update
                 },
-                (Err(e), _) =>
-                {
-                    debug_println!("Internal dd Warning: Error in progress update thread\n\t{}", e);
-
-                    continue;
-                },
+                (Err(_), _) =>
+                    // recv only fails permenantly
+                    break,
             };
             // Handle signals
             match sigval.load(Ordering::Relaxed)
@@ -1014,17 +1044,64 @@ fn calc_bsize(ibs: usize, obs: usize) -> usize
     lcm
 }
 
+/// Calculate the buffer size appropriate for this loop iteration, respecting
+/// a count=N if present.
+fn calc_loop_bsize(count: &Option<CountType>, rstat: &ReadStat, wstat: &WriteStat, ibs: usize, ideal_bsize: usize) -> usize
+{
+    match count
+    {
+        Some(CountType::Reads(rmax)) =>
+        {
+            let rmax: u64 = (*rmax).try_into().unwrap();
+            let rsofar = rstat.reads_complete + rstat.reads_partial;
+            let rremain: usize = (rmax - rsofar).try_into().unwrap();
+            cmp::min(ideal_bsize, rremain*ibs)
+        },
+        Some(CountType::Bytes(bmax)) =>
+        {
+            let bmax: u128 = (*bmax).try_into().unwrap();
+            let bremain: usize = (bmax - wstat.bytes_total).try_into().unwrap();
+            cmp::min(ideal_bsize, bremain)
+        },
+        None =>
+            ideal_bsize,
+    }
+}
+
+/// Decide if the current progress is below a count=N limit or return
+/// true if no such limit is set.
+fn below_count_limit(count: &Option<CountType>, rstat: &ReadStat, wstat: &WriteStat) -> bool
+{
+    match count
+    {
+        Some(CountType::Reads(n)) =>
+        {
+            let n = (*n).try_into().unwrap();
+            // debug_assert!(rstat.reads_complete + rstat.reads_partial >= n);
+            rstat.reads_complete + rstat.reads_partial <= n
+        },
+        Some(CountType::Bytes(n)) =>
+        {
+            let n = (*n).try_into().unwrap();
+            // debug_assert!(wstat.bytes_total >= n);
+            wstat.bytes_total <= n
+        },
+        None =>
+            true,
+    }
+}
+
 /// Perform the copy/convert opertaions. Stdout version
 // Note: Some of dd's functionality depends on whether the output is actually a file. This breaks the Output<Write> abstraction,
 // and should be fixed in the future.
 fn dd_stdout<R: Read>(mut i: Input<R>, mut o: Output<io::Stdout>) -> Result<(), Box<dyn Error>>
 {
-    let mut rstats = ReadStat {
+    let mut rstat = ReadStat {
         reads_complete: 0,
         reads_partial: 0,
         records_truncated: 0,
     };
-    let mut wstats = WriteStat {
+    let mut wstat = WriteStat {
         writes_complete: 0,
         writes_partial: 0,
         bytes_total: 0,
@@ -1038,37 +1115,30 @@ fn dd_stdout<R: Read>(mut i: Input<R>, mut o: Output<io::Stdout>) -> Result<(), 
         tx
     };
 
-    loop
+    while below_count_limit(&i.count, &rstat, &wstat)
     {
         // Read/Write
-        match read_helper(&mut i, &mut o, bsize)?
+        let loop_bsize = calc_loop_bsize(&i.count, &rstat, &wstat, i.ibs, bsize);
+        match read_helper(&mut i, &mut o, loop_bsize)?
         {
             (ReadStat { reads_complete: 0, reads_partial: 0, .. }, _) =>
                 break,
             (rstat_update, buf) =>
             {
-                let wstats_update = o.write_blocks(buf)?;
+                let wstat_update = o.write_blocks(buf)?;
 
-                rstats = ReadStat {
-                    reads_complete: rstats.reads_complete + rstat_update.reads_complete,
-                    reads_partial: rstats.reads_partial + rstat_update.reads_partial,
-                    records_truncated: rstats.records_truncated + rstat_update.records_truncated,
-                };
-                wstats = WriteStat {
-                    writes_complete: wstats.writes_complete + wstats_update.writes_complete,
-                    writes_partial: wstats.writes_partial + wstats_update.writes_partial,
-                    bytes_total: wstats.bytes_total + wstats_update.bytes_total,
-                };
-            },
+                rstat += rstat_update;
+                wstat += wstat_update;
+           },
         };
         // Update Prog
         prog_tx.send(ProgUpdate {
-                reads_complete: rstats.reads_complete,
-                reads_partial: rstats.reads_partial,
-                writes_complete: wstats.writes_complete,
-                writes_partial: wstats.writes_partial,
-                bytes_total: wstats.bytes_total,
-                records_truncated: rstats.records_truncated,
+                reads_complete: rstat.reads_complete,
+                reads_partial: rstat.reads_partial,
+                writes_complete: wstat.writes_complete,
+                writes_partial: wstat.writes_partial,
+                bytes_total: wstat.bytes_total,
+                records_truncated: rstat.records_truncated,
                 duration: start.elapsed(),
         })?;
     }
@@ -1088,12 +1158,12 @@ fn dd_stdout<R: Read>(mut i: Input<R>, mut o: Output<io::Stdout>) -> Result<(), 
         Some(StatusLevel::None) => {},
         _ =>
             print_xfer_stats(&ProgUpdate {
-                reads_complete: rstats.reads_complete,
-                reads_partial: rstats.reads_partial,
-                writes_complete: wstats.writes_complete,
-                writes_partial: wstats.writes_partial,
-                bytes_total: wstats.bytes_total,
-                records_truncated: rstats.records_truncated,
+                reads_complete: rstat.reads_complete,
+                reads_partial: rstat.reads_partial,
+                writes_complete: wstat.writes_complete,
+                writes_partial: wstat.writes_partial,
+                bytes_total: wstat.bytes_total,
+                records_truncated: rstat.records_truncated,
                 duration: start.elapsed(),
             }),
     }
@@ -1105,12 +1175,12 @@ fn dd_stdout<R: Read>(mut i: Input<R>, mut o: Output<io::Stdout>) -> Result<(), 
 // and should be fixed in the future.
 fn dd_fileout<R: Read>(mut i: Input<R>, mut o: Output<File>) -> Result<(), Box<dyn Error>>
 {
-    let mut rstats = ReadStat {
+    let mut rstat = ReadStat {
         reads_complete: 0,
         reads_partial: 0,
         records_truncated: 0,
     };
-    let mut wstats = WriteStat {
+    let mut wstat = WriteStat {
         writes_complete: 0,
         writes_partial: 0,
         bytes_total: 0,
@@ -1124,37 +1194,30 @@ fn dd_fileout<R: Read>(mut i: Input<R>, mut o: Output<File>) -> Result<(), Box<d
         tx
     };
 
-    loop
+    while below_count_limit(&i.count, &rstat, &wstat)
     {
         // Read/Write
-        match read_helper(&mut i, &mut o, bsize)?
+        let loop_bsize = calc_loop_bsize(&i.count, &rstat, &wstat, i.ibs, bsize);
+        match read_helper(&mut i, &mut o, loop_bsize)?
         {
             (ReadStat { reads_complete: 0, reads_partial: 0, .. }, _) =>
                 break,
             (rstat_update, buf) =>
             {
-                let wstats_update = o.write_blocks(buf)?;
+                let wstat_update = o.write_blocks(buf)?;
 
-                rstats = ReadStat {
-                    reads_complete: rstats.reads_complete + rstat_update.reads_complete,
-                    reads_partial: rstats.reads_partial + rstat_update.reads_partial,
-                    records_truncated: rstats.records_truncated + rstat_update.records_truncated,
-                };
-                wstats = WriteStat {
-                    writes_complete: wstats.writes_complete + wstats_update.writes_complete,
-                    writes_partial: wstats.writes_partial + wstats_update.writes_partial,
-                    bytes_total: wstats.bytes_total + wstats_update.bytes_total,
-                };
+                rstat += rstat_update;
+                wstat += wstat_update;
             },
         };
         // Update Prog
         prog_tx.send(ProgUpdate {
-            reads_complete: rstats.reads_complete,
-            reads_partial: rstats.reads_partial,
-            writes_complete: wstats.writes_complete,
-            writes_partial: wstats.writes_partial,
-            bytes_total: wstats.bytes_total,
-            records_truncated: rstats.records_truncated,
+            reads_complete: rstat.reads_complete,
+            reads_partial: rstat.reads_partial,
+            writes_complete: wstat.writes_complete,
+            writes_partial: wstat.writes_partial,
+            bytes_total: wstat.bytes_total,
+            records_truncated: rstat.records_truncated,
             duration: start.elapsed(),
         })?;
     }
@@ -1174,12 +1237,12 @@ fn dd_fileout<R: Read>(mut i: Input<R>, mut o: Output<File>) -> Result<(), Box<d
         Some(StatusLevel::None) => {},
         _ =>
             print_xfer_stats(&ProgUpdate {
-                reads_complete: rstats.reads_complete,
-                reads_partial: rstats.reads_partial,
-                writes_complete: wstats.writes_complete,
-                writes_partial: wstats.writes_partial,
-                bytes_total: wstats.bytes_total,
-                records_truncated: rstats.records_truncated,
+                reads_complete: rstat.reads_complete,
+                reads_partial: rstat.reads_partial,
+                writes_complete: wstat.writes_complete,
+                writes_partial: wstat.writes_partial,
+                bytes_total: wstat.bytes_total,
+                records_truncated: rstat.records_truncated,
                 duration: start.elapsed(),
             }),
     }

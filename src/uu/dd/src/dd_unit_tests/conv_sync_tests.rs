@@ -24,6 +24,7 @@ macro_rules! make_sync_test (
                             non_ascii: false,
                             ibs: $ibs,
                             xfer_stats: None,
+                            count: None,
                             cflags: IConvFlags {
                                 ctable: None,
                                 block: None,
