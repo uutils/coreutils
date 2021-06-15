@@ -27,6 +27,7 @@ pub enum ParseError
     ByteStringContainsNoValue(String),
     MultiplierStringWouldOverflow(String),
     BlockUnblockWithoutCBS,
+    StatusLevelNotRecognized(String),
 }
 
 impl std::fmt::Display for ParseError
@@ -189,6 +190,26 @@ impl std::str::FromStr for Flag
     }
 }
 
+impl std::str::FromStr for StatusLevel
+{
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err>
+    {
+        match s
+        {
+            "none" =>
+                Ok(StatusLevel::None),
+            "noxfer" =>
+                Ok(StatusLevel::Noxfer),
+            "progress" =>
+                Ok(StatusLevel::Progress),
+            _ =>
+                Err(ParseError::StatusLevelNotRecognized(s.to_string())),
+        }
+    }
+}
+
 fn parse_multiplier<'a>(s: &'a str) -> Result<usize, ParseError>
 {
     match s
@@ -251,7 +272,7 @@ fn parse_bytes_with_opt_multiplier(s: String) -> Result<usize, ParseError>
 {
     if let Some(idx) = s.find(char::is_alphabetic)
     {
-        let base = parse_bytes_only(&s[0..idx])?;
+        let base = parse_bytes_only(&s[..idx])?;
         let mult = parse_multiplier(&s[idx..])?;
 
         if let Some(bytes) = base.checked_mul(mult)
@@ -300,7 +321,16 @@ fn parse_cbs(matches: &getopts::Matches) -> Result<Option<usize>, ParseError>
 
 pub fn parse_status_level(matches: &getopts::Matches) -> Result<Option<StatusLevel>, ParseError>
 {
-    unimplemented!()
+    match matches.opt_str("status")
+    {
+       Some(s) =>
+        {
+            let st = s.parse()?;
+            Ok(Some(st))
+        },
+        None =>
+            Ok(None),
+    }
 }
 
 pub fn parse_obs(matches: &getopts::Matches) -> Result<usize, ParseError>
@@ -321,45 +351,55 @@ pub fn parse_obs(matches: &getopts::Matches) -> Result<usize, ParseError>
 
 fn parse_ctable(fmt: Option<ConvFlag>, case: Option<ConvFlag>) -> Option<&'static ConversionTable>
 {
+    fn parse_conv_and_case_table(fmt: &ConvFlag, case: &ConvFlag) -> Option<&'static ConversionTable>
+    {
+        match (fmt, case)
+        {
+            (ConvFlag::FmtAtoE, ConvFlag::UCase) =>
+                Some(&ASCII_TO_EBCDIC_LCASE_TO_UCASE),
+            (ConvFlag::FmtAtoE, ConvFlag::LCase) =>
+                Some(&ASCII_TO_EBCDIC_UCASE_TO_LCASE),
+            (ConvFlag::FmtEtoA, ConvFlag::UCase) =>
+                Some(&EBCDIC_TO_ASCII_LCASE_TO_UCASE),
+            (ConvFlag::FmtEtoA, ConvFlag::LCase) =>
+                Some(&EBCDIC_TO_ASCII_UCASE_TO_LCASE),
+            (ConvFlag::FmtAtoI, ConvFlag::UCase) =>
+                Some(&ASCII_TO_IBM_UCASE_TO_LCASE),
+            (ConvFlag::FmtAtoI, ConvFlag::LCase) =>
+                Some(&ASCII_TO_IBM_LCASE_TO_UCASE),
+            (_, _) =>
+                None,
+        }
+    }
+    fn parse_conv_table_only(fmt: &ConvFlag) -> Option<&'static ConversionTable>
+    {
+        match fmt
+        {
+            ConvFlag::FmtAtoE =>
+                Some(&ASCII_TO_EBCDIC),
+            ConvFlag::FmtEtoA =>
+                Some(&EBCDIC_TO_ASCII),
+            ConvFlag::FmtAtoI =>
+                Some(&ASCII_TO_IBM),
+            _ =>
+                None,
+        }
+    }
+    // ------------------------------------------------------------------------
     match (fmt, case)
     {
         // Both [ascii | ebcdic | ibm] and [lcase | ucase] specified
         (Some(fmt), Some(case)) =>
-            match (fmt, case)
-            {
-                (ConvFlag::FmtAtoE, ConvFlag::UCase) =>
-                    Some(&ASCII_TO_EBCDIC_LCASE_TO_UCASE),
-                (ConvFlag::FmtAtoE, ConvFlag::LCase) =>
-                    Some(&ASCII_TO_EBCDIC_UCASE_TO_LCASE),
-                (ConvFlag::FmtEtoA, ConvFlag::UCase) =>
-                    Some(&EBCDIC_TO_ASCII_LCASE_TO_UCASE),
-                (ConvFlag::FmtEtoA, ConvFlag::LCase) =>
-                    Some(&EBCDIC_TO_ASCII_UCASE_TO_LCASE),
-                (ConvFlag::FmtAtoI, ConvFlag::UCase) =>
-                    Some(&ASCII_TO_IBM_UCASE_TO_LCASE),
-                (ConvFlag::FmtAtoI, ConvFlag::LCase) =>
-                    Some(&ASCII_TO_IBM_LCASE_TO_UCASE),
-                (_, _) =>
-                    None,
-            },
+            parse_conv_and_case_table(&fmt, &case),
         // Only [ascii | ebcdic | ibm] specified
         (Some(fmt), None) =>
-            match fmt
-            {
-                ConvFlag::FmtAtoE =>
-                    Some(&ASCII_TO_EBCDIC),
-                ConvFlag::FmtEtoA =>
-                    Some(&EBCDIC_TO_ASCII),
-                ConvFlag::FmtAtoI =>
-                    Some(&ASCII_TO_IBM),
-                _ =>
-                    None,
-            },
+            parse_conv_table_only(&fmt),
         // Only [lcase | ucase] specified
         (None, Some(ConvFlag::UCase)) =>
             Some(&ASCII_LCASE_TO_UCASE),
         (None, Some(ConvFlag::LCase)) =>
             Some(&ASCII_UCASE_TO_LCASE),
+        // ST else...
         (_, _) =>
             None,
    }

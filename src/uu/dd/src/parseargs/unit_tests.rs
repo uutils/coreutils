@@ -7,6 +7,69 @@ use crate::{
     StatusLevel,
 };
 
+#[test]
+fn test_status_level_absent()
+{
+    let args = vec![
+        String::from("dd"),
+        String::from("--if=foo.file"),
+        String::from("--of=bar.file"),
+    ];
+
+    let matches = build_app!().parse(args);
+    let st = parse_status_level(&matches).unwrap();
+
+    assert_eq!(st, None);
+}
+
+#[test]
+fn test_status_level_none()
+{
+    let args = vec![
+        String::from("dd"),
+        String::from("--status=none"),
+        String::from("--if=foo.file"),
+        String::from("--of=bar.file"),
+    ];
+
+    let matches = build_app!().parse(args);
+    let st = parse_status_level(&matches).unwrap().unwrap();
+
+    assert_eq!(st, StatusLevel::None);
+}
+
+#[test]
+fn test_status_level_progress()
+{
+    let args = vec![
+        String::from("dd"),
+        String::from("--if=foo.file"),
+        String::from("--of=bar.file"),
+        String::from("--status=progress"),
+    ];
+
+    let matches = build_app!().parse(args);
+    let st = parse_status_level(&matches).unwrap().unwrap();
+
+    assert_eq!(st, StatusLevel::Progress);
+}
+
+#[test]
+fn test_status_level_noxfer()
+{
+    let args = vec![
+        String::from("dd"),
+        String::from("--if=foo.file"),
+        String::from("--status=noxfer"),
+        String::from("--of=bar.file"),
+    ];
+
+    let matches = build_app!().parse(args);
+    let st = parse_status_level(&matches).unwrap().unwrap();
+
+    assert_eq!(st, StatusLevel::Noxfer);
+}
+
 // ----- IConvFlags/Output -----
 
 #[test]

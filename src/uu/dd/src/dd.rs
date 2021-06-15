@@ -164,7 +164,7 @@ pub struct OFlags
 
 /// The value of the status cl-option.
 /// Controls printing of transfer stats
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum StatusLevel
 {
     Progress,
@@ -1315,6 +1315,43 @@ macro_rules! build_app (
                 "cbs",
                 "Set the conversion block size to BYTES. When converting variable-length records to fixed-length ones (‘conv=block’) or the reverse (‘conv=unblock’), use BYTES as the fixed record length.",
                 "BYTES"
+            )
+            .optopt(
+                "",
+                "status",
+                "Specify the amount of information printed.  If this operand is
+     given multiple times, the last one takes precedence.  The LEVEL
+     value can be one of the following:
+
+     ‘none’
+          Do not print any informational or warning messages to stderr.
+          Error messages are output as normal.
+
+     ‘noxfer’
+          Do not print the final transfer rate and volume statistics
+          that normally make up the last status line.
+
+     ‘progress’
+          Print the transfer rate and volume statistics on stderr, when
+          processing each input block.  Statistics are output on a
+          single line at most once every second, but updates can be
+          delayed when waiting on I/O.
+
+     Transfer information is normally output to stderr upon receipt of
+     the ‘INFO’ signal or when ‘dd’ exits, and defaults to the following
+     form in the C locale:
+
+          7287+1 records in
+          116608+0 records out
+          59703296 bytes (60 MB, 57 MiB) copied, 0.0427974 s, 1.4 GB/s
+
+     The notation ‘W+P’ stands for W whole blocks and P partial blocks.
+     A partial block occurs when a read or write operation succeeds but
+     transfers less data than the block size.  An additional line like
+     ‘1 truncated record’ or ‘10 truncated records’ is output after the
+     ‘records out’ line if ‘conv=block’ processing truncated one or more
+     input records.",
+                "LEVEL"
             )
     }
 );
