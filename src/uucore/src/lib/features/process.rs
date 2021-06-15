@@ -17,18 +17,22 @@ use std::process::ExitStatus as StdExitStatus;
 use std::thread;
 use std::time::{Duration, Instant};
 
+/// `geteuid()` returns the effective user ID of the calling process.
 pub fn geteuid() -> uid_t {
     unsafe { libc::geteuid() }
 }
 
+/// `getegid()` returns the effective group ID of the calling process.
 pub fn getegid() -> gid_t {
     unsafe { libc::getegid() }
 }
 
+/// `getgid()` returns the real group ID of the calling process.
 pub fn getgid() -> gid_t {
     unsafe { libc::getgid() }
 }
 
+/// `getuid()` returns the real user ID of the calling process.
 pub fn getuid() -> uid_t {
     unsafe { libc::getuid() }
 }
