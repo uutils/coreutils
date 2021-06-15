@@ -382,10 +382,11 @@ impl Config {
         #[allow(clippy::needless_bool)]
         let show_control = if options.is_present(options::HIDE_CONTROL_CHARS) {
             false
-        } else if options.is_present(options::SHOW_CONTROL_CHARS) {
+        } else if options.is_present(options::SHOW_CONTROL_CHARS) || atty::is(atty::Stream::Stdout)
+        {
             true
         } else {
-            false // TODO: only if output is a terminal and the program is `ls`
+            false
         };
 
         let quoting_style = if let Some(style) = options.value_of(options::QUOTING_STYLE) {
