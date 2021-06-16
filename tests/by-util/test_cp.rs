@@ -727,6 +727,15 @@ fn test_cp_parents_dest_not_directory() {
 }
 
 #[test]
+fn test_cp_preserve_no_args() {
+    new_ucmd!()
+        .arg(TEST_COPY_FROM_FOLDER_FILE)
+        .arg(TEST_HELLO_WORLD_DEST)
+        .arg("--preserve")
+        .succeeds();
+}
+
+#[test]
 // For now, disable the test on Windows. Symlinks aren't well support on Windows.
 // It works on Unix for now and it works locally when run from a powershell
 #[cfg(not(windows))]
