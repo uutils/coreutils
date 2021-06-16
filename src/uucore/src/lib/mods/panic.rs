@@ -8,7 +8,7 @@ pub fn mute_sigpipe_panic() {
     let hook = panic::take_hook();
     panic::set_hook(Box::new(move |info| {
         if let Some(res) = info.payload().downcast_ref::<String>() {
-            if res.contains("Broken pipe") {
+            if res.contains("BrokenPipe") {
                 return;
             }
         }
