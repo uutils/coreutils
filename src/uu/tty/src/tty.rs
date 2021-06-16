@@ -14,6 +14,7 @@ extern crate uucore;
 
 use clap::{crate_version, App, Arg};
 use std::ffi::CStr;
+use std::io::Write;
 use uucore::InvalidEncodingHandling;
 
 static ABOUT: &str = "Print the file name of the terminal connected to standard input.";
@@ -66,11 +67,18 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     };
 
+    let mut stdout = std::io::stdout();
+
     if !silent {
-        if !tty.chars().all(|c| c.is_whitespace()) {
-            println!("{}", tty);
+        let write_result = if !tty.chars().all(|c| c.is_whitespace()) {
+            writeln!(stdout, "{}", tty)
         } else {
-            println!("not a tty");
+            writeln!(stdout, "not a tty")
+        };
+        if write_result.is_err() || stdout.flush().is_err() {
+            // Don't return to prevent a panic later when another flush is attempted
+            // because the `uucore_procs::main` macro inserts a flush after execution for every utility.
+            std::process::exit(3);
         }
     }
 

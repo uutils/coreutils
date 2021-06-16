@@ -63,3 +63,12 @@ fn test_close_stdin_silent_alias() {
 fn test_wrong_argument() {
     new_ucmd!().args(&["a"]).fails().code_is(2);
 }
+
+#[test]
+#[cfg(not(windows))]
+fn test_stdout_fail() {
+    let mut child = new_ucmd!().run_no_wait();
+    drop(child.stdout.take());
+    let status = child.wait().unwrap();
+    assert_eq!(status.code(), Some(3));
+}
