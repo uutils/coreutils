@@ -843,17 +843,6 @@ fn read_helper<R: Read, W: Write>(i: &mut Input<R>, o: &mut Output<W>, bsize: us
 {
     // Local Predicate Fns -----------------------------------------------
     #[inline]
-    fn is_fast_read<R: Read, W: Write>(i: &Input<R>, o: &Output<W>) -> bool
-    {
-        // TODO: Enable this once fast_reads are implemented
-        false &&
-        i.ibs == o.obs
-            && !is_conv(i)
-            && !is_block(i)
-            && !is_unblock(i)
-            && !i.cflags.swab
-    }
-    #[inline]
     fn is_conv<R: Read>(i: &Input<R>) -> bool
     {
         i.cflags.ctable.is_some()
@@ -882,45 +871,35 @@ fn read_helper<R: Read, W: Write>(i: &mut Input<R>, o: &mut Output<W>, bsize: us
         }
     }
    // ------------------------------------------------------------------
-    if is_fast_read(&i, &o)
-    {
-        // TODO: fast reads are copies performed
-        // directly to output (without creating any buffers)
-        // as mentioned in the dd spec.
-        unimplemented!()
-    }
-    else
-    {
-        // Read
-        let mut buf = vec![BUF_INIT_BYTE; bsize];
-        let mut rstat = match i.cflags.sync
-        {
-            Some(ch) =>
-                i.fill_blocks(&mut buf, o.obs, ch)?,
-            _ =>
-                i.fill_consecutive(&mut buf)?,
-        };
-        // Return early if no data
-        if rstat.reads_complete == 0 && rstat.reads_partial == 0
-        {
-            return Ok((rstat,buf));
-        }
+   // Read
+   let mut buf = vec![BUF_INIT_BYTE; bsize];
+   let mut rstat = match i.cflags.sync
+   {
+       Some(ch) =>
+           i.fill_blocks(&mut buf, o.obs, ch)?,
+       _ =>
+           i.fill_consecutive(&mut buf)?,
+   };
+   // Return early if no data
+   if rstat.reads_complete == 0 && rstat.reads_partial == 0
+   {
+       return Ok((rstat,buf));
+   }
 
-        // Perform any conv=x[,x...] options
-        if i.cflags.swab
-        {
-            perform_swab(&mut buf);
-        }
-        if is_conv(&i) || is_block(&i) || is_unblock(&i)
-        {
-            let buf = conv_block_unblock_helper(buf, i, o, &mut rstat)?;
-            Ok((rstat, buf))
-        }
-        else
-        {
-            Ok((rstat, buf))
-        }
-    }
+   // Perform any conv=x[,x...] options
+   if i.cflags.swab
+   {
+       perform_swab(&mut buf);
+   }
+   if is_conv(&i) || is_block(&i) || is_unblock(&i)
+   {
+       let buf = conv_block_unblock_helper(buf, i, o, &mut rstat)?;
+       Ok((rstat, buf))
+   }
+   else
+   {
+       Ok((rstat, buf))
+   }
 }
 
 fn print_io_lines(update: &ProgUpdate)
