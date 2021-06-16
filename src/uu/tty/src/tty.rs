@@ -44,7 +44,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("print nothing, only return an exit status")
                 .required(false),
         )
-        .get_matches_from(args);
+        .get_matches_from_safe(args);
+
+    let matches = match matches {
+        Ok(m) => m,
+        Err(e) => {
+            eprint!("{}", e);
+            return 2;
+        }
+    };
 
     let silent = matches.is_present(options::SILENT);
 
