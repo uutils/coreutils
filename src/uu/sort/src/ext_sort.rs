@@ -255,7 +255,7 @@ fn write<I: WriteableTmpFile>(
 
 fn write_lines<'a, T: Write>(lines: &[Line<'a>], writer: &mut T, separator: u8) {
     for s in lines {
-        crash_if_err!(1, writer.write_all(s.line.as_bytes()));
-        crash_if_err!(1, writer.write_all(&[separator]));
+        writer.write_all(s.line.as_bytes()).unwrap();
+        writer.write_all(&[separator]).unwrap();
     }
 }
