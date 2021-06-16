@@ -236,7 +236,7 @@ impl Default for GlobalSettings {
             buffer_size: DEFAULT_BUF_SIZE,
             tmp_dir: PathBuf::new(),
             compress_prog: None,
-            merge_batch_size: 16,
+            merge_batch_size: 32,
         }
     }
 }
@@ -1313,7 +1313,7 @@ fn output_sorted_lines<'a>(iter: impl Iterator<Item = &'a Line<'a>>, settings: &
 
 fn exec(files: &[String], settings: &GlobalSettings) -> i32 {
     if settings.merge {
-        let mut file_merger = merge::merge_with_file_limit(files.iter().map(open), settings);
+        let mut file_merger = merge::merge(files.iter().map(open), settings);
         file_merger.write_all(settings);
     } else if settings.check {
         if files.len() > 1 {
@@ -1516,8 +1516,6 @@ fn get_hash<T: Hash>(t: &T) -> u64 {
 }
 
 fn random_shuffle(a: &str, b: &str, salt: &str) -> Ordering {
-    #![allow(clippy::comparison_chain)]
-
     let da = get_hash(&[a, salt].concat());
     let db = get_hash(&[b, salt].concat());
 

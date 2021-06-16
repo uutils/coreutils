@@ -52,17 +52,17 @@ impl Chunk {
 
 /// Read a chunk, parse lines and send them.
 ///
-/// No empty chunk will be sent. If we reach the end of the input, sender_option
-/// is set to None. If this function however does not set sender_option to None,
-/// it is not guaranteed that there is still input left: If the input fits _exactly_
-/// into a buffer, we will only notice that there's nothing more to read at the next
-/// invocation.
+/// No empty chunk will be sent. If we reach the end of the input, `false` is returned.
+/// However, if this function returns `true`, it is not guaranteed that there is still
+/// input left: If the input fits _exactly_ into a buffer, we will only notice that there's
+/// nothing more to read at the next invocation. In case there is no input left, nothing will
+/// be sent.
 ///
 /// # Arguments
 ///
 /// (see also `read_to_chunk` for a more detailed documentation)
 ///
-/// * `sender_option`: The sender to send the lines to the sorter. If `None`, this function does nothing.
+/// * `sender`: The sender to send the lines to the sorter.
 /// * `buffer`: The recycled buffer. All contents will be overwritten, but it must already be filled.
 ///   (i.e. `buffer.len()` should be equal to `buffer.capacity()`)
 /// * `max_buffer_size`: How big `buffer` can be.
@@ -73,52 +73,47 @@ impl Chunk {
 /// * `lines`: The recycled vector to fill with lines. Must be empty.
 /// * `settings`: The global settings.
 #[allow(clippy::too_many_arguments)]
-#[allow(clippy::borrowed_box)]
-pub fn read(
-    sender_option: &mut Option<SyncSender<Chunk>>,
+pub fn read<T: Read>(
+    sender: &SyncSender<Chunk>,
     mut buffer: Vec<u8>,
     max_buffer_size: Option<usize>,
     carry_over: &mut Vec<u8>,
-    file: &mut Box<dyn Read + Send>,
-    next_files: &mut impl Iterator<Item = Box<dyn Read + Send>>,
+    file: &mut T,
+    next_files: &mut impl Iterator<Item = T>,
     separator: u8,
     lines: Vec<Line<'static>>,
     settings: &GlobalSettings,
-) {
+) -> bool {
     assert!(lines.is_empty());
-    if let Some(sender) = sender_option {
-        if buffer.len() < carry_over.len() {
-            buffer.resize(carry_over.len() + 10 * 1024, 0);
-        }
-        buffer[..carry_over.len()].copy_from_slice(carry_over);
-        let (read, should_continue) = read_to_buffer(
-            file,
-            next_files,
-            &mut buffer,
-            max_buffer_size,
-            carry_over.len(),
-            separator,
-        );
-        carry_over.clear();
-        carry_over.extend_from_slice(&buffer[read..]);
-
-        if read != 0 {
-            let payload = Chunk::new(buffer, |buf| {
-                let mut lines = unsafe {
-                    // SAFETY: It is safe to transmute to a vector of lines with shorter lifetime,
-                    // because it was only temporarily transmuted to a Vec<Line<'static>> to make recycling possible.
-                    std::mem::transmute::<Vec<Line<'static>>, Vec<Line<'_>>>(lines)
-                };
-                let read = crash_if_err!(1, std::str::from_utf8(&buf[..read]));
-                parse_lines(read, &mut lines, separator, settings);
-                lines
-            });
-            sender.send(payload).unwrap();
-        }
-        if !should_continue {
-            *sender_option = None;
-        }
+    if buffer.len() < carry_over.len() {
+        buffer.resize(carry_over.len() + 10 * 1024, 0);
     }
+    buffer[..carry_over.len()].copy_from_slice(carry_over);
+    let (read, should_continue) = read_to_buffer(
+        file,
+        next_files,
+        &mut buffer,
+        max_buffer_size,
+        carry_over.len(),
+        separator,
+    );
+    carry_over.clear();
+    carry_over.extend_from_slice(&buffer[read..]);
+
+    if read != 0 {
+        let payload = Chunk::new(buffer, |buf| {
+            let mut lines = unsafe {
+                // SAFETY: It is safe to transmute to a vector of lines with shorter lifetime,
+                // because it was only temporarily transmuted to a Vec<Line<'static>> to make recycling possible.
+                std::mem::transmute::<Vec<Line<'static>>, Vec<Line<'_>>>(lines)
+            };
+            let read = crash_if_err!(1, std::str::from_utf8(&buf[..read]));
+            parse_lines(read, &mut lines, separator, settings);
+            lines
+        });
+        sender.send(payload).unwrap();
+    }
+    should_continue
 }
 
 /// Split `read` into `Line`s, and add them to `lines`.
@@ -165,10 +160,9 @@ fn parse_lines<'a>(
 ///   The remaining bytes must be copied to the start of the buffer for the next invocation,
 ///   if another invocation is necessary, which is determined by the other return value.
 /// * Whether this function should be called again.
-#[allow(clippy::borrowed_box)]
-fn read_to_buffer(
-    file: &mut Box<dyn Read + Send>,
-    next_files: &mut impl Iterator<Item = Box<dyn Read + Send>>,
+fn read_to_buffer<T: Read>(
+    file: &mut T,
+    next_files: &mut impl Iterator<Item = T>,
     buffer: &mut Vec<u8>,
     max_buffer_size: Option<usize>,
     start_offset: usize,
