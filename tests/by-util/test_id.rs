@@ -1,20 +1,15 @@
 use crate::common::util::*;
 
-// Apparently some CI environments have configuration issues, e.g. with 'whoami' and 'id'.
-//
-// From the Logs: "Build (ubuntu-18.04, x86_64-unknown-linux-gnu, feat_os_unix, use-cross)"
-//    whoami: cannot find name for user ID 1001
-// id --name: cannot find name for user ID 1001
-// id --name: cannot find name for group ID 116
-//
-// However, when running "id" from within "/bin/bash" it looks fine:
-// id: "uid=1001(runner) gid=118(docker) groups=118(docker),4(adm),101(systemd-journal)"
-// whoami: "runner"
-//
-
 // spell-checker:ignore (ToDO) testsuite coreutil
 
-const VERSION_EXPECTED: &str = "8.30"; // 8.32
+// These tests run the GNU coreutils `(g)id` binary in `$PATH` in order to gather reference values.
+// If the `(g)id` in `$PATH` doesn't include a coreutils version string,
+// or the version is too low, the test is skipped.
+
+// The reference version is 8.32. Here 8.30 was chosen because right now there's no
+// ubuntu image for github action available with a higher version than 8.30.
+const VERSION_EXPECTED: &str = "8.30"; // Version expected for the reference `id` in $PATH
+const VERSION_MULTIPLE_USERS: &str = "8.31";
 const UUTILS_WARNING: &str = "uutils-tests-warning";
 const UUTILS_INFO: &str = "uutils-tests-info";
 
@@ -31,6 +26,17 @@ macro_rules! unwrap_or_return {
 }
 
 fn whoami() -> String {
+    // Apparently some CI environments have configuration issues, e.g. with 'whoami' and 'id'.
+    //
+    // From the Logs: "Build (ubuntu-18.04, x86_64-unknown-linux-gnu, feat_os_unix, use-cross)"
+    //    whoami: cannot find name for user ID 1001
+    // id --name: cannot find name for user ID 1001
+    // id --name: cannot find name for group ID 116
+    //
+    // However, when running "id" from within "/bin/bash" it looks fine:
+    // id: "uid=1001(runner) gid=118(docker) groups=118(docker),4(adm),101(systemd-journal)"
+    // whoami: "runner"
+
     // Use environment variable to get current user instead of
     // invoking `whoami` and fall back to user "nobody" on error.
     std::env::var("USER").unwrap_or_else(|e| {
@@ -48,12 +54,10 @@ fn test_id_no_specified_user() {
 
     #[cfg(target_os = "linux")]
     {
-        // NOTE: Strip 'context' part from exp_stdout (remove if SElinux gets added):
-        let context_offset = exp_result
-            .stdout_str()
-            .find(" context=")
-            .unwrap_or_else(|| _exp_stdout.len());
-        _exp_stdout.replace_range(context_offset.., "\n");
+        // NOTE: (SELinux NotImplemented) strip 'context' part from exp_stdout:
+        if let Some(context_offset) = exp_result.stdout_str().find(" context=") {
+            _exp_stdout.replace_range(context_offset.._exp_stdout.len() - 1, "");
+        }
     }
 
     result
@@ -126,10 +130,10 @@ fn test_id_single_user_non_existing() {
     let result = new_ucmd!().args(args).run();
     let exp_result = unwrap_or_return!(expected_result(args));
 
+    // It is unknown why on macOS (and possibly others?) `id` adds "Invalid argument".
     // coreutils 8.32: $ LC_ALL=C id foobar
     // macOS: stderr: "id: 'foobar': no such user: Invalid argument"
     // linux: stderr: "id: 'foobar': no such user"
-    // It is unkown why the output on macOS is different.
     result
         .stdout_is(exp_result.stdout_str())
         .stderr_is(exp_result.stderr_str().replace(": Invalid argument", ""))
@@ -202,6 +206,16 @@ fn test_id_password_style() {
 #[test]
 #[cfg(unix)]
 fn test_id_multiple_users() {
+    #[cfg(target_os = "linux")]
+    let util_name = util_name!();
+    #[cfg(all(unix, not(target_os = "linux")))]
+    let util_name = &format!("g{}", util_name!());
+    let version_check_string = check_coreutil_version(util_name, VERSION_MULTIPLE_USERS);
+    if version_check_string.starts_with(UUTILS_WARNING) {
+        println!("{}\ntest skipped", version_check_string);
+        return;
+    }
+
     // Same typical users that GNU testsuite is using.
     let test_users = ["root", "man", "postfix", "sshd", &whoami()];
 
@@ -260,6 +274,16 @@ fn test_id_multiple_users() {
 #[test]
 #[cfg(unix)]
 fn test_id_multiple_users_non_existing() {
+    #[cfg(target_os = "linux")]
+    let util_name = util_name!();
+    #[cfg(all(unix, not(target_os = "linux")))]
+    let util_name = &format!("g{}", util_name!());
+    let version_check_string = check_coreutil_version(util_name, VERSION_MULTIPLE_USERS);
+    if version_check_string.starts_with(UUTILS_WARNING) {
+        println!("{}\ntest skipped", version_check_string);
+        return;
+    }
+
     let test_users = [
         "root",
         "hopefully_non_existing_username1",
@@ -401,58 +425,61 @@ fn test_id_zero() {
     }
 }
 
-#[allow(clippy::needless_borrow)]
-#[cfg(unix)]
-fn expected_result(args: &[&str]) -> Result<CmdResult, String> {
-    // version for reference coreutil binary
-
-    #[cfg(target_os = "linux")]
-    let util_name = util_name!();
-    #[cfg(all(unix, not(target_os = "linux")))]
-    let util_name = format!("g{}", util_name!());
-
-    let scene = TestScenario::new(&util_name);
+fn check_coreutil_version(util_name: &str, version_expected: &str) -> String {
+    // example:
+    // $ id --version | head -n 1
+    // id (GNU coreutils) 8.32.162-4eda
+    let scene = TestScenario::new(util_name);
     let version_check = scene
         .cmd_keepenv(&util_name)
         .env("LANGUAGE", "C")
         .arg("--version")
         .run();
-    let version_check_string: String = version_check
+    version_check
         .stdout_str()
         .split('\n')
         .collect::<Vec<_>>()
         .get(0)
         .map_or_else(
-            || format!("{}: unexpected output format for reference coreutils '{} --version'", UUTILS_WARNING, util_name),
+            || format!("{}: unexpected output format for reference coreutil: '{} --version'", UUTILS_WARNING, util_name),
             |s| {
-                if s.contains(&format!("(GNU coreutils) {}", VERSION_EXPECTED)) {
+                if s.contains(&format!("(GNU coreutils) {}", version_expected)) {
                     s.to_string()
                 } else if s.contains("(GNU coreutils)") {
-                    // example: id (GNU coreutils) 8.32.162-4eda
                     let version_found = s.split_whitespace().last().unwrap()[..4].parse::<f32>().unwrap_or_default();
-                    let version_expected = VERSION_EXPECTED.parse::<f32>().unwrap_or_default();
+                    let version_expected = version_expected.parse::<f32>().unwrap_or_default();
                     if version_found > version_expected {
-                    format!("{}: version for the reference coreutil '{}' is higher than expected; expected: {}, found: {}", UUTILS_INFO, util_name, VERSION_EXPECTED, version_found)
+                    format!("{}: version for the reference coreutil '{}' is higher than expected; expected: {}, found: {}", UUTILS_INFO, util_name, version_expected, version_found)
                     } else {
-                    format!("{}: version for the reference coreutil '{}' does not match; expected: {}, found: {}", UUTILS_WARNING, util_name, VERSION_EXPECTED, version_found) }
+                    format!("{}: version for the reference coreutil '{}' does not match; expected: {}, found: {}", UUTILS_WARNING, util_name, version_expected, version_found) }
                 } else {
                     format!("{}: no coreutils version string found for reference coreutils '{} --version'", UUTILS_WARNING, util_name)
                 }
             },
-        );
+        )
+}
+
+#[allow(clippy::needless_borrow)]
+#[cfg(unix)]
+fn expected_result(args: &[&str]) -> Result<CmdResult, String> {
+    #[cfg(target_os = "linux")]
+    let util_name = util_name!();
+    #[cfg(all(unix, not(target_os = "linux")))]
+    let util_name = &format!("g{}", util_name!());
+
+    let version_check_string = check_coreutil_version(util_name, VERSION_EXPECTED);
     if version_check_string.starts_with(UUTILS_WARNING) {
         return Err(version_check_string);
     }
     println!("{}", version_check_string);
 
+    let scene = TestScenario::new(util_name);
     let result = scene
-        .cmd_keepenv(&util_name)
+        .cmd_keepenv(util_name)
         .env("LANGUAGE", "C")
         .args(args)
         .run();
 
-    // #[cfg(all(unix, not(target_os = "linux")))]
-    // if cfg!(target_os = "macos") {
     let (stdout, stderr): (String, String) = if cfg!(target_os = "linux") {
         (
             result.stdout_str().to_string(),

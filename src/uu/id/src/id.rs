@@ -15,13 +15,15 @@
 // * This was partially rewritten in order for stdout/stderr/exit_code
 //   to be conform with GNU coreutils (8.32) testsuite for `id`.
 //
-// * This passes GNU's coreutils Testsuite (8.32.161-370c2-dirty)
+// * This supports multiple users (a feature that was introduced in coreutils 8.31)
+//
+// * This passes GNU's coreutils Testsuite (8.32)
 //   for "tests/id/uid.sh" and "tests/id/zero/sh".
 //
-// * Option '--zero' does not exist for BSD's `id`, therefor '--zero' is only
+// * Option '--zero' does not exist for BSD's `id`, therefore '--zero' is only
 //   allowed together with other options that are available on GNU's `id`.
 //
-// * Help text based on BSD's `id`.
+// * Help text based on BSD's `id` manpage and GNU's `id` manpage.
 //
 
 // spell-checker:ignore (ToDO) asid auditid auditinfo auid cstr egid emod euid getaudit getlogin gflag nflag pline rflag termid uflag gsflag zflag testsuite
@@ -516,7 +518,7 @@ fn id_print(state: &State, groups: Vec<u32>) {
             .join(",")
     );
 
-    // NOTE: placeholder ("-Z" is NotImplemented):
+    // NOTE: (SELinux NotImplemented) placeholder:
     // if !state.user_specified {
     //     // print SElinux context (does not depend on "-Z")
     //     print!(" context={}", get_selinux_contexts().join(":"));
