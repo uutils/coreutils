@@ -47,6 +47,9 @@ use std::io::Result as IOResult;
 use std::ptr;
 
 extern "C" {
+    /// From: https://man7.org/linux/man-pages/man3/getgrouplist.3.html
+    /// > The getgrouplist() function scans the group database to obtain
+    /// > the list of groups that user belongs to.
     fn getgrouplist(
         name: *const c_char,
         gid: gid_t,
@@ -55,6 +58,13 @@ extern "C" {
     ) -> c_int;
 }
 
+/// From: https://man7.org/linux/man-pages/man2/getgroups.2.html
+/// > getgroups() returns the supplementary group IDs of the calling
+/// > process in list.
+/// > If size is zero, list is not modified, but the total number of
+/// > supplementary group IDs for the process is returned.  This allows
+/// > the caller to determine the size of a dynamically allocated list
+/// > to be used in a further call to getgroups().
 pub fn get_groups() -> IOResult<Vec<gid_t>> {
     let ngroups = unsafe { getgroups(0, ptr::null_mut()) };
     if ngroups == -1 {
@@ -83,17 +93,17 @@ pub fn get_groups() -> IOResult<Vec<gid_t>> {
 /// for `id --groups --real` if `gid` and `egid` are not equal.
 ///
 /// From: https://www.man7.org/linux/man-pages/man3/getgroups.3p.html
-/// As implied by the definition of supplementary groups, the
-/// effective group ID may appear in the array returned by
-/// getgroups() or it may be returned only by getegid().  Duplication
-/// may exist, but the application needs to call getegid() to be sure
-/// of getting all of the information. Various implementation
-/// variations and administrative sequences cause the set of groups
-/// appearing in the result of getgroups() to vary in order and as to
-/// whether the effective group ID is included, even when the set of
-/// groups is the same (in the mathematical sense of ``set''). (The
-/// history of a process and its parents could affect the details of
-/// the result.)
+/// > As implied by the definition of supplementary groups, the
+/// > effective group ID may appear in the array returned by
+/// > getgroups() or it may be returned only by getegid().  Duplication
+/// > may exist, but the application needs to call getegid() to be sure
+/// > of getting all of the information. Various implementation
+/// > variations and administrative sequences cause the set of groups
+/// > appearing in the result of getgroups() to vary in order and as to
+/// > whether the effective group ID is included, even when the set of
+/// > groups is the same (in the mathematical sense of ``set''). (The
+/// > history of a process and its parents could affect the details of
+/// > the result.)
 #[cfg(all(unix, feature = "process"))]
 pub fn get_groups_gnu(arg_id: Option<u32>) -> IOResult<Vec<gid_t>> {
     let groups = get_groups()?;
@@ -187,20 +197,35 @@ impl Passwd {
     /// This is a wrapper function for `libc::getgrouplist`.
     ///
     /// From: https://man7.org/linux/man-pages/man3/getgrouplist.3.html
-    /// If the user is a member of more than *ngroups groups, then
-    /// getgrouplist() returns -1.  In this case, the value returned in
-    /// *ngroups can be used to resize the buffer passed to a further
-    /// call getgrouplist().
+    /// > If the number of groups of which user is a member is less than or
+    /// > equal to *ngroups, then the value *ngroups is returned.
+    /// > If the user is a member of more than *ngroups groups, then
+    /// > getgrouplist() returns -1.  In this case, the value returned in
+    /// > *ngroups can be used to resize the buffer passed to a further
+    /// > call getgrouplist().
+    ///
+    /// However, on macOS/darwin (and maybe others?) `getgrouplist` does
+    /// not update `ngroups` if `ngroups` is too small. Therefore, if not
+    /// updated by `getgrouplist`, `ngroups` needs to be increased in a
+    /// loop until `getgrouplist` stops returning -1.
     pub fn belongs_to(&self) -> Vec<gid_t> {
         let mut ngroups: c_int = 8;
+        let mut ngroups_old: c_int;
         let mut groups = Vec::with_capacity(ngroups as usize);
         let gid = self.inner.pw_gid;
         let name = self.inner.pw_name;
-        unsafe {
-            if getgrouplist(name, gid, groups.as_mut_ptr(), &mut ngroups) == -1 {
+        loop {
+            ngroups_old = ngroups;
+            if unsafe { getgrouplist(name, gid, groups.as_mut_ptr(), &mut ngroups) } == -1 {
+                if ngroups == ngroups_old {
+                    ngroups *= 2;
+                }
                 groups.resize(ngroups as usize, 0);
-                getgrouplist(name, gid, groups.as_mut_ptr(), &mut ngroups);
+            } else {
+                break;
             }
+        }
+        unsafe {
             groups.set_len(ngroups as usize);
         }
         groups.truncate(ngroups as usize);

@@ -5,7 +5,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) tstr sigstr cmdname setpgid
+// spell-checker:ignore (ToDO) tstr sigstr cmdname setpgid sigchld
 
 #[macro_use]
 extern crate uucore;
@@ -17,13 +17,13 @@ use std::io::ErrorKind;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 use uucore::process::ChildExt;
-use uucore::signals::signal_by_name_or_value;
+use uucore::signals::{signal_by_name_or_value, signal_name_by_value};
 use uucore::InvalidEncodingHandling;
 
 static ABOUT: &str = "Start COMMAND, and kill it if still running after DURATION.";
 
 fn get_usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", executable!())
+    format!("{0} [OPTION] DURATION COMMAND...", executable!())
 }
 
 const ERR_EXIT_STATUS: i32 = 125;
@@ -33,22 +33,22 @@ pub mod options {
     pub static KILL_AFTER: &str = "kill-after";
     pub static SIGNAL: &str = "signal";
     pub static PRESERVE_STATUS: &str = "preserve-status";
+    pub static VERBOSE: &str = "verbose";
 
     // Positional args.
     pub static DURATION: &str = "duration";
     pub static COMMAND: &str = "command";
-    pub static ARGS: &str = "args";
 }
 
 struct Config {
     foreground: bool,
-    kill_after: Duration,
+    kill_after: Option<Duration>,
     signal: usize,
     duration: Duration,
     preserve_status: bool,
+    verbose: bool,
 
-    command: String,
-    command_args: Vec<String>,
+    command: Vec<String>,
 }
 
 impl Config {
@@ -66,23 +66,22 @@ impl Config {
             _ => uucore::signals::signal_by_name_or_value("TERM").unwrap(),
         };
 
-        let kill_after: Duration = match options.value_of(options::KILL_AFTER) {
-            Some(time) => uucore::parse_time::from_str(time).unwrap(),
-            None => Duration::new(0, 0),
-        };
+        let kill_after = options
+            .value_of(options::KILL_AFTER)
+            .map(|time| uucore::parse_time::from_str(time).unwrap());
 
         let duration: Duration =
             uucore::parse_time::from_str(options.value_of(options::DURATION).unwrap()).unwrap();
 
         let preserve_status: bool = options.is_present(options::PRESERVE_STATUS);
         let foreground = options.is_present(options::FOREGROUND);
+        let verbose = options.is_present(options::VERBOSE);
 
-        let command: String = options.value_of(options::COMMAND).unwrap().to_string();
-
-        let command_args: Vec<String> = match options.values_of(options::ARGS) {
-            Some(values) => values.map(|x| x.to_owned()).collect(),
-            None => vec![],
-        };
+        let command = options
+            .values_of(options::COMMAND)
+            .unwrap()
+            .map(String::from)
+            .collect::<Vec<_>>();
 
         Config {
             foreground,
@@ -91,7 +90,7 @@ impl Config {
             duration,
             preserve_status,
             command,
-            command_args,
+            verbose,
         }
     }
 }
@@ -129,6 +128,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .takes_value(true)
         )
         .arg(
+            Arg::with_name(options::VERBOSE)
+              .short("v")
+              .long(options::VERBOSE)
+              .help("diagnose to stderr any signal sent upon timeout")
+        )
+        .arg(
             Arg::with_name(options::DURATION)
                 .index(1)
                 .required(true)
@@ -137,9 +142,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(options::COMMAND)
                 .index(2)
                 .required(true)
-        )
-        .arg(
-            Arg::with_name(options::ARGS).multiple(true)
+                .multiple(true)
         )
         .setting(AppSettings::TrailingVarArg);
 
@@ -148,31 +151,42 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let config = Config::from(matches);
     timeout(
         &config.command,
-        &config.command_args,
         config.duration,
         config.signal,
         config.kill_after,
         config.foreground,
         config.preserve_status,
+        config.verbose,
     )
+}
+
+/// Remove pre-existing SIGCHLD handlers that would make waiting for the child's exit code fail.
+fn unblock_sigchld() {
+    unsafe {
+        nix::sys::signal::signal(
+            nix::sys::signal::Signal::SIGCHLD,
+            nix::sys::signal::SigHandler::SigDfl,
+        )
+        .unwrap();
+    }
 }
 
 /// TODO: Improve exit codes, and make them consistent with the GNU Coreutils exit codes.
 
 fn timeout(
-    cmdname: &str,
-    args: &[String],
+    cmd: &[String],
     duration: Duration,
     signal: usize,
-    kill_after: Duration,
+    kill_after: Option<Duration>,
     foreground: bool,
     preserve_status: bool,
+    verbose: bool,
 ) -> i32 {
     if !foreground {
         unsafe { libc::setpgid(0, 0) };
     }
-    let mut process = match Command::new(cmdname)
-        .args(args)
+    let mut process = match Command::new(&cmd[0])
+        .args(&cmd[1..])
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
@@ -190,32 +204,44 @@ fn timeout(
             }
         }
     };
+    unblock_sigchld();
     match process.wait_or_timeout(duration) {
         Ok(Some(status)) => status.code().unwrap_or_else(|| status.signal().unwrap()),
         Ok(None) => {
+            if verbose {
+                show_error!(
+                    "sending signal {} to command '{}'",
+                    signal_name_by_value(signal).unwrap(),
+                    cmd[0]
+                );
+            }
             return_if_err!(ERR_EXIT_STATUS, process.send_signal(signal));
-            match process.wait_or_timeout(kill_after) {
-                Ok(Some(status)) => {
-                    if preserve_status {
-                        status.code().unwrap_or_else(|| status.signal().unwrap())
-                    } else {
-                        124
+            if let Some(kill_after) = kill_after {
+                match process.wait_or_timeout(kill_after) {
+                    Ok(Some(status)) => {
+                        if preserve_status {
+                            status.code().unwrap_or_else(|| status.signal().unwrap())
+                        } else {
+                            124
+                        }
                     }
-                }
-                Ok(None) => {
-                    if kill_after == Duration::new(0, 0) {
-                        // XXX: this may not be right
-                        return 124;
+                    Ok(None) => {
+                        if verbose {
+                            show_error!("sending signal KILL to command '{}'", cmd[0]);
+                        }
+                        return_if_err!(
+                            ERR_EXIT_STATUS,
+                            process.send_signal(
+                                uucore::signals::signal_by_name_or_value("KILL").unwrap()
+                            )
+                        );
+                        return_if_err!(ERR_EXIT_STATUS, process.wait());
+                        137
                     }
-                    return_if_err!(
-                        ERR_EXIT_STATUS,
-                        process
-                            .send_signal(uucore::signals::signal_by_name_or_value("KILL").unwrap())
-                    );
-                    return_if_err!(ERR_EXIT_STATUS, process.wait());
-                    137
+                    Err(_) => 124,
                 }
-                Err(_) => 124,
+            } else {
+                124
             }
         }
         Err(_) => {

@@ -6,7 +6,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars) FiletestOp StrlenOp
+// spell-checker:ignore (vars) egid euid FiletestOp StrlenOp
 
 mod parser;
 
@@ -96,8 +96,10 @@ fn eval(stack: &mut Vec<Symbol>) -> Result<bool, String> {
                 "-e" => path(&f, PathCondition::Exists),
                 "-f" => path(&f, PathCondition::Regular),
                 "-g" => path(&f, PathCondition::GroupIdFlag),
+                "-G" => path(&f, PathCondition::GroupOwns),
                 "-h" => path(&f, PathCondition::SymLink),
                 "-L" => path(&f, PathCondition::SymLink),
+                "-O" => path(&f, PathCondition::UserOwns),
                 "-p" => path(&f, PathCondition::Fifo),
                 "-r" => path(&f, PathCondition::Readable),
                 "-S" => path(&f, PathCondition::Socket),
@@ -166,7 +168,9 @@ enum PathCondition {
     Exists,
     Regular,
     GroupIdFlag,
+    GroupOwns,
     SymLink,
+    UserOwns,
     Fifo,
     Readable,
     Socket,
@@ -190,18 +194,28 @@ fn path(path: &OsStr, condition: PathCondition) -> bool {
         Execute = 0o1,
     }
 
-    let perm = |metadata: Metadata, p: Permission| {
+    let geteuid = || {
         #[cfg(not(target_os = "redox"))]
-        let (uid, gid) = unsafe { (libc::getuid(), libc::getgid()) };
+        let euid = unsafe { libc::geteuid() };
         #[cfg(target_os = "redox")]
-        let (uid, gid) = (
-            syscall::getuid().unwrap() as u32,
-            syscall::getgid().unwrap() as u32,
-        );
+        let euid = syscall::geteuid().unwrap() as u32;
 
-        if uid == metadata.uid() {
+        euid
+    };
+
+    let getegid = || {
+        #[cfg(not(target_os = "redox"))]
+        let egid = unsafe { libc::getegid() };
+        #[cfg(target_os = "redox")]
+        let egid = syscall::getegid().unwrap() as u32;
+
+        egid
+    };
+
+    let perm = |metadata: Metadata, p: Permission| {
+        if geteuid() == metadata.uid() {
             metadata.mode() & ((p as u32) << 6) != 0
-        } else if gid == metadata.gid() {
+        } else if getegid() == metadata.gid() {
             metadata.mode() & ((p as u32) << 3) != 0
         } else {
             metadata.mode() & (p as u32) != 0
@@ -230,7 +244,9 @@ fn path(path: &OsStr, condition: PathCondition) -> bool {
         PathCondition::Exists => true,
         PathCondition::Regular => file_type.is_file(),
         PathCondition::GroupIdFlag => metadata.mode() & S_ISGID != 0,
+        PathCondition::GroupOwns => metadata.gid() == getegid(),
         PathCondition::SymLink => metadata.file_type().is_symlink(),
+        PathCondition::UserOwns => metadata.uid() == geteuid(),
         PathCondition::Fifo => file_type.is_fifo(),
         PathCondition::Readable => perm(metadata, Permission::Read),
         PathCondition::Socket => file_type.is_socket(),
@@ -257,7 +273,9 @@ fn path(path: &OsStr, condition: PathCondition) -> bool {
         PathCondition::Exists => true,
         PathCondition::Regular => stat.is_file(),
         PathCondition::GroupIdFlag => false,
+        PathCondition::GroupOwns => unimplemented!(),
         PathCondition::SymLink => false,
+        PathCondition::UserOwns => unimplemented!(),
         PathCondition::Fifo => false,
         PathCondition::Readable => false, // TODO
         PathCondition::Socket => false,

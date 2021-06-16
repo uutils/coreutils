@@ -6,6 +6,7 @@ use self::touch::filetime::{self, FileTime};
 extern crate time;
 
 use crate::common::util::*;
+use std::path::PathBuf;
 
 fn get_file_times(at: &AtPath, path: &str) -> (FileTime, FileTime) {
     let m = at.metadata(path);
@@ -465,4 +466,38 @@ fn test_touch_trailing_slash() {
     let (_at, mut ucmd) = at_and_ucmd!();
     let file = "no-file/";
     ucmd.args(&[file]).fails();
+}
+
+#[test]
+fn test_touch_no_such_file_error_msg() {
+    let dirname = "nonexistent";
+    let filename = "file";
+    let path = PathBuf::from(dirname).join(filename);
+    let path_str = path.to_str().unwrap();
+
+    new_ucmd!().arg(&path).fails().stderr_only(format!(
+        "touch: cannot touch '{}': No such file or directory",
+        path_str
+    ));
+}
+
+#[test]
+#[cfg(unix)]
+fn test_touch_permission_denied_error_msg() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let dirname = "dir_with_read_only_access";
+    let filename = "file";
+    let path = PathBuf::from(dirname).join(filename);
+    let path_str = path.to_str().unwrap();
+
+    // create dest without write permissions
+    at.mkdir(dirname);
+    at.set_readonly(dirname);
+
+    let full_path = at.plus_as_string(path_str);
+    ucmd.arg(&full_path).fails().stderr_only(format!(
+        "touch: cannot touch '{}': Permission denied",
+        &full_path
+    ));
 }

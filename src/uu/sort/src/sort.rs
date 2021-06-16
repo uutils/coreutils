@@ -46,8 +46,8 @@ use unicode_width::UnicodeWidthStr;
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::InvalidEncodingHandling;
 
-static NAME: &str = "sort";
-static ABOUT: &str = "Display sorted concatenation of all FILE(s).";
+const NAME: &str = "sort";
+const ABOUT: &str = "Display sorted concatenation of all FILE(s).";
 
 const LONG_HELP_KEYS: &str = "The key format is FIELD[.CHAR][OPTIONS][,FIELD[.CHAR]][OPTIONS].
 
@@ -59,49 +59,59 @@ If CHAR is set 0, it means the end of the field. CHAR defaults to 1 for the star
 
 Valid options are: MbdfhnRrV. They override the global options for this key.";
 
-static OPT_HUMAN_NUMERIC_SORT: &str = "human-numeric-sort";
-static OPT_MONTH_SORT: &str = "month-sort";
-static OPT_NUMERIC_SORT: &str = "numeric-sort";
-static OPT_GENERAL_NUMERIC_SORT: &str = "general-numeric-sort";
-static OPT_VERSION_SORT: &str = "version-sort";
+mod options {
+    pub mod modes {
+        pub const SORT: &str = "sort";
 
-static OPT_SORT: &str = "sort";
+        pub const HUMAN_NUMERIC: &str = "human-numeric-sort";
+        pub const MONTH: &str = "month-sort";
+        pub const NUMERIC: &str = "numeric-sort";
+        pub const GENERAL_NUMERIC: &str = "general-numeric-sort";
+        pub const VERSION: &str = "version-sort";
+        pub const RANDOM: &str = "random-sort";
 
-static ALL_SORT_MODES: &[&str] = &[
-    OPT_GENERAL_NUMERIC_SORT,
-    OPT_HUMAN_NUMERIC_SORT,
-    OPT_MONTH_SORT,
-    OPT_NUMERIC_SORT,
-    OPT_VERSION_SORT,
-    OPT_RANDOM,
-];
+        pub const ALL_SORT_MODES: [&str; 6] = [
+            GENERAL_NUMERIC,
+            HUMAN_NUMERIC,
+            MONTH,
+            NUMERIC,
+            VERSION,
+            RANDOM,
+        ];
+    }
 
-static OPT_DICTIONARY_ORDER: &str = "dictionary-order";
-static OPT_MERGE: &str = "merge";
-static OPT_CHECK: &str = "check";
-static OPT_CHECK_SILENT: &str = "check-silent";
-static OPT_DEBUG: &str = "debug";
-static OPT_IGNORE_CASE: &str = "ignore-case";
-static OPT_IGNORE_BLANKS: &str = "ignore-blanks";
-static OPT_IGNORE_NONPRINTING: &str = "ignore-nonprinting";
-static OPT_OUTPUT: &str = "output";
-static OPT_REVERSE: &str = "reverse";
-static OPT_STABLE: &str = "stable";
-static OPT_UNIQUE: &str = "unique";
-static OPT_KEY: &str = "key";
-static OPT_SEPARATOR: &str = "field-separator";
-static OPT_RANDOM: &str = "random-sort";
-static OPT_ZERO_TERMINATED: &str = "zero-terminated";
-static OPT_PARALLEL: &str = "parallel";
-static OPT_FILES0_FROM: &str = "files0-from";
-static OPT_BUF_SIZE: &str = "buffer-size";
-static OPT_TMP_DIR: &str = "temporary-directory";
-static OPT_COMPRESS_PROG: &str = "compress-program";
-static OPT_BATCH_SIZE: &str = "batch-size";
+    pub mod check {
+        pub const CHECK: &str = "check";
+        pub const CHECK_SILENT: &str = "check-silent";
+        pub const SILENT: &str = "silent";
+        pub const QUIET: &str = "quiet";
+        pub const DIAGNOSE_FIRST: &str = "diagnose-first";
+    }
 
-static ARG_FILES: &str = "files";
+    pub const DICTIONARY_ORDER: &str = "dictionary-order";
+    pub const MERGE: &str = "merge";
+    pub const DEBUG: &str = "debug";
+    pub const IGNORE_CASE: &str = "ignore-case";
+    pub const IGNORE_LEADING_BLANKS: &str = "ignore-leading-blanks";
+    pub const IGNORE_NONPRINTING: &str = "ignore-nonprinting";
+    pub const OUTPUT: &str = "output";
+    pub const REVERSE: &str = "reverse";
+    pub const STABLE: &str = "stable";
+    pub const UNIQUE: &str = "unique";
+    pub const KEY: &str = "key";
+    pub const SEPARATOR: &str = "field-separator";
+    pub const ZERO_TERMINATED: &str = "zero-terminated";
+    pub const PARALLEL: &str = "parallel";
+    pub const FILES0_FROM: &str = "files0-from";
+    pub const BUF_SIZE: &str = "buffer-size";
+    pub const TMP_DIR: &str = "temporary-directory";
+    pub const COMPRESS_PROG: &str = "compress-program";
+    pub const BATCH_SIZE: &str = "batch-size";
 
-static DECIMAL_PT: char = '.';
+    pub const FILES: &str = "files";
+}
+
+const DECIMAL_PT: char = '.';
 
 const NEGATIVE: char = '-';
 const POSITIVE: char = '+';
@@ -109,7 +119,7 @@ const POSITIVE: char = '+';
 // Choosing a higher buffer size does not result in performance improvements
 // (at least not on my machine). TODO: In the future, we should also take the amount of
 // available memory into consideration, instead of relying on this constant only.
-static DEFAULT_BUF_SIZE: usize = 1_000_000_000; // 1 GB
+const DEFAULT_BUF_SIZE: usize = 1_000_000_000; // 1 GB
 
 #[derive(Eq, Ord, PartialEq, PartialOrd, Clone, Copy, Debug)]
 enum SortMode {
@@ -140,7 +150,7 @@ impl SortMode {
 pub struct GlobalSettings {
     mode: SortMode,
     debug: bool,
-    ignore_blanks: bool,
+    ignore_leading_blanks: bool,
     ignore_case: bool,
     dictionary_order: bool,
     ignore_non_printing: bool,
@@ -207,7 +217,7 @@ impl Default for GlobalSettings {
         GlobalSettings {
             mode: SortMode::Default,
             debug: false,
-            ignore_blanks: false,
+            ignore_leading_blanks: false,
             ignore_case: false,
             dictionary_order: false,
             ignore_non_printing: false,
@@ -298,7 +308,7 @@ impl From<&GlobalSettings> for KeySettings {
     fn from(settings: &GlobalSettings) -> Self {
         Self {
             mode: settings.mode,
-            ignore_blanks: settings.ignore_blanks,
+            ignore_blanks: settings.ignore_leading_blanks,
             ignore_case: settings.ignore_case,
             ignore_non_printing: settings.ignore_non_printing,
             reverse: settings.reverse,
@@ -505,7 +515,7 @@ impl<'a> Line<'a> {
             && !settings.stable
             && !settings.unique
             && (settings.dictionary_order
-                || settings.ignore_blanks
+                || settings.ignore_leading_blanks
                 || settings.ignore_case
                 || settings.ignore_non_printing
                 || settings.mode != SortMode::Default
@@ -669,9 +679,11 @@ impl FieldSelector {
                     // This would be ideal for a try block, I think. In the meantime this closure allows
                     // to use the `?` operator here.
                     Self::new(
-                        KeyPosition::new(from, 1, global_settings.ignore_blanks)?,
-                        to.map(|(to, _)| KeyPosition::new(to, 0, global_settings.ignore_blanks))
-                            .transpose()?,
+                        KeyPosition::new(from, 1, global_settings.ignore_leading_blanks)?,
+                        to.map(|(to, _)| {
+                            KeyPosition::new(to, 0, global_settings.ignore_leading_blanks)
+                        })
+                        .transpose()?,
                         KeySettings::from(global_settings),
                     )
                 })()
@@ -887,9 +899,10 @@ With no FILE, or when FILE is -, read standard input.",
     )
 }
 
+/// Creates an `Arg` that conflicts with all other sort modes.
 fn make_sort_mode_arg<'a, 'b>(mode: &'a str, short: &'b str, help: &'b str) -> Arg<'a, 'b> {
     let mut arg = Arg::with_name(mode).short(short).long(mode).help(help);
-    for possible_mode in ALL_SORT_MODES {
+    for possible_mode in &options::modes::ALL_SORT_MODES {
         if *possible_mode != mode {
             arg = arg.conflicts_with(possible_mode);
         }
@@ -909,8 +922,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .about(ABOUT)
         .usage(&usage[..])
         .arg(
-            Arg::with_name(OPT_SORT)
-                .long(OPT_SORT)
+            Arg::with_name(options::modes::SORT)
+                .long(options::modes::SORT)
                 .takes_value(true)
                 .possible_values(
                     &[
@@ -922,199 +935,221 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                         "random",
                     ]
                 )
-                .conflicts_with_all(ALL_SORT_MODES)
+                .conflicts_with_all(&options::modes::ALL_SORT_MODES)
         )
         .arg(
             make_sort_mode_arg(
-                OPT_HUMAN_NUMERIC_SORT,
+                options::modes::HUMAN_NUMERIC,
                 "h",
                 "compare according to human readable sizes, eg 1M > 100k"
             ),
         )
         .arg(
             make_sort_mode_arg(
-                OPT_MONTH_SORT,
+                options::modes::MONTH,
                 "M",
                 "compare according to month name abbreviation"
             ),
         )
         .arg(
             make_sort_mode_arg(
-                OPT_NUMERIC_SORT,
+                options::modes::NUMERIC,
                 "n",
                 "compare according to string numerical value"
             ),
         )
         .arg(
             make_sort_mode_arg(
-                OPT_GENERAL_NUMERIC_SORT,
+                options::modes::GENERAL_NUMERIC,
                 "g",
                 "compare according to string general numerical value"
             ),
         )
         .arg(
             make_sort_mode_arg(
-                OPT_VERSION_SORT,
+                options::modes::VERSION,
                 "V",
                 "Sort by SemVer version number, eg 1.12.2 > 1.1.2",
             ),
         )
         .arg(
             make_sort_mode_arg(
-                OPT_RANDOM,
+                options::modes::RANDOM,
                 "R",
                 "shuffle in random order",
             ),
         )
         .arg(
-            Arg::with_name(OPT_DICTIONARY_ORDER)
+            Arg::with_name(options::DICTIONARY_ORDER)
                 .short("d")
-                .long(OPT_DICTIONARY_ORDER)
+                .long(options::DICTIONARY_ORDER)
                 .help("consider only blanks and alphanumeric characters")
-                .conflicts_with_all(&[OPT_NUMERIC_SORT, OPT_GENERAL_NUMERIC_SORT, OPT_HUMAN_NUMERIC_SORT, OPT_MONTH_SORT]),
+                .conflicts_with_all(
+                    &[
+                        options::modes::NUMERIC,
+                        options::modes::GENERAL_NUMERIC,
+                        options::modes::HUMAN_NUMERIC,
+                        options::modes::MONTH,
+                    ]
+                ),
         )
         .arg(
-            Arg::with_name(OPT_MERGE)
+            Arg::with_name(options::MERGE)
                 .short("m")
-                .long(OPT_MERGE)
+                .long(options::MERGE)
                 .help("merge already sorted files; do not sort"),
         )
         .arg(
-            Arg::with_name(OPT_CHECK)
+            Arg::with_name(options::check::CHECK)
                 .short("c")
-                .long(OPT_CHECK)
+                .long(options::check::CHECK)
+                .takes_value(true)
+                .require_equals(true)
+                .min_values(0)
+                .possible_values(&[
+                    options::check::SILENT,
+                    options::check::QUIET,
+                    options::check::DIAGNOSE_FIRST,
+                ])
                 .help("check for sorted input; do not sort"),
         )
         .arg(
-            Arg::with_name(OPT_CHECK_SILENT)
+            Arg::with_name(options::check::CHECK_SILENT)
                 .short("C")
-                .long(OPT_CHECK_SILENT)
+                .long(options::check::CHECK_SILENT)
                 .help("exit successfully if the given file is already sorted, and exit with status 1 otherwise."),
         )
         .arg(
-            Arg::with_name(OPT_IGNORE_CASE)
+            Arg::with_name(options::IGNORE_CASE)
                 .short("f")
-                .long(OPT_IGNORE_CASE)
+                .long(options::IGNORE_CASE)
                 .help("fold lower case to upper case characters"),
         )
         .arg(
-            Arg::with_name(OPT_IGNORE_NONPRINTING)
+            Arg::with_name(options::IGNORE_NONPRINTING)
                 .short("i")
-                .long(OPT_IGNORE_NONPRINTING)
+                .long(options::IGNORE_NONPRINTING)
                 .help("ignore nonprinting characters")
-                .conflicts_with_all(&[OPT_NUMERIC_SORT, OPT_GENERAL_NUMERIC_SORT, OPT_HUMAN_NUMERIC_SORT, OPT_MONTH_SORT]),
+                .conflicts_with_all(
+                    &[
+                        options::modes::NUMERIC,
+                        options::modes::GENERAL_NUMERIC,
+                        options::modes::HUMAN_NUMERIC,
+                        options::modes::MONTH
+                    ]
+                ),
         )
         .arg(
-            Arg::with_name(OPT_IGNORE_BLANKS)
+            Arg::with_name(options::IGNORE_LEADING_BLANKS)
                 .short("b")
-                .long(OPT_IGNORE_BLANKS)
+                .long(options::IGNORE_LEADING_BLANKS)
                 .help("ignore leading blanks when finding sort keys in each line"),
         )
         .arg(
-            Arg::with_name(OPT_OUTPUT)
+            Arg::with_name(options::OUTPUT)
                 .short("o")
-                .long(OPT_OUTPUT)
+                .long(options::OUTPUT)
                 .help("write output to FILENAME instead of stdout")
                 .takes_value(true)
                 .value_name("FILENAME"),
         )
         .arg(
-            Arg::with_name(OPT_REVERSE)
+            Arg::with_name(options::REVERSE)
                 .short("r")
-                .long(OPT_REVERSE)
+                .long(options::REVERSE)
                 .help("reverse the output"),
         )
         .arg(
-            Arg::with_name(OPT_STABLE)
+            Arg::with_name(options::STABLE)
                 .short("s")
-                .long(OPT_STABLE)
+                .long(options::STABLE)
                 .help("stabilize sort by disabling last-resort comparison"),
         )
         .arg(
-            Arg::with_name(OPT_UNIQUE)
+            Arg::with_name(options::UNIQUE)
                 .short("u")
-                .long(OPT_UNIQUE)
+                .long(options::UNIQUE)
                 .help("output only the first of an equal run"),
         )
         .arg(
-            Arg::with_name(OPT_KEY)
+            Arg::with_name(options::KEY)
                 .short("k")
-                .long(OPT_KEY)
+                .long(options::KEY)
                 .help("sort by a key")
                 .long_help(LONG_HELP_KEYS)
                 .multiple(true)
                 .takes_value(true),
         )
         .arg(
-            Arg::with_name(OPT_SEPARATOR)
+            Arg::with_name(options::SEPARATOR)
                 .short("t")
-                .long(OPT_SEPARATOR)
+                .long(options::SEPARATOR)
                 .help("custom separator for -k")
                 .takes_value(true))
         .arg(
-            Arg::with_name(OPT_ZERO_TERMINATED)
+            Arg::with_name(options::ZERO_TERMINATED)
                 .short("z")
-                .long(OPT_ZERO_TERMINATED)
+                .long(options::ZERO_TERMINATED)
                 .help("line delimiter is NUL, not newline"),
         )
         .arg(
-            Arg::with_name(OPT_PARALLEL)
-                .long(OPT_PARALLEL)
+            Arg::with_name(options::PARALLEL)
+                .long(options::PARALLEL)
                 .help("change the number of threads running concurrently to NUM_THREADS")
                 .takes_value(true)
                 .value_name("NUM_THREADS"),
         )
         .arg(
-            Arg::with_name(OPT_BUF_SIZE)
+            Arg::with_name(options::BUF_SIZE)
                 .short("S")
-                .long(OPT_BUF_SIZE)
+                .long(options::BUF_SIZE)
                 .help("sets the maximum SIZE of each segment in number of sorted items")
                 .takes_value(true)
                 .value_name("SIZE"),
         )
         .arg(
-            Arg::with_name(OPT_TMP_DIR)
+            Arg::with_name(options::TMP_DIR)
                 .short("T")
-                .long(OPT_TMP_DIR)
+                .long(options::TMP_DIR)
                 .help("use DIR for temporaries, not $TMPDIR or /tmp")
                 .takes_value(true)
                 .value_name("DIR"),
         )
         .arg(
-            Arg::with_name(OPT_COMPRESS_PROG)
-                .long(OPT_COMPRESS_PROG)
+            Arg::with_name(options::COMPRESS_PROG)
+                .long(options::COMPRESS_PROG)
                 .help("compress temporary files with PROG, decompress with PROG -d")
                 .long_help("PROG has to take input from stdin and output to stdout")
                 .value_name("PROG")
         )
         .arg(
-            Arg::with_name(OPT_BATCH_SIZE)
-                .long(OPT_BATCH_SIZE)
+            Arg::with_name(options::BATCH_SIZE)
+                .long(options::BATCH_SIZE)
                 .help("Merge at most N_MERGE inputs at once.")
                 .value_name("N_MERGE")
         )
         .arg(
-            Arg::with_name(OPT_FILES0_FROM)
-                .long(OPT_FILES0_FROM)
+            Arg::with_name(options::FILES0_FROM)
+                .long(options::FILES0_FROM)
                 .help("read input from the files specified by NUL-terminated NUL_FILES")
                 .takes_value(true)
                 .value_name("NUL_FILES")
                 .multiple(true),
         )
         .arg(
-            Arg::with_name(OPT_DEBUG)
-                .long(OPT_DEBUG)
+            Arg::with_name(options::DEBUG)
+                .long(options::DEBUG)
                 .help("underline the parts of the line that are actually used for sorting"),
         )
-        .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true))
+        .arg(Arg::with_name(options::FILES).multiple(true).takes_value(true))
         .get_matches_from(args);
 
-    settings.debug = matches.is_present(OPT_DEBUG);
+    settings.debug = matches.is_present(options::DEBUG);
 
     // check whether user specified a zero terminated list of files for input, otherwise read files from args
-    let mut files: Vec<String> = if matches.is_present(OPT_FILES0_FROM) {
+    let mut files: Vec<String> = if matches.is_present(options::FILES0_FROM) {
         let files0_from: Vec<String> = matches
-            .values_of(OPT_FILES0_FROM)
+            .values_of(options::FILES0_FROM)
             .map(|v| v.map(ToString::to_string).collect())
             .unwrap_or_default();
 
@@ -1133,82 +1168,93 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         files
     } else {
         matches
-            .values_of(ARG_FILES)
+            .values_of(options::FILES)
             .map(|v| v.map(ToString::to_string).collect())
             .unwrap_or_default()
     };
 
-    settings.mode = if matches.is_present(OPT_HUMAN_NUMERIC_SORT)
-        || matches.value_of(OPT_SORT) == Some("human-numeric")
+    settings.mode = if matches.is_present(options::modes::HUMAN_NUMERIC)
+        || matches.value_of(options::modes::SORT) == Some("human-numeric")
     {
         SortMode::HumanNumeric
-    } else if matches.is_present(OPT_MONTH_SORT) || matches.value_of(OPT_SORT) == Some("month") {
+    } else if matches.is_present(options::modes::MONTH)
+        || matches.value_of(options::modes::SORT) == Some("month")
+    {
         SortMode::Month
-    } else if matches.is_present(OPT_GENERAL_NUMERIC_SORT)
-        || matches.value_of(OPT_SORT) == Some("general-numeric")
+    } else if matches.is_present(options::modes::GENERAL_NUMERIC)
+        || matches.value_of(options::modes::SORT) == Some("general-numeric")
     {
         SortMode::GeneralNumeric
-    } else if matches.is_present(OPT_NUMERIC_SORT) || matches.value_of(OPT_SORT) == Some("numeric")
+    } else if matches.is_present(options::modes::NUMERIC)
+        || matches.value_of(options::modes::SORT) == Some("numeric")
     {
         SortMode::Numeric
-    } else if matches.is_present(OPT_VERSION_SORT) || matches.value_of(OPT_SORT) == Some("version")
+    } else if matches.is_present(options::modes::VERSION)
+        || matches.value_of(options::modes::SORT) == Some("version")
     {
         SortMode::Version
-    } else if matches.is_present(OPT_RANDOM) || matches.value_of(OPT_SORT) == Some("random") {
+    } else if matches.is_present(options::modes::RANDOM)
+        || matches.value_of(options::modes::SORT) == Some("random")
+    {
         settings.salt = get_rand_string();
         SortMode::Random
     } else {
         SortMode::Default
     };
 
-    settings.dictionary_order = matches.is_present(OPT_DICTIONARY_ORDER);
-    settings.ignore_non_printing = matches.is_present(OPT_IGNORE_NONPRINTING);
-    if matches.is_present(OPT_PARALLEL) {
+    settings.dictionary_order = matches.is_present(options::DICTIONARY_ORDER);
+    settings.ignore_non_printing = matches.is_present(options::IGNORE_NONPRINTING);
+    if matches.is_present(options::PARALLEL) {
         // "0" is default - threads = num of cores
         settings.threads = matches
-            .value_of(OPT_PARALLEL)
+            .value_of(options::PARALLEL)
             .map(String::from)
             .unwrap_or_else(|| "0".to_string());
         env::set_var("RAYON_NUM_THREADS", &settings.threads);
     }
 
     settings.buffer_size = matches
-        .value_of(OPT_BUF_SIZE)
+        .value_of(options::BUF_SIZE)
         .map_or(DEFAULT_BUF_SIZE, |s| {
             GlobalSettings::parse_byte_count(s)
-                .unwrap_or_else(|e| crash!(2, "{}", format_error_message(e, s, OPT_BUF_SIZE)))
+                .unwrap_or_else(|e| crash!(2, "{}", format_error_message(e, s, options::BUF_SIZE)))
         });
 
     settings.tmp_dir = matches
-        .value_of(OPT_TMP_DIR)
+        .value_of(options::TMP_DIR)
         .map(PathBuf::from)
         .unwrap_or_else(env::temp_dir);
 
-    settings.compress_prog = matches.value_of(OPT_COMPRESS_PROG).map(String::from);
+    settings.compress_prog = matches.value_of(options::COMPRESS_PROG).map(String::from);
 
-    if let Some(n_merge) = matches.value_of(OPT_BATCH_SIZE) {
+    if let Some(n_merge) = matches.value_of(options::BATCH_SIZE) {
         settings.merge_batch_size = n_merge
             .parse()
             .unwrap_or_else(|_| crash!(2, "invalid --batch-size argument '{}'", n_merge));
     }
 
-    settings.zero_terminated = matches.is_present(OPT_ZERO_TERMINATED);
-    settings.merge = matches.is_present(OPT_MERGE);
+    settings.zero_terminated = matches.is_present(options::ZERO_TERMINATED);
+    settings.merge = matches.is_present(options::MERGE);
 
-    settings.check = matches.is_present(OPT_CHECK);
-    if matches.is_present(OPT_CHECK_SILENT) {
-        settings.check_silent = matches.is_present(OPT_CHECK_SILENT);
+    settings.check = matches.is_present(options::check::CHECK);
+    if matches.is_present(options::check::CHECK_SILENT)
+        || matches!(
+            matches.value_of(options::check::CHECK),
+            Some(options::check::SILENT) | Some(options::check::QUIET)
+        )
+    {
+        settings.check_silent = true;
         settings.check = true;
     };
 
-    settings.ignore_case = matches.is_present(OPT_IGNORE_CASE);
+    settings.ignore_case = matches.is_present(options::IGNORE_CASE);
 
-    settings.ignore_blanks = matches.is_present(OPT_IGNORE_BLANKS);
+    settings.ignore_leading_blanks = matches.is_present(options::IGNORE_LEADING_BLANKS);
 
-    settings.output_file = matches.value_of(OPT_OUTPUT).map(String::from);
-    settings.reverse = matches.is_present(OPT_REVERSE);
-    settings.stable = matches.is_present(OPT_STABLE);
-    settings.unique = matches.is_present(OPT_UNIQUE);
+    settings.output_file = matches.value_of(options::OUTPUT).map(String::from);
+    settings.reverse = matches.is_present(options::REVERSE);
+    settings.stable = matches.is_present(options::STABLE);
+    settings.unique = matches.is_present(options::UNIQUE);
 
     if files.is_empty() {
         /* if no file, default to stdin */
@@ -1217,7 +1263,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         crash!(1, "extra operand `{}' not allowed with -c", files[1])
     }
 
-    if let Some(arg) = matches.args.get(OPT_SEPARATOR) {
+    if let Some(arg) = matches.args.get(options::SEPARATOR) {
         let separator = arg.vals[0].to_string_lossy();
         let separator = separator;
         if separator.len() != 1 {
@@ -1226,15 +1272,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         settings.separator = Some(separator.chars().next().unwrap())
     }
 
-    if matches.is_present(OPT_KEY) {
-        for key in &matches.args[OPT_KEY].vals {
+    if let Some(values) = matches.values_of(options::KEY) {
+        for value in values {
             settings
                 .selectors
-                .push(FieldSelector::parse(&key.to_string_lossy(), &settings));
+                .push(FieldSelector::parse(value, &settings));
         }
     }
 
-    if !matches.is_present(OPT_KEY) {
+    if !matches.is_present(options::KEY) {
         // add a default selector matching the whole line
         let key_settings = KeySettings::from(&settings);
         settings.selectors.push(
