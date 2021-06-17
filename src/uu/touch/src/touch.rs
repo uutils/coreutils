@@ -268,6 +268,10 @@ fn parse_date(str: &str) -> FileTime {
             return local_tm_to_filetime(to_local(tm));
         }
     }
+    if let Ok(tm) = time::strptime(str, "@%s") {
+        // Don't convert to local time in this case - seconds since epoch are not time-zone dependent
+        return local_tm_to_filetime(tm);
+    }
     show_error!("Unable to parse date: {}\n", str);
     process::exit(1);
 }
