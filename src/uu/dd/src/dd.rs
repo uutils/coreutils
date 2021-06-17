@@ -35,6 +35,10 @@ use std::io::{
     self, Read, Write,
     Seek,
 };
+#[cfg(unix)]
+use libc;
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 use std::sync::{
     Arc, atomic::AtomicUsize, mpsc, atomic::Ordering,
 };
@@ -250,6 +254,53 @@ impl Input<io::Stdin>
     }
 }
 
+fn make_unix_iflags(oflags: &IFlags) -> Option<libc::c_int>
+{
+    let mut flag = 0;
+
+    if oflags.direct
+    {
+        flag |= libc::O_DIRECT;
+    }
+    if oflags.directory
+    {
+        flag |= libc::O_DIRECTORY;
+    }
+    if oflags.dsync
+    {
+        flag |= libc::O_DSYNC;
+    }
+    if oflags.noatime
+    {
+        flag |= libc::O_NOATIME;
+    }
+    if oflags.noctty
+    {
+        flag |= libc::O_NOCTTY;
+    }
+    if oflags.nofollow
+    {
+        flag |= libc::O_NOFOLLOW;
+    }
+    if oflags.nonblock
+    {
+        flag |= libc::O_NONBLOCK;
+    }
+    if oflags.sync
+    {
+        flag |= libc::O_SYNC;
+    }
+
+    if flag != 0
+    {
+        Some(flag)
+    }
+    else
+    {
+        None
+    }
+}
+
 impl Input<File>
 {
     fn new(matches: &getopts::Matches) -> Result<Self, Box<dyn Error>>
@@ -264,7 +315,21 @@ impl Input<File>
 
         if let Some(fname) = matches.opt_str("if")
         {
-            let mut src = File::open(fname)?;
+            let mut src =
+            {
+                let mut opts = OpenOptions::new();
+                opts.read(true);
+
+                if cfg!(unix)
+                {
+                    if let Some(libc_flags) = make_unix_iflags(&iflags)
+                    {
+                        opts.custom_flags(libc_flags);
+                    }
+                }
+
+                opts.open(fname)?
+            };
 
             if let Some(amt) = skip
             {
@@ -461,6 +526,53 @@ impl Output<io::Stdout> {
     }
 }
 
+fn make_unix_oflags(oflags: &OFlags) -> Option<libc::c_int>
+{
+    let mut flag = 0;
+
+    if oflags.direct
+    {
+        flag |= libc::O_DIRECT;
+    }
+    if oflags.directory
+    {
+        flag |= libc::O_DIRECTORY;
+    }
+    if oflags.dsync
+    {
+        flag |= libc::O_DSYNC;
+    }
+    if oflags.noatime
+    {
+        flag |= libc::O_NOATIME;
+    }
+    if oflags.noctty
+    {
+        flag |= libc::O_NOCTTY;
+    }
+    if oflags.nofollow
+    {
+        flag |= libc::O_NOFOLLOW;
+    }
+    if oflags.nonblock
+    {
+        flag |= libc::O_NONBLOCK;
+    }
+    if oflags.sync
+    {
+        flag |= libc::O_SYNC;
+    }
+
+    if flag != 0
+    {
+        Some(flag)
+    }
+    else
+    {
+        None
+    }
+}
+
 impl Output<File> {
     fn new(matches: &getopts::Matches) -> Result<Self, Box<dyn Error>>
     {
@@ -471,11 +583,23 @@ impl Output<File> {
 
         if let Some(fname) = matches.opt_str("of")
         {
-            let mut dst = OpenOptions::new()
-                .write(true)
-                .create(!cflags.nocreat)
-                .truncate(!cflags.notrunc)
-                .open(fname)?;
+            let mut dst = {
+                let mut opts = OpenOptions::new();
+                opts.write(true)
+                    .append(oflags.append)
+                    .create_new(cflags.excl || !cflags.nocreat)
+                    .truncate(!cflags.notrunc);
+
+                if cfg!(unix)
+                {
+                    if let Some(libc_flags) = make_unix_oflags(&oflags)
+                    {
+                        opts.custom_flags(libc_flags);
+                    }
+                }
+
+                opts.open(fname)?
+            };
 
             if let Some(amt) = seek
             {

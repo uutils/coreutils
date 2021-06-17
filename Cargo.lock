@@ -1760,6 +1760,7 @@ dependencies = [
  "gcd",
  "getopts",
  "hex-literal",
+ "libc",
  "md-5",
  "signal-hook",
  "uucore",
