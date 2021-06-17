@@ -384,13 +384,13 @@ impl<'a> Line<'a> {
 
     fn print(&self, writer: &mut impl Write, settings: &GlobalSettings) {
         if settings.zero_terminated && !settings.debug {
-            crash_if_err!(1, writer.write_all(self.line.as_bytes()));
-            crash_if_err!(1, writer.write_all(b"\0"));
+            writer.write_all(self.line.as_bytes()).unwrap();
+            writer.write_all(b"\0").unwrap();
         } else if !settings.debug {
-            crash_if_err!(1, writer.write_all(self.line.as_bytes()));
-            crash_if_err!(1, writer.write_all(b"\n"));
+            writer.write_all(self.line.as_bytes()).unwrap();
+            writer.write_all(b"\n").unwrap();
         } else {
-            crash_if_err!(1, self.print_debug(settings, writer));
+            self.print_debug(settings, writer).unwrap();
         }
     }
 

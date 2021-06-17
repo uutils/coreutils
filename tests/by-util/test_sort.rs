@@ -913,3 +913,16 @@ fn test_merge_batch_size() {
         .succeeds()
         .stdout_only_fixture("merge_ints_interleaved.expected");
 }
+
+#[test]
+fn test_sigpipe_panic() {
+    let mut cmd = new_ucmd!();
+    let mut child = cmd.args(&["ext_sort.txt"]).run_no_wait();
+    // Dropping the stdout should not lead to an error.
+    // The "Broken pipe" error should be silently ignored.
+    drop(child.stdout.take());
+    assert_eq!(
+        String::from_utf8(child.wait_with_output().unwrap().stderr),
+        Ok(String::new())
+    );
+}
