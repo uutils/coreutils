@@ -48,7 +48,6 @@ use std::path::{Path, PathBuf, StripPrefixError};
 use std::str::FromStr;
 use std::string::ToString;
 use uucore::backup_control::{self, BackupMode};
-use uucore::fs::resolve_relative_path;
 use uucore::fs::{canonicalize, CanonicalizeMode};
 use walkdir::WalkDir;
 
@@ -198,7 +197,6 @@ pub struct Options {
     copy_contents: bool,
     copy_mode: CopyMode,
     dereference: bool,
-    no_dereference: bool,
     no_target_dir: bool,
     one_file_system: bool,
     overwrite: OverwriteMode,
@@ -641,11 +639,12 @@ impl Options {
             attributes_only: matches.is_present(OPT_ATTRIBUTES_ONLY),
             copy_contents: matches.is_present(OPT_COPY_CONTENTS),
             copy_mode: CopyMode::from_matches(matches),
-            dereference: matches.is_present(OPT_DEREFERENCE),
             // No dereference is set with -p, -d and --archive
-            no_dereference: matches.is_present(OPT_NO_DEREFERENCE)
+            dereference: !(matches.is_present(OPT_NO_DEREFERENCE)
                 || matches.is_present(OPT_NO_DEREFERENCE_PRESERVE_LINKS)
-                || matches.is_present(OPT_ARCHIVE),
+                || matches.is_present(OPT_ARCHIVE)
+                || recursive)
+                || matches.is_present(OPT_DEREFERENCE),
             one_file_system: matches.is_present(OPT_ONE_FILE_SYSTEM),
             parents: matches.is_present(OPT_PARENTS),
             update: matches.is_present(OPT_UPDATE),
@@ -896,7 +895,14 @@ fn copy_source(
     options: &Options,
 ) -> CopyResult<()> {
     let source_path = Path::new(&source);
-    if source_path.is_dir() {
+    // if no-dereference is enabled and this is a symlink, don't treat it as a directory
+    if source_path.is_dir()
+        && !(!options.dereference
+            && fs::symlink_metadata(source_path)
+                .unwrap()
+                .file_type()
+                .is_symlink())
+    {
         // Copy as directory
         copy_directory(source, target, options)
     } else {
@@ -937,7 +943,7 @@ fn copy_directory(root: &Path, target: &TargetSlice, options: &Options) -> CopyR
         return Err(format!("omitting directory '{}'", root.display()).into());
     }
 
-    let root_path = Path::new(&root).canonicalize()?;
+    let root_path = env::current_dir().unwrap().join(root);
 
     let root_parent = if target.exists() {
         root_path.parent()
@@ -958,17 +964,15 @@ fn copy_directory(root: &Path, target: &TargetSlice, options: &Options) -> CopyR
     #[cfg(any(windows, target_os = "redox"))]
     let mut hard_links: Vec<(String, u64)> = vec![];
 
-    for path in WalkDir::new(root).same_file_system(options.one_file_system) {
+    for path in WalkDir::new(root)
+        .same_file_system(options.one_file_system)
+        .follow_links(options.dereference)
+    {
         let p = or_continue!(path);
         let is_symlink = fs::symlink_metadata(p.path())?.file_type().is_symlink();
-        let path = if (options.no_dereference || options.dereference) && is_symlink {
-            // we are dealing with a symlink. Don't follow it
-            match env::current_dir() {
-                Ok(cwd) => cwd.join(resolve_relative_path(p.path())),
-                Err(e) => crash!(1, "failed to get current directory {}", e),
-            }
-        } else {
-            or_continue!(p.path().canonicalize())
+        let path = match env::current_dir() {
+            Ok(cwd) => cwd.join(&p.path()),
+            Err(e) => crash!(1, "failed to get current directory {}", e),
         };
 
         let local_to_root_parent = match root_parent {
@@ -992,9 +996,10 @@ fn copy_directory(root: &Path, target: &TargetSlice, options: &Options) -> CopyR
         };
 
         let local_to_target = target.join(&local_to_root_parent);
-
-        if path.is_dir() && !local_to_target.exists() {
-            or_continue!(fs::create_dir_all(local_to_target.clone()));
+        if is_symlink && !options.dereference {
+            copy_link(&path, &local_to_target)?;
+        } else if path.is_dir() && !local_to_target.exists() {
+            or_continue!(fs::create_dir_all(local_to_target));
         } else if !path.is_dir() {
             if preserve_hard_links {
                 let mut found_hard_link = false;
@@ -1220,25 +1225,10 @@ fn copy_helper(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> 
 
         #[cfg(target_os = "macos")]
         copy_on_write_macos(source, dest, options.reflink_mode)?;
-
         #[cfg(target_os = "linux")]
         copy_on_write_linux(source, dest, options.reflink_mode)?;
-    } else if options.no_dereference && fs::symlink_metadata(&source)?.file_type().is_symlink() {
-        // Here, we will copy the symlink itself (actually, just recreate it)
-        let link = fs::read_link(&source)?;
-        let dest: Cow<'_, Path> = if dest.is_dir() {
-            match source.file_name() {
-                Some(name) => dest.join(name).into(),
-                None => crash!(
-                    EXIT_ERR,
-                    "cannot stat ‘{}’: No such file or directory",
-                    source.display()
-                ),
-            }
-        } else {
-            dest.into()
-        };
-        symlink_file(&link, &dest, &*context_for(&link, &dest))?;
+    } else if !options.dereference && fs::symlink_metadata(&source)?.file_type().is_symlink() {
+        copy_link(source, dest)?;
     } else if source.to_string_lossy() == "/dev/null" {
         /* workaround a limitation of fs::copy
          * https://github.com/rust-lang/rust/issues/79390
@@ -1253,6 +1243,24 @@ fn copy_helper(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> 
     }
 
     Ok(())
+}
+
+fn copy_link(source: &Path, dest: &Path) -> CopyResult<()> {
+    // Here, we will copy the symlink itself (actually, just recreate it)
+    let link = fs::read_link(&source)?;
+    let dest: Cow<'_, Path> = if dest.is_dir() {
+        match source.file_name() {
+            Some(name) => dest.join(name).into(),
+            None => crash!(
+                EXIT_ERR,
+                "cannot stat ‘{}’: No such file or directory",
+                source.display()
+            ),
+        }
+    } else {
+        dest.into()
+    };
+    symlink_file(&link, &dest, &*context_for(&link, &dest))
 }
 
 /// Copies `source` to `dest` using copy-on-write if possible.
