@@ -7,7 +7,6 @@
 
 ### To Do
 
-
 - [ ] cli-symbolic-links
 - [ ] context
 - [ ] copy-contents
