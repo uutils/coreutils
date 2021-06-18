@@ -531,7 +531,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 let zero_terminated = matches.is_present(options::ZERO_TERMINATED);
 
                 match matches.value_of(options::DELIMITER) {
-                    Some(delim) => {
+                    Some(mut delim) => {
+                        // GNU's `cut` supports `-d=` to set the delimiter to `=`.
+                        // Clap parsing is limited in this situation, see:
+                        // https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242
+                        // Since clap parsing handles `-d=` as delimiter explicitly set to "" and
+                        // an empty delimiter is not accepted by GNU's `cut` (and makes no sense),
+                        // we can use this as basis for a simple workaround:
+                        if delim.is_empty() {
+                            delim = "=";
+                        }
                         if delim.chars().count() > 1 {
                             Err(msg_opt_invalid_should_be!(
                                 "empty or 1 character long",
