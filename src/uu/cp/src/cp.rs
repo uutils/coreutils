@@ -226,39 +226,41 @@ fn get_usage() -> String {
 }
 
 // Argument constants
-static OPT_ARCHIVE: &str = "archive";
-static OPT_ATTRIBUTES_ONLY: &str = "attributes-only";
-static OPT_BACKUP: &str = "backup";
-static OPT_BACKUP_NO_ARG: &str = "b";
-static OPT_CLI_SYMBOLIC_LINKS: &str = "cli-symbolic-links";
-static OPT_CONTEXT: &str = "context";
-static OPT_COPY_CONTENTS: &str = "copy-contents";
-static OPT_DEREFERENCE: &str = "dereference";
-static OPT_FORCE: &str = "force";
-static OPT_INTERACTIVE: &str = "interactive";
-static OPT_LINK: &str = "link";
-static OPT_NO_CLOBBER: &str = "no-clobber";
-static OPT_NO_DEREFERENCE: &str = "no-dereference";
-static OPT_NO_DEREFERENCE_PRESERVE_LINKS: &str = "no-dereference-preserve-linkgs";
-static OPT_NO_PRESERVE: &str = "no-preserve";
-static OPT_NO_TARGET_DIRECTORY: &str = "no-target-directory";
-static OPT_ONE_FILE_SYSTEM: &str = "one-file-system";
-static OPT_PARENT: &str = "parent";
-static OPT_PARENTS: &str = "parents";
-static OPT_PATHS: &str = "paths";
-static OPT_PRESERVE: &str = "preserve";
-static OPT_PRESERVE_DEFAULT_ATTRIBUTES: &str = "preserve-default-attributes";
-static OPT_RECURSIVE: &str = "recursive";
-static OPT_RECURSIVE_ALIAS: &str = "recursive_alias";
-static OPT_REFLINK: &str = "reflink";
-static OPT_REMOVE_DESTINATION: &str = "remove-destination";
-static OPT_SPARSE: &str = "sparse";
-static OPT_STRIP_TRAILING_SLASHES: &str = "strip-trailing-slashes";
-static OPT_SUFFIX: &str = "suffix";
-static OPT_SYMBOLIC_LINK: &str = "symbolic-link";
-static OPT_TARGET_DIRECTORY: &str = "target-directory";
-static OPT_UPDATE: &str = "update";
-static OPT_VERBOSE: &str = "verbose";
+mod options {
+    pub const ARCHIVE: &str = "archive";
+    pub const ATTRIBUTES_ONLY: &str = "attributes-only";
+    pub const BACKUP: &str = "backup";
+    pub const BACKUP_NO_ARG: &str = "b";
+    pub const CLI_SYMBOLIC_LINKS: &str = "cli-symbolic-links";
+    pub const CONTEXT: &str = "context";
+    pub const COPY_CONTENTS: &str = "copy-contents";
+    pub const DEREFERENCE: &str = "dereference";
+    pub const FORCE: &str = "force";
+    pub const INTERACTIVE: &str = "interactive";
+    pub const LINK: &str = "link";
+    pub const NO_CLOBBER: &str = "no-clobber";
+    pub const NO_DEREFERENCE: &str = "no-dereference";
+    pub const NO_DEREFERENCE_PRESERVE_LINKS: &str = "no-dereference-preserve-linkgs";
+    pub const NO_PRESERVE: &str = "no-preserve";
+    pub const NO_TARGET_DIRECTORY: &str = "no-target-directory";
+    pub const ONE_FILE_SYSTEM: &str = "one-file-system";
+    pub const PARENT: &str = "parent";
+    pub const PARENTS: &str = "parents";
+    pub const PATHS: &str = "paths";
+    pub const PRESERVE: &str = "preserve";
+    pub const PRESERVE_DEFAULT_ATTRIBUTES: &str = "preserve-default-attributes";
+    pub const RECURSIVE: &str = "recursive";
+    pub const RECURSIVE_ALIAS: &str = "recursive_alias";
+    pub const REFLINK: &str = "reflink";
+    pub const REMOVE_DESTINATION: &str = "remove-destination";
+    pub const SPARSE: &str = "sparse";
+    pub const STRIP_TRAILING_SLASHES: &str = "strip-trailing-slashes";
+    pub const SUFFIX: &str = "suffix";
+    pub const SYMBOLIC_LINK: &str = "symbolic-link";
+    pub const TARGET_DIRECTORY: &str = "target-directory";
+    pub const UPDATE: &str = "update";
+    pub const VERBOSE: &str = "verbose";
+}
 
 #[cfg(unix)]
 static PRESERVABLE_ATTRIBUTES: &[&str] = &[
@@ -295,67 +297,67 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .about(ABOUT)
         .after_help(&*format!("{}\n{}", LONG_HELP, backup_control::BACKUP_CONTROL_LONG_HELP))
         .usage(&usage[..])
-        .arg(Arg::with_name(OPT_TARGET_DIRECTORY)
+        .arg(Arg::with_name(options::TARGET_DIRECTORY)
              .short("t")
-             .conflicts_with(OPT_NO_TARGET_DIRECTORY)
-             .long(OPT_TARGET_DIRECTORY)
-             .value_name(OPT_TARGET_DIRECTORY)
+             .conflicts_with(options::NO_TARGET_DIRECTORY)
+             .long(options::TARGET_DIRECTORY)
+             .value_name(options::TARGET_DIRECTORY)
              .takes_value(true)
              .help("copy all SOURCE arguments into target-directory"))
-        .arg(Arg::with_name(OPT_NO_TARGET_DIRECTORY)
+        .arg(Arg::with_name(options::NO_TARGET_DIRECTORY)
              .short("T")
-             .long(OPT_NO_TARGET_DIRECTORY)
-             .conflicts_with(OPT_TARGET_DIRECTORY)
+             .long(options::NO_TARGET_DIRECTORY)
+             .conflicts_with(options::TARGET_DIRECTORY)
              .help("Treat DEST as a regular file and not a directory"))
-        .arg(Arg::with_name(OPT_INTERACTIVE)
+        .arg(Arg::with_name(options::INTERACTIVE)
              .short("i")
-             .long(OPT_INTERACTIVE)
-             .conflicts_with(OPT_NO_CLOBBER)
+             .long(options::INTERACTIVE)
+             .conflicts_with(options::NO_CLOBBER)
              .help("ask before overwriting files"))
-        .arg(Arg::with_name(OPT_LINK)
+        .arg(Arg::with_name(options::LINK)
              .short("l")
-             .long(OPT_LINK)
-             .overrides_with(OPT_REFLINK)
+             .long(options::LINK)
+             .overrides_with(options::REFLINK)
              .help("hard-link files instead of copying"))
-        .arg(Arg::with_name(OPT_NO_CLOBBER)
+        .arg(Arg::with_name(options::NO_CLOBBER)
              .short("n")
-             .long(OPT_NO_CLOBBER)
-             .conflicts_with(OPT_INTERACTIVE)
+             .long(options::NO_CLOBBER)
+             .conflicts_with(options::INTERACTIVE)
              .help("don't overwrite a file that already exists"))
-        .arg(Arg::with_name(OPT_RECURSIVE)
+        .arg(Arg::with_name(options::RECURSIVE)
              .short("r")
-             .long(OPT_RECURSIVE)
+             .long(options::RECURSIVE)
              // --archive sets this option
             .help("copy directories recursively"))
-        .arg(Arg::with_name(OPT_RECURSIVE_ALIAS)
+        .arg(Arg::with_name(options::RECURSIVE_ALIAS)
              .short("R")
              .help("same as -r"))
-        .arg(Arg::with_name(OPT_STRIP_TRAILING_SLASHES)
-             .long(OPT_STRIP_TRAILING_SLASHES)
+        .arg(Arg::with_name(options::STRIP_TRAILING_SLASHES)
+             .long(options::STRIP_TRAILING_SLASHES)
              .help("remove any trailing slashes from each SOURCE argument"))
-        .arg(Arg::with_name(OPT_VERBOSE)
+        .arg(Arg::with_name(options::VERBOSE)
              .short("v")
-             .long(OPT_VERBOSE)
+             .long(options::VERBOSE)
              .help("explicitly state what is being done"))
-        .arg(Arg::with_name(OPT_SYMBOLIC_LINK)
+        .arg(Arg::with_name(options::SYMBOLIC_LINK)
              .short("s")
-             .long(OPT_SYMBOLIC_LINK)
-             .conflicts_with(OPT_LINK)
-             .overrides_with(OPT_REFLINK)
+             .long(options::SYMBOLIC_LINK)
+             .conflicts_with(options::LINK)
+             .overrides_with(options::REFLINK)
              .help("make symbolic links instead of copying"))
-        .arg(Arg::with_name(OPT_FORCE)
+        .arg(Arg::with_name(options::FORCE)
              .short("f")
-             .long(OPT_FORCE)
+             .long(options::FORCE)
              .help("if an existing destination file cannot be opened, remove it and \
                     try again (this option is ignored when the -n option is also used). \
                     Currently not implemented for Windows."))
-        .arg(Arg::with_name(OPT_REMOVE_DESTINATION)
-             .long(OPT_REMOVE_DESTINATION)
-             .conflicts_with(OPT_FORCE)
+        .arg(Arg::with_name(options::REMOVE_DESTINATION)
+             .long(options::REMOVE_DESTINATION)
+             .conflicts_with(options::FORCE)
              .help("remove each existing destination file before attempting to open it \
                     (contrast with --force). On Windows, current only works for writeable files."))
-        .arg(Arg::with_name(OPT_BACKUP)
-             .long(OPT_BACKUP)
+        .arg(Arg::with_name(options::BACKUP)
+             .long(options::BACKUP)
              .help("make a backup of each existing destination file")
              .takes_value(true)
              .require_equals(true)
@@ -363,104 +365,104 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
              .possible_values(backup_control::BACKUP_CONTROL_VALUES)
              .value_name("CONTROL")
         )
-        .arg(Arg::with_name(OPT_BACKUP_NO_ARG)
-             .short(OPT_BACKUP_NO_ARG)
+        .arg(Arg::with_name(options::BACKUP_NO_ARG)
+             .short(options::BACKUP_NO_ARG)
              .help("like --backup but does not accept an argument")
         )
-        .arg(Arg::with_name(OPT_SUFFIX)
+        .arg(Arg::with_name(options::SUFFIX)
              .short("S")
-             .long(OPT_SUFFIX)
+             .long(options::SUFFIX)
              .takes_value(true)
              .value_name("SUFFIX")
              .help("override the usual backup suffix"))
-        .arg(Arg::with_name(OPT_UPDATE)
+        .arg(Arg::with_name(options::UPDATE)
              .short("u")
-             .long(OPT_UPDATE)
+             .long(options::UPDATE)
              .help("copy only when the SOURCE file is newer than the destination file\
                     or when the destination file is missing"))
-        .arg(Arg::with_name(OPT_REFLINK)
-             .long(OPT_REFLINK)
+        .arg(Arg::with_name(options::REFLINK)
+             .long(options::REFLINK)
              .takes_value(true)
              .value_name("WHEN")
              .help("control clone/CoW copies. See below"))
-        .arg(Arg::with_name(OPT_ATTRIBUTES_ONLY)
-             .long(OPT_ATTRIBUTES_ONLY)
-             .conflicts_with(OPT_COPY_CONTENTS)
-             .overrides_with(OPT_REFLINK)
+        .arg(Arg::with_name(options::ATTRIBUTES_ONLY)
+             .long(options::ATTRIBUTES_ONLY)
+             .conflicts_with(options::COPY_CONTENTS)
+             .overrides_with(options::REFLINK)
              .help("Don't copy the file data, just the attributes"))
-        .arg(Arg::with_name(OPT_PRESERVE)
-             .long(OPT_PRESERVE)
+        .arg(Arg::with_name(options::PRESERVE)
+             .long(options::PRESERVE)
              .takes_value(true)
              .multiple(true)
              .use_delimiter(true)
              .possible_values(PRESERVABLE_ATTRIBUTES)
              .min_values(0)
              .value_name("ATTR_LIST")
-             .conflicts_with_all(&[OPT_PRESERVE_DEFAULT_ATTRIBUTES, OPT_NO_PRESERVE])
+             .conflicts_with_all(&[options::PRESERVE_DEFAULT_ATTRIBUTES, options::NO_PRESERVE])
              // -d sets this option
              // --archive sets this option
              .help("Preserve the specified attributes (default: mode(unix only),ownership,timestamps),\
                     if possible additional attributes: context, links, xattr, all"))
-        .arg(Arg::with_name(OPT_PRESERVE_DEFAULT_ATTRIBUTES)
+        .arg(Arg::with_name(options::PRESERVE_DEFAULT_ATTRIBUTES)
              .short("-p")
-             .long(OPT_PRESERVE_DEFAULT_ATTRIBUTES)
-             .conflicts_with_all(&[OPT_PRESERVE, OPT_NO_PRESERVE, OPT_ARCHIVE])
+             .long(options::PRESERVE_DEFAULT_ATTRIBUTES)
+             .conflicts_with_all(&[options::PRESERVE, options::NO_PRESERVE, options::ARCHIVE])
              .help("same as --preserve=mode(unix only),ownership,timestamps"))
-        .arg(Arg::with_name(OPT_NO_PRESERVE)
-             .long(OPT_NO_PRESERVE)
+        .arg(Arg::with_name(options::NO_PRESERVE)
+             .long(options::NO_PRESERVE)
              .takes_value(true)
              .value_name("ATTR_LIST")
-             .conflicts_with_all(&[OPT_PRESERVE_DEFAULT_ATTRIBUTES, OPT_PRESERVE, OPT_ARCHIVE])
+             .conflicts_with_all(&[options::PRESERVE_DEFAULT_ATTRIBUTES, options::PRESERVE, options::ARCHIVE])
              .help("don't preserve the specified attributes"))
-        .arg(Arg::with_name(OPT_PARENTS)
-            .long(OPT_PARENTS)
-            .alias(OPT_PARENT)
+        .arg(Arg::with_name(options::PARENTS)
+            .long(options::PARENTS)
+            .alias(options::PARENT)
             .help("use full source file name under DIRECTORY"))
-        .arg(Arg::with_name(OPT_NO_DEREFERENCE)
+        .arg(Arg::with_name(options::NO_DEREFERENCE)
              .short("-P")
-             .long(OPT_NO_DEREFERENCE)
-             .conflicts_with(OPT_DEREFERENCE)
+             .long(options::NO_DEREFERENCE)
+             .conflicts_with(options::DEREFERENCE)
              // -d sets this option
              .help("never follow symbolic links in SOURCE"))
-        .arg(Arg::with_name(OPT_DEREFERENCE)
+        .arg(Arg::with_name(options::DEREFERENCE)
              .short("L")
-             .long(OPT_DEREFERENCE)
-             .conflicts_with(OPT_NO_DEREFERENCE)
+             .long(options::DEREFERENCE)
+             .conflicts_with(options::NO_DEREFERENCE)
              .help("always follow symbolic links in SOURCE"))
-        .arg(Arg::with_name(OPT_ARCHIVE)
+        .arg(Arg::with_name(options::ARCHIVE)
              .short("a")
-             .long(OPT_ARCHIVE)
-             .conflicts_with_all(&[OPT_PRESERVE_DEFAULT_ATTRIBUTES, OPT_PRESERVE, OPT_NO_PRESERVE])
+             .long(options::ARCHIVE)
+             .conflicts_with_all(&[options::PRESERVE_DEFAULT_ATTRIBUTES, options::PRESERVE, options::NO_PRESERVE])
              .help("Same as -dR --preserve=all"))
-        .arg(Arg::with_name(OPT_NO_DEREFERENCE_PRESERVE_LINKS)
+        .arg(Arg::with_name(options::NO_DEREFERENCE_PRESERVE_LINKS)
              .short("d")
              .help("same as --no-dereference --preserve=links"))
-        .arg(Arg::with_name(OPT_ONE_FILE_SYSTEM)
+        .arg(Arg::with_name(options::ONE_FILE_SYSTEM)
              .short("x")
-             .long(OPT_ONE_FILE_SYSTEM)
+             .long(options::ONE_FILE_SYSTEM)
              .help("stay on this file system"))
 
         // TODO: implement the following args
-        .arg(Arg::with_name(OPT_COPY_CONTENTS)
-             .long(OPT_COPY_CONTENTS)
-             .conflicts_with(OPT_ATTRIBUTES_ONLY)
+        .arg(Arg::with_name(options::COPY_CONTENTS)
+             .long(options::COPY_CONTENTS)
+             .conflicts_with(options::ATTRIBUTES_ONLY)
              .help("NotImplemented: copy contents of special files when recursive"))
-        .arg(Arg::with_name(OPT_SPARSE)
-             .long(OPT_SPARSE)
+        .arg(Arg::with_name(options::SPARSE)
+             .long(options::SPARSE)
              .takes_value(true)
              .value_name("WHEN")
              .help("NotImplemented: control creation of sparse files. See below"))
-        .arg(Arg::with_name(OPT_CONTEXT)
-             .long(OPT_CONTEXT)
+        .arg(Arg::with_name(options::CONTEXT)
+             .long(options::CONTEXT)
              .takes_value(true)
              .value_name("CTX")
              .help("NotImplemented: set SELinux security context of destination file to default type"))
-        .arg(Arg::with_name(OPT_CLI_SYMBOLIC_LINKS)
+        .arg(Arg::with_name(options::CLI_SYMBOLIC_LINKS)
              .short("H")
              .help("NotImplemented: follow command-line symbolic links in SOURCE"))
         // END TODO
 
-        .arg(Arg::with_name(OPT_PATHS)
+        .arg(Arg::with_name(options::PATHS)
              .multiple(true))
         .get_matches_from(args);
 
@@ -472,7 +474,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     let paths: Vec<String> = matches
-        .values_of(OPT_PATHS)
+        .values_of(options::PATHS)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
@@ -494,9 +496,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
 impl ClobberMode {
     fn from_matches(matches: &ArgMatches) -> ClobberMode {
-        if matches.is_present(OPT_FORCE) {
+        if matches.is_present(options::FORCE) {
             ClobberMode::Force
-        } else if matches.is_present(OPT_REMOVE_DESTINATION) {
+        } else if matches.is_present(options::REMOVE_DESTINATION) {
             ClobberMode::RemoveDestination
         } else {
             ClobberMode::Standard
@@ -506,9 +508,9 @@ impl ClobberMode {
 
 impl OverwriteMode {
     fn from_matches(matches: &ArgMatches) -> OverwriteMode {
-        if matches.is_present(OPT_INTERACTIVE) {
+        if matches.is_present(options::INTERACTIVE) {
             OverwriteMode::Interactive(ClobberMode::from_matches(matches))
-        } else if matches.is_present(OPT_NO_CLOBBER) {
+        } else if matches.is_present(options::NO_CLOBBER) {
             OverwriteMode::NoClobber
         } else {
             OverwriteMode::Clobber(ClobberMode::from_matches(matches))
@@ -518,15 +520,15 @@ impl OverwriteMode {
 
 impl CopyMode {
     fn from_matches(matches: &ArgMatches) -> CopyMode {
-        if matches.is_present(OPT_LINK) {
+        if matches.is_present(options::LINK) {
             CopyMode::Link
-        } else if matches.is_present(OPT_SYMBOLIC_LINK) {
+        } else if matches.is_present(options::SYMBOLIC_LINK) {
             CopyMode::SymLink
-        } else if matches.is_present(OPT_SPARSE) {
+        } else if matches.is_present(options::SPARSE) {
             CopyMode::Sparse
-        } else if matches.is_present(OPT_UPDATE) {
+        } else if matches.is_present(options::UPDATE) {
             CopyMode::Update
-        } else if matches.is_present(OPT_ATTRIBUTES_ONLY) {
+        } else if matches.is_present(options::ATTRIBUTES_ONLY) {
             CopyMode::AttrOnly
         } else {
             CopyMode::Copy
@@ -574,13 +576,13 @@ fn add_all_attributes() -> Vec<Attribute> {
 impl Options {
     fn from_matches(matches: &ArgMatches) -> CopyResult<Options> {
         let not_implemented_opts = vec![
-            OPT_COPY_CONTENTS,
-            OPT_SPARSE,
+            options::COPY_CONTENTS,
+            options::SPARSE,
             #[cfg(not(any(windows, unix)))]
-            OPT_ONE_FILE_SYSTEM,
-            OPT_CONTEXT,
+            options::ONE_FILE_SYSTEM,
+            options::CONTEXT,
             #[cfg(windows)]
-            OPT_FORCE,
+            options::FORCE,
         ];
 
         for not_implemented_opt in not_implemented_opts {
@@ -589,27 +591,28 @@ impl Options {
             }
         }
 
-        let recursive = matches.is_present(OPT_RECURSIVE)
-            || matches.is_present(OPT_RECURSIVE_ALIAS)
-            || matches.is_present(OPT_ARCHIVE);
+        let recursive = matches.is_present(options::RECURSIVE)
+            || matches.is_present(options::RECURSIVE_ALIAS)
+            || matches.is_present(options::ARCHIVE);
 
         let backup_mode = backup_control::determine_backup_mode(
-            matches.is_present(OPT_BACKUP_NO_ARG) || matches.is_present(OPT_BACKUP),
-            matches.value_of(OPT_BACKUP),
+            matches.is_present(options::BACKUP_NO_ARG) || matches.is_present(options::BACKUP),
+            matches.value_of(options::BACKUP),
         );
-        let backup_suffix = backup_control::determine_backup_suffix(matches.value_of(OPT_SUFFIX));
+        let backup_suffix =
+            backup_control::determine_backup_suffix(matches.value_of(options::SUFFIX));
 
         let overwrite = OverwriteMode::from_matches(matches);
 
         // Parse target directory options
-        let no_target_dir = matches.is_present(OPT_NO_TARGET_DIRECTORY);
+        let no_target_dir = matches.is_present(options::NO_TARGET_DIRECTORY);
         let target_dir = matches
-            .value_of(OPT_TARGET_DIRECTORY)
+            .value_of(options::TARGET_DIRECTORY)
             .map(ToString::to_string);
 
         // Parse attributes to preserve
-        let preserve_attributes: Vec<Attribute> = if matches.is_present(OPT_PRESERVE) {
-            match matches.values_of(OPT_PRESERVE) {
+        let preserve_attributes: Vec<Attribute> = if matches.is_present(options::PRESERVE) {
+            match matches.values_of(options::PRESERVE) {
                 None => DEFAULT_ATTRIBUTES.to_vec(),
                 Some(attribute_strs) => {
                     let mut attributes = Vec::new();
@@ -624,34 +627,34 @@ impl Options {
                     attributes
                 }
             }
-        } else if matches.is_present(OPT_ARCHIVE) {
+        } else if matches.is_present(options::ARCHIVE) {
             // --archive is used. Same as --preserve=all
             add_all_attributes()
-        } else if matches.is_present(OPT_NO_DEREFERENCE_PRESERVE_LINKS) {
+        } else if matches.is_present(options::NO_DEREFERENCE_PRESERVE_LINKS) {
             vec![Attribute::Links]
-        } else if matches.is_present(OPT_PRESERVE_DEFAULT_ATTRIBUTES) {
+        } else if matches.is_present(options::PRESERVE_DEFAULT_ATTRIBUTES) {
             DEFAULT_ATTRIBUTES.to_vec()
         } else {
             vec![]
         };
 
         let options = Options {
-            attributes_only: matches.is_present(OPT_ATTRIBUTES_ONLY),
-            copy_contents: matches.is_present(OPT_COPY_CONTENTS),
+            attributes_only: matches.is_present(options::ATTRIBUTES_ONLY),
+            copy_contents: matches.is_present(options::COPY_CONTENTS),
             copy_mode: CopyMode::from_matches(matches),
             // No dereference is set with -p, -d and --archive
-            dereference: !(matches.is_present(OPT_NO_DEREFERENCE)
-                || matches.is_present(OPT_NO_DEREFERENCE_PRESERVE_LINKS)
-                || matches.is_present(OPT_ARCHIVE)
+            dereference: !(matches.is_present(options::NO_DEREFERENCE)
+                || matches.is_present(options::NO_DEREFERENCE_PRESERVE_LINKS)
+                || matches.is_present(options::ARCHIVE)
                 || recursive)
-                || matches.is_present(OPT_DEREFERENCE),
-            one_file_system: matches.is_present(OPT_ONE_FILE_SYSTEM),
-            parents: matches.is_present(OPT_PARENTS),
-            update: matches.is_present(OPT_UPDATE),
-            verbose: matches.is_present(OPT_VERBOSE),
-            strip_trailing_slashes: matches.is_present(OPT_STRIP_TRAILING_SLASHES),
+                || matches.is_present(options::DEREFERENCE),
+            one_file_system: matches.is_present(options::ONE_FILE_SYSTEM),
+            parents: matches.is_present(options::PARENTS),
+            update: matches.is_present(options::UPDATE),
+            verbose: matches.is_present(options::VERBOSE),
+            strip_trailing_slashes: matches.is_present(options::STRIP_TRAILING_SLASHES),
             reflink_mode: {
-                if let Some(reflink) = matches.value_of(OPT_REFLINK) {
+                if let Some(reflink) = matches.value_of(options::REFLINK) {
                     match reflink {
                         "always" => ReflinkMode::Always,
                         "auto" => ReflinkMode::Auto,
@@ -1180,7 +1183,7 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
         CopyMode::SymLink => {
             symlink_file(source, dest, &*context_for(source, dest))?;
         }
-        CopyMode::Sparse => return Err(Error::NotImplemented(OPT_SPARSE.to_string())),
+        CopyMode::Sparse => return Err(Error::NotImplemented(options::SPARSE.to_string())),
         CopyMode::Update => {
             if dest.exists() {
                 let src_metadata = fs::metadata(source)?;
