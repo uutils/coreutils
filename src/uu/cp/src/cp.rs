@@ -375,7 +375,7 @@ pub fn uu_app() -> App<'static, 'static> {
         .arg(Arg::with_name(options::UPDATE)
              .short("u")
              .long(options::UPDATE)
-             .help("copy only when the SOURCE file is newer than the destination file\
+             .help("copy only when the SOURCE file is newer than the destination file \
                     or when the destination file is missing"))
         .arg(Arg::with_name(options::REFLINK)
              .long(options::REFLINK)
@@ -398,7 +398,7 @@ pub fn uu_app() -> App<'static, 'static> {
              .conflicts_with_all(&[options::PRESERVE_DEFAULT_ATTRIBUTES, options::NO_PRESERVE])
              // -d sets this option
              // --archive sets this option
-             .help("Preserve the specified attributes (default: mode(unix only),ownership,timestamps),\
+             .help("Preserve the specified attributes (default: mode (unix only), ownership, timestamps), \
                     if possible additional attributes: context, links, xattr, all"))
         .arg(Arg::with_name(options::PRESERVE_DEFAULT_ATTRIBUTES)
              .short("-p")
