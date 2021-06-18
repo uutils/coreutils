@@ -477,6 +477,27 @@ fn test_nonexistent_file_is_not_symlink() {
 }
 
 #[test]
+#[cfg(not(windows))] // Windows has no concept of sticky bit
+fn test_file_is_sticky() {
+    let scenario = TestScenario::new(util_name!());
+    let mut ucmd = scenario.ucmd();
+    let mut chmod = scenario.cmd("chmod");
+
+    scenario.fixtures.touch("sticky_file");
+    chmod.args(&["+t", "sticky_file"]).succeeds();
+
+    ucmd.args(&["-k", "sticky_file"]).succeeds();
+}
+
+#[test]
+fn test_file_is_not_sticky() {
+    new_ucmd!()
+        .args(&["-k", "regular_file"])
+        .run()
+        .status_code(1);
+}
+
+#[test]
 #[cfg(not(windows))]
 fn test_file_owned_by_euid() {
     new_ucmd!().args(&["-O", "regular_file"]).succeeds();

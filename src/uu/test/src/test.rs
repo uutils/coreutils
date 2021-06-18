@@ -98,6 +98,7 @@ fn eval(stack: &mut Vec<Symbol>) -> Result<bool, String> {
                 "-g" => path(&f, PathCondition::GroupIdFlag),
                 "-G" => path(&f, PathCondition::GroupOwns),
                 "-h" => path(&f, PathCondition::SymLink),
+                "-k" => path(&f, PathCondition::Sticky),
                 "-L" => path(&f, PathCondition::SymLink),
                 "-O" => path(&f, PathCondition::UserOwns),
                 "-p" => path(&f, PathCondition::Fifo),
@@ -170,6 +171,7 @@ enum PathCondition {
     GroupIdFlag,
     GroupOwns,
     SymLink,
+    Sticky,
     UserOwns,
     Fifo,
     Readable,
@@ -187,6 +189,7 @@ fn path(path: &OsStr, condition: PathCondition) -> bool {
 
     const S_ISUID: u32 = 0o4000;
     const S_ISGID: u32 = 0o2000;
+    const S_ISVTX: u32 = 0o1000;
 
     enum Permission {
         Read = 0o4,
@@ -246,6 +249,7 @@ fn path(path: &OsStr, condition: PathCondition) -> bool {
         PathCondition::GroupIdFlag => metadata.mode() & S_ISGID != 0,
         PathCondition::GroupOwns => metadata.gid() == getegid(),
         PathCondition::SymLink => metadata.file_type().is_symlink(),
+        PathCondition::Sticky => metadata.mode() & S_ISVTX != 0,
         PathCondition::UserOwns => metadata.uid() == geteuid(),
         PathCondition::Fifo => file_type.is_fifo(),
         PathCondition::Readable => perm(metadata, Permission::Read),
@@ -275,6 +279,7 @@ fn path(path: &OsStr, condition: PathCondition) -> bool {
         PathCondition::GroupIdFlag => false,
         PathCondition::GroupOwns => unimplemented!(),
         PathCondition::SymLink => false,
+        PathCondition::Sticky => false,
         PathCondition::UserOwns => unimplemented!(),
         PathCondition::Fifo => false,
         PathCondition::Readable => false, // TODO
