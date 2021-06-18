@@ -1299,3 +1299,29 @@ fn test_closes_file_descriptors() {
         .with_limit(Resource::NOFILE, 9, 9)
         .succeeds();
 }
+
+#[test]
+fn test_copy_dir_symlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.symlink_dir("dir", "dir-link");
+    ucmd.args(&["-r", "dir-link", "copy"]).succeeds();
+    assert_eq!(at.resolve_link("copy"), "dir");
+}
+
+#[test]
+fn test_copy_dir_with_symlinks() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.make_file("dir/file");
+
+    TestScenario::new("ln")
+        .ucmd()
+        .arg("-sr")
+        .arg(at.subdir.join("dir/file"))
+        .arg(at.subdir.join("dir/file-link"))
+        .succeeds();
+
+    ucmd.args(&["-r", "dir", "copy"]).succeeds();
+    assert_eq!(at.resolve_link("copy/file-link"), "file");
+}
