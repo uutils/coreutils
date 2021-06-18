@@ -22,6 +22,7 @@ fn file_last_modified_time(ucmd: &UCommand, path: &str) -> String {
 }
 
 fn all_minutes(from: DateTime<Local>, to: DateTime<Local>) -> Vec<String> {
+    let to = to + Duration::minutes(1);
     const FORMAT: &str = "%b %d %H:%M %Y";
     let mut vec = vec![];
     let mut current = from;
