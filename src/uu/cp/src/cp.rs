@@ -941,7 +941,10 @@ fn copy_directory(root: &Path, target: &TargetSlice, options: &Options) -> CopyR
         return copy_file(root, target, options);
     }
 
-    let root_path = env::current_dir().unwrap().join(root);
+    let current_dir =
+        env::current_dir().unwrap_or_else(|e| crash!(1, "failed to get current directory {}", e));
+
+    let root_path = current_dir.join(root);
 
     let root_parent = if target.exists() {
         root_path.parent()
@@ -968,10 +971,7 @@ fn copy_directory(root: &Path, target: &TargetSlice, options: &Options) -> CopyR
     {
         let p = or_continue!(path);
         let is_symlink = fs::symlink_metadata(p.path())?.file_type().is_symlink();
-        let path = match env::current_dir() {
-            Ok(cwd) => cwd.join(&p.path()),
-            Err(e) => crash!(1, "failed to get current directory {}", e),
-        };
+        let path = current_dir.join(&p.path());
 
         let local_to_root_parent = match root_parent {
             Some(parent) => {
