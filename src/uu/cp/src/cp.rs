@@ -1397,9 +1397,9 @@ pub fn paths_refer_to_same_file(p1: &Path, p2: &Path) -> io::Result<bool> {
 fn test_cp_localize_to_target() {
     assert!(
         localize_to_target(
-            &Path::new("a/source/"),
-            &Path::new("a/source/c.txt"),
-            &Path::new("target/")
+            Path::new("a/source/"),
+            Path::new("a/source/c.txt"),
+            Path::new("target/")
         )
         .unwrap()
             == Path::new("target/c.txt")
