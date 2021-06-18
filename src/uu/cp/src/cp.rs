@@ -895,14 +895,7 @@ fn copy_source(
     options: &Options,
 ) -> CopyResult<()> {
     let source_path = Path::new(&source);
-    // if no-dereference is enabled and this is a symlink, don't treat it as a directory
-    if source_path.is_dir()
-        && !(!options.dereference
-            && fs::symlink_metadata(source_path)
-                .unwrap()
-                .file_type()
-                .is_symlink())
-    {
+    if source_path.is_dir() {
         // Copy as directory
         copy_directory(source, target, options)
     } else {
@@ -941,6 +934,11 @@ fn adjust_canonicalization(p: &Path) -> Cow<Path> {
 fn copy_directory(root: &Path, target: &TargetSlice, options: &Options) -> CopyResult<()> {
     if !options.recursive {
         return Err(format!("omitting directory '{}'", root.display()).into());
+    }
+
+    // if no-dereference is enabled and this is a symlink, copy it as a file
+    if !options.dereference && fs::symlink_metadata(root).unwrap().file_type().is_symlink() {
+        return copy_file(root, target, options);
     }
 
     let root_path = env::current_dir().unwrap().join(root);
