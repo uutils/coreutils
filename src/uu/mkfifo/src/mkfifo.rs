@@ -86,8 +86,16 @@ pub fn uu_app() -> App<'static, 'static> {
         .arg(
             Arg::with_name(options::SE_LINUX_SECURITY_CONTEXT)
                 .short(options::SE_LINUX_SECURITY_CONTEXT)
-                .help("set the SELinux security context to default type")
+                .help("set the SELinux security context to default type"),
         )
-        .arg(Arg::with_name(options::CONTEXT).long(options::CONTEXT).value_name("CTX").help("like -Z, or if CTX is specified then set the SELinux\nor SMACK security context to CTX"))
+        .arg(
+            Arg::with_name(options::CONTEXT)
+                .long(options::CONTEXT)
+                .value_name("CTX")
+                .help(
+                    "like -Z, or if CTX is specified then set the SELinux \
+                    or SMACK security context to CTX",
+                ),
+        )
         .arg(Arg::with_name(options::FIFO).hidden(true).multiple(true))
 }
