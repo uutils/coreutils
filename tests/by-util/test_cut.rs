@@ -157,3 +157,12 @@ fn test_directory_and_no_such_file() {
         .run()
         .stderr_is("cut: some: No such file or directory\n");
 }
+
+#[test]
+fn test_equal_as_delimiter() {
+    new_ucmd!()
+        .args(&["-f", "2", "-d="])
+        .pipe_in("--libdir=./out/lib")
+        .succeeds()
+        .stdout_only("./out/lib\n");
+}
