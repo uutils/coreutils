@@ -326,6 +326,9 @@ ifeq (${MULTICALL}, y)
 endif
 	rm -f $(addprefix $(INSTALLDIR_MAN)/,$(PROG_PREFIX)coreutils.1.gz)
 	rm -f $(addprefix $(INSTALLDIR_BIN)/$(PROG_PREFIX),$(PROGS))
+	rm -f $(addprefix $(DESTDIR)$(PREFIX)/share/zsh/site-functions/_$(PROG_PREFIX),$(PROGS))
+	rm -f $(addprefix $(DESTDIR)$(PREFIX)/share/bash-completion/completions/$(PROG_PREFIX),$(PROGS))
+	rm -f $(addprefix $(DESTDIR)$(PREFIX)/share/fish/vendor_completions.d/$(PROG_PREFIX),$(addsuffix .fish,$(PROGS)))
 	rm -f $(addprefix $(INSTALLDIR_MAN)/$(PROG_PREFIX),$(addsuffix .1.gz,$(PROGS)))
 
 .PHONY: all build build-coreutils build-pkgs build-docs test distclean clean busytest install uninstall
