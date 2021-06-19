@@ -2021,3 +2021,38 @@ fn test_ls_path() {
         .run()
         .stdout_is(expected_stdout);
 }
+
+#[test]
+fn test_ls_size() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("test-1");
+    at.append(
+        "test-1",
+        &std::iter::repeat("a\n").take(123456).collect::<String>(),
+    );
+    at.touch("test-2");
+    at.append(
+        "test-2",
+        &std::iter::repeat("a\n").take(234567).collect::<String>(),
+    );
+    at.touch("test-3");
+    at.append(
+        "test-3",
+        &std::iter::repeat("a\n").take(345678).collect::<String>(),
+    );
+    at.touch("test-4");
+    at.append(
+        "test-4",
+        &std::iter::repeat("a\n").take(456789).collect::<String>(),
+    );
+
+    scene.ucmd().arg("-s").succeeds();
+
+    let result = scene.ucmd().arg("-s").succeeds();
+    #[cfg(not(windows))]
+    result.stdout_only("244 test-1\n460 test-2\n676 test-3\n896 test-4\n");
+    #[cfg(windows)]
+    result.stdout_only("246912 test-1  469134 test-2  691356 test-3  913578 test-4\n");
+}

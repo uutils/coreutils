@@ -206,6 +206,7 @@ struct Config {
     quoting_style: QuotingStyle,
     indicator_style: IndicatorStyle,
     time_style: TimeStyle,
+    show_size: bool,
 }
 
 // Fields that can be removed or added to the long format
@@ -529,6 +530,8 @@ impl Config {
             Dereference::DirArgs
         };
 
+        let show_size = options.is_present(options::size::S);
+
         Config {
             format,
             files,
@@ -548,6 +551,7 @@ impl Config {
             quoting_style,
             indicator_style,
             time_style,
+            show_size,
         }
     }
 }
@@ -992,6 +996,12 @@ only ignore '.' and '..'.",
                 .help("Print human readable file sizes using powers of 1000 instead of 1024."),
         )
         .arg(
+            Arg::with_name(options::size::S)
+                .short(options::size::S)
+                .long(options::size::SIZE)
+                .help("print the allocated size of each file, in blocks."),
+        )
+        .arg(
             Arg::with_name(options::INODE)
                 .short("i")
                 .long(options::INODE)
@@ -1350,40 +1360,13 @@ fn get_metadata(entry: &Path, dereference: bool) -> std::io::Result<Metadata> {
     }
 }
 
-fn display_dir_entry_size(entry: &PathData, config: &Config) -> (usize, usize) {
-    if let Some(md) = entry.md() {
-        (
-            display_symlink_count(md).len(),
-            display_size_or_rdev(md, config).len(),
-        )
-    } else {
-        (0, 0)
-    }
-}
-
 fn pad_left(string: String, count: usize) -> String {
     format!("{:>width$}", string, width = count)
 }
 
 fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) {
     if config.format == Format::Long {
-        let (mut max_links, mut max_width) = (1, 1);
-        let mut total_size = 0;
-
-        for item in items {
-            let (links, width) = display_dir_entry_size(item, config);
-            max_links = links.max(max_links);
-            max_width = width.max(max_width);
-            total_size += item.md().map_or(0, |md| get_block_size(md, config));
-        }
-
-        if total_size > 0 {
-            let _ = writeln!(out, "total {}", display_size(total_size, config));
-        }
-
-        for item in items {
-            display_item_long(item, max_links, max_width, config, out);
-        }
+        display_item_long(items, config, out);
     } else {
         let names = items.iter().filter_map(|i| display_file_name(i, config));
 
@@ -1395,32 +1378,11 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
                 display_grid(names, width, Direction::LeftToRight, out)
             }
             (Format::Commas, width_opt) => {
-                let term_width = width_opt.unwrap_or(1);
-                let mut current_col = 0;
-                let mut names = names;
-                if let Some(name) = names.next() {
-                    let _ = write!(out, "{}", name.contents);
-                    current_col = name.width as u16 + 2;
-                }
-                for name in names {
-                    let name_width = name.width as u16;
-                    if current_col + name_width + 1 > term_width {
-                        current_col = name_width + 2;
-                        let _ = write!(out, ",\n{}", name.contents);
-                    } else {
-                        current_col += name_width + 2;
-                        let _ = write!(out, ", {}", name.contents);
-                    }
-                }
-                // Current col is never zero again if names have been printed.
-                // So we print a newline.
-                if current_col > 0 {
-                    let _ = writeln!(out,);
-                }
+                display_comma(names, width_opt.unwrap_or(1).into(), out);
             }
             _ => {
                 for name in names {
-                    let _ = writeln!(out, "{}", name.contents);
+                    writeln!(out, "{}", name.contents).unwrap();
                 }
             }
         }
@@ -1478,59 +1440,64 @@ fn display_grid(
 
 use uucore::fs::display_permissions;
 
-fn display_item_long(
-    item: &PathData,
-    max_links: usize,
-    max_size: usize,
-    config: &Config,
-    out: &mut BufWriter<Stdout>,
-) {
-    let md = match item.md() {
-        None => {
-            show_error!("could not show file: {}", &item.p_buf.display());
-            return;
+fn display_item_long(paths: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) {
+    let metadatas = paths
+        .iter()
+        // FIXME: For now it just unwraps. Perhaps introduce better error messages?
+        .map(|path| path.md().unwrap())
+        .collect::<Vec<_>>();
+    let (max_links, max_width, total_size) = metadatas
+        .iter()
+        .map(|md| {
+            (
+                display_symlink_count(md).len(),
+                display_size_or_rdev(md, config).len(),
+                get_block_size(md, config),
+            )
+        })
+        .fold((1, 1, 0u64), |(a, b, c), (d, e, f)| {
+            (a.max(d), b.max(e), c.saturating_add(f))
+        });
+    if total_size > 0 {
+        writeln!(out, "total {}", display_size(total_size, config)).unwrap();
+    }
+    for (item, md) in paths.iter().zip(metadatas.iter()) {
+        #[cfg(unix)]
+        {
+            if config.inode {
+                write!(out, "{} ", get_inode(md)).unwrap();
+            }
         }
-        Some(md) => md,
-    };
-
-    #[cfg(unix)]
-    {
-        if config.inode {
-            let _ = write!(out, "{} ", get_inode(md));
+        write!(
+            out,
+            "{} {}",
+            display_permissions(md, true),
+            pad_left(display_symlink_count(md), max_links),
+        )
+        .unwrap();
+        if config.long.owner {
+            write!(out, " {}", display_uname(md, config)).unwrap();
         }
+        if config.long.group {
+            write!(out, " {}", display_group(md, config)).unwrap();
+        }
+        // Author is only different from owner on GNU/Hurd, so we reuse
+        // the owner, since GNU/Hurd is not currently supported by Rust.
+        if config.long.author {
+            write!(out, " {}", display_uname(md, config)).unwrap();
+        }
+        writeln!(
+            out,
+            " {} {} {}",
+            pad_left(display_size_or_rdev(md, config), max_width),
+            display_date(md, config),
+            // unwrap is fine because it fails when metadata is not available
+            // but we already know that it is because it's checked at the
+            // start of the function.
+            display_file_name(item, config).unwrap().contents,
+        )
+        .unwrap();
     }
-
-    let _ = write!(
-        out,
-        "{} {}",
-        display_permissions(md, true),
-        pad_left(display_symlink_count(md), max_links),
-    );
-
-    if config.long.owner {
-        let _ = write!(out, " {}", display_uname(md, config));
-    }
-
-    if config.long.group {
-        let _ = write!(out, " {}", display_group(md, config));
-    }
-
-    // Author is only different from owner on GNU/Hurd, so we reuse
-    // the owner, since GNU/Hurd is not currently supported by Rust.
-    if config.long.author {
-        let _ = write!(out, " {}", display_uname(md, config));
-    }
-
-    let _ = writeln!(
-        out,
-        " {} {} {}",
-        pad_left(display_size_or_rdev(md, config), max_size),
-        display_date(md, config),
-        // unwrap is fine because it fails when metadata is not available
-        // but we already know that it is because it's checked at the
-        // start of the function.
-        display_file_name(item, config).unwrap().contents,
-    );
 }
 
 #[cfg(unix)]
@@ -1750,9 +1717,15 @@ fn display_file_name(path: &PathData, config: &Config) -> Option<Cell> {
         }
     }
 
+    let file_size = if config.show_size {
+        format!("{} ", get_block_size(path.md().unwrap(), config))
+    } else {
+        String::new()
+    };
+
     // We need to keep track of the width ourselves instead of letting term_grid
     // infer it because the color codes mess up term_grid's width calculation.
-    let mut width = name.width();
+    let mut width = name.width() + file_size.width();
 
     if let Some(ls_colors) = &config.color {
         name = color_name(ls_colors, &path.p_buf, name, path.md()?);
@@ -1793,10 +1766,9 @@ fn display_file_name(path: &PathData, config: &Config) -> Option<Cell> {
         }
     }
 
-    Some(Cell {
-        contents: name,
-        width,
-    })
+    let contents = format!("{}{}", file_size, name);
+
+    Some(Cell { contents, width })
 }
 
 fn color_name(ls_colors: &LsColors, path: &Path, name: String, md: &Metadata) -> String {
@@ -1816,4 +1788,32 @@ fn display_symlink_count(_metadata: &Metadata) -> String {
 #[cfg(unix)]
 fn display_symlink_count(metadata: &Metadata) -> String {
     metadata.nlink().to_string()
+}
+
+fn display_comma(
+    names: impl Iterator<Item = Cell>,
+    term_width: usize,
+    out: &mut BufWriter<Stdout>,
+) {
+    let mut current_col = 0;
+    let mut names = names;
+    if let Some(name) = names.next() {
+        let _ = write!(out, "{}", name.contents);
+        current_col = name.width + 2;
+    }
+    for name in names {
+        let name_width = name.width;
+        if current_col + name_width + 1 > term_width {
+            current_col = name_width + 2;
+            let _ = write!(out, ",\n{}", name.contents);
+        } else {
+            current_col += name_width + 2;
+            let _ = write!(out, ", {}", name.contents);
+        }
+    }
+    // Current col is never zero again if names have been printed.
+    // So we print a newline.
+    if current_col > 0 {
+        let _ = writeln!(out,);
+    }
 }
