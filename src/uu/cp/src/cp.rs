@@ -1269,6 +1269,11 @@ fn copy_link(source: &Path, dest: &Path) -> CopyResult<()> {
             ),
         }
     } else {
+        // we always need to remove the file to be able to create a symlink,
+        // even if it is writeable.
+        if dest.exists() {
+            fs::remove_file(dest)?;
+        }
         dest.into()
     };
     symlink_file(&link, &dest, &*context_for(&link, &dest))
