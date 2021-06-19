@@ -45,7 +45,14 @@ jobs:
     - name: Run GNU tests
       shell: bash
       run: |
-        bash uutils/util/run-gnu-test.sh
+        # bash uutils/util/run-gnu-test.sh # TODO: revert after testing
+          bash uutils/util/run-gnu-test.sh tests/id/context.sh
+          bash uutils/util/run-gnu-test.sh tests/id/no-context.sh
+          bash uutils/util/run-gnu-test.sh tests/id/smack.sh
+          bash uutils/util/run-gnu-test.sh tests/id/uid.sh
+          bash uutils/util/run-gnu-test.sh tests/id/setgid.sh
+          bash uutils/util/run-gnu-test.sh tests/id/zero.sh
+          bash uutils/util/run-gnu-test.sh tests/id/gnu-zero-uids.sh
     - name: Extract tests info
       shell: bash
       run: |

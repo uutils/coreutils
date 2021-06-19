@@ -11,7 +11,7 @@ env:
   PROJECT_NAME: coreutils
   PROJECT_DESC: "Core universal (cross-platform) utilities"
   PROJECT_AUTH: "uutils"
-  RUST_MIN_SRV: "1.43.1" ## v1.43.0
+  RUST_MIN_SRV: "1.51.0" ## v1.43.0
   RUST_COV_SRV: "2020-08-01" ## (~v1.47.0) supported rust version for code coverage; (date required/used by 'coverage') ## !maint: refactor when code coverage support is included in the stable channel
 
 on: [push, pull_request]
@@ -222,7 +222,7 @@ jobs:
     - name: "Run make build"
       shell: bash
       run: |
-        sudo apt-get -y update ; sudo apt-get -y install python3-sphinx;
+        sudo apt-get -y update ; sudo apt-get -y install python3-sphinx libselinux1 libselinux1-dev ;
         make build
 
   build:
@@ -260,6 +260,7 @@ jobs:
         esac
         case '${{ matrix.job.os }}' in
           macos-latest) brew install coreutils ;; # needed for testing
+          ubuntu-latest) sudo apt-get -y update ; sudo apt-get -y install libselinux1 libselinux1-dev ;; # TODO: probably redundant here
         esac
     - name: Initialize workflow variables
       id: vars

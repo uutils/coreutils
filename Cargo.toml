@@ -352,6 +352,7 @@ unindent = "0.1"
 uucore = { version=">=0.0.8", package="uucore", path="src/uucore", features=["entries", "process"] }
 walkdir = "2.2"
 atty = "0.2"
+selinux = "0.1.1"
 
 [target.'cfg(unix)'.dev-dependencies]
 rlimit = "0.4.0"

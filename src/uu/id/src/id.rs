@@ -26,7 +26,7 @@
 // * Help text based on BSD's `id` manpage and GNU's `id` manpage.
 //
 
-// spell-checker:ignore (ToDO) asid auditid auditinfo auid cstr egid emod euid getaudit getlogin gflag nflag pline rflag termid uflag gsflag zflag testsuite
+// spell-checker:ignore (ToDO) asid auditid auditinfo auid cstr egid emod euid getaudit getlogin gflag nflag pline rflag termid uflag gsflag zflag cflag testsuite
 
 #![allow(non_camel_case_types)]
 #![allow(dead_code)]
@@ -35,6 +35,8 @@
 extern crate uucore;
 
 use clap::{crate_version, App, Arg};
+#[cfg(target_os = "linux")]
+use selinux::{self, KernelSupport, SecurityContext};
 use std::ffi::CStr;
 use uucore::entries::{self, Group, Locate, Passwd};
 pub use uucore::libc;
@@ -93,6 +95,8 @@ struct State {
     gsflag: bool, // --groups
     rflag: bool,  // --real
     zflag: bool,  // --zero
+    cflag: bool,  // --context
+    selinux_supported: bool,
     ids: Option<Ids>,
     // The behavior for calling GNU's `id` and calling GNU's `id $USER` is similar but different.
     // * The SELinux context is only displayed without a specified user.
@@ -147,6 +151,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(options::OPT_GROUP)
                 .short("g")
                 .long(options::OPT_GROUP)
+                .conflicts_with(options::OPT_EFFECTIVE_USER)
                 .help("Display only the effective group ID as a number"),
         )
         .arg(
@@ -156,6 +161,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .conflicts_with_all(&[
                     options::OPT_GROUP,
                     options::OPT_EFFECTIVE_USER,
+                    options::OPT_CONTEXT,
                     options::OPT_HUMAN_READABLE,
                     options::OPT_PASSWORD,
                     options::OPT_AUDIT,
@@ -207,7 +213,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(options::OPT_CONTEXT)
                 .short("Z")
                 .long(options::OPT_CONTEXT)
-                .help("NotImplemented: print only the security context of the process"),
+                .conflicts_with_all(&[options::OPT_GROUP, options::OPT_EFFECTIVE_USER])
+                .help("print only the security context of the process"),
         )
         .arg(
             Arg::with_name(options::ARG_USERS)
@@ -229,6 +236,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         gsflag: matches.is_present(options::OPT_GROUPS),
         rflag: matches.is_present(options::OPT_REAL_ID),
         zflag: matches.is_present(options::OPT_ZERO),
+        cflag: matches.is_present(options::OPT_CONTEXT),
+
+        #[cfg(not(target_os = "linux"))]
+        selinux_supported: false,
+        #[cfg(target_os = "linux")]
+        selinux_supported: selinux::kernel_support() != KernelSupport::Unsupported,
         user_specified: !users.is_empty(),
         ids: None,
     };
@@ -238,12 +251,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         !(state.uflag || state.gflag || state.gsflag)
     };
 
-    if (state.nflag || state.rflag) && default_format {
+    if (state.nflag || state.rflag) && default_format && !state.cflag {
         crash!(1, "cannot print only names or real IDs in default format");
     }
-    if (state.zflag) && default_format {
+    if state.zflag && default_format && !state.cflag {
         // NOTE: GNU testsuite "id/zero.sh" needs this stderr output:
         crash!(1, "option --zero not permitted in default format");
+    }
+    if state.user_specified && state.cflag {
+        crash!(1, "cannot print security context when user specified");
     }
 
     let delimiter = {
@@ -261,6 +277,23 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     };
     let mut exit_code = 0;
+
+    if state.cflag {
+        if state.selinux_supported {
+            // print SElinux context and exit
+            #[cfg(target_os = "linux")]
+            if let Ok(context) = SecurityContext::current(false) {
+                let bytes = context.as_bytes();
+                print!("{}{}", String::from_utf8_lossy(bytes), line_ending);
+            } else {
+                // print error because `cflag` was explicitly requested
+                crash!(1, "can't get process context");
+            }
+            return exit_code;
+        } else {
+            crash!(1, "--context (-Z) works only on an SELinux-enabled kernel");
+        }
+    }
 
     for i in 0..=users.len() {
         let possible_pw = if !state.user_specified {
@@ -518,11 +551,17 @@ fn id_print(state: &State, groups: Vec<u32>) {
             .join(",")
     );
 
-    // NOTE: (SELinux NotImplemented) placeholder:
-    // if !state.user_specified {
-    //     // print SElinux context (does not depend on "-Z")
-    //     print!(" context={}", get_selinux_contexts().join(":"));
-    // }
+    #[cfg(target_os = "linux")]
+    if state.selinux_supported
+        && !state.user_specified
+        && std::env::var_os("POSIXLY_CORRECT").is_none()
+    {
+        // print SElinux context (does not depend on "-Z")
+        if let Ok(context) = SecurityContext::current(false) {
+            let bytes = context.as_bytes();
+            print!(" context={}", String::from_utf8_lossy(bytes));
+        }
+    }
 }
 
 #[cfg(not(target_os = "linux"))]
