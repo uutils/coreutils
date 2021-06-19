@@ -580,3 +580,11 @@ fn test_relative_src_already_symlink() {
     ucmd.arg("-sr").arg("file2").arg("file3").succeeds();
     assert!(at.resolve_link("file3").ends_with("file1"));
 }
+
+#[test]
+fn test_relative_recursive() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    ucmd.args(&["-sr", "dir", "dir/recursive"]).succeeds();
+    assert_eq!(at.resolve_link("dir/recursive"), ".");
+}

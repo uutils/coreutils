@@ -382,12 +382,15 @@ fn relative_path<'a>(src: &Path, dst: &Path) -> Result<Cow<'a, Path>> {
 
     let src_iter = src_abs.components().skip(suffix_pos).map(|x| x.as_os_str());
 
-    let result: PathBuf = dst_abs
+    let mut result: PathBuf = dst_abs
         .components()
         .skip(suffix_pos + 1)
         .map(|_| OsStr::new(".."))
         .chain(src_iter)
         .collect();
+    if result.as_os_str().is_empty() {
+        result.push(".");
+    }
     Ok(result.into())
 }
 
