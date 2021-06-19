@@ -690,3 +690,31 @@ fn test_or_as_filename() {
 fn test_string_length_and_nothing() {
     new_ucmd!().args(&["-n", "a", "-a"]).run().status_code(2);
 }
+
+#[test]
+fn test_bracket_syntax_success() {
+    let scenario = TestScenario::new("[");
+    let mut ucmd = scenario.ucmd();
+
+    ucmd.args(&["1", "-eq", "1", "]"]).succeeds();
+}
+
+#[test]
+fn test_bracket_syntax_failure() {
+    let scenario = TestScenario::new("[");
+    let mut ucmd = scenario.ucmd();
+
+    ucmd.args(&["1", "-eq", "2", "]"]).run().status_code(1);
+}
+
+#[test]
+fn test_bracket_syntax_missing_right_bracket() {
+    let scenario = TestScenario::new("[");
+    let mut ucmd = scenario.ucmd();
+
+    // Missing closing bracket takes precedence over other possible errors.
+    ucmd.args(&["1", "-eq"])
+        .run()
+        .status_code(2)
+        .stderr_is("[: missing ']'");
+}
