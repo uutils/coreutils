@@ -667,7 +667,14 @@ impl Options {
                         }
                     }
                 } else {
-                    ReflinkMode::Never
+                    #[cfg(any(target_os = "linux", target_os = "macos"))]
+                    {
+                        ReflinkMode::Auto
+                    }
+                    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+                    {
+                        ReflinkMode::Never
+                    }
                 }
             },
             backup: backup_mode,
