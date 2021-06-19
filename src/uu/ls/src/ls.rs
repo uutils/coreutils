@@ -13,6 +13,7 @@ extern crate uucore;
 #[macro_use]
 extern crate lazy_static;
 
+mod options;
 mod quoting_style;
 mod version_cmp;
 
@@ -45,84 +46,8 @@ use unicode_width::UnicodeWidthStr;
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 
-static ABOUT: &str = "
- By default, ls will list the files and contents of any directories on
- the command line, expect that it will ignore files and directories
- whose names start with '.'
-";
-static AFTER_HELP: &str = "The TIME_STYLE argument can be full-iso, long-iso, iso.
-Also the TIME_STYLE environment variable sets the default style to use.";
-
 fn get_usage() -> String {
     format!("{0} [OPTION]... [FILE]...", executable!())
-}
-
-pub mod options {
-    pub mod format {
-        pub static ONE_LINE: &str = "1";
-        pub static LONG: &str = "long";
-        pub static COLUMNS: &str = "C";
-        pub static ACROSS: &str = "x";
-        pub static COMMAS: &str = "m";
-        pub static LONG_NO_OWNER: &str = "g";
-        pub static LONG_NO_GROUP: &str = "o";
-        pub static LONG_NUMERIC_UID_GID: &str = "numeric-uid-gid";
-    }
-    pub mod files {
-        pub static ALL: &str = "all";
-        pub static ALMOST_ALL: &str = "almost-all";
-    }
-    pub mod sort {
-        pub static SIZE: &str = "S";
-        pub static TIME: &str = "t";
-        pub static NONE: &str = "U";
-        pub static VERSION: &str = "v";
-        pub static EXTENSION: &str = "X";
-    }
-    pub mod time {
-        pub static ACCESS: &str = "u";
-        pub static CHANGE: &str = "c";
-    }
-    pub mod size {
-        pub static HUMAN_READABLE: &str = "human-readable";
-        pub static SI: &str = "si";
-    }
-    pub mod quoting {
-        pub static ESCAPE: &str = "escape";
-        pub static LITERAL: &str = "literal";
-        pub static C: &str = "quote-name";
-    }
-    pub static QUOTING_STYLE: &str = "quoting-style";
-    pub mod indicator_style {
-        pub static SLASH: &str = "p";
-        pub static FILE_TYPE: &str = "file-type";
-        pub static CLASSIFY: &str = "classify";
-    }
-    pub mod dereference {
-        pub static ALL: &str = "dereference";
-        pub static ARGS: &str = "dereference-command-line";
-        pub static DIR_ARGS: &str = "dereference-command-line-symlink-to-dir";
-    }
-    pub static HIDE_CONTROL_CHARS: &str = "hide-control-chars";
-    pub static SHOW_CONTROL_CHARS: &str = "show-control-chars";
-    pub static WIDTH: &str = "width";
-    pub static AUTHOR: &str = "author";
-    pub static NO_GROUP: &str = "no-group";
-    pub static FORMAT: &str = "format";
-    pub static SORT: &str = "sort";
-    pub static TIME: &str = "time";
-    pub static IGNORE_BACKUPS: &str = "ignore-backups";
-    pub static DIRECTORY: &str = "directory";
-    pub static INODE: &str = "inode";
-    pub static REVERSE: &str = "reverse";
-    pub static RECURSIVE: &str = "recursive";
-    pub static COLOR: &str = "color";
-    pub static PATHS: &str = "paths";
-    pub static INDICATOR_STYLE: &str = "indicator-style";
-    pub static TIME_STYLE: &str = "time-style";
-    pub static FULL_TIME: &str = "full-time";
-    pub static HIDE: &str = "hide";
-    pub static IGNORE: &str = "ignore";
 }
 
 #[derive(PartialEq, Eq)]
@@ -560,16 +485,24 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let app = App::new(executable!())
         .version(crate_version!())
-        .about(ABOUT)
+        .about(options::ABOUT)
         .usage(&usage[..])
-
         // Format arguments
         .arg(
             Arg::with_name(options::FORMAT)
                 .long(options::FORMAT)
                 .help("Set the display format.")
                 .takes_value(true)
-                .possible_values(&["long", "verbose", "single-column", "columns", "vertical", "across", "horizontal", "commas"])
+                .possible_values(&[
+                    "long",
+                    "verbose",
+                    "single-column",
+                    "columns",
+                    "vertical",
+                    "across",
+                    "horizontal",
+                    "commas",
+                ])
                 .hide_possible_values(true)
                 .require_equals(true)
                 .overrides_with_all(&[
@@ -639,41 +572,48 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(options::format::ONE_LINE)
                 .short(options::format::ONE_LINE)
                 .help("List one file per line.")
-                .multiple(true)
+                .multiple(true),
         )
         .arg(
             Arg::with_name(options::format::LONG_NO_GROUP)
                 .short(options::format::LONG_NO_GROUP)
-                .help("Long format without group information. Identical to --format=long with --no-group.")
-                .multiple(true)
+                .help(options::format::LONG_NO_GROUP_HELP)
+                .multiple(true),
         )
         .arg(
             Arg::with_name(options::format::LONG_NO_OWNER)
                 .short(options::format::LONG_NO_OWNER)
                 .help("Long format without owner information.")
-                .multiple(true)
+                .multiple(true),
         )
         .arg(
             Arg::with_name(options::format::LONG_NUMERIC_UID_GID)
                 .short("n")
                 .long(options::format::LONG_NUMERIC_UID_GID)
                 .help("-l with numeric UIDs and GIDs.")
-                .multiple(true)
+                .multiple(true),
         )
-
         // Quoting style
         .arg(
             Arg::with_name(options::QUOTING_STYLE)
                 .long(options::QUOTING_STYLE)
                 .takes_value(true)
                 .help("Set quoting style.")
-                .possible_values(&["literal", "shell", "shell-always", "shell-escape", "shell-escape-always", "c", "escape"])
+                .possible_values(&[
+                    "literal",
+                    "shell",
+                    "shell-always",
+                    "shell-escape",
+                    "shell-escape-always",
+                    "c",
+                    "escape",
+                ])
                 .overrides_with_all(&[
                     options::QUOTING_STYLE,
                     options::quoting::LITERAL,
                     options::quoting::ESCAPE,
                     options::quoting::C,
-                ])
+                ]),
         )
         .arg(
             Arg::with_name(options::quoting::LITERAL)
@@ -685,7 +625,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::quoting::LITERAL,
                     options::quoting::ESCAPE,
                     options::quoting::C,
-                ])
+                ]),
         )
         .arg(
             Arg::with_name(options::quoting::ESCAPE)
@@ -697,7 +637,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::quoting::LITERAL,
                     options::quoting::ESCAPE,
                     options::quoting::C,
-                ])
+                ]),
         )
         .arg(
             Arg::with_name(options::quoting::C)
@@ -709,76 +649,53 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::quoting::LITERAL,
                     options::quoting::ESCAPE,
                     options::quoting::C,
-                ])
+                ]),
         )
-
         // Control characters
         .arg(
             Arg::with_name(options::HIDE_CONTROL_CHARS)
                 .short("q")
                 .long(options::HIDE_CONTROL_CHARS)
                 .help("Replace control characters with '?' if they are not escaped.")
-                .overrides_with_all(&[
-                    options::HIDE_CONTROL_CHARS,
-                    options::SHOW_CONTROL_CHARS,
-                ])
+                .overrides_with_all(&[options::HIDE_CONTROL_CHARS, options::SHOW_CONTROL_CHARS]),
         )
         .arg(
             Arg::with_name(options::SHOW_CONTROL_CHARS)
                 .long(options::SHOW_CONTROL_CHARS)
                 .help("Show control characters 'as is' if they are not escaped.")
-                .overrides_with_all(&[
-                    options::HIDE_CONTROL_CHARS,
-                    options::SHOW_CONTROL_CHARS,
-                ])
+                .overrides_with_all(&[options::HIDE_CONTROL_CHARS, options::SHOW_CONTROL_CHARS]),
         )
-
         // Time arguments
         .arg(
             Arg::with_name(options::TIME)
                 .long(options::TIME)
-                .help("Show time in <field>:\n\
+                .help(
+                    "Show time in <field>:\n\
                     \taccess time (-u): atime, access, use;\n\
                     \tchange time (-t): ctime, status.\n\
-                    \tbirth time: birth, creation;")
+                    \tbirth time: birth, creation;",
+                )
                 .value_name("field")
                 .takes_value(true)
-                .possible_values(&["atime", "access", "use", "ctime", "status", "birth", "creation"])
+                .possible_values(&[
+                    "atime", "access", "use", "ctime", "status", "birth", "creation",
+                ])
                 .hide_possible_values(true)
                 .require_equals(true)
-                .overrides_with_all(&[
-                    options::TIME,
-                    options::time::ACCESS,
-                    options::time::CHANGE,
-                ])
+                .overrides_with_all(&[options::TIME, options::time::ACCESS, options::time::CHANGE]),
         )
         .arg(
             Arg::with_name(options::time::CHANGE)
                 .short(options::time::CHANGE)
-                .help("If the long listing format (e.g., -l, -o) is being used, print the status \
-                change time (the ‘ctime’ in the inode) instead of the modification time. When \
-                explicitly sorting by time (--sort=time or -t) or when not using a long listing \
-                format, sort according to the status change time.")
-                .overrides_with_all(&[
-                    options::TIME,
-                    options::time::ACCESS,
-                    options::time::CHANGE,
-                ])
+                .help(options::time::CHANGE_HELP)
+                .overrides_with_all(&[options::TIME, options::time::ACCESS, options::time::CHANGE]),
         )
         .arg(
             Arg::with_name(options::time::ACCESS)
                 .short(options::time::ACCESS)
-                .help("If the long listing format (e.g., -l, -o) is being used, print the status \
-                access time instead of the modification time. When explicitly sorting by time \
-                (--sort=time or -t) or when not using a long listing format, sort according to the \
-                access time.")
-                .overrides_with_all(&[
-                    options::TIME,
-                    options::time::ACCESS,
-                    options::time::CHANGE,
-                ])
+                .help(options::time::ACCESS_HELP)
+                .overrides_with_all(&[options::TIME, options::time::ACCESS, options::time::CHANGE]),
         )
-
         // Hide and ignore
         .arg(
             Arg::with_name(options::HIDE)
@@ -786,7 +703,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .takes_value(true)
                 .multiple(true)
                 .value_name("PATTERN")
-                .help("do not list implied entries matching shell PATTERN (overridden by -a or -A)")
+                .help(options::HIDE_HELP),
         )
         .arg(
             Arg::with_name(options::IGNORE)
@@ -795,7 +712,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .takes_value(true)
                 .multiple(true)
                 .value_name("PATTERN")
-                .help("do not list implied entries matching shell PATTERN")
+                .help("do not list implied entries matching shell PATTERN"),
         )
         .arg(
             Arg::with_name(options::IGNORE_BACKUPS)
@@ -803,7 +720,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(options::IGNORE_BACKUPS)
                 .help("Ignore entries which end with ~."),
         )
-
         // Sort arguments
         .arg(
             Arg::with_name(options::SORT)
@@ -820,7 +736,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::sort::NONE,
                     options::sort::VERSION,
                     options::sort::EXTENSION,
-                ])
+                ]),
         )
         .arg(
             Arg::with_name(options::sort::SIZE)
@@ -833,7 +749,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::sort::NONE,
                     options::sort::VERSION,
                     options::sort::EXTENSION,
-                ])
+                ]),
         )
         .arg(
             Arg::with_name(options::sort::TIME)
@@ -846,7 +762,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::sort::NONE,
                     options::sort::VERSION,
                     options::sort::EXTENSION,
-                ])
+                ]),
         )
         .arg(
             Arg::with_name(options::sort::VERSION)
@@ -859,7 +775,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::sort::NONE,
                     options::sort::VERSION,
                     options::sort::EXTENSION,
-                ])
+                ]),
         )
         .arg(
             Arg::with_name(options::sort::EXTENSION)
@@ -872,14 +788,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::sort::NONE,
                     options::sort::VERSION,
                     options::sort::EXTENSION,
-                ])
+                ]),
         )
         .arg(
             Arg::with_name(options::sort::NONE)
                 .short(options::sort::NONE)
-                .help("Do not sort; list the files in whatever order they are stored in the \
-                directory.  This is especially useful when listing very large directories, \
-                since not doing any sorting can be noticeably faster.")
+                .help(options::sort::NONE_HELP)
                 .overrides_with_all(&[
                     options::SORT,
                     options::sort::SIZE,
@@ -887,63 +801,52 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::sort::NONE,
                     options::sort::VERSION,
                     options::sort::EXTENSION,
-                ])
+                ]),
         )
-
         // Dereferencing
         .arg(
             Arg::with_name(options::dereference::ALL)
                 .short("L")
                 .long(options::dereference::ALL)
-                .help(
-                    "When showing file information for a symbolic link, show information for the \
-                file the link references rather than the link itself.",
-                )
+                .help(options::dereference::ALL_HELP)
                 .overrides_with_all(&[
                     options::dereference::ALL,
                     options::dereference::DIR_ARGS,
                     options::dereference::ARGS,
-                ])
+                ]),
         )
         .arg(
             Arg::with_name(options::dereference::DIR_ARGS)
                 .long(options::dereference::DIR_ARGS)
-                .help(
-                    "Do not dereference symlinks except when they link to directories and are \
-                    given as command line arguments.",
-                )
+                .help(options::dereference::DIR_ARGS_HELP)
                 .overrides_with_all(&[
                     options::dereference::ALL,
                     options::dereference::DIR_ARGS,
                     options::dereference::ARGS,
-                ])
+                ]),
         )
         .arg(
             Arg::with_name(options::dereference::ARGS)
                 .short("H")
                 .long(options::dereference::ARGS)
-                .help(
-                    "Do not dereference symlinks except when given as command line arguments.",
-                )
+                .help("Do not dereference symlinks except when given as command line arguments.")
                 .overrides_with_all(&[
                     options::dereference::ALL,
                     options::dereference::DIR_ARGS,
                     options::dereference::ARGS,
-                ])
+                ]),
         )
-
         // Long format options
         .arg(
             Arg::with_name(options::NO_GROUP)
                 .long(options::NO_GROUP)
                 .short("-G")
-                .help("Do not show group in long format.")
+                .help("Do not show group in long format."),
         )
         .arg(
             Arg::with_name(options::AUTHOR)
                 .long(options::AUTHOR)
-                .help("Show author in long format. On the supported platforms, the author \
-                always matches the file owner.")
+                .help(options::AUTHOR_HELP),
         )
         // Other Flags
         .arg(
@@ -956,21 +859,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(options::files::ALMOST_ALL)
                 .short("A")
                 .long(options::files::ALMOST_ALL)
-                .help(
-                "In a directory, do not ignore all file names that start with '.', only ignore \
-                '.' and '..'.",
-            ),
+                .help(options::files::ALMOST_ALL_HELP),
         )
         .arg(
             Arg::with_name(options::DIRECTORY)
                 .short("d")
                 .long(options::DIRECTORY)
-                .help(
-                    "Only list the names of directories, rather than listing directory contents. \
-                This will not follow symbolic links unless one of `--dereference-command-line \
-                (-H)`, `--dereference (-L)`, or `--dereference-command-line-symlink-to-dir` is \
-                specified.",
-                ),
+                .help(options::DIRECTORY_HELP),
         )
         .arg(
             Arg::with_name(options::size::HUMAN_READABLE)
@@ -982,7 +877,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(
             Arg::with_name(options::size::SI)
                 .long(options::size::SI)
-                .help("Print human readable file sizes using powers of 1000 instead of 1024.")
+                .help("Print human readable file sizes using powers of 1000 instead of 1024."),
         )
         .arg(
             Arg::with_name(options::INODE)
@@ -994,9 +889,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(options::REVERSE)
                 .short("r")
                 .long(options::REVERSE)
-                .help("Reverse whatever the sorting method is--e.g., list files in reverse \
-                alphabetical order, youngest first, smallest first, or whatever.",
-        ))
+                .help(options::REVERSE_HLEP),
+        )
         .arg(
             Arg::with_name(options::RECURSIVE)
                 .short("R")
@@ -1009,7 +903,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .short("w")
                 .help("Assume that the terminal is COLS columns wide.")
                 .value_name("COLS")
-                .takes_value(true)
+                .takes_value(true),
         )
         .arg(
             Arg::with_name(options::COLOR)
@@ -1022,8 +916,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(
             Arg::with_name(options::INDICATOR_STYLE)
                 .long(options::INDICATOR_STYLE)
-                .help(" append indicator with style WORD to entry names: none (default),  slash\
-                       (-p), file-type (--file-type), classify (-F)")
+                .help(options::INDICATOR_STYLE_HELP)
                 .takes_value(true)
                 .possible_values(&["none", "slash", "file-type", "classify"])
                 .overrides_with_all(&[
@@ -1031,21 +924,19 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::indicator_style::SLASH,
                     options::indicator_style::CLASSIFY,
                     options::INDICATOR_STYLE,
-                ]))
-                .arg(
+                ]),
+        )
+        .arg(
             Arg::with_name(options::indicator_style::CLASSIFY)
                 .short("F")
                 .long(options::indicator_style::CLASSIFY)
-                .help("Append a character to each file name indicating the file type. Also, for \
-                       regular files that are executable, append '*'. The file type indicators are \
-                       '/' for directories, '@' for symbolic links, '|' for FIFOs, '=' for sockets, \
-                       '>' for doors, and nothing for regular files.")
+                .help(options::indicator_style::CLASSIFY_HELP)
                 .overrides_with_all(&[
                     options::indicator_style::FILE_TYPE,
                     options::indicator_style::SLASH,
                     options::indicator_style::CLASSIFY,
                     options::INDICATOR_STYLE,
-                ])
+                ]),
         )
         .arg(
             Arg::with_name(options::indicator_style::FILE_TYPE)
@@ -1056,18 +947,19 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     options::indicator_style::SLASH,
                     options::indicator_style::CLASSIFY,
                     options::INDICATOR_STYLE,
-                ]))
+                ]),
+        )
         .arg(
             Arg::with_name(options::indicator_style::SLASH)
                 .short(options::indicator_style::SLASH)
-                .help("Append / indicator to directories."
-                )
+                .help("Append / indicator to directories.")
                 .overrides_with_all(&[
                     options::indicator_style::FILE_TYPE,
                     options::indicator_style::SLASH,
                     options::indicator_style::CLASSIFY,
                     options::INDICATOR_STYLE,
-                ]))
+                ]),
+        )
         .arg(
             //This still needs support for posix-*, +FORMAT
             Arg::with_name(options::TIME_STYLE)
@@ -1075,27 +967,22 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("time/date format with -l; see TIME_STYLE below")
                 .value_name("TIME_STYLE")
                 .env("TIME_STYLE")
-                .possible_values(&[
-                    "full-iso",
-                    "long-iso",
-                    "iso",
-                    "locale",
-                ])
-                .overrides_with_all(&[
-                    options::TIME_STYLE
-                ])
+                .possible_values(&["full-iso", "long-iso", "iso", "locale"])
+                .overrides_with_all(&[options::TIME_STYLE]),
         )
         .arg(
             Arg::with_name(options::FULL_TIME)
-            .long(options::FULL_TIME)
-            .overrides_with(options::FULL_TIME)
-            .help("like -l --time-style=full-iso")
+                .long(options::FULL_TIME)
+                .overrides_with(options::FULL_TIME)
+                .help("like -l --time-style=full-iso"),
         )
-
-    // Positional arguments
-        .arg(Arg::with_name(options::PATHS).multiple(true).takes_value(true))
-
-        .after_help(AFTER_HELP);
+        // Positional arguments
+        .arg(
+            Arg::with_name(options::PATHS)
+                .multiple(true)
+                .takes_value(true),
+        )
+        .after_help(options::PATHS_AFTER_HELP);
 
     let matches = app.get_matches_from(args);
 
