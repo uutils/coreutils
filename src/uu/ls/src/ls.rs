@@ -703,7 +703,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .takes_value(true)
                 .multiple(true)
                 .value_name("PATTERN")
-                .help(options::HIDE_HELP),
+                .help(
+                    "do not list implied entries matching shell PATTERN (overridden by -a or -A)",
+                ),
         )
         .arg(
             Arg::with_name(options::IGNORE)

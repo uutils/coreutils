@@ -125,8 +125,6 @@ pub static INDICATOR_STYLE_HELP: &str =
 pub static TIME_STYLE: &str = "time-style";
 pub static FULL_TIME: &str = "full-time";
 pub static HIDE: &str = "hide";
-pub static HIDE_HELP: &str =
-    "do not list implied entries matching shell PATTERN (overridden by -a or -A)";
 pub static IGNORE: &str = "ignore";
 
 pub static ABOUT: &str = "
