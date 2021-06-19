@@ -1,4 +1,4 @@
-use crate::units::Transform;
+use crate::units::Unit;
 use uucore::ranges::Range;
 
 pub const DELIMITER: &str = "delimiter";
@@ -10,12 +10,13 @@ pub const HEADER: &str = "header";
 pub const HEADER_DEFAULT: &str = "1";
 pub const NUMBER: &str = "NUMBER";
 pub const PADDING: &str = "padding";
+pub const ROUND: &str = "round";
 pub const TO: &str = "to";
 pub const TO_DEFAULT: &str = "none";
 
 pub struct TransformOptions {
-    pub from: Transform,
-    pub to: Transform,
+    pub from: Unit,
+    pub to: Unit,
 }
 
 pub struct NumfmtOptions {
@@ -24,4 +25,38 @@ pub struct NumfmtOptions {
     pub header: usize,
     pub fields: Vec<Range>,
     pub delimiter: Option<String>,
+    pub round: RoundMethod,
+}
+
+#[derive(Clone, Copy)]
+pub enum RoundMethod {
+    Up,
+    Down,
+    FromZero,
+    TowardsZero,
+    Nearest,
+}
+
+impl RoundMethod {
+    pub fn round(&self, f: f64) -> f64 {
+        match self {
+            RoundMethod::Up => f.ceil(),
+            RoundMethod::Down => f.floor(),
+            RoundMethod::FromZero => {
+                if f < 0.0 {
+                    f.floor()
+                } else {
+                    f.ceil()
+                }
+            }
+            RoundMethod::TowardsZero => {
+                if f < 0.0 {
+                    f.ceil()
+                } else {
+                    f.floor()
+                }
+            }
+            RoundMethod::Nearest => f.round(),
+        }
+    }
 }

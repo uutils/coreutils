@@ -1,7 +1,5 @@
-use crate::options::NumfmtOptions;
-use crate::units::{
-    DisplayableSuffix, RawSuffix, Result, Suffix, Transform, Unit, IEC_BASES, SI_BASES,
-};
+use crate::options::{NumfmtOptions, RoundMethod};
+use crate::units::{DisplayableSuffix, RawSuffix, Result, Suffix, Unit, IEC_BASES, SI_BASES};
 
 /// Iterate over a line's fields, where each field is a contiguous sequence of
 /// non-whitespace, optionally prefixed with one or more characters of leading
@@ -62,7 +60,7 @@ impl<'a> Iterator for WhitespaceSplitter<'a> {
 
 fn parse_suffix(s: &str) -> Result<(f64, Option<Suffix>)> {
     if s.is_empty() {
-        return Err("invalid number: ‘’".to_string());
+        return Err("invalid number: ''".to_string());
     }
 
     let with_i = s.ends_with('i');
@@ -70,18 +68,18 @@ fn parse_suffix(s: &str) -> Result<(f64, Option<Suffix>)> {
     if with_i {
         iter.next_back();
     }
-    let suffix: Option<Suffix> = match iter.next_back() {
-        Some('K') => Ok(Some((RawSuffix::K, with_i))),
-        Some('M') => Ok(Some((RawSuffix::M, with_i))),
-        Some('G') => Ok(Some((RawSuffix::G, with_i))),
-        Some('T') => Ok(Some((RawSuffix::T, with_i))),
-        Some('P') => Ok(Some((RawSuffix::P, with_i))),
-        Some('E') => Ok(Some((RawSuffix::E, with_i))),
-        Some('Z') => Ok(Some((RawSuffix::Z, with_i))),
-        Some('Y') => Ok(Some((RawSuffix::Y, with_i))),
-        Some('0'..='9') => Ok(None),
-        _ => Err(format!("invalid suffix in input: ‘{}’", s)),
-    }?;
+    let suffix = match iter.next_back() {
+        Some('K') => Some((RawSuffix::K, with_i)),
+        Some('M') => Some((RawSuffix::M, with_i)),
+        Some('G') => Some((RawSuffix::G, with_i)),
+        Some('T') => Some((RawSuffix::T, with_i)),
+        Some('P') => Some((RawSuffix::P, with_i)),
+        Some('E') => Some((RawSuffix::E, with_i)),
+        Some('Z') => Some((RawSuffix::Z, with_i)),
+        Some('Y') => Some((RawSuffix::Y, with_i)),
+        Some('0'..='9') => None,
+        _ => return Err(format!("invalid suffix in input: '{}'", s)),
+    };
 
     let suffix_len = match suffix {
         None => 0,
@@ -91,7 +89,7 @@ fn parse_suffix(s: &str) -> Result<(f64, Option<Suffix>)> {
 
     let number = s[..s.len() - suffix_len]
         .parse::<f64>()
-        .map_err(|_| format!("invalid number: ‘{}’", s))?;
+        .map_err(|_| format!("invalid number: '{}'", s))?;
 
     Ok((number, suffix))
 }
@@ -127,10 +125,10 @@ fn remove_suffix(i: f64, s: Option<Suffix>, u: &Unit) -> Result<f64> {
     }
 }
 
-fn transform_from(s: &str, opts: &Transform) -> Result<f64> {
+fn transform_from(s: &str, opts: &Unit) -> Result<f64> {
     let (i, suffix) = parse_suffix(s)?;
 
-    remove_suffix(i, suffix, &opts.unit).map(|n| if n < 0.0 { -n.abs().ceil() } else { n.ceil() })
+    remove_suffix(i, suffix, opts).map(|n| if n < 0.0 { -n.abs().ceil() } else { n.ceil() })
 }
 
 /// Divide numerator by denominator, with ceiling.
@@ -153,18 +151,17 @@ fn transform_from(s: &str, opts: &Transform) -> Result<f64> {
 /// assert_eq!(div_ceil(1000.0, -3.14), -319.0);
 /// assert_eq!(div_ceil(-271828.0, -271.0), 1004.0);
 /// ```
-pub fn div_ceil(n: f64, d: f64) -> f64 {
-    let v = n / (d / 10.0);
-    let (v, sign) = if v < 0.0 { (v.abs(), -1.0) } else { (v, 1.0) };
+pub fn div_round(n: f64, d: f64, method: RoundMethod) -> f64 {
+    let v = n / d;
 
-    if v < 100.0 {
-        v.ceil() / 10.0 * sign
+    if v.abs() < 10.0 {
+        method.round(10.0 * v) / 10.0
     } else {
-        (v / 10.0).ceil() * sign
+        method.round(v)
     }
 }
 
-fn consider_suffix(n: f64, u: &Unit) -> Result<(f64, Option<Suffix>)> {
+fn consider_suffix(n: f64, u: &Unit, round_method: RoundMethod) -> Result<(f64, Option<Suffix>)> {
     use crate::units::RawSuffix::*;
 
     let abs_n = n.abs();
@@ -190,7 +187,7 @@ fn consider_suffix(n: f64, u: &Unit) -> Result<(f64, Option<Suffix>)> {
         _ => return Err("Number is too big and unsupported".to_string()),
     };
 
-    let v = div_ceil(n, bases[i]);
+    let v = div_round(n, bases[i], round_method);
 
     // check if rounding pushed us into the next base
     if v.abs() >= bases[1] {
@@ -200,8 +197,8 @@ fn consider_suffix(n: f64, u: &Unit) -> Result<(f64, Option<Suffix>)> {
     }
 }
 
-fn transform_to(s: f64, opts: &Transform) -> Result<String> {
-    let (i2, s) = consider_suffix(s, &opts.unit)?;
+fn transform_to(s: f64, opts: &Unit, round_method: RoundMethod) -> Result<String> {
+    let (i2, s) = consider_suffix(s, opts, round_method)?;
     Ok(match s {
         None => format!("{}", i2),
         Some(s) if i2.abs() < 10.0 => format!("{:.1}{}", i2, DisplayableSuffix(s)),
@@ -217,10 +214,11 @@ fn format_string(
     let number = transform_to(
         transform_from(source, &options.transform.from)?,
         &options.transform.to,
+        options.round,
     )?;
 
     Ok(match implicit_padding.unwrap_or(options.padding) {
-        p if p == 0 => number,
+        0 => number,
         p if p > 0 => format!("{:>padding$}", number, padding = p as usize),
         p => format!("{:<padding$}", number, padding = p.abs() as usize),
     })
