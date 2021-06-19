@@ -25,6 +25,7 @@ use std::os::unix::fs::MetadataExt;
 use std::os::windows::fs::MetadataExt;
 #[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
+#[cfg(windows)]
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
