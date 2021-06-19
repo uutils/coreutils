@@ -62,6 +62,7 @@ mod options {
     pub const TIME: &str = "time";
     pub const TIME_STYLE: &str = "time-style";
     pub const ONE_FILE_SYSTEM: &str = "one-file-system";
+    pub const DEREFERENCE: &str = "dereference";
     pub const FILE: &str = "FILE";
 }
 
@@ -87,6 +88,7 @@ struct Options {
     total: bool,
     separate_dirs: bool,
     one_file_system: bool,
+    dereference: bool,
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
@@ -107,8 +109,12 @@ struct Stat {
 }
 
 impl Stat {
-    fn new(path: PathBuf) -> Result<Stat> {
-        let metadata = fs::symlink_metadata(&path)?;
+    fn new(path: PathBuf, options: &Options) -> Result<Stat> {
+        let metadata = if options.dereference {
+            fs::metadata(&path)?
+        } else {
+            fs::symlink_metadata(&path)?
+        };
 
         #[cfg(not(windows))]
         let file_info = FileInfo {
@@ -279,8 +285,14 @@ fn du(
 
         for f in read {
             match f {
-                Ok(entry) => match Stat::new(entry.path()) {
+                Ok(entry) => match Stat::new(entry.path(), options) {
                     Ok(this_stat) => {
+                        if let Some(inode) = this_stat.inode {
+                            if inodes.contains(&inode) {
+                                continue;
+                            }
+                            inodes.insert(inode);
+                        }
                         if this_stat.is_dir {
                             if options.one_file_system {
                                 if let (Some(this_inode), Some(my_inode)) =
@@ -293,12 +305,6 @@ fn du(
                             }
                             futures.push(du(this_stat, options, depth + 1, inodes));
                         } else {
-                            if let Some(inode) = this_stat.inode {
-                                if inodes.contains(&inode) {
-                                    continue;
-                                }
-                                inodes.insert(inode);
-                            }
                             my_stat.size += this_stat.size;
                             my_stat.blocks += this_stat.blocks;
                             if options.all {
@@ -308,18 +314,13 @@ fn du(
                     }
                     Err(error) => match error.kind() {
                         ErrorKind::PermissionDenied => {
-                            let description = format!(
-                                "cannot access '{}'",
-                                entry
-                                    .path()
-                                    .as_os_str()
-                                    .to_str()
-                                    .unwrap_or("<Un-printable path>")
-                            );
+                            let description = format!("cannot access '{}'", entry.path().display());
                             let error_message = "Permission denied";
                             show_error_custom_description!(description, "{}", error_message)
                         }
-                        _ => show_error!("{}", error),
+                        _ => {
+                            show_error!("cannot access '{}': {}", entry.path().display(), error)
+                        }
                     },
                 },
                 Err(error) => show_error!("{}", error),
@@ -327,7 +328,7 @@ fn du(
         }
     }
 
-    stats.extend(futures.into_iter().flatten().rev().filter(|stat| {
+    stats.extend(futures.into_iter().flatten().filter(|stat| {
         if !options.separate_dirs && stat.path.parent().unwrap() == my_stat.path {
             my_stat.size += stat.size;
             my_stat.blocks += stat.blocks;
@@ -466,12 +467,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long("count-links")
                 .help("count sizes many times if hard linked")
         )
-        // .arg(
-        //     Arg::with_name("dereference")
-        //         .short("L")
-        //         .long("dereference")
-        //         .help("dereference all symbolic links")
-        // )
+        .arg(
+            Arg::with_name(options::DEREFERENCE)
+                .short("L")
+                .long(options::DEREFERENCE)
+                .help("dereference all symbolic links")
+        )
         // .arg(
         //     Arg::with_name("no-dereference")
         //         .short("P")
@@ -588,12 +589,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         total: matches.is_present(options::TOTAL),
         separate_dirs: matches.is_present(options::SEPARATE_DIRS),
         one_file_system: matches.is_present(options::ONE_FILE_SYSTEM),
+        dereference: matches.is_present(options::DEREFERENCE),
     };
 
     let files = match matches.value_of(options::FILE) {
         Some(_) => matches.values_of(options::FILE).unwrap().collect(),
         None => {
-            vec!["./"] // TODO: gnu `du` doesn't use trailing "/" here
+            vec!["."]
         }
     };
 
@@ -655,10 +657,12 @@ Try '{} --help' for more information.",
     let mut grand_total = 0;
     for path_string in files {
         let path = PathBuf::from(&path_string);
-        match Stat::new(path) {
+        match Stat::new(path, &options) {
             Ok(stat) => {
                 let mut inodes: HashSet<FileInfo> = HashSet::new();
-
+                if let Some(inode) = stat.inode {
+                    inodes.insert(inode);
+                }
                 let iter = du(stat, &options, 0, &mut inodes);
                 let (_, len) = iter.size_hint();
                 let len = len.unwrap();
