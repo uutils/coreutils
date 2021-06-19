@@ -293,6 +293,77 @@ fn _du_dereference(s: &str) {
 }
 
 #[test]
+fn test_du_inodes_basic() {
+    let scene = TestScenario::new(util_name!());
+    let result = scene.ucmd().arg("--inodes").succeeds();
+
+    #[cfg(target_os = "linux")]
+    {
+        let result_reference = scene.cmd("du").arg("--inodes").run();
+        assert_eq!(result.stdout_str(), result_reference.stdout_str());
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    _du_inodes_basic(result.stdout_str());
+}
+
+#[cfg(target_os = "windows")]
+fn _du_inodes_basic(s: &str) {
+    assert_eq!(
+        s,
+        "2\t.\\subdir\\deeper\\deeper_dir
+4\t.\\subdir\\deeper
+3\t.\\subdir\\links
+8\t.\\subdir
+11\t.
+"
+    );
+}
+
+#[cfg(not(target_os = "windows"))]
+fn _du_inodes_basic(s: &str) {
+    assert_eq!(
+        s,
+        "2\t./subdir/deeper/deeper_dir
+4\t./subdir/deeper
+3\t./subdir/links
+8\t./subdir
+11\t.
+"
+    );
+}
+
+#[test]
+fn test_du_inodes() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .arg("--summarize")
+        .arg("--inodes")
+        .succeeds()
+        .stdout_only("11\t.\n");
+
+    let result = scene
+        .ucmd()
+        .arg("--separate-dirs")
+        .arg("--inodes")
+        .succeeds();
+
+    #[cfg(target_os = "windows")]
+    result.stdout_contains("3\t.\\subdir\\links\n");
+    #[cfg(not(target_os = "windows"))]
+    result.stdout_contains("3\t./subdir/links\n");
+    result.stdout_contains("3\t.\n");
+
+    #[cfg(target_os = "linux")]
+    {
+        let result_reference = scene.cmd("du").arg("--separate-dirs").arg("--inodes").run();
+        assert_eq!(result.stdout_str(), result_reference.stdout_str());
+    }
+}
+
+#[test]
 fn test_du_h_flag_empty_file() {
     new_ucmd!()
         .arg("-h")
