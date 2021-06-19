@@ -83,6 +83,8 @@ pub mod options {
     pub mod size {
         pub static HUMAN_READABLE: &str = "human-readable";
         pub static SI: &str = "si";
+        pub static S: &str = "s";
+        pub static SIZE: &str = "size";
     }
 
     pub mod quoting {
@@ -999,13 +1001,13 @@ only ignore '.' and '..'.",
             Arg::with_name(options::size::S)
                 .short(options::size::S)
                 .long(options::size::SIZE)
-                .help("print the allocated size of each file, in blocks."),
+                .help("Print the allocated size of each file, in blocks."),
         )
         .arg(
             Arg::with_name(options::INODE)
                 .short("i")
                 .long(options::INODE)
-                .help("print the index number of each file"),
+                .help("Print the index number of each file."),
         )
         .arg(
             Arg::with_name(options::REVERSE)
