@@ -1,0 +1,29 @@
+name: Docs
+
+on:
+  push:
+    branches: [master]
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Install `rust` toolchain (v${{ env.RUST_MIN_SRV }})
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        default: true
+        profile: minimal
+
+    - name: Build Documentation
+      run: cargo doc --no-deps --all-features --workspace
+
+    - name: Deploy Docs
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./target/doc
