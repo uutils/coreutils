@@ -1242,6 +1242,7 @@ fn copy_helper(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> 
         return Err("--reflink is only supported on linux and macOS"
             .to_string()
             .into());
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         if is_symlink {
             assert!(options.dereference);
             let real_path = std::fs::read_link(source)?;
