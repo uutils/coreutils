@@ -2044,5 +2044,5 @@ fn test_ls_dangling_symlinks() {
         .arg("-Li")
         .arg("temp_dir")
         .succeeds() // this should fail, though at the moment, ls lacks a way to propagate errors encountered during display
-        .stdout_contains("? dangle");
+        .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
 }
