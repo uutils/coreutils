@@ -131,25 +131,32 @@ fn transform_from(s: &str, opts: &Unit) -> Result<f64> {
     remove_suffix(i, suffix, opts).map(|n| if n < 0.0 { -n.abs().ceil() } else { n.ceil() })
 }
 
-/// Divide numerator by denominator, with ceiling.
+/// Divide numerator by denominator, with rounding.
 ///
-/// If the result of the division is less than 10.0, truncate the result
-/// to the next highest tenth.
+/// If the result of the division is less than 10.0, round to one decimal point.
 ///
-/// Otherwise, truncate the result to the next highest whole number.
+/// Otherwise, round to an integer.
 ///
 /// # Examples:
 ///
 /// ```
-/// use uu_numfmt::format::div_ceil;
+/// use uu_numfmt::format::div_round;
+/// use uu_numfmt::options::RoundMethod;
 ///
-/// assert_eq!(div_ceil(1.01, 1.0), 1.1);
-/// assert_eq!(div_ceil(999.1, 1000.), 1.0);
-/// assert_eq!(div_ceil(1001., 10.), 101.);
-/// assert_eq!(div_ceil(9991., 10.), 1000.);
-/// assert_eq!(div_ceil(-12.34, 1.0), -13.0);
-/// assert_eq!(div_ceil(1000.0, -3.14), -319.0);
-/// assert_eq!(div_ceil(-271828.0, -271.0), 1004.0);
+/// // Rounding methods:
+/// assert_eq!(div_round(1.01, 1.0, RoundMethod::FromZero), 1.1);
+/// assert_eq!(div_round(1.01, 1.0, RoundMethod::TowardsZero), 1.0);
+/// assert_eq!(div_round(1.01, 1.0, RoundMethod::Up), 1.1);
+/// assert_eq!(div_round(1.01, 1.0, RoundMethod::Down), 1.0);
+/// assert_eq!(div_round(1.01, 1.0, RoundMethod::Nearest), 1.0);
+///
+/// // Division:
+/// assert_eq!(div_round(999.1, 1000.0, RoundMethod::FromZero), 1.0);
+/// assert_eq!(div_round(1001., 10., RoundMethod::FromZero), 101.);
+/// assert_eq!(div_round(9991., 10., RoundMethod::FromZero), 1000.);
+/// assert_eq!(div_round(-12.34, 1.0, RoundMethod::FromZero), -13.0);
+/// assert_eq!(div_round(1000.0, -3.14, RoundMethod::FromZero), -319.0);
+/// assert_eq!(div_round(-271828.0, -271.0, RoundMethod::FromZero), 1004.0);
 /// ```
 pub fn div_round(n: f64, d: f64, method: RoundMethod) -> f64 {
     let v = n / d;

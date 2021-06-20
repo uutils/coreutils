@@ -5,6 +5,8 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
+// spell-checker:ignore N'th M'th
+
 #[macro_use]
 extern crate uucore;
 
@@ -16,7 +18,7 @@ use std::io::{BufRead, Write};
 use uucore::ranges::Range;
 
 pub mod format;
-mod options;
+pub mod options;
 mod units;
 
 static ABOUT: &str = "Convert numbers from/to human-readable strings";
