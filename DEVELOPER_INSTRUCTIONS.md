@@ -1,5 +1,16 @@
+Documentation
+-------------
+
+The documentation is generated at every merge.
+It is available on:
+
+https://uutils.github.io/coreutils/coreutils/
+
+Pages are stored in the `gh-pages` branch.
+
+
 Code Coverage Report Generation
----------------------------------
+-------------------------------
 
 <!-- spell-checker:ignore (flags) Ccodegen Coverflow Cpanic Zinstrument Zpanic -->
 
