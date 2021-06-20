@@ -2033,20 +2033,11 @@ fn test_ls_size() {
         &std::iter::repeat("a\n").take(123456).collect::<String>(),
     );
     at.touch("test-2");
-    at.append(
-        "test-2",
-        &std::iter::repeat("a\n").take(234567).collect::<String>(),
-    );
+    at.append("test-2", &"a\n".repeat(234567));
     at.touch("test-3");
-    at.append(
-        "test-3",
-        &std::iter::repeat("a\n").take(345678).collect::<String>(),
-    );
+    at.append("test-3", &"a\n".repeat(345678));
     at.touch("test-4");
-    at.append(
-        "test-4",
-        &std::iter::repeat("a\n").take(456789).collect::<String>(),
-    );
+    at.append("test-4", &"a\n".repeat(456789));
 
     scene.ucmd().arg("-s").succeeds();
 
