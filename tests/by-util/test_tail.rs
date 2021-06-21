@@ -364,21 +364,21 @@ fn test_tail_invalid_num() {
     new_ucmd!()
         .args(&["-c", "1024R", "emptyfile.txt"])
         .fails()
-        .stderr_is("tail: invalid number of bytes: ‘1024R’");
+        .stderr_is("tail: invalid number of bytes: '1024R'");
     new_ucmd!()
         .args(&["-n", "1024R", "emptyfile.txt"])
         .fails()
-        .stderr_is("tail: invalid number of lines: ‘1024R’");
+        .stderr_is("tail: invalid number of lines: '1024R'");
     #[cfg(not(target_pointer_width = "128"))]
     new_ucmd!()
         .args(&["-c", "1Y", "emptyfile.txt"])
         .fails()
-        .stderr_is("tail: invalid number of bytes: ‘1Y’: Value too large for defined data type");
+        .stderr_is("tail: invalid number of bytes: '1Y': Value too large for defined data type");
     #[cfg(not(target_pointer_width = "128"))]
     new_ucmd!()
         .args(&["-n", "1Y", "emptyfile.txt"])
         .fails()
-        .stderr_is("tail: invalid number of lines: ‘1Y’: Value too large for defined data type");
+        .stderr_is("tail: invalid number of lines: '1Y': Value too large for defined data type");
     #[cfg(target_pointer_width = "32")]
     {
         let sizes = ["1000G", "10T"];
@@ -388,7 +388,7 @@ fn test_tail_invalid_num() {
                 .fails()
                 .code_is(1)
                 .stderr_only(format!(
-                    "tail: invalid number of bytes: ‘{}’: Value too large for defined data type",
+                    "tail: invalid number of bytes: '{}': Value too large for defined data type",
                     size
                 ));
         }

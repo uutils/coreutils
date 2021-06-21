@@ -210,7 +210,7 @@ fn truncate_reference_and_size(
     let mode = match parse_mode_and_size(size_string) {
         Ok(m) => match m {
             TruncateMode::Absolute(_) => {
-                crash!(1, "you must specify a relative ‘--size’ with ‘--reference’")
+                crash!(1, "you must specify a relative '--size' with '--reference'")
             }
             _ => m,
         },

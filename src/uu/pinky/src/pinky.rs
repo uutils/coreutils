@@ -234,7 +234,7 @@ fn idle_string(when: i64) -> String {
 }
 
 fn time_string(ut: &Utmpx) -> String {
-    time::strftime("%Y-%m-%d %H:%M", &ut.login_time()).unwrap()
+    time::strftime("%b %e %H:%M", &ut.login_time()).unwrap() // LC_ALL=C
 }
 
 impl Pinky {

@@ -114,7 +114,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
                     0 => Err(value),
                     _ => Ok(n),
                 })
-                .map_err(|value| format!("invalid header value ‘{}’", value))
+                .map_err(|value| format!("invalid header value '{}'", value))
         }
     }?;
 

@@ -311,7 +311,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     if !(delete_flag || squeeze_flag) && sets.len() < 2 {
         show_error!(
-            "missing operand after ‘{}’\nTry `{} --help` for more information.",
+            "missing operand after '{}'\nTry `{} --help` for more information.",
             sets[0],
             executable!()
         );

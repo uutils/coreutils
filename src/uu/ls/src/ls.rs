@@ -373,7 +373,7 @@ impl Config {
             .value_of(options::WIDTH)
             .map(|x| {
                 x.parse::<u16>().unwrap_or_else(|_e| {
-                    show_error!("invalid line width: ‘{}’", x);
+                    show_error!("invalid line width: '{}'", x);
                     exit(2);
                 })
             })
@@ -756,7 +756,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(options::time::CHANGE)
                 .short(options::time::CHANGE)
                 .help("If the long listing format (e.g., -l, -o) is being used, print the status \
-                change time (the ‘ctime’ in the inode) instead of the modification time. When \
+                change time (the 'ctime' in the inode) instead of the modification time. When \
                 explicitly sorting by time (--sort=time or -t) or when not using a long listing \
                 format, sort according to the status change time.")
                 .overrides_with_all(&[

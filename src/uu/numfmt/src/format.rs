@@ -62,7 +62,7 @@ impl<'a> Iterator for WhitespaceSplitter<'a> {
 
 fn parse_suffix(s: &str) -> Result<(f64, Option<Suffix>)> {
     if s.is_empty() {
-        return Err("invalid number: ‘’".to_string());
+        return Err("invalid number: ''".to_string());
     }
 
     let with_i = s.ends_with('i');
@@ -80,7 +80,7 @@ fn parse_suffix(s: &str) -> Result<(f64, Option<Suffix>)> {
         Some('Z') => Ok(Some((RawSuffix::Z, with_i))),
         Some('Y') => Ok(Some((RawSuffix::Y, with_i))),
         Some('0'..='9') => Ok(None),
-        _ => Err(format!("invalid suffix in input: ‘{}’", s)),
+        _ => Err(format!("invalid suffix in input: '{}'", s)),
     }?;
 
     let suffix_len = match suffix {
@@ -91,7 +91,7 @@ fn parse_suffix(s: &str) -> Result<(f64, Option<Suffix>)> {
 
     let number = s[..s.len() - suffix_len]
         .parse::<f64>()
-        .map_err(|_| format!("invalid number: ‘{}’", s))?;
+        .map_err(|_| format!("invalid number: '{}'", s))?;
 
     Ok((number, suffix))
 }

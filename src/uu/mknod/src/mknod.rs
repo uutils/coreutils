@@ -210,7 +210,7 @@ fn valid_type(tpe: String) -> Result<(), String> {
             if vec!['b', 'c', 'u', 'p'].contains(&first_char) {
                 Ok(())
             } else {
-                Err(format!("invalid device type ‘{}’", tpe))
+                Err(format!("invalid device type '{}'", tpe))
             }
         })
 }

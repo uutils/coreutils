@@ -88,7 +88,7 @@ fn eval(stack: &mut Vec<Symbol>) -> Result<bool, String> {
                     return Ok(true);
                 }
                 _ => {
-                    return Err(format!("missing argument after ‘{:?}’", op));
+                    return Err(format!("missing argument after '{:?}'", op));
                 }
             };
 
@@ -140,7 +140,7 @@ fn eval(stack: &mut Vec<Symbol>) -> Result<bool, String> {
 }
 
 fn integers(a: &OsStr, b: &OsStr, op: &OsStr) -> Result<bool, String> {
-    let format_err = |value| format!("invalid integer ‘{}’", value);
+    let format_err = |value| format!("invalid integer '{}'", value);
 
     let a = a.to_string_lossy();
     let a: i64 = a.parse().map_err(|_| format_err(a))?;
@@ -156,7 +156,7 @@ fn integers(a: &OsStr, b: &OsStr, op: &OsStr) -> Result<bool, String> {
         "-ge" => a >= b,
         "-lt" => a < b,
         "-le" => a <= b,
-        _ => return Err(format!("unknown operator ‘{}’", operator)),
+        _ => return Err(format!("unknown operator '{}'", operator)),
     })
 }
 
@@ -164,7 +164,7 @@ fn isatty(fd: &OsStr) -> Result<bool, String> {
     let fd = fd.to_string_lossy();
 
     fd.parse()
-        .map_err(|_| format!("invalid integer ‘{}’", fd))
+        .map_err(|_| format!("invalid integer '{}'", fd))
         .map(|i| {
             #[cfg(not(target_os = "redox"))]
             unsafe {
