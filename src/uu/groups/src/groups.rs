@@ -5,6 +5,13 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+//
+// ============================================================================
+// Testsuite summary for GNU coreutils 8.32.162-4eda
+// ============================================================================
+// PASS: tests/misc/groups-dash.sh
+// PASS: tests/misc/groups-process-all.sh
+// PASS: tests/misc/groups-version.sh
 
 // spell-checker:ignore (ToDO) passwd
 
@@ -14,11 +21,15 @@ use uucore::entries::{get_groups_gnu, gid2grp, Locate, Passwd};
 
 use clap::{crate_version, App, Arg};
 
-static ABOUT: &str = "display current group names";
-static OPT_USER: &str = "user";
+mod options {
+    pub const USERS: &str = "USERNAME";
+}
+static ABOUT: &str = "Print group memberships for each USERNAME or, \
+                      if no USERNAME is specified, for\nthe current process \
+                      (which may differ if the groups data‐base has changed).";
 
 fn get_usage() -> String {
-    format!("{0} [USERNAME]", executable!())
+    format!("{0} [OPTION]... [USERNAME]...", executable!())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
@@ -28,36 +39,57 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .version(crate_version!())
         .about(ABOUT)
         .usage(&usage[..])
-        .arg(Arg::with_name(OPT_USER))
+        .arg(
+            Arg::with_name(options::USERS)
+                .multiple(true)
+                .takes_value(true)
+                .value_name(options::USERS),
+        )
         .get_matches_from(args);
 
-    match matches.value_of(OPT_USER) {
-        None => {
+    let users: Vec<String> = matches
+        .values_of(options::USERS)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
+
+    let mut exit_code = 1;
+
+    if users.is_empty() {
+        println!(
+            "{}",
+            get_groups_gnu(None)
+                .unwrap()
+                .iter()
+                .map(|&gid| gid2grp(gid).unwrap_or_else(|_| {
+                    show_error!("cannot find name for group ID {}", gid);
+                    exit_code = 1;
+                    gid.to_string()
+                }))
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
+        return exit_code;
+    }
+
+    for user in users {
+        if let Ok(p) = Passwd::locate(user.as_str()) {
             println!(
-                "{}",
-                get_groups_gnu(None)
-                    .unwrap()
+                "{} : {}",
+                user,
+                p.belongs_to()
                     .iter()
-                    .map(|&g| gid2grp(g).unwrap())
+                    .map(|&gid| gid2grp(gid).unwrap_or_else(|_| {
+                        show_error!("cannot find name for group ID {}", gid);
+                        exit_code = 1;
+                        gid.to_string()
+                    }))
                     .collect::<Vec<_>>()
                     .join(" ")
             );
-            0
-        }
-        Some(user) => {
-            if let Ok(p) = Passwd::locate(user) {
-                println!(
-                    "{}",
-                    p.belongs_to()
-                        .iter()
-                        .map(|&g| gid2grp(g).unwrap())
-                        .collect::<Vec<_>>()
-                        .join(" ")
-                );
-                0
-            } else {
-                crash!(1, "'{}': no such user", user);
-            }
+        } else {
+            show_error!("'{}': no such user", user);
+            exit_code = 1;
         }
     }
+    exit_code
 }
