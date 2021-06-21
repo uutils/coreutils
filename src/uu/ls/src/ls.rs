@@ -1198,7 +1198,7 @@ fn list(locs: Vec<String>, config: Config) -> i32 {
         let p = PathBuf::from(&loc);
         let path_data = PathData::new(p, None, None, &config, true);
 
-        if !path_data.md().is_some() {
+        if path_data.md().is_none() {
             show_error!("'{}': {}", &loc, "No such file or directory");
             /*
             We found an error, the return code of ls should not be 0
