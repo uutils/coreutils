@@ -386,7 +386,7 @@ fn test_mktemp_tmpdir_one_arg() {
     let scene = TestScenario::new(util_name!());
 
     let result = scene
-        .ucmd()
+        .ucmd_keepenv()
         .arg("--tmpdir")
         .arg("apt-key-gpghome.XXXXXXXXXX")
         .succeeds();
@@ -399,7 +399,7 @@ fn test_mktemp_directory_tmpdir() {
     let scene = TestScenario::new(util_name!());
 
     let result = scene
-        .ucmd()
+        .ucmd_keepenv()
         .arg("--directory")
         .arg("--tmpdir")
         .arg("apt-key-gpghome.XXXXXXXXXX")
