@@ -361,7 +361,6 @@ impl<R: Read> Read for Input<R>
 {
     fn read(&mut self, mut buf: &mut [u8]) -> io::Result<usize>
     {
-        // Read from source, ignore read errors if conv=noerror
         match self.src.read(&mut buf)
         {
             Ok(len) =>
@@ -1052,11 +1051,11 @@ fn make_prog_line(update: &ProgUpdate) -> String
         .get_appropriate_unit(false)
         .format(1);
 
-    format!("{} bytes ({}, {}) copied, {} s, {}/s",
+    format!("{} bytes ({}, {}) copied, {:.1} s, {}/s",
             update.bytes_total,
             btotal_metric,
             btotal_bin,
-            safe_millis * 1000,
+            update.duration.as_secs_f64(),
             xfer_rate
     ).to_string()
 }
@@ -1066,7 +1065,7 @@ fn reprint_prog_line(update: &ProgUpdate)
 }
 fn print_prog_line(update: &ProgUpdate)
 {
-    eprint!("{}", make_prog_line(update));
+    eprintln!("{}", make_prog_line(update));
 }
 fn print_xfer_stats(update: &ProgUpdate)
 {
@@ -1386,6 +1385,18 @@ macro_rules! build_app (
                 "Set both input and output block sizes to BYTES. This makes ‘dd’ read and write BYTES per block, overriding any ‘ibs’ and ‘obs’ settings. In addition, if no data-transforming ‘conv’ option is specified, input is copied to the output as soon as it’s read, even
      if it is smaller than the block size.",
                 "BYTES"
+            )
+            .optopt(
+                "",
+                "iflag",
+                "read as per the comma separated symbol list of flags",
+                "FLAG"
+            )
+            .optopt(
+                "",
+                "oflag",
+                "write as per the comma separated symbol list of flags",
+                "FLAG"
             )
             .optopt(
                 "",

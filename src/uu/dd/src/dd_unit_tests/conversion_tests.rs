@@ -177,20 +177,23 @@ fn all_valid_ascii_ebcdic_ascii_roundtrip_conv_test()
 
     dd_fileout(i,o).unwrap();
 
-    let res = {
-        let res = File::open(&tmp_fname_ea).unwrap();
-        let res = BufReader::new(res);
+    // Final Comparison
+    let res = File::open(&tmp_fname_ea).unwrap();
+    let spec = File::open("./test-resources/all-valid-ascii-chars-37eff01866ba3f538421b30b7cbefcac.test").unwrap();
 
-        let mut h = Md5::new();
-        for b in res.bytes()
-        {
-            h.update([b.unwrap()]);
-        }
+    assert_eq!(res.metadata().unwrap().len(), spec.metadata().unwrap().len());
 
-        h.finalize()
-    };
+    let res = BufReader::new(res);
+    let spec = BufReader::new(spec);
 
-    assert_eq!(hex!("37eff01866ba3f538421b30b7cbefcac"), res[..]);
+    let res = BufReader::new(res);
+
+    // Check all bytes match
+    for (b_res, b_spec) in res.bytes().zip(spec.bytes())
+    {
+        assert_eq!(b_res.unwrap(),
+                   b_spec.unwrap());
+    }
 
     fs::remove_file(&tmp_fname_ae).unwrap();
     fs::remove_file(&tmp_fname_ea).unwrap();
