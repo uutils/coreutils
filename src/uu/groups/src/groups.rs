@@ -7,7 +7,7 @@
 // file that was distributed with this source code.
 //
 // ============================================================================
-// Testsuite summary for GNU coreutils 8.32.162-4eda
+// Test suite summary for GNU coreutils 8.32.162-4eda
 // ============================================================================
 // PASS: tests/misc/groups-dash.sh
 // PASS: tests/misc/groups-process-all.sh
@@ -52,7 +52,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    let mut exit_code = 1;
+    let mut exit_code = 0;
 
     if users.is_empty() {
         println!(

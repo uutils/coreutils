@@ -3,7 +3,7 @@ name = "uu_groups"
 version = "0.0.6"
 authors = ["uutils developers"]
 license = "MIT"
-description = "groups ~ (uutils) print the groups a user is in"
+description = "groups ~ (uutils) display group memberships for USERNAME"
 
 homepage = "https://github.com/uutils/coreutils"
 repository = "https://github.com/uutils/coreutils/tree/master/src/uu/groups"
