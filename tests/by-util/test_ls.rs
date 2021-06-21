@@ -2021,3 +2021,28 @@ fn test_ls_path() {
         .run()
         .stdout_is(expected_stdout);
 }
+
+#[test]
+fn test_ls_dangling_symlinks() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("temp_dir");
+    at.symlink_file("does_not_exist", "temp_dir/dangle");
+
+    scene.ucmd().arg("-L").arg("temp_dir/dangle").fails();
+    scene.ucmd().arg("-H").arg("temp_dir/dangle").fails();
+
+    scene
+        .ucmd()
+        .arg("temp_dir/dangle")
+        .succeeds()
+        .stdout_contains("dangle");
+
+    scene
+        .ucmd()
+        .arg("-Li")
+        .arg("temp_dir")
+        .succeeds() // this should fail, though at the moment, ls lacks a way to propagate errors encountered during display
+        .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
+}
