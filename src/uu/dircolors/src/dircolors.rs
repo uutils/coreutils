@@ -192,21 +192,25 @@ pub trait StrUtils {
 impl StrUtils for str {
     fn purify(&self) -> &Self {
         let mut line = self;
-        for (n, c) in self.chars().enumerate() {
-            if c != '#' {
-                continue;
-            }
-
-            // Ignore if '#' is at the beginning of line
-            if n == 0 {
-                line = &self[..0];
-                break;
-            }
-
+        for (n, _) in self
+            .as_bytes()
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| **c == b'#')
+        {
             // Ignore the content after '#'
             // only if it is preceded by at least one whitespace
-            if self.chars().nth(n - 1).unwrap().is_whitespace() {
-                line = &self[..n];
+            match self[..n].chars().last() {
+                Some(c) if c.is_whitespace() => {
+                    line = &self[..n - c.len_utf8()];
+                    break;
+                }
+                None => {
+                    // n == 0
+                    line = &self[..0];
+                    break;
+                }
+                _ => (),
             }
         }
         line.trim()
