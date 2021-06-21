@@ -56,7 +56,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 );
                 0
             } else {
-                crash!(1, "unknown user {}", user);
+                crash!(1, "'{}': no such user", user);
             }
         }
     }
