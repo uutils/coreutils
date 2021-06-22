@@ -17,7 +17,10 @@ static TEST_TEMPLATE8: &str = "tempXXXl/ate";
 #[cfg(windows)]
 static TEST_TEMPLATE8: &str = "tempXXXl\\ate";
 
+#[cfg(not(windows))]
 const TMPDIR: &str = "TMPDIR";
+#[cfg(windows)]
+const TMPDIR: &str = "TMP";
 
 #[test]
 fn test_mktemp_mktemp() {

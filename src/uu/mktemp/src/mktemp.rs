@@ -77,14 +77,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(OPT_TMPDIR)
                 .help(
                     "interpret TEMPLATE relative to DIR; if DIR is not specified, use \
-                     $TMPDIR if set, else /tmp. With this option, TEMPLATE must not \
+                     $TMPDIR ($TMP on windows) if set, else /tmp. With this option, TEMPLATE must not \
                      be an absolute name; unlike with -t, TEMPLATE may contain \
                      slashes, but mktemp creates only the final component",
                 )
                 .value_name("DIR"),
         )
         .arg(Arg::with_name(OPT_T).short(OPT_T).help(
-            "Generate a template (using the supplied prefix and TMPDIR if set) \
+            "Generate a template (using the supplied prefix and TMPDIR (TMP on windows) if set) \
              to create a filename template [deprecated]",
         ))
         .arg(
