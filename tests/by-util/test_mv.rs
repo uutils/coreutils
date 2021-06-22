@@ -729,6 +729,7 @@ fn test_mv_verbose() {
 }
 
 #[test]
+#[cfg(target_os = "linux")] // mkdir does not support -m on windows. Freebsd doesn't return a permission error either.
 fn test_mv_permission_error() {
     let scene = TestScenario::new("mkdir");
     let folder1 = "bar";
@@ -738,12 +739,11 @@ fn test_mv_permission_error() {
     scene.ucmd().arg("-m777").arg(folder2).succeeds();
 
     scene
-        .cmd_keepenv(util_name!())
+        .ccmd("mv")
         .arg(folder2)
         .arg(folder_to_move)
-        .run()
-        .stderr_str()
-        .ends_with("Permission denied");
+        .fails()
+        .stderr_contains("Permission denied");
 }
 
 // Todo:
