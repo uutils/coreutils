@@ -520,6 +520,29 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> Result<(), ()> {
     if b.compare && !need_copy(from, to, b) {
         return Ok(());
     }
+    // Declare the path here as we may need it for the verbose output below.
+    let mut backup_path = None;
+
+    // Perform backup, if any, before overwriting 'to'
+    //
+    // The codes actually making use of the backup process don't seem to agree
+    // on how best to approach the issue. (mv and ln, for example)
+    if to.exists() {
+        backup_path = backup_control::get_backup_path(
+            b.backup_mode, to, &b.suffix);
+        if let Some(ref backup_path) = backup_path {
+            // TODO!!
+            if let Err(err) = fs::rename(to, backup_path) {
+                show_error!(
+                    "install: cannot backup file '{}' to '{}': {}",
+                    to.display(),
+                    backup_path.display(),
+                    err
+                );
+                return Err(());
+            }
+        }
+    }
 
     if from.to_string_lossy() == "/dev/null" {
         /* workaround a limitation of fs::copy
@@ -627,7 +650,11 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> Result<(), ()> {
     }
 
     if b.verbose {
-        show_error!("'{}' -> '{}'", from.display(), to.display());
+        print!("'{}' -> '{}'", from.display(), to.display());
+        match backup_path {
+            Some(path) => println!(" (backup: '{}')", path.display()),
+            None => println!(),
+        }
     }
 
     Ok(())
