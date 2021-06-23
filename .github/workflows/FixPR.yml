@@ -2,6 +2,8 @@ name: FixPR
 
 # Trigger automated fixes for PRs being merged (with associated commits)
 
+# ToDO: [2021-06; rivy] change from `cargo-tree` to `cargo tree` once MSRV is >= 1.45
+
 env:
   BRANCH_TARGET: master
 
@@ -64,7 +66,7 @@ jobs:
         ## tooling info display
         echo "## tooling"
         which gcc >/dev/null 2>&1 && (gcc --version | head -1) || true
-        rustup -V
+        rustup -V 2>/dev/null
         rustup show active-toolchain
         cargo -V
         rustc -V
@@ -73,7 +75,7 @@ jobs:
         echo "## dependency list"
         cargo fetch --locked --quiet
         ## * using the 'stable' toolchain is necessary to avoid "unexpected '--filter-platform'" errors
-        RUSTUP_TOOLCHAIN=stable cargo-tree tree --frozen --all --no-dev-dependencies --no-indent --features ${{ matrix.job.features }} | grep -vE "$PWD" | sort --unique
+        RUSTUP_TOOLCHAIN=stable cargo-tree tree --locked --all --no-dev-dependencies --no-indent --features ${{ matrix.job.features }} | grep -vE "$PWD" | sort --unique
     - name: Commit any changes (to '${{ env.BRANCH_TARGET }}')
       uses: EndBug/add-and-commit@v7
       with:
