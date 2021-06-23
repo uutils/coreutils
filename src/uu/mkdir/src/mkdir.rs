@@ -40,7 +40,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(OPT_MODE)
                 .short("m")
                 .long(OPT_MODE)
-                .help("set file mode")
+                .help("set file mode (not implemented on windows)")
                 .default_value("755"),
         )
         .arg(
