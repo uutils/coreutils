@@ -107,7 +107,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(
                 Arg::with_name(OPT_BACKUP)
                 .long(OPT_BACKUP)
-                .help("(unimplemented) make a backup of each existing destination file")
+                .help("make a backup of each existing destination file")
                 .takes_value(true)
                 .require_equals(true)
                 .min_values(0)
@@ -117,7 +117,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             // TODO implement flag
             Arg::with_name(OPT_BACKUP_NO_ARG)
             .short("b")
-            .help("(unimplemented) like --backup but does not accept an argument")
+            .help("like --backup but does not accept an argument")
         )
         .arg(
             Arg::with_name(OPT_IGNORED)
@@ -190,7 +190,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(OPT_SUFFIX)
                 .short("S")
                 .long(OPT_SUFFIX)
-                .help("(unimplemented) override the usual backup suffix")
+                .help("override the usual backup suffix")
                 .value_name("SUFFIX")
                 .takes_value(true)
                 .min_values(1)
@@ -268,14 +268,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 ///
 ///
 fn check_unimplemented<'a>(matches: &ArgMatches) -> Result<(), &'a str> {
-    if matches.is_present(OPT_BACKUP) {
-        Err("--backup")
-    } else if matches.is_present(OPT_BACKUP_2) {
-        Err("-b")
-    } else if matches.is_present(OPT_BACKUP_NO_ARG) {
-    } else if matches.is_present(OPT_SUFFIX) {
-        Err("--suffix, -S")
-    } else if matches.is_present(OPT_NO_TARGET_DIRECTORY) {
+    if matches.is_present(OPT_NO_TARGET_DIRECTORY) {
         Err("--no-target-directory, -T")
     } else if matches.is_present(OPT_PRESERVE_CONTEXT) {
         Err("--preserve-context, -P")
