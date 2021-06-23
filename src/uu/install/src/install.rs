@@ -68,7 +68,7 @@ static ABOUT: &str = "Copy SOURCE to DEST or multiple SOURCE(s) to the existing
 
 static OPT_COMPARE: &str = "compare";
 static OPT_BACKUP: &str = "backup";
-static OPT_BACKUP_2: &str = "backup2";
+static OPT_BACKUP_NO_ARG: &str = "backup2";
 static OPT_DIRECTORY: &str = "directory";
 static OPT_IGNORED: &str = "ignored";
 static OPT_CREATE_LEADING: &str = "create-leading";
@@ -113,7 +113,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         )
         .arg(
             // TODO implement flag
-            Arg::with_name(OPT_BACKUP_2)
+            Arg::with_name(OPT_BACKUP_NO_ARG)
             .short("b")
             .help("(unimplemented) like --backup but does not accept an argument")
         )
@@ -270,6 +270,7 @@ fn check_unimplemented<'a>(matches: &ArgMatches) -> Result<(), &'a str> {
         Err("--backup")
     } else if matches.is_present(OPT_BACKUP_2) {
         Err("-b")
+    } else if matches.is_present(OPT_BACKUP_NO_ARG) {
     } else if matches.is_present(OPT_SUFFIX) {
         Err("--suffix, -S")
     } else if matches.is_present(OPT_NO_TARGET_DIRECTORY) {
