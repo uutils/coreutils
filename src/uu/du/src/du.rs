@@ -274,7 +274,7 @@ fn du(
             Err(e) => {
                 safe_writeln!(
                     stderr(),
-                    "{}: cannot read directory ‘{}‘: {}",
+                    "{}: cannot read directory '{}': {}",
                     options.program_name,
                     my_stat.path.display(),
                     e
@@ -318,9 +318,7 @@ fn du(
                             let error_message = "Permission denied";
                             show_error_custom_description!(description, "{}", error_message)
                         }
-                        _ => {
-                            show_error!("cannot access '{}': {}", entry.path().display(), error)
-                        }
+                        _ => show_error!("cannot access '{}': {}", entry.path().display(), error),
                     },
                 },
                 Err(error) => show_error!("{}", error),
@@ -594,9 +592,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let files = match matches.value_of(options::FILE) {
         Some(_) => matches.values_of(options::FILE).unwrap().collect(),
-        None => {
-            vec!["."]
-        }
+        None => vec!["."],
     };
 
     let block_size = u64::try_from(read_block_size(matches.value_of(options::BLOCK_SIZE))).unwrap();
@@ -693,8 +689,8 @@ Try '{} --help' for more information.",
                                                 time
                                             } else {
                                                 show_error!(
-                                                    "Invalid argument ‘{}‘ for --time.
-‘birth‘ and ‘creation‘ arguments are not supported on this platform.",
+                                                    "Invalid argument '{}' for --time.
+'birth' and 'creation' arguments are not supported on this platform.",
                                                     s
                                                 );
                                                 return 1;

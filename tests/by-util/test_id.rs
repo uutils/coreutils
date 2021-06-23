@@ -432,7 +432,7 @@ fn check_coreutil_version(util_name: &str, version_expected: &str) -> String {
     let scene = TestScenario::new(util_name);
     let version_check = scene
         .cmd_keepenv(&util_name)
-        .env("LANGUAGE", "C")
+        .env("LC_ALL", "C")
         .arg("--version")
         .run();
     version_check
@@ -476,7 +476,7 @@ fn expected_result(args: &[&str]) -> Result<CmdResult, String> {
     let scene = TestScenario::new(util_name);
     let result = scene
         .cmd_keepenv(util_name)
-        .env("LANGUAGE", "C")
+        .env("LC_ALL", "C")
         .args(args)
         .run();
 

@@ -168,7 +168,7 @@ fn test_ls_width() {
             .ucmd()
             .args(&option.split(' ').collect::<Vec<_>>())
             .fails()
-            .stderr_only("ls: invalid line width: ‘1a’");
+            .stderr_only("ls: invalid line width: '1a'");
     }
 }
 

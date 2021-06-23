@@ -1254,7 +1254,7 @@ fn copy_link(source: &Path, dest: &Path) -> CopyResult<()> {
             Some(name) => dest.join(name).into(),
             None => crash!(
                 EXIT_ERR,
-                "cannot stat ‘{}’: No such file or directory",
+                "cannot stat '{}': No such file or directory",
                 source.display()
             ),
         }

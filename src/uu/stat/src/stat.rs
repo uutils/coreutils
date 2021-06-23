@@ -24,7 +24,7 @@ use std::{cmp, fs, iter};
 macro_rules! check_bound {
     ($str: ident, $bound:expr, $beg: expr, $end: expr) => {
         if $end >= $bound {
-            return Err(format!("‘{}’: invalid directive", &$str[$beg..$end]));
+            return Err(format!("'{}': invalid directive", &$str[$beg..$end]));
         }
     };
 }

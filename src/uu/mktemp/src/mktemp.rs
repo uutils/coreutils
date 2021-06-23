@@ -154,7 +154,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     if matches.is_present(OPT_TMPDIR) && PathBuf::from(prefix).is_absolute() {
         show_error!(
-            "invalid template, ‘{}’; with --tmpdir, it may not be absolute",
+            "invalid template, '{}'; with --tmpdir, it may not be absolute",
             template
         );
         return 1;

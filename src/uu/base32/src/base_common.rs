@@ -39,7 +39,7 @@ impl Config {
             Some(mut values) => {
                 let name = values.next().unwrap();
                 if values.len() != 0 {
-                    return Err(format!("extra operand ‘{}’", name));
+                    return Err(format!("extra operand '{}'", name));
                 }
 
                 if name == "-" {
@@ -58,7 +58,7 @@ impl Config {
             .value_of(options::WRAP)
             .map(|num| {
                 num.parse::<usize>()
-                    .map_err(|e| format!("Invalid wrap size: ‘{}’: {}", num, e))
+                    .map_err(|e| format!("Invalid wrap size: '{}': {}", num, e))
             })
             .transpose()?;
 

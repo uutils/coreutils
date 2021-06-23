@@ -300,7 +300,7 @@ fn idle_string<'a>(when: i64, boottime: i64) -> Cow<'a, str> {
 }
 
 fn time_string(ut: &Utmpx) -> String {
-    time::strftime("%Y-%m-%d %H:%M", &ut.login_time()).unwrap()
+    time::strftime("%b %e %H:%M", &ut.login_time()).unwrap() // LC_ALL=C
 }
 
 #[inline]
@@ -523,8 +523,8 @@ impl Who {
             buf.push_str(&msg);
         }
         buf.push_str(&format!(" {:<12}", line));
-        // "%Y-%m-%d %H:%M"
-        let time_size = 4 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2;
+        // "%b %e %H:%M" (LC_ALL=C)
+        let time_size = 3 + 2 + 2 + 1 + 2;
         buf.push_str(&format!(" {:<1$}", time, time_size));
 
         if !self.short_output {

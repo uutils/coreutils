@@ -123,7 +123,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if matches.is_present(options::PRINT_DATABASE) {
         if !files.is_empty() {
             show_usage_error!(
-                "extra operand ‘{}’\nfile operands cannot be combined with \
+                "extra operand '{}'\nfile operands cannot be combined with \
                  --print-database (-p)",
                 files[0]
             );
@@ -155,7 +155,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         result = parse(INTERNAL_DB.lines(), out_format, "")
     } else {
         if files.len() > 1 {
-            show_usage_error!("extra operand ‘{}’", files[1]);
+            show_usage_error!("extra operand '{}'", files[1]);
             return 1;
         }
         match File::open(files[0]) {

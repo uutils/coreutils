@@ -269,7 +269,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             match Passwd::locate(users[i].as_str()) {
                 Ok(p) => Some(p),
                 Err(_) => {
-                    show_error!("‘{}’: no such user", users[i]);
+                    show_error!("'{}': no such user", users[i]);
                     exit_code = 1;
                     if i + 1 >= users.len() {
                         break;
