@@ -13,11 +13,11 @@
 //  http://www.opensource.apple.com/source/shell_cmds/shell_cmds-118/id/id.c
 //
 // * This was partially rewritten in order for stdout/stderr/exit_code
-//   to be conform with GNU coreutils (8.32) testsuite for `id`.
+//   to be conform with GNU coreutils (8.32) test suite for `id`.
 //
 // * This supports multiple users (a feature that was introduced in coreutils 8.31)
 //
-// * This passes GNU's coreutils Testsuite (8.32)
+// * This passes GNU's coreutils Test suite (8.32)
 //   for "tests/id/uid.sh" and "tests/id/zero/sh".
 //
 // * Option '--zero' does not exist for BSD's `id`, therefore '--zero' is only
@@ -26,7 +26,7 @@
 // * Help text based on BSD's `id` manpage and GNU's `id` manpage.
 //
 
-// spell-checker:ignore (ToDO) asid auditid auditinfo auid cstr egid emod euid getaudit getlogin gflag nflag pline rflag termid uflag gsflag zflag testsuite
+// spell-checker:ignore (ToDO) asid auditid auditinfo auid cstr egid emod euid getaudit getlogin gflag nflag pline rflag termid uflag gsflag zflag
 
 #![allow(non_camel_case_types)]
 #![allow(dead_code)]
@@ -242,7 +242,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         crash!(1, "cannot print only names or real IDs in default format");
     }
     if (state.zflag) && default_format {
-        // NOTE: GNU testsuite "id/zero.sh" needs this stderr output:
+        // NOTE: GNU test suite "id/zero.sh" needs this stderr output:
         crash!(1, "option --zero not permitted in default format");
     }
 
