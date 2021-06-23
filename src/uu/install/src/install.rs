@@ -106,6 +106,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 Arg::with_name(OPT_BACKUP)
                 .long(OPT_BACKUP)
                 .help("(unimplemented) make a backup of each existing destination file")
+                .takes_value(true)
+                .require_equals(true)
+                .min_values(0)
                 .value_name("CONTROL")
         )
         .arg(
