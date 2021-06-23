@@ -17,6 +17,7 @@ use file_diff::diff;
 use filetime::{set_file_times, FileTime};
 use uucore::entries::{grp2gid, usr2uid};
 use uucore::perms::{wrap_chgrp, wrap_chown, Verbosity};
+use uucore::backup_control::{self, BackupMode};
 
 use libc::{getegid, geteuid};
 use std::fs;
@@ -33,6 +34,7 @@ const DEFAULT_STRIP_PROGRAM: &str = "strip";
 pub struct Behavior {
     main_function: MainFunction,
     specified_mode: Option<u32>,
+    backup_mode: BackupMode,
     suffix: String,
     owner: String,
     group: String,
@@ -311,18 +313,17 @@ fn behavior(matches: &ArgMatches) -> Result<Behavior, i32> {
         None
     };
 
-    let backup_suffix = if matches.is_present(OPT_SUFFIX) {
-        matches.value_of(OPT_SUFFIX).ok_or(1)?
-    } else {
-        "~"
-    };
-
     let target_dir = matches.value_of(OPT_TARGET_DIRECTORY).map(|d| d.to_owned());
 
     Ok(Behavior {
         main_function,
         specified_mode,
-        suffix: backup_suffix.to_string(),
+        backup_mode: backup_control::determine_backup_mode(
+            matches.is_present(OPT_BACKUP_NO_ARG) || matches.is_present(OPT_BACKUP),
+            matches.value_of(OPT_BACKUP),
+        ),
+        suffix: backup_control::determine_backup_suffix(
+            matches.value_of(OPT_SUFFIX)),
         owner: matches.value_of(OPT_OWNER).unwrap_or("").to_string(),
         group: matches.value_of(OPT_GROUP).unwrap_or("").to_string(),
         verbose: matches.is_present(OPT_VERBOSE),
