@@ -2,6 +2,8 @@ name: FixPR
 
 # Trigger automated fixes for PRs being merged (with associated commits)
 
+# ToDO: [2021-06; rivy] change from `cargo-tree` to `cargo tree` once MSRV is >= 1.45
+
 env:
   BRANCH_TARGET: master
 
