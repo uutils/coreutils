@@ -249,7 +249,7 @@ fn test_size_and_reference() {
 
 #[test]
 fn test_error_filename_only() {
-    // truncate: you must specify either ‘--size’ or ‘--reference’
+    // truncate: you must specify either '--size' or '--reference'
     new_ucmd!().args(&["file"]).fails().stderr_contains(
         "error: The following required arguments were not provided:
     --reference <RFILE>
@@ -262,15 +262,15 @@ fn test_invalid_numbers() {
     new_ucmd!()
         .args(&["-s", "0X", "file"])
         .fails()
-        .stderr_contains("Invalid number: ‘0X’");
+        .stderr_contains("Invalid number: '0X'");
     new_ucmd!()
         .args(&["-s", "0XB", "file"])
         .fails()
-        .stderr_contains("Invalid number: ‘0XB’");
+        .stderr_contains("Invalid number: '0XB'");
     new_ucmd!()
         .args(&["-s", "0B", "file"])
         .fails()
-        .stderr_contains("Invalid number: ‘0B’");
+        .stderr_contains("Invalid number: '0B'");
 }
 
 #[test]
@@ -299,13 +299,13 @@ fn test_truncate_bytes_size() {
         .args(&["--size", "1024R", "file"])
         .fails()
         .code_is(1)
-        .stderr_only("truncate: Invalid number: ‘1024R’");
+        .stderr_only("truncate: Invalid number: '1024R'");
     #[cfg(not(target_pointer_width = "128"))]
     new_ucmd!()
         .args(&["--size", "1Y", "file"])
         .fails()
         .code_is(1)
-        .stderr_only("truncate: Invalid number: ‘1Y’: Value too large for defined data type");
+        .stderr_only("truncate: Invalid number: '1Y': Value too large for defined data type");
     #[cfg(target_pointer_width = "32")]
     {
         let sizes = ["1000G", "10T"];
@@ -315,7 +315,7 @@ fn test_truncate_bytes_size() {
                 .fails()
                 .code_is(1)
                 .stderr_only(format!(
-                    "truncate: Invalid number: ‘{}’: Value too large for defined data type",
+                    "truncate: Invalid number: '{}': Value too large for defined data type",
                     size
                 ));
         }

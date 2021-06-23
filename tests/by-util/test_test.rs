@@ -165,7 +165,7 @@ fn test_dangling_string_comparison_is_error() {
         .args(&["missing_something", "="])
         .run()
         .status_code(2)
-        .stderr_is("test: missing argument after ‘=’");
+        .stderr_is("test: missing argument after '='");
 }
 
 #[test]
@@ -265,7 +265,7 @@ fn test_float_inequality_is_error() {
         .args(&["123.45", "-ge", "6"])
         .run()
         .status_code(2)
-        .stderr_is("test: invalid integer ‘123.45’");
+        .stderr_is("test: invalid integer '123.45'");
 }
 
 #[test]
@@ -283,7 +283,7 @@ fn test_invalid_utf8_integer_compare() {
 
     cmd.run()
         .status_code(2)
-        .stderr_is("test: invalid integer ‘fo�o’");
+        .stderr_is("test: invalid integer 'fo�o'");
 
     let mut cmd = new_ucmd!();
     cmd.raw.arg(arg);
@@ -291,7 +291,7 @@ fn test_invalid_utf8_integer_compare() {
 
     cmd.run()
         .status_code(2)
-        .stderr_is("test: invalid integer ‘fo�o’");
+        .stderr_is("test: invalid integer 'fo�o'");
 }
 
 #[test]
@@ -674,7 +674,7 @@ fn test_erroneous_parenthesized_expression() {
         .args(&["a", "!=", "(", "b", "-a", "b", ")", "!=", "c"])
         .run()
         .status_code(2)
-        .stderr_is("test: extra argument ‘b’");
+        .stderr_is("test: extra argument 'b'");
 }
 
 #[test]
@@ -689,4 +689,32 @@ fn test_or_as_filename() {
 #[ignore = "GNU considers this an error"]
 fn test_string_length_and_nothing() {
     new_ucmd!().args(&["-n", "a", "-a"]).run().status_code(2);
+}
+
+#[test]
+fn test_bracket_syntax_success() {
+    let scenario = TestScenario::new("[");
+    let mut ucmd = scenario.ucmd();
+
+    ucmd.args(&["1", "-eq", "1", "]"]).succeeds();
+}
+
+#[test]
+fn test_bracket_syntax_failure() {
+    let scenario = TestScenario::new("[");
+    let mut ucmd = scenario.ucmd();
+
+    ucmd.args(&["1", "-eq", "2", "]"]).run().status_code(1);
+}
+
+#[test]
+fn test_bracket_syntax_missing_right_bracket() {
+    let scenario = TestScenario::new("[");
+    let mut ucmd = scenario.ucmd();
+
+    // Missing closing bracket takes precedence over other possible errors.
+    ucmd.args(&["1", "-eq"])
+        .run()
+        .status_code(2)
+        .stderr_is("[: missing ']'");
 }

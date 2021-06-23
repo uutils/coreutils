@@ -89,8 +89,8 @@ impl Config {
             signal,
             duration,
             preserve_status,
-            command,
             verbose,
+            command,
         }
     }
 }

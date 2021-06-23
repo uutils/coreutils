@@ -186,7 +186,7 @@ mod tests {
     fn make_os_vec(os_str: &OsStr) -> Vec<OsString> {
         vec![
             OsString::from("test"),
-            OsString::from("สวัสดี"),
+            OsString::from("สวัสดี"), // spell-checker:disable-line
             os_str.to_os_string(),
         ]
     }

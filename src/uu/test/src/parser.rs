@@ -167,7 +167,7 @@ impl Parser {
                 self.expr();
                 match self.next_token() {
                     Symbol::Literal(s) if s == ")" => (),
-                    _ => panic!("expected ‘)’"),
+                    _ => panic!("expected ')'"),
                 }
             }
         }
@@ -314,7 +314,7 @@ impl Parser {
         self.expr();
 
         match self.tokens.next() {
-            Some(token) => Err(format!("extra argument ‘{}’", token.to_string_lossy())),
+            Some(token) => Err(format!("extra argument '{}'", token.to_string_lossy())),
             None => Ok(()),
         }
     }

@@ -309,7 +309,7 @@ fn test_split_lines_number() {
         .args(&["--lines", "2fb", "file"])
         .fails()
         .code_is(1)
-        .stderr_only("split: invalid number of lines: ‘2fb’");
+        .stderr_only("split: invalid number of lines: '2fb'");
 }
 
 #[test]
@@ -318,13 +318,13 @@ fn test_split_invalid_bytes_size() {
         .args(&["-b", "1024R"])
         .fails()
         .code_is(1)
-        .stderr_only("split: invalid number of bytes: ‘1024R’");
+        .stderr_only("split: invalid number of bytes: '1024R'");
     #[cfg(not(target_pointer_width = "128"))]
     new_ucmd!()
         .args(&["-b", "1Y"])
         .fails()
         .code_is(1)
-        .stderr_only("split: invalid number of bytes: ‘1Y’: Value too large for defined data type");
+        .stderr_only("split: invalid number of bytes: '1Y': Value too large for defined data type");
     #[cfg(target_pointer_width = "32")]
     {
         let sizes = ["1000G", "10T"];
@@ -334,7 +334,7 @@ fn test_split_invalid_bytes_size() {
                 .fails()
                 .code_is(1)
                 .stderr_only(format!(
-                    "split: invalid number of bytes: ‘{}’: Value too large for defined data type",
+                    "split: invalid number of bytes: '{}': Value too large for defined data type",
                     size
                 ));
         }

@@ -158,13 +158,12 @@ fn test_users() {
         let mut v_actual: Vec<&str> = actual.split_whitespace().collect();
         let mut v_expect: Vec<&str> = expect.split_whitespace().collect();
 
-        // TODO: `--users` differs from GNU's output on macOS
-        // Diff < left / right > :
-        // <"runner   console      2021-05-20 22:03 00:08         196\n"
-        // >"runner   console      2021-05-20 22:03  old          196\n"
+        // TODO: `--users` sometimes differs from GNU's output on macOS (race condition?)
+        // actual: "runner   console      Jun 23 06:37 00:34         196\n"
+        // expect: "runner   console      Jun 23 06:37  old          196\n"
         if cfg!(target_os = "macos") {
-            v_actual.remove(4);
-            v_expect.remove(4);
+            v_actual.remove(5);
+            v_expect.remove(5);
         }
 
         assert_eq!(v_actual, v_expect);
@@ -242,7 +241,7 @@ fn expected_result(args: &[&str]) -> String {
     #[allow(clippy::needless_borrow)]
     TestScenario::new(&util_name)
         .cmd_keepenv(util_name)
-        .env("LANGUAGE", "C")
+        .env("LC_ALL", "C")
         .args(args)
         .succeeds()
         .stdout_move_str()

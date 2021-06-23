@@ -373,7 +373,7 @@ impl Config {
             .value_of(options::WIDTH)
             .map(|x| {
                 x.parse::<u16>().unwrap_or_else(|_e| {
-                    show_error!("invalid line width: ‘{}’", x);
+                    show_error!("invalid line width: '{}'", x);
                     exit(2);
                 })
             })
@@ -756,7 +756,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(options::time::CHANGE)
                 .short(options::time::CHANGE)
                 .help("If the long listing format (e.g., -l, -o) is being used, print the status \
-                change time (the ‘ctime’ in the inode) instead of the modification time. When \
+                change time (the 'ctime' in the inode) instead of the modification time. When \
                 explicitly sorting by time (--sort=time or -t) or when not using a long listing \
                 format, sort according to the status change time.")
                 .overrides_with_all(&[
@@ -1196,7 +1196,9 @@ fn list(locs: Vec<String>, config: Config) -> i32 {
 
     for loc in &locs {
         let p = PathBuf::from(&loc);
-        if !p.exists() {
+        let path_data = PathData::new(p, None, None, &config, true);
+
+        if path_data.md().is_none() {
             show_error!("'{}': {}", &loc, "No such file or directory");
             /*
             We found an error, the return code of ls should not be 0
@@ -1205,8 +1207,6 @@ fn list(locs: Vec<String>, config: Config) -> i32 {
             has_failed = true;
             continue;
         }
-
-        let path_data = PathData::new(p, None, None, &config, true);
 
         let show_dir_contents = match path_data.file_type() {
             Some(ft) => !config.directory && ft.is_dir(),
@@ -1270,7 +1270,8 @@ fn sort_entries(entries: &mut Vec<PathData>, config: &Config) {
 
 #[cfg(windows)]
 fn is_hidden(file_path: &DirEntry) -> bool {
-    let metadata = fs::metadata(file_path.path()).unwrap();
+    let path = file_path.path();
+    let metadata = fs::metadata(&path).unwrap_or_else(|_| fs::symlink_metadata(&path).unwrap());
     let attr = metadata.file_attributes();
     (attr & 0x2) > 0
 }
@@ -1331,7 +1332,7 @@ fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>)
 
 fn get_metadata(entry: &Path, dereference: bool) -> std::io::Result<Metadata> {
     if dereference {
-        entry.metadata().or_else(|_| entry.symlink_metadata())
+        entry.metadata()
     } else {
         entry.symlink_metadata()
     }
@@ -1733,7 +1734,11 @@ fn display_file_name(path: &PathData, config: &Config) -> Option<Cell> {
     #[cfg(unix)]
     {
         if config.format != Format::Long && config.inode {
-            name = get_inode(path.md()?) + " " + &name;
+            name = path
+                .md()
+                .map_or_else(|| "?".to_string(), |md| get_inode(md))
+                + " "
+                + &name;
         }
     }
 

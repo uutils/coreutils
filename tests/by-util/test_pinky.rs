@@ -106,7 +106,7 @@ fn expected_result(args: &[&str]) -> String {
     #[allow(clippy::needless_borrow)]
     TestScenario::new(&util_name)
         .cmd_keepenv(util_name)
-        .env("LANGUAGE", "C")
+        .env("LC_ALL", "C")
         .args(args)
         .succeeds()
         .stdout_move_str()

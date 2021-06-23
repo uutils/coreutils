@@ -281,7 +281,7 @@ fn parse_spec(spec: &str) -> Result<(Option<u32>, Option<u32>), String> {
     let uid = if usr_only || usr_grp {
         Some(
             Passwd::locate(args[0])
-                .map_err(|_| format!("invalid user: ‘{}’", spec))?
+                .map_err(|_| format!("invalid user: '{}'", spec))?
                 .uid(),
         )
     } else {
@@ -290,7 +290,7 @@ fn parse_spec(spec: &str) -> Result<(Option<u32>, Option<u32>), String> {
     let gid = if grp_only || usr_grp {
         Some(
             Group::locate(args[1])
-                .map_err(|_| format!("invalid group: ‘{}’", spec))?
+                .map_err(|_| format!("invalid group: '{}'", spec))?
                 .gid(),
         )
     } else {

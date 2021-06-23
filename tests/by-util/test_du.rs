@@ -355,7 +355,7 @@ fn test_du_no_permission() {
 
     let result = scene.ucmd().arg(SUB_DIR_LINKS).run(); // TODO: replace with ".fails()" once `du` is fixed
     result.stderr_contains(
-        "du: cannot read directory ‘subdir/links‘: Permission denied (os error 13)",
+        "du: cannot read directory 'subdir/links': Permission denied (os error 13)",
     );
 
     #[cfg(target_os = "linux")]
