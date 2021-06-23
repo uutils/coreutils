@@ -1325,3 +1325,16 @@ fn test_copy_dir_with_symlinks() {
     ucmd.args(&["-r", "dir", "copy"]).succeeds();
     assert_eq!(at.resolve_link("copy/file-link"), "file");
 }
+
+#[test]
+#[cfg(not(windows))]
+fn test_copy_symlink_force() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    at.symlink_file("file", "file-link");
+    at.touch("copy");
+
+    ucmd.args(&["file-link", "copy", "-f", "--no-dereference"])
+        .succeeds();
+    assert_eq!(at.resolve_link("copy"), "file");
+}
