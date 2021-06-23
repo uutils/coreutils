@@ -58,6 +58,9 @@ Haitao Li
 Inokentiy Babushkin
     Inokentiy
     Babushkin
+Jan Scheer * jhscheer
+    Jan
+    Scheer
 Jeremiah Peschka
     Jeremiah
     Peschka
