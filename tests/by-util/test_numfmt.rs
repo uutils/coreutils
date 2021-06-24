@@ -481,3 +481,27 @@ fn test_delimiter_with_padding_and_fields() {
         .succeeds()
         .stdout_only(" 1.0K| 2.0K\n");
 }
+
+#[test]
+fn test_round() {
+    for (method, exp) in &[
+        ("from-zero", ["9.1K", "-9.1K", "9.1K", "-9.1K"]),
+        ("towards-zero", ["9.0K", "-9.0K", "9.0K", "-9.0K"]),
+        ("up", ["9.1K", "-9.0K", "9.1K", "-9.0K"]),
+        ("down", ["9.0K", "-9.1K", "9.0K", "-9.1K"]),
+        ("nearest", ["9.0K", "-9.0K", "9.1K", "-9.1K"]),
+    ] {
+        new_ucmd!()
+            .args(&[
+                "--to=si",
+                &format!("--round={}", method),
+                "--",
+                "9001",
+                "-9001",
+                "9099",
+                "-9099",
+            ])
+            .succeeds()
+            .stdout_only(exp.join("\n") + "\n");
+    }
+}

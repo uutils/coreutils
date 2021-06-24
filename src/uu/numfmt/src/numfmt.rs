@@ -5,18 +5,20 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
+// spell-checker:ignore N'th M'th
+
 #[macro_use]
 extern crate uucore;
 
 use crate::format::format_and_print;
 use crate::options::*;
-use crate::units::{Result, Transform, Unit};
+use crate::units::{Result, Unit};
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use std::io::{BufRead, Write};
 use uucore::ranges::Range;
 
 pub mod format;
-mod options;
+pub mod options;
 mod units;
 
 static ABOUT: &str = "Convert numbers from/to human-readable strings";
@@ -92,10 +94,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
     let from = parse_unit(args.value_of(options::FROM).unwrap())?;
     let to = parse_unit(args.value_of(options::TO).unwrap())?;
 
-    let transform = TransformOptions {
-        from: Transform { unit: from },
-        to: Transform { unit: to },
-    };
+    let transform = TransformOptions { from, to };
 
     let padding = match args.value_of(options::PADDING) {
         Some(s) => s.parse::<isize>().map_err(|err| err.to_string()),
@@ -118,13 +117,12 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         }
     }?;
 
-    let fields = match args.value_of(options::FIELD) {
-        Some("-") => vec![Range {
+    let fields = match args.value_of(options::FIELD).unwrap() {
+        "-" => vec![Range {
             low: 1,
             high: std::usize::MAX,
         }],
-        Some(v) => Range::from_list(v)?,
-        None => unreachable!(),
+        v => Range::from_list(v)?,
     };
 
     let delimiter = args.value_of(options::DELIMITER).map_or(Ok(None), |arg| {
@@ -135,12 +133,23 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
         }
     })?;
 
+    // unwrap is fine because the argument has a default value
+    let round = match args.value_of(options::ROUND).unwrap() {
+        "up" => RoundMethod::Up,
+        "down" => RoundMethod::Down,
+        "from-zero" => RoundMethod::FromZero,
+        "towards-zero" => RoundMethod::TowardsZero,
+        "nearest" => RoundMethod::Nearest,
+        _ => unreachable!("Should be restricted by clap"),
+    };
+
     Ok(NumfmtOptions {
         transform,
         padding,
         header,
         fields,
         delimiter,
+        round,
     })
 }
 
@@ -202,6 +211,17 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .value_name("N")
                 .default_value(options::HEADER_DEFAULT)
                 .hide_default_value(true),
+        )
+        .arg(
+            Arg::with_name(options::ROUND)
+                .long(options::ROUND)
+                .help(
+                    "use METHOD for rounding when scaling; METHOD can be: up,\
+                    down, from-zero (default), towards-zero, nearest",
+                )
+                .value_name("METHOD")
+                .default_value("from-zero")
+                .possible_values(&["up", "down", "from-zero", "towards-zero", "nearest"]),
         )
         .arg(Arg::with_name(options::NUMBER).hidden(true).multiple(true))
         .get_matches_from(args);

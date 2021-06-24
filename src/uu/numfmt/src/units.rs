@@ -24,10 +24,6 @@ pub enum Unit {
     None,
 }
 
-pub struct Transform {
-    pub unit: Unit,
-}
-
 pub type Result<T> = std::result::Result<T, String>;
 
 #[derive(Clone, Copy, Debug)]
