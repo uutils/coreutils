@@ -42,6 +42,7 @@ pub struct Behavior {
     strip: bool,
     strip_program: String,
     create_leading: bool,
+    target_dir: Option<String>,
 }
 
 #[derive(Clone, Eq, PartialEq)]
@@ -194,7 +195,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(OPT_TARGET_DIRECTORY)
                 .short("t")
                 .long(OPT_TARGET_DIRECTORY)
-                .help("(unimplemented) move all SOURCE arguments into DIRECTORY")
+                .help("move all SOURCE arguments into DIRECTORY")
                 .value_name("DIRECTORY")
         )
         .arg(
@@ -268,8 +269,6 @@ fn check_unimplemented<'a>(matches: &ArgMatches) -> Result<(), &'a str> {
         Err("-b")
     } else if matches.is_present(OPT_SUFFIX) {
         Err("--suffix, -S")
-    } else if matches.is_present(OPT_TARGET_DIRECTORY) {
-        Err("--target-directory, -t")
     } else if matches.is_present(OPT_NO_TARGET_DIRECTORY) {
         Err("--no-target-directory, -T")
     } else if matches.is_present(OPT_PRESERVE_CONTEXT) {
@@ -314,6 +313,8 @@ fn behavior(matches: &ArgMatches) -> Result<Behavior, i32> {
         "~"
     };
 
+    let target_dir = matches.value_of(OPT_TARGET_DIRECTORY).map(|d| d.to_owned());
+
     Ok(Behavior {
         main_function,
         specified_mode,
@@ -330,6 +331,7 @@ fn behavior(matches: &ArgMatches) -> Result<Behavior, i32> {
                 .unwrap_or(DEFAULT_STRIP_PROGRAM),
         ),
         create_leading: matches.is_present(OPT_CREATE_LEADING),
+        target_dir,
     })
 }
 
@@ -392,16 +394,17 @@ fn is_new_file_path(path: &Path) -> bool {
 ///
 /// Returns an integer intended as a program return code.
 ///
-fn standard(paths: Vec<String>, b: Behavior) -> i32 {
-    let sources = &paths[0..paths.len() - 1]
-        .iter()
-        .map(PathBuf::from)
-        .collect::<Vec<_>>();
+fn standard(mut paths: Vec<String>, b: Behavior) -> i32 {
+    let target: PathBuf = b
+        .target_dir
+        .clone()
+        .unwrap_or_else(|| paths.pop().unwrap())
+        .into();
 
-    let target = Path::new(paths.last().unwrap());
+    let sources = &paths.iter().map(PathBuf::from).collect::<Vec<_>>();
 
     if sources.len() > 1 || (target.exists() && target.is_dir()) {
-        copy_files_into_dir(sources, &target.to_path_buf(), &b)
+        copy_files_into_dir(sources, &target, &b)
     } else {
         if let Some(parent) = target.parent() {
             if !parent.exists() && b.create_leading {
@@ -417,8 +420,8 @@ fn standard(paths: Vec<String>, b: Behavior) -> i32 {
             }
         }
 
-        if target.is_file() || is_new_file_path(target) {
-            copy_file_to_file(&sources[0], &target.to_path_buf(), &b)
+        if target.is_file() || is_new_file_path(&target) {
+            copy_file_to_file(&sources[0], &target, &b)
         } else {
             show_error!(
                 "invalid target {}: No such file or directory",

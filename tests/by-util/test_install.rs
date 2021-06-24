@@ -674,3 +674,25 @@ fn test_install_creating_leading_dir_fails_on_long_name() {
         .fails()
         .stderr_contains("failed to create");
 }
+
+#[test]
+fn test_install_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "target_dir";
+    let file1 = "source_file1";
+    let file2 = "source_file2";
+
+    at.touch(file1);
+    at.touch(file2);
+    at.mkdir(dir);
+    ucmd.arg(file1)
+        .arg(file2)
+        .arg(&format!("--target-directory={}", dir))
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file1));
+    assert!(at.file_exists(file2));
+    assert!(at.file_exists(&format!("{}/{}", dir, file1)));
+    assert!(at.file_exists(&format!("{}/{}", dir, file2)));
+}

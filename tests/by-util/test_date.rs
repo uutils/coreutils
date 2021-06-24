@@ -117,7 +117,7 @@ fn test_date_format_without_plus() {
     new_ucmd!()
         .arg("%s")
         .fails()
-        .stderr_contains("date: invalid date ‘%s’")
+        .stderr_contains("date: invalid date '%s'")
         .code_is(1);
 }
 

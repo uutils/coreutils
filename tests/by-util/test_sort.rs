@@ -28,7 +28,8 @@ fn test_helper(file_name: &str, possible_args: &[&str]) {
 fn test_buffer_sizes() {
     let buffer_sizes = ["0", "50K", "50k", "1M", "100M"];
     for buffer_size in &buffer_sizes {
-        new_ucmd!()
+        TestScenario::new(util_name!())
+            .ucmd_keepenv()
             .arg("-n")
             .arg("-S")
             .arg(buffer_size)
@@ -40,7 +41,8 @@ fn test_buffer_sizes() {
         {
             let buffer_sizes = ["1000G", "10T"];
             for buffer_size in &buffer_sizes {
-                new_ucmd!()
+                TestScenario::new(util_name!())
+                    .ucmd_keepenv()
                     .arg("-n")
                     .arg("-S")
                     .arg(buffer_size)
@@ -877,7 +879,8 @@ fn test_compress() {
 
 #[test]
 fn test_compress_fail() {
-    new_ucmd!()
+    TestScenario::new(util_name!())
+        .ucmd_keepenv()
         .args(&[
             "ext_sort.txt",
             "-n",
@@ -892,7 +895,8 @@ fn test_compress_fail() {
 
 #[test]
 fn test_merge_batches() {
-    new_ucmd!()
+    TestScenario::new(util_name!())
+        .ucmd_keepenv()
         .args(&["ext_sort.txt", "-n", "-S", "150b"])
         .succeeds()
         .stdout_only_fixture("ext_sort.expected");
@@ -900,7 +904,8 @@ fn test_merge_batches() {
 
 #[test]
 fn test_merge_batch_size() {
-    new_ucmd!()
+    TestScenario::new(util_name!())
+        .ucmd_keepenv()
         .arg("--batch-size=2")
         .arg("-m")
         .arg("--unique")

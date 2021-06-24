@@ -12,10 +12,24 @@ mod parser;
 
 use parser::{parse, Symbol};
 use std::ffi::{OsStr, OsString};
+use std::path::Path;
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    // TODO: handle being called as `[`
-    let args: Vec<_> = args.skip(1).collect();
+pub fn uumain(mut args: impl uucore::Args) -> i32 {
+    let program = args.next().unwrap_or_else(|| OsString::from("test"));
+    let binary_name = Path::new(&program)
+        .file_name()
+        .unwrap_or_else(|| OsStr::new("test"))
+        .to_string_lossy();
+    let mut args: Vec<_> = args.collect();
+
+    // If invoked via name '[', matching ']' must be in the last arg
+    if binary_name == "[" {
+        let last = args.pop();
+        if last != Some(OsString::from("]")) {
+            eprintln!("[: missing ']'");
+            return 2;
+        }
+    }
 
     let result = parse(args).and_then(|mut stack| eval(&mut stack));
 
@@ -74,7 +88,7 @@ fn eval(stack: &mut Vec<Symbol>) -> Result<bool, String> {
                     return Ok(true);
                 }
                 _ => {
-                    return Err(format!("missing argument after ‘{:?}’", op));
+                    return Err(format!("missing argument after '{:?}'", op));
                 }
             };
 
@@ -126,7 +140,7 @@ fn eval(stack: &mut Vec<Symbol>) -> Result<bool, String> {
 }
 
 fn integers(a: &OsStr, b: &OsStr, op: &OsStr) -> Result<bool, String> {
-    let format_err = |value| format!("invalid integer ‘{}’", value);
+    let format_err = |value| format!("invalid integer '{}'", value);
 
     let a = a.to_string_lossy();
     let a: i64 = a.parse().map_err(|_| format_err(a))?;
@@ -142,7 +156,7 @@ fn integers(a: &OsStr, b: &OsStr, op: &OsStr) -> Result<bool, String> {
         "-ge" => a >= b,
         "-lt" => a < b,
         "-le" => a <= b,
-        _ => return Err(format!("unknown operator ‘{}’", operator)),
+        _ => return Err(format!("unknown operator '{}'", operator)),
     })
 }
 
@@ -150,7 +164,7 @@ fn isatty(fd: &OsStr) -> Result<bool, String> {
     let fd = fd.to_string_lossy();
 
     fd.parse()
-        .map_err(|_| format!("invalid integer ‘{}’", fd))
+        .map_err(|_| format!("invalid integer '{}'", fd))
         .map(|i| {
             #[cfg(not(target_os = "redox"))]
             unsafe {

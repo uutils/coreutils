@@ -234,7 +234,7 @@ impl LineSplitter {
     fn new(settings: &Settings) -> LineSplitter {
         LineSplitter {
             lines_per_split: settings.strategy_param.parse().unwrap_or_else(|_| {
-                crash!(1, "invalid number of lines: ‘{}’", settings.strategy_param)
+                crash!(1, "invalid number of lines: '{}'", settings.strategy_param)
             }),
         }
     }

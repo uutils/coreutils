@@ -168,7 +168,7 @@ fn test_ls_width() {
             .ucmd()
             .args(&option.split(' ').collect::<Vec<_>>())
             .fails()
-            .stderr_only("ls: invalid line width: ‘1a’");
+            .stderr_only("ls: invalid line width: '1a'");
     }
 }
 
@@ -2046,4 +2046,29 @@ fn test_ls_size() {
     result.stdout_only("244 test-1\n460 test-2\n676 test-3\n896 test-4\n");
     #[cfg(windows)]
     result.stdout_only("246912 test-1  469134 test-2  691356 test-3  913578 test-4\n");
+}
+ 
+#[test]
+fn test_ls_dangling_symlinks() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("temp_dir");
+    at.symlink_file("does_not_exist", "temp_dir/dangle");
+
+    scene.ucmd().arg("-L").arg("temp_dir/dangle").fails();
+    scene.ucmd().arg("-H").arg("temp_dir/dangle").fails();
+
+    scene
+        .ucmd()
+        .arg("temp_dir/dangle")
+        .succeeds()
+        .stdout_contains("dangle");
+
+    scene
+        .ucmd()
+        .arg("-Li")
+        .arg("temp_dir")
+        .succeeds() // this should fail, though at the moment, ls lacks a way to propagate errors encountered during display
+        .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
 }

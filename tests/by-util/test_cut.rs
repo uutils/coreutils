@@ -162,7 +162,7 @@ fn test_directory_and_no_such_file() {
 fn test_equal_as_delimiter() {
     new_ucmd!()
         .args(&["-f", "2", "-d="])
-        .pipe_in("--libdir=./out/lib")
+        .pipe_in("--dir=./out/lib")
         .succeeds()
         .stdout_only("./out/lib\n");
 }
