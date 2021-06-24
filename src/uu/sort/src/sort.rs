@@ -227,11 +227,8 @@ impl GlobalSettings {
     /// afterwards.
     fn init_precomputed(&mut self) {
         self.precomputed.needs_tokens = self.selectors.iter().any(|s| s.needs_tokens);
-        self.precomputed.selections_per_line = self
-            .selectors
-            .iter()
-            .filter(|s| !s.is_default_selection)
-            .count();
+        self.precomputed.selections_per_line =
+            self.selectors.iter().filter(|s| s.needs_selection).count();
         self.precomputed.num_infos_per_line = self
             .selectors
             .iter()
@@ -362,10 +359,10 @@ impl Default for KeySettings {
         Self::from(&GlobalSettings::default())
     }
 }
-enum NumCache {
+enum Selection<'a> {
     AsF64(GeneralF64ParseResult),
-    WithInfo(NumInfo),
-    None,
+    WithNumInfo(&'a str, NumInfo),
+    Str(&'a str),
 }
 
 type Field = Range<usize>;
@@ -392,17 +389,22 @@ impl<'a> Line<'a> {
         if settings.precomputed.needs_tokens {
             tokenize(line, settings.separator, token_buffer);
         }
-        for (selection, num_cache) in settings
+        for (selector, selection) in settings
             .selectors
             .iter()
-            .filter(|selector| !selector.is_default_selection)
-            .map(|selector| selector.get_selection(line, token_buffer))
+            .map(|selector| (selector, selector.get_selection(line, token_buffer)))
         {
-            line_data.selections.push(selection);
-            match num_cache {
-                NumCache::AsF64(parsed_float) => line_data.parsed_floats.push(parsed_float),
-                NumCache::WithInfo(num_info) => line_data.num_infos.push(num_info),
-                NumCache::None => (),
+            match selection {
+                Selection::AsF64(parsed_float) => line_data.parsed_floats.push(parsed_float),
+                Selection::WithNumInfo(str, num_info) => {
+                    line_data.num_infos.push(num_info);
+                    line_data.selections.push(str);
+                }
+                Selection::Str(str) => {
+                    if selector.needs_selection {
+                        line_data.selections.push(str)
+                    }
+                }
             }
         }
         Self { line, index }
@@ -667,8 +669,10 @@ struct FieldSelector {
     to: Option<KeyPosition>,
     settings: KeySettings,
     needs_tokens: bool,
-    // Whether the selection for each line is going to be the whole line with no NumCache
-    is_default_selection: bool,
+    // Whether this selector operates on a sub-slice of a line.
+    // Selections are therefore not needed when this selector matches the whole line
+    // or the sort mode is general-numeric.
+    needs_selection: bool,
 }
 
 impl Default for FieldSelector {
@@ -678,7 +682,7 @@ impl Default for FieldSelector {
             to: None,
             settings: Default::default(),
             needs_tokens: false,
-            is_default_selection: true,
+            needs_selection: false,
         }
     }
 }
@@ -774,14 +778,12 @@ impl FieldSelector {
             Err("invalid character index 0 for the start position of a field".to_string())
         } else {
             Ok(Self {
-                is_default_selection: from.field == 1
-                    && from.char == 1
-                    && to.is_none()
-                    && !matches!(
-                        settings.mode,
-                        SortMode::Numeric | SortMode::GeneralNumeric | SortMode::HumanNumeric
-                    )
-                    && !from.ignore_blanks,
+                needs_selection: (from.field != 1
+                    || from.char != 1
+                    || to.is_some()
+                    || matches!(settings.mode, SortMode::Numeric | SortMode::HumanNumeric)
+                    || from.ignore_blanks)
+                    && !matches!(settings.mode, SortMode::GeneralNumeric),
                 needs_tokens: from.field != 1 || from.char == 0 || to.is_some(),
                 from,
                 to,
@@ -792,7 +794,7 @@ impl FieldSelector {
 
     /// Get the selection that corresponds to this selector for the line.
     /// If needs_fields returned false, tokens may be empty.
-    fn get_selection<'a>(&self, line: &'a str, tokens: &[Field]) -> (&'a str, NumCache) {
+    fn get_selection<'a>(&self, line: &'a str, tokens: &[Field]) -> Selection<'a> {
         // `get_range` expects `None` when we don't need tokens and would get confused by an empty vector.
         let tokens = if self.needs_tokens {
             Some(tokens)
@@ -800,9 +802,7 @@ impl FieldSelector {
             None
         };
         let mut range = &line[self.get_range(line, tokens)];
-        let num_cache = if self.settings.mode == SortMode::Numeric
-            || self.settings.mode == SortMode::HumanNumeric
-        {
+        if self.settings.mode == SortMode::Numeric || self.settings.mode == SortMode::HumanNumeric {
             // Parse NumInfo for this number.
             let (info, num_range) = NumInfo::parse(
                 range,
@@ -813,15 +813,14 @@ impl FieldSelector {
             );
             // Shorten the range to what we need to pass to numeric_str_cmp later.
             range = &range[num_range];
-            NumCache::WithInfo(info)
+            Selection::WithNumInfo(range, info)
         } else if self.settings.mode == SortMode::GeneralNumeric {
             // Parse this number as f64, as this is the requirement for general numeric sorting.
-            NumCache::AsF64(general_f64_parse(&range[get_leading_gen(range)]))
+            Selection::AsF64(general_f64_parse(&range[get_leading_gen(range)]))
         } else {
             // This is not a numeric sort, so we don't need a NumCache.
-            NumCache::None
-        };
-        (range, num_cache)
+            Selection::Str(range)
+        }
     }
 
     /// Look up the range in the line that corresponds to this selector.
@@ -1366,7 +1365,7 @@ fn compare_by<'a>(
     let mut num_info_index = 0;
     let mut parsed_float_index = 0;
     for selector in &global_settings.selectors {
-        let (a_str, b_str) = if selector.is_default_selection {
+        let (a_str, b_str) = if !selector.needs_selection {
             // We can select the whole line.
             (a.line, b.line)
         } else {
