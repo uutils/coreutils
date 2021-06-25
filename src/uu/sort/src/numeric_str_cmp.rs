@@ -81,28 +81,12 @@ impl NumInfo {
             }
 
             if Self::is_invalid_char(char, &mut had_decimal_pt, &parse_settings) {
-                let si_unit = if parse_settings.accept_si_units {
-                    match char {
-                        'K' | 'k' => 3,
-                        'M' => 6,
-                        'G' => 9,
-                        'T' => 12,
-                        'P' => 15,
-                        'E' => 18,
-                        'Z' => 21,
-                        'Y' => 24,
-                        _ => 0,
-                    }
-                } else {
-                    0
-                };
                 return if let Some(start) = start {
+                    let has_si_unit = parse_settings.accept_si_units
+                        && matches!(char, 'K' | 'k' | 'M' | 'G' | 'T' | 'P' | 'E' | 'Z' | 'Y');
                     (
-                        NumInfo {
-                            exponent: exponent + si_unit,
-                            sign,
-                        },
-                        start..idx,
+                        NumInfo { exponent, sign },
+                        start..if has_si_unit { idx + 1 } else { idx },
                     )
                 } else {
                     (
@@ -182,8 +166,53 @@ impl NumInfo {
     }
 }
 
-/// compare two numbers as strings without parsing them as a number first. This should be more performant and can handle numbers more precisely.
+fn get_unit(unit: Option<char>) -> u8 {
+    if let Some(unit) = unit {
+        match unit {
+            'K' | 'k' => 1,
+            'M' => 2,
+            'G' => 3,
+            'T' => 4,
+            'P' => 5,
+            'E' => 6,
+            'Z' => 7,
+            'Y' => 8,
+            _ => 0,
+        }
+    } else {
+        0
+    }
+}
+
+/// Compare two numbers according to the rules of human numeric comparison.
+/// The SI-Unit takes precedence over the actual value (i.e. 2000M < 1G).
+pub fn human_numeric_str_cmp(
+    (a, a_info): (&str, &NumInfo),
+    (b, b_info): (&str, &NumInfo),
+) -> Ordering {
+    // 1. Sign
+    if a_info.sign != b_info.sign {
+        return a_info.sign.cmp(&b_info.sign);
+    }
+    // 2. Unit
+    let a_unit = get_unit(a.chars().next_back());
+    let b_unit = get_unit(b.chars().next_back());
+    let ordering = a_unit.cmp(&b_unit);
+    if ordering != Ordering::Equal {
+        if a_info.sign == Sign::Negative {
+            ordering.reverse()
+        } else {
+            ordering
+        }
+    } else {
+        // 3. Number
+        numeric_str_cmp((a, a_info), (b, b_info))
+    }
+}
+
+/// Compare two numbers as strings without parsing them as a number first. This should be more performant and can handle numbers more precisely.
 /// NumInfo is needed to provide a fast path for most numbers.
+#[inline(always)]
 pub fn numeric_str_cmp((a, a_info): (&str, &NumInfo), (b, b_info): (&str, &NumInfo)) -> Ordering {
     // check for a difference in the sign
     if a_info.sign != b_info.sign {

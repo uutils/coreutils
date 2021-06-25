@@ -28,7 +28,7 @@ use clap::{crate_version, App, Arg};
 use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
-use numeric_str_cmp::{numeric_str_cmp, NumInfo, NumInfoParseSettings};
+use numeric_str_cmp::{human_numeric_str_cmp, numeric_str_cmp, NumInfo, NumInfoParseSettings};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use rayon::prelude::*;
@@ -1383,13 +1383,21 @@ fn compare_by<'a>(
 
         let cmp: Ordering = match settings.mode {
             SortMode::Random => random_shuffle(a_str, b_str, &global_settings.salt),
-            SortMode::Numeric | SortMode::HumanNumeric => {
+            SortMode::Numeric => {
                 let a_num_info = &a_line_data.num_infos
                     [a.index * global_settings.precomputed.num_infos_per_line + num_info_index];
                 let b_num_info = &b_line_data.num_infos
                     [b.index * global_settings.precomputed.num_infos_per_line + num_info_index];
                 num_info_index += 1;
                 numeric_str_cmp((a_str, a_num_info), (b_str, b_num_info))
+            }
+            SortMode::HumanNumeric => {
+                let a_num_info = &a_line_data.num_infos
+                    [a.index * global_settings.precomputed.num_infos_per_line + num_info_index];
+                let b_num_info = &b_line_data.num_infos
+                    [b.index * global_settings.precomputed.num_infos_per_line + num_info_index];
+                num_info_index += 1;
+                human_numeric_str_cmp((a_str, a_num_info), (b_str, b_num_info))
             }
             SortMode::GeneralNumeric => {
                 let a_float = &a_line_data.parsed_floats

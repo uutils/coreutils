@@ -456,8 +456,18 @@ fn test_human_block_sizes2() {
             .arg(human_numeric_sort_param)
             .pipe_in(input)
             .succeeds()
-            .stdout_only("-8T\n0.8M\n8981K\n21G\n909991M\n");
+            .stdout_only("-8T\n8981K\n0.8M\n909991M\n21G\n");
     }
+}
+
+#[test]
+fn test_human_numeric_zero_stable() {
+    let input = "0M\n0K\n-0K\n-P\n-0M\n";
+    new_ucmd!()
+        .arg("-hs")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(input);
 }
 
 #[test]
