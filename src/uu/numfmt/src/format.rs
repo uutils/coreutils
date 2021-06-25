@@ -79,7 +79,7 @@ fn parse_suffix(s: &str) -> Result<(f64, Option<Suffix>)> {
         Some('Y') => Some((RawSuffix::Y, with_i)),
         Some('0'..='9') => None,
         _ => return Err(format!("invalid suffix in input: '{}'", s)),
-    };  
+    };
 
     let suffix_len = match suffix {
         None => 0,
