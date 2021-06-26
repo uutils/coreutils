@@ -122,13 +122,13 @@ pub fn get_backup_path(
     }
 }
 
-pub fn simple_backup_path(path: &Path, suffix: &str) -> PathBuf {
+fn simple_backup_path(path: &Path, suffix: &str) -> PathBuf {
     let mut p = path.to_string_lossy().into_owned();
     p.push_str(suffix);
     PathBuf::from(p)
 }
 
-pub fn numbered_backup_path(path: &Path) -> PathBuf {
+fn numbered_backup_path(path: &Path) -> PathBuf {
     for i in 1_u64.. {
         let path_str = &format!("{}.~{}~", path.to_string_lossy(), i);
         let path = Path::new(path_str);
@@ -139,7 +139,7 @@ pub fn numbered_backup_path(path: &Path) -> PathBuf {
     panic!("cannot create backup")
 }
 
-pub fn existing_backup_path(path: &Path, suffix: &str) -> PathBuf {
+fn existing_backup_path(path: &Path, suffix: &str) -> PathBuf {
     let test_path_str = &format!("{}.~1~", path.to_string_lossy());
     let test_path = Path::new(test_path_str);
     if test_path.exists() {
