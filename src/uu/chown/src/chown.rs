@@ -164,7 +164,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(ARG_FILES)
                 .multiple(true)
                 .takes_value(true)
-                .required(true)
+                .required_unless(options::REFERENCE)
                 .min_values(1),
         )
         .get_matches_from(args);
@@ -173,10 +173,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let owner = matches.value_of(ARG_OWNER).unwrap();
 
     /* Then the list of files */
-    let files: Vec<String> = matches
+    let mut files: Vec<String> = matches
         .values_of(ARG_FILES)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
+    if matches.is_present(options::REFERENCE) {
+        // "--reference" and OWNER are mutually exclusive
+        // if "--reference" was used OWNER needs to be interpreted as another FILE
+        // it wasn't possible to implement this behavior directly with clap
+        files.push(owner.to_string());
+    }
 
     let preserve_root = matches.is_present(options::preserve_root::PRESERVE);
 
