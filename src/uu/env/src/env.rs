@@ -12,13 +12,15 @@
 #[macro_use]
 extern crate clap;
 
-use clap::{App, AppSettings, Arg};
-use ini::Ini;
 use std::borrow::Cow;
 use std::env;
+use std::ffi::OsString;
 use std::io::{self, Write};
 use std::iter::Iterator;
 use std::process::Command;
+
+use clap::{App, AppSettings, Arg};
+use ini::Ini;
 
 const USAGE: &str = "env [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]";
 const AFTER_HELP: &str = "\
@@ -155,11 +157,71 @@ fn create_app() -> App<'static, 'static> {
             .value_name("NAME")
             .multiple(true)
             .help("remove variable from the environment"))
+        .arg(Arg::with_name("split-string")
+            .short("S")
+            .long("split-string")
+            .takes_value(true)
+            .number_of_values(1)
+            .value_name("S")
+            .help("process and split S into separate arguments; \
+            used to pass multiple arguments on shebang lines"))
+}
+
+// From all the args passed to env, some are for env itself and some
+// are for the process to be run with env. The arguments are partitioned
+// by -S (or --split-string). For example, in
+// `env -i -S ls -c` `-i` is for env and `-c` is for ls.
+fn partition_args(args: impl uucore::Args) -> (Vec<OsString>, Vec<String>) {
+    let mut env_args = vec![];
+    let mut command_args = vec![];
+
+    let mut in_command_args = false; // are we past -S?
+    for arg in args {
+        if in_command_args {
+            command_args.push(arg.to_string_lossy().to_string());
+        } else if arg == "-S" || arg == "--split-string" {
+            in_command_args = true;
+        } else if let Some(splitted_args) = parse_split_args(&arg) {
+            in_command_args = true;
+            command_args.extend(splitted_args);
+        } else {
+            env_args.push(arg);
+        }
+    }
+    (env_args, command_args)
+}
+
+// This function splits multiple arguments in one string into a
+// vector of individual arguments.
+//
+// Use-Case: If env is used in a shebang (eg. `#!/usr/bin/env -S awk -f`)
+// then all arguments are passed as one string and -S must be used to
+// split up that string.
+//
+// Example: assert_eq!(Some(vec!["awk", "-f"]), parse_split_args("-S awk -f"))
+fn parse_split_args(arg: &OsString) -> Option<Vec<String>> {
+    let str = arg.to_string_lossy();
+    let split_arg = if str.starts_with("-S") {
+        str.trim_start_matches("-S")
+    } else if str.starts_with("--split-args") {
+        str.trim_start_matches("--split-args")
+    } else {
+        return None;
+    };
+
+    Some(
+        split_arg
+            .split_whitespace()
+            .map(|s| s.to_string())
+            .collect(),
+    )
 }
 
 fn run_env(args: impl uucore::Args) -> Result<(), i32> {
+    let (env_args, split_args) = partition_args(args);
+
     let app = create_app();
-    let matches = app.get_matches_from(args);
+    let matches = app.get_matches_from(env_args);
 
     let ignore_env = matches.is_present("ignore-environment");
     let null = matches.is_present("null");
@@ -180,7 +242,7 @@ fn run_env(args: impl uucore::Args) -> Result<(), i32> {
         files,
         unsets,
         sets: vec![],
-        program: vec![],
+        program: split_args.iter().map(|s| s.as_str()).collect(),
     };
 
     // change directory
@@ -270,5 +332,27 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     match run_env(args) {
         Ok(()) => 0,
         Err(code) => code,
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::ffi::OsString;
+
+    use super::parse_split_args;
+
+    #[test]
+    fn test_split_args() {
+        assert_eq!(None, parse_split_args(&OsString::from("-f test.env")));
+        assert_eq!(None, parse_split_args(&OsString::from("--do-something")));
+        assert_eq!(None, parse_split_args(&OsString::from("")));
+        assert_eq!(
+            Some(vec!["awk".into(), "-f".into(), "test.awk".into()]),
+            parse_split_args(&OsString::from("-S awk -f test.awk"))
+        );
+        assert_eq!(
+            Some(vec!["awk".into(), "-f".into(), "test.awk".into()]),
+            parse_split_args(&OsString::from("--split-args awk -f test.awk"))
+        );
     }
 }
