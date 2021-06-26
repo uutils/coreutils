@@ -7,7 +7,7 @@ pub static BACKUP_CONTROL_VALUES: &[&str] = &[
     "simple", "never", "numbered", "t", "existing", "nil", "none", "off",
 ];
 
-pub static BACKUP_CONTROL_LONG_HELP: &str = 
+pub static BACKUP_CONTROL_LONG_HELP: &str =
 "The backup suffix is '~', unless set with --suffix or SIMPLE_BACKUP_SUFFIX.
 The version control method may be selected via the --backup option or through
 the VERSION_CONTROL environment variable.  Here are the values:
@@ -62,6 +62,50 @@ pub fn determine_backup_mode(backup_opt_exists: bool, backup_opt: Option<&str>) 
         }
     } else {
         BackupMode::NoBackup
+    }
+}
+
+/// Match a backup option string to a `BackupMode`.
+///
+/// The GNU manual specifies that abbreviations to options are valid as long as
+/// they aren't ambiguous. This function matches the given `method` argument
+/// against all valid backup options (via `starts_with`), and returns a valid
+/// [`BackupMode`] if exactly one backup option matches the `method` given.
+///
+/// `origin` is required in order to format the generated error message
+/// properly, when an error occurs.
+///
+///
+/// # Errors
+///
+/// If `method` is ambiguous (i.e. may resolve to multiple backup modes) or
+/// invalid, an error is returned. The error contains the formatted error string
+/// which may then be passed to the [`show_usage_error`] macro.
+fn match_method(method: &str, origin: &str) -> Result<BackupMode, String> {
+    let x = vec!["simple", "never", "numbered", "t",
+                 "existing", "nil", "none", "off"];
+
+    let matches: Vec<&&str> = x.iter()
+        .filter(|val| val.starts_with(method))
+        .collect();
+    if matches.len() == 1 {
+        match *matches[0] {
+            "simple" | "never" => Ok(BackupMode::SimpleBackup),
+            "numbered" | "t" => Ok(BackupMode::NumberedBackup),
+            "existing" | "nil" => Ok(BackupMode::ExistingBackup),
+            "none" | "off" => Ok(BackupMode::NoBackup),
+            _ => panic!(),  // cannot happen as we must have exactly one match
+                            // from the list above.
+        }
+    } else {
+        let error_type = if matches.len() == 0 { "invalid" } else { "ambiguous" };
+        Err(format!(
+"{0} argument ‘{1}’ for ‘{2}’
+Valid arguments are:
+  - ‘none’, ‘off’
+  - ‘simple’, ‘never’
+  - ‘existing’, ‘nil’
+  - ‘numbered’, ‘t’", error_type, method, origin))
     }
 }
 
