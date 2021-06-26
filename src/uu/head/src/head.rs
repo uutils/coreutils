@@ -40,7 +40,7 @@ mod take;
 use lines::zlines;
 use take::take_all_but;
 
-fn app<'a>() -> App<'a, 'a> {
+pub fn uu_app() -> App<'static, 'static> {
     App::new(executable!())
         .version(crate_version!())
         .about(ABOUT)
@@ -167,7 +167,7 @@ impl HeadOptions {
 
     ///Construct options from matches
     pub fn get_from(args: impl uucore::Args) -> Result<Self, String> {
-        let matches = app().get_matches_from(arg_iterate(args)?);
+        let matches = uu_app().get_matches_from(arg_iterate(args)?);
 
         let mut options = HeadOptions::new();
 

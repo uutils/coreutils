@@ -17,13 +17,16 @@ static ABOUT: &str = "Display machine architecture";
 static SUMMARY: &str = "Determine architecture name for current machine.";
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
-        .after_help(SUMMARY)
-        .get_matches_from(args);
+    uu_app().get_matches_from(args);
 
     let uts = return_if_err!(1, PlatformInfo::new());
     println!("{}", uts.machine().trim());
     0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
+        .after_help(SUMMARY)
 }

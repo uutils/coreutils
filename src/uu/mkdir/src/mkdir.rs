@@ -32,10 +32,37 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     // Linux-specific options, not implemented
     // opts.optflag("Z", "context", "set SELinux security context" +
     // " of each created directory to CTX"),
-    let matches = App::new(executable!())
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+
+    let dirs: Vec<String> = matches
+        .values_of(ARG_DIRS)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
+
+    let verbose = matches.is_present(OPT_VERBOSE);
+    let recursive = matches.is_present(OPT_PARENTS);
+
+    // Translate a ~str in octal form to u16, default to 755
+    // Not tested on Windows
+    let mode_match = matches.value_of(OPT_MODE);
+    let mode: u16 = match mode_match {
+        Some(m) => {
+            let res: Option<u16> = u16::from_str_radix(m, 8).ok();
+            match res {
+                Some(r) => r,
+                _ => crash!(1, "no mode given"),
+            }
+        }
+        _ => 0o755_u16,
+    };
+
+    exec(dirs, recursive, mode, verbose)
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .version(crate_version!())
         .about(ABOUT)
-        .usage(&usage[..])
         .arg(
             Arg::with_name(OPT_MODE)
                 .short("m")
@@ -62,31 +89,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .takes_value(true)
                 .min_values(1),
         )
-        .get_matches_from(args);
-
-    let dirs: Vec<String> = matches
-        .values_of(ARG_DIRS)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_default();
-
-    let verbose = matches.is_present(OPT_VERBOSE);
-    let recursive = matches.is_present(OPT_PARENTS);
-
-    // Translate a ~str in octal form to u16, default to 755
-    // Not tested on Windows
-    let mode_match = matches.value_of(OPT_MODE);
-    let mode: u16 = match mode_match {
-        Some(m) => {
-            let res: Option<u16> = u16::from_str_radix(m, 8).ok();
-            match res {
-                Some(r) => r,
-                _ => crash!(1, "no mode given"),
-            }
-        }
-        _ => 0o755_u16,
-    };
-
-    exec(dirs, recursive, mode, verbose)
 }
 
 /**

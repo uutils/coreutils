@@ -35,69 +35,7 @@ fn get_usage() -> String {
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
-        .usage(&usage[..])
-        .arg(
-            Arg::with_name(OPT_CANONICALIZE)
-                .short("f")
-                .long(OPT_CANONICALIZE)
-                .help(
-                    "canonicalize by following every symlink in every component of the \
-                     given name recursively; all but the last component must exist",
-                ),
-        )
-        .arg(
-            Arg::with_name(OPT_CANONICALIZE_EXISTING)
-                .short("e")
-                .long("canonicalize-existing")
-                .help(
-                    "canonicalize by following every symlink in every component of the \
-                     given name recursively, all components must exist",
-                ),
-        )
-        .arg(
-            Arg::with_name(OPT_CANONICALIZE_MISSING)
-                .short("m")
-                .long(OPT_CANONICALIZE_MISSING)
-                .help(
-                    "canonicalize by following every symlink in every component of the \
-                     given name recursively, without requirements on components existence",
-                ),
-        )
-        .arg(
-            Arg::with_name(OPT_NO_NEWLINE)
-                .short("n")
-                .long(OPT_NO_NEWLINE)
-                .help("do not output the trailing delimiter"),
-        )
-        .arg(
-            Arg::with_name(OPT_QUIET)
-                .short("q")
-                .long(OPT_QUIET)
-                .help("suppress most error messages"),
-        )
-        .arg(
-            Arg::with_name(OPT_SILENT)
-                .short("s")
-                .long(OPT_SILENT)
-                .help("suppress most error messages"),
-        )
-        .arg(
-            Arg::with_name(OPT_VERBOSE)
-                .short("v")
-                .long(OPT_VERBOSE)
-                .help("report error message"),
-        )
-        .arg(
-            Arg::with_name(OPT_ZERO)
-                .short("z")
-                .long(OPT_ZERO)
-                .help("separate output with NUL rather than newline"),
-        )
-        .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true))
-        .get_matches_from(args);
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     let mut no_newline = matches.is_present(OPT_NO_NEWLINE);
     let use_zero = matches.is_present(OPT_ZERO);
@@ -157,6 +95,70 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
+        .arg(
+            Arg::with_name(OPT_CANONICALIZE)
+                .short("f")
+                .long(OPT_CANONICALIZE)
+                .help(
+                    "canonicalize by following every symlink in every component of the \
+                     given name recursively; all but the last component must exist",
+                ),
+        )
+        .arg(
+            Arg::with_name(OPT_CANONICALIZE_EXISTING)
+                .short("e")
+                .long("canonicalize-existing")
+                .help(
+                    "canonicalize by following every symlink in every component of the \
+                     given name recursively, all components must exist",
+                ),
+        )
+        .arg(
+            Arg::with_name(OPT_CANONICALIZE_MISSING)
+                .short("m")
+                .long(OPT_CANONICALIZE_MISSING)
+                .help(
+                    "canonicalize by following every symlink in every component of the \
+                     given name recursively, without requirements on components existence",
+                ),
+        )
+        .arg(
+            Arg::with_name(OPT_NO_NEWLINE)
+                .short("n")
+                .long(OPT_NO_NEWLINE)
+                .help("do not output the trailing delimiter"),
+        )
+        .arg(
+            Arg::with_name(OPT_QUIET)
+                .short("q")
+                .long(OPT_QUIET)
+                .help("suppress most error messages"),
+        )
+        .arg(
+            Arg::with_name(OPT_SILENT)
+                .short("s")
+                .long(OPT_SILENT)
+                .help("suppress most error messages"),
+        )
+        .arg(
+            Arg::with_name(OPT_VERBOSE)
+                .short("v")
+                .long(OPT_VERBOSE)
+                .help("report error message"),
+        )
+        .arg(
+            Arg::with_name(OPT_ZERO)
+                .short("z")
+                .long(OPT_ZERO)
+                .help("separate output with NUL rather than newline"),
+        )
+        .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true))
 }
 
 fn show(path: &Path, no_newline: bool, use_zero: bool) {

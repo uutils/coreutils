@@ -34,12 +34,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let after_help = get_long_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = uu_app()
         .usage(&usage[..])
         .after_help(&after_help[..])
-        .arg(Arg::with_name(ARG_FILES).takes_value(true).max_values(1))
         .get_matches_from(args);
 
     let files: Vec<String> = matches
@@ -65,4 +62,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
+        .arg(Arg::with_name(ARG_FILES).takes_value(true).max_values(1))
 }

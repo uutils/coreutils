@@ -180,13 +180,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let matches = App::new(executable!())
-        .name(NAME)
-        .version(crate_version!())
-        .about(SUMMARY)
-        .usage(SYNTAX)
-        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
-        .get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     let files: Vec<String> = match matches.values_of(options::FILE) {
         Some(v) => v.clone().map(|v| v.to_owned()).collect(),
@@ -216,4 +210,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     exit_code
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .name(NAME)
+        .version(crate_version!())
+        .about(SUMMARY)
+        .usage(SYNTAX)
+        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
 }

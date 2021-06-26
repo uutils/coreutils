@@ -102,9 +102,25 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let usage = get_usage();
 
-    let app = App::new("timeout")
+    let app = uu_app().usage(&usage[..]);
+
+    let matches = app.get_matches_from(args);
+
+    let config = Config::from(matches);
+    timeout(
+        &config.command,
+        config.duration,
+        config.signal,
+        config.kill_after,
+        config.foreground,
+        config.preserve_status,
+        config.verbose,
+    )
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new("timeout")
         .version(crate_version!())
-        .usage(&usage[..])
         .about(ABOUT)
         .arg(
             Arg::with_name(options::FOREGROUND)
@@ -144,20 +160,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .required(true)
                 .multiple(true)
         )
-        .setting(AppSettings::TrailingVarArg);
-
-    let matches = app.get_matches_from(args);
-
-    let config = Config::from(matches);
-    timeout(
-        &config.command,
-        config.duration,
-        config.signal,
-        config.kill_after,
-        config.foreground,
-        config.preserve_status,
-        config.verbose,
-    )
+        .setting(AppSettings::TrailingVarArg)
 }
 
 /// Remove pre-existing SIGCHLD handlers that would make waiting for the child's exit code fail.

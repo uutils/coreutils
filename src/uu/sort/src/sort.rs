@@ -944,10 +944,170 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let mut settings: GlobalSettings = Default::default();
 
-    let matches = App::new(executable!())
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+
+    settings.debug = matches.is_present(options::DEBUG);
+
+    // check whether user specified a zero terminated list of files for input, otherwise read files from args
+    let mut files: Vec<String> = if matches.is_present(options::FILES0_FROM) {
+        let files0_from: Vec<String> = matches
+            .values_of(options::FILES0_FROM)
+            .map(|v| v.map(ToString::to_string).collect())
+            .unwrap_or_default();
+
+        let mut files = Vec::new();
+        for path in &files0_from {
+            let reader = open(path.as_str());
+            let buf_reader = BufReader::new(reader);
+            for line in buf_reader.split(b'\0').flatten() {
+                files.push(
+                    std::str::from_utf8(&line)
+                        .expect("Could not parse string from zero terminated input.")
+                        .to_string(),
+                );
+            }
+        }
+        files
+    } else {
+        matches
+            .values_of(options::FILES)
+            .map(|v| v.map(ToString::to_string).collect())
+            .unwrap_or_default()
+    };
+
+    settings.mode = if matches.is_present(options::modes::HUMAN_NUMERIC)
+        || matches.value_of(options::modes::SORT) == Some("human-numeric")
+    {
+        SortMode::HumanNumeric
+    } else if matches.is_present(options::modes::MONTH)
+        || matches.value_of(options::modes::SORT) == Some("month")
+    {
+        SortMode::Month
+    } else if matches.is_present(options::modes::GENERAL_NUMERIC)
+        || matches.value_of(options::modes::SORT) == Some("general-numeric")
+    {
+        SortMode::GeneralNumeric
+    } else if matches.is_present(options::modes::NUMERIC)
+        || matches.value_of(options::modes::SORT) == Some("numeric")
+    {
+        SortMode::Numeric
+    } else if matches.is_present(options::modes::VERSION)
+        || matches.value_of(options::modes::SORT) == Some("version")
+    {
+        SortMode::Version
+    } else if matches.is_present(options::modes::RANDOM)
+        || matches.value_of(options::modes::SORT) == Some("random")
+    {
+        settings.salt = get_rand_string();
+        SortMode::Random
+    } else {
+        SortMode::Default
+    };
+
+    settings.dictionary_order = matches.is_present(options::DICTIONARY_ORDER);
+    settings.ignore_non_printing = matches.is_present(options::IGNORE_NONPRINTING);
+    if matches.is_present(options::PARALLEL) {
+        // "0" is default - threads = num of cores
+        settings.threads = matches
+            .value_of(options::PARALLEL)
+            .map(String::from)
+            .unwrap_or_else(|| "0".to_string());
+        env::set_var("RAYON_NUM_THREADS", &settings.threads);
+    }
+
+    settings.buffer_size = matches
+        .value_of(options::BUF_SIZE)
+        .map_or(DEFAULT_BUF_SIZE, |s| {
+            GlobalSettings::parse_byte_count(s)
+                .unwrap_or_else(|e| crash!(2, "{}", format_error_message(e, s, options::BUF_SIZE)))
+        });
+
+    settings.tmp_dir = matches
+        .value_of(options::TMP_DIR)
+        .map(PathBuf::from)
+        .unwrap_or_else(env::temp_dir);
+
+    settings.compress_prog = matches.value_of(options::COMPRESS_PROG).map(String::from);
+
+    if let Some(n_merge) = matches.value_of(options::BATCH_SIZE) {
+        settings.merge_batch_size = n_merge
+            .parse()
+            .unwrap_or_else(|_| crash!(2, "invalid --batch-size argument '{}'", n_merge));
+    }
+
+    settings.zero_terminated = matches.is_present(options::ZERO_TERMINATED);
+    settings.merge = matches.is_present(options::MERGE);
+
+    settings.check = matches.is_present(options::check::CHECK);
+    if matches.is_present(options::check::CHECK_SILENT)
+        || matches!(
+            matches.value_of(options::check::CHECK),
+            Some(options::check::SILENT) | Some(options::check::QUIET)
+        )
+    {
+        settings.check_silent = true;
+        settings.check = true;
+    };
+
+    settings.ignore_case = matches.is_present(options::IGNORE_CASE);
+
+    settings.ignore_leading_blanks = matches.is_present(options::IGNORE_LEADING_BLANKS);
+
+    settings.output_file = matches.value_of(options::OUTPUT).map(String::from);
+    settings.reverse = matches.is_present(options::REVERSE);
+    settings.stable = matches.is_present(options::STABLE);
+    settings.unique = matches.is_present(options::UNIQUE);
+
+    if files.is_empty() {
+        /* if no file, default to stdin */
+        files.push("-".to_owned());
+    } else if settings.check && files.len() != 1 {
+        crash!(1, "extra operand `{}' not allowed with -c", files[1])
+    }
+
+    if let Some(arg) = matches.args.get(options::SEPARATOR) {
+        let separator = arg.vals[0].to_string_lossy();
+        let separator = separator;
+        if separator.len() != 1 {
+            crash!(1, "separator must be exactly one character long");
+        }
+        settings.separator = Some(separator.chars().next().unwrap())
+    }
+
+    if let Some(values) = matches.values_of(options::KEY) {
+        for value in values {
+            settings
+                .selectors
+                .push(FieldSelector::parse(value, &settings));
+        }
+    }
+
+    if !matches.is_present(options::KEY) {
+        // add a default selector matching the whole line
+        let key_settings = KeySettings::from(&settings);
+        settings.selectors.push(
+            FieldSelector::new(
+                KeyPosition {
+                    field: 1,
+                    char: 1,
+                    ignore_blanks: key_settings.ignore_blanks,
+                },
+                None,
+                key_settings,
+            )
+            .unwrap(),
+        );
+    }
+
+    settings.init_precomputed();
+
+    exec(&files, &settings)
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .version(crate_version!())
         .about(ABOUT)
-        .usage(&usage[..])
         .arg(
             Arg::with_name(options::modes::SORT)
                 .long(options::modes::SORT)
@@ -1169,164 +1329,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("underline the parts of the line that are actually used for sorting"),
         )
         .arg(Arg::with_name(options::FILES).multiple(true).takes_value(true))
-        .get_matches_from(args);
-
-    settings.debug = matches.is_present(options::DEBUG);
-
-    // check whether user specified a zero terminated list of files for input, otherwise read files from args
-    let mut files: Vec<String> = if matches.is_present(options::FILES0_FROM) {
-        let files0_from: Vec<String> = matches
-            .values_of(options::FILES0_FROM)
-            .map(|v| v.map(ToString::to_string).collect())
-            .unwrap_or_default();
-
-        let mut files = Vec::new();
-        for path in &files0_from {
-            let reader = open(path.as_str());
-            let buf_reader = BufReader::new(reader);
-            for line in buf_reader.split(b'\0').flatten() {
-                files.push(
-                    std::str::from_utf8(&line)
-                        .expect("Could not parse string from zero terminated input.")
-                        .to_string(),
-                );
-            }
-        }
-        files
-    } else {
-        matches
-            .values_of(options::FILES)
-            .map(|v| v.map(ToString::to_string).collect())
-            .unwrap_or_default()
-    };
-
-    settings.mode = if matches.is_present(options::modes::HUMAN_NUMERIC)
-        || matches.value_of(options::modes::SORT) == Some("human-numeric")
-    {
-        SortMode::HumanNumeric
-    } else if matches.is_present(options::modes::MONTH)
-        || matches.value_of(options::modes::SORT) == Some("month")
-    {
-        SortMode::Month
-    } else if matches.is_present(options::modes::GENERAL_NUMERIC)
-        || matches.value_of(options::modes::SORT) == Some("general-numeric")
-    {
-        SortMode::GeneralNumeric
-    } else if matches.is_present(options::modes::NUMERIC)
-        || matches.value_of(options::modes::SORT) == Some("numeric")
-    {
-        SortMode::Numeric
-    } else if matches.is_present(options::modes::VERSION)
-        || matches.value_of(options::modes::SORT) == Some("version")
-    {
-        SortMode::Version
-    } else if matches.is_present(options::modes::RANDOM)
-        || matches.value_of(options::modes::SORT) == Some("random")
-    {
-        settings.salt = get_rand_string();
-        SortMode::Random
-    } else {
-        SortMode::Default
-    };
-
-    settings.dictionary_order = matches.is_present(options::DICTIONARY_ORDER);
-    settings.ignore_non_printing = matches.is_present(options::IGNORE_NONPRINTING);
-    if matches.is_present(options::PARALLEL) {
-        // "0" is default - threads = num of cores
-        settings.threads = matches
-            .value_of(options::PARALLEL)
-            .map(String::from)
-            .unwrap_or_else(|| "0".to_string());
-        env::set_var("RAYON_NUM_THREADS", &settings.threads);
-    }
-
-    settings.buffer_size = matches
-        .value_of(options::BUF_SIZE)
-        .map_or(DEFAULT_BUF_SIZE, |s| {
-            GlobalSettings::parse_byte_count(s)
-                .unwrap_or_else(|e| crash!(2, "{}", format_error_message(e, s, options::BUF_SIZE)))
-        });
-
-    settings.tmp_dir = matches
-        .value_of(options::TMP_DIR)
-        .map(PathBuf::from)
-        .unwrap_or_else(env::temp_dir);
-
-    settings.compress_prog = matches.value_of(options::COMPRESS_PROG).map(String::from);
-
-    if let Some(n_merge) = matches.value_of(options::BATCH_SIZE) {
-        settings.merge_batch_size = n_merge
-            .parse()
-            .unwrap_or_else(|_| crash!(2, "invalid --batch-size argument '{}'", n_merge));
-    }
-
-    settings.zero_terminated = matches.is_present(options::ZERO_TERMINATED);
-    settings.merge = matches.is_present(options::MERGE);
-
-    settings.check = matches.is_present(options::check::CHECK);
-    if matches.is_present(options::check::CHECK_SILENT)
-        || matches!(
-            matches.value_of(options::check::CHECK),
-            Some(options::check::SILENT) | Some(options::check::QUIET)
-        )
-    {
-        settings.check_silent = true;
-        settings.check = true;
-    };
-
-    settings.ignore_case = matches.is_present(options::IGNORE_CASE);
-
-    settings.ignore_leading_blanks = matches.is_present(options::IGNORE_LEADING_BLANKS);
-
-    settings.output_file = matches.value_of(options::OUTPUT).map(String::from);
-    settings.reverse = matches.is_present(options::REVERSE);
-    settings.stable = matches.is_present(options::STABLE);
-    settings.unique = matches.is_present(options::UNIQUE);
-
-    if files.is_empty() {
-        /* if no file, default to stdin */
-        files.push("-".to_owned());
-    } else if settings.check && files.len() != 1 {
-        crash!(1, "extra operand `{}' not allowed with -c", files[1])
-    }
-
-    if let Some(arg) = matches.args.get(options::SEPARATOR) {
-        let separator = arg.vals[0].to_string_lossy();
-        let separator = separator;
-        if separator.len() != 1 {
-            crash!(1, "separator must be exactly one character long");
-        }
-        settings.separator = Some(separator.chars().next().unwrap())
-    }
-
-    if let Some(values) = matches.values_of(options::KEY) {
-        for value in values {
-            settings
-                .selectors
-                .push(FieldSelector::parse(value, &settings));
-        }
-    }
-
-    if !matches.is_present(options::KEY) {
-        // add a default selector matching the whole line
-        let key_settings = KeySettings::from(&settings);
-        settings.selectors.push(
-            FieldSelector::new(
-                KeyPosition {
-                    field: 1,
-                    char: 1,
-                    ignore_blanks: key_settings.ignore_blanks,
-                },
-                None,
-                key_settings,
-            )
-            .unwrap(),
-        );
-    }
-
-    settings.init_precomputed();
-
-    exec(&files, &settings)
 }
 
 fn exec(files: &[String], settings: &GlobalSettings) -> i32 {

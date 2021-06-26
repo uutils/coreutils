@@ -52,10 +52,25 @@ fn get_usage() -> String {
 }
 fn execute(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
-    let matches = App::new(executable!())
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+
+    match matches.value_of(OPT_HOST) {
+        None => display_hostname(&matches),
+        Some(host) => {
+            if let Err(err) = hostname::set(host) {
+                show_error!("{}", err);
+                1
+            } else {
+                0
+            }
+        }
+    }
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .version(crate_version!())
         .about(ABOUT)
-        .usage(&usage[..])
         .arg(
             Arg::with_name(OPT_DOMAIN)
                 .short("d")
@@ -80,19 +95,6 @@ fn execute(args: impl uucore::Args) -> i32 {
              possible",
         ))
         .arg(Arg::with_name(OPT_HOST))
-        .get_matches_from(args);
-
-    match matches.value_of(OPT_HOST) {
-        None => display_hostname(&matches),
-        Some(host) => {
-            if let Err(err) = hostname::set(host) {
-                show_error!("{}", err);
-                1
-            } else {
-                0
-            }
-        }
-    }
 }
 
 fn display_hostname(matches: &ArgMatches) -> i32 {

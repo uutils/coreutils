@@ -214,7 +214,45 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let clap_opts = clap::App::new(executable!())
+    let clap_opts = uu_app();
+
+    let clap_matches = clap_opts
+        .clone() // Clone to reuse clap_opts to print help
+        .get_matches_from(args.clone());
+
+    let od_options = match OdOptions::new(clap_matches, args) {
+        Err(s) => {
+            crash!(1, "{}", s);
+        }
+        Ok(o) => o,
+    };
+
+    let mut input_offset =
+        InputOffset::new(od_options.radix, od_options.skip_bytes, od_options.label);
+
+    let mut input = open_input_peek_reader(
+        &od_options.input_strings,
+        od_options.skip_bytes,
+        od_options.read_bytes,
+    );
+    let mut input_decoder = InputDecoder::new(
+        &mut input,
+        od_options.line_bytes,
+        PEEK_BUFFER_SIZE,
+        od_options.byte_order,
+    );
+
+    let output_info = OutputInfo::new(
+        od_options.line_bytes,
+        &od_options.formats[..],
+        od_options.output_duplicates,
+    );
+
+    odfunc(&mut input_offset, &mut input_decoder, &output_info)
+}
+
+pub fn uu_app() -> clap::App<'static, 'static> {
+    clap::App::new(executable!())
         .version(crate_version!())
         .about(ABOUT)
         .usage(USAGE)
@@ -434,41 +472,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             AppSettings::DontDelimitTrailingValues,
             AppSettings::DisableVersion,
             AppSettings::DeriveDisplayOrder,
-        ]);
-
-    let clap_matches = clap_opts
-        .clone() // Clone to reuse clap_opts to print help
-        .get_matches_from(args.clone());
-
-    let od_options = match OdOptions::new(clap_matches, args) {
-        Err(s) => {
-            crash!(1, "{}", s);
-        }
-        Ok(o) => o,
-    };
-
-    let mut input_offset =
-        InputOffset::new(od_options.radix, od_options.skip_bytes, od_options.label);
-
-    let mut input = open_input_peek_reader(
-        &od_options.input_strings,
-        od_options.skip_bytes,
-        od_options.read_bytes,
-    );
-    let mut input_decoder = InputDecoder::new(
-        &mut input,
-        od_options.line_bytes,
-        PEEK_BUFFER_SIZE,
-        od_options.byte_order,
-    );
-
-    let output_info = OutputInfo::new(
-        od_options.line_bytes,
-        &od_options.formats[..],
-        od_options.output_duplicates,
-    );
-
-    odfunc(&mut input_offset, &mut input_decoder, &output_info)
+        ])
 }
 
 /// Loops through the input line by line, calling print_bytes to take care of the output.

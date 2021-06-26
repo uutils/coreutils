@@ -70,11 +70,64 @@ fn get_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
+    let matches = uu_app()
+        .after_help(&*format!(
+            "{}\n{}",
+            LONG_HELP,
+            backup_control::BACKUP_CONTROL_LONG_HELP
+        ))
+        .usage(&usage[..])
+        .get_matches_from(args);
+
+    let files: Vec<String> = matches
+        .values_of(ARG_FILES)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
+
+    let overwrite_mode = determine_overwrite_mode(&matches);
+    let backup_mode = backup_control::determine_backup_mode(
+        matches.is_present(OPT_BACKUP_NO_ARG) || matches.is_present(OPT_BACKUP),
+        matches.value_of(OPT_BACKUP),
+    );
+
+    if overwrite_mode == OverwriteMode::NoClobber && backup_mode != BackupMode::NoBackup {
+        show_usage_error!("options --backup and --no-clobber are mutually exclusive");
+        return 1;
+    }
+
+    let backup_suffix = backup_control::determine_backup_suffix(matches.value_of(OPT_SUFFIX));
+
+    let behavior = Behavior {
+        overwrite: overwrite_mode,
+        backup: backup_mode,
+        suffix: backup_suffix,
+        update: matches.is_present(OPT_UPDATE),
+        target_dir: matches.value_of(OPT_TARGET_DIRECTORY).map(String::from),
+        no_target_dir: matches.is_present(OPT_NO_TARGET_DIRECTORY),
+        verbose: matches.is_present(OPT_VERBOSE),
+    };
+
+    let paths: Vec<PathBuf> = {
+        fn strip_slashes(p: &Path) -> &Path {
+            p.components().as_path()
+        }
+        let to_owned = |p: &Path| p.to_owned();
+        let paths = files.iter().map(Path::new);
+
+        if matches.is_present(OPT_STRIP_TRAILING_SLASHES) {
+            paths.map(strip_slashes).map(to_owned).collect()
+        } else {
+            paths.map(to_owned).collect()
+        }
+    };
+
+    exec(&paths[..], behavior)
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .version(crate_version!())
         .about(ABOUT)
-        .after_help(&*format!("{}\n{}", LONG_HELP, backup_control::BACKUP_CONTROL_LONG_HELP))
-        .usage(&usage[..])
     .arg(
             Arg::with_name(OPT_BACKUP)
             .long(OPT_BACKUP)
@@ -153,51 +206,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             .min_values(2)
             .required(true)
         )
-    .get_matches_from(args);
-
-    let files: Vec<String> = matches
-        .values_of(ARG_FILES)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_default();
-
-    let overwrite_mode = determine_overwrite_mode(&matches);
-    let backup_mode = backup_control::determine_backup_mode(
-        matches.is_present(OPT_BACKUP_NO_ARG) || matches.is_present(OPT_BACKUP),
-        matches.value_of(OPT_BACKUP),
-    );
-
-    if overwrite_mode == OverwriteMode::NoClobber && backup_mode != BackupMode::NoBackup {
-        show_usage_error!("options --backup and --no-clobber are mutually exclusive");
-        return 1;
-    }
-
-    let backup_suffix = backup_control::determine_backup_suffix(matches.value_of(OPT_SUFFIX));
-
-    let behavior = Behavior {
-        overwrite: overwrite_mode,
-        backup: backup_mode,
-        suffix: backup_suffix,
-        update: matches.is_present(OPT_UPDATE),
-        target_dir: matches.value_of(OPT_TARGET_DIRECTORY).map(String::from),
-        no_target_dir: matches.is_present(OPT_NO_TARGET_DIRECTORY),
-        verbose: matches.is_present(OPT_VERBOSE),
-    };
-
-    let paths: Vec<PathBuf> = {
-        fn strip_slashes(p: &Path) -> &Path {
-            p.components().as_path()
-        }
-        let to_owned = |p: &Path| p.to_owned();
-        let paths = files.iter().map(Path::new);
-
-        if matches.is_present(OPT_STRIP_TRAILING_SLASHES) {
-            paths.map(strip_slashes).map(to_owned).collect()
-        } else {
-            paths.map(to_owned).collect()
-        }
-    };
-
-    exec(&paths[..], behavior)
 }
 
 fn determine_overwrite_mode(matches: &ArgMatches) -> OverwriteMode {

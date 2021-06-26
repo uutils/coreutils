@@ -1,3 +1,5 @@
+use clap::App;
+
 //  * This file is part of the uutils coreutils package.
 //  *
 //  * (c) Jordi Boggiano <j.boggiano@seld.be>
@@ -15,7 +17,7 @@ extern crate uucore;
 mod platform;
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let app = app_from_crate!();
+    let app = uu_app();
 
     if let Err(err) = app.get_matches_from_safe(args) {
         if err.kind == clap::ErrorKind::HelpDisplayed
@@ -32,6 +34,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
         0
     }
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    app_from_crate!()
 }
 
 pub fn exec() {

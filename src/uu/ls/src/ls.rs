@@ -558,10 +558,22 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let usage = get_usage();
 
-    let app = App::new(executable!())
+    let app = uu_app().usage(&usage[..]);
+
+    let matches = app.get_matches_from(args);
+
+    let locs = matches
+        .values_of(options::PATHS)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_else(|| vec![String::from(".")]);
+
+    list(locs, Config::from(matches))
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .version(crate_version!())
         .about(ABOUT)
-        .usage(&usage[..])
 
         // Format arguments
         .arg(
@@ -1095,16 +1107,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     // Positional arguments
         .arg(Arg::with_name(options::PATHS).multiple(true).takes_value(true))
 
-        .after_help(AFTER_HELP);
-
-    let matches = app.get_matches_from(args);
-
-    let locs = matches
-        .values_of(options::PATHS)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_else(|| vec![String::from(".")]);
-
-    list(locs, Config::from(matches))
+        .after_help(AFTER_HELP)
 }
 
 /// Represents a Path along with it's associated data

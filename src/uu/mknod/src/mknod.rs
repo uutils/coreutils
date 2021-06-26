@@ -89,48 +89,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     // opts.optflag("Z", "", "set the SELinux security context to default type");
     // opts.optopt("", "context", "like -Z, or if CTX is specified then set the SELinux or SMACK security context to CTX");
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .usage(USAGE)
-        .after_help(LONG_HELP)
-        .about(ABOUT)
-        .arg(
-            Arg::with_name("mode")
-                .short("m")
-                .long("mode")
-                .value_name("MODE")
-                .help("set file permission bits to MODE, not a=rw - umask"),
-        )
-        .arg(
-            Arg::with_name("name")
-                .value_name("NAME")
-                .help("name of the new file")
-                .required(true)
-                .index(1),
-        )
-        .arg(
-            Arg::with_name("type")
-                .value_name("TYPE")
-                .help("type of the new file (b, c, u or p)")
-                .required(true)
-                .validator(valid_type)
-                .index(2),
-        )
-        .arg(
-            Arg::with_name("major")
-                .value_name("MAJOR")
-                .help("major file type")
-                .validator(valid_u64)
-                .index(3),
-        )
-        .arg(
-            Arg::with_name("minor")
-                .value_name("MINOR")
-                .help("minor file type")
-                .validator(valid_u64)
-                .index(4),
-        )
-        .get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     let mode = match get_mode(&matches) {
         Ok(mode) => mode,
@@ -183,6 +142,50 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             }
         }
     }
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .usage(USAGE)
+        .after_help(LONG_HELP)
+        .about(ABOUT)
+        .arg(
+            Arg::with_name("mode")
+                .short("m")
+                .long("mode")
+                .value_name("MODE")
+                .help("set file permission bits to MODE, not a=rw - umask"),
+        )
+        .arg(
+            Arg::with_name("name")
+                .value_name("NAME")
+                .help("name of the new file")
+                .required(true)
+                .index(1),
+        )
+        .arg(
+            Arg::with_name("type")
+                .value_name("TYPE")
+                .help("type of the new file (b, c, u or p)")
+                .required(true)
+                .validator(valid_type)
+                .index(2),
+        )
+        .arg(
+            Arg::with_name("major")
+                .value_name("MAJOR")
+                .help("major file type")
+                .validator(valid_u64)
+                .index(3),
+        )
+        .arg(
+            Arg::with_name("minor")
+                .value_name("MINOR")
+                .help("minor file type")
+                .validator(valid_u64)
+                .index(4),
+        )
 }
 
 fn get_mode(matches: &ArgMatches) -> Result<mode_t, String> {

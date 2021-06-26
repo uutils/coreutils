@@ -33,10 +33,29 @@ fn get_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+
+    let dirs: Vec<String> = matches
+        .values_of(ARG_DIRS)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
+
+    let ignore = matches.is_present(OPT_IGNORE_FAIL_NON_EMPTY);
+    let parents = matches.is_present(OPT_PARENTS);
+    let verbose = matches.is_present(OPT_VERBOSE);
+
+    match remove(dirs, ignore, parents, verbose) {
+        Ok(()) => ( /* pass */ ),
+        Err(e) => return e,
+    }
+
+    0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .version(crate_version!())
         .about(ABOUT)
-        .usage(&usage[..])
         .arg(
             Arg::with_name(OPT_IGNORE_FAIL_NON_EMPTY)
                 .long(OPT_IGNORE_FAIL_NON_EMPTY)
@@ -64,23 +83,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .min_values(1)
                 .required(true),
         )
-        .get_matches_from(args);
-
-    let dirs: Vec<String> = matches
-        .values_of(ARG_DIRS)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_default();
-
-    let ignore = matches.is_present(OPT_IGNORE_FAIL_NON_EMPTY);
-    let parents = matches.is_present(OPT_PARENTS);
-    let verbose = matches.is_present(OPT_VERBOSE);
-
-    match remove(dirs, ignore, parents, verbose) {
-        Ok(()) => ( /* pass */ ),
-        Err(e) => return e,
-    }
-
-    0
 }
 
 fn remove(dirs: Vec<String>, ignore: bool, parents: bool, verbose: bool) -> Result<(), i32> {

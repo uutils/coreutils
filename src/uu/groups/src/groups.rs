@@ -35,17 +35,7 @@ fn get_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
-        .usage(&usage[..])
-        .arg(
-            Arg::with_name(options::USERS)
-                .multiple(true)
-                .takes_value(true)
-                .value_name(options::USERS),
-        )
-        .get_matches_from(args);
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     let users: Vec<String> = matches
         .values_of(options::USERS)
@@ -92,4 +82,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     }
     exit_code
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
+        .arg(
+            Arg::with_name(options::USERS)
+                .multiple(true)
+                .takes_value(true)
+                .value_name(options::USERS),
+        )
 }

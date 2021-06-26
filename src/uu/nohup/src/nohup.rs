@@ -45,19 +45,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
-        .usage(&usage[..])
-        .after_help(LONG_HELP)
-        .arg(
-            Arg::with_name(options::CMD)
-                .hidden(true)
-                .required(true)
-                .multiple(true),
-        )
-        .setting(AppSettings::TrailingVarArg)
-        .get_matches_from(args);
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     replace_fds();
 
@@ -80,6 +68,20 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         libc::ENOENT => EXIT_ENOENT,
         _ => EXIT_CANNOT_INVOKE,
     }
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
+        .after_help(LONG_HELP)
+        .arg(
+            Arg::with_name(options::CMD)
+                .hidden(true)
+                .required(true)
+                .multiple(true),
+        )
+        .setting(AppSettings::TrailingVarArg)
 }
 
 fn replace_fds() {

@@ -249,46 +249,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let after_help = get_long_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = uu_app()
         .usage(&usage[..])
         .after_help(&after_help[..])
-        .arg(
-            Arg::with_name(options::COMPLEMENT)
-                // .visible_short_alias('C')  // TODO: requires clap "3.0.0-beta.2"
-                .short("c")
-                .long(options::COMPLEMENT)
-                .help("use the complement of SET1"),
-        )
-        .arg(
-            Arg::with_name("C") // work around for `Arg::visible_short_alias`
-                .short("C")
-                .help("same as -c"),
-        )
-        .arg(
-            Arg::with_name(options::DELETE)
-                .short("d")
-                .long(options::DELETE)
-                .help("delete characters in SET1, do not translate"),
-        )
-        .arg(
-            Arg::with_name(options::SQUEEZE)
-                .long(options::SQUEEZE)
-                .short("s")
-                .help(
-                    "replace each sequence  of  a  repeated  character  that  is
-  listed  in the last specified SET, with a single occurrence
-  of that character",
-                ),
-        )
-        .arg(
-            Arg::with_name(options::TRUNCATE)
-                .long(options::TRUNCATE)
-                .short("t")
-                .help("first truncate SET1 to length of SET2"),
-        )
-        .arg(Arg::with_name(options::SETS).multiple(true))
         .get_matches_from(args);
 
     let delete_flag = matches.is_present(options::DELETE);
@@ -357,4 +320,45 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
+        .arg(
+            Arg::with_name(options::COMPLEMENT)
+                // .visible_short_alias('C')  // TODO: requires clap "3.0.0-beta.2"
+                .short("c")
+                .long(options::COMPLEMENT)
+                .help("use the complement of SET1"),
+        )
+        .arg(
+            Arg::with_name("C") // work around for `Arg::visible_short_alias`
+                .short("C")
+                .help("same as -c"),
+        )
+        .arg(
+            Arg::with_name(options::DELETE)
+                .short("d")
+                .long(options::DELETE)
+                .help("delete characters in SET1, do not translate"),
+        )
+        .arg(
+            Arg::with_name(options::SQUEEZE)
+                .long(options::SQUEEZE)
+                .short("s")
+                .help(
+                    "replace each sequence  of  a  repeated  character  that  is
+  listed  in the last specified SET, with a single occurrence
+  of that character",
+                ),
+        )
+        .arg(
+            Arg::with_name(options::TRUNCATE)
+                .long(options::TRUNCATE)
+                .short("t")
+                .help("first truncate SET1 to length of SET2"),
+        )
+        .arg(Arg::with_name(options::SETS).multiple(true))
 }

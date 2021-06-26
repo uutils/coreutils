@@ -97,11 +97,71 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let long_usage = get_long_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = uu_app()
         .usage(&usage[..])
         .after_help(&long_usage[..])
+        .get_matches_from(args);
+
+    /* the list of files */
+
+    let paths: Vec<PathBuf> = matches
+        .values_of(ARG_FILES)
+        .unwrap()
+        .map(PathBuf::from)
+        .collect();
+
+    let overwrite_mode = if matches.is_present(options::FORCE) {
+        OverwriteMode::Force
+    } else if matches.is_present(options::INTERACTIVE) {
+        OverwriteMode::Interactive
+    } else {
+        OverwriteMode::NoClobber
+    };
+
+    let backup_mode = if matches.is_present(options::B) {
+        BackupMode::ExistingBackup
+    } else if matches.is_present(options::BACKUP) {
+        match matches.value_of(options::BACKUP) {
+            None => BackupMode::ExistingBackup,
+            Some(mode) => match mode {
+                "simple" | "never" => BackupMode::SimpleBackup,
+                "numbered" | "t" => BackupMode::NumberedBackup,
+                "existing" | "nil" => BackupMode::ExistingBackup,
+                "none" | "off" => BackupMode::NoBackup,
+                _ => panic!(), // cannot happen as it is managed by clap
+            },
+        }
+    } else {
+        BackupMode::NoBackup
+    };
+
+    let backup_suffix = if matches.is_present(options::SUFFIX) {
+        matches.value_of(options::SUFFIX).unwrap()
+    } else {
+        "~"
+    };
+
+    let settings = Settings {
+        overwrite: overwrite_mode,
+        backup: backup_mode,
+        suffix: backup_suffix.to_string(),
+        symbolic: matches.is_present(options::SYMBOLIC),
+        relative: matches.is_present(options::RELATIVE),
+        target_dir: matches
+            .value_of(options::TARGET_DIRECTORY)
+            .map(String::from),
+        no_target_dir: matches.is_present(options::NO_TARGET_DIRECTORY),
+        no_dereference: matches.is_present(options::NO_DEREFERENCE),
+        verbose: matches.is_present(options::VERBOSE),
+    };
+
+    exec(&paths[..], &settings)
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
         .arg(Arg::with_name(options::B).short(options::B).help(
             "make a backup of each file that would otherwise be overwritten or \
              removed",
@@ -198,62 +258,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .required(true)
                 .min_values(1),
         )
-        .get_matches_from(args);
-
-    /* the list of files */
-
-    let paths: Vec<PathBuf> = matches
-        .values_of(ARG_FILES)
-        .unwrap()
-        .map(PathBuf::from)
-        .collect();
-
-    let overwrite_mode = if matches.is_present(options::FORCE) {
-        OverwriteMode::Force
-    } else if matches.is_present(options::INTERACTIVE) {
-        OverwriteMode::Interactive
-    } else {
-        OverwriteMode::NoClobber
-    };
-
-    let backup_mode = if matches.is_present(options::B) {
-        BackupMode::ExistingBackup
-    } else if matches.is_present(options::BACKUP) {
-        match matches.value_of(options::BACKUP) {
-            None => BackupMode::ExistingBackup,
-            Some(mode) => match mode {
-                "simple" | "never" => BackupMode::SimpleBackup,
-                "numbered" | "t" => BackupMode::NumberedBackup,
-                "existing" | "nil" => BackupMode::ExistingBackup,
-                "none" | "off" => BackupMode::NoBackup,
-                _ => panic!(), // cannot happen as it is managed by clap
-            },
-        }
-    } else {
-        BackupMode::NoBackup
-    };
-
-    let backup_suffix = if matches.is_present(options::SUFFIX) {
-        matches.value_of(options::SUFFIX).unwrap()
-    } else {
-        "~"
-    };
-
-    let settings = Settings {
-        overwrite: overwrite_mode,
-        backup: backup_mode,
-        suffix: backup_suffix.to_string(),
-        symbolic: matches.is_present(options::SYMBOLIC),
-        relative: matches.is_present(options::RELATIVE),
-        target_dir: matches
-            .value_of(options::TARGET_DIRECTORY)
-            .map(String::from),
-        no_target_dir: matches.is_present(options::NO_TARGET_DIRECTORY),
-        no_dereference: matches.is_present(options::NO_DEREFERENCE),
-        verbose: matches.is_present(options::VERBOSE),
-    };
-
-    exec(&paths[..], &settings)
 }
 
 fn exec(files: &[PathBuf], settings: &Settings) -> i32 {

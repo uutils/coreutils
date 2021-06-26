@@ -290,13 +290,10 @@ static DEFAULT_ATTRIBUTES: &[Attribute] = &[
     Attribute::Timestamps,
 ];
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
-    let matches = App::new(executable!())
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .version(crate_version!())
         .about(ABOUT)
-        .after_help(&*format!("{}\n{}", LONG_HELP, backup_control::BACKUP_CONTROL_LONG_HELP))
-        .usage(&usage[..])
         .arg(Arg::with_name(options::TARGET_DIRECTORY)
              .short("t")
              .conflicts_with(options::NO_TARGET_DIRECTORY)
@@ -378,7 +375,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(Arg::with_name(options::UPDATE)
              .short("u")
              .long(options::UPDATE)
-             .help("copy only when the SOURCE file is newer than the destination file\
+             .help("copy only when the SOURCE file is newer than the destination file \
                     or when the destination file is missing"))
         .arg(Arg::with_name(options::REFLINK)
              .long(options::REFLINK)
@@ -401,7 +398,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
              .conflicts_with_all(&[options::PRESERVE_DEFAULT_ATTRIBUTES, options::NO_PRESERVE])
              // -d sets this option
              // --archive sets this option
-             .help("Preserve the specified attributes (default: mode(unix only),ownership,timestamps),\
+             .help("Preserve the specified attributes (default: mode (unix only), ownership, timestamps), \
                     if possible additional attributes: context, links, xattr, all"))
         .arg(Arg::with_name(options::PRESERVE_DEFAULT_ATTRIBUTES)
              .short("-p")
@@ -464,6 +461,17 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
         .arg(Arg::with_name(options::PATHS)
              .multiple(true))
+}
+
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let usage = get_usage();
+    let matches = uu_app()
+        .after_help(&*format!(
+            "{}\n{}",
+            LONG_HELP,
+            backup_control::BACKUP_CONTROL_LONG_HELP
+        ))
+        .usage(&usage[..])
         .get_matches_from(args);
 
     let options = crash_if_err!(EXIT_ERR, Options::from_matches(&matches));

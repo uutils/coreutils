@@ -98,10 +98,35 @@ fn get_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+
+    let paths: Vec<String> = matches
+        .values_of(ARG_FILES)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
+
+    if let Err(s) = check_unimplemented(&matches) {
+        show_error!("Unimplemented feature: {}", s);
+        return 2;
+    }
+
+    let behavior = match behavior(&matches) {
+        Ok(x) => x,
+        Err(ret) => {
+            return ret;
+        }
+    };
+
+    match behavior.main_function {
+        MainFunction::Directory => directory(paths, behavior),
+        MainFunction::Standard => standard(paths, behavior),
+    }
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .version(crate_version!())
         .about(ABOUT)
-        .usage(&usage[..])
         .arg(
                 Arg::with_name(OPT_BACKUP)
                 .long(OPT_BACKUP)
@@ -228,29 +253,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .value_name("CONTEXT")
         )
         .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true).min_values(1))
-        .get_matches_from(args);
-
-    let paths: Vec<String> = matches
-        .values_of(ARG_FILES)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_default();
-
-    if let Err(s) = check_unimplemented(&matches) {
-        show_error!("Unimplemented feature: {}", s);
-        return 2;
-    }
-
-    let behavior = match behavior(&matches) {
-        Ok(x) => x,
-        Err(ret) => {
-            return ret;
-        }
-    };
-
-    match behavior.main_function {
-        MainFunction::Directory => directory(paths, behavior),
-        MainFunction::Standard => standard(paths, behavior),
-    }
 }
 
 /// Check for unimplemented command line arguments.

@@ -272,62 +272,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let usage = get_usage();
 
-    let app = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
-        .after_help(AFTER_HELP)
-        .usage(&usage[..])
-        .arg(
-            Arg::with_name(options::FORCE)
-                .long(options::FORCE)
-                .short("f")
-                .help("change permissions to allow writing if necessary"),
-        )
-        .arg(
-            Arg::with_name(options::ITERATIONS)
-                .long(options::ITERATIONS)
-                .short("n")
-                .help("overwrite N times instead of the default (3)")
-                .value_name("NUMBER")
-                .default_value("3"),
-        )
-        .arg(
-            Arg::with_name(options::SIZE)
-                .long(options::SIZE)
-                .short("s")
-                .takes_value(true)
-                .value_name("N")
-                .help("shred this many bytes (suffixes like K, M, G accepted)"),
-        )
-        .arg(
-            Arg::with_name(options::REMOVE)
-                .short("u")
-                .long(options::REMOVE)
-                .help("truncate and remove file after overwriting;  See below"),
-        )
-        .arg(
-            Arg::with_name(options::VERBOSE)
-                .long(options::VERBOSE)
-                .short("v")
-                .help("show progress"),
-        )
-        .arg(
-            Arg::with_name(options::EXACT)
-                .long(options::EXACT)
-                .short("x")
-                .help(
-                    "do not round file sizes up to the next full block;\n\
-                     this is the default for non-regular files",
-                ),
-        )
-        .arg(
-            Arg::with_name(options::ZERO)
-                .long(options::ZERO)
-                .short("z")
-                .help("add a final overwrite with zeros to hide shredding"),
-        )
-        // Positional arguments
-        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true));
+    let app = uu_app().usage(&usage[..]);
 
     let matches = app.get_matches_from(args);
 
@@ -382,6 +327,64 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
+        .after_help(AFTER_HELP)
+        .arg(
+            Arg::with_name(options::FORCE)
+                .long(options::FORCE)
+                .short("f")
+                .help("change permissions to allow writing if necessary"),
+        )
+        .arg(
+            Arg::with_name(options::ITERATIONS)
+                .long(options::ITERATIONS)
+                .short("n")
+                .help("overwrite N times instead of the default (3)")
+                .value_name("NUMBER")
+                .default_value("3"),
+        )
+        .arg(
+            Arg::with_name(options::SIZE)
+                .long(options::SIZE)
+                .short("s")
+                .takes_value(true)
+                .value_name("N")
+                .help("shred this many bytes (suffixes like K, M, G accepted)"),
+        )
+        .arg(
+            Arg::with_name(options::REMOVE)
+                .short("u")
+                .long(options::REMOVE)
+                .help("truncate and remove file after overwriting;  See below"),
+        )
+        .arg(
+            Arg::with_name(options::VERBOSE)
+                .long(options::VERBOSE)
+                .short("v")
+                .help("show progress"),
+        )
+        .arg(
+            Arg::with_name(options::EXACT)
+                .long(options::EXACT)
+                .short("x")
+                .help(
+                    "do not round file sizes up to the next full block;\n\
+                     this is the default for non-regular files",
+                ),
+        )
+        .arg(
+            Arg::with_name(options::ZERO)
+                .long(options::ZERO)
+                .short("z")
+                .help("add a final overwrite with zeros to hide shredding"),
+        )
+        // Positional arguments
+        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
 }
 
 // TODO: Add support for all postfixes here up to and including EiB

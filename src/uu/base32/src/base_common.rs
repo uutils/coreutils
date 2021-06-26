@@ -78,10 +78,17 @@ pub fn parse_base_cmd_args(
     about: &str,
     usage: &str,
 ) -> Result<Config, String> {
-    let app = App::new(name)
+    let app = base_app(name, version, about).usage(usage);
+    let arg_list = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
+    Config::from(app.get_matches_from(arg_list))
+}
+
+pub fn base_app<'a>(name: &str, version: &'a str, about: &'a str) -> App<'static, 'a> {
+    App::new(name)
         .version(version)
         .about(about)
-        .usage(usage)
         // Format arguments.
         .arg(
             Arg::with_name(options::DECODE)
@@ -106,11 +113,7 @@ pub fn parse_base_cmd_args(
         )
         // "multiple" arguments are used to check whether there is more than one
         // file passed in.
-        .arg(Arg::with_name(options::FILE).index(1).multiple(true));
-    let arg_list = args
-        .collect_str(InvalidEncodingHandling::ConvertLossy)
-        .accept_any();
-    Config::from(app.get_matches_from(arg_list))
+        .arg(Arg::with_name(options::FILE).index(1).multiple(true))
 }
 
 pub fn get_input<'a>(config: &Config, stdin_ref: &'a Stdin) -> Box<dyn Read + 'a> {

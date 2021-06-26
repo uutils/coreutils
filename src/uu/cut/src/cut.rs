@@ -396,88 +396,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let matches = App::new(executable!())
-        .name(NAME)
-        .version(crate_version!())
-        .usage(SYNTAX)
-        .about(SUMMARY)
-        .after_help(LONG_HELP)
-        .arg(
-            Arg::with_name(options::BYTES)
-                .short("b")
-                .long(options::BYTES)
-                .takes_value(true)
-                .help("filter byte columns from the input source")
-                .allow_hyphen_values(true)
-                .value_name("LIST")
-                .display_order(1),
-        )
-        .arg(
-            Arg::with_name(options::CHARACTERS)
-                .short("c")
-                .long(options::CHARACTERS)
-                .help("alias for character mode")
-                .takes_value(true)
-                .allow_hyphen_values(true)
-                .value_name("LIST")
-                .display_order(2),
-        )
-        .arg(
-            Arg::with_name(options::DELIMITER)
-                .short("d")
-                .long(options::DELIMITER)
-                .help("specify the delimiter character that separates fields in the input source. Defaults to Tab.")
-                .takes_value(true)
-                .value_name("DELIM")
-                .display_order(3),
-        )
-        .arg(
-            Arg::with_name(options::FIELDS)
-                .short("f")
-                .long(options::FIELDS)
-                .help("filter field columns from the input source")
-                .takes_value(true)
-                .allow_hyphen_values(true)
-                .value_name("LIST")
-                .display_order(4),
-        )
-        .arg(
-            Arg::with_name(options::COMPLEMENT)
-                .long(options::COMPLEMENT)
-                .help("invert the filter - instead of displaying only the filtered columns, display all but those columns")
-                .takes_value(false)
-                .display_order(5),
-        )
-        .arg(
-            Arg::with_name(options::ONLY_DELIMITED)
-            .short("s")
-                .long(options::ONLY_DELIMITED)
-                .help("in field mode, only print lines which contain the delimiter")
-                .takes_value(false)
-                .display_order(6),
-        )
-        .arg(
-            Arg::with_name(options::ZERO_TERMINATED)
-            .short("z")
-                .long(options::ZERO_TERMINATED)
-                .help("instead of filtering columns based on line, filter columns based on \\0 (NULL character)")
-                .takes_value(false)
-                .display_order(8),
-        )
-        .arg(
-            Arg::with_name(options::OUTPUT_DELIMITER)
-            .long(options::OUTPUT_DELIMITER)
-                .help("in field mode, replace the delimiter in output lines with this option's argument")
-                .takes_value(true)
-                .value_name("NEW_DELIM")
-                .display_order(7),
-        )
-        .arg(
-            Arg::with_name(options::FILE)
-            .hidden(true)
-                .multiple(true)
-        )
-        .get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     let complement = matches.is_present(options::COMPLEMENT);
 
@@ -626,4 +545,88 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             1
         }
     }
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .name(NAME)
+        .version(crate_version!())
+        .usage(SYNTAX)
+        .about(SUMMARY)
+        .after_help(LONG_HELP)
+        .arg(
+            Arg::with_name(options::BYTES)
+                .short("b")
+                .long(options::BYTES)
+                .takes_value(true)
+                .help("filter byte columns from the input source")
+                .allow_hyphen_values(true)
+                .value_name("LIST")
+                .display_order(1),
+        )
+        .arg(
+            Arg::with_name(options::CHARACTERS)
+                .short("c")
+                .long(options::CHARACTERS)
+                .help("alias for character mode")
+                .takes_value(true)
+                .allow_hyphen_values(true)
+                .value_name("LIST")
+                .display_order(2),
+        )
+        .arg(
+            Arg::with_name(options::DELIMITER)
+                .short("d")
+                .long(options::DELIMITER)
+                .help("specify the delimiter character that separates fields in the input source. Defaults to Tab.")
+                .takes_value(true)
+                .value_name("DELIM")
+                .display_order(3),
+        )
+        .arg(
+            Arg::with_name(options::FIELDS)
+                .short("f")
+                .long(options::FIELDS)
+                .help("filter field columns from the input source")
+                .takes_value(true)
+                .allow_hyphen_values(true)
+                .value_name("LIST")
+                .display_order(4),
+        )
+        .arg(
+            Arg::with_name(options::COMPLEMENT)
+                .long(options::COMPLEMENT)
+                .help("invert the filter - instead of displaying only the filtered columns, display all but those columns")
+                .takes_value(false)
+                .display_order(5),
+        )
+        .arg(
+            Arg::with_name(options::ONLY_DELIMITED)
+            .short("s")
+                .long(options::ONLY_DELIMITED)
+                .help("in field mode, only print lines which contain the delimiter")
+                .takes_value(false)
+                .display_order(6),
+        )
+        .arg(
+            Arg::with_name(options::ZERO_TERMINATED)
+            .short("z")
+                .long(options::ZERO_TERMINATED)
+                .help("instead of filtering columns based on line, filter columns based on \\0 (NULL character)")
+                .takes_value(false)
+                .display_order(8),
+        )
+        .arg(
+            Arg::with_name(options::OUTPUT_DELIMITER)
+            .long(options::OUTPUT_DELIMITER)
+                .help("in field mode, replace the delimiter in output lines with this option's argument")
+                .takes_value(true)
+                .value_name("NEW_DELIM")
+                .display_order(7),
+        )
+        .arg(
+            Arg::with_name(options::FILE)
+            .hidden(true)
+                .multiple(true)
+        )
 }

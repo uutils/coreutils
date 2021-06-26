@@ -73,36 +73,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let usage = get_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(SUMMARY)
-        .usage(&usage[..])
-        .after_help(LONG_HELP)
-        .arg(
-            Arg::with_name(options::BOURNE_SHELL)
-                .long("sh")
-                .short("b")
-                .visible_alias("bourne-shell")
-                .help("output Bourne shell code to set LS_COLORS")
-                .display_order(1),
-        )
-        .arg(
-            Arg::with_name(options::C_SHELL)
-                .long("csh")
-                .short("c")
-                .visible_alias("c-shell")
-                .help("output C shell code to set LS_COLORS")
-                .display_order(2),
-        )
-        .arg(
-            Arg::with_name(options::PRINT_DATABASE)
-                .long("print-database")
-                .short("p")
-                .help("print the byte counts")
-                .display_order(3),
-        )
-        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
-        .get_matches_from(&args);
+    let matches = uu_app().usage(&usage[..]).get_matches_from(&args);
 
     let files = matches
         .values_of(options::FILE)
@@ -179,6 +150,37 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             1
         }
     }
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(SUMMARY)
+        .after_help(LONG_HELP)
+        .arg(
+            Arg::with_name(options::BOURNE_SHELL)
+                .long("sh")
+                .short("b")
+                .visible_alias("bourne-shell")
+                .help("output Bourne shell code to set LS_COLORS")
+                .display_order(1),
+        )
+        .arg(
+            Arg::with_name(options::C_SHELL)
+                .long("csh")
+                .short("c")
+                .visible_alias("c-shell")
+                .help("output C shell code to set LS_COLORS")
+                .display_order(2),
+        )
+        .arg(
+            Arg::with_name(options::PRINT_DATABASE)
+                .long("print-database")
+                .short("p")
+                .help("print the byte counts")
+                .display_order(3),
+        )
+        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
 }
 
 pub trait StrUtils {
