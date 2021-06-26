@@ -8,7 +8,7 @@ pub static BACKUP_CONTROL_VALUES: &[&str] = &[
 ];
 
 pub static BACKUP_CONTROL_LONG_HELP: &str =
-"The backup suffix is '~', unless set with --suffix or SIMPLE_BACKUP_SUFFIX.
+    "The backup suffix is '~', unless set with --suffix or SIMPLE_BACKUP_SUFFIX.
 The version control method may be selected via the --backup option or through
 the VERSION_CONTROL environment variable.  Here are the values:
 
@@ -33,35 +33,115 @@ pub fn determine_backup_suffix(supplied_suffix: Option<&str>) -> String {
     }
 }
 
-/// # TODO
+/// Determine the "mode" for the backup operation to perform, if any.
 ///
-/// This function currently deviates slightly from how the [manual][1] describes
-/// that it should work. In particular, the current implementation:
+/// Parses the backup options according to the [GNU manual][1], and converts
+/// them to an instance of `BackupMode` for further processing.
 ///
-/// 1. Doesn't strictly respect the order in which to determine the backup type,
-///    which is (in order of precedence)
-///     1. Take a valid value to the '--backup' option
-///     2. Take the value of the `VERSION_CONTROL` env var
-///     3. default to 'existing'
-/// 2. Doesn't accept abbreviations to the 'backup_option' parameter
+/// For an explanation of what the arguments mean, refer to the examples below.
 ///
 /// [1]: https://www.gnu.org/software/coreutils/manual/html_node/Backup-options.html
-pub fn determine_backup_mode(backup_opt_exists: bool, backup_opt: Option<&str>) -> BackupMode {
-    if backup_opt_exists {
-        match backup_opt.map(String::from) {
-            // default is existing, see:
-            // https://www.gnu.org/software/coreutils/manual/html_node/Backup-options.html
-            None => BackupMode::ExistingBackup,
-            Some(mode) => match &mode[..] {
-                "simple" | "never" => BackupMode::SimpleBackup,
-                "numbered" | "t" => BackupMode::NumberedBackup,
-                "existing" | "nil" => BackupMode::ExistingBackup,
-                "none" | "off" => BackupMode::NoBackup,
-                _ => panic!(), // cannot happen as it is managed by clap
-            },
+///
+///
+/// # Errors
+///
+/// If an argument supplied directly to the long `backup` option, or read in
+/// through the `VERSION CONTROL` env var is ambiguous (i.e. may resolve to
+/// multiple backup modes) or invalid, an error is returned. The error contains
+/// the formatted error string which may then be passed to the
+/// [`show_usage_error`] macro.
+///
+///
+/// # Examples
+///
+/// Here's how one would integrate the backup mode determination into an
+/// application.
+///
+/// ```
+/// let OPT_BACKUP: &str = "backup";
+/// let OPT_BACKUP_NO_ARG: &str = "b";
+/// let matches = App::new("myprog")
+///     .arg(Arg::with_name(OPT_BACKUP_NO_ARG)
+///         .short(OPT_BACKUP_NO_ARG)
+///     .arg(Arg::with_name(OPT_BACKUP)
+///         .long(OPT_BACKUP)
+///         .takes_value(true)
+///         .require_equals(true)
+///         .min_values(0))
+///     .get_matches_from(vec![
+///         "myprog", "-b", "--backup=t"
+///     ]);
+///
+/// let backup_mode = backup_control::determine_backup_mode(
+///     matches.is_present(OPT_BACKUP_NO_ARG), matches.is_present(OPT_BACKUP),
+///     matches.value_of(OPT_BACKUP)
+/// );
+/// let backup_mode = match backup_mode {
+///     Err(err) => {
+///         show_usage_error!("{}", err);
+///         return 1;
+///     },
+///     Ok(mode) => mode,
+/// };
+/// ```
+///
+/// This example shows an ambiguous imput, as 'n' may resolve to 4 different
+/// backup modes.
+///
+///
+/// ```
+/// let OPT_BACKUP: &str = "backup";
+/// let OPT_BACKUP_NO_ARG: &str = "b";
+/// let matches = App::new("myprog")
+///     .arg(Arg::with_name(OPT_BACKUP_NO_ARG)
+///         .short(OPT_BACKUP_NO_ARG)
+///     .arg(Arg::with_name(OPT_BACKUP)
+///         .long(OPT_BACKUP)
+///         .takes_value(true)
+///         .require_equals(true)
+///         .min_values(0))
+///     .get_matches_from(vec![
+///         "myprog", "-b", "--backup=n"
+///     ]);
+///
+/// let backup_mode = backup_control::determine_backup_mode(
+///     matches.is_present(OPT_BACKUP_NO_ARG), matches.is_present(OPT_BACKUP),
+///     matches.value_of(OPT_BACKUP)
+/// );
+/// let backup_mode = match backup_mode {
+///     Err(err) => {
+///         show_usage_error!("{}", err);
+///         return 1;
+///     },
+///     Ok(mode) => mode,
+/// };
+/// ```
+pub fn determine_backup_mode(
+    short_opt_present: bool,
+    long_opt_present: bool,
+    long_opt_value: Option<&str>,
+) -> Result<BackupMode, String> {
+    if long_opt_present {
+        // Use method to determine the type of backups to make. When this option
+        // is used but method is not specified, then the value of the
+        // VERSION_CONTROL environment variable is used. And if VERSION_CONTROL
+        // is not set, the default backup type is ‘existing’.
+        if let Some(method) = long_opt_value {
+            // Second argument is for the error string that is returned.
+            match_method(method, "backup type")
+        } else if let Ok(method) = env::var("VERSION_CONTROL") {
+            // Second argument is for the error string that is returned.
+            match_method(&method, "$VERSION_CONTROL")
+        } else {
+            Ok(BackupMode::ExistingBackup)
         }
+    } else if short_opt_present {
+        // the short form of this option, -b does not accept any argument.
+        // Using -b is equivalent to using --backup=existing.
+        Ok(BackupMode::ExistingBackup)
     } else {
-        BackupMode::NoBackup
+        // No option was present at all
+        Ok(BackupMode::NoBackup)
     }
 }
 
@@ -82,10 +162,8 @@ pub fn determine_backup_mode(backup_opt_exists: bool, backup_opt: Option<&str>) 
 /// invalid, an error is returned. The error contains the formatted error string
 /// which may then be passed to the [`show_usage_error`] macro.
 fn match_method(method: &str, origin: &str) -> Result<BackupMode, String> {
-    let x = vec!["simple", "never", "numbered", "t",
-                 "existing", "nil", "none", "off"];
-
-    let matches: Vec<&&str> = x.iter()
+    let matches: Vec<&&str> = BACKUP_CONTROL_VALUES
+        .iter()
         .filter(|val| val.starts_with(method))
         .collect();
     if matches.len() == 1 {
@@ -94,18 +172,24 @@ fn match_method(method: &str, origin: &str) -> Result<BackupMode, String> {
             "numbered" | "t" => Ok(BackupMode::NumberedBackup),
             "existing" | "nil" => Ok(BackupMode::ExistingBackup),
             "none" | "off" => Ok(BackupMode::NoBackup),
-            _ => panic!(),  // cannot happen as we must have exactly one match
-                            // from the list above.
+            _ => unreachable!(), // cannot happen as we must have exactly one match
+                                 // from the list above.
         }
     } else {
-        let error_type = if matches.len() == 0 { "invalid" } else { "ambiguous" };
+        let error_type = if matches.is_empty() {
+            "invalid"
+        } else {
+            "ambiguous"
+        };
         Err(format!(
-"{0} argument ‘{1}’ for ‘{2}’
+            "{0} argument ‘{1}’ for ‘{2}’
 Valid arguments are:
   - ‘none’, ‘off’
   - ‘simple’, ‘never’
   - ‘existing’, ‘nil’
-  - ‘numbered’, ‘t’", error_type, method, origin))
+  - ‘numbered’, ‘t’",
+            error_type, method, origin
+        ))
     }
 }
 
