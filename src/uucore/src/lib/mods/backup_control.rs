@@ -7,19 +7,15 @@ pub static BACKUP_CONTROL_VALUES: &[&str] = &[
     "simple", "never", "numbered", "t", "existing", "nil", "none", "off",
 ];
 
-pub static BACKUP_CONTROL_LONG_HELP: &str = "The backup suffix is '~', unless set with --suffix or SIMPLE_BACKUP_SUFFIX. Here are the version control values:
+pub static BACKUP_CONTROL_LONG_HELP: &str = 
+"The backup suffix is '~', unless set with --suffix or SIMPLE_BACKUP_SUFFIX.
+The version control method may be selected via the --backup option or through
+the VERSION_CONTROL environment variable.  Here are the values:
 
-none, off
-    never make backups (even if --backup is given)
-
-numbered, t
-    make numbered backups
-
-existing, nil
-    numbered if numbered backups exist, simple otherwise
-
-simple, never
-    always make simple backups";
+  none, off       never make backups (even if --backup is given)
+  numbered, t     make numbered backups
+  existing, nil   numbered if numbered backups exist, simple otherwise
+  simple, never   always make simple backups";
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum BackupMode {
