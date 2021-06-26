@@ -269,7 +269,7 @@ fn choose_size(matches: &ArgMatches, stat: &Stat) -> u64 {
     } else if matches.is_present(options::APPARENT_SIZE) || matches.is_present(options::BYTES) {
         stat.size
     } else {
-        // C's stat is such that each block is assume to be 512 bytes
+        // The st_blocks field indicates the number of blocks allocated to the file, 512-byte units.
         // See: http://linux.die.net/man/2/stat
         stat.blocks * 512
     }

@@ -490,3 +490,96 @@ fn test_du_threshold() {
         .stdout_does_not_contain("links")
         .stdout_contains("deeper_dir");
 }
+
+#[test]
+fn test_du_apparent_size() {
+    let scene = TestScenario::new(util_name!());
+    let result = scene.ucmd().arg("--apparent-size").succeeds();
+
+    #[cfg(target_os = "linux")]
+    {
+        let result_reference = scene.cmd("du").arg("--apparent-size").run();
+        assert_eq!(result.stdout_str(), result_reference.stdout_str());
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    _du_apparent_size(result.stdout_str());
+}
+
+#[cfg(target_os = "windows")]
+fn _du_apparent_size(s: &str) {
+    assert_eq!(
+        s,
+        "1\t.\\subdir\\deeper\\deeper_dir
+1\t.\\subdir\\deeper
+6\t.\\subdir\\links
+6\t.\\subdir
+6\t.
+"
+    );
+}
+#[cfg(target_vendor = "apple")]
+fn _du_apparent_size(s: &str) {
+    assert_eq!(
+        s,
+        "1\t./subdir/deeper/deeper_dir
+1\t./subdir/deeper
+6\t./subdir/links
+6\t./subdir
+6\t.
+"
+    );
+}
+#[cfg(target_os = "freebsd")]
+fn _du_apparent_size(s: &str) {
+    assert_eq!(
+        s,
+        "1\t./subdir/deeper/deeper_dir
+2\t./subdir/deeper
+6\t./subdir/links
+8\t./subdir
+8\t.
+"
+    );
+}
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "freebsd")
+))]
+fn _du_apparent_size(s: &str) {
+    assert_eq!(
+        s,
+        "5\t./subdir/deeper/deeper_dir
+9\t./subdir/deeper
+10\t./subdir/links
+22\t./subdir
+26\t.
+"
+    );
+}
+
+#[test]
+fn test_du_bytes() {
+    let scene = TestScenario::new(util_name!());
+    let result = scene.ucmd().arg("--bytes").succeeds();
+
+    #[cfg(target_os = "linux")]
+    {
+        let result_reference = scene.cmd("du").arg("--bytes").run();
+        assert_eq!(result.stdout_str(), result_reference.stdout_str());
+    }
+
+    #[cfg(target_os = "windows")]
+    result.stdout_contains("5145\t.\\subdir\n");
+    #[cfg(target_vendor = "apple")]
+    result.stdout_contains("5625\t./subdir\n");
+    #[cfg(target_os = "freebsd")]
+    result.stdout_contains("7193\t./subdir\n");
+    #[cfg(all(
+        not(target_vendor = "apple"),
+        not(target_os = "windows"),
+        not(target_os = "freebsd")
+    ))]
+    result.stdout_contains("21529\t./subdir\n");
+}
