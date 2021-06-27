@@ -15,9 +15,9 @@ extern crate uucore;
 use clap::{crate_version, App, Arg, ArgMatches};
 use file_diff::diff;
 use filetime::{set_file_times, FileTime};
+use uucore::backup_control::{self, BackupMode};
 use uucore::entries::{grp2gid, usr2uid};
 use uucore::perms::{wrap_chgrp, wrap_chown, Verbosity};
-use uucore::backup_control::{self, BackupMode};
 
 use libc::{getegid, geteuid};
 use std::fs;
@@ -315,8 +315,7 @@ fn behavior(matches: &ArgMatches) -> Result<Behavior, i32> {
             matches.is_present(OPT_BACKUP_NO_ARG) || matches.is_present(OPT_BACKUP),
             matches.value_of(OPT_BACKUP),
         ),
-        suffix: backup_control::determine_backup_suffix(
-            matches.value_of(OPT_SUFFIX)),
+        suffix: backup_control::determine_backup_suffix(matches.value_of(OPT_SUFFIX)),
         owner: matches.value_of(OPT_OWNER).unwrap_or("").to_string(),
         group: matches.value_of(OPT_GROUP).unwrap_or("").to_string(),
         verbose: matches.is_present(OPT_VERBOSE),
@@ -521,8 +520,7 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> Result<(), ()> {
     // The codes actually making use of the backup process don't seem to agree
     // on how best to approach the issue. (mv and ln, for example)
     if to.exists() {
-        backup_path = backup_control::get_backup_path(
-            b.backup_mode, to, &b.suffix);
+        backup_path = backup_control::get_backup_path(b.backup_mode, to, &b.suffix);
         if let Some(ref backup_path) = backup_path {
             // TODO!!
             if let Err(err) = fs::rename(to, backup_path) {
