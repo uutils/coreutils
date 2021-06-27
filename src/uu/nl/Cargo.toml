@@ -15,7 +15,7 @@ edition = "2018"
 path = "src/nl.rs"
 
 [dependencies]
-clap = "2.33.3"
+clap = { version = "2.33", features = ["wrap_help"] }
 aho-corasick = "0.7.3"
 libc = "0.2.42"
 memchr = "2.2.0"

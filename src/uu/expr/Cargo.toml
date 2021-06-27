@@ -15,7 +15,7 @@ edition = "2018"
 path = "src/expr.rs"
 
 [dependencies]
-clap = "2.33.3"
+clap = { version = "2.33", features = ["wrap_help"] }
 libc = "0.2.42"
 num-bigint = "0.4.0"
 num-traits = "0.2.14"
