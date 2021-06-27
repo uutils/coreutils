@@ -48,7 +48,7 @@ use std::path::{Path, PathBuf, StripPrefixError};
 use std::str::FromStr;
 use std::string::ToString;
 use uucore::backup_control::{self, BackupMode};
-use uucore::fs::{canonicalize, CanonicalizeMode};
+use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
 use walkdir::WalkDir;
 
 #[cfg(unix)]
@@ -1421,8 +1421,8 @@ pub fn localize_to_target(root: &Path, source: &Path, target: &Path) -> CopyResu
 
 pub fn paths_refer_to_same_file(p1: &Path, p2: &Path) -> io::Result<bool> {
     // We have to take symlinks and relative paths into account.
-    let pathbuf1 = canonicalize(p1, CanonicalizeMode::Normal)?;
-    let pathbuf2 = canonicalize(p2, CanonicalizeMode::Normal)?;
+    let pathbuf1 = canonicalize(p1, MissingHandling::Normal, ResolveMode::Logical)?;
+    let pathbuf2 = canonicalize(p2, MissingHandling::Normal, ResolveMode::Logical)?;
 
     Ok(pathbuf1 == pathbuf2)
 }
