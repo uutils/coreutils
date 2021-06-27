@@ -5,3 +5,4 @@ pub mod coreopts;
 pub mod os;
 pub mod panic;
 pub mod ranges;
+pub mod version_cmp;
