@@ -941,3 +941,17 @@ fn test_sigpipe_panic() {
         Ok(String::new())
     );
 }
+
+#[test]
+fn test_conflict_check_out() {
+    let check_flags = ["-c=silent", "-c=quiet", "-c=diagnose-first", "-c", "-C"];
+    for check_flag in &check_flags {
+        new_ucmd!()
+            .arg(check_flag)
+            .arg("-o=/dev/null")
+            .fails()
+            .stderr_contains(
+                "error: The argument '--output <FILENAME>' cannot be used with '--check",
+            );
+    }
+}
