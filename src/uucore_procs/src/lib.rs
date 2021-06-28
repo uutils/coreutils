@@ -1,6 +1,10 @@
 // Copyright (C) ~ Roy Ivy III <rivy.dev@gmail.com>; MIT license
 
 extern crate proc_macro;
+use proc_macro::TokenStream;
+use proc_macro2::{Ident, Span};
+use quote::quote;
+use syn::{self, parse_macro_input, ItemFn};
 
 //## rust proc-macro background info
 //* ref: <https://dev.to/naufraghi/procedural-macro-in-rust-101-k3f> @@ <http://archive.is/Vbr5e>
@@ -41,7 +45,7 @@ impl syn::parse::Parse for Tokens {
 }
 
 #[proc_macro]
-pub fn main(stream: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn main(stream: TokenStream) -> TokenStream {
     let Tokens { expr } = syn::parse_macro_input!(stream as Tokens);
     proc_dbg!(&expr);
 
@@ -78,5 +82,32 @@ pub fn main(stream: proc_macro::TokenStream) -> proc_macro::TokenStream {
             std::process::exit(code);
         }
     };
-    proc_macro::TokenStream::from(result)
+    TokenStream::from(result)
+}
+
+#[proc_macro_attribute]
+pub fn gen_uumain(_args: TokenStream, stream: TokenStream) -> TokenStream {
+    let mut ast = parse_macro_input!(stream as ItemFn);
+
+    // Change the name of the function to "uumain_result" to prevent name-conflicts
+    ast.sig.ident = Ident::new("uumain_result", Span::call_site());
+
+    let new = quote!(
+        pub fn uumain(args: impl uucore::Args) -> i32 {
+            #ast
+            let result = uumain_result(args);
+            match result {
+                Ok(()) => uucore::error::get_exit_code(),
+                Err(e) => {
+                    let s = format!("{}", e);
+                    if s != "" {
+                        show_error!("{}", s);
+                    }
+                    e.code()
+                }
+            }
+        }
+    );
+
+    TokenStream::from(new)
 }
