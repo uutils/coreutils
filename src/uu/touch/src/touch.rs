@@ -16,9 +16,8 @@ extern crate uucore;
 use clap::{crate_version, App, Arg, ArgGroup};
 use filetime::*;
 use std::fs::{self, File};
-use std::io::Error;
 use std::path::Path;
-use std::process;
+use uucore::error::{FromIo, UResult, USimpleError};
 
 static ABOUT: &str = "Update the access and modification times of each FILE to the current time.";
 pub mod options {
@@ -52,57 +51,38 @@ fn get_usage() -> String {
     format!("{0} [OPTION]... [USER]", executable!())
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = get_usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
-    let files: Vec<String> = matches
-        .values_of(ARG_FILES)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_default();
+    let files = matches.values_of_os(ARG_FILES).unwrap();
 
-    let (mut atime, mut mtime) = if matches.is_present(options::sources::REFERENCE) {
-        stat(
-            matches.value_of(options::sources::REFERENCE).unwrap(),
-            !matches.is_present(options::NO_DEREF),
-        )
-    } else if matches.is_present(options::sources::DATE)
-        || matches.is_present(options::sources::CURRENT)
-    {
-        let timestamp = if matches.is_present(options::sources::DATE) {
-            parse_date(matches.value_of(options::sources::DATE).unwrap())
+    let (mut atime, mut mtime) =
+        if let Some(reference) = matches.value_of_os(options::sources::REFERENCE) {
+            stat(Path::new(reference), !matches.is_present(options::NO_DEREF))?
         } else {
-            parse_timestamp(matches.value_of(options::sources::CURRENT).unwrap())
+            let timestamp = if let Some(date) = matches.value_of(options::sources::DATE) {
+                parse_date(date)?
+            } else if let Some(current) = matches.value_of(options::sources::CURRENT) {
+                parse_timestamp(current)?
+            } else {
+                local_tm_to_filetime(time::now())
+            };
+            (timestamp, timestamp)
         };
-        (timestamp, timestamp)
-    } else {
-        let now = local_tm_to_filetime(time::now());
-        (now, now)
-    };
 
-    let mut error_code = 0;
-
-    for filename in &files {
-        let path = &filename[..];
-
-        if !Path::new(path).exists() {
+    for filename in files {
+        let path = Path::new(filename);
+        if !path.exists() {
             // no-dereference included here for compatibility
             if matches.is_present(options::NO_CREATE) || matches.is_present(options::NO_DEREF) {
                 continue;
             }
 
             if let Err(e) = File::create(path) {
-                match e.kind() {
-                    std::io::ErrorKind::NotFound => {
-                        show_error!("cannot touch '{}': {}", path, "No such file or directory")
-                    }
-                    std::io::ErrorKind::PermissionDenied => {
-                        show_error!("cannot touch '{}': {}", path, "Permission denied")
-                    }
-                    _ => show_error!("cannot touch '{}': {}", path, e),
-                }
-                error_code = 1;
+                show!(e.map_err_context(|| format!("cannot touch '{}'", path.display())));
                 continue;
             };
 
@@ -118,7 +98,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             || matches.is_present(options::MODIFICATION)
             || matches.is_present(options::TIME)
         {
-            let st = stat(path, !matches.is_present(options::NO_DEREF));
+            let st = stat(path, !matches.is_present(options::NO_DEREF))?;
             let time = matches.value_of(options::TIME).unwrap_or("");
 
             if !(matches.is_present(options::ACCESS)
@@ -138,29 +118,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
 
         if matches.is_present(options::NO_DEREF) {
-            if let Err(e) = set_symlink_file_times(path, atime, mtime) {
-                // we found an error, it should fail in any case
-                error_code = 1;
-                if e.kind() == std::io::ErrorKind::PermissionDenied {
-                    // GNU compatibility (not-owner.sh)
-                    show_error!("setting times of '{}': {}", path, "Permission denied");
-                } else {
-                    show_error!("setting times of '{}': {}", path, e);
-                }
-            }
-        } else if let Err(e) = filetime::set_file_times(path, atime, mtime) {
-            // we found an error, it should fail in any case
-            error_code = 1;
-
-            if e.kind() == std::io::ErrorKind::PermissionDenied {
-                // GNU compatibility (not-owner.sh)
-                show_error!("setting times of '{}': {}", path, "Permission denied");
-            } else {
-                show_error!("setting times of '{}': {}", path, e);
-            }
+            set_symlink_file_times(path, atime, mtime)
+        } else {
+            filetime::set_file_times(path, atime, mtime)
         }
+        .map_err_context(|| format!("setting times of '{}'", path.display()))?;
     }
-    error_code
+
+    Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -238,28 +203,21 @@ pub fn uu_app() -> App<'static, 'static> {
         ]))
 }
 
-fn stat(path: &str, follow: bool) -> (FileTime, FileTime) {
+fn stat(path: &Path, follow: bool) -> UResult<(FileTime, FileTime)> {
     let metadata = if follow {
         fs::symlink_metadata(path)
     } else {
         fs::metadata(path)
-    };
-
-    match metadata {
-        Ok(m) => (
-            FileTime::from_last_access_time(&m),
-            FileTime::from_last_modification_time(&m),
-        ),
-        Err(_) => crash!(
-            1,
-            "failed to get attributes of '{}': {}",
-            path,
-            Error::last_os_error()
-        ),
     }
+    .map_err_context(|| format!("failed to get attributes of '{}'", path.display()))?;
+
+    Ok((
+        FileTime::from_last_access_time(&metadata),
+        FileTime::from_last_modification_time(&metadata),
+    ))
 }
 
-fn parse_date(str: &str) -> FileTime {
+fn parse_date(str: &str) -> UResult<FileTime> {
     // This isn't actually compatible with GNU touch, but there doesn't seem to
     // be any simple specification for what format this parameter allows and I'm
     // not about to implement GNU parse_datetime.
@@ -267,18 +225,22 @@ fn parse_date(str: &str) -> FileTime {
     let formats = vec!["%c", "%F"];
     for f in formats {
         if let Ok(tm) = time::strptime(str, f) {
-            return local_tm_to_filetime(to_local(tm));
+            return Ok(local_tm_to_filetime(to_local(tm)));
         }
     }
+
     if let Ok(tm) = time::strptime(str, "@%s") {
         // Don't convert to local time in this case - seconds since epoch are not time-zone dependent
-        return local_tm_to_filetime(tm);
+        return Ok(local_tm_to_filetime(tm));
     }
-    show_error!("Unable to parse date: {}\n", str);
-    process::exit(1);
+
+    Err(USimpleError::new(
+        1,
+        format!("Unable to parse date: {}", str),
+    ))
 }
 
-fn parse_timestamp(s: &str) -> FileTime {
+fn parse_timestamp(s: &str) -> UResult<FileTime> {
     let now = time::now();
     let (format, ts) = match s.chars().count() {
         15 => ("%Y%m%d%H%M.%S", s.to_owned()),
@@ -287,31 +249,28 @@ fn parse_timestamp(s: &str) -> FileTime {
         10 => ("%y%m%d%H%M", s.to_owned()),
         11 => ("%Y%m%d%H%M.%S", format!("{}{}", now.tm_year + 1900, s)),
         8 => ("%Y%m%d%H%M", format!("{}{}", now.tm_year + 1900, s)),
-        _ => panic!("Unknown timestamp format"),
+        _ => return Err(USimpleError::new(1, format!("invalid date format '{}'", s))),
     };
 
-    match time::strptime(&ts, format) {
-        Ok(tm) => {
-            let mut local = to_local(tm);
-            local.tm_isdst = -1;
-            let ft = local_tm_to_filetime(local);
+    let tm = time::strptime(&ts, format)
+        .map_err(|_| USimpleError::new(1, format!("invalid date format '{}'", s)))?;
 
-            // We have to check that ft is valid time. Due to daylight saving
-            // time switch, local time can jump from 1:59 AM to 3:00 AM,
-            // in which case any time between 2:00 AM and 2:59 AM is not valid.
-            // Convert back to local time and see if we got the same value back.
-            let ts = time::Timespec {
-                sec: ft.unix_seconds(),
-                nsec: 0,
-            };
-            let tm2 = time::at(ts);
-            if tm.tm_hour != tm2.tm_hour {
-                show_error!("invalid date format {}", s);
-                process::exit(1);
-            }
+    let mut local = to_local(tm);
+    local.tm_isdst = -1;
+    let ft = local_tm_to_filetime(local);
 
-            ft
-        }
-        Err(e) => panic!("Unable to parse timestamp\n{}", e),
+    // We have to check that ft is valid time. Due to daylight saving
+    // time switch, local time can jump from 1:59 AM to 3:00 AM,
+    // in which case any time between 2:00 AM and 2:59 AM is not valid.
+    // Convert back to local time and see if we got the same value back.
+    let ts = time::Timespec {
+        sec: ft.unix_seconds(),
+        nsec: 0,
+    };
+    let tm2 = time::at(ts);
+    if tm.tm_hour != tm2.tm_hour {
+        return Err(USimpleError::new(1, format!("invalid date format '{}'", s)));
     }
+
+    Ok(ft)
 }

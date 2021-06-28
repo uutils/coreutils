@@ -27,6 +27,7 @@ mod parser; // string parsing modules
 // * cross-platform modules
 pub use crate::mods::backup_control;
 pub use crate::mods::coreopts;
+pub use crate::mods::error;
 pub use crate::mods::os;
 pub use crate::mods::panic;
 pub use crate::mods::ranges;

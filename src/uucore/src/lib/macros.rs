@@ -21,6 +21,24 @@ macro_rules! executable(
     })
 );
 
+#[macro_export]
+macro_rules! show(
+    ($err:expr) => ({
+        let e = $err;
+        uucore::error::set_exit_code(e.code());
+        eprintln!("{}: {}", executable!(), e);
+    })
+);
+
+#[macro_export]
+macro_rules! show_if_err(
+    ($res:expr) => ({
+        if let Err(e) = $res {
+            show!(e);
+        }
+    })
+);
+
 /// Show an error to stderr in a similar style to GNU coreutils.
 #[macro_export]
 macro_rules! show_error(
