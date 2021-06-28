@@ -31,7 +31,7 @@ pub fn uumain(mut args: impl uucore::Args) -> i32 {
     let mut args: Vec<_> = args.collect();
 
     // If invoked via name '[', matching ']' must be in the last arg
-    if binary_name == "[" {
+    if binary_name.ends_with('[') {
         let last = args.pop();
         if last != Some(OsString::from("]")) {
             eprintln!("[: missing ']'");
