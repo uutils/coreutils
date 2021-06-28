@@ -125,7 +125,8 @@ fn test_mktemp_mktemp_t() {
         .arg(TEST_TEMPLATE8)
         .fails()
         .no_stdout()
-        .stderr_contains("suffix cannot contain any path separators");
+        .stderr_contains("invalid suffix")
+        .stderr_contains("contains directory separator");
 }
 
 #[test]
