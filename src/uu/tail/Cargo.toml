@@ -24,6 +24,10 @@ winapi = { version="0.3", features=["fileapi", "handleapi", "processthreadsapi",
 [target.'cfg(target_os = "redox")'.dependencies]
 redox_syscall = "0.1"
 
+[target.'cfg(unix)'.dependencies]
+nix = "0.20"
+libc = "0.2"
+
 [[bin]]
 name = "tail"
 path = "src/main.rs"
