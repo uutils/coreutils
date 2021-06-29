@@ -10,11 +10,81 @@
 
 mod parser;
 
-use clap::{App, AppSettings};
+use clap::{crate_version, App, AppSettings};
 use parser::{parse, Symbol};
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
 use uucore::executable;
+
+const USAGE: &str = "test EXPRESSION
+or:  test
+or:  [ EXPRESSION ]
+or:  [ ]
+or:  [ OPTION";
+
+// We use after_help so that this comes after the usage string (it would come before if we used about)
+const AFTER_HELP: &str = "
+Exit with the status determined by EXPRESSION.
+
+An omitted EXPRESSION defaults to false.  Otherwise,
+EXPRESSION is true or false and sets exit status.  It is one of:
+
+  ( EXPRESSION )               EXPRESSION is true
+  ! EXPRESSION                 EXPRESSION is false
+  EXPRESSION1 -a EXPRESSION2   both EXPRESSION1 and EXPRESSION2 are true
+  EXPRESSION1 -o EXPRESSION2   either EXPRESSION1 or EXPRESSION2 is true
+
+  -n STRING            the length of STRING is nonzero
+  STRING               equivalent to -n STRING
+  -z STRING            the length of STRING is zero
+  STRING1 = STRING2    the strings are equal
+  STRING1 != STRING2   the strings are not equal
+
+  INTEGER1 -eq INTEGER2   INTEGER1 is equal to INTEGER2
+  INTEGER1 -ge INTEGER2   INTEGER1 is greater than or equal to INTEGER2
+  INTEGER1 -gt INTEGER2   INTEGER1 is greater than INTEGER2
+  INTEGER1 -le INTEGER2   INTEGER1 is less than or equal to INTEGER2
+  INTEGER1 -lt INTEGER2   INTEGER1 is less than INTEGER2
+  INTEGER1 -ne INTEGER2   INTEGER1 is not equal to INTEGER2
+
+  FILE1 -ef FILE2   FILE1 and FILE2 have the same device and inode numbers
+  FILE1 -nt FILE2   FILE1 is newer (modification date) than FILE2
+  FILE1 -ot FILE2   FILE1 is older than FILE2
+
+  -b FILE     FILE exists and is block special
+  -c FILE     FILE exists and is character special
+  -d FILE     FILE exists and is a directory
+  -e FILE     FILE exists
+  -f FILE     FILE exists and is a regular file
+  -g FILE     FILE exists and is set-group-ID
+  -G FILE     FILE exists and is owned by the effective group ID
+  -h FILE     FILE exists and is a symbolic link (same as -L)
+  -k FILE     FILE exists and has its sticky bit set
+  -L FILE     FILE exists and is a symbolic link (same as -h)
+  -N FILE     FILE exists and has been modified since it was last read
+  -O FILE     FILE exists and is owned by the effective user ID
+  -p FILE     FILE exists and is a named pipe
+  -r FILE     FILE exists and read permission is granted
+  -s FILE     FILE exists and has a size greater than zero
+  -S FILE     FILE exists and is a socket
+  -t FD       file descriptor FD is opened on a terminal
+  -u FILE     FILE exists and its set-user-ID bit is set
+  -w FILE     FILE exists and write permission is granted
+  -x FILE     FILE exists and execute (or search) permission is granted
+
+Except for -h and -L, all FILE-related tests dereference symbolic links.
+Beware that parentheses need to be escaped (e.g., by backslashes) for shells.
+INTEGER may also be -l STRING, which evaluates to the length of STRING.
+
+NOTE: Binary -a and -o are inherently ambiguous.  Use 'test EXPR1 && test
+EXPR2' or 'test EXPR1 || test EXPR2' instead.
+
+NOTE: [ honors the --help and --version options, but test does not.
+test treats each of those as it treats any other nonempty STRING.
+
+NOTE: your shell may have its own version of test and/or [, which usually supersedes
+the version described here.  Please refer to your shell's documentation
+for details about the options it supports.";
 
 pub fn uu_app() -> App<'static, 'static> {
     App::new(executable!())
@@ -30,8 +100,22 @@ pub fn uumain(mut args: impl uucore::Args) -> i32 {
         .to_string_lossy();
     let mut args: Vec<_> = args.collect();
 
-    // If invoked via name '[', matching ']' must be in the last arg
     if binary_name.ends_with('[') {
+        // If invoked as [ we should recognize --help and --version (but not -h or -v)
+        if args.len() == 1 && (args[0] == "--help" || args[0] == "--version") {
+            // Let clap pretty-print help and version
+            App::new(binary_name)
+                .version(crate_version!())
+                .usage(USAGE)
+                .after_help(AFTER_HELP)
+                // Disable printing of -h and -v as valid alternatives for --help and --version,
+                // since we don't recognize -h and -v as help/version flags.
+                .setting(AppSettings::NeedsLongHelp)
+                .setting(AppSettings::NeedsLongVersion)
+                .get_matches_from(std::iter::once(program).chain(args.into_iter()));
+            return 0;
+        }
+        // If invoked via name '[', matching ']' must be in the last arg
         let last = args.pop();
         if last != Some(OsString::from("]")) {
             eprintln!("[: missing ']'");
