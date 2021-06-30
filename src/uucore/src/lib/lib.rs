@@ -75,6 +75,9 @@ pub use crate::features::wide;
 //## core functions
 
 use std::ffi::OsString;
+use std::sync::Mutex;
+
+use lazy_static::lazy_static;
 
 pub enum InvalidEncodingHandling {
     Ignore,
@@ -177,6 +180,17 @@ pub fn args() -> impl Iterator<Item = String> {
 
 pub fn args_os() -> impl Iterator<Item = OsString> {
     wild::args_os()
+}
+
+lazy_static! {
+    static ref EXE_NAME: Mutex<Option<String>> = Default::default();
+}
+
+pub fn set_exe_name(name: String) {
+    *EXE_NAME.lock().unwrap() = Some(name);
+}
+pub fn get_exe_name() -> Option<String> {
+    EXE_NAME.lock().unwrap().clone()
 }
 
 #[cfg(test)]
