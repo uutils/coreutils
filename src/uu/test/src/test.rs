@@ -14,10 +14,10 @@ use clap::{App, AppSettings};
 use parser::{parse, Symbol};
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
-use uucore::executable;
+use uucore::utility_name;
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(utility_name!())
         .setting(AppSettings::DisableHelpFlags)
         .setting(AppSettings::DisableVersion)
 }

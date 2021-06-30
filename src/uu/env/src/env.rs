@@ -14,6 +14,7 @@ extern crate clap;
 
 use clap::{App, AppSettings, Arg};
 use ini::Ini;
+use uucore::utility_name;
 use std::borrow::Cow;
 use std::env;
 use std::io::{self, Write};
@@ -115,7 +116,7 @@ fn build_command<'a, 'b>(args: &'a mut Vec<&'b str>) -> (Cow<'b, str>, &'a [&'b 
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(crate_name!())
+    App::new(utility_name!())
         .version(crate_version!())
         .author(crate_authors!())
         .about(crate_description!())

@@ -15,8 +15,6 @@ use std::cmp::{min, Ordering};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Lines, Stdin};
 
-static NAME: &str = "join";
-
 #[derive(Copy, Clone, PartialEq)]
 enum FileNum {
     None,
@@ -507,7 +505,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(NAME)
+    App::new(utility_name!())
         .version(crate_version!())
         .about(
             "For each pair of input lines with identical join fields, write a line to
