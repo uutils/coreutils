@@ -21,7 +21,7 @@ static SUMMARY: &str = "Determine architecture name for current machine.";
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     uu_app().get_matches_from(args);
 
-    let uts = PlatformInfo::new().map_err_context(|| "arch: ".to_string())?;
+    let uts = PlatformInfo::new().map_err_context(|| "cannot get system name".to_string())?;
     println!("{}", uts.machine().trim());
     Ok(())
 }
