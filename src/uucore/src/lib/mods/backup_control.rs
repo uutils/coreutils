@@ -58,31 +58,38 @@ pub fn determine_backup_suffix(supplied_suffix: Option<&str>) -> String {
 /// application.
 ///
 /// ```
-/// let OPT_BACKUP: &str = "backup";
-/// let OPT_BACKUP_NO_ARG: &str = "b";
-/// let matches = App::new("myprog")
-///     .arg(Arg::with_name(OPT_BACKUP_NO_ARG)
-///         .short(OPT_BACKUP_NO_ARG)
-///     .arg(Arg::with_name(OPT_BACKUP)
-///         .long(OPT_BACKUP)
-///         .takes_value(true)
-///         .require_equals(true)
-///         .min_values(0))
-///     .get_matches_from(vec![
-///         "myprog", "-b", "--backup=t"
-///     ]);
+/// #[macro_use]
+/// extern crate uucore;
+/// use uucore::backup_control::{self, BackupMode};
+/// use clap::{App, Arg};
 ///
-/// let backup_mode = backup_control::determine_backup_mode(
-///     matches.is_present(OPT_BACKUP_NO_ARG), matches.is_present(OPT_BACKUP),
-///     matches.value_of(OPT_BACKUP)
-/// );
-/// let backup_mode = match backup_mode {
-///     Err(err) => {
-///         show_usage_error!("{}", err);
-///         return 1;
-///     },
-///     Ok(mode) => mode,
-/// };
+/// fn main() {
+///     let OPT_BACKUP: &str = "backup";
+///     let OPT_BACKUP_NO_ARG: &str = "b";
+///     let matches = App::new("myprog")
+///         .arg(Arg::with_name(OPT_BACKUP_NO_ARG)
+///             .short(OPT_BACKUP_NO_ARG))
+///         .arg(Arg::with_name(OPT_BACKUP)
+///             .long(OPT_BACKUP)
+///             .takes_value(true)
+///             .require_equals(true)
+///             .min_values(0))
+///         .get_matches_from(vec![
+///             "myprog", "-b", "--backup=t"
+///         ]);
+///    
+///     let backup_mode = backup_control::determine_backup_mode(
+///         matches.is_present(OPT_BACKUP_NO_ARG), matches.is_present(OPT_BACKUP),
+///         matches.value_of(OPT_BACKUP)
+///     );
+///     let backup_mode = match backup_mode {
+///         Err(err) => {
+///             show_usage_error!("{}", err);
+///             return;
+///         },
+///         Ok(mode) => mode,
+///     };
+/// }
 /// ```
 ///
 /// This example shows an ambiguous imput, as 'n' may resolve to 4 different
@@ -90,31 +97,38 @@ pub fn determine_backup_suffix(supplied_suffix: Option<&str>) -> String {
 ///
 ///
 /// ```
-/// let OPT_BACKUP: &str = "backup";
-/// let OPT_BACKUP_NO_ARG: &str = "b";
-/// let matches = App::new("myprog")
-///     .arg(Arg::with_name(OPT_BACKUP_NO_ARG)
-///         .short(OPT_BACKUP_NO_ARG)
-///     .arg(Arg::with_name(OPT_BACKUP)
-///         .long(OPT_BACKUP)
-///         .takes_value(true)
-///         .require_equals(true)
-///         .min_values(0))
-///     .get_matches_from(vec![
-///         "myprog", "-b", "--backup=n"
-///     ]);
+/// #[macro_use]
+/// extern crate uucore;
+/// use uucore::backup_control::{self, BackupMode};
+/// use clap::{crate_version, App, Arg, ArgMatches};
 ///
-/// let backup_mode = backup_control::determine_backup_mode(
-///     matches.is_present(OPT_BACKUP_NO_ARG), matches.is_present(OPT_BACKUP),
-///     matches.value_of(OPT_BACKUP)
-/// );
-/// let backup_mode = match backup_mode {
-///     Err(err) => {
-///         show_usage_error!("{}", err);
-///         return 1;
-///     },
-///     Ok(mode) => mode,
-/// };
+/// fn main() {
+///     let OPT_BACKUP: &str = "backup";
+///     let OPT_BACKUP_NO_ARG: &str = "b";
+///     let matches = App::new("myprog")
+///         .arg(Arg::with_name(OPT_BACKUP_NO_ARG)
+///             .short(OPT_BACKUP_NO_ARG))
+///         .arg(Arg::with_name(OPT_BACKUP)
+///             .long(OPT_BACKUP)
+///             .takes_value(true)
+///             .require_equals(true)
+///             .min_values(0))
+///         .get_matches_from(vec![
+///             "myprog", "-b", "--backup=n"
+///         ]);
+///    
+///     let backup_mode = backup_control::determine_backup_mode(
+///         matches.is_present(OPT_BACKUP_NO_ARG), matches.is_present(OPT_BACKUP),
+///         matches.value_of(OPT_BACKUP)
+///     );
+///     let backup_mode = match backup_mode {
+///         Err(err) => {
+///             show_usage_error!("{}", err);
+///             return;
+///         },
+///         Ok(mode) => mode,
+///     };
+/// }
 /// ```
 pub fn determine_backup_mode(
     short_opt_present: bool,
@@ -230,5 +244,187 @@ fn existing_backup_path(path: &Path, suffix: &str) -> PathBuf {
         numbered_backup_path(path)
     } else {
         simple_backup_path(path, suffix)
+    }
+}
+
+//
+// Tests for this module
+//
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+
+    // Environment variable for "VERSION_CONTROL"
+    static ENV_VERSION_CONTROL: &str = "VERSION_CONTROL";
+
+    // Defaults to --backup=existing
+    #[test]
+    fn test_backup_mode_short_only() {
+        let short_opt_present = true;
+        let long_opt_present = false;
+        let long_opt_value = None;
+
+        let result =
+            determine_backup_mode(short_opt_present, long_opt_present, long_opt_value).unwrap();
+
+        assert!(result == BackupMode::ExistingBackup);
+    }
+
+    // -b ignores the "VERSION_CONTROL" environment variable
+    #[test]
+    fn test_backup_mode_short_only_ignore_env() {
+        let short_opt_present = true;
+        let long_opt_present = false;
+        let long_opt_value = None;
+        env::set_var(ENV_VERSION_CONTROL, "none");
+
+        let result =
+            determine_backup_mode(short_opt_present, long_opt_present, long_opt_value).unwrap();
+
+        assert!(result == BackupMode::ExistingBackup);
+        env::remove_var(ENV_VERSION_CONTROL);
+    }
+
+    // --backup takes precedence over -b
+    #[test]
+    fn test_backup_mode_long_preferred_over_short() {
+        let short_opt_present = true;
+        let long_opt_present = true;
+        let long_opt_value = Some("none");
+
+        let result =
+            determine_backup_mode(short_opt_present, long_opt_present, long_opt_value).unwrap();
+
+        assert!(result == BackupMode::NoBackup);
+    }
+
+    // --backup can be passed without an argument
+    #[test]
+    fn test_backup_mode_long_without_args_no_env() {
+        let short_opt_present = false;
+        let long_opt_present = true;
+        let long_opt_value = None;
+
+        let result =
+            determine_backup_mode(short_opt_present, long_opt_present, long_opt_value).unwrap();
+
+        assert!(result == BackupMode::ExistingBackup);
+    }
+
+    // --backup can be passed without an argument, but reads env var if existant
+    #[test]
+    fn test_backup_mode_long_without_args_with_env() {
+        let short_opt_present = false;
+        let long_opt_present = true;
+        let long_opt_value = None;
+        env::set_var(ENV_VERSION_CONTROL, "none");
+
+        let result =
+            determine_backup_mode(short_opt_present, long_opt_present, long_opt_value).unwrap();
+
+        assert!(result == BackupMode::NoBackup);
+        env::remove_var(ENV_VERSION_CONTROL);
+    }
+
+    // --backup can be passed with an argument only
+    #[test]
+    fn test_backup_mode_long_with_args() {
+        let short_opt_present = false;
+        let long_opt_present = true;
+        let long_opt_value = Some("simple");
+
+        let result =
+            determine_backup_mode(short_opt_present, long_opt_present, long_opt_value).unwrap();
+
+        assert!(result == BackupMode::SimpleBackup);
+    }
+
+    // --backup errors on invalid argument
+    #[test]
+    fn test_backup_mode_long_with_args_invalid() {
+        let short_opt_present = false;
+        let long_opt_present = true;
+        let long_opt_value = Some("foobar");
+
+        let result = determine_backup_mode(short_opt_present, long_opt_present, long_opt_value);
+
+        assert!(result.is_err());
+        let text = result.unwrap_err();
+        assert!(text.contains("invalid argument ‘foobar’ for ‘backup type’"));
+    }
+
+    // --backup errors on ambiguous argument
+    #[test]
+    fn test_backup_mode_long_with_args_ambiguous() {
+        let short_opt_present = false;
+        let long_opt_present = true;
+        let long_opt_value = Some("n");
+
+        let result = determine_backup_mode(short_opt_present, long_opt_present, long_opt_value);
+
+        assert!(result.is_err());
+        let text = result.unwrap_err();
+        assert!(text.contains("ambiguous argument ‘n’ for ‘backup type’"));
+    }
+
+    // --backup errors on invalid VERSION_CONTROL env var
+    #[test]
+    fn test_backup_mode_long_with_env_var_invalid() {
+        let short_opt_present = false;
+        let long_opt_present = true;
+        let long_opt_value = None;
+        env::set_var(ENV_VERSION_CONTROL, "foobar");
+
+        let result = determine_backup_mode(short_opt_present, long_opt_present, long_opt_value);
+
+        assert!(result.is_err());
+        let text = result.unwrap_err();
+        assert!(text.contains("invalid argument ‘foobar’ for ‘$VERSION_CONTROL’"));
+        env::remove_var(ENV_VERSION_CONTROL);
+    }
+
+    // --backup errors on ambiguous VERSION_CONTROL env var
+    #[test]
+    fn test_backup_mode_long_with_env_var_ambiguous() {
+        let short_opt_present = false;
+        let long_opt_present = true;
+        let long_opt_value = None;
+        env::set_var(ENV_VERSION_CONTROL, "n");
+
+        let result = determine_backup_mode(short_opt_present, long_opt_present, long_opt_value);
+
+        assert!(result.is_err());
+        let text = result.unwrap_err();
+        assert!(text.contains("ambiguous argument ‘n’ for ‘$VERSION_CONTROL’"));
+        env::remove_var(ENV_VERSION_CONTROL);
+    }
+
+    // --backup accepts shortened arguments (si for simple)
+    #[test]
+    fn test_backup_mode_long_with_arg_shortened() {
+        let short_opt_present = false;
+        let long_opt_present = true;
+        let long_opt_value = Some("si");
+
+        let result =
+            determine_backup_mode(short_opt_present, long_opt_present, long_opt_value).unwrap();
+
+        assert!(result == BackupMode::SimpleBackup);
+    }
+
+    // --backup accepts shortened env vars (si for simple)
+    #[test]
+    fn test_backup_mode_long_with_env_var_shortened() {
+        let short_opt_present = false;
+        let long_opt_present = true;
+        let long_opt_value = None;
+        env::set_var(ENV_VERSION_CONTROL, "si");
+
+        let result =
+            determine_backup_mode(short_opt_present, long_opt_present, long_opt_value).unwrap();
+
+        assert!(result == BackupMode::SimpleBackup);
+        env::remove_var(ENV_VERSION_CONTROL);
     }
 }
