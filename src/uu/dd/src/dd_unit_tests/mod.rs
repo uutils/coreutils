@@ -5,14 +5,10 @@ mod conversion_tests;
 mod block_unblock_tests;
 mod conv_sync_tests;
 
+use rand::prelude::*;
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::fs;
-use md5::{ Md5, Digest, };
-use hex_literal::hex;
-
-// use tempfile::tempfile;
-// TODO: (Maybe) Use tempfiles in the tests.
 
 const DEFAULT_CFO: OConvFlags = OConvFlags {
     sparse: false,
@@ -59,6 +55,40 @@ const DEFAULT_OFLAGS: OFlags = OFlags {
     text: false,
     seek_bytes: false,
 };
+
+struct LazyReader<R: Read>
+{
+    src: R,
+}
+
+impl<R: Read> Read for LazyReader<R>
+{
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize>
+    {
+        let reduced = cmp::max(buf.len() / 2, 1);
+        self.src.read(&mut buf[..reduced])
+    }
+}
+
+struct FickleReader<R: Read>
+{
+    src: R,
+}
+
+impl<R: Read> Read for FickleReader<R>
+{
+    fn read(&mut self, mut buf: &mut [u8]) -> io::Result<usize>
+    {
+        if rand::random()
+        {
+            self.src.read(&mut buf)
+        }
+        else
+        {
+            Ok(0)
+        }
+    }
+}
 
 #[macro_export]
 macro_rules! icf (

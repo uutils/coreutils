@@ -1,19 +1,5 @@
 use super::*;
 
-struct LazyReader<R: Read>
-{
-    src: R,
-}
-
-impl<R: Read> Read for LazyReader<R>
-{
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize>
-    {
-        let reduced = cmp::max(buf.len() / 2, 1);
-        self.src.read(&mut buf[..reduced])
-    }
-}
-
 macro_rules! make_sync_test (
     ( $test_id:ident, $test_name:expr, $src:expr, $sync:expr, $ibs:expr, $obs:expr, $spec:expr ) =>
     {

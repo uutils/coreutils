@@ -361,19 +361,32 @@ impl<R: Read> Read for Input<R>
 {
     fn read(&mut self, mut buf: &mut [u8]) -> io::Result<usize>
     {
-        match self.src.read(&mut buf)
+        let mut base_idx = 0;
+        let tlen = buf.len();
+        loop
         {
-            Ok(len) =>
-                Ok(len),
-            Err(e) =>
-                if !self.cflags.noerror
+            match self.src.read(&mut buf[base_idx..])
+            {
+                Ok(0) =>
+                    return Ok(base_idx),
+                Ok(rlen) if self.iflags.fullblock =>
                 {
-                    Err(e)
-                }
-                else
-                {
-                    Ok(0)
+                    base_idx += rlen;
+
+                    if base_idx >= tlen
+                    {
+                        return Ok(tlen)
+                    }
                 },
+                Ok(len) =>
+                    return Ok(len),
+                Err(e) if e.kind() == io::ErrorKind::Interrupted =>
+                    continue,
+                Err(_) if self.cflags.noerror =>
+                    return Ok(base_idx),
+                Err(e) =>
+                    return Err(e),
+            }
         }
     }
 }
@@ -529,6 +542,11 @@ fn make_unix_oflags(oflags: &OFlags) -> Option<libc::c_int>
 {
     let mut flag = 0;
 
+    // oflag=FLAG
+    if oflags.append
+    {
+        flag |= libc::O_APPEND;
+    }
     if oflags.direct
     {
         flag |= libc::O_DIRECT;
@@ -585,9 +603,11 @@ impl Output<File> {
             let mut dst = {
                 let mut opts = OpenOptions::new();
                 opts.write(true)
+                    .create(true)
+                    .truncate(!cflags.notrunc)
                     .append(oflags.append)
-                    .create_new(cflags.excl || !cflags.nocreat)
-                    .truncate(!cflags.notrunc);
+                    // 'create_new' overrides 'create'
+                    .create_new(cflags.excl && !cflags.nocreat);
 
                 if cfg!(unix)
                 {
@@ -1484,47 +1504,57 @@ fn append_dashes_if_not_present(mut acc: Vec<String>, s: &String) -> Vec<String>
     }
 }
 
+macro_rules! unpack_or_rtn (
+    ($i:expr, $o:expr) =>
+    {{
+        match ($i, $o)
+        {
+            (Ok(i), Ok(o)) =>
+                (i,o),
+            (Err(e), _) =>
+            {
+                eprintln!("dd Error: {}", e);
+                return RTN_FAILURE;
+            },
+            (_, Err(e)) =>
+            {
+                eprintln!("dd Error: {}", e);
+                return RTN_FAILURE;
+            },
+        }
+    }};
+);
+
 pub fn uumain(args: impl uucore::Args) -> i32
 {
     let dashed_args = args.collect_str()
                           .iter()
                           .fold(Vec::new(), append_dashes_if_not_present);
     let matches = build_app!().parse(dashed_args);
+
     let result = match (matches.opt_present("if"), matches.opt_present("of"))
     {
         (true, true) =>
         {
-            let i = Input::<File>::new(&matches)
-                .expect("TODO: Return correct error code");
-            let o = Output::<File>::new(&matches)
-                .expect("TODO: Return correct error code");
+            let (i, o) = unpack_or_rtn!(Input::<File>::new(&matches), Output::<File>::new(&matches));
+
+            dd_fileout(i,o)
+        },
+        (false, true) =>
+        {
+            let (i, o) = unpack_or_rtn!(Input::<io::Stdin>::new(&matches), Output::<File>::new(&matches));
 
             dd_fileout(i,o)
         },
         (true, false) =>
         {
-            let i = Input::<File>::new(&matches)
-                .expect("TODO: Return correct error code");
-            let o = Output::<io::Stdout>::new(&matches)
-                .expect("TODO: Return correct error code");
+            let (i, o) = unpack_or_rtn!(Input::<File>::new(&matches), Output::<io::Stdout>::new(&matches));
 
             dd_stdout(i,o)
         },
-        (false, true) =>
+       (false, false) =>
         {
-            let i = Input::<io::Stdin>::new(&matches)
-                .expect("TODO: Return correct error code");
-            let o = Output::<File>::new(&matches)
-                .expect("TODO: Return correct error code");
-
-            dd_fileout(i,o)
-        },
-        (false, false) =>
-        {
-            let i = Input::<io::Stdin>::new(&matches)
-                .expect("TODO: Return correct error code");
-            let o = Output::<io::Stdout>::new(&matches)
-                .expect("TODO: Return correct error code");
+            let (i, o) = unpack_or_rtn!(Input::<io::Stdin>::new(&matches), Output::<io::Stdout>::new(&matches));
 
             dd_stdout(i,o)
         },

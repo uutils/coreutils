@@ -1,5 +1,107 @@
 use crate::common::util::*;
 
+use std::io::{BufReader, Read, Write};
+use std::path::{Path, PathBuf};
+use std::fs::{self, OpenOptions, File};
+use std::time::{Duration, SystemTime};
+use tempfile::tempfile;
+
+macro_rules! inf
+{
+    ($fname:expr) =>
+    {{
+        &format!("if={}", $fname)
+    }};
+}
+
+macro_rules! of
+{
+    ($fname:expr) =>
+    {{
+        &format!("of={}", $fname)
+    }};
+}
+
+macro_rules! fixture_path
+{
+    ($fname:expr) =>
+    {{
+        PathBuf::from(format!("./tests/fixtures/dd/{}", $fname))
+    }};
+}
+
+macro_rules! assert_fixture_exists
+{
+    ($fname:expr) =>
+    {{
+        let fpath = fixture_path!($fname);
+        if !fpath.exists()
+        {
+            panic!("Fixture missing: {:?}", fpath);
+        }
+    }};
+}
+
+macro_rules! assert_fixture_not_exists
+{
+    ($fname:expr) =>
+    {{
+        let fpath = PathBuf::from(format!("./fixtures/dd/{}", $fname));
+        if fpath.exists()
+        {
+            panic!("Fixture present: {:?}", fpath);
+        }
+    }};
+}
+
+macro_rules! build_test_file {
+    ($fp:expr, $data:expr) => {{
+        OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open($fp)
+            .unwrap()
+            .write_all($data)
+            .unwrap()
+    }};
+}
+
+macro_rules! cmp_file (
+    ($spec:expr, $test:expr) =>
+    {
+        let specfile_len = $spec.metadata().unwrap().len();
+        let testfile_len = $test.metadata().unwrap().len();
+        assert_eq!(testfile_len, specfile_len);
+
+        let spec = BufReader::new($spec);
+        let test = BufReader::new($test);
+
+        for (b_spec, b_test) in spec.bytes().zip(test.bytes())
+        {
+            assert_eq!(b_spec.unwrap(),
+                       b_test.unwrap());
+        }
+    };
+);
+
+fn build_ascii_block(n: usize) -> Vec<u8>
+{
+    (0..=127)
+        .cycle()
+        .take(n)
+        .collect()
+}
+
+fn build_ebcdic_block(n: usize) -> Vec<u8>
+{
+    (0..=255)
+        .cycle()
+        .take(n)
+        .collect()
+}
+
+// Sanity Tests
 #[test]
 fn version()
 {
@@ -16,16 +118,6 @@ fn help()
         .succeeds();
 }
 
-fn build_ascii_block(n: usize) -> Vec<u8>
-{
-    vec!['a', 'b', 'c', 'd', 'e', 'f']
-        .into_iter()
-        .map(|c| c as u8)
-        .cycle()
-        .take(n)
-        .collect()
-}
-
 #[test]
 fn test_stdin_stdout()
 {
@@ -34,10 +126,13 @@ fn test_stdin_stdout()
     new_ucmd!()
         .args(&["status=none"])
         .pipe_in(input)
-        .succeeds()
+        .run()
+        .no_stderr()
         .stdout_only(output);
 }
 
+// Top-Level Items
+// count=N, skip=N, status=LEVEL, conv=FLAG, *flag=FLAG
 #[test]
 fn test_stdin_stdout_count()
 {
@@ -51,7 +146,8 @@ fn test_stdin_stdout_count()
             "ibs=128",
         ])
         .pipe_in(input)
-        .succeeds()
+        .run()
+        .no_stderr()
         .stdout_only(output);
 }
 
@@ -68,7 +164,8 @@ fn test_stdin_stdout_count_bytes()
             "iflag=count_bytes",
         ])
         .pipe_in(input)
-        .succeeds()
+        .run()
+        .no_stderr()
         .stdout_only(output);
 }
 
@@ -85,7 +182,8 @@ fn test_stdin_stdout_skip()
             "ibs=128",
         ])
         .pipe_in(input)
-        .succeeds()
+        .run()
+        .no_stderr()
         .stdout_only(output);
 }
 
@@ -103,14 +201,51 @@ fn test_stdin_stdout_skip_bytes()
             "iflag=skip_bytes",
         ])
         .pipe_in(input)
-        .succeeds()
+        .run()
+        .no_stderr()
         .stdout_only(output);
+}
+
+#[test]
+fn test_stdin_stdout_skip_w_multiplier()
+{
+    let input = build_ascii_block(10*1024);
+    let output = String::from_utf8(input[5*1024..].to_vec()).unwrap();
+    new_ucmd!()
+        .args(&[
+            "status=none",
+            "skip=5K",
+            "iflag=skip_bytes"
+        ])
+        .pipe_in(input)
+        .run()
+        .no_stderr()
+        .stdout_is(output)
+        .success();
+}
+
+#[test]
+fn test_stdin_stdout_count_w_multiplier()
+{
+    let input = build_ascii_block(5*1024);
+    let output = String::from_utf8(input[..2*1024].to_vec()).unwrap();
+    new_ucmd!()
+        .args(&[
+            "status=none",
+            "count=2KiB",
+            "iflag=count_bytes",
+        ])
+        .pipe_in(input)
+        .run()
+        .no_stderr()
+        .stdout_is(output)
+        .success();
 }
 
 #[test]
 fn test_final_stats_noxfer()
 {
-   new_ucmd!()
+    new_ucmd!()
         .args(&[
             "status=noxfer",
         ])
@@ -133,49 +268,246 @@ fn test_final_stats_unspec()
                            acc
                        });
     new_ucmd!()
-        .succeeds()
-        .stderr_only(&output);
+        .run()
+        .stderr_only(&output)
+        .success();
 }
 
 #[test]
-fn test_self_transfer()
+fn test_excl_causes_failure_when_present()
 {
-    panic!();
-    // TODO: Make new copy per-test
-    new_ucmd!()
-        .args(&[
-            "conv=notruc",
-            "if=../fixtures/dd/zero-256k.copy",
-            "of=../fixtures/dd/zero-256k.copy",
-        ])
-        .succeeds();
-    assert!(false/* Must check that zero256k.copy still == zero-256k.txt */)
+    let fname = "this-file-exists-excl.txt";
+    assert_fixture_exists!(&fname);
+
+    let (_fix, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&[
+        "of=this-file-exists-excl.txt",
+        "conv=excl",
+    ])
+        .fails();
 }
 
-#[cfg(unix)]
 #[test]
-fn test_null()
+fn test_atime_updated()
+{
+    let fname = "this-file-exists-no-noatime.txt";
+    assert_fixture_exists!(&fname);
+
+    let (fix, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&[
+        "status=none",
+        inf!(fname),
+    ]);
+
+    let pre_atime = fix.metadata(&fname).accessed().unwrap();
+
+    ucmd.pipe_in("")
+        .run()
+        .no_stderr()
+        .success();
+
+    let post_atime = fix.metadata(&fname).accessed().unwrap();
+    assert!(pre_atime != post_atime);
+}
+
+#[test]
+fn test_noatime_does_not_update_infile_atime()
+{
+    let fname = "this-ifile-exists-noatime.txt";
+    assert_fixture_exists!(&fname);
+
+    let (fix, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&[
+        "status=none",
+        "iflag=noatime",
+        inf!(fname),
+    ]);
+
+    let pre_atime = fix.metadata(&fname).accessed().unwrap();
+
+    ucmd.run()
+        .no_stderr()
+        .success();
+
+    let post_atime = fix.metadata(&fname).accessed().unwrap();
+    assert_eq!(pre_atime, post_atime);
+}
+
+#[test]
+fn test_noatime_does_not_update_ofile_atime()
+{
+    let fname = "this-ofile-exists-noatime.txt";
+    assert_fixture_exists!(&fname);
+
+    let (fix, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&[
+        "status=none",
+        "oflag=noatime",
+        of!(fname),
+    ]);
+
+    let pre_atime = fix.metadata(&fname).accessed().unwrap();
+
+    ucmd.pipe_in("")
+        .run()
+        .no_stderr()
+        .success();
+
+    let post_atime = fix.metadata(&fname).accessed().unwrap();
+    assert_eq!(pre_atime, post_atime);
+}
+
+#[test]
+fn test_nocreat_causes_failure_when_not_present()
+{
+    let fname = "this-file-does-not-exist.txt";
+    assert_fixture_not_exists!(&fname);
+
+    let (fix, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&[
+        "conv=nocreat",
+        of!(&fname),
+    ])
+        .run();
+
+    assert!(!fix.file_exists(&fname));
+
+    ucmd.fails();
+}
+
+#[test]
+fn test_notrunc_does_not_truncate()
+{
+    // Set up test if needed (eg. after failure)
+    let fname = "this-file-exists-notrunc.txt";
+    let fpath = fixture_path!(fname);
+    match fpath.metadata()
+    {
+        Ok(m) if m.len() == 256 => {},
+        _ =>
+            build_test_file!(&fpath, &build_ascii_block(256)),
+    }
+
+    let (fix, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&[
+        "status=none",
+        "conv=notrunc",
+        of!(&fname),
+        "if=null.txt",
+    ])
+        .run()
+        .no_stdout()
+        .no_stderr()
+        .success();
+
+    assert_eq!(256, fix.metadata(&fname).len());
+}
+
+#[test]
+fn test_existing_file_truncated()
+{
+    // Set up test if needed (eg. after failure)
+    let fname = "this-file-exists-truncated.txt";
+    let fpath = fixture_path!(fname);
+    match fpath.metadata()
+    {
+        Ok(m) if m.len() == 256 => {},
+        _ =>
+            build_test_file!(&fpath, &vec![0; 256]),
+    }
+
+    let (fix, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&[
+        "status=none",
+        "if=null.txt",
+        of!(fname),
+    ])
+        .run()
+        .no_stdout()
+        .no_stderr()
+        .success();
+
+    assert_eq!(0, fix.metadata(&fname).len());
+}
+
+#[test]
+fn test_null_stats()
 {
     let stats = vec![
-        "0+0 records in",
-        "0+0 records out",
-        "0 bytes (0 B, 0 B) copied, 0.0 s, 0 B/s",
+        "0+0 records in\n",
+        "0+0 records out\n",
+        "0 bytes (0 B, 0 B) copied, 0.0 s, 0 B/s\n",
     ];
     let stats = stats.into_iter()
                        .fold(String::new(), | mut acc, s | {
                            acc.push_str(s);
-                           acc.push('\n');
                            acc
                        });
+
     new_ucmd!()
         .args(&[
-            "if=/dev/null",
+            "if=null.txt",
         ])
-        .succeeds()
+        .run()
         .stderr_only(stats)
-        .stdout_only("");
+        .success();
 }
 
+#[test]
+fn test_null_fullblock()
+{
+    new_ucmd!()
+        .args(&[
+            "if=null.txt",
+            "status=none",
+            "iflag=fullblock",
+        ])
+        .run()
+        .no_stdout()
+        .no_stderr()
+        .success();
+}
+
+#[cfg(unix)]
+// #[ignore] // See note below before running this test!
+#[test]
+fn test_fullblock()
+{
+    let tname = "fullblock-from-urand";
+    let tmp_fn = format!("TESTFILE-{}.tmp", &tname);
+    let stats = vec![
+        "1+0 records in\n",
+        "1+0 records out\n",
+        "134217728 bytes (134 MB, 128 MiB) copied,",
+    ];
+    let stats = stats.into_iter()
+                       .fold(String::new(), | mut acc, s | {
+                           acc.push_str(s);
+                           acc
+                       });
+
+    let res = new_ucmd!()
+        .args(&[
+            "if=/dev/urandom",
+            of!(&tmp_fn),
+            "bs=128M",
+            // Note: In order for this test to actually test iflag=fullblock, the bs=VALUE
+            // must be big enough to 'overwhelm' urandom's store of bytes.
+            // Try executing 'dd if=/dev/urandom bs=128M count=1' (i.e without iflag=fullblock).
+            // The stats should contain the line: '0+1 records in' indicating a partial read.
+            // Since my system only copies 32 MiB without fullblock, I expect 128 MiB to be
+            // a reasonable value for testing most systems.
+            "count=1",
+            "iflag=fullblock",
+        ])
+        .run();
+
+    res.success();
+    let res_stats = &res.stderr[..stats.len()];
+    assert_eq!(&stats, res_stats);
+}
+
+// Fileio
 #[test]
 fn test_ys_to_stdout()
 {
@@ -188,10 +520,13 @@ fn test_ys_to_stdout()
 
     new_ucmd!()
         .args(&[
-            "if=../fixtures/dd/y-nl-1k.txt",
+            "status=none",
+            "if=y-nl-1k.txt",
         ])
         .run()
-        .stdout_only(output);
+        .no_stderr()
+        .stdout_is(output)
+        .success();
 }
 
 #[test]
@@ -201,9 +536,176 @@ fn test_zeros_to_stdout()
     let output = String::from_utf8(output).unwrap();
     new_ucmd!()
         .args(&[
-            "if=../fixtures/dd/zero-256k.txt",
+            "status=none",
+            "if=zero-256k.txt",
         ])
         .run()
-        .stdout_only(output);
+        .no_stderr()
+        .stdout_is(output)
+        .success();
 }
 
+#[test]
+fn test_to_stdout_with_ibs_obs()
+{
+    let output: Vec<_> = String::from("y\n")
+        .bytes()
+        .cycle()
+        .take(1024)
+        .collect();
+    let output = String::from_utf8(output).unwrap();
+
+    new_ucmd!()
+        .args(&[
+            "status=none",
+            "if=y-nl-1k.txt",
+            "ibs=521",
+            "obs=1031",
+        ])
+        .run()
+        .no_stderr()
+        .stdout_is(output)
+        .success();
+}
+
+#[test]
+fn test_ascii_10k_to_stdout()
+{
+    let output = build_ascii_block(1024*1024);
+    // build_test_file!("ascii-10k.txt", &output);
+    let output = String::from_utf8(output).unwrap();
+
+    new_ucmd!()
+        .args(&[
+            "status=none",
+            "if=ascii-10k.txt",
+        ])
+        .run()
+        .no_stderr()
+        .stdout_is(output)
+        .success();
+}
+
+#[test]
+fn test_zeros_to_file()
+{
+    let tname = "zero-256k";
+    let test_fn = format!("{}.txt", tname);
+    let tmp_fn = format!("TESTFILE-{}.tmp", &tname);
+
+    let (fix, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&[
+        "status=none",
+        inf!(test_fn),
+        of!(tmp_fn),
+    ])
+    .run()
+    .no_stderr()
+    .no_stdout()
+    .success();
+
+    cmp_file!(File::open(fixture_path!(&test_fn)).unwrap(),
+              fix.open(&tmp_fn));
+}
+
+#[test]
+fn test_to_file_with_ibs_obs()
+{
+    let tname = "zero-256k";
+    let test_fn = format!("{}.txt", tname);
+    let tmp_fn = format!("TESTFILE-{}.tmp", &tname);
+
+    let (fix, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&[
+        "status=none",
+        inf!(test_fn),
+        of!(tmp_fn),
+        "ibs=222",
+        "obs=111",
+    ])
+        .run()
+        .no_stderr()
+        .no_stdout()
+        .success();
+
+    cmp_file!(File::open(fixture_path!(&test_fn)).unwrap(),
+              fix.open(&tmp_fn));
+}
+
+#[test]
+fn test_ascii_521k_to_file()
+{
+    let tname = "ascii-521k";
+    let input = build_ascii_block(512*1024);
+    let tmp_fn = format!("TESTFILE-{}.tmp", &tname);
+
+    let (fix, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&[
+        "status=none",
+        of!(tmp_fn),
+    ])
+        .pipe_in(input.clone())
+        .run()
+        .no_stderr()
+        .no_stdout()
+        .success();
+
+    assert_eq!(512*1024, fix.metadata(&tmp_fn).len());
+
+    cmp_file!({ let mut input_f = tempfile().unwrap();
+                input_f.write(&input).unwrap();
+                input_f },
+              fix.open(&tmp_fn));
+}
+
+#[ignore]
+#[cfg(unix)]
+#[test]
+fn test_ascii_5_gibi_to_file()
+{
+    let tname = "ascii-5G";
+    let tmp_fn = format!("TESTFILE-{}.tmp", &tname);
+
+    let (fix, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&[
+        "status=none",
+        "count=5G",
+        "iflag=count_bytes",
+        "if=/dev/zero",
+        of!(tmp_fn),
+    ])
+        .run()
+        .no_stderr()
+        .no_stdout()
+        .success();
+
+    assert_eq!(5*1024*1024*1024, fix.metadata(&tmp_fn).len());
+}
+
+#[test]
+fn test_self_transfer()
+{
+    let fname = "self-transfer-256k.txt";
+
+    let (fix, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&[
+        "status=none",
+        "conv=notrunc",
+        inf!(fname),
+        of!(fname),
+    ]);
+
+    assert!(fix.file_exists(fname));
+    assert_eq!(256*1024, fix.metadata(fname).len());
+
+    ucmd.run()
+        .no_stdout()
+        .no_stderr()
+        .success();
+
+    assert!(fix.file_exists(fname));
+    assert_eq!(256*1024, fix.metadata(fname).len());
+}
+
+// conv=[ascii,ebcdic,ibm], conv=[ucase,lcase], conv=[block,unblock], conv=sync
+// TODO: Move conv tests from unit test module

@@ -33,7 +33,53 @@ pub enum ParseError
 impl std::fmt::Display for ParseError
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "dd-args: Parse Error")
+        match self
+        {
+            Self::MultipleFmtTable =>
+            {
+                write!(f, "Only one of conv=ascii conv=ebcdic or conv=ibm may be specified")
+            },
+            Self::MultipleUCaseLCase =>
+            {
+                write!(f, "Only one of conv=lcase or conv=ucase may be specified")
+            },
+            Self::MultipleBlockUnblock =>
+            {
+                write!(f, "Only one of conv=block or conv=unblock may be specified")
+            },
+            Self::MultipleExclNoCreat =>
+            {
+                write!(f, "Only one ov conv=excl or conv=nocreat may be specified")
+            },
+            Self::FlagNoMatch(arg) =>
+            {
+                write!(f, "Unrecognized iflag=FLAG or oflag=FLAG -> {}", arg)
+            },
+            Self::ConvFlagNoMatch(arg) =>
+            {
+                write!(f, "Unrecognized conv=CONV -> {}", arg)
+            },
+            Self::NoMatchingMultiplier(arg) =>
+            {
+                write!(f, "Unrecognized byte multiplier -> {}", arg)
+            },
+            Self::ByteStringContainsNoValue(arg) =>
+            {
+                write!(f, "Unrecognized byte value -> {}", arg)
+            },
+            Self::MultiplierStringWouldOverflow(arg) =>
+            {
+                write!(f, "Multiplier string would overflow on current system -> {}", arg)
+            },
+            Self::BlockUnblockWithoutCBS =>
+            {
+                write!(f, "conv=block or conv=unblock specified without cbs=N")
+            },
+            Self::StatusLevelNotRecognized(arg) =>
+            {
+                write!(f, "status=LEVEL not recognized -> {}", arg)
+            },
+        }
     }
 }
 
@@ -270,23 +316,24 @@ fn parse_bytes_only(s: &str) -> Result<usize, ParseError>
 
 fn parse_bytes_with_opt_multiplier(s: String) -> Result<usize, ParseError>
 {
-    if let Some(idx) = s.find(char::is_alphabetic)
+    match s.find(char::is_alphabetic)
     {
-        let base = parse_bytes_only(&s[..idx])?;
-        let mult = parse_multiplier(&s[idx..])?;
+        Some(idx) =>
+        {
+            let base = parse_bytes_only(&s[..idx])?;
+            let mult = parse_multiplier(&s[idx..])?;
 
-        if let Some(bytes) = base.checked_mul(mult)
-        {
-            Ok(bytes)
+            if let Some(bytes) = base.checked_mul(mult)
+            {
+                Ok(bytes)
+            }
+            else
+            {
+                Err(ParseError::MultiplierStringWouldOverflow(s))
+            }
         }
-        else
-        {
-            Err(ParseError::MultiplierStringWouldOverflow(s))
-        }
-    }
-    else
-    {
-        parse_bytes_only(&s)
+        _ =>
+            parse_bytes_only(&s),
     }
 }
 

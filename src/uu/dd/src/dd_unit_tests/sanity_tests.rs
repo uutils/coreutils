@@ -212,6 +212,86 @@ make_io_test!(
     File::open("./test-resources/gnudd-random-first-32k.spec").unwrap()
 );
 
+make_io_test!(
+    random_73k_test_lazy_fullblock,
+    "random-73k-test-lazy-fullblock",
+    Input {
+        src: LazyReader {
+            src: File::open("./test-resources/random-5828891cb1230748e146f34223bbd3b5.test").unwrap()
+        },
+        non_ascii: false,
+        ibs: 521,
+        xfer_stats: None,
+        count: None,
+        cflags: icf!(),
+        iflags: IFlags {
+            fullblock: true,
+            cio: false,
+            direct: false,
+            directory: false,
+            dsync: false,
+            sync: false,
+            nocache: false,
+            nonblock: false,
+            noatime: false,
+            noctty: false,
+            nofollow: false,
+            nolinks: false,
+            binary: false,
+            text: false,
+            count_bytes: false,
+            skip_bytes: false,
+        },
+    },
+    Output {
+        dst: DST_PLACEHOLDER,
+        obs: 1031,
+        cflags: DEFAULT_CFO,
+        oflags: DEFAULT_OFLAGS,
+    },
+    File::open("./test-resources/random-5828891cb1230748e146f34223bbd3b5.test").unwrap()
+);
+
+make_io_test!(
+    random_73k_test_fickle_fullblock,
+    "random-73k-test-fickle-fullblock",
+    Input {
+        src: FickleReader {
+            src: File::open("./test-resources/random-5828891cb1230748e146f34223bbd3b5.test").unwrap()
+        },
+        non_ascii: false,
+        ibs: 521,
+        xfer_stats: None,
+        count: None,
+        cflags: icf!(),
+        iflags: IFlags {
+            fullblock: true,
+            cio: false,
+            direct: false,
+            directory: false,
+            dsync: false,
+            sync: false,
+            nocache: false,
+            nonblock: false,
+            noatime: false,
+            noctty: false,
+            nofollow: false,
+            nolinks: false,
+            binary: false,
+            text: false,
+            count_bytes: false,
+            skip_bytes: false,
+        },
+    },
+    Output {
+        dst: DST_PLACEHOLDER,
+        obs: 1031,
+        cflags: DEFAULT_CFO,
+        oflags: DEFAULT_OFLAGS,
+    },
+    File::open("./test-resources/random-5828891cb1230748e146f34223bbd3b5.test").unwrap()
+);
+
 // Test internal buffer size fn
 #[test]
 fn bsize_test_primes()
