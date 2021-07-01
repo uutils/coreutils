@@ -113,7 +113,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if ch == 'p' {
         if matches.is_present("major") || matches.is_present("minor") {
             eprintln!("Fifos do not have major and minor device numbers.");
-            eprintln!("Try '{} --help' for more information.", NAME);
+            eprintln!("Try `{} --help` for more information.", NAME);
             1
         } else {
             _mknod(file_name, S_IFIFO | mode, 0)
@@ -122,7 +122,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         match (matches.value_of("major"), matches.value_of("minor")) {
             (None, None) | (_, None) | (None, _) => {
                 eprintln!("Special files require major and minor device numbers.");
-                eprintln!("Try '{} --help' for more information.", NAME);
+                eprintln!("Try `{} --help` for more information.", NAME);
                 1
             }
             (Some(major), Some(minor)) => {

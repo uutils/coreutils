@@ -203,8 +203,8 @@ pub trait UError: Error + Send {
     /// Print usage help to a custom error.
     ///
     /// Return true or false to control whether a short usage help is printed
-    /// below the error message. The usage help is in the format: "Try '{name}
-    /// --help' for more information." and printed only if `true` is returned.
+    /// below the error message. The usage help is in the format: "Try `{name}
+    /// --help` for more information." and printed only if `true` is returned.
     ///
     /// # Example
     ///
@@ -519,7 +519,7 @@ macro_rules! uio_error(
 /// let res: UResult<()> = Err(1.into());
 /// ```
 /// This type is especially useful for a trivial conversion from utils returning [`i32`] to
-/// returning [`UResult`].  
+/// returning [`UResult`].
 #[derive(Debug)]
 pub struct ExitCode(pub i32);
 

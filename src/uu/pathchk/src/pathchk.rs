@@ -69,7 +69,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     // take necessary actions
     let paths = matches.values_of(options::PATH);
     let mut res = if paths.is_none() {
-        show_error!("missing operand\nTry {} --help for more information", NAME);
+        show_error!(
+            "missing operand\nTry `{} --help` for more information",
+            NAME
+        );
         false
     } else {
         true

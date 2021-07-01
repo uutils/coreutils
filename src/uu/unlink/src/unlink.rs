@@ -43,13 +43,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if paths.is_empty() {
         crash!(
             1,
-            "missing operand\nTry '{0} --help' for more information.",
+            "missing operand\nTry `{0} --help` for more information.",
             executable!()
         );
     } else if paths.len() > 1 {
         crash!(
             1,
-            "extra operand: '{1}'\nTry '{0} --help' for more information.",
+            "extra operand: '{1}'\nTry `{0} --help` for more information.",
             executable!(),
             paths[1]
         );

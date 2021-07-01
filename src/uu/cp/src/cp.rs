@@ -99,7 +99,7 @@ quick_error! {
         NotImplemented(opt: String) { display("Option '{}' not yet implemented.", opt) }
 
         /// Invalid arguments to backup
-        Backup(description: String) { display("{}\nTry 'cp --help' for more information.", description) }
+        Backup(description: String) { display("{}\nTry `{} --help` for more information.", description, executable!()) }
     }
 }
 

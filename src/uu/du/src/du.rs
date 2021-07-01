@@ -70,7 +70,6 @@ mod options {
     pub const FILE: &str = "FILE";
 }
 
-const NAME: &str = "du";
 const SUMMARY: &str = "estimate file space usage";
 const LONG_HELP: &str = "
 Display values are in units of the first available SIZE from --block-size,
@@ -87,7 +86,7 @@ const UNITS: [(char, u32); 6] = [('E', 6), ('P', 5), ('T', 4), ('G', 3), ('M', 2
 
 struct Options {
     all: bool,
-    program_name: String,
+    util_name: String,
     max_depth: Option<usize>,
     total: bool,
     separate_dirs: bool,
@@ -295,7 +294,7 @@ fn du(
                 safe_writeln!(
                     stderr(),
                     "{}: cannot read directory '{}': {}",
-                    options.program_name,
+                    options.util_name,
                     my_stat.path.display(),
                     e
                 );
@@ -423,8 +422,9 @@ Valid arguments are:
 - 'full-iso'
 - 'long-iso'
 - 'iso'
-Try '{} --help' for more information.",
-                s, NAME
+Try `{} --help` for more information.",
+                s,
+                executable!()
             ),
             DuError::InvalidTimeArg(s) => write!(
                 f,
@@ -466,7 +466,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let options = Options {
         all: matches.is_present(options::ALL),
-        program_name: NAME.to_owned(),
+        util_name: util_name!().to_string(),
         max_depth,
         total: matches.is_present(options::TOTAL),
         separate_dirs: matches.is_present(options::SEPARATE_DIRS),

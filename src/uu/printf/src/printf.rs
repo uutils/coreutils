@@ -284,7 +284,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let location = &args[0];
     if args.len() <= 1 {
         println!(
-            "{0}: missing operand\nTry '{0} --help' for more information.",
+            "{0}: missing operand\nTry `{0} --help` for more information.",
             location
         );
         return 1;

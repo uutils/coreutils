@@ -156,8 +156,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
-    let options = ProgramOptions::try_from(&matches)
-        .unwrap_or_else(|e| crash!(125, "{}\nTry 'stdbuf --help' for more information.", e.0));
+    let options = ProgramOptions::try_from(&matches).unwrap_or_else(|e| {
+        crash!(
+            125,
+            "{}\nTry `{} --help` for more information.",
+            e.0,
+            executable!()
+        )
+    });
 
     let mut command_values = matches.values_of::<&str>(options::COMMAND).unwrap();
     let mut command = Command::new(command_values.next().unwrap());
