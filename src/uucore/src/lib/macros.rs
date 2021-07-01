@@ -119,7 +119,7 @@ macro_rules! exit(
 macro_rules! crash(
     ($exit_code:expr, $($args:tt)+) => ({
         show_error!($($args)+);
-        ::std::process::exit($exit_code)
+        exit!($exit_code)
     })
 );
 
