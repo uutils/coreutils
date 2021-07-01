@@ -22,7 +22,7 @@ static OPT_WIDTHS: &str = "widths";
 
 static ARG_NUMBERS: &str = "numbers";
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!(
         "{0} [OPTION]... LAST
     {0} [OPTION]... FIRST LAST
@@ -86,7 +86,7 @@ impl FromStr for Number {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     let numbers = matches.values_of(ARG_NUMBERS).unwrap().collect::<Vec<_>>();

@@ -1055,7 +1055,7 @@ impl FieldSelector {
     }
 }
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!(
         "{0} [OPTION]... [FILE]...
 Write the sorted concatenation of all FILE(s) to standard output.
@@ -1081,7 +1081,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
-    let usage = get_usage();
+    let usage = usage();
     let mut settings: GlobalSettings = Default::default();
 
     let matches = match uu_app().usage(&usage[..]).get_matches_from_safe(args) {

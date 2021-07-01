@@ -32,12 +32,12 @@ extern "C" {
     fn GetTickCount() -> uucore::libc::uint32_t;
 }
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!("{0} [OPTION]...", executable!())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     let (boot_time, user_count) = process_utmpx();

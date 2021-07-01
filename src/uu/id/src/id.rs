@@ -76,7 +76,7 @@ mod options {
     pub const ARG_USERS: &str = "USER";
 }
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!("{0} [OPTION]... [USER]...", executable!())
 }
 
@@ -127,7 +127,7 @@ struct State {
 
 #[uucore_procs::gen_uumain]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = get_usage();
+    let usage = usage();
     let after_help = get_description();
 
     let matches = uu_app()

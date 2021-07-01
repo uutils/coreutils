@@ -221,7 +221,7 @@ fn opt_parsed<T: FromStr>(opt_name: &str, matches: &ArgMatches) -> Option<T> {
     })
 }
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!("{0} [OPTION]... [INPUT [OUTPUT]]...", executable!())
 }
 
@@ -235,7 +235,7 @@ fn get_long_usage() -> String {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
     let long_usage = get_long_usage();
 
     let matches = uu_app()

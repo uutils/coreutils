@@ -228,7 +228,7 @@ fn translate_input<T: SymbolTranslator>(
     }
 }
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!("{} [OPTION]... SET1 [SET2]", executable!())
 }
 
@@ -243,7 +243,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let usage = get_usage();
+    let usage = usage();
     let after_help = get_long_usage();
 
     let matches = uu_app()

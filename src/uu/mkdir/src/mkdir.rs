@@ -22,13 +22,13 @@ mod options {
     pub const DIRS: &str = "dirs";
 }
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!("{0} [OPTION]... [USER]", executable!())
 }
 
 #[uucore_procs::gen_uumain]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = get_usage();
+    let usage = usage();
 
     // Linux-specific options, not implemented
     // opts.optflag("Z", "context", "set SELinux security context" +

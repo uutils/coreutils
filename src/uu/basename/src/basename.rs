@@ -17,7 +17,7 @@ use uucore::InvalidEncodingHandling;
 static SUMMARY: &str = "Print NAME with any leading directory components removed
 If specified, also remove a trailing SUFFIX";
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!(
         "{0} NAME [SUFFIX]
     {0} OPTION... NAME...",
@@ -36,7 +36,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
-    let usage = get_usage();
+    let usage = usage();
     //
     // Argument parsing
     //

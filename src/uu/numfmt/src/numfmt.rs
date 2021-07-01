@@ -50,7 +50,7 @@ FIELDS supports cut(1) style field ranges:
 Multiple fields/ranges can be separated with commas
 ";
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!("{0} [OPTION]... [NUMBER]...", executable!())
 }
 
@@ -154,7 +154,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 

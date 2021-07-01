@@ -28,13 +28,13 @@ static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 static BASE_CMD_PARSE_ERROR: i32 = 1;
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!("{0} [OPTION]... [FILE]", executable!())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let format = Format::Base32;
-    let usage = get_usage();
+    let usage = usage();
     let name = executable!();
 
     let config_result: Result<base_common::Config, String> =

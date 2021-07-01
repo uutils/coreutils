@@ -22,7 +22,7 @@ use uucore::InvalidEncodingHandling;
 static ABOUT: &str = "Unlink the file at [FILE].";
 static OPT_PATH: &str = "FILE";
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!("{} [OPTION]... FILE", executable!())
 }
 
@@ -31,7 +31,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let usage = get_usage();
+    let usage = usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 

@@ -34,7 +34,7 @@ mod options {
     pub const PATTERN: &str = "pattern";
 }
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!("{0} [OPTION]... FILE PATTERN...", executable!())
 }
 
@@ -706,7 +706,7 @@ mod tests {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();

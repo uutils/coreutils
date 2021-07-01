@@ -53,11 +53,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     result
 }
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!("{0} [OPTION]... [HOSTNAME]", executable!())
 }
+
 fn execute(args: impl uucore::Args) -> UResult<()> {
-    let usage = get_usage();
+    let usage = usage();
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     match matches.value_of(OPT_HOST) {

@@ -23,12 +23,12 @@ mod options {
     pub const SILENT: &str = "silent";
 }
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!("{0} [OPTION]...", executable!())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();

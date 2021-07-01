@@ -46,7 +46,7 @@ use unicode_width::UnicodeWidthStr;
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 use uucore::{fs::display_permissions, version_cmp::version_cmp};
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!("{0} [OPTION]... [FILE]...", executable!())
 }
 
@@ -603,7 +603,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let usage = get_usage();
+    let usage = usage();
 
     let app = uu_app().usage(&usage[..]);
 

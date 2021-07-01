@@ -19,7 +19,7 @@ pub mod options {
     pub static FILES: &str = "FILES";
 }
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!("{0} FILE1 FILE2", executable!())
 }
 
@@ -31,7 +31,7 @@ pub fn normalize_error_message(e: Error) -> String {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     let files: Vec<_> = matches

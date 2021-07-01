@@ -213,7 +213,7 @@ static ABOUT: &str = "Overwrite the specified FILE(s) repeatedly, in order to ma
 for even very expensive hardware probing to recover the data.
 ";
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!("{} [OPTION]... FILE...", executable!())
 }
 
@@ -270,7 +270,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let usage = get_usage();
+    let usage = usage();
 
     let app = uu_app().usage(&usage[..]);
 

@@ -34,13 +34,13 @@ pub fn absolute_path(path: &Path) -> io::Result<PathBuf> {
     Ok(path_buf)
 }
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!("{0} [OPTION]... FILE...", executable!())
 }
 
 #[uucore_procs::gen_uumain]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = get_usage();
+    let usage = usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 

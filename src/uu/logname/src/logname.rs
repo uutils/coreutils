@@ -35,7 +35,7 @@ fn get_userlogin() -> Option<String> {
 
 static SUMMARY: &str = "Print user's login name";
 
-fn get_usage() -> String {
+fn usage() -> String {
     String::from(executable!())
 }
 
@@ -44,7 +44,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let usage = get_usage();
+    let usage = usage();
     let _ = uu_app().usage(&usage[..]).get_matches_from(args);
 
     match get_userlogin() {

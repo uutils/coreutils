@@ -882,7 +882,7 @@ impl Stater {
     }
 }
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!("{0} [OPTION]... FILE...", executable!())
 }
 
@@ -945,7 +945,7 @@ for details about the options it supports.
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
     let long_usage = get_long_usage();
 
     let matches = uu_app()

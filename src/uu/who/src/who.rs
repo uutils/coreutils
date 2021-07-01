@@ -44,7 +44,7 @@ static RUNLEVEL_HELP: &str = "print current runlevel";
 #[cfg(not(target_os = "linux"))]
 static RUNLEVEL_HELP: &str = "print current runlevel (This is meaningless on non Linux)";
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!("{0} [OPTION]... [ FILE | ARG1 ARG2 ]", executable!())
 }
 
@@ -61,7 +61,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let usage = get_usage();
+    let usage = usage();
     let after_help = get_long_usage();
 
     let matches = uu_app()

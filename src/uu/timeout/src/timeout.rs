@@ -22,7 +22,7 @@ use uucore::InvalidEncodingHandling;
 
 static ABOUT: &str = "Start COMMAND, and kill it if still running after DURATION.";
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!("{0} [OPTION] DURATION COMMAND...", executable!())
 }
 
@@ -100,7 +100,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let usage = get_usage();
+    let usage = usage();
 
     let app = uu_app().usage(&usage[..]);
 

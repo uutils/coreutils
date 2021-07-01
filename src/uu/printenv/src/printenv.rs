@@ -19,12 +19,12 @@ static OPT_NULL: &str = "null";
 
 static ARG_VARIABLES: &str = "variables";
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!("{0} [VARIABLE]... [OPTION]...", executable!())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 

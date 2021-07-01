@@ -26,7 +26,7 @@ mod options {
     pub const NUMBER: &str = "NUMBER";
 }
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!(
         "{0} {1}[SUFFIX]... \n    {0} OPTION",
         executable!(),
@@ -36,7 +36,7 @@ fn get_usage() -> String {
 
 #[uucore_procs::gen_uumain]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = get_usage();
+    let usage = usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 

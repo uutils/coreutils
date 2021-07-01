@@ -25,7 +25,7 @@ mod options {
     pub const FROM: &str = "FROM";
 }
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!("{} [-d DIR] TO [FROM]", executable!())
 }
 
@@ -33,7 +33,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
-    let usage = get_usage();
+    let usage = usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 

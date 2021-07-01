@@ -31,7 +31,7 @@ mod options {
     pub const FILE_2: &str = "FILE2";
 }
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!("{} [OPTION]... FILE1 FILE2", executable!())
 }
 
@@ -132,7 +132,7 @@ fn open_file(name: &str) -> io::Result<LineReader> {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();

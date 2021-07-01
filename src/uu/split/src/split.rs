@@ -36,7 +36,7 @@ static OPT_VERBOSE: &str = "verbose";
 static ARG_INPUT: &str = "input";
 static ARG_PREFIX: &str = "prefix";
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!("{0} [OPTION]... [INPUT [PREFIX]]", NAME)
 }
 fn get_long_usage() -> String {
@@ -47,12 +47,12 @@ fn get_long_usage() -> String {
 Output fixed-size pieces of INPUT to PREFIXaa, PREFIX ab, ...; default
 size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
 -, read standard input.",
-        get_usage()
+        usage()
     )
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
     let long_usage = get_long_usage();
 
     let matches = uu_app()

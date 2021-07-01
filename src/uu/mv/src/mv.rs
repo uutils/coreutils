@@ -58,7 +58,7 @@ static OPT_VERBOSE: &str = "verbose";
 
 static ARG_FILES: &str = "files";
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!(
         "{0} [OPTION]... [-T] SOURCE DEST
 {0} [OPTION]... SOURCE... DIRECTORY
@@ -68,7 +68,7 @@ fn get_usage() -> String {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
 
     let matches = uu_app()
         .after_help(&*format!(
