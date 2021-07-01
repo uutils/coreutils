@@ -189,25 +189,25 @@ macro_rules! safe_unwrap(
 
 //-- message templates
 
-//-- message templates : general
+//-- message templates : (join utility sub-macros)
 
 #[macro_export]
-macro_rules! snippet_list_join_oxford {
+macro_rules! snippet_list_join_oxford_comma {
     ($conjunction:expr, $valOne:expr, $valTwo:expr) => (
         format!("{}, {} {}", $valOne, $conjunction, $valTwo)
     );
     ($conjunction:expr, $valOne:expr, $valTwo:expr $(, $remaining_values:expr)*) => (
-        format!("{}, {}", $valOne, snippet_list_join_inner!($conjunction, $valTwo $(, $remaining_values)*))
+        format!("{}, {}", $valOne, snippet_list_join_oxford_comma!($conjunction, $valTwo $(, $remaining_values)*))
     );
 }
 
 #[macro_export]
-macro_rules! snippet_list_join_or {
-    ($valOne:expr, $valTwo:expr) => (
-        format!("{} or {}", $valOne, $valTwo)
+macro_rules! snippet_list_join {
+    ($conjunction:expr, $valOne:expr, $valTwo:expr) => (
+        format!("{} {} {}", $valOne, $conjunction, $valTwo)
     );
-    ($valOne:expr, $valTwo:expr $(, $remaining_values:expr)*) => (
-        format!("{}, {}", $valOne, snippet_list_join_oxford!("or", $valTwo $(, $remaining_values)*))
+    ($conjunction:expr, $valOne:expr, $valTwo:expr $(, $remaining_values:expr)*) => (
+        format!("{}, {}", $valOne, snippet_list_join_oxford_comma!($conjunction, $valTwo $(, $remaining_values)*))
     );
 }
 
@@ -271,13 +271,13 @@ macro_rules! msg_opt_invalid_should_be {
 #[macro_export]
 macro_rules! msg_expects_one_of {
     ($valOne:expr $(, $remaining_values:expr)*) => (
-        msg_invalid_input!(format!("expects one of {}", snippet_list_join_or!($valOne $(, $remaining_values)*)))
+        msg_invalid_input!(format!("expects one of {}", snippet_list_join!("or", $valOne $(, $remaining_values)*)))
     );
 }
 
 #[macro_export]
 macro_rules! msg_expects_no_more_than_one_of {
     ($valOne:expr $(, $remaining_values:expr)*) => (
-        msg_invalid_input!(format!("expects no more than one of {}", snippet_list_join_or!($valOne $(, $remaining_values)*))) ;
+        msg_invalid_input!(format!("expects no more than one of {}", snippet_list_join!("or", $valOne $(, $remaining_values)*))) ;
     );
 }
