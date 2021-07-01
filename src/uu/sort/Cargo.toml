@@ -16,7 +16,7 @@ path = "src/sort.rs"
 
 [dependencies]
 binary-heap-plus = "0.4.1"
-clap = "2.33"
+clap = { version = "2.33", features = ["wrap_help"] }
 compare = "0.1.0"
 fnv = "1.0.7"
 itertools = "0.10.0"
