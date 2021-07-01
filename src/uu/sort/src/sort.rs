@@ -1198,12 +1198,14 @@ pub fn uu_app() -> App<'static, 'static> {
                     options::check::QUIET,
                     options::check::DIAGNOSE_FIRST,
                 ])
+                .conflicts_with(options::OUTPUT)
                 .help("check for sorted input; do not sort"),
         )
         .arg(
             Arg::with_name(options::check::CHECK_SILENT)
                 .short("C")
                 .long(options::check::CHECK_SILENT)
+                .conflicts_with(options::OUTPUT)
                 .help("exit successfully if the given file is already sorted, and exit with status 1 otherwise."),
         )
         .arg(
