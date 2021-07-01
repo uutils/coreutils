@@ -31,6 +31,7 @@ pub use crate::mods::error;
 pub use crate::mods::os;
 pub use crate::mods::panic;
 pub use crate::mods::ranges;
+pub use crate::mods::version_cmp;
 
 // * string parsing modules
 pub use crate::parser::parse_size;

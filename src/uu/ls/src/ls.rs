@@ -14,7 +14,6 @@ extern crate uucore;
 extern crate lazy_static;
 
 mod quoting_style;
-mod version_cmp;
 
 use clap::{crate_version, App, Arg};
 use globset::{self, Glob, GlobSet, GlobSetBuilder};
@@ -45,6 +44,7 @@ use uucore::error::{set_exit_code, FromIo, UCustomError, UResult};
 use unicode_width::UnicodeWidthStr;
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
+use uucore::{fs::display_permissions, version_cmp::version_cmp};
 
 static ABOUT: &str = "
  By default, ls will list the files and contents of any directories on
@@ -1275,7 +1275,8 @@ fn sort_entries(entries: &mut Vec<PathData>, config: &Config) {
         }
         // The default sort in GNU ls is case insensitive
         Sort::Name => entries.sort_by(|a, b| a.display_name.cmp(&b.display_name)),
-        Sort::Version => entries.sort_by(|a, b| version_cmp::version_cmp(&a.p_buf, &b.p_buf)),
+        Sort::Version => entries
+            .sort_by(|a, b| version_cmp(&a.p_buf.to_string_lossy(), &b.p_buf.to_string_lossy())),
         Sort::Extension => entries.sort_by(|a, b| {
             a.p_buf
                 .extension()
@@ -1485,8 +1486,6 @@ fn display_grid(
         }
     }
 }
-
-use uucore::fs::display_permissions;
 
 fn display_item_long(
     item: &PathData,
