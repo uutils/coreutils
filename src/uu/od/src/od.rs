@@ -252,7 +252,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> clap::App<'static, 'static> {
-    clap::App::new(executable!())
+    clap::App::new(util_name!())
         .version(crate_version!())
         .about(ABOUT)
         .usage(USAGE)

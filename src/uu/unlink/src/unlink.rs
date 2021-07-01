@@ -95,7 +95,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(util_name!())
         .version(crate_version!())
         .about(ABOUT)
         .arg(Arg::with_name(OPT_PATH).hidden(true).multiple(true))

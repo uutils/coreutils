@@ -625,7 +625,7 @@ fn parse_depth(max_depth_str: Option<&str>, summarize: bool) -> UResult<Option<u
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(util_name!())
         .version(crate_version!())
         .about(SUMMARY)
         .after_help(LONG_HELP)

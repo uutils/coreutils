@@ -23,7 +23,7 @@ use std::fs::{metadata, File};
 use std::io::{stdin, stdout, BufRead, BufReader, Lines, Read, Stdout, Write};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
-use uucore::executable;
+use uucore::util_name;
 
 type IOError = std::io::Error;
 
@@ -170,7 +170,7 @@ quick_error! {
 
 pub fn uu_app() -> clap::App<'static, 'static> {
     // TODO: migrate to clap to get more shell completions
-    clap::App::new(executable!())
+    clap::App::new(util_name!())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {

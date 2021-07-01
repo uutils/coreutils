@@ -18,7 +18,7 @@ const VERSION: &str = "version";
 const HELP: &str = "help";
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(util_name!())
         .arg(Arg::with_name(VERSION).long(VERSION))
         .arg(Arg::with_name(HELP).long(HELP))
 }

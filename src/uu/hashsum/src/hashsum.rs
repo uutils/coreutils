@@ -342,7 +342,7 @@ pub fn uu_app_common() -> App<'static, 'static> {
     const TEXT_HELP: &str = "read in text mode";
     #[cfg(not(windows))]
     const TEXT_HELP: &str = "read in text mode (default)";
-    App::new(executable!())
+    App::new(util_name!())
         .version(crate_version!())
         .about("Compute and check message digests.")
         .arg(
