@@ -5,19 +5,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-/// Get the utility name.
-#[macro_export]
-macro_rules! util_name(
-    () => ({
-        let crate_name =  env!("CARGO_PKG_NAME");
-        if crate_name.starts_with("uu_") {
-            &crate_name[3..]
-        } else {
-            &crate_name
-        }
-    })
-);
-
 /// Get the executable path (as `OsString`).
 #[macro_export]
 macro_rules! executable_os(
@@ -47,6 +34,21 @@ macro_rules! executable_name(
         &std::path::Path::new(executable_os!()).file_stem().unwrap().to_string_lossy()
     })
 );
+
+/// Derive the utility name.
+#[macro_export]
+macro_rules! util_name(
+    () => ({
+        let crate_name = env!("CARGO_PKG_NAME");
+        if crate_name.starts_with("uu_") {
+            &crate_name[3..]
+        } else {
+            &crate_name
+        }
+    })
+);
+
+//====
 
 #[macro_export]
 macro_rules! show(
@@ -102,19 +104,21 @@ macro_rules! show_usage_error(
     })
 );
 
-/// Display the provided error message, then `exit()` with the provided exit code
-#[macro_export]
-macro_rules! crash(
-    ($exit_code:expr, $($args:tt)+) => ({
-        show_error!($($args)+);
-        ::std::process::exit($exit_code)
-    })
-);
+//====
 
 /// Calls `exit()` with the provided exit code.
 #[macro_export]
 macro_rules! exit(
     ($exit_code:expr) => ({
+        ::std::process::exit($exit_code)
+    })
+);
+
+/// Display the provided error message, then `exit()` with the provided exit code
+#[macro_export]
+macro_rules! crash(
+    ($exit_code:expr, $($args:tt)+) => ({
+        show_error!($($args)+);
         ::std::process::exit($exit_code)
     })
 );
@@ -131,6 +135,8 @@ macro_rules! crash_if_err(
     )
 );
 
+//====
+
 /// Unwraps the Result. Instead of panicking, it shows the error and then
 /// returns from the function with the provided exit code.
 /// Assumes the current function returns an i32 value.
@@ -146,6 +152,8 @@ macro_rules! return_if_err(
         }
     )
 );
+
+//====
 
 #[macro_export]
 macro_rules! safe_write(
