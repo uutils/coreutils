@@ -18,11 +18,33 @@ macro_rules! util_name(
     })
 );
 
-/// Get the executable name.
+/// Get the executable path (as `OsString`).
+#[macro_export]
+macro_rules! executable_os(
+    () => ({
+        &std::env::args_os().next().unwrap()
+    })
+);
+
+/// Get the executable path (as `String`; lossless).
 #[macro_export]
 macro_rules! executable(
     () => ({
-        &std::env::args().next().unwrap()
+        let exe = match executable_os!().to_str() {
+            // * UTF-8
+            Some(s) => s.to_string(),
+            // * "lossless" debug format if `executable_os!()` is not well-formed UTF-8
+            None => format!("{:?}", executable_os!())
+        };
+        &exe.to_owned()
+    })
+);
+
+/// Get the executable name.
+#[macro_export]
+macro_rules! executable_name(
+    () => ({
+        &std::path::Path::new(executable_os!()).file_stem().unwrap().to_string_lossy()
     })
 );
 
@@ -31,10 +53,7 @@ macro_rules! show(
     ($err:expr) => ({
         let e = $err;
         uucore::error::set_exit_code(e.code());
-        eprintln!("{}: {}", executable!(), e);
-        if e.usage() {
-            eprintln!("Try '{} --help' for more information.", executable!());
-        }
+        eprintln!("{}: {}", executable_name!(), e);
     })
 );
 
@@ -51,7 +70,7 @@ macro_rules! show_if_err(
 #[macro_export]
 macro_rules! show_error(
     ($($args:tt)+) => ({
-        eprint!("{}: ", executable!());
+        eprint!("{}: ", executable_name!());
         eprintln!($($args)+);
     })
 );
@@ -60,7 +79,7 @@ macro_rules! show_error(
 #[macro_export]
 macro_rules! show_error_custom_description (
     ($err:expr,$($args:tt)+) => ({
-        eprint!("{}: {}: ", executable!(), $err);
+        eprint!("{}: {}: ", executable_name!(), $err);
         eprintln!($($args)+);
     })
 );
@@ -68,7 +87,7 @@ macro_rules! show_error_custom_description (
 #[macro_export]
 macro_rules! show_warning(
     ($($args:tt)+) => ({
-        eprint!("{}: warning: ", executable!());
+        eprint!("{}: warning: ", executable_name!());
         eprintln!($($args)+);
     })
 );
@@ -77,9 +96,9 @@ macro_rules! show_warning(
 #[macro_export]
 macro_rules! show_usage_error(
     ($($args:tt)+) => ({
-        eprint!("{}: ", executable!());
+        eprint!("{}: ", executable_name!());
         eprintln!($($args)+);
-        eprintln!("Try '{} --help' for more information.", executable!());
+        eprintln!("Try `{:?} --help` for more information.", executable!());
     })
 );
 
