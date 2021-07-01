@@ -1,21 +1,26 @@
+// spell-checker:ignore (words) gpghome
+
 use crate::common::util::*;
 
 use std::path::PathBuf;
 use tempfile::tempdir;
 
-static TEST_TEMPLATE1: &'static str = "tempXXXXXX";
-static TEST_TEMPLATE2: &'static str = "temp";
-static TEST_TEMPLATE3: &'static str = "tempX";
-static TEST_TEMPLATE4: &'static str = "tempXX";
-static TEST_TEMPLATE5: &'static str = "tempXXX";
-static TEST_TEMPLATE6: &'static str = "tempXXXlate";
-static TEST_TEMPLATE7: &'static str = "XXXtemplate";
+static TEST_TEMPLATE1: &str = "tempXXXXXX";
+static TEST_TEMPLATE2: &str = "temp";
+static TEST_TEMPLATE3: &str = "tempX";
+static TEST_TEMPLATE4: &str = "tempXX";
+static TEST_TEMPLATE5: &str = "tempXXX";
+static TEST_TEMPLATE6: &str = "tempXXXlate"; // spell-checker:disable-line
+static TEST_TEMPLATE7: &str = "XXXtemplate"; // spell-checker:disable-line
 #[cfg(unix)]
-static TEST_TEMPLATE8: &'static str = "tempXXXl/ate";
+static TEST_TEMPLATE8: &str = "tempXXXl/ate";
 #[cfg(windows)]
-static TEST_TEMPLATE8: &'static str = "tempXXXl\\ate";
+static TEST_TEMPLATE8: &str = "tempXXXl\\ate";
 
-const TMPDIR: &'static str = "TMPDIR";
+#[cfg(not(windows))]
+const TMPDIR: &str = "TMPDIR";
+#[cfg(windows)]
+const TMPDIR: &str = "TMP";
 
 #[test]
 fn test_mktemp_mktemp() {
@@ -113,17 +118,15 @@ fn test_mktemp_mktemp_t() {
         .arg("-t")
         .arg(TEST_TEMPLATE7)
         .succeeds();
-    let result = scene
+    scene
         .ucmd()
         .env(TMPDIR, &pathname)
         .arg("-t")
         .arg(TEST_TEMPLATE8)
-        .fails();
-    println!("stdout {}", result.stdout);
-    println!("stderr {}", result.stderr);
-    assert!(result
-        .stderr
-        .contains("error: suffix cannot contain any path separators"));
+        .fails()
+        .no_stdout()
+        .stderr_contains("invalid suffix")
+        .stderr_contains("contains directory separator");
 }
 
 #[test]
@@ -387,14 +390,12 @@ fn test_mktemp_tmpdir_one_arg() {
     let scene = TestScenario::new(util_name!());
 
     let result = scene
-        .ucmd()
+        .ucmd_keepenv()
         .arg("--tmpdir")
         .arg("apt-key-gpghome.XXXXXXXXXX")
         .succeeds();
-    println!("stdout {}", result.stdout);
-    println!("stderr {}", result.stderr);
-    assert!(result.stdout.contains("apt-key-gpghome."));
-    assert!(PathBuf::from(result.stdout.trim()).is_file());
+    result.no_stderr().stdout_contains("apt-key-gpghome.");
+    assert!(PathBuf::from(result.stdout_str().trim()).is_file());
 }
 
 #[test]
@@ -402,13 +403,11 @@ fn test_mktemp_directory_tmpdir() {
     let scene = TestScenario::new(util_name!());
 
     let result = scene
-        .ucmd()
+        .ucmd_keepenv()
         .arg("--directory")
         .arg("--tmpdir")
         .arg("apt-key-gpghome.XXXXXXXXXX")
         .succeeds();
-    println!("stdout {}", result.stdout);
-    println!("stderr {}", result.stderr);
-    assert!(result.stdout.contains("apt-key-gpghome."));
-    assert!(PathBuf::from(result.stdout.trim()).is_dir());
+    result.no_stderr().stdout_contains("apt-key-gpghome.");
+    assert!(PathBuf::from(result.stdout_str().trim()).is_dir());
 }

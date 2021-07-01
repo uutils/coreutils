@@ -1,36 +1,35 @@
-// spell-checker:ignore (ToDO) conv intf strf floatf scif charf fieldtype vals subparser unescaping submodule Cninety inprefix
+// spell-checker:ignore (vars) charf cninetyninehexfloatf decf floatf intf scif strf Cninety
 
 //! formatter for %e %E scientific notation subs
 use super::super::format_field::FormatField;
-use super::super::formatter::{FormatPrimitive, Formatter, InPrefix};
+use super::super::formatter::{FormatPrimitive, Formatter, InitialPrefix};
 use super::float_common::{get_primitive_dec, primitive_to_str_common, FloatAnalysis};
 
-pub struct Scif {
-    as_num: f64,
-}
+pub struct Scif;
+
 impl Scif {
     pub fn new() -> Scif {
-        Scif { as_num: 0.0 }
+        Scif
     }
 }
 impl Formatter for Scif {
     fn get_primitive(
         &self,
         field: &FormatField,
-        inprefix: &InPrefix,
+        initial_prefix: &InitialPrefix,
         str_in: &str,
     ) -> Option<FormatPrimitive> {
         let second_field = field.second_field.unwrap_or(6) + 1;
         let analysis = FloatAnalysis::analyze(
             str_in,
-            inprefix,
+            initial_prefix,
             Some(second_field as usize + 1),
             None,
             false,
         );
         let f = get_primitive_dec(
-            inprefix,
-            &str_in[inprefix.offset..],
+            initial_prefix,
+            &str_in[initial_prefix.offset..],
             &analysis,
             second_field as usize,
             Some(*field.field_char == 'E'),

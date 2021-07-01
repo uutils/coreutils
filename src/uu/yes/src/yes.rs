@@ -12,7 +12,7 @@ extern crate clap;
 #[macro_use]
 extern crate uucore;
 
-use clap::Arg;
+use clap::{App, Arg};
 use std::borrow::Cow;
 use std::io::{self, Write};
 use uucore::zero_copy::ZeroCopyWriter;
@@ -22,7 +22,7 @@ use uucore::zero_copy::ZeroCopyWriter;
 const BUF_SIZE: usize = 16 * 1024;
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let app = app_from_crate!().arg(Arg::with_name("STRING").index(1).multiple(true));
+    let app = uu_app();
 
     let matches = match app.get_matches_from_safe(args) {
         Ok(m) => m,
@@ -54,6 +54,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     exec(bytes);
 
     0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    app_from_crate!().arg(Arg::with_name("STRING").index(1).multiple(true))
 }
 
 #[cfg(not(feature = "latency"))]

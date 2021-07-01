@@ -13,17 +13,20 @@ use std::error::Error;
 use std::io::{self, stdin, stdout, BufRead, Write};
 
 mod factor;
-pub(crate) use factor::*;
+use clap::{crate_version, App, Arg};
+pub use factor::*;
 
 mod miller_rabin;
 pub mod numeric;
 mod rho;
-mod table;
+pub mod table;
 
-static SYNTAX: &str = "[OPTION] [NUMBER]...";
-static SUMMARY: &str = "Print the prime factors of the given number(s).
- If none are specified, read from standard input.";
-static LONG_HELP: &str = "";
+static SUMMARY: &str = "Print the prime factors of the given NUMBER(s).
+If none are specified, read from standard input.";
+
+mod options {
+    pub static NUMBER: &str = "NUMBER";
+}
 
 fn print_factors_str(num_str: &str, w: &mut impl io::Write) -> Result<(), Box<dyn Error>> {
     num_str
@@ -33,11 +36,17 @@ fn print_factors_str(num_str: &str, w: &mut impl io::Write) -> Result<(), Box<dy
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let matches = app!(SYNTAX, SUMMARY, LONG_HELP).parse(args.collect_str());
+    let matches = uu_app().get_matches_from(args);
     let stdout = stdout();
     let mut w = io::BufWriter::new(stdout.lock());
 
-    if matches.free.is_empty() {
+    if let Some(values) = matches.values_of(options::NUMBER) {
+        for number in values {
+            if let Err(e) = print_factors_str(number, &mut w) {
+                show_warning!("{}: {}", number, e);
+            }
+        }
+    } else {
         let stdin = stdin();
 
         for line in stdin.lock().lines() {
@@ -47,12 +56,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 }
             }
         }
-    } else {
-        for number in &matches.free {
-            if let Err(e) = print_factors_str(number, &mut w) {
-                show_warning!("{}: {}", number, e);
-            }
-        }
     }
 
     if let Err(e) = w.flush() {
@@ -60,4 +63,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(SUMMARY)
+        .arg(Arg::with_name(options::NUMBER).multiple(true))
 }

@@ -9,14 +9,18 @@
 #[macro_use]
 extern crate uucore;
 
+use clap::{crate_version, App, Arg};
 use std::io::{self, Write};
 use std::iter::Peekable;
 use std::str::Chars;
+use uucore::InvalidEncodingHandling;
 
-const SYNTAX: &str = "[OPTIONS]... [STRING]...";
+const NAME: &str = "echo";
 const SUMMARY: &str = "display a line of text";
-const HELP: &str = r#"
+const USAGE: &str = "[OPTIONS]... [STRING]...";
+const AFTER_HELP: &str = r#"
  Echo the STRING(s) to standard output.
+
  If -e is in effect, the following sequences are recognized:
 
  \\\\      backslash
@@ -32,6 +36,13 @@ const HELP: &str = r#"
  \\0NNN   byte with octal value NNN (1 to 3 digits)
  \\xHH    byte with hexadecimal value HH (1 to 2 digits)
 "#;
+
+mod options {
+    pub const STRING: &str = "STRING";
+    pub const NO_NEWLINE: &str = "no_newline";
+    pub const ENABLE_BACKSLASH_ESCAPE: &str = "enable_backslash_escape";
+    pub const DISABLE_BACKSLASH_ESCAPE: &str = "disable_backslash_escape";
+}
 
 fn parse_code(
     input: &mut Peekable<Chars>,
@@ -103,28 +114,65 @@ fn print_escaped(input: &str, mut output: impl Write) -> io::Result<bool> {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
+    let matches = uu_app().get_matches_from(args);
 
-    let matches = app!(SYNTAX, SUMMARY, HELP)
-        .optflag("n", "", "do not output the trailing newline")
-        .optflag("e", "", "enable interpretation of backslash escapes")
-        .optflag(
-            "E",
-            "",
-            "disable interpretation of backslash escapes (default)",
-        )
-        .parse(args);
+    let no_newline = matches.is_present(options::NO_NEWLINE);
+    let escaped = matches.is_present(options::ENABLE_BACKSLASH_ESCAPE);
+    let values: Vec<String> = match matches.values_of(options::STRING) {
+        Some(s) => s.map(|s| s.to_string()).collect(),
+        None => vec!["".to_string()],
+    };
 
-    let no_newline = matches.opt_present("n");
-    let escaped = matches.opt_present("e");
-
-    match execute(no_newline, escaped, matches.free) {
+    match execute(no_newline, escaped, values) {
         Ok(_) => 0,
         Err(f) => {
             show_error!("{}", f);
             1
         }
     }
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .name(NAME)
+        // TrailingVarArg specifies the final positional argument is a VarArg
+        // and it doesn't attempts the parse any further args.
+        // Final argument must have multiple(true) or the usage string equivalent.
+        .setting(clap::AppSettings::TrailingVarArg)
+        .setting(clap::AppSettings::AllowLeadingHyphen)
+        .version(crate_version!())
+        .about(SUMMARY)
+        .after_help(AFTER_HELP)
+        .usage(USAGE)
+        .arg(
+            Arg::with_name(options::NO_NEWLINE)
+                .short("n")
+                .help("do not output the trailing newline")
+                .takes_value(false)
+                .display_order(1),
+        )
+        .arg(
+            Arg::with_name(options::ENABLE_BACKSLASH_ESCAPE)
+                .short("e")
+                .help("enable interpretation of backslash escapes")
+                .takes_value(false)
+                .display_order(2),
+        )
+        .arg(
+            Arg::with_name(options::DISABLE_BACKSLASH_ESCAPE)
+                .short("E")
+                .help("disable interpretation of backslash escapes (default)")
+                .takes_value(false)
+                .display_order(3),
+        )
+        .arg(
+            Arg::with_name(options::STRING)
+                .multiple(true)
+                .allow_hyphen_values(true),
+        )
 }
 
 fn execute(no_newline: bool, escaped: bool, free: Vec<String>) -> io::Result<()> {
@@ -136,7 +184,7 @@ fn execute(no_newline: bool, escaped: bool, free: Vec<String>) -> io::Result<()>
             write!(output, " ")?;
         }
         if escaped {
-            let should_stop = print_escaped(&input, &mut output)?;
+            let should_stop = print_escaped(input, &mut output)?;
             if should_stop {
                 break;
             }

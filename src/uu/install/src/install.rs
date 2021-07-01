@@ -12,17 +12,22 @@ mod mode;
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg, ArgMatches};
+use clap::{crate_version, App, Arg, ArgMatches};
+use file_diff::diff;
+use filetime::{set_file_times, FileTime};
 use uucore::entries::{grp2gid, usr2uid};
 use uucore::perms::{wrap_chgrp, wrap_chown, Verbosity};
 
+use libc::{getegid, geteuid};
 use std::fs;
 use std::fs::File;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::result::Result;
 
 const DEFAULT_MODE: u32 = 0o755;
+const DEFAULT_STRIP_PROGRAM: &str = "strip";
 
 #[allow(dead_code)]
 pub struct Behavior {
@@ -32,6 +37,12 @@ pub struct Behavior {
     owner: String,
     group: String,
     verbose: bool,
+    preserve_timestamps: bool,
+    compare: bool,
+    strip: bool,
+    strip_program: String,
+    create_leading: bool,
+    target_dir: Option<String>,
 }
 
 #[derive(Clone, Eq, PartialEq)]
@@ -54,14 +65,13 @@ impl Behavior {
 
 static ABOUT: &str = "Copy SOURCE to DEST or multiple SOURCE(s) to the existing
  DIRECTORY, while setting permission modes and owner/group";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 static OPT_COMPARE: &str = "compare";
 static OPT_BACKUP: &str = "backup";
 static OPT_BACKUP_2: &str = "backup2";
 static OPT_DIRECTORY: &str = "directory";
 static OPT_IGNORED: &str = "ignored";
-static OPT_CREATED: &str = "created";
+static OPT_CREATE_LEADING: &str = "create-leading";
 static OPT_GROUP: &str = "group";
 static OPT_MODE: &str = "mode";
 static OPT_OWNER: &str = "owner";
@@ -88,10 +98,35 @@ fn get_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
-        .version(VERSION)
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+
+    let paths: Vec<String> = matches
+        .values_of(ARG_FILES)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
+
+    if let Err(s) = check_unimplemented(&matches) {
+        show_error!("Unimplemented feature: {}", s);
+        return 2;
+    }
+
+    let behavior = match behavior(&matches) {
+        Ok(x) => x,
+        Err(ret) => {
+            return ret;
+        }
+    };
+
+    match behavior.main_function {
+        MainFunction::Directory => directory(paths, behavior),
+        MainFunction::Standard => standard(paths, behavior),
+    }
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
         .about(ABOUT)
-        .usage(&usage[..])
         .arg(
                 Arg::with_name(OPT_BACKUP)
                 .long(OPT_BACKUP)
@@ -110,11 +145,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             .help("ignored")
         )
         .arg(
-            // TODO implement flag
             Arg::with_name(OPT_COMPARE)
             .short("C")
             .long(OPT_COMPARE)
-            .help("(unimplemented) compare each pair of source and destination files, and in some cases, do not modify the destination at all")
+            .help("compare each pair of source and destination files, and in some cases, do not modify the destination at all")
         )
         .arg(
             Arg::with_name(OPT_DIRECTORY)
@@ -125,9 +159,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
         .arg(
             // TODO implement flag
-            Arg::with_name(OPT_CREATED)
+            Arg::with_name(OPT_CREATE_LEADING)
                 .short("D")
-                .help("(unimplemented) create all leading components of DEST except the last, then copy SOURCE to DEST")
+                .help("create all leading components of DEST except the last, then copy SOURCE to DEST")
         )
         .arg(
             Arg::with_name(OPT_GROUP)
@@ -154,24 +188,21 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .takes_value(true)
         )
         .arg(
-            // TODO implement flag
             Arg::with_name(OPT_PRESERVE_TIMESTAMPS)
                 .short("p")
                 .long(OPT_PRESERVE_TIMESTAMPS)
-                .help("(unimplemented) apply access/modification times of SOURCE files to corresponding destination files")
+                .help("apply access/modification times of SOURCE files to corresponding destination files")
         )
         .arg(
-            // TODO implement flag
             Arg::with_name(OPT_STRIP)
             .short("s")
             .long(OPT_STRIP)
-            .help("(unimplemented) strip symbol tables")
+            .help("strip symbol tables (no action Windows)")
         )
         .arg(
-            // TODO implement flag
             Arg::with_name(OPT_STRIP_PROGRAM)
                 .long(OPT_STRIP_PROGRAM)
-                .help("(unimplemented) program used to strip binaries")
+                .help("program used to strip binaries (no action Windows)")
                 .value_name("PROGRAM")
         )
         .arg(
@@ -189,7 +220,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(OPT_TARGET_DIRECTORY)
                 .short("t")
                 .long(OPT_TARGET_DIRECTORY)
-                .help("(unimplemented) move all SOURCE arguments into DIRECTORY")
+                .help("move all SOURCE arguments into DIRECTORY")
                 .value_name("DIRECTORY")
         )
         .arg(
@@ -222,29 +253,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .value_name("CONTEXT")
         )
         .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true).min_values(1))
-        .get_matches_from(args);
-
-    let paths: Vec<String> = matches
-        .values_of(ARG_FILES)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_default();
-
-    if let Err(s) = check_unimplemented(&matches) {
-        show_error!("Unimplemented feature: {}", s);
-        return 2;
-    }
-
-    let behavior = match behavior(&matches) {
-        Ok(x) => x,
-        Err(ret) => {
-            return ret;
-        }
-    };
-
-    match behavior.main_function {
-        MainFunction::Directory => directory(paths, behavior),
-        MainFunction::Standard => standard(paths, behavior),
-    }
 }
 
 /// Check for unimplemented command line arguments.
@@ -261,20 +269,8 @@ fn check_unimplemented<'a>(matches: &ArgMatches) -> Result<(), &'a str> {
         Err("--backup")
     } else if matches.is_present(OPT_BACKUP_2) {
         Err("-b")
-    } else if matches.is_present(OPT_COMPARE) {
-        Err("--compare, -C")
-    } else if matches.is_present(OPT_CREATED) {
-        Err("-D")
-    } else if matches.is_present(OPT_PRESERVE_TIMESTAMPS) {
-        Err("--preserve-timestamps, -p")
-    } else if matches.is_present(OPT_STRIP) {
-        Err("--strip, -s")
-    } else if matches.is_present(OPT_STRIP_PROGRAM) {
-        Err("--strip-program")
     } else if matches.is_present(OPT_SUFFIX) {
         Err("--suffix, -S")
-    } else if matches.is_present(OPT_TARGET_DIRECTORY) {
-        Err("--target-directory, -t")
     } else if matches.is_present(OPT_NO_TARGET_DIRECTORY) {
         Err("--no-target-directory, -T")
     } else if matches.is_present(OPT_PRESERVE_CONTEXT) {
@@ -304,32 +300,22 @@ fn behavior(matches: &ArgMatches) -> Result<Behavior, i32> {
     let considering_dir: bool = MainFunction::Directory == main_function;
 
     let specified_mode: Option<u32> = if matches.is_present(OPT_MODE) {
-        match matches.value_of(OPT_MODE) {
-            Some(x) => match mode::parse(&x[..], considering_dir) {
-                Ok(y) => Some(y),
-                Err(err) => {
-                    show_error!("Invalid mode string: {}", err);
-                    return Err(1);
-                }
-            },
-            None => {
-                return Err(1);
-            }
-        }
+        let x = matches.value_of(OPT_MODE).ok_or(1)?;
+        Some(mode::parse(x, considering_dir).map_err(|err| {
+            show_error!("Invalid mode string: {}", err);
+            1
+        })?)
     } else {
         None
     };
 
     let backup_suffix = if matches.is_present(OPT_SUFFIX) {
-        match matches.value_of(OPT_SUFFIX) {
-            Some(x) => x,
-            None => {
-                return Err(1);
-            }
-        }
+        matches.value_of(OPT_SUFFIX).ok_or(1)?
     } else {
         "~"
     };
+
+    let target_dir = matches.value_of(OPT_TARGET_DIRECTORY).map(|d| d.to_owned());
 
     Ok(Behavior {
         main_function,
@@ -338,6 +324,16 @@ fn behavior(matches: &ArgMatches) -> Result<Behavior, i32> {
         owner: matches.value_of(OPT_OWNER).unwrap_or("").to_string(),
         group: matches.value_of(OPT_GROUP).unwrap_or("").to_string(),
         verbose: matches.is_present(OPT_VERBOSE),
+        preserve_timestamps: matches.is_present(OPT_PRESERVE_TIMESTAMPS),
+        compare: matches.is_present(OPT_COMPARE),
+        strip: matches.is_present(OPT_STRIP),
+        strip_program: String::from(
+            matches
+                .value_of(OPT_STRIP_PROGRAM)
+                .unwrap_or(DEFAULT_STRIP_PROGRAM),
+        ),
+        create_leading: matches.is_present(OPT_CREATE_LEADING),
+        target_dir,
     })
 }
 
@@ -355,23 +351,29 @@ fn directory(paths: Vec<String>, b: Behavior) -> i32 {
     } else {
         let mut all_successful = true;
 
-        for directory in paths.iter() {
-            let path = Path::new(directory);
-
+        for path in paths.iter().map(Path::new) {
             // if the path already exist, don't try to create it again
             if !path.exists() {
-                if let Err(e) = fs::create_dir(directory) {
-                    show_info!("{}: {}", path.display(), e.to_string());
+                // Differently than the primary functionality (MainFunction::Standard), the directory
+                // functionality should create all ancestors (or components) of a directory regardless
+                // of the presence of the "-D" flag.
+                // NOTE: the GNU "install" sets the expected mode only for the target directory. All
+                // created ancestor directories will have the default mode. Hence it is safe to use
+                // fs::create_dir_all and then only modify the target's dir mode.
+                if let Err(e) = fs::create_dir_all(path) {
+                    show_error!("{}: {}", path.display(), e);
                     all_successful = false;
+                    continue;
+                }
+
+                if b.verbose {
+                    show_error!("creating directory '{}'", path.display());
                 }
             }
 
-            if mode::chmod(&path, b.mode()).is_err() {
+            if mode::chmod(path, b.mode()).is_err() {
                 all_successful = false;
-            }
-
-            if b.verbose {
-                show_info!("created directory '{}'", path.display());
+                continue;
             }
         }
         if all_successful {
@@ -394,17 +396,41 @@ fn is_new_file_path(path: &Path) -> bool {
 ///
 /// Returns an integer intended as a program return code.
 ///
-fn standard(paths: Vec<String>, b: Behavior) -> i32 {
-    let sources = &paths[0..paths.len() - 1]
-        .iter()
-        .map(PathBuf::from)
-        .collect::<Vec<_>>();
-    let target = Path::new(paths.last().unwrap());
+fn standard(mut paths: Vec<String>, b: Behavior) -> i32 {
+    let target: PathBuf = b
+        .target_dir
+        .clone()
+        .unwrap_or_else(|| paths.pop().unwrap())
+        .into();
 
-    if (target.is_file() || is_new_file_path(target)) && sources.len() == 1 {
-        copy_file_to_file(&sources[0], &target.to_path_buf(), &b)
+    let sources = &paths.iter().map(PathBuf::from).collect::<Vec<_>>();
+
+    if sources.len() > 1 || (target.exists() && target.is_dir()) {
+        copy_files_into_dir(sources, &target, &b)
     } else {
-        copy_files_into_dir(sources, &target.to_path_buf(), &b)
+        if let Some(parent) = target.parent() {
+            if !parent.exists() && b.create_leading {
+                if let Err(e) = fs::create_dir_all(parent) {
+                    show_error!("failed to create {}: {}", parent.display(), e);
+                    return 1;
+                }
+
+                if mode::chmod(parent, b.mode()).is_err() {
+                    show_error!("failed to chmod {}", parent.display());
+                    return 1;
+                }
+            }
+        }
+
+        if target.is_file() || is_new_file_path(&target) {
+            copy_file_to_file(&sources[0], &target, &b)
+        } else {
+            show_error!(
+                "invalid target {}: No such file or directory",
+                target.display()
+            );
+            1
+        }
     }
 }
 
@@ -418,7 +444,7 @@ fn standard(paths: Vec<String>, b: Behavior) -> i32 {
 /// _files_ must all exist as non-directories.
 /// _target_dir_ must be a directory.
 ///
-fn copy_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behavior) -> i32 {
+fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> i32 {
     if !target_dir.is_dir() {
         show_error!("target '{}' is not a directory", target_dir.display());
         return 1;
@@ -426,18 +452,25 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behavior) ->
 
     let mut all_successful = true;
     for sourcepath in files.iter() {
-        let targetpath = match sourcepath.as_os_str().to_str() {
-            Some(name) => target_dir.join(name),
-            None => {
-                show_error!(
-                    "cannot stat '{}': No such file or directory",
-                    sourcepath.display()
-                );
+        if !sourcepath.exists() {
+            show_error!(
+                "cannot stat '{}': No such file or directory",
+                sourcepath.display()
+            );
 
-                all_successful = false;
-                continue;
-            }
-        };
+            all_successful = false;
+            continue;
+        }
+
+        if sourcepath.is_dir() {
+            show_error!("omitting directory '{}'", sourcepath.display());
+            all_successful = false;
+            continue;
+        }
+
+        let mut targetpath = target_dir.to_path_buf();
+        let filename = sourcepath.components().last().unwrap();
+        targetpath.push(filename);
 
         if copy(sourcepath, &targetpath, b).is_err() {
             all_successful = false;
@@ -460,8 +493,8 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &PathBuf, b: &Behavior) ->
 /// _file_ must exist as a non-directory.
 /// _target_ must be a non-directory
 ///
-fn copy_file_to_file(file: &PathBuf, target: &PathBuf, b: &Behavior) -> i32 {
-    if copy(file, &target, b).is_err() {
+fn copy_file_to_file(file: &Path, target: &Path, b: &Behavior) -> i32 {
+    if copy(file, target, b).is_err() {
         1
     } else {
         0
@@ -479,7 +512,12 @@ fn copy_file_to_file(file: &PathBuf, target: &PathBuf, b: &Behavior) -> i32 {
 ///
 /// If the copy system call fails, we print a verbose error and return an empty error value.
 ///
-fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
+#[allow(clippy::cognitive_complexity)]
+fn copy(from: &Path, to: &Path, b: &Behavior) -> Result<(), ()> {
+    if b.compare && !need_copy(from, to, b) {
+        return Ok(());
+    }
+
     if from.to_string_lossy() == "/dev/null" {
         /* workaround a limitation of fs::copy
          * https://github.com/rust-lang/rust/issues/79390
@@ -503,7 +541,22 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
         return Err(());
     }
 
-    if mode::chmod(&to, b.mode()).is_err() {
+    if b.strip && cfg!(not(windows)) {
+        match Command::new(&b.strip_program).arg(to).output() {
+            Ok(o) => {
+                if !o.status.success() {
+                    crash!(
+                        1,
+                        "strip program failed: {}",
+                        String::from_utf8(o.stderr).unwrap_or_default()
+                    );
+                }
+            }
+            Err(e) => crash!(1, "strip program execution failed: {}", e),
+        }
+    }
+
+    if mode::chmod(to, b.mode()).is_err() {
         return Err(());
     }
 
@@ -519,7 +572,7 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
         };
         let gid = meta.gid();
         match wrap_chown(
-            to.as_path(),
+            to,
             &meta,
             Some(owner_id),
             Some(gid),
@@ -528,10 +581,10 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
         ) {
             Ok(n) => {
                 if !n.is_empty() {
-                    show_info!("{}", n);
+                    show_error!("{}", n);
                 }
             }
-            Err(e) => show_info!("{}", e),
+            Err(e) => show_error!("{}", e),
         }
     }
 
@@ -545,19 +598,112 @@ fn copy(from: &PathBuf, to: &PathBuf, b: &Behavior) -> Result<(), ()> {
             Ok(g) => g,
             _ => crash!(1, "no such group: {}", b.group),
         };
-        match wrap_chgrp(to.as_path(), &meta, group_id, false, Verbosity::Normal) {
+        match wrap_chgrp(to, &meta, group_id, false, Verbosity::Normal) {
             Ok(n) => {
                 if !n.is_empty() {
-                    show_info!("{}", n);
+                    show_error!("{}", n);
                 }
             }
-            Err(e) => show_info!("{}", e),
+            Err(e) => show_error!("{}", e),
+        }
+    }
+
+    if b.preserve_timestamps {
+        let meta = match fs::metadata(from) {
+            Ok(meta) => meta,
+            Err(f) => crash!(1, "{}", f.to_string()),
+        };
+
+        let modified_time = FileTime::from_last_modification_time(&meta);
+        let accessed_time = FileTime::from_last_access_time(&meta);
+
+        match set_file_times(to, accessed_time, modified_time) {
+            Ok(_) => {}
+            Err(e) => show_error!("{}", e),
         }
     }
 
     if b.verbose {
-        show_info!("'{}' -> '{}'", from.display(), to.display());
+        show_error!("'{}' -> '{}'", from.display(), to.display());
     }
 
     Ok(())
+}
+
+/// Return true if a file is necessary to copy. This is the case when:
+/// - _from_ or _to_ is nonexistent;
+/// - either file has a sticky bit or set[ug]id bit, or the user specified one;
+/// - either file isn't a regular file;
+/// - the sizes of _from_ and _to_ differ;
+/// - _to_'s owner differs from intended; or
+/// - the contents of _from_ and _to_ differ.
+///
+/// # Parameters
+///
+/// _from_ and _to_, if existent, must be non-directories.
+///
+/// # Errors
+///
+/// Crashes the program if a nonexistent owner or group is specified in _b_.
+///
+fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
+    let from_meta = match fs::metadata(from) {
+        Ok(meta) => meta,
+        Err(_) => return true,
+    };
+    let to_meta = match fs::metadata(to) {
+        Ok(meta) => meta,
+        Err(_) => return true,
+    };
+
+    // setuid || setgid || sticky
+    let extra_mode: u32 = 0o7000;
+
+    if b.specified_mode.unwrap_or(0) & extra_mode != 0
+        || from_meta.mode() & extra_mode != 0
+        || to_meta.mode() & extra_mode != 0
+    {
+        return true;
+    }
+
+    if !from_meta.is_file() || !to_meta.is_file() {
+        return true;
+    }
+
+    if from_meta.len() != to_meta.len() {
+        return true;
+    }
+
+    // TODO: if -P (#1809) and from/to contexts mismatch, return true.
+
+    if !b.owner.is_empty() {
+        let owner_id = match usr2uid(&b.owner) {
+            Ok(id) => id,
+            _ => crash!(1, "no such user: {}", b.owner),
+        };
+        if owner_id != to_meta.uid() {
+            return true;
+        }
+    } else if !b.group.is_empty() {
+        let group_id = match grp2gid(&b.group) {
+            Ok(id) => id,
+            _ => crash!(1, "no such group: {}", b.group),
+        };
+        if group_id != to_meta.gid() {
+            return true;
+        }
+    } else {
+        #[cfg(not(target_os = "windows"))]
+        unsafe {
+            if to_meta.uid() != geteuid() || to_meta.gid() != getegid() {
+                return true;
+            }
+        }
+    }
+
+    if !diff(from.to_str().unwrap(), to.to_str().unwrap()) {
+        return true;
+    }
+
+    false
 }

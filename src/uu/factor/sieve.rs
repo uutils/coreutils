@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (ToDO) filts, minidx, minkey paridx
 
-use std::iter::{Chain, Cycle, Map};
+use std::iter::{Chain, Copied, Cycle};
 use std::slice::Iter;
 
 /// A lazy Sieve of Eratosthenes.
@@ -30,7 +30,7 @@ impl Iterator for Sieve {
 
     #[inline]
     fn next(&mut self) -> Option<u64> {
-        while let Some(n) = self.inner.next() {
+        for n in &mut self.inner {
             let mut prime = true;
             while let Some((next, inc)) = self.filts.peek() {
                 // need to keep checking the min element of the heap
@@ -68,27 +68,17 @@ impl Sieve {
     #[allow(dead_code)]
     #[inline]
     pub fn primes() -> PrimeSieve {
-        #[allow(clippy::trivially_copy_pass_by_ref)]
-        fn deref(x: &u64) -> u64 {
-            *x
-        }
-        let deref = deref as fn(&u64) -> u64;
-        INIT_PRIMES.iter().map(deref).chain(Sieve::new())
+        INIT_PRIMES.iter().copied().chain(Sieve::new())
     }
 
     #[allow(dead_code)]
     #[inline]
     pub fn odd_primes() -> PrimeSieve {
-        #[allow(clippy::trivially_copy_pass_by_ref)]
-        fn deref(x: &u64) -> u64 {
-            *x
-        }
-        let deref = deref as fn(&u64) -> u64;
-        (&INIT_PRIMES[1..]).iter().map(deref).chain(Sieve::new())
+        (&INIT_PRIMES[1..]).iter().copied().chain(Sieve::new())
     }
 }
 
-pub type PrimeSieve = Chain<Map<Iter<'static, u64>, fn(&u64) -> u64>, Sieve>;
+pub type PrimeSieve = Chain<Copied<Iter<'static, u64>>, Sieve>;
 
 /// An iterator that generates an infinite list of numbers that are
 /// not divisible by any of 2, 3, 5, or 7.

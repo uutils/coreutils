@@ -81,7 +81,7 @@ pub fn break_lines(para: &Paragraph, opts: &FmtOptions, ostream: &mut BufWriter<
     let mut break_args = BreakArgs {
         opts,
         init_len: p_init_len,
-        indent_str: &p_indent[..],
+        indent_str: p_indent,
         indent_len: p_indent_len,
         uniform,
         ostream,
@@ -296,7 +296,7 @@ fn find_kp_breakpoints<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
                         (0, 0.0)
                     } else {
                         compute_demerits(
-                            (args.opts.goal - tlen) as isize,
+                            args.opts.goal as isize - tlen as isize,
                             stretch,
                             w.word_nchars as isize,
                             active.prev_rat,

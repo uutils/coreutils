@@ -1,5 +1,7 @@
 // spell-checker:ignore (ToDO) conv
 
+use crate::options;
+
 // parse_style parses a style string into a NumberingStyle.
 fn parse_style(chars: &[char]) -> Result<crate::NumberingStyle, String> {
     if chars.len() == 1 && chars[0] == 'a' {
@@ -23,19 +25,19 @@ fn parse_style(chars: &[char]) -> Result<crate::NumberingStyle, String> {
 
 // parse_options loads the options into the settings, returning an array of
 // error messages.
-pub fn parse_options(settings: &mut crate::Settings, opts: &getopts::Matches) -> Vec<String> {
+pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) -> Vec<String> {
     // This vector holds error messages encountered.
     let mut errs: Vec<String> = vec![];
-    settings.renumber = !opts.opt_present("p");
-    match opts.opt_str("s") {
+    settings.renumber = !opts.is_present(options::NO_RENUMBER);
+    match opts.value_of(options::NUMBER_SEPARATOR) {
         None => {}
         Some(val) => {
-            settings.number_separator = val;
+            settings.number_separator = val.to_owned();
         }
     }
-    match opts.opt_str("n") {
+    match opts.value_of(options::NUMBER_FORMAT) {
         None => {}
-        Some(val) => match val.as_ref() {
+        Some(val) => match val {
             "ln" => {
                 settings.number_format = crate::NumberFormat::Left;
             }
@@ -50,7 +52,7 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &getopts::Matches) ->
             }
         },
     }
-    match opts.opt_str("b") {
+    match opts.value_of(options::BODY_NUMBERING) {
         None => {}
         Some(val) => {
             let chars: Vec<char> = val.chars().collect();
@@ -64,7 +66,7 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &getopts::Matches) ->
             }
         }
     }
-    match opts.opt_str("f") {
+    match opts.value_of(options::FOOTER_NUMBERING) {
         None => {}
         Some(val) => {
             let chars: Vec<char> = val.chars().collect();
@@ -78,7 +80,7 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &getopts::Matches) ->
             }
         }
     }
-    match opts.opt_str("h") {
+    match opts.value_of(options::HEADER_NUMBERING) {
         None => {}
         Some(val) => {
             let chars: Vec<char> = val.chars().collect();
@@ -92,7 +94,7 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &getopts::Matches) ->
             }
         }
     }
-    match opts.opt_str("i") {
+    match opts.value_of(options::LINE_INCREMENT) {
         None => {}
         Some(val) => {
             let conv: Option<u64> = val.parse().ok();
@@ -104,7 +106,7 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &getopts::Matches) ->
             }
         }
     }
-    match opts.opt_str("w") {
+    match opts.value_of(options::NUMBER_WIDTH) {
         None => {}
         Some(val) => {
             let conv: Option<usize> = val.parse().ok();
@@ -116,7 +118,7 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &getopts::Matches) ->
             }
         }
     }
-    match opts.opt_str("v") {
+    match opts.value_of(options::STARTING_LINE_NUMBER) {
         None => {}
         Some(val) => {
             let conv: Option<u64> = val.parse().ok();
@@ -128,7 +130,7 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &getopts::Matches) ->
             }
         }
     }
-    match opts.opt_str("l") {
+    match opts.value_of(options::JOIN_BLANK_LINES) {
         None => {}
         Some(val) => {
             let conv: Option<u64> = val.parse().ok();

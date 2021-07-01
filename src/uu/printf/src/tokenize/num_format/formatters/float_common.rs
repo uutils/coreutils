@@ -1,7 +1,10 @@
-// spell-checker:ignore (ToDO) conv intf strf floatf scif charf fieldtype vals subparser unescaping submodule Cninety inprefix hexifying glibc floatnum rten rhex arrnum
+// spell-checker:ignore (vars) charf decf floatf intf scif strf Cninety
+// spell-checker:ignore (ToDO) arrnum
 
 use super::super::format_field::FormatField;
-use super::super::formatter::{get_it_at, warn_incomplete_conv, Base, FormatPrimitive, InPrefix};
+use super::super::formatter::{
+    get_it_at, warn_incomplete_conv, Base, FormatPrimitive, InitialPrefix,
+};
 use super::base_conv;
 use super::base_conv::RadixDef;
 
@@ -39,7 +42,7 @@ fn has_enough_digits(
 impl FloatAnalysis {
     pub fn analyze(
         str_in: &str,
-        inprefix: &InPrefix,
+        initial_prefix: &InitialPrefix,
         max_sd_opt: Option<usize>,
         max_after_dec_opt: Option<usize>,
         hex_output: bool,
@@ -47,13 +50,13 @@ impl FloatAnalysis {
         // this fn assumes
         // the input string
         // has no leading spaces or 0s
-        let str_it = get_it_at(inprefix.offset, str_in);
+        let str_it = get_it_at(initial_prefix.offset, str_in);
         let mut ret = FloatAnalysis {
             len_important: 0,
             decimal_pos: None,
             follow: None,
         };
-        let hex_input = match inprefix.radix_in {
+        let hex_input = match initial_prefix.radix_in {
             Base::Hex => true,
             Base::Ten => false,
             Base::Octal => {
@@ -126,15 +129,15 @@ impl FloatAnalysis {
 }
 
 fn de_hex(src: &str, before_decimal: bool) -> String {
-    let rten = base_conv::RadixTen;
-    let rhex = base_conv::RadixHex;
+    let radix_ten = base_conv::RadixTen;
+    let radix_hex = base_conv::RadixHex;
     if before_decimal {
-        base_conv::base_conv_str(src, &rhex, &rten)
+        base_conv::base_conv_str(src, &radix_hex, &radix_ten)
     } else {
-        let as_arrnum_hex = base_conv::str_to_arrnum(src, &rhex);
+        let as_arrnum_hex = base_conv::str_to_arrnum(src, &radix_hex);
         let s = format!(
             "{}",
-            base_conv::base_conv_float(&as_arrnum_hex, rhex.get_max(), rten.get_max())
+            base_conv::base_conv_float(&as_arrnum_hex, radix_hex.get_max(), radix_ten.get_max())
         );
         if s.len() > 2 {
             String::from(&s[2..])
@@ -200,7 +203,7 @@ fn round_terminal_digit(
 }
 
 pub fn get_primitive_dec(
-    inprefix: &InPrefix,
+    initial_prefix: &InitialPrefix,
     str_in: &str,
     analysis: &FloatAnalysis,
     last_dec_place: usize,
@@ -209,7 +212,7 @@ pub fn get_primitive_dec(
     let mut f: FormatPrimitive = Default::default();
 
     // add negative sign section
-    if inprefix.sign == -1 {
+    if initial_prefix.sign == -1 {
         f.prefix = Some(String::from("-"));
     }
 
@@ -218,13 +221,13 @@ pub fn get_primitive_dec(
     // assign 0
     let (mut first_segment_raw, second_segment_raw) = match analysis.decimal_pos {
         Some(pos) => (&str_in[..pos], &str_in[pos + 1..]),
-        None => (&str_in[..], "0"),
+        None => (str_in, "0"),
     };
     if first_segment_raw.is_empty() {
         first_segment_raw = "0";
     }
-    // convert to string, de_hexifying if input is in hex.
-    let (first_segment, second_segment) = match inprefix.radix_in {
+    // convert to string, de_hexifying if input is in hex   // spell-checker:disable-line
+    let (first_segment, second_segment) = match initial_prefix.radix_in {
         Base::Hex => (
             de_hex(first_segment_raw, true),
             de_hex(second_segment_raw, false),
@@ -244,8 +247,12 @@ pub fn get_primitive_dec(
                 first_segment.len() as isize - 1,
             )
         } else {
-            match first_segment.chars().next() {
-                Some('0') => {
+            match first_segment
+                .chars()
+                .next()
+                .expect("float_common: no chars in first segment.")
+            {
+                '0' => {
                     let it = second_segment.chars().enumerate();
                     let mut m: isize = 0;
                     let mut pre = String::from("0");
@@ -263,10 +270,7 @@ pub fn get_primitive_dec(
                     }
                     (pre, post, m)
                 }
-                Some(_) => (first_segment, second_segment, 0),
-                None => {
-                    panic!("float_common: no chars in first segment.");
-                }
+                _ => (first_segment, second_segment, 0),
             }
         }
     } else {
@@ -295,11 +299,11 @@ pub fn get_primitive_dec(
 pub fn primitive_to_str_common(prim: &FormatPrimitive, field: &FormatField) -> String {
     let mut final_str = String::new();
     if let Some(ref prefix) = prim.prefix {
-        final_str.push_str(&prefix);
+        final_str.push_str(prefix);
     }
     match prim.pre_decimal {
         Some(ref pre_decimal) => {
-            final_str.push_str(&pre_decimal);
+            final_str.push_str(pre_decimal);
         }
         None => {
             panic!(

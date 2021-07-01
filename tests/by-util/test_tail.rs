@@ -1,13 +1,19 @@
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
+
+// spell-checker:ignore (ToDO) abcdefghijklmnopqrstuvwxyz efghijklmnopqrstuvwxyz vwxyz emptyfile
+
 extern crate tail;
 
-use self::tail::parse_size;
 use crate::common::util::*;
 use std::char::from_digit;
 use std::io::Write;
 
-static FOOBAR_TXT: &'static str = "foobar.txt";
-static FOOBAR_2_TXT: &'static str = "foobar2.txt";
-static FOOBAR_WITH_NULL_TXT: &'static str = "foobar_with_null.txt";
+static FOOBAR_TXT: &str = "foobar.txt";
+static FOOBAR_2_TXT: &str = "foobar2.txt";
+static FOOBAR_WITH_NULL_TXT: &str = "foobar_with_null.txt";
 
 #[test]
 fn test_stdin_default() {
@@ -78,7 +84,7 @@ fn test_follow_multiple() {
     at.append(FOOBAR_2_TXT, first_append);
     assert_eq!(read_size(&mut child, first_append.len()), first_append);
 
-    let second_append = "doce\ntrece\n";
+    let second_append = "twenty\nthirty\n";
     let expected = at.read("foobar_follow_multiple_appended.expected");
     at.append(FOOBAR_TXT, second_append);
     assert_eq!(read_size(&mut child, expected.len()), expected);
@@ -95,7 +101,7 @@ fn test_follow_stdin() {
         .stdout_is_fixture("follow_stdin.expected");
 }
 
-// FixME: test PASSES for usual windows builds, but fails for coverage testing builds (likely related to the specific RUSTFLAGS '-Zpanic_abort_tests -Cpanic=abort')  This test also breaks tty settings under bash requiring a 'stty sane' or reset.
+// FixME: test PASSES for usual windows builds, but fails for coverage testing builds (likely related to the specific RUSTFLAGS '-Zpanic_abort_tests -Cpanic=abort')  This test also breaks tty settings under bash requiring a 'stty sane' or reset. // spell-checker:disable-line
 #[cfg(disable_until_fixed)]
 #[test]
 fn test_follow_with_pid() {
@@ -130,7 +136,7 @@ fn test_follow_with_pid() {
     at.append(FOOBAR_2_TXT, first_append);
     assert_eq!(read_size(&mut child, first_append.len()), first_append);
 
-    let second_append = "doce\ntrece\n";
+    let second_append = "twenty\nthirty\n";
     let expected = at.read("foobar_follow_multiple_appended.expected");
     at.append(FOOBAR_TXT, second_append);
     assert_eq!(read_size(&mut child, expected.len()), expected);
@@ -153,8 +159,8 @@ fn test_follow_with_pid() {
 
 #[test]
 fn test_single_big_args() {
-    const FILE: &'static str = "single_big_args.txt";
-    const EXPECTED_FILE: &'static str = "single_big_args_expected.txt";
+    const FILE: &str = "single_big_args.txt";
+    const EXPECTED_FILE: &str = "single_big_args_expected.txt";
     const LINES: usize = 1_000_000;
     const N_ARG: usize = 100_000;
 
@@ -162,13 +168,13 @@ fn test_single_big_args() {
 
     let mut big_input = at.make_file(FILE);
     for i in 0..LINES {
-        write!(&mut big_input, "Line {}\n", i).expect("Could not write to FILE");
+        writeln!(&mut big_input, "Line {}", i).expect("Could not write to FILE");
     }
     big_input.flush().expect("Could not flush FILE");
 
     let mut big_expected = at.make_file(EXPECTED_FILE);
     for i in (LINES - N_ARG)..LINES {
-        write!(&mut big_expected, "Line {}\n", i).expect("Could not write to EXPECTED_FILE");
+        writeln!(&mut big_expected, "Line {}", i).expect("Could not write to EXPECTED_FILE");
     }
     big_expected.flush().expect("Could not flush EXPECTED_FILE");
 
@@ -201,8 +207,8 @@ fn test_bytes_stdin() {
 
 #[test]
 fn test_bytes_big() {
-    const FILE: &'static str = "test_bytes_big.txt";
-    const EXPECTED_FILE: &'static str = "test_bytes_big_expected.txt";
+    const FILE: &str = "test_bytes_big.txt";
+    const EXPECTED_FILE: &str = "test_bytes_big_expected.txt";
     const BYTES: usize = 1_000_000;
     const N_ARG: usize = 100_000;
 
@@ -226,8 +232,8 @@ fn test_bytes_big() {
         .arg(FILE)
         .arg("-c")
         .arg(format!("{}", N_ARG))
-        .run()
-        .stdout;
+        .succeeds()
+        .stdout_move_str();
     let expected = at.read(EXPECTED_FILE);
 
     assert_eq!(result.len(), expected.len());
@@ -237,44 +243,9 @@ fn test_bytes_big() {
 }
 
 #[test]
-fn test_parse_size() {
-    // No suffix.
-    assert_eq!(Ok(1234), parse_size("1234"));
-
-    // kB is 1000
-    assert_eq!(Ok(9 * 1000), parse_size("9kB"));
-
-    // K is 1024
-    assert_eq!(Ok(2 * 1024), parse_size("2K"));
-
-    let suffixes = [
-        ('M', 2u32),
-        ('G', 3u32),
-        ('T', 4u32),
-        ('P', 5u32),
-        ('E', 6u32),
-    ];
-
-    for &(c, exp) in &suffixes {
-        let s = format!("2{}B", c);
-        assert_eq!(Ok(2 * (1000 as u64).pow(exp)), parse_size(&s));
-
-        let s = format!("2{}", c);
-        assert_eq!(Ok(2 * (1024 as u64).pow(exp)), parse_size(&s));
-    }
-
-    // Sizes that are too big.
-    assert!(parse_size("1Z").is_err());
-    assert!(parse_size("1Y").is_err());
-
-    // Bad number
-    assert!(parse_size("328hdsf3290").is_err());
-}
-
-#[test]
 fn test_lines_with_size_suffix() {
-    const FILE: &'static str = "test_lines_with_size_suffix.txt";
-    const EXPECTED_FILE: &'static str = "test_lines_with_size_suffix_expected.txt";
+    const FILE: &str = "test_lines_with_size_suffix.txt";
+    const EXPECTED_FILE: &str = "test_lines_with_size_suffix_expected.txt";
     const LINES: usize = 3_000;
     const N_ARG: usize = 2 * 1024;
 
@@ -320,12 +291,128 @@ fn test_multiple_input_files_with_suppressed_headers() {
 
 #[test]
 fn test_multiple_input_quiet_flag_overrides_verbose_flag_for_suppressing_headers() {
-    // TODO: actually the later one should win, i.e. -qv should lead to headers being printed, -vq to them being suppressed
     new_ucmd!()
         .arg(FOOBAR_TXT)
         .arg(FOOBAR_2_TXT)
-        .arg("-q")
         .arg("-v")
+        .arg("-q")
         .run()
         .stdout_is_fixture("foobar_multiple_quiet.expected");
+}
+
+#[test]
+fn test_negative_indexing() {
+    let positive_lines_index = new_ucmd!().arg("-n").arg("5").arg(FOOBAR_TXT).run();
+
+    let negative_lines_index = new_ucmd!().arg("-n").arg("-5").arg(FOOBAR_TXT).run();
+
+    let positive_bytes_index = new_ucmd!().arg("-c").arg("20").arg(FOOBAR_TXT).run();
+
+    let negative_bytes_index = new_ucmd!().arg("-c").arg("-20").arg(FOOBAR_TXT).run();
+
+    assert_eq!(positive_lines_index.stdout(), negative_lines_index.stdout());
+    assert_eq!(positive_bytes_index.stdout(), negative_bytes_index.stdout());
+}
+
+#[test]
+fn test_sleep_interval() {
+    new_ucmd!().arg("-s").arg("10").arg(FOOBAR_TXT).succeeds();
+}
+
+/// Test for reading all but the first NUM bytes: `tail -c +3`.
+#[test]
+fn test_positive_bytes() {
+    new_ucmd!()
+        .args(&["-c", "+3"])
+        .pipe_in("abcde")
+        .succeeds()
+        .stdout_is("cde");
+}
+
+/// Test for reading all bytes, specified by `tail -c +0`.
+#[test]
+fn test_positive_zero_bytes() {
+    new_ucmd!()
+        .args(&["-c", "+0"])
+        .pipe_in("abcde")
+        .succeeds()
+        .stdout_is("abcde");
+}
+
+/// Test for reading all but the first NUM lines: `tail -n +3`.
+#[test]
+fn test_positive_lines() {
+    new_ucmd!()
+        .args(&["-n", "+3"])
+        .pipe_in("a\nb\nc\nd\ne\n")
+        .succeeds()
+        .stdout_is("c\nd\ne\n");
+}
+
+/// Test for reading all lines, specified by `tail -n +0`.
+#[test]
+fn test_positive_zero_lines() {
+    new_ucmd!()
+        .args(&["-n", "+0"])
+        .pipe_in("a\nb\nc\nd\ne\n")
+        .succeeds()
+        .stdout_is("a\nb\nc\nd\ne\n");
+}
+
+#[test]
+fn test_tail_invalid_num() {
+    new_ucmd!()
+        .args(&["-c", "1024R", "emptyfile.txt"])
+        .fails()
+        .stderr_is("tail: invalid number of bytes: '1024R'");
+    new_ucmd!()
+        .args(&["-n", "1024R", "emptyfile.txt"])
+        .fails()
+        .stderr_is("tail: invalid number of lines: '1024R'");
+    #[cfg(not(target_pointer_width = "128"))]
+    new_ucmd!()
+        .args(&["-c", "1Y", "emptyfile.txt"])
+        .fails()
+        .stderr_is("tail: invalid number of bytes: '1Y': Value too large for defined data type");
+    #[cfg(not(target_pointer_width = "128"))]
+    new_ucmd!()
+        .args(&["-n", "1Y", "emptyfile.txt"])
+        .fails()
+        .stderr_is("tail: invalid number of lines: '1Y': Value too large for defined data type");
+    #[cfg(target_pointer_width = "32")]
+    {
+        let sizes = ["1000G", "10T"];
+        for size in &sizes {
+            new_ucmd!()
+                .args(&["-c", size])
+                .fails()
+                .code_is(1)
+                .stderr_only(format!(
+                    "tail: invalid number of bytes: '{}': Value too large for defined data type",
+                    size
+                ));
+        }
+    }
+}
+
+#[test]
+fn test_tail_num_with_undocumented_sign_bytes() {
+    // tail: '-' is not documented (8.32 man pages)
+    // head: '+' is not documented (8.32 man pages)
+    const ALPHABET: &str = "abcdefghijklmnopqrstuvwxyz";
+    new_ucmd!()
+        .args(&["-c", "5"])
+        .pipe_in(ALPHABET)
+        .succeeds()
+        .stdout_is("vwxyz");
+    new_ucmd!()
+        .args(&["-c", "-5"])
+        .pipe_in(ALPHABET)
+        .succeeds()
+        .stdout_is("vwxyz");
+    new_ucmd!()
+        .args(&["-c", "+5"])
+        .pipe_in(ALPHABET)
+        .succeeds()
+        .stdout_is("efghijklmnopqrstuvwxyz");
 }

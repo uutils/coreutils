@@ -8,14 +8,14 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg, ArgMatches};
+use clap::{crate_version, App, Arg, ArgMatches};
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Result, Write};
 use std::path::Path;
 use std::str::FromStr;
+use strum_macros::{AsRefStr, EnumString};
 
 static ABOUT: &str = "Report or omit repeated lines.";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 pub mod options {
     pub static ALL_REPEATED: &str = "all-repeated";
     pub static CHECK_CHARS: &str = "check-chars";
@@ -26,14 +26,18 @@ pub mod options {
     pub static SKIP_CHARS: &str = "skip-chars";
     pub static UNIQUE: &str = "unique";
     pub static ZERO_TERMINATED: &str = "zero-terminated";
+    pub static GROUP: &str = "group";
 }
 
 static ARG_FILES: &str = "files";
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone, Copy, AsRefStr, EnumString)]
+#[strum(serialize_all = "snake_case")]
 enum Delimiters {
+    Append,
     Prepend,
     Separate,
+    Both,
     None,
 }
 
@@ -56,24 +60,44 @@ impl Uniq {
         reader: &mut BufReader<R>,
         writer: &mut BufWriter<W>,
     ) {
-        let mut lines: Vec<String> = vec![];
         let mut first_line_printed = false;
-        let delimiters = &self.delimiters;
+        let mut group_count = 1;
         let line_terminator = self.get_line_terminator();
+        let mut lines = reader.split(line_terminator).map(get_line_string);
+        let mut line = match lines.next() {
+            Some(l) => l,
+            None => return,
+        };
 
-        for line in reader.split(line_terminator).map(get_line_string) {
-            if !lines.is_empty() && self.cmp_keys(&lines[0], &line) {
-                let print_delimiter = delimiters == &Delimiters::Prepend
-                    || (delimiters == &Delimiters::Separate && first_line_printed);
-                first_line_printed |= self.print_lines(writer, &lines, print_delimiter);
-                lines.truncate(0);
+        // compare current `line` with consecutive lines (`next_line`) of the input
+        // and if needed, print `line` based on the command line options provided
+        for next_line in lines {
+            if self.cmp_keys(&line, &next_line) {
+                if (group_count == 1 && !self.repeats_only)
+                    || (group_count > 1 && !self.uniques_only)
+                {
+                    self.print_line(writer, &line, group_count, first_line_printed);
+                    first_line_printed = true;
+                }
+                line = next_line;
+                group_count = 1;
+            } else {
+                if self.all_repeated {
+                    self.print_line(writer, &line, group_count, first_line_printed);
+                    first_line_printed = true;
+                    line = next_line;
+                }
+                group_count += 1;
             }
-            lines.push(line);
         }
-        if !lines.is_empty() {
-            let print_delimiter = delimiters == &Delimiters::Prepend
-                || (delimiters == &Delimiters::Separate && first_line_printed);
-            self.print_lines(writer, &lines, print_delimiter);
+        if (group_count == 1 && !self.repeats_only) || (group_count > 1 && !self.uniques_only) {
+            self.print_line(writer, &line, group_count, first_line_printed);
+            first_line_printed = true;
+        }
+        if (self.delimiters == Delimiters::Append || self.delimiters == Delimiters::Both)
+            && first_line_printed
+        {
+            crash_if_err!(1, writer.write_all(&[line_terminator]));
         }
     }
 
@@ -147,27 +171,17 @@ impl Uniq {
         }
     }
 
-    fn print_lines<W: Write>(
-        &self,
-        writer: &mut BufWriter<W>,
-        lines: &[String],
-        print_delimiter: bool,
-    ) -> bool {
-        let mut first_line_printed = false;
-        let mut count = if self.all_repeated { 1 } else { lines.len() };
-        if lines.len() == 1 && !self.repeats_only || lines.len() > 1 && !self.uniques_only {
-            self.print_line(writer, &lines[0], count, print_delimiter);
-            first_line_printed = true;
-            count += 1;
-        }
-        if self.all_repeated {
-            for line in lines[1..].iter() {
-                self.print_line(writer, line, count, print_delimiter && !first_line_printed);
-                first_line_printed = true;
-                count += 1;
-            }
-        }
-        first_line_printed
+    fn should_print_delimiter(&self, group_count: usize, first_line_printed: bool) -> bool {
+        // if no delimiter option is selected then no other checks needed
+        self.delimiters != Delimiters::None
+            // print delimiter only before the first line of a group, not between lines of a group
+            && group_count == 1
+            // if at least one line has been output before current group then print delimiter
+            && (first_line_printed
+                // or if we need to prepend delimiter then print it even at the start of the output
+                || self.delimiters == Delimiters::Prepend
+                // the 'both' delimit mode should prepend and append delimiters
+                || self.delimiters == Delimiters::Both)
     }
 
     fn print_line<W: Write>(
@@ -175,11 +189,11 @@ impl Uniq {
         writer: &mut BufWriter<W>,
         line: &str,
         count: usize,
-        print_delimiter: bool,
+        first_line_printed: bool,
     ) {
         let line_terminator = self.get_line_terminator();
 
-        if print_delimiter {
+        if self.should_print_delimiter(count, first_line_printed) {
             crash_if_err!(1, writer.write_all(&[line_terminator]));
         }
 
@@ -224,19 +238,80 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let long_usage = get_long_usage();
 
-    let matches = App::new(executable!())
-        .version(VERSION)
-        .about(ABOUT)
+    let matches = uu_app()
         .usage(&usage[..])
         .after_help(&long_usage[..])
+        .get_matches_from(args);
+
+    let files: Vec<String> = matches
+        .values_of(ARG_FILES)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
+
+    let (in_file_name, out_file_name) = match files.len() {
+        0 => ("-".to_owned(), "-".to_owned()),
+        1 => (files[0].clone(), "-".to_owned()),
+        2 => (files[0].clone(), files[1].clone()),
+        _ => {
+            // Cannot happen as clap will fail earlier
+            crash!(1, "Extra operand: {}", files[2]);
+        }
+    };
+
+    let uniq = Uniq {
+        repeats_only: matches.is_present(options::REPEATED)
+            || matches.is_present(options::ALL_REPEATED),
+        uniques_only: matches.is_present(options::UNIQUE),
+        all_repeated: matches.is_present(options::ALL_REPEATED)
+            || matches.is_present(options::GROUP),
+        delimiters: get_delimiter(&matches),
+        show_counts: matches.is_present(options::COUNT),
+        skip_fields: opt_parsed(options::SKIP_FIELDS, &matches),
+        slice_start: opt_parsed(options::SKIP_CHARS, &matches),
+        slice_stop: opt_parsed(options::CHECK_CHARS, &matches),
+        ignore_case: matches.is_present(options::IGNORE_CASE),
+        zero_terminated: matches.is_present(options::ZERO_TERMINATED),
+    };
+    uniq.print_uniq(
+        &mut open_input_file(in_file_name),
+        &mut open_output_file(out_file_name),
+    );
+
+    0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
         .arg(
             Arg::with_name(options::ALL_REPEATED)
                 .short("D")
                 .long(options::ALL_REPEATED)
-                .possible_values(&["none", "prepend", "separate"])
-                .help("print all duplicate lines. Delimiting is done with blank lines")
+                .possible_values(&[
+                    Delimiters::None.as_ref(), Delimiters::Prepend.as_ref(), Delimiters::Separate.as_ref()
+                ])
+                .help("print all duplicate lines. Delimiting is done with blank lines. [default: none]")
                 .value_name("delimit-method")
-                .default_value("none"),
+                .min_values(0)
+                .max_values(1),
+        )
+        .arg(
+            Arg::with_name(options::GROUP)
+                .long(options::GROUP)
+                .possible_values(&[
+                    Delimiters::Separate.as_ref(), Delimiters::Prepend.as_ref(),
+                    Delimiters::Append.as_ref(), Delimiters::Both.as_ref()
+                ])
+                .help("show all items, separating groups with an empty line. [default: separate]")
+                .value_name("group-method")
+                .min_values(0)
+                .max_values(1)
+                .conflicts_with_all(&[
+                    options::REPEATED,
+                    options::ALL_REPEATED,
+                    options::UNIQUE,
+                ]),
         )
         .arg(
             Arg::with_name(options::CHECK_CHARS)
@@ -295,49 +370,19 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .takes_value(true)
                 .max_values(2),
         )
-        .get_matches_from(args);
+}
 
-    let files: Vec<String> = matches
-        .values_of(ARG_FILES)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_default();
-
-    let (in_file_name, out_file_name) = match files.len() {
-        0 => ("-".to_owned(), "-".to_owned()),
-        1 => (files[0].clone(), "-".to_owned()),
-        2 => (files[0].clone(), files[1].clone()),
-        _ => {
-            // Cannot happen as clap will fail earlier
-            crash!(1, "Extra operand: {}", files[2]);
-        }
-    };
-
-    let uniq = Uniq {
-        repeats_only: matches.is_present(options::REPEATED)
-            || matches.occurrences_of(options::ALL_REPEATED) > 0,
-        uniques_only: matches.is_present(options::UNIQUE),
-        all_repeated: matches.occurrences_of(options::ALL_REPEATED) > 0,
-        delimiters: match matches.value_of(options::ALL_REPEATED).map(String::from) {
-            Some(ref opt_arg) if opt_arg != "none" => match &(*opt_arg.as_str()) {
-                "prepend" => Delimiters::Prepend,
-                "separate" => Delimiters::Separate,
-                _ => crash!(1, "Incorrect argument for all-repeated: {}", opt_arg),
-            },
-            _ => Delimiters::None,
-        },
-        show_counts: matches.is_present(options::COUNT),
-        skip_fields: opt_parsed(options::SKIP_FIELDS, &matches),
-        slice_start: opt_parsed(options::SKIP_CHARS, &matches),
-        slice_stop: opt_parsed(options::CHECK_CHARS, &matches),
-        ignore_case: matches.is_present(options::IGNORE_CASE),
-        zero_terminated: matches.is_present(options::ZERO_TERMINATED),
-    };
-    uniq.print_uniq(
-        &mut open_input_file(in_file_name),
-        &mut open_output_file(out_file_name),
-    );
-
-    0
+fn get_delimiter(matches: &ArgMatches) -> Delimiters {
+    let value = matches
+        .value_of(options::ALL_REPEATED)
+        .or_else(|| matches.value_of(options::GROUP));
+    if let Some(delimiter_arg) = value {
+        crash_if_err!(1, Delimiters::from_str(delimiter_arg))
+    } else if matches.is_present(options::GROUP) {
+        Delimiters::Separate
+    } else {
+        Delimiters::None
+    }
 }
 
 fn open_input_file(in_file_name: String) -> BufReader<Box<dyn Read + 'static>> {

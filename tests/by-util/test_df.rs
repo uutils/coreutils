@@ -2,30 +2,34 @@ use crate::common::util::*;
 
 #[test]
 fn test_df_compatible_no_size_arg() {
-    let (_, mut ucmd) = at_and_ucmd!();
-    let result = ucmd.arg("-a").run();
-    assert!(result.success);
+    new_ucmd!().arg("-a").succeeds();
 }
 
 #[test]
 fn test_df_compatible() {
-    let (_, mut ucmd) = at_and_ucmd!();
-    let result = ucmd.arg("-ah").run();
-    assert!(result.success);
+    new_ucmd!().arg("-ah").succeeds();
 }
 
 #[test]
 fn test_df_compatible_type() {
-    let (_, mut ucmd) = at_and_ucmd!();
-    let result = ucmd.arg("-aT").run();
-    assert!(result.success);
+    new_ucmd!().arg("-aT").succeeds();
 }
 
 #[test]
 fn test_df_compatible_si() {
-    let (_, mut ucmd) = at_and_ucmd!();
-    let result = ucmd.arg("-aH").run();
-    assert!(result.success);
+    new_ucmd!().arg("-aH").succeeds();
+}
+
+#[test]
+fn test_df_output() {
+    if cfg!(target_os = "macos") {
+        new_ucmd!().arg("-H").arg("-total").succeeds().
+        stdout_only("Filesystem               Size         Used    Available     Capacity  Use% Mounted on       \n");
+    } else {
+        new_ucmd!().arg("-H").arg("-total").succeeds().stdout_only(
+            "Filesystem               Size         Used    Available  Use% Mounted on       \n",
+        );
+    }
 }
 
 // ToDO: more tests...

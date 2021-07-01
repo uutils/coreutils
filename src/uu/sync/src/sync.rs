@@ -12,13 +12,12 @@ extern crate libc;
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::path::Path;
 
 static EXIT_ERR: i32 = 1;
 
 static ABOUT: &str = "Synchronize cached writes to persistent storage";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 pub mod options {
     pub static FILE_SYSTEM: &str = "file-system";
     pub static DATA: &str = "data";
@@ -167,10 +166,36 @@ fn get_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
-        .version(VERSION)
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+
+    let files: Vec<String> = matches
+        .values_of(ARG_FILES)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
+
+    for f in &files {
+        if !Path::new(&f).exists() {
+            crash!(EXIT_ERR, "cannot stat '{}': No such file or directory", f);
+        }
+    }
+
+    #[allow(clippy::if_same_then_else)]
+    if matches.is_present(options::FILE_SYSTEM) {
+        #[cfg(any(target_os = "linux", target_os = "windows"))]
+        syncfs(files);
+    } else if matches.is_present(options::DATA) {
+        #[cfg(target_os = "linux")]
+        fdatasync(files);
+    } else {
+        sync();
+    }
+    0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
         .about(ABOUT)
-        .usage(&usage[..])
         .arg(
             Arg::with_name(options::FILE_SYSTEM)
                 .short("f")
@@ -186,29 +211,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("sync only file data, no unneeded metadata (Linux only)"),
         )
         .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true))
-        .get_matches_from(args);
-
-    let files: Vec<String> = matches
-        .values_of(ARG_FILES)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_default();
-
-    for f in &files {
-        if !Path::new(&f).exists() {
-            crash!(EXIT_ERR, "cannot stat '{}': No such file or directory", f);
-        }
-    }
-
-    if matches.is_present(options::FILE_SYSTEM) {
-        #[cfg(any(target_os = "linux", target_os = "windows"))]
-        syncfs(files);
-    } else if matches.is_present(options::DATA) {
-        #[cfg(target_os = "linux")]
-        fdatasync(files);
-    } else {
-        sync();
-    }
-    0
 }
 
 fn sync() -> isize {

@@ -1,3 +1,5 @@
+// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE
+
 use crate::common::util::*;
 #[cfg(not(windows))]
 use std::fs::set_permissions;
@@ -5,11 +7,15 @@ use std::fs::set_permissions;
 #[cfg(not(windows))]
 use std::os::unix::fs;
 
+#[cfg(target_os = "linux")]
+use std::os::unix::fs::PermissionsExt;
 #[cfg(windows)]
 use std::os::windows::fs::symlink_file;
 
 #[cfg(target_os = "linux")]
 use filetime::FileTime;
+#[cfg(target_os = "linux")]
+use rlimit::Resource;
 #[cfg(not(windows))]
 use std::env;
 #[cfg(target_os = "linux")]
@@ -31,18 +37,20 @@ static TEST_COPY_FROM_FOLDER: &str = "hello_dir_with_file/";
 static TEST_COPY_FROM_FOLDER_FILE: &str = "hello_dir_with_file/hello_world.txt";
 static TEST_COPY_TO_FOLDER_NEW: &str = "hello_dir_new";
 static TEST_COPY_TO_FOLDER_NEW_FILE: &str = "hello_dir_new/hello_world.txt";
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+static TEST_MOUNT_COPY_FROM_FOLDER: &str = "dir_with_mount";
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+static TEST_MOUNT_MOUNTPOINT: &str = "mount";
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+static TEST_MOUNT_OTHER_FILESYSTEM_FILE: &str = "mount/DO_NOT_copy_me.txt";
 
 #[test]
 fn test_cp_cp() {
     let (at, mut ucmd) = at_and_ucmd!();
     // Invoke our binary to make the copy.
-    let result = ucmd
-        .arg(TEST_HELLO_WORLD_SOURCE)
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_HELLO_WORLD_DEST)
-        .run();
-
-    // Check that the exit code represents a successful copy.
-    assert!(result.success);
+        .succeeds();
 
     // Check the content of the destination file that was copied.
     assert_eq!(at.read(TEST_HELLO_WORLD_DEST), "Hello, World!\n");
@@ -51,12 +59,9 @@ fn test_cp_cp() {
 #[test]
 fn test_cp_existing_target() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let result = ucmd
-        .arg(TEST_HELLO_WORLD_SOURCE)
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_EXISTING_FILE)
-        .run();
-
-    assert!(result.success);
+        .succeeds();
 
     // Check the content of the destination file
     assert_eq!(at.read(TEST_EXISTING_FILE), "Hello, World!\n");
@@ -68,69 +73,55 @@ fn test_cp_existing_target() {
 #[test]
 fn test_cp_duplicate_files() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let result = ucmd
-        .arg(TEST_HELLO_WORLD_SOURCE)
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_COPY_TO_FOLDER)
-        .run();
-
-    assert!(result.success);
-    assert!(result.stderr.contains("specified more than once"));
+        .succeeds()
+        .stderr_contains("specified more than once");
     assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
 }
 
 #[test]
 fn test_cp_multiple_files_target_is_file() {
-    let (_, mut ucmd) = at_and_ucmd!();
-    let result = ucmd
+    new_ucmd!()
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_EXISTING_FILE)
-        .run();
-
-    assert!(!result.success);
-    assert!(result.stderr.contains("not a directory"));
+        .fails()
+        .stderr_contains("not a directory");
 }
 
 #[test]
 fn test_cp_directory_not_recursive() {
-    let (_, mut ucmd) = at_and_ucmd!();
-    let result = ucmd
+    new_ucmd!()
         .arg(TEST_COPY_TO_FOLDER)
         .arg(TEST_HELLO_WORLD_DEST)
-        .run();
-
-    assert!(!result.success);
-    assert!(result.stderr.contains("omitting directory"));
+        .fails()
+        .stderr_contains("omitting directory");
 }
 
 #[test]
 fn test_cp_multiple_files() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let result = ucmd
-        .arg(TEST_HELLO_WORLD_SOURCE)
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_HOW_ARE_YOU_SOURCE)
         .arg(TEST_COPY_TO_FOLDER)
-        .run();
+        .succeeds();
 
-    assert!(result.success);
     assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
     assert_eq!(at.read(TEST_HOW_ARE_YOU_DEST), "How are you?\n");
 }
 
 #[test]
 // FixME: for MacOS, this has intermittent failures; track repair progress at GH:uutils/coreutils/issues/1590
-#[cfg(not(macos))]
+#[cfg(not(target_os = "macos"))]
 fn test_cp_recurse() {
     let (at, mut ucmd) = at_and_ucmd!();
-
-    let result = ucmd
-        .arg("-r")
+    ucmd.arg("-r")
         .arg(TEST_COPY_FROM_FOLDER)
         .arg(TEST_COPY_TO_FOLDER_NEW)
-        .run();
+        .succeeds();
 
-    assert!(result.success);
     // Check the content of the destination file that was copied.
     assert_eq!(at.read(TEST_COPY_TO_FOLDER_NEW_FILE), "Hello, World!\n");
 }
@@ -138,81 +129,66 @@ fn test_cp_recurse() {
 #[test]
 fn test_cp_with_dirs_t() {
     let (at, mut ucmd) = at_and_ucmd!();
-
-    //using -t option
-    let result_to_dir_t = ucmd
-        .arg("-t")
+    ucmd.arg("-t")
         .arg(TEST_COPY_TO_FOLDER)
         .arg(TEST_HELLO_WORLD_SOURCE)
-        .run();
-    assert!(result_to_dir_t.success);
+        .succeeds();
     assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
 }
 
 #[test]
 // FixME: for MacOS, this has intermittent failures; track repair progress at GH:uutils/coreutils/issues/1590
-#[cfg(not(macos))]
+#[cfg(not(target_os = "macos"))]
 fn test_cp_with_dirs() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    //using -t option
-    let result_to_dir = scene
+    scene
         .ucmd()
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_COPY_TO_FOLDER)
-        .run();
-    assert!(result_to_dir.success);
+        .succeeds();
     assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
 
-    let result_from_dir = scene
+    scene
         .ucmd()
         .arg(TEST_COPY_FROM_FOLDER_FILE)
         .arg(TEST_HELLO_WORLD_DEST)
-        .run();
-    assert!(result_from_dir.success);
+        .succeeds();
     assert_eq!(at.read(TEST_HELLO_WORLD_DEST), "Hello, World!\n");
 }
 
 #[test]
 fn test_cp_arg_target_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let result = ucmd
-        .arg(TEST_HELLO_WORLD_SOURCE)
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
         .arg("-t")
         .arg(TEST_COPY_TO_FOLDER)
-        .run();
+        .succeeds();
 
-    assert!(result.success);
     assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
 }
 
 #[test]
 fn test_cp_arg_no_target_directory() {
-    let (_, mut ucmd) = at_and_ucmd!();
-    let result = ucmd
+    new_ucmd!()
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg("-v")
         .arg("-T")
         .arg(TEST_COPY_TO_FOLDER)
-        .run();
-
-    assert!(!result.success);
-    assert!(result.stderr.contains("cannot overwrite directory"));
+        .fails()
+        .stderr_contains("cannot overwrite directory");
 }
 
 #[test]
 fn test_cp_arg_interactive() {
-    let (_, mut ucmd) = at_and_ucmd!();
-    let result = ucmd
+    new_ucmd!()
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_HOW_ARE_YOU_SOURCE)
         .arg("-i")
         .pipe_in("N\n")
-        .run();
-
-    assert!(result.success);
-    assert!(result.stderr.contains("Not overwriting"));
+        .succeeds()
+        .stderr_contains("Not overwriting");
 }
 
 #[test]
@@ -221,39 +197,33 @@ fn test_cp_arg_link() {
     use std::os::linux::fs::MetadataExt;
 
     let (at, mut ucmd) = at_and_ucmd!();
-    let result = ucmd
-        .arg(TEST_HELLO_WORLD_SOURCE)
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
         .arg("--link")
         .arg(TEST_HELLO_WORLD_DEST)
-        .run();
+        .succeeds();
 
-    assert!(result.success);
     assert_eq!(at.metadata(TEST_HELLO_WORLD_SOURCE).st_nlink(), 2);
 }
 
 #[test]
 fn test_cp_arg_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let result = ucmd
-        .arg(TEST_HELLO_WORLD_SOURCE)
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
         .arg("--symbolic-link")
         .arg(TEST_HELLO_WORLD_DEST)
-        .run();
+        .succeeds();
 
-    assert!(result.success);
     assert!(at.is_symlink(TEST_HELLO_WORLD_DEST));
 }
 
 #[test]
 fn test_cp_arg_no_clobber() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let result = ucmd
-        .arg(TEST_HELLO_WORLD_SOURCE)
-        .arg("--no-clobber")
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_HOW_ARE_YOU_SOURCE)
-        .run();
+        .arg("--no-clobber")
+        .succeeds();
 
-    assert!(result.success);
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
 }
 
@@ -261,34 +231,31 @@ fn test_cp_arg_no_clobber() {
 fn test_cp_arg_no_clobber_twice() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
+
     at.touch("source.txt");
-    let result = scene
+    scene
         .ucmd()
         .arg("--no-clobber")
         .arg("source.txt")
         .arg("dest.txt")
-        .run();
+        .succeeds()
+        .no_stderr();
 
-    println!("stderr = {:?}", result.stderr);
-    println!("stdout = {:?}", result.stdout);
-    assert!(result.success);
-    assert!(result.stderr.is_empty());
     assert_eq!(at.read("source.txt"), "");
 
     at.append("source.txt", "some-content");
-    let result = scene
+    scene
         .ucmd()
         .arg("--no-clobber")
         .arg("source.txt")
         .arg("dest.txt")
-        .run();
+        .succeeds()
+        .stdout_does_not_contain("Not overwriting");
 
-    assert!(result.success);
     assert_eq!(at.read("source.txt"), "some-content");
     // Should be empty as the "no-clobber" should keep
     // the previous version
     assert_eq!(at.read("dest.txt"), "");
-    assert!(!result.stderr.contains("Not overwriting"));
 }
 
 #[test]
@@ -305,16 +272,11 @@ fn test_cp_arg_force() {
     permissions.set_readonly(true);
     set_permissions(at.plus(TEST_HELLO_WORLD_DEST), permissions).unwrap();
 
-    let result = ucmd
-        .arg(TEST_HELLO_WORLD_SOURCE)
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
         .arg("--force")
         .arg(TEST_HELLO_WORLD_DEST)
-        .run();
+        .succeeds();
 
-    println!("{:?}", result.stderr);
-    println!("{:?}", result.stdout);
-
-    assert!(result.success);
     assert_eq!(at.read(TEST_HELLO_WORLD_DEST), "Hello, World!\n");
 }
 
@@ -336,13 +298,11 @@ fn test_cp_arg_remove_destination() {
     permissions.set_readonly(true);
     set_permissions(at.plus(TEST_HELLO_WORLD_DEST), permissions).unwrap();
 
-    let result = ucmd
-        .arg(TEST_HELLO_WORLD_SOURCE)
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
         .arg("--remove-destination")
         .arg(TEST_HELLO_WORLD_DEST)
-        .run();
+        .succeeds();
 
-    assert!(result.success);
     assert_eq!(at.read(TEST_HELLO_WORLD_DEST), "Hello, World!\n");
 }
 
@@ -350,13 +310,43 @@ fn test_cp_arg_remove_destination() {
 fn test_cp_arg_backup() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    let result = ucmd
-        .arg(TEST_HELLO_WORLD_SOURCE)
-        .arg("--backup")
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_HOW_ARE_YOU_SOURCE)
-        .run();
+        .arg("-b")
+        .succeeds();
 
-    assert!(result.success);
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert_eq!(
+        at.read(&*format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_arg_backup_with_other_args() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .arg("-vbL")
+        .succeeds();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert_eq!(
+        at.read(&*format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_arg_backup_arg_first() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("--backup")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds();
+
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
         at.read(&*format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
@@ -368,14 +358,13 @@ fn test_cp_arg_backup() {
 fn test_cp_arg_suffix() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    let result = ucmd
-        .arg(TEST_HELLO_WORLD_SOURCE)
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg("-b")
         .arg("--suffix")
         .arg(".bak")
         .arg(TEST_HOW_ARE_YOU_SOURCE)
-        .run();
+        .succeeds();
 
-    assert!(result.success);
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
     assert_eq!(
         at.read(&*format!("{}.bak", TEST_HOW_ARE_YOU_SOURCE)),
@@ -384,10 +373,210 @@ fn test_cp_arg_suffix() {
 }
 
 #[test]
-fn test_cp_deref_conflicting_options() {
-    let (_at, mut ucmd) = at_and_ucmd!();
+fn test_cp_custom_backup_suffix_via_env() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let suffix = "super-suffix-of-the-century";
 
-    ucmd.arg("-LP")
+    ucmd.arg("-b")
+        .env("SIMPLE_BACKUP_SUFFIX", suffix)
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert_eq!(
+        at.read(&*format!("{}{}", TEST_HOW_ARE_YOU_SOURCE, suffix)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_backup_numbered_with_t() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("--backup=t")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert_eq!(
+        at.read(&*format!("{}.~1~", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_backup_numbered() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("--backup=numbered")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert_eq!(
+        at.read(&*format!("{}.~1~", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_backup_existing() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("--backup=existing")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert_eq!(
+        at.read(&*format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_backup_nil() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("--backup=nil")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert_eq!(
+        at.read(&*format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_numbered_if_existing_backup_existing() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let existing_backup = &*format!("{}.~1~", TEST_HOW_ARE_YOU_SOURCE);
+    at.touch(existing_backup);
+
+    ucmd.arg("--backup=existing")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(TEST_HOW_ARE_YOU_SOURCE));
+    assert!(at.file_exists(existing_backup));
+    assert_eq!(
+        at.read(&*format!("{}.~2~", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_numbered_if_existing_backup_nil() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let existing_backup = &*format!("{}.~1~", TEST_HOW_ARE_YOU_SOURCE);
+
+    at.touch(existing_backup);
+    ucmd.arg("--backup=nil")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(TEST_HOW_ARE_YOU_SOURCE));
+    assert!(at.file_exists(existing_backup));
+    assert_eq!(
+        at.read(&*format!("{}.~2~", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_backup_simple() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("--backup=simple")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert_eq!(
+        at.read(&*format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_backup_never() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("--backup=never")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert_eq!(
+        at.read(&*format!("{}~", TEST_HOW_ARE_YOU_SOURCE)),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_backup_none() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("--backup=none")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert!(!at.file_exists(&format!("{}~", TEST_HOW_ARE_YOU_SOURCE)));
+}
+
+#[test]
+fn test_cp_backup_off() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("--backup=off")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert!(!at.file_exists(&format!("{}~", TEST_HOW_ARE_YOU_SOURCE)));
+}
+
+#[test]
+fn test_cp_backup_no_clobber_conflicting_options() {
+    let (_, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("--backup")
+        .arg("--no-clobber")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .fails()
+        .stderr_is("cp: options --backup and --no-clobber are mutually exclusive\nTry 'cp --help' for more information.");
+}
+
+#[test]
+fn test_cp_deref_conflicting_options() {
+    new_ucmd!()
+        .arg("-LP")
         .arg(TEST_COPY_TO_FOLDER)
         .arg(TEST_HELLO_WORLD_SOURCE)
         .fails();
@@ -395,8 +584,7 @@ fn test_cp_deref_conflicting_options() {
 
 #[test]
 fn test_cp_deref() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
 
     #[cfg(not(windows))]
     let _r = fs::symlink(
@@ -409,16 +597,12 @@ fn test_cp_deref() {
         at.subdir.join(TEST_HELLO_WORLD_SOURCE_SYMLINK),
     );
     //using -L option
-    let result = scene
-        .ucmd()
-        .arg("-L")
+    ucmd.arg("-L")
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_HELLO_WORLD_SOURCE_SYMLINK)
         .arg(TEST_COPY_TO_FOLDER)
-        .run();
+        .succeeds();
 
-    // Check that the exit code represents a successful copy.
-    assert!(result.success);
     let path_to_new_symlink = at
         .subdir
         .join(TEST_COPY_TO_FOLDER)
@@ -434,12 +618,11 @@ fn test_cp_deref() {
     // Check the content of the destination file that was copied.
     assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
     let path_to_check = path_to_new_symlink.to_str().unwrap();
-    assert_eq!(at.read(&path_to_check), "Hello, World!\n");
+    assert_eq!(at.read(path_to_check), "Hello, World!\n");
 }
 #[test]
 fn test_cp_no_deref() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
 
     #[cfg(not(windows))]
     let _r = fs::symlink(
@@ -452,16 +635,12 @@ fn test_cp_no_deref() {
         at.subdir.join(TEST_HELLO_WORLD_SOURCE_SYMLINK),
     );
     //using -P option
-    let result = scene
-        .ucmd()
-        .arg("-P")
+    ucmd.arg("-P")
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_HELLO_WORLD_SOURCE_SYMLINK)
         .arg(TEST_COPY_TO_FOLDER)
-        .run();
+        .succeeds();
 
-    // Check that the exit code represents a successful copy.
-    assert!(result.success);
     let path_to_new_symlink = at
         .subdir
         .join(TEST_COPY_TO_FOLDER)
@@ -476,7 +655,7 @@ fn test_cp_no_deref() {
     // Check the content of the destination file that was copied.
     assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
     let path_to_check = path_to_new_symlink.to_str().unwrap();
-    assert_eq!(at.read(&path_to_check), "Hello, World!\n");
+    assert_eq!(at.read(path_to_check), "Hello, World!\n");
 }
 
 #[test]
@@ -484,14 +663,10 @@ fn test_cp_strip_trailing_slashes() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     //using --strip-trailing-slashes option
-    let result = ucmd
-        .arg("--strip-trailing-slashes")
+    ucmd.arg("--strip-trailing-slashes")
         .arg(format!("{}/", TEST_HELLO_WORLD_SOURCE))
         .arg(TEST_HELLO_WORLD_DEST)
-        .run();
-
-    // Check that the exit code represents a successful copy.
-    assert!(result.success);
+        .succeeds();
 
     // Check the content of the destination file that was copied.
     assert_eq!(at.read(TEST_HELLO_WORLD_DEST), "Hello, World!\n");
@@ -501,14 +676,11 @@ fn test_cp_strip_trailing_slashes() {
 fn test_cp_parents() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    let result = ucmd
-        .arg("--parents")
+    ucmd.arg("--parents")
         .arg(TEST_COPY_FROM_FOLDER_FILE)
         .arg(TEST_COPY_TO_FOLDER)
-        .run();
+        .succeeds();
 
-    assert!(result.success);
-    // Check the content of the destination file that was copied.
     assert_eq!(
         at.read(&format!(
             "{}/{}",
@@ -522,14 +694,12 @@ fn test_cp_parents() {
 fn test_cp_parents_multiple_files() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    let result = ucmd
-        .arg("--parents")
+    ucmd.arg("--parents")
         .arg(TEST_COPY_FROM_FOLDER_FILE)
         .arg(TEST_HOW_ARE_YOU_SOURCE)
         .arg(TEST_COPY_TO_FOLDER)
-        .run();
+        .succeeds();
 
-    assert!(result.success);
     assert_eq!(
         at.read(&format!(
             "{}/{}",
@@ -548,20 +718,21 @@ fn test_cp_parents_multiple_files() {
 
 #[test]
 fn test_cp_parents_dest_not_directory() {
-    let (_, mut ucmd) = at_and_ucmd!();
-
-    let result = ucmd
+    new_ucmd!()
         .arg("--parents")
         .arg(TEST_COPY_FROM_FOLDER_FILE)
         .arg(TEST_HELLO_WORLD_DEST)
-        .run();
-    println!("{:?}", result);
+        .fails()
+        .stderr_contains("with --parents, the destination must be a directory");
+}
 
-    // Check that we did not succeed in copying.
-    assert!(!result.success);
-    assert!(result
-        .stderr
-        .contains("with --parents, the destination must be a directory"));
+#[test]
+fn test_cp_preserve_no_args() {
+    new_ucmd!()
+        .arg(TEST_COPY_FROM_FOLDER_FILE)
+        .arg(TEST_HELLO_WORLD_DEST)
+        .arg("--preserve")
+        .succeeds();
 }
 
 #[test]
@@ -588,29 +759,25 @@ fn test_cp_deref_folder_to_folder() {
     assert!(env::set_current_dir(&cwd).is_ok());
 
     //using -P -R option
-    let result = scene
+    scene
         .ucmd()
         .arg("-L")
         .arg("-R")
         .arg("-v")
         .arg(TEST_COPY_FROM_FOLDER)
         .arg(TEST_COPY_TO_FOLDER_NEW)
-        .run();
-    println!("cp output {}", result.stdout);
-
-    // Check that the exit code represents a successful copy.
-    assert!(result.success);
+        .succeeds();
 
     #[cfg(not(windows))]
     {
         let scene2 = TestScenario::new("ls");
         let result = scene2.cmd("ls").arg("-al").arg(path_to_new_symlink).run();
-        println!("ls source {}", result.stdout);
+        println!("ls source {}", result.stdout_str());
 
         let path_to_new_symlink = at.subdir.join(TEST_COPY_TO_FOLDER_NEW);
 
         let result = scene2.cmd("ls").arg("-al").arg(path_to_new_symlink).run();
-        println!("ls dest {}", result.stdout);
+        println!("ls dest {}", result.stdout_str());
     }
 
     #[cfg(windows)]
@@ -665,7 +832,7 @@ fn test_cp_deref_folder_to_folder() {
 
     // Check the content of the symlink
     let path_to_check = path_to_new_symlink.to_str().unwrap();
-    assert_eq!(at.read(&path_to_check), "Hello, World!\n");
+    assert_eq!(at.read(path_to_check), "Hello, World!\n");
 }
 
 #[test]
@@ -692,29 +859,25 @@ fn test_cp_no_deref_folder_to_folder() {
     assert!(env::set_current_dir(&cwd).is_ok());
 
     //using -P -R option
-    let result = scene
+    scene
         .ucmd()
         .arg("-P")
         .arg("-R")
         .arg("-v")
         .arg(TEST_COPY_FROM_FOLDER)
         .arg(TEST_COPY_TO_FOLDER_NEW)
-        .run();
-    println!("cp output {}", result.stdout);
-
-    // Check that the exit code represents a successful copy.
-    assert!(result.success);
+        .succeeds();
 
     #[cfg(not(windows))]
     {
         let scene2 = TestScenario::new("ls");
         let result = scene2.cmd("ls").arg("-al").arg(path_to_new_symlink).run();
-        println!("ls source {}", result.stdout);
+        println!("ls source {}", result.stdout_str());
 
         let path_to_new_symlink = at.subdir.join(TEST_COPY_TO_FOLDER_NEW);
 
         let result = scene2.cmd("ls").arg("-al").arg(path_to_new_symlink).run();
-        println!("ls dest {}", result.stdout);
+        println!("ls dest {}", result.stdout_str());
     }
 
     #[cfg(windows)]
@@ -769,7 +932,7 @@ fn test_cp_no_deref_folder_to_folder() {
 
     // Check the content of the symlink
     let path_to_check = path_to_new_symlink.to_str().unwrap();
-    assert_eq!(at.read(&path_to_check), "Hello, World!\n");
+    assert_eq!(at.read(path_to_check), "Hello, World!\n");
 }
 
 #[test]
@@ -778,20 +941,18 @@ fn test_cp_archive() {
     let (at, mut ucmd) = at_and_ucmd!();
     let ts = time::now().to_timespec();
     let previous = FileTime::from_unix_time(ts.sec as i64 - 3600, ts.nsec as u32);
-    // set the file creation/modif an hour ago
+    // set the file creation/modification an hour ago
     filetime::set_file_times(
         at.plus_as_string(TEST_HELLO_WORLD_SOURCE),
         previous,
         previous,
     )
     .unwrap();
-    let result = ucmd
-        .arg(TEST_HELLO_WORLD_SOURCE)
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
         .arg("--archive")
         .arg(TEST_HOW_ARE_YOU_SOURCE)
-        .run();
+        .succeeds();
 
-    assert!(result.success);
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
 
     let metadata = std_fs::metadata(at.subdir.join(TEST_HELLO_WORLD_SOURCE)).unwrap();
@@ -801,11 +962,10 @@ fn test_cp_archive() {
     let creation2 = metadata2.modified().unwrap();
 
     let scene2 = TestScenario::new("ls");
-    let result = scene2.cmd("ls").arg("-al").arg(at.subdir).run();
+    let result = scene2.cmd("ls").arg("-al").arg(at.subdir).succeeds();
 
-    println!("ls dest {}", result.stdout);
+    println!("ls dest {}", result.stdout_str());
     assert_eq!(creation, creation2);
-    assert!(result.success);
 }
 
 #[test]
@@ -844,11 +1004,10 @@ fn test_cp_archive_recursive() {
     // Back to the initial cwd (breaks the other tests)
     assert!(env::set_current_dir(&cwd).is_ok());
 
-    let resultg = ucmd
-        .arg("--archive")
+    ucmd.arg("--archive")
         .arg(TEST_COPY_TO_FOLDER)
         .arg(TEST_COPY_TO_FOLDER_NEW)
-        .run();
+        .fails(); // fails for now
 
     let scene2 = TestScenario::new("ls");
     let result = scene2
@@ -857,16 +1016,15 @@ fn test_cp_archive_recursive() {
         .arg(&at.subdir.join(TEST_COPY_TO_FOLDER))
         .run();
 
-    println!("ls dest {}", result.stdout);
+    println!("ls dest {}", result.stdout_str());
 
-    let scene2 = TestScenario::new("ls");
     let result = scene2
         .cmd("ls")
         .arg("-al")
         .arg(&at.subdir.join(TEST_COPY_TO_FOLDER_NEW))
         .run();
 
-    println!("ls dest {}", result.stdout);
+    println!("ls dest {}", result.stdout_str());
     assert!(at.file_exists(
         &at.subdir
             .join(TEST_COPY_TO_FOLDER_NEW)
@@ -904,9 +1062,6 @@ fn test_cp_archive_recursive() {
             .join("2.link")
             .to_string_lossy()
     ));
-
-    // fails for now
-    assert!(resultg.success);
 }
 
 #[test]
@@ -915,20 +1070,18 @@ fn test_cp_preserve_timestamps() {
     let (at, mut ucmd) = at_and_ucmd!();
     let ts = time::now().to_timespec();
     let previous = FileTime::from_unix_time(ts.sec as i64 - 3600, ts.nsec as u32);
-    // set the file creation/modif an hour ago
+    // set the file creation/modification an hour ago
     filetime::set_file_times(
         at.plus_as_string(TEST_HELLO_WORLD_SOURCE),
         previous,
         previous,
     )
     .unwrap();
-    let result = ucmd
-        .arg(TEST_HELLO_WORLD_SOURCE)
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
         .arg("--preserve=timestamps")
         .arg(TEST_HOW_ARE_YOU_SOURCE)
-        .run();
+        .succeeds();
 
-    assert!(result.success);
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
 
     let metadata = std_fs::metadata(at.subdir.join(TEST_HELLO_WORLD_SOURCE)).unwrap();
@@ -940,18 +1093,17 @@ fn test_cp_preserve_timestamps() {
     let scene2 = TestScenario::new("ls");
     let result = scene2.cmd("ls").arg("-al").arg(at.subdir).run();
 
-    println!("ls dest {}", result.stdout);
+    println!("ls dest {}", result.stdout_str());
     assert_eq!(creation, creation2);
-    assert!(result.success);
 }
 
 #[test]
 #[cfg(target_os = "linux")]
-fn test_cp_dont_preserve_timestamps() {
+fn test_cp_no_preserve_timestamps() {
     let (at, mut ucmd) = at_and_ucmd!();
     let ts = time::now().to_timespec();
     let previous = FileTime::from_unix_time(ts.sec as i64 - 3600, ts.nsec as u32);
-    // set the file creation/modif an hour ago
+    // set the file creation/modification an hour ago
     filetime::set_file_times(
         at.plus_as_string(TEST_HELLO_WORLD_SOURCE),
         previous,
@@ -960,13 +1112,11 @@ fn test_cp_dont_preserve_timestamps() {
     .unwrap();
     sleep(Duration::from_secs(3));
 
-    let result = ucmd
-        .arg(TEST_HELLO_WORLD_SOURCE)
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
         .arg("--no-preserve=timestamps")
         .arg(TEST_HOW_ARE_YOU_SOURCE)
-        .run();
+        .succeeds();
 
-    assert!(result.success);
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
 
     let metadata = std_fs::metadata(at.subdir.join(TEST_HELLO_WORLD_SOURCE)).unwrap();
@@ -978,7 +1128,7 @@ fn test_cp_dont_preserve_timestamps() {
     let scene2 = TestScenario::new("ls");
     let result = scene2.cmd("ls").arg("-al").arg(at.subdir).run();
 
-    println!("ls dest {}", result.stdout);
+    println!("ls dest {}", result.stdout_str());
     println!("creation {:?} / {:?}", creation, creation2);
 
     assert_ne!(creation, creation2);
@@ -986,7 +1136,6 @@ fn test_cp_dont_preserve_timestamps() {
     // Some margins with time check
     assert!(res.as_secs() > 3595);
     assert!(res.as_secs() < 3605);
-    assert!(result.success);
 }
 
 #[test]
@@ -1000,4 +1149,192 @@ fn test_cp_target_file_dev_null() {
     ucmd.arg(file1).arg(file2).succeeds().no_stderr();
 
     assert!(at.file_exists(file2));
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "freebsd"))]
+fn test_cp_one_file_system() {
+    use crate::common::util::AtPath;
+    use walkdir::WalkDir;
+
+    let scene = TestScenario::new(util_name!());
+
+    // Test must be run as root (or with `sudo -E`)
+    if scene.cmd("whoami").run().stdout_str() != "root\n" {
+        return;
+    }
+
+    let at = scene.fixtures.clone();
+    let at_src = AtPath::new(&at.plus(TEST_MOUNT_COPY_FROM_FOLDER));
+    let at_dst = AtPath::new(&at.plus(TEST_COPY_TO_FOLDER_NEW));
+
+    // Prepare the mount
+    at_src.mkdir(TEST_MOUNT_MOUNTPOINT);
+    let mountpoint_path = &at_src.plus_as_string(TEST_MOUNT_MOUNTPOINT);
+
+    scene
+        .cmd("mount")
+        .arg("-t")
+        .arg("tmpfs")
+        .arg("-o")
+        .arg("size=640k") // ought to be enough
+        .arg("tmpfs")
+        .arg(mountpoint_path)
+        .succeeds();
+
+    at_src.touch(TEST_MOUNT_OTHER_FILESYSTEM_FILE);
+
+    // Begin testing -x flag
+    scene
+        .ucmd()
+        .arg("-rx")
+        .arg(TEST_MOUNT_COPY_FROM_FOLDER)
+        .arg(TEST_COPY_TO_FOLDER_NEW)
+        .succeeds();
+
+    // Ditch the mount before the asserts
+    scene.cmd("umount").arg(mountpoint_path).succeeds();
+
+    assert!(!at_dst.file_exists(TEST_MOUNT_OTHER_FILESYSTEM_FILE));
+    // Check if the other files were copied from the source folder hierarchy
+    for entry in WalkDir::new(at_src.as_string()) {
+        let entry = entry.unwrap();
+        let relative_src = entry
+            .path()
+            .strip_prefix(at_src.as_string())
+            .unwrap()
+            .to_str()
+            .unwrap();
+
+        let ft = entry.file_type();
+        match (ft.is_dir(), ft.is_file(), ft.is_symlink()) {
+            (true, _, _) => assert!(at_dst.dir_exists(relative_src)),
+            (_, true, _) => assert!(at_dst.file_exists(relative_src)),
+            (_, _, _) => panic!(),
+        }
+    }
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn test_cp_reflink_always() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let result = ucmd
+        .arg("--reflink=always")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_EXISTING_FILE)
+        .run();
+
+    if result.succeeded() {
+        // Check the content of the destination file
+        assert_eq!(at.read(TEST_EXISTING_FILE), "Hello, World!\n");
+    } else {
+        // Older Linux versions do not support cloning.
+    }
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn test_cp_reflink_auto() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("--reflink=auto")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_EXISTING_FILE)
+        .succeeds();
+
+    // Check the content of the destination file
+    assert_eq!(at.read(TEST_EXISTING_FILE), "Hello, World!\n");
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn test_cp_reflink_never() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("--reflink=never")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_EXISTING_FILE)
+        .succeeds();
+
+    // Check the content of the destination file
+    assert_eq!(at.read(TEST_EXISTING_FILE), "Hello, World!\n");
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn test_cp_reflink_bad() {
+    let (_, mut ucmd) = at_and_ucmd!();
+    let _result = ucmd
+        .arg("--reflink=bad")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_EXISTING_FILE)
+        .fails()
+        .stderr_contains("invalid argument");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_reflink_insufficient_permission() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.make_file("unreadable")
+        .set_permissions(PermissionsExt::from_mode(0o000))
+        .unwrap();
+
+    ucmd.arg("-r")
+        .arg("--reflink=auto")
+        .arg("unreadable")
+        .arg(TEST_EXISTING_FILE)
+        .fails()
+        .stderr_only("cp: 'unreadable' -> 'existing_file.txt': Permission denied (os error 13)");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_closes_file_descriptors() {
+    new_ucmd!()
+        .arg("-r")
+        .arg("--reflink=auto")
+        .arg("dir_with_10_files/")
+        .arg("dir_with_10_files_new/")
+        .with_limit(Resource::NOFILE, 9, 9)
+        .succeeds();
+}
+
+#[test]
+fn test_copy_dir_symlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.symlink_dir("dir", "dir-link");
+    ucmd.args(&["-r", "dir-link", "copy"]).succeeds();
+    assert_eq!(at.resolve_link("copy"), "dir");
+}
+
+#[test]
+fn test_copy_dir_with_symlinks() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.make_file("dir/file");
+
+    TestScenario::new("ln")
+        .ucmd()
+        .arg("-sr")
+        .arg(at.subdir.join("dir/file"))
+        .arg(at.subdir.join("dir/file-link"))
+        .succeeds();
+
+    ucmd.args(&["-r", "dir", "copy"]).succeeds();
+    assert_eq!(at.resolve_link("copy/file-link"), "file");
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_copy_symlink_force() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    at.symlink_file("file", "file-link");
+    at.touch("copy");
+
+    ucmd.args(&["file-link", "copy", "-f", "--no-dereference"])
+        .succeeds();
+    assert_eq!(at.resolve_link("copy"), "file");
 }

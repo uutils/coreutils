@@ -8,14 +8,25 @@
 #[macro_use]
 extern crate uucore;
 
+use clap::{crate_version, App, Arg};
+use uucore::InvalidEncodingHandling;
+
 mod syntax_tree;
 mod tokens;
 
-static NAME: &str = "expr";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
+const VERSION: &str = "version";
+const HELP: &str = "help";
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .arg(Arg::with_name(VERSION).long(VERSION))
+        .arg(Arg::with_name(HELP).long(HELP))
+}
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
     // For expr utility we do not want getopts.
     // The following usage should work without escaping hyphens: `expr -15 = 1 +  2 \* \( 3 - -4 \)`
@@ -33,7 +44,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 fn process_expr(token_strings: &[String]) -> Result<String, String> {
-    let maybe_tokens = tokens::strings_to_tokens(&token_strings);
+    let maybe_tokens = tokens::strings_to_tokens(token_strings);
     let maybe_ast = syntax_tree::tokens_to_ast(maybe_tokens);
     evaluate_ast(maybe_ast)
 }
@@ -51,12 +62,8 @@ fn print_expr_error(expr_error: &str) -> ! {
     crash!(2, "{}", expr_error)
 }
 
-fn evaluate_ast(maybe_ast: Result<Box<syntax_tree::ASTNode>, String>) -> Result<String, String> {
-    if maybe_ast.is_err() {
-        Err(maybe_ast.err().unwrap())
-    } else {
-        maybe_ast.ok().unwrap().evaluate()
-    }
+fn evaluate_ast(maybe_ast: Result<Box<syntax_tree::AstNode>, String>) -> Result<String, String> {
+    maybe_ast.and_then(|ast| ast.evaluate())
 }
 
 fn maybe_handle_help_or_version(args: &[String]) -> bool {
@@ -133,5 +140,5 @@ Environment variables:
 }
 
 fn print_version() {
-    println!("{} {}", NAME, VERSION);
+    println!("{} {}", executable!(), crate_version!());
 }

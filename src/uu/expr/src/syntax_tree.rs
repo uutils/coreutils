@@ -12,15 +12,17 @@
 
 // spell-checker:ignore (ToDO) binop binops ints paren prec
 
+use num_bigint::BigInt;
+use num_traits::{One, Zero};
 use onig::{Regex, RegexOptions, Syntax};
 
 use crate::tokens::Token;
 
 type TokenStack = Vec<(usize, Token)>;
-pub type OperandsList = Vec<Box<ASTNode>>;
+pub type OperandsList = Vec<Box<AstNode>>;
 
 #[derive(Debug)]
-pub enum ASTNode {
+pub enum AstNode {
     Leaf {
         token_idx: usize,
         value: String,
@@ -31,7 +33,7 @@ pub enum ASTNode {
         operands: OperandsList,
     },
 }
-impl ASTNode {
+impl AstNode {
     fn debug_dump(&self) {
         self.debug_dump_impl(1);
     }
@@ -39,20 +41,17 @@ impl ASTNode {
         for _ in 0..depth {
             print!("\t",);
         }
-        match *self {
-            ASTNode::Leaf {
-                ref token_idx,
-                ref value,
-            } => println!(
+        match self {
+            AstNode::Leaf { token_idx, value } => println!(
                 "Leaf( {} ) at #{} ( evaluate -> {:?} )",
                 value,
                 token_idx,
                 self.evaluate()
             ),
-            ASTNode::Node {
-                ref token_idx,
-                ref op_type,
-                ref operands,
+            AstNode::Node {
+                token_idx,
+                op_type,
+                operands,
             } => {
                 println!(
                     "Node( {} ) at #{} (evaluate -> {:?})",
@@ -67,50 +66,47 @@ impl ASTNode {
         }
     }
 
-    fn new_node(token_idx: usize, op_type: &str, operands: OperandsList) -> Box<ASTNode> {
-        Box::new(ASTNode::Node {
+    fn new_node(token_idx: usize, op_type: &str, operands: OperandsList) -> Box<AstNode> {
+        Box::new(AstNode::Node {
             token_idx,
             op_type: op_type.into(),
             operands,
         })
     }
-    fn new_leaf(token_idx: usize, value: &str) -> Box<ASTNode> {
-        Box::new(ASTNode::Leaf {
+    fn new_leaf(token_idx: usize, value: &str) -> Box<AstNode> {
+        Box::new(AstNode::Leaf {
             token_idx,
             value: value.into(),
         })
     }
     pub fn evaluate(&self) -> Result<String, String> {
-        match *self {
-            ASTNode::Leaf { ref value, .. } => Ok(value.clone()),
-            ASTNode::Node { ref op_type, .. } => match self.operand_values() {
+        match self {
+            AstNode::Leaf { value, .. } => Ok(value.clone()),
+            AstNode::Node { op_type, .. } => match self.operand_values() {
                 Err(reason) => Err(reason),
                 Ok(operand_values) => match op_type.as_ref() {
-                    "+" => infix_operator_two_ints(
-                        |a: i64, b: i64| checked_binop(|| a.checked_add(b), "+"),
-                        &operand_values,
-                    ),
-                    "-" => infix_operator_two_ints(
-                        |a: i64, b: i64| checked_binop(|| a.checked_sub(b), "-"),
-                        &operand_values,
-                    ),
-                    "*" => infix_operator_two_ints(
-                        |a: i64, b: i64| checked_binop(|| a.checked_mul(b), "*"),
-                        &operand_values,
-                    ),
+                    "+" => {
+                        infix_operator_two_ints(|a: BigInt, b: BigInt| Ok(a + b), &operand_values)
+                    }
+                    "-" => {
+                        infix_operator_two_ints(|a: BigInt, b: BigInt| Ok(a - b), &operand_values)
+                    }
+                    "*" => {
+                        infix_operator_two_ints(|a: BigInt, b: BigInt| Ok(a * b), &operand_values)
+                    }
                     "/" => infix_operator_two_ints(
-                        |a: i64, b: i64| {
-                            if b == 0 {
+                        |a: BigInt, b: BigInt| {
+                            if b.is_zero() {
                                 Err("division by zero".to_owned())
                             } else {
-                                checked_binop(|| a.checked_div(b), "/")
+                                Ok(a / b)
                             }
                         },
                         &operand_values,
                     ),
                     "%" => infix_operator_two_ints(
-                        |a: i64, b: i64| {
-                            if b == 0 {
+                        |a: BigInt, b: BigInt| {
+                            if b.is_zero() {
                                 Err("division by zero".to_owned())
                             } else {
                                 Ok(a % b)
@@ -119,41 +115,41 @@ impl ASTNode {
                         &operand_values,
                     ),
                     "=" => infix_operator_two_ints_or_two_strings(
-                        |a: i64, b: i64| Ok(bool_as_int(a == b)),
+                        |a: BigInt, b: BigInt| Ok(bool_as_int(a == b)),
                         |a: &String, b: &String| Ok(bool_as_string(a == b)),
                         &operand_values,
                     ),
                     "!=" => infix_operator_two_ints_or_two_strings(
-                        |a: i64, b: i64| Ok(bool_as_int(a != b)),
+                        |a: BigInt, b: BigInt| Ok(bool_as_int(a != b)),
                         |a: &String, b: &String| Ok(bool_as_string(a != b)),
                         &operand_values,
                     ),
                     "<" => infix_operator_two_ints_or_two_strings(
-                        |a: i64, b: i64| Ok(bool_as_int(a < b)),
+                        |a: BigInt, b: BigInt| Ok(bool_as_int(a < b)),
                         |a: &String, b: &String| Ok(bool_as_string(a < b)),
                         &operand_values,
                     ),
                     ">" => infix_operator_two_ints_or_two_strings(
-                        |a: i64, b: i64| Ok(bool_as_int(a > b)),
+                        |a: BigInt, b: BigInt| Ok(bool_as_int(a > b)),
                         |a: &String, b: &String| Ok(bool_as_string(a > b)),
                         &operand_values,
                     ),
                     "<=" => infix_operator_two_ints_or_two_strings(
-                        |a: i64, b: i64| Ok(bool_as_int(a <= b)),
+                        |a: BigInt, b: BigInt| Ok(bool_as_int(a <= b)),
                         |a: &String, b: &String| Ok(bool_as_string(a <= b)),
                         &operand_values,
                     ),
                     ">=" => infix_operator_two_ints_or_two_strings(
-                        |a: i64, b: i64| Ok(bool_as_int(a >= b)),
+                        |a: BigInt, b: BigInt| Ok(bool_as_int(a >= b)),
                         |a: &String, b: &String| Ok(bool_as_string(a >= b)),
                         &operand_values,
                     ),
-                    "|" => infix_operator_or(&operand_values),
-                    "&" => infix_operator_and(&operand_values),
+                    "|" => Ok(infix_operator_or(&operand_values)),
+                    "&" => Ok(infix_operator_and(&operand_values)),
                     ":" | "match" => operator_match(&operand_values),
-                    "length" => prefix_operator_length(&operand_values),
-                    "index" => prefix_operator_index(&operand_values),
-                    "substr" => prefix_operator_substr(&operand_values),
+                    "length" => Ok(prefix_operator_length(&operand_values)),
+                    "index" => Ok(prefix_operator_index(&operand_values)),
+                    "substr" => Ok(prefix_operator_substr(&operand_values)),
 
                     _ => Err(format!("operation not implemented: {}", op_type)),
                 },
@@ -161,13 +157,11 @@ impl ASTNode {
         }
     }
     pub fn operand_values(&self) -> Result<Vec<String>, String> {
-        if let ASTNode::Node { ref operands, .. } = *self {
+        if let AstNode::Node { operands, .. } = self {
             let mut out = Vec::with_capacity(operands.len());
             for operand in operands {
-                match operand.evaluate() {
-                    Ok(value) => out.push(value),
-                    Err(reason) => return Err(reason),
-                }
+                let value = operand.evaluate()?;
+                out.push(value);
             }
             Ok(out)
         } else {
@@ -178,24 +172,15 @@ impl ASTNode {
 
 pub fn tokens_to_ast(
     maybe_tokens: Result<Vec<(usize, Token)>, String>,
-) -> Result<Box<ASTNode>, String> {
-    if maybe_tokens.is_err() {
-        Err(maybe_tokens.err().unwrap())
-    } else {
-        let tokens = maybe_tokens.ok().unwrap();
+) -> Result<Box<AstNode>, String> {
+    maybe_tokens.and_then(|tokens| {
         let mut out_stack: TokenStack = Vec::new();
         let mut op_stack: TokenStack = Vec::new();
 
         for (token_idx, token) in tokens {
-            if let Err(reason) =
-                push_token_to_either_stack(token_idx, &token, &mut out_stack, &mut op_stack)
-            {
-                return Err(reason);
-            }
+            push_token_to_either_stack(token_idx, &token, &mut out_stack, &mut op_stack)?;
         }
-        if let Err(reason) = move_rest_of_ops_to_out(&mut out_stack, &mut op_stack) {
-            return Err(reason);
-        }
+        move_rest_of_ops_to_out(&mut out_stack, &mut op_stack)?;
         assert!(op_stack.is_empty());
 
         maybe_dump_rpn(&out_stack);
@@ -209,17 +194,17 @@ pub fn tokens_to_ast(
             maybe_dump_ast(&result);
             result
         }
-    }
+    })
 }
 
-fn maybe_dump_ast(result: &Result<Box<ASTNode>, String>) {
+fn maybe_dump_ast(result: &Result<Box<AstNode>, String>) {
     use std::env;
     if let Ok(debug_var) = env::var("EXPR_DEBUG_AST") {
         if debug_var == "1" {
             println!("EXPR_DEBUG_AST");
-            match *result {
-                Ok(ref ast) => ast.debug_dump(),
-                Err(ref reason) => println!("\terr: {:?}", reason),
+            match result {
+                Ok(ast) => ast.debug_dump(),
+                Err(reason) => println!("\terr: {:?}", reason),
             }
         }
     }
@@ -238,11 +223,11 @@ fn maybe_dump_rpn(rpn: &TokenStack) {
     }
 }
 
-fn ast_from_rpn(rpn: &mut TokenStack) -> Result<Box<ASTNode>, String> {
+fn ast_from_rpn(rpn: &mut TokenStack) -> Result<Box<AstNode>, String> {
     match rpn.pop() {
         None => Err("syntax error (premature end of expression)".to_owned()),
 
-        Some((token_idx, Token::Value { value })) => Ok(ASTNode::new_leaf(token_idx, &value)),
+        Some((token_idx, Token::Value { value })) => Ok(AstNode::new_leaf(token_idx, &value)),
 
         Some((token_idx, Token::InfixOp { value, .. })) => {
             maybe_ast_node(token_idx, &value, 2, rpn)
@@ -262,16 +247,14 @@ fn maybe_ast_node(
     op_type: &str,
     arity: usize,
     rpn: &mut TokenStack,
-) -> Result<Box<ASTNode>, String> {
+) -> Result<Box<AstNode>, String> {
     let mut operands = Vec::with_capacity(arity);
     for _ in 0..arity {
-        match ast_from_rpn(rpn) {
-            Err(reason) => return Err(reason),
-            Ok(operand) => operands.push(operand),
-        }
+        let operand = ast_from_rpn(rpn)?;
+        operands.push(operand);
     }
     operands.reverse();
-    Ok(ASTNode::new_node(token_idx, op_type, operands))
+    Ok(AstNode::new_node(token_idx, op_type, operands))
 }
 
 fn move_rest_of_ops_to_out(
@@ -304,7 +287,7 @@ fn push_token_to_either_stack(
     out_stack: &mut TokenStack,
     op_stack: &mut TokenStack,
 ) -> Result<(), String> {
-    let result = match *token {
+    let result = match token {
         Token::Value { .. } => {
             out_stack.push((token_idx, token.clone()));
             Ok(())
@@ -412,32 +395,24 @@ fn move_till_match_paren(
     op_stack: &mut TokenStack,
 ) -> Result<(), String> {
     loop {
-        match op_stack.pop() {
-            None => return Err("syntax error (Mismatched close-parenthesis)".to_string()),
-            Some((_, Token::ParOpen)) => return Ok(()),
-            Some(other) => out_stack.push(other),
+        let op = op_stack
+            .pop()
+            .ok_or_else(|| "syntax error (Mismatched close-parenthesis)".to_string())?;
+        match op {
+            (_, Token::ParOpen) => return Ok(()),
+            other => out_stack.push(other),
         }
-    }
-}
-
-fn checked_binop<F: Fn() -> Option<T>, T>(cb: F, op: &str) -> Result<T, String> {
-    match cb() {
-        Some(v) => Ok(v),
-        None => Err(format!("{}: Numerical result out of range", op)),
     }
 }
 
 fn infix_operator_two_ints<F>(f: F, values: &[String]) -> Result<String, String>
 where
-    F: Fn(i64, i64) -> Result<i64, String>,
+    F: Fn(BigInt, BigInt) -> Result<BigInt, String>,
 {
     assert!(values.len() == 2);
-    if let Ok(left) = values[0].parse::<i64>() {
-        if let Ok(right) = values[1].parse::<i64>() {
-            return match f(left, right) {
-                Ok(result) => Ok(result.to_string()),
-                Err(reason) => Err(reason),
-            };
+    if let Ok(left) = values[0].parse::<BigInt>() {
+        if let Ok(right) = values[1].parse::<BigInt>() {
+            return f(left, right).map(|big_int| big_int.to_string());
         }
     }
     Err("Expected an integer operand".to_string())
@@ -449,13 +424,14 @@ fn infix_operator_two_ints_or_two_strings<FI, FS>(
     values: &[String],
 ) -> Result<String, String>
 where
-    FI: Fn(i64, i64) -> Result<i64, String>,
+    FI: Fn(BigInt, BigInt) -> Result<u8, String>,
     FS: Fn(&String, &String) -> Result<String, String>,
 {
     assert!(values.len() == 2);
-    if let (Some(a_int), Some(b_int)) =
-        (values[0].parse::<i64>().ok(), values[1].parse::<i64>().ok())
-    {
+    if let (Some(a_int), Some(b_int)) = (
+        values[0].parse::<BigInt>().ok(),
+        values[1].parse::<BigInt>().ok(),
+    ) {
         match fi(a_int, b_int) {
             Ok(result) => Ok(result.to_string()),
             Err(reason) => Err(reason),
@@ -465,49 +441,44 @@ where
     }
 }
 
-fn infix_operator_or(values: &[String]) -> Result<String, String> {
+fn infix_operator_or(values: &[String]) -> String {
     assert!(values.len() == 2);
     if value_as_bool(&values[0]) {
-        Ok(values[0].clone())
+        values[0].clone()
     } else {
-        Ok(values[1].clone())
+        values[1].clone()
     }
 }
 
-fn infix_operator_and(values: &[String]) -> Result<String, String> {
+fn infix_operator_and(values: &[String]) -> String {
     if value_as_bool(&values[0]) && value_as_bool(&values[1]) {
-        Ok(values[0].clone())
+        values[0].clone()
     } else {
-        Ok(0.to_string())
+        0.to_string()
     }
 }
 
 fn operator_match(values: &[String]) -> Result<String, String> {
     assert!(values.len() == 2);
-    let re = match Regex::with_options(&values[1], RegexOptions::REGEX_OPTION_NONE, Syntax::grep())
-    {
-        Ok(m) => m,
-        Err(err) => return Err(err.description().to_string()),
-    };
-    if re.captures_len() > 0 {
-        Ok(match re.captures(&values[0]) {
-            Some(captures) => captures.at(1).unwrap().to_string(),
-            None => "".to_string(),
-        })
+    let re = Regex::with_options(&values[1], RegexOptions::REGEX_OPTION_NONE, Syntax::grep())
+        .map_err(|err| err.description().to_string())?;
+    Ok(if re.captures_len() > 0 {
+        re.captures(&values[0])
+            .map(|captures| captures.at(1).unwrap())
+            .unwrap_or("")
+            .to_string()
     } else {
-        Ok(match re.find(&values[0]) {
-            Some((start, end)) => (end - start).to_string(),
-            None => "0".to_string(),
-        })
-    }
+        re.find(&values[0])
+            .map_or("0".to_string(), |(start, end)| (end - start).to_string())
+    })
 }
 
-fn prefix_operator_length(values: &[String]) -> Result<String, String> {
+fn prefix_operator_length(values: &[String]) -> String {
     assert!(values.len() == 1);
-    Ok(values[0].len().to_string())
+    values[0].len().to_string()
 }
 
-fn prefix_operator_index(values: &[String]) -> Result<String, String> {
+fn prefix_operator_index(values: &[String]) -> String {
     assert!(values.len() == 2);
     let haystack = &values[0];
     let needles = &values[1];
@@ -515,45 +486,33 @@ fn prefix_operator_index(values: &[String]) -> Result<String, String> {
     for (current_idx, ch_h) in haystack.chars().enumerate() {
         for ch_n in needles.chars() {
             if ch_n == ch_h {
-                return Ok(current_idx.to_string());
+                return current_idx.to_string();
             }
         }
     }
-    Ok("0".to_string())
+    "0".to_string()
 }
 
-fn prefix_operator_substr(values: &[String]) -> Result<String, String> {
+fn prefix_operator_substr(values: &[String]) -> String {
     assert!(values.len() == 3);
     let subj = &values[0];
-    let mut idx = match values[1].parse::<i64>() {
-        Ok(i) => i,
-        Err(_) => return Err("expected integer as POS arg to 'substr'".to_string()),
+    let idx = match values[1]
+        .parse::<usize>()
+        .ok()
+        .and_then(|v| v.checked_sub(1))
+    {
+        Some(i) => i,
+        None => return String::new(),
     };
-    let mut len = match values[2].parse::<i64>() {
+    let len = match values[2].parse::<usize>() {
         Ok(i) => i,
-        Err(_) => return Err("expected integer as LENGTH arg to 'substr'".to_string()),
+        Err(_) => return String::new(),
     };
 
-    if idx <= 0 || len <= 0 {
-        return Ok("".to_string());
-    }
-
-    let mut out_str = String::new();
-    for ch in subj.chars() {
-        idx -= 1;
-        if idx <= 0 {
-            if len <= 0 {
-                break;
-            }
-            len -= 1;
-
-            out_str.push(ch);
-        }
-    }
-    Ok(out_str)
+    subj.chars().skip(idx).take(len).collect()
 }
 
-fn bool_as_int(b: bool) -> i64 {
+fn bool_as_int(b: bool) -> u8 {
     if b {
         1
     } else {
@@ -571,8 +530,8 @@ fn value_as_bool(s: &str) -> bool {
     if s.is_empty() {
         return false;
     }
-    match s.parse::<i64>() {
-        Ok(n) => n != 0,
+    match s.parse::<BigInt>() {
+        Ok(n) => n.is_one(),
         Err(_) => true,
     }
 }

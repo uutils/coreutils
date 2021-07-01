@@ -12,9 +12,10 @@
 #[macro_use]
 extern crate uucore;
 
-use getopts::Options;
+use clap::{crate_version, App, Arg};
 use std::fs;
 use std::io::{ErrorKind, Write};
+use uucore::InvalidEncodingHandling;
 
 // operating mode
 enum Mode {
@@ -22,116 +23,107 @@ enum Mode {
     Basic,   // check basic compatibility with POSIX
     Extra,   // check for leading dashes and empty names
     Both,    // a combination of `Basic` and `Extra`
-    Help,    // show help
-    Version, // show version information
 }
 
 static NAME: &str = "pathchk";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
+static ABOUT: &str = "Check whether file names are valid or portable";
+
+mod options {
+    pub const POSIX: &str = "posix";
+    pub const POSIX_SPECIAL: &str = "posix-special";
+    pub const PORTABILITY: &str = "portability";
+    pub const PATH: &str = "path";
+}
 
 // a few global constants as used in the GNU implementation
 const POSIX_PATH_MAX: usize = 256;
 const POSIX_NAME_MAX: usize = 14;
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+fn get_usage() -> String {
+    format!("{0} [OPTION]... NAME...", executable!())
+}
 
-    // add options
-    let mut opts = Options::new();
-    opts.optflag("p", "posix", "check for (most) POSIX systems");
-    opts.optflag(
-        "P",
-        "posix-special",
-        "check for empty names and leading \"-\"",
-    );
-    opts.optflag(
-        "",
-        "portability",
-        "check for all POSIX systems (equivalent to -p -P)",
-    );
-    opts.optflag("h", "help", "display this help text and exit");
-    opts.optflag("V", "version", "output version information and exit");
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(e) => crash!(1, "{}", e),
-    };
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let usage = get_usage();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
+
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     // set working mode
-    let mode = if matches.opt_present("version") {
-        Mode::Version
-    } else if matches.opt_present("help") {
-        Mode::Help
-    } else if (matches.opt_present("posix") && matches.opt_present("posix-special"))
-        || matches.opt_present("portability")
-    {
+    let is_posix = matches.values_of(options::POSIX).is_some();
+    let is_posix_special = matches.values_of(options::POSIX_SPECIAL).is_some();
+    let is_portability = matches.values_of(options::PORTABILITY).is_some();
+
+    let mode = if (is_posix && is_posix_special) || is_portability {
         Mode::Both
-    } else if matches.opt_present("posix") {
+    } else if is_posix {
         Mode::Basic
-    } else if matches.opt_present("posix-special") {
+    } else if is_posix_special {
         Mode::Extra
     } else {
         Mode::Default
     };
 
     // take necessary actions
-    match mode {
-        Mode::Help => {
-            help(opts);
-            0
-        }
-        Mode::Version => {
-            version();
-            0
-        }
-        _ => {
-            let mut res = if matches.free.is_empty() {
-                show_error!("missing operand\nTry {} --help for more information", NAME);
-                false
-            } else {
-                true
-            };
-            // free strings are path operands
-            // FIXME: TCS, seems inefficient and overly verbose (?)
-            for p in matches.free {
-                let mut path = Vec::new();
-                for path_segment in p.split('/') {
-                    path.push(path_segment.to_string());
-                }
-                res &= check_path(&mode, &path);
+    let paths = matches.values_of(options::PATH);
+    let mut res = if paths.is_none() {
+        show_error!("missing operand\nTry {} --help for more information", NAME);
+        false
+    } else {
+        true
+    };
+
+    if res {
+        // free strings are path operands
+        // FIXME: TCS, seems inefficient and overly verbose (?)
+        for p in paths.unwrap() {
+            let mut path = Vec::new();
+            for path_segment in p.split('/') {
+                path.push(path_segment.to_string());
             }
-            // determine error code
-            if res {
-                0
-            } else {
-                1
-            }
+            res &= check_path(&mode, &path);
         }
+    }
+
+    // determine error code
+    if res {
+        0
+    } else {
+        1
     }
 }
 
-// print help
-fn help(opts: Options) {
-    let msg = format!(
-        "Usage: {} [OPTION]... NAME...\n\n\
-         Diagnose invalid or unportable file names.",
-        NAME
-    );
-
-    print!("{}", opts.usage(&msg));
-}
-
-// print version information
-fn version() {
-    println!("{} {}", NAME, VERSION);
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
+        .arg(
+            Arg::with_name(options::POSIX)
+                .short("p")
+                .help("check for most POSIX systems"),
+        )
+        .arg(
+            Arg::with_name(options::POSIX_SPECIAL)
+                .short("P")
+                .help(r#"check for empty names and leading "-""#),
+        )
+        .arg(
+            Arg::with_name(options::PORTABILITY)
+                .long(options::PORTABILITY)
+                .help("check for all POSIX systems (equivalent to -p -P)"),
+        )
+        .arg(Arg::with_name(options::PATH).hidden(true).multiple(true))
 }
 
 // check a path, given as a slice of it's components and an operating mode
 fn check_path(mode: &Mode, path: &[String]) -> bool {
     match *mode {
-        Mode::Basic => check_basic(&path),
-        Mode::Extra => check_default(&path) && check_extra(&path),
-        Mode::Both => check_basic(&path) && check_extra(&path),
-        _ => check_default(&path),
+        Mode::Basic => check_basic(path),
+        Mode::Extra => check_default(path) && check_extra(path),
+        Mode::Both => check_basic(path) && check_extra(path),
+        _ => check_default(path),
     }
 }
 
@@ -166,7 +158,7 @@ fn check_basic(path: &[String]) -> bool {
             );
             return false;
         }
-        if !check_portable_chars(&p) {
+        if !check_portable_chars(p) {
             return false;
         }
     }
@@ -178,7 +170,7 @@ fn check_basic(path: &[String]) -> bool {
 fn check_extra(path: &[String]) -> bool {
     // components: leading hyphens
     for p in path {
-        if !no_leading_hyphen(&p) {
+        if !no_leading_hyphen(p) {
             writeln!(
                 &mut std::io::stderr(),
                 "leading hyphen in file name component '{}'",
@@ -251,13 +243,14 @@ fn no_leading_hyphen(path_segment: &str) -> bool {
 
 // check whether a path segment contains only valid (read: portable) characters
 fn check_portable_chars(path_segment: &str) -> bool {
-    let valid_str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-".to_string();
-    for ch in path_segment.chars() {
-        if !valid_str.contains(ch) {
+    const VALID_CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-";
+    for (i, ch) in path_segment.as_bytes().iter().enumerate() {
+        if !VALID_CHARS.contains(ch) {
+            let invalid = path_segment[i..].chars().next().unwrap();
             writeln!(
                 &mut std::io::stderr(),
                 "nonportable character '{}' in file name component '{}'",
-                ch,
+                invalid,
                 path_segment
             );
             return false;

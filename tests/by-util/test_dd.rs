@@ -1,9 +1,8 @@
 use crate::common::util::*;
 
 use std::io::{BufReader, Read, Write};
-use std::path::{Path, PathBuf};
-use std::fs::{self, OpenOptions, File};
-use std::time::{Duration, SystemTime};
+use std::path::{PathBuf};
+use std::fs::{OpenOptions, File};
 use tempfile::tempfile;
 
 macro_rules! inf
@@ -475,18 +474,18 @@ fn test_fullblock()
 {
     let tname = "fullblock-from-urand";
     let tmp_fn = format!("TESTFILE-{}.tmp", &tname);
-    let stats = vec![
+    let exp_stats = vec![
         "1+0 records in\n",
         "1+0 records out\n",
         "134217728 bytes (134 MB, 128 MiB) copied,",
     ];
-    let stats = stats.into_iter()
-                       .fold(String::new(), | mut acc, s | {
-                           acc.push_str(s);
-                           acc
-                       });
+    let exp_stats = exp_stats.into_iter()
+                             .fold(Vec::new(), | mut acc, s | {
+                                 acc.extend(s.bytes());
+                                 acc
+                             });
 
-    let res = new_ucmd!()
+    let ucmd = new_ucmd!()
         .args(&[
             "if=/dev/urandom",
             of!(&tmp_fn),
@@ -499,12 +498,11 @@ fn test_fullblock()
             // a reasonable value for testing most systems.
             "count=1",
             "iflag=fullblock",
-        ])
-        .run();
+        ]).run();
+    ucmd.success();
 
-    res.success();
-    let res_stats = &res.stderr[..stats.len()];
-    assert_eq!(&stats, res_stats);
+    let run_stats = &ucmd.stderr()[..exp_stats.len()];
+    assert_eq!(exp_stats, run_stats);
 }
 
 // Fileio

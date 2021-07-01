@@ -1,6 +1,13 @@
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
+
+// spell-checker:ignore (words) bogusfile emptyfile abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstu
+
 use crate::common::util::*;
 
-static INPUT: &'static str = "lorem_ipsum.txt";
+static INPUT: &str = "lorem_ipsum.txt";
 
 #[test]
 fn test_stdin_default() {
@@ -89,73 +96,214 @@ fn test_verbose() {
 #[test]
 #[ignore]
 fn test_spams_newline() {
+    //this test is does not mirror what GNU does
     new_ucmd!().pipe_in("a").succeeds().stdout_is("a\n");
 }
 
 #[test]
-#[ignore]
-fn test_unsupported_byte_syntax() {
+fn test_byte_syntax() {
     new_ucmd!()
         .args(&["-1c"])
         .pipe_in("abc")
-        .fails()
-        //GNU head returns "a"
-        .stdout_is("")
-        .stderr_is("head: error: Unrecognized option: \'1\'");
+        .run()
+        .stdout_is("a");
 }
 
 #[test]
-#[ignore]
-fn test_unsupported_line_syntax() {
+fn test_line_syntax() {
     new_ucmd!()
         .args(&["-n", "2048m"])
         .pipe_in("a\n")
-        .fails()
-        //.stdout_is("a\n");  What GNU head returns.
-        .stdout_is("")
-        .stderr_is("head: error: invalid line count \'2048m\': invalid digit found in string");
+        .run()
+        .stdout_is("a\n");
 }
 
 #[test]
-#[ignore]
-fn test_unsupported_zero_terminated_syntax() {
+fn test_zero_terminated_syntax() {
     new_ucmd!()
-        .args(&["-z -n 1"])
+        .args(&["-z", "-n", "1"])
         .pipe_in("x\0y")
-        .fails()
-        //GNU Head returns "x\0"
-        .stderr_is("head: error: Unrecognized option: \'z\'");
+        .run()
+        .stdout_is("x\0");
 }
 
 #[test]
-#[ignore]
-fn test_unsupported_zero_terminated_syntax_2() {
+fn test_zero_terminated_syntax_2() {
     new_ucmd!()
-        .args(&["-z -n 2"])
+        .args(&["-z", "-n", "2"])
         .pipe_in("x\0y")
-        .fails()
-        //GNU Head returns "x\0y"
-        .stderr_is("head: error: Unrecognized option: \'z\'");
+        .run()
+        .stdout_is("x\0y");
 }
 
 #[test]
-#[ignore]
-fn test_unsupported_negative_byte_syntax() {
+fn test_zero_terminated_negative_lines() {
+    new_ucmd!()
+        .args(&["-z", "-n", "-1"])
+        .pipe_in("x\0y\0z\0")
+        .run()
+        .stdout_is("x\0y\0");
+}
+
+#[test]
+fn test_negative_byte_syntax() {
     new_ucmd!()
         .args(&["--bytes=-2"])
         .pipe_in("a\n")
-        .fails()
-        //GNU Head returns ""
-        .stderr_is("head: error: invalid byte count \'-2\': invalid digit found in string");
+        .run()
+        .stdout_is("");
 }
 
 #[test]
-#[ignore]
-fn test_bug_in_negative_zero_lines() {
+fn test_negative_zero_lines() {
     new_ucmd!()
         .args(&["--lines=-0"])
         .pipe_in("a\nb\n")
         .succeeds()
-        //GNU Head returns "a\nb\n"
-        .stdout_is("");
+        .stdout_is("a\nb\n");
+}
+#[test]
+fn test_negative_zero_bytes() {
+    new_ucmd!()
+        .args(&["--bytes=-0"])
+        .pipe_in("qwerty")
+        .succeeds()
+        .stdout_is("qwerty");
+}
+#[test]
+fn test_no_such_file_or_directory() {
+    new_ucmd!()
+        .arg("no_such_file.toml")
+        .fails()
+        .stderr_contains("cannot open 'no_such_file.toml' for reading: No such file or directory");
+}
+
+/// Test that each non-existent files gets its own error message printed.
+#[test]
+fn test_multiple_nonexistent_files() {
+    new_ucmd!()
+        .args(&["bogusfile1", "bogusfile2"])
+        .fails()
+        .stdout_does_not_contain("==> bogusfile1 <==")
+        .stderr_contains("cannot open 'bogusfile1' for reading: No such file or directory")
+        .stdout_does_not_contain("==> bogusfile2 <==")
+        .stderr_contains("cannot open 'bogusfile2' for reading: No such file or directory");
+}
+
+// there was a bug not caught by previous tests
+// where for negative n > 3, the total amount of lines
+// was correct, but it would eat from the second line
+#[test]
+fn test_sequence_fixture() {
+    new_ucmd!()
+        .args(&["-n", "-10", "sequence"])
+        .run()
+        .stdout_is_fixture("sequence.expected");
+}
+#[test]
+fn test_file_backwards() {
+    new_ucmd!()
+        .args(&["-c", "-10", "lorem_ipsum.txt"])
+        .run()
+        .stdout_is_fixture("lorem_ipsum_backwards_file.expected");
+}
+
+#[test]
+fn test_zero_terminated() {
+    new_ucmd!()
+        .args(&["-z", "zero_terminated.txt"])
+        .run()
+        .stdout_is_fixture("zero_terminated.expected");
+}
+
+#[test]
+fn test_obsolete_extras() {
+    new_ucmd!()
+        .args(&["-5zv"])
+        .pipe_in("1\02\03\04\05\06")
+        .succeeds()
+        .stdout_is("==> standard input <==\n1\02\03\04\05\0");
+}
+
+#[test]
+fn test_multiple_files() {
+    new_ucmd!()
+        .args(&["emptyfile.txt", "emptyfile.txt"])
+        .succeeds()
+        .stdout_is("==> emptyfile.txt <==\n\n==> emptyfile.txt <==\n");
+}
+
+#[test]
+fn test_multiple_files_with_stdin() {
+    new_ucmd!()
+        .args(&["emptyfile.txt", "-", "emptyfile.txt"])
+        .pipe_in("hello\n")
+        .succeeds()
+        .stdout_is(
+            "==> emptyfile.txt <==
+
+==> standard input <==
+hello
+
+==> emptyfile.txt <==
+",
+        );
+}
+
+#[test]
+fn test_head_invalid_num() {
+    new_ucmd!()
+        .args(&["-c", "1024R", "emptyfile.txt"])
+        .fails()
+        .stderr_is("head: invalid number of bytes: '1024R'");
+    new_ucmd!()
+        .args(&["-n", "1024R", "emptyfile.txt"])
+        .fails()
+        .stderr_is("head: invalid number of lines: '1024R'");
+    #[cfg(not(target_pointer_width = "128"))]
+    new_ucmd!()
+        .args(&["-c", "1Y", "emptyfile.txt"])
+        .fails()
+        .stderr_is("head: invalid number of bytes: '1Y': Value too large for defined data type");
+    #[cfg(not(target_pointer_width = "128"))]
+    new_ucmd!()
+        .args(&["-n", "1Y", "emptyfile.txt"])
+        .fails()
+        .stderr_is("head: invalid number of lines: '1Y': Value too large for defined data type");
+    #[cfg(target_pointer_width = "32")]
+    {
+        let sizes = ["1000G", "10T"];
+        for size in &sizes {
+            new_ucmd!()
+                .args(&["-c", size])
+                .fails()
+                .code_is(1)
+                .stderr_only(format!(
+                    "head: invalid number of bytes: '{}': Value too large for defined data type",
+                    size
+                ));
+        }
+    }
+}
+
+#[test]
+fn test_head_num_with_undocumented_sign_bytes() {
+    // tail: '-' is not documented (8.32 man pages)
+    // head: '+' is not documented (8.32 man pages)
+    const ALPHABET: &str = "abcdefghijklmnopqrstuvwxyz";
+    new_ucmd!()
+        .args(&["-c", "5"])
+        .pipe_in(ALPHABET)
+        .succeeds()
+        .stdout_is("abcde");
+    new_ucmd!()
+        .args(&["-c", "-5"])
+        .pipe_in(ALPHABET)
+        .succeeds()
+        .stdout_is("abcdefghijklmnopqrstu");
+    new_ucmd!()
+        .args(&["-c", "+5"])
+        .pipe_in(ALPHABET)
+        .succeeds()
+        .stdout_is("abcde");
 }

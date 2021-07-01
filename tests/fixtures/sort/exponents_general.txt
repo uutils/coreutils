@@ -1,0 +1,28 @@
+100E6
+
+50e10
++100000
+
+10000K78
+0x10 // hexadecimal not supported, but it should be
+10E
+0b10 // binary not supported
+64e+
+99e-
+
+45e+10.5
+
+1000EDKLD
+
+13e+10
+
+100E6
+
+50e10
+ 	 -12e-5555.5
++100000
+
+10e10e10e10
+5.5.5.5
+55e-20
+55e-20.10

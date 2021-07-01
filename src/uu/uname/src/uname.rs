@@ -13,10 +13,9 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use platform_info::*;
 
-const VERSION: &str = env!("CARGO_PKG_VERSION");
 const ABOUT: &str = "Print certain system information.  With no OPTION, same as -s.";
 
 pub mod options {
@@ -39,7 +38,7 @@ const HOST_OS: &str = "Windows NT";
 const HOST_OS: &str = "FreeBSD";
 #[cfg(target_os = "openbsd")]
 const HOST_OS: &str = "OpenBSD";
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 const HOST_OS: &str = "Darwin";
 #[cfg(target_os = "fuchsia")]
 const HOST_OS: &str = "Fuchsia";
@@ -48,49 +47,7 @@ const HOST_OS: &str = "Redox";
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = format!("{} [OPTION]...", executable!());
-    let matches = App::new(executable!())
-        .version(VERSION)
-        .about(ABOUT)
-        .usage(&usage[..])
-        .arg(Arg::with_name(options::ALL)
-            .short("a")
-            .long(options::ALL)
-            .help("Behave as though all of the options -mnrsv were specified."))
-        .arg(Arg::with_name(options::KERNELNAME)
-            .short("s")
-            .long(options::KERNELNAME)
-            .alias("sysname") // Obsolescent option in GNU uname
-            .help("print the kernel name."))
-        .arg(Arg::with_name(options::NODENAME)
-            .short("n")
-            .long(options::NODENAME)
-            .help("print the nodename (the nodename may be a name that the system is known by to a communications network)."))
-        .arg(Arg::with_name(options::KERNELRELEASE)
-            .short("r")
-            .long(options::KERNELRELEASE)
-            .alias("release") // Obsolescent option in GNU uname
-            .help("print the operating system release."))
-        .arg(Arg::with_name(options::KERNELVERSION)
-            .short("v")
-            .long(options::KERNELVERSION)
-            .help("print the operating system version."))
-        .arg(Arg::with_name(options::HWPLATFORM)
-            .short("i")
-            .long(options::HWPLATFORM)
-            .help("print the hardware platform (non-portable)"))
-        .arg(Arg::with_name(options::MACHINE)
-            .short("m")
-            .long(options::MACHINE)
-            .help("print the machine hardware name."))
-        .arg(Arg::with_name(options::PROCESSOR)
-            .short("p")
-            .long(options::PROCESSOR)
-            .help("print the processor type (non-portable)"))
-        .arg(Arg::with_name(options::OS)
-            .short("o")
-            .long(options::OS)
-            .help("print the operating system name."))
-        .get_matches_from(args);
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     let uname = return_if_err!(1, PlatformInfo::new());
     let mut output = String::new();
@@ -155,4 +112,48 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     println!("{}", output.trim_end());
 
     0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
+        .arg(Arg::with_name(options::ALL)
+            .short("a")
+            .long(options::ALL)
+            .help("Behave as though all of the options -mnrsv were specified."))
+        .arg(Arg::with_name(options::KERNELNAME)
+            .short("s")
+            .long(options::KERNELNAME)
+            .alias("sysname") // Obsolescent option in GNU uname
+            .help("print the kernel name."))
+        .arg(Arg::with_name(options::NODENAME)
+            .short("n")
+            .long(options::NODENAME)
+            .help("print the nodename (the nodename may be a name that the system is known by to a communications network)."))
+        .arg(Arg::with_name(options::KERNELRELEASE)
+            .short("r")
+            .long(options::KERNELRELEASE)
+            .alias("release") // Obsolescent option in GNU uname
+            .help("print the operating system release."))
+        .arg(Arg::with_name(options::KERNELVERSION)
+            .short("v")
+            .long(options::KERNELVERSION)
+            .help("print the operating system version."))
+        .arg(Arg::with_name(options::HWPLATFORM)
+            .short("i")
+            .long(options::HWPLATFORM)
+            .help("print the hardware platform (non-portable)"))
+        .arg(Arg::with_name(options::MACHINE)
+            .short("m")
+            .long(options::MACHINE)
+            .help("print the machine hardware name."))
+        .arg(Arg::with_name(options::PROCESSOR)
+            .short("p")
+            .long(options::PROCESSOR)
+            .help("print the processor type (non-portable)"))
+        .arg(Arg::with_name(options::OS)
+            .short("o")
+            .long(options::OS)
+            .help("print the operating system name."))
 }

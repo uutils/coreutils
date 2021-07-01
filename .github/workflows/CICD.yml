@@ -5,18 +5,54 @@ name: CICD
 # spell-checker:ignore (jargon) SHAs deps softprops toolchain
 # spell-checker:ignore (names) CodeCOV MacOS MinGW Peltoche rivy
 # spell-checker:ignore (shell/tools) choco clippy dmake dpkg esac fakeroot gmake grcov halium lcov libssl mkdir popd printf pushd rustc rustfmt rustup shopt xargs
-# spell-checker:ignore (misc) aarch alnum armhf coreutils gnueabihf issuecomment maint nullglob onexitbegin onexitend tempfile uutils
+# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils gnueabihf issuecomment maint nullglob onexitbegin onexitend runtest tempfile testsuite uutils
+
+# ToDO: [2021-06; rivy] change from `cargo-tree` to `cargo tree` once MSRV is >= 1.45
 
 env:
   PROJECT_NAME: coreutils
   PROJECT_DESC: "Core universal (cross-platform) utilities"
   PROJECT_AUTH: "uutils"
-  RUST_MIN_SRV: "1.33.0" ## v1.33.0 - minimum version for tempfile 3.1.0 and libc needed for aarch64
+  RUST_MIN_SRV: "1.43.1" ## v1.43.0
   RUST_COV_SRV: "2020-08-01" ## (~v1.47.0) supported rust version for code coverage; (date required/used by 'coverage') ## !maint: refactor when code coverage support is included in the stable channel
 
 on: [push, pull_request]
 
 jobs:
+  code_deps:
+    name: Style/dependencies
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: ubuntu-latest , features: feat_os_unix }
+    steps:
+    - uses: actions/checkout@v2
+    - name: Initialize workflow variables
+      id: vars
+      shell: bash
+      run: |
+        ## VARs setup
+        outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
+        # target-specific options
+        # * CARGO_FEATURES_OPTION
+        CARGO_FEATURES_OPTION='' ;
+        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
+        outputs CARGO_FEATURES_OPTION
+    - name: Install `rust` toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        default: true
+        profile: minimal # minimal component installation (ie, no documentation)
+    - name: "`cargo update` testing"
+      shell: bash
+      run: |
+        ## `cargo update` testing
+        # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
+        cargo fetch --locked --quiet || { echo "::error file=Cargo.lock::'Cargo.lock' file requires update (use \`cargo +${{ env.RUST_MIN_SRV }} update\`)" ; exit 1 ; }
+
   code_format:
     name: Style/format
     runs-on: ${{ matrix.job.os }}
@@ -26,18 +62,18 @@ jobs:
         job:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
     - name: Initialize workflow variables
       id: vars
       shell: bash
       run: |
         ## VARs setup
+        outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
         # target-specific options
         # * CARGO_FEATURES_OPTION
         CARGO_FEATURES_OPTION='' ;
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
-        echo set-output name=CARGO_FEATURES_OPTION::${CARGO_FEATURES_OPTION}
-        echo ::set-output name=CARGO_FEATURES_OPTION::${CARGO_FEATURES_OPTION}
+        outputs CARGO_FEATURES_OPTION
     - name: Install `rust` toolchain
       uses: actions-rs/toolchain@v1
       with:
@@ -48,18 +84,19 @@ jobs:
     - name: "`fmt` testing"
       shell: bash
       run: |
-        # `fmt` testing
+        ## `fmt` testing
         # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-        S=$(cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" | sed -E -n -e "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::warning file=\1,line=\2::WARNING: \`cargo fmt\`: style violation/p" ; }
+        S=$(cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s\n" "$S" | sed -E -n -e "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::error file=\1,line=\2::ERROR: \`cargo fmt\`: style violation (file:'\1', line:\2; use \`cargo fmt \"\1\"\`)/p" ; exit 1 ; }
     - name: "`fmt` testing of tests"
+      if: success() || failure() # run regardless of prior step success/failure
       shell: bash
       run: |
-        # `fmt` testing of tests
+        ## `fmt` testing of tests
         # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-        S=$(find tests -name "*.rs" -print0 | xargs -0 cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" | sed -E -n "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::warning file=\1,line=\2::WARNING: \`cargo fmt\`: style violation/p" ; }
+        S=$(find tests -name "*.rs" -print0 | xargs -0 cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s\n" "$S" | sed -E -n "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::error file=\1,line=\2::ERROR: \`cargo fmt\`: style violation (file:'\1', line:\2; use \`cargo fmt \"\1\"\`)/p" ; exit 1 ; }
 
-  code_warnings:
-    name: Style/warnings
+  code_lint:
+    name: Style/lint
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
@@ -69,32 +106,51 @@ jobs:
           - { os: macos-latest   , features: feat_os_macos }
           - { os: windows-latest , features: feat_os_windows }
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
     - name: Initialize workflow variables
       id: vars
       shell: bash
       run: |
         ## VARs setup
+        outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
         # target-specific options
         # * CARGO_FEATURES_OPTION
         CARGO_FEATURES_OPTION='' ;
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
-        echo set-output name=CARGO_FEATURES_OPTION::${CARGO_FEATURES_OPTION}
-        echo ::set-output name=CARGO_FEATURES_OPTION::${CARGO_FEATURES_OPTION}
+        outputs CARGO_FEATURES_OPTION
     - name: Install `rust` toolchain
       uses: actions-rs/toolchain@v1
       with:
-        toolchain: stable
+        toolchain: nightly
         default: true
         profile: minimal # minimal component installation (ie, no documentation)
         components: clippy
-    - name: "`clippy` testing"
-      if: success() || failure() # run regardless of prior step success/failure
+    - name: "`clippy` lint testing"
       shell: bash
       run: |
-        # `clippy` testing
+        ## `clippy` lint testing
         # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-        S=$(cargo clippy ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -- -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+(.*):([0-9]+):([0-9]+).*$/::warning file=\2,line=\3,col=\4::WARNING: \`cargo clippy\`: \1/p;" -e '}' ; }
+        S=$(cargo +nightly clippy --all-targets ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -- -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+${PWD//\//\\/}\/(.*):([0-9]+):([0-9]+).*$/::error file=\2,line=\3,col=\4::ERROR: \`cargo clippy\`: \1 (file:'\2', line:\3)/p;" -e '}' ; exit 1 ; }
+
+  code_spellcheck:
+    name: Style/spelling
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      matrix:
+        job:
+          - { os: ubuntu-latest }
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        ## Install/setup prerequisites
+        sudo apt-get -y update ; sudo apt-get -y install npm ; sudo npm install cspell -g ;
+    - name: Run `cspell`
+      shell: bash
+      run: |
+        ## Run `cspell`
+        cspell --config .vscode/cSpell.json --no-summary --no-progress "**/*" | sed -E -n "s/${PWD//\//\\/}\/(.*):(.*):(.*) - (.*)/::error file=\1,line=\2,col=\3::ERROR: \4 (file:'\1', line:\2)/p"
 
   min_version:
     name: MinRustV # Minimum supported rust version
@@ -104,7 +160,7 @@ jobs:
         job:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
     - name: Install `rust` toolchain (v${{ env.RUST_MIN_SRV }})
       uses: actions-rs/toolchain@v1
       with:
@@ -119,43 +175,42 @@ jobs:
         use-tool-cache: true
       env:
         RUSTUP_TOOLCHAIN: stable
-    - name: Confirm compatible 'Cargo.lock'
+    - name: Confirm MinSRV compatible 'Cargo.lock'
       shell: bash
       run: |
-        # Confirm compatible 'Cargo.lock'
+        ## Confirm MinSRV compatible 'Cargo.lock'
         # * 'Cargo.lock' is required to be in a format that `cargo` of MinSRV can interpret (eg, v1-format for MinSRV < v1.38)
-        cargo fetch --locked --quiet || { echo "::error file=Cargo.lock::Incompatible 'Cargo.lock' format; try \`cargo +${{ env.RUST_MIN_SRV }} update\`" ; exit 1 ; }
+        cargo fetch --locked --quiet || { echo "::error file=Cargo.lock::Incompatible (or out-of-date) 'Cargo.lock' file; update using \`cargo +${{ env.RUST_MIN_SRV }} update\`" ; exit 1 ; }
     - name: Info
       shell: bash
       run: |
-        # Info
-        ## environment
+        ## Info
+        # environment
         echo "## environment"
         echo "CI='${CI}'"
-        ## tooling info display
+        # tooling info display
         echo "## tooling"
         which gcc >/dev/null 2>&1 && (gcc --version | head -1) || true
-        rustup -V
+        rustup -V 2>/dev/null
         rustup show active-toolchain
         cargo -V
         rustc -V
         cargo-tree tree -V
-        ## dependencies
+        # dependencies
         echo "## dependency list"
         cargo fetch --locked --quiet
         ## * using the 'stable' toolchain is necessary to avoid "unexpected '--filter-platform'" errors
-        RUSTUP_TOOLCHAIN=stable cargo-tree tree --frozen --all --no-dev-dependencies --no-indent --features ${{ matrix.job.features }} | grep -vE "$PWD" | sort --unique
-
+        RUSTUP_TOOLCHAIN=stable cargo-tree tree --locked --all --no-dev-dependencies --no-indent --features ${{ matrix.job.features }} | grep -vE "$PWD" | sort --unique
     - name: Test
       uses: actions-rs/cargo@v1
       with:
         command: test
-        args: --features "feat_os_unix"
+        args: --features "feat_os_unix" -p uucore -p coreutils
       env:
         RUSTFLAGS: '-Awarnings'
 
-  busybox_test:
-    name: Busybox test suite
+  build_makefile:
+    name: Build/Makefile
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
@@ -163,23 +218,26 @@ jobs:
         job:
           - { os: ubuntu-latest }
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
     - name: Install `rust` toolchain
       uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
         default: true
         profile: minimal # minimal component installation (ie, no documentation)
-    - name: "prepare busytest"
+    - name: Install/setup prerequisites
       shell: bash
       run: |
-        make prepare-busytest
-    - name: "run busybox testsuite"
+        ## Install/setup prerequisites
+        sudo apt-get -y update ; sudo apt-get -y install python3-sphinx ;
+    - name: "`make build`"
       shell: bash
       run: |
-        bindir=$(pwd)/target/debug
-        cd tmp/busybox-*/testsuite
-        S=$(bindir=$bindir ./runtest) && printf "%s\n" "$S" || { printf "%s\n" "$S" | grep "FAIL:" | sed -e "s/FAIL: /::warning ::Test failure:/g" ; }
+        make build
+    - name: "`make test`"
+      shell: bash
+      run: |
+        make test
 
   build:
     name: Build
@@ -191,7 +249,6 @@ jobs:
           # { os, target, cargo-options, features, use-cross, toolchain }
           - { os: ubuntu-latest  , target: arm-unknown-linux-gnueabihf , features: feat_os_unix_gnueabihf , use-cross: use-cross }
           - { os: ubuntu-latest  , target: aarch64-unknown-linux-gnu   , features: feat_os_unix_gnueabihf , use-cross: use-cross }
-          - { os: ubuntu-16.04   , target: x86_64-unknown-linux-gnu    , features: feat_os_unix           , use-cross: use-cross }
           # - { os: ubuntu-18.04   , target: i586-unknown-linux-gnu      , features: feat_os_unix           , use-cross: use-cross } ## note: older windows platform; not required, dev-FYI only
           # - { os: ubuntu-18.04   , target: i586-unknown-linux-gnu      , features: feat_os_unix           , use-cross: use-cross } ## note: older windows platform; not required, dev-FYI only
           - { os: ubuntu-18.04   , target: i686-unknown-linux-gnu      , features: feat_os_unix           , use-cross: use-cross }
@@ -204,36 +261,37 @@ jobs:
           - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows }  ## note: requires rust >= 1.43.0 to link correctly
           - { os: windows-latest , target: x86_64-pc-windows-msvc      , features: feat_os_windows }
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
     - name: Install/setup prerequisites
       shell: bash
       run: |
-        ## install/setup prerequisites
+        ## Install/setup prerequisites
         case '${{ matrix.job.target }}' in
           arm-unknown-linux-gnueabihf) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf ;;
           aarch64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu ;;
+        esac
+        case '${{ matrix.job.os }}' in
+          macos-latest) brew install coreutils ;; # needed for testing
         esac
     - name: Initialize workflow variables
       id: vars
       shell: bash
       run: |
         ## VARs setup
+        outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
         # toolchain
         TOOLCHAIN="stable" ## default to "stable" toolchain
         # * specify alternate/non-default TOOLCHAIN for *-pc-windows-gnu targets; gnu targets on Windows are broken for the standard *-pc-windows-msvc toolchain (refs: GH:rust-lang/rust#47048, GH:rust-lang/rust#53454, GH:rust-lang/cargo#6754)
         case ${{ matrix.job.target }} in *-pc-windows-gnu) TOOLCHAIN="stable-${{ matrix.job.target }}" ;; esac;
         # * use requested TOOLCHAIN if specified
         if [ -n "${{ matrix.job.toolchain }}" ]; then TOOLCHAIN="${{ matrix.job.toolchain }}" ; fi
-        echo set-output name=TOOLCHAIN::${TOOLCHAIN:-<empty>/false}
-        echo ::set-output name=TOOLCHAIN::${TOOLCHAIN}
+        outputs TOOLCHAIN
         # staging directory
         STAGING='_staging'
-        echo set-output name=STAGING::${STAGING}
-        echo ::set-output name=STAGING::${STAGING}
+        outputs STAGING
         # determine EXE suffix
         EXE_suffix="" ; case '${{ matrix.job.target }}' in *-pc-windows-*) EXE_suffix=".exe" ;; esac;
-        echo set-output name=EXE_suffix::${EXE_suffix}
-        echo ::set-output name=EXE_suffix::${EXE_suffix}
+        outputs EXE_suffix
         # parse commit reference info
         echo GITHUB_REF=${GITHUB_REF}
         echo GITHUB_SHA=${GITHUB_SHA}
@@ -241,14 +299,7 @@ jobs:
         unset REF_BRANCH ; case "${GITHUB_REF}" in refs/heads/*) REF_BRANCH=${GITHUB_REF#refs/heads/} ;; esac;
         unset REF_TAG ; case "${GITHUB_REF}" in refs/tags/*) REF_TAG=${GITHUB_REF#refs/tags/} ;; esac;
         REF_SHAS=${GITHUB_SHA:0:8}
-        echo set-output name=REF_NAME::${REF_NAME}
-        echo set-output name=REF_BRANCH::${REF_BRANCH}
-        echo set-output name=REF_TAG::${REF_TAG}
-        echo set-output name=REF_SHAS::${REF_SHAS}
-        echo ::set-output name=REF_NAME::${REF_NAME}
-        echo ::set-output name=REF_BRANCH::${REF_BRANCH}
-        echo ::set-output name=REF_TAG::${REF_TAG}
-        echo ::set-output name=REF_SHAS::${REF_SHAS}
+        outputs REF_NAME REF_BRANCH REF_TAG REF_SHAS
         # parse target
         unset TARGET_ARCH
         case '${{ matrix.job.target }}' in
@@ -258,68 +309,50 @@ jobs:
           i686-*) TARGET_ARCH=i686 ;;
           x86_64-*) TARGET_ARCH=x86_64 ;;
         esac;
-        echo set-output name=TARGET_ARCH::${TARGET_ARCH}
-        echo ::set-output name=TARGET_ARCH::${TARGET_ARCH}
         unset TARGET_OS ; case '${{ matrix.job.target }}' in *-linux-*) TARGET_OS=linux ;; *-apple-*) TARGET_OS=macos ;; *-windows-*) TARGET_OS=windows ;; esac;
-        echo set-output name=TARGET_OS::${TARGET_OS}
-        echo ::set-output name=TARGET_OS::${TARGET_OS}
+        outputs TARGET_ARCH TARGET_OS
         # package name
         PKG_suffix=".tar.gz" ; case '${{ matrix.job.target }}' in *-pc-windows-*) PKG_suffix=".zip" ;; esac;
         PKG_BASENAME=${PROJECT_NAME}-${REF_TAG:-$REF_SHAS}-${{ matrix.job.target }}
         PKG_NAME=${PKG_BASENAME}${PKG_suffix}
-        echo set-output name=PKG_suffix::${PKG_suffix}
-        echo set-output name=PKG_BASENAME::${PKG_BASENAME}
-        echo set-output name=PKG_NAME::${PKG_NAME}
-        echo ::set-output name=PKG_suffix::${PKG_suffix}
-        echo ::set-output name=PKG_BASENAME::${PKG_BASENAME}
-        echo ::set-output name=PKG_NAME::${PKG_NAME}
+        outputs PKG_suffix PKG_BASENAME PKG_NAME
         # deployable tag? (ie, leading "vM" or "M"; M == version number)
         unset DEPLOY ; if [[ $REF_TAG =~ ^[vV]?[0-9].* ]]; then DEPLOY='true' ; fi
-        echo set-output name=DEPLOY::${DEPLOY:-<empty>/false}
-        echo ::set-output name=DEPLOY::${DEPLOY}
+        outputs DEPLOY
         # DPKG architecture?
         unset DPKG_ARCH
         case ${{ matrix.job.target }} in
           x86_64-*-linux-*) DPKG_ARCH=amd64 ;;
           *-linux-*) DPKG_ARCH=${TARGET_ARCH} ;;
         esac
-        echo set-output name=DPKG_ARCH::${DPKG_ARCH}
-        echo ::set-output name=DPKG_ARCH::${DPKG_ARCH}
+        outputs DPKG_ARCH
         # DPKG version?
         unset DPKG_VERSION ; if [[ $REF_TAG =~ ^[vV]?[0-9].* ]]; then DPKG_VERSION=${REF_TAG/#[vV]/} ; fi
-        echo set-output name=DPKG_VERSION::${DPKG_VERSION}
-        echo ::set-output name=DPKG_VERSION::${DPKG_VERSION}
+        outputs DPKG_VERSION
         # DPKG base name/conflicts?
         DPKG_BASENAME=${PROJECT_NAME}
         DPKG_CONFLICTS=${PROJECT_NAME}-musl
         case ${{ matrix.job.target }} in *-musl) DPKG_BASENAME=${PROJECT_NAME}-musl ; DPKG_CONFLICTS=${PROJECT_NAME} ;; esac;
-        echo set-output name=DPKG_BASENAME::${DPKG_BASENAME}
-        echo set-output name=DPKG_CONFLICTS::${DPKG_CONFLICTS}
-        echo ::set-output name=DPKG_BASENAME::${DPKG_BASENAME}
-        echo ::set-output name=DPKG_CONFLICTS::${DPKG_CONFLICTS}
+        outputs DPKG_BASENAME DPKG_CONFLICTS
         # DPKG name
         unset DPKG_NAME;
         if [[ -n $DPKG_ARCH && -n $DPKG_VERSION ]]; then DPKG_NAME="${DPKG_BASENAME}_${DPKG_VERSION}_${DPKG_ARCH}.deb" ; fi
-        echo set-output name=DPKG_NAME::${DPKG_NAME}
-        echo ::set-output name=DPKG_NAME::${DPKG_NAME}
+        outputs DPKG_NAME
         # target-specific options
         # * CARGO_FEATURES_OPTION
         CARGO_FEATURES_OPTION='' ;
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
-        echo set-output name=CARGO_FEATURES_OPTION::${CARGO_FEATURES_OPTION}
-        echo ::set-output name=CARGO_FEATURES_OPTION::${CARGO_FEATURES_OPTION}
+        outputs CARGO_FEATURES_OPTION
         # * CARGO_USE_CROSS (truthy)
         CARGO_USE_CROSS='true' ; case '${{ matrix.job.use-cross }}' in ''|0|f|false|n|no) unset CARGO_USE_CROSS ;; esac;
-        echo set-output name=CARGO_USE_CROSS::${CARGO_USE_CROSS:-<empty>/false}
-        echo ::set-output name=CARGO_USE_CROSS::${CARGO_USE_CROSS}
+        outputs CARGO_USE_CROSS
         # ** pass needed environment into `cross` container (iff `cross` not already configured via "Cross.toml")
         if [ -n "${CARGO_USE_CROSS}" ] && [ ! -e "Cross.toml" ] ; then
           printf "[build.env]\npassthrough = [\"CI\"]\n" > Cross.toml
         fi
         # * test only library and/or binaries for arm-type targets
         unset CARGO_TEST_OPTIONS ; case '${{ matrix.job.target }}' in aarch64-* | arm-*) CARGO_TEST_OPTIONS="--bins" ;; esac;
-        echo set-output name=CARGO_TEST_OPTIONS::${CARGO_TEST_OPTIONS}
-        echo ::set-output name=CARGO_TEST_OPTIONS::${CARGO_TEST_OPTIONS}
+        outputs CARGO_TEST_OPTIONS
         # * executable for `strip`?
         STRIP="strip"
         case ${{ matrix.job.target }} in
@@ -327,17 +360,20 @@ jobs:
           arm-*-linux-gnueabihf) STRIP="arm-linux-gnueabihf-strip" ;;
           *-pc-windows-msvc) STRIP="" ;;
         esac;
-        echo set-output name=STRIP::${STRIP:-<empty>/false}
-        echo ::set-output name=STRIP::${STRIP}
+        outputs STRIP
     - name: Create all needed build/work directories
       shell: bash
       run: |
-        ## create build/work space
+        ## Create build/work space
         mkdir -p '${{ steps.vars.outputs.STAGING }}'
         mkdir -p '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}'
         mkdir -p '${{ steps.vars.outputs.STAGING }}/dpkg'
     - name: rust toolchain ~ install
       uses: actions-rs/toolchain@v1
+      env:
+        # Override auto-detection of RAM for Rustc install.
+        # https://github.com/rust-lang/rustup/issues/2229#issuecomment-585855925
+        RUSTUP_UNPACK_RAM: "21474836480"
       with:
         toolchain: ${{ steps.vars.outputs.TOOLCHAIN }}
         target: ${{ matrix.job.target }}
@@ -348,11 +384,12 @@ jobs:
       shell: bash
       run: |
         ## Dependent VARs setup
+        outputs() { step_id="dep_vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
         # * determine sub-crate utility list
         UTILITY_LIST="$(./util/show-utils.sh ${CARGO_FEATURES_OPTION})"
+        echo UTILITY_LIST=${UTILITY_LIST}
         CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo "-puu_${u}"; done;)"
-        echo set-output name=UTILITY_LIST::${UTILITY_LIST}
-        echo ::set-output name=CARGO_UTILITY_LIST_OPTIONS::${CARGO_UTILITY_LIST_OPTIONS}
+        outputs CARGO_UTILITY_LIST_OPTIONS
     - name: Install `cargo-tree` # for dependency information
       uses: actions-rs/install@v0.1
       with:
@@ -364,26 +401,26 @@ jobs:
     - name: Info
       shell: bash
       run: |
-        # Info
-        ## commit info
+        ## Info
+        # commit info
         echo "## commit"
         echo GITHUB_REF=${GITHUB_REF}
         echo GITHUB_SHA=${GITHUB_SHA}
-        ## environment
+        # environment
         echo "## environment"
         echo "CI='${CI}'"
-        ## tooling info display
+        # tooling info display
         echo "## tooling"
         which gcc >/dev/null 2>&1 && (gcc --version | head -1) || true
-        rustup -V
+        rustup -V 2>/dev/null
         rustup show active-toolchain
         cargo -V
         rustc -V
         cargo-tree tree -V
-        ## dependencies
+        # dependencies
         echo "## dependency list"
         cargo fetch --locked --quiet
-        cargo-tree tree --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --all --no-dev-dependencies --no-indent | grep -vE "$PWD" | sort --unique
+        cargo-tree tree --locked --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --all --no-dev-dependencies --no-indent | grep -vE "$PWD" | sort --unique
     - name: Build
       uses: actions-rs/cargo@v1
       with:
@@ -410,7 +447,7 @@ jobs:
     - name: Package
       shell: bash
       run: |
-        ## package artifact(s)
+        ## Package artifact(s)
         # binary
         cp 'target/${{ matrix.job.target }}/release/${{ env.PROJECT_NAME }}${{ steps.vars.outputs.EXE_suffix }}' '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}/'
         # `strip` binary (if needed)
@@ -451,6 +488,37 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  test_busybox:
+    name: Tests/BusyBox test suite
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: ubuntu-latest }
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install `rust` toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        default: true
+        profile: minimal # minimal component installation (ie, no documentation)
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        make prepare-busytest
+    - name: "Run BusyBox test suite"
+      shell: bash
+      run: |
+        ## Run BusyBox test suite
+        bindir=$(pwd)/target/debug
+        cd tmp/busybox-*/testsuite
+        output=$(bindir=$bindir ./runtest 2>&1 || true)
+        printf "%s\n" "${output}"
+        n_fails=$(echo "$output" | grep "^FAIL:\s" | wc --lines)
+        if [ $n_fails -gt 0 ] ; then echo "::warning ::${n_fails}+ test failures" ; fi
+
   coverage:
     name: Code Coverage
     runs-on: ${{ matrix.job.os }}
@@ -463,41 +531,45 @@ jobs:
           - { os: macos-latest   , features: macos }
           - { os: windows-latest , features: windows }
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        ## Install/setup prerequisites
+        case '${{ matrix.job.os }}' in
+          macos-latest) brew install coreutils ;; # needed for testing
+        esac
     # - name: Reattach HEAD ## may be needed for accurate code coverage info
     #   run: git checkout ${{ github.head_ref }}
     - name: Initialize workflow variables
       id: vars
       shell: bash
       run: |
+        ## VARs setup
+        outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
         # toolchain
         TOOLCHAIN="nightly-${{ env.RUST_COV_SRV }}" ## default to "nightly" toolchain (required for certain required unstable compiler flags) ## !maint: refactor when stable channel has needed support
         # * specify gnu-type TOOLCHAIN for windows; `grcov` requires gnu-style code coverage data files
         case ${{ matrix.job.os }} in windows-*) TOOLCHAIN="$TOOLCHAIN-x86_64-pc-windows-gnu" ;; esac;
         # * use requested TOOLCHAIN if specified
         if [ -n "${{ matrix.job.toolchain }}" ]; then TOOLCHAIN="${{ matrix.job.toolchain }}" ; fi
-        echo set-output name=TOOLCHAIN::${TOOLCHAIN}
-        echo ::set-output name=TOOLCHAIN::${TOOLCHAIN}
+        outputs TOOLCHAIN
         # staging directory
         STAGING='_staging'
-        echo set-output name=STAGING::${STAGING}
-        echo ::set-output name=STAGING::${STAGING}
+        outputs STAGING
         ## # check for CODECOV_TOKEN availability (work-around for inaccessible 'secrets' object for 'if'; see <https://github.community/t5/GitHub-Actions/jobs-lt-job-id-gt-if-does-not-work-with-env-secrets/m-p/38549>)
         ## # note: CODECOV_TOKEN / HAS_CODECOV_TOKEN is not needed for public repositories when using AppVeyor, Azure Pipelines, CircleCI, GitHub Actions, Travis (see <https://docs.codecov.io/docs/about-the-codecov-bash-uploader#section-upload-token>)
         ## unset HAS_CODECOV_TOKEN
         ## if [ -n $CODECOV_TOKEN ]; then HAS_CODECOV_TOKEN='true' ; fi
-        ## echo set-output name=HAS_CODECOV_TOKEN::${HAS_CODECOV_TOKEN}
-        ## echo ::set-output name=HAS_CODECOV_TOKEN::${HAS_CODECOV_TOKEN}
+        ## outputs HAS_CODECOV_TOKEN
         # target-specific options
         # * CARGO_FEATURES_OPTION
         CARGO_FEATURES_OPTION='--all-features' ;  ## default to '--all-features' for code coverage
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
-        echo set-output name=CARGO_FEATURES_OPTION::${CARGO_FEATURES_OPTION}
-        echo ::set-output name=CARGO_FEATURES_OPTION::${CARGO_FEATURES_OPTION}
+        outputs CARGO_FEATURES_OPTION
         # * CODECOV_FLAGS
         CODECOV_FLAGS=$( echo "${{ matrix.job.os }}" | sed 's/[^[:alnum:]]/_/g' )
-        echo set-output name=CODECOV_FLAGS::${CODECOV_FLAGS}
-        echo ::set-output name=CODECOV_FLAGS::${CODECOV_FLAGS}
+        outputs CODECOV_FLAGS
     - name: rust toolchain ~ install
       uses: actions-rs/toolchain@v1
       with:
@@ -509,11 +581,22 @@ jobs:
       shell: bash
       run: |
         ## Dependent VARs setup
+        outputs() { step_id="dep_vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
         # * determine sub-crate utility list
         UTILITY_LIST="$(./util/show-utils.sh ${CARGO_FEATURES_OPTION})"
         CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo "-puu_${u}"; done;)"
-        echo set-output name=UTILITY_LIST::${UTILITY_LIST}
-        echo ::set-output name=CARGO_UTILITY_LIST_OPTIONS::${CARGO_UTILITY_LIST_OPTIONS}
+        outputs CARGO_UTILITY_LIST_OPTIONS
+    - name: Test uucore
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
+        args: ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --no-fail-fast -p uucore
+      env:
+        CARGO_INCREMENTAL: '0'
+        RUSTC_WRAPPER: ''
+        RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
+        RUSTDOCFLAGS: '-Cpanic=abort'
+        # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
     - name: Test
       uses: actions-rs/cargo@v1
       with:
@@ -541,12 +624,12 @@ jobs:
       with:
         crate: grcov
         version: latest
-        use-tool-cache: true
+        use-tool-cache: false
     - name: Generate coverage data (via `grcov`)
       id: coverage
       shell: bash
       run: |
-        # generate coverage data
+        ## Generate coverage data
         COVERAGE_REPORT_DIR="target/debug"
         COVERAGE_REPORT_FILE="${COVERAGE_REPORT_DIR}/lcov.info"
         # GRCOV_IGNORE_OPTION='--ignore build.rs --ignore "/*" --ignore "[a-zA-Z]:/*"' ## `grcov` ignores these params when passed as an environment variable (why?)

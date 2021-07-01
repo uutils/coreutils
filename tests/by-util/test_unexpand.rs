@@ -38,7 +38,7 @@ fn unexpand_init_list_1() {
 }
 
 #[test]
-fn unexpand_aflag_0() {
+fn unexpand_flag_a_0() {
     new_ucmd!()
         .args(&["--"])
         .pipe_in("e     E\nf      F\ng       G\nh        H\n")
@@ -47,7 +47,7 @@ fn unexpand_aflag_0() {
 }
 
 #[test]
-fn unexpand_aflag_1() {
+fn unexpand_flag_a_1() {
     new_ucmd!()
         .args(&["-a"])
         .pipe_in("e     E\nf      F\ng       G\nh        H\n")
@@ -56,7 +56,7 @@ fn unexpand_aflag_1() {
 }
 
 #[test]
-fn unexpand_aflag_2() {
+fn unexpand_flag_a_2() {
     new_ucmd!()
         .args(&["-t8"])
         .pipe_in("e     E\nf      F\ng       G\nh        H\n")
@@ -135,4 +135,23 @@ fn unexpand_spaces_after_fields() {
         .pipe_in("   \t        A B C D             A\t\n")
         .run()
         .stdout_is("\t\tA B C D\t\t    A\t\n");
+}
+
+#[test]
+fn unexpand_read_from_file() {
+    new_ucmd!()
+        .arg("with_spaces.txt")
+        .arg("-t4")
+        .run()
+        .success();
+}
+
+#[test]
+fn unexpand_read_from_two_file() {
+    new_ucmd!()
+        .arg("with_spaces.txt")
+        .arg("with_spaces.txt")
+        .arg("-t4")
+        .run()
+        .success();
 }

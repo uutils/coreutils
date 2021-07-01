@@ -85,10 +85,9 @@ impl Range {
         let mut ranges: Vec<Range> = vec![];
 
         for item in list.split(',') {
-            match FromStr::from_str(item) {
-                Ok(range_item) => ranges.push(range_item),
-                Err(e) => return Err(format!("range '{}' was invalid: {}", item, e)),
-            }
+            let range_item = FromStr::from_str(item)
+                .map_err(|e| format!("range '{}' was invalid: {}", item, e))?;
+            ranges.push(range_item);
         }
 
         ranges.sort();

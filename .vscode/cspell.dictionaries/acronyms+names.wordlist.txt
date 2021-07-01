@@ -1,0 +1,66 @@
+# * abbreviations / acronyms
+AIX
+ASLR # address space layout randomization
+AST # abstract syntax tree
+CICD # continuous integration/deployment
+CPU
+CPUs
+DevOps
+Ext3
+FIFO
+FIFOs
+FQDN # fully qualified domain name
+GID # group ID
+GIDs
+GNU
+GNUEABI
+GNUEABIhf
+JFS
+MSRV # minimum supported rust version
+MSVC
+NixOS
+POSIX
+POSIXLY
+RISC
+RISCV
+RNG # random number generator
+RNGs
+ReiserFS
+Solaris
+UID # user ID
+UIDs
+UUID # universally unique identifier
+WASI
+WASM
+XFS
+aarch
+flac
+lzma
+
+# * names
+BusyBox
+BusyTest
+Codacy
+Cygwin
+Deno
+EditorConfig
+FreeBSD
+Gmail
+GNU
+Irix
+MS-DOS
+MSDOS
+MacOS
+MinGW
+Minix
+NetBSD
+Novell
+OpenBSD
+POSIX
+PowerPC
+SELinux
+SkyPack
+Solaris
+SysV
+Xenix
+Yargs

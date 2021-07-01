@@ -1,0 +1,18 @@
+aa bb cc
+        ^ no match for key
+________
+dd aa ff
+        ^ no match for key
+________
+gg aa cc
+        ^ no match for key
+________
+èè éé èè
+        ^ no match for key
+________
+👩‍🔬 👩‍🔬 👩‍🔬
+              ^ no match for key
+______________
+💣💣 💣💣 💣💣
+              ^ no match for key
+______________
