@@ -17,11 +17,11 @@ macro_rules! executable_os(
 #[macro_export]
 macro_rules! executable(
     () => ({
-        let exe = match executable_os!().to_str() {
+        let exe = match $crate::executable_os!().to_str() {
             // * UTF-8
             Some(s) => s.to_string(),
             // * "lossless" debug format if `executable_os!()` is not well-formed UTF-8
-            None => format!("{:?}", executable_os!())
+            None => format!("{:?}", $crate::executable_os!())
         };
         &exe.to_owned()
     })
@@ -31,7 +31,7 @@ macro_rules! executable(
 #[macro_export]
 macro_rules! executable_name(
     () => ({
-        &std::path::Path::new(executable_os!()).file_stem().unwrap().to_string_lossy()
+        &std::path::Path::new($crate::executable_os!()).file_stem().unwrap().to_string_lossy()
     })
 );
 
@@ -55,7 +55,7 @@ macro_rules! show(
     ($err:expr) => ({
         let e = $err;
         uucore::error::set_exit_code(e.code());
-        eprintln!("{}: {}", executable_name!(), e);
+        eprintln!("{}: {}", $crate::executable_name!(), e);
     })
 );
 
@@ -72,7 +72,7 @@ macro_rules! show_if_err(
 #[macro_export]
 macro_rules! show_error(
     ($($args:tt)+) => ({
-        eprint!("{}: ", executable_name!());
+        eprint!("{}: ", $crate::executable_name!());
         eprintln!($($args)+);
     })
 );
@@ -81,7 +81,7 @@ macro_rules! show_error(
 #[macro_export]
 macro_rules! show_error_custom_description (
     ($err:expr,$($args:tt)+) => ({
-        eprint!("{}: {}: ", executable_name!(), $err);
+        eprint!("{}: {}: ", $crate::executable_name!(), $err);
         eprintln!($($args)+);
     })
 );
@@ -89,7 +89,7 @@ macro_rules! show_error_custom_description (
 #[macro_export]
 macro_rules! show_warning(
     ($($args:tt)+) => ({
-        eprint!("{}: warning: ", executable_name!());
+        eprint!("{}: warning: ", $crate::executable_name!());
         eprintln!($($args)+);
     })
 );
@@ -98,9 +98,9 @@ macro_rules! show_warning(
 #[macro_export]
 macro_rules! show_usage_error(
     ($($args:tt)+) => ({
-        eprint!("{}: ", executable_name!());
+        eprint!("{}: ", $crate::executable_name!());
         eprintln!($($args)+);
-        eprintln!("Try `{:?} --help` for more information.", executable!());
+        eprintln!("Try `{:?} --help` for more information.", $crate::executable!());
     })
 );
 
@@ -118,8 +118,8 @@ macro_rules! exit(
 #[macro_export]
 macro_rules! crash(
     ($exit_code:expr, $($args:tt)+) => ({
-        show_error!($($args)+);
-        exit!($exit_code)
+        $crate::show_error!($($args)+);
+        $crate::exit!($exit_code)
     })
 );
 
@@ -130,7 +130,7 @@ macro_rules! crash_if_err(
     ($exit_code:expr, $exp:expr) => (
         match $exp {
             Ok(m) => m,
-            Err(f) => crash!($exit_code, "{}", f),
+            Err(f) => $crate::crash!($exit_code, "{}", f),
         }
     )
 );
@@ -146,7 +146,7 @@ macro_rules! return_if_err(
         match $exp {
             Ok(m) => m,
             Err(f) => {
-                show_error!("{}", f);
+                $crate::show_error!("{}", f);
                 return $exit_code;
             }
         }
@@ -182,7 +182,7 @@ macro_rules! safe_unwrap(
     ($exp:expr) => (
         match $exp {
             Ok(m) => m,
-            Err(f) => crash!(1, "{}", f.to_string())
+            Err(f) => $crate::crash!(1, "{}", f.to_string())
         }
     )
 );
@@ -197,7 +197,7 @@ macro_rules! snippet_list_join_oxford_comma {
         format!("{}, {} {}", $valOne, $conjunction, $valTwo)
     );
     ($conjunction:expr, $valOne:expr, $valTwo:expr $(, $remaining_values:expr)*) => (
-        format!("{}, {}", $valOne, snippet_list_join_oxford_comma!($conjunction, $valTwo $(, $remaining_values)*))
+        format!("{}, {}", $valOne, $crate::snippet_list_join_oxford_comma!($conjunction, $valTwo $(, $remaining_values)*))
     );
 }
 
@@ -207,7 +207,7 @@ macro_rules! snippet_list_join {
         format!("{} {} {}", $valOne, $conjunction, $valTwo)
     );
     ($conjunction:expr, $valOne:expr, $valTwo:expr $(, $remaining_values:expr)*) => (
-        format!("{}, {}", $valOne, snippet_list_join_oxford_comma!($conjunction, $valTwo $(, $remaining_values)*))
+        format!("{}, {}", $valOne, $crate::snippet_list_join_oxford_comma!($conjunction, $valTwo $(, $remaining_values)*))
     );
 }
 
@@ -225,10 +225,10 @@ macro_rules! msg_invalid_input {
 #[macro_export]
 macro_rules! msg_invalid_opt_use {
     ($about:expr, $flag:expr) => {
-        msg_invalid_input!(format!("The '{}' option {}", $flag, $about))
+        $crate::msg_invalid_input!(format!("The '{}' option {}", $flag, $about))
     };
     ($about:expr, $long_flag:expr, $short_flag:expr) => {
-        msg_invalid_input!(format!(
+        $crate::msg_invalid_input!(format!(
             "The '{}' ('{}') option {}",
             $long_flag, $short_flag, $about
         ))
@@ -238,10 +238,10 @@ macro_rules! msg_invalid_opt_use {
 #[macro_export]
 macro_rules! msg_opt_only_usable_if {
     ($clause:expr, $flag:expr) => {
-        msg_invalid_opt_use!(format!("only usable if {}", $clause), $flag)
+        $crate::msg_invalid_opt_use!(format!("only usable if {}", $clause), $flag)
     };
     ($clause:expr, $long_flag:expr, $short_flag:expr) => {
-        msg_invalid_opt_use!(
+        $crate::msg_invalid_opt_use!(
             format!("only usable if {}", $clause),
             $long_flag,
             $short_flag
@@ -252,13 +252,13 @@ macro_rules! msg_opt_only_usable_if {
 #[macro_export]
 macro_rules! msg_opt_invalid_should_be {
     ($expects:expr, $received:expr, $flag:expr) => {
-        msg_invalid_opt_use!(
+        $crate::msg_invalid_opt_use!(
             format!("expects {}, but was provided {}", $expects, $received),
             $flag
         )
     };
     ($expects:expr, $received:expr, $long_flag:expr, $short_flag:expr) => {
-        msg_invalid_opt_use!(
+        $crate::msg_invalid_opt_use!(
             format!("expects {}, but was provided {}", $expects, $received),
             $long_flag,
             $short_flag
@@ -271,13 +271,13 @@ macro_rules! msg_opt_invalid_should_be {
 #[macro_export]
 macro_rules! msg_expects_one_of {
     ($valOne:expr $(, $remaining_values:expr)*) => (
-        msg_invalid_input!(format!("expects one of {}", snippet_list_join!("or", $valOne $(, $remaining_values)*)))
+        $crate::msg_invalid_input!(format!("expects one of {}", $crate::snippet_list_join!("or", $valOne $(, $remaining_values)*)))
     );
 }
 
 #[macro_export]
 macro_rules! msg_expects_no_more_than_one_of {
     ($valOne:expr $(, $remaining_values:expr)*) => (
-        msg_invalid_input!(format!("expects no more than one of {}", snippet_list_join!("or", $valOne $(, $remaining_values)*))) ;
+        $crate::msg_invalid_input!(format!("expects no more than one of {}", $crate::snippet_list_join!("or", $valOne $(, $remaining_values)*))) ;
     );
 }
