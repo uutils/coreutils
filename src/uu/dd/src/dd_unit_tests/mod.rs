@@ -37,23 +37,23 @@ const DEFAULT_IFLAGS: IFlags = IFlags {
     skip_bytes: false,
 };
 
-const DEFAULT_OFLAGS: OFlags = OFlags {
-    append: false,
-    cio: false,
-    direct: false,
-    directory: false,
-    dsync: false,
-    sync: false,
-    nocache: false,
-    nonblock: false,
-    noatime: false,
-    noctty: false,
-    nofollow: false,
-    nolinks: false,
-    binary: false,
-    text: false,
-    seek_bytes: false,
-};
+// const DEFAULT_OFLAGS: OFlags = OFlags {
+//     append: false,
+//     cio: false,
+//     direct: false,
+//     directory: false,
+//     dsync: false,
+//     sync: false,
+//     nocache: false,
+//     nonblock: false,
+//     noatime: false,
+//     noctty: false,
+//     nofollow: false,
+//     nolinks: false,
+//     binary: false,
+//     text: false,
+//     seek_bytes: false,
+// };
 
 struct LazyReader<R: Read> {
     src: R,
@@ -109,7 +109,6 @@ macro_rules! make_spec_test (
                             dst: File::create(format!("./test-resources/FAILED-{}.test", $test_name)).unwrap(),
                             obs: 512,
                             cflags: DEFAULT_CFO,
-                            oflags: DEFAULT_OFLAGS,
                         },
                         $spec,
                         format!("./test-resources/FAILED-{}.test", $test_name)

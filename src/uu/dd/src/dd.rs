@@ -42,7 +42,7 @@ use std::sync::{atomic::AtomicUsize, atomic::Ordering, mpsc, Arc};
 use std::thread;
 use std::time;
 
-const SYNTAX: &str = "dd [OPERAND]...\ndd OPTION";
+// const SYNTAX: &str = "dd [OPERAND]...\ndd OPTION";
 const ABOUT: &str = "copy, and optionally convert, a file system resource";
 const BUF_INIT_BYTE: u8 = 0xDD;
 const RTN_SUCCESS: i32 = 0;
@@ -294,14 +294,12 @@ struct Output<W: Write> {
     dst: W,
     obs: usize,
     cflags: OConvFlags,
-    oflags: OFlags,
 }
 
 impl Output<io::Stdout> {
     fn new(matches: &Matches) -> Result<Self, Box<dyn Error>> {
         let obs = parseargs::parse_obs(matches)?;
         let cflags = parseargs::parse_conv_flag_output(matches)?;
-        let oflags = parseargs::parse_oflags(matches)?;
 
         let dst = io::stdout();
 
@@ -309,7 +307,6 @@ impl Output<io::Stdout> {
             dst,
             obs,
             cflags,
-            oflags,
         })
     }
 
@@ -396,7 +393,6 @@ impl Output<File> {
                 dst,
                 obs,
                 cflags,
-                oflags,
             })
         } else {
             // The following error should only occur if someone

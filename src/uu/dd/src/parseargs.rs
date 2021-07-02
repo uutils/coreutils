@@ -133,18 +133,31 @@ enum Flag {
     CountBytes,
     SkipBytes,
     // Either
+    #[allow(unused)]
     Cio,
+    #[allow(unused)]
     Direct,
+    #[allow(unused)]
     Directory,
+    #[allow(unused)]
     Dsync,
+    #[allow(unused)]
     Sync,
+    #[allow(unused)]
     NoCache,
+    #[allow(unused)]
     NonBlock,
+    #[allow(unused)]
     NoATime,
+    #[allow(unused)]
     NoCtty,
+    #[allow(unused)]
     NoFollow,
+    #[allow(unused)]
     NoLinks,
+    #[allow(unused)]
     Binary,
+    #[allow(unused)]
     Text,
     // Output only
     Append,

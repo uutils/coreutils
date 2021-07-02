@@ -12,7 +12,6 @@ macro_rules! make_io_test (
                             dst: File::create(format!("./test-resources/FAILED-{}.test", $test_name)).unwrap(),
                             obs: $o.obs,
                             cflags: $o.cflags,
-                            oflags: $o.oflags,
                         },
                         $spec,
                         format!("./test-resources/FAILED-{}.test", $test_name)
@@ -60,7 +59,6 @@ make_io_test!(
         dst: DST_PLACEHOLDER,
         obs: 1031,
         cflags: DEFAULT_CFO,
-        oflags: DEFAULT_OFLAGS,
     },
     File::open("./test-resources/random-5828891cb1230748e146f34223bbd3b5.test").unwrap()
 );
@@ -81,7 +79,6 @@ make_io_test!(
         dst: DST_PLACEHOLDER,
         obs: 521,
         cflags: DEFAULT_CFO,
-        oflags: DEFAULT_OFLAGS,
     },
     File::open("./test-resources/random-5828891cb1230748e146f34223bbd3b5.test").unwrap()
 );
@@ -102,7 +99,6 @@ make_io_test!(
         dst: DST_PLACEHOLDER,
         obs: 1024,
         cflags: DEFAULT_CFO,
-        oflags: DEFAULT_OFLAGS,
     },
     File::open("./test-resources/deadbeef-18d99661a1de1fc9af21b0ec2cd67ba3.test").unwrap()
 );
@@ -123,7 +119,6 @@ make_io_test!(
         dst: DST_PLACEHOLDER,
         obs: 1031,
         cflags: DEFAULT_CFO,
-        oflags: DEFAULT_OFLAGS,
     },
     File::open("./test-resources/deadbeef-18d99661a1de1fc9af21b0ec2cd67ba3.test").unwrap()
 );
@@ -144,7 +139,6 @@ make_io_test!(
         dst: DST_PLACEHOLDER,
         obs: 1031,
         cflags: DEFAULT_CFO,
-        oflags: DEFAULT_OFLAGS,
     },
     File::open("./test-resources/gnudd-deadbeef-first-16k.spec").unwrap()
 );
@@ -165,7 +159,6 @@ make_io_test!(
         dst: DST_PLACEHOLDER,
         obs: 1031,
         cflags: DEFAULT_CFO,
-        oflags: DEFAULT_OFLAGS,
     },
     File::open("./test-resources/gnudd-deadbeef-first-12345.spec").unwrap()
 );
@@ -186,7 +179,6 @@ make_io_test!(
         dst: DST_PLACEHOLDER,
         obs: 1024,
         cflags: DEFAULT_CFO,
-        oflags: DEFAULT_OFLAGS,
     },
     File::open("./test-resources/gnudd-random-first-32k.spec").unwrap()
 );
@@ -207,7 +199,6 @@ make_io_test!(
         dst: DST_PLACEHOLDER,
         obs: 1031,
         cflags: DEFAULT_CFO,
-        oflags: DEFAULT_OFLAGS,
     },
     File::open("./test-resources/gnudd-random-first-32k.spec").unwrap()
 );
@@ -248,7 +239,6 @@ make_io_test!(
         dst: DST_PLACEHOLDER,
         obs: 1031,
         cflags: DEFAULT_CFO,
-        oflags: DEFAULT_OFLAGS,
     },
     File::open("./test-resources/random-5828891cb1230748e146f34223bbd3b5.test").unwrap()
 );

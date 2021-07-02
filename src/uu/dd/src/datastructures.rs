@@ -68,18 +68,31 @@ pub struct OConvFlags {
 
 /// Stores all Flags that apply to the input
 pub struct IFlags {
+    #[allow(dead_code)]
     pub cio: bool,
+    #[allow(dead_code)]
     pub direct: bool,
+    #[allow(dead_code)]
     pub directory: bool,
+    #[allow(dead_code)]
     pub dsync: bool,
+    #[allow(dead_code)]
     pub sync: bool,
+    #[allow(dead_code)]
     pub nocache: bool,
+    #[allow(dead_code)]
     pub nonblock: bool,
+    #[allow(dead_code)]
     pub noatime: bool,
+    #[allow(dead_code)]
     pub noctty: bool,
+    #[allow(dead_code)]
     pub nofollow: bool,
+    #[allow(dead_code)]
     pub nolinks: bool,
+    #[allow(dead_code)]
     pub binary: bool,
+    #[allow(dead_code)]
     pub text: bool,
     pub fullblock: bool,
     pub count_bytes: bool,
@@ -89,18 +102,31 @@ pub struct IFlags {
 /// Stores all Flags that apply to the output
 pub struct OFlags {
     pub append: bool,
+    #[allow(dead_code)]
     pub cio: bool,
+    #[allow(dead_code)]
     pub direct: bool,
+    #[allow(dead_code)]
     pub directory: bool,
+    #[allow(dead_code)]
     pub dsync: bool,
+    #[allow(dead_code)]
     pub sync: bool,
+    #[allow(dead_code)]
     pub nocache: bool,
+    #[allow(dead_code)]
     pub nonblock: bool,
+    #[allow(dead_code)]
     pub noatime: bool,
+    #[allow(dead_code)]
     pub noctty: bool,
+    #[allow(dead_code)]
     pub nofollow: bool,
+    #[allow(dead_code)]
     pub nolinks: bool,
+    #[allow(dead_code)]
     pub binary: bool,
+    #[allow(dead_code)]
     pub text: bool,
     pub seek_bytes: bool,
 }

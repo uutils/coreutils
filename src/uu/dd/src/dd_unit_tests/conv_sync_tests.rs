@@ -25,7 +25,6 @@ macro_rules! make_sync_test (
                             dst: File::create(format!("./test-resources/FAILED-{}.test", $test_name)).unwrap(),
                             obs: $obs,
                             cflags: DEFAULT_CFO,
-                            oflags: DEFAULT_OFLAGS,
                         },
                         $spec,
                         format!("./test-resources/FAILED-{}.test", $test_name)

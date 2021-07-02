@@ -39,7 +39,6 @@ macro_rules! make_block_test (
                             dst: File::create(format!("./test-resources/FAILED-{}.test", $test_name)).unwrap(),
                             obs: 512,
                             cflags: DEFAULT_CFO,
-                            oflags: DEFAULT_OFLAGS,
                         },
                         $spec,
                         format!("./test-resources/FAILED-{}.test", $test_name)
@@ -72,7 +71,6 @@ macro_rules! make_unblock_test (
                             dst: File::create(format!("./test-resources/FAILED-{}.test", $test_name)).unwrap(),
                             obs: 512,
                             cflags: DEFAULT_CFO,
-                            oflags: DEFAULT_OFLAGS,
                         },
                         $spec,
                         format!("./test-resources/FAILED-{}.test", $test_name)

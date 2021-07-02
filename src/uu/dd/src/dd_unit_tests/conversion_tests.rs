@@ -18,7 +18,6 @@ macro_rules! make_conv_test (
                             dst: File::create(format!("./test-resources/FAILED-{}.test", $test_name)).unwrap(),
                             obs: 512,
                             cflags: DEFAULT_CFO,
-                            oflags: DEFAULT_OFLAGS,
                         },
                         $spec,
                         format!("./test-resources/FAILED-{}.test", $test_name)
@@ -44,7 +43,6 @@ macro_rules! make_icf_test (
                             dst: File::create(format!("./test-resources/FAILED-{}.test", $test_name)).unwrap(),
                             obs: 512,
                             cflags: DEFAULT_CFO,
-                            oflags: DEFAULT_OFLAGS,
                         },
                         $spec,
                         format!("./test-resources/FAILED-{}.test", $test_name)
@@ -151,7 +149,6 @@ fn all_valid_ascii_ebcdic_ascii_roundtrip_conv_test() {
         dst: File::create(&tmp_fname_ae).unwrap(),
         obs: 1024,
         cflags: DEFAULT_CFO,
-        oflags: DEFAULT_OFLAGS,
     };
 
     dd_fileout(i, o).unwrap();
@@ -174,7 +171,6 @@ fn all_valid_ascii_ebcdic_ascii_roundtrip_conv_test() {
         dst: File::create(&tmp_fname_ea).unwrap(),
         obs: 1024,
         cflags: DEFAULT_CFO,
-        oflags: DEFAULT_OFLAGS,
     };
 
     dd_fileout(i, o).unwrap();
