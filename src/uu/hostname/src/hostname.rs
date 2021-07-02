@@ -14,6 +14,7 @@ use clap::{crate_version, App, Arg, ArgMatches};
 use std::collections::hash_set::HashSet;
 use std::net::ToSocketAddrs;
 use std::str;
+use uucore::error::{UResult, USimpleError};
 
 #[cfg(windows)]
 use winapi::shared::minwindef::MAKEWORD;
@@ -28,15 +29,15 @@ static OPT_FQDN: &str = "fqdn";
 static OPT_SHORT: &str = "short";
 static OPT_HOST: &str = "host";
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     #![allow(clippy::let_and_return)]
     #[cfg(windows)]
     unsafe {
         #[allow(deprecated)]
         let mut data = std::mem::uninitialized();
         if WSAStartup(MAKEWORD(2, 2), &mut data as *mut _) != 0 {
-            eprintln!("Failed to start Winsock 2.2");
-            return 1;
+            return Err(USimpleError::new(1, format!("Failed to start Winsock 2.2")));
         }
     }
     let result = execute(args);
@@ -50,7 +51,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 fn get_usage() -> String {
     format!("{0} [OPTION]... [HOSTNAME]", executable!())
 }
-fn execute(args: impl uucore::Args) -> i32 {
+fn execute(args: impl uucore::Args) -> UResult<()> {
     let usage = get_usage();
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
@@ -58,10 +59,9 @@ fn execute(args: impl uucore::Args) -> i32 {
         None => display_hostname(&matches),
         Some(host) => {
             if let Err(err) = hostname::set(host) {
-                show_error!("{}", err);
-                1
+                return Err(USimpleError::new(1, format!("{}", err)));
             } else {
-                0
+                Ok(())
             }
         }
     }
@@ -97,7 +97,7 @@ pub fn uu_app() -> App<'static, 'static> {
         .arg(Arg::with_name(OPT_HOST))
 }
 
-fn display_hostname(matches: &ArgMatches) -> i32 {
+fn display_hostname(matches: &ArgMatches) -> UResult<()> {
     let hostname = hostname::get().unwrap().into_string().unwrap();
 
     if matches.is_present(OPT_IP_ADDRESS) {
@@ -127,12 +127,10 @@ fn display_hostname(matches: &ArgMatches) -> i32 {
                     println!("{}", &output[0..len - 1]);
                 }
 
-                0
+                Ok(())
             }
             Err(f) => {
-                show_error!("{}", f);
-
-                1
+                return Err(USimpleError::new(1, format!("{}", f)));
             }
         }
     } else {
@@ -144,12 +142,12 @@ fn display_hostname(matches: &ArgMatches) -> i32 {
                 } else {
                     println!("{}", &hostname[ci.0 + 1..]);
                 }
-                return 0;
+                return Ok(());
             }
         }
 
         println!("{}", hostname);
 
-        0
+        Ok(())
     }
 }
