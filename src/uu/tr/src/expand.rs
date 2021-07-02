@@ -14,17 +14,47 @@ use std::cmp::min;
 use std::iter::Peekable;
 use std::ops::RangeInclusive;
 
+/// Parse a backslash escape sequence to the corresponding character. Assumes
+/// the string starts from the character _after_ the `\` and is not empty.
+///
+/// Returns a tuple containing the character and the number of characters
+/// consumed from the input. The alphabetic escape sequences consume 1
+/// character; octal escape sequences consume 1 to 3 octal digits.
 #[inline]
-fn unescape_char(c: char) -> char {
-    match c {
-        'a' => 0x07u8 as char,
-        'b' => 0x08u8 as char,
-        'f' => 0x0cu8 as char,
-        'v' => 0x0bu8 as char,
-        'n' => '\n',
-        'r' => '\r',
-        't' => '\t',
-        _ => c,
+fn parse_sequence(s: &str) -> (char, usize) {
+    let mut s = s.chars();
+    let c = s.next().expect("invalid escape: empty string");
+
+    if ('0'..='7').contains(&c) {
+        let mut v = c.to_digit(8).unwrap();
+        let mut consumed = 1;
+        let bits_per_digit = 3;
+
+        for c in s.take(2) {
+            match c.to_digit(8) {
+                Some(c) => {
+                    v = (v << bits_per_digit) | c;
+                    consumed += 1;
+                }
+                None => break,
+            }
+        }
+
+        (from_u32(v).expect("invalid octal escape"), consumed)
+    } else {
+        (
+            match c {
+                'a' => 0x07u8 as char,
+                'b' => 0x08u8 as char,
+                'f' => 0x0cu8 as char,
+                'v' => 0x0bu8 as char,
+                'n' => '\n',
+                'r' => '\r',
+                't' => '\t',
+                c => c,
+            },
+            1,
+        )
     }
 }
 
@@ -52,8 +82,9 @@ impl<'a> Iterator for Unescape<'a> {
             '\\' if self.string.len() > 1 => {
                 // yes---it's \ and it's not the last char in a string
                 // we know that \ is 1 byte long so we can index into the string safely
-                let c = self.string[1..].chars().next().unwrap();
-                (Some(unescape_char(c)), 1 + c.len_utf8())
+                let (c, consumed) = parse_sequence(&self.string[1..]);
+
+                (Some(c), 1 + consumed)
             }
             c => (Some(c), c.len_utf8()), // not an escape char
         };
@@ -80,7 +111,7 @@ impl<'a> Iterator for ExpandSet<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         // while the Range has elements, try to return chars from it
         // but make sure that they actually turn out to be Chars!
-        while let Some(n) = self.range.next() {
+        for n in &mut self.range {
             if let Some(c) = from_u32(n) {
                 return Some(c);
             }

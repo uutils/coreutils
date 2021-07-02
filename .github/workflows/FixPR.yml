@@ -1,0 +1,135 @@
+name: FixPR
+
+# Trigger automated fixes for PRs being merged (with associated commits)
+
+# ToDO: [2021-06; rivy] change from `cargo-tree` to `cargo tree` once MSRV is >= 1.45
+
+env:
+  BRANCH_TARGET: master
+
+on:
+  # * only trigger on pull request closed to specific branches
+  # ref: https://github.community/t/trigger-workflow-only-on-pull-request-merge/17359/9
+  pull_request:
+    branches:
+      - master # == env.BRANCH_TARGET ## unfortunately, env context variables are only available in jobs/steps (see <https://github.community/t/how-to-use-env-context/16975/2>)
+    types: [ closed ]
+
+jobs:
+  code_deps:
+    # Refresh dependencies (ie, 'Cargo.lock') and show updated dependency tree
+    if: github.event.pull_request.merged == true ## only for PR merges
+    name: Update/dependencies
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      matrix:
+        job:
+          - { os: ubuntu-latest , features: feat_os_unix }
+    steps:
+    - uses: actions/checkout@v2
+    - name: Initialize job variables
+      id: vars
+      shell: bash
+      run: |
+        ## VARs setup
+        outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
+        # surface MSRV from CICD workflow
+        RUST_MIN_SRV=$(grep -P "^\s+RUST_MIN_SRV:" .github/workflows/CICD.yml | grep -Po "(?<=\x22)\d+[.]\d+(?:[.]\d+)?(?=\x22)" )
+        outputs RUST_MIN_SRV
+    - name: Install `rust` toolchain (v${{ steps.vars.outputs.RUST_MIN_SRV }})
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: ${{ steps.vars.outputs.RUST_MIN_SRV }}
+        default: true
+        profile: minimal # minimal component installation (ie, no documentation)
+    - name: Install `cargo-tree` # for dependency information
+      uses: actions-rs/install@v0.1
+      with:
+        crate: cargo-tree
+        version: latest
+        use-tool-cache: true
+      env:
+        RUSTUP_TOOLCHAIN: stable
+    - name: Ensure updated 'Cargo.lock'
+      shell: bash
+      run: |
+        # Ensure updated 'Cargo.lock'
+        # * 'Cargo.lock' is required to be in a format that `cargo` of MinSRV can interpret (eg, v1-format for MinSRV < v1.38)
+        cargo fetch --locked --quiet || cargo +${{ steps.vars.outputs.RUST_MIN_SRV }} update
+    - name: Info
+      shell: bash
+      run: |
+        # Info
+        ## environment
+        echo "## environment"
+        echo "CI='${CI}'"
+        ## tooling info display
+        echo "## tooling"
+        which gcc >/dev/null 2>&1 && (gcc --version | head -1) || true
+        rustup -V 2>/dev/null
+        rustup show active-toolchain
+        cargo -V
+        rustc -V
+        cargo-tree tree -V
+        ## dependencies
+        echo "## dependency list"
+        cargo fetch --locked --quiet
+        ## * using the 'stable' toolchain is necessary to avoid "unexpected '--filter-platform'" errors
+        RUSTUP_TOOLCHAIN=stable cargo-tree tree --locked --all --no-dev-dependencies --no-indent --features ${{ matrix.job.features }} | grep -vE "$PWD" | sort --unique
+    - name: Commit any changes (to '${{ env.BRANCH_TARGET }}')
+      uses: EndBug/add-and-commit@v7
+      with:
+        branch: ${{ env.BRANCH_TARGET }}
+        default_author: github_actions
+        message: "maint ~ refresh 'Cargo.lock'"
+        add: Cargo.lock
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  code_format:
+    # Recheck/refresh code formatting
+    if: github.event.pull_request.merged == true ## only for PR merges
+    name: Update/format
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: ubuntu-latest , features: feat_os_unix }
+    steps:
+    - uses: actions/checkout@v2
+    - name: Initialize job variables
+      id: vars
+      shell: bash
+      run: |
+        ## VARs setup
+        outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
+        # target-specific options
+        # * CARGO_FEATURES_OPTION
+        CARGO_FEATURES_OPTION='' ;
+        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
+        outputs CARGO_FEATURES_OPTION
+    - name: Install `rust` toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        default: true
+        profile: minimal # minimal component installation (ie, no documentation)
+        components: rustfmt
+    - name: "`cargo fmt`"
+      shell: bash
+      run: |
+        cargo fmt
+    - name: "`cargo fmt` tests"
+      shell: bash
+      run: |
+        # `cargo fmt` of tests
+        find tests -name "*.rs" -print0 | xargs -0 cargo fmt --
+    - name: Commit any changes (to '${{ env.BRANCH_TARGET }}')
+      uses: EndBug/add-and-commit@v7
+      with:
+        branch: ${{ env.BRANCH_TARGET }}
+        default_author: github_actions
+        message: "maint ~ rustfmt (`cargo fmt`)"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

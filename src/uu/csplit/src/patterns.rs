@@ -1,3 +1,5 @@
+// spell-checker:ignore (regex) SKIPTO UPTO ; (vars) ntimes
+
 use crate::csplit_error::CsplitError;
 use regex::Regex;
 
@@ -131,20 +133,12 @@ fn extract_patterns(args: &[String]) -> Result<Vec<Pattern>, CsplitError> {
                 Some(m) => m.as_str().parse().unwrap(),
             };
             if let Some(up_to_match) = captures.name("UPTO") {
-                let pattern = match Regex::new(up_to_match.as_str()) {
-                    Err(_) => {
-                        return Err(CsplitError::InvalidPattern(arg.to_string()));
-                    }
-                    Ok(reg) => reg,
-                };
+                let pattern = Regex::new(up_to_match.as_str())
+                    .map_err(|_| CsplitError::InvalidPattern(arg.to_string()))?;
                 patterns.push(Pattern::UpToMatch(pattern, offset, execute_ntimes));
             } else if let Some(skip_to_match) = captures.name("SKIPTO") {
-                let pattern = match Regex::new(skip_to_match.as_str()) {
-                    Err(_) => {
-                        return Err(CsplitError::InvalidPattern(arg.to_string()));
-                    }
-                    Ok(reg) => reg,
-                };
+                let pattern = Regex::new(skip_to_match.as_str())
+                    .map_err(|_| CsplitError::InvalidPattern(arg.to_string()))?;
                 patterns.push(Pattern::SkipToMatch(pattern, offset, execute_ntimes));
             }
         } else if let Ok(line_number) = arg.parse::<usize>() {
@@ -167,7 +161,7 @@ fn validate_line_numbers(patterns: &[Pattern]) -> Result<(), CsplitError> {
         .try_fold(0, |prev_ln, &current_ln| match (prev_ln, current_ln) {
             // a line number cannot be zero
             (_, 0) => Err(CsplitError::LineNumberIsZero),
-            // two consecutifs numbers should not be equal
+            // two consecutive numbers should not be equal
             (n, m) if n == m => {
                 show_warning!("line number '{}' is the same as preceding line number", n);
                 Ok(n)

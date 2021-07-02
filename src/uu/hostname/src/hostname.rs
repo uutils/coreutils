@@ -10,7 +10,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg, ArgMatches};
+use clap::{crate_version, App, Arg, ArgMatches};
 use std::collections::hash_set::HashSet;
 use std::net::ToSocketAddrs;
 use std::str;
@@ -21,7 +21,6 @@ use winapi::shared::minwindef::MAKEWORD;
 use winapi::um::winsock2::{WSACleanup, WSAStartup};
 
 static ABOUT: &str = "Display or set the system's host name.";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 static OPT_DOMAIN: &str = "domain";
 static OPT_IP_ADDRESS: &str = "ip-address";
@@ -53,10 +52,25 @@ fn get_usage() -> String {
 }
 fn execute(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
-    let matches = App::new(executable!())
-        .version(VERSION)
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+
+    match matches.value_of(OPT_HOST) {
+        None => display_hostname(&matches),
+        Some(host) => {
+            if let Err(err) = hostname::set(host) {
+                show_error!("{}", err);
+                1
+            } else {
+                0
+            }
+        }
+    }
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
         .about(ABOUT)
-        .usage(&usage[..])
         .arg(
             Arg::with_name(OPT_DOMAIN)
                 .short("d")
@@ -78,22 +92,9 @@ fn execute(args: impl uucore::Args) -> i32 {
         )
         .arg(Arg::with_name(OPT_SHORT).short("s").long("short").help(
             "Display the short hostname (the portion before the first dot) if \
-                possible",
+             possible",
         ))
         .arg(Arg::with_name(OPT_HOST))
-        .get_matches_from(args);
-
-    match matches.value_of(OPT_HOST) {
-        None => display_hostname(&matches),
-        Some(host) => {
-            if let Err(err) = hostname::set(host) {
-                show_error!("{}", err);
-                1
-            } else {
-                0
-            }
-        }
-    }
 }
 
 fn display_hostname(matches: &ArgMatches) -> i32 {

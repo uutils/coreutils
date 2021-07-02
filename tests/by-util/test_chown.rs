@@ -1,8 +1,38 @@
+// spell-checker:ignore (words) agroupthatdoesntexist auserthatdoesntexist groupname notexisting passgrp
+
 use crate::common::util::*;
 #[cfg(target_os = "linux")]
 use rust_users::get_effective_uid;
 
 extern crate chown;
+
+// Apparently some CI environments have configuration issues, e.g. with 'whoami' and 'id'.
+// If we are running inside the CI and "needle" is in "stderr" skipping this test is
+// considered okay. If we are not inside the CI this calls assert!(result.success).
+//
+// From the Logs: "Build (ubuntu-18.04, x86_64-unknown-linux-gnu, feat_os_unix, use-cross)"
+//
+// stderr: "whoami: cannot find name for user ID 1001"
+// TODO: Maybe `adduser --uid 1001 username` can put things right?
+//
+// stderr: "id: cannot find name for group ID 116"
+// stderr: "thread 'main' panicked at 'called `Result::unwrap()` on an `Err`
+//     value: Custom { kind: NotFound, error: "No such id: 1001" }',
+//     /project/src/uucore/src/lib/features/perms.rs:176:44"
+//
+fn skipping_test_is_okay(result: &CmdResult, needle: &str) -> bool {
+    if !result.succeeded() {
+        println!("result.stdout = {}", result.stdout_str());
+        println!("result.stderr = {}", result.stderr_str());
+        if is_ci() && result.stderr_str().contains(needle) {
+            println!("test skipped:");
+            return true;
+        } else {
+            result.success();
+        }
+    }
+    false
+}
 
 #[cfg(test)]
 mod test_passgrp {
@@ -11,7 +41,7 @@ mod test_passgrp {
     #[test]
     fn test_usr2uid() {
         assert_eq!(0, usr2uid("root").unwrap());
-        assert!(usr2uid("88888888").is_err());
+        assert!(usr2uid("88_888_888").is_err());
         assert!(usr2uid("auserthatdoesntexist").is_err());
     }
 
@@ -22,14 +52,14 @@ mod test_passgrp {
         } else {
             assert_eq!(0, grp2gid("wheel").unwrap());
         }
-        assert!(grp2gid("88888888").is_err());
+        assert!(grp2gid("88_888_888").is_err());
         assert!(grp2gid("agroupthatdoesntexist").is_err());
     }
 
     #[test]
     fn test_uid2usr() {
         assert_eq!("root", uid2usr(0).unwrap());
-        assert!(uid2usr(88888888).is_err());
+        assert!(uid2usr(88_888_888).is_err());
     }
 
     #[test]
@@ -39,7 +69,7 @@ mod test_passgrp {
         } else {
             assert_eq!("wheel", gid2grp(0).unwrap());
         }
-        assert!(gid2grp(88888888).is_err());
+        assert!(gid2grp(88_888_888).is_err());
     }
 }
 
@@ -49,338 +79,427 @@ fn test_invalid_option() {
 }
 
 #[test]
-fn test_chown_myself() {
+fn test_chown_only_owner() {
     // test chown username file.txt
+
     let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
     let result = scene.cmd("whoami").run();
-    if is_ci() && result.stderr.contains("No such user/group") {
-        // In the CI, some server are failing to return whoami.
-        // As seems to be a configuration issue, ignoring it
+    if skipping_test_is_okay(&result, "whoami: cannot find name for user ID") {
         return;
     }
-    println!("results {}", result.stdout);
-    let username = result.stdout.trim_end();
+    let user_name = String::from(result.stdout_str().trim());
+    assert!(!user_name.is_empty());
 
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file1 = "test_install_target_dir_file_a1";
-
+    let file1 = "test_chown_file1";
     at.touch(file1);
-    let result = ucmd.arg(username).arg(file1).run();
-    println!("results stdout {}", result.stdout);
-    println!("results stderr {}", result.stderr);
-    if is_ci() && result.stderr.contains("invalid user") {
-        // In the CI, some server are failing to return id.
-        // As seems to be a configuration issue, ignoring it
-        return;
-    }
-    assert!(result.success);
-}
 
-#[test]
-fn test_chown_myself_second() {
-    // test chown username: file.txt
-    let scene = TestScenario::new(util_name!());
-    let result = scene.cmd("whoami").run();
-    if is_ci() && result.stderr.contains("No such user/group") {
-        // In the CI, some server are failing to return whoami.
-        // As seems to be a configuration issue, ignoring it
-        return;
-    }
-    println!("results {}", result.stdout);
-
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file1 = "test_install_target_dir_file_a1";
-
-    at.touch(file1);
-    let result = ucmd
-        .arg(result.stdout.trim_end().to_owned() + ":")
+    // since only superuser can change owner, we have to change from ourself to ourself
+    let result = scene
+        .ucmd()
+        .arg(user_name)
+        .arg("--verbose")
         .arg(file1)
         .run();
+    result.stderr_contains(&"retained as");
 
-    println!("result.stdout = {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    assert!(result.success);
+    // try to change to another existing user, e.g. 'root'
+    scene
+        .ucmd()
+        .arg("root")
+        .arg("--verbose")
+        .arg(file1)
+        .fails()
+        .stderr_contains(&"failed to change");
 }
 
 #[test]
-fn test_chown_myself_group() {
-    // test chown username:group file.txt
+fn test_chown_only_owner_colon() {
+    // test chown username: file.txt
+
     let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
     let result = scene.cmd("whoami").run();
-    if is_ci() && result.stderr.contains("No such user/group") {
-        // In the CI, some server are failing to return whoami.
-        // As seems to be a configuration issue, ignoring it
+    if skipping_test_is_okay(&result, "whoami: cannot find name for user ID") {
         return;
     }
-    println!("user name = {}", result.stdout);
-    let username = result.stdout.trim_end();
+    let user_name = String::from(result.stdout_str().trim());
+    assert!(!user_name.is_empty());
+
+    let file1 = "test_chown_file1";
+    at.touch(file1);
+
+    scene
+        .ucmd()
+        .arg(format!("{}:", user_name))
+        .arg("--verbose")
+        .arg(file1)
+        .succeeds()
+        .stderr_contains(&"retained as");
+
+    scene
+        .ucmd()
+        .arg("root:")
+        .arg("--verbose")
+        .arg(file1)
+        .fails()
+        .stderr_contains(&"failed to change");
+}
+
+#[test]
+fn test_chown_only_colon() {
+    // test chown : file.txt
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file1 = "test_chown_file1";
+    at.touch(file1);
+
+    // expected:
+    // $ chown -v : file.txt 2>out_err ; echo $? ; cat out_err
+    // ownership of 'file.txt' retained
+    // 0
+    let result = scene.ucmd().arg(":").arg("--verbose").arg(file1).run();
+    if skipping_test_is_okay(&result, "No such id") {
+        return;
+    }
+    result.stderr_contains(&"retained as"); // TODO: verbose is not printed to stderr in GNU chown
+
+    // test chown : file.txt
+    // expected:
+    // $ chown -v :: file.txt 2>out_err ; echo $? ; cat out_err
+    // 1
+    // chown: invalid group: '::'
+    scene
+        .ucmd()
+        .arg("::")
+        .arg("--verbose")
+        .arg(file1)
+        .fails()
+        .stderr_contains(&"invalid group: '::'");
+}
+
+#[test]
+fn test_chown_failed_stdout() {
+    // test chown root file.txt
+
+    // TODO: implement once output "failed to change" to stdout is fixed
+    // expected:
+    // $ chown -v root file.txt 2>out_err ; echo $? ; cat out_err
+    // failed to change ownership of 'file.txt' from jhs to root
+    // 1
+    // chown: changing ownership of 'file.txt': Operation not permitted
+}
+
+#[test]
+fn test_chown_owner_group() {
+    // test chown username:group file.txt
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let result = scene.cmd("whoami").run();
+    if skipping_test_is_okay(&result, "whoami: cannot find name for user ID") {
+        return;
+    }
+
+    let user_name = String::from(result.stdout_str().trim());
+    assert!(!user_name.is_empty());
+
+    let file1 = "test_chown_file1";
+    at.touch(file1);
 
     let result = scene.cmd("id").arg("-gn").run();
-    if is_ci() && result.stderr.contains("No such user/group") {
-        // In the CI, some server are failing to return whoami.
-        // As seems to be a configuration issue, ignoring it
+    if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
         return;
     }
-    println!("group name = {}", result.stdout);
-    let group = result.stdout.trim_end();
+    let group_name = String::from(result.stdout_str().trim());
+    assert!(!group_name.is_empty());
 
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file1 = "test_install_target_dir_file_a1";
-    let perm = username.to_owned() + ":" + group;
-    at.touch(file1);
-    let result = ucmd.arg(perm).arg(file1).run();
-    println!("result.stdout = {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    if is_ci() && result.stderr.contains("chown: invalid group:") {
-        // With some Ubuntu into the CI, we can get this answer
+    let result = scene
+        .ucmd()
+        .arg(format!("{}:{}", user_name, group_name))
+        .arg("--verbose")
+        .arg(file1)
+        .run();
+    if skipping_test_is_okay(&result, "chown: invalid group:") {
         return;
     }
-    assert!(result.success);
+    result.stderr_contains(&"retained as");
+
+    // TODO: on macos group name is not recognized correctly: "chown: invalid group: 'root:root'
+    #[cfg(any(windows, all(unix, not(target_os = "macos"))))]
+    scene
+        .ucmd()
+        .arg("root:root")
+        .arg("--verbose")
+        .arg(file1)
+        .fails()
+        .stderr_contains(&"failed to change");
 }
 
 #[test]
+// TODO: on macos group name is not recognized correctly: "chown: invalid group: ':groupname'
+#[cfg(any(windows, all(unix, not(target_os = "macos"))))]
 fn test_chown_only_group() {
     // test chown :group file.txt
+
     let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
     let result = scene.cmd("whoami").run();
-    if is_ci() && result.stderr.contains("No such user/group") {
-        // In the CI, some server are failing to return whoami.
-        // As seems to be a configuration issue, ignoring it
+    if skipping_test_is_okay(&result, "whoami: cannot find name for user ID") {
         return;
     }
-    println!("results {}", result.stdout);
+    let user_name = String::from(result.stdout_str().trim());
+    assert!(!user_name.is_empty());
 
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file1 = "test_install_target_dir_file_a1";
-    let perm = ":".to_owned() + result.stdout.trim_end();
+    let file1 = "test_chown_file1";
     at.touch(file1);
-    let result = ucmd.arg(perm).arg(file1).run();
 
-    println!("result.stdout = {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-
-    if is_ci() && result.stderr.contains("Operation not permitted") {
+    let result = scene
+        .ucmd()
+        .arg(format!(":{}", user_name))
+        .arg("--verbose")
+        .arg(file1)
+        .run();
+    if is_ci() && result.stderr_str().contains("Operation not permitted") {
         // With ubuntu with old Rust in the CI, we can get an error
         return;
     }
-    if is_ci() && result.stderr.contains("chown: invalid group:") {
+    if is_ci() && result.stderr_str().contains("chown: invalid group:") {
         // With mac into the CI, we can get this answer
         return;
     }
-    assert!(result.success);
+    result.stderr_contains(&"retained as");
+    result.success();
+
+    scene
+        .ucmd()
+        .arg(":root")
+        .arg("--verbose")
+        .arg(file1)
+        .fails()
+        .stderr_contains(&"failed to change");
 }
 
 #[test]
-fn test_chown_only_id() {
+fn test_chown_only_user_id() {
     // test chown 1111 file.txt
-    let result = TestScenario::new("id").ucmd_keepenv().arg("-u").run();
-    if is_ci() && result.stderr.contains("No such user/group") {
-        // In the CI, some server are failing to return whoami.
-        // As seems to be a configuration issue, ignoring it
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let result = scene.cmd_keepenv("id").arg("-u").run();
+    if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
         return;
     }
-    println!("result.stdout = {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    let id = String::from(result.stdout.trim());
+    let user_id = String::from(result.stdout_str().trim());
+    assert!(!user_id.is_empty());
 
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file1 = "test_install_target_dir_file_a1";
-
+    let file1 = "test_chown_file1";
     at.touch(file1);
-    let result = ucmd.arg(id).arg(file1).run();
 
-    println!("result.stdout = {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    if is_ci() && result.stderr.contains("chown: invalid user:") {
-        // With some Ubuntu into the CI, we can get this answer
+    let result = scene.ucmd().arg(user_id).arg("--verbose").arg(file1).run();
+    if skipping_test_is_okay(&result, "invalid user") {
+        // From the Logs: "Build (ubuntu-18.04, x86_64-unknown-linux-gnu, feat_os_unix, use-cross)"
+        // stderr: "chown: invalid user: '1001'
         return;
     }
-    assert!(result.success);
+    result.stderr_contains(&"retained as");
+
+    scene
+        .ucmd()
+        .arg("0")
+        .arg("--verbose")
+        .arg(file1)
+        .fails()
+        .stderr_contains(&"failed to change");
 }
 
 #[test]
 fn test_chown_only_group_id() {
     // test chown :1111 file.txt
-    let result = TestScenario::new("id").ucmd_keepenv().arg("-g").run();
-    if is_ci() && result.stderr.contains("No such user/group") {
-        // In the CI, some server are failing to return whoami.
-        // As seems to be a configuration issue, ignoring it
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let result = scene.cmd_keepenv("id").arg("-g").run();
+    if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
         return;
     }
-    println!("result.stdout {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    let id = String::from(result.stdout.trim());
+    let group_id = String::from(result.stdout_str().trim());
+    assert!(!group_id.is_empty());
 
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file1 = "test_install_target_dir_file_a1";
-
+    let file1 = "test_chown_file1";
     at.touch(file1);
-    let perm = ":".to_owned() + &id;
 
-    let result = ucmd.arg(perm).arg(file1).run();
-
-    println!("result.stdout = {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    if is_ci() && result.stderr.contains("chown: invalid group:") {
+    let result = scene
+        .ucmd()
+        .arg(format!(":{}", group_id))
+        .arg("--verbose")
+        .arg(file1)
+        .run();
+    if skipping_test_is_okay(&result, "chown: invalid group:") {
         // With mac into the CI, we can get this answer
         return;
     }
-    assert!(result.success);
+    result.stderr_contains(&"retained as");
+
+    // Apparently on CI "macos-latest, x86_64-apple-darwin, feat_os_macos"
+    // the process has the rights to change from runner:staff to runner:wheel
+    #[cfg(any(windows, all(unix, not(target_os = "macos"))))]
+    scene
+        .ucmd()
+        .arg(":0")
+        .arg("--verbose")
+        .arg(file1)
+        .fails()
+        .stderr_contains(&"failed to change");
 }
 
 #[test]
-fn test_chown_both_id() {
+fn test_chown_owner_group_id() {
     // test chown 1111:1111 file.txt
-    let result = TestScenario::new("id").ucmd_keepenv().arg("-u").run();
-    if is_ci() && result.stderr.contains("No such user/group") {
-        // In the CI, some server are failing to return whoami.
-        // As seems to be a configuration issue, ignoring it
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let result = scene.cmd_keepenv("id").arg("-u").run();
+    if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
         return;
     }
-    println!("result.stdout {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    let id_user = String::from(result.stdout.trim());
+    let user_id = String::from(result.stdout_str().trim());
+    assert!(!user_id.is_empty());
 
-    let result = TestScenario::new("id").ucmd_keepenv().arg("-g").run();
-    if is_ci() && result.stderr.contains("No such user/group") {
-        // In the CI, some server are failing to return whoami.
-        // As seems to be a configuration issue, ignoring it
+    let result = scene.cmd_keepenv("id").arg("-g").run();
+    if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
         return;
     }
-    println!("result.stdout {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    let id_group = String::from(result.stdout.trim());
+    let group_id = String::from(result.stdout_str().trim());
+    assert!(!group_id.is_empty());
 
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file1 = "test_install_target_dir_file_a1";
-
+    let file1 = "test_chown_file1";
     at.touch(file1);
-    let perm = id_user + &":".to_owned() + &id_group;
 
-    let result = ucmd.arg(perm).arg(file1).run();
-    println!("result.stdout {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-
-    if is_ci() && result.stderr.contains("invalid user") {
-        // In the CI, some server are failing to return id.
-        // As seems to be a configuration issue, ignoring it
+    let result = scene
+        .ucmd()
+        .arg(format!("{}:{}", user_id, group_id))
+        .arg("--verbose")
+        .arg(file1)
+        .run();
+    if skipping_test_is_okay(&result, "invalid user") {
+        // From the Logs: "Build (ubuntu-18.04, x86_64-unknown-linux-gnu, feat_os_unix, use-cross)"
+        // stderr: "chown: invalid user: '1001:116'
         return;
     }
+    result.stderr_contains(&"retained as");
 
-    assert!(result.success);
+    scene
+        .ucmd()
+        .arg("0:0")
+        .arg("--verbose")
+        .arg(file1)
+        .fails()
+        .stderr_contains(&"failed to change");
 }
 
 #[test]
-fn test_chown_both_mix() {
-    // test chown 1111:1111 file.txt
-    let result = TestScenario::new("id").ucmd_keepenv().arg("-u").run();
-    if is_ci() && result.stderr.contains("No such user/group") {
-        // In the CI, some server are failing to return whoami.
-        // As seems to be a configuration issue, ignoring it
+fn test_chown_owner_group_mix() {
+    // test chown 1111:group file.txt
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let result = scene.cmd_keepenv("id").arg("-u").run();
+    if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
         return;
     }
-    println!("result.stdout {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    let id_user = String::from(result.stdout.trim());
+    let user_id = String::from(result.stdout_str().trim());
+    assert!(!user_id.is_empty());
 
-    let result = TestScenario::new("id").ucmd_keepenv().arg("-gn").run();
-    if is_ci() && result.stderr.contains("No such user/group") {
-        // In the CI, some server are failing to return whoami.
-        // As seems to be a configuration issue, ignoring it
+    let result = scene.cmd_keepenv("id").arg("-gn").run();
+    if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
         return;
     }
-    println!("result.stdout {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    let group_name = String::from(result.stdout.trim());
+    let group_name = String::from(result.stdout_str().trim());
+    assert!(!group_name.is_empty());
 
-    let (at, mut ucmd) = at_and_ucmd!();
-    let file1 = "test_install_target_dir_file_a1";
-
+    let file1 = "test_chown_file1";
     at.touch(file1);
-    let perm = id_user + &":".to_owned() + &group_name;
 
-    let result = ucmd.arg(perm).arg(file1).run();
+    let result = scene
+        .ucmd()
+        .arg(format!("{}:{}", user_id, group_name))
+        .arg("--verbose")
+        .arg(file1)
+        .run();
+    result.stderr_contains(&"retained as");
 
-    if is_ci() && result.stderr.contains("invalid user") {
-        // In the CI, some server are failing to return id.
-        // As seems to be a configuration issue, ignoring it
-        return;
-    }
-    assert!(result.success);
+    // TODO: on macos group name is not recognized correctly: "chown: invalid group: '0:root'
+    #[cfg(any(windows, all(unix, not(target_os = "macos"))))]
+    scene
+        .ucmd()
+        .arg("0:root")
+        .arg("--verbose")
+        .arg(file1)
+        .fails()
+        .stderr_contains(&"failed to change");
 }
 
 #[test]
 fn test_chown_recursive() {
     let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
     let result = scene.cmd("whoami").run();
-    if is_ci() && result.stderr.contains("No such user/group") {
-        // In the CI, some server are failing to return whoami.
-        // As seems to be a configuration issue, ignoring it
+    if skipping_test_is_okay(&result, "whoami: cannot find name for user ID") {
         return;
     }
-    println!("result.stdout {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    let username = result.stdout.trim_end();
+    let user_name = String::from(result.stdout_str().trim());
+    assert!(!user_name.is_empty());
 
-    let (at, mut ucmd) = at_and_ucmd!();
-    at.mkdir("a");
-    at.mkdir("a/b");
-    at.mkdir("a/b/c");
+    at.mkdir_all("a/b/c");
     at.mkdir("z");
     at.touch(&at.plus_as_string("a/a"));
     at.touch(&at.plus_as_string("a/b/b"));
     at.touch(&at.plus_as_string("a/b/c/c"));
     at.touch(&at.plus_as_string("z/y"));
 
-    let result = ucmd
+    let result = scene
+        .ucmd()
         .arg("-R")
         .arg("--verbose")
-        .arg(username)
+        .arg(user_name)
         .arg("a")
         .arg("z")
         .run();
-    println!("result.stdout {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    if is_ci() && result.stderr.contains("invalid user") {
-        // In the CI, some server are failing to return id.
-        // As seems to be a configuration issue, ignoring it
-        return;
-    }
-
-    assert!(result.stderr.contains("ownership of 'a/a' retained as"));
-    assert!(result.stderr.contains("ownership of 'z/y' retained as"));
-    assert!(result.success);
+    result.stderr_contains(&"ownership of 'a/a' retained as");
+    result.stderr_contains(&"ownership of 'z/y' retained as");
 }
 
 #[test]
 fn test_root_preserve() {
     let scene = TestScenario::new(util_name!());
+
     let result = scene.cmd("whoami").run();
-    if is_ci() && result.stderr.contains("No such user/group") {
-        // In the CI, some server are failing to return whoami.
-        // As seems to be a configuration issue, ignoring it
+    if skipping_test_is_okay(&result, "whoami: cannot find name for user ID") {
         return;
     }
-    println!("result.stdout {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    let username = result.stdout.trim_end();
+    let user_name = String::from(result.stdout_str().trim());
+    assert!(!user_name.is_empty());
 
-    let result = new_ucmd!()
+    let result = scene
+        .ucmd()
         .arg("--preserve-root")
         .arg("-R")
-        .arg(username)
+        .arg(user_name)
         .arg("/")
         .fails();
-    println!("result.stdout {}", result.stdout);
-    println!("result.stderr = {}", result.stderr);
-    if is_ci() && result.stderr.contains("invalid user") {
-        // In the CI, some server are failing to return id.
-        // As seems to be a configuration issue, ignoring it
-        return;
-    }
-    assert!(result
-        .stderr
-        .contains("chown: it is dangerous to operate recursively"));
+    result.stderr_contains(&"chown: it is dangerous to operate recursively");
 }
 
 #[cfg(target_os = "linux")]
@@ -392,8 +511,34 @@ fn test_big_p() {
             .arg("bin")
             .arg("/proc/self/cwd")
             .fails()
-            .stderr_is(
-                "chown: changing ownership of '/proc/self/cwd': Operation not permitted (os error 1)\n",
+            .stderr_contains(
+                "chown: changing ownership of '/proc/self/cwd': Operation not permitted (os error 1)",
             );
     }
+}
+
+#[test]
+fn test_chown_file_notexisting() {
+    // test chown username not_existing
+
+    let scene = TestScenario::new(util_name!());
+
+    let result = scene.cmd("whoami").run();
+    if skipping_test_is_okay(&result, "whoami: cannot find name for user ID") {
+        return;
+    }
+    let user_name = String::from(result.stdout_str().trim());
+    assert!(!user_name.is_empty());
+
+    let _result = scene
+        .ucmd()
+        .arg(user_name)
+        .arg("--verbose")
+        .arg("not_existing")
+        .fails();
+
+    // TODO: uncomment once "failed to change ownership of '{}' to {}" added to stdout
+    // result.stderr_contains(&"retained as");
+    // TODO: uncomment once message changed from "cannot dereference" to "cannot access"
+    // result.stderr_contains(&"cannot access 'not_existing': No such file or directory");
 }

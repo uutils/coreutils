@@ -10,16 +10,19 @@
 #[macro_use]
 extern crate uucore;
 
+use bstr::io::BufReadExt;
+use clap::{crate_version, App, Arg};
 use std::fs::File;
-use std::io::{stdin, stdout, BufRead, BufReader, Read, Stdout, Write};
+use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 
 use self::searcher::Searcher;
 use uucore::ranges::Range;
+use uucore::InvalidEncodingHandling;
 
-mod buffer;
 mod searcher;
 
+static NAME: &str = "cut";
 static SYNTAX: &str =
     "[-d] [-s] [-z] [--output-delimiter] ((-f|-b|-c) {{sequence}}) {{sourcefile}}+";
 static SUMMARY: &str =
@@ -122,6 +125,14 @@ enum Mode {
     Fields(Vec<Range>, FieldOptions),
 }
 
+fn stdout_writer() -> Box<dyn Write> {
+    if atty::is(atty::Stream::Stdout) {
+        Box::new(stdout())
+    } else {
+        Box::new(BufWriter::new(stdout())) as Box<dyn Write>
+    }
+}
+
 fn list_to_ranges(list: &str, complement: bool) -> Result<Vec<Range>, String> {
     if complement {
         Range::from_list(list).map(|r| uucore::ranges::complement(&r))
@@ -131,72 +142,35 @@ fn list_to_ranges(list: &str, complement: bool) -> Result<Vec<Range>, String> {
 }
 
 fn cut_bytes<R: Read>(reader: R, ranges: &[Range], opts: &Options) -> i32 {
-    use self::buffer::Bytes::Select;
-    use self::buffer::Bytes::Selected::*;
-
     let newline_char = if opts.zero_terminated { b'\0' } else { b'\n' };
-    let mut buf_read = buffer::ByteReader::new(reader, newline_char);
-    let mut out = stdout();
+    let buf_in = BufReader::new(reader);
+    let mut out = stdout_writer();
+    let delim = opts
+        .out_delim
+        .as_ref()
+        .map_or("", String::as_str)
+        .as_bytes();
 
-    'newline: loop {
-        let mut cur_pos = 1;
+    let res = buf_in.for_byte_record(newline_char, |line| {
         let mut print_delim = false;
-
-        for &Range { low, high } in ranges.iter() {
-            // skip up to low
-            let orig_pos = cur_pos;
-            loop {
-                match buf_read.select(low - cur_pos, None::<&mut Stdout>) {
-                    NewlineFound => {
-                        crash_if_err!(1, out.write_all(&[newline_char]));
-                        continue 'newline;
-                    }
-                    Complete(len) => {
-                        cur_pos += len;
-                        break;
-                    }
-                    Partial(len) => cur_pos += len,
-                    EndOfFile => {
-                        if orig_pos != cur_pos {
-                            crash_if_err!(1, out.write_all(&[newline_char]));
-                        }
-
-                        break 'newline;
-                    }
-                }
+        for &Range { low, high } in ranges {
+            if low > line.len() {
+                break;
             }
-
-            if let Some(ref delim) = opts.out_delim {
-                if print_delim {
-                    crash_if_err!(1, out.write_all(delim.as_bytes()));
-                }
+            if print_delim {
+                out.write_all(delim)?;
+            } else if opts.out_delim.is_some() {
                 print_delim = true;
             }
-
-            // write out from low to high
-            loop {
-                match buf_read.select(high - cur_pos + 1, Some(&mut out)) {
-                    NewlineFound => continue 'newline,
-                    Partial(len) => cur_pos += len,
-                    Complete(_) => {
-                        cur_pos = high + 1;
-                        break;
-                    }
-                    EndOfFile => {
-                        if cur_pos != low || low == high {
-                            crash_if_err!(1, out.write_all(&[newline_char]));
-                        }
-
-                        break 'newline;
-                    }
-                }
-            }
+            // change `low` from 1-indexed value to 0-index value
+            let low = low - 1;
+            let high = high.min(line.len());
+            out.write_all(&line[low..high])?;
         }
-
-        buf_read.consume_line();
-        crash_if_err!(1, out.write_all(&[newline_char]));
-    }
-
+        out.write_all(&[newline_char])?;
+        Ok(true)
+    });
+    crash_if_err!(1, res);
     0
 }
 
@@ -209,23 +183,11 @@ fn cut_fields_delimiter<R: Read>(
     newline_char: u8,
     out_delim: &str,
 ) -> i32 {
-    let mut buf_in = BufReader::new(reader);
-    let mut out = stdout();
-    let mut buffer = Vec::new();
+    let buf_in = BufReader::new(reader);
+    let mut out = stdout_writer();
+    let input_delim_len = delim.len();
 
-    'newline: loop {
-        buffer.clear();
-        match buf_in.read_until(newline_char, &mut buffer) {
-            Ok(n) if n == 0 => break,
-            Err(e) => {
-                if buffer.is_empty() {
-                    crash!(1, "read error: {}", e);
-                }
-            }
-            _ => (),
-        }
-
-        let line = &buffer[..];
+    let result = buf_in.for_byte_record_with_terminator(newline_char, |line| {
         let mut fields_pos = 1;
         let mut low_idx = 0;
         let mut delim_search = Searcher::new(line, delim.as_bytes()).peekable();
@@ -233,46 +195,46 @@ fn cut_fields_delimiter<R: Read>(
 
         if delim_search.peek().is_none() {
             if !only_delimited {
-                crash_if_err!(1, out.write_all(line));
+                out.write_all(line)?;
                 if line[line.len() - 1] != newline_char {
-                    crash_if_err!(1, out.write_all(&[newline_char]));
+                    out.write_all(&[newline_char])?;
                 }
             }
 
-            continue;
+            return Ok(true);
         }
 
-        for &Range { low, high } in ranges.iter() {
+        for &Range { low, high } in ranges {
             if low - fields_pos > 0 {
                 low_idx = match delim_search.nth(low - fields_pos - 1) {
-                    Some((_, beyond_delim)) => beyond_delim,
+                    Some(index) => index + input_delim_len,
                     None => break,
                 };
             }
 
             for _ in 0..=high - low {
                 if print_delim {
-                    crash_if_err!(1, out.write_all(out_delim.as_bytes()));
+                    out.write_all(out_delim.as_bytes())?;
+                } else {
+                    print_delim = true;
                 }
 
                 match delim_search.next() {
-                    Some((high_idx, next_low_idx)) => {
+                    Some(high_idx) => {
                         let segment = &line[low_idx..high_idx];
 
-                        crash_if_err!(1, out.write_all(segment));
+                        out.write_all(segment)?;
 
-                        print_delim = true;
-
-                        low_idx = next_low_idx;
+                        low_idx = high_idx + input_delim_len;
                         fields_pos = high + 1;
                     }
                     None => {
                         let segment = &line[low_idx..];
 
-                        crash_if_err!(1, out.write_all(segment));
+                        out.write_all(segment)?;
 
                         if line[line.len() - 1] == newline_char {
-                            continue 'newline;
+                            return Ok(true);
                         }
                         break;
                     }
@@ -280,9 +242,10 @@ fn cut_fields_delimiter<R: Read>(
             }
         }
 
-        crash_if_err!(1, out.write_all(&[newline_char]));
-    }
-
+        out.write_all(&[newline_char])?;
+        Ok(true)
+    });
+    crash_if_err!(1, result);
     0
 }
 
@@ -300,23 +263,11 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> i32 
         );
     }
 
-    let mut buf_in = BufReader::new(reader);
-    let mut out = stdout();
-    let mut buffer = Vec::new();
+    let buf_in = BufReader::new(reader);
+    let mut out = stdout_writer();
+    let delim_len = opts.delimiter.len();
 
-    'newline: loop {
-        buffer.clear();
-        match buf_in.read_until(newline_char, &mut buffer) {
-            Ok(n) if n == 0 => break,
-            Err(e) => {
-                if buffer.is_empty() {
-                    crash!(1, "read error: {}", e);
-                }
-            }
-            _ => (),
-        }
-
-        let line = &buffer[..];
+    let result = buf_in.for_byte_record_with_terminator(newline_char, |line| {
         let mut fields_pos = 1;
         let mut low_idx = 0;
         let mut delim_search = Searcher::new(line, opts.delimiter.as_bytes()).peekable();
@@ -324,53 +275,54 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> i32 
 
         if delim_search.peek().is_none() {
             if !opts.only_delimited {
-                crash_if_err!(1, out.write_all(line));
+                out.write_all(line)?;
                 if line[line.len() - 1] != newline_char {
-                    crash_if_err!(1, out.write_all(&[newline_char]));
+                    out.write_all(&[newline_char])?;
                 }
             }
 
-            continue;
+            return Ok(true);
         }
 
-        for &Range { low, high } in ranges.iter() {
+        for &Range { low, high } in ranges {
             if low - fields_pos > 0 {
-                low_idx = match delim_search.nth(low - fields_pos - 1) {
-                    Some((_, beyond_delim)) => beyond_delim,
-                    None => break,
-                };
-            }
-
-            if print_delim && low_idx >= opts.delimiter.as_bytes().len() {
-                low_idx -= opts.delimiter.as_bytes().len();
+                if let Some(delim_pos) = delim_search.nth(low - fields_pos - 1) {
+                    low_idx = if print_delim {
+                        delim_pos
+                    } else {
+                        delim_pos + delim_len
+                    }
+                } else {
+                    break;
+                }
             }
 
             match delim_search.nth(high - low) {
-                Some((high_idx, next_low_idx)) => {
+                Some(high_idx) => {
                     let segment = &line[low_idx..high_idx];
 
-                    crash_if_err!(1, out.write_all(segment));
+                    out.write_all(segment)?;
 
                     print_delim = true;
-                    low_idx = next_low_idx;
+                    low_idx = high_idx;
                     fields_pos = high + 1;
                 }
                 None => {
                     let segment = &line[low_idx..line.len()];
 
-                    crash_if_err!(1, out.write_all(segment));
+                    out.write_all(segment)?;
 
                     if line[line.len() - 1] == newline_char {
-                        continue 'newline;
+                        return Ok(true);
                     }
                     break;
                 }
             }
         }
-
-        crash_if_err!(1, out.write_all(&[newline_char]));
-    }
-
+        out.write_all(&[newline_char])?;
+        Ok(true)
+    });
+    crash_if_err!(1, result);
     0
 }
 
@@ -398,8 +350,13 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> i32 {
         } else {
             let path = Path::new(&filename[..]);
 
-            if !path.exists() {
-                show_error!("{}", msg_args_nonexistent_file!(filename));
+            if path.is_dir() {
+                show_error!("{}: Is a directory", filename);
+                continue;
+            }
+
+            if path.metadata().is_err() {
+                show_error!("{}: No such file or directory", filename);
                 continue;
             }
 
@@ -422,67 +379,87 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> i32 {
     exit_code
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+mod options {
+    pub const BYTES: &str = "bytes";
+    pub const CHARACTERS: &str = "characters";
+    pub const DELIMITER: &str = "delimiter";
+    pub const FIELDS: &str = "fields";
+    pub const ZERO_TERMINATED: &str = "zero-terminated";
+    pub const ONLY_DELIMITED: &str = "only-delimited";
+    pub const OUTPUT_DELIMITER: &str = "output-delimiter";
+    pub const COMPLEMENT: &str = "complement";
+    pub const FILE: &str = "file";
+}
 
-    let matches = app!(SYNTAX, SUMMARY, LONG_HELP)
-        .optopt("b", "bytes", "filter byte columns from the input source", "sequence")
-        .optopt("c", "characters", "alias for character mode", "sequence")
-        .optopt("d", "delimiter", "specify the delimiter character that separates fields in the input source. Defaults to Tab.", "delimiter")
-        .optopt("f", "fields", "filter field columns from the input source", "sequence")
-        .optflag("n", "", "legacy option - has no effect.")
-        .optflag("", "complement", "invert the filter - instead of displaying only the filtered columns, display all but those columns")
-        .optflag("s", "only-delimited", "in field mode, only print lines which contain the delimiter")
-        .optflag("z", "zero-terminated", "instead of filtering columns based on line, filter columns based on \\0 (NULL character)")
-        .optopt("", "output-delimiter", "in field mode, replace the delimiter in output lines with this option's argument", "new delimiter")
-        .parse(args);
-    let complement = matches.opt_present("complement");
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
+
+    let matches = uu_app().get_matches_from(args);
+
+    let complement = matches.is_present(options::COMPLEMENT);
 
     let mode_parse = match (
-        matches.opt_str("bytes"),
-        matches.opt_str("characters"),
-        matches.opt_str("fields"),
+        matches.value_of(options::BYTES),
+        matches.value_of(options::CHARACTERS),
+        matches.value_of(options::FIELDS),
     ) {
-        (Some(byte_ranges), None, None) => {
-            list_to_ranges(&byte_ranges[..], complement).map(|ranges| {
-                Mode::Bytes(
-                    ranges,
-                    Options {
-                        out_delim: matches.opt_str("output-delimiter"),
-                        zero_terminated: matches.opt_present("zero-terminated"),
-                    },
-                )
-            })
-        }
-        (None, Some(char_ranges), None) => {
-            list_to_ranges(&char_ranges[..], complement).map(|ranges| {
-                Mode::Characters(
-                    ranges,
-                    Options {
-                        out_delim: matches.opt_str("output-delimiter"),
-                        zero_terminated: matches.opt_present("zero-terminated"),
-                    },
-                )
-            })
-        }
+        (Some(byte_ranges), None, None) => list_to_ranges(byte_ranges, complement).map(|ranges| {
+            Mode::Bytes(
+                ranges,
+                Options {
+                    out_delim: Some(
+                        matches
+                            .value_of(options::OUTPUT_DELIMITER)
+                            .unwrap_or_default()
+                            .to_owned(),
+                    ),
+                    zero_terminated: matches.is_present(options::ZERO_TERMINATED),
+                },
+            )
+        }),
+        (None, Some(char_ranges), None) => list_to_ranges(char_ranges, complement).map(|ranges| {
+            Mode::Characters(
+                ranges,
+                Options {
+                    out_delim: Some(
+                        matches
+                            .value_of(options::OUTPUT_DELIMITER)
+                            .unwrap_or_default()
+                            .to_owned(),
+                    ),
+                    zero_terminated: matches.is_present(options::ZERO_TERMINATED),
+                },
+            )
+        }),
         (None, None, Some(field_ranges)) => {
-            list_to_ranges(&field_ranges[..], complement).and_then(|ranges| {
-                let out_delim = match matches.opt_str("output-delimiter") {
+            list_to_ranges(field_ranges, complement).and_then(|ranges| {
+                let out_delim = match matches.value_of(options::OUTPUT_DELIMITER) {
                     Some(s) => {
                         if s.is_empty() {
                             Some("\0".to_owned())
                         } else {
-                            Some(s)
+                            Some(s.to_owned())
                         }
                     }
                     None => None,
                 };
 
-                let only_delimited = matches.opt_present("only-delimited");
-                let zero_terminated = matches.opt_present("zero-terminated");
+                let only_delimited = matches.is_present(options::ONLY_DELIMITED);
+                let zero_terminated = matches.is_present(options::ZERO_TERMINATED);
 
-                match matches.opt_str("delimiter") {
-                    Some(delim) => {
+                match matches.value_of(options::DELIMITER) {
+                    Some(mut delim) => {
+                        // GNU's `cut` supports `-d=` to set the delimiter to `=`.
+                        // Clap parsing is limited in this situation, see:
+                        // https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242
+                        // Since clap parsing handles `-d=` as delimiter explicitly set to "" and
+                        // an empty delimiter is not accepted by GNU's `cut` (and makes no sense),
+                        // we can use this as basis for a simple workaround:
+                        if delim.is_empty() {
+                            delim = "=";
+                        }
                         if delim.chars().count() > 1 {
                             Err(msg_opt_invalid_should_be!(
                                 "empty or 1 character long",
@@ -494,7 +471,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                             let delim = if delim.is_empty() {
                                 "\0".to_owned()
                             } else {
-                                delim
+                                delim.to_owned()
                             };
 
                             Ok(Mode::Fields(
@@ -533,10 +510,18 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let mode_parse = match mode_parse {
         Err(_) => mode_parse,
         Ok(mode) => match mode {
-            Mode::Bytes(_, _) | Mode::Characters(_, _) if matches.opt_present("delimiter") => Err(
-                msg_opt_only_usable_if!("printing a sequence of fields", "--delimiter", "-d"),
-            ),
-            Mode::Bytes(_, _) | Mode::Characters(_, _) if matches.opt_present("only-delimited") => {
+            Mode::Bytes(_, _) | Mode::Characters(_, _)
+                if matches.is_present(options::DELIMITER) =>
+            {
+                Err(msg_opt_only_usable_if!(
+                    "printing a sequence of fields",
+                    "--delimiter",
+                    "-d"
+                ))
+            }
+            Mode::Bytes(_, _) | Mode::Characters(_, _)
+                if matches.is_present(options::ONLY_DELIMITED) =>
+            {
                 Err(msg_opt_only_usable_if!(
                     "printing a sequence of fields",
                     "--only-delimited",
@@ -547,11 +532,101 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         },
     };
 
+    let files: Vec<String> = matches
+        .values_of(options::FILE)
+        .unwrap_or_default()
+        .map(str::to_owned)
+        .collect();
+
     match mode_parse {
-        Ok(mode) => cut_files(matches.free, mode),
+        Ok(mode) => cut_files(files, mode),
         Err(err_msg) => {
             show_error!("{}", err_msg);
             1
         }
     }
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .name(NAME)
+        .version(crate_version!())
+        .usage(SYNTAX)
+        .about(SUMMARY)
+        .after_help(LONG_HELP)
+        .arg(
+            Arg::with_name(options::BYTES)
+                .short("b")
+                .long(options::BYTES)
+                .takes_value(true)
+                .help("filter byte columns from the input source")
+                .allow_hyphen_values(true)
+                .value_name("LIST")
+                .display_order(1),
+        )
+        .arg(
+            Arg::with_name(options::CHARACTERS)
+                .short("c")
+                .long(options::CHARACTERS)
+                .help("alias for character mode")
+                .takes_value(true)
+                .allow_hyphen_values(true)
+                .value_name("LIST")
+                .display_order(2),
+        )
+        .arg(
+            Arg::with_name(options::DELIMITER)
+                .short("d")
+                .long(options::DELIMITER)
+                .help("specify the delimiter character that separates fields in the input source. Defaults to Tab.")
+                .takes_value(true)
+                .value_name("DELIM")
+                .display_order(3),
+        )
+        .arg(
+            Arg::with_name(options::FIELDS)
+                .short("f")
+                .long(options::FIELDS)
+                .help("filter field columns from the input source")
+                .takes_value(true)
+                .allow_hyphen_values(true)
+                .value_name("LIST")
+                .display_order(4),
+        )
+        .arg(
+            Arg::with_name(options::COMPLEMENT)
+                .long(options::COMPLEMENT)
+                .help("invert the filter - instead of displaying only the filtered columns, display all but those columns")
+                .takes_value(false)
+                .display_order(5),
+        )
+        .arg(
+            Arg::with_name(options::ONLY_DELIMITED)
+            .short("s")
+                .long(options::ONLY_DELIMITED)
+                .help("in field mode, only print lines which contain the delimiter")
+                .takes_value(false)
+                .display_order(6),
+        )
+        .arg(
+            Arg::with_name(options::ZERO_TERMINATED)
+            .short("z")
+                .long(options::ZERO_TERMINATED)
+                .help("instead of filtering columns based on line, filter columns based on \\0 (NULL character)")
+                .takes_value(false)
+                .display_order(8),
+        )
+        .arg(
+            Arg::with_name(options::OUTPUT_DELIMITER)
+            .long(options::OUTPUT_DELIMITER)
+                .help("in field mode, replace the delimiter in output lines with this option's argument")
+                .takes_value(true)
+                .value_name("NEW_DELIM")
+                .display_order(7),
+        )
+        .arg(
+            Arg::with_name(options::FILE)
+            .hidden(true)
+                .multiple(true)
+        )
 }

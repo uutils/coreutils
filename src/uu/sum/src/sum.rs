@@ -10,12 +10,16 @@
 #[macro_use]
 extern crate uucore;
 
+use clap::{crate_version, App, Arg};
 use std::fs::File;
 use std::io::{stdin, Read, Result};
 use std::path::Path;
+use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "sum";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
+static USAGE: &str =
+    "[OPTION]... [FILE]...\nWith no FILE, or when  FILE is -, read standard input.";
+static SUMMARY: &str = "Checksum and count the blocks in a file.";
 
 fn bsd_sum(mut reader: Box<dyn Read>) -> (usize, u16) {
     let mut buf = [0; 1024];
@@ -64,55 +68,44 @@ fn open(name: &str) -> Result<Box<dyn Read>> {
     match name {
         "-" => Ok(Box::new(stdin()) as Box<dyn Read>),
         _ => {
-            let f = File::open(&Path::new(name))?;
+            let path = &Path::new(name);
+            if path.is_dir() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "Is a directory",
+                ));
+            };
+            if path.metadata().is_err() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "No such file or directory",
+                ));
+            };
+            let f = File::open(path)?;
             Ok(Box::new(f) as Box<dyn Read>)
         }
     }
 }
 
+mod options {
+    pub static FILE: &str = "file";
+    pub static BSD_COMPATIBLE: &str = "r";
+    pub static SYSTEM_V_COMPATIBLE: &str = "sysv";
+}
+
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
-    let mut opts = getopts::Options::new();
+    let matches = uu_app().get_matches_from(args);
 
-    opts.optflag("r", "", "use the BSD compatible algorithm (default)");
-    opts.optflag("s", "sysv", "use System V compatible algorithm");
-    opts.optflag("h", "help", "show this help message");
-    opts.optflag("v", "version", "print the version and exit");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => crash!(1, "Invalid options\n{}", f),
+    let files: Vec<String> = match matches.values_of(options::FILE) {
+        Some(v) => v.clone().map(|v| v.to_owned()).collect(),
+        None => vec!["-".to_owned()],
     };
 
-    if matches.opt_present("help") {
-        let msg = format!(
-            "{0} {1}
-
-Usage:
-  {0} [OPTION]... [FILE]...
-
-Checksum and count the blocks in a file.",
-            NAME, VERSION
-        );
-        println!(
-            "{}\nWith no FILE, or when  FILE is -, read standard input.",
-            opts.usage(&msg)
-        );
-        return 0;
-    }
-    if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-        return 0;
-    }
-
-    let sysv = matches.opt_present("sysv");
-
-    let files = if matches.free.is_empty() {
-        vec!["-".to_owned()]
-    } else {
-        matches.free
-    };
+    let sysv = matches.is_present(options::SYSTEM_V_COMPATIBLE);
 
     let print_names = if sysv {
         files.len() > 1 || files[0] != "-"
@@ -120,10 +113,15 @@ Checksum and count the blocks in a file.",
         files.len() > 1
     };
 
+    let mut exit_code = 0;
     for file in &files {
         let reader = match open(file) {
             Ok(f) => f,
-            _ => crash!(1, "unable to open file"),
+            Err(error) => {
+                show_error!("'{}' {}", file, error);
+                exit_code = 2;
+                continue;
+            }
         };
         let (blocks, sum) = if sysv {
             sysv_sum(reader)
@@ -138,5 +136,25 @@ Checksum and count the blocks in a file.",
         }
     }
 
-    0
+    exit_code
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .name(NAME)
+        .version(crate_version!())
+        .usage(USAGE)
+        .about(SUMMARY)
+        .arg(Arg::with_name(options::FILE).multiple(true).hidden(true))
+        .arg(
+            Arg::with_name(options::BSD_COMPATIBLE)
+                .short(options::BSD_COMPATIBLE)
+                .help("use the BSD sum algorithm, use 1K blocks (default)"),
+        )
+        .arg(
+            Arg::with_name(options::SYSTEM_V_COMPATIBLE)
+                .short("s")
+                .long(options::SYSTEM_V_COMPATIBLE)
+                .help("use System V sum algorithm, use 512 bytes blocks"),
+        )
 }

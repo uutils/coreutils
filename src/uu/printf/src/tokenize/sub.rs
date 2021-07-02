@@ -1,4 +1,4 @@
-// spell-checker:ignore (ToDO) conv intf strf floatf scif charf fieldtype vals subparser unescaping submodule Cninety
+// spell-checker:ignore (vars) charf decf floatf intf scif strf Cninety
 
 //! Sub is a token that represents a
 //! segment of the format string that is a substitution
@@ -78,7 +78,7 @@ impl Sub {
             'c' => FieldType::Charf,
             _ => {
                 // should be unreachable.
-                println!("Invalid fieldtype");
+                println!("Invalid field type");
                 exit(cli::EXIT_ERR);
             }
         };
@@ -130,7 +130,7 @@ impl SubParser {
         }
     }
     fn build_token(parser: SubParser) -> Box<dyn token::Token> {
-        // not a self method so as to allow move of subparser vals.
+        // not a self method so as to allow move of sub-parser vals.
         // return new Sub struct as token
         let t: Box<dyn token::Token> = Box::new(Sub::new(
             if parser.min_width_is_asterisk {
@@ -275,7 +275,7 @@ impl SubParser {
                 }
                 None => {
                     text_so_far.push('%');
-                    err_conv(&text_so_far);
+                    err_conv(text_so_far);
                     false
                 }
             }
@@ -354,7 +354,7 @@ impl token::Token for Sub {
         // field char
         let pre_min_width_opt: Option<String> = match *field.field_type {
             // if %s just return arg
-            // if %b use UnescapedText module's unescaping-fn
+            // if %b use UnescapedText module's unescape-fn
             // if %c return first char of arg
             FieldType::Strf | FieldType::Charf => {
                 match pf_arg {

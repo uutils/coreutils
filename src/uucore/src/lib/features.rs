@@ -4,8 +4,10 @@
 pub mod encoding;
 #[cfg(feature = "fs")]
 pub mod fs;
-#[cfg(feature = "parse_time")]
-pub mod parse_time;
+#[cfg(feature = "fsext")]
+pub mod fsext;
+#[cfg(feature = "ringbuffer")]
+pub mod ringbuffer;
 #[cfg(feature = "zero-copy")]
 pub mod zero_copy;
 

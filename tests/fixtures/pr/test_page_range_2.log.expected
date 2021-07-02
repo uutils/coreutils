@@ -1,0 +1,198 @@
+
+
+{last_modified_time} test.log Page 15
+
+
+Mon Dec 10 12:05:48.183     <CWChannel: 0x7fc3ff50d600> [channelNumber=12(2GHz), channelWidth={20MHz}, active]
+Mon Dec 10 12:05:48.183 )} took 0.0007 seconds, returned 4 results
+Mon Dec 10 12:05:48.183 Scan: <airportd[160]> Cache-assisted scan request on channel 13 does not require a live scan
+Mon Dec 10 12:05:48.183 Scan: <airportd[160]> Cache-assisted scan request on channel 36 does not require a live scan
+Mon Dec 10 12:05:48.184 Scan: <airportd[160]> Cache-assisted scan request on channel 40 does not require a live scan
+Mon Dec 10 12:05:48.184 Scan: <airportd[160]> Cache-assisted scan request does not require a live scan
+Mon Dec 10 12:05:48.184 AutoJoin: <airportd[160]> Successful cache-assisted background scan request with channels {(
+Mon Dec 10 12:05:48.184     <CWChannel: 0x7fc3ff55aa40> [channelNumber=13(2GHz), channelWidth={20MHz}, active],
+Mon Dec 10 12:05:48.184     <CWChannel: 0x7fc3ff504b10> [channelNumber=36(5GHz), channelWidth={40MHz(+1)}, active],
+Mon Dec 10 12:05:48.184     <CWChannel: 0x7fc3ff55b310> [channelNumber=40(5GHz), channelWidth={40MHz(-1)}, active]
+Mon Dec 10 12:05:48.184 )} took 0.0007 seconds, returned 5 results
+Mon Dec 10 12:05:48.184 Scan: <airportd[160]> Cache-assisted scan request on channel 44 does not require a live scan
+Mon Dec 10 12:05:48.184 Scan: <airportd[160]> Cache-assisted scan request on channel 48 does not require a live scan
+Mon Dec 10 12:05:48.184 Scan: <airportd[160]> Cache-assisted scan request on channel 149 does not require a live scan
+Mon Dec 10 12:05:48.184 Scan: <airportd[160]> Cache-assisted scan request does not require a live scan
+Mon Dec 10 12:05:48.185 AutoJoin: <airportd[160]> Successful cache-assisted background scan request with channels {(
+Mon Dec 10 12:05:48.185     <CWChannel: 0x7fc3ff50cca0> [channelNumber=44(5GHz), channelWidth={40MHz(+1)}, active],
+Mon Dec 10 12:05:48.185     <CWChannel: 0x7fc3ff55ac00> [channelNumber=48(5GHz), channelWidth={40MHz(-1)}, active],
+Mon Dec 10 12:05:48.185     <CWChannel: 0x7fc3ff532a50> [channelNumber=149(5GHz), channelWidth={20MHz}, active]
+Mon Dec 10 12:05:48.185 )} took 0.0006 seconds, returned 4 results
+Mon Dec 10 12:05:48.185 Scan: <airportd[160]> Cache-assisted scan request on channel 153 does not require a live scan
+Mon Dec 10 12:05:48.185 Scan: <airportd[160]> Cache-assisted scan request on channel 157 does not require a live scan
+Mon Dec 10 12:05:48.185 Scan: <airportd[160]> Cache-assisted scan request on channel 161 does not require a live scan
+Mon Dec 10 12:05:48.186 Scan: <airportd[160]> Cache-assisted scan request does not require a live scan
+Mon Dec 10 12:05:48.186 AutoJoin: <airportd[160]> Successful cache-assisted background scan request with channels {(
+Mon Dec 10 12:05:48.186     <CWChannel: 0x7fc3ff5571c0> [channelNumber=153(5GHz), channelWidth={40MHz(-1)}, active],
+Mon Dec 10 12:05:48.186     <CWChannel: 0x7fc3ff5503a0> [channelNumber=157(5GHz), channelWidth={20MHz}, active],
+Mon Dec 10 12:05:48.186     <CWChannel: 0x7fc3ff55fe50> [channelNumber=161(5GHz), channelWidth={40MHz(-1)}, active]
+Mon Dec 10 12:05:48.186 )} took 0.0010 seconds, returned 7 results
+Mon Dec 10 12:05:48.186 Scan: <airportd[160]> Cache-assisted scan request on channel 165 does not require a live scan
+Mon Dec 10 12:05:48.186 Scan: <airportd[160]> Cache-assisted scan request on channel 52 does not require a live scan
+Mon Dec 10 12:05:48.186 Scan: <airportd[160]> Cache-assisted scan request on channel 56 does not require a live scan
+Mon Dec 10 12:05:48.186 Scan: <airportd[160]> Cache-assisted scan request does not require a live scan
+Mon Dec 10 12:05:48.187 AutoJoin: <airportd[160]> Successful cache-assisted background scan request with channels {(
+Mon Dec 10 12:05:48.187     <CWChannel: 0x7fc3ff513800> [channelNumber=165(5GHz), channelWidth={20MHz}, active],
+Mon Dec 10 12:05:48.187     <CWChannel: 0x7fc3ff524d50> [channelNumber=52(5GHz), channelWidth={40MHz(+1)}, DFS],
+Mon Dec 10 12:05:48.187     <CWChannel: 0x7fc3ff550d80> [channelNumber=56(5GHz), channelWidth={40MHz(-1)}, DFS]
+Mon Dec 10 12:05:48.187 )} took 0.0008 seconds, returned 5 results
+Mon Dec 10 12:05:48.187 Scan: <airportd[160]> Cache-assisted scan request on channel 60 does not require a live scan
+Mon Dec 10 12:05:48.187 Scan: <airportd[160]> Cache-assisted scan request on channel 64 does not require a live scan
+Mon Dec 10 12:05:48.188 Scan: <airportd[160]> Cache-assisted scan request does not require a live scan
+Mon Dec 10 12:05:48.188 AutoJoin: <airportd[160]> Successful cache-assisted background scan request with channels {(
+Mon Dec 10 12:05:48.188     <CWChannel: 0x7fc3ff54cf50> [channelNumber=60(5GHz), channelWidth={40MHz(+1)}, DFS],
+Mon Dec 10 12:05:48.188     <CWChannel: 0x7fc3ff538220> [channelNumber=64(5GHz), channelWidth={40MHz(-1)}, DFS]
+Mon Dec 10 12:05:48.188 )} took 0.0013 seconds, returned 8 results
+Mon Dec 10 12:05:50.375 Driver Event: <airportd[160]> _bsd_80211_event_callback: LINK_QUALITY (en0)
+Mon Dec 10 12:05:50.375 Info: <airportd[160]> _bsd_80211_event_callback: <en0> link quality: RSSI=-57 dBm TxRate=216 Mbps
+Mon Dec 10 12:05:50.376 Info: <Wi-Fi Menu Extra[335]> link quality changed
+Mon Dec 10 12:05:55.378 Driver Event: <airportd[160]> _bsd_80211_event_callback: LINK_QUALITY (en0)
+Mon Dec 10 12:05:55.378 Info: <airportd[160]> _bsd_80211_event_callback: <en0> link quality: RSSI=-56 dBm TxRate=243 Mbps
+Mon Dec 10 12:05:55.379 Info: <Wi-Fi Menu Extra[335]> link quality changed
+Mon Dec 10 12:06:28.759 Driver Event: <airportd[160]> _bsd_80211_event_callback: AWDL_SYNC_STATE_CHANGED (awdl0)
+Mon Dec 10 12:06:28.763 Info: <airportd[160]> AWDL started
+Mon Dec 10 12:06:28.763 Driver Event: <airportd[160]> _bsd_80211_event_callback: CHANNEL_SWITCH (en0)
+Mon Dec 10 12:06:28.765 Roam: <airportd[160]> ROAMING PROFILES updated to SINGLE-BAND, SINGLE-AP for 2.4GHz on en0
+Mon Dec 10 12:06:28.765 Roam: <airportd[160]> ROAMING PROFILES updated to SINGLE-BAND, SINGLE-AP for 5GHz on en0
+
+
+
+
+
+
+
+{last_modified_time} test.log Page 16
+
+
+Mon Dec 10 12:06:28.770 SC: <airportd[160]> airportdProcessSystemConfigurationEvent: Processing 'State:/Network/Interface/en0/AirPort/ProfileID'
+Mon Dec 10 12:06:28.770 SC: <airportd[160]> airportdProcessSystemConfigurationEvent: Processing 'State:/Network/Interface/en0/AirPort/WEP40'
+Mon Dec 10 12:06:28.770 SC: <airportd[160]> airportdProcessSystemConfigurationEvent: Processing 'State:/Network/Interface/en0/AirPort/SSID_STR'
+Mon Dec 10 12:06:28.770 SC: <airportd[160]> airportdProcessSystemConfigurationEvent: Processing 'State:/Network/Interface/en0/AirPort/AirPlay'
+Mon Dec 10 12:06:28.770 SC: <airportd[160]> airportdProcessSystemConfigurationEvent: Processing 'State:/Network/Interface/en0/AirPort/AutoJoinTimestamp'
+Mon Dec 10 12:06:28.770 SC: <airportd[160]> airportdProcessSystemConfigurationEvent: Processing 'State:/Network/Interface/en0/AirPort/BSSID'
+Mon Dec 10 12:06:28.770 SC: <airportd[160]> airportdProcessSystemConfigurationEvent: Processing 'State:/Network/Interface/en0/AirPort/SSID'
+Mon Dec 10 12:06:28.770 SC: <airportd[160]> airportdProcessSystemConfigurationEvent: Processing 'State:/Network/Interface/en0/AirPort/CHANNEL'
+Mon Dec 10 12:06:28.770 SC: <airportd[160]> airportdProcessSystemConfigurationEvent: Processing 'State:/Network/Interface/en0/AirPort/Busy'
+Mon Dec 10 12:06:28.770 SC: <airportd[160]> airportdProcessSystemConfigurationEvent: Processing 'State:/Network/Interface/en0/AirPort/Power Status'
+Mon Dec 10 12:06:28.770 SC: <airportd[160]> airportdProcessSystemConfigurationEvent: Processing 'State:/Network/Interface/en0/AirPort/WEPOPENSYSTEM'
+Mon Dec 10 12:06:28.770 SC: <airportd[160]> airportdProcessSystemConfigurationEvent: Processing 'State:/Network/Interface/en0/AirPort/CachedScanRecord'
+Mon Dec 10 12:06:28.770 SC: <airportd[160]> airportdProcessSystemConfigurationEvent: Processing 'State:/Network/Interface/en0/AirPort/UserMode8021X'
+Mon Dec 10 12:06:28.771 SC: <airportd[160]> airportdProcessSystemConfigurationEvent: Processing 'State:/Network/Interface/en0/AirPort/BusyUI'
+Mon Dec 10 12:06:28.945 Info: <airportd[160]> INTERFACE STATE INFO request received from pid 362 (sharingd)
+Mon Dec 10 12:06:28.946 Info: <airportd[160]> -[CWXPCInterfaceContext __copyMACAddressForInterface:]: <awdl0> MAC address: <82cd0ac3 bf73>
+Mon Dec 10 12:06:30.064 Driver Event: <airportd[160]> _bsd_80211_event_callback: AWDL_PEER_PRESENCE (awdl0)
+Mon Dec 10 12:06:30.151 Driver Event: <airportd[160]> _bsd_80211_event_callback: AWDL_PEER_PRESENCE (awdl0)
+Mon Dec 10 12:06:30.151 Driver Event: <airportd[160]> _bsd_80211_event_callback: AWDL_PEER_PRESENCE (awdl0)
+Mon Dec 10 12:06:31.137 Driver Event: <airportd[160]> _bsd_80211_event_callback: AWDL_PEER_PRESENCE (awdl0)
+Mon Dec 10 12:06:31.138 Driver Event: <airportd[160]> _bsd_80211_event_callback: AWDL_PEER_PRESENCE (awdl0)
+Mon Dec 10 12:06:31.832 Driver Event: <airportd[160]> _bsd_80211_event_callback: AWDL_PEER_PRESENCE (awdl0)
+Mon Dec 10 12:06:31.832 Driver Event: <airportd[160]> _bsd_80211_event_callback: AWDL_PEER_PRESENCE (awdl0)
+Mon Dec 10 12:06:48.742 Driver Event: <airportd[160]> _bsd_80211_event_callback: AWDL_PEER_PRESENCE (awdl0)
+Mon Dec 10 12:06:48.742 Driver Event: <airportd[160]> _bsd_80211_event_callback: AWDL_PEER_PRESENCE (awdl0)
+Mon Dec 10 12:06:49.121 P2P: <airportd[160]> _terminateGroupOwnerTimer: Terminate group owner timer notification received.
+Mon Dec 10 12:06:49.267 Driver Event: <airportd[160]> _bsd_80211_event_callback: AWDL_PEER_PRESENCE (awdl0)
+Mon Dec 10 12:06:49.267 Driver Event: <airportd[160]> _bsd_80211_event_callback: AWDL_PEER_PRESENCE (awdl0)
+Mon Dec 10 12:06:49.793 Driver Event: <airportd[160]> _bsd_80211_event_callback: AWDL_PEER_PRESENCE (awdl0)
+Mon Dec 10 12:06:49.793 Driver Event: <airportd[160]> _bsd_80211_event_callback: AWDL_PEER_PRESENCE (awdl0)
+Mon Dec 10 12:06:50.931 Driver Event: <airportd[160]> _bsd_80211_event_callback: AWDL_REALTIME_MODE_END (awdl0)
+Mon Dec 10 12:06:50.931 Driver Event: <airportd[160]> _bsd_80211_event_callback: AWDL_STATISTICS (awdl0)
+Mon Dec 10 12:06:50.932 Info: <Wi-Fi Menu Extra[335]> AWDL real time mode ended
+Mon Dec 10 12:06:50.945 BTC: <airportd[160]> __BluetoothCoexHandleUpdateForNode: <en0> Handle Bluetooth Coex: FrequencyBand <2>, Bluetooth Bandwidth Utilization <3>, Clamshell Mode <0>
+Mon Dec 10 12:06:50.945 BTC: <airportd[160]> BluetoothCoexSetProfile: <en0> profile for band 2.4GHz didn't change
+Mon Dec 10 12:06:50.945 BTC: <airportd[160]> BluetoothCoexSetProfile: <en0> profile for band 5GHz didn't change
+Mon Dec 10 12:06:50.945 BTC: <airportd[160]> BluetoothCoexHandle_ApplyPolicy: <en0> Bluetooth Coex: band = 0x2
+Mon Dec 10 12:06:50.945 BTC: <airportd[160]> BluetoothCoexHandle_ApplyPolicy: <en0> Bluetooth Coex: hosting AP = NO, assoc as STA = YES, assoced in 2.4GHz = NO
+Mon Dec 10 12:06:50.945 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
+Mon Dec 10 12:06:50.945 BTC: <airportd[160]> BluetoothCoexHandle_ReconfigureAntennas: <en0> Bluetooth Coex: band = 2
+Mon Dec 10 12:06:50.945 BTC: <airportd[160]> BluetoothCoexGetCurrentBssidPhyMode: <en0> Bluetooth Coex: Active PHY Mode 16. PHY Mode
+Mon Dec 10 12:06:50.945 <CFBasicHash 0x7fc3fcd05ae0 [0x7fff9da548e0]>{type = mutable dict, count = 2,
+Mon Dec 10 12:06:50.945 entries =>
+Mon Dec 10 12:06:50.945 	0 : <CFString 0x1042fdbe0 [0x7fff9da548e0]>{contents = "PHYMODE_ACTIVE"} = <CFNumber 0x27c86f4fab1424ff [0x7fff9da548e0]>{value = +16, type = kCFNumberSInt32Type}
+Mon Dec 10 12:06:50.945 	1 : <CFString 0x104301b60 [0x7fff9da548e0]>{contents = "PHYMODE_SUPPORTED"} = <CFNumber 0x27c86f4fab14abff [0x7fff9da548e0]>{value = +159, type = kCFNumberSInt32Type}
+Mon Dec 10 12:06:50.945 }
+Mon Dec 10 12:06:50.945
+Mon Dec 10 12:06:50.945 BTC: <airportd[160]> BluetoothCoexHandle_ReconfigureAntennas: <en0> Bluetooth Coex: PHY mode: <10>  5GHz: YES
+Mon Dec 10 12:06:50.945 BTC: <airportd[160]> BluetoothCoexHandle_ReconfigureAntennas: <en0> MCS index set size = 16, NSS = 2SS, need to re-assoc = YES
+Mon Dec 10 12:06:50.945 BTC: <airportd[160]> BluetoothCoexHandle_ReconfigureAntennas: <en0> Bluetooth Coex: 11bg only = NO, BT on = YES, # HIDs = 0, # A2DP = 0, # SCO = 0, fallback = normal -> Middle Chain is ON
+Mon Dec 10 12:06:50.945 BTC: <airportd[160]> BluetoothCoexSettingPerChainPower: Chain Power Setting does not need to be updated
+Mon Dec 10 12:06:50.945 BTC: <airportd[160]> BluetoothCoexHandle_ReconfigureAntennas: <en0> Skipping REASSOC - The # of chains did not change.
+Mon Dec 10 12:06:50.945 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
+Mon Dec 10 12:06:50.945 Driver Event: <airportd[160]> _bsd_80211_event_callback: AWDL_REALTIME_MODE_END (awdl0)
+Mon Dec 10 12:06:50.945 Driver Event: <airportd[160]> _bsd_80211_event_callback: AWDL_PEER_PRESENCE (awdl0)
+Mon Dec 10 12:06:50.945 BTC: <airportd[160]> __BluetoothCoexHandleUpdateForNode: <en0> Handle Bluetooth Coex: FrequencyBand <2>, Bluetooth Bandwidth Utilization <3>, Clamshell Mode <0>
+
+
+
+
+
+
+
+{last_modified_time} test.log Page 17
+
+
+Mon Dec 10 12:06:50.945 BTC: <airportd[160]> BluetoothCoexSetProfile: <en0> profile for band 2.4GHz didn't change
+Mon Dec 10 12:06:50.945 BTC: <airportd[160]> BluetoothCoexSetProfile: <en0> profile for band 5GHz didn't change
+Mon Dec 10 12:06:50.945 BTC: <airportd[160]> BluetoothCoexHandle_ApplyPolicy: <en0> Bluetooth Coex: band = 0x2
+Mon Dec 10 12:06:50.945 Info: <Wi-Fi Menu Extra[335]> AWDL real time mode ended
+Mon Dec 10 12:06:50.945 BTC: <airportd[160]> BluetoothCoexHandle_ApplyPolicy: <en0> Bluetooth Coex: hosting AP = NO, assoc as STA = YES, assoced in 2.4GHz = NO
+Mon Dec 10 12:06:50.946 BTC: <airportd[160]> BluetoothCoexHandle_ReconfigureAntennas: <en0> Bluetooth Coex: band = 2
+Mon Dec 10 12:06:50.946 BTC: <airportd[160]> BluetoothCoexGetCurrentBssidPhyMode: <en0> Bluetooth Coex: Active PHY Mode 16. PHY Mode
+Mon Dec 10 12:06:50.946 <CFBasicHash 0x7fc3ff5389a0 [0x7fff9da548e0]>{type = mutable dict, count = 2,
+Mon Dec 10 12:06:50.946 entries =>
+Mon Dec 10 12:06:50.946 	0 : <CFString 0x1042fdbe0 [0x7fff9da548e0]>{contents = "PHYMODE_ACTIVE"} = <CFNumber 0x27c86f4fab1424ff [0x7fff9da548e0]>{value = +16, type = kCFNumberSInt32Type}
+Mon Dec 10 12:06:50.946 	1 : <CFString 0x104301b60 [0x7fff9da548e0]>{contents = "PHYMODE_SUPPORTED"} = <CFNumber 0x27c86f4fab14abff [0x7fff9da548e0]>{value = +159, type = kCFNumberSInt32Type}
+Mon Dec 10 12:06:50.946 }
+Mon Dec 10 12:06:50.946
+Mon Dec 10 12:06:50.946 BTC: <airportd[160]> BluetoothCoexHandle_ReconfigureAntennas: <en0> Bluetooth Coex: PHY mode: <10>  5GHz: YES
+Mon Dec 10 12:06:50.946 BTC: <airportd[160]> BluetoothCoexHandle_ReconfigureAntennas: <en0> MCS index set size = 16, NSS = 2SS, need to re-assoc = YES
+Mon Dec 10 12:06:50.946 BTC: <airportd[160]> BluetoothCoexHandle_ReconfigureAntennas: <en0> Bluetooth Coex: 11bg only = NO, BT on = YES, # HIDs = 0, # A2DP = 0, # SCO = 0, fallback = normal -> Middle Chain is ON
+Mon Dec 10 12:06:50.946 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
+Mon Dec 10 12:06:50.946 BTC: <airportd[160]> BluetoothCoexSettingPerChainPower: Chain Power Setting does not need to be updated
+Mon Dec 10 12:06:50.946 BTC: <airportd[160]> BluetoothCoexHandle_ReconfigureAntennas: <en0> Skipping REASSOC - The # of chains did not change.
+Mon Dec 10 12:06:50.946 Driver Event: <airportd[160]> _bsd_80211_event_callback: AWDL_PEER_PRESENCE (awdl0)
+Mon Dec 10 12:06:50.946 Driver Event: <airportd[160]> _bsd_80211_event_callback: AWDL_PEER_PRESENCE (awdl0)
+Mon Dec 10 12:06:50.946 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
+Mon Dec 10 12:06:50.946 Driver Event: <airportd[160]> _bsd_80211_event_callback: AWDL_PEER_PRESENCE (awdl0)
+Mon Dec 10 12:06:50.946 Driver Event: <airportd[160]> _bsd_80211_event_callback: AWDL_PEER_PRESENCE (awdl0)
+Mon Dec 10 12:06:50.946 Driver Event: <airportd[160]> _bsd_80211_event_callback: AWDL_PEER_PRESENCE (awdl0)
+Mon Dec 10 12:06:50.946 Driver Event: <airportd[160]> _bsd_80211_event_callback: AWDL_SYNC_STATE_CHANGED (awdl0)
+Mon Dec 10 12:06:50.947 Info: <airportd[160]> AWDL ended
+Mon Dec 10 12:06:50.951 Info: <airportd[160]> -[CWXPCInterfaceContext __submitAWDLUsageMetric:duration:]: AWDL usage metric data: CWAWDMetricAwdlUsageData: selfInfraChannel 40, peerInfraChannel 0, numOfPeers 6. Keys: Info: <airportd[160]> -[CWAWDManager submitMetric:]: submitting metric id 0x90013
+Mon Dec 10 12:06:50.952 Info: <airportd[160]> INTERFACE STATE INFO request received from pid 362 (sharingd)
+Mon Dec 10 12:06:50.952 Info: <airportd[160]> -[CWXPCInterfaceContext __copyMACAddressForInterface:]: <awdl0> MAC address: <82cd0ac3 bf73>
+Mon Dec 10 12:06:50.953 Roam: <airportd[160]> ROAMING PROFILES updated to AC POWER for 2.4GHz on en0
+Mon Dec 10 12:06:50.953 Roam: <airportd[160]> ROAMING PROFILES updated to AC POWER for 5GHz on en0
+Mon Dec 10 12:06:53.680 Info: <airportd[160]> -[CWXPCSubsystem handleDeviceCountMetricQuery:]_block_invoke: DeviceCount metric data: CWAWDMetricDeviceCountData: timeSinceBoot: 1515466.360642, deviceCount: 1
+Mon Dec 10 12:06:53.684 Info: <airportd[160]> -[CWXPCSubsystem handleNetworkPrefsMetricQuery:]: NetworkPrefs metric data: CWAWDMetricNetworkPrefsData: preferred 15 hidden 0 open 1 wep 0 wpa 12 eap 2
+Mon Dec 10 12:06:53.684 Info: <airportd[160]> -[CWAWDManager submitMetric:]: submitting metric id 0x90004
+Mon Dec 10 12:06:53.852 Info: <airportd[160]> -[CWAWDManager submitMetric:]: submitting metric id 0x90001
+Mon Dec 10 12:06:53.852 Info: <airportd[160]> -[CWAWDManager submitMetric:]: submitting metric id 0x9000d
+Mon Dec 10 12:06:53.852 Info: <airportd[160]> -[CWAWDManager submitMetric:]: submitting metric id 0x9000b
+Mon Dec 10 12:12:03.594 Driver Event: <airportd[160]> _bsd_80211_event_callback: LINK_QUALITY (en0)
+Mon Dec 10 12:12:03.594 Info: <airportd[160]> _bsd_80211_event_callback: <en0> link quality: RSSI=-57 dBm TxRate=216 Mbps
+Mon Dec 10 12:12:03.595 Info: <Wi-Fi Menu Extra[335]> link quality changed
+Mon Dec 10 12:12:09.598 Driver Event: <airportd[160]> _bsd_80211_event_callback: LINK_QUALITY (en0)
+Mon Dec 10 12:12:09.598 Info: <airportd[160]> _bsd_80211_event_callback: <en0> link quality: RSSI=-58 dBm TxRate=270 Mbps
+Mon Dec 10 12:12:09.599 Info: <Wi-Fi Menu Extra[335]> link quality changed
+Mon Dec 10 12:12:56.625 Driver Event: <airportd[160]> _bsd_80211_event_callback: LINK_QUALITY (en0)
+Mon Dec 10 12:12:56.625 Info: <airportd[160]> _bsd_80211_event_callback: <en0> link quality: RSSI=-58 dBm TxRate=216 Mbps
+Mon Dec 10 12:12:56.625 Info: <Wi-Fi Menu Extra[335]> link quality changed
+Mon Dec 10 12:13:01.625 Driver Event: <airportd[160]> _bsd_80211_event_callback: LINK_QUALITY (en0)
+Mon Dec 10 12:13:01.625 Info: <airportd[160]> _bsd_80211_event_callback: <en0> link quality: RSSI=-58 dBm TxRate=243 Mbps
+Mon Dec 10 12:13:01.626 Info: <Wi-Fi Menu Extra[335]> link quality changed
+Mon Dec 10 12:13:06.628 Driver Event: <airportd[160]> _bsd_80211_event_callback: LINK_QUALITY (en0)
+Mon Dec 10 12:13:06.628 Info: <airportd[160]> _bsd_80211_event_callback: <en0> link quality: RSSI=-58 dBm TxRate=216 Mbps
+Mon Dec 10 12:13:06.628 Info: <Wi-Fi Menu Extra[335]> link quality changed
+Mon Dec 10 12:13:27.639 Driver Event: <airportd[160]> _bsd_80211_event_callback: LINK_QUALITY (en0)
+Mon Dec 10 12:13:27.639 Info: <airportd[160]> _bsd_80211_event_callback: <en0> link quality: RSSI=-57 dBm TxRate=243 Mbps
+Mon Dec 10 12:13:27.640 Info: <Wi-Fi Menu Extra[335]> link quality changed
+
+
+
+
+

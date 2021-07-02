@@ -1,0 +1,200 @@
+
+
+{last_modified_time} test.log Page 2
+
+
+   91	Mon Dec 10 11:43:31.748 )} took 0.0025 seconds, returned 10 results
+   92	Mon Dec 10 11:43:31.748 Scan: <airportd[160]> Cache-assisted scan request on channel 4 does not require a live scan
+   93	Mon Dec 10 11:43:31.748 Scan: <airportd[160]> Cache-assisted scan request on channel 5 does not require a live scan
+   94	Mon Dec 10 11:43:31.749 Scan: <airportd[160]> Cache-assisted scan request on channel 6 does not require a live scan
+   95	Mon Dec 10 11:43:31.749 Scan: <airportd[160]> Cache-assisted scan request does not require a live scan
+   96	Mon Dec 10 11:43:31.749 AutoJoin: <airportd[160]> Successful cache-assisted background scan request with channels {(
+   97	Mon Dec 10 11:43:31.749     <CWChannel: 0x7fc3fcd0e7e0> [channelNumber=4(2GHz), channelWidth={20MHz}, active],
+   98	Mon Dec 10 11:43:31.749     <CWChannel: 0x7fc3fcd18a40> [channelNumber=5(2GHz), channelWidth={20MHz}, active],
+   99	Mon Dec 10 11:43:31.749     <CWChannel: 0x7fc3fcd0ae10> [channelNumber=6(2GHz), channelWidth={20MHz}, active]
+  100	Mon Dec 10 11:43:31.749 )} took 0.0008 seconds, returned 7 results
+  101	Mon Dec 10 11:43:31.749 Scan: <airportd[160]> Cache-assisted scan request on channel 7 does not require a live scan
+  102	Mon Dec 10 11:43:31.749 Scan: <airportd[160]> Cache-assisted scan request on channel 8 does not require a live scan
+  103	Mon Dec 10 11:43:31.749 Scan: <airportd[160]> Cache-assisted scan request on channel 9 does not require a live scan
+  104	Mon Dec 10 11:43:31.749 Scan: <airportd[160]> Cache-assisted scan request does not require a live scan
+  105	Mon Dec 10 11:43:31.749 AutoJoin: <airportd[160]> Successful cache-assisted background scan request with channels {(
+  106	Mon Dec 10 11:43:31.749     <CWChannel: 0x7fc3fcd57a80> [channelNumber=7(2GHz), channelWidth={20MHz}, active],
+  107	Mon Dec 10 11:43:31.749     <CWChannel: 0x7fc3fcd32290> [channelNumber=8(2GHz), channelWidth={20MHz}, active],
+  108	Mon Dec 10 11:43:31.749     <CWChannel: 0x7fc3fcd77ab0> [channelNumber=9(2GHz), channelWidth={20MHz}, active]
+  109	Mon Dec 10 11:43:31.749 )} took 0.0002 seconds, returned 1 results
+  110	Mon Dec 10 11:43:31.749 Scan: <airportd[160]> Cache-assisted scan request on channel 10 does not require a live scan
+  111	Mon Dec 10 11:43:31.749 Scan: <airportd[160]> Cache-assisted scan request on channel 11 does not require a live scan
+  112	Mon Dec 10 11:43:31.750 Scan: <airportd[160]> Cache-assisted scan request on channel 12 does not require a live scan
+  113	Mon Dec 10 11:43:31.750 Scan: <airportd[160]> Cache-assisted scan request does not require a live scan
+  114	Mon Dec 10 11:43:31.750 AutoJoin: <airportd[160]> Successful cache-assisted background scan request with channels {(
+  115	Mon Dec 10 11:43:31.750     <CWChannel: 0x7fc3fcd15170> [channelNumber=10(2GHz), channelWidth={20MHz}, active],
+  116	Mon Dec 10 11:43:31.750     <CWChannel: 0x7fc3fcd8dfe0> [channelNumber=11(2GHz), channelWidth={20MHz}, active],
+  117	Mon Dec 10 11:43:31.750     <CWChannel: 0x7fc3fcd67f40> [channelNumber=12(2GHz), channelWidth={20MHz}, active]
+  118	Mon Dec 10 11:43:31.750 )} took 0.0004 seconds, returned 4 results
+  119	Mon Dec 10 11:43:31.750 Scan: <airportd[160]> Cache-assisted scan request on channel 13 does not require a live scan
+  120	Mon Dec 10 11:43:31.750 Scan: <airportd[160]> Cache-assisted scan request on channel 36 does not require a live scan
+  121	Mon Dec 10 11:43:31.750 Scan: <airportd[160]> Cache-assisted scan request on channel 40 does not require a live scan
+  122	Mon Dec 10 11:43:31.751 Scan: <airportd[160]> Cache-assisted scan request does not require a live scan
+  123	Mon Dec 10 11:43:31.751 AutoJoin: <airportd[160]> Successful cache-assisted background scan request with channels {(
+  124	Mon Dec 10 11:43:31.751     <CWChannel: 0x7fc3fcd01390> [channelNumber=13(2GHz), channelWidth={20MHz}, active],
+  125	Mon Dec 10 11:43:31.751     <CWChannel: 0x7fc3fcd14e50> [channelNumber=36(5GHz), channelWidth={40MHz(+1)}, active],
+  126	Mon Dec 10 11:43:31.751     <CWChannel: 0x7fc3fcd11a60> [channelNumber=40(5GHz), channelWidth={40MHz(-1)}, active]
+  127	Mon Dec 10 11:43:31.751 )} took 0.0009 seconds, returned 9 results
+  128	Mon Dec 10 11:43:31.751 Scan: <airportd[160]> Cache-assisted scan request on channel 44 does not require a live scan
+  129	Mon Dec 10 11:43:31.751 Scan: <airportd[160]> Cache-assisted scan request on channel 48 does not require a live scan
+  130	Mon Dec 10 11:43:31.751 Scan: <airportd[160]> Cache-assisted scan request on channel 149 does not require a live scan
+  131	Mon Dec 10 11:43:31.752 Scan: <airportd[160]> Cache-assisted scan request does not require a live scan
+  132	Mon Dec 10 11:43:31.752 AutoJoin: <airportd[160]> Successful cache-assisted background scan request with channels {(
+  133	Mon Dec 10 11:43:31.752     <CWChannel: 0x7fc3fcd0d1b0> [channelNumber=44(5GHz), channelWidth={40MHz(+1)}, active],
+  134	Mon Dec 10 11:43:31.752     <CWChannel: 0x7fc3fcd1e420> [channelNumber=48(5GHz), channelWidth={40MHz(-1)}, active],
+  135	Mon Dec 10 11:43:31.752     <CWChannel: 0x7fc3fcd1bdd0> [channelNumber=149(5GHz), channelWidth={20MHz}, active]
+  136	Mon Dec 10 11:43:31.752 )} took 0.0010 seconds, returned 9 results
+  137	Mon Dec 10 11:43:31.752 Scan: <airportd[160]> Cache-assisted scan request on channel 153 does not require a live scan
+  138	Mon Dec 10 11:43:31.752 Scan: <airportd[160]> Cache-assisted scan request on channel 157 does not require a live scan
+  139	Mon Dec 10 11:43:31.752 Scan: <airportd[160]> Cache-assisted scan request on channel 161 does not require a live scan
+  140	Mon Dec 10 11:43:31.752 Scan: <airportd[160]> Cache-assisted scan request does not require a live scan
+  141	Mon Dec 10 11:43:31.753 AutoJoin: <airportd[160]> Successful cache-assisted background scan request with channels {(
+  142	Mon Dec 10 11:43:31.753     <CWChannel: 0x7fc3fcd572d0> [channelNumber=153(5GHz), channelWidth={40MHz(-1)}, active],
+  143	Mon Dec 10 11:43:31.753     <CWChannel: 0x7fc3fcd16030> [channelNumber=157(5GHz), channelWidth={20MHz}, active],
+  144	Mon Dec 10 11:43:31.753     <CWChannel: 0x7fc3fcd74ee0> [channelNumber=161(5GHz), channelWidth={40MHz(-1)}, active]
+  145	Mon Dec 10 11:43:31.753 )} took 0.0007 seconds, returned 9 results
+  146	Mon Dec 10 11:43:31.753 Scan: <airportd[160]> Cache-assisted scan request on channel 165 does not require a live scan
+  147	Mon Dec 10 11:43:31.753 Scan: <airportd[160]> Cache-assisted scan request on channel 52 does not require a live scan
+  148	Mon Dec 10 11:43:31.753 Scan: <airportd[160]> Cache-assisted scan request on channel 56 does not require a live scan
+  149	Mon Dec 10 11:43:31.753 Scan: <airportd[160]> Cache-assisted scan request does not require a live scan
+  150	Mon Dec 10 11:43:31.753 AutoJoin: <airportd[160]> Successful cache-assisted background scan request with channels {(
+  151	Mon Dec 10 11:43:31.753     <CWChannel: 0x7fc3fcd48070> [channelNumber=165(5GHz), channelWidth={20MHz}, active],
+  152	Mon Dec 10 11:43:31.753     <CWChannel: 0x7fc3fcdb97b0> [channelNumber=52(5GHz), channelWidth={40MHz(+1)}, DFS],
+  153	Mon Dec 10 11:43:31.753     <CWChannel: 0x7fc3fcd097e0> [channelNumber=56(5GHz), channelWidth={40MHz(-1)}, DFS]
+  154	Mon Dec 10 11:43:31.753 )} took 0.0005 seconds, returned 6 results
+  155	Mon Dec 10 11:43:31.753 Scan: <airportd[160]> Cache-assisted scan request on channel 60 does not require a live scan
+  156	Mon Dec 10 11:43:31.753 Scan: <airportd[160]> Cache-assisted scan request on channel 64 does not require a live scan
+  157	Mon Dec 10 11:43:31.753 Scan: <airportd[160]> Cache-assisted scan request does not require a live scan
+  158	Mon Dec 10 11:43:31.753 AutoJoin: <airportd[160]> Successful cache-assisted background scan request with channels {(
+  159	Mon Dec 10 11:43:31.754     <CWChannel: 0x7fc3fcd10860> [channelNumber=60(5GHz), channelWidth={40MHz(+1)}, DFS],
+  160	Mon Dec 10 11:43:31.754     <CWChannel: 0x7fc3fcd0e430> [channelNumber=64(5GHz), channelWidth={40MHz(-1)}, DFS]
+  161	Mon Dec 10 11:43:31.754 )} took 0.0003 seconds, returned 4 results
+  162	Mon Dec 10 11:43:42.382 Driver Event: <airportd[160]> _bsd_80211_event_callback: LINK_QUALITY (en0)
+  163	Mon Dec 10 11:43:42.382 Info: <airportd[160]> _bsd_80211_event_callback: <en0> link quality: RSSI=-57 dBm TxRate=270 Mbps
+  164	Mon Dec 10 11:43:42.383 Info: <Wi-Fi Menu Extra[335]> link quality changed
+  165	Mon Dec 10 11:49:12.347 Driver Event: <airportd[160]> _bsd_80211_event_callback: SCAN_CACHE_UPDATED (en0)
+  166	Mon Dec 10 11:49:12.350 Info: <airportd[160]> QUERY SCAN CACHE request received from pid 92 (locationd)
+  167	Mon Dec 10 11:52:32.194 Info: <airportd[160]> SCAN request received from pid 92 (locationd) with priority 2
+  168	Mon Dec 10 11:52:32.448 Driver Event: <airportd[160]> _bsd_80211_event_callback: SCAN_CACHE_UPDATED (en0)
+  169	Mon Dec 10 11:52:32.450 Info: <airportd[160]> QUERY SCAN CACHE request received from pid 92 (locationd)
+  170	Mon Dec 10 11:52:32.451 AutoJoin: <airportd[160]> Successful cache-assisted scan request for locationd with channels {(
+  171	Mon Dec 10 11:52:32.451     <CWChannel: 0x7fc3fcd11420> [channelNumber=1(2GHz), channelWidth={20MHz}, active],
+  172	Mon Dec 10 11:52:32.451     <CWChannel: 0x7fc3fcd11560> [channelNumber=2(2GHz), channelWidth={20MHz}, active],
+  173	Mon Dec 10 11:52:32.451     <CWChannel: 0x7fc3fcdab8c0> [channelNumber=3(2GHz), channelWidth={20MHz}, active],
+  174	Mon Dec 10 11:52:32.451     <CWChannel: 0x7fc3fcd15400> [channelNumber=4(2GHz), channelWidth={20MHz}, active],
+  175	Mon Dec 10 11:52:32.451     <CWChannel: 0x7fc3fcd21bc0> [channelNumber=5(2GHz), channelWidth={20MHz}, active],
+  176	Mon Dec 10 11:52:32.451     <CWChannel: 0x7fc3fcd16540> [channelNumber=6(2GHz), channelWidth={20MHz}, active]
+  177	Mon Dec 10 11:52:32.451 )} took 0.2566 seconds, returned 10 results
+  178	Mon Dec 10 11:52:32.451 Info: <Wi-Fi Menu Extra[335]> scan cache updated
+  179	Mon Dec 10 11:52:32.712 Driver Event: <airportd[160]> _bsd_80211_event_callback: SCAN_CACHE_UPDATED (en0)
+  180	Mon Dec 10 11:52:32.715 Info: <airportd[160]> QUERY SCAN CACHE request received from pid 92 (locationd)
+
+
+
+
+
+
+
+{last_modified_time} test.log Page 3
+
+
+  181	Mon Dec 10 11:52:32.715 AutoJoin: <airportd[160]> Successful cache-assisted scan request for locationd with channels {(
+  182	Mon Dec 10 11:52:32.715     <CWChannel: 0x7fc3fcd12470> [channelNumber=7(2GHz), channelWidth={20MHz}, active],
+  183	Mon Dec 10 11:52:32.715     <CWChannel: 0x7fc3fcd15590> [channelNumber=8(2GHz), channelWidth={20MHz}, active],
+  184	Mon Dec 10 11:52:32.715     <CWChannel: 0x7fc3fcd091c0> [channelNumber=9(2GHz), channelWidth={20MHz}, active],
+  185	Mon Dec 10 11:52:32.715     <CWChannel: 0x7fc3fcd36ac0> [channelNumber=10(2GHz), channelWidth={20MHz}, active],
+  186	Mon Dec 10 11:52:32.715     <CWChannel: 0x7fc3fcd3b1b0> [channelNumber=11(2GHz), channelWidth={20MHz}, active],
+  187	Mon Dec 10 11:52:32.715     <CWChannel: 0x7fc3fcd37970> [channelNumber=12(2GHz), channelWidth={20MHz}, active]
+  188	Mon Dec 10 11:52:32.715 )} took 0.2636 seconds, returned 10 results
+  189	Mon Dec 10 11:52:32.994 Driver Event: <airportd[160]> _bsd_80211_event_callback: SCAN_CACHE_UPDATED (en0)
+  190	Mon Dec 10 11:52:32.997 Info: <airportd[160]> QUERY SCAN CACHE request received from pid 92 (locationd)
+  191	Mon Dec 10 11:52:32.998 AutoJoin: <airportd[160]> Successful cache-assisted scan request for locationd with channels {(
+  192	Mon Dec 10 11:52:32.998     <CWChannel: 0x7fc3fcd0a4d0> [channelNumber=13(2GHz), channelWidth={20MHz}, active],
+  193	Mon Dec 10 11:52:32.998     <CWChannel: 0x7fc3fcd37320> [channelNumber=36(5GHz), channelWidth={40MHz(+1)}, active],
+  194	Mon Dec 10 11:52:32.998     <CWChannel: 0x7fc3fcd0fb50> [channelNumber=40(5GHz), channelWidth={40MHz(-1)}, active],
+  195	Mon Dec 10 11:52:32.998     <CWChannel: 0x7fc3fcd17760> [channelNumber=44(5GHz), channelWidth={40MHz(+1)}, active],
+  196	Mon Dec 10 11:52:32.998     <CWChannel: 0x7fc3fcd48130> [channelNumber=48(5GHz), channelWidth={40MHz(-1)}, active],
+  197	Mon Dec 10 11:52:32.998     <CWChannel: 0x7fc3fcd147d0> [channelNumber=149(5GHz), channelWidth={20MHz}, active]
+  198	Mon Dec 10 11:52:32.998 )} took 0.2822 seconds, returned 14 results
+  199	Mon Dec 10 11:52:33.405 Driver Event: <airportd[160]> _bsd_80211_event_callback: SCAN_CACHE_UPDATED (en0)
+  200	Mon Dec 10 11:52:33.408 Info: <airportd[160]> QUERY SCAN CACHE request received from pid 92 (locationd)
+  201	Mon Dec 10 11:52:33.409 AutoJoin: <airportd[160]> Successful cache-assisted scan request for locationd with channels {(
+  202	Mon Dec 10 11:52:33.409     <CWChannel: 0x7fc3fcd1c0c0> [channelNumber=153(5GHz), channelWidth={40MHz(-1)}, active],
+  203	Mon Dec 10 11:52:33.409     <CWChannel: 0x7fc3fcd02590> [channelNumber=157(5GHz), channelWidth={20MHz}, active],
+  204	Mon Dec 10 11:52:33.409     <CWChannel: 0x7fc3fcd01390> [channelNumber=161(5GHz), channelWidth={40MHz(-1)}, active],
+  205	Mon Dec 10 11:52:33.409     <CWChannel: 0x7fc3fcd31d20> [channelNumber=165(5GHz), channelWidth={20MHz}, active],
+  206	Mon Dec 10 11:52:33.409     <CWChannel: 0x7fc3fcd27100> [channelNumber=52(5GHz), channelWidth={40MHz(+1)}, DFS],
+  207	Mon Dec 10 11:52:33.409     <CWChannel: 0x7fc3fcd17e60> [channelNumber=56(5GHz), channelWidth={40MHz(-1)}, DFS]
+  208	Mon Dec 10 11:52:33.409 )} took 0.4099 seconds, returned 11 results
+  209	Mon Dec 10 11:52:33.669 Driver Event: <airportd[160]> _bsd_80211_event_callback: SCAN_CACHE_UPDATED (en0)
+  210	Mon Dec 10 11:52:33.672 Info: <airportd[160]> QUERY SCAN CACHE request received from pid 92 (locationd)
+  211	Mon Dec 10 11:52:33.672 AutoJoin: <airportd[160]> Successful cache-assisted scan request for locationd with channels {(
+  212	Mon Dec 10 11:52:33.672     <CWChannel: 0x7fc3fcd02d10> [channelNumber=60(5GHz), channelWidth={40MHz(+1)}, DFS],
+  213	Mon Dec 10 11:52:33.672     <CWChannel: 0x7fc3fcd48ab0> [channelNumber=64(5GHz), channelWidth={40MHz(-1)}, DFS]
+  214	Mon Dec 10 11:52:33.672 )} took 0.2625 seconds, returned 8 results
+  215	Mon Dec 10 11:52:33.673 Info: <Wi-Fi Menu Extra[335]> scan cache updated
+  216	Mon Dec 10 11:52:33.693 Info: <airportd[160]> SCAN request received from pid 92 (locationd) with priority 2
+  217	Mon Dec 10 11:52:33.693 Scan: <airportd[160]> locationd requested a live scan less than 10 seconds after previous request (1.4991s) returning cached scan results
+  218	Mon Dec 10 11:52:33.728 Info: <airportd[160]> SCAN request received from pid 92 (locationd) with priority 2
+  219	Mon Dec 10 11:52:33.728 Scan: <airportd[160]> locationd requested a live scan less than 10 seconds after previous request (1.5339s) returning cached scan results
+  220	Mon Dec 10 11:55:47.609 Driver Discovery: <airportd[160]> _PMConnectionHandler: caps = CPU Net Disk
+  221	Mon Dec 10 11:55:47.609 Driver Discovery: <airportd[160]> _PMConnectionHandler: Being put into maintenance wake mode while fully awake.
+  222	Mon Dec 10 11:55:47.610 Info: <airportd[160]> psCallback: powerSource = AC Power
+  223	Mon Dec 10 11:55:47.610 Info: <airportd[160]> psCallback: set powersave disabled on en0
+  224	Mon Dec 10 11:55:47.637 Info: <airportd[160]> RELINQUISH BT PAGING LOCK request received from pid 106 (bluetoothd)
+  225	Mon Dec 10 11:55:47.637 Info: <airportd[160]> RELINQUISH BT PAGING LOCK request received from pid 106 (bluetoothd)
+  226	Mon Dec 10 11:55:47.638 BTC: <airportd[160]> BT PAGING state already set to 0
+  227	Mon Dec 10 11:55:47.638 BTC: <airportd[160]> BT PAGING state already set to 0
+  228	Mon Dec 10 11:55:47.638 Info: <airportd[160]> BT PAGING LOCK RELINQUISHED after 0.0 seconds
+  229	Mon Dec 10 11:55:47.638 Info: <airportd[160]> BT PAGING LOCK RELINQUISHED after 0.0 seconds
+  230	Mon Dec 10 11:55:47.638 Info: <airportd[160]> <en0> BT PAGING LOCK RELINQUISHED, re-enabling deferred WiFi requests
+  231	Mon Dec 10 11:55:47.638 Info: <airportd[160]> <en0> BT PAGING LOCK RELINQUISHED, re-enabling deferred WiFi requests
+  232	Mon Dec 10 11:55:48.093 IPC: <airportd[160]> ADDED XPC CLIENT CONNECTION [loginwindow (pid=101, euid=1651299376, egid=604256670)]
+  233	Mon Dec 10 11:55:48.093 Info: <airportd[160]> START MONITORING EVENT request received from pid 101 (loginwindow)
+  234	Mon Dec 10 11:55:48.093 Info: <airportd[160]> START MONITORING EVENT request received from pid 101 (loginwindow)
+  235	Mon Dec 10 11:55:48.094 Info: <airportd[160]> START MONITORING EVENT request received from pid 101 (loginwindow)
+  236	Mon Dec 10 11:55:48.094 Info: <airportd[160]> START MONITORING EVENT request received from pid 101 (loginwindow)
+  237	Mon Dec 10 11:55:48.094 Info: <airportd[160]> START MONITORING EVENT request received from pid 101 (loginwindow)
+  238	Mon Dec 10 11:55:48.094 Info: <airportd[160]> START MONITORING EVENT request received from pid 101 (loginwindow)
+  239	Mon Dec 10 11:55:48.094 Info: <airportd[160]> START MONITORING EVENT request received from pid 101 (loginwindow)
+  240	Mon Dec 10 11:55:48.104 Info: <airportd[160]> STOP MONITORING EVENT request received from pid 101 (loginwindow)
+  241	Mon Dec 10 11:55:48.104 Info: <airportd[160]> STOP MONITORING EVENT request received from pid 101 (loginwindow)
+  242	Mon Dec 10 11:55:48.104 Info: <airportd[160]> STOP MONITORING EVENT request received from pid 101 (loginwindow)
+  243	Mon Dec 10 11:55:48.104 Info: <airportd[160]> STOP MONITORING EVENT request received from pid 101 (loginwindow)
+  244	Mon Dec 10 11:55:48.104 Info: <airportd[160]> STOP MONITORING EVENT request received from pid 101 (loginwindow)
+  245	Mon Dec 10 11:55:48.104 Info: <airportd[160]> STOP MONITORING EVENT request received from pid 101 (loginwindow)
+  246	Mon Dec 10 11:55:48.105 Info: <airportd[160]> STOP MONITORING EVENT request received from pid 101 (loginwindow)
+  247	Mon Dec 10 11:56:07.629 Driver Discovery: <airportd[160]> _PMConnectionHandler: caps =
+  248	Mon Dec 10 11:56:07.629 AutoJoin: <airportd[160]> BEST CONNECTED SCAN CANCELLED on interface en0
+  249	Mon Dec 10 11:56:07.629 AutoJoin: <airportd[160]> BACKGROUND SCAN CANCELLED on interface en0
+  250	Mon Dec 10 11:56:07.629 AutoJoin: <airportd[160]> Auto-join retry cancelled on interface en0
+  251	Mon Dec 10 11:56:07.629 Offload: <airportd[160]> _tcpKeepAliveActive: TCP keep-alive is active.
+  252	Mon Dec 10 11:56:07.637 P2P: <airportd[160]> _changeInterfaceFlags: Marking p2p0 down
+  253	Mon Dec 10 11:56:07.637 Info: <airportd[160]> SleepAcknowledgementCheckForHostAP: Checking sleep readiness for HostAP
+  254	Mon Dec 10 11:56:07.637 <airportd[160]> SleepAcknowledgementCheck: Checking sleep readiness
+  255	Mon Dec 10 11:56:07.637 <airportd[160]> SleepAcknowledgementCheck: <p2p0> Delaying sleep acknowledgement because of VifUp
+  256	Mon Dec 10 11:56:07.638 <airportd[160]> _interfaceFlagsChanged: KEV_DL_SIFFLAGS received for p2p0 [flags=0xffff8802 (down)].
+  257	Mon Dec 10 11:56:07.638 <airportd[160]> _interfaceFlagsChanged: Flags changed for p2p0 (0xffff8843 -> 0xffff8802) (down).
+  258	Mon Dec 10 11:56:07.638 P2P: <airportd[160]> _deviceInterfaceMarkedDown: p2p0 marked down
+  259	Mon Dec 10 11:56:07.638 P2P: <airportd[160]> _removeTimeoutForActionAndParam: Attempting to remove 'Stop GO' action (param = 0x0)
+  260	Mon Dec 10 11:56:07.638 P2P: <airportd[160]> _removeTimeoutForActionAndParam: Attempting to remove 'Scan' action (param = 0x0)
+  261	Mon Dec 10 11:56:07.638 P2P: <airportd[160]> _p2pSupervisorEventRunLoopCallback: Mark down complete for p2p0
+  262	Mon Dec 10 11:56:07.638 <airportd[160]> SleepAcknowledgementCheck: Checking sleep readiness
+  263	Mon Dec 10 11:56:07.638 WoW: <airportd[160]> SleepAcknowledgementCheck: <en0> Checking if auto-join is in progress before sleep acknowledgement
+  264	Mon Dec 10 11:56:07.638 WoW: <airportd[160]> SleepAcknowledgementDelayForAutoJoinAttempt_block_invoke: AUTO-JOIN attempt complete for en0, re-checking sleep readiness
+  265	Mon Dec 10 11:56:07.638 <airportd[160]> SleepAcknowledgementCheck: Checking sleep readiness
+  266	Mon Dec 10 11:56:07.639 WoW: <airportd[160]> _wowEnabled: WoW is active on en0
+  267	Mon Dec 10 11:56:07.639 WoW: <airportd[160]> wowExchangeRequiredForNode: WoW exchange not required for en0
+  268	Mon Dec 10 11:56:07.639 <airportd[160]> _acknowledgeSleepEvent: Acknowledging sleep event
+  269	Mon Dec 10 11:56:07.639 Info: <airportd[160]> PRIORITY LOCK ADDED [client=airportd, type=4, interface=(null), priority=7]
+  270	Mon Dec 10 11:56:07.640 AutoJoin: <airportd[160]> Auto-join retry cancelled on interface en0
+
+
+
+
+

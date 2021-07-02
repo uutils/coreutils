@@ -5,6 +5,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+/// Deduce the name of the binary from the current source code filename.
+///
+/// e.g.: `src/uu/cp/src/cp.rs` -> `cp`
 #[macro_export]
 macro_rules! executable(
     () => ({
@@ -19,9 +22,37 @@ macro_rules! executable(
 );
 
 #[macro_export]
+macro_rules! show(
+    ($err:expr) => ({
+        let e = $err;
+        uucore::error::set_exit_code(e.code());
+        eprintln!("{}: {}", executable!(), e);
+    })
+);
+
+#[macro_export]
+macro_rules! show_if_err(
+    ($res:expr) => ({
+        if let Err(e) = $res {
+            show!(e);
+        }
+    })
+);
+
+/// Show an error to stderr in a similar style to GNU coreutils.
+#[macro_export]
 macro_rules! show_error(
     ($($args:tt)+) => ({
-        eprint!("{}: error: ", executable!());
+        eprint!("{}: ", executable!());
+        eprintln!($($args)+);
+    })
+);
+
+/// Show a warning to stderr in a similar style to GNU coreutils.
+#[macro_export]
+macro_rules! show_error_custom_description (
+    ($err:expr,$($args:tt)+) => ({
+        eprint!("{}: {}: ", executable!(), $err);
         eprintln!($($args)+);
     })
 );
@@ -34,14 +65,7 @@ macro_rules! show_warning(
     })
 );
 
-#[macro_export]
-macro_rules! show_info(
-    ($($args:tt)+) => ({
-        eprint!("{}: ", executable!());
-        eprintln!($($args)+);
-    })
-);
-
+/// Show a bad invocation help message in a similar style to GNU coreutils.
 #[macro_export]
 macro_rules! show_usage_error(
     ($($args:tt)+) => ({
@@ -51,6 +75,7 @@ macro_rules! show_usage_error(
     })
 );
 
+/// Display the provided error message, then `exit()` with the provided exit code
 #[macro_export]
 macro_rules! crash(
     ($exit_code:expr, $($args:tt)+) => ({
@@ -59,6 +84,7 @@ macro_rules! crash(
     })
 );
 
+/// Calls `exit()` with the provided exit code.
 #[macro_export]
 macro_rules! exit(
     ($exit_code:expr) => ({
@@ -66,6 +92,8 @@ macro_rules! exit(
     })
 );
 
+/// Unwraps the Result. Instead of panicking, it exists the program with the
+/// provided exit code.
 #[macro_export]
 macro_rules! crash_if_err(
     ($exit_code:expr, $exp:expr) => (
@@ -76,6 +104,9 @@ macro_rules! crash_if_err(
     )
 );
 
+/// Unwraps the Result. Instead of panicking, it shows the error and then
+/// returns from the function with the provided exit code.
+/// Assumes the current function returns an i32 value.
 #[macro_export]
 macro_rules! return_if_err(
     ($exit_code:expr, $exp:expr) => (
@@ -94,7 +125,7 @@ macro_rules! safe_write(
     ($fd:expr, $($args:tt)+) => (
         match write!($fd, $($args)+) {
             Ok(_) => {}
-            Err(f) => panic!(f.to_string())
+            Err(f) => panic!("{}", f)
         }
     )
 );
@@ -104,11 +135,13 @@ macro_rules! safe_writeln(
     ($fd:expr, $($args:tt)+) => (
         match writeln!($fd, $($args)+) {
             Ok(_) => {}
-            Err(f) => panic!(f.to_string())
+            Err(f) => panic!("{}", f)
         }
     )
 );
 
+/// Unwraps the Result. Instead of panicking, it exists the program with exit
+/// code 1.
 #[macro_export]
 macro_rules! safe_unwrap(
     ($exp:expr) => (
@@ -149,13 +182,6 @@ macro_rules! snippet_list_join_or {
 macro_rules! msg_invalid_input {
     ($reason: expr) => {
         format!("invalid input: {}", $reason)
-    };
-}
-
-#[macro_export]
-macro_rules! snippet_no_file_at_path {
-    ($path:expr) => {
-        format!("nonexistent path {}", $path)
     };
 }
 
@@ -202,55 +228,6 @@ macro_rules! msg_opt_invalid_should_be {
             $long_flag,
             $short_flag
         )
-    };
-}
-
-// -- message templates : invalid input : args
-
-#[macro_export]
-macro_rules! msg_arg_invalid_value {
-    ($expects:expr, $received:expr) => {
-        msg_invalid_input!(format!(
-            "expects its argument to be {}, but was provided {}",
-            $expects, $received
-        ))
-    };
-}
-
-#[macro_export]
-macro_rules! msg_args_invalid_value {
-    ($expects:expr, $received:expr) => {
-        msg_invalid_input!(format!(
-            "expects its arguments to be {}, but was provided {}",
-            $expects, $received
-        ))
-    };
-    ($msg:expr) => {
-        msg_invalid_input!($msg)
-    };
-}
-
-#[macro_export]
-macro_rules! msg_args_nonexistent_file {
-    ($received:expr) => {
-        msg_args_invalid_value!("paths to files", snippet_no_file_at_path!($received))
-    };
-}
-
-#[macro_export]
-macro_rules! msg_wrong_number_of_arguments {
-    () => {
-        msg_args_invalid_value!("wrong number of arguments")
-    };
-    ($min:expr, $max:expr) => {
-        msg_args_invalid_value!(format!("expects {}-{} arguments", $min, $max))
-    };
-    ($exact:expr) => {
-        if $exact == 1 {
-            msg_args_invalid_value!("expects 1 argument")
-        } else {
-            msg_args_invalid_value!(format!("expects {} arguments", $exact))
-        }
     };
 }
 

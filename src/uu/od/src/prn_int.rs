@@ -1,5 +1,3 @@
-// spell-checker:ignore (ToDO) itembytes
-
 use crate::formatteriteminfo::*;
 
 /// format string to print octal using `int_writer_unsigned`
@@ -60,9 +58,9 @@ macro_rules! int_writer_signed {
     };
 }
 
-/// Extends a signed number in `item` of `itembytes` bytes into a (signed) i64
-fn sign_extend(item: u64, itembytes: usize) -> i64 {
-    let shift = 64 - itembytes * 8;
+/// Extends a signed number in `item` of `item_bytes` bytes into a (signed) i64
+fn sign_extend(item: u64, item_bytes: usize) -> i64 {
+    let shift = 64 - item_bytes * 8;
     (item << shift) as i64 >> shift
 }
 
@@ -89,46 +87,46 @@ int_writer_signed!(FORMAT_ITEM_DEC64S, 8, 21, format_item_dec_s64, DEC!()); // m
 #[test]
 fn test_sign_extend() {
     assert_eq!(
-        0xffffffffffffff80u64 as i64,
-        sign_extend(0x0000000000000080, 1)
+        0xffff_ffff_ffff_ff80u64 as i64,
+        sign_extend(0x0000_0000_0000_0080, 1)
     );
     assert_eq!(
-        0xffffffffffff8000u64 as i64,
-        sign_extend(0x0000000000008000, 2)
+        0xffff_ffff_ffff_8000u64 as i64,
+        sign_extend(0x0000_0000_0000_8000, 2)
     );
     assert_eq!(
-        0xffffffffff800000u64 as i64,
-        sign_extend(0x0000000000800000, 3)
+        0xffff_ffff_ff80_0000u64 as i64,
+        sign_extend(0x0000_0000_0080_0000, 3)
     );
     assert_eq!(
-        0xffffffff80000000u64 as i64,
-        sign_extend(0x0000000080000000, 4)
+        0xffff_ffff_8000_0000u64 as i64,
+        sign_extend(0x0000_0000_8000_0000, 4)
     );
     assert_eq!(
-        0xffffff8000000000u64 as i64,
-        sign_extend(0x0000008000000000, 5)
+        0xffff_ff80_0000_0000u64 as i64,
+        sign_extend(0x0000_0080_0000_0000, 5)
     );
     assert_eq!(
-        0xffff800000000000u64 as i64,
-        sign_extend(0x0000800000000000, 6)
+        0xffff_8000_0000_0000u64 as i64,
+        sign_extend(0x0000_8000_0000_0000, 6)
     );
     assert_eq!(
-        0xff80000000000000u64 as i64,
-        sign_extend(0x0080000000000000, 7)
+        0xff80_0000_0000_0000u64 as i64,
+        sign_extend(0x0080_0000_0000_0000, 7)
     );
     assert_eq!(
-        0x8000000000000000u64 as i64,
-        sign_extend(0x8000000000000000, 8)
+        0x8000_0000_0000_0000u64 as i64,
+        sign_extend(0x8000_0000_0000_0000, 8)
     );
 
-    assert_eq!(0x000000000000007f, sign_extend(0x000000000000007f, 1));
-    assert_eq!(0x0000000000007fff, sign_extend(0x0000000000007fff, 2));
-    assert_eq!(0x00000000007fffff, sign_extend(0x00000000007fffff, 3));
-    assert_eq!(0x000000007fffffff, sign_extend(0x000000007fffffff, 4));
-    assert_eq!(0x0000007fffffffff, sign_extend(0x0000007fffffffff, 5));
-    assert_eq!(0x00007fffffffffff, sign_extend(0x00007fffffffffff, 6));
-    assert_eq!(0x007fffffffffffff, sign_extend(0x007fffffffffffff, 7));
-    assert_eq!(0x7fffffffffffffff, sign_extend(0x7fffffffffffffff, 8));
+    assert_eq!(0x0000_0000_0000_007f, sign_extend(0x0000_0000_0000_007f, 1));
+    assert_eq!(0x0000_0000_0000_7fff, sign_extend(0x0000_0000_0000_7fff, 2));
+    assert_eq!(0x0000_0000_007f_ffff, sign_extend(0x0000_0000_007f_ffff, 3));
+    assert_eq!(0x0000_0000_7fff_ffff, sign_extend(0x0000_0000_7fff_ffff, 4));
+    assert_eq!(0x0000_007f_ffff_ffff, sign_extend(0x0000_007f_ffff_ffff, 5));
+    assert_eq!(0x0000_7fff_ffff_ffff, sign_extend(0x0000_7fff_ffff_ffff, 6));
+    assert_eq!(0x007f_ffff_ffff_ffff, sign_extend(0x007f_ffff_ffff_ffff, 7));
+    assert_eq!(0x7fff_ffff_ffff_ffff, sign_extend(0x7fff_ffff_ffff_ffff, 8));
 }
 
 #[test]
@@ -138,11 +136,11 @@ fn test_format_item_oct() {
     assert_eq!(" 000000", format_item_oct16(0));
     assert_eq!(" 177777", format_item_oct16(0xffff));
     assert_eq!(" 00000000000", format_item_oct32(0));
-    assert_eq!(" 37777777777", format_item_oct32(0xffffffff));
+    assert_eq!(" 37777777777", format_item_oct32(0xffff_ffff));
     assert_eq!(" 0000000000000000000000", format_item_oct64(0));
     assert_eq!(
         " 1777777777777777777777",
-        format_item_oct64(0xffffffffffffffff)
+        format_item_oct64(0xffff_ffff_ffff_ffff)
     );
 }
 
@@ -153,9 +151,12 @@ fn test_format_item_hex() {
     assert_eq!(" 0000", format_item_hex16(0));
     assert_eq!(" ffff", format_item_hex16(0xffff));
     assert_eq!(" 00000000", format_item_hex32(0));
-    assert_eq!(" ffffffff", format_item_hex32(0xffffffff));
+    assert_eq!(" ffffffff", format_item_hex32(0xffff_ffff));
     assert_eq!(" 0000000000000000", format_item_hex64(0));
-    assert_eq!(" ffffffffffffffff", format_item_hex64(0xffffffffffffffff));
+    assert_eq!(
+        " ffffffffffffffff",
+        format_item_hex64(0xffff_ffff_ffff_ffff)
+    );
 }
 
 #[test]
@@ -165,11 +166,11 @@ fn test_format_item_dec_u() {
     assert_eq!("     0", format_item_dec_u16(0));
     assert_eq!(" 65535", format_item_dec_u16(0xffff));
     assert_eq!("          0", format_item_dec_u32(0));
-    assert_eq!(" 4294967295", format_item_dec_u32(0xffffffff));
+    assert_eq!(" 4294967295", format_item_dec_u32(0xffff_ffff));
     assert_eq!("                    0", format_item_dec_u64(0));
     assert_eq!(
         " 18446744073709551615",
-        format_item_dec_u64(0xffffffffffffffff)
+        format_item_dec_u64(0xffff_ffff_ffff_ffff)
     );
 }
 
@@ -182,15 +183,15 @@ fn test_format_item_dec_s() {
     assert_eq!("  32767", format_item_dec_s16(0x7fff));
     assert_eq!(" -32768", format_item_dec_s16(0x8000));
     assert_eq!("           0", format_item_dec_s32(0));
-    assert_eq!("  2147483647", format_item_dec_s32(0x7fffffff));
-    assert_eq!(" -2147483648", format_item_dec_s32(0x80000000));
+    assert_eq!("  2147483647", format_item_dec_s32(0x7fff_ffff));
+    assert_eq!(" -2147483648", format_item_dec_s32(0x8000_0000));
     assert_eq!("                    0", format_item_dec_s64(0));
     assert_eq!(
         "  9223372036854775807",
-        format_item_dec_s64(0x7fffffffffffffff)
+        format_item_dec_s64(0x7fff_ffff_ffff_ffff)
     );
     assert_eq!(
         " -9223372036854775808",
-        format_item_dec_s64(0x8000000000000000)
+        format_item_dec_s64(0x8000_0000_0000_0000)
     );
 }

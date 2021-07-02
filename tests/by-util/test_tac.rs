@@ -49,3 +49,22 @@ fn test_single_non_newline_separator_before() {
         .run()
         .stdout_is_fixture("delimited_primes_before.expected");
 }
+
+#[test]
+fn test_invalid_input() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene
+        .ucmd()
+        .arg("b")
+        .fails()
+        .stderr_contains("failed to open 'b' for reading: No such file or directory");
+
+    at.mkdir("a");
+    scene
+        .ucmd()
+        .arg("a")
+        .fails()
+        .stderr_contains("dir: read error: Invalid argument");
+}

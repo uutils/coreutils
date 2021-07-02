@@ -43,21 +43,44 @@ pub fn main() {
     let mut tf = File::create(Path::new(&out_dir).join("test_modules.rs")).unwrap();
 
     mf.write_all(
-        "type UtilityMap<T> = HashMap<&'static str, fn(T) -> i32>;\n\
-        \n\
-        fn util_map<T: uucore::Args>() -> UtilityMap<T> {\n\
-        \tlet mut map = UtilityMap::new();\n\
-        "
+        "type UtilityMap<T> = HashMap<&'static str, (fn(T) -> i32, fn() -> App<'static, 'static>)>;\n\
+         \n\
+         fn util_map<T: uucore::Args>() -> UtilityMap<T> {\n\
+         \tlet mut map = UtilityMap::new();\n\
+         "
         .as_bytes(),
     )
     .unwrap();
 
     for krate in crates {
         match krate.as_ref() {
+            // 'test' is named uu_test to avoid collision with rust core crate 'test'.
+            // It can also be invoked by name '[' for the '[ expr ] syntax'.
+            "uu_test" => {
+                mf.write_all(
+                    format!(
+                        "\
+                         \tmap.insert(\"test\", ({krate}::uumain, {krate}::uu_app));\n\
+                         \t\tmap.insert(\"[\", ({krate}::uumain, {krate}::uu_app));\n\
+                         ",
+                        krate = krate
+                    )
+                    .as_bytes(),
+                )
+                .unwrap();
+                tf.write_all(
+                    format!(
+                        "#[path=\"{dir}/test_test.rs\"]\nmod test_test;\n",
+                        dir = util_tests_dir,
+                    )
+                    .as_bytes(),
+                )
+                .unwrap()
+            }
             k if k.starts_with(override_prefix) => {
                 mf.write_all(
                     format!(
-                        "\tmap.insert(\"{k}\", {krate}::uumain);\n",
+                        "\tmap.insert(\"{k}\", ({krate}::uumain, {krate}::uu_app));\n",
                         k = krate[override_prefix.len()..].to_string(),
                         krate = krate
                     )
@@ -77,7 +100,7 @@ pub fn main() {
             "false" | "true" => {
                 mf.write_all(
                     format!(
-                        "\tmap.insert(\"{krate}\", r#{krate}::uumain);\n",
+                        "\tmap.insert(\"{krate}\", (r#{krate}::uumain, r#{krate}::uu_app));\n",
                         krate = krate
                     )
                     .as_bytes(),
@@ -97,21 +120,21 @@ pub fn main() {
                 mf.write_all(
                     format!(
                         "\
-                        \tmap.insert(\"{krate}\", {krate}::uumain);\n\
-                        \t\tmap.insert(\"md5sum\", {krate}::uumain);\n\
-                        \t\tmap.insert(\"sha1sum\", {krate}::uumain);\n\
-                        \t\tmap.insert(\"sha224sum\", {krate}::uumain);\n\
-                        \t\tmap.insert(\"sha256sum\", {krate}::uumain);\n\
-                        \t\tmap.insert(\"sha384sum\", {krate}::uumain);\n\
-                        \t\tmap.insert(\"sha512sum\", {krate}::uumain);\n\
-                        \t\tmap.insert(\"sha3sum\", {krate}::uumain);\n\
-                        \t\tmap.insert(\"sha3-224sum\", {krate}::uumain);\n\
-                        \t\tmap.insert(\"sha3-256sum\", {krate}::uumain);\n\
-                        \t\tmap.insert(\"sha3-384sum\", {krate}::uumain);\n\
-                        \t\tmap.insert(\"sha3-512sum\", {krate}::uumain);\n\
-                        \t\tmap.insert(\"shake128sum\", {krate}::uumain);\n\
-                        \t\tmap.insert(\"shake256sum\", {krate}::uumain);\n\
-                        ",
+                         \tmap.insert(\"{krate}\", ({krate}::uumain, {krate}::uu_app_custom));\n\
+                         \t\tmap.insert(\"md5sum\", ({krate}::uumain, {krate}::uu_app_common));\n\
+                         \t\tmap.insert(\"sha1sum\", ({krate}::uumain, {krate}::uu_app_common));\n\
+                         \t\tmap.insert(\"sha224sum\", ({krate}::uumain, {krate}::uu_app_common));\n\
+                         \t\tmap.insert(\"sha256sum\", ({krate}::uumain, {krate}::uu_app_common));\n\
+                         \t\tmap.insert(\"sha384sum\", ({krate}::uumain, {krate}::uu_app_common));\n\
+                         \t\tmap.insert(\"sha512sum\", ({krate}::uumain, {krate}::uu_app_common));\n\
+                         \t\tmap.insert(\"sha3sum\", ({krate}::uumain, {krate}::uu_app_common));\n\
+                         \t\tmap.insert(\"sha3-224sum\", ({krate}::uumain, {krate}::uu_app_common));\n\
+                         \t\tmap.insert(\"sha3-256sum\", ({krate}::uumain, {krate}::uu_app_common));\n\
+                         \t\tmap.insert(\"sha3-384sum\", ({krate}::uumain, {krate}::uu_app_common));\n\
+                         \t\tmap.insert(\"sha3-512sum\", ({krate}::uumain, {krate}::uu_app_common));\n\
+                         \t\tmap.insert(\"shake128sum\", ({krate}::uumain, {krate}::uu_app_common));\n\
+                         \t\tmap.insert(\"shake256sum\", ({krate}::uumain, {krate}::uu_app_common));\n\
+                         ",
                         krate = krate
                     )
                     .as_bytes(),
@@ -130,7 +153,7 @@ pub fn main() {
             _ => {
                 mf.write_all(
                     format!(
-                        "\tmap.insert(\"{krate}\", {krate}::uumain);\n",
+                        "\tmap.insert(\"{krate}\", ({krate}::uumain, {krate}::uu_app));\n",
                         krate = krate
                     )
                     .as_bytes(),

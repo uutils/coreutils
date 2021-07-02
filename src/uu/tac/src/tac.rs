@@ -10,79 +10,82 @@
 #[macro_use]
 extern crate uucore;
 
-use std::fs::File;
+use clap::{crate_version, App, Arg};
 use std::io::{stdin, stdout, BufReader, Read, Stdout, Write};
+use std::{fs::File, path::Path};
+use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "tac";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
+static USAGE: &str = "[OPTION]... [FILE]...";
+static SUMMARY: &str = "Write each file to standard output, last line first.";
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
-
-    let mut opts = getopts::Options::new();
-
-    opts.optflag(
-        "b",
-        "before",
-        "attach the separator before instead of after",
-    );
-    opts.optflag(
-        "r",
-        "regex",
-        "interpret the sequence as a regular expression (NOT IMPLEMENTED)",
-    );
-    opts.optopt(
-        "s",
-        "separator",
-        "use STRING as the separator instead of newline",
-        "STRING",
-    );
-    opts.optflag("h", "help", "display this help and exit");
-    opts.optflag("V", "version", "output version information and exit");
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => crash!(1, "{}", f),
-    };
-    if matches.opt_present("help") {
-        let msg = format!(
-            "{0} {1}
-
-Usage:
-  {0} [OPTION]... [FILE]...
-
-Write each file to standard output, last line first.",
-            NAME, VERSION
-        );
-
-        print!("{}", opts.usage(&msg));
-    } else if matches.opt_present("version") {
-        println!("{} {}", NAME, VERSION);
-    } else {
-        let before = matches.opt_present("b");
-        let regex = matches.opt_present("r");
-        let separator = match matches.opt_str("s") {
-            Some(m) => {
-                if m.is_empty() {
-                    crash!(1, "separator cannot be empty")
-                } else {
-                    m
-                }
-            }
-            None => "\n".to_owned(),
-        };
-        let files = if matches.free.is_empty() {
-            vec!["-".to_owned()]
-        } else {
-            matches.free
-        };
-        tac(files, before, regex, &separator[..]);
-    }
-
-    0
+mod options {
+    pub static BEFORE: &str = "before";
+    pub static REGEX: &str = "regex";
+    pub static SEPARATOR: &str = "separator";
+    pub static FILE: &str = "file";
 }
 
-fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) {
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
+
+    let matches = uu_app().get_matches_from(args);
+
+    let before = matches.is_present(options::BEFORE);
+    let regex = matches.is_present(options::REGEX);
+    let separator = match matches.value_of(options::SEPARATOR) {
+        Some(m) => {
+            if m.is_empty() {
+                crash!(1, "separator cannot be empty")
+            } else {
+                m.to_owned()
+            }
+        }
+        None => "\n".to_owned(),
+    };
+
+    let files: Vec<String> = match matches.values_of(options::FILE) {
+        Some(v) => v.map(|v| v.to_owned()).collect(),
+        None => vec!["-".to_owned()],
+    };
+
+    tac(files, before, regex, &separator[..])
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .name(NAME)
+        .version(crate_version!())
+        .usage(USAGE)
+        .about(SUMMARY)
+        .arg(
+            Arg::with_name(options::BEFORE)
+                .short("b")
+                .long(options::BEFORE)
+                .help("attach the separator before instead of after")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name(options::REGEX)
+                .short("r")
+                .long(options::REGEX)
+                .help("interpret the sequence as a regular expression (NOT IMPLEMENTED)")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name(options::SEPARATOR)
+                .short("s")
+                .long(options::SEPARATOR)
+                .help("use STRING as the separator instead of newline")
+                .takes_value(true),
+        )
+        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
+}
+
+fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) -> i32 {
+    let mut exit_code = 0;
     let mut out = stdout();
     let sbytes = separator.as_bytes();
     let slen = sbytes.len();
@@ -91,10 +94,24 @@ fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) {
         let mut file = BufReader::new(if filename == "-" {
             Box::new(stdin()) as Box<dyn Read>
         } else {
-            match File::open(filename) {
+            let path = Path::new(filename);
+            if path.is_dir() || path.metadata().is_err() {
+                if path.is_dir() {
+                    show_error!("dir: read error: Invalid argument");
+                } else {
+                    show_error!(
+                        "failed to open '{}' for reading: No such file or directory",
+                        filename
+                    );
+                }
+                exit_code = 1;
+                continue;
+            }
+            match File::open(path) {
                 Ok(f) => Box::new(f) as Box<dyn Read>,
                 Err(e) => {
-                    show_warning!("failed to open '{}' for reading: {}", filename, e);
+                    show_error!("failed to open '{}' for reading: {}", filename, e);
+                    exit_code = 1;
                     continue;
                 }
             }
@@ -102,7 +119,8 @@ fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) {
 
         let mut data = Vec::new();
         if let Err(e) = file.read_to_end(&mut data) {
-            show_warning!("failed to read '{}': {}", filename, e);
+            show_error!("failed to read '{}': {}", filename, e);
+            exit_code = 1;
             continue;
         };
 
@@ -141,6 +159,8 @@ fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) {
         }
         show_line(&mut out, sbytes, &data[0..prev], before);
     }
+
+    exit_code
 }
 
 fn show_line(out: &mut Stdout, sep: &[u8], dat: &[u8], before: bool) {

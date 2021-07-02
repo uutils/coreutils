@@ -18,6 +18,8 @@
 
 // spell-checker:ignore (ToDO) paren
 
+use num_bigint::BigInt;
+
 #[derive(Debug, Clone)]
 pub enum Token {
     Value {
@@ -51,24 +53,19 @@ impl Token {
     }
 
     fn is_infix_plus(&self) -> bool {
-        match *self {
-            Token::InfixOp { ref value, .. } => value == "+",
+        match self {
+            Token::InfixOp { value, .. } => value == "+",
             _ => false,
         }
     }
     fn is_a_number(&self) -> bool {
-        match *self {
-            Token::Value { ref value, .. } => value.parse::<i64>().is_ok(),
+        match self {
+            Token::Value { value, .. } => value.parse::<BigInt>().is_ok(),
             _ => false,
         }
     }
     fn is_a_close_paren(&self) -> bool {
-        #[allow(clippy::match_like_matches_macro)]
-        // `matches!(...)` macro not stabilized until rust v1.42
-        match *self {
-            Token::ParClose => true,
-            _ => false,
-        }
+        matches!(*self, Token::ParClose)
     }
 }
 
@@ -81,27 +78,27 @@ pub fn strings_to_tokens(strings: &[String]) -> Result<Vec<(usize, Token)>, Stri
             "(" => Token::ParOpen,
             ")" => Token::ParClose,
 
-            "^" => Token::new_infix_op(&s, false, 7),
+            "^" => Token::new_infix_op(s, false, 7),
 
-            ":" => Token::new_infix_op(&s, true, 6),
+            ":" => Token::new_infix_op(s, true, 6),
 
-            "*" => Token::new_infix_op(&s, true, 5),
-            "/" => Token::new_infix_op(&s, true, 5),
-            "%" => Token::new_infix_op(&s, true, 5),
+            "*" => Token::new_infix_op(s, true, 5),
+            "/" => Token::new_infix_op(s, true, 5),
+            "%" => Token::new_infix_op(s, true, 5),
 
-            "+" => Token::new_infix_op(&s, true, 4),
-            "-" => Token::new_infix_op(&s, true, 4),
+            "+" => Token::new_infix_op(s, true, 4),
+            "-" => Token::new_infix_op(s, true, 4),
 
-            "=" => Token::new_infix_op(&s, true, 3),
-            "!=" => Token::new_infix_op(&s, true, 3),
-            "<" => Token::new_infix_op(&s, true, 3),
-            ">" => Token::new_infix_op(&s, true, 3),
-            "<=" => Token::new_infix_op(&s, true, 3),
-            ">=" => Token::new_infix_op(&s, true, 3),
+            "=" => Token::new_infix_op(s, true, 3),
+            "!=" => Token::new_infix_op(s, true, 3),
+            "<" => Token::new_infix_op(s, true, 3),
+            ">" => Token::new_infix_op(s, true, 3),
+            "<=" => Token::new_infix_op(s, true, 3),
+            ">=" => Token::new_infix_op(s, true, 3),
 
-            "&" => Token::new_infix_op(&s, true, 2),
+            "&" => Token::new_infix_op(s, true, 2),
 
-            "|" => Token::new_infix_op(&s, true, 1),
+            "|" => Token::new_infix_op(s, true, 1),
 
             "match" => Token::PrefixOp {
                 arity: 2,
@@ -120,9 +117,9 @@ pub fn strings_to_tokens(strings: &[String]) -> Result<Vec<(usize, Token)>, Stri
                 value: s.clone(),
             },
 
-            _ => Token::new_value(&s),
+            _ => Token::new_value(s),
         };
-        push_token_if_not_escaped(&mut tokens_acc, tok_idx, token_if_not_escaped, &s);
+        push_token_if_not_escaped(&mut tokens_acc, tok_idx, token_if_not_escaped, s);
         tok_idx += 1;
     }
     maybe_dump_tokens_acc(&tokens_acc);
@@ -147,7 +144,7 @@ fn push_token_if_not_escaped(acc: &mut Vec<(usize, Token)>, tok_idx: usize, toke
     // Smells heuristics... :(
     let prev_is_plus = match acc.last() {
         None => false,
-        Some(ref t) => t.1.is_infix_plus(),
+        Some(t) => t.1.is_infix_plus(),
     };
     let should_use_as_escaped = if prev_is_plus && acc.len() >= 2 {
         let pre_prev = &acc[acc.len() - 2];

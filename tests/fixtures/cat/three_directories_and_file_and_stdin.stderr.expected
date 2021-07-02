@@ -1,0 +1,5 @@
+cat: test_directory3/test_directory4: Is a directory
+cat: file_which_does_not_exist.txt: No such file or directory (os error 2)
+cat: test_directory3/test_directory5: Is a directory
+cat: test_directory3/../test_directory3/test_directory5: Is a directory
+cat: test_directory3: Is a directory

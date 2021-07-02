@@ -10,13 +10,11 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
-use std::fs;
-use std::path::PathBuf;
+use clap::{crate_version, App, Arg};
+use std::path::{Path, PathBuf};
 use uucore::fs::{canonicalize, CanonicalizeMode};
 
 static ABOUT: &str = "print the resolved path";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 static OPT_QUIET: &str = "quiet";
 static OPT_STRIP: &str = "strip";
@@ -31,10 +29,35 @@ fn get_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
-        .version(VERSION)
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+
+    /*  the list of files */
+
+    let paths: Vec<PathBuf> = matches
+        .values_of(ARG_FILES)
+        .unwrap()
+        .map(PathBuf::from)
+        .collect();
+
+    let strip = matches.is_present(OPT_STRIP);
+    let zero = matches.is_present(OPT_ZERO);
+    let quiet = matches.is_present(OPT_QUIET);
+    let mut retcode = 0;
+    for path in &paths {
+        if let Err(e) = resolve_path(path, strip, zero) {
+            if !quiet {
+                show_error!("{}: {}", e, path.display());
+            }
+            retcode = 1
+        };
+    }
+    retcode
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
         .about(ABOUT)
-        .usage(&usage[..])
         .arg(
             Arg::with_name(OPT_QUIET)
                 .short("q")
@@ -60,79 +83,27 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .required(true)
                 .min_values(1),
         )
-        .get_matches_from(args);
-
-    /*  the list of files */
-
-    let paths: Vec<PathBuf> = matches
-        .values_of(ARG_FILES)
-        .unwrap()
-        .map(PathBuf::from)
-        .collect();
-
-    let strip = matches.is_present(OPT_STRIP);
-    let zero = matches.is_present(OPT_ZERO);
-    let quiet = matches.is_present(OPT_QUIET);
-    let mut retcode = 0;
-    for path in &paths {
-        if !resolve_path(path, strip, zero, quiet) {
-            retcode = 1
-        };
-    }
-    retcode
 }
 
-fn resolve_path(p: &PathBuf, strip: bool, zero: bool, quiet: bool) -> bool {
-    let abs = canonicalize(p, CanonicalizeMode::Normal).unwrap();
-
-    if strip {
-        if zero {
-            print!("{}\0", p.display());
-        } else {
-            println!("{}", p.display())
-        }
-        return true;
-    }
-
-    let mut result = PathBuf::new();
-    let mut links_left = 256;
-
-    for part in abs.components() {
-        result.push(part.as_os_str());
-        loop {
-            if links_left == 0 {
-                if !quiet {
-                    show_error!("Too many symbolic links: {}", p.display())
-                };
-                return false;
-            }
-            match fs::metadata(result.as_path()) {
-                Err(_) => break,
-                Ok(ref m) if !m.file_type().is_symlink() => break,
-                Ok(_) => {
-                    links_left -= 1;
-                    match fs::read_link(result.as_path()) {
-                        Ok(x) => {
-                            result.pop();
-                            result.push(x.as_path());
-                        }
-                        _ => {
-                            if !quiet {
-                                show_error!("Invalid path: {}", p.display())
-                            };
-                            return false;
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    if zero {
-        print!("{}\0", result.display());
+/// Resolve a path to an absolute form and print it.
+///
+/// If `strip` is `true`, then this function does not attempt to resolve
+/// symbolic links in the path. If `zero` is `true`, then this function
+/// prints the path followed by the null byte (`'\0'`) instead of a
+/// newline character (`'\n'`).
+///
+/// # Errors
+///
+/// This function returns an error if there is a problem resolving
+/// symbolic links.
+fn resolve_path(p: &Path, strip: bool, zero: bool) -> std::io::Result<()> {
+    let mode = if strip {
+        CanonicalizeMode::None
     } else {
-        println!("{}", result.display());
-    }
-
-    true
+        CanonicalizeMode::Normal
+    };
+    let abs = canonicalize(p, mode)?;
+    let line_ending = if zero { '\0' } else { '\n' };
+    print!("{}{}", abs.display(), line_ending);
+    Ok(())
 }

@@ -10,62 +10,43 @@
 #[macro_use]
 extern crate uucore;
 
+use clap::{crate_version, App, Arg};
 use std::env;
 use std::path::{Path, PathBuf};
 use uucore::fs::{canonicalize, CanonicalizeMode};
+use uucore::InvalidEncodingHandling;
 
-static NAME: &str = "relpath";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
+static ABOUT: &str = "Convert TO destination to the relative path from the FROM dir.
+If FROM path is omitted, current working dir will be used.";
+
+mod options {
+    pub const DIR: &str = "DIR";
+    pub const TO: &str = "TO";
+    pub const FROM: &str = "FROM";
+}
+
+fn get_usage() -> String {
+    format!("{} [-d DIR] TO [FROM]", executable!())
+}
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
+    let usage = get_usage();
 
-    let mut opts = getopts::Options::new();
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
-    opts.optflag("h", "help", "Show help and exit");
-    opts.optflag("V", "version", "Show version and exit");
-    opts.optopt(
-        "d",
-        "",
-        "If any of FROM and TO is not subpath of DIR, output absolute path instead of relative",
-        "DIR",
-    );
-
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => {
-            show_error!("{}", f);
-            show_usage(&opts);
-            return 1;
-        }
-    };
-
-    if matches.opt_present("V") {
-        version();
-        return 0;
-    }
-    if matches.opt_present("h") {
-        show_usage(&opts);
-        return 0;
-    }
-
-    if matches.free.is_empty() {
-        show_error!("Missing operand: TO");
-        println!("Try `{} --help` for more information.", NAME);
-        return 1;
-    }
-
-    let to = Path::new(&matches.free[0]);
-    let from = if matches.free.len() > 1 {
-        Path::new(&matches.free[1]).to_path_buf()
-    } else {
-        env::current_dir().unwrap()
+    let to = Path::new(matches.value_of(options::TO).unwrap()).to_path_buf(); // required
+    let from = match matches.value_of(options::FROM) {
+        Some(p) => Path::new(p).to_path_buf(),
+        None => env::current_dir().unwrap(),
     };
     let absto = canonicalize(to, CanonicalizeMode::Normal).unwrap();
     let absfrom = canonicalize(from, CanonicalizeMode::Normal).unwrap();
 
-    if matches.opt_present("d") {
-        let base = Path::new(&matches.opt_str("d").unwrap()).to_path_buf();
+    if matches.is_present(options::DIR) {
+        let base = Path::new(&matches.value_of(options::DIR).unwrap()).to_path_buf();
         let absbase = canonicalize(base, CanonicalizeMode::Normal).unwrap();
         if !absto.as_path().starts_with(absbase.as_path())
             || !absfrom.as_path().starts_with(absbase.as_path())
@@ -100,23 +81,23 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     0
 }
 
-fn version() {
-    println!("{} {}", NAME, VERSION)
-}
-
-fn show_usage(opts: &getopts::Options) {
-    version();
-    println!();
-    println!("Usage:");
-    println!("  {} [-d DIR] TO [FROM]", NAME);
-    println!("  {} -V|--version", NAME);
-    println!("  {} -h|--help", NAME);
-    println!();
-    print!(
-        "{}",
-        opts.usage(
-            "Convert TO destination to the relative path from the FROM dir.\n\
-             If FROM path is omitted, current working dir will be used."
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
+        .arg(
+            Arg::with_name(options::DIR)
+                .short("d")
+                .takes_value(true)
+                .help("If any of FROM and TO is not subpath of DIR, output absolute path instead of relative"),
         )
-    );
+        .arg(
+            Arg::with_name(options::TO)
+                .required(true)
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name(options::FROM)
+                .takes_value(true),
+        )
 }

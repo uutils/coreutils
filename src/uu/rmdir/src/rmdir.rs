@@ -5,20 +5,26 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
+// spell-checker:ignore (ToDO) ENOTDIR
+
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::fs;
 use std::path::Path;
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Remove the DIRECTORY(ies), if they are empty.";
 static OPT_IGNORE_FAIL_NON_EMPTY: &str = "ignore-fail-on-non-empty";
 static OPT_PARENTS: &str = "parents";
 static OPT_VERBOSE: &str = "verbose";
 
 static ARG_DIRS: &str = "dirs";
+
+#[cfg(unix)]
+static ENOTDIR: i32 = 20;
+#[cfg(windows)]
+static ENOTDIR: i32 = 267;
 
 fn get_usage() -> String {
     format!("{0} [OPTION]... DIRECTORY...", executable!())
@@ -27,10 +33,29 @@ fn get_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
-        .version(VERSION)
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+
+    let dirs: Vec<String> = matches
+        .values_of(ARG_DIRS)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
+
+    let ignore = matches.is_present(OPT_IGNORE_FAIL_NON_EMPTY);
+    let parents = matches.is_present(OPT_PARENTS);
+    let verbose = matches.is_present(OPT_VERBOSE);
+
+    match remove(dirs, ignore, parents, verbose) {
+        Ok(()) => ( /* pass */ ),
+        Err(e) => return e,
+    }
+
+    0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
         .about(ABOUT)
-        .usage(&usage[..])
         .arg(
             Arg::with_name(OPT_IGNORE_FAIL_NON_EMPTY)
                 .long(OPT_IGNORE_FAIL_NON_EMPTY)
@@ -58,23 +83,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .min_values(1)
                 .required(true),
         )
-        .get_matches_from(args);
-
-    let dirs: Vec<String> = matches
-        .values_of(ARG_DIRS)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_default();
-
-    let ignore = matches.is_present(OPT_IGNORE_FAIL_NON_EMPTY);
-    let parents = matches.is_present(OPT_PARENTS);
-    let verbose = matches.is_present(OPT_VERBOSE);
-
-    match remove(dirs, ignore, parents, verbose) {
-        Ok(()) => ( /* pass */ ),
-        Err(e) => return e,
-    }
-
-    0
 }
 
 fn remove(dirs: Vec<String>, ignore: bool, parents: bool, verbose: bool) -> Result<(), i32> {
@@ -82,7 +90,7 @@ fn remove(dirs: Vec<String>, ignore: bool, parents: bool, verbose: bool) -> Resu
 
     for dir in &dirs {
         let path = Path::new(&dir[..]);
-        r = remove_dir(&path, ignore, verbose).and(r);
+        r = remove_dir(path, ignore, verbose).and(r);
         if parents {
             let mut p = path;
             while let Some(new_p) = p.parent() {
@@ -103,13 +111,14 @@ fn remove(dirs: Vec<String>, ignore: bool, parents: bool, verbose: bool) -> Resu
 }
 
 fn remove_dir(path: &Path, ignore: bool, verbose: bool) -> Result<(), i32> {
-    let mut read_dir = match fs::read_dir(path) {
-        Ok(m) => m,
-        Err(e) => {
+    let mut read_dir = fs::read_dir(path).map_err(|e| {
+        if e.raw_os_error() == Some(ENOTDIR) {
+            show_error!("failed to remove '{}': Not a directory", path.display());
+        } else {
             show_error!("reading directory '{}': {}", path.display(), e);
-            return Err(1);
         }
-    };
+        1
+    })?;
 
     let mut r = Ok(());
 

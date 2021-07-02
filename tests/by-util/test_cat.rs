@@ -1,42 +1,249 @@
-#[cfg(unix)]
-extern crate unix_socket;
-
 use crate::common::util::*;
+#[cfg(unix)]
+use std::fs::OpenOptions;
+#[cfg(unix)]
+use std::io::Read;
+
+#[test]
+fn test_output_simple() {
+    new_ucmd!()
+        .args(&["alpha.txt"])
+        .succeeds()
+        .stdout_only("abcde\nfghij\nklmno\npqrst\nuvwxyz\n"); // spell-checker:disable-line
+}
+
+#[test]
+fn test_no_options() {
+    // spell-checker:disable-next-line
+    for fixture in &["empty.txt", "alpha.txt", "nonewline.txt"] {
+        // Give fixture through command line file argument
+        new_ucmd!()
+            .args(&[fixture])
+            .succeeds()
+            .stdout_is_fixture(fixture);
+        // Give fixture through stdin
+        new_ucmd!()
+            .pipe_in_fixture(fixture)
+            .succeeds()
+            .stdout_is_fixture(fixture);
+    }
+}
+
+#[test]
+#[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
+fn test_no_options_big_input() {
+    for &n in &[
+        0,
+        1,
+        42,
+        16 * 1024 - 7,
+        16 * 1024 - 1,
+        16 * 1024,
+        16 * 1024 + 1,
+        16 * 1024 + 3,
+        32 * 1024,
+        64 * 1024,
+        80 * 1024,
+        96 * 1024,
+        112 * 1024,
+        128 * 1024,
+    ] {
+        let data = vec_of_size(n);
+        let data2 = data.clone();
+        assert_eq!(data.len(), data2.len());
+        new_ucmd!().pipe_in(data).succeeds().stdout_is_bytes(&data2);
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_fifo_symlink() {
+    use std::io::Write;
+    use std::thread;
+
+    let s = TestScenario::new(util_name!());
+    s.fixtures.mkdir("dir");
+    s.fixtures.mkfifo("dir/pipe");
+    assert!(s.fixtures.is_fifo("dir/pipe"));
+
+    // Make cat read the pipe through a symlink
+    s.fixtures.symlink_file("dir/pipe", "sympipe"); // spell-checker:disable-line
+    let proc = s.ucmd().args(&["sympipe"]).run_no_wait(); // spell-checker:disable-line
+
+    let data = vec_of_size(128 * 1024);
+    let data2 = data.clone();
+
+    let pipe_path = s.fixtures.plus("dir/pipe");
+    let thread = thread::spawn(move || {
+        let mut pipe = OpenOptions::new()
+            .write(true)
+            .create(false)
+            .open(pipe_path)
+            .unwrap();
+        pipe.write_all(&data).unwrap();
+    });
+
+    let output = proc.wait_with_output().unwrap();
+    assert_eq!(&output.stdout, &data2);
+    thread.join().unwrap();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_piped_to_regular_file() {
+    use std::fs::read_to_string;
+
+    for &append in &[true, false] {
+        let s = TestScenario::new(util_name!());
+        let file_path = s.fixtures.plus("file.txt");
+
+        {
+            let file = OpenOptions::new()
+                .create_new(true)
+                .write(true)
+                .append(append)
+                .open(&file_path)
+                .unwrap();
+
+            s.ucmd()
+                .set_stdout(file)
+                .pipe_in_fixture("alpha.txt")
+                .succeeds();
+        }
+        let contents = read_to_string(&file_path).unwrap();
+        assert_eq!(contents, "abcde\nfghij\nklmno\npqrst\nuvwxyz\n"); // spell-checker:disable-line
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_piped_to_dev_null() {
+    for &append in &[true, false] {
+        let s = TestScenario::new(util_name!());
+        {
+            let dev_null = OpenOptions::new()
+                .write(true)
+                .append(append)
+                .open("/dev/null")
+                .unwrap();
+
+            s.ucmd()
+                .set_stdout(dev_null)
+                .pipe_in_fixture("alpha.txt")
+                .succeeds();
+        }
+    }
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+fn test_piped_to_dev_full() {
+    for &append in &[true, false] {
+        let s = TestScenario::new(util_name!());
+        {
+            let dev_full = OpenOptions::new()
+                .write(true)
+                .append(append)
+                .open("/dev/full")
+                .unwrap();
+
+            s.ucmd()
+                .set_stdout(dev_full)
+                .pipe_in_fixture("alpha.txt")
+                .fails()
+                .stderr_contains(&"No space left on device".to_owned());
+        }
+    }
+}
+
+#[test]
+fn test_directory() {
+    let s = TestScenario::new(util_name!());
+    s.fixtures.mkdir("test_directory");
+    s.ucmd()
+        .args(&["test_directory"])
+        .fails()
+        .stderr_is("cat: test_directory: Is a directory");
+}
+
+#[test]
+fn test_directory_and_file() {
+    let s = TestScenario::new(util_name!());
+    s.fixtures.mkdir("test_directory2");
+    // spell-checker:disable-next-line
+    for fixture in &["empty.txt", "alpha.txt", "nonewline.txt"] {
+        s.ucmd()
+            .args(&["test_directory2", fixture])
+            .fails()
+            .stderr_is("cat: test_directory2: Is a directory")
+            .stdout_is_fixture(fixture);
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_three_directories_and_file_and_stdin() {
+    let s = TestScenario::new(util_name!());
+    s.fixtures.mkdir("test_directory3");
+    s.fixtures.mkdir("test_directory3/test_directory4");
+    s.fixtures.mkdir("test_directory3/test_directory5");
+    s.ucmd()
+        .args(&[
+            "test_directory3/test_directory4",
+            "alpha.txt",
+            "-",
+            "file_which_does_not_exist.txt",
+            "nonewline.txt", // spell-checker:disable-line
+            "test_directory3/test_directory5",
+            "test_directory3/../test_directory3/test_directory5",
+            "test_directory3",
+        ])
+        .pipe_in("stdout bytes")
+        .fails()
+        .stderr_is_fixture("three_directories_and_file_and_stdin.stderr.expected")
+        .stdout_is(
+            "abcde\nfghij\nklmno\npqrst\nuvwxyz\nstdout bytestext without a trailing newline", // spell-checker:disable-line
+        );
+}
 
 #[test]
 fn test_output_multi_files_print_all_chars() {
+    // spell-checker:disable
     new_ucmd!()
         .args(&["alpha.txt", "256.txt", "-A", "-n"])
         .succeeds()
         .stdout_only(
             "     1\tabcde$\n     2\tfghij$\n     3\tklmno$\n     4\tpqrst$\n     \
-                5\tuvwxyz$\n     6\t^@^A^B^C^D^E^F^G^H^I$\n     \
-                7\t^K^L^M^N^O^P^Q^R^S^T^U^V^W^X^Y^Z^[^\\^]^^^_ \
-                !\"#$%&\'()*+,-./0123456789:;\
-                <=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~^?M-^@M-^AM-^\
-                BM-^CM-^DM-^EM-^FM-^GM-^HM-^IM-^JM-^KM-^LM-^MM-^NM-^OM-^PM-^QM-^RM-^SM-^TM-^UM-^V\
-                M-^WM-^XM-^YM-^ZM-^[M-^\\M-^]M-^^M-^_M- \
-                M-!M-\"M-#M-$M-%M-&M-\'M-(M-)M-*M-+M-,M--M-.M-/M-0M-1M-2M-3M-4M-5M-6M-7M-8M-9M-:\
-                M-;M-<M-=M->M-?M-@M-AM-BM-CM-DM-EM-FM-GM-HM-IM-JM-KM-LM-MM-NM-OM-PM-QM-RM-SM-TM-U\
-                M-VM-WM-XM-YM-ZM-[M-\\M-]M-^M-_M-`M-aM-bM-cM-dM-eM-fM-gM-hM-iM-jM-kM-lM-mM-nM-oM-\
-                pM-qM-rM-sM-tM-uM-vM-wM-xM-yM-zM-{M-|M-}M-~M-^?",
+             5\tuvwxyz$\n     6\t^@^A^B^C^D^E^F^G^H^I$\n     \
+             7\t^K^L^M^N^O^P^Q^R^S^T^U^V^W^X^Y^Z^[^\\^]^^^_ \
+             !\"#$%&\'()*+,-./0123456789:;\
+             <=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~^?M-^@M-^AM-^\
+             BM-^CM-^DM-^EM-^FM-^GM-^HM-^IM-^JM-^KM-^LM-^MM-^NM-^OM-^PM-^QM-^RM-^SM-^TM-^UM-^V\
+             M-^WM-^XM-^YM-^ZM-^[M-^\\M-^]M-^^M-^_M- \
+             M-!M-\"M-#M-$M-%M-&M-\'M-(M-)M-*M-+M-,M--M-.M-/M-0M-1M-2M-3M-4M-5M-6M-7M-8M-9M-:\
+             M-;M-<M-=M->M-?M-@M-AM-BM-CM-DM-EM-FM-GM-HM-IM-JM-KM-LM-MM-NM-OM-PM-QM-RM-SM-TM-U\
+             M-VM-WM-XM-YM-ZM-[M-\\M-]M-^M-_M-`M-aM-bM-cM-dM-eM-fM-gM-hM-iM-jM-kM-lM-mM-nM-oM-\
+             pM-qM-rM-sM-tM-uM-vM-wM-xM-yM-zM-{M-|M-}M-~M-^?",
         );
+    // spell-checker:enable
 }
 
 #[test]
 fn test_numbered_lines_no_trailing_newline() {
+    // spell-checker:disable
     new_ucmd!()
         .args(&["nonewline.txt", "alpha.txt", "-n"])
         .succeeds()
         .stdout_only(
             "     1\ttext without a trailing newlineabcde\n     2\tfghij\n     \
-                3\tklmno\n     4\tpqrst\n     5\tuvwxyz\n",
+             3\tklmno\n     4\tpqrst\n     5\tuvwxyz\n",
         );
+    // spell-checker:enable
 }
 
 #[test]
 fn test_stdin_show_nonprinting() {
-    for same_param in vec!["-v", "--show-nonprinting"] {
+    for same_param in &["-v", "--show-nonprinting"] {
         new_ucmd!()
             .args(&[same_param])
             .pipe_in("\t\0\n")
@@ -47,7 +254,7 @@ fn test_stdin_show_nonprinting() {
 
 #[test]
 fn test_stdin_show_tabs() {
-    for same_param in vec!["-T", "--show-tabs"] {
+    for same_param in &["-T", "--show-tabs"] {
         new_ucmd!()
             .args(&[same_param])
             .pipe_in("\t\0\n")
@@ -58,7 +265,7 @@ fn test_stdin_show_tabs() {
 
 #[test]
 fn test_stdin_show_ends() {
-    for same_param in vec!["-E", "--show-ends"] {
+    for &same_param in &["-E", "--show-ends"] {
         new_ucmd!()
             .args(&[same_param, "-"])
             .pipe_in("\t\0\n\t")
@@ -69,7 +276,7 @@ fn test_stdin_show_ends() {
 
 #[test]
 fn test_stdin_show_all() {
-    for same_param in vec!["-A", "--show-all"] {
+    for same_param in &["-A", "--show-all"] {
         new_ucmd!()
             .args(&[same_param])
             .pipe_in("\t\0\n")
@@ -98,7 +305,7 @@ fn test_stdin_nonprinting_and_tabs() {
 
 #[test]
 fn test_stdin_squeeze_blank() {
-    for same_param in vec!["-s", "--squeeze-blank"] {
+    for same_param in &["-s", "--squeeze-blank"] {
         new_ucmd!()
             .arg(same_param)
             .pipe_in("\n\na\n\n\n\n\nb\n\n\n")
@@ -109,7 +316,8 @@ fn test_stdin_squeeze_blank() {
 
 #[test]
 fn test_stdin_number_non_blank() {
-    for same_param in vec!["-b", "--number-nonblank"] {
+    // spell-checker:disable-next-line
+    for same_param in &["-b", "--number-nonblank"] {
         new_ucmd!()
             .arg(same_param)
             .arg("-")
@@ -121,7 +329,8 @@ fn test_stdin_number_non_blank() {
 
 #[test]
 fn test_non_blank_overrides_number() {
-    for same_param in vec!["-b", "--number-nonblank"] {
+    // spell-checker:disable-next-line
+    for &same_param in &["-b", "--number-nonblank"] {
         new_ucmd!()
             .args(&[same_param, "-"])
             .pipe_in("\na\nb\n\n\nc")
@@ -132,7 +341,7 @@ fn test_non_blank_overrides_number() {
 
 #[test]
 fn test_squeeze_blank_before_numbering() {
-    for same_param in vec!["-s", "--squeeze-blank"] {
+    for &same_param in &["-s", "--squeeze-blank"] {
         new_ucmd!()
             .args(&[same_param, "-n", "-"])
             .pipe_in("a\n\n\nb")
@@ -141,29 +350,96 @@ fn test_squeeze_blank_before_numbering() {
     }
 }
 
+/// This tests reading from Unix character devices
 #[test]
-#[cfg(foo)]
-fn test_domain_socket() {
-    use self::tempdir::TempDir;
-    use self::unix_socket::UnixListener;
-    use std::io::prelude::*;
-    use std::thread;
+#[cfg(unix)]
+fn test_dev_random() {
+    let mut buf = [0; 2048];
+    #[cfg(target_os = "linux")]
+    const DEV_RANDOM: &str = "/dev/urandom";
 
-    let dir = TempDir::new("unix_socket").expect("failed to create dir");
+    #[cfg(not(target_os = "linux"))]
+    const DEV_RANDOM: &str = "/dev/random";
+
+    let mut proc = new_ucmd!().args(&[DEV_RANDOM]).run_no_wait();
+    let mut proc_stdout = proc.stdout.take().unwrap();
+    proc_stdout.read_exact(&mut buf).unwrap();
+
+    let num_zeroes = buf.iter().fold(0, |mut acc, &n| {
+        if n == 0 {
+            acc += 1;
+        }
+        acc
+    });
+    // The probability of more than 512 zero bytes is essentially zero if the
+    // output is truly random.
+    assert!(num_zeroes < 512);
+    proc.kill().unwrap();
+}
+
+/// Reading from /dev/full should return an infinite amount of zero bytes.
+/// Wikipedia says there is support on Linux, FreeBSD, and NetBSD.
+#[test]
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+fn test_dev_full() {
+    let mut buf = [0; 2048];
+    let mut proc = new_ucmd!().args(&["/dev/full"]).run_no_wait();
+    let mut proc_stdout = proc.stdout.take().unwrap();
+    let expected = [0; 2048];
+    proc_stdout.read_exact(&mut buf).unwrap();
+    assert_eq!(&buf[..], &expected[..]);
+    proc.kill().unwrap();
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+fn test_dev_full_show_all() {
+    let mut buf = [0; 2048];
+    let mut proc = new_ucmd!().args(&["-A", "/dev/full"]).run_no_wait();
+    let mut proc_stdout = proc.stdout.take().unwrap();
+    proc_stdout.read_exact(&mut buf).unwrap();
+
+    let expected: Vec<u8> = (0..buf.len())
+        .map(|n| if n & 1 == 0 { b'^' } else { b'@' })
+        .collect();
+
+    assert_eq!(&buf[..], &expected[..]);
+    proc.kill().unwrap();
+}
+
+#[test]
+#[cfg(unix)]
+#[ignore]
+fn test_domain_socket() {
+    use std::io::prelude::*;
+    use std::sync::{Arc, Barrier};
+    use std::thread;
+    use unix_socket::UnixListener;
+
+    let dir = tempfile::Builder::new()
+        .prefix("unix_socket")
+        .tempdir()
+        .expect("failed to create dir");
     let socket_path = dir.path().join("sock");
     let listener = UnixListener::bind(&socket_path).expect("failed to create socket");
 
+    // use a barrier to ensure we don't run cat before the listener is setup
+    let barrier = Arc::new(Barrier::new(2));
+    let barrier2 = Arc::clone(&barrier);
+
     let thread = thread::spawn(move || {
         let mut stream = listener.accept().expect("failed to accept connection").0;
+        barrier2.wait();
         stream
             .write_all(b"a\tb")
             .expect("failed to write test data");
     });
 
-    new_ucmd!()
-        .args(&[socket_path])
-        .succeeds()
-        .stdout_only("a\tb");
+    let child = new_ucmd!().args(&[socket_path]).run_no_wait();
+    barrier.wait();
+    let stdout = &child.wait_with_output().unwrap().stdout;
+    let output = String::from_utf8_lossy(stdout);
+    assert_eq!("a\tb", output);
 
     thread.join().unwrap();
 }

@@ -5,18 +5,35 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) fpath
-
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg, ArgMatches};
+mod count_bytes;
+mod countable;
+mod word_count;
+use count_bytes::count_bytes_fast;
+use countable::WordCountable;
+use word_count::{TitledWordCount, WordCount};
 
-use std::fs::File;
-use std::io::{stdin, BufRead, BufReader, Read};
+use clap::{crate_version, App, Arg, ArgMatches};
+use thiserror::Error;
+
+use std::fs::{self, File};
+use std::io::{self, ErrorKind, Write};
 use std::path::Path;
-use std::result::Result as StdResult;
-use std::str::from_utf8;
+
+/// The minimum character width for formatting counts when reading from stdin.
+const MINIMUM_WIDTH: usize = 7;
+
+#[derive(Error, Debug)]
+pub enum WcError {
+    #[error("{0}")]
+    Io(#[from] io::Error),
+    #[error("Expected a file, found directory {0}")]
+    IsDirectory(String),
+}
+
+type WcResult<T> = Result<T, WcError>;
 
 struct Settings {
     show_bytes: bool,
@@ -53,20 +70,20 @@ impl Settings {
             show_max_line_length: false,
         }
     }
-}
 
-struct Result {
-    title: String,
-    bytes: usize,
-    chars: usize,
-    lines: usize,
-    words: usize,
-    max_line_length: usize,
+    fn number_enabled(&self) -> u32 {
+        let mut result = 0;
+        result += self.show_bytes as u32;
+        result += self.show_chars as u32;
+        result += self.show_lines as u32;
+        result += self.show_max_line_length as u32;
+        result += self.show_words as u32;
+        result
+    }
 }
 
 static ABOUT: &str = "Display newline, word, and byte counts for each FILE, and a total line if
 more than one FILE is specified.";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub mod options {
     pub static BYTES: &str = "bytes";
@@ -86,13 +103,70 @@ fn get_usage() -> String {
     )
 }
 
+enum StdinKind {
+    /// Stdin specified on command-line with "-".
+    Explicit,
+
+    /// Stdin implicitly specified on command-line by not passing any positional argument.
+    Implicit,
+}
+
+/// Supported inputs.
+enum Input {
+    /// A regular file.
+    Path(String),
+
+    /// Standard input.
+    Stdin(StdinKind),
+}
+
+impl Input {
+    /// Converts input to title that appears in stats.
+    fn to_title(&self) -> Option<&str> {
+        match self {
+            Input::Path(path) => Some(path),
+            Input::Stdin(StdinKind::Explicit) => Some("-"),
+            Input::Stdin(StdinKind::Implicit) => None,
+        }
+    }
+}
+
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
-        .version(VERSION)
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+
+    let mut inputs: Vec<Input> = matches
+        .values_of(ARG_FILES)
+        .map(|v| {
+            v.map(|i| {
+                if i == "-" {
+                    Input::Stdin(StdinKind::Explicit)
+                } else {
+                    Input::Path(ToString::to_string(i))
+                }
+            })
+            .collect()
+        })
+        .unwrap_or_default();
+
+    if inputs.is_empty() {
+        inputs.push(Input::Stdin(StdinKind::Implicit));
+    }
+
+    let settings = Settings::new(&matches);
+
+    if wc(inputs, &settings).is_ok() {
+        0
+    } else {
+        1
+    }
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
         .about(ABOUT)
-        .usage(&usage[..])
         .arg(
             Arg::with_name(options::BYTES)
                 .short("c")
@@ -124,184 +198,276 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("print the word counts"),
         )
         .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true))
-        .get_matches_from(args);
-
-    let mut files: Vec<String> = matches
-        .values_of(ARG_FILES)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_default();
-
-    if files.is_empty() {
-        files.push("-".to_owned());
-    }
-
-    let settings = Settings::new(&matches);
-
-    match wc(files, &settings) {
-        Ok(()) => ( /* pass */ ),
-        Err(e) => return e,
-    }
-
-    0
 }
 
-const CR: u8 = b'\r';
-const LF: u8 = b'\n';
-const SPACE: u8 = b' ';
-const TAB: u8 = b'\t';
-const SYN: u8 = 0x16_u8;
-const FF: u8 = 0x0C_u8;
-
-#[inline(always)]
-fn is_word_separator(byte: u8) -> bool {
-    byte == SPACE || byte == TAB || byte == CR || byte == SYN || byte == FF
-}
-
-fn wc(files: Vec<String>, settings: &Settings) -> StdResult<(), i32> {
-    let mut total_line_count: usize = 0;
-    let mut total_word_count: usize = 0;
-    let mut total_char_count: usize = 0;
-    let mut total_byte_count: usize = 0;
-    let mut total_longest_line_length: usize = 0;
-
-    let mut results = vec![];
-    let mut max_width: usize = 0;
+fn word_count_from_reader<T: WordCountable>(
+    mut reader: T,
+    settings: &Settings,
+    path: &str,
+) -> WcResult<WordCount> {
+    let only_count_bytes = settings.show_bytes
+        && (!(settings.show_chars
+            || settings.show_lines
+            || settings.show_max_line_length
+            || settings.show_words));
+    if only_count_bytes {
+        return Ok(WordCount {
+            bytes: count_bytes_fast(&mut reader)?,
+            ..WordCount::default()
+        });
+    }
 
     // we do not need to decode the byte stream if we're only counting bytes/newlines
     let decode_chars = settings.show_chars || settings.show_words || settings.show_max_line_length;
 
-    for path in &files {
-        let mut reader = open(&path[..])?;
-
-        let mut line_count: usize = 0;
-        let mut word_count: usize = 0;
-        let mut byte_count: usize = 0;
-        let mut char_count: usize = 0;
-        let mut longest_line_length: usize = 0;
-        let mut raw_line = Vec::new();
-        let mut ends_lf: bool;
-        // reading from a TTY seems to raise a condition on, rather than return Some(0) like a file.
-        // hence the option wrapped in a result here
-        while match reader.read_until(LF, &mut raw_line) {
-            Ok(n) if n > 0 => true,
-            Err(ref e) if !raw_line.is_empty() => {
+    // Sum the WordCount for each line. Show a warning for each line
+    // that results in an IO error when trying to read it.
+    let total = reader
+        .lines()
+        .filter_map(|res| match res {
+            Ok(line) => Some(line),
+            Err(e) => {
                 show_warning!("Error while reading {}: {}", path, e);
-                !raw_line.is_empty()
+                None
             }
-            _ => false,
-        } {
-            // GNU 'wc' only counts lines that end in LF as lines
-            ends_lf = *raw_line.last().unwrap() == LF;
-            line_count += ends_lf as usize;
+        })
+        .map(|line| WordCount::from_line(&line, decode_chars))
+        .sum();
+    Ok(total)
+}
 
-            byte_count += raw_line.len();
-
-            if decode_chars {
-                // try and convert the bytes to UTF-8 first
-                let current_char_count;
-                match from_utf8(&raw_line[..]) {
-                    Ok(line) => {
-                        word_count += line.split_whitespace().count();
-                        current_char_count = line.chars().count();
-                    }
-                    Err(..) => {
-                        word_count += raw_line.split(|&x| is_word_separator(x)).count();
-                        current_char_count = raw_line.iter().filter(|c| c.is_ascii()).count()
-                    }
-                }
-                char_count += current_char_count;
-                if current_char_count > longest_line_length {
-                    // -L is a GNU 'wc' extension so same behavior on LF
-                    longest_line_length = current_char_count - (ends_lf as usize);
-                }
-            }
-
-            raw_line.truncate(0);
+fn word_count_from_input(input: &Input, settings: &Settings) -> WcResult<WordCount> {
+    match input {
+        Input::Stdin(_) => {
+            let stdin = io::stdin();
+            let stdin_lock = stdin.lock();
+            word_count_from_reader(stdin_lock, settings, "-")
         }
+        Input::Path(path) => {
+            let path_obj = Path::new(path);
+            if path_obj.is_dir() {
+                Err(WcError::IsDirectory(path.to_owned()))
+            } else {
+                let file = File::open(path)?;
+                word_count_from_reader(file, settings, path)
+            }
+        }
+    }
+}
 
-        results.push(Result {
-            title: path.clone(),
-            bytes: byte_count,
-            chars: char_count,
-            lines: line_count,
-            words: word_count,
-            max_line_length: longest_line_length,
+/// Print a message appropriate for the particular error to `stderr`.
+///
+/// # Examples
+///
+/// This will print `wc: /tmp: Is a directory` to `stderr`.
+///
+/// ```rust,ignore
+/// show_error(Input::Path("/tmp"), WcError::IsDirectory("/tmp"))
+/// ```
+fn show_error(input: &Input, err: WcError) {
+    match (input, err) {
+        (_, WcError::IsDirectory(path)) => {
+            show_error_custom_description!(path, "Is a directory");
+        }
+        (Input::Path(path), WcError::Io(e)) if e.kind() == ErrorKind::NotFound => {
+            show_error_custom_description!(path, "No such file or directory");
+        }
+        (_, e) => {
+            show_error!("{}", e);
+        }
+    };
+}
+
+/// Compute the number of digits needed to represent any count for this input.
+///
+/// If `input` is [`Input::Stdin`], then this function returns
+/// [`MINIMUM_WIDTH`]. Otherwise, if metadata could not be read from
+/// `input` then this function returns 1.
+///
+/// # Errors
+///
+/// This function will return an error if `input` is a [`Input::Path`]
+/// and there is a problem accessing the metadata of the given `input`.
+///
+/// # Examples
+///
+/// A [`Input::Stdin`] gets a default minimum width:
+///
+/// ```rust,ignore
+/// let input = Input::Stdin(StdinKind::Explicit);
+/// assert_eq!(7, digit_width(input));
+/// ```
+fn digit_width(input: &Input) -> WcResult<Option<usize>> {
+    match input {
+        Input::Stdin(_) => Ok(Some(MINIMUM_WIDTH)),
+        Input::Path(filename) => {
+            let path = Path::new(filename);
+            let metadata = fs::metadata(path)?;
+            if metadata.is_file() {
+                // TODO We are now computing the number of bytes in a file
+                // twice: once here and once in `WordCount::from_line()` (or
+                // in `count_bytes_fast()` if that function is called
+                // instead). See GitHub issue #2201.
+                let num_bytes = metadata.len();
+                let num_digits = num_bytes.to_string().len();
+                Ok(Some(num_digits))
+            } else {
+                Ok(None)
+            }
+        }
+    }
+}
+
+/// Compute the number of digits needed to represent all counts in all inputs.
+///
+/// `inputs` may include zero or more [`Input::Stdin`] entries, each of
+/// which represents reading from `stdin`. The presence of any such
+/// entry causes this function to return a width that is at least
+/// [`MINIMUM_WIDTH`].
+///
+/// If `input` is empty, then this function returns 1. If file metadata
+/// could not be read from any of the [`Input::Path`] inputs and there
+/// are no [`Input::Stdin`] inputs, then this function returns 1.
+///
+/// If there is a problem accessing the metadata, this function will
+/// silently ignore the error and assume that the number of digits
+/// needed to display the counts for that file is 1.
+///
+/// # Examples
+///
+/// An empty slice implies a width of 1:
+///
+/// ```rust,ignore
+/// assert_eq!(1, max_width(&vec![]));
+/// ```
+///
+/// The presence of [`Input::Stdin`] implies a minimum width:
+///
+/// ```rust,ignore
+/// let inputs = vec![Input::Stdin(StdinKind::Explicit)];
+/// assert_eq!(7, max_width(&inputs));
+/// ```
+fn max_width(inputs: &[Input]) -> usize {
+    let mut result = 1;
+    for input in inputs {
+        match digit_width(input) {
+            Ok(maybe_n) => {
+                if let Some(n) = maybe_n {
+                    result = result.max(n);
+                }
+            }
+            Err(_) => continue,
+        }
+    }
+    result
+}
+
+fn wc(inputs: Vec<Input>, settings: &Settings) -> Result<(), u32> {
+    // Compute the width, in digits, to use when formatting counts.
+    //
+    // The width is the number of digits needed to print the number of
+    // bytes in the largest file. This is true regardless of whether
+    // the `settings` indicate that the bytes will be displayed.
+    let mut error_count = 0;
+    let max_width = max_width(&inputs);
+
+    let mut total_word_count = WordCount::default();
+
+    let num_inputs = inputs.len();
+
+    for input in &inputs {
+        let word_count = word_count_from_input(input, settings).unwrap_or_else(|err| {
+            show_error(input, err);
+            error_count += 1;
+            WordCount::default()
         });
-
-        total_line_count += line_count;
         total_word_count += word_count;
-        total_char_count += char_count;
-        total_byte_count += byte_count;
-
-        if longest_line_length > total_longest_line_length {
-            total_longest_line_length = longest_line_length;
+        let result = word_count.with_title(input.to_title());
+        if let Err(err) = print_stats(settings, &result, max_width) {
+            show_warning!(
+                "failed to print result for {}: {}",
+                result.title.unwrap_or("<stdin>"),
+                err
+            );
+            error_count += 1;
         }
-
-        // used for formatting
-        max_width = total_byte_count.to_string().len() + 1;
     }
 
-    for result in &results {
-        print_stats(settings, &result, max_width);
+    if num_inputs > 1 {
+        let total_result = total_word_count.with_title(Some("total"));
+        if let Err(err) = print_stats(settings, &total_result, max_width) {
+            show_warning!("failed to print total: {}", err);
+            error_count += 1;
+        }
     }
 
-    if files.len() > 1 {
-        let result = Result {
-            title: "total".to_owned(),
-            bytes: total_byte_count,
-            chars: total_char_count,
-            lines: total_line_count,
-            words: total_word_count,
-            max_line_length: total_longest_line_length,
-        };
-        print_stats(settings, &result, max_width);
+    if error_count == 0 {
+        Ok(())
+    } else {
+        Err(error_count)
+    }
+}
+
+fn print_stats(
+    settings: &Settings,
+    result: &TitledWordCount,
+    mut min_width: usize,
+) -> WcResult<()> {
+    let stdout = io::stdout();
+    let mut stdout_lock = stdout.lock();
+
+    if settings.number_enabled() <= 1 {
+        // Prevent a leading space in case we only need to display a single
+        // number.
+        min_width = 0;
+    }
+
+    let mut is_first: bool = true;
+
+    if settings.show_lines {
+        if !is_first {
+            write!(stdout_lock, " ")?;
+        }
+        write!(stdout_lock, "{:1$}", result.count.lines, min_width)?;
+        is_first = false;
+    }
+    if settings.show_words {
+        if !is_first {
+            write!(stdout_lock, " ")?;
+        }
+        write!(stdout_lock, "{:1$}", result.count.words, min_width)?;
+        is_first = false;
+    }
+    if settings.show_bytes {
+        if !is_first {
+            write!(stdout_lock, " ")?;
+        }
+        write!(stdout_lock, "{:1$}", result.count.bytes, min_width)?;
+        is_first = false;
+    }
+    if settings.show_chars {
+        if !is_first {
+            write!(stdout_lock, " ")?;
+        }
+        write!(stdout_lock, "{:1$}", result.count.chars, min_width)?;
+        is_first = false;
+    }
+    if settings.show_max_line_length {
+        if !is_first {
+            write!(stdout_lock, " ")?;
+        }
+        write!(
+            stdout_lock,
+            "{:1$}",
+            result.count.max_line_length, min_width
+        )?;
+    }
+
+    if let Some(title) = result.title {
+        writeln!(stdout_lock, " {}", title)?;
+    } else {
+        writeln!(stdout_lock)?;
     }
 
     Ok(())
-}
-
-fn print_stats(settings: &Settings, result: &Result, max_width: usize) {
-    if settings.show_lines {
-        print!("{:1$}", result.lines, max_width);
-    }
-    if settings.show_words {
-        print!("{:1$}", result.words, max_width);
-    }
-    if settings.show_bytes {
-        print!("{:1$}", result.bytes, max_width);
-    }
-    if settings.show_chars {
-        print!("{:1$}", result.chars, max_width);
-    }
-    if settings.show_max_line_length {
-        print!("{:1$}", result.max_line_length, max_width);
-    }
-
-    if result.title != "-" {
-        println!(" {}", result.title);
-    } else {
-        println!();
-    }
-}
-
-fn open(path: &str) -> StdResult<BufReader<Box<dyn Read + 'static>>, i32> {
-    if "-" == path {
-        let reader = Box::new(stdin()) as Box<dyn Read>;
-        return Ok(BufReader::new(reader));
-    }
-
-    let fpath = Path::new(path);
-    if fpath.is_dir() {
-        show_info!("{}: is a directory", path);
-    }
-    match File::open(&fpath) {
-        Ok(fd) => {
-            let reader = Box::new(fd) as Box<dyn Read>;
-            Ok(BufReader::new(reader))
-        }
-        Err(e) => {
-            show_error!("wc: {}: {}", path, e);
-            Err(1)
-        }
-    }
 }

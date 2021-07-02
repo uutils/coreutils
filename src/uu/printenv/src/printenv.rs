@@ -10,11 +10,10 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::env;
 
 static ABOUT: &str = "Display the values of the specified environment VARIABLE(s), or (with no VARIABLE) display name and value pairs for them all.";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 
 static OPT_NULL: &str = "null";
 
@@ -27,33 +26,18 @@ fn get_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
-        .version(VERSION)
-        .about(ABOUT)
-        .usage(&usage[..])
-        .arg(
-            Arg::with_name(OPT_NULL)
-                .short("0")
-                .long(OPT_NULL)
-                .help("end each output line with 0 byte rather than newline"),
-        )
-        .arg(
-            Arg::with_name(ARG_VARIABLES)
-                .multiple(true)
-                .takes_value(true)
-                .min_values(1),
-        )
-        .get_matches_from(args);
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     let variables: Vec<String> = matches
         .values_of(ARG_VARIABLES)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    let mut separator = "\n";
-    if matches.is_present(OPT_NULL) {
-        separator = "\x00";
-    }
+    let separator = if matches.is_present(OPT_NULL) {
+        "\x00"
+    } else {
+        "\n"
+    };
 
     if variables.is_empty() {
         for (env_var, value) in env::vars() {
@@ -68,4 +52,22 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     }
     0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
+        .arg(
+            Arg::with_name(OPT_NULL)
+                .short("0")
+                .long(OPT_NULL)
+                .help("end each output line with 0 byte rather than newline"),
+        )
+        .arg(
+            Arg::with_name(ARG_VARIABLES)
+                .multiple(true)
+                .takes_value(true)
+                .min_values(1),
+        )
 }

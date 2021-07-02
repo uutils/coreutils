@@ -5,6 +5,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
+// spell-checker:ignore (clap) DontDelimitTrailingValues
 // spell-checker:ignore (ToDO) formatteriteminfo inputdecoder inputoffset mockstream nrofbytes partialreader odfunc multifile exitcode
 
 #[macro_use]
@@ -41,15 +42,19 @@ use crate::parse_nrofbytes::parse_number_of_bytes;
 use crate::partialreader::*;
 use crate::peekreader::*;
 use crate::prn_char::format_ascii_dump;
+use clap::{self, crate_version, AppSettings, Arg, ArgMatches};
+use uucore::parse_size::ParseSizeError;
+use uucore::InvalidEncodingHandling;
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 const PEEK_BUFFER_SIZE: usize = 4; // utf-8 can be 4 bytes
+static ABOUT: &str = "dump files in octal and other formats";
 
-static USAGE: &str = r#"Usage:
+static USAGE: &str = r#"
     od [OPTION]... [--] [FILENAME]...
     od [-abcdDefFhHiIlLoOsxX] [FILENAME] [[+][0x]OFFSET[.][b]]
-    od --traditional [OPTION]... [FILENAME] [[+][0x]OFFSET[.][b] [[+][0x]LABEL[.][b]]]
+    od --traditional [OPTION]... [FILENAME] [[+][0x]OFFSET[.][b] [[+][0x]LABEL[.][b]]]"#;
 
+static LONG_HELP: &str = r#"
 Displays data in various human-readable formats. If multiple formats are
 specified, the output will contain all formats in the order they appear on the
 command line. Each format will be printed on a new line. Only the line
@@ -88,85 +93,17 @@ Any type specification can have a "z" suffix, which will add a ASCII dump at
 If an error occurred, a diagnostic message will be printed to stderr, and the
 exitcode will be non-zero."#;
 
-fn create_getopts_options() -> getopts::Options {
-    let mut opts = getopts::Options::new();
-
-    opts.optopt(
-        "A",
-        "address-radix",
-        "Select the base in which file offsets are printed.",
-        "RADIX",
-    );
-    opts.optopt(
-        "j",
-        "skip-bytes",
-        "Skip bytes input bytes before formatting and writing.",
-        "BYTES",
-    );
-    opts.optopt(
-        "N",
-        "read-bytes",
-        "limit dump to BYTES input bytes",
-        "BYTES",
-    );
-    opts.optopt(
-        "",
-        "endian",
-        "byte order to use for multi-byte formats",
-        "big|little",
-    );
-    opts.optopt(
-        "S",
-        "strings",
-        "output strings of at least BYTES graphic chars. 3 is assumed when \
-         BYTES is not specified.",
-        "BYTES",
-    );
-    opts.optflagmulti("a", "", "named characters, ignoring high-order bit");
-    opts.optflagmulti("b", "", "octal bytes");
-    opts.optflagmulti("c", "", "ASCII characters or backslash escapes");
-    opts.optflagmulti("d", "", "unsigned decimal 2-byte units");
-    opts.optflagmulti("D", "", "unsigned decimal 4-byte units");
-    opts.optflagmulti("o", "", "octal 2-byte units");
-
-    opts.optflagmulti("I", "", "decimal 8-byte units");
-    opts.optflagmulti("L", "", "decimal 8-byte units");
-    opts.optflagmulti("i", "", "decimal 4-byte units");
-    opts.optflagmulti("l", "", "decimal 8-byte units");
-    opts.optflagmulti("x", "", "hexadecimal 2-byte units");
-    opts.optflagmulti("h", "", "hexadecimal 2-byte units");
-
-    opts.optflagmulti("O", "", "octal 4-byte units");
-    opts.optflagmulti("s", "", "decimal 2-byte units");
-    opts.optflagmulti("X", "", "hexadecimal 4-byte units");
-    opts.optflagmulti("H", "", "hexadecimal 4-byte units");
-
-    opts.optflagmulti("e", "", "floating point double precision (64-bit) units");
-    opts.optflagmulti("f", "", "floating point single precision (32-bit) units");
-    opts.optflagmulti("F", "", "floating point double precision (64-bit) units");
-
-    opts.optmulti("t", "format", "select output format or formats", "TYPE");
-    opts.optflag(
-        "v",
-        "output-duplicates",
-        "do not use * to mark line suppression",
-    );
-    opts.optflagopt(
-        "w",
-        "width",
-        "output BYTES bytes per output line. 32 is implied when BYTES is not \
-         specified.",
-        "BYTES",
-    );
-    opts.optflag("", "help", "display this help and exit.");
-    opts.optflag("", "version", "output version information and exit.");
-    opts.optflag(
-        "",
-        "traditional",
-        "compatibility mode with one input, offset and label.",
-    );
-
-    opts
+pub(crate) mod options {
+    pub const ADDRESS_RADIX: &str = "address-radix";
+    pub const SKIP_BYTES: &str = "skip-bytes";
+    pub const READ_BYTES: &str = "read-bytes";
+    pub const ENDIAN: &str = "endian";
+    pub const STRINGS: &str = "strings";
+    pub const FORMAT: &str = "format";
+    pub const OUTPUT_DUPLICATES: &str = "output-duplicates";
+    pub const TRADITIONAL: &str = "traditional";
+    pub const WIDTH: &str = "width";
+    pub const FILENAME: &str = "FILENAME";
 }
 
 struct OdOptions {
@@ -182,8 +119,8 @@ struct OdOptions {
 }
 
 impl OdOptions {
-    fn new(matches: getopts::Matches, args: Vec<String>) -> Result<OdOptions, String> {
-        let byte_order = match matches.opt_str("endian").as_ref().map(String::as_ref) {
+    fn new(matches: ArgMatches, args: Vec<String>) -> Result<OdOptions, String> {
+        let byte_order = match matches.value_of(options::ENDIAN) {
             None => ByteOrder::Native,
             Some("little") => ByteOrder::Little,
             Some("big") => ByteOrder::Big,
@@ -192,41 +129,34 @@ impl OdOptions {
             }
         };
 
-        let mut skip_bytes = match matches.opt_default("skip-bytes", "0") {
-            None => 0,
-            Some(s) => match parse_number_of_bytes(&s) {
-                Ok(i) => i,
-                Err(_) => {
-                    return Err(format!("Invalid argument --skip-bytes={}", s));
-                }
-            },
-        };
+        let mut skip_bytes = matches.value_of(options::SKIP_BYTES).map_or(0, |s| {
+            parse_number_of_bytes(s).unwrap_or_else(|e| {
+                crash!(1, "{}", format_error_message(e, s, options::SKIP_BYTES))
+            })
+        });
 
         let mut label: Option<usize> = None;
 
-        let input_strings = match parse_inputs(&matches) {
-            Ok(CommandLineInputs::FileNames(v)) => v,
-            Ok(CommandLineInputs::FileAndOffset((f, s, l))) => {
+        let parsed_input = parse_inputs(&matches).map_err(|e| format!("Invalid inputs: {}", e))?;
+        let input_strings = match parsed_input {
+            CommandLineInputs::FileNames(v) => v,
+            CommandLineInputs::FileAndOffset((f, s, l)) => {
                 skip_bytes = s;
                 label = l;
                 vec![f]
             }
-            Err(e) => {
-                return Err(format!("Invalid inputs: {}", e));
-            }
         };
 
-        let formats = match parse_format_flags(&args) {
-            Ok(f) => f,
-            Err(e) => {
-                return Err(e);
-            }
-        };
+        let formats = parse_format_flags(&args)?;
 
-        let mut line_bytes = match matches.opt_default("w", "32") {
-            None => 16,
-            Some(s) => s.parse::<usize>().unwrap_or(0),
-        };
+        let mut line_bytes = matches.value_of(options::WIDTH).map_or(16, |s| {
+            if matches.occurrences_of(options::WIDTH) == 0 {
+                return 16;
+            };
+            parse_number_of_bytes(s)
+                .unwrap_or_else(|e| crash!(1, "{}", format_error_message(e, s, options::WIDTH)))
+        });
+
         let min_bytes = formats.iter().fold(1, |max, next| {
             cmp::max(max, next.formatter_item_info.byte_size)
         });
@@ -235,22 +165,18 @@ impl OdOptions {
             line_bytes = min_bytes;
         }
 
-        let output_duplicates = matches.opt_present("v");
+        let output_duplicates = matches.is_present(options::OUTPUT_DUPLICATES);
 
-        let read_bytes = match matches.opt_str("read-bytes") {
-            None => None,
-            Some(s) => match parse_number_of_bytes(&s) {
-                Ok(i) => Some(i),
-                Err(_) => {
-                    return Err(format!("Invalid argument --read-bytes={}", s));
-                }
-            },
-        };
+        let read_bytes = matches.value_of(options::READ_BYTES).map(|s| {
+            parse_number_of_bytes(s).unwrap_or_else(|e| {
+                crash!(1, "{}", format_error_message(e, s, options::READ_BYTES))
+            })
+        });
 
-        let radix = match matches.opt_str("A") {
+        let radix = match matches.value_of(options::ADDRESS_RADIX) {
             None => Radix::Octal,
             Some(s) => {
-                let st = s.into_bytes();
+                let st = s.as_bytes();
                 if st.len() != 1 {
                     return Err("Radix must be one of [d, o, n, x]".to_string());
                 } else {
@@ -284,31 +210,19 @@ impl OdOptions {
 /// parses and validates command line parameters, prepares data structures,
 /// opens the input and calls `odfunc` to process the input.
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::Ignore)
+        .accept_any();
 
-    let opts = create_getopts_options();
+    let clap_opts = uu_app();
 
-    let matches = match opts.parse(&args[1..]) {
-        Ok(m) => m,
-        Err(f) => {
-            show_usage_error!("{}", f);
-            return 1;
-        }
-    };
+    let clap_matches = clap_opts
+        .clone() // Clone to reuse clap_opts to print help
+        .get_matches_from(args.clone());
 
-    if matches.opt_present("help") {
-        println!("{}", opts.usage(&USAGE));
-        return 0;
-    }
-    if matches.opt_present("version") {
-        println!("{} {}", executable!(), VERSION);
-        return 0;
-    }
-
-    let od_options = match OdOptions::new(matches, args) {
+    let od_options = match OdOptions::new(clap_matches, args) {
         Err(s) => {
-            show_usage_error!("{}", s);
-            return 1;
+            crash!(1, "{}", s);
         }
         Ok(o) => o,
     };
@@ -335,6 +249,230 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     );
 
     odfunc(&mut input_offset, &mut input_decoder, &output_info)
+}
+
+pub fn uu_app() -> clap::App<'static, 'static> {
+    clap::App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
+        .usage(USAGE)
+        .after_help(LONG_HELP)
+        .arg(
+            Arg::with_name(options::ADDRESS_RADIX)
+                .short("A")
+                .long(options::ADDRESS_RADIX)
+                .help("Select the base in which file offsets are printed.")
+                .value_name("RADIX"),
+        )
+        .arg(
+            Arg::with_name(options::SKIP_BYTES)
+                .short("j")
+                .long(options::SKIP_BYTES)
+                .help("Skip bytes input bytes before formatting and writing.")
+                .value_name("BYTES"),
+        )
+        .arg(
+            Arg::with_name(options::READ_BYTES)
+                .short("N")
+                .long(options::READ_BYTES)
+                .help("limit dump to BYTES input bytes")
+                .value_name("BYTES"),
+        )
+        .arg(
+            Arg::with_name(options::ENDIAN)
+                .long(options::ENDIAN)
+                .help("byte order to use for multi-byte formats")
+                .possible_values(&["big", "little"])
+                .value_name("big|little"),
+        )
+        .arg(
+            Arg::with_name(options::STRINGS)
+                .short("S")
+                .long(options::STRINGS)
+                .help(
+                    "NotImplemented: output strings of at least BYTES graphic chars. 3 is assumed when \
+                     BYTES is not specified.",
+                )
+                .default_value("3")
+                .value_name("BYTES"),
+        )
+        .arg(
+            Arg::with_name("a")
+                .short("a")
+                .help("named characters, ignoring high-order bit")
+                .multiple(true)
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("b")
+                .short("b")
+                .help("octal bytes")
+                .multiple(true)
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("c")
+                .short("c")
+                .help("ASCII characters or backslash escapes")
+                .multiple(true)
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("d")
+                .short("d")
+                .help("unsigned decimal 2-byte units")
+                .multiple(true)
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("D")
+                .short("D")
+                .help("unsigned decimal 4-byte units")
+                .multiple(true)
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("o")
+                .short("o")
+                .help("octal 2-byte units")
+                .multiple(true)
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("I")
+                .short("I")
+                .help("decimal 8-byte units")
+                .multiple(true)
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("L")
+                .short("L")
+                .help("decimal 8-byte units")
+                .multiple(true)
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("i")
+                .short("i")
+                .help("decimal 4-byte units")
+                .multiple(true)
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("l")
+                .short("l")
+                .help("decimal 8-byte units")
+                .multiple(true)
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("x")
+                .short("x")
+                .help("hexadecimal 2-byte units")
+                .multiple(true)
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("h")
+                .short("h")
+                .help("hexadecimal 2-byte units")
+                .multiple(true)
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("O")
+                .short("O")
+                .help("octal 4-byte units")
+                .multiple(true)
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("s")
+                .short("s")
+                .help("decimal 2-byte units")
+                .multiple(true)
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("X")
+                .short("X")
+                .help("hexadecimal 4-byte units")
+                .multiple(true)
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("H")
+                .short("H")
+                .help("hexadecimal 4-byte units")
+                .multiple(true)
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("e")
+                .short("e")
+                .help("floating point double precision (64-bit) units")
+                .multiple(true)
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("f")
+                .short("f")
+                .help("floating point double precision (32-bit) units")
+                .multiple(true)
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name("F")
+                .short("F")
+                .help("floating point double precision (64-bit) units")
+                .multiple(true)
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name(options::FORMAT)
+                .short("t")
+                .long(options::FORMAT)
+                .help("select output format or formats")
+                .multiple(true)
+                .value_name("TYPE"),
+        )
+        .arg(
+            Arg::with_name(options::OUTPUT_DUPLICATES)
+                .short("v")
+                .long(options::OUTPUT_DUPLICATES)
+                .help("do not use * to mark line suppression")
+                .takes_value(false)
+                .possible_values(&["big", "little"]),
+        )
+        .arg(
+            Arg::with_name(options::WIDTH)
+                .short("w")
+                .long(options::WIDTH)
+                .help(
+                    "output BYTES bytes per output line. 32 is implied when BYTES is not \
+                     specified.",
+                )
+                .default_value("32")
+                .value_name("BYTES"),
+        )
+        .arg(
+            Arg::with_name(options::TRADITIONAL)
+                .long(options::TRADITIONAL)
+                .help("compatibility mode with one input, offset and label.")
+                .takes_value(false),
+        )
+        .arg(
+            Arg::with_name(options::FILENAME)
+                .hidden(true)
+                .multiple(true),
+        )
+        .settings(&[
+            AppSettings::TrailingVarArg,
+            AppSettings::DontDelimitTrailingValues,
+            AppSettings::DisableVersion,
+            AppSettings::DeriveDisplayOrder,
+        ])
 }
 
 /// Loops through the input line by line, calling print_bytes to take care of the output.
@@ -391,7 +529,7 @@ where
                     print_bytes(
                         &input_offset.format_byte_offset(),
                         &memory_decoder,
-                        &output_info,
+                        output_info,
                     );
                 }
 
@@ -489,4 +627,14 @@ fn open_input_peek_reader(
     let mf = MultifileReader::new(inputs);
     let pr = PartialReader::new(mf, skip_bytes, read_bytes);
     PeekReader::new(pr)
+}
+
+fn format_error_message(error: ParseSizeError, s: &str, option: &str) -> String {
+    // NOTE:
+    // GNU's od echos affected flag, -N or --read-bytes (-j or --skip-bytes, etc.), depending user's selection
+    // GNU's od does distinguish between "invalid (suffix in) argument"
+    match error {
+        ParseSizeError::ParseFailure(_) => format!("invalid --{} argument '{}'", option, s),
+        ParseSizeError::SizeTooBig(_) => format!("--{} argument '{}' too large", option, s),
+    }
 }

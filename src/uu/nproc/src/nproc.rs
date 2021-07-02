@@ -10,12 +10,12 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::env;
 
 #[cfg(target_os = "linux")]
 pub const _SC_NPROCESSORS_CONF: libc::c_int = 83;
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 pub const _SC_NPROCESSORS_CONF: libc::c_int = libc::_SC_NPROCESSORS_CONF;
 #[cfg(target_os = "freebsd")]
 pub const _SC_NPROCESSORS_CONF: libc::c_int = 57;
@@ -25,7 +25,6 @@ pub const _SC_NPROCESSORS_CONF: libc::c_int = 1001;
 static OPT_ALL: &str = "all";
 static OPT_IGNORE: &str = "ignore";
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Print the number of cores available to the current process.";
 
 fn get_usage() -> String {
@@ -34,24 +33,7 @@ fn get_usage() -> String {
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
-    let matches = App::new(executable!())
-        .version(VERSION)
-        .about(ABOUT)
-        .usage(&usage[..])
-        .arg(
-            Arg::with_name(OPT_ALL)
-                .short("")
-                .long(OPT_ALL)
-                .help("print the number of cores available to the system"),
-        )
-        .arg(
-            Arg::with_name(OPT_IGNORE)
-                .short("")
-                .long(OPT_IGNORE)
-                .takes_value(true)
-                .help("ignore up to N cores"),
-        )
-        .get_matches_from(args);
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     let mut ignore = match matches.value_of(OPT_IGNORE) {
         Some(numstr) => match numstr.parse() {
@@ -87,9 +69,28 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     0
 }
 
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
+        .arg(
+            Arg::with_name(OPT_ALL)
+                .short("")
+                .long(OPT_ALL)
+                .help("print the number of cores available to the system"),
+        )
+        .arg(
+            Arg::with_name(OPT_IGNORE)
+                .short("")
+                .long(OPT_IGNORE)
+                .takes_value(true)
+                .help("ignore up to N cores"),
+        )
+}
+
 #[cfg(any(
     target_os = "linux",
-    target_os = "macos",
+    target_vendor = "apple",
     target_os = "freebsd",
     target_os = "netbsd"
 ))]
@@ -109,7 +110,7 @@ fn num_cpus_all() -> usize {
 // Other platforms (e.g., windows), num_cpus::get() directly.
 #[cfg(not(any(
     target_os = "linux",
-    target_os = "macos",
+    target_vendor = "apple",
     target_os = "freebsd",
     target_os = "netbsd"
 )))]

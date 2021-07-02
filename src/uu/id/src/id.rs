@@ -6,11 +6,27 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// Synced with:
+// This was originally based on BSD's `id`
+// (noticeable in functionality, usage text, options text, etc.)
+// and synced with:
 //  http://ftp-archive.freebsd.org/mirror/FreeBSD-Archive/old-releases/i386/1.0-RELEASE/ports/shellutils/src/id.c
 //  http://www.opensource.apple.com/source/shell_cmds/shell_cmds-118/id/id.c
+//
+// * This was partially rewritten in order for stdout/stderr/exit_code
+//   to be conform with GNU coreutils (8.32) test suite for `id`.
+//
+// * This supports multiple users (a feature that was introduced in coreutils 8.31)
+//
+// * This passes GNU's coreutils Test suite (8.32)
+//   for "tests/id/uid.sh" and "tests/id/zero/sh".
+//
+// * Option '--zero' does not exist for BSD's `id`, therefore '--zero' is only
+//   allowed together with other options that are available on GNU's `id`.
+//
+// * Help text based on BSD's `id` manpage and GNU's `id` manpage.
+//
 
-// spell-checker:ignore (ToDO) asid auditid auditinfo auid cstr egid emod euid getaudit getlogin gflag nflag pline rflag termid uflag
+// spell-checker:ignore (ToDO) asid auditid auditinfo auid cstr egid emod euid getaudit getlogin gflag nflag pline rflag termid uflag gsflag zflag
 
 #![allow(non_camel_case_types)]
 #![allow(dead_code)]
@@ -18,7 +34,7 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::ffi::CStr;
 use uucore::entries::{self, Group, Locate, Passwd};
 pub use uucore::libc;
@@ -31,211 +47,346 @@ macro_rules! cstr2cow {
     };
 }
 
-#[cfg(not(target_os = "linux"))]
-mod audit {
-    use super::libc::{c_int, c_uint, dev_t, pid_t, uid_t};
+static ABOUT: &str = "Print user and group information for each specified USER,
+or (when USER omitted) for the current user.";
 
-    pub type au_id_t = uid_t;
-    pub type au_asid_t = pid_t;
-    pub type au_event_t = c_uint;
-    pub type au_emod_t = c_uint;
-    pub type au_class_t = c_int;
-    pub type au_flag_t = u64;
-
-    #[repr(C)]
-    pub struct au_mask {
-        pub am_success: c_uint,
-        pub am_failure: c_uint,
-    }
-    pub type au_mask_t = au_mask;
-
-    #[repr(C)]
-    pub struct au_tid_addr {
-        pub port: dev_t,
-    }
-    pub type au_tid_addr_t = au_tid_addr;
-
-    #[repr(C)]
-    pub struct c_auditinfo_addr {
-        pub ai_auid: au_id_t,         // Audit user ID
-        pub ai_mask: au_mask_t,       // Audit masks.
-        pub ai_termid: au_tid_addr_t, // Terminal ID.
-        pub ai_asid: au_asid_t,       // Audit session ID.
-        pub ai_flags: au_flag_t,      // Audit session flags
-    }
-    pub type c_auditinfo_addr_t = c_auditinfo_addr;
-
-    extern "C" {
-        pub fn getaudit(auditinfo_addr: *mut c_auditinfo_addr_t) -> c_int;
-    }
+mod options {
+    pub const OPT_AUDIT: &str = "audit"; // GNU's id does not have this
+    pub const OPT_CONTEXT: &str = "context";
+    pub const OPT_EFFECTIVE_USER: &str = "user";
+    pub const OPT_GROUP: &str = "group";
+    pub const OPT_GROUPS: &str = "groups";
+    pub const OPT_HUMAN_READABLE: &str = "human-readable"; // GNU's id does not have this
+    pub const OPT_NAME: &str = "name";
+    pub const OPT_PASSWORD: &str = "password"; // GNU's id does not have this
+    pub const OPT_REAL_ID: &str = "real";
+    pub const OPT_ZERO: &str = "zero"; // BSD's id does not have this
+    pub const ARG_USERS: &str = "USER";
 }
 
-static ABOUT: &str = "Display user and group information for the specified USER,\n or (when USER omitted) for the current user.";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
-
-static OPT_AUDIT: &str = "audit";
-static OPT_EFFECTIVE_USER: &str = "effective-user";
-static OPT_GROUP: &str = "group";
-static OPT_GROUPS: &str = "groups";
-static OPT_HUMAN_READABLE: &str = "human-readable";
-static OPT_NAME: &str = "name";
-static OPT_PASSWORD: &str = "password";
-static OPT_REAL_ID: &str = "real-id";
-
-static ARG_USERS: &str = "users";
-
 fn get_usage() -> String {
-    format!("{0} [OPTION]... [USER]", executable!())
+    format!("{0} [OPTION]... [USER]...", executable!())
+}
+
+fn get_description() -> String {
+    String::from(
+        "The id utility displays the user and group names and numeric IDs, of the \
+                      calling process, to the standard output. If the real and effective IDs are \
+                      different, both are displayed, otherwise only the real ID is displayed.\n\n\
+                      If a user (login name or user ID) is specified, the user and group IDs of \
+                      that user are displayed. In this case, the real and effective IDs are \
+                      assumed to be the same.",
+    )
+}
+
+struct Ids {
+    uid: u32,  // user id
+    gid: u32,  // group id
+    euid: u32, // effective uid
+    egid: u32, // effective gid
+}
+
+struct State {
+    nflag: bool,  // --name
+    uflag: bool,  // --user
+    gflag: bool,  // --group
+    gsflag: bool, // --groups
+    rflag: bool,  // --real
+    zflag: bool,  // --zero
+    ids: Option<Ids>,
+    // The behavior for calling GNU's `id` and calling GNU's `id $USER` is similar but different.
+    // * The SELinux context is only displayed without a specified user.
+    // * The `getgroups` system call is only used without a specified user, this causes
+    //   the order of the displayed groups to be different between `id` and `id $USER`.
+    //
+    // Example:
+    // $ strace -e getgroups id -G $USER
+    // 1000 10 975 968
+    // +++ exited with 0 +++
+    // $ strace -e getgroups id -G
+    // getgroups(0, NULL)                      = 4
+    // getgroups(4, [10, 968, 975, 1000])      = 4
+    // 1000 10 968 975
+    // +++ exited with 0 +++
+    user_specified: bool,
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
+    let after_help = get_description();
 
-    let matches = App::new(executable!())
-        .version(VERSION)
-        .about(ABOUT)
+    let matches = uu_app()
         .usage(&usage[..])
-        .arg(
-            Arg::with_name(OPT_AUDIT)
-                .short("A")
-                .help("Display the process audit (not available on Linux)"),
-        )
-        .arg(
-            Arg::with_name(OPT_EFFECTIVE_USER)
-                .short("u")
-                .long("user")
-                .help("Display the effective user ID as a number"),
-        )
-        .arg(
-            Arg::with_name(OPT_GROUP)
-                .short("g")
-                .long(OPT_GROUP)
-                .help("Display the effective group ID as a number"),
-        )
-        .arg(
-            Arg::with_name(OPT_GROUPS)
-                .short("G")
-                .long(OPT_GROUPS)
-                .help("Display the different group IDs"),
-        )
-        .arg(
-            Arg::with_name(OPT_HUMAN_READABLE)
-                .short("p")
-                .help("Make the output human-readable"),
-        )
-        .arg(
-            Arg::with_name(OPT_NAME)
-                .short("n")
-                .help("Display the name of the user or group ID for the -G, -g and -u options"),
-        )
-        .arg(
-            Arg::with_name(OPT_PASSWORD)
-                .short("P")
-                .help("Display the id as a password file entry"),
-        )
-        .arg(
-            Arg::with_name(OPT_REAL_ID)
-                .short("r")
-                .help("Display the real ID for the -g and -u options"),
-        )
-        .arg(Arg::with_name(ARG_USERS).multiple(true).takes_value(true))
+        .after_help(&after_help[..])
         .get_matches_from(args);
 
     let users: Vec<String> = matches
-        .values_of(ARG_USERS)
+        .values_of(options::ARG_USERS)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    if matches.is_present(OPT_AUDIT) {
-        auditid();
-        return 0;
+    let mut state = State {
+        nflag: matches.is_present(options::OPT_NAME),
+        uflag: matches.is_present(options::OPT_EFFECTIVE_USER),
+        gflag: matches.is_present(options::OPT_GROUP),
+        gsflag: matches.is_present(options::OPT_GROUPS),
+        rflag: matches.is_present(options::OPT_REAL_ID),
+        zflag: matches.is_present(options::OPT_ZERO),
+        user_specified: !users.is_empty(),
+        ids: None,
+    };
+
+    let default_format = {
+        // "default format" is when none of '-ugG' was used
+        !(state.uflag || state.gflag || state.gsflag)
+    };
+
+    if (state.nflag || state.rflag) && default_format {
+        crash!(1, "cannot print only names or real IDs in default format");
+    }
+    if (state.zflag) && default_format {
+        // NOTE: GNU test suite "id/zero.sh" needs this stderr output:
+        crash!(1, "option --zero not permitted in default format");
     }
 
-    let possible_pw = if users.is_empty() {
-        None
-    } else {
-        match Passwd::locate(users[0].as_str()) {
-            Ok(p) => Some(p),
-            Err(_) => crash!(1, "No such user/group: {}", users[0]),
+    let delimiter = {
+        if state.zflag {
+            "\0".to_string()
+        } else {
+            " ".to_string()
         }
     };
-
-    let nflag = matches.is_present(OPT_NAME);
-    let uflag = matches.is_present(OPT_EFFECTIVE_USER);
-    let gflag = matches.is_present(OPT_GROUP);
-    let rflag = matches.is_present(OPT_REAL_ID);
-
-    if gflag {
-        let id = possible_pw
-            .map(|p| p.gid())
-            .unwrap_or(if rflag { getgid() } else { getegid() });
-        println!(
-            "{}",
-            if nflag {
-                entries::gid2grp(id).unwrap_or_else(|_| id.to_string())
-            } else {
-                id.to_string()
-            }
-        );
-        return 0;
-    }
-
-    if uflag {
-        let id = possible_pw
-            .map(|p| p.uid())
-            .unwrap_or(if rflag { getuid() } else { geteuid() });
-        println!(
-            "{}",
-            if nflag {
-                entries::uid2usr(id).unwrap_or_else(|_| id.to_string())
-            } else {
-                id.to_string()
-            }
-        );
-        return 0;
-    }
-
-    if matches.is_present(OPT_GROUPS) {
-        println!(
-            "{}",
-            if nflag {
-                possible_pw
-                    .map(|p| p.belongs_to())
-                    .unwrap_or_else(|| entries::get_groups().unwrap())
-                    .iter()
-                    .map(|&id| entries::gid2grp(id).unwrap())
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            } else {
-                possible_pw
-                    .map(|p| p.belongs_to())
-                    .unwrap_or_else(|| entries::get_groups().unwrap())
-                    .iter()
-                    .map(|&id| id.to_string())
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            }
-        );
-        return 0;
-    }
-
-    if matches.is_present(OPT_PASSWORD) {
-        pline(possible_pw.map(|v| v.uid()));
-        return 0;
+    let line_ending = {
+        if state.zflag {
+            '\0'
+        } else {
+            '\n'
+        }
     };
+    let mut exit_code = 0;
 
-    if matches.is_present(OPT_HUMAN_READABLE) {
-        pretty(possible_pw);
-        return 0;
+    for i in 0..=users.len() {
+        let possible_pw = if !state.user_specified {
+            None
+        } else {
+            match Passwd::locate(users[i].as_str()) {
+                Ok(p) => Some(p),
+                Err(_) => {
+                    show_error!("'{}': no such user", users[i]);
+                    exit_code = 1;
+                    if i + 1 >= users.len() {
+                        break;
+                    } else {
+                        continue;
+                    }
+                }
+            }
+        };
+
+        // GNU's `id` does not support the flags: -p/-P/-A.
+        if matches.is_present(options::OPT_PASSWORD) {
+            // BSD's `id` ignores all but the first specified user
+            pline(possible_pw.map(|v| v.uid()));
+            return exit_code;
+        };
+        if matches.is_present(options::OPT_HUMAN_READABLE) {
+            // BSD's `id` ignores all but the first specified user
+            pretty(possible_pw);
+            return exit_code;
+        }
+        if matches.is_present(options::OPT_AUDIT) {
+            // BSD's `id` ignores specified users
+            auditid();
+            return exit_code;
+        }
+
+        let (uid, gid) = possible_pw.map(|p| (p.uid(), p.gid())).unwrap_or((
+            if state.rflag { getuid() } else { geteuid() },
+            if state.rflag { getgid() } else { getegid() },
+        ));
+        state.ids = Some(Ids {
+            uid,
+            gid,
+            euid: geteuid(),
+            egid: getegid(),
+        });
+
+        if state.gflag {
+            print!(
+                "{}",
+                if state.nflag {
+                    entries::gid2grp(gid).unwrap_or_else(|_| {
+                        show_error!("cannot find name for group ID {}", gid);
+                        exit_code = 1;
+                        gid.to_string()
+                    })
+                } else {
+                    gid.to_string()
+                }
+            );
+        }
+
+        if state.uflag {
+            print!(
+                "{}",
+                if state.nflag {
+                    entries::uid2usr(uid).unwrap_or_else(|_| {
+                        show_error!("cannot find name for user ID {}", uid);
+                        exit_code = 1;
+                        uid.to_string()
+                    })
+                } else {
+                    uid.to_string()
+                }
+            );
+        }
+
+        let groups = entries::get_groups_gnu(Some(gid)).unwrap();
+        let groups = if state.user_specified {
+            possible_pw.map(|p| p.belongs_to()).unwrap()
+        } else {
+            groups.clone()
+        };
+
+        if state.gsflag {
+            print!(
+                "{}{}",
+                groups
+                    .iter()
+                    .map(|&id| {
+                        if state.nflag {
+                            entries::gid2grp(id).unwrap_or_else(|_| {
+                                show_error!("cannot find name for group ID {}", id);
+                                exit_code = 1;
+                                id.to_string()
+                            })
+                        } else {
+                            id.to_string()
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join(&delimiter),
+                // NOTE: this is necessary to pass GNU's "tests/id/zero.sh":
+                if state.zflag && state.user_specified && users.len() > 1 {
+                    "\0"
+                } else {
+                    ""
+                }
+            );
+        }
+
+        if default_format {
+            id_print(&state, groups);
+        }
+        print!("{}", line_ending);
+
+        if i + 1 >= users.len() {
+            break;
+        }
     }
 
-    if possible_pw.is_some() {
-        id_print(possible_pw, false, false)
-    } else {
-        id_print(possible_pw, true, true)
-    }
+    exit_code
+}
 
-    0
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
+        .arg(
+            Arg::with_name(options::OPT_AUDIT)
+                .short("A")
+                .conflicts_with_all(&[
+                    options::OPT_GROUP,
+                    options::OPT_EFFECTIVE_USER,
+                    options::OPT_HUMAN_READABLE,
+                    options::OPT_PASSWORD,
+                    options::OPT_GROUPS,
+                    options::OPT_ZERO,
+                ])
+                .help(
+                    "Display the process audit user ID and other process audit properties,\n\
+                      which requires privilege (not available on Linux).",
+                ),
+        )
+        .arg(
+            Arg::with_name(options::OPT_EFFECTIVE_USER)
+                .short("u")
+                .long(options::OPT_EFFECTIVE_USER)
+                .conflicts_with(options::OPT_GROUP)
+                .help("Display only the effective user ID as a number."),
+        )
+        .arg(
+            Arg::with_name(options::OPT_GROUP)
+                .short("g")
+                .long(options::OPT_GROUP)
+                .help("Display only the effective group ID as a number"),
+        )
+        .arg(
+            Arg::with_name(options::OPT_GROUPS)
+                .short("G")
+                .long(options::OPT_GROUPS)
+                .conflicts_with_all(&[
+                    options::OPT_GROUP,
+                    options::OPT_EFFECTIVE_USER,
+                    options::OPT_HUMAN_READABLE,
+                    options::OPT_PASSWORD,
+                    options::OPT_AUDIT,
+                ])
+                .help(
+                    "Display only the different group IDs as white-space separated numbers, \
+                      in no particular order.",
+                ),
+        )
+        .arg(
+            Arg::with_name(options::OPT_HUMAN_READABLE)
+                .short("p")
+                .help("Make the output human-readable. Each display is on a separate line."),
+        )
+        .arg(
+            Arg::with_name(options::OPT_NAME)
+                .short("n")
+                .long(options::OPT_NAME)
+                .help(
+                    "Display the name of the user or group ID for the -G, -g and -u options \
+                      instead of the number.\nIf any of the ID numbers cannot be mapped into \
+                      names, the number will be displayed as usual.",
+                ),
+        )
+        .arg(
+            Arg::with_name(options::OPT_PASSWORD)
+                .short("P")
+                .help("Display the id as a password file entry."),
+        )
+        .arg(
+            Arg::with_name(options::OPT_REAL_ID)
+                .short("r")
+                .long(options::OPT_REAL_ID)
+                .help(
+                    "Display the real ID for the -G, -g and -u options instead of \
+                      the effective ID.",
+                ),
+        )
+        .arg(
+            Arg::with_name(options::OPT_ZERO)
+                .short("z")
+                .long(options::OPT_ZERO)
+                .help(
+                    "delimit entries with NUL characters, not whitespace;\n\
+                      not permitted in default format",
+                ),
+        )
+        .arg(
+            Arg::with_name(options::OPT_CONTEXT)
+                .short("Z")
+                .long(options::OPT_CONTEXT)
+                .help("NotImplemented: print only the security context of the process"),
+        )
+        .arg(
+            Arg::with_name(options::ARG_USERS)
+                .multiple(true)
+                .takes_value(true)
+                .value_name(options::ARG_USERS),
+        )
 }
 
 fn pretty(possible_pw: Option<Passwd>) {
@@ -281,7 +432,7 @@ fn pretty(possible_pw: Option<Passwd>) {
 
         println!(
             "groups\t{}",
-            entries::get_groups()
+            entries::get_groups_gnu(None)
                 .unwrap()
                 .iter()
                 .map(|&gr| entries::gid2grp(gr).unwrap())
@@ -291,7 +442,7 @@ fn pretty(possible_pw: Option<Passwd>) {
     }
 }
 
-#[cfg(any(target_os = "macos", target_os = "freebsd"))]
+#[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
 fn pline(possible_uid: Option<uid_t>) {
     let uid = possible_uid.unwrap_or_else(getuid);
     let pw = Passwd::locate(uid).unwrap();
@@ -348,30 +499,21 @@ fn auditid() {
     println!("asid={}", auditinfo.ai_asid);
 }
 
-fn id_print(possible_pw: Option<Passwd>, p_euid: bool, p_egid: bool) {
-    let (uid, gid) = possible_pw
-        .map(|p| (p.uid(), p.gid()))
-        .unwrap_or((getuid(), getgid()));
-
-    let groups = match Passwd::locate(uid) {
-        Ok(p) => p.belongs_to(),
-        Err(e) => crash!(1, "Could not find uid {}: {}", uid, e),
-    };
+fn id_print(state: &State, groups: Vec<u32>) {
+    let uid = state.ids.as_ref().unwrap().uid;
+    let gid = state.ids.as_ref().unwrap().gid;
+    let euid = state.ids.as_ref().unwrap().euid;
+    let egid = state.ids.as_ref().unwrap().egid;
 
     print!("uid={}({})", uid, entries::uid2usr(uid).unwrap());
     print!(" gid={}({})", gid, entries::gid2grp(gid).unwrap());
-
-    let euid = geteuid();
-    if p_euid && (euid != uid) {
+    if !state.user_specified && (euid != uid) {
         print!(" euid={}({})", euid, entries::uid2usr(euid).unwrap());
     }
-
-    let egid = getegid();
-    if p_egid && (egid != gid) {
+    if !state.user_specified && (egid != gid) {
         print!(" egid={}({})", euid, entries::gid2grp(egid).unwrap());
     }
-
-    println!(
+    print!(
         " groups={}",
         groups
             .iter()
@@ -379,4 +521,49 @@ fn id_print(possible_pw: Option<Passwd>, p_euid: bool, p_egid: bool) {
             .collect::<Vec<_>>()
             .join(",")
     );
+
+    // NOTE: (SELinux NotImplemented) placeholder:
+    // if !state.user_specified {
+    //     // print SElinux context (does not depend on "-Z")
+    //     print!(" context={}", get_selinux_contexts().join(":"));
+    // }
+}
+
+#[cfg(not(target_os = "linux"))]
+mod audit {
+    use super::libc::{c_int, c_uint, dev_t, pid_t, uid_t};
+
+    pub type au_id_t = uid_t;
+    pub type au_asid_t = pid_t;
+    pub type au_event_t = c_uint;
+    pub type au_emod_t = c_uint;
+    pub type au_class_t = c_int;
+    pub type au_flag_t = u64;
+
+    #[repr(C)]
+    pub struct au_mask {
+        pub am_success: c_uint,
+        pub am_failure: c_uint,
+    }
+    pub type au_mask_t = au_mask;
+
+    #[repr(C)]
+    pub struct au_tid_addr {
+        pub port: dev_t,
+    }
+    pub type au_tid_addr_t = au_tid_addr;
+
+    #[repr(C)]
+    pub struct c_auditinfo_addr {
+        pub ai_auid: au_id_t,         // Audit user ID
+        pub ai_mask: au_mask_t,       // Audit masks.
+        pub ai_termid: au_tid_addr_t, // Terminal ID.
+        pub ai_asid: au_asid_t,       // Audit session ID.
+        pub ai_flags: au_flag_t,      // Audit session flags
+    }
+    pub type c_auditinfo_addr_t = c_auditinfo_addr;
+
+    extern "C" {
+        pub fn getaudit(auditinfo_addr: *mut c_auditinfo_addr_t) -> c_int;
+    }
 }

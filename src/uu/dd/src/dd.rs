@@ -9,206 +9,44 @@
 
 #[macro_use]
 extern crate uucore;
+use uucore::InvalidEncodingHandling;
 
 #[cfg(test)]
 mod dd_unit_tests;
 
+mod datastructures;
+use datastructures::*;
+
 mod parseargs;
+use parseargs::Matches;
 
 mod conversion_tables;
 use conversion_tables::*;
 
+use clap::{self, crate_version};
 use byte_unit::Byte;
-// #[macro_use]
 use debug_print::debug_println;
 use gcd::Gcd;
-use getopts;
 use signal_hook::consts::signal;
 use std::cmp;
 use std::convert::TryInto;
 use std::error::Error;
 use std::env;
-use std::fs::{
-    File, OpenOptions,
-};
-use std::io::{
-    self, Read, Write,
-    Seek,
-};
+use std::fs::{File, OpenOptions, };
+use std::io::{self, Read, Write, Seek, };
 #[cfg(unix)]
 use libc;
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
-use std::sync::{
-    Arc, atomic::AtomicUsize, mpsc, atomic::Ordering,
-};
+use std::sync::{Arc, atomic::AtomicUsize, mpsc, atomic::Ordering, };
 use std::thread;
 use std::time;
 
 const SYNTAX: &str = "dd [OPERAND]...\ndd OPTION";
-const SUMMARY: &str = "convert, and optionally copy, a file";
-const LONG_HELP: &str = "";
+const ABOUT: &str = "copy, and optionally convert, a file system resource";
 const BUF_INIT_BYTE: u8 = 0xDD;
 const RTN_SUCCESS: i32 = 0;
 const RTN_FAILURE: i32 = 1;
-
-// ----- Datatypes -----
-struct ProgUpdate
-{
-    reads_complete: u64,
-    reads_partial: u64,
-    writes_complete: u64,
-    writes_partial: u64,
-    bytes_total: u128,
-    records_truncated: u32,
-    duration: time::Duration,
-}
-
-struct ReadStat
-{
-    reads_complete: u64,
-    reads_partial: u64,
-    records_truncated: u32,
-}
-impl std::ops::AddAssign for ReadStat
-{
-    fn add_assign(&mut self, other: Self)
-    {
-        *self = Self {
-            reads_complete: self.reads_complete + other.reads_complete,
-            reads_partial: self.reads_partial + other.reads_partial,
-            records_truncated: self.records_truncated + other.records_truncated,
-        }
-    }
-}
-
-struct WriteStat
-{
-    writes_complete: u64,
-    writes_partial: u64,
-    bytes_total: u128,
-}
-impl std::ops::AddAssign for WriteStat
-{
-    fn add_assign(&mut self, other: Self)
-    {
-        *self = Self {
-            writes_complete: self.writes_complete + other.writes_complete,
-            writes_partial: self.writes_partial + other.writes_partial,
-            bytes_total: self.bytes_total + other.bytes_total,
-        }
-    }
-}
-
-type Cbs = usize;
-
-/// Stores all Conv Flags that apply to the input
-pub struct IConvFlags
-{
-    ctable: Option<&'static ConversionTable>,
-    block: Option<Cbs>,
-    unblock: Option<Cbs>,
-    swab: bool,
-    sync: Option<u8>,
-    noerror: bool,
-}
-
-/// Stores all Conv Flags that apply to the output
-#[derive(Debug, PartialEq)]
-pub struct OConvFlags
-{
-    sparse: bool,
-    excl: bool,
-    nocreat: bool,
-    notrunc: bool,
-    fdatasync: bool,
-    fsync: bool,
-}
-
-/// Stores all Flags that apply to the input
-pub struct IFlags
-{
-    cio: bool,
-    direct: bool,
-    directory: bool,
-    dsync: bool,
-    sync: bool,
-    nocache: bool,
-    nonblock: bool,
-    noatime: bool,
-    noctty: bool,
-    nofollow: bool,
-    nolinks: bool,
-    binary: bool,
-    text: bool,
-    fullblock: bool,
-    count_bytes: bool,
-    skip_bytes: bool,
-}
-
-/// Stores all Flags that apply to the output
-pub struct OFlags
-{
-    append: bool,
-    cio: bool,
-    direct: bool,
-    directory: bool,
-    dsync: bool,
-    sync: bool,
-    nocache: bool,
-    nonblock: bool,
-    noatime: bool,
-    noctty: bool,
-    nofollow: bool,
-    nolinks: bool,
-    binary: bool,
-    text: bool,
-    seek_bytes: bool,
-}
-
-/// The value of the status cl-option.
-/// Controls printing of transfer stats
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum StatusLevel
-{
-    Progress,
-    Noxfer,
-    None,
-}
-
-/// The value of count=N
-/// Defaults to Reads(N)
-/// if iflag=count_bytes
-/// then becomes Bytes(N)
-pub enum CountType
-{
-    Reads(usize),
-    Bytes(usize),
-}
-
-#[derive(Debug)]
-enum InternalError
-{
-    WrongInputType,
-    WrongOutputType,
-    InvalidConvBlockUnblockCase,
-}
-
-impl std::fmt::Display for InternalError
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self
-        {
-            Self::WrongInputType |
-            Self::WrongOutputType =>
-                write!(f, "Internal dd error: Wrong Input/Output data type"),
-            Self::InvalidConvBlockUnblockCase =>
-                write!(f, "Internal dd error: Invalid Conversion, Block, or Unblock data"),
-        }
-    }
-}
-
-impl Error for InternalError {}
 
 struct Input<R: Read>
 {
@@ -223,7 +61,7 @@ struct Input<R: Read>
 
 impl Input<io::Stdin>
 {
-    fn new(matches: &getopts::Matches) -> Result<Self, Box<dyn Error>>
+    fn new(matches: &Matches) -> Result<Self, Box<dyn Error>>
     {
         let ibs = parseargs::parse_ibs(matches)?;
         let non_ascii = parseargs::parse_input_non_ascii(matches)?;
@@ -303,7 +141,7 @@ fn make_unix_iflags(oflags: &IFlags) -> Option<libc::c_int>
 
 impl Input<File>
 {
-    fn new(matches: &getopts::Matches) -> Result<Self, Box<dyn Error>>
+    fn new(matches: &Matches) -> Result<Self, Box<dyn Error>>
     {
         let ibs = parseargs::parse_ibs(matches)?;
         let non_ascii = parseargs::parse_input_non_ascii(matches)?;
@@ -313,7 +151,7 @@ impl Input<File>
         let skip = parseargs::parse_skip_amt(&ibs, &iflags, matches)?;
         let count = parseargs::parse_count(&iflags, matches)?;
 
-        if let Some(fname) = matches.opt_str("if")
+        if let Some(fname) = matches.value_of("if")
         {
             let mut src =
             {
@@ -359,7 +197,7 @@ impl Input<File>
 
 impl<R: Read> Read for Input<R>
 {
-    fn read(&mut self, mut buf: &mut [u8]) -> io::Result<usize>
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize>
     {
         let mut base_idx = 0;
         let tlen = buf.len();
@@ -513,14 +351,16 @@ struct Output<W: Write>
 }
 
 impl Output<io::Stdout> {
-    fn new(matches: &getopts::Matches) -> Result<Self, Box<dyn Error>>
+    fn new(matches: &Matches) -> Result<Self, Box<dyn Error>>
     {
         let obs = parseargs::parse_obs(matches)?;
         let cflags = parseargs::parse_conv_flag_output(matches)?;
         let oflags = parseargs::parse_oflags(matches)?;
 
+        let dst = io::stdout();
+
         Ok(Output {
-                dst: io::stdout(),
+                dst,
                 obs,
                 cflags,
                 oflags,
@@ -591,14 +431,14 @@ fn make_unix_oflags(oflags: &OFlags) -> Option<libc::c_int>
 }
 
 impl Output<File> {
-    fn new(matches: &getopts::Matches) -> Result<Self, Box<dyn Error>>
+    fn new(matches: &Matches) -> Result<Self, Box<dyn Error>>
     {
         let obs = parseargs::parse_obs(matches)?;
         let cflags = parseargs::parse_conv_flag_output(matches)?;
         let oflags = parseargs::parse_oflags(matches)?;
         let seek = parseargs::parse_seek_amt(&obs, &oflags, matches)?;
 
-        if let Some(fname) = matches.opt_str("of")
+        if let Some(fname) = matches.value_of("of")
         {
             let mut dst = {
                 let mut opts = OpenOptions::new();
@@ -1375,124 +1215,6 @@ fn dd_fileout<R: Read>(mut i: Input<R>, mut o: Output<File>) -> Result<(), Box<d
     Ok(())
 }
 
-#[macro_export]
-macro_rules! build_app (
-    () =>
-    {
-        app!(SYNTAX, SUMMARY, LONG_HELP)
-            .optopt(
-                "",
-                "skip",
-                "Skip N ‘ibs’-byte blocks in the input file before copying. If ‘iflag=skip_bytes’ is specified, N is interpreted as a byte count rather than a block count.",
-                "N"
-            )
-            .optopt(
-                "",
-                "seek",
-                "Skip N ‘obs’-byte blocks in the input file before copying. If ‘oflag=skip_bytes’ is specified, N is interpreted as a byte count rather than a block count.",
-                "N"
-            )
-            .optopt(
-                "",
-                "count",
-                "Copy N ‘ibs’-byte blocks from the input file, instead of everything until the end of the file. if ‘iflag=count_bytes’ is specified, N is interpreted as a byte count rather than a block count. Note if the input may return short reads as could be the case when reading
-     from a pipe for example, ‘iflag=fullblock’ will ensure that ‘count=’ corresponds to complete input blocks rather than the traditional POSIX specified behavior of counting input read operations.",
-                "BYTES"
-            )
-            .optopt(
-                "",
-                "bs",
-                "Set both input and output block sizes to BYTES. This makes ‘dd’ read and write BYTES per block, overriding any ‘ibs’ and ‘obs’ settings. In addition, if no data-transforming ‘conv’ option is specified, input is copied to the output as soon as it’s read, even
-     if it is smaller than the block size.",
-                "BYTES"
-            )
-            .optopt(
-                "",
-                "iflag",
-                "read as per the comma separated symbol list of flags",
-                "FLAG"
-            )
-            .optopt(
-                "",
-                "oflag",
-                "write as per the comma separated symbol list of flags",
-                "FLAG"
-            )
-            .optopt(
-                "",
-                "if",
-                "Read from FILE instead of standard input.",
-                "FILE"
-            )
-            .optopt(
-                "",
-                "ibs",
-                "Set the input block size to BYTES. This makes ‘dd’ read BYTES per block. The default is 512 bytes.",
-                "BYTES"
-            )
-            .optopt(
-                "",
-                "of",
-                "Write to FILE instead of standard output. Unless ‘conv=notrunc’ is given, ‘dd’ truncates FILE to zero bytes (or the size specified with ‘seek=’).",
-                "FILE"
-            )
-            .optopt(
-                "",
-                "obs",
-                "Set the output block size to BYTES. This makes ‘dd’ write BYTES per block. The default is 512 bytes.",
-                "BYTES"
-            )
-            .optopt(
-                "",
-                "conv",
-                "Convert the file as specified by the CONVERSION argument(s). (No spaces around any comma(s).)",
-                "OPT[,OPT]..."
-            )
-            .optopt(
-                "",
-                "cbs",
-                "Set the conversion block size to BYTES. When converting variable-length records to fixed-length ones (‘conv=block’) or the reverse (‘conv=unblock’), use BYTES as the fixed record length.",
-                "BYTES"
-            )
-            .optopt(
-                "",
-                "status",
-                "Specify the amount of information printed.  If this operand is
-     given multiple times, the last one takes precedence.  The LEVEL
-     value can be one of the following:
-
-     ‘none’
-          Do not print any informational or warning messages to stderr.
-          Error messages are output as normal.
-
-     ‘noxfer’
-          Do not print the final transfer rate and volume statistics
-          that normally make up the last status line.
-
-     ‘progress’
-          Print the transfer rate and volume statistics on stderr, when
-          processing each input block.  Statistics are output on a
-          single line at most once every second, but updates can be
-          delayed when waiting on I/O.
-
-     Transfer information is normally output to stderr upon receipt of
-     the ‘INFO’ signal or when ‘dd’ exits, and defaults to the following
-     form in the C locale:
-
-          7287+1 records in
-          116608+0 records out
-          59703296 bytes (60 MB, 57 MiB) copied, 0.0427974 s, 1.4 GB/s
-
-     The notation ‘W+P’ stands for W whole blocks and P partial blocks.
-     A partial block occurs when a read or write operation succeeds but
-     transfers less data than the block size.  An additional line like
-     ‘1 truncated record’ or ‘10 truncated records’ is output after the
-     ‘records out’ line if ‘conv=block’ processing truncated one or more
-     input records.",
-                "LEVEL"
-            )
-    }
-);
 
 fn append_dashes_if_not_present(mut acc: Vec<String>, s: &String) -> Vec<String>
 {
@@ -1527,12 +1249,18 @@ macro_rules! unpack_or_rtn (
 
 pub fn uumain(args: impl uucore::Args) -> i32
 {
-    let dashed_args = args.collect_str()
+    let dashed_args = args.collect_str(InvalidEncodingHandling::Ignore)
+                          .accept_any()
                           .iter()
                           .fold(Vec::new(), append_dashes_if_not_present);
-    let matches = build_app!().parse(dashed_args);
 
-    let result = match (matches.opt_present("if"), matches.opt_present("of"))
+    let matches = build_dd_app!()
+        // TODO: usage, after_help
+        //.usage(...)
+        //.after_help(...)
+        .get_matches_from(dashed_args);
+
+    let result = match (matches.is_present(options::INFILE), matches.is_present(options::OUTFILE))
     {
         (true, true) =>
         {
@@ -1573,3 +1301,175 @@ pub fn uumain(args: impl uucore::Args) -> i32
     }
 }
 
+pub fn uu_app() -> clap::App<'static, 'static>
+{
+    build_dd_app!()
+}
+
+#[macro_export]
+macro_rules! build_dd_app (
+    () =>
+    {
+        clap::App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
+        .arg(
+            clap::Arg::with_name(options::INFILE)
+                .long(options::INFILE)
+                .takes_value(true)
+                .help("if=FILE (alternatively --if FILE) specifies the file used for input. When not specified, stdin is used instead")
+        )
+        .arg(
+            clap::Arg::with_name(options::OUTFILE)
+                .long(options::OUTFILE)
+                .takes_value(true)
+                .help("of=FILE (alternatively --of FILE) specifies the file used for output. When not specified, stdout is used instead")
+        )
+        .arg(
+            clap::Arg::with_name(options::IBS)
+                .long(options::IBS)
+                .takes_value(true)
+                .help("ibs=N (alternatively --ibs N) specifies the size of buffer used for reads (default: 512). Multiplier strings permitted.")
+        )
+        .arg(
+            clap::Arg::with_name(options::OBS)
+                .long(options::OBS)
+                .takes_value(true)
+                .help("obs=N (alternatively --obs N) specifies the size of buffer used for writes (default: 512). Multiplier strings permitted.")
+        )
+        .arg(
+            clap::Arg::with_name(options::BS)
+                .long(options::BS)
+                .takes_value(true)
+                .help("bs=N (alternatively --bs N) specifies ibs=N and obs=N (default: 512). If ibs or obs are also specified, bs=N takes presedence. Multiplier strings permitted.")
+        )
+        .arg(
+            clap::Arg::with_name(options::CBS)
+                .long(options::CBS)
+                .takes_value(true)
+                .help("cbs=BYTES (alternatively --cbs BYTES) specifies the 'conversion block size' in bytes. Applies to the conv=block, and conv=unblock operations. Multiplier strings permitted.")
+        )
+        .arg(
+            clap::Arg::with_name(options::SKIP)
+                .long(options::SKIP)
+                .takes_value(true)
+                .help("skip=N (alternatively --skip N) causes N ibs-sized records of input to be skipped before beginning copy/convert operations. See iflag=count_bytes if skipping N bytes is prefered. Multiplier strings permitted.")
+        )
+        .arg(
+            clap::Arg::with_name(options::SEEK)
+                .long(options::SEEK)
+                .takes_value(true)
+                .help("seek=N (alternatively --seek N) seeks N obs-sized records into output before beginning copy/convert operations. See oflag=seek_bytes if seeking N bytes is prefered. Multiplier strings permitted.")
+        )
+        .arg(
+            clap::Arg::with_name(options::COUNT)
+                .long(options::COUNT)
+                .takes_value(true)
+                .help("count=N (alternatively --count N) stop reading input after N ibs-sized read operations rather than proceeding until EOF. See iflag=count_bytes if stopping after N bytes is prefered. Multiplier strings permitted.")
+        )
+        .arg(
+            clap::Arg::with_name(options::STATUS)
+                .long(options::STATUS)
+                .takes_value(true)
+                .help("status=LEVEL (alternatively --status LEVEL) controls whether volume and performace stats are written to stderr.
+
+When unspecified, dd will print stats upon completion. An example is below.
+\t6+0 records in
+\t16+0 records out
+\t8192 bytes (8.2 kB, 8.0 KiB) copied, 0.00057009 s, 14.4 MB/s
+The first two lines are the 'volume' stats and the final line is the 'performance' stats.
+The volume stats indicate the number of complete and partial ibs-sized reads, or obs-sized writes that took place during the copy. The format of the volume stats is <complete>+<partial>. If records have been truncated (see conv=block), the volume stats will contain the number of truncated records.
+
+Permissable LEVEL values are:
+\t- progress: Print periodic performance stats as the copy proceedes.
+\t- noxfer: Print final volume stats, but not performance stats.
+\t- none: Do not print any stats.
+
+Printing performance stats is also triggered by the INFO signal (where supported), or the USR1 signal. Setting the POSIXLY_CORRECT evnironment variable to any value (including an empty value) will cause the USR1 signal to be ignored.
+")
+        )
+        .arg(
+            clap::Arg::with_name(options::CONV)
+                .long(options::CONV)
+                .takes_value(true)
+                .help("conv=CONV[,CONV] (alternatively --conv CONV[,CONV]) specifies a comma-separated list of conversion options or (for legacy reasons) file-flags. Conversion options and file flags may be intermixed.
+
+Conversion options:
+\t- One of {ascii, ebcdic, ibm} will perform an encoding conversion.
+\t\t- 'ascii' converts from EBCDIC to ASCII. This is the inverse of the 'ebcdic' option.
+\t\t- 'ebcdic' converts from ASCII to EBCDIC. This is the inverse of the 'ascii' option.
+\t\t- 'ibm' converts from ASCII to EBCDIC, appling the conventions for '[', ']' and '~' specified in POSIX.
+
+\t- One of {ucase, lcase} will perform a case conversion. Works in conjuction with option {ascii, ebcdic, ibm} to infer input encoding. If no other conversion option is specified, input is assumed to be ascii.
+\t\t- 'ucase' converts from lower-case to upper-case
+\t\t- 'lcase' converts from upper-case to lower-case.
+
+\t- One of {block, unblock}. Convert between lines terminated by newline characters, and fixed-width lines padded by spaces (without any newlines). Both the 'block' and 'unblock' options require cbs=BYTES be specified.
+\t\t- 'block' for each newline less than the size indicated by cbs=BYTES, remove the newline and pad with spaces up to cbs. Lines longer than cbs are truncated.
+\t\t- 'unblock' for each block of input of the size indicated by cbs=BYTES, remove right-trailing spaces and replace with a newline character.
+
+\t 'sparse' attempts to seek the output when an obs-sized block consists of only zeros.
+\t 'swab' swaps each adjacent pair of bytes. If an odd number of bytes is present, the final byte is omitted.
+\t 'sync' pad each ibs-sided block with zeros. If 'block' or 'unblock' is specified, pad with spaces instead.
+
+Flags:
+\t- One of {excl, nocreat}
+\t\t- 'excl' the output file must be created. Fail if the output file is already present.
+\t\t- 'nocreat' the output file will not be created. Fail if the output file in not already present.
+\t- 'notrunc' the output file will not be truncated. If this option is not present, output will be truncated when opened.
+\t- 'noerror' all read errors will be ignored. If this option is not present, dd will only ignore Error::Interrupted.
+\t- 'fdatasync' data will be written before finishing.
+\t- 'fsync' data and metadata will be written before finishing.
+")
+        )
+        .arg(
+            clap::Arg::with_name(options::IFLAG)
+                .long(options::IFLAG)
+                .takes_value(true)
+                .help("iflag=FLAG[,FLAG] (alternatively --iflag FLAG[,FLAG]) a comma separated list of input flags which specify how the input source is treated. FLAG may be any of the input-flags or general-flags specified below.
+
+Input-Flags
+\t- 'count_bytes' a value to count=N will be interpreted as bytes.
+\t- 'skip_bytes' a value to skip=N will be interpreted as bytes.
+\t- 'fullblock' wait for ibs bytes from each read. zero-length reads are still considered EOF.
+
+General-Flags
+\t- 'direct'
+\t- 'directory'
+\t- 'dsync'
+\t- 'sync'
+\t- 'nonblock'
+\t- 'noatime'
+\t- 'nocache'
+\t- 'noctty'
+\t- 'nofollow'
+
+Output-Flags
+\t- 'append' open file in append mode. Consider setting conv=notrunc as well.
+\t- 'seek_bytes' a value to seek=N will be interpreted as bytes.
+")
+        )
+        .arg(
+            clap::Arg::with_name(options::OFLAG)
+                .long(options::OFLAG)
+                .takes_value(true)
+                .help("oflag=FLAG[,FLAG] (alternatively --oflag FLAG[,FLAG]) a comma separated list of output flags which specify how the output source is treated. FLAG may be any of the output-flags or general-flags specified below.
+
+Output-Flags
+\t- 'append' open file in append mode. Consider setting conv=notrunc as well.
+\t- 'seek_bytes' a value to seek=N will be interpreted as bytes.
+
+General-Flags
+\t- 'direct'
+\t- 'directory'
+\t- 'dsync'
+\t- 'sync'
+\t- 'nonblock'
+\t- 'noatime'
+\t- 'nocache'
+\t- 'noctty'
+\t- 'nofollow'
+")
+        )
+    };
+);

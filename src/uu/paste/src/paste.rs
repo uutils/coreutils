@@ -10,13 +10,12 @@
 #[macro_use]
 extern crate uucore;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::iter::repeat;
 use std::path::Path;
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Write lines consisting of the sequentially corresponding lines from each
 FILE, separated by TABs, to standard output.";
 
@@ -38,8 +37,23 @@ fn read_line<R: Read>(
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let matches = App::new(executable!())
-        .version(VERSION)
+    let matches = uu_app().get_matches_from(args);
+
+    let serial = matches.is_present(options::SERIAL);
+    let delimiters = matches.value_of(options::DELIMITER).unwrap().to_owned();
+    let files = matches
+        .values_of(options::FILE)
+        .unwrap()
+        .map(|s| s.to_owned())
+        .collect();
+    paste(files, serial, delimiters);
+
+    0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
         .about(ABOUT)
         .arg(
             Arg::with_name(options::SERIAL)
@@ -62,18 +76,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .multiple(true)
                 .default_value("-"),
         )
-        .get_matches_from(args);
-
-    let serial = matches.is_present(options::SERIAL);
-    let delimiters = matches.value_of(options::DELIMITER).unwrap().to_owned();
-    let files = matches
-        .values_of(options::FILE)
-        .unwrap()
-        .map(|s| s.to_owned())
-        .collect();
-    paste(files, serial, delimiters);
-
-    0
 }
 
 fn paste(filenames: Vec<String>, serial: bool, delimiters: String) {

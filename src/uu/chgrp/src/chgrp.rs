@@ -14,6 +14,8 @@ use uucore::fs::resolve_relative_path;
 use uucore::libc::gid_t;
 use uucore::perms::{wrap_chgrp, Verbosity};
 
+use clap::{App, Arg};
+
 extern crate walkdir;
 use walkdir::WalkDir;
 
@@ -22,79 +24,123 @@ use std::fs::Metadata;
 use std::os::unix::fs::MetadataExt;
 
 use std::path::Path;
+use uucore::InvalidEncodingHandling;
 
-static SYNTAX: &str =
-    "chgrp [OPTION]... GROUP FILE...\n or :  chgrp [OPTION]... --reference=RFILE FILE...";
-static SUMMARY: &str = "Change the group of each FILE to GROUP.";
+static ABOUT: &str = "Change the group of each FILE to GROUP.";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
+
+pub mod options {
+    pub mod verbosity {
+        pub static CHANGES: &str = "changes";
+        pub static QUIET: &str = "quiet";
+        pub static SILENT: &str = "silent";
+        pub static VERBOSE: &str = "verbose";
+    }
+    pub mod preserve_root {
+        pub static PRESERVE: &str = "preserve-root";
+        pub static NO_PRESERVE: &str = "no-preserve-root";
+    }
+    pub mod dereference {
+        pub static DEREFERENCE: &str = "dereference";
+        pub static NO_DEREFERENCE: &str = "no-dereference";
+    }
+    pub static RECURSIVE: &str = "recursive";
+    pub mod traverse {
+        pub static TRAVERSE: &str = "H";
+        pub static NO_TRAVERSE: &str = "P";
+        pub static EVERY: &str = "L";
+    }
+    pub static REFERENCE: &str = "reference";
+    pub static ARG_GROUP: &str = "GROUP";
+    pub static ARG_FILES: &str = "FILE";
+}
 
 const FTS_COMFOLLOW: u8 = 1;
 const FTS_PHYSICAL: u8 = 1 << 1;
 const FTS_LOGICAL: u8 = 1 << 2;
 
+fn get_usage() -> String {
+    format!(
+        "{0} [OPTION]... GROUP FILE...\n    {0} [OPTION]... --reference=RFILE FILE...",
+        executable!()
+    )
+}
+
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let args = args.collect_str();
+    let args = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
 
-    let mut opts = app!(SYNTAX, SUMMARY, "");
-    opts.optflag("c",
-                 "changes",
-                 "like verbose but report only when a change is made")
-        .optflag("f", "silent", "")
-        .optflag("", "quiet", "suppress most error messages")
-        .optflag("v",
-                 "verbose",
-                 "output a diagnostic for every file processed")
-        .optflag("", "dereference", "affect the referent of each symbolic link (this is the default), rather than the symbolic link itself")
-        .optflag("h", "no-dereference", "affect symbolic links instead of any referenced file (useful only on systems that can change the ownership of a symlink)")
-        .optflag("",
-                 "no-preserve-root",
-                 "do not treat '/' specially (the default)")
-        .optflag("", "preserve-root", "fail to operate recursively on '/'")
-        .optopt("",
-                "reference",
-                "use RFILE's owner and group rather than specifying OWNER:GROUP values",
-                "RFILE")
-        .optflag("R",
-                 "recursive",
-                 "operate on files and directories recursively")
-        .optflag("H",
-                 "",
-                 "if a command line argument is a symbolic link to a directory, traverse it")
-        .optflag("L",
-                 "",
-                 "traverse every symbolic link to a directory encountered")
-        .optflag("P", "", "do not traverse any symbolic links (default)");
+    let usage = get_usage();
 
-    let mut bit_flag = FTS_PHYSICAL;
-    let mut preserve_root = false;
-    let mut derefer = -1;
-    let flags: &[char] = &['H', 'L', 'P'];
-    for opt in &args {
-        match opt.as_str() {
-            // If more than one is specified, only the final one takes effect.
-            s if s.contains(flags) => {
-                if let Some(idx) = s.rfind(flags) {
-                    match s.chars().nth(idx).unwrap() {
-                        'H' => bit_flag = FTS_COMFOLLOW | FTS_PHYSICAL,
-                        'L' => bit_flag = FTS_LOGICAL,
-                        'P' => bit_flag = FTS_PHYSICAL,
-                        _ => (),
-                    }
-                }
-            }
-            "--no-preserve-root" => preserve_root = false,
-            "--preserve-root" => preserve_root = true,
-            "--dereference" => derefer = 1,
-            "--no-dereference" => derefer = 0,
-            _ => (),
+    let mut app = uu_app().usage(&usage[..]);
+
+    // we change the positional args based on whether
+    // --reference was used.
+    let mut reference = false;
+    let mut help = false;
+    // stop processing options on --
+    for arg in args.iter().take_while(|s| *s != "--") {
+        if arg.starts_with("--reference=") || arg == "--reference" {
+            reference = true;
+        } else if arg == "--help" {
+            // we stop processing once we see --help,
+            // as it doesn't matter if we've seen reference or not
+            help = true;
+            break;
         }
     }
 
-    let matches = opts.parse(args);
-    let recursive = matches.opt_present("recursive");
+    if help || !reference {
+        // add both positional arguments
+        app = app.arg(
+            Arg::with_name(options::ARG_GROUP)
+                .value_name(options::ARG_GROUP)
+                .required(true)
+                .takes_value(true)
+                .multiple(false),
+        )
+    }
+    app = app.arg(
+        Arg::with_name(options::ARG_FILES)
+            .value_name(options::ARG_FILES)
+            .multiple(true)
+            .takes_value(true)
+            .required(true)
+            .min_values(1),
+    );
+
+    let matches = app.get_matches_from(args);
+
+    /* Get the list of files */
+    let files: Vec<String> = matches
+        .values_of(options::ARG_FILES)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
+
+    let preserve_root = matches.is_present(options::preserve_root::PRESERVE);
+
+    let mut derefer = if matches.is_present(options::dereference::DEREFERENCE) {
+        1
+    } else if matches.is_present(options::dereference::NO_DEREFERENCE) {
+        0
+    } else {
+        -1
+    };
+
+    let mut bit_flag = if matches.is_present(options::traverse::TRAVERSE) {
+        FTS_COMFOLLOW | FTS_PHYSICAL
+    } else if matches.is_present(options::traverse::EVERY) {
+        FTS_LOGICAL
+    } else {
+        FTS_PHYSICAL
+    };
+
+    let recursive = matches.is_present(options::RECURSIVE);
     if recursive {
         if bit_flag == FTS_PHYSICAL {
             if derefer == 1 {
-                show_info!("-R --dereference requires -H or -L");
+                show_error!("-R --dereference requires -H or -L");
                 return 1;
             }
             derefer = 0;
@@ -103,49 +149,40 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         bit_flag = FTS_PHYSICAL;
     }
 
-    let verbosity = if matches.opt_present("changes") {
+    let verbosity = if matches.is_present(options::verbosity::CHANGES) {
         Verbosity::Changes
-    } else if matches.opt_present("silent") || matches.opt_present("quiet") {
+    } else if matches.is_present(options::verbosity::SILENT)
+        || matches.is_present(options::verbosity::QUIET)
+    {
         Verbosity::Silent
-    } else if matches.opt_present("verbose") {
+    } else if matches.is_present(options::verbosity::VERBOSE) {
         Verbosity::Verbose
     } else {
         Verbosity::Normal
     };
 
-    if matches.free.is_empty() {
-        show_usage_error!("missing operand");
-        return 1;
-    } else if matches.free.len() < 2 && !matches.opt_present("reference") {
-        show_usage_error!("missing operand after ‘{}’", matches.free[0]);
-        return 1;
-    }
-
-    let dest_gid: gid_t;
-    let mut files;
-    if let Some(file) = matches.opt_str("reference") {
+    let dest_gid: u32;
+    if let Some(file) = matches.value_of(options::REFERENCE) {
         match fs::metadata(&file) {
             Ok(meta) => {
                 dest_gid = meta.gid();
             }
             Err(e) => {
-                show_info!("failed to get attributes of '{}': {}", file, e);
+                show_error!("failed to get attributes of '{}': {}", file, e);
                 return 1;
             }
         }
-        files = matches.free;
     } else {
-        match entries::grp2gid(&matches.free[0]) {
+        let group = matches.value_of(options::ARG_GROUP).unwrap_or_default();
+        match entries::grp2gid(group) {
             Ok(g) => {
                 dest_gid = g;
             }
             _ => {
-                show_info!("invalid group: {}", matches.free[0].as_str());
+                show_error!("invalid group: {}", group);
                 return 1;
             }
         }
-        files = matches.free;
-        files.remove(0);
     }
 
     let executor = Chgrper {
@@ -158,6 +195,86 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         files,
     };
     executor.exec()
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(VERSION)
+        .about(ABOUT)
+        .arg(
+            Arg::with_name(options::verbosity::CHANGES)
+                .short("c")
+                .long(options::verbosity::CHANGES)
+                .help("like verbose but report only when a change is made"),
+        )
+        .arg(
+            Arg::with_name(options::verbosity::SILENT)
+                .short("f")
+                .long(options::verbosity::SILENT),
+        )
+        .arg(
+            Arg::with_name(options::verbosity::QUIET)
+                .long(options::verbosity::QUIET)
+                .help("suppress most error messages"),
+        )
+        .arg(
+            Arg::with_name(options::verbosity::VERBOSE)
+                .short("v")
+                .long(options::verbosity::VERBOSE)
+                .help("output a diagnostic for every file processed"),
+        )
+        .arg(
+            Arg::with_name(options::dereference::DEREFERENCE)
+                .long(options::dereference::DEREFERENCE),
+        )
+        .arg(
+           Arg::with_name(options::dereference::NO_DEREFERENCE)
+               .short("h")
+               .long(options::dereference::NO_DEREFERENCE)
+               .help(
+                   "affect symbolic links instead of any referenced file (useful only on systems that can change the ownership of a symlink)",
+               ),
+        )
+        .arg(
+            Arg::with_name(options::preserve_root::PRESERVE)
+                .long(options::preserve_root::PRESERVE)
+                .help("fail to operate recursively on '/'"),
+        )
+        .arg(
+            Arg::with_name(options::preserve_root::NO_PRESERVE)
+                .long(options::preserve_root::NO_PRESERVE)
+                .help("do not treat '/' specially (the default)"),
+        )
+        .arg(
+            Arg::with_name(options::REFERENCE)
+                .long(options::REFERENCE)
+                .value_name("RFILE")
+                .help("use RFILE's group rather than specifying GROUP values")
+                .takes_value(true)
+                .multiple(false),
+        )
+        .arg(
+            Arg::with_name(options::RECURSIVE)
+                .short("R")
+                .long(options::RECURSIVE)
+                .help("operate on files and directories recursively"),
+        )
+        .arg(
+            Arg::with_name(options::traverse::TRAVERSE)
+                .short(options::traverse::TRAVERSE)
+                .help("if a command line argument is a symbolic link to a directory, traverse it"),
+        )
+        .arg(
+            Arg::with_name(options::traverse::NO_TRAVERSE)
+                .short(options::traverse::NO_TRAVERSE)
+                .help("do not traverse any symbolic links (default)")
+                .overrides_with_all(&[options::traverse::TRAVERSE, options::traverse::EVERY]),
+        )
+        .arg(
+            Arg::with_name(options::traverse::EVERY)
+                .short(options::traverse::EVERY)
+                .help("traverse every symbolic link to a directory encountered"),
+        )
 }
 
 struct Chgrper {
@@ -232,8 +349,8 @@ impl Chgrper {
 
             if let Some(p) = may_exist {
                 if p.parent().is_none() || self.is_bind_root(p) {
-                    show_info!("it is dangerous to operate recursively on '/'");
-                    show_info!("use --no-preserve-root to override this failsafe");
+                    show_error!("it is dangerous to operate recursively on '/'");
+                    show_error!("use --no-preserve-root to override this failsafe");
                     return 1;
                 }
             }
@@ -247,12 +364,12 @@ impl Chgrper {
             self.verbosity.clone(),
         ) {
             Ok(n) => {
-                show_info!("{}", n);
+                show_error!("{}", n);
                 0
             }
             Err(e) => {
                 if self.verbosity != Verbosity::Silent {
-                    show_info!("{}", e);
+                    show_error!("{}", e);
                 }
                 1
             }
@@ -272,7 +389,7 @@ impl Chgrper {
         for entry in WalkDir::new(root).follow_links(follow).min_depth(1) {
             let entry = unwrap!(entry, e, {
                 ret = 1;
-                show_info!("{}", e);
+                show_error!("{}", e);
                 continue;
             });
             let path = entry.path();
@@ -286,14 +403,14 @@ impl Chgrper {
 
             ret = match wrap_chgrp(path, &meta, self.dest_gid, follow, self.verbosity.clone()) {
                 Ok(n) => {
-                    if n != "" {
-                        show_info!("{}", n);
+                    if !n.is_empty() {
+                        show_error!("{}", n);
                     }
                     0
                 }
                 Err(e) => {
                     if self.verbosity != Verbosity::Silent {
-                        show_info!("{}", e);
+                        show_error!("{}", e);
                     }
                     1
                 }
@@ -310,7 +427,7 @@ impl Chgrper {
             unwrap!(path.metadata(), e, {
                 match self.verbosity {
                     Silent => (),
-                    _ => show_info!("cannot access '{}': {}", path.display(), e),
+                    _ => show_error!("cannot access '{}': {}", path.display(), e),
                 }
                 return None;
             })
@@ -318,7 +435,7 @@ impl Chgrper {
             unwrap!(path.symlink_metadata(), e, {
                 match self.verbosity {
                     Silent => (),
-                    _ => show_info!("cannot dereference '{}': {}", path.display(), e),
+                    _ => show_error!("cannot dereference '{}': {}", path.display(), e),
                 }
                 return None;
             })

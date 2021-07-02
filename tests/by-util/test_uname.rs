@@ -2,60 +2,46 @@ use crate::common::util::*;
 
 #[test]
 fn test_uname_compatible() {
-    let (_, mut ucmd) = at_and_ucmd!();
-
-    let result = ucmd.arg("-a").run();
-    assert!(result.success);
+    new_ucmd!().arg("-a").succeeds();
 }
 
 #[test]
 fn test_uname_name() {
-    let (_, mut ucmd) = at_and_ucmd!();
-
-    let result = ucmd.arg("-n").run();
-    assert!(result.success);
+    new_ucmd!().arg("-n").succeeds();
 }
 
 #[test]
 fn test_uname_processor() {
-    let (_, mut ucmd) = at_and_ucmd!();
-
-    let result = ucmd.arg("-p").run();
-    assert!(result.success);
-    assert_eq!(result.stdout.trim_end(), "unknown");
+    let result = new_ucmd!().arg("-p").succeeds();
+    assert_eq!(result.stdout_str().trim_end(), "unknown");
 }
 
 #[test]
-fn test_uname_hwplatform() {
-    let (_, mut ucmd) = at_and_ucmd!();
-
-    let result = ucmd.arg("-i").run();
-    assert!(result.success);
-    assert_eq!(result.stdout.trim_end(), "unknown");
+fn test_uname_hardware_platform() {
+    let result = new_ucmd!().arg("-i").succeeds();
+    assert_eq!(result.stdout_str().trim_end(), "unknown");
 }
 
 #[test]
 fn test_uname_machine() {
-    let (_, mut ucmd) = at_and_ucmd!();
-
-    let result = ucmd.arg("-m").run();
-    assert!(result.success);
+    new_ucmd!().arg("-m").succeeds();
 }
 
 #[test]
 fn test_uname_kernel_version() {
-    let (_, mut ucmd) = at_and_ucmd!();
-
-    let result = ucmd.arg("-v").run();
-    assert!(result.success);
+    new_ucmd!().arg("-v").succeeds();
 }
 
 #[test]
 fn test_uname_kernel() {
     let (_, mut ucmd) = at_and_ucmd!();
 
-    let result = ucmd.arg("-o").run();
-    assert!(result.success);
     #[cfg(target_os = "linux")]
-    assert!(result.stdout.to_lowercase().contains("linux"));
+    {
+        let result = ucmd.arg("-o").succeeds();
+        assert!(result.stdout_str().to_lowercase().contains("linux"));
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    ucmd.arg("-o").succeeds();
 }

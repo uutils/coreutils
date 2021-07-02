@@ -16,9 +16,8 @@ path = "src/dd.rs"
 
 [dependencies]
 byte-unit = "4.0"
+clap = "2.33.3"
 debug_print = "1.0"
-# Probably best to keep the getopts version identical to the version of getopts in the uucore crate
-getopts = "<= 0.2.21"
 gcd = "2.0"
 libc = "0.2"
 signal-hook = "0.3.9"

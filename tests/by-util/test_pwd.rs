@@ -9,5 +9,5 @@ fn test_default() {
 #[test]
 fn test_failed() {
     let (_at, mut ucmd) = at_and_ucmd!();
-    ucmd.arg("willfail").fails();
+    ucmd.arg("will-fail").fails();
 }

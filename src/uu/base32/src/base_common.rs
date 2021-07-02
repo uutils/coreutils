@@ -7,73 +7,134 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
-use std::fs::File;
-use std::io::{stdin, stdout, BufReader, Read, Write};
-use std::path::Path;
+use std::io::{stdout, Read, Write};
 
 use uucore::encoding::{wrap_print, Data, Format};
+use uucore::InvalidEncodingHandling;
 
-pub fn execute(
-    args: Vec<String>,
-    syntax: &str,
-    summary: &str,
-    long_help: &str,
-    format: Format,
-) -> i32 {
-    let matches = app!(syntax, summary, long_help)
-        .optflag("d", "decode", "decode data")
-        .optflag(
-            "i",
-            "ignore-garbage",
-            "when decoding, ignore non-alphabetic characters",
-        )
-        .optopt(
-            "w",
-            "wrap",
-            "wrap encoded lines after COLS character (default 76, 0 to disable wrapping)",
-            "COLS",
-        )
-        .parse(args);
+use std::fs::File;
+use std::io::{BufReader, Stdin};
+use std::path::Path;
 
-    let line_wrap = matches.opt_str("wrap").map(|s| match s.parse() {
-        Ok(n) => n,
-        Err(e) => {
-            crash!(1, "invalid wrap size: ‘{}’: {}", s, e);
-        }
-    });
-    let ignore_garbage = matches.opt_present("ignore-garbage");
-    let decode = matches.opt_present("decode");
+use clap::{App, Arg};
 
-    if matches.free.len() > 1 {
-        show_usage_error!("extra operand ‘{}’", matches.free[0]);
-        return 1;
-    }
-
-    if matches.free.is_empty() || &matches.free[0][..] == "-" {
-        let stdin_raw = stdin();
-        handle_input(
-            &mut stdin_raw.lock(),
-            format,
-            line_wrap,
-            ignore_garbage,
-            decode,
-        );
-    } else {
-        let path = Path::new(matches.free[0].as_str());
-        let file_buf = safe_unwrap!(File::open(&path));
-        let mut input = BufReader::new(file_buf);
-        handle_input(&mut input, format, line_wrap, ignore_garbage, decode);
-    };
-
-    0
+// Config.
+pub struct Config {
+    pub decode: bool,
+    pub ignore_garbage: bool,
+    pub wrap_cols: Option<usize>,
+    pub to_read: Option<String>,
 }
 
-fn handle_input<R: Read>(
+pub mod options {
+    pub static DECODE: &str = "decode";
+    pub static WRAP: &str = "wrap";
+    pub static IGNORE_GARBAGE: &str = "ignore-garbage";
+    pub static FILE: &str = "file";
+}
+
+impl Config {
+    fn from(options: clap::ArgMatches) -> Result<Config, String> {
+        let file: Option<String> = match options.values_of(options::FILE) {
+            Some(mut values) => {
+                let name = values.next().unwrap();
+                if values.len() != 0 {
+                    return Err(format!("extra operand '{}'", name));
+                }
+
+                if name == "-" {
+                    None
+                } else {
+                    if !Path::exists(Path::new(name)) {
+                        return Err(format!("{}: No such file or directory", name));
+                    }
+                    Some(name.to_owned())
+                }
+            }
+            None => None,
+        };
+
+        let cols = options
+            .value_of(options::WRAP)
+            .map(|num| {
+                num.parse::<usize>()
+                    .map_err(|e| format!("Invalid wrap size: '{}': {}", num, e))
+            })
+            .transpose()?;
+
+        Ok(Config {
+            decode: options.is_present(options::DECODE),
+            ignore_garbage: options.is_present(options::IGNORE_GARBAGE),
+            wrap_cols: cols,
+            to_read: file,
+        })
+    }
+}
+
+pub fn parse_base_cmd_args(
+    args: impl uucore::Args,
+    name: &str,
+    version: &str,
+    about: &str,
+    usage: &str,
+) -> Result<Config, String> {
+    let app = base_app(name, version, about).usage(usage);
+    let arg_list = args
+        .collect_str(InvalidEncodingHandling::ConvertLossy)
+        .accept_any();
+    Config::from(app.get_matches_from(arg_list))
+}
+
+pub fn base_app<'a>(name: &str, version: &'a str, about: &'a str) -> App<'static, 'a> {
+    App::new(name)
+        .version(version)
+        .about(about)
+        // Format arguments.
+        .arg(
+            Arg::with_name(options::DECODE)
+                .short("d")
+                .long(options::DECODE)
+                .help("decode data"),
+        )
+        .arg(
+            Arg::with_name(options::IGNORE_GARBAGE)
+                .short("i")
+                .long(options::IGNORE_GARBAGE)
+                .help("when decoding, ignore non-alphabetic characters"),
+        )
+        .arg(
+            Arg::with_name(options::WRAP)
+                .short("w")
+                .long(options::WRAP)
+                .takes_value(true)
+                .help(
+                    "wrap encoded lines after COLS character (default 76, 0 to disable wrapping)",
+                ),
+        )
+        // "multiple" arguments are used to check whether there is more than one
+        // file passed in.
+        .arg(Arg::with_name(options::FILE).index(1).multiple(true))
+}
+
+pub fn get_input<'a>(config: &Config, stdin_ref: &'a Stdin) -> Box<dyn Read + 'a> {
+    match &config.to_read {
+        Some(name) => {
+            let file_buf = safe_unwrap!(File::open(Path::new(name)));
+            Box::new(BufReader::new(file_buf)) // as Box<dyn Read>
+        }
+        None => {
+            Box::new(stdin_ref.lock()) // as Box<dyn Read>
+        }
+    }
+}
+
+pub fn handle_input<R: Read>(
     input: &mut R,
     format: Format,
     line_wrap: Option<usize>,
     ignore_garbage: bool,
     decode: bool,
+    name: &str,
 ) {
     let mut data = Data::new(input, format).ignore_garbage(ignore_garbage);
     if let Some(wrap) = line_wrap {
@@ -88,10 +149,14 @@ fn handle_input<R: Read>(
             Ok(s) => {
                 if stdout().write_all(&s).is_err() {
                     // on windows console, writing invalid utf8 returns an error
-                    crash!(1, "Cannot write non-utf8 data");
+                    eprintln!("{}: error: Cannot write non-utf8 data", name);
+                    exit!(1)
                 }
             }
-            Err(_) => crash!(1, "invalid input"),
+            Err(_) => {
+                eprintln!("{}: error: invalid input", name);
+                exit!(1)
+            }
         }
     }
 }

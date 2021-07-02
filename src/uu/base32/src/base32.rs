@@ -7,13 +7,15 @@
 
 #[macro_use]
 extern crate uucore;
+
+use std::io::{stdin, Read};
+
+use clap::App;
 use uucore::encoding::Format;
 
-mod base_common;
+pub mod base_common;
 
-static SYNTAX: &str = "[OPTION]... [FILE]";
-static SUMMARY: &str = "Base32 encode or decode FILE, or standard input, to standard output.";
-static LONG_HELP: &str = "
+static ABOUT: &str = "
  With no FILE, or when FILE is -, read standard input.
 
  The data are encoded as described for the base32 alphabet in RFC
@@ -22,13 +24,40 @@ static LONG_HELP: &str = "
  to attempt to recover from any other non-alphabet bytes in the
  encoded stream.
 ";
+static VERSION: &str = env!("CARGO_PKG_VERSION");
+
+static BASE_CMD_PARSE_ERROR: i32 = 1;
+
+fn get_usage() -> String {
+    format!("{0} [OPTION]... [FILE]", executable!())
+}
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    base_common::execute(
-        args.collect_str(),
-        SYNTAX,
-        SUMMARY,
-        LONG_HELP,
-        Format::Base32,
-    )
+    let format = Format::Base32;
+    let usage = get_usage();
+    let name = executable!();
+
+    let config_result: Result<base_common::Config, String> =
+        base_common::parse_base_cmd_args(args, name, VERSION, ABOUT, &usage);
+    let config = config_result.unwrap_or_else(|s| crash!(BASE_CMD_PARSE_ERROR, "{}", s));
+
+    // Create a reference to stdin so we can return a locked stdin from
+    // parse_base_cmd_args
+    let stdin_raw = stdin();
+    let mut input: Box<dyn Read> = base_common::get_input(&config, &stdin_raw);
+
+    base_common::handle_input(
+        &mut input,
+        format,
+        config.wrap_cols,
+        config.ignore_garbage,
+        config.decode,
+        name,
+    );
+
+    0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    base_common::base_app(executable!(), VERSION, ABOUT)
 }

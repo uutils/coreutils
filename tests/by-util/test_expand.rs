@@ -2,47 +2,54 @@ use crate::common::util::*;
 
 #[test]
 fn test_with_tab() {
-    let (_, mut ucmd) = at_and_ucmd!();
-
-    let result = ucmd.arg("with-tab.txt").run();
-    assert!(result.success);
-    assert!(result.stdout.contains("        "));
-    assert!(!result.stdout.contains("\t"));
+    new_ucmd!()
+        .arg("with-tab.txt")
+        .succeeds()
+        .stdout_contains("        ")
+        .stdout_does_not_contain("\t");
 }
 
 #[test]
 fn test_with_trailing_tab() {
-    let (_, mut ucmd) = at_and_ucmd!();
-
-    let result = ucmd.arg("with-trailing-tab.txt").run();
-    assert!(result.success);
-    assert!(result.stdout.contains("with tabs=>  "));
-    assert!(!result.stdout.contains("\t"));
+    new_ucmd!()
+        .arg("with-trailing-tab.txt")
+        .succeeds()
+        .stdout_contains("with tabs=>  ")
+        .stdout_does_not_contain("\t");
 }
 
 #[test]
 fn test_with_trailing_tab_i() {
-    let (_, mut ucmd) = at_and_ucmd!();
-
-    let result = ucmd.arg("with-trailing-tab.txt").arg("-i").run();
-    assert!(result.success);
-    assert!(result.stdout.contains("        // with tabs=>\t"));
+    new_ucmd!()
+        .arg("with-trailing-tab.txt")
+        .arg("-i")
+        .succeeds()
+        .stdout_contains("        // with tabs=>\t");
 }
 
 #[test]
 fn test_with_tab_size() {
-    let (_, mut ucmd) = at_and_ucmd!();
-
-    let result = ucmd.arg("with-tab.txt").arg("--tabs=10").run();
-    assert!(result.success);
-    assert!(result.stdout.contains("          "));
+    new_ucmd!()
+        .arg("with-tab.txt")
+        .arg("--tabs=10")
+        .succeeds()
+        .stdout_contains("          ");
 }
 
 #[test]
 fn test_with_space() {
-    let (_, mut ucmd) = at_and_ucmd!();
+    new_ucmd!()
+        .arg("with-spaces.txt")
+        .succeeds()
+        .stdout_contains("    return");
+}
 
-    let result = ucmd.arg("with-spaces.txt").run();
-    assert!(result.success);
-    assert!(result.stdout.contains("    return"));
+#[test]
+fn test_with_multiple_files() {
+    new_ucmd!()
+        .arg("with-spaces.txt")
+        .arg("with-tab.txt")
+        .succeeds()
+        .stdout_contains("    return")
+        .stdout_contains("        ");
 }

@@ -1,6 +1,6 @@
 [package]
 name = "uu_nohup"
-version = "0.0.4"
+version = "0.0.6"
 authors = ["uutils developers"]
 license = "MIT"
 description = "nohup ~ (uutils) run COMMAND, ignoring hangup signals"
@@ -15,9 +15,10 @@ edition = "2018"
 path = "src/nohup.rs"
 
 [dependencies]
-getopts = "0.2.18"
+clap = "2.33"
 libc = "0.2.42"
-uucore = { version=">=0.0.7", package="uucore", path="../../uucore", features=["fs"] }
+atty = "0.2"
+uucore = { version=">=0.0.8", package="uucore", path="../../uucore", features=["fs"] }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]

@@ -1,6 +1,6 @@
 [package]
 name = "uu_hashsum"
-version = "0.0.4"
+version = "0.0.6"
 authors = ["uutils developers"]
 license = "MIT"
 description = "hashsum ~ (uutils) display or check input digests"
@@ -25,8 +25,8 @@ regex-syntax = "0.6.7"
 sha1 = "0.6.0"
 sha2 = "0.6.0"
 sha3 = "0.6.0"
-blake2-rfc = "0.2.18"
-uucore = { version=">=0.0.7", package="uucore", path="../../uucore" }
+blake2b_simd = "0.5.11"
+uucore = { version=">=0.0.8", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]

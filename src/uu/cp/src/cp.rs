@@ -25,7 +25,7 @@ use winapi::um::fileapi::GetFileInformationByHandle;
 
 use std::borrow::Cow;
 
-use clap::{App, Arg, ArgMatches};
+use clap::{crate_version, App, Arg, ArgMatches};
 use filetime::FileTime;
 use quick_error::ResultExt;
 use std::collections::HashSet;
@@ -41,13 +41,13 @@ use std::io;
 use std::io::{stdin, stdout, Write};
 use std::mem;
 #[cfg(target_os = "linux")]
-use std::os::unix::io::IntoRawFd;
+use std::os::unix::io::AsRawFd;
 #[cfg(windows)]
 use std::os::windows::ffi::OsStrExt;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::str::FromStr;
 use std::string::ToString;
-use uucore::fs::resolve_relative_path;
+use uucore::backup_control::{self, BackupMode};
 use uucore::fs::{canonicalize, CanonicalizeMode};
 use walkdir::WalkDir;
 
@@ -112,7 +112,7 @@ macro_rules! or_continue(
     })
 );
 
-/// Prompts the user yes/no and returns `true` they if successfully
+/// Prompts the user yes/no and returns `true` if they successfully
 /// answered yes.
 macro_rules! prompt_yes(
     ($($args:tt)+) => ({
@@ -132,7 +132,9 @@ macro_rules! prompt_yes(
 
 pub type CopyResult<T> = Result<T, Error>;
 pub type Source = PathBuf;
+pub type SourceSlice = Path;
 pub type Target = PathBuf;
+pub type TargetSlice = Path;
 
 /// Specifies whether when overwrite files
 #[derive(Clone, Eq, PartialEq)]
@@ -153,7 +155,8 @@ pub enum OverwriteMode {
     NoClobber,
 }
 
-#[derive(Clone, Eq, PartialEq)]
+/// Possible arguments for `--reflink`.
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub enum ReflinkMode {
     Always,
     Auto,
@@ -164,14 +167,6 @@ pub enum ReflinkMode {
 pub enum TargetType {
     Directory,
     File,
-}
-
-#[derive(Clone, Eq, PartialEq)]
-pub enum BackupMode {
-    ExistingBackup,
-    NoBackup,
-    NumberedBackup,
-    SimpleBackup,
 }
 
 pub enum CopyMode {
@@ -198,17 +193,15 @@ pub enum Attribute {
 #[allow(dead_code)]
 pub struct Options {
     attributes_only: bool,
-    backup: bool,
+    backup: BackupMode,
     copy_contents: bool,
     copy_mode: CopyMode,
     dereference: bool,
-    no_dereference: bool,
     no_target_dir: bool,
     one_file_system: bool,
     overwrite: OverwriteMode,
     parents: bool,
     strip_trailing_slashes: bool,
-    reflink: bool,
     reflink_mode: ReflinkMode,
     preserve_attributes: Vec<Attribute>,
     recursive: bool,
@@ -218,8 +211,8 @@ pub struct Options {
     verbose: bool,
 }
 
-static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.";
+static LONG_HELP: &str = "";
 static EXIT_OK: i32 = 0;
 static EXIT_ERR: i32 = 1;
 
@@ -233,38 +226,41 @@ fn get_usage() -> String {
 }
 
 // Argument constants
-static OPT_ARCHIVE: &str = "archive";
-static OPT_ATTRIBUTES_ONLY: &str = "attributes-only";
-static OPT_BACKUP: &str = "backup";
-static OPT_CLI_SYMBOLIC_LINKS: &str = "cli-symbolic-links";
-static OPT_CONTEXT: &str = "context";
-static OPT_COPY_CONTENTS: &str = "copy-contents";
-static OPT_DEREFERENCE: &str = "dereference";
-static OPT_FORCE: &str = "force";
-static OPT_INTERACTIVE: &str = "interactive";
-static OPT_LINK: &str = "link";
-static OPT_NO_CLOBBER: &str = "no-clobber";
-static OPT_NO_DEREFERENCE: &str = "no-dereference";
-static OPT_NO_DEREFERENCE_PRESERVE_LINKS: &str = "no-dereference-preserve-linkgs";
-static OPT_NO_PRESERVE: &str = "no-preserve";
-static OPT_NO_TARGET_DIRECTORY: &str = "no-target-directory";
-static OPT_ONE_FILE_SYSTEM: &str = "one-file-system";
-static OPT_PARENT: &str = "parent";
-static OPT_PARENTS: &str = "parents";
-static OPT_PATHS: &str = "paths";
-static OPT_PRESERVE: &str = "preserve";
-static OPT_PRESERVE_DEFAULT_ATTRIBUTES: &str = "preserve-default-attributes";
-static OPT_RECURSIVE: &str = "recursive";
-static OPT_RECURSIVE_ALIAS: &str = "recursive_alias";
-static OPT_REFLINK: &str = "reflink";
-static OPT_REMOVE_DESTINATION: &str = "remove-destination";
-static OPT_SPARSE: &str = "sparse";
-static OPT_STRIP_TRAILING_SLASHES: &str = "strip-trailing-slashes";
-static OPT_SUFFIX: &str = "suffix";
-static OPT_SYMBOLIC_LINK: &str = "symbolic-link";
-static OPT_TARGET_DIRECTORY: &str = "target-directory";
-static OPT_UPDATE: &str = "update";
-static OPT_VERBOSE: &str = "verbose";
+mod options {
+    pub const ARCHIVE: &str = "archive";
+    pub const ATTRIBUTES_ONLY: &str = "attributes-only";
+    pub const BACKUP: &str = "backup";
+    pub const BACKUP_NO_ARG: &str = "b";
+    pub const CLI_SYMBOLIC_LINKS: &str = "cli-symbolic-links";
+    pub const CONTEXT: &str = "context";
+    pub const COPY_CONTENTS: &str = "copy-contents";
+    pub const DEREFERENCE: &str = "dereference";
+    pub const FORCE: &str = "force";
+    pub const INTERACTIVE: &str = "interactive";
+    pub const LINK: &str = "link";
+    pub const NO_CLOBBER: &str = "no-clobber";
+    pub const NO_DEREFERENCE: &str = "no-dereference";
+    pub const NO_DEREFERENCE_PRESERVE_LINKS: &str = "no-dereference-preserve-linkgs";
+    pub const NO_PRESERVE: &str = "no-preserve";
+    pub const NO_TARGET_DIRECTORY: &str = "no-target-directory";
+    pub const ONE_FILE_SYSTEM: &str = "one-file-system";
+    pub const PARENT: &str = "parent";
+    pub const PARENTS: &str = "parents";
+    pub const PATHS: &str = "paths";
+    pub const PRESERVE: &str = "preserve";
+    pub const PRESERVE_DEFAULT_ATTRIBUTES: &str = "preserve-default-attributes";
+    pub const RECURSIVE: &str = "recursive";
+    pub const RECURSIVE_ALIAS: &str = "recursive_alias";
+    pub const REFLINK: &str = "reflink";
+    pub const REMOVE_DESTINATION: &str = "remove-destination";
+    pub const SPARSE: &str = "sparse";
+    pub const STRIP_TRAILING_SLASHES: &str = "strip-trailing-slashes";
+    pub const SUFFIX: &str = "suffix";
+    pub const SYMBOLIC_LINK: &str = "symbolic-link";
+    pub const TARGET_DIRECTORY: &str = "target-directory";
+    pub const UPDATE: &str = "update";
+    pub const VERBOSE: &str = "verbose";
+}
 
 #[cfg(unix)]
 static PRESERVABLE_ATTRIBUTES: &[&str] = &[
@@ -294,175 +290,199 @@ static DEFAULT_ATTRIBUTES: &[Attribute] = &[
     Attribute::Timestamps,
 ];
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
-    let matches = App::new(executable!())
-        .version(VERSION)
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
         .about(ABOUT)
-        .usage(&usage[..])
-        .arg(Arg::with_name(OPT_TARGET_DIRECTORY)
+        .arg(Arg::with_name(options::TARGET_DIRECTORY)
              .short("t")
-             .conflicts_with(OPT_NO_TARGET_DIRECTORY)
-             .long(OPT_TARGET_DIRECTORY)
-             .value_name(OPT_TARGET_DIRECTORY)
+             .conflicts_with(options::NO_TARGET_DIRECTORY)
+             .long(options::TARGET_DIRECTORY)
+             .value_name(options::TARGET_DIRECTORY)
              .takes_value(true)
              .help("copy all SOURCE arguments into target-directory"))
-        .arg(Arg::with_name(OPT_NO_TARGET_DIRECTORY)
+        .arg(Arg::with_name(options::NO_TARGET_DIRECTORY)
              .short("T")
-             .long(OPT_NO_TARGET_DIRECTORY)
-             .conflicts_with(OPT_TARGET_DIRECTORY)
+             .long(options::NO_TARGET_DIRECTORY)
+             .conflicts_with(options::TARGET_DIRECTORY)
              .help("Treat DEST as a regular file and not a directory"))
-        .arg(Arg::with_name(OPT_INTERACTIVE)
+        .arg(Arg::with_name(options::INTERACTIVE)
              .short("i")
-             .long(OPT_INTERACTIVE)
-             .conflicts_with(OPT_NO_CLOBBER)
+             .long(options::INTERACTIVE)
+             .conflicts_with(options::NO_CLOBBER)
              .help("ask before overwriting files"))
-        .arg(Arg::with_name(OPT_LINK)
+        .arg(Arg::with_name(options::LINK)
              .short("l")
-             .long(OPT_LINK)
-             .overrides_with(OPT_REFLINK)
+             .long(options::LINK)
+             .overrides_with(options::REFLINK)
              .help("hard-link files instead of copying"))
-        .arg(Arg::with_name(OPT_NO_CLOBBER)
+        .arg(Arg::with_name(options::NO_CLOBBER)
              .short("n")
-             .long(OPT_NO_CLOBBER)
-             .conflicts_with(OPT_INTERACTIVE)
+             .long(options::NO_CLOBBER)
+             .conflicts_with(options::INTERACTIVE)
              .help("don't overwrite a file that already exists"))
-        .arg(Arg::with_name(OPT_RECURSIVE)
+        .arg(Arg::with_name(options::RECURSIVE)
              .short("r")
-             .long(OPT_RECURSIVE)
+             .long(options::RECURSIVE)
              // --archive sets this option
             .help("copy directories recursively"))
-        .arg(Arg::with_name(OPT_RECURSIVE_ALIAS)
+        .arg(Arg::with_name(options::RECURSIVE_ALIAS)
              .short("R")
              .help("same as -r"))
-        .arg(Arg::with_name(OPT_STRIP_TRAILING_SLASHES)
-             .long(OPT_STRIP_TRAILING_SLASHES)
+        .arg(Arg::with_name(options::STRIP_TRAILING_SLASHES)
+             .long(options::STRIP_TRAILING_SLASHES)
              .help("remove any trailing slashes from each SOURCE argument"))
-        .arg(Arg::with_name(OPT_VERBOSE)
+        .arg(Arg::with_name(options::VERBOSE)
              .short("v")
-             .long(OPT_VERBOSE)
+             .long(options::VERBOSE)
              .help("explicitly state what is being done"))
-        .arg(Arg::with_name(OPT_SYMBOLIC_LINK)
+        .arg(Arg::with_name(options::SYMBOLIC_LINK)
              .short("s")
-             .long(OPT_SYMBOLIC_LINK)
-             .conflicts_with(OPT_LINK)
-             .overrides_with(OPT_REFLINK)
+             .long(options::SYMBOLIC_LINK)
+             .conflicts_with(options::LINK)
+             .overrides_with(options::REFLINK)
              .help("make symbolic links instead of copying"))
-        .arg(Arg::with_name(OPT_FORCE)
+        .arg(Arg::with_name(options::FORCE)
              .short("f")
-             .long(OPT_FORCE)
+             .long(options::FORCE)
              .help("if an existing destination file cannot be opened, remove it and \
                     try again (this option is ignored when the -n option is also used). \
                     Currently not implemented for Windows."))
-        .arg(Arg::with_name(OPT_REMOVE_DESTINATION)
-             .long(OPT_REMOVE_DESTINATION)
-             .conflicts_with(OPT_FORCE)
+        .arg(Arg::with_name(options::REMOVE_DESTINATION)
+             .long(options::REMOVE_DESTINATION)
+             .conflicts_with(options::FORCE)
              .help("remove each existing destination file before attempting to open it \
                     (contrast with --force). On Windows, current only works for writeable files."))
-        .arg(Arg::with_name(OPT_BACKUP)
-             .short("b")
-             .long(OPT_BACKUP)
-             .help("make a backup of each existing destination file"))
-        .arg(Arg::with_name(OPT_SUFFIX)
-             .short("S")
-             .long(OPT_SUFFIX)
+        .arg(Arg::with_name(options::BACKUP)
+             .long(options::BACKUP)
+             .help("make a backup of each existing destination file")
              .takes_value(true)
-             .default_value("~")
+             .require_equals(true)
+             .min_values(0)
+             .possible_values(backup_control::BACKUP_CONTROL_VALUES)
+             .value_name("CONTROL")
+        )
+        .arg(Arg::with_name(options::BACKUP_NO_ARG)
+             .short(options::BACKUP_NO_ARG)
+             .help("like --backup but does not accept an argument")
+        )
+        .arg(Arg::with_name(options::SUFFIX)
+             .short("S")
+             .long(options::SUFFIX)
+             .takes_value(true)
              .value_name("SUFFIX")
              .help("override the usual backup suffix"))
-        .arg(Arg::with_name(OPT_UPDATE)
+        .arg(Arg::with_name(options::UPDATE)
              .short("u")
-             .long(OPT_UPDATE)
-             .help("copy only when the SOURCE file is newer than the destination file\
+             .long(options::UPDATE)
+             .help("copy only when the SOURCE file is newer than the destination file \
                     or when the destination file is missing"))
-        .arg(Arg::with_name(OPT_REFLINK)
-             .long(OPT_REFLINK)
+        .arg(Arg::with_name(options::REFLINK)
+             .long(options::REFLINK)
              .takes_value(true)
              .value_name("WHEN")
              .help("control clone/CoW copies. See below"))
-        .arg(Arg::with_name(OPT_ATTRIBUTES_ONLY)
-             .long(OPT_ATTRIBUTES_ONLY)
-             .conflicts_with(OPT_COPY_CONTENTS)
-             .overrides_with(OPT_REFLINK)
+        .arg(Arg::with_name(options::ATTRIBUTES_ONLY)
+             .long(options::ATTRIBUTES_ONLY)
+             .conflicts_with(options::COPY_CONTENTS)
+             .overrides_with(options::REFLINK)
              .help("Don't copy the file data, just the attributes"))
-        .arg(Arg::with_name(OPT_PRESERVE)
-             .long(OPT_PRESERVE)
+        .arg(Arg::with_name(options::PRESERVE)
+             .long(options::PRESERVE)
              .takes_value(true)
              .multiple(true)
              .use_delimiter(true)
              .possible_values(PRESERVABLE_ATTRIBUTES)
+             .min_values(0)
              .value_name("ATTR_LIST")
-             .conflicts_with_all(&[OPT_PRESERVE_DEFAULT_ATTRIBUTES, OPT_NO_PRESERVE])
+             .conflicts_with_all(&[options::PRESERVE_DEFAULT_ATTRIBUTES, options::NO_PRESERVE])
              // -d sets this option
              // --archive sets this option
-             .help("Preserve the specified attributes (default: mode(unix only),ownership,timestamps),\
+             .help("Preserve the specified attributes (default: mode (unix only), ownership, timestamps), \
                     if possible additional attributes: context, links, xattr, all"))
-        .arg(Arg::with_name(OPT_PRESERVE_DEFAULT_ATTRIBUTES)
+        .arg(Arg::with_name(options::PRESERVE_DEFAULT_ATTRIBUTES)
              .short("-p")
-             .long(OPT_PRESERVE_DEFAULT_ATTRIBUTES)
-             .conflicts_with_all(&[OPT_PRESERVE, OPT_NO_PRESERVE, OPT_ARCHIVE])
+             .long(options::PRESERVE_DEFAULT_ATTRIBUTES)
+             .conflicts_with_all(&[options::PRESERVE, options::NO_PRESERVE, options::ARCHIVE])
              .help("same as --preserve=mode(unix only),ownership,timestamps"))
-        .arg(Arg::with_name(OPT_NO_PRESERVE)
-             .long(OPT_NO_PRESERVE)
+        .arg(Arg::with_name(options::NO_PRESERVE)
+             .long(options::NO_PRESERVE)
              .takes_value(true)
              .value_name("ATTR_LIST")
-             .conflicts_with_all(&[OPT_PRESERVE_DEFAULT_ATTRIBUTES, OPT_PRESERVE, OPT_ARCHIVE])
+             .conflicts_with_all(&[options::PRESERVE_DEFAULT_ATTRIBUTES, options::PRESERVE, options::ARCHIVE])
              .help("don't preserve the specified attributes"))
-        .arg(Arg::with_name(OPT_PARENTS)
-            .long(OPT_PARENTS)
-            .alias(OPT_PARENT)
+        .arg(Arg::with_name(options::PARENTS)
+            .long(options::PARENTS)
+            .alias(options::PARENT)
             .help("use full source file name under DIRECTORY"))
-        .arg(Arg::with_name(OPT_NO_DEREFERENCE)
+        .arg(Arg::with_name(options::NO_DEREFERENCE)
              .short("-P")
-             .long(OPT_NO_DEREFERENCE)
-             .conflicts_with(OPT_DEREFERENCE)
+             .long(options::NO_DEREFERENCE)
+             .conflicts_with(options::DEREFERENCE)
              // -d sets this option
              .help("never follow symbolic links in SOURCE"))
-        .arg(Arg::with_name(OPT_DEREFERENCE)
+        .arg(Arg::with_name(options::DEREFERENCE)
              .short("L")
-             .long(OPT_DEREFERENCE)
-             .conflicts_with(OPT_NO_DEREFERENCE)
+             .long(options::DEREFERENCE)
+             .conflicts_with(options::NO_DEREFERENCE)
              .help("always follow symbolic links in SOURCE"))
-        .arg(Arg::with_name(OPT_ARCHIVE)
+        .arg(Arg::with_name(options::ARCHIVE)
              .short("a")
-             .long(OPT_ARCHIVE)
-             .conflicts_with_all(&[OPT_PRESERVE_DEFAULT_ATTRIBUTES, OPT_PRESERVE, OPT_NO_PRESERVE])
+             .long(options::ARCHIVE)
+             .conflicts_with_all(&[options::PRESERVE_DEFAULT_ATTRIBUTES, options::PRESERVE, options::NO_PRESERVE])
              .help("Same as -dR --preserve=all"))
-        .arg(Arg::with_name(OPT_NO_DEREFERENCE_PRESERVE_LINKS)
+        .arg(Arg::with_name(options::NO_DEREFERENCE_PRESERVE_LINKS)
              .short("d")
              .help("same as --no-dereference --preserve=links"))
+        .arg(Arg::with_name(options::ONE_FILE_SYSTEM)
+             .short("x")
+             .long(options::ONE_FILE_SYSTEM)
+             .help("stay on this file system"))
 
         // TODO: implement the following args
-        .arg(Arg::with_name(OPT_COPY_CONTENTS)
-             .long(OPT_COPY_CONTENTS)
-             .conflicts_with(OPT_ATTRIBUTES_ONLY)
+        .arg(Arg::with_name(options::COPY_CONTENTS)
+             .long(options::COPY_CONTENTS)
+             .conflicts_with(options::ATTRIBUTES_ONLY)
              .help("NotImplemented: copy contents of special files when recursive"))
-        .arg(Arg::with_name(OPT_SPARSE)
-             .long(OPT_SPARSE)
+        .arg(Arg::with_name(options::SPARSE)
+             .long(options::SPARSE)
              .takes_value(true)
              .value_name("WHEN")
              .help("NotImplemented: control creation of sparse files. See below"))
-        .arg(Arg::with_name(OPT_ONE_FILE_SYSTEM)
-             .short("x")
-             .long(OPT_ONE_FILE_SYSTEM)
-             .help("NotImplemented: stay on this file system"))
-        .arg(Arg::with_name(OPT_CONTEXT)
-             .long(OPT_CONTEXT)
+        .arg(Arg::with_name(options::CONTEXT)
+             .long(options::CONTEXT)
              .takes_value(true)
              .value_name("CTX")
              .help("NotImplemented: set SELinux security context of destination file to default type"))
-        .arg(Arg::with_name(OPT_CLI_SYMBOLIC_LINKS)
+        .arg(Arg::with_name(options::CLI_SYMBOLIC_LINKS)
              .short("H")
              .help("NotImplemented: follow command-line symbolic links in SOURCE"))
         // END TODO
 
-        .arg(Arg::with_name(OPT_PATHS)
+        .arg(Arg::with_name(options::PATHS)
              .multiple(true))
+}
+
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let usage = get_usage();
+    let matches = uu_app()
+        .after_help(&*format!(
+            "{}\n{}",
+            LONG_HELP,
+            backup_control::BACKUP_CONTROL_LONG_HELP
+        ))
+        .usage(&usage[..])
         .get_matches_from(args);
 
     let options = crash_if_err!(EXIT_ERR, Options::from_matches(&matches));
+
+    if options.overwrite == OverwriteMode::NoClobber && options.backup != BackupMode::NoBackup {
+        show_usage_error!("options --backup and --no-clobber are mutually exclusive");
+        return 1;
+    }
+
     let paths: Vec<String> = matches
-        .values_of(OPT_PATHS)
+        .values_of(options::PATHS)
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
@@ -484,9 +504,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
 impl ClobberMode {
     fn from_matches(matches: &ArgMatches) -> ClobberMode {
-        if matches.is_present(OPT_FORCE) {
+        if matches.is_present(options::FORCE) {
             ClobberMode::Force
-        } else if matches.is_present(OPT_REMOVE_DESTINATION) {
+        } else if matches.is_present(options::REMOVE_DESTINATION) {
             ClobberMode::RemoveDestination
         } else {
             ClobberMode::Standard
@@ -496,9 +516,9 @@ impl ClobberMode {
 
 impl OverwriteMode {
     fn from_matches(matches: &ArgMatches) -> OverwriteMode {
-        if matches.is_present(OPT_INTERACTIVE) {
+        if matches.is_present(options::INTERACTIVE) {
             OverwriteMode::Interactive(ClobberMode::from_matches(matches))
-        } else if matches.is_present(OPT_NO_CLOBBER) {
+        } else if matches.is_present(options::NO_CLOBBER) {
             OverwriteMode::NoClobber
         } else {
             OverwriteMode::Clobber(ClobberMode::from_matches(matches))
@@ -508,15 +528,15 @@ impl OverwriteMode {
 
 impl CopyMode {
     fn from_matches(matches: &ArgMatches) -> CopyMode {
-        if matches.is_present(OPT_LINK) {
+        if matches.is_present(options::LINK) {
             CopyMode::Link
-        } else if matches.is_present(OPT_SYMBOLIC_LINK) {
+        } else if matches.is_present(options::SYMBOLIC_LINK) {
             CopyMode::SymLink
-        } else if matches.is_present(OPT_SPARSE) {
+        } else if matches.is_present(options::SPARSE) {
             CopyMode::Sparse
-        } else if matches.is_present(OPT_UPDATE) {
+        } else if matches.is_present(options::UPDATE) {
             CopyMode::Update
-        } else if matches.is_present(OPT_ATTRIBUTES_ONLY) {
+        } else if matches.is_present(options::ATTRIBUTES_ONLY) {
             CopyMode::AttrOnly
         } else {
             CopyMode::Copy
@@ -547,26 +567,30 @@ impl FromStr for Attribute {
 }
 
 fn add_all_attributes() -> Vec<Attribute> {
-    let mut attr = Vec::new();
+    use Attribute::*;
+
+    #[cfg(target_os = "windows")]
+    let attr = vec![Ownership, Timestamps, Context, Xattr, Links];
+
+    #[cfg(not(target_os = "windows"))]
+    let mut attr = vec![Ownership, Timestamps, Context, Xattr, Links];
+
     #[cfg(unix)]
-    attr.push(Attribute::Mode);
-    attr.push(Attribute::Ownership);
-    attr.push(Attribute::Timestamps);
-    attr.push(Attribute::Context);
-    attr.push(Attribute::Xattr);
-    attr.push(Attribute::Links);
+    attr.insert(0, Mode);
+
     attr
 }
 
 impl Options {
     fn from_matches(matches: &ArgMatches) -> CopyResult<Options> {
         let not_implemented_opts = vec![
-            OPT_COPY_CONTENTS,
-            OPT_SPARSE,
-            OPT_ONE_FILE_SYSTEM,
-            OPT_CONTEXT,
+            options::COPY_CONTENTS,
+            options::SPARSE,
+            #[cfg(not(any(windows, unix)))]
+            options::ONE_FILE_SYSTEM,
+            options::CONTEXT,
             #[cfg(windows)]
-            OPT_FORCE,
+            options::FORCE,
         ];
 
         for not_implemented_opt in not_implemented_opts {
@@ -575,21 +599,28 @@ impl Options {
             }
         }
 
-        let recursive = matches.is_present(OPT_RECURSIVE)
-            || matches.is_present(OPT_RECURSIVE_ALIAS)
-            || matches.is_present(OPT_ARCHIVE);
+        let recursive = matches.is_present(options::RECURSIVE)
+            || matches.is_present(options::RECURSIVE_ALIAS)
+            || matches.is_present(options::ARCHIVE);
 
-        let backup = matches.is_present(OPT_BACKUP) || (matches.occurrences_of(OPT_SUFFIX) > 0);
+        let backup_mode = backup_control::determine_backup_mode(
+            matches.is_present(options::BACKUP_NO_ARG) || matches.is_present(options::BACKUP),
+            matches.value_of(options::BACKUP),
+        );
+        let backup_suffix =
+            backup_control::determine_backup_suffix(matches.value_of(options::SUFFIX));
+
+        let overwrite = OverwriteMode::from_matches(matches);
 
         // Parse target directory options
-        let no_target_dir = matches.is_present(OPT_NO_TARGET_DIRECTORY);
+        let no_target_dir = matches.is_present(options::NO_TARGET_DIRECTORY);
         let target_dir = matches
-            .value_of(OPT_TARGET_DIRECTORY)
+            .value_of(options::TARGET_DIRECTORY)
             .map(ToString::to_string);
 
         // Parse attributes to preserve
-        let preserve_attributes: Vec<Attribute> = if matches.is_present(OPT_PRESERVE) {
-            match matches.values_of(OPT_PRESERVE) {
+        let preserve_attributes: Vec<Attribute> = if matches.is_present(options::PRESERVE) {
+            match matches.values_of(options::PRESERVE) {
                 None => DEFAULT_ATTRIBUTES.to_vec(),
                 Some(attribute_strs) => {
                     let mut attributes = Vec::new();
@@ -604,39 +635,38 @@ impl Options {
                     attributes
                 }
             }
-        } else if matches.is_present(OPT_ARCHIVE) {
+        } else if matches.is_present(options::ARCHIVE) {
             // --archive is used. Same as --preserve=all
             add_all_attributes()
-        } else if matches.is_present(OPT_NO_DEREFERENCE_PRESERVE_LINKS) {
+        } else if matches.is_present(options::NO_DEREFERENCE_PRESERVE_LINKS) {
             vec![Attribute::Links]
-        } else if matches.is_present(OPT_PRESERVE_DEFAULT_ATTRIBUTES) {
+        } else if matches.is_present(options::PRESERVE_DEFAULT_ATTRIBUTES) {
             DEFAULT_ATTRIBUTES.to_vec()
         } else {
             vec![]
         };
 
         let options = Options {
-            attributes_only: matches.is_present(OPT_ATTRIBUTES_ONLY),
-            copy_contents: matches.is_present(OPT_COPY_CONTENTS),
+            attributes_only: matches.is_present(options::ATTRIBUTES_ONLY),
+            copy_contents: matches.is_present(options::COPY_CONTENTS),
             copy_mode: CopyMode::from_matches(matches),
-            dereference: matches.is_present(OPT_DEREFERENCE),
             // No dereference is set with -p, -d and --archive
-            no_dereference: matches.is_present(OPT_NO_DEREFERENCE)
-                || matches.is_present(OPT_NO_DEREFERENCE_PRESERVE_LINKS)
-                || matches.is_present(OPT_ARCHIVE),
-            one_file_system: matches.is_present(OPT_ONE_FILE_SYSTEM),
-            overwrite: OverwriteMode::from_matches(matches),
-            parents: matches.is_present(OPT_PARENTS),
-            backup_suffix: matches.value_of(OPT_SUFFIX).unwrap().to_string(),
-            update: matches.is_present(OPT_UPDATE),
-            verbose: matches.is_present(OPT_VERBOSE),
-            strip_trailing_slashes: matches.is_present(OPT_STRIP_TRAILING_SLASHES),
-            reflink: matches.is_present(OPT_REFLINK),
+            dereference: !(matches.is_present(options::NO_DEREFERENCE)
+                || matches.is_present(options::NO_DEREFERENCE_PRESERVE_LINKS)
+                || matches.is_present(options::ARCHIVE)
+                || recursive)
+                || matches.is_present(options::DEREFERENCE),
+            one_file_system: matches.is_present(options::ONE_FILE_SYSTEM),
+            parents: matches.is_present(options::PARENTS),
+            update: matches.is_present(options::UPDATE),
+            verbose: matches.is_present(options::VERBOSE),
+            strip_trailing_slashes: matches.is_present(options::STRIP_TRAILING_SLASHES),
             reflink_mode: {
-                if let Some(reflink) = matches.value_of(OPT_REFLINK) {
+                if let Some(reflink) = matches.value_of(options::REFLINK) {
                     match reflink {
                         "always" => ReflinkMode::Always,
                         "auto" => ReflinkMode::Auto,
+                        "never" => ReflinkMode::Never,
                         value => {
                             return Err(Error::InvalidArgument(format!(
                                 "invalid argument '{}' for \'reflink\'",
@@ -645,10 +675,19 @@ impl Options {
                         }
                     }
                 } else {
-                    ReflinkMode::Never
+                    #[cfg(any(target_os = "linux", target_os = "macos"))]
+                    {
+                        ReflinkMode::Auto
+                    }
+                    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+                    {
+                        ReflinkMode::Never
+                    }
                 }
             },
-            backup,
+            backup: backup_mode,
+            backup_suffix,
+            overwrite,
             no_target_dir,
             preserve_attributes,
             recursive,
@@ -664,7 +703,7 @@ impl TargetType {
     ///
     /// Treat target as a dir if we have multiple sources or the target
     /// exists and already is a directory
-    fn determine(sources: &[Source], target: &Target) -> TargetType {
+    fn determine(sources: &[Source], target: &TargetSlice) -> TargetType {
         if sources.len() > 1 || target.is_dir() {
             TargetType::Directory
         } else {
@@ -688,32 +727,31 @@ fn parse_path_args(path_args: &[String], options: &Options) -> CopyResult<(Vec<S
         return Err(format!("extra operand {:?}", paths[2]).into());
     }
 
-    let (mut sources, target) = match options.target_dir {
+    let target = match options.target_dir {
         Some(ref target) => {
             // All path args are sources, and the target dir was
             // specified separately
-            (paths, PathBuf::from(target))
+            PathBuf::from(target)
         }
         None => {
             // If there was no explicit target-dir, then use the last
             // path_arg
-            let target = paths.pop().unwrap();
-            (paths, target)
+            paths.pop().unwrap()
         }
     };
 
     if options.strip_trailing_slashes {
-        for source in sources.iter_mut() {
+        for source in paths.iter_mut() {
             *source = source.components().as_path().to_owned()
         }
     }
 
-    Ok((sources, target))
+    Ok((paths, target))
 }
 
 fn preserve_hardlinks(
     hard_links: &mut Vec<(String, u64)>,
-    source: &std::path::PathBuf,
+    source: &std::path::Path,
     dest: std::path::PathBuf,
     found_hard_link: &mut bool,
 ) -> CopyResult<()> {
@@ -787,7 +825,7 @@ fn preserve_hardlinks(
 /// Behavior depends on `options`, see [`Options`] for details.
 ///
 /// [`Options`]: ./struct.Options.html
-fn copy(sources: &[Source], target: &Target, options: &Options) -> CopyResult<()> {
+fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResult<()> {
     let target_type = TargetType::determine(sources, target);
     verify_target_type(target, &target_type)?;
 
@@ -839,7 +877,7 @@ fn copy(sources: &[Source], target: &Target, options: &Options) -> CopyResult<()
 
 fn construct_dest_path(
     source_path: &Path,
-    target: &Target,
+    target: &TargetSlice,
     target_type: &TargetType,
     options: &Options,
 ) -> CopyResult<PathBuf> {
@@ -869,8 +907,8 @@ fn construct_dest_path(
 }
 
 fn copy_source(
-    source: &Source,
-    target: &Target,
+    source: &SourceSlice,
+    target: &TargetSlice,
     target_type: &TargetType,
     options: &Options,
 ) -> CopyResult<()> {
@@ -911,12 +949,20 @@ fn adjust_canonicalization(p: &Path) -> Cow<Path> {
 ///
 /// Any errors encountered copying files in the tree will be logged but
 /// will not cause a short-circuit.
-fn copy_directory(root: &Path, target: &Target, options: &Options) -> CopyResult<()> {
+fn copy_directory(root: &Path, target: &TargetSlice, options: &Options) -> CopyResult<()> {
     if !options.recursive {
         return Err(format!("omitting directory '{}'", root.display()).into());
     }
 
-    let root_path = Path::new(&root).canonicalize()?;
+    // if no-dereference is enabled and this is a symlink, copy it as a file
+    if !options.dereference && fs::symlink_metadata(root).unwrap().file_type().is_symlink() {
+        return copy_file(root, target, options);
+    }
+
+    let current_dir =
+        env::current_dir().unwrap_or_else(|e| crash!(1, "failed to get current directory {}", e));
+
+    let root_path = current_dir.join(root);
 
     let root_parent = if target.exists() {
         root_path.parent()
@@ -937,18 +983,13 @@ fn copy_directory(root: &Path, target: &Target, options: &Options) -> CopyResult
     #[cfg(any(windows, target_os = "redox"))]
     let mut hard_links: Vec<(String, u64)> = vec![];
 
-    for path in WalkDir::new(root) {
+    for path in WalkDir::new(root)
+        .same_file_system(options.one_file_system)
+        .follow_links(options.dereference)
+    {
         let p = or_continue!(path);
         let is_symlink = fs::symlink_metadata(p.path())?.file_type().is_symlink();
-        let path = if (options.no_dereference || options.dereference) && is_symlink {
-            // we are dealing with a symlink. Don't follow it
-            match env::current_dir() {
-                Ok(cwd) => cwd.join(resolve_relative_path(p.path())),
-                Err(e) => crash!(1, "failed to get current directory {}", e),
-            }
-        } else {
-            or_continue!(p.path().canonicalize())
-        };
+        let path = current_dir.join(&p.path());
 
         let local_to_root_parent = match root_parent {
             Some(parent) => {
@@ -971,9 +1012,10 @@ fn copy_directory(root: &Path, target: &Target, options: &Options) -> CopyResult
         };
 
         let local_to_target = target.join(&local_to_root_parent);
-
-        if path.is_dir() && !local_to_target.exists() {
-            or_continue!(fs::create_dir_all(local_to_target.clone()));
+        if is_symlink && !options.dereference {
+            copy_link(&path, &local_to_target)?;
+        } else if path.is_dir() && !local_to_target.exists() {
+            or_continue!(fs::create_dir_all(local_to_target));
         } else if !path.is_dir() {
             if preserve_hard_links {
                 let mut found_hard_link = false;
@@ -1067,6 +1109,7 @@ fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResu
 }
 
 #[cfg(not(windows))]
+#[allow(clippy::unnecessary_wraps)] // needed for windows version
 fn symlink_file(source: &Path, dest: &Path, context: &str) -> CopyResult<()> {
     match std::os::unix::fs::symlink(source, dest).context(context) {
         Ok(_) => Ok(()),
@@ -1083,14 +1126,10 @@ fn context_for(src: &Path, dest: &Path) -> String {
     format!("'{}' -> '{}'", src.display(), dest.display())
 }
 
-/// Implements a relatively naive backup that is not as full featured
-/// as GNU cp.  No CONTROL version control method argument is taken
-/// for backups.
-/// TODO: Add version control methods
-fn backup_file(path: &Path, suffix: &str) -> CopyResult<PathBuf> {
-    let mut backup_path = path.to_path_buf().into_os_string();
-    backup_path.push(suffix);
-    fs::copy(path, &backup_path)?;
+/// Implements a simple backup copy for the destination file.
+/// TODO: for the backup, should this function be replaced by `copy_file(...)`?
+fn backup_dest(dest: &Path, backup_path: &Path) -> CopyResult<PathBuf> {
+    fs::copy(dest, &backup_path)?;
     Ok(backup_path.into())
 }
 
@@ -1101,8 +1140,9 @@ fn handle_existing_dest(source: &Path, dest: &Path, options: &Options) -> CopyRe
 
     options.overwrite.verify(dest)?;
 
-    if options.backup {
-        backup_file(dest, &options.backup_suffix)?;
+    let backup_path = backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
+    if let Some(backup_path) = backup_path {
+        backup_dest(dest, &backup_path)?;
     }
 
     match options.overwrite {
@@ -1158,7 +1198,7 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
         CopyMode::SymLink => {
             symlink_file(source, dest, &*context_for(source, dest))?;
         }
-        CopyMode::Sparse => return Err(Error::NotImplemented(OPT_SPARSE.to_string())),
+        CopyMode::Sparse => return Err(Error::NotImplemented(options::SPARSE.to_string())),
         CopyMode::Update => {
             if dest.exists() {
                 let src_metadata = fs::metadata(source)?;
@@ -1190,74 +1230,159 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
     Ok(())
 }
 
-///Copy the file from `source` to `dest` either using the normal `fs::copy` or the
-///`FICLONE` ioctl if --reflink is specified and the filesystem supports it.
+/// Copy the file from `source` to `dest` either using the normal `fs::copy` or a
+/// copy-on-write scheme if --reflink is specified and the filesystem supports it.
 fn copy_helper(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
-    if options.reflink {
-        #[cfg(not(target_os = "linux"))]
-        return Err("--reflink is only supported on linux".to_string().into());
-
-        #[cfg(target_os = "linux")]
-        {
-            let src_file = File::open(source).unwrap().into_raw_fd();
-            let dst_file = OpenOptions::new()
-                .write(true)
-                .truncate(false)
-                .create(true)
-                .open(dest)
-                .unwrap()
-                .into_raw_fd();
-            match options.reflink_mode {
-                ReflinkMode::Always => unsafe {
-                    let result = ficlone(dst_file, src_file as *const i32);
-                    if result != 0 {
-                        return Err(format!(
-                            "failed to clone {:?} from {:?}: {}",
-                            source,
-                            dest,
-                            std::io::Error::last_os_error()
-                        )
-                        .into());
-                    } else {
-                        return Ok(());
-                    }
-                },
-                ReflinkMode::Auto => unsafe {
-                    let result = ficlone(dst_file, src_file as *const i32);
-                    if result != 0 {
-                        fs::copy(source, dest).context(&*context_for(source, dest))?;
-                    }
-                },
-                ReflinkMode::Never => {}
-            }
-        }
-    } else if options.no_dereference && fs::symlink_metadata(&source)?.file_type().is_symlink() {
-        // Here, we will copy the symlink itself (actually, just recreate it)
-        let link = fs::read_link(&source)?;
-        let dest: Cow<'_, Path> = if dest.is_dir() {
-            match source.file_name() {
-                Some(name) => dest.join(name).into(),
-                None => crash!(
-                    EXIT_ERR,
-                    "cannot stat ‘{}’: No such file or directory",
-                    source.display()
-                ),
-            }
-        } else {
-            dest.into()
-        };
-        symlink_file(&link, &dest, &*context_for(&link, &dest))?;
-    } else if source.to_string_lossy() == "/dev/null" {
+    if options.parents {
+        let parent = dest.parent().unwrap_or(dest);
+        fs::create_dir_all(parent)?;
+    }
+    let is_symlink = fs::symlink_metadata(&source)?.file_type().is_symlink();
+    if source.to_string_lossy() == "/dev/null" {
         /* workaround a limitation of fs::copy
          * https://github.com/rust-lang/rust/issues/79390
          */
         File::create(dest)?;
-    } else {
-        if options.parents {
-            let parent = dest.parent().unwrap_or(dest);
-            fs::create_dir_all(parent)?;
+    } else if !options.dereference && is_symlink {
+        copy_link(source, dest)?;
+    } else if options.reflink_mode != ReflinkMode::Never {
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        return Err("--reflink is only supported on linux and macOS"
+            .to_string()
+            .into());
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        if is_symlink {
+            assert!(options.dereference);
+            let real_path = std::fs::read_link(source)?;
+
+            #[cfg(target_os = "macos")]
+            copy_on_write_macos(&real_path, dest, options.reflink_mode)?;
+            #[cfg(target_os = "linux")]
+            copy_on_write_linux(&real_path, dest, options.reflink_mode)?;
+        } else {
+            #[cfg(target_os = "macos")]
+            copy_on_write_macos(source, dest, options.reflink_mode)?;
+            #[cfg(target_os = "linux")]
+            copy_on_write_linux(source, dest, options.reflink_mode)?;
         }
+    } else {
         fs::copy(source, dest).context(&*context_for(source, dest))?;
+    }
+
+    Ok(())
+}
+
+fn copy_link(source: &Path, dest: &Path) -> CopyResult<()> {
+    // Here, we will copy the symlink itself (actually, just recreate it)
+    let link = fs::read_link(&source)?;
+    let dest: Cow<'_, Path> = if dest.is_dir() {
+        match source.file_name() {
+            Some(name) => dest.join(name).into(),
+            None => crash!(
+                EXIT_ERR,
+                "cannot stat '{}': No such file or directory",
+                source.display()
+            ),
+        }
+    } else {
+        // we always need to remove the file to be able to create a symlink,
+        // even if it is writeable.
+        if dest.exists() {
+            fs::remove_file(dest)?;
+        }
+        dest.into()
+    };
+    symlink_file(&link, &dest, &*context_for(&link, &dest))
+}
+
+/// Copies `source` to `dest` using copy-on-write if possible.
+#[cfg(target_os = "linux")]
+fn copy_on_write_linux(source: &Path, dest: &Path, mode: ReflinkMode) -> CopyResult<()> {
+    debug_assert!(mode != ReflinkMode::Never);
+
+    let src_file = File::open(source).context(&*context_for(source, dest))?;
+    let dst_file = OpenOptions::new()
+        .write(true)
+        .truncate(false)
+        .create(true)
+        .open(dest)
+        .context(&*context_for(source, dest))?;
+    match mode {
+        ReflinkMode::Always => unsafe {
+            let result = ficlone(dst_file.as_raw_fd(), src_file.as_raw_fd() as *const i32);
+            if result != 0 {
+                Err(format!(
+                    "failed to clone {:?} from {:?}: {}",
+                    source,
+                    dest,
+                    std::io::Error::last_os_error()
+                )
+                .into())
+            } else {
+                Ok(())
+            }
+        },
+        ReflinkMode::Auto => unsafe {
+            let result = ficlone(dst_file.as_raw_fd(), src_file.as_raw_fd() as *const i32);
+            if result != 0 {
+                fs::copy(source, dest).context(&*context_for(source, dest))?;
+            }
+            Ok(())
+        },
+        ReflinkMode::Never => unreachable!(),
+    }
+}
+
+/// Copies `source` to `dest` using copy-on-write if possible.
+#[cfg(target_os = "macos")]
+fn copy_on_write_macos(source: &Path, dest: &Path, mode: ReflinkMode) -> CopyResult<()> {
+    debug_assert!(mode != ReflinkMode::Never);
+
+    // Extract paths in a form suitable to be passed to a syscall.
+    // The unwrap() is safe because they come from the command-line and so contain non nul
+    // character.
+    use std::os::unix::ffi::OsStrExt;
+    let src = CString::new(source.as_os_str().as_bytes()).unwrap();
+    let dst = CString::new(dest.as_os_str().as_bytes()).unwrap();
+
+    // clonefile(2) was introduced in macOS 10.12 so we cannot statically link against it
+    // for backward compatibility.
+    let clonefile = CString::new("clonefile").unwrap();
+    let raw_pfn = unsafe { libc::dlsym(libc::RTLD_NEXT, clonefile.as_ptr()) };
+
+    let mut error = 0;
+    if !raw_pfn.is_null() {
+        // Call clonefile(2).
+        // Safety: Casting a C function pointer to a rust function value is one of the few
+        // blessed uses of `transmute()`.
+        unsafe {
+            let pfn: extern "C" fn(
+                src: *const libc::c_char,
+                dst: *const libc::c_char,
+                flags: u32,
+            ) -> libc::c_int = std::mem::transmute(raw_pfn);
+            error = pfn(src.as_ptr(), dst.as_ptr(), 0);
+            if std::io::Error::last_os_error().kind() == std::io::ErrorKind::AlreadyExists {
+                // clonefile(2) fails if the destination exists.  Remove it and try again.  Do not
+                // bother to check if removal worked because we're going to try to clone again.
+                let _ = fs::remove_file(dest);
+                error = pfn(src.as_ptr(), dst.as_ptr(), 0);
+            }
+        }
+    }
+
+    if raw_pfn.is_null() || error != 0 {
+        // clonefile(2) is either not supported or it errored out (possibly because the FS does not
+        // support COW).
+        match mode {
+            ReflinkMode::Always => {
+                return Err(
+                    format!("failed to clone {:?} from {:?}: {}", source, dest, error).into(),
+                )
+            }
+            ReflinkMode::Auto => fs::copy(source, dest).context(&*context_for(source, dest))?,
+            ReflinkMode::Never => unreachable!(),
+        };
     }
 
     Ok(())
@@ -1306,9 +1431,9 @@ pub fn paths_refer_to_same_file(p1: &Path, p2: &Path) -> io::Result<bool> {
 fn test_cp_localize_to_target() {
     assert!(
         localize_to_target(
-            &Path::new("a/source/"),
-            &Path::new("a/source/c.txt"),
-            &Path::new("target/")
+            Path::new("a/source/"),
+            Path::new("a/source/c.txt"),
+            Path::new("target/")
         )
         .unwrap()
             == Path::new("target/c.txt")
