@@ -14,201 +14,39 @@ use uucore::InvalidEncodingHandling;
 #[cfg(test)]
 mod dd_unit_tests;
 
+mod datastructures;
+use datastructures::*;
+
 mod parseargs;
+use parseargs::Matches;
 
 mod conversion_tables;
 use conversion_tables::*;
 
+use clap::{self, crate_version};
 use byte_unit::Byte;
 use debug_print::debug_println;
 use gcd::Gcd;
-use getopts;
 use signal_hook::consts::signal;
 use std::cmp;
 use std::convert::TryInto;
 use std::error::Error;
 use std::env;
-use std::fs::{
-    File, OpenOptions,
-};
-use std::io::{
-    self, Read, Write,
-    Seek,
-};
+use std::fs::{File, OpenOptions, };
+use std::io::{self, Read, Write, Seek, };
 #[cfg(unix)]
 use libc;
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
-use std::sync::{
-    Arc, atomic::AtomicUsize, mpsc, atomic::Ordering,
-};
+use std::sync::{Arc, atomic::AtomicUsize, mpsc, atomic::Ordering, };
 use std::thread;
 use std::time;
 
 const SYNTAX: &str = "dd [OPERAND]...\ndd OPTION";
-const SUMMARY: &str = "copy, and optionally convert, a file system resource";
-const LONG_HELP: &str = "";
+const ABOUT: &str = "copy, and optionally convert, a file system resource";
 const BUF_INIT_BYTE: u8 = 0xDD;
 const RTN_SUCCESS: i32 = 0;
 const RTN_FAILURE: i32 = 1;
-
-// ----- Datatypes -----
-struct ProgUpdate
-{
-    reads_complete: u64,
-    reads_partial: u64,
-    writes_complete: u64,
-    writes_partial: u64,
-    bytes_total: u128,
-    records_truncated: u32,
-    duration: time::Duration,
-}
-
-struct ReadStat
-{
-    reads_complete: u64,
-    reads_partial: u64,
-    records_truncated: u32,
-}
-impl std::ops::AddAssign for ReadStat
-{
-    fn add_assign(&mut self, other: Self)
-    {
-        *self = Self {
-            reads_complete: self.reads_complete + other.reads_complete,
-            reads_partial: self.reads_partial + other.reads_partial,
-            records_truncated: self.records_truncated + other.records_truncated,
-        }
-    }
-}
-
-struct WriteStat
-{
-    writes_complete: u64,
-    writes_partial: u64,
-    bytes_total: u128,
-}
-impl std::ops::AddAssign for WriteStat
-{
-    fn add_assign(&mut self, other: Self)
-    {
-        *self = Self {
-            writes_complete: self.writes_complete + other.writes_complete,
-            writes_partial: self.writes_partial + other.writes_partial,
-            bytes_total: self.bytes_total + other.bytes_total,
-        }
-    }
-}
-
-type Cbs = usize;
-
-/// Stores all Conv Flags that apply to the input
-pub struct IConvFlags
-{
-    ctable: Option<&'static ConversionTable>,
-    block: Option<Cbs>,
-    unblock: Option<Cbs>,
-    swab: bool,
-    sync: Option<u8>,
-    noerror: bool,
-}
-
-/// Stores all Conv Flags that apply to the output
-#[derive(Debug, PartialEq)]
-pub struct OConvFlags
-{
-    sparse: bool,
-    excl: bool,
-    nocreat: bool,
-    notrunc: bool,
-    fdatasync: bool,
-    fsync: bool,
-}
-
-/// Stores all Flags that apply to the input
-pub struct IFlags
-{
-    cio: bool,
-    direct: bool,
-    directory: bool,
-    dsync: bool,
-    sync: bool,
-    nocache: bool,
-    nonblock: bool,
-    noatime: bool,
-    noctty: bool,
-    nofollow: bool,
-    nolinks: bool,
-    binary: bool,
-    text: bool,
-    fullblock: bool,
-    count_bytes: bool,
-    skip_bytes: bool,
-}
-
-/// Stores all Flags that apply to the output
-pub struct OFlags
-{
-    append: bool,
-    cio: bool,
-    direct: bool,
-    directory: bool,
-    dsync: bool,
-    sync: bool,
-    nocache: bool,
-    nonblock: bool,
-    noatime: bool,
-    noctty: bool,
-    nofollow: bool,
-    nolinks: bool,
-    binary: bool,
-    text: bool,
-    seek_bytes: bool,
-}
-
-/// The value of the status cl-option.
-/// Controls printing of transfer stats
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum StatusLevel
-{
-    Progress,
-    Noxfer,
-    None,
-}
-
-/// The value of count=N
-/// Defaults to Reads(N)
-/// if iflag=count_bytes
-/// then becomes Bytes(N)
-pub enum CountType
-{
-    Reads(usize),
-    Bytes(usize),
-}
-
-#[derive(Debug)]
-enum InternalError
-{
-    WrongInputType,
-    WrongOutputType,
-    InvalidConvBlockUnblockCase,
-}
-
-impl std::fmt::Display for InternalError
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self
-        {
-            Self::WrongInputType |
-            Self::WrongOutputType =>
-                write!(f, "Internal dd error: Wrong Input/Output data type"),
-            Self::InvalidConvBlockUnblockCase =>
-                write!(f, "Internal dd error: Invalid Conversion, Block, or Unblock data"),
-        }
-    }
-}
-
-impl Error for InternalError {}
 
 struct Input<R: Read>
 {
@@ -223,7 +61,7 @@ struct Input<R: Read>
 
 impl Input<io::Stdin>
 {
-    fn new(matches: &getopts::Matches) -> Result<Self, Box<dyn Error>>
+    fn new(matches: &Matches) -> Result<Self, Box<dyn Error>>
     {
         let ibs = parseargs::parse_ibs(matches)?;
         let non_ascii = parseargs::parse_input_non_ascii(matches)?;
@@ -303,7 +141,7 @@ fn make_unix_iflags(oflags: &IFlags) -> Option<libc::c_int>
 
 impl Input<File>
 {
-    fn new(matches: &getopts::Matches) -> Result<Self, Box<dyn Error>>
+    fn new(matches: &Matches) -> Result<Self, Box<dyn Error>>
     {
         let ibs = parseargs::parse_ibs(matches)?;
         let non_ascii = parseargs::parse_input_non_ascii(matches)?;
@@ -313,7 +151,7 @@ impl Input<File>
         let skip = parseargs::parse_skip_amt(&ibs, &iflags, matches)?;
         let count = parseargs::parse_count(&iflags, matches)?;
 
-        if let Some(fname) = matches.opt_str("if")
+        if let Some(fname) = matches.value_of("if")
         {
             let mut src =
             {
@@ -359,7 +197,7 @@ impl Input<File>
 
 impl<R: Read> Read for Input<R>
 {
-    fn read(&mut self, mut buf: &mut [u8]) -> io::Result<usize>
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize>
     {
         let mut base_idx = 0;
         let tlen = buf.len();
@@ -513,21 +351,16 @@ struct Output<W: Write>
 }
 
 impl Output<io::Stdout> {
-    fn new(matches: &getopts::Matches) -> Result<Self, Box<dyn Error>>
+    fn new(matches: &Matches) -> Result<Self, Box<dyn Error>>
     {
         let obs = parseargs::parse_obs(matches)?;
         let cflags = parseargs::parse_conv_flag_output(matches)?;
         let oflags = parseargs::parse_oflags(matches)?;
-        let seek = parseargs::parse_seek_amt(&obs, &oflags, matches)?;
 
-        if let Some(amt) = seek
-        {
-            let amt: u64 = amt.try_into()?;
-            dst.seek(io::SeekFrom::Start(amt))?;
-        }
+        let dst = io::stdout();
 
         Ok(Output {
-                dst: io::stdout(),
+                dst,
                 obs,
                 cflags,
                 oflags,
@@ -598,14 +431,14 @@ fn make_unix_oflags(oflags: &OFlags) -> Option<libc::c_int>
 }
 
 impl Output<File> {
-    fn new(matches: &getopts::Matches) -> Result<Self, Box<dyn Error>>
+    fn new(matches: &Matches) -> Result<Self, Box<dyn Error>>
     {
         let obs = parseargs::parse_obs(matches)?;
         let cflags = parseargs::parse_conv_flag_output(matches)?;
         let oflags = parseargs::parse_oflags(matches)?;
         let seek = parseargs::parse_seek_amt(&obs, &oflags, matches)?;
 
-        if let Some(fname) = matches.opt_str("of")
+        if let Some(fname) = matches.value_of("of")
         {
             let mut dst = {
                 let mut opts = OpenOptions::new();
@@ -702,37 +535,11 @@ impl Write for Output<File>
     }
 }
 
-impl Seek for Output<io::Stdout>
-{
-    fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64>
-    {
-        self.dst.seek(pos)
-    }
-}
-
 impl Write for Output<io::Stdout>
 {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize>
     {
-        #[inline]
-        fn is_sparse(buf: &[u8]) -> bool
-        {
-            buf.iter()
-               .all(|&e| e == 0u8)
-        }
-        // -----------------------------
-        if self.cflags.sparse && is_sparse(buf)
-        {
-            let seek_amt: i64 = buf.len()
-                                   .try_into()
-                                   .expect("Internal dd Error: Seek amount greater than signed 64-bit integer");
-            self.dst.seek(io::SeekFrom::Current(seek_amt))?;
-            Ok(buf.len())
-        }
-        else
-        {
-            self.dst.write(buf)
-        }
+        self.dst.write(buf)
     }
 
     fn flush(&mut self) -> io::Result<()>
@@ -1446,9 +1253,14 @@ pub fn uumain(args: impl uucore::Args) -> i32
                           .accept_any()
                           .iter()
                           .fold(Vec::new(), append_dashes_if_not_present);
-    let matches = build_app!().parse(dashed_args);
 
-    let result = match (matches.opt_present("if"), matches.opt_present("of"))
+    let matches = build_dd_app!()
+        // TODO: usage, after_help
+        //.usage(...)
+        //.after_help(...)
+        .get_matches_from(dashed_args);
+
+    let result = match (matches.is_present(options::INFILE), matches.is_present(options::OUTFILE))
     {
         (true, true) =>
         {
@@ -1489,74 +1301,74 @@ pub fn uumain(args: impl uucore::Args) -> i32
     }
 }
 
-pub fn uu_app() -> App<'static, 'static>
+pub fn uu_app() -> clap::App<'static, 'static>
 {
-    build_app!()
+    build_dd_app!()
 }
 
 #[macro_export]
-macro_rules! build_app (
+macro_rules! build_dd_app (
     () =>
     {
-        App::new(executable!())
+        clap::App::new(executable!())
         .version(crate_version!())
         .about(ABOUT)
         .arg(
-            Arg::with_name(options::INFILE)
+            clap::Arg::with_name(options::INFILE)
                 .long(options::INFILE)
                 .takes_value(true)
                 .help("if=FILE (alternatively --if FILE) specifies the file used for input. When not specified, stdin is used instead")
         )
         .arg(
-            Arg::with_name(options::OUTFILE)
+            clap::Arg::with_name(options::OUTFILE)
                 .long(options::OUTFILE)
                 .takes_value(true)
                 .help("of=FILE (alternatively --of FILE) specifies the file used for output. When not specified, stdout is used instead")
         )
         .arg(
-            Arg::with_name(options::IBS)
+            clap::Arg::with_name(options::IBS)
                 .long(options::IBS)
                 .takes_value(true)
                 .help("ibs=N (alternatively --ibs N) specifies the size of buffer used for reads (default: 512). Multiplier strings permitted.")
         )
         .arg(
-            Arg::with_name(options::OBS)
+            clap::Arg::with_name(options::OBS)
                 .long(options::OBS)
                 .takes_value(true)
                 .help("obs=N (alternatively --obs N) specifies the size of buffer used for writes (default: 512). Multiplier strings permitted.")
         )
         .arg(
-            Arg::with_name(options::BS)
+            clap::Arg::with_name(options::BS)
                 .long(options::BS)
                 .takes_value(true)
                 .help("bs=N (alternatively --bs N) specifies ibs=N and obs=N (default: 512). If ibs or obs are also specified, bs=N takes presedence. Multiplier strings permitted.")
         )
         .arg(
-            Arg::with_name(options::CBS)
+            clap::Arg::with_name(options::CBS)
                 .long(options::CBS)
                 .takes_value(true)
                 .help("cbs=BYTES (alternatively --cbs BYTES) specifies the 'conversion block size' in bytes. Applies to the conv=block, and conv=unblock operations. Multiplier strings permitted.")
         )
         .arg(
-            Arg::with_name(options::SKIP)
+            clap::Arg::with_name(options::SKIP)
                 .long(options::SKIP)
                 .takes_value(true)
                 .help("skip=N (alternatively --skip N) causes N ibs-sized records of input to be skipped before beginning copy/convert operations. See iflag=count_bytes if skipping N bytes is prefered. Multiplier strings permitted.")
         )
         .arg(
-            Arg::with_name(options::SEEK)
+            clap::Arg::with_name(options::SEEK)
                 .long(options::SEEK)
                 .takes_value(true)
                 .help("seek=N (alternatively --seek N) seeks N obs-sized records into output before beginning copy/convert operations. See oflag=seek_bytes if seeking N bytes is prefered. Multiplier strings permitted.")
         )
         .arg(
-            Arg::with_name(options::COUNT)
+            clap::Arg::with_name(options::COUNT)
                 .long(options::COUNT)
                 .takes_value(true)
                 .help("count=N (alternatively --count N) stop reading input after N ibs-sized read operations rather than proceeding until EOF. See iflag=count_bytes if stopping after N bytes is prefered. Multiplier strings permitted.")
         )
         .arg(
-            Arg::with_name(options::STATUS)
+            clap::Arg::with_name(options::STATUS)
                 .long(options::STATUS)
                 .takes_value(true)
                 .help("status=LEVEL (alternatively --status LEVEL) controls whether volume and performace stats are written to stderr.
@@ -1577,7 +1389,7 @@ Printing performance stats is also triggered by the INFO signal (where supported
 ")
         )
         .arg(
-            Arg::with_name(options::CONV)
+            clap::Arg::with_name(options::CONV)
                 .long(options::CONV)
                 .takes_value(true)
                 .help("conv=CONV[,CONV] (alternatively --conv CONV[,CONV]) specifies a comma-separated list of conversion options or (for legacy reasons) file-flags. Conversion options and file flags may be intermixed.
@@ -1611,7 +1423,7 @@ Flags:
 ")
         )
         .arg(
-            Arg::with_name(options::IFLAG)
+            clap::Arg::with_name(options::IFLAG)
                 .long(options::IFLAG)
                 .takes_value(true)
                 .help("iflag=FLAG[,FLAG] (alternatively --iflag FLAG[,FLAG]) a comma separated list of input flags which specify how the input source is treated. FLAG may be any of the input-flags or general-flags specified below.
@@ -1638,7 +1450,7 @@ Output-Flags
 ")
         )
         .arg(
-            Arg::with_name(options::OFLAG)
+            clap::Arg::with_name(options::OFLAG)
                 .long(options::OFLAG)
                 .takes_value(true)
                 .help("oflag=FLAG[,FLAG] (alternatively --oflag FLAG[,FLAG]) a comma separated list of output flags which specify how the output source is treated. FLAG may be any of the output-flags or general-flags specified below.

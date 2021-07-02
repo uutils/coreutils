@@ -1,4 +1,3 @@
-
 // Conversion tables are just lookup tables.
 // eg. The ASCII->EBCDIC table stores the EBCDIC code at the index
 // obtained by treating the ASCII representation as a number.

@@ -13,6 +13,8 @@ use crate::{
 
 use std::error::Error;
 
+pub type Matches = clap::ArgMatches<'static>;
+
 /// Parser Errors describe errors with parser input
 #[derive(Debug)]
 pub enum ParseError
@@ -300,21 +302,22 @@ fn parse_multiplier<'a>(s: &'a str) -> Result<usize, ParseError>
 //      "Y" | "YiB" =>
 //          Ok(1024*1024*1024*1024*1024*1024*1024*1024),
         _ =>
-            Err(ParseError::NoMatchingMultiplier(String::from(s))),
+            Err(ParseError::NoMatchingMultiplier(s.to_string())),
     }
 }
 
 fn parse_bytes_only(s: &str) -> Result<usize, ParseError>
 {
-    let bytes: usize = match s.parse()
+    match s.parse()
     {
-        Ok(val) => val,
-        Err(_) => return Err(ParseError::ByteStringContainsNoValue(String::from(s))),
-    };
-    Ok(bytes)
+        Ok(bytes) =>
+            Ok(bytes),
+        Err(_) =>
+            Err(ParseError::ByteStringContainsNoValue(s.to_string())),
+    }
 }
 
-fn parse_bytes_with_opt_multiplier(s: String) -> Result<usize, ParseError>
+fn parse_bytes_with_opt_multiplier(s: &str) -> Result<usize, ParseError>
 {
     match s.find(char::is_alphabetic)
     {
@@ -329,7 +332,7 @@ fn parse_bytes_with_opt_multiplier(s: String) -> Result<usize, ParseError>
             }
             else
             {
-                Err(ParseError::MultiplierStringWouldOverflow(s))
+                Err(ParseError::MultiplierStringWouldOverflow(s.to_string()))
             }
         }
         _ =>
@@ -337,13 +340,13 @@ fn parse_bytes_with_opt_multiplier(s: String) -> Result<usize, ParseError>
     }
 }
 
-pub fn parse_ibs(matches: &getopts::Matches) -> Result<usize, ParseError>
+pub fn parse_ibs(matches: &Matches) -> Result<usize, ParseError>
 {
-    if let Some(mixed_str) = matches.opt_str("bs")
+    if let Some(mixed_str) = matches.value_of("bs")
     {
         parse_bytes_with_opt_multiplier(mixed_str)
     }
-    else if let Some(mixed_str) = matches.opt_str("ibs")
+    else if let Some(mixed_str) = matches.value_of("ibs")
     {
         parse_bytes_with_opt_multiplier(mixed_str)
     }
@@ -353,9 +356,9 @@ pub fn parse_ibs(matches: &getopts::Matches) -> Result<usize, ParseError>
     }
 }
 
-fn parse_cbs(matches: &getopts::Matches) -> Result<Option<usize>, ParseError>
+fn parse_cbs(matches: &Matches) -> Result<Option<usize>, ParseError>
 {
-    if let Some(s) = matches.opt_str("cbs")
+    if let Some(s) = matches.value_of("cbs")
     {
         let bytes = parse_bytes_with_opt_multiplier(s)?;
         Ok(Some(bytes))
@@ -366,9 +369,9 @@ fn parse_cbs(matches: &getopts::Matches) -> Result<Option<usize>, ParseError>
     }
 }
 
-pub fn parse_status_level(matches: &getopts::Matches) -> Result<Option<StatusLevel>, ParseError>
+pub fn parse_status_level(matches: &Matches) -> Result<Option<StatusLevel>, ParseError>
 {
-    match matches.opt_str("status")
+    match matches.value_of("status")
     {
        Some(s) =>
         {
@@ -380,13 +383,13 @@ pub fn parse_status_level(matches: &getopts::Matches) -> Result<Option<StatusLev
     }
 }
 
-pub fn parse_obs(matches: &getopts::Matches) -> Result<usize, ParseError>
+pub fn parse_obs(matches: &Matches) -> Result<usize, ParseError>
 {
-    if let Some(mixed_str) = matches.opt_str("bs")
+    if let Some(mixed_str) = matches.value_of("bs")
     {
         parse_bytes_with_opt_multiplier(mixed_str)
     }
-    else if let Some(mixed_str) = matches.opt_str("obs")
+    else if let Some(mixed_str) = matches.value_of("obs")
     {
         parse_bytes_with_opt_multiplier(mixed_str)
     }
@@ -452,11 +455,11 @@ fn parse_ctable(fmt: Option<ConvFlag>, case: Option<ConvFlag>) -> Option<&'stati
    }
 }
 
-fn parse_flag_list<T: std::str::FromStr<Err = ParseError>>(tag: &str, matches: &getopts::Matches) -> Result<Vec<T>, ParseError>
+fn parse_flag_list<T: std::str::FromStr<Err = ParseError>>(tag: &str, matches: &Matches) -> Result<Vec<T>, ParseError>
 {
     let mut flags = Vec::new();
 
-    if let Some(comma_str) = matches.opt_str(tag)
+    if let Some(comma_str) = matches.value_of(tag)
     {
         for s in comma_str.split(",")
         {
@@ -470,7 +473,7 @@ fn parse_flag_list<T: std::str::FromStr<Err = ParseError>>(tag: &str, matches: &
 
 /// Parse Conversion Options (Input Variety)
 /// Construct and validate a IConvFlags
-pub fn parse_conv_flag_input(matches: &getopts::Matches) -> Result<IConvFlags, ParseError>
+pub fn parse_conv_flag_input(matches: &Matches) -> Result<IConvFlags, ParseError>
 {
     let flags = parse_flag_list("conv", matches)?;
     let cbs = parse_cbs(matches)?;
@@ -588,7 +591,7 @@ pub fn parse_conv_flag_input(matches: &getopts::Matches) -> Result<IConvFlags, P
 
 /// Parse Conversion Options (Output Variety)
 /// Construct and validate a OConvFlags
-pub fn parse_conv_flag_output(matches: &getopts::Matches) -> Result<OConvFlags, ParseError>
+pub fn parse_conv_flag_output(matches: &Matches) -> Result<OConvFlags, ParseError>
 {
     let flags = parse_flag_list("conv", matches)?;
 
@@ -644,7 +647,7 @@ pub fn parse_conv_flag_output(matches: &getopts::Matches) -> Result<OConvFlags, 
 }
 
 /// Parse IFlags struct from CL-input
-pub fn parse_iflags(matches: &getopts::Matches) -> Result<IFlags, ParseError>
+pub fn parse_iflags(matches: &Matches) -> Result<IFlags, ParseError>
 {
     let mut cio = false;
     let mut direct = false;
@@ -726,7 +729,7 @@ pub fn parse_iflags(matches: &getopts::Matches) -> Result<IFlags, ParseError>
 }
 
 /// Parse OFlags struct from CL-input
-pub fn parse_oflags(matches: &getopts::Matches) -> Result<OFlags, ParseError>
+pub fn parse_oflags(matches: &Matches) -> Result<OFlags, ParseError>
 {
     let mut append = false;
     let mut cio = false;
@@ -804,9 +807,9 @@ pub fn parse_oflags(matches: &getopts::Matches) -> Result<OFlags, ParseError>
 }
 
 /// Parse the amount of the input file to skip.
-pub fn parse_skip_amt(ibs: &usize, iflags: &IFlags, matches: &getopts::Matches) -> Result<Option<usize>, ParseError>
+pub fn parse_skip_amt(ibs: &usize, iflags: &IFlags, matches: &Matches) -> Result<Option<usize>, ParseError>
 {
-    if let Some(amt) = matches.opt_str("skip")
+    if let Some(amt) = matches.value_of("skip")
     {
         if iflags.skip_bytes
         {
@@ -826,9 +829,9 @@ pub fn parse_skip_amt(ibs: &usize, iflags: &IFlags, matches: &getopts::Matches) 
 }
 
 /// Parse the amount of the output file to seek.
-pub fn parse_seek_amt(obs: &usize, oflags: &OFlags, matches: &getopts::Matches) -> Result<Option<usize>, ParseError>
+pub fn parse_seek_amt(obs: &usize, oflags: &OFlags, matches: &Matches) -> Result<Option<usize>, ParseError>
 {
-    if let Some(amt) = matches.opt_str("seek")
+    if let Some(amt) = matches.value_of("seek")
     {
         if oflags.seek_bytes
         {
@@ -848,9 +851,9 @@ pub fn parse_seek_amt(obs: &usize, oflags: &OFlags, matches: &getopts::Matches) 
 }
 
 /// Parse the value of count=N and the type of N implied by iflags
-pub fn parse_count(iflags: &IFlags, matches:  &getopts::Matches) -> Result<Option<CountType>, ParseError>
+pub fn parse_count(iflags: &IFlags, matches:  &Matches) -> Result<Option<CountType>, ParseError>
 {
-    if let Some(amt) = matches.opt_str("count")
+    if let Some(amt) = matches.value_of("count")
     {
         let n = parse_bytes_with_opt_multiplier(amt)?;
         if iflags.count_bytes
@@ -869,9 +872,9 @@ pub fn parse_count(iflags: &IFlags, matches:  &getopts::Matches) -> Result<Optio
 }
 
 /// Parse whether the args indicate the input is not ascii
-pub fn parse_input_non_ascii(matches: &getopts::Matches) -> Result<bool, ParseError>
+pub fn parse_input_non_ascii(matches: &Matches) -> Result<bool, ParseError>
 {
-    if let Some(conv_opts) = matches.opt_str("conv")
+    if let Some(conv_opts) = matches.value_of("conv")
     {
         Ok(conv_opts.contains("ascii"))
     }

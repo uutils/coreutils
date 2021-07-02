@@ -1928,9 +1928,9 @@ name = "uu_dd"
 version = "0.0.4"
 dependencies = [
  "byte-unit",
+ "clap",
  "debug_print",
  "gcd",
- "getopts",
  "libc",
  "rand 0.8.4",
  "signal-hook",
