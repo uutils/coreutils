@@ -99,7 +99,9 @@ make_sync_test!(
 make_sync_test!(
     deadbeef_16_delayed,
     "deadbeef-16-delayed",
-    LazyReader { src: File::open("./test-resources/deadbeef-16.test").unwrap() },
+    LazyReader {
+        src: File::open("./test-resources/deadbeef-16.test").unwrap()
+    },
     Some(0u8),
     16,
     32,

@@ -81,176 +81,176 @@ macro_rules! make_unblock_test (
 );
 
 #[test]
-fn block_test_no_nl()
-{
+fn block_test_no_nl() {
     let mut rs = rs!();
     let buf = vec![0u8, 1u8, 2u8, 3u8];
     let res = block(buf, 4, &mut rs);
 
-    assert_eq!(res, vec![
-        vec![0u8, 1u8, 2u8, 3u8],
-    ]);
+    assert_eq!(res, vec![vec![0u8, 1u8, 2u8, 3u8],]);
 }
 
 #[test]
-fn block_test_no_nl_short_record()
-{
+fn block_test_no_nl_short_record() {
     let mut rs = rs!();
     let buf = vec![0u8, 1u8, 2u8, 3u8];
     let res = block(buf, 8, &mut rs);
 
-    assert_eq!(res, vec![
-        vec![0u8, 1u8, 2u8, 3u8, SPACE, SPACE, SPACE, SPACE],
-    ]);
+    assert_eq!(
+        res,
+        vec![vec![0u8, 1u8, 2u8, 3u8, SPACE, SPACE, SPACE, SPACE],]
+    );
 }
 
 #[test]
-fn block_test_no_nl_trunc()
-{
+fn block_test_no_nl_trunc() {
     let mut rs = rs!();
     let buf = vec![0u8, 1u8, 2u8, 3u8, 4u8];
     let res = block(buf, 4, &mut rs);
 
-    assert_eq!(res, vec![
-        vec![0u8, 1u8, 2u8, 3u8/*, 4u8*/],
-    ]);
+    assert_eq!(res, vec![vec![0u8, 1u8, 2u8, 3u8 /*, 4u8*/],]);
     assert_eq!(rs.records_truncated, 1);
 }
 
 #[test]
-fn block_test_nl_gt_cbs_trunc()
-{
+fn block_test_nl_gt_cbs_trunc() {
     let mut rs = rs!();
-    let buf = vec![0u8, 1u8, 2u8, 3u8, 4u8, NL, 0u8, 1u8, 2u8, 3u8, 4u8, NL, 5u8, 6u8, 7u8, 8u8];
+    let buf = vec![
+        0u8, 1u8, 2u8, 3u8, 4u8, NL, 0u8, 1u8, 2u8, 3u8, 4u8, NL, 5u8, 6u8, 7u8, 8u8,
+    ];
     let res = block(buf, 4, &mut rs);
 
-    assert_eq!(res, vec![
-        vec![0u8, 1u8, 2u8, 3u8],
-        // vec![4u8, SPACE, SPACE, SPACE],
-        vec![0u8, 1u8, 2u8, 3u8],
-        // vec![4u8, SPACE, SPACE, SPACE],
-        vec![5u8, 6u8, 7u8, 8u8],
-    ]);
+    assert_eq!(
+        res,
+        vec![
+            vec![0u8, 1u8, 2u8, 3u8],
+            // vec![4u8, SPACE, SPACE, SPACE],
+            vec![0u8, 1u8, 2u8, 3u8],
+            // vec![4u8, SPACE, SPACE, SPACE],
+            vec![5u8, 6u8, 7u8, 8u8],
+        ]
+    );
     assert_eq!(rs.records_truncated, 2);
 }
 
 #[test]
-fn block_test_surrounded_nl()
-{
+fn block_test_surrounded_nl() {
     let mut rs = rs!();
     let buf = vec![0u8, 1u8, 2u8, 3u8, NL, 4u8, 5u8, 6u8, 7u8, 8u8];
     let res = block(buf, 8, &mut rs);
 
-    assert_eq!(res, vec![
-        vec![0u8, 1u8, 2u8, 3u8, SPACE, SPACE, SPACE, SPACE],
-        vec![4u8, 5u8, 6u8, 7u8, 8u8, SPACE, SPACE, SPACE],
-    ]);
+    assert_eq!(
+        res,
+        vec![
+            vec![0u8, 1u8, 2u8, 3u8, SPACE, SPACE, SPACE, SPACE],
+            vec![4u8, 5u8, 6u8, 7u8, 8u8, SPACE, SPACE, SPACE],
+        ]
+    );
 }
 
 #[test]
-fn block_test_multiple_nl_same_cbs_block()
-{
+fn block_test_multiple_nl_same_cbs_block() {
     let mut rs = rs!();
     let buf = vec![0u8, 1u8, 2u8, 3u8, NL, 4u8, NL, 5u8, 6u8, 7u8, 8u8, 9u8];
     let res = block(buf, 8, &mut rs);
 
-    assert_eq!(res, vec![
-        vec![0u8, 1u8, 2u8, 3u8, SPACE, SPACE, SPACE, SPACE],
-        vec![4u8, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE],
-        vec![5u8, 6u8, 7u8, 8u8, 9u8, SPACE, SPACE, SPACE],
-    ]);
+    assert_eq!(
+        res,
+        vec![
+            vec![0u8, 1u8, 2u8, 3u8, SPACE, SPACE, SPACE, SPACE],
+            vec![4u8, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE],
+            vec![5u8, 6u8, 7u8, 8u8, 9u8, SPACE, SPACE, SPACE],
+        ]
+    );
 }
 
 #[test]
-fn block_test_multiple_nl_diff_cbs_block()
-{
+fn block_test_multiple_nl_diff_cbs_block() {
     let mut rs = rs!();
     let buf = vec![0u8, 1u8, 2u8, 3u8, NL, 4u8, 5u8, 6u8, 7u8, NL, 8u8, 9u8];
     let res = block(buf, 8, &mut rs);
 
-    assert_eq!(res, vec![
-        vec![0u8, 1u8, 2u8, 3u8, SPACE, SPACE, SPACE, SPACE],
-        vec![4u8, 5u8, 6u8, 7u8, SPACE, SPACE, SPACE, SPACE],
-        vec![8u8, 9u8, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE],
-    ]);
+    assert_eq!(
+        res,
+        vec![
+            vec![0u8, 1u8, 2u8, 3u8, SPACE, SPACE, SPACE, SPACE],
+            vec![4u8, 5u8, 6u8, 7u8, SPACE, SPACE, SPACE, SPACE],
+            vec![8u8, 9u8, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE],
+        ]
+    );
 }
 
 #[test]
-fn block_test_end_nl_diff_cbs_block()
-{
+fn block_test_end_nl_diff_cbs_block() {
     let mut rs = rs!();
     let buf = vec![0u8, 1u8, 2u8, 3u8, NL];
     let res = block(buf, 4, &mut rs);
 
-    assert_eq!(res, vec![
-        vec![0u8, 1u8, 2u8, 3u8],
-    ]);
+    assert_eq!(res, vec![vec![0u8, 1u8, 2u8, 3u8],]);
 }
 
 #[test]
-fn block_test_end_nl_same_cbs_block()
-{
+fn block_test_end_nl_same_cbs_block() {
     let mut rs = rs!();
     let buf = vec![0u8, 1u8, 2u8, NL];
     let res = block(buf, 4, &mut rs);
 
-    assert_eq!(res, vec![
-        vec![0u8, 1u8, 2u8, SPACE]
-    ]);
+    assert_eq!(res, vec![vec![0u8, 1u8, 2u8, SPACE]]);
 }
 
 #[test]
-fn block_test_double_end_nl()
-{
+fn block_test_double_end_nl() {
     let mut rs = rs!();
     let buf = vec![0u8, 1u8, 2u8, NL, NL];
     let res = block(buf, 4, &mut rs);
 
-    assert_eq!(res, vec![
-        vec![0u8, 1u8, 2u8, SPACE],
-        vec![SPACE, SPACE, SPACE, SPACE],
-    ]);
+    assert_eq!(
+        res,
+        vec![vec![0u8, 1u8, 2u8, SPACE], vec![SPACE, SPACE, SPACE, SPACE],]
+    );
 }
 
 #[test]
-fn block_test_start_nl()
-{
+fn block_test_start_nl() {
     let mut rs = rs!();
     let buf = vec![NL, 0u8, 1u8, 2u8, 3u8];
     let res = block(buf, 4, &mut rs);
 
-    assert_eq!(res, vec![
-        vec![SPACE, SPACE, SPACE, SPACE],
-        vec![0u8, 1u8, 2u8, 3u8],
-    ]);
+    assert_eq!(
+        res,
+        vec![vec![SPACE, SPACE, SPACE, SPACE], vec![0u8, 1u8, 2u8, 3u8],]
+    );
 }
 
 #[test]
-fn block_test_double_surrounded_nl_no_trunc()
-{
+fn block_test_double_surrounded_nl_no_trunc() {
     let mut rs = rs!();
     let buf = vec![0u8, 1u8, 2u8, 3u8, NL, NL, 4u8, 5u8, 6u8, 7u8];
     let res = block(buf, 8, &mut rs);
 
-    assert_eq!(res, vec![
-        vec![0u8, 1u8, 2u8, 3u8, SPACE, SPACE, SPACE, SPACE],
-        vec![SPACE, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE],
-        vec![4u8, 5u8, 6u8, 7u8, SPACE, SPACE, SPACE, SPACE],
-    ]);
+    assert_eq!(
+        res,
+        vec![
+            vec![0u8, 1u8, 2u8, 3u8, SPACE, SPACE, SPACE, SPACE],
+            vec![SPACE, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE],
+            vec![4u8, 5u8, 6u8, 7u8, SPACE, SPACE, SPACE, SPACE],
+        ]
+    );
 }
 
 #[test]
-fn block_test_double_surrounded_nl_double_trunc()
-{
+fn block_test_double_surrounded_nl_double_trunc() {
     let mut rs = rs!();
     let buf = vec![0u8, 1u8, 2u8, 3u8, NL, NL, 4u8, 5u8, 6u8, 7u8, 8u8];
     let res = block(buf, 4, &mut rs);
 
-    assert_eq!(res, vec![
-        vec![0u8, 1u8, 2u8, 3u8],
-        vec![SPACE, SPACE, SPACE, SPACE],
-        vec![4u8, 5u8, 6u8, 7u8/*, 8u8*/],
-    ]);
+    assert_eq!(
+        res,
+        vec![
+            vec![0u8, 1u8, 2u8, 3u8],
+            vec![SPACE, SPACE, SPACE, SPACE],
+            vec![4u8, 5u8, 6u8, 7u8 /*, 8u8*/],
+        ]
+    );
     assert_eq!(rs.records_truncated, 1);
 }
 
@@ -279,58 +279,51 @@ make_block_test!(
 );
 
 #[test]
-fn unblock_test_full_cbs()
-{
+fn unblock_test_full_cbs() {
     let buf = vec![0u8, 1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8];
     let res = unblock(buf, 8);
 
-    assert_eq!(res,
-               vec![0u8, 1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, NL],
-    );
+    assert_eq!(res, vec![0u8, 1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, NL],);
 }
 
 #[test]
-fn unblock_test_all_space()
-{
+fn unblock_test_all_space() {
     let buf = vec![SPACE, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE];
     let res = unblock(buf, 8);
 
-    assert_eq!(res,
-               vec![NL],
-    );
+    assert_eq!(res, vec![NL],);
 }
 
 #[test]
-fn unblock_test_decoy_spaces()
-{
+fn unblock_test_decoy_spaces() {
     let buf = vec![0u8, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE, 7u8];
     let res = unblock(buf, 8);
 
-    assert_eq!(res,
-              vec![0u8, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE, 7u8, NL],
+    assert_eq!(
+        res,
+        vec![0u8, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE, 7u8, NL],
     );
 }
 
 #[test]
-fn unblock_test_strip_single_cbs()
-{
+fn unblock_test_strip_single_cbs() {
     let buf = vec![0u8, 1u8, 2u8, 3u8, SPACE, SPACE, SPACE, SPACE];
     let res = unblock(buf, 8);
 
-    assert_eq!(res,
-               vec![0u8, 1u8, 2u8, 3u8, NL],
-    );
+    assert_eq!(res, vec![0u8, 1u8, 2u8, 3u8, NL],);
 }
 
 #[test]
-fn unblock_test_strip_multi_cbs()
-{
+fn unblock_test_strip_multi_cbs() {
     let buf = vec![
         vec![0u8, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE],
         vec![0u8, 1u8, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE],
         vec![0u8, 1u8, 2u8, SPACE, SPACE, SPACE, SPACE, SPACE],
         vec![0u8, 1u8, 2u8, 3u8, SPACE, SPACE, SPACE, SPACE],
-    ].into_iter().flatten().collect::<Vec<_>>();
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>();
 
     let res = unblock(buf, 8);
 
@@ -339,7 +332,10 @@ fn unblock_test_strip_multi_cbs()
         vec![0u8, 1u8, NL],
         vec![0u8, 1u8, 2u8, NL],
         vec![0u8, 1u8, 2u8, 3u8, NL],
-    ].into_iter().flatten().collect::<Vec<_>>();
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>();
 
     assert_eq!(res, exp);
 }

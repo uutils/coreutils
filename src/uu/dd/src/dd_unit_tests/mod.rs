@@ -1,13 +1,13 @@
 use super::*;
 
-mod sanity_tests;
-mod conversion_tests;
 mod block_unblock_tests;
 mod conv_sync_tests;
+mod conversion_tests;
+mod sanity_tests;
 
+use std::fs;
 use std::io::prelude::*;
 use std::io::BufReader;
-use std::fs;
 
 const DEFAULT_CFO: OConvFlags = OConvFlags {
     sparse: false,
@@ -55,15 +55,12 @@ const DEFAULT_OFLAGS: OFlags = OFlags {
     seek_bytes: false,
 };
 
-struct LazyReader<R: Read>
-{
+struct LazyReader<R: Read> {
     src: R,
 }
 
-impl<R: Read> Read for LazyReader<R>
-{
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize>
-    {
+impl<R: Read> Read for LazyReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let reduced = cmp::max(buf.len() / 2, 1);
         self.src.read(&mut buf[..reduced])
     }
@@ -143,4 +140,3 @@ macro_rules! make_spec_test (
         }
     };
 );
-

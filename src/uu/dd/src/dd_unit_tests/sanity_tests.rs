@@ -115,7 +115,7 @@ make_io_test!(
         non_ascii: false,
         ibs: 531,
         xfer_stats: None,
-        count: Some(CountType::Bytes(32*1024)),
+        count: Some(CountType::Bytes(32 * 1024)),
         cflags: icf!(),
         iflags: DEFAULT_IFLAGS,
     },
@@ -199,7 +199,7 @@ make_io_test!(
         non_ascii: false,
         ibs: 521,
         xfer_stats: None,
-        count: Some(CountType::Bytes(32*1024)),
+        count: Some(CountType::Bytes(32 * 1024)),
         cflags: icf!(),
         iflags: DEFAULT_IFLAGS,
     },
@@ -217,7 +217,8 @@ make_io_test!(
     "random-73k-test-lazy-fullblock",
     Input {
         src: LazyReader {
-            src: File::open("./test-resources/random-5828891cb1230748e146f34223bbd3b5.test").unwrap()
+            src: File::open("./test-resources/random-5828891cb1230748e146f34223bbd3b5.test")
+                .unwrap()
         },
         non_ascii: false,
         ibs: 521,
@@ -254,53 +255,48 @@ make_io_test!(
 
 // Test internal buffer size fn
 #[test]
-fn bsize_test_primes()
-{
-    let (n,m) = (7901, 7919);
+fn bsize_test_primes() {
+    let (n, m) = (7901, 7919);
     let res = calc_bsize(n, m);
     assert!(res % n == 0);
     assert!(res % m == 0);
 
-    assert_eq!(res, n*m);
+    assert_eq!(res, n * m);
 }
 
 #[test]
-fn bsize_test_rel_prime_obs_greater()
-{
-    let (n,m) = (7*5119, 13*5119);
+fn bsize_test_rel_prime_obs_greater() {
+    let (n, m) = (7 * 5119, 13 * 5119);
     let res = calc_bsize(n, m);
     assert!(res % n == 0);
     assert!(res % m == 0);
 
-    assert_eq!(res, 7*13*5119);
+    assert_eq!(res, 7 * 13 * 5119);
 }
 
 #[test]
-fn bsize_test_rel_prime_ibs_greater()
-{
-    let (n,m) = (13*5119, 7*5119);
+fn bsize_test_rel_prime_ibs_greater() {
+    let (n, m) = (13 * 5119, 7 * 5119);
     let res = calc_bsize(n, m);
     assert!(res % n == 0);
     assert!(res % m == 0);
 
-    assert_eq!(res, 7*13*5119);
+    assert_eq!(res, 7 * 13 * 5119);
 }
 
 #[test]
-fn bsize_test_3fac_rel_prime()
-{
-    let (n,m) = (11*13*5119, 7*11*5119);
+fn bsize_test_3fac_rel_prime() {
+    let (n, m) = (11 * 13 * 5119, 7 * 11 * 5119);
     let res = calc_bsize(n, m);
     assert!(res % n == 0);
     assert!(res % m == 0);
 
-    assert_eq!(res, 7*11*13*5119);
+    assert_eq!(res, 7 * 11 * 13 * 5119);
 }
 
 #[test]
-fn bsize_test_ibs_greater()
-{
-    let (n,m) = (512*1024, 256*1024);
+fn bsize_test_ibs_greater() {
+    let (n, m) = (512 * 1024, 256 * 1024);
     let res = calc_bsize(n, m);
     assert!(res % n == 0);
     assert!(res % m == 0);
@@ -309,9 +305,8 @@ fn bsize_test_ibs_greater()
 }
 
 #[test]
-fn bsize_test_obs_greater()
-{
-    let (n,m) = (256*1024, 512*1024);
+fn bsize_test_obs_greater() {
+    let (n, m) = (256 * 1024, 512 * 1024);
     let res = calc_bsize(n, m);
     assert!(res % n == 0);
     assert!(res % m == 0);
@@ -320,9 +315,8 @@ fn bsize_test_obs_greater()
 }
 
 #[test]
-fn bsize_test_bs_eq()
-{
-    let (n,m) = (1024, 1024);
+fn bsize_test_bs_eq() {
+    let (n, m) = (1024, 1024);
     let res = calc_bsize(n, m);
     assert!(res % n == 0);
     assert!(res % m == 0);

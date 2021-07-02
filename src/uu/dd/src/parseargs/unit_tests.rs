@@ -1,19 +1,23 @@
 use super::*;
 
-use crate::{
-    build_dd_app,
-    StatusLevel,
-};
+use crate::{build_dd_app, StatusLevel};
 
 #[cfg(not(unix))]
 #[test]
-fn unimplemented_flags_should_error_non_unix()
-{
+fn unimplemented_flags_should_error_non_unix() {
     let mut unfailed = Vec::new();
 
     // The following flags are only implemented in unix
-    for flag in vec!["direct", "directory", "dsync", "sync", "nonblock", "noatime", "noctty", "nofollow"]
-    {
+    for flag in vec![
+        "direct",
+        "directory",
+        "dsync",
+        "sync",
+        "nonblock",
+        "noatime",
+        "noctty",
+        "nofollow",
+    ] {
         let args = vec![
             String::from("dd"),
             format!("--iflag={}", flag),
@@ -21,36 +25,30 @@ fn unimplemented_flags_should_error_non_unix()
         ];
         let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
 
-        match parse_iflags(&matches)
-        {
-            Ok(_) =>
-                unfailed.push(format!("iflag={}", flag)),
-            Err(_) =>
-            {/* expected behaviour :-) */},
+        match parse_iflags(&matches) {
+            Ok(_) => unfailed.push(format!("iflag={}", flag)),
+            Err(_) => { /* expected behaviour :-) */ }
         }
-        match parse_oflags(&matches)
-        {
-            Ok(_) =>
-                unfailed.push(format!("oflag={}", flag)),
-            Err(_) =>
-            {/* expected behaviour :-) */},
+        match parse_oflags(&matches) {
+            Ok(_) => unfailed.push(format!("oflag={}", flag)),
+            Err(_) => { /* expected behaviour :-) */ }
         }
     }
 
-    if !unfailed.is_empty()
-    {
-        panic!("The following flags did not panic as expected: {:?}", unfailed);
+    if !unfailed.is_empty() {
+        panic!(
+            "The following flags did not panic as expected: {:?}",
+            unfailed
+        );
     }
 }
 
 #[test]
-fn unimplemented_flags_should_error()
-{
+fn unimplemented_flags_should_error() {
     let mut unfailed = Vec::new();
 
     // The following flags are not implemented
-    for flag in vec!["cio", "nocache", "nolinks", "text", "binary"]
-    {
+    for flag in vec!["cio", "nocache", "nolinks", "text", "binary"] {
         let args = vec![
             String::from("dd"),
             format!("--iflag={}", flag),
@@ -58,31 +56,26 @@ fn unimplemented_flags_should_error()
         ];
         let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
 
-        match parse_iflags(&matches)
-        {
-            Ok(_) =>
-                unfailed.push(format!("iflag={}", flag)),
-            Err(_) =>
-            {/* expected behaviour :-) */},
+        match parse_iflags(&matches) {
+            Ok(_) => unfailed.push(format!("iflag={}", flag)),
+            Err(_) => { /* expected behaviour :-) */ }
         }
-        match parse_oflags(&matches)
-        {
-            Ok(_) =>
-                unfailed.push(format!("oflag={}", flag)),
-            Err(_) =>
-            {/* expected behaviour :-) */},
+        match parse_oflags(&matches) {
+            Ok(_) => unfailed.push(format!("oflag={}", flag)),
+            Err(_) => { /* expected behaviour :-) */ }
         }
     }
 
-    if !unfailed.is_empty()
-    {
-        panic!("The following flags did not panic as expected: {:?}", unfailed);
+    if !unfailed.is_empty() {
+        panic!(
+            "The following flags did not panic as expected: {:?}",
+            unfailed
+        );
     }
 }
 
 #[test]
-fn test_status_level_absent()
-{
+fn test_status_level_absent() {
     let args = vec![
         String::from("dd"),
         String::from("--if=foo.file"),
@@ -96,8 +89,7 @@ fn test_status_level_absent()
 }
 
 #[test]
-fn test_status_level_none()
-{
+fn test_status_level_none() {
     let args = vec![
         String::from("dd"),
         String::from("--status=none"),
@@ -112,8 +104,7 @@ fn test_status_level_none()
 }
 
 #[test]
-fn test_status_level_progress()
-{
+fn test_status_level_progress() {
     let args = vec![
         String::from("dd"),
         String::from("--if=foo.file"),
@@ -128,8 +119,7 @@ fn test_status_level_progress()
 }
 
 #[test]
-fn test_status_level_noxfer()
-{
+fn test_status_level_noxfer() {
     let args = vec![
         String::from("dd"),
         String::from("--if=foo.file"),
@@ -147,12 +137,8 @@ fn test_status_level_noxfer()
 
 #[test]
 #[should_panic]
-fn icf_ctable_error()
-{
-    let args = vec![
-        String::from("dd"),
-        String::from("--conv=ascii,ebcdic,ibm"),
-    ];
+fn icf_ctable_error() {
+    let args = vec![String::from("dd"), String::from("--conv=ascii,ebcdic,ibm")];
 
     let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
 
@@ -161,12 +147,8 @@ fn icf_ctable_error()
 
 #[test]
 #[should_panic]
-fn icf_case_error()
-{
-    let args = vec![
-        String::from("dd"),
-        String::from("--conv=ucase,lcase"),
-    ];
+fn icf_case_error() {
+    let args = vec![String::from("dd"), String::from("--conv=ucase,lcase")];
 
     let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
 
@@ -175,12 +157,8 @@ fn icf_case_error()
 
 #[test]
 #[should_panic]
-fn icf_block_error()
-{
-    let args = vec![
-        String::from("dd"),
-        String::from("--conv=block,unblock"),
-    ];
+fn icf_block_error() {
+    let args = vec![String::from("dd"), String::from("--conv=block,unblock")];
 
     let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
 
@@ -189,12 +167,8 @@ fn icf_block_error()
 
 #[test]
 #[should_panic]
-fn icf_creat_error()
-{
-    let args = vec![
-        String::from("dd"),
-        String::from("--conv=excl,nocreat"),
-    ];
+fn icf_creat_error() {
+    let args = vec![String::from("dd"), String::from("--conv=excl,nocreat")];
 
     let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
 
@@ -202,35 +176,23 @@ fn icf_creat_error()
 }
 
 #[test]
-fn parse_icf_token_ibm()
-{
-    let exp = vec![
-        ConvFlag::FmtAtoI,
-    ];
+fn parse_icf_token_ibm() {
+    let exp = vec![ConvFlag::FmtAtoI];
 
-    let args = vec![
-        String::from("dd"),
-        String::from("--conv=ibm"),
-    ];
+    let args = vec![String::from("dd"), String::from("--conv=ibm")];
     let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
 
     let act = parse_flag_list::<ConvFlag>("conv", &matches).unwrap();
 
     assert_eq!(exp.len(), act.len());
-    for cf in &exp
-    {
+    for cf in &exp {
         assert!(exp.contains(&cf));
     }
 }
 
 #[test]
-fn parse_icf_tokens_elu()
-{
-    let exp = vec![
-        ConvFlag::FmtEtoA,
-        ConvFlag::LCase,
-        ConvFlag::Unblock,
-    ];
+fn parse_icf_tokens_elu() {
+    let exp = vec![ConvFlag::FmtEtoA, ConvFlag::LCase, ConvFlag::Unblock];
 
     let args = vec![
         String::from("dd"),
@@ -240,15 +202,13 @@ fn parse_icf_tokens_elu()
     let act = parse_flag_list::<ConvFlag>("conv", &matches).unwrap();
 
     assert_eq!(exp.len(), act.len());
-    for cf in &exp
-    {
+    for cf in &exp {
         assert!(exp.contains(&cf));
     }
 }
 
 #[test]
-fn parse_icf_tokens_remaining()
-{
+fn parse_icf_tokens_remaining() {
     let exp = vec![
         ConvFlag::FmtAtoE,
         ConvFlag::UCase,
@@ -274,8 +234,7 @@ fn parse_icf_tokens_remaining()
     let act = parse_flag_list::<ConvFlag>("conv", &matches).unwrap();
 
     assert_eq!(exp.len(), act.len());
-    for cf in &exp
-    {
+    for cf in &exp {
         assert!(exp.contains(&cf));
     }
 }
@@ -294,130 +253,53 @@ macro_rules! test_byte_parser (
     }
 );
 
-test_byte_parser!(
-    test_bytes_n,
-    "765",
-    765
-);
-test_byte_parser!(
-    test_bytes_c,
-    "13c",
-    13
-);
+test_byte_parser!(test_bytes_n, "765", 765);
+test_byte_parser!(test_bytes_c, "13c", 13);
 
-test_byte_parser!(
-    test_bytes_w,
-    "1w",
-    2
-);
+test_byte_parser!(test_bytes_w, "1w", 2);
 
-test_byte_parser!(
-    test_bytes_b,
-    "1b",
-    512
-);
+test_byte_parser!(test_bytes_b, "1b", 512);
 
-test_byte_parser!(
-    test_bytes_k,
-    "1kB",
-    1000
-);
-test_byte_parser!(
-    test_bytes_K,
-    "1K",
-    1024
-);
-test_byte_parser!(
-    test_bytes_Ki,
-    "1KiB",
-    1024
-);
+test_byte_parser!(test_bytes_k, "1kB", 1000);
+test_byte_parser!(test_bytes_K, "1K", 1024);
+test_byte_parser!(test_bytes_Ki, "1KiB", 1024);
 
-test_byte_parser!(
-    test_bytes_MB,
-    "2MB",
-    2*1000*1000
-);
-test_byte_parser!(
-    test_bytes_M,
-    "2M",
-    2*1024*1024
-);
-test_byte_parser!(
-    test_bytes_Mi,
-    "2MiB",
-    2*1024*1024
-);
+test_byte_parser!(test_bytes_MB, "2MB", 2 * 1000 * 1000);
+test_byte_parser!(test_bytes_M, "2M", 2 * 1024 * 1024);
+test_byte_parser!(test_bytes_Mi, "2MiB", 2 * 1024 * 1024);
 
-test_byte_parser!(
-    test_bytes_GB,
-    "3GB",
-    3*1000*1000*1000
-);
-test_byte_parser!(
-    test_bytes_G,
-    "3G",
-    3*1024*1024*1024
-);
-test_byte_parser!(
-    test_bytes_Gi,
-    "3GiB",
-    3*1024*1024*1024
-);
+test_byte_parser!(test_bytes_GB, "3GB", 3 * 1000 * 1000 * 1000);
+test_byte_parser!(test_bytes_G, "3G", 3 * 1024 * 1024 * 1024);
+test_byte_parser!(test_bytes_Gi, "3GiB", 3 * 1024 * 1024 * 1024);
 
-test_byte_parser!(
-    test_bytes_TB,
-    "4TB",
-    4*1000*1000*1000*1000
-);
-test_byte_parser!(
-    test_bytes_T,
-    "4T",
-    4*1024*1024*1024*1024
-);
-test_byte_parser!(
-    test_bytes_Ti,
-    "4TiB",
-    4*1024*1024*1024*1024
-);
+test_byte_parser!(test_bytes_TB, "4TB", 4 * 1000 * 1000 * 1000 * 1000);
+test_byte_parser!(test_bytes_T, "4T", 4 * 1024 * 1024 * 1024 * 1024);
+test_byte_parser!(test_bytes_Ti, "4TiB", 4 * 1024 * 1024 * 1024 * 1024);
 
-test_byte_parser!(
-    test_bytes_PB,
-    "5PB",
-    5*1000*1000*1000*1000*1000
-);
-test_byte_parser!(
-    test_bytes_P,
-    "5P",
-    5*1024*1024*1024*1024*1024
-);
-test_byte_parser!(
-    test_bytes_Pi,
-    "5PiB",
-    5*1024*1024*1024*1024*1024
-);
+test_byte_parser!(test_bytes_PB, "5PB", 5 * 1000 * 1000 * 1000 * 1000 * 1000);
+test_byte_parser!(test_bytes_P, "5P", 5 * 1024 * 1024 * 1024 * 1024 * 1024);
+test_byte_parser!(test_bytes_Pi, "5PiB", 5 * 1024 * 1024 * 1024 * 1024 * 1024);
 
 test_byte_parser!(
     test_bytes_EB,
     "6EB",
-    6*1000*1000*1000*1000*1000*1000
+    6 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000
 );
 test_byte_parser!(
     test_bytes_E,
     "6E",
-    6*1024*1024*1024*1024*1024*1024
+    6 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024
 );
 test_byte_parser!(
     test_bytes_Ei,
     "6EiB",
-    6*1024*1024*1024*1024*1024*1024
+    6 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024
 );
 
 #[test]
 #[should_panic]
 #[allow(non_snake_case)]
-fn test_KB_multiplier_error()
-{
+fn test_KB_multiplier_error() {
     // KB is not valid (kB, K, and KiB are)
     let bs_str = "2000KB";
 
@@ -426,8 +308,7 @@ fn test_KB_multiplier_error()
 
 #[test]
 #[should_panic]
-fn test_overflow_panic()
-{
+fn test_overflow_panic() {
     let bs_str = format!("{}KiB", usize::MAX);
 
     parse_bytes_with_opt_multiplier(&bs_str).unwrap();
@@ -435,8 +316,7 @@ fn test_overflow_panic()
 
 #[test]
 #[should_panic]
-fn test_neg_panic()
-{
+fn test_neg_panic() {
     let bs_str = format!("{}KiB", -1);
 
     parse_bytes_with_opt_multiplier(&bs_str).unwrap();

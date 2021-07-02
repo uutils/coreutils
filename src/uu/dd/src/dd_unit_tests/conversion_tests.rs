@@ -129,14 +129,16 @@ make_conv_test!(
 );
 
 #[test]
-fn all_valid_ascii_ebcdic_ascii_roundtrip_conv_test()
-{
+fn all_valid_ascii_ebcdic_ascii_roundtrip_conv_test() {
     // ASCII->EBCDIC
     let test_name = "all-valid-ascii-to-ebcdic";
     let tmp_fname_ae = format!("./test-resources/FAILED-{}.test", test_name);
 
     let i = Input {
-        src: File::open("./test-resources/all-valid-ascii-chars-37eff01866ba3f538421b30b7cbefcac.test").unwrap(),
+        src: File::open(
+            "./test-resources/all-valid-ascii-chars-37eff01866ba3f538421b30b7cbefcac.test",
+        )
+        .unwrap(),
         non_ascii: false,
         ibs: 128,
         xfer_stats: None,
@@ -152,7 +154,7 @@ fn all_valid_ascii_ebcdic_ascii_roundtrip_conv_test()
         oflags: DEFAULT_OFLAGS,
     };
 
-    dd_fileout(i,o).unwrap();
+    dd_fileout(i, o).unwrap();
 
     // EBCDIC->ASCII
     let test_name = "all-valid-ebcdic-to-ascii";
@@ -175,13 +177,18 @@ fn all_valid_ascii_ebcdic_ascii_roundtrip_conv_test()
         oflags: DEFAULT_OFLAGS,
     };
 
-    dd_fileout(i,o).unwrap();
+    dd_fileout(i, o).unwrap();
 
     // Final Comparison
     let res = File::open(&tmp_fname_ea).unwrap();
-    let spec = File::open("./test-resources/all-valid-ascii-chars-37eff01866ba3f538421b30b7cbefcac.test").unwrap();
+    let spec =
+        File::open("./test-resources/all-valid-ascii-chars-37eff01866ba3f538421b30b7cbefcac.test")
+            .unwrap();
 
-    assert_eq!(res.metadata().unwrap().len(), spec.metadata().unwrap().len());
+    assert_eq!(
+        res.metadata().unwrap().len(),
+        spec.metadata().unwrap().len()
+    );
 
     let res = BufReader::new(res);
     let spec = BufReader::new(spec);
@@ -189,10 +196,8 @@ fn all_valid_ascii_ebcdic_ascii_roundtrip_conv_test()
     let res = BufReader::new(res);
 
     // Check all bytes match
-    for (b_res, b_spec) in res.bytes().zip(spec.bytes())
-    {
-        assert_eq!(b_res.unwrap(),
-                   b_spec.unwrap());
+    for (b_res, b_spec) in res.bytes().zip(spec.bytes()) {
+        assert_eq!(b_res.unwrap(), b_spec.unwrap());
     }
 
     fs::remove_file(&tmp_fname_ae).unwrap();
