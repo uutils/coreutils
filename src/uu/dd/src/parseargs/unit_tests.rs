@@ -2,7 +2,6 @@ use super::*;
 
 use crate::{
     build_dd_app,
-    IConvFlags, OConvFlags,
     StatusLevel,
 };
 
@@ -82,7 +81,7 @@ fn icf_ctable_error()
 
     let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
 
-    let icf_parsed = parse_conv_flag_input(&matches).unwrap();
+    let _ = parse_conv_flag_input(&matches).unwrap();
 }
 
 #[test]
@@ -96,7 +95,7 @@ fn icf_case_error()
 
     let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
 
-    let icf_parsed = parse_conv_flag_input(&matches).unwrap();
+    let _ = parse_conv_flag_input(&matches).unwrap();
 }
 
 #[test]
@@ -110,7 +109,7 @@ fn icf_block_error()
 
     let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
 
-    let icf_parsed = parse_conv_flag_input(&matches).unwrap();
+    let _ = parse_conv_flag_input(&matches).unwrap();
 }
 
 #[test]
@@ -124,7 +123,7 @@ fn icf_creat_error()
 
     let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
 
-    let icf_parsed = parse_conv_flag_output(&matches).unwrap();
+    let _ = parse_conv_flag_output(&matches).unwrap();
 }
 
 #[test]

@@ -92,14 +92,6 @@ fn build_ascii_block(n: usize) -> Vec<u8>
         .collect()
 }
 
-fn build_ebcdic_block(n: usize) -> Vec<u8>
-{
-    (0..=255)
-        .cycle()
-        .take(n)
-        .collect()
-}
-
 // Sanity Tests
 #[test]
 fn version()
@@ -357,7 +349,7 @@ fn test_noatime_does_not_update_ofile_atime()
 }
 
 #[test]
-fn test_nocreat_causes_failure_when_not_present()
+fn test_nocreat_causes_failure_when_outfile_not_present()
 {
     let fname = "this-file-does-not-exist.txt";
     assert_fixture_not_exists!(&fname);
@@ -367,6 +359,7 @@ fn test_nocreat_causes_failure_when_not_present()
         "conv=nocreat",
         of!(&fname),
     ])
+        .pipe_in("")
         .run();
 
     assert!(!fix.file_exists(&fname));

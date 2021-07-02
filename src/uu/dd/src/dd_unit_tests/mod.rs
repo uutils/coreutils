@@ -5,7 +5,6 @@ mod conversion_tests;
 mod block_unblock_tests;
 mod conv_sync_tests;
 
-use rand::prelude::*;
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::fs;
@@ -67,26 +66,6 @@ impl<R: Read> Read for LazyReader<R>
     {
         let reduced = cmp::max(buf.len() / 2, 1);
         self.src.read(&mut buf[..reduced])
-    }
-}
-
-struct FickleReader<R: Read>
-{
-    src: R,
-}
-
-impl<R: Read> Read for FickleReader<R>
-{
-    fn read(&mut self, mut buf: &mut [u8]) -> io::Result<usize>
-    {
-        if rand::random()
-        {
-            self.src.read(&mut buf)
-        }
-        else
-        {
-            Ok(0)
-        }
     }
 }
 

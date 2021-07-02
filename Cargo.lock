@@ -1918,7 +1918,6 @@ dependencies = [
  "debug_print",
  "gcd",
  "libc",
- "rand 0.8.4",
  "signal-hook",
  "tempfile",
  "uucore",
