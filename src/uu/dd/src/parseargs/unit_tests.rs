@@ -5,6 +5,81 @@ use crate::{
     StatusLevel,
 };
 
+#[cfg(not(unix))]
+#[test]
+fn unimplemented_flags_should_error_non_unix()
+{
+    let mut unfailed = Vec::new();
+
+    // The following flags are only implemented in unix
+    for flag in vec!["direct", "directory", "dsync", "sync", "nonblock", "noatime", "noctty", "nofollow"]
+    {
+        let args = vec![
+            String::from("dd"),
+            format!("--iflag={}", flag),
+            format!("--oflag={}", flag),
+        ];
+        let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
+
+        match parse_iflags(&matches)
+        {
+            Ok(_) =>
+                unfailed.push(format!("iflag={}", flag)),
+            Err(_) =>
+            {/* expected behaviour :-) */},
+        }
+        match parse_oflags(&matches)
+        {
+            Ok(_) =>
+                unfailed.push(format!("oflag={}", flag)),
+            Err(_) =>
+            {/* expected behaviour :-) */},
+        }
+    }
+
+    if !unfailed.is_empty()
+    {
+        panic!("The following flags did not panic as expected: {:?}", unfailed);
+    }
+}
+
+#[test]
+fn unimplemented_flags_should_error()
+{
+    let mut unfailed = Vec::new();
+
+    // The following flags are not implemented
+    for flag in vec!["cio", "nocache", "nolinks", "text", "binary"]
+    {
+        let args = vec![
+            String::from("dd"),
+            format!("--iflag={}", flag),
+            format!("--oflag={}", flag),
+        ];
+        let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
+
+        match parse_iflags(&matches)
+        {
+            Ok(_) =>
+                unfailed.push(format!("iflag={}", flag)),
+            Err(_) =>
+            {/* expected behaviour :-) */},
+        }
+        match parse_oflags(&matches)
+        {
+            Ok(_) =>
+                unfailed.push(format!("oflag={}", flag)),
+            Err(_) =>
+            {/* expected behaviour :-) */},
+        }
+    }
+
+    if !unfailed.is_empty()
+    {
+        panic!("The following flags did not panic as expected: {:?}", unfailed);
+    }
+}
+
 #[test]
 fn test_status_level_absent()
 {

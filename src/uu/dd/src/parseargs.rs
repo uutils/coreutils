@@ -7,7 +7,7 @@ use std::error::Error;
 pub type Matches = clap::ArgMatches<'static>;
 
 /// Parser Errors describe errors with parser input
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum ParseError
 {
     MultipleFmtTable,
@@ -21,6 +21,7 @@ pub enum ParseError
     MultiplierStringWouldOverflow(String),
     BlockUnblockWithoutCBS,
     StatusLevelNotRecognized(String),
+    Unimplemented(String),
 }
 
 impl std::fmt::Display for ParseError
@@ -71,6 +72,10 @@ impl std::fmt::Display for ParseError
             Self::StatusLevelNotRecognized(arg) =>
             {
                 write!(f, "status=LEVEL not recognized -> {}", arg)
+            },
+            Self::Unimplemented(arg) =>
+            {
+                write!(f, "feature not implemented on this system -> {}", arg)
             },
         }
     }
@@ -193,31 +198,100 @@ impl std::str::FromStr for Flag
                 Ok(Self::SkipBytes),
             // Either
             "cio" =>
-                Ok(Self::Cio),
+                // Ok(Self::Cio),
+                Err(ParseError::Unimplemented(s.to_string())),
             "direct" =>
-                Ok(Self::Direct),
+                // Ok(Self::Direct),
+                if cfg!(unix)
+                {
+                    Ok(Self::Direct)
+                }
+                else
+                {
+                    Err(ParseError::Unimplemented(s.to_string()))
+                },
             "directory" =>
-                Ok(Self::Directory),
+                // Ok(Self::Directory),
+                if cfg!(unix)
+                {
+                    Ok(Self::Directory)
+                }
+                else
+                {
+                    Err(ParseError::Unimplemented(s.to_string()))
+                },
             "dsync" =>
-                Ok(Self::Dsync),
+                // Ok(Self::Dsync),
+                if cfg!(unix)
+                {
+                    Ok(Self::Dsync)
+                }
+                else
+                {
+                    Err(ParseError::Unimplemented(s.to_string()))
+                },
             "sync" =>
-                Ok(Self::Sync),
+                // Ok(Self::Sync),
+                if cfg!(unix)
+                {
+                    Ok(Self::Sync)
+                }
+                else
+                {
+                    Err(ParseError::Unimplemented(s.to_string()))
+                },
             "nocache" =>
-                Ok(Self::NoCache),
+                // Ok(Self::NoCache),
+                Err(ParseError::Unimplemented(s.to_string())),
             "nonblock" =>
-                Ok(Self::NonBlock),
+                // Ok(Self::NonBlock),
+                if cfg!(unix)
+                {
+                    Ok(Self::NonBlock)
+                }
+                else
+                {
+                    Err(ParseError::Unimplemented(s.to_string()))
+                },
             "noatime" =>
-                Ok(Self::NoATime),
+                // Ok(Self::NoATime),
+                if cfg!(unix)
+                {
+                    Ok(Self::NoATime)
+                }
+                else
+                {
+                    Err(ParseError::Unimplemented(s.to_string()))
+                },
             "noctty" =>
-                Ok(Self::NoCtty),
+                // Ok(Self::NoCtty),
+                if cfg!(unix)
+                {
+                    Ok(Self::NoCtty)
+                }
+                else
+                {
+                    Err(ParseError::Unimplemented(s.to_string()))
+                },
             "nofollow" =>
-                Ok(Self::NoFollow),
+                // Ok(Self::NoFollow),
+                if cfg!(unix)
+                {
+                    Ok(Self::NoFollow)
+                }
+                else
+                {
+                    Err(ParseError::Unimplemented(s.to_string()))
+                },
             "nolinks" =>
-                Ok(Self::NoLinks),
+                // Ok(Self::NoLinks),
+                Err(ParseError::Unimplemented(s.to_string())),
             "binary" =>
-                Ok(Self::Binary),
+                // Ok(Self::Binary),
+                Err(ParseError::Unimplemented(s.to_string())),
             "text" =>
-                Ok(Self::Text),
+                // Ok(Self::Text),
+                Err(ParseError::Unimplemented(s.to_string())),
             // Output only
             "append" =>
                 Ok(Self::Append),
