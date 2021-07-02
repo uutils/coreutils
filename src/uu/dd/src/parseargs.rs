@@ -1,16 +1,7 @@
 #[cfg(test)]
 mod unit_tests;
 
-use crate::conversion_tables::*;
-use crate::{
-    CountType,
-    IConvFlags, OConvFlags,
-    StatusLevel,
-};
-use crate::{
-    IFlags, OFlags,
-};
-
+use super::*;
 use std::error::Error;
 
 pub type Matches = clap::ArgMatches<'static>;

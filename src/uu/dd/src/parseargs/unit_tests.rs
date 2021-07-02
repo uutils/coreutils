@@ -1,8 +1,7 @@
 use super::*;
 
 use crate::{
-    build_app,
-    SYNTAX, SUMMARY, LONG_HELP,
+    build_dd_app,
     IConvFlags, OConvFlags,
     StatusLevel,
 };
@@ -16,7 +15,7 @@ fn test_status_level_absent()
         String::from("--of=bar.file"),
     ];
 
-    let matches = build_app!().parse(args);
+    let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
     let st = parse_status_level(&matches).unwrap();
 
     assert_eq!(st, None);
@@ -32,7 +31,7 @@ fn test_status_level_none()
         String::from("--of=bar.file"),
     ];
 
-    let matches = build_app!().parse(args);
+    let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
     let st = parse_status_level(&matches).unwrap().unwrap();
 
     assert_eq!(st, StatusLevel::None);
@@ -48,7 +47,7 @@ fn test_status_level_progress()
         String::from("--status=progress"),
     ];
 
-    let matches = build_app!().parse(args);
+    let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
     let st = parse_status_level(&matches).unwrap().unwrap();
 
     assert_eq!(st, StatusLevel::Progress);
@@ -64,7 +63,7 @@ fn test_status_level_noxfer()
         String::from("--of=bar.file"),
     ];
 
-    let matches = build_app!().parse(args);
+    let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
     let st = parse_status_level(&matches).unwrap().unwrap();
 
     assert_eq!(st, StatusLevel::Noxfer);
@@ -81,7 +80,7 @@ fn icf_ctable_error()
         String::from("--conv=ascii,ebcdic,ibm"),
     ];
 
-    let matches = build_app!().parse(args);
+    let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
 
     let icf_parsed = parse_conv_flag_input(&matches).unwrap();
 }
@@ -95,7 +94,7 @@ fn icf_case_error()
         String::from("--conv=ucase,lcase"),
     ];
 
-    let matches = build_app!().parse(args);
+    let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
 
     let icf_parsed = parse_conv_flag_input(&matches).unwrap();
 }
@@ -109,7 +108,7 @@ fn icf_block_error()
         String::from("--conv=block,unblock"),
     ];
 
-    let matches = build_app!().parse(args);
+    let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
 
     let icf_parsed = parse_conv_flag_input(&matches).unwrap();
 }
@@ -123,7 +122,7 @@ fn icf_creat_error()
         String::from("--conv=excl,nocreat"),
     ];
 
-    let matches = build_app!().parse(args);
+    let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
 
     let icf_parsed = parse_conv_flag_output(&matches).unwrap();
 }
@@ -139,7 +138,7 @@ fn parse_icf_token_ibm()
         String::from("dd"),
         String::from("--conv=ibm"),
     ];
-    let matches = build_app!().parse(args);
+    let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
 
     let act = parse_flag_list::<ConvFlag>("conv", &matches).unwrap();
 
@@ -163,7 +162,7 @@ fn parse_icf_tokens_elu()
         String::from("dd"),
         String::from("--conv=ebcdic,lcase,unblock"),
     ];
-    let matches = build_app!().parse(args);
+    let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
     let act = parse_flag_list::<ConvFlag>("conv", &matches).unwrap();
 
     assert_eq!(exp.len(), act.len());
@@ -196,7 +195,7 @@ fn parse_icf_tokens_remaining()
         String::from("dd"),
         String::from("--conv=ascii,ucase,block,sparse,swab,sync,noerror,excl,nocreat,notrunc,noerror,fdatasync,fsync"),
     ];
-    let matches = build_app!().parse(args);
+    let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
 
     let act = parse_flag_list::<ConvFlag>("conv", &matches).unwrap();
 
@@ -215,8 +214,8 @@ macro_rules! test_byte_parser (
         #[test]
         fn $test_name()
         {
-            let bs_str = String::from($bs_str);
-            assert_eq!($bs, parse_bytes_with_opt_multiplier(bs_str).unwrap())
+            // let bs_str = String::from($bs_str);
+            assert_eq!($bs, parse_bytes_with_opt_multiplier($bs_str).unwrap())
         }
     }
 );
@@ -346,7 +345,7 @@ test_byte_parser!(
 fn test_KB_multiplier_error()
 {
     // KB is not valid (kB, K, and KiB are)
-    let bs_str = String::from("2000KB");
+    let bs_str = "2000KB";
 
     parse_bytes_with_opt_multiplier(bs_str).unwrap();
 }
@@ -357,7 +356,7 @@ fn test_overflow_panic()
 {
     let bs_str = format!("{}KiB", usize::MAX);
 
-    parse_bytes_with_opt_multiplier(bs_str).unwrap();
+    parse_bytes_with_opt_multiplier(&bs_str).unwrap();
 }
 
 #[test]
@@ -366,5 +365,5 @@ fn test_neg_panic()
 {
     let bs_str = format!("{}KiB", -1);
 
-    parse_bytes_with_opt_multiplier(bs_str).unwrap();
+    parse_bytes_with_opt_multiplier(&bs_str).unwrap();
 }
