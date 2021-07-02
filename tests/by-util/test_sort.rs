@@ -127,11 +127,7 @@ fn test_months_whitespace() {
 
 #[test]
 fn test_version_empty_lines() {
-    new_ucmd!()
-        .arg("-V")
-        .arg("version-empty-lines.txt")
-        .succeeds()
-        .stdout_is("\n\n\n\n\n\n\n1.2.3-alpha\n1.2.3-alpha2\n\t\t\t1.12.4\n11.2.3\n");
+    test_helper("version-empty-lines", &["-V", "--version-sort"]);
 }
 
 #[test]
@@ -940,4 +936,18 @@ fn test_sigpipe_panic() {
         String::from_utf8(child.wait_with_output().unwrap().stderr),
         Ok(String::new())
     );
+}
+
+#[test]
+fn test_conflict_check_out() {
+    let check_flags = ["-c=silent", "-c=quiet", "-c=diagnose-first", "-c", "-C"];
+    for check_flag in &check_flags {
+        new_ucmd!()
+            .arg(check_flag)
+            .arg("-o=/dev/null")
+            .fails()
+            .stderr_contains(
+                "error: The argument '--output <FILENAME>' cannot be used with '--check",
+            );
+    }
 }

@@ -32,7 +32,6 @@ use numeric_str_cmp::{human_numeric_str_cmp, numeric_str_cmp, NumInfo, NumInfoPa
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use rayon::prelude::*;
-use semver::Version;
 use std::cmp::Ordering;
 use std::env;
 use std::ffi::OsStr;
@@ -44,6 +43,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use unicode_width::UnicodeWidthStr;
 use uucore::parse_size::{parse_size, ParseSizeError};
+use uucore::version_cmp::version_cmp;
 use uucore::InvalidEncodingHandling;
 
 const NAME: &str = "sort";
@@ -1198,12 +1198,14 @@ pub fn uu_app() -> App<'static, 'static> {
                     options::check::QUIET,
                     options::check::DIAGNOSE_FIRST,
                 ])
+                .conflicts_with(options::OUTPUT)
                 .help("check for sorted input; do not sort"),
         )
         .arg(
             Arg::with_name(options::check::CHECK_SILENT)
                 .short("C")
                 .long(options::check::CHECK_SILENT)
+                .conflicts_with(options::OUTPUT)
                 .help("exit successfully if the given file is already sorted, and exit with status 1 otherwise."),
         )
         .arg(
@@ -1410,7 +1412,7 @@ fn compare_by<'a>(
                 general_numeric_compare(a_float, b_float)
             }
             SortMode::Month => month_compare(a_str, b_str),
-            SortMode::Version => version_compare(a_str, b_str),
+            SortMode::Version => version_cmp(a_str, b_str),
             SortMode::Default => custom_str_cmp(
                 a_str,
                 b_str,
@@ -1615,31 +1617,6 @@ fn month_compare(a: &str, b: &str) -> Ordering {
     }
 }
 
-fn version_parse(a: &str) -> Version {
-    let result = Version::parse(a);
-
-    match result {
-        Ok(vers_a) => vers_a,
-        // Non-version lines parse to 0.0.0
-        Err(_e) => Version::parse("0.0.0").unwrap(),
-    }
-}
-
-fn version_compare(a: &str, b: &str) -> Ordering {
-    #![allow(clippy::comparison_chain)]
-    let ver_a = version_parse(a);
-    let ver_b = version_parse(b);
-
-    // Version::cmp is not implemented; implement comparison directly
-    if ver_a > ver_b {
-        Ordering::Greater
-    } else if ver_a < ver_b {
-        Ordering::Less
-    } else {
-        Ordering::Equal
-    }
-}
-
 fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(iter: T, settings: &GlobalSettings) {
     let mut writer = settings.out_writer();
     for line in iter {
@@ -1712,7 +1689,7 @@ mod tests {
         let a = "1.2.3-alpha2";
         let b = "1.4.0";
 
-        assert_eq!(Ordering::Less, version_compare(a, b));
+        assert_eq!(Ordering::Less, version_cmp(a, b));
     }
 
     #[test]

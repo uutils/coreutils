@@ -15,7 +15,7 @@ edition = "2018"
 path = "src/fmt.rs"
 
 [dependencies]
-clap = "2.33"
+clap = { version = "2.33", features = ["wrap_help"] }
 libc = "0.2.42"
 unicode-width = "0.1.5"
 uucore = { version=">=0.0.8", package="uucore", path="../../uucore" }
