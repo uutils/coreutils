@@ -6,6 +6,7 @@
 // file that was distributed with this source code.
 
 use clap::App;
+use clap::Arg;
 use clap::Shell;
 use std::cmp;
 use std::collections::hash_map::HashMap;
@@ -122,31 +123,38 @@ fn main() {
 
 /// Prints completions for the utility in the first parameter for the shell in the second parameter to stdout
 fn gen_completions<T: uucore::Args>(
-    mut args: impl Iterator<Item = OsString>,
+    args: impl Iterator<Item = OsString>,
     util_map: UtilityMap<T>,
 ) -> ! {
-    let utility = args
-        .next()
-        .expect("expected utility as the first parameter")
-        .to_str()
-        .expect("utility name was not valid utf-8")
-        .to_owned();
-    let shell = args
-        .next()
-        .expect("expected shell as the second parameter")
-        .to_str()
-        .expect("shell name was not valid utf-8")
-        .to_owned();
+    let all_utilities: Vec<_> = std::iter::once("coreutils")
+        .chain(util_map.keys().copied())
+        .collect();
+
+    let matches = App::new("completion")
+        .about("Prints completions to stdout")
+        .arg(
+            Arg::with_name("utility")
+                .possible_values(&all_utilities)
+                .required(true),
+        )
+        .arg(
+            Arg::with_name("shell")
+                .possible_values(&Shell::variants())
+                .required(true),
+        )
+        .get_matches_from(std::iter::once(OsString::from("completion")).chain(args));
+
+    let utility = matches.value_of("utility").unwrap();
+    let shell = matches.value_of("shell").unwrap();
+
     let mut app = if utility == "coreutils" {
         gen_coreutils_app(util_map)
-    } else if let Some((_, app)) = util_map.get(utility.as_str()) {
-        app()
     } else {
-        eprintln!("{} is not a valid utility", utility);
-        process::exit(1)
+        util_map.get(utility).unwrap().1()
     };
     let shell: Shell = shell.parse().unwrap();
-    let bin_name = std::env::var("PROG_PREFIX").unwrap_or_default() + &utility;
+    let bin_name = std::env::var("PROG_PREFIX").unwrap_or_default() + utility;
+
     app.gen_completions_to(bin_name, shell, &mut io::stdout());
     io::stdout().flush().unwrap();
     process::exit(0);
