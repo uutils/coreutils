@@ -31,6 +31,8 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::{Duration, UNIX_EPOCH};
+use std::{error::Error, fmt::Display};
+use uucore::error::{UCustomError, UResult};
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::InvalidEncodingHandling;
 #[cfg(windows)]
@@ -399,8 +401,61 @@ fn get_usage() -> String {
     )
 }
 
+#[derive(Debug)]
+enum DuError {
+    InvalidMaxDepthArg(String),
+    SummarizeDepthConflict(String),
+    InvalidTimeStyleArg(String),
+    InvalidTimeArg(String),
+}
+
+impl Display for DuError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DuError::InvalidMaxDepthArg(s) => write!(f, "invalid maximum depth '{}'", s),
+            DuError::SummarizeDepthConflict(s) => {
+                write!(f, "summarizing conflicts with --max-depth={}", s)
+            }
+            DuError::InvalidTimeStyleArg(s) => {
+                write!(
+                    f,
+                    "invalid argument '{}' for 'time style'
+Valid arguments are:
+- 'full-iso'
+- 'long-iso'
+- 'iso'
+Try '{} --help' for more information.",
+                    s, NAME
+                )
+            }
+            DuError::InvalidTimeArg(s) => {
+                write!(
+                    f,
+                    "Invalid argument '{}' for --time.
+'birth' and 'creation' arguments are not supported on this platform.",
+                    s
+                )
+            }
+        }
+    }
+}
+
+impl Error for DuError {}
+
+impl UCustomError for DuError {
+    fn code(&self) -> i32 {
+        match self {
+            Self::InvalidMaxDepthArg(_) => 1,
+            Self::SummarizeDepthConflict(_) => 1,
+            Self::InvalidTimeStyleArg(_) => 1,
+            Self::InvalidTimeArg(_) => 1,
+        }
+    }
+}
+
+#[uucore_procs::gen_uumain]
 #[allow(clippy::cognitive_complexity)]
-pub fn uumain(args: impl uucore::Args) -> i32 {
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
@@ -411,19 +466,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let summarize = matches.is_present(options::SUMMARIZE);
 
-    let max_depth_str = matches.value_of(options::MAX_DEPTH);
-    let max_depth = max_depth_str.as_ref().and_then(|s| s.parse::<usize>().ok());
-    match (max_depth_str, max_depth) {
-        (Some(s), _) if summarize => {
-            show_error!("summarizing conflicts with --max-depth={}", s);
-            return 1;
-        }
-        (Some(s), None) => {
-            show_error!("invalid maximum depth '{}'", s);
-            return 1;
-        }
-        (Some(_), Some(_)) | (None, _) => { /* valid */ }
-    }
+    let max_depth = parse_depth(matches.value_of(options::MAX_DEPTH), summarize)?;
 
     let options = Options {
         all: matches.is_present(options::ALL),
@@ -480,27 +523,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     };
 
-    let time_format_str = match matches.value_of("time-style") {
-        Some(s) => match s {
-            "full-iso" => "%Y-%m-%d %H:%M:%S.%f %z",
-            "long-iso" => "%Y-%m-%d %H:%M",
-            "iso" => "%Y-%m-%d",
-            _ => {
-                show_error!(
-                    "invalid argument '{}' for 'time style'
-Valid arguments are:
-- 'full-iso'
-- 'long-iso'
-- 'iso'
-Try '{} --help' for more information.",
-                    s,
-                    NAME
-                );
-                return 1;
-            }
-        },
-        None => "%Y-%m-%d %H:%M",
-    };
+    let time_format_str = parse_time_style(matches.value_of("time-style"))?;
 
     let line_separator = if matches.is_present(options::NULL) {
         "\0"
@@ -534,18 +557,9 @@ Try '{} --help' for more information.",
                                     Some(s) => match s {
                                         "ctime" | "status" => stat.modified,
                                         "access" | "atime" | "use" => stat.accessed,
-                                        "birth" | "creation" => {
-                                            if let Some(time) = stat.created {
-                                                time
-                                            } else {
-                                                show_error!(
-                                                    "Invalid argument '{}' for --time.
-'birth' and 'creation' arguments are not supported on this platform.",
-                                                    s
-                                                );
-                                                return 1;
-                                            }
-                                        }
+                                        "birth" | "creation" => stat
+                                            .created
+                                            .ok_or_else(|| DuError::InvalidTimeArg(s.into()))?,
                                         // below should never happen as clap already restricts the values.
                                         _ => unreachable!("Invalid field for --time"),
                                     },
@@ -590,7 +604,28 @@ Try '{} --help' for more information.",
         print!("{}", line_separator);
     }
 
-    0
+    Ok(())
+}
+
+fn parse_time_style(s: Option<&str>) -> UResult<&str> {
+    match s {
+        Some(s) => match s {
+            "full-iso" => Ok("%Y-%m-%d %H:%M:%S.%f %z"),
+            "long-iso" => Ok("%Y-%m-%d %H:%M"),
+            "iso" => Ok("%Y-%m-%d"),
+            _ => Err(DuError::InvalidTimeStyleArg(s.into()).into()),
+        },
+        None => Ok("%Y-%m-%d %H:%M"),
+    }
+}
+
+fn parse_depth(max_depth_str: Option<&str>, summarize: bool) -> UResult<Option<usize>> {
+    let max_depth = max_depth_str.as_ref().and_then(|s| s.parse::<usize>().ok());
+    match (max_depth_str, max_depth) {
+        (Some(s), _) if summarize => Err(DuError::SummarizeDepthConflict(s.into()).into()),
+        (Some(s), None) => Err(DuError::InvalidMaxDepthArg(s.into()).into()),
+        (Some(_), Some(_)) | (None, _) => Ok(max_depth),
+    }
 }
 
 pub fn uu_app() -> App<'static, 'static> {
