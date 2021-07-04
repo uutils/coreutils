@@ -79,7 +79,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             print!("{}", separator);
         }
     } else {
-        return Err(USimpleError::new(1, format!("missing operand")));
+        return Err(UUsageError::new(1, "missing operand".to_string()));
     }
 
     Ok(())
