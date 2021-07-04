@@ -10,7 +10,7 @@ extern crate uucore;
 
 use clap::{crate_version, App, Arg};
 use std::path::Path;
-use uucore::error::{UResult, USimpleError};
+use uucore::error::{UResult, UUsageError};
 use uucore::InvalidEncodingHandling;
 
 static ABOUT: &str = "strip last component from file name";
