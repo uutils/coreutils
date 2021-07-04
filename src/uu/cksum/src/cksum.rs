@@ -160,18 +160,14 @@ fn cksum(fname: &str) -> io::Result<(u32, usize)> {
 
     let mut bytes = init_byte_array();
     loop {
-        match rd.read(&mut bytes) {
-            Ok(num_bytes) => {
-                if num_bytes == 0 {
-                    return Ok((crc_final(crc, size), size));
-                }
-                for &b in bytes[..num_bytes].iter() {
-                    crc = crc_update(crc, b);
-                }
-                size += num_bytes;
-            }
-            Err(err) => return Err(err),
+        let num_bytes = rd.read(&mut bytes)?;
+        if num_bytes == 0 {
+            return Ok((crc_final(crc, size), size));
         }
+        for &b in bytes[..num_bytes].iter() {
+            crc = crc_update(crc, b);
+        }
+        size += num_bytes;
     }
 }
 
@@ -184,13 +180,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let matches = App::new(executable!())
-        .name(NAME)
-        .version(crate_version!())
-        .about(SUMMARY)
-        .usage(SYNTAX)
-        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
-        .get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     let files: Vec<String> = match matches.values_of(options::FILE) {
         Some(v) => v.clone().map(|v| v.to_owned()).collect(),
@@ -220,4 +210,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     exit_code
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .name(NAME)
+        .version(crate_version!())
+        .about(SUMMARY)
+        .usage(SYNTAX)
+        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
 }

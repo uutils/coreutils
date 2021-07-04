@@ -268,11 +268,11 @@ test:
 	${CARGO} test ${CARGOFLAGS} --features "$(TESTS) $(TEST_SPEC_FEATURE)" --no-default-features $(TEST_NO_FAIL_FAST)
 
 busybox-src:
-	if [ ! -e $(BUSYBOX_SRC) ]; then \
-	mkdir -p $(BUSYBOX_ROOT); \
-	wget https://busybox.net/downloads/busybox-$(BUSYBOX_VER).tar.bz2 -P $(BUSYBOX_ROOT); \
-	tar -C $(BUSYBOX_ROOT) -xf $(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER).tar.bz2; \
-	fi; \
+	if [ ! -e "$(BUSYBOX_SRC)" ] ; then \
+		mkdir -p "$(BUSYBOX_ROOT)" ; \
+		wget "https://busybox.net/downloads/busybox-$(BUSYBOX_VER).tar.bz2" -P "$(BUSYBOX_ROOT)" ; \
+		tar -C "$(BUSYBOX_ROOT)" -xf "$(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER).tar.bz2" ; \
+	fi ;
 
 # This is a busybox-specific config file their test suite wants to parse.
 $(BUILDDIR)/.config: $(BASEDIR)/.busybox-config
@@ -280,10 +280,12 @@ $(BUILDDIR)/.config: $(BASEDIR)/.busybox-config
 
 # Test under the busybox test suite
 $(BUILDDIR)/busybox: busybox-src build-coreutils $(BUILDDIR)/.config
-	cp $(BUILDDIR)/coreutils $(BUILDDIR)/busybox; \
-	chmod +x $@;
+	cp "$(BUILDDIR)/coreutils" "$(BUILDDIR)/busybox"
+	chmod +x $@
 
 prepare-busytest: $(BUILDDIR)/busybox
+	# disable inapplicable tests
+	-( cd "$(BUSYBOX_SRC)/testsuite" ; if [ -e "busybox.tests" ] ; then mv busybox.tests busybox.tests- ; fi ; )
 
 ifeq ($(EXES),)
 busytest:
@@ -312,6 +314,11 @@ else
 endif
 	$(foreach man, $(filter $(INSTALLEES), $(basename $(notdir $(wildcard $(DOCSDIR)/_build/man/*)))), \
 		cat $(DOCSDIR)/_build/man/$(man).1 | gzip > $(INSTALLDIR_MAN)/$(PROG_PREFIX)$(man).1.gz &&) :
+	$(foreach prog, $(INSTALLEES), \
+		$(BUILDDIR)/coreutils completion $(prog) zsh > $(DESTDIR)$(PREFIX)/share/zsh/site-functions/_$(PROG_PREFIX)$(prog); \
+		$(BUILDDIR)/coreutils completion $(prog) bash > $(DESTDIR)$(PREFIX)/share/bash-completion/completions/$(PROG_PREFIX)$(prog); \
+		$(BUILDDIR)/coreutils completion $(prog) fish > $(DESTDIR)$(PREFIX)/share/fish/vendor_completions.d/$(PROG_PREFIX)$(prog).fish; \
+	)
 
 uninstall:
 ifeq (${MULTICALL}, y)
@@ -319,6 +326,9 @@ ifeq (${MULTICALL}, y)
 endif
 	rm -f $(addprefix $(INSTALLDIR_MAN)/,$(PROG_PREFIX)coreutils.1.gz)
 	rm -f $(addprefix $(INSTALLDIR_BIN)/$(PROG_PREFIX),$(PROGS))
+	rm -f $(addprefix $(DESTDIR)$(PREFIX)/share/zsh/site-functions/_$(PROG_PREFIX),$(PROGS))
+	rm -f $(addprefix $(DESTDIR)$(PREFIX)/share/bash-completion/completions/$(PROG_PREFIX),$(PROGS))
+	rm -f $(addprefix $(DESTDIR)$(PREFIX)/share/fish/vendor_completions.d/$(PROG_PREFIX),$(addsuffix .fish,$(PROGS)))
 	rm -f $(addprefix $(INSTALLDIR_MAN)/$(PROG_PREFIX),$(addsuffix .1.gz,$(PROGS)))
 
 .PHONY: all build build-coreutils build-pkgs build-docs test distclean clean busytest install uninstall

@@ -43,38 +43,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let (args, obs_signal) = handle_obsolete(args);
 
     let usage = format!("{} [OPTIONS]... PID...", executable!());
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
-        .usage(&usage[..])
-        .arg(
-            Arg::with_name(options::LIST)
-                .short("l")
-                .long(options::LIST)
-                .help("Lists signals")
-                .conflicts_with(options::TABLE)
-                .conflicts_with(options::TABLE_OLD),
-        )
-        .arg(
-            Arg::with_name(options::TABLE)
-                .short("t")
-                .long(options::TABLE)
-                .help("Lists table of signals"),
-        )
-        .arg(Arg::with_name(options::TABLE_OLD).short("L").hidden(true))
-        .arg(
-            Arg::with_name(options::SIGNAL)
-                .short("s")
-                .long(options::SIGNAL)
-                .help("Sends given signal")
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name(options::PIDS_OR_SIGNALS)
-                .hidden(true)
-                .multiple(true),
-        )
-        .get_matches_from(args);
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     let mode = if matches.is_present(options::TABLE) || matches.is_present(options::TABLE_OLD) {
         Mode::Table
@@ -106,12 +75,45 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     EXIT_OK
 }
 
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
+        .arg(
+            Arg::with_name(options::LIST)
+                .short("l")
+                .long(options::LIST)
+                .help("Lists signals")
+                .conflicts_with(options::TABLE)
+                .conflicts_with(options::TABLE_OLD),
+        )
+        .arg(
+            Arg::with_name(options::TABLE)
+                .short("t")
+                .long(options::TABLE)
+                .help("Lists table of signals"),
+        )
+        .arg(Arg::with_name(options::TABLE_OLD).short("L").hidden(true))
+        .arg(
+            Arg::with_name(options::SIGNAL)
+                .short("s")
+                .long(options::SIGNAL)
+                .help("Sends given signal")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name(options::PIDS_OR_SIGNALS)
+                .hidden(true)
+                .multiple(true),
+        )
+}
+
 fn handle_obsolete(mut args: Vec<String>) -> (Vec<String>, Option<String>) {
     let mut i = 0;
     while i < args.len() {
         // this is safe because slice is valid when it is referenced
         let slice = &args[i].clone();
-        if slice.starts_with('-') && slice.len() > 1 && slice.chars().nth(1).unwrap().is_digit(10) {
+        if slice.starts_with('-') && slice.chars().nth(1).map_or(false, |c| c.is_digit(10)) {
             let val = &slice[1..];
             match val.parse() {
                 Ok(num) => {
@@ -129,33 +131,24 @@ fn handle_obsolete(mut args: Vec<String>) -> (Vec<String>, Option<String>) {
 }
 
 fn table() {
-    let mut name_width = 0;
-    /* Compute the maximum width of a signal name. */
-    for s in &ALL_SIGNALS {
-        if s.name.len() > name_width {
-            name_width = s.name.len()
-        }
-    }
+    let name_width = ALL_SIGNALS.iter().map(|n| n.len()).max().unwrap();
 
     for (idx, signal) in ALL_SIGNALS.iter().enumerate() {
-        print!("{0: >#2} {1: <#8}", idx + 1, signal.name);
-        //TODO: obtain max signal width here
-
+        print!("{0: >#2} {1: <#2$}", idx, signal, name_width + 2);
         if (idx + 1) % 7 == 0 {
             println!();
         }
     }
+    println!()
 }
 
 fn print_signal(signal_name_or_value: &str) {
-    for signal in &ALL_SIGNALS {
-        if signal.name == signal_name_or_value
-            || (format!("SIG{}", signal.name)) == signal_name_or_value
-        {
-            println!("{}", signal.value);
+    for (value, &signal) in ALL_SIGNALS.iter().enumerate() {
+        if signal == signal_name_or_value || (format!("SIG{}", signal)) == signal_name_or_value {
+            println!("{}", value);
             exit!(EXIT_OK as i32)
-        } else if signal_name_or_value == signal.value.to_string() {
-            println!("{}", signal.name);
+        } else if signal_name_or_value == value.to_string() {
+            println!("{}", signal);
             exit!(EXIT_OK as i32)
         }
     }
@@ -165,8 +158,8 @@ fn print_signal(signal_name_or_value: &str) {
 fn print_signals() {
     let mut pos = 0;
     for (idx, signal) in ALL_SIGNALS.iter().enumerate() {
-        pos += signal.name.len();
-        print!("{}", signal.name);
+        pos += signal.len();
+        print!("{}", signal);
         if idx > 0 && pos > 73 {
             println!();
             pos = 0;

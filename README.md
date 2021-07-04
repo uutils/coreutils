@@ -134,6 +134,9 @@ $ cargo install --path .
 
 This command will install uutils into Cargo's *bin* folder (*e.g.* `$HOME/.cargo/bin`).
 
+This does not install files necessary for shell completion. For shell completion to work,
+use `GNU Make` or see `Manually install shell completions`.
+
 ### GNU Make
 
 To install all available utilities:
@@ -179,6 +182,10 @@ Set install parent directory (default value is /usr/local):
 $ make PREFIX=/my/path install
 ```
 
+Installing with `make` installs shell completions for all installed utilities
+for `bash`, `fish` and `zsh`. Completions for `elvish` and `powershell` can also
+be generated; See `Manually install shell completions`.
+
 ### NixOS
 
 The [standard package set](https://nixos.org/nixpkgs/manual/) of [NixOS](https://nixos.org/)
@@ -186,6 +193,23 @@ provides this package out of the box since 18.03:
 
 ```shell
 $ nix-env -iA nixos.uutils-coreutils
+```
+
+### Manually install shell completions
+
+The `coreutils` binary can generate completions for the `bash`, `elvish`, `fish`, `powershell`
+and `zsh` shells. It prints the result to stdout.
+
+The syntax is:
+```bash
+cargo run completion <utility> <shell>
+```
+
+So, to install completions for `ls` on `bash` to `/usr/local/share/bash-completion/completions/ls`,
+run:
+
+```bash
+cargo run completion ls bash > /usr/local/share/bash-completion/completions/ls
 ```
 
 ## Un-installation Instructions
@@ -342,22 +366,22 @@ To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 | Done      | Semi-Done | To Do  |
 |-----------|-----------|--------|
 | arch      | cp        | chcon  |
-| base32    | expr      | csplit |
-| base64    | install   | dd     |
-| basename  | ls        | df     |
-| cat       | more      | numfmt |
-| chgrp     | od (`--strings` and 128-bit data types missing) | runcon |
-| chmod     | printf    | stty   |
-| chown     | sort      |        |
-| chroot    | split     |        |
-| cksum     | tail      |        |
-| comm      | test      |        |
-| csplit    | date      |        |
-| cut       | join      |        |
-| dircolors | df        |        |
+| base32    | date      | dd     |
+| base64    | df        | runcon |
+| basename  | expr      | stty   |
+| cat       | install   |        |
+| chgrp     | join      |        |
+| chmod     | ls        |        |
+| chown     | more      |        |
+| chroot    | numfmt    |        |
+| cksum     | od (`--strings` and 128-bit data types missing) | |
+| comm      | pr        |        |
+| csplit    | printf    |        |
+| cut       | sort      |        |
+| dircolors | split     |        |
 | dirname   | tac       |        |
-| du        | pr        |        |
-| echo      |           |        |
+| du        | tail      |        |
+| echo      | test      |        |
 | env       |           |        |
 | expand    |           |        |
 | factor    |           |        |
@@ -374,12 +398,12 @@ To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 | link      |           |        |
 | ln        |           |        |
 | logname   |           |        |
-| ~~md5sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | |
-| ~~sha1sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | |
-| ~~sha224sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | |
-| ~~sha256sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | |
-| ~~sha384sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | |
-| ~~sha512sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | |
+| ~~md5sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | | |
+| ~~sha1sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | | |
+| ~~sha224sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | | |
+| ~~sha256sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | | |
+| ~~sha384sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | | |
+| ~~sha512sum~~ (replaced by [hashsum](https://github.com/uutils/coreutils/blob/master/src/uu/hashsum/src/hashsum.rs)) | | |
 | mkdir     |           |        |
 | mkfifo    |           |        |
 | mknod     |           |        |

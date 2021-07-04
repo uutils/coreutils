@@ -24,7 +24,7 @@ use std::{cmp, fs, iter};
 macro_rules! check_bound {
     ($str: ident, $bound:expr, $beg: expr, $end: expr) => {
         if $end >= $bound {
-            return Err(format!("‘{}’: invalid directive", &$str[$beg..$end]));
+            return Err(format!("'{}': invalid directive", &$str[$beg..$end]));
         }
     };
 }
@@ -477,7 +477,7 @@ impl Stater {
             Stater::generate_tokens(&Stater::default_format(show_fs, terse, false), use_printf)
                 .unwrap()
         } else {
-            Stater::generate_tokens(&format_str, use_printf)?
+            Stater::generate_tokens(format_str, use_printf)?
         };
         let default_dev_tokens =
             Stater::generate_tokens(&Stater::default_format(show_fs, terse, true), use_printf)
@@ -947,11 +947,24 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let long_usage = get_long_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = uu_app()
         .usage(&usage[..])
         .after_help(&long_usage[..])
+        .get_matches_from(args);
+
+    match Stater::new(matches) {
+        Ok(stater) => stater.exec(),
+        Err(e) => {
+            show_error!("{}", e);
+            1
+        }
+    }
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
         .arg(
             Arg::with_name(options::DEREFERENCE)
                 .short("L")
@@ -996,13 +1009,4 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .takes_value(true)
                 .min_values(1),
         )
-        .get_matches_from(args);
-
-    match Stater::new(matches) {
-        Ok(stater) => stater.exec(),
-        Err(e) => {
-            show_error!("{}", e);
-            1
-        }
-    }
 }

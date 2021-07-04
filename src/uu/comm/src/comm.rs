@@ -50,9 +50,8 @@ fn mkdelim(col: usize, opts: &ArgMatches) -> String {
 }
 
 fn ensure_nl(line: &mut String) {
-    match line.chars().last() {
-        Some('\n') => (),
-        _ => line.push('\n'),
+    if !line.ends_with('\n') {
+        line.push('\n');
     }
 }
 
@@ -138,10 +137,20 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let matches = App::new(executable!())
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+
+    let mut f1 = open_file(matches.value_of(options::FILE_1).unwrap()).unwrap();
+    let mut f2 = open_file(matches.value_of(options::FILE_2).unwrap()).unwrap();
+
+    comm(&mut f1, &mut f2, &matches);
+
+    0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .version(crate_version!())
         .about(ABOUT)
-        .usage(&usage[..])
         .after_help(LONG_HELP)
         .arg(
             Arg::with_name(options::COLUMN_1)
@@ -168,12 +177,4 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         )
         .arg(Arg::with_name(options::FILE_1).required(true))
         .arg(Arg::with_name(options::FILE_2).required(true))
-        .get_matches_from(args);
-
-    let mut f1 = open_file(matches.value_of(options::FILE_1).unwrap()).unwrap();
-    let mut f2 = open_file(matches.value_of(options::FILE_2).unwrap()).unwrap();
-
-    comm(&mut f1, &mut f2, &matches);
-
-    0
 }

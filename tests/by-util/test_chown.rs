@@ -172,14 +172,14 @@ fn test_chown_only_colon() {
     // expected:
     // $ chown -v :: file.txt 2>out_err ; echo $? ; cat out_err
     // 1
-    // chown: invalid group: ‘::’
+    // chown: invalid group: '::'
     scene
         .ucmd()
         .arg("::")
         .arg("--verbose")
         .arg(file1)
         .fails()
-        .stderr_contains(&"invalid group: ‘::’");
+        .stderr_contains(&"invalid group: '::'");
 }
 
 #[test]

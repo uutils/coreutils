@@ -6,16 +6,38 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars) FiletestOp StrlenOp
+// spell-checker:ignore (vars) egid euid FiletestOp StrlenOp
 
 mod parser;
 
+use clap::{App, AppSettings};
 use parser::{parse, Symbol};
 use std::ffi::{OsStr, OsString};
+use std::path::Path;
+use uucore::executable;
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    // TODO: handle being called as `[`
-    let args: Vec<_> = args.skip(1).collect();
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .setting(AppSettings::DisableHelpFlags)
+        .setting(AppSettings::DisableVersion)
+}
+
+pub fn uumain(mut args: impl uucore::Args) -> i32 {
+    let program = args.next().unwrap_or_else(|| OsString::from("test"));
+    let binary_name = Path::new(&program)
+        .file_name()
+        .unwrap_or_else(|| OsStr::new("test"))
+        .to_string_lossy();
+    let mut args: Vec<_> = args.collect();
+
+    // If invoked via name '[', matching ']' must be in the last arg
+    if binary_name == "[" {
+        let last = args.pop();
+        if last != Some(OsString::from("]")) {
+            eprintln!("[: missing ']'");
+            return 2;
+        }
+    }
 
     let result = parse(args).and_then(|mut stack| eval(&mut stack));
 
@@ -74,7 +96,7 @@ fn eval(stack: &mut Vec<Symbol>) -> Result<bool, String> {
                     return Ok(true);
                 }
                 _ => {
-                    return Err(format!("missing argument after ‘{:?}’", op));
+                    return Err(format!("missing argument after '{:?}'", op));
                 }
             };
 
@@ -96,8 +118,11 @@ fn eval(stack: &mut Vec<Symbol>) -> Result<bool, String> {
                 "-e" => path(&f, PathCondition::Exists),
                 "-f" => path(&f, PathCondition::Regular),
                 "-g" => path(&f, PathCondition::GroupIdFlag),
+                "-G" => path(&f, PathCondition::GroupOwns),
                 "-h" => path(&f, PathCondition::SymLink),
+                "-k" => path(&f, PathCondition::Sticky),
                 "-L" => path(&f, PathCondition::SymLink),
+                "-O" => path(&f, PathCondition::UserOwns),
                 "-p" => path(&f, PathCondition::Fifo),
                 "-r" => path(&f, PathCondition::Readable),
                 "-S" => path(&f, PathCondition::Socket),
@@ -123,7 +148,7 @@ fn eval(stack: &mut Vec<Symbol>) -> Result<bool, String> {
 }
 
 fn integers(a: &OsStr, b: &OsStr, op: &OsStr) -> Result<bool, String> {
-    let format_err = |value| format!("invalid integer ‘{}’", value);
+    let format_err = |value| format!("invalid integer '{}'", value);
 
     let a = a.to_string_lossy();
     let a: i64 = a.parse().map_err(|_| format_err(a))?;
@@ -139,7 +164,7 @@ fn integers(a: &OsStr, b: &OsStr, op: &OsStr) -> Result<bool, String> {
         "-ge" => a >= b,
         "-lt" => a < b,
         "-le" => a <= b,
-        _ => return Err(format!("unknown operator ‘{}’", operator)),
+        _ => return Err(format!("unknown operator '{}'", operator)),
     })
 }
 
@@ -147,7 +172,7 @@ fn isatty(fd: &OsStr) -> Result<bool, String> {
     let fd = fd.to_string_lossy();
 
     fd.parse()
-        .map_err(|_| format!("invalid integer ‘{}’", fd))
+        .map_err(|_| format!("invalid integer '{}'", fd))
         .map(|i| {
             #[cfg(not(target_os = "redox"))]
             unsafe {
@@ -166,7 +191,10 @@ enum PathCondition {
     Exists,
     Regular,
     GroupIdFlag,
+    GroupOwns,
     SymLink,
+    Sticky,
+    UserOwns,
     Fifo,
     Readable,
     Socket,
@@ -183,6 +211,7 @@ fn path(path: &OsStr, condition: PathCondition) -> bool {
 
     const S_ISUID: u32 = 0o4000;
     const S_ISGID: u32 = 0o2000;
+    const S_ISVTX: u32 = 0o1000;
 
     enum Permission {
         Read = 0o4,
@@ -190,18 +219,28 @@ fn path(path: &OsStr, condition: PathCondition) -> bool {
         Execute = 0o1,
     }
 
-    let perm = |metadata: Metadata, p: Permission| {
+    let geteuid = || {
         #[cfg(not(target_os = "redox"))]
-        let (uid, gid) = unsafe { (libc::getuid(), libc::getgid()) };
+        let euid = unsafe { libc::geteuid() };
         #[cfg(target_os = "redox")]
-        let (uid, gid) = (
-            syscall::getuid().unwrap() as u32,
-            syscall::getgid().unwrap() as u32,
-        );
+        let euid = syscall::geteuid().unwrap() as u32;
 
-        if uid == metadata.uid() {
+        euid
+    };
+
+    let getegid = || {
+        #[cfg(not(target_os = "redox"))]
+        let egid = unsafe { libc::getegid() };
+        #[cfg(target_os = "redox")]
+        let egid = syscall::getegid().unwrap() as u32;
+
+        egid
+    };
+
+    let perm = |metadata: Metadata, p: Permission| {
+        if geteuid() == metadata.uid() {
             metadata.mode() & ((p as u32) << 6) != 0
-        } else if gid == metadata.gid() {
+        } else if getegid() == metadata.gid() {
             metadata.mode() & ((p as u32) << 3) != 0
         } else {
             metadata.mode() & (p as u32) != 0
@@ -230,7 +269,10 @@ fn path(path: &OsStr, condition: PathCondition) -> bool {
         PathCondition::Exists => true,
         PathCondition::Regular => file_type.is_file(),
         PathCondition::GroupIdFlag => metadata.mode() & S_ISGID != 0,
+        PathCondition::GroupOwns => metadata.gid() == getegid(),
         PathCondition::SymLink => metadata.file_type().is_symlink(),
+        PathCondition::Sticky => metadata.mode() & S_ISVTX != 0,
+        PathCondition::UserOwns => metadata.uid() == geteuid(),
         PathCondition::Fifo => file_type.is_fifo(),
         PathCondition::Readable => perm(metadata, Permission::Read),
         PathCondition::Socket => file_type.is_socket(),
@@ -257,7 +299,10 @@ fn path(path: &OsStr, condition: PathCondition) -> bool {
         PathCondition::Exists => true,
         PathCondition::Regular => stat.is_file(),
         PathCondition::GroupIdFlag => false,
+        PathCondition::GroupOwns => unimplemented!(),
         PathCondition::SymLink => false,
+        PathCondition::Sticky => false,
+        PathCondition::UserOwns => unimplemented!(),
         PathCondition::Fifo => false,
         PathCondition::Readable => false, // TODO
         PathCondition::Socket => false,

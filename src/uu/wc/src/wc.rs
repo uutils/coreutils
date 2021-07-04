@@ -134,10 +134,39 @@ impl Input {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+
+    let mut inputs: Vec<Input> = matches
+        .values_of(ARG_FILES)
+        .map(|v| {
+            v.map(|i| {
+                if i == "-" {
+                    Input::Stdin(StdinKind::Explicit)
+                } else {
+                    Input::Path(ToString::to_string(i))
+                }
+            })
+            .collect()
+        })
+        .unwrap_or_default();
+
+    if inputs.is_empty() {
+        inputs.push(Input::Stdin(StdinKind::Implicit));
+    }
+
+    let settings = Settings::new(&matches);
+
+    if wc(inputs, &settings).is_ok() {
+        0
+    } else {
+        1
+    }
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .version(crate_version!())
         .about(ABOUT)
-        .usage(&usage[..])
         .arg(
             Arg::with_name(options::BYTES)
                 .short("c")
@@ -169,33 +198,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("print the word counts"),
         )
         .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true))
-        .get_matches_from(args);
-
-    let mut inputs: Vec<Input> = matches
-        .values_of(ARG_FILES)
-        .map(|v| {
-            v.map(|i| {
-                if i == "-" {
-                    Input::Stdin(StdinKind::Explicit)
-                } else {
-                    Input::Path(ToString::to_string(i))
-                }
-            })
-            .collect()
-        })
-        .unwrap_or_default();
-
-    if inputs.is_empty() {
-        inputs.push(Input::Stdin(StdinKind::Implicit));
-    }
-
-    let settings = Settings::new(&matches);
-
-    if wc(inputs, &settings).is_ok() {
-        0
-    } else {
-        1
-    }
 }
 
 fn word_count_from_reader<T: WordCountable>(
@@ -374,8 +376,8 @@ fn wc(inputs: Vec<Input>, settings: &Settings) -> Result<(), u32> {
     let num_inputs = inputs.len();
 
     for input in &inputs {
-        let word_count = word_count_from_input(&input, settings).unwrap_or_else(|err| {
-            show_error(&input, err);
+        let word_count = word_count_from_input(input, settings).unwrap_or_else(|err| {
+            show_error(input, err);
             error_count += 1;
             WordCount::default()
         });

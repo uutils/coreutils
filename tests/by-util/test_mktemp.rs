@@ -17,7 +17,10 @@ static TEST_TEMPLATE8: &str = "tempXXXl/ate";
 #[cfg(windows)]
 static TEST_TEMPLATE8: &str = "tempXXXl\\ate";
 
+#[cfg(not(windows))]
 const TMPDIR: &str = "TMPDIR";
+#[cfg(windows)]
+const TMPDIR: &str = "TMP";
 
 #[test]
 fn test_mktemp_mktemp() {
@@ -122,7 +125,8 @@ fn test_mktemp_mktemp_t() {
         .arg(TEST_TEMPLATE8)
         .fails()
         .no_stdout()
-        .stderr_contains("suffix cannot contain any path separators");
+        .stderr_contains("invalid suffix")
+        .stderr_contains("contains directory separator");
 }
 
 #[test]
@@ -386,7 +390,7 @@ fn test_mktemp_tmpdir_one_arg() {
     let scene = TestScenario::new(util_name!());
 
     let result = scene
-        .ucmd()
+        .ucmd_keepenv()
         .arg("--tmpdir")
         .arg("apt-key-gpghome.XXXXXXXXXX")
         .succeeds();
@@ -399,7 +403,7 @@ fn test_mktemp_directory_tmpdir() {
     let scene = TestScenario::new(util_name!());
 
     let result = scene
-        .ucmd()
+        .ucmd_keepenv()
         .arg("--directory")
         .arg("--tmpdir")
         .arg("apt-key-gpghome.XXXXXXXXXX")

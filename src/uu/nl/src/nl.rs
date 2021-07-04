@@ -88,7 +88,62 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let matches = App::new(executable!())
+    let matches = uu_app().get_matches_from(args);
+
+    // A mutable settings object, initialized with the defaults.
+    let mut settings = Settings {
+        header_numbering: NumberingStyle::NumberForNone,
+        body_numbering: NumberingStyle::NumberForAll,
+        footer_numbering: NumberingStyle::NumberForNone,
+        section_delimiter: ['\\', ':'],
+        starting_line_number: 1,
+        line_increment: 1,
+        join_blank_lines: 1,
+        number_width: 6,
+        number_format: NumberFormat::Right,
+        renumber: true,
+        number_separator: String::from("\t"),
+    };
+
+    // Update the settings from the command line options, and terminate the
+    // program if some options could not successfully be parsed.
+    let parse_errors = helper::parse_options(&mut settings, &matches);
+    if !parse_errors.is_empty() {
+        show_error!("Invalid arguments supplied.");
+        for message in &parse_errors {
+            println!("{}", message);
+        }
+        return 1;
+    }
+
+    let mut read_stdin = false;
+    let files: Vec<String> = match matches.values_of(options::FILE) {
+        Some(v) => v.clone().map(|v| v.to_owned()).collect(),
+        None => vec!["-".to_owned()],
+    };
+
+    for file in &files {
+        if file == "-" {
+            // If both file names and '-' are specified, we choose to treat first all
+            // regular files, and then read from stdin last.
+            read_stdin = true;
+            continue;
+        }
+        let path = Path::new(file);
+        let reader = File::open(path).unwrap();
+        let mut buffer = BufReader::new(reader);
+        nl(&mut buffer, &settings);
+    }
+
+    if read_stdin {
+        let mut buffer = BufReader::new(stdin());
+        nl(&mut buffer, &settings);
+    }
+    0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .name(NAME)
         .version(crate_version!())
         .usage(USAGE)
@@ -169,58 +224,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("use NUMBER columns for line numbers")
                 .value_name("NUMBER"),
         )
-        .get_matches_from(args);
-
-    // A mutable settings object, initialized with the defaults.
-    let mut settings = Settings {
-        header_numbering: NumberingStyle::NumberForNone,
-        body_numbering: NumberingStyle::NumberForAll,
-        footer_numbering: NumberingStyle::NumberForNone,
-        section_delimiter: ['\\', ':'],
-        starting_line_number: 1,
-        line_increment: 1,
-        join_blank_lines: 1,
-        number_width: 6,
-        number_format: NumberFormat::Right,
-        renumber: true,
-        number_separator: String::from("\t"),
-    };
-
-    // Update the settings from the command line options, and terminate the
-    // program if some options could not successfully be parsed.
-    let parse_errors = helper::parse_options(&mut settings, &matches);
-    if !parse_errors.is_empty() {
-        show_error!("Invalid arguments supplied.");
-        for message in &parse_errors {
-            println!("{}", message);
-        }
-        return 1;
-    }
-
-    let mut read_stdin = false;
-    let files: Vec<String> = match matches.values_of(options::FILE) {
-        Some(v) => v.clone().map(|v| v.to_owned()).collect(),
-        None => vec!["-".to_owned()],
-    };
-
-    for file in &files {
-        if file == "-" {
-            // If both file names and '-' are specified, we choose to treat first all
-            // regular files, and then read from stdin last.
-            read_stdin = true;
-            continue;
-        }
-        let path = Path::new(file);
-        let reader = File::open(path).unwrap();
-        let mut buffer = BufReader::new(reader);
-        nl(&mut buffer, &settings);
-    }
-
-    if read_stdin {
-        let mut buffer = BufReader::new(stdin());
-        nl(&mut buffer, &settings);
-    }
-    0
 }
 
 // nl implements the main functionality for an individual buffer.
@@ -247,7 +250,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
     let mut line_filter: fn(&str, &regex::Regex) -> bool = pass_regex;
     for mut l in reader.lines().map(|r| r.unwrap()) {
         // Sanitize the string. We want to print the newline ourselves.
-        if !l.is_empty() && l.chars().rev().next().unwrap() == '\n' {
+        if l.ends_with('\n') {
             l.pop();
         }
         // Next we iterate through the individual chars to see if this

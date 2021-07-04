@@ -58,6 +58,10 @@ Haitao Li
 Inokentiy Babushkin
     Inokentiy
     Babushkin
+Jan Scheer * jhscheer
+    Jan
+    Scheer
+    jhscheer
 Jeremiah Peschka
     Jeremiah
     Peschka
@@ -97,6 +101,9 @@ Michael Debertol
 Michael Gehring
     Michael
     Gehring
+Mitchell Mebane
+    Mitchell
+    Mebane
 Morten Olsen Lysgaard
     Morten
     Olsen

@@ -82,13 +82,10 @@ fn load_config_file(opts: &mut Options) -> Result<(), i32> {
             Ini::load_from_file(file)
         };
 
-        let conf = match conf {
-            Ok(config) => config,
-            Err(error) => {
-                eprintln!("env: error: \"{}\": {}", file, error);
-                return Err(1);
-            }
-        };
+        let conf = conf.map_err(|error| {
+            eprintln!("env: error: \"{}\": {}", file, error);
+            1
+        })?;
 
         for (_, prop) in &conf {
             // ignore all INI section lines (treat them as comments)
@@ -117,7 +114,7 @@ fn build_command<'a, 'b>(args: &'a mut Vec<&'b str>) -> (Cow<'b, str>, &'a [&'b 
     (progname, &args[..])
 }
 
-fn create_app() -> App<'static, 'static> {
+pub fn uu_app() -> App<'static, 'static> {
     App::new(crate_name!())
         .version(crate_version!())
         .author(crate_authors!())
@@ -161,7 +158,7 @@ fn create_app() -> App<'static, 'static> {
 }
 
 fn run_env(args: impl uucore::Args) -> Result<(), i32> {
-    let app = create_app();
+    let app = uu_app();
     let matches = app.get_matches_from(args);
 
     let ignore_env = matches.is_present("ignore-environment");
@@ -245,7 +242,7 @@ fn run_env(args: impl uucore::Args) -> Result<(), i32> {
     }
 
     // set specified env vars
-    for &(ref name, ref val) in &opts.sets {
+    for &(name, val) in &opts.sets {
         // FIXME: set_var() panics if name is an empty string
         env::set_var(name, val);
     }
@@ -256,13 +253,10 @@ fn run_env(args: impl uucore::Args) -> Result<(), i32> {
 
         // FIXME: this should just use execvp() (no fork()) on Unix-like systems
         match Command::new(&*prog).args(args).status() {
-            Ok(exit) => {
-                if !exit.success() {
-                    return Err(exit.code().unwrap());
-                }
-            }
+            Ok(exit) if !exit.success() => return Err(exit.code().unwrap()),
             Err(ref err) if err.kind() == io::ErrorKind::NotFound => return Err(127),
             Err(_) => return Err(126),
+            Ok(_) => (),
         }
     } else {
         // no program provided, so just dump all env vars to stdout

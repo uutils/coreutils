@@ -24,7 +24,7 @@ extern crate uucore;
 
 static NAME: &str = "shred";
 const BLOCK_SIZE: usize = 512;
-const NAME_CHARSET: &str = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_.";
+const NAME_CHARSET: &[u8] = b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_.";
 
 // Patterns as shown in the GNU coreutils shred implementation
 const PATTERNS: [&[u8]; 22] = [
@@ -89,7 +89,7 @@ impl Iterator for FilenameGenerator {
         // Make the return value, then increment
         let mut ret = String::new();
         for i in name_charset_indices.iter() {
-            let c: char = NAME_CHARSET.chars().nth(*i).unwrap();
+            let c = char::from(NAME_CHARSET[*i]);
             ret.push(c);
         }
 
@@ -163,16 +163,14 @@ impl<'a> BytesGenerator<'a> {
             return None;
         }
 
-        let this_block_size = {
-            if !self.exact {
+        let this_block_size = if !self.exact {
+            self.block_size
+        } else {
+            let bytes_left = self.total_bytes - self.bytes_generated.get();
+            if bytes_left >= self.block_size as u64 {
                 self.block_size
             } else {
-                let bytes_left = self.total_bytes - self.bytes_generated.get();
-                if bytes_left >= self.block_size as u64 {
-                    self.block_size
-                } else {
-                    (bytes_left % self.block_size as u64) as usize
-                }
+                (bytes_left % self.block_size as u64) as usize
             }
         };
 
@@ -184,12 +182,10 @@ impl<'a> BytesGenerator<'a> {
                 rng.fill(bytes);
             }
             PassType::Pattern(pattern) => {
-                let skip = {
-                    if self.bytes_generated.get() == 0 {
-                        0
-                    } else {
-                        (pattern.len() as u64 % self.bytes_generated.get()) as usize
-                    }
+                let skip = if self.bytes_generated.get() == 0 {
+                    0
+                } else {
+                    (pattern.len() as u64 % self.bytes_generated.get()) as usize
                 };
 
                 // Copy the pattern in chunks rather than simply one byte at a time
@@ -276,11 +272,68 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let usage = get_usage();
 
-    let app = App::new(executable!())
+    let app = uu_app().usage(&usage[..]);
+
+    let matches = app.get_matches_from(args);
+
+    let mut errs: Vec<String> = vec![];
+
+    if !matches.is_present(options::FILE) {
+        show_error!("Missing an argument");
+        show_error!("For help, try '{} --help'", NAME);
+        return 0;
+    }
+
+    let iterations = match matches.value_of(options::ITERATIONS) {
+        Some(s) => match s.parse::<usize>() {
+            Ok(u) => u,
+            Err(_) => {
+                errs.push(format!("invalid number of passes: '{}'", s));
+                0
+            }
+        },
+        None => unreachable!(),
+    };
+
+    // TODO: implement --remove HOW
+    //       The optional HOW parameter indicates how to remove a directory entry:
+    //         - 'unlink' => use a standard unlink call.
+    //         - 'wipe' => also first obfuscate bytes in the name.
+    //         - 'wipesync' => also sync each obfuscated byte to disk.
+    //       The default mode is 'wipesync', but note it can be expensive.
+
+    // TODO: implement --random-source
+
+    let force = matches.is_present(options::FORCE);
+    let remove = matches.is_present(options::REMOVE);
+    let size_arg = matches.value_of(options::SIZE).map(|s| s.to_string());
+    let size = get_size(size_arg);
+    let exact = matches.is_present(options::EXACT) && size.is_none(); // if -s is given, ignore -x
+    let zero = matches.is_present(options::ZERO);
+    let verbose = matches.is_present(options::VERBOSE);
+
+    if !errs.is_empty() {
+        show_error!("Invalid arguments supplied.");
+        for message in errs {
+            show_error!("{}", message);
+        }
+        return 1;
+    }
+
+    for path_str in matches.values_of(options::FILE).unwrap() {
+        wipe_file(
+            path_str, iterations, remove, size, exact, zero, verbose, force,
+        );
+    }
+
+    0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(AFTER_HELP)
-        .usage(&usage[..])
         .arg(
             Arg::with_name(options::FORCE)
                 .long(options::FORCE)
@@ -331,61 +384,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("add a final overwrite with zeros to hide shredding"),
         )
         // Positional arguments
-        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true));
-
-    let matches = app.get_matches_from(args);
-
-    let mut errs: Vec<String> = vec![];
-
-    if !matches.is_present(options::FILE) {
-        show_error!("Missing an argument");
-        show_error!("For help, try '{} --help'", NAME);
-        return 0;
-    }
-
-    let iterations = match matches.value_of(options::ITERATIONS) {
-        Some(s) => match s.parse::<usize>() {
-            Ok(u) => u,
-            Err(_) => {
-                errs.push(format!("invalid number of passes: '{}'", s));
-                0
-            }
-        },
-        None => unreachable!(),
-    };
-
-    // TODO: implement --remove HOW
-    //       The optional HOW parameter indicates how to remove a directory entry:
-    //         - 'unlink' => use a standard unlink call.
-    //         - 'wipe' => also first obfuscate bytes in the name.
-    //         - 'wipesync' => also sync each obfuscated byte to disk.
-    //       The default mode is 'wipesync', but note it can be expensive.
-
-    // TODO: implement --random-source
-
-    let force = matches.is_present(options::FORCE);
-    let remove = matches.is_present(options::REMOVE);
-    let size_arg = matches.value_of(options::SIZE).map(|s| s.to_string());
-    let size = get_size(size_arg);
-    let exact = matches.is_present(options::EXACT) && size.is_none(); // if -s is given, ignore -x
-    let zero = matches.is_present(options::ZERO);
-    let verbose = matches.is_present(options::VERBOSE);
-
-    if !errs.is_empty() {
-        show_error!("Invalid arguments supplied.");
-        for message in errs {
-            show_error!("{}", message);
-        }
-        return 1;
-    }
-
-    for path_str in matches.values_of(options::FILE).unwrap() {
-        wipe_file(
-            &path_str, iterations, remove, size, exact, zero, verbose, force,
-        );
-    }
-
-    0
+        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
 }
 
 // TODO: Add support for all postfixes here up to and including EiB
@@ -659,7 +658,7 @@ fn do_remove(path: &Path, orig_filename: &str, verbose: bool) -> Result<(), io::
         println!("{}: {}: removing", NAME, orig_filename);
     }
 
-    let renamed_path: Option<PathBuf> = wipe_name(&path, verbose);
+    let renamed_path: Option<PathBuf> = wipe_name(path, verbose);
     if let Some(rp) = renamed_path {
         fs::remove_file(rp)?;
     }

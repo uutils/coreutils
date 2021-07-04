@@ -69,6 +69,22 @@ pub struct CmdResult {
 }
 
 impl CmdResult {
+    pub fn new(
+        tmpd: Option<Rc<TempDir>>,
+        code: Option<i32>,
+        success: bool,
+        stdout: &[u8],
+        stderr: &[u8],
+    ) -> CmdResult {
+        CmdResult {
+            tmpd,
+            code,
+            success,
+            stdout: stdout.to_vec(),
+            stderr: stderr.to_vec(),
+        }
+    }
+
     /// Returns a reference to the program's standard output as a slice of bytes
     pub fn stdout(&self) -> &[u8] {
         &self.stdout
@@ -207,6 +223,18 @@ impl CmdResult {
         self
     }
 
+    /// like `stdout_is`, but succeeds if any elements of `expected` matches stdout.
+    pub fn stdout_is_any<T: AsRef<str> + std::fmt::Debug>(&self, expected: Vec<T>) -> &CmdResult {
+        if !expected.iter().any(|msg| self.stdout_str() == msg.as_ref()) {
+            panic!(
+                "stdout was {}\nExpected any of {:#?}",
+                self.stdout_str(),
+                expected
+            )
+        }
+        self
+    }
+
     /// Like `stdout_is` but newlines are normalized to `\n`.
     pub fn normalized_newlines_stdout_is<T: AsRef<str>>(&self, msg: T) -> &CmdResult {
         let msg = msg.as_ref().replace("\r\n", "\n");
@@ -231,7 +259,7 @@ impl CmdResult {
     pub fn stdout_is_templated_fixture<T: AsRef<OsStr>>(
         &self,
         file_rel_path: T,
-        template_vars: Vec<(&String, &String)>,
+        template_vars: &[(&str, &str)],
     ) -> &CmdResult {
         let mut contents =
             String::from_utf8(read_scenario_fixture(&self.tmpd, file_rel_path)).unwrap();
@@ -239,6 +267,23 @@ impl CmdResult {
             contents = contents.replace(kv.0, kv.1);
         }
         self.stdout_is(contents)
+    }
+
+    /// like `stdout_is_templated_fixture`, but succeeds if any replacement by `template_vars` results in the actual stdout.
+    pub fn stdout_is_templated_fixture_any<T: AsRef<OsStr>>(
+        &self,
+        file_rel_path: T,
+        template_vars: &[Vec<(String, String)>],
+    ) {
+        let contents = String::from_utf8(read_scenario_fixture(&self.tmpd, file_rel_path)).unwrap();
+        let possible_values = template_vars.iter().map(|vars| {
+            let mut contents = contents.clone();
+            for kv in vars.iter() {
+                contents = contents.replace(&kv.0, &kv.1);
+            }
+            contents
+        });
+        self.stdout_is_any(possible_values.collect());
     }
 
     /// asserts that the command resulted in stderr stream output that equals the
@@ -625,11 +670,20 @@ impl AtPath {
         // Source:
         // http://stackoverflow.com/questions/31439011/getfinalpathnamebyhandle-without-prepended
         let prefix = "\\\\?\\";
+        // FixME: replace ...
+        #[allow(clippy::manual_strip)]
         if s.starts_with(prefix) {
             String::from(&s[prefix.len()..])
         } else {
             s
         }
+        // ... with ...
+        // if let Some(stripped) = s.strip_prefix(prefix) {
+        //     String::from(stripped)
+        // } else {
+        //     s
+        // }
+        // ... when using MSRV with stabilized `strip_prefix()`
     }
 }
 

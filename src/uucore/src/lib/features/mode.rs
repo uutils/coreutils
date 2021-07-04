@@ -89,19 +89,19 @@ fn parse_levels(mode: &str) -> (u32, usize) {
 }
 
 fn parse_op(mode: &str, default: Option<char>) -> Result<(char, usize), String> {
-    match mode.chars().next() {
-        Some(ch) => match ch {
-            '+' | '-' | '=' => Ok((ch, 1)),
-            _ => match default {
-                Some(ch) => Ok((ch, 0)),
-                None => Err(format!(
-                    "invalid operator (expected +, -, or =, but found {})",
-                    ch
-                )),
-            },
-        },
-        None => Err("unexpected end of mode".to_owned()),
-    }
+    let ch = mode
+        .chars()
+        .next()
+        .ok_or_else(|| "unexpected end of mode".to_owned())?;
+    Ok(match ch {
+        '+' | '-' | '=' => (ch, 1),
+        _ => {
+            let ch = default.ok_or_else(|| {
+                format!("invalid operator (expected +, -, or =, but found {})", ch)
+            })?;
+            (ch, 0)
+        }
+    })
 }
 
 fn parse_change(mode: &str, fperm: u32, considering_dir: bool) -> (u32, usize) {

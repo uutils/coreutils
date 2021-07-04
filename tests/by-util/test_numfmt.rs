@@ -35,7 +35,7 @@ fn test_from_iec_i_requires_suffix() {
     new_ucmd!()
         .args(&["--from=iec-i", "1024"])
         .fails()
-        .stderr_is("numfmt: missing 'i' suffix in input: ‘1024’ (e.g Ki/Mi/Gi)");
+        .stderr_is("numfmt: missing 'i' suffix in input: '1024' (e.g Ki/Mi/Gi)");
 }
 
 #[test]
@@ -123,7 +123,7 @@ fn test_header_error_if_non_numeric() {
     new_ucmd!()
         .args(&["--header=two"])
         .run()
-        .stderr_is("numfmt: invalid header value ‘two’");
+        .stderr_is("numfmt: invalid header value 'two'");
 }
 
 #[test]
@@ -131,7 +131,7 @@ fn test_header_error_if_0() {
     new_ucmd!()
         .args(&["--header=0"])
         .run()
-        .stderr_is("numfmt: invalid header value ‘0’");
+        .stderr_is("numfmt: invalid header value '0'");
 }
 
 #[test]
@@ -139,7 +139,7 @@ fn test_header_error_if_negative() {
     new_ucmd!()
         .args(&["--header=-3"])
         .run()
-        .stderr_is("numfmt: invalid header value ‘-3’");
+        .stderr_is("numfmt: invalid header value '-3'");
 }
 
 #[test]
@@ -187,7 +187,7 @@ fn test_should_report_invalid_empty_number_on_empty_stdin() {
         .args(&["--from=auto"])
         .pipe_in("\n")
         .run()
-        .stderr_is("numfmt: invalid number: ‘’\n");
+        .stderr_is("numfmt: invalid number: ''\n");
 }
 
 #[test]
@@ -196,7 +196,7 @@ fn test_should_report_invalid_empty_number_on_blank_stdin() {
         .args(&["--from=auto"])
         .pipe_in("  \t  \n")
         .run()
-        .stderr_is("numfmt: invalid number: ‘’\n");
+        .stderr_is("numfmt: invalid number: ''\n");
 }
 
 #[test]
@@ -205,14 +205,14 @@ fn test_should_report_invalid_suffix_on_stdin() {
         .args(&["--from=auto"])
         .pipe_in("1k")
         .run()
-        .stderr_is("numfmt: invalid suffix in input: ‘1k’\n");
+        .stderr_is("numfmt: invalid suffix in input: '1k'\n");
 
     // GNU numfmt reports this one as “invalid number”
     new_ucmd!()
         .args(&["--from=auto"])
         .pipe_in("NaN")
         .run()
-        .stderr_is("numfmt: invalid suffix in input: ‘NaN’\n");
+        .stderr_is("numfmt: invalid suffix in input: 'NaN'\n");
 }
 
 #[test]
@@ -222,7 +222,7 @@ fn test_should_report_invalid_number_with_interior_junk() {
         .args(&["--from=auto"])
         .pipe_in("1x0K")
         .run()
-        .stderr_is("numfmt: invalid number: ‘1x0K’\n");
+        .stderr_is("numfmt: invalid number: '1x0K'\n");
 }
 
 #[test]
@@ -461,7 +461,7 @@ fn test_delimiter_overrides_whitespace_separator() {
         .args(&["-d,"])
         .pipe_in("1 234,56")
         .fails()
-        .stderr_is("numfmt: invalid number: ‘1 234’\n");
+        .stderr_is("numfmt: invalid number: '1 234'\n");
 }
 
 #[test]
@@ -480,4 +480,28 @@ fn test_delimiter_with_padding_and_fields() {
         .pipe_in("1000|2000")
         .succeeds()
         .stdout_only(" 1.0K| 2.0K\n");
+}
+
+#[test]
+fn test_round() {
+    for (method, exp) in &[
+        ("from-zero", ["9.1K", "-9.1K", "9.1K", "-9.1K"]),
+        ("towards-zero", ["9.0K", "-9.0K", "9.0K", "-9.0K"]),
+        ("up", ["9.1K", "-9.0K", "9.1K", "-9.0K"]),
+        ("down", ["9.0K", "-9.1K", "9.0K", "-9.1K"]),
+        ("nearest", ["9.0K", "-9.0K", "9.1K", "-9.1K"]),
+    ] {
+        new_ucmd!()
+            .args(&[
+                "--to=si",
+                &format!("--round={}", method),
+                "--",
+                "9001",
+                "-9001",
+                "9099",
+                "-9099",
+            ])
+            .succeeds()
+            .stdout_only(exp.join("\n") + "\n");
+    }
 }

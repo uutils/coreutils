@@ -35,10 +35,20 @@ fn get_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+
+    if let Some(values) = matches.values_of(options::NUMBER) {
+        let numbers = values.collect();
+        sleep(numbers);
+    }
+
+    0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .version(crate_version!())
         .about(ABOUT)
-        .usage(&usage[..])
         .after_help(LONG_HELP)
         .arg(
             Arg::with_name(options::NUMBER)
@@ -49,14 +59,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .multiple(true)
                 .required(true),
         )
-        .get_matches_from(args);
-
-    if let Some(values) = matches.values_of(options::NUMBER) {
-        let numbers = values.collect();
-        sleep(numbers);
-    }
-
-    0
 }
 
 fn sleep(args: Vec<&str>) {

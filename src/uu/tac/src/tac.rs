@@ -31,7 +31,31 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let matches = App::new(executable!())
+    let matches = uu_app().get_matches_from(args);
+
+    let before = matches.is_present(options::BEFORE);
+    let regex = matches.is_present(options::REGEX);
+    let separator = match matches.value_of(options::SEPARATOR) {
+        Some(m) => {
+            if m.is_empty() {
+                crash!(1, "separator cannot be empty")
+            } else {
+                m.to_owned()
+            }
+        }
+        None => "\n".to_owned(),
+    };
+
+    let files: Vec<String> = match matches.values_of(options::FILE) {
+        Some(v) => v.map(|v| v.to_owned()).collect(),
+        None => vec!["-".to_owned()],
+    };
+
+    tac(files, before, regex, &separator[..])
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .name(NAME)
         .version(crate_version!())
         .usage(USAGE)
@@ -58,27 +82,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .takes_value(true),
         )
         .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
-        .get_matches_from(args);
-
-    let before = matches.is_present(options::BEFORE);
-    let regex = matches.is_present(options::REGEX);
-    let separator = match matches.value_of(options::SEPARATOR) {
-        Some(m) => {
-            if m.is_empty() {
-                crash!(1, "separator cannot be empty")
-            } else {
-                m.to_owned()
-            }
-        }
-        None => "\n".to_owned(),
-    };
-
-    let files: Vec<String> = match matches.values_of(options::FILE) {
-        Some(v) => v.map(|v| v.to_owned()).collect(),
-        None => vec!["-".to_owned()],
-    };
-
-    tac(files, before, regex, &separator[..])
 }
 
 fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) -> i32 {

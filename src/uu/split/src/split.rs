@@ -13,11 +13,13 @@ extern crate uucore;
 mod platform;
 
 use clap::{crate_version, App, Arg};
+use std::convert::TryFrom;
 use std::env;
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 use std::{char, fs::remove_file};
+use uucore::parse_size::parse_size;
 
 static NAME: &str = "split";
 
@@ -28,7 +30,7 @@ static OPT_ADDITIONAL_SUFFIX: &str = "additional-suffix";
 static OPT_FILTER: &str = "filter";
 static OPT_NUMERIC_SUFFIXES: &str = "numeric-suffixes";
 static OPT_SUFFIX_LENGTH: &str = "suffix-length";
-static OPT_DEFAULT_SUFFIX_LENGTH: usize = 2;
+static OPT_DEFAULT_SUFFIX_LENGTH: &str = "2";
 static OPT_VERBOSE: &str = "verbose";
 
 static ARG_INPUT: &str = "input";
@@ -52,85 +54,10 @@ size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let long_usage = get_long_usage();
-    let default_suffix_length_str = OPT_DEFAULT_SUFFIX_LENGTH.to_string();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about("Create output files containing consecutive or interleaved sections of input")
+    let matches = uu_app()
         .usage(&usage[..])
         .after_help(&long_usage[..])
-        // strategy (mutually exclusive)
-        .arg(
-            Arg::with_name(OPT_BYTES)
-                .short("b")
-                .long(OPT_BYTES)
-                .takes_value(true)
-                .default_value("2")
-                .help("use suffixes of length N (default 2)"),
-        )
-        .arg(
-            Arg::with_name(OPT_LINE_BYTES)
-                .short("C")
-                .long(OPT_LINE_BYTES)
-                .takes_value(true)
-                .default_value("2")
-                .help("put at most SIZE bytes of lines per output file"),
-        )
-        .arg(
-            Arg::with_name(OPT_LINES)
-                .short("l")
-                .long(OPT_LINES)
-                .takes_value(true)
-                .default_value("1000")
-                .help("write to shell COMMAND file name is $FILE (Currently not implemented for Windows)"),
-        )
-        // rest of the arguments
-        .arg(
-            Arg::with_name(OPT_ADDITIONAL_SUFFIX)
-                .long(OPT_ADDITIONAL_SUFFIX)
-                .takes_value(true)
-                .default_value("")
-                .help("additional suffix to append to output file names"),
-        )
-        .arg(
-            Arg::with_name(OPT_FILTER)
-                .long(OPT_FILTER)
-                .takes_value(true)
-                .help("write to shell COMMAND file name is $FILE (Currently not implemented for Windows)"),
-        )
-        .arg(
-            Arg::with_name(OPT_NUMERIC_SUFFIXES)
-                .short("d")
-                .long(OPT_NUMERIC_SUFFIXES)
-                .takes_value(true)
-                .default_value("0")
-                .help("use numeric suffixes instead of alphabetic"),
-        )
-        .arg(
-            Arg::with_name(OPT_SUFFIX_LENGTH)
-                .short("a")
-                .long(OPT_SUFFIX_LENGTH)
-                .takes_value(true)
-                .default_value(default_suffix_length_str.as_str())
-                .help("use suffixes of length N (default 2)"),
-        )
-        .arg(
-            Arg::with_name(OPT_VERBOSE)
-                .long(OPT_VERBOSE)
-                .help("print a diagnostic just before each output file is opened"),
-        )
-        .arg(
-            Arg::with_name(ARG_INPUT)
-            .takes_value(true)
-            .default_value("-")
-            .index(1)
-        )
-        .arg(
-            Arg::with_name(ARG_PREFIX)
-            .takes_value(true)
-            .default_value("x")
-            .index(2)
-        )
         .get_matches_from(args);
 
     let mut settings = Settings {
@@ -199,6 +126,84 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     split(&settings)
 }
 
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about("Create output files containing consecutive or interleaved sections of input")
+        // strategy (mutually exclusive)
+        .arg(
+            Arg::with_name(OPT_BYTES)
+                .short("b")
+                .long(OPT_BYTES)
+                .takes_value(true)
+                .default_value("2")
+                .help("use suffixes of length N (default 2)"),
+        )
+        .arg(
+            Arg::with_name(OPT_LINE_BYTES)
+                .short("C")
+                .long(OPT_LINE_BYTES)
+                .takes_value(true)
+                .default_value("2")
+                .help("put at most SIZE bytes of lines per output file"),
+        )
+        .arg(
+            Arg::with_name(OPT_LINES)
+                .short("l")
+                .long(OPT_LINES)
+                .takes_value(true)
+                .default_value("1000")
+                .help("write to shell COMMAND file name is $FILE (Currently not implemented for Windows)"),
+        )
+        // rest of the arguments
+        .arg(
+            Arg::with_name(OPT_ADDITIONAL_SUFFIX)
+                .long(OPT_ADDITIONAL_SUFFIX)
+                .takes_value(true)
+                .default_value("")
+                .help("additional suffix to append to output file names"),
+        )
+        .arg(
+            Arg::with_name(OPT_FILTER)
+                .long(OPT_FILTER)
+                .takes_value(true)
+                .help("write to shell COMMAND file name is $FILE (Currently not implemented for Windows)"),
+        )
+        .arg(
+            Arg::with_name(OPT_NUMERIC_SUFFIXES)
+                .short("d")
+                .long(OPT_NUMERIC_SUFFIXES)
+                .takes_value(true)
+                .default_value("0")
+                .help("use numeric suffixes instead of alphabetic"),
+        )
+        .arg(
+            Arg::with_name(OPT_SUFFIX_LENGTH)
+                .short("a")
+                .long(OPT_SUFFIX_LENGTH)
+                .takes_value(true)
+                .default_value(OPT_DEFAULT_SUFFIX_LENGTH)
+                .help("use suffixes of length N (default 2)"),
+        )
+        .arg(
+            Arg::with_name(OPT_VERBOSE)
+                .long(OPT_VERBOSE)
+                .help("print a diagnostic just before each output file is opened"),
+        )
+        .arg(
+            Arg::with_name(ARG_INPUT)
+            .takes_value(true)
+            .default_value("-")
+            .index(1)
+        )
+        .arg(
+            Arg::with_name(ARG_PREFIX)
+            .takes_value(true)
+            .default_value("x")
+            .index(2)
+        )
+}
+
 #[allow(dead_code)]
 struct Settings {
     prefix: String,
@@ -231,10 +236,9 @@ struct LineSplitter {
 impl LineSplitter {
     fn new(settings: &Settings) -> LineSplitter {
         LineSplitter {
-            lines_per_split: settings
-                .strategy_param
-                .parse()
-                .unwrap_or_else(|e| crash!(1, "invalid number of lines: {}", e)),
+            lines_per_split: settings.strategy_param.parse().unwrap_or_else(|_| {
+                crash!(1, "invalid number of lines: '{}'", settings.strategy_param)
+            }),
         }
     }
 }
@@ -276,40 +280,14 @@ struct ByteSplitter {
 
 impl ByteSplitter {
     fn new(settings: &Settings) -> ByteSplitter {
-        // These multipliers are the same as supported by GNU coreutils.
-        let modifiers: Vec<(&str, u128)> = vec![
-            ("K", 1024u128),
-            ("M", 1024 * 1024),
-            ("G", 1024 * 1024 * 1024),
-            ("T", 1024 * 1024 * 1024 * 1024),
-            ("P", 1024 * 1024 * 1024 * 1024 * 1024),
-            ("E", 1024 * 1024 * 1024 * 1024 * 1024 * 1024),
-            ("Z", 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024),
-            ("Y", 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024),
-            ("KB", 1000),
-            ("MB", 1000 * 1000),
-            ("GB", 1000 * 1000 * 1000),
-            ("TB", 1000 * 1000 * 1000 * 1000),
-            ("PB", 1000 * 1000 * 1000 * 1000 * 1000),
-            ("EB", 1000 * 1000 * 1000 * 1000 * 1000 * 1000),
-            ("ZB", 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000),
-            ("YB", 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000),
-        ];
-
-        // This sequential find is acceptable since none of the modifiers are
-        // suffixes of any other modifiers, a la Huffman codes.
-        let (suffix, multiplier) = modifiers
-            .iter()
-            .find(|(suffix, _)| settings.strategy_param.ends_with(suffix))
-            .unwrap_or(&("", 1));
-
-        // Try to parse the actual numeral.
-        let n = &settings.strategy_param[0..(settings.strategy_param.len() - suffix.len())]
-            .parse::<u128>()
-            .unwrap_or_else(|e| crash!(1, "invalid number of bytes: {}", e));
+        let size_string = &settings.strategy_param;
+        let size_num = match parse_size(size_string) {
+            Ok(n) => n,
+            Err(e) => crash!(1, "invalid number of bytes: {}", e.to_string()),
+        };
 
         ByteSplitter {
-            bytes_per_split: n * multiplier,
+            bytes_per_split: u128::try_from(size_num).unwrap(),
         }
     }
 }

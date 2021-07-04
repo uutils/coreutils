@@ -64,11 +64,105 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let after_help = get_long_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = uu_app()
         .usage(&usage[..])
         .after_help(&after_help[..])
+        .get_matches_from(args);
+
+    let files: Vec<String> = matches
+        .values_of(options::FILE)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
+
+    // If true, attempt to canonicalize hostnames via a DNS lookup.
+    let do_lookup = matches.is_present(options::LOOKUP);
+
+    // If true, display only a list of usernames and count of
+    // the users logged on.
+    // Ignored for 'who am i'.
+    let short_list = matches.is_present(options::COUNT);
+
+    let all = matches.is_present(options::ALL);
+
+    // If true, display a line at the top describing each field.
+    let include_heading = matches.is_present(options::HEADING);
+
+    // If true, display a '+' for each user if mesg y, a '-' if mesg n,
+    // or a '?' if their tty cannot be statted.
+    let include_mesg = all || matches.is_present(options::MESG) || matches.is_present("w");
+
+    // If true, display the last boot time.
+    let need_boottime = all || matches.is_present(options::BOOT);
+
+    // If true, display dead processes.
+    let need_deadprocs = all || matches.is_present(options::DEAD);
+
+    // If true, display processes waiting for user login.
+    let need_login = all || matches.is_present(options::LOGIN);
+
+    // If true, display processes started by init.
+    let need_initspawn = all || matches.is_present(options::PROCESS);
+
+    // If true, display the last clock change.
+    let need_clockchange = all || matches.is_present(options::TIME);
+
+    // If true, display the current runlevel.
+    let need_runlevel = all || matches.is_present(options::RUNLEVEL);
+
+    let use_defaults = !(all
+        || need_boottime
+        || need_deadprocs
+        || need_login
+        || need_initspawn
+        || need_runlevel
+        || need_clockchange
+        || matches.is_present(options::USERS));
+
+    // If true, display user processes.
+    let need_users = all || matches.is_present(options::USERS) || use_defaults;
+
+    // If true, display the hours:minutes since each user has touched
+    // the keyboard, or "." if within the last minute, or "old" if
+    // not within the last day.
+    let include_idle = need_deadprocs || need_login || need_runlevel || need_users;
+
+    // If true, display process termination & exit status.
+    let include_exit = need_deadprocs;
+
+    // If true, display only name, line, and time fields.
+    let short_output = !include_exit && use_defaults;
+
+    // If true, display info only for the controlling tty.
+    let my_line_only = matches.is_present(options::ONLY_HOSTNAME_USER) || files.len() == 2;
+
+    let mut who = Who {
+        do_lookup,
+        short_list,
+        short_output,
+        include_idle,
+        include_heading,
+        include_mesg,
+        include_exit,
+        need_boottime,
+        need_deadprocs,
+        need_login,
+        need_initspawn,
+        need_clockchange,
+        need_runlevel,
+        need_users,
+        my_line_only,
+        args: files,
+    };
+
+    who.exec();
+
+    0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
         .arg(
             Arg::with_name(options::ALL)
                 .long(options::ALL)
@@ -164,162 +258,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .min_values(1)
                 .max_values(2),
         )
-        .get_matches_from(args);
-
-    let files: Vec<String> = matches
-        .values_of(options::FILE)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_default();
-
-    // If true, attempt to canonicalize hostnames via a DNS lookup.
-    let do_lookup = matches.is_present(options::LOOKUP);
-
-    // If true, display only a list of usernames and count of
-    // the users logged on.
-    // Ignored for 'who am i'.
-    let short_list = matches.is_present(options::COUNT);
-
-    // If true, display only name, line, and time fields.
-    let mut short_output = false;
-
-    // If true, display the hours:minutes since each user has touched
-    // the keyboard, or "." if within the last minute, or "old" if
-    // not within the last day.
-    let mut include_idle = false;
-
-    // If true, display a line at the top describing each field.
-    let include_heading = matches.is_present(options::HEADING);
-
-    // If true, display a '+' for each user if mesg y, a '-' if mesg n,
-    // or a '?' if their tty cannot be statted.
-    let include_mesg = matches.is_present(options::ALL)
-        || matches.is_present(options::MESG)
-        || matches.is_present("w");
-
-    // If true, display process termination & exit status.
-    let mut include_exit = false;
-
-    // If true, display the last boot time.
-    let mut need_boottime = false;
-
-    // If true, display dead processes.
-    let mut need_deadprocs = false;
-
-    // If true, display processes waiting for user login.
-    let mut need_login = false;
-
-    // If true, display processes started by init.
-    let mut need_initspawn = false;
-
-    // If true, display the last clock change.
-    let mut need_clockchange = false;
-
-    // If true, display the current runlevel.
-    let mut need_runlevel = false;
-
-    // If true, display user processes.
-    let mut need_users = false;
-
-    // If true, display info only for the controlling tty.
-    let mut my_line_only = false;
-
-    let mut assumptions = true;
-
-    #[allow(clippy::useless_let_if_seq)]
-    {
-        if matches.is_present(options::ALL) {
-            need_boottime = true;
-            need_deadprocs = true;
-            need_login = true;
-            need_initspawn = true;
-            need_runlevel = true;
-            need_clockchange = true;
-            need_users = true;
-            include_idle = true;
-            include_exit = true;
-            assumptions = false;
-        }
-
-        if matches.is_present(options::BOOT) {
-            need_boottime = true;
-            assumptions = false;
-        }
-
-        if matches.is_present(options::DEAD) {
-            need_deadprocs = true;
-            include_idle = true;
-            include_exit = true;
-            assumptions = false;
-        }
-
-        if matches.is_present(options::LOGIN) {
-            need_login = true;
-            include_idle = true;
-            assumptions = false;
-        }
-
-        if matches.is_present(options::ONLY_HOSTNAME_USER) || files.len() == 2 {
-            my_line_only = true;
-        }
-
-        if matches.is_present(options::PROCESS) {
-            need_initspawn = true;
-            assumptions = false;
-        }
-
-        if matches.is_present(options::RUNLEVEL) {
-            need_runlevel = true;
-            include_idle = true;
-            assumptions = false;
-        }
-
-        if matches.is_present(options::SHORT) {
-            short_output = true;
-        }
-
-        if matches.is_present(options::TIME) {
-            need_clockchange = true;
-            assumptions = false;
-        }
-
-        if matches.is_present(options::USERS) {
-            need_users = true;
-            include_idle = true;
-            assumptions = false;
-        }
-
-        if assumptions {
-            need_users = true;
-            short_output = true;
-        }
-
-        if include_exit {
-            short_output = false;
-        }
-    }
-
-    let mut who = Who {
-        do_lookup,
-        short_list,
-        short_output,
-        include_idle,
-        include_heading,
-        include_mesg,
-        include_exit,
-        need_boottime,
-        need_deadprocs,
-        need_login,
-        need_initspawn,
-        need_clockchange,
-        need_runlevel,
-        need_users,
-        my_line_only,
-        args: files,
-    };
-
-    who.exec();
-
-    0
 }
 
 struct Who {
@@ -366,7 +304,7 @@ fn idle_string<'a>(when: i64, boottime: i64) -> Cow<'a, str> {
 }
 
 fn time_string(ut: &Utmpx) -> String {
-    time::strftime("%Y-%m-%d %H:%M", &ut.login_time()).unwrap()
+    time::strftime("%b %e %H:%M", &ut.login_time()).unwrap() // LC_ALL=C
 }
 
 #[inline]
@@ -589,8 +527,8 @@ impl Who {
             buf.push_str(&msg);
         }
         buf.push_str(&format!(" {:<12}", line));
-        // "%Y-%m-%d %H:%M"
-        let time_size = 4 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 2;
+        // "%b %e %H:%M" (LC_ALL=C)
+        let time_size = 3 + 2 + 2 + 1 + 2;
         buf.push_str(&format!(" {:<1$}", time, time_size));
 
         if !self.short_output {

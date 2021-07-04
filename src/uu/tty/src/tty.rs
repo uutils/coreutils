@@ -14,7 +14,7 @@ extern crate uucore;
 
 use clap::{crate_version, App, Arg};
 use std::ffi::CStr;
-use uucore::fs::is_stdin_interactive;
+use std::io::Write;
 use uucore::InvalidEncodingHandling;
 
 static ABOUT: &str = "Print the file name of the terminal connected to standard input.";
@@ -33,19 +33,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
-        .usage(&usage[..])
-        .arg(
-            Arg::with_name(options::SILENT)
-                .long(options::SILENT)
-                .visible_alias("quiet")
-                .short("s")
-                .help("print nothing, only return an exit status")
-                .required(false),
-        )
-        .get_matches_from(args);
+    let matches = uu_app().usage(&usage[..]).get_matches_from_safe(args);
+
+    let matches = match matches {
+        Ok(m) => m,
+        Err(e) => {
+            eprint!("{}", e);
+            return 2;
+        }
+    };
 
     let silent = matches.is_present(options::SILENT);
 
@@ -59,17 +55,38 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     };
 
+    let mut stdout = std::io::stdout();
+
     if !silent {
-        if !tty.chars().all(|c| c.is_whitespace()) {
-            println!("{}", tty);
+        let write_result = if !tty.chars().all(|c| c.is_whitespace()) {
+            writeln!(stdout, "{}", tty)
         } else {
-            println!("not a tty");
+            writeln!(stdout, "not a tty")
+        };
+        if write_result.is_err() || stdout.flush().is_err() {
+            // Don't return to prevent a panic later when another flush is attempted
+            // because the `uucore_procs::main` macro inserts a flush after execution for every utility.
+            std::process::exit(3);
         }
     }
 
-    if is_stdin_interactive() {
+    if atty::is(atty::Stream::Stdin) {
         libc::EXIT_SUCCESS
     } else {
         libc::EXIT_FAILURE
     }
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
+        .arg(
+            Arg::with_name(options::SILENT)
+                .long(options::SILENT)
+                .visible_alias("quiet")
+                .short("s")
+                .help("print nothing, only return an exit status")
+                .required(false),
+        )
 }

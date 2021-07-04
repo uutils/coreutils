@@ -1,6 +1,12 @@
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
+
+// spell-checker:ignore (ToDO) abcdefghijklmnopqrstuvwxyz efghijklmnopqrstuvwxyz vwxyz emptyfile
+
 extern crate tail;
 
-use self::tail::parse_size;
 use crate::common::util::*;
 use std::char::from_digit;
 use std::io::Write;
@@ -237,41 +243,6 @@ fn test_bytes_big() {
 }
 
 #[test]
-fn test_parse_size() {
-    // No suffix.
-    assert_eq!(Ok(1234), parse_size("1234"));
-
-    // kB is 1000
-    assert_eq!(Ok(9 * 1000), parse_size("9kB"));
-
-    // K is 1024
-    assert_eq!(Ok(2 * 1024), parse_size("2K"));
-
-    let suffixes = [
-        ('M', 2u32),
-        ('G', 3u32),
-        ('T', 4u32),
-        ('P', 5u32),
-        ('E', 6u32),
-    ];
-
-    for &(c, exp) in &suffixes {
-        let s = format!("2{}B", c);
-        assert_eq!(Ok(2 * (1000_u64).pow(exp)), parse_size(&s));
-
-        let s = format!("2{}", c);
-        assert_eq!(Ok(2 * (1024_u64).pow(exp)), parse_size(&s));
-    }
-
-    // Sizes that are too big.
-    assert!(parse_size("1Z").is_err());
-    assert!(parse_size("1Y").is_err());
-
-    // Bad number
-    assert!(parse_size("328hdsf3290").is_err()); // spell-checker:disable-line
-}
-
-#[test]
 fn test_lines_with_size_suffix() {
     const FILE: &str = "test_lines_with_size_suffix.txt";
     const EXPECTED_FILE: &str = "test_lines_with_size_suffix_expected.txt";
@@ -320,12 +291,11 @@ fn test_multiple_input_files_with_suppressed_headers() {
 
 #[test]
 fn test_multiple_input_quiet_flag_overrides_verbose_flag_for_suppressing_headers() {
-    // TODO: actually the later one should win, i.e. -qv should lead to headers being printed, -vq to them being suppressed
     new_ucmd!()
         .arg(FOOBAR_TXT)
         .arg(FOOBAR_2_TXT)
-        .arg("-q")
         .arg("-v")
+        .arg("-q")
         .run()
         .stdout_is_fixture("foobar_multiple_quiet.expected");
 }
@@ -387,4 +357,62 @@ fn test_positive_zero_lines() {
         .pipe_in("a\nb\nc\nd\ne\n")
         .succeeds()
         .stdout_is("a\nb\nc\nd\ne\n");
+}
+
+#[test]
+fn test_tail_invalid_num() {
+    new_ucmd!()
+        .args(&["-c", "1024R", "emptyfile.txt"])
+        .fails()
+        .stderr_is("tail: invalid number of bytes: '1024R'");
+    new_ucmd!()
+        .args(&["-n", "1024R", "emptyfile.txt"])
+        .fails()
+        .stderr_is("tail: invalid number of lines: '1024R'");
+    #[cfg(not(target_pointer_width = "128"))]
+    new_ucmd!()
+        .args(&["-c", "1Y", "emptyfile.txt"])
+        .fails()
+        .stderr_is("tail: invalid number of bytes: '1Y': Value too large for defined data type");
+    #[cfg(not(target_pointer_width = "128"))]
+    new_ucmd!()
+        .args(&["-n", "1Y", "emptyfile.txt"])
+        .fails()
+        .stderr_is("tail: invalid number of lines: '1Y': Value too large for defined data type");
+    #[cfg(target_pointer_width = "32")]
+    {
+        let sizes = ["1000G", "10T"];
+        for size in &sizes {
+            new_ucmd!()
+                .args(&["-c", size])
+                .fails()
+                .code_is(1)
+                .stderr_only(format!(
+                    "tail: invalid number of bytes: '{}': Value too large for defined data type",
+                    size
+                ));
+        }
+    }
+}
+
+#[test]
+fn test_tail_num_with_undocumented_sign_bytes() {
+    // tail: '-' is not documented (8.32 man pages)
+    // head: '+' is not documented (8.32 man pages)
+    const ALPHABET: &str = "abcdefghijklmnopqrstuvwxyz";
+    new_ucmd!()
+        .args(&["-c", "5"])
+        .pipe_in(ALPHABET)
+        .succeeds()
+        .stdout_is("vwxyz");
+    new_ucmd!()
+        .args(&["-c", "-5"])
+        .pipe_in(ALPHABET)
+        .succeeds()
+        .stdout_is("vwxyz");
+    new_ucmd!()
+        .args(&["-c", "+5"])
+        .pipe_in(ALPHABET)
+        .succeeds()
+        .stdout_is("efghijklmnopqrstuvwxyz");
 }

@@ -15,7 +15,6 @@ extern crate uucore;
 use clap::{crate_version, App, Arg, ArgMatches};
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
-use std::iter::repeat;
 use std::str::from_utf8;
 use unicode_width::UnicodeWidthChar;
 
@@ -90,7 +89,7 @@ impl Options {
             })
             .max()
             .unwrap(); // length of tabstops is guaranteed >= 1
-        let tspaces = repeat(' ').take(nspaces).collect();
+        let tspaces = " ".repeat(nspaces);
 
         let files: Vec<String> = match matches.values_of(options::FILES) {
             Some(s) => s.map(|v| v.to_string()).collect(),
@@ -109,10 +108,16 @@ impl Options {
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
-    let matches = App::new(executable!())
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+
+    expand(Options::new(&matches));
+    0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .version(crate_version!())
         .about(ABOUT)
-        .usage(&usage[..])
         .after_help(LONG_HELP)
         .arg(
             Arg::with_name(options::INITIAL)
@@ -139,10 +144,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .hidden(true)
                 .takes_value(true)
         )
-        .get_matches_from(args);
-
-    expand(Options::new(&matches));
-    0
 }
 
 fn open(path: String) -> BufReader<Box<dyn Read + 'static>> {
@@ -236,7 +237,7 @@ fn expand(options: Options) {
 
                         // now dump out either spaces if we're expanding, or a literal tab if we're not
                         if init || !options.iflag {
-                            safe_unwrap!(output.write_all(&options.tspaces[..nts].as_bytes()));
+                            safe_unwrap!(output.write_all(options.tspaces[..nts].as_bytes()));
                         } else {
                             safe_unwrap!(output.write_all(&buf[byte..byte + nbytes]));
                         }

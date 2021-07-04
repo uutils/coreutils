@@ -29,27 +29,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let matches = App::new(executable!())
-        .name(NAME)
-        .version(crate_version!())
-        .usage(USAGE)
-        .about(SUMMARY)
-        .arg(
-            Arg::with_name(options::MODE)
-                .short("m")
-                .long(options::MODE)
-                .help("file permissions for the fifo")
-                .default_value("0666")
-                .value_name("0666"),
-        )
-        .arg(
-            Arg::with_name(options::SE_LINUX_SECURITY_CONTEXT)
-                .short(options::SE_LINUX_SECURITY_CONTEXT)
-                .help("set the SELinux security context to default type")
-        )
-        .arg(Arg::with_name(options::CONTEXT).long(options::CONTEXT).value_name("CTX").help("like -Z, or if CTX is specified then set the SELinux\nor SMACK security context to CTX"))
-        .arg(Arg::with_name(options::FIFO).hidden(true).multiple(true))
-        .get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     if matches.is_present(options::CONTEXT) {
         crash!(1, "--context is not implemented");
@@ -59,7 +39,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     let mode = match matches.value_of(options::MODE) {
-        Some(m) => match usize::from_str_radix(&m, 8) {
+        Some(m) => match usize::from_str_radix(m, 8) {
             Ok(m) => m,
             Err(e) => {
                 show_error!("invalid mode: {}", e);
@@ -87,4 +67,35 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     exit_code
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .name(NAME)
+        .version(crate_version!())
+        .usage(USAGE)
+        .about(SUMMARY)
+        .arg(
+            Arg::with_name(options::MODE)
+                .short("m")
+                .long(options::MODE)
+                .help("file permissions for the fifo")
+                .default_value("0666")
+                .value_name("0666"),
+        )
+        .arg(
+            Arg::with_name(options::SE_LINUX_SECURITY_CONTEXT)
+                .short(options::SE_LINUX_SECURITY_CONTEXT)
+                .help("set the SELinux security context to default type"),
+        )
+        .arg(
+            Arg::with_name(options::CONTEXT)
+                .long(options::CONTEXT)
+                .value_name("CTX")
+                .help(
+                    "like -Z, or if CTX is specified then set the SELinux \
+                    or SMACK security context to CTX",
+                ),
+        )
+        .arg(Arg::with_name(options::FIFO).hidden(true).multiple(true))
 }

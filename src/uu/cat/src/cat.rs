@@ -20,7 +20,6 @@ use clap::{crate_version, App, Arg};
 use std::fs::{metadata, File};
 use std::io::{self, Read, Write};
 use thiserror::Error;
-use uucore::fs::is_stdin_interactive;
 
 /// Linux splice support
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -170,7 +169,65 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let matches = App::new(executable!())
+    let matches = uu_app().get_matches_from(args);
+
+    let number_mode = if matches.is_present(options::NUMBER_NONBLANK) {
+        NumberingMode::NonEmpty
+    } else if matches.is_present(options::NUMBER) {
+        NumberingMode::All
+    } else {
+        NumberingMode::None
+    };
+
+    let show_nonprint = vec![
+        options::SHOW_ALL.to_owned(),
+        options::SHOW_NONPRINTING_ENDS.to_owned(),
+        options::SHOW_NONPRINTING_TABS.to_owned(),
+        options::SHOW_NONPRINTING.to_owned(),
+    ]
+    .iter()
+    .any(|v| matches.is_present(v));
+
+    let show_ends = vec![
+        options::SHOW_ENDS.to_owned(),
+        options::SHOW_ALL.to_owned(),
+        options::SHOW_NONPRINTING_ENDS.to_owned(),
+    ]
+    .iter()
+    .any(|v| matches.is_present(v));
+
+    let show_tabs = vec![
+        options::SHOW_ALL.to_owned(),
+        options::SHOW_TABS.to_owned(),
+        options::SHOW_NONPRINTING_TABS.to_owned(),
+    ]
+    .iter()
+    .any(|v| matches.is_present(v));
+
+    let squeeze_blank = matches.is_present(options::SQUEEZE_BLANK);
+    let files: Vec<String> = match matches.values_of(options::FILE) {
+        Some(v) => v.clone().map(|v| v.to_owned()).collect(),
+        None => vec!["-".to_owned()],
+    };
+
+    let options = OutputOptions {
+        show_ends,
+        number: number_mode,
+        show_nonprint,
+        show_tabs,
+        squeeze_blank,
+    };
+    let success = cat_files(files, &options).is_ok();
+
+    if success {
+        0
+    } else {
+        1
+    }
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .name(NAME)
         .version(crate_version!())
         .usage(SYNTAX)
@@ -230,61 +287,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(options::SHOW_NONPRINTING)
                 .help("use ^ and M- notation, except for LF (\\n) and TAB (\\t)"),
         )
-        .get_matches_from(args);
-
-    let number_mode = if matches.is_present(options::NUMBER_NONBLANK) {
-        NumberingMode::NonEmpty
-    } else if matches.is_present(options::NUMBER) {
-        NumberingMode::All
-    } else {
-        NumberingMode::None
-    };
-
-    let show_nonprint = vec![
-        options::SHOW_ALL.to_owned(),
-        options::SHOW_NONPRINTING_ENDS.to_owned(),
-        options::SHOW_NONPRINTING_TABS.to_owned(),
-        options::SHOW_NONPRINTING.to_owned(),
-    ]
-    .iter()
-    .any(|v| matches.is_present(v));
-
-    let show_ends = vec![
-        options::SHOW_ENDS.to_owned(),
-        options::SHOW_ALL.to_owned(),
-        options::SHOW_NONPRINTING_ENDS.to_owned(),
-    ]
-    .iter()
-    .any(|v| matches.is_present(v));
-
-    let show_tabs = vec![
-        options::SHOW_ALL.to_owned(),
-        options::SHOW_TABS.to_owned(),
-        options::SHOW_NONPRINTING_TABS.to_owned(),
-    ]
-    .iter()
-    .any(|v| matches.is_present(v));
-
-    let squeeze_blank = matches.is_present(options::SQUEEZE_BLANK);
-    let files: Vec<String> = match matches.values_of(options::FILE) {
-        Some(v) => v.clone().map(|v| v.to_owned()).collect(),
-        None => vec!["-".to_owned()],
-    };
-
-    let options = OutputOptions {
-        show_ends,
-        number: number_mode,
-        show_nonprint,
-        show_tabs,
-        squeeze_blank,
-    };
-    let success = cat_files(files, &options).is_ok();
-
-    if success {
-        0
-    } else {
-        1
-    }
 }
 
 fn cat_handle<R: Read>(
@@ -295,7 +297,7 @@ fn cat_handle<R: Read>(
     if options.can_write_fast() {
         write_fast(handle)
     } else {
-        write_lines(handle, &options, state)
+        write_lines(handle, options, state)
     }
 }
 
@@ -306,9 +308,9 @@ fn cat_path(path: &str, options: &OutputOptions, state: &mut OutputState) -> Cat
             #[cfg(any(target_os = "linux", target_os = "android"))]
             file_descriptor: stdin.as_raw_fd(),
             reader: stdin,
-            is_interactive: is_stdin_interactive(),
+            is_interactive: atty::is(atty::Stream::Stdin),
         };
-        return cat_handle(&mut handle, &options, state);
+        return cat_handle(&mut handle, options, state);
     }
     match get_input_type(path)? {
         InputType::Directory => Err(CatError::IsDirectory),
@@ -322,7 +324,7 @@ fn cat_path(path: &str, options: &OutputOptions, state: &mut OutputState) -> Cat
                 reader: socket,
                 is_interactive: false,
             };
-            cat_handle(&mut handle, &options, state)
+            cat_handle(&mut handle, options, state)
         }
         _ => {
             let file = File::open(path)?;
@@ -332,7 +334,7 @@ fn cat_path(path: &str, options: &OutputOptions, state: &mut OutputState) -> Cat
                 reader: file,
                 is_interactive: false,
             };
-            cat_handle(&mut handle, &options, state)
+            cat_handle(&mut handle, options, state)
         }
     }
 }
@@ -345,7 +347,7 @@ fn cat_files(files: Vec<String>, options: &OutputOptions) -> Result<(), u32> {
     };
 
     for path in &files {
-        if let Err(err) = cat_path(path, &options, &mut state) {
+        if let Err(err) = cat_path(path, options, &mut state) {
             show_error!("{}: {}", path, err);
             error_count += 1;
         }

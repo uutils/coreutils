@@ -328,8 +328,8 @@ impl<'a> State<'a> {
                     });
                 } else {
                     repr.print_field(key);
-                    repr.print_fields(&line1, self.key, self.max_fields);
-                    repr.print_fields(&line2, other.key, other.max_fields);
+                    repr.print_fields(line1, self.key, self.max_fields);
+                    repr.print_fields(line2, other.key, other.max_fields);
                 }
 
                 println!();
@@ -442,7 +442,72 @@ impl<'a> State<'a> {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let matches = App::new(NAME)
+    let matches = uu_app().get_matches_from(args);
+
+    let keys = parse_field_number_option(matches.value_of("j"));
+    let key1 = parse_field_number_option(matches.value_of("1"));
+    let key2 = parse_field_number_option(matches.value_of("2"));
+
+    let mut settings: Settings = Default::default();
+
+    if let Some(value) = matches.value_of("v") {
+        settings.print_unpaired = parse_file_number(value);
+        settings.print_joined = false;
+    } else if let Some(value) = matches.value_of("a") {
+        settings.print_unpaired = parse_file_number(value);
+    }
+
+    settings.ignore_case = matches.is_present("i");
+    settings.key1 = get_field_number(keys, key1);
+    settings.key2 = get_field_number(keys, key2);
+
+    if let Some(value) = matches.value_of("t") {
+        settings.separator = match value.len() {
+            0 => Sep::Line,
+            1 => Sep::Char(value.chars().next().unwrap()),
+            _ => crash!(1, "multi-character tab {}", value),
+        };
+    }
+
+    if let Some(format) = matches.value_of("o") {
+        if format == "auto" {
+            settings.autoformat = true;
+        } else {
+            settings.format = format
+                .split(|c| c == ' ' || c == ',' || c == '\t')
+                .map(Spec::parse)
+                .collect();
+        }
+    }
+
+    if let Some(empty) = matches.value_of("e") {
+        settings.empty = empty.to_string();
+    }
+
+    if matches.is_present("nocheck-order") {
+        settings.check_order = CheckOrder::Disabled;
+    }
+
+    if matches.is_present("check-order") {
+        settings.check_order = CheckOrder::Enabled;
+    }
+
+    if matches.is_present("header") {
+        settings.headers = true;
+    }
+
+    let file1 = matches.value_of("file1").unwrap();
+    let file2 = matches.value_of("file2").unwrap();
+
+    if file1 == "-" && file2 == "-" {
+        crash!(1, "both files cannot be standard input");
+    }
+
+    exec(file1, file2, &settings)
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(NAME)
         .version(crate_version!())
         .about(
             "For each pair of input lines with identical join fields, write a line to
@@ -542,68 +607,6 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
                 .value_name("FILE2")
                 .hidden(true),
         )
-        .get_matches_from(args);
-
-    let keys = parse_field_number_option(matches.value_of("j"));
-    let key1 = parse_field_number_option(matches.value_of("1"));
-    let key2 = parse_field_number_option(matches.value_of("2"));
-
-    let mut settings: Settings = Default::default();
-
-    if let Some(value) = matches.value_of("v") {
-        settings.print_unpaired = parse_file_number(value);
-        settings.print_joined = false;
-    } else if let Some(value) = matches.value_of("a") {
-        settings.print_unpaired = parse_file_number(value);
-    }
-
-    settings.ignore_case = matches.is_present("i");
-    settings.key1 = get_field_number(keys, key1);
-    settings.key2 = get_field_number(keys, key2);
-
-    if let Some(value) = matches.value_of("t") {
-        settings.separator = match value.len() {
-            0 => Sep::Line,
-            1 => Sep::Char(value.chars().next().unwrap()),
-            _ => crash!(1, "multi-character tab {}", value),
-        };
-    }
-
-    if let Some(format) = matches.value_of("o") {
-        if format == "auto" {
-            settings.autoformat = true;
-        } else {
-            settings.format = format
-                .split(|c| c == ' ' || c == ',' || c == '\t')
-                .map(Spec::parse)
-                .collect();
-        }
-    }
-
-    if let Some(empty) = matches.value_of("e") {
-        settings.empty = empty.to_string();
-    }
-
-    if matches.is_present("nocheck-order") {
-        settings.check_order = CheckOrder::Disabled;
-    }
-
-    if matches.is_present("check-order") {
-        settings.check_order = CheckOrder::Enabled;
-    }
-
-    if matches.is_present("header") {
-        settings.headers = true;
-    }
-
-    let file1 = matches.value_of("file1").unwrap();
-    let file2 = matches.value_of("file2").unwrap();
-
-    if file1 == "-" && file2 == "-" {
-        crash!(1, "both files cannot be standard input");
-    }
-
-    exec(file1, file2, &settings)
 }
 
 fn exec(file1: &str, file2: &str, settings: &Settings) -> i32 {
@@ -611,7 +614,7 @@ fn exec(file1: &str, file2: &str, settings: &Settings) -> i32 {
 
     let mut state1 = State::new(
         FileNum::File1,
-        &file1,
+        file1,
         &stdin,
         settings.key1,
         settings.print_unpaired,
@@ -619,7 +622,7 @@ fn exec(file1: &str, file2: &str, settings: &Settings) -> i32 {
 
     let mut state2 = State::new(
         FileNum::File2,
-        &file2,
+        file2,
         &stdin,
         settings.key2,
         settings.print_unpaired,

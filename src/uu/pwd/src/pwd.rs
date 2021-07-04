@@ -39,23 +39,7 @@ fn get_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
-        .usage(&usage[..])
-        .arg(
-            Arg::with_name(OPT_LOGICAL)
-                .short("L")
-                .long(OPT_LOGICAL)
-                .help("use PWD from environment, even if it contains symlinks"),
-        )
-        .arg(
-            Arg::with_name(OPT_PHYSICAL)
-                .short("P")
-                .long(OPT_PHYSICAL)
-                .help("avoid all symlinks"),
-        )
-        .get_matches_from(args);
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     match env::current_dir() {
         Ok(logical_path) => {
@@ -72,4 +56,22 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     };
 
     0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
+        .arg(
+            Arg::with_name(OPT_LOGICAL)
+                .short("L")
+                .long(OPT_LOGICAL)
+                .help("use PWD from environment, even if it contains symlinks"),
+        )
+        .arg(
+            Arg::with_name(OPT_PHYSICAL)
+                .short("P")
+                .long(OPT_PHYSICAL)
+                .help("avoid all symlinks"),
+        )
 }

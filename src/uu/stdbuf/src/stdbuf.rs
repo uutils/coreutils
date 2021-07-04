@@ -19,6 +19,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use tempfile::tempdir;
 use tempfile::TempDir;
+use uucore::parse_size::parse_size;
 use uucore::InvalidEncodingHandling;
 
 static ABOUT: &str =
@@ -55,7 +56,7 @@ const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf
 enum BufferType {
     Default,
     Line,
-    Size(u64),
+    Size(usize),
 }
 
 struct ProgramOptions {
@@ -69,9 +70,9 @@ impl<'a> TryFrom<&ArgMatches<'a>> for ProgramOptions {
 
     fn try_from(matches: &ArgMatches) -> Result<Self, Self::Error> {
         Ok(ProgramOptions {
-            stdin: check_option(&matches, options::INPUT)?,
-            stdout: check_option(&matches, options::OUTPUT)?,
-            stderr: check_option(&matches, options::ERROR)?,
+            stdin: check_option(matches, options::INPUT)?,
+            stdout: check_option(matches, options::OUTPUT)?,
+            stderr: check_option(matches, options::ERROR)?,
         })
     }
 }
@@ -104,41 +105,6 @@ fn preload_strings() -> (&'static str, &'static str) {
     crash!(1, "Command not supported for this operating system!")
 }
 
-fn parse_size(size: &str) -> Option<u64> {
-    let ext = size.trim_start_matches(|c: char| c.is_digit(10));
-    let num = size.trim_end_matches(char::is_alphabetic);
-    let mut recovered = num.to_owned();
-    recovered.push_str(ext);
-    if recovered != size {
-        return None;
-    }
-    let buf_size: u64 = match num.parse().ok() {
-        Some(m) => m,
-        None => return None,
-    };
-    let (power, base): (u32, u64) = match ext {
-        "" => (0, 0),
-        "KB" => (1, 1024),
-        "K" => (1, 1000),
-        "MB" => (2, 1024),
-        "M" => (2, 1000),
-        "GB" => (3, 1024),
-        "G" => (3, 1000),
-        "TB" => (4, 1024),
-        "T" => (4, 1000),
-        "PB" => (5, 1024),
-        "P" => (5, 1000),
-        "EB" => (6, 1024),
-        "E" => (6, 1000),
-        "ZB" => (7, 1024),
-        "Z" => (7, 1000),
-        "YB" => (8, 1024),
-        "Y" => (8, 1000),
-        _ => return None,
-    };
-    Some(buf_size * base.pow(power))
-}
-
 fn check_option(matches: &ArgMatches, name: &str) -> Result<BufferType, ProgramOptionsError> {
     match matches.value_of(name) {
         Some(value) => match value {
@@ -151,13 +117,10 @@ fn check_option(matches: &ArgMatches, name: &str) -> Result<BufferType, ProgramO
                     Ok(BufferType::Line)
                 }
             }
-            x => {
-                let size = match parse_size(x) {
-                    Some(m) => m,
-                    None => return Err(ProgramOptionsError(format!("invalid mode {}", x))),
-                };
-                Ok(BufferType::Size(size))
-            }
+            x => parse_size(x).map_or_else(
+                |e| crash!(125, "invalid mode {}", e),
+                |m| Ok(BufferType::Size(m)),
+            ),
         },
         None => Ok(BufferType::Default),
     }
@@ -191,10 +154,40 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .accept_any();
     let usage = get_usage();
 
-    let matches = App::new(executable!())
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+
+    let options = ProgramOptions::try_from(&matches)
+        .unwrap_or_else(|e| crash!(125, "{}\nTry 'stdbuf --help' for more information.", e.0));
+
+    let mut command_values = matches.values_of::<&str>(options::COMMAND).unwrap();
+    let mut command = Command::new(command_values.next().unwrap());
+    let command_params: Vec<&str> = command_values.collect();
+
+    let mut tmp_dir = tempdir().unwrap();
+    let (preload_env, libstdbuf) = return_if_err!(1, get_preload_env(&mut tmp_dir));
+    command.env(preload_env, libstdbuf);
+    set_command_env(&mut command, "_STDBUF_I", options.stdin);
+    set_command_env(&mut command, "_STDBUF_O", options.stdout);
+    set_command_env(&mut command, "_STDBUF_E", options.stderr);
+    command.args(command_params);
+
+    let mut process = match command.spawn() {
+        Ok(p) => p,
+        Err(e) => crash!(1, "failed to execute process: {}", e),
+    };
+    match process.wait() {
+        Ok(status) => match status.code() {
+            Some(i) => i,
+            None => crash!(1, "process killed by signal {}", status.signal().unwrap()),
+        },
+        Err(e) => crash!(1, "{}", e),
+    }
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .version(crate_version!())
         .about(ABOUT)
-        .usage(&usage[..])
         .after_help(LONG_HELP)
         .setting(AppSettings::TrailingVarArg)
         .arg(
@@ -228,32 +221,4 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .hidden(true)
                 .required(true),
         )
-        .get_matches_from(args);
-
-    let options = ProgramOptions::try_from(&matches)
-        .unwrap_or_else(|e| crash!(125, "{}\nTry 'stdbuf --help' for more information.", e.0));
-
-    let mut command_values = matches.values_of::<&str>(options::COMMAND).unwrap();
-    let mut command = Command::new(command_values.next().unwrap());
-    let command_params: Vec<&str> = command_values.collect();
-
-    let mut tmp_dir = tempdir().unwrap();
-    let (preload_env, libstdbuf) = return_if_err!(1, get_preload_env(&mut tmp_dir));
-    command.env(preload_env, libstdbuf);
-    set_command_env(&mut command, "_STDBUF_I", options.stdin);
-    set_command_env(&mut command, "_STDBUF_O", options.stdout);
-    set_command_env(&mut command, "_STDBUF_E", options.stderr);
-    command.args(command_params);
-
-    let mut process = match command.spawn() {
-        Ok(p) => p,
-        Err(e) => crash!(1, "failed to execute process: {}", e),
-    };
-    match process.wait() {
-        Ok(status) => match status.code() {
-            Some(i) => i,
-            None => crash!(1, "process killed by signal {}", status.signal().unwrap()),
-        },
-        Err(e) => crash!(1, "{}", e),
-    }
 }

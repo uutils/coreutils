@@ -8,7 +8,7 @@
 // file that was distributed with this source code.
 //
 
-// spell-checker:ignore (words) pseudofloat
+// spell-checker:ignore (words) egid euid pseudofloat
 
 use crate::common::util::*;
 
@@ -165,7 +165,7 @@ fn test_dangling_string_comparison_is_error() {
         .args(&["missing_something", "="])
         .run()
         .status_code(2)
-        .stderr_is("test: missing argument after ‘=’");
+        .stderr_is("test: missing argument after '='");
 }
 
 #[test]
@@ -265,7 +265,7 @@ fn test_float_inequality_is_error() {
         .args(&["123.45", "-ge", "6"])
         .run()
         .status_code(2)
-        .stderr_is("test: invalid integer ‘123.45’");
+        .stderr_is("test: invalid integer '123.45'");
 }
 
 #[test]
@@ -283,7 +283,7 @@ fn test_invalid_utf8_integer_compare() {
 
     cmd.run()
         .status_code(2)
-        .stderr_is("test: invalid integer ‘fo�o’");
+        .stderr_is("test: invalid integer 'fo�o'");
 
     let mut cmd = new_ucmd!();
     cmd.raw.arg(arg);
@@ -291,7 +291,7 @@ fn test_invalid_utf8_integer_compare() {
 
     cmd.run()
         .status_code(2)
-        .stderr_is("test: invalid integer ‘fo�o’");
+        .stderr_is("test: invalid integer 'fo�o'");
 }
 
 #[test]
@@ -477,6 +477,73 @@ fn test_nonexistent_file_is_not_symlink() {
 }
 
 #[test]
+#[cfg(not(windows))] // Windows has no concept of sticky bit
+fn test_file_is_sticky() {
+    let scenario = TestScenario::new(util_name!());
+    let mut ucmd = scenario.ucmd();
+    let mut chmod = scenario.cmd("chmod");
+
+    scenario.fixtures.touch("sticky_file");
+    chmod.args(&["+t", "sticky_file"]).succeeds();
+
+    ucmd.args(&["-k", "sticky_file"]).succeeds();
+}
+
+#[test]
+fn test_file_is_not_sticky() {
+    new_ucmd!()
+        .args(&["-k", "regular_file"])
+        .run()
+        .status_code(1);
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_file_owned_by_euid() {
+    new_ucmd!().args(&["-O", "regular_file"]).succeeds();
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_nonexistent_file_not_owned_by_euid() {
+    new_ucmd!()
+        .args(&["-O", "nonexistent_file"])
+        .run()
+        .status_code(1);
+}
+
+#[test]
+#[cfg(all(not(windows), not(target_os = "freebsd")))]
+fn test_file_not_owned_by_euid() {
+    new_ucmd!()
+        .args(&["-f", "/bin/sh", "-a", "!", "-O", "/bin/sh"])
+        .succeeds();
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_file_owned_by_egid() {
+    new_ucmd!().args(&["-G", "regular_file"]).succeeds();
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_nonexistent_file_not_owned_by_egid() {
+    new_ucmd!()
+        .args(&["-G", "nonexistent_file"])
+        .run()
+        .status_code(1);
+}
+
+#[test]
+#[cfg(all(not(windows), not(target_os = "freebsd")))]
+fn test_file_not_owned_by_egid() {
+    new_ucmd!()
+        .args(&["-f", "/bin/sh", "-a", "!", "-G", "/bin/sh"])
+        .succeeds();
+}
+
+#[test]
 fn test_op_precedence_and_or_1() {
     new_ucmd!().args(&[" ", "-o", "", "-a", ""]).succeeds();
 }
@@ -607,7 +674,7 @@ fn test_erroneous_parenthesized_expression() {
         .args(&["a", "!=", "(", "b", "-a", "b", ")", "!=", "c"])
         .run()
         .status_code(2)
-        .stderr_is("test: extra argument ‘b’");
+        .stderr_is("test: extra argument 'b'");
 }
 
 #[test]
@@ -622,4 +689,32 @@ fn test_or_as_filename() {
 #[ignore = "GNU considers this an error"]
 fn test_string_length_and_nothing() {
     new_ucmd!().args(&["-n", "a", "-a"]).run().status_code(2);
+}
+
+#[test]
+fn test_bracket_syntax_success() {
+    let scenario = TestScenario::new("[");
+    let mut ucmd = scenario.ucmd();
+
+    ucmd.args(&["1", "-eq", "1", "]"]).succeeds();
+}
+
+#[test]
+fn test_bracket_syntax_failure() {
+    let scenario = TestScenario::new("[");
+    let mut ucmd = scenario.ucmd();
+
+    ucmd.args(&["1", "-eq", "2", "]"]).run().status_code(1);
+}
+
+#[test]
+fn test_bracket_syntax_missing_right_bracket() {
+    let scenario = TestScenario::new("[");
+    let mut ucmd = scenario.ucmd();
+
+    // Missing closing bracket takes precedence over other possible errors.
+    ucmd.args(&["1", "-eq"])
+        .run()
+        .status_code(2)
+        .stderr_is("[: missing ']'");
 }

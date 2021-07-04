@@ -73,10 +73,116 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let usage = get_usage();
 
-    let matches = App::new(executable!())
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+
+    /* First arg is the owner/group */
+    let owner = matches.value_of(ARG_OWNER).unwrap();
+
+    /* Then the list of files */
+    let files: Vec<String> = matches
+        .values_of(ARG_FILES)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
+
+    let preserve_root = matches.is_present(options::preserve_root::PRESERVE);
+
+    let mut derefer = if matches.is_present(options::dereference::NO_DEREFERENCE) {
+        1
+    } else {
+        0
+    };
+
+    let mut bit_flag = if matches.is_present(options::traverse::TRAVERSE) {
+        FTS_COMFOLLOW | FTS_PHYSICAL
+    } else if matches.is_present(options::traverse::EVERY) {
+        FTS_LOGICAL
+    } else {
+        FTS_PHYSICAL
+    };
+
+    let recursive = matches.is_present(options::RECURSIVE);
+    if recursive {
+        if bit_flag == FTS_PHYSICAL {
+            if derefer == 1 {
+                show_error!("-R --dereference requires -H or -L");
+                return 1;
+            }
+            derefer = 0;
+        }
+    } else {
+        bit_flag = FTS_PHYSICAL;
+    }
+
+    let verbosity = if matches.is_present(options::verbosity::CHANGES) {
+        Verbosity::Changes
+    } else if matches.is_present(options::verbosity::SILENT)
+        || matches.is_present(options::verbosity::QUIET)
+    {
+        Verbosity::Silent
+    } else if matches.is_present(options::verbosity::VERBOSE) {
+        Verbosity::Verbose
+    } else {
+        Verbosity::Normal
+    };
+
+    let filter = if let Some(spec) = matches.value_of(options::FROM) {
+        match parse_spec(spec) {
+            Ok((Some(uid), None)) => IfFrom::User(uid),
+            Ok((None, Some(gid))) => IfFrom::Group(gid),
+            Ok((Some(uid), Some(gid))) => IfFrom::UserGroup(uid, gid),
+            Ok((None, None)) => IfFrom::All,
+            Err(e) => {
+                show_error!("{}", e);
+                return 1;
+            }
+        }
+    } else {
+        IfFrom::All
+    };
+
+    let dest_uid: Option<u32>;
+    let dest_gid: Option<u32>;
+    if let Some(file) = matches.value_of(options::REFERENCE) {
+        match fs::metadata(&file) {
+            Ok(meta) => {
+                dest_gid = Some(meta.gid());
+                dest_uid = Some(meta.uid());
+            }
+            Err(e) => {
+                show_error!("failed to get attributes of '{}': {}", file, e);
+                return 1;
+            }
+        }
+    } else {
+        match parse_spec(owner) {
+            Ok((u, g)) => {
+                dest_uid = u;
+                dest_gid = g;
+            }
+            Err(e) => {
+                show_error!("{}", e);
+                return 1;
+            }
+        }
+    }
+    let executor = Chowner {
+        bit_flag,
+        dest_uid,
+        dest_gid,
+        verbosity,
+        recursive,
+        dereference: derefer != 0,
+        filter,
+        preserve_root,
+        files,
+    };
+    executor.exec()
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .version(crate_version!())
         .about(ABOUT)
-        .usage(&usage[..])
         .arg(
             Arg::with_name(options::verbosity::CHANGES)
                 .short("c")
@@ -167,110 +273,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .required(true)
                 .min_values(1),
         )
-        .get_matches_from(args);
-
-    /* First arg is the owner/group */
-    let owner = matches.value_of(ARG_OWNER).unwrap();
-
-    /* Then the list of files */
-    let files: Vec<String> = matches
-        .values_of(ARG_FILES)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_default();
-
-    let preserve_root = matches.is_present(options::preserve_root::PRESERVE);
-
-    let mut derefer = if matches.is_present(options::dereference::NO_DEREFERENCE) {
-        1
-    } else {
-        0
-    };
-
-    let mut bit_flag = if matches.is_present(options::traverse::TRAVERSE) {
-        FTS_COMFOLLOW | FTS_PHYSICAL
-    } else if matches.is_present(options::traverse::EVERY) {
-        FTS_LOGICAL
-    } else {
-        FTS_PHYSICAL
-    };
-
-    let recursive = matches.is_present(options::RECURSIVE);
-    if recursive {
-        if bit_flag == FTS_PHYSICAL {
-            if derefer == 1 {
-                show_error!("-R --dereference requires -H or -L");
-                return 1;
-            }
-            derefer = 0;
-        }
-    } else {
-        bit_flag = FTS_PHYSICAL;
-    }
-
-    let verbosity = if matches.is_present(options::verbosity::CHANGES) {
-        Verbosity::Changes
-    } else if matches.is_present(options::verbosity::SILENT)
-        || matches.is_present(options::verbosity::QUIET)
-    {
-        Verbosity::Silent
-    } else if matches.is_present(options::verbosity::VERBOSE) {
-        Verbosity::Verbose
-    } else {
-        Verbosity::Normal
-    };
-
-    let filter = if let Some(spec) = matches.value_of(options::FROM) {
-        match parse_spec(&spec) {
-            Ok((Some(uid), None)) => IfFrom::User(uid),
-            Ok((None, Some(gid))) => IfFrom::Group(gid),
-            Ok((Some(uid), Some(gid))) => IfFrom::UserGroup(uid, gid),
-            Ok((None, None)) => IfFrom::All,
-            Err(e) => {
-                show_error!("{}", e);
-                return 1;
-            }
-        }
-    } else {
-        IfFrom::All
-    };
-
-    let dest_uid: Option<u32>;
-    let dest_gid: Option<u32>;
-    if let Some(file) = matches.value_of(options::REFERENCE) {
-        match fs::metadata(&file) {
-            Ok(meta) => {
-                dest_gid = Some(meta.gid());
-                dest_uid = Some(meta.uid());
-            }
-            Err(e) => {
-                show_error!("failed to get attributes of '{}': {}", file, e);
-                return 1;
-            }
-        }
-    } else {
-        match parse_spec(&owner) {
-            Ok((u, g)) => {
-                dest_uid = u;
-                dest_gid = g;
-            }
-            Err(e) => {
-                show_error!("{}", e);
-                return 1;
-            }
-        }
-    }
-    let executor = Chowner {
-        bit_flag,
-        dest_uid,
-        dest_gid,
-        verbosity,
-        recursive,
-        dereference: derefer != 0,
-        filter,
-        preserve_root,
-        files,
-    };
-    executor.exec()
 }
 
 fn parse_spec(spec: &str) -> Result<(Option<u32>, Option<u32>), String> {
@@ -278,37 +280,25 @@ fn parse_spec(spec: &str) -> Result<(Option<u32>, Option<u32>), String> {
     let usr_only = args.len() == 1 && !args[0].is_empty();
     let grp_only = args.len() == 2 && args[0].is_empty();
     let usr_grp = args.len() == 2 && !args[0].is_empty() && !args[1].is_empty();
-
-    if usr_only {
-        Ok((
-            Some(match Passwd::locate(args[0]) {
-                Ok(v) => v.uid(),
-                _ => return Err(format!("invalid user: ‘{}’", spec)),
-            }),
-            None,
-        ))
-    } else if grp_only {
-        Ok((
-            None,
-            Some(match Group::locate(args[1]) {
-                Ok(v) => v.gid(),
-                _ => return Err(format!("invalid group: ‘{}’", spec)),
-            }),
-        ))
-    } else if usr_grp {
-        Ok((
-            Some(match Passwd::locate(args[0]) {
-                Ok(v) => v.uid(),
-                _ => return Err(format!("invalid user: ‘{}’", spec)),
-            }),
-            Some(match Group::locate(args[1]) {
-                Ok(v) => v.gid(),
-                _ => return Err(format!("invalid group: ‘{}’", spec)),
-            }),
-        ))
+    let uid = if usr_only || usr_grp {
+        Some(
+            Passwd::locate(args[0])
+                .map_err(|_| format!("invalid user: '{}'", spec))?
+                .uid(),
+        )
     } else {
-        Ok((None, None))
-    }
+        None
+    };
+    let gid = if grp_only || usr_grp {
+        Some(
+            Group::locate(args[1])
+                .map_err(|_| format!("invalid group: '{}'", spec))?
+                .gid(),
+        )
+    } else {
+        None
+    };
+    Ok((uid, gid))
 }
 
 enum IfFrom {
@@ -495,5 +485,19 @@ impl Chowner {
             IfFrom::Group(g) => g == gid,
             IfFrom::UserGroup(u, g) => u == uid && g == gid,
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_parse_spec() {
+        assert_eq!(parse_spec(":"), Ok((None, None)));
+        assert!(parse_spec("::")
+            .err()
+            .unwrap()
+            .starts_with("invalid group: "));
     }
 }

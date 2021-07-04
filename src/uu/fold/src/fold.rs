@@ -36,7 +36,35 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .accept_any();
 
     let (args, obs_width) = handle_obsolete(&args[..]);
-    let matches = App::new(executable!())
+    let matches = uu_app().get_matches_from(args);
+
+    let bytes = matches.is_present(options::BYTES);
+    let spaces = matches.is_present(options::SPACES);
+    let poss_width = match matches.value_of(options::WIDTH) {
+        Some(v) => Some(v.to_owned()),
+        None => obs_width,
+    };
+
+    let width = match poss_width {
+        Some(inp_width) => match inp_width.parse::<usize>() {
+            Ok(width) => width,
+            Err(e) => crash!(1, "illegal width value (\"{}\"): {}", inp_width, e),
+        },
+        None => 80,
+    };
+
+    let files = match matches.values_of(options::FILE) {
+        Some(v) => v.map(|v| v.to_owned()).collect(),
+        None => vec!["-".to_owned()],
+    };
+
+    fold(files, bytes, spaces, width);
+
+    0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .name(NAME)
         .version(crate_version!())
         .usage(SYNTAX)
@@ -68,37 +96,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .takes_value(true),
         )
         .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
-        .get_matches_from(args);
-
-    let bytes = matches.is_present(options::BYTES);
-    let spaces = matches.is_present(options::SPACES);
-    let poss_width = match matches.value_of(options::WIDTH) {
-        Some(v) => Some(v.to_owned()),
-        None => obs_width,
-    };
-
-    let width = match poss_width {
-        Some(inp_width) => match inp_width.parse::<usize>() {
-            Ok(width) => width,
-            Err(e) => crash!(1, "illegal width value (\"{}\"): {}", inp_width, e),
-        },
-        None => 80,
-    };
-
-    let files = match matches.values_of(options::FILE) {
-        Some(v) => v.map(|v| v.to_owned()).collect(),
-        None => vec!["-".to_owned()],
-    };
-
-    fold(files, bytes, spaces, width);
-
-    0
 }
 
 fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
     for (i, arg) in args.iter().enumerate() {
         let slice = &arg;
-        if slice.starts_with('-') && slice.len() > 1 && slice.chars().nth(1).unwrap().is_digit(10) {
+        if slice.starts_with('-') && slice.chars().nth(1).map_or(false, |c| c.is_digit(10)) {
             let mut v = args.to_vec();
             v.remove(i);
             return (v, Some(slice[1..].to_owned()));
@@ -109,7 +112,7 @@ fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
 
 fn fold(filenames: Vec<String>, bytes: bool, spaces: bool, width: usize) {
     for filename in &filenames {
-        let filename: &str = &filename;
+        let filename: &str = filename;
         let mut stdin_buf;
         let mut file_buf;
         let buffer = BufReader::new(if filename == "-" {

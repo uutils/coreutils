@@ -1,9 +1,16 @@
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
+
 // spell-checker:ignore (paths) sublink subwords
 
 use crate::common::util::*;
 
 const SUB_DIR: &str = "subdir/deeper";
+const SUB_DEEPER_DIR: &str = "subdir/deeper/deeper_dir";
 const SUB_DIR_LINKS: &str = "subdir/links";
+const SUB_DIR_LINKS_DEEPER_SYM_DIR: &str = "subdir/links/deeper_dir";
 const SUB_FILE: &str = "subdir/links/subwords.txt";
 const SUB_LINK: &str = "subdir/links/sublink.txt";
 
@@ -16,7 +23,7 @@ fn _du_basics(s: &str) {
     let answer = "32\t./subdir
 8\t./subdir/deeper
 24\t./subdir/links
-40\t./
+40\t.
 ";
     assert_eq!(s, answer);
 }
@@ -25,7 +32,7 @@ fn _du_basics(s: &str) {
     let answer = "28\t./subdir
 8\t./subdir/deeper
 16\t./subdir/links
-36\t./
+36\t.
 ";
     assert_eq!(s, answer);
 }
@@ -49,15 +56,15 @@ fn test_du_basics_subdir() {
 
 #[cfg(target_vendor = "apple")]
 fn _du_basics_subdir(s: &str) {
-    assert_eq!(s, "4\tsubdir/deeper\n");
+    assert_eq!(s, "4\tsubdir/deeper/deeper_dir\n8\tsubdir/deeper\n");
 }
 #[cfg(target_os = "windows")]
 fn _du_basics_subdir(s: &str) {
-    assert_eq!(s, "0\tsubdir/deeper\n");
+    assert_eq!(s, "0\tsubdir/deeper\\deeper_dir\n0\tsubdir/deeper\n");
 }
 #[cfg(target_os = "freebsd")]
 fn _du_basics_subdir(s: &str) {
-    assert_eq!(s, "8\tsubdir/deeper\n");
+    assert_eq!(s, "8\tsubdir/deeper/deeper_dir\n16\tsubdir/deeper\n");
 }
 #[cfg(all(
     not(target_vendor = "apple"),
@@ -70,6 +77,26 @@ fn _du_basics_subdir(s: &str) {
         assert_eq!(s, "8\tsubdir/deeper\n");
     } else {
         assert_eq!(s, "0\tsubdir/deeper\n");
+    }
+}
+
+#[test]
+fn test_du_invalid_size() {
+    let args = &["block-size", "threshold"];
+    for s in args {
+        new_ucmd!()
+            .arg(format!("--{}=1fb4t", s))
+            .arg("/tmp")
+            .fails()
+            .code_is(1)
+            .stderr_only(format!("du: invalid --{} argument '1fb4t'", s));
+        #[cfg(not(target_pointer_width = "128"))]
+        new_ucmd!()
+            .arg(format!("--{}=1Y", s))
+            .arg("/tmp")
+            .fails()
+            .code_is(1)
+            .stderr_only(format!("du: --{} argument '1Y' too large", s));
     }
 }
 
@@ -185,12 +212,7 @@ fn test_du_d_flag() {
     {
         let result_reference = scene.cmd("du").arg("-d1").run();
         if result_reference.succeeded() {
-            assert_eq!(
-                // TODO: gnu `du` doesn't use trailing "/" here
-                // result.stdout_str(), result_reference.stdout_str()
-                result.stdout_str().trim_end_matches("/\n"),
-                result_reference.stdout_str().trim_end_matches('\n')
-            );
+            assert_eq!(result.stdout_str(), result_reference.stdout_str());
             return;
         }
     }
@@ -199,15 +221,15 @@ fn test_du_d_flag() {
 
 #[cfg(target_vendor = "apple")]
 fn _du_d_flag(s: &str) {
-    assert_eq!(s, "16\t./subdir\n20\t./\n");
+    assert_eq!(s, "20\t./subdir\n24\t.\n");
 }
 #[cfg(target_os = "windows")]
 fn _du_d_flag(s: &str) {
-    assert_eq!(s, "8\t./subdir\n8\t./\n");
+    assert_eq!(s, "8\t.\\subdir\n8\t.\n");
 }
 #[cfg(target_os = "freebsd")]
 fn _du_d_flag(s: &str) {
-    assert_eq!(s, "28\t./subdir\n36\t./\n");
+    assert_eq!(s, "36\t./subdir\n44\t.\n");
 }
 #[cfg(all(
     not(target_vendor = "apple"),
@@ -217,9 +239,127 @@ fn _du_d_flag(s: &str) {
 fn _du_d_flag(s: &str) {
     // MS-WSL linux has altered expected output
     if !uucore::os::is_wsl_1() {
-        assert_eq!(s, "28\t./subdir\n36\t./\n");
+        assert_eq!(s, "28\t./subdir\n36\t.\n");
     } else {
-        assert_eq!(s, "8\t./subdir\n8\t./\n");
+        assert_eq!(s, "8\t./subdir\n8\t.\n");
+    }
+}
+
+#[test]
+fn test_du_dereference() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.symlink_dir(SUB_DEEPER_DIR, SUB_DIR_LINKS_DEEPER_SYM_DIR);
+
+    let result = scene.ucmd().arg("-L").arg(SUB_DIR_LINKS).succeeds();
+
+    #[cfg(target_os = "linux")]
+    {
+        let result_reference = scene.cmd("du").arg("-L").arg(SUB_DIR_LINKS).run();
+        if result_reference.succeeded() {
+            assert_eq!(result.stdout_str(), result_reference.stdout_str());
+            return;
+        }
+    }
+
+    _du_dereference(result.stdout_str());
+}
+
+#[cfg(target_vendor = "apple")]
+fn _du_dereference(s: &str) {
+    assert_eq!(s, "4\tsubdir/links/deeper_dir\n16\tsubdir/links\n");
+}
+#[cfg(target_os = "windows")]
+fn _du_dereference(s: &str) {
+    assert_eq!(s, "0\tsubdir/links\\deeper_dir\n8\tsubdir/links\n");
+}
+#[cfg(target_os = "freebsd")]
+fn _du_dereference(s: &str) {
+    assert_eq!(s, "8\tsubdir/links/deeper_dir\n24\tsubdir/links\n");
+}
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "freebsd")
+))]
+fn _du_dereference(s: &str) {
+    // MS-WSL linux has altered expected output
+    if !uucore::os::is_wsl_1() {
+        assert_eq!(s, "8\tsubdir/links/deeper_dir\n24\tsubdir/links\n");
+    } else {
+        assert_eq!(s, "0\tsubdir/links/deeper_dir\n8\tsubdir/links\n");
+    }
+}
+
+#[test]
+fn test_du_inodes_basic() {
+    let scene = TestScenario::new(util_name!());
+    let result = scene.ucmd().arg("--inodes").succeeds();
+
+    #[cfg(target_os = "linux")]
+    {
+        let result_reference = scene.cmd("du").arg("--inodes").run();
+        assert_eq!(result.stdout_str(), result_reference.stdout_str());
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    _du_inodes_basic(result.stdout_str());
+}
+
+#[cfg(target_os = "windows")]
+fn _du_inodes_basic(s: &str) {
+    assert_eq!(
+        s,
+        "2\t.\\subdir\\deeper\\deeper_dir
+4\t.\\subdir\\deeper
+3\t.\\subdir\\links
+8\t.\\subdir
+11\t.
+"
+    );
+}
+
+#[cfg(not(target_os = "windows"))]
+fn _du_inodes_basic(s: &str) {
+    assert_eq!(
+        s,
+        "2\t./subdir/deeper/deeper_dir
+4\t./subdir/deeper
+3\t./subdir/links
+8\t./subdir
+11\t.
+"
+    );
+}
+
+#[test]
+fn test_du_inodes() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .arg("--summarize")
+        .arg("--inodes")
+        .succeeds()
+        .stdout_only("11\t.\n");
+
+    let result = scene
+        .ucmd()
+        .arg("--separate-dirs")
+        .arg("--inodes")
+        .succeeds();
+
+    #[cfg(target_os = "windows")]
+    result.stdout_contains("3\t.\\subdir\\links\n");
+    #[cfg(not(target_os = "windows"))]
+    result.stdout_contains("3\t./subdir/links\n");
+    result.stdout_contains("3\t.\n");
+
+    #[cfg(target_os = "linux")]
+    {
+        let result_reference = scene.cmd("du").arg("--separate-dirs").arg("--inodes").run();
+        assert_eq!(result.stdout_str(), result_reference.stdout_str());
     }
 }
 
@@ -286,7 +426,7 @@ fn test_du_no_permission() {
 
     let result = scene.ucmd().arg(SUB_DIR_LINKS).run(); // TODO: replace with ".fails()" once `du` is fixed
     result.stderr_contains(
-        "du: cannot read directory ‘subdir/links‘: Permission denied (os error 13)",
+        "du: cannot read directory 'subdir/links': Permission denied (os error 13)",
     );
 
     #[cfg(target_os = "linux")]
@@ -311,4 +451,135 @@ fn _du_no_permission(s: &str) {
 #[cfg(all(not(target_vendor = "apple"), not(target_os = "windows")))]
 fn _du_no_permission(s: &str) {
     assert_eq!(s, "4\tsubdir/links\n");
+}
+
+#[test]
+fn test_du_one_file_system() {
+    let scene = TestScenario::new(util_name!());
+
+    let result = scene.ucmd().arg("-x").arg(SUB_DIR).succeeds();
+
+    #[cfg(target_os = "linux")]
+    {
+        let result_reference = scene.cmd("du").arg("-x").arg(SUB_DIR).run();
+        if result_reference.succeeded() {
+            assert_eq!(result.stdout_str(), result_reference.stdout_str());
+            return;
+        }
+    }
+    _du_basics_subdir(result.stdout_str());
+}
+
+#[test]
+fn test_du_threshold() {
+    let scene = TestScenario::new(util_name!());
+
+    let threshold = if cfg!(windows) { "7K" } else { "10K" };
+
+    scene
+        .ucmd()
+        .arg(format!("--threshold={}", threshold))
+        .succeeds()
+        .stdout_contains("links")
+        .stdout_does_not_contain("deeper_dir");
+
+    scene
+        .ucmd()
+        .arg(format!("--threshold=-{}", threshold))
+        .succeeds()
+        .stdout_does_not_contain("links")
+        .stdout_contains("deeper_dir");
+}
+
+#[test]
+fn test_du_apparent_size() {
+    let scene = TestScenario::new(util_name!());
+    let result = scene.ucmd().arg("--apparent-size").succeeds();
+
+    #[cfg(target_os = "linux")]
+    {
+        let result_reference = scene.cmd("du").arg("--apparent-size").run();
+        assert_eq!(result.stdout_str(), result_reference.stdout_str());
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    _du_apparent_size(result.stdout_str());
+}
+
+#[cfg(target_os = "windows")]
+fn _du_apparent_size(s: &str) {
+    assert_eq!(
+        s,
+        "1\t.\\subdir\\deeper\\deeper_dir
+1\t.\\subdir\\deeper
+6\t.\\subdir\\links
+6\t.\\subdir
+6\t.
+"
+    );
+}
+#[cfg(target_vendor = "apple")]
+fn _du_apparent_size(s: &str) {
+    assert_eq!(
+        s,
+        "1\t./subdir/deeper/deeper_dir
+1\t./subdir/deeper
+6\t./subdir/links
+6\t./subdir
+6\t.
+"
+    );
+}
+#[cfg(target_os = "freebsd")]
+fn _du_apparent_size(s: &str) {
+    assert_eq!(
+        s,
+        "1\t./subdir/deeper/deeper_dir
+2\t./subdir/deeper
+6\t./subdir/links
+8\t./subdir
+8\t.
+"
+    );
+}
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "freebsd")
+))]
+fn _du_apparent_size(s: &str) {
+    assert_eq!(
+        s,
+        "5\t./subdir/deeper/deeper_dir
+9\t./subdir/deeper
+10\t./subdir/links
+22\t./subdir
+26\t.
+"
+    );
+}
+
+#[test]
+fn test_du_bytes() {
+    let scene = TestScenario::new(util_name!());
+    let result = scene.ucmd().arg("--bytes").succeeds();
+
+    #[cfg(target_os = "linux")]
+    {
+        let result_reference = scene.cmd("du").arg("--bytes").run();
+        assert_eq!(result.stdout_str(), result_reference.stdout_str());
+    }
+
+    #[cfg(target_os = "windows")]
+    result.stdout_contains("5145\t.\\subdir\n");
+    #[cfg(target_vendor = "apple")]
+    result.stdout_contains("5625\t./subdir\n");
+    #[cfg(target_os = "freebsd")]
+    result.stdout_contains("7193\t./subdir\n");
+    #[cfg(all(
+        not(target_vendor = "apple"),
+        not(target_os = "windows"),
+        not(target_os = "freebsd")
+    ))]
+    result.stdout_contains("21529\t./subdir\n");
 }

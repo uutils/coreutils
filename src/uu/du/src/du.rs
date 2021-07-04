@@ -1,17 +1,19 @@
-// This file is part of the uutils coreutils package.
-//
-// (c) Derek Chiang <derekchiang93@gmail.com>
-//
-// For the full copyright and license information, please view the LICENSE
-// file that was distributed with this source code.
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * (c) Derek Chiang <derekchiang93@gmail.com>
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
 
 #[macro_use]
 extern crate uucore;
 
 use chrono::prelude::DateTime;
 use chrono::Local;
+use clap::ArgMatches;
 use clap::{crate_version, App, Arg};
 use std::collections::HashSet;
+use std::convert::TryFrom;
 use std::env;
 use std::fs;
 #[cfg(not(windows))]
@@ -24,8 +26,12 @@ use std::os::unix::fs::MetadataExt;
 use std::os::windows::fs::MetadataExt;
 #[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
+#[cfg(windows)]
+use std::path::Path;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::time::{Duration, UNIX_EPOCH};
+use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::InvalidEncodingHandling;
 #[cfg(windows)]
 use winapi::shared::minwindef::{DWORD, LPVOID};
@@ -42,7 +48,7 @@ mod options {
     pub const NULL: &str = "0";
     pub const ALL: &str = "all";
     pub const APPARENT_SIZE: &str = "apparent-size";
-    pub const BLOCK_SIZE: &str = "B";
+    pub const BLOCK_SIZE: &str = "block-size";
     pub const BYTES: &str = "b";
     pub const TOTAL: &str = "c";
     pub const MAX_DEPTH: &str = "d";
@@ -52,9 +58,13 @@ mod options {
     pub const BLOCK_SIZE_1M: &str = "m";
     pub const SEPARATE_DIRS: &str = "S";
     pub const SUMMARIZE: &str = "s";
+    pub const THRESHOLD: &str = "threshold";
     pub const SI: &str = "si";
     pub const TIME: &str = "time";
     pub const TIME_STYLE: &str = "time-style";
+    pub const ONE_FILE_SYSTEM: &str = "one-file-system";
+    pub const DEREFERENCE: &str = "dereference";
+    pub const INODES: &str = "inodes";
     pub const FILE: &str = "FILE";
 }
 
@@ -79,6 +89,9 @@ struct Options {
     max_depth: Option<usize>,
     total: bool,
     separate_dirs: bool,
+    one_file_system: bool,
+    dereference: bool,
+    inodes: bool,
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
@@ -92,6 +105,7 @@ struct Stat {
     is_dir: bool,
     size: u64,
     blocks: u64,
+    inodes: u64,
     inode: Option<FileInfo>,
     created: Option<u64>,
     accessed: u64,
@@ -99,8 +113,12 @@ struct Stat {
 }
 
 impl Stat {
-    fn new(path: PathBuf) -> Result<Stat> {
-        let metadata = fs::symlink_metadata(&path)?;
+    fn new(path: PathBuf, options: &Options) -> Result<Stat> {
+        let metadata = if options.dereference {
+            fs::metadata(&path)?
+        } else {
+            fs::symlink_metadata(&path)?
+        };
 
         #[cfg(not(windows))]
         let file_info = FileInfo {
@@ -113,6 +131,7 @@ impl Stat {
             is_dir: metadata.is_dir(),
             size: metadata.len(),
             blocks: metadata.blocks() as u64,
+            inodes: 1,
             inode: Some(file_info),
             created: birth_u64(&metadata),
             accessed: metadata.atime() as u64,
@@ -130,6 +149,7 @@ impl Stat {
             size: metadata.len(),
             blocks: size_on_disk / 1024 * 2,
             inode: file_info,
+            inodes: 1,
             created: windows_creation_time_to_unix_time(metadata.creation_time()),
             accessed: windows_time_to_unix_time(metadata.last_access_time()),
             modified: windows_time_to_unix_time(metadata.last_write_time()),
@@ -159,7 +179,7 @@ fn birth_u64(meta: &Metadata) -> Option<u64> {
 }
 
 #[cfg(windows)]
-fn get_size_on_disk(path: &PathBuf) -> u64 {
+fn get_size_on_disk(path: &Path) -> u64 {
     let mut size_on_disk = 0;
 
     // bind file so it stays in scope until end of function
@@ -191,7 +211,7 @@ fn get_size_on_disk(path: &PathBuf) -> u64 {
 }
 
 #[cfg(windows)]
-fn get_file_info(path: &PathBuf) -> Option<FileInfo> {
+fn get_file_info(path: &Path) -> Option<FileInfo> {
     let mut result = None;
 
     let file = match fs::File::open(path) {
@@ -223,65 +243,35 @@ fn get_file_info(path: &PathBuf) -> Option<FileInfo> {
     result
 }
 
-fn unit_string_to_number(s: &str) -> Option<u64> {
-    let mut offset = 0;
-    let mut s_chars = s.chars().rev();
-
-    let (mut ch, multiple) = match s_chars.next() {
-        Some('B') | Some('b') => ('B', 1000u64),
-        Some(ch) => (ch, 1024u64),
-        None => return None,
-    };
-    if ch == 'B' {
-        ch = s_chars.next()?;
-        offset += 1;
-    }
-    ch = ch.to_ascii_uppercase();
-
-    let unit = UNITS
-        .iter()
-        .rev()
-        .find(|&&(unit_ch, _)| unit_ch == ch)
-        .map(|&(_, val)| {
-            // we found a match, so increment offset
-            offset += 1;
-            val
-        })
-        .or_else(|| if multiple == 1024 { Some(0) } else { None })?;
-
-    let number = s[..s.len() - offset].parse::<u64>().ok()?;
-
-    Some(number * multiple.pow(unit))
-}
-
-fn translate_to_pure_number(s: &Option<&str>) -> Option<u64> {
-    match *s {
-        Some(ref s) => unit_string_to_number(s),
-        None => None,
-    }
-}
-
-fn read_block_size(s: Option<&str>) -> u64 {
-    match translate_to_pure_number(&s) {
-        Some(v) => v,
-        None => {
-            if let Some(value) = s {
-                show_error!("invalid --block-size argument '{}'", value);
-            };
-
-            for env_var in &["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
-                let env_size = env::var(env_var).ok();
-                if let Some(quantity) = translate_to_pure_number(&env_size.as_deref()) {
-                    return quantity;
+fn read_block_size(s: Option<&str>) -> usize {
+    if let Some(s) = s {
+        parse_size(s)
+            .unwrap_or_else(|e| crash!(1, "{}", format_error_message(e, s, options::BLOCK_SIZE)))
+    } else {
+        for env_var in &["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"] {
+            if let Ok(env_size) = env::var(env_var) {
+                if let Ok(v) = parse_size(&env_size) {
+                    return v;
                 }
             }
-
-            if env::var("POSIXLY_CORRECT").is_ok() {
-                512
-            } else {
-                1024
-            }
         }
+        if env::var("POSIXLY_CORRECT").is_ok() {
+            512
+        } else {
+            1024
+        }
+    }
+}
+
+fn choose_size(matches: &ArgMatches, stat: &Stat) -> u64 {
+    if matches.is_present(options::INODES) {
+        stat.inodes
+    } else if matches.is_present(options::APPARENT_SIZE) || matches.is_present(options::BYTES) {
+        stat.size
+    } else {
+        // The st_blocks field indicates the number of blocks allocated to the file, 512-byte units.
+        // See: http://linux.die.net/man/2/stat
+        stat.blocks * 512
     }
 }
 
@@ -302,7 +292,7 @@ fn du(
             Err(e) => {
                 safe_writeln!(
                     stderr(),
-                    "{}: cannot read directory ‘{}‘: {}",
+                    "{}: cannot read directory '{}': {}",
                     options.program_name,
                     my_stat.path.display(),
                     e
@@ -313,20 +303,29 @@ fn du(
 
         for f in read {
             match f {
-                Ok(entry) => match Stat::new(entry.path()) {
+                Ok(entry) => match Stat::new(entry.path(), options) {
                     Ok(this_stat) => {
+                        if let Some(inode) = this_stat.inode {
+                            if inodes.contains(&inode) {
+                                continue;
+                            }
+                            inodes.insert(inode);
+                        }
                         if this_stat.is_dir {
+                            if options.one_file_system {
+                                if let (Some(this_inode), Some(my_inode)) =
+                                    (this_stat.inode, my_stat.inode)
+                                {
+                                    if this_inode.dev_id != my_inode.dev_id {
+                                        continue;
+                                    }
+                                }
+                            }
                             futures.push(du(this_stat, options, depth + 1, inodes));
                         } else {
-                            if this_stat.inode.is_some() {
-                                let inode = this_stat.inode.unwrap();
-                                if inodes.contains(&inode) {
-                                    continue;
-                                }
-                                inodes.insert(inode);
-                            }
                             my_stat.size += this_stat.size;
                             my_stat.blocks += this_stat.blocks;
+                            my_stat.inodes += 1;
                             if options.all {
                                 stats.push(this_stat);
                             }
@@ -334,18 +333,11 @@ fn du(
                     }
                     Err(error) => match error.kind() {
                         ErrorKind::PermissionDenied => {
-                            let description = format!(
-                                "cannot access '{}'",
-                                entry
-                                    .path()
-                                    .as_os_str()
-                                    .to_str()
-                                    .unwrap_or("<Un-printable path>")
-                            );
+                            let description = format!("cannot access '{}'", entry.path().display());
                             let error_message = "Permission denied";
                             show_error_custom_description!(description, "{}", error_message)
                         }
-                        _ => show_error!("{}", error),
+                        _ => show_error!("cannot access '{}': {}", entry.path().display(), error),
                     },
                 },
                 Err(error) => show_error!("{}", error),
@@ -353,12 +345,15 @@ fn du(
         }
     }
 
-    stats.extend(futures.into_iter().flatten().rev().filter(|stat| {
+    stats.extend(futures.into_iter().flatten().filter(|stat| {
         if !options.separate_dirs && stat.path.parent().unwrap() == my_stat.path {
             my_stat.size += stat.size;
             my_stat.blocks += stat.blocks;
+            my_stat.inodes += stat.inodes;
         }
-        options.max_depth == None || depth < options.max_depth.unwrap()
+        options
+            .max_depth
+            .map_or(true, |max_depth| depth < max_depth)
     }));
     stats.push(my_stat);
     Box::new(stats.into_iter())
@@ -412,182 +407,19 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let usage = get_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(SUMMARY)
-        .usage(&usage[..])
-        .after_help(LONG_HELP)
-        .arg(
-            Arg::with_name(options::ALL)
-                .short("a")
-                .long(options::ALL)
-                .help("write counts for all files, not just directories"),
-        )
-        .arg(
-            Arg::with_name(options::APPARENT_SIZE)
-                .long(options::APPARENT_SIZE)
-                .help(
-                    "print apparent sizes,  rather  than  disk  usage \
-                    although  the apparent  size is usually smaller, it may be larger due to holes \
-                    in ('sparse') files, internal  fragmentation,  indirect  blocks, and the like"
-                )
-        )
-        .arg(
-            Arg::with_name(options::BLOCK_SIZE)
-                .short("B")
-                .long("block-size")
-                .value_name("SIZE")
-                .help(
-                    "scale sizes  by  SIZE before printing them. \
-                    E.g., '-BM' prints sizes in units of 1,048,576 bytes.  See SIZE format below."
-                )
-        )
-        .arg(
-            Arg::with_name(options::BYTES)
-                .short("b")
-                .long("bytes")
-                .help("equivalent to '--apparent-size --block-size=1'")
-        )
-        .arg(
-            Arg::with_name(options::TOTAL)
-                .long("total")
-                .short("c")
-                .help("produce a grand total")
-        )
-        .arg(
-            Arg::with_name(options::MAX_DEPTH)
-                .short("d")
-                .long("max-depth")
-                .value_name("N")
-                .help(
-                    "print the total for a directory (or file, with --all) \
-                    only if it is N or fewer levels below the command \
-                    line argument;  --max-depth=0 is the same as --summarize"
-                )
-        )
-        .arg(
-            Arg::with_name(options::HUMAN_READABLE)
-                .long("human-readable")
-                .short("h")
-                .help("print sizes in human readable format (e.g., 1K 234M 2G)")
-        )
-        .arg(
-            Arg::with_name("inodes")
-                .long("inodes")
-                .help(
-                    "list inode usage information instead of block usage like --block-size=1K"
-                )
-        )
-        .arg(
-            Arg::with_name(options::BLOCK_SIZE_1K)
-                .short("k")
-                .help("like --block-size=1K")
-        )
-        .arg(
-            Arg::with_name(options::COUNT_LINKS)
-                .short("l")
-                .long("count-links")
-                .help("count sizes many times if hard linked")
-        )
-        // .arg(
-        //     Arg::with_name("dereference")
-        //         .short("L")
-        //         .long("dereference")
-        //         .help("dereference all symbolic links")
-        // )
-        // .arg(
-        //     Arg::with_name("no-dereference")
-        //         .short("P")
-        //         .long("no-dereference")
-        //         .help("don't follow any symbolic links (this is the default)")
-        // )
-        .arg(
-            Arg::with_name(options::BLOCK_SIZE_1M)
-                .short("m")
-                .help("like --block-size=1M")
-        )
-        .arg(
-            Arg::with_name(options::NULL)
-                .short("0")
-                .long("null")
-                .help("end each output line with 0 byte rather than newline")
-        )
-        .arg(
-            Arg::with_name(options::SEPARATE_DIRS)
-                .short("S")
-                .long("separate-dirs")
-                .help("do not include size of subdirectories")
-        )
-        .arg(
-            Arg::with_name(options::SUMMARIZE)
-                .short("s")
-                .long("summarize")
-                .help("display only a total for each argument")
-        )
-        .arg(
-            Arg::with_name(options::SI)
-                .long(options::SI)
-                .help("like -h, but use powers of 1000 not 1024")
-        )
-        // .arg(
-        //     Arg::with_name("one-file-system")
-        //         .short("x")
-        //         .long("one-file-system")
-        //         .help("skip directories on different file systems")
-        // )
-        // .arg(
-        //     Arg::with_name("")
-        //         .short("x")
-        //         .long("exclude-from")
-        //         .value_name("FILE")
-        //         .help("exclude files that match any pattern in FILE")
-        // )
-        // .arg(
-        //     Arg::with_name("exclude")
-        //         .long("exclude")
-        //         .value_name("PATTERN")
-        //         .help("exclude files that match PATTERN")
-        // )
-        .arg(
-            Arg::with_name(options::TIME)
-                .long(options::TIME)
-                .value_name("WORD")
-                .require_equals(true)
-                .min_values(0)
-                .possible_values(&["atime", "access", "use", "ctime", "status", "birth", "creation"])
-                .help(
-                    "show time of the last modification of any file in the \
-                    directory, or any of its subdirectories.  If WORD is given, show time as WORD instead \
-                    of modification time: atime, access, use, ctime, status, birth or creation"
-                )
-        )
-        .arg(
-            Arg::with_name(options::TIME_STYLE)
-                .long(options::TIME_STYLE)
-                .value_name("STYLE")
-                .help(
-                    "show times using style STYLE: \
-                    full-iso, long-iso, iso, +FORMAT FORMAT is interpreted like 'date'"
-                )
-        )
-        .arg(
-            Arg::with_name(options::FILE)
-                .hidden(true)
-                .multiple(true)
-        )
-        .get_matches_from(args);
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     let summarize = matches.is_present(options::SUMMARIZE);
 
     let max_depth_str = matches.value_of(options::MAX_DEPTH);
     let max_depth = max_depth_str.as_ref().and_then(|s| s.parse::<usize>().ok());
     match (max_depth_str, max_depth) {
-        (Some(ref s), _) if summarize => {
-            show_error!("summarizing conflicts with --max-depth={}", *s);
+        (Some(s), _) if summarize => {
+            show_error!("summarizing conflicts with --max-depth={}", s);
             return 1;
         }
-        (Some(ref s), None) => {
-            show_error!("invalid maximum depth '{}'", *s);
+        (Some(s), None) => {
+            show_error!("invalid maximum depth '{}'", s);
             return 1;
         }
         (Some(_), Some(_)) | (None, _) => { /* valid */ }
@@ -599,16 +431,28 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         max_depth,
         total: matches.is_present(options::TOTAL),
         separate_dirs: matches.is_present(options::SEPARATE_DIRS),
+        one_file_system: matches.is_present(options::ONE_FILE_SYSTEM),
+        dereference: matches.is_present(options::DEREFERENCE),
+        inodes: matches.is_present(options::INODES),
     };
 
     let files = match matches.value_of(options::FILE) {
         Some(_) => matches.values_of(options::FILE).unwrap().collect(),
-        None => {
-            vec!["./"] // TODO: gnu `du` doesn't use trailing "/" here
-        }
+        None => vec!["."],
     };
 
-    let block_size = read_block_size(matches.value_of(options::BLOCK_SIZE));
+    if options.inodes
+        && (matches.is_present(options::APPARENT_SIZE) || matches.is_present(options::BYTES))
+    {
+        show_warning!("options --apparent-size and -b are ineffective with --inodes")
+    }
+
+    let block_size = u64::try_from(read_block_size(matches.value_of(options::BLOCK_SIZE))).unwrap();
+
+    let threshold = matches.value_of(options::THRESHOLD).map(|s| {
+        Threshold::from_str(s)
+            .unwrap_or_else(|e| crash!(1, "{}", format_error_message(e, s, options::THRESHOLD)))
+    });
 
     let multiplier: u64 = if matches.is_present(options::SI) {
         1000
@@ -628,7 +472,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             convert_size_other
         }
     };
-    let convert_size = |size| convert_size_fn(size, multiplier, block_size);
+    let convert_size = |size: u64| {
+        if options.inodes {
+            size.to_string()
+        } else {
+            convert_size_fn(size, multiplier, block_size)
+        }
+    };
 
     let time_format_str = match matches.value_of("time-style") {
         Some(s) => match s {
@@ -661,23 +511,22 @@ Try '{} --help' for more information.",
     let mut grand_total = 0;
     for path_string in files {
         let path = PathBuf::from(&path_string);
-        match Stat::new(path) {
+        match Stat::new(path, &options) {
             Ok(stat) => {
                 let mut inodes: HashSet<FileInfo> = HashSet::new();
-
+                if let Some(inode) = stat.inode {
+                    inodes.insert(inode);
+                }
                 let iter = du(stat, &options, 0, &mut inodes);
                 let (_, len) = iter.size_hint();
                 let len = len.unwrap();
                 for (index, stat) in iter.enumerate() {
-                    let size = if matches.is_present(options::APPARENT_SIZE)
-                        || matches.is_present(options::BYTES)
-                    {
-                        stat.size
-                    } else {
-                        // C's stat is such that each block is assume to be 512 bytes
-                        // See: http://linux.die.net/man/2/stat
-                        stat.blocks * 512
-                    };
+                    let size = choose_size(&matches, &stat);
+
+                    if threshold.map_or(false, |threshold| threshold.should_exclude(size)) {
+                        continue;
+                    }
+
                     if matches.is_present(options::TIME) {
                         let tm = {
                             let secs = {
@@ -690,8 +539,8 @@ Try '{} --help' for more information.",
                                                 time
                                             } else {
                                                 show_error!(
-                                                    "Invalid argument ‘{}‘ for --time.
-‘birth‘ and ‘creation‘ arguments are not supported on this platform.",
+                                                    "Invalid argument '{}' for --time.
+'birth' and 'creation' arguments are not supported on this platform.",
                                                     s
                                                 );
                                                 return 1;
@@ -744,31 +593,235 @@ Try '{} --help' for more information.",
     0
 }
 
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(SUMMARY)
+        .after_help(LONG_HELP)
+        .arg(
+            Arg::with_name(options::ALL)
+                .short("a")
+                .long(options::ALL)
+                .help("write counts for all files, not just directories"),
+        )
+        .arg(
+            Arg::with_name(options::APPARENT_SIZE)
+                .long(options::APPARENT_SIZE)
+                .help(
+                    "print apparent sizes,  rather  than  disk  usage \
+                    although  the apparent  size is usually smaller, it may be larger due to holes \
+                    in ('sparse') files, internal  fragmentation,  indirect  blocks, and the like"
+                )
+                .alias("app") // The GNU test suite uses this alias
+        )
+        .arg(
+            Arg::with_name(options::BLOCK_SIZE)
+                .short("B")
+                .long(options::BLOCK_SIZE)
+                .value_name("SIZE")
+                .help(
+                    "scale sizes  by  SIZE before printing them. \
+                    E.g., '-BM' prints sizes in units of 1,048,576 bytes.  See SIZE format below."
+                )
+        )
+        .arg(
+            Arg::with_name(options::BYTES)
+                .short("b")
+                .long("bytes")
+                .help("equivalent to '--apparent-size --block-size=1'")
+        )
+        .arg(
+            Arg::with_name(options::TOTAL)
+                .long("total")
+                .short("c")
+                .help("produce a grand total")
+        )
+        .arg(
+            Arg::with_name(options::MAX_DEPTH)
+                .short("d")
+                .long("max-depth")
+                .value_name("N")
+                .help(
+                    "print the total for a directory (or file, with --all) \
+                    only if it is N or fewer levels below the command \
+                    line argument;  --max-depth=0 is the same as --summarize"
+                )
+        )
+        .arg(
+            Arg::with_name(options::HUMAN_READABLE)
+                .long("human-readable")
+                .short("h")
+                .help("print sizes in human readable format (e.g., 1K 234M 2G)")
+        )
+        .arg(
+            Arg::with_name(options::INODES)
+                .long(options::INODES)
+                .help(
+                    "list inode usage information instead of block usage like --block-size=1K"
+                )
+        )
+        .arg(
+            Arg::with_name(options::BLOCK_SIZE_1K)
+                .short("k")
+                .help("like --block-size=1K")
+        )
+        .arg(
+            Arg::with_name(options::COUNT_LINKS)
+                .short("l")
+                .long("count-links")
+                .help("count sizes many times if hard linked")
+        )
+        .arg(
+            Arg::with_name(options::DEREFERENCE)
+                .short("L")
+                .long(options::DEREFERENCE)
+                .help("dereference all symbolic links")
+        )
+        // .arg(
+        //     Arg::with_name("no-dereference")
+        //         .short("P")
+        //         .long("no-dereference")
+        //         .help("don't follow any symbolic links (this is the default)")
+        // )
+        .arg(
+            Arg::with_name(options::BLOCK_SIZE_1M)
+                .short("m")
+                .help("like --block-size=1M")
+        )
+        .arg(
+            Arg::with_name(options::NULL)
+                .short("0")
+                .long("null")
+                .help("end each output line with 0 byte rather than newline")
+        )
+        .arg(
+            Arg::with_name(options::SEPARATE_DIRS)
+                .short("S")
+                .long("separate-dirs")
+                .help("do not include size of subdirectories")
+        )
+        .arg(
+            Arg::with_name(options::SUMMARIZE)
+                .short("s")
+                .long("summarize")
+                .help("display only a total for each argument")
+        )
+        .arg(
+            Arg::with_name(options::SI)
+                .long(options::SI)
+                .help("like -h, but use powers of 1000 not 1024")
+        )
+        .arg(
+            Arg::with_name(options::ONE_FILE_SYSTEM)
+                .short("x")
+                .long(options::ONE_FILE_SYSTEM)
+                .help("skip directories on different file systems")
+        )
+        .arg(
+            Arg::with_name(options::THRESHOLD)
+                .short("t")
+                .long(options::THRESHOLD)
+                .alias("th")
+                .value_name("SIZE")
+                .number_of_values(1)
+                .allow_hyphen_values(true)
+                .help("exclude entries smaller than SIZE if positive, \
+                          or entries greater than SIZE if negative")
+        )
+        // .arg(
+        //     Arg::with_name("")
+        //         .short("x")
+        //         .long("exclude-from")
+        //         .value_name("FILE")
+        //         .help("exclude files that match any pattern in FILE")
+        // )
+        // .arg(
+        //     Arg::with_name("exclude")
+        //         .long("exclude")
+        //         .value_name("PATTERN")
+        //         .help("exclude files that match PATTERN")
+        // )
+        .arg(
+            Arg::with_name(options::TIME)
+                .long(options::TIME)
+                .value_name("WORD")
+                .require_equals(true)
+                .min_values(0)
+                .possible_values(&["atime", "access", "use", "ctime", "status", "birth", "creation"])
+                .help(
+                    "show time of the last modification of any file in the \
+                    directory, or any of its subdirectories.  If WORD is given, show time as WORD instead \
+                    of modification time: atime, access, use, ctime, status, birth or creation"
+                )
+        )
+        .arg(
+            Arg::with_name(options::TIME_STYLE)
+                .long(options::TIME_STYLE)
+                .value_name("STYLE")
+                .help(
+                    "show times using style STYLE: \
+                    full-iso, long-iso, iso, +FORMAT FORMAT is interpreted like 'date'"
+                )
+        )
+        .arg(
+            Arg::with_name(options::FILE)
+                .hidden(true)
+                .multiple(true)
+        )
+}
+
+#[derive(Clone, Copy)]
+enum Threshold {
+    Lower(u64),
+    Upper(u64),
+}
+
+impl FromStr for Threshold {
+    type Err = ParseSizeError;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        let offset = if s.starts_with(&['-', '+'][..]) { 1 } else { 0 };
+
+        let size = u64::try_from(parse_size(&s[offset..])?).unwrap();
+
+        if s.starts_with('-') {
+            Ok(Threshold::Upper(size))
+        } else {
+            Ok(Threshold::Lower(size))
+        }
+    }
+}
+
+impl Threshold {
+    fn should_exclude(&self, size: u64) -> bool {
+        match *self {
+            Threshold::Upper(threshold) => size > threshold,
+            Threshold::Lower(threshold) => size < threshold,
+        }
+    }
+}
+
+fn format_error_message(error: ParseSizeError, s: &str, option: &str) -> String {
+    // NOTE:
+    // GNU's du echos affected flag, -B or --block-size (-t or --threshold), depending user's selection
+    // GNU's du does distinguish between "invalid (suffix in) argument"
+    match error {
+        ParseSizeError::ParseFailure(_) => format!("invalid --{} argument '{}'", option, s),
+        ParseSizeError::SizeTooBig(_) => format!("--{} argument '{}' too large", option, s),
+    }
+}
+
 #[cfg(test)]
 mod test_du {
     #[allow(unused_imports)]
     use super::*;
 
     #[test]
-    fn test_translate_to_pure_number() {
-        let test_data = [
-            (Some("10".to_string()), Some(10)),
-            (Some("10K".to_string()), Some(10 * 1024)),
-            (Some("5M".to_string()), Some(5 * 1024 * 1024)),
-            (Some("900KB".to_string()), Some(900 * 1000)),
-            (Some("BAD_STRING".to_string()), None),
-        ];
-        for it in test_data.iter() {
-            assert_eq!(translate_to_pure_number(&it.0.as_deref()), it.1);
-        }
-    }
-
-    #[test]
     fn test_read_block_size() {
         let test_data = [
-            (Some("10".to_string()), 10),
+            (Some("1024".to_string()), 1024),
+            (Some("K".to_string()), 1024),
             (None, 1024),
-            (Some("BAD_STRING".to_string()), 1024),
         ];
         for it in test_data.iter() {
             assert_eq!(read_block_size(it.0.as_deref()), it.1);

@@ -618,7 +618,7 @@ fn test_cp_deref() {
     // Check the content of the destination file that was copied.
     assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
     let path_to_check = path_to_new_symlink.to_str().unwrap();
-    assert_eq!(at.read(&path_to_check), "Hello, World!\n");
+    assert_eq!(at.read(path_to_check), "Hello, World!\n");
 }
 #[test]
 fn test_cp_no_deref() {
@@ -655,7 +655,7 @@ fn test_cp_no_deref() {
     // Check the content of the destination file that was copied.
     assert_eq!(at.read(TEST_COPY_TO_FOLDER_FILE), "Hello, World!\n");
     let path_to_check = path_to_new_symlink.to_str().unwrap();
-    assert_eq!(at.read(&path_to_check), "Hello, World!\n");
+    assert_eq!(at.read(path_to_check), "Hello, World!\n");
 }
 
 #[test]
@@ -724,6 +724,15 @@ fn test_cp_parents_dest_not_directory() {
         .arg(TEST_HELLO_WORLD_DEST)
         .fails()
         .stderr_contains("with --parents, the destination must be a directory");
+}
+
+#[test]
+fn test_cp_preserve_no_args() {
+    new_ucmd!()
+        .arg(TEST_COPY_FROM_FOLDER_FILE)
+        .arg(TEST_HELLO_WORLD_DEST)
+        .arg("--preserve")
+        .succeeds();
 }
 
 #[test]
@@ -823,7 +832,7 @@ fn test_cp_deref_folder_to_folder() {
 
     // Check the content of the symlink
     let path_to_check = path_to_new_symlink.to_str().unwrap();
-    assert_eq!(at.read(&path_to_check), "Hello, World!\n");
+    assert_eq!(at.read(path_to_check), "Hello, World!\n");
 }
 
 #[test]
@@ -923,7 +932,7 @@ fn test_cp_no_deref_folder_to_folder() {
 
     // Check the content of the symlink
     let path_to_check = path_to_new_symlink.to_str().unwrap();
-    assert_eq!(at.read(&path_to_check), "Hello, World!\n");
+    assert_eq!(at.read(path_to_check), "Hello, World!\n");
 }
 
 #[test]
@@ -1289,4 +1298,43 @@ fn test_closes_file_descriptors() {
         .arg("dir_with_10_files_new/")
         .with_limit(Resource::NOFILE, 9, 9)
         .succeeds();
+}
+
+#[test]
+fn test_copy_dir_symlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.symlink_dir("dir", "dir-link");
+    ucmd.args(&["-r", "dir-link", "copy"]).succeeds();
+    assert_eq!(at.resolve_link("copy"), "dir");
+}
+
+#[test]
+fn test_copy_dir_with_symlinks() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.make_file("dir/file");
+
+    TestScenario::new("ln")
+        .ucmd()
+        .arg("-sr")
+        .arg(at.subdir.join("dir/file"))
+        .arg(at.subdir.join("dir/file-link"))
+        .succeeds();
+
+    ucmd.args(&["-r", "dir", "copy"]).succeeds();
+    assert_eq!(at.resolve_link("copy/file-link"), "file");
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_copy_symlink_force() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    at.symlink_file("file", "file-link");
+    at.touch("copy");
+
+    ucmd.args(&["file-link", "copy", "-f", "--no-dereference"])
+        .succeeds();
+    assert_eq!(at.resolve_link("copy"), "file");
 }

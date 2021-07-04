@@ -1,3 +1,8 @@
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
+
 // spell-checker:ignore (words) ints
 
 use crate::common::util::*;
@@ -21,17 +26,31 @@ fn test_helper(file_name: &str, possible_args: &[&str]) {
 
 #[test]
 fn test_buffer_sizes() {
-    let buffer_sizes = [
-        "0", "50K", "50k", "1M", "100M", "1000G", "10T", "500E", "1Y",
-    ];
+    let buffer_sizes = ["0", "50K", "50k", "1M", "100M"];
     for buffer_size in &buffer_sizes {
-        new_ucmd!()
+        TestScenario::new(util_name!())
+            .ucmd_keepenv()
             .arg("-n")
             .arg("-S")
             .arg(buffer_size)
             .arg("ext_sort.txt")
             .succeeds()
             .stdout_is_fixture("ext_sort.expected");
+
+        #[cfg(not(target_pointer_width = "32"))]
+        {
+            let buffer_sizes = ["1000G", "10T"];
+            for buffer_size in &buffer_sizes {
+                TestScenario::new(util_name!())
+                    .ucmd_keepenv()
+                    .arg("-n")
+                    .arg("-S")
+                    .arg(buffer_size)
+                    .arg("ext_sort.txt")
+                    .succeeds()
+                    .stdout_is_fixture("ext_sort.expected");
+            }
+        }
     }
 }
 
@@ -43,10 +62,38 @@ fn test_invalid_buffer_size() {
             .arg("-S")
             .arg(invalid_buffer_size)
             .fails()
+            .code_is(2)
             .stderr_only(format!(
-                "sort: failed to parse buffer size `{}`: invalid digit found in string",
+                "sort: invalid --buffer-size argument '{}'",
                 invalid_buffer_size
             ));
+    }
+    #[cfg(not(target_pointer_width = "128"))]
+    new_ucmd!()
+        .arg("-n")
+        .arg("-S")
+        .arg("1Y")
+        .arg("ext_sort.txt")
+        .fails()
+        .code_is(2)
+        .stderr_only("sort: --buffer-size argument '1Y' too large");
+
+    #[cfg(target_pointer_width = "32")]
+    {
+        let buffer_sizes = ["1000G", "10T"];
+        for buffer_size in &buffer_sizes {
+            new_ucmd!()
+                .arg("-n")
+                .arg("-S")
+                .arg(buffer_size)
+                .arg("ext_sort.txt")
+                .fails()
+                .code_is(2)
+                .stderr_only(format!(
+                    "sort: --buffer-size argument '{}' too large",
+                    buffer_size
+                ));
+        }
     }
 }
 
@@ -80,11 +127,7 @@ fn test_months_whitespace() {
 
 #[test]
 fn test_version_empty_lines() {
-    new_ucmd!()
-        .arg("-V")
-        .arg("version-empty-lines.txt")
-        .succeeds()
-        .stdout_is("\n\n\n\n\n\n\n1.2.3-alpha\n1.2.3-alpha2\n\t\t\t1.12.4\n11.2.3\n");
+    test_helper("version-empty-lines", &["-V", "--version-sort"]);
 }
 
 #[test]
@@ -409,8 +452,18 @@ fn test_human_block_sizes2() {
             .arg(human_numeric_sort_param)
             .pipe_in(input)
             .succeeds()
-            .stdout_only("-8T\n0.8M\n8981K\n21G\n909991M\n");
+            .stdout_only("-8T\n8981K\n0.8M\n909991M\n21G\n");
     }
+}
+
+#[test]
+fn test_human_numeric_zero_stable() {
+    let input = "0M\n0K\n-0K\n-P\n-0M\n";
+    new_ucmd!()
+        .arg("-hs")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(input);
 }
 
 #[test]
@@ -717,26 +770,30 @@ fn test_pipe() {
 
 #[test]
 fn test_check() {
-    new_ucmd!()
-        .arg("-c")
-        .arg("check_fail.txt")
-        .fails()
-        .stdout_is("sort: check_fail.txt:6: disorder: 5\n");
+    for diagnose_arg in &["-c", "--check", "--check=diagnose-first"] {
+        new_ucmd!()
+            .arg(diagnose_arg)
+            .arg("check_fail.txt")
+            .fails()
+            .stdout_is("sort: check_fail.txt:6: disorder: 5\n");
 
-    new_ucmd!()
-        .arg("-c")
-        .arg("multiple_files.expected")
-        .succeeds()
-        .stdout_is("");
+        new_ucmd!()
+            .arg(diagnose_arg)
+            .arg("multiple_files.expected")
+            .succeeds()
+            .stdout_is("");
+    }
 }
 
 #[test]
 fn test_check_silent() {
-    new_ucmd!()
-        .arg("-C")
-        .arg("check_fail.txt")
-        .fails()
-        .stdout_is("");
+    for silent_arg in &["-C", "--check=silent", "--check=quiet"] {
+        new_ucmd!()
+            .arg(silent_arg)
+            .arg("check_fail.txt")
+            .fails()
+            .stdout_is("");
+    }
 }
 
 #[test]
@@ -790,5 +847,107 @@ fn test_nonexistent_file() {
 
 #[test]
 fn test_blanks() {
-    test_helper("blanks", &["-b", "--ignore-blanks"]);
+    test_helper("blanks", &["-b", "--ignore-leading-blanks"]);
+}
+
+#[test]
+fn sort_multiple() {
+    new_ucmd!()
+        .args(&["no_trailing_newline1.txt", "no_trailing_newline2.txt"])
+        .succeeds()
+        .stdout_is("a\nb\nb\n");
+}
+
+#[test]
+fn sort_empty_chunk() {
+    new_ucmd!()
+        .args(&["-S", "40b"])
+        .pipe_in("a\na\n")
+        .succeeds()
+        .stdout_is("a\na\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_compress() {
+    new_ucmd!()
+        .args(&[
+            "ext_sort.txt",
+            "-n",
+            "--compress-program",
+            "gzip",
+            "-S",
+            "10",
+        ])
+        .succeeds()
+        .stdout_only_fixture("ext_sort.expected");
+}
+
+#[test]
+fn test_compress_fail() {
+    TestScenario::new(util_name!())
+        .ucmd_keepenv()
+        .args(&[
+            "ext_sort.txt",
+            "-n",
+            "--compress-program",
+            "nonexistent-program",
+            "-S",
+            "10",
+        ])
+        .fails()
+        .stderr_only("sort: couldn't execute compress program: errno 2");
+}
+
+#[test]
+fn test_merge_batches() {
+    TestScenario::new(util_name!())
+        .ucmd_keepenv()
+        .args(&["ext_sort.txt", "-n", "-S", "150b"])
+        .succeeds()
+        .stdout_only_fixture("ext_sort.expected");
+}
+
+#[test]
+fn test_merge_batch_size() {
+    TestScenario::new(util_name!())
+        .ucmd_keepenv()
+        .arg("--batch-size=2")
+        .arg("-m")
+        .arg("--unique")
+        .arg("merge_ints_interleaved_1.txt")
+        .arg("merge_ints_interleaved_2.txt")
+        .arg("merge_ints_interleaved_3.txt")
+        .arg("merge_ints_interleaved_3.txt")
+        .arg("merge_ints_interleaved_2.txt")
+        .arg("merge_ints_interleaved_1.txt")
+        .succeeds()
+        .stdout_only_fixture("merge_ints_interleaved.expected");
+}
+
+#[test]
+fn test_sigpipe_panic() {
+    let mut cmd = new_ucmd!();
+    let mut child = cmd.args(&["ext_sort.txt"]).run_no_wait();
+    // Dropping the stdout should not lead to an error.
+    // The "Broken pipe" error should be silently ignored.
+    drop(child.stdout.take());
+    assert_eq!(
+        String::from_utf8(child.wait_with_output().unwrap().stderr),
+        Ok(String::new())
+    );
+}
+
+#[test]
+fn test_conflict_check_out() {
+    let check_flags = ["-c=silent", "-c=quiet", "-c=diagnose-first", "-c", "-C"];
+    for check_flag in &check_flags {
+        new_ucmd!()
+            .arg(check_flag)
+            .arg("-o=/dev/null")
+            .fails()
+            .stderr_contains(
+                "error: The argument '--output <FILENAME>' cannot be used with '--check",
+            );
+    }
 }

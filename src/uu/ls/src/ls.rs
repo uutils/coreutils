@@ -14,7 +14,6 @@ extern crate uucore;
 extern crate lazy_static;
 
 mod quoting_style;
-mod version_cmp;
 
 use clap::{crate_version, App, Arg};
 use globset::{self, Glob, GlobSet, GlobSetBuilder};
@@ -26,10 +25,11 @@ use quoting_style::{escape_name, QuotingStyle};
 use std::os::windows::fs::MetadataExt;
 use std::{
     cmp::Reverse,
+    error::Error,
+    fmt::Display,
     fs::{self, DirEntry, FileType, Metadata},
     io::{stdout, BufWriter, Stdout, Write},
     path::{Path, PathBuf},
-    process::exit,
     time::{SystemTime, UNIX_EPOCH},
 };
 #[cfg(unix)]
@@ -38,12 +38,13 @@ use std::{
     os::unix::fs::{FileTypeExt, MetadataExt},
     time::Duration,
 };
-
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
+use uucore::error::{set_exit_code, FromIo, UCustomError, UResult};
 
 use unicode_width::UnicodeWidthStr;
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
+use uucore::{fs::display_permissions, version_cmp::version_cmp};
 
 static ABOUT: &str = "
  By default, ls will list the files and contents of any directories on
@@ -123,6 +124,32 @@ pub mod options {
     pub static FULL_TIME: &str = "full-time";
     pub static HIDE: &str = "hide";
     pub static IGNORE: &str = "ignore";
+}
+
+#[derive(Debug)]
+enum LsError {
+    InvalidLineWidth(String),
+    NoMetadata(PathBuf),
+}
+
+impl UCustomError for LsError {
+    fn code(&self) -> i32 {
+        match self {
+            LsError::InvalidLineWidth(_) => 2,
+            LsError::NoMetadata(_) => 1,
+        }
+    }
+}
+
+impl Error for LsError {}
+
+impl Display for LsError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LsError::InvalidLineWidth(s) => write!(f, "invalid line width: '{}'", s),
+            LsError::NoMetadata(p) => write!(f, "could not open file: '{}'", p.display()),
+        }
+    }
 }
 
 #[derive(PartialEq, Eq)]
@@ -218,7 +245,7 @@ struct LongFormat {
 
 impl Config {
     #[allow(clippy::cognitive_complexity)]
-    fn from(options: clap::ArgMatches) -> Config {
+    fn from(options: clap::ArgMatches) -> UResult<Config> {
         let (mut format, opt) = if let Some(format_) = options.value_of(options::FORMAT) {
             (
                 match format_ {
@@ -369,23 +396,22 @@ impl Config {
             }
         };
 
-        let width = options
-            .value_of(options::WIDTH)
-            .map(|x| {
-                x.parse::<u16>().unwrap_or_else(|_e| {
-                    show_error!("invalid line width: ‘{}’", x);
-                    exit(2);
-                })
-            })
-            .or_else(|| termsize::get().map(|s| s.cols));
+        let width = match options.value_of(options::WIDTH) {
+            Some(x) => match x.parse::<u16>() {
+                Ok(u) => Some(u),
+                Err(_) => return Err(LsError::InvalidLineWidth(x.into()).into()),
+            },
+            None => termsize::get().map(|s| s.cols),
+        };
 
         #[allow(clippy::needless_bool)]
         let show_control = if options.is_present(options::HIDE_CONTROL_CHARS) {
             false
-        } else if options.is_present(options::SHOW_CONTROL_CHARS) {
+        } else if options.is_present(options::SHOW_CONTROL_CHARS) || atty::is(atty::Stream::Stdout)
+        {
             true
         } else {
-            false // TODO: only if output is a terminal and the program is `ls`
+            false
         };
 
         let quoting_style = if let Some(style) = options.value_of(options::QUOTING_STYLE) {
@@ -527,7 +553,7 @@ impl Config {
             Dereference::DirArgs
         };
 
-        Config {
+        Ok(Config {
             format,
             files,
             sort,
@@ -546,21 +572,34 @@ impl Config {
             quoting_style,
             indicator_style,
             time_style,
-        }
+        })
     }
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
     let usage = get_usage();
 
-    let app = App::new(executable!())
+    let app = uu_app().usage(&usage[..]);
+
+    let matches = app.get_matches_from(args);
+
+    let locs = matches
+        .values_of(options::PATHS)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_else(|| vec![String::from(".")]);
+
+    list(locs, Config::from(matches)?)
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .version(crate_version!())
         .about(ABOUT)
-        .usage(&usage[..])
 
         // Format arguments
         .arg(
@@ -755,7 +794,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(options::time::CHANGE)
                 .short(options::time::CHANGE)
                 .help("If the long listing format (e.g., -l, -o) is being used, print the status \
-                change time (the ‘ctime’ in the inode) instead of the modification time. When \
+                change time (the 'ctime' in the inode) instead of the modification time. When \
                 explicitly sorting by time (--sort=time or -t) or when not using a long listing \
                 format, sort according to the status change time.")
                 .overrides_with_all(&[
@@ -1094,16 +1133,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     // Positional arguments
         .arg(Arg::with_name(options::PATHS).multiple(true).takes_value(true))
 
-        .after_help(AFTER_HELP);
-
-    let matches = app.get_matches_from(args);
-
-    let locs = matches
-        .values_of(options::PATHS)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_else(|| vec![String::from(".")]);
-
-    list(locs, Config::from(matches))
+        .after_help(AFTER_HELP)
 }
 
 /// Represents a Path along with it's associated data
@@ -1186,31 +1216,27 @@ impl PathData {
     }
 }
 
-fn list(locs: Vec<String>, config: Config) -> i32 {
+fn list(locs: Vec<String>, config: Config) -> UResult<()> {
     let mut files = Vec::<PathData>::new();
     let mut dirs = Vec::<PathData>::new();
-    let mut has_failed = false;
 
     let mut out = BufWriter::new(stdout());
 
     for loc in &locs {
         let p = PathBuf::from(&loc);
-        if !p.exists() {
-            show_error!("'{}': {}", &loc, "No such file or directory");
-            /*
-            We found an error, the return code of ls should not be 0
-            And no need to continue the execution
-            */
-            has_failed = true;
+        let path_data = PathData::new(p, None, None, &config, true);
+
+        if path_data.md().is_none() {
+            show!(std::io::ErrorKind::NotFound
+                .map_err_context(|| format!("cannot access '{}'", path_data.p_buf.display())));
+            // We found an error, no need to continue the execution
             continue;
         }
-
-        let path_data = PathData::new(p, None, None, &config, true);
 
         let show_dir_contents = match path_data.file_type() {
             Some(ft) => !config.directory && ft.is_dir(),
             None => {
-                has_failed = true;
+                set_exit_code(1);
                 false
             }
         };
@@ -1231,11 +1257,8 @@ fn list(locs: Vec<String>, config: Config) -> i32 {
         }
         enter_directory(&dir, &config, &mut out);
     }
-    if has_failed {
-        1
-    } else {
-        0
-    }
+
+    Ok(())
 }
 
 fn sort_entries(entries: &mut Vec<PathData>, config: &Config) {
@@ -1243,7 +1266,7 @@ fn sort_entries(entries: &mut Vec<PathData>, config: &Config) {
         Sort::Time => entries.sort_by_key(|k| {
             Reverse(
                 k.md()
-                    .and_then(|md| get_system_time(&md, config))
+                    .and_then(|md| get_system_time(md, config))
                     .unwrap_or(UNIX_EPOCH),
             )
         }),
@@ -1252,7 +1275,8 @@ fn sort_entries(entries: &mut Vec<PathData>, config: &Config) {
         }
         // The default sort in GNU ls is case insensitive
         Sort::Name => entries.sort_by(|a, b| a.display_name.cmp(&b.display_name)),
-        Sort::Version => entries.sort_by(|a, b| version_cmp::version_cmp(&a.p_buf, &b.p_buf)),
+        Sort::Version => entries
+            .sort_by(|a, b| version_cmp(&a.p_buf.to_string_lossy(), &b.p_buf.to_string_lossy())),
         Sort::Extension => entries.sort_by(|a, b| {
             a.p_buf
                 .extension()
@@ -1269,7 +1293,8 @@ fn sort_entries(entries: &mut Vec<PathData>, config: &Config) {
 
 #[cfg(windows)]
 fn is_hidden(file_path: &DirEntry) -> bool {
-    let metadata = fs::metadata(file_path.path()).unwrap();
+    let path = file_path.path();
+    let metadata = fs::metadata(&path).unwrap_or_else(|_| fs::symlink_metadata(&path).unwrap());
     let attr = metadata.file_attributes();
     (attr & 0x2) > 0
 }
@@ -1323,14 +1348,14 @@ fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>)
             .filter(|p| p.file_type().map(|ft| ft.is_dir()).unwrap_or(false))
         {
             let _ = writeln!(out, "\n{}:", e.p_buf.display());
-            enter_directory(&e, config, out);
+            enter_directory(e, config, out);
         }
     }
 }
 
 fn get_metadata(entry: &Path, dereference: bool) -> std::io::Result<Metadata> {
     if dereference {
-        entry.metadata().or_else(|_| entry.symlink_metadata())
+        entry.metadata()
     } else {
         entry.symlink_metadata()
     }
@@ -1339,8 +1364,8 @@ fn get_metadata(entry: &Path, dereference: bool) -> std::io::Result<Metadata> {
 fn display_dir_entry_size(entry: &PathData, config: &Config) -> (usize, usize) {
     if let Some(md) = entry.md() {
         (
-            display_symlink_count(&md).len(),
-            display_size_or_rdev(&md, config).len(),
+            display_symlink_count(md).len(),
+            display_size_or_rdev(md, config).len(),
         )
     } else {
         (0, 0)
@@ -1371,7 +1396,7 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             display_item_long(item, max_links, max_width, config, out);
         }
     } else {
-        let names = items.iter().filter_map(|i| display_file_name(&i, config));
+        let names = items.iter().filter_map(|i| display_file_name(i, config));
 
         match (&config.format, config.width) {
             (Format::Columns, Some(width)) => {
@@ -1462,8 +1487,6 @@ fn display_grid(
     }
 }
 
-use uucore::fs::display_permissions;
-
 fn display_item_long(
     item: &PathData,
     max_links: usize,
@@ -1473,7 +1496,7 @@ fn display_item_long(
 ) {
     let md = match item.md() {
         None => {
-            show_error!("could not show file: {}", &item.p_buf.display());
+            show!(LsError::NoMetadata(item.p_buf.clone()));
             return;
         }
         Some(md) => md,
@@ -1482,40 +1505,40 @@ fn display_item_long(
     #[cfg(unix)]
     {
         if config.inode {
-            let _ = write!(out, "{} ", get_inode(&md));
+            let _ = write!(out, "{} ", get_inode(md));
         }
     }
 
     let _ = write!(
         out,
         "{} {}",
-        display_permissions(&md, true),
-        pad_left(display_symlink_count(&md), max_links),
+        display_permissions(md, true),
+        pad_left(display_symlink_count(md), max_links),
     );
 
     if config.long.owner {
-        let _ = write!(out, " {}", display_uname(&md, config));
+        let _ = write!(out, " {}", display_uname(md, config));
     }
 
     if config.long.group {
-        let _ = write!(out, " {}", display_group(&md, config));
+        let _ = write!(out, " {}", display_group(md, config));
     }
 
     // Author is only different from owner on GNU/Hurd, so we reuse
     // the owner, since GNU/Hurd is not currently supported by Rust.
     if config.long.author {
-        let _ = write!(out, " {}", display_uname(&md, config));
+        let _ = write!(out, " {}", display_uname(md, config));
     }
 
     let _ = writeln!(
         out,
         " {} {} {}",
         pad_left(display_size_or_rdev(md, config), max_size),
-        display_date(&md, config),
+        display_date(md, config),
         // unwrap is fine because it fails when metadata is not available
         // but we already know that it is because it's checked at the
         // start of the function.
-        display_file_name(&item, config).unwrap().contents,
+        display_file_name(item, config).unwrap().contents,
     );
 }
 
@@ -1732,7 +1755,11 @@ fn display_file_name(path: &PathData, config: &Config) -> Option<Cell> {
     #[cfg(unix)]
     {
         if config.format != Format::Long && config.inode {
-            name = get_inode(path.md()?) + " " + &name;
+            name = path
+                .md()
+                .map_or_else(|| "?".to_string(), |md| get_inode(md))
+                + " "
+                + &name;
         }
     }
 
@@ -1741,7 +1768,7 @@ fn display_file_name(path: &PathData, config: &Config) -> Option<Cell> {
     let mut width = name.width();
 
     if let Some(ls_colors) = &config.color {
-        name = color_name(&ls_colors, &path.p_buf, name, path.md()?);
+        name = color_name(ls_colors, &path.p_buf, name, path.md()?);
     }
 
     if config.indicator_style != IndicatorStyle::None {
@@ -1786,7 +1813,7 @@ fn display_file_name(path: &PathData, config: &Config) -> Option<Cell> {
 }
 
 fn color_name(ls_colors: &LsColors, path: &Path, name: String, md: &Metadata) -> String {
-    match ls_colors.style_for_path_with_metadata(path, Some(&md)) {
+    match ls_colors.style_for_path_with_metadata(path, Some(md)) {
         Some(style) => style.to_ansi_term_style().paint(name).to_string(),
         None => name,
     }

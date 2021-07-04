@@ -56,7 +56,66 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let matches = App::new(executable!())
+    let matches = uu_app().get_matches_from(args);
+
+    let mode = if let Some(args) = matches.values_of(options::ECHO) {
+        Mode::Echo(args.map(String::from).collect())
+    } else if let Some(range) = matches.value_of(options::INPUT_RANGE) {
+        match parse_range(range) {
+            Ok(m) => Mode::InputRange(m),
+            Err(msg) => {
+                crash!(1, "{}", msg);
+            }
+        }
+    } else {
+        Mode::Default(matches.value_of(options::FILE).unwrap_or("-").to_string())
+    };
+
+    let options = Options {
+        head_count: match matches.value_of(options::HEAD_COUNT) {
+            Some(count) => match count.parse::<usize>() {
+                Ok(val) => val,
+                Err(_) => {
+                    show_error!("invalid line count: '{}'", count);
+                    return 1;
+                }
+            },
+            None => std::usize::MAX,
+        },
+        output: matches.value_of(options::OUTPUT).map(String::from),
+        random_source: matches.value_of(options::RANDOM_SOURCE).map(String::from),
+        repeat: matches.is_present(options::REPEAT),
+        sep: if matches.is_present(options::ZERO_TERMINATED) {
+            0x00_u8
+        } else {
+            0x0a_u8
+        },
+    };
+
+    match mode {
+        Mode::Echo(args) => {
+            let mut evec = args.iter().map(String::as_bytes).collect::<Vec<_>>();
+            find_seps(&mut evec, options.sep);
+            shuf_bytes(&mut evec, options);
+        }
+        Mode::InputRange((b, e)) => {
+            let rvec = (b..e).map(|x| format!("{}", x)).collect::<Vec<String>>();
+            let mut rvec = rvec.iter().map(String::as_bytes).collect::<Vec<&[u8]>>();
+            shuf_bytes(&mut rvec, options);
+        }
+        Mode::Default(filename) => {
+            let fdata = read_input_file(&filename);
+            let mut fdata = vec![&fdata[..]];
+            find_seps(&mut fdata, options.sep);
+            shuf_bytes(&mut fdata, options);
+        }
+    }
+
+    0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .name(NAME)
         .version(crate_version!())
         .template(TEMPLATE)
@@ -118,62 +177,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .help("line delimiter is NUL, not newline"),
         )
         .arg(Arg::with_name(options::FILE).takes_value(true))
-        .get_matches_from(args);
-
-    let mode = if let Some(args) = matches.values_of(options::ECHO) {
-        Mode::Echo(args.map(String::from).collect())
-    } else if let Some(range) = matches.value_of(options::INPUT_RANGE) {
-        match parse_range(range) {
-            Ok(m) => Mode::InputRange(m),
-            Err(msg) => {
-                crash!(1, "{}", msg);
-            }
-        }
-    } else {
-        Mode::Default(matches.value_of(options::FILE).unwrap_or("-").to_string())
-    };
-
-    let options = Options {
-        head_count: match matches.value_of(options::HEAD_COUNT) {
-            Some(count) => match count.parse::<usize>() {
-                Ok(val) => val,
-                Err(_) => {
-                    show_error!("invalid line count: '{}'", count);
-                    return 1;
-                }
-            },
-            None => std::usize::MAX,
-        },
-        output: matches.value_of(options::OUTPUT).map(String::from),
-        random_source: matches.value_of(options::RANDOM_SOURCE).map(String::from),
-        repeat: matches.is_present(options::REPEAT),
-        sep: if matches.is_present(options::ZERO_TERMINATED) {
-            0x00_u8
-        } else {
-            0x0a_u8
-        },
-    };
-
-    match mode {
-        Mode::Echo(args) => {
-            let mut evec = args.iter().map(String::as_bytes).collect::<Vec<_>>();
-            find_seps(&mut evec, options.sep);
-            shuf_bytes(&mut evec, options);
-        }
-        Mode::InputRange((b, e)) => {
-            let rvec = (b..e).map(|x| format!("{}", x)).collect::<Vec<String>>();
-            let mut rvec = rvec.iter().map(String::as_bytes).collect::<Vec<&[u8]>>();
-            shuf_bytes(&mut rvec, options);
-        }
-        Mode::Default(filename) => {
-            let fdata = read_input_file(&filename);
-            let mut fdata = vec![&fdata[..]];
-            find_seps(&mut fdata, options.sep);
-            shuf_bytes(&mut fdata, options);
-        }
-    }
-
-    0
 }
 
 fn read_input_file(filename: &str) -> Vec<u8> {
@@ -285,14 +288,12 @@ fn parse_range(input_range: &str) -> Result<(usize, usize), String> {
     if split.len() != 2 {
         Err(format!("invalid input range: '{}'", input_range))
     } else {
-        let begin = match split[0].parse::<usize>() {
-            Ok(m) => m,
-            Err(_) => return Err(format!("invalid input range: '{}'", split[0])),
-        };
-        let end = match split[1].parse::<usize>() {
-            Ok(m) => m,
-            Err(_) => return Err(format!("invalid input range: '{}'", split[1])),
-        };
+        let begin = split[0]
+            .parse::<usize>()
+            .map_err(|_| format!("invalid input range: '{}'", split[0]))?;
+        let end = split[1]
+            .parse::<usize>()
+            .map_err(|_| format!("invalid input range: '{}'", split[1]))?;
         Ok((begin, end + 1))
     }
 }

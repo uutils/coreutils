@@ -28,6 +28,7 @@ mod options {
     pub const GROUP: &str = "group";
     pub const GROUPS: &str = "groups";
     pub const USERSPEC: &str = "userspec";
+    pub const COMMAND: &str = "command";
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
@@ -35,11 +36,72 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let matches = App::new(executable!())
+    let matches = uu_app().get_matches_from(args);
+
+    let default_shell: &'static str = "/bin/sh";
+    let default_option: &'static str = "-i";
+    let user_shell = std::env::var("SHELL");
+
+    let newroot: &Path = match matches.value_of(options::NEWROOT) {
+        Some(v) => Path::new(v),
+        None => crash!(
+            1,
+            "Missing operand: NEWROOT\nTry '{} --help' for more information.",
+            NAME
+        ),
+    };
+
+    if !newroot.is_dir() {
+        crash!(
+            1,
+            "cannot change root directory to `{}`: no such directory",
+            newroot.display()
+        );
+    }
+
+    let commands = match matches.values_of(options::COMMAND) {
+        Some(v) => v.collect(),
+        None => vec![],
+    };
+
+    // TODO: refactor the args and command matching
+    // See: https://github.com/uutils/coreutils/pull/2365#discussion_r647849967
+    let command: Vec<&str> = match commands.len() {
+        1 => {
+            let shell: &str = match user_shell {
+                Err(_) => default_shell,
+                Ok(ref s) => s.as_ref(),
+            };
+            vec![shell, default_option]
+        }
+        _ => commands,
+    };
+
+    set_context(newroot, &matches);
+
+    let pstatus = Command::new(command[0])
+        .args(&command[1..])
+        .status()
+        .unwrap_or_else(|e| crash!(1, "Cannot exec: {}", e));
+
+    if pstatus.success() {
+        0
+    } else {
+        pstatus.code().unwrap_or(-1)
+    }
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .version(crate_version!())
         .about(ABOUT)
         .usage(SYNTAX)
-        .arg(Arg::with_name(options::NEWROOT).hidden(true).required(true))
+        .arg(
+            Arg::with_name(options::NEWROOT)
+                .hidden(true)
+                .required(true)
+                .index(1),
+        )
         .arg(
             Arg::with_name(options::USER)
                 .short("u")
@@ -71,59 +133,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 )
                 .value_name("USER:GROUP"),
         )
-        .get_matches_from(args);
-
-    let default_shell: &'static str = "/bin/sh";
-    let default_option: &'static str = "-i";
-    let user_shell = std::env::var("SHELL");
-
-    let newroot: &Path = match matches.value_of(options::NEWROOT) {
-        Some(v) => Path::new(v),
-        None => crash!(
-            1,
-            "Missing operand: NEWROOT\nTry '{} --help' for more information.",
-            NAME
-        ),
-    };
-
-    if !newroot.is_dir() {
-        crash!(
-            1,
-            "cannot change root directory to `{}`: no such directory",
-            newroot.display()
-        );
-    }
-
-    let command: Vec<&str> = match matches.args.len() {
-        1 => {
-            let shell: &str = match user_shell {
-                Err(_) => default_shell,
-                Ok(ref s) => s.as_ref(),
-            };
-            vec![shell, default_option]
-        }
-        _ => {
-            let mut vector: Vec<&str> = Vec::new();
-            for (&k, v) in matches.args.iter() {
-                vector.push(k);
-                vector.push(&v.vals[0].to_str().unwrap());
-            }
-            vector
-        }
-    };
-
-    set_context(&newroot, &matches);
-
-    let pstatus = Command::new(command[0])
-        .args(&command[1..])
-        .status()
-        .unwrap_or_else(|e| crash!(1, "Cannot exec: {}", e));
-
-    if pstatus.success() {
-        0
-    } else {
-        pstatus.code().unwrap_or(-1)
-    }
+        .arg(
+            Arg::with_name(options::COMMAND)
+                .hidden(true)
+                .multiple(true)
+                .index(2),
+        )
 }
 
 fn set_context(root: &Path, options: &clap::ArgMatches) {
@@ -132,7 +147,7 @@ fn set_context(root: &Path, options: &clap::ArgMatches) {
     let group_str = options.value_of(options::GROUP).unwrap_or_default();
     let groups_str = options.value_of(options::GROUPS).unwrap_or_default();
     let userspec = match userspec_str {
-        Some(ref u) => {
+        Some(u) => {
             let s: Vec<&str> = u.split(':').collect();
             if s.len() != 2 || s.iter().any(|&spec| spec.is_empty()) {
                 crash!(1, "invalid userspec: `{}`", u)

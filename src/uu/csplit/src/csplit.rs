@@ -92,7 +92,7 @@ where
     T: BufRead,
 {
     let mut input_iter = InputSplitter::new(input.lines().enumerate());
-    let mut split_writer = SplitWriter::new(&options);
+    let mut split_writer = SplitWriter::new(options);
     let ret = do_csplit(&mut split_writer, patterns, &mut input_iter);
 
     // consume the rest
@@ -711,10 +711,37 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let matches = App::new(executable!())
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+
+    // get the file to split
+    let file_name = matches.value_of(options::FILE).unwrap();
+
+    // get the patterns to split on
+    let patterns: Vec<String> = matches
+        .values_of(options::PATTERN)
+        .unwrap()
+        .map(str::to_string)
+        .collect();
+    let patterns = return_if_err!(1, patterns::get_patterns(&patterns[..]));
+    let options = CsplitOptions::new(&matches);
+    if file_name == "-" {
+        let stdin = io::stdin();
+        crash_if_err!(1, csplit(&options, patterns, stdin.lock()));
+    } else {
+        let file = return_if_err!(1, File::open(file_name));
+        let file_metadata = return_if_err!(1, file.metadata());
+        if !file_metadata.is_file() {
+            crash!(1, "'{}' is not a regular file", file_name);
+        }
+        crash_if_err!(1, csplit(&options, patterns, BufReader::new(file)));
+    };
+    0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .version(crate_version!())
         .about(SUMMARY)
-        .usage(&usage[..])
         .arg(
             Arg::with_name(options::SUFFIX_FORMAT)
                 .short("b")
@@ -768,29 +795,4 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .required(true),
         )
         .after_help(LONG_HELP)
-        .get_matches_from(args);
-
-    // get the file to split
-    let file_name = matches.value_of(options::FILE).unwrap();
-
-    // get the patterns to split on
-    let patterns: Vec<String> = matches
-        .values_of(options::PATTERN)
-        .unwrap()
-        .map(str::to_string)
-        .collect();
-    let patterns = return_if_err!(1, patterns::get_patterns(&patterns[..]));
-    let options = CsplitOptions::new(&matches);
-    if file_name == "-" {
-        let stdin = io::stdin();
-        crash_if_err!(1, csplit(&options, patterns, stdin.lock()));
-    } else {
-        let file = return_if_err!(1, File::open(file_name));
-        let file_metadata = return_if_err!(1, file.metadata());
-        if !file_metadata.is_file() {
-            crash!(1, "'{}' is not a regular file", file_name);
-        }
-        crash_if_err!(1, csplit(&options, patterns, BufReader::new(file)));
-    };
-    0
 }

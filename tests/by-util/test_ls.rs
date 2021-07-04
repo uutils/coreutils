@@ -168,7 +168,7 @@ fn test_ls_width() {
             .ucmd()
             .args(&option.split(' ').collect::<Vec<_>>())
             .fails()
-            .stderr_only("ls: invalid line width: ‘1a’");
+            .stderr_only("ls: invalid line width: '1a'");
     }
 }
 
@@ -398,7 +398,7 @@ fn test_ls_long_formats() {
         .arg("--author")
         .arg("test-long-formats")
         .succeeds();
-    assert!(re_three.is_match(&result.stdout_str()));
+    assert!(re_three.is_match(result.stdout_str()));
 
     #[cfg(unix)]
     {
@@ -701,20 +701,20 @@ fn test_ls_styles() {
         .arg("-l")
         .arg("--time-style=full-iso")
         .succeeds();
-    assert!(re_full.is_match(&result.stdout_str()));
+    assert!(re_full.is_match(result.stdout_str()));
     //long-iso
     let result = scene
         .ucmd()
         .arg("-l")
         .arg("--time-style=long-iso")
         .succeeds();
-    assert!(re_long.is_match(&result.stdout_str()));
+    assert!(re_long.is_match(result.stdout_str()));
     //iso
     let result = scene.ucmd().arg("-l").arg("--time-style=iso").succeeds();
-    assert!(re_iso.is_match(&result.stdout_str()));
+    assert!(re_iso.is_match(result.stdout_str()));
     //locale
     let result = scene.ucmd().arg("-l").arg("--time-style=locale").succeeds();
-    assert!(re_locale.is_match(&result.stdout_str()));
+    assert!(re_locale.is_match(result.stdout_str()));
 
     //Overwrite options tests
     let result = scene
@@ -723,19 +723,19 @@ fn test_ls_styles() {
         .arg("--time-style=long-iso")
         .arg("--time-style=iso")
         .succeeds();
-    assert!(re_iso.is_match(&result.stdout_str()));
+    assert!(re_iso.is_match(result.stdout_str()));
     let result = scene
         .ucmd()
         .arg("--time-style=iso")
         .arg("--full-time")
         .succeeds();
-    assert!(re_full.is_match(&result.stdout_str()));
+    assert!(re_full.is_match(result.stdout_str()));
     let result = scene
         .ucmd()
         .arg("--full-time")
         .arg("--time-style=iso")
         .succeeds();
-    assert!(re_iso.is_match(&result.stdout_str()));
+    assert!(re_iso.is_match(result.stdout_str()));
 
     let result = scene
         .ucmd()
@@ -743,7 +743,7 @@ fn test_ls_styles() {
         .arg("--time-style=iso")
         .arg("--full-time")
         .succeeds();
-    assert!(re_full.is_match(&result.stdout_str()));
+    assert!(re_full.is_match(result.stdout_str()));
 
     let result = scene
         .ucmd()
@@ -751,7 +751,7 @@ fn test_ls_styles() {
         .arg("-x")
         .arg("-l")
         .succeeds();
-    assert!(re_full.is_match(&result.stdout_str()));
+    assert!(re_full.is_match(result.stdout_str()));
 
     at.touch("test2");
     let result = scene.ucmd().arg("--full-time").arg("-x").succeeds();
@@ -1143,7 +1143,7 @@ fn test_ls_indicator_style() {
     for opt in options {
         scene
             .ucmd()
-            .arg(format!("{}", opt))
+            .arg(opt.to_string())
             .succeeds()
             .stdout_contains(&"/");
     }
@@ -2020,4 +2020,29 @@ fn test_ls_path() {
         .arg(path)
         .run()
         .stdout_is(expected_stdout);
+}
+
+#[test]
+fn test_ls_dangling_symlinks() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("temp_dir");
+    at.symlink_file("does_not_exist", "temp_dir/dangle");
+
+    scene.ucmd().arg("-L").arg("temp_dir/dangle").fails();
+    scene.ucmd().arg("-H").arg("temp_dir/dangle").fails();
+
+    scene
+        .ucmd()
+        .arg("temp_dir/dangle")
+        .succeeds()
+        .stdout_contains("dangle");
+
+    scene
+        .ucmd()
+        .arg("-Li")
+        .arg("temp_dir")
+        .succeeds() // this should fail, though at the moment, ls lacks a way to propagate errors encountered during display
+        .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
 }

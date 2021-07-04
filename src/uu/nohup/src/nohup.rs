@@ -19,7 +19,6 @@ use std::fs::{File, OpenOptions};
 use std::io::Error;
 use std::os::unix::prelude::*;
 use std::path::{Path, PathBuf};
-use uucore::fs::{is_stderr_interactive, is_stdin_interactive, is_stdout_interactive};
 use uucore::InvalidEncodingHandling;
 
 static ABOUT: &str = "Run COMMAND ignoring hangup signals.";
@@ -46,19 +45,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
-        .usage(&usage[..])
-        .after_help(LONG_HELP)
-        .arg(
-            Arg::with_name(options::CMD)
-                .hidden(true)
-                .required(true)
-                .multiple(true),
-        )
-        .setting(AppSettings::TrailingVarArg)
-        .get_matches_from(args);
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     replace_fds();
 
@@ -83,8 +70,22 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 }
 
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
+        .after_help(LONG_HELP)
+        .arg(
+            Arg::with_name(options::CMD)
+                .hidden(true)
+                .required(true)
+                .multiple(true),
+        )
+        .setting(AppSettings::TrailingVarArg)
+}
+
 fn replace_fds() {
-    if is_stdin_interactive() {
+    if atty::is(atty::Stream::Stdin) {
         let new_stdin = match File::open(Path::new("/dev/null")) {
             Ok(t) => t,
             Err(e) => crash!(2, "Cannot replace STDIN: {}", e),
@@ -94,7 +95,7 @@ fn replace_fds() {
         }
     }
 
-    if is_stdout_interactive() {
+    if atty::is(atty::Stream::Stdout) {
         let new_stdout = find_stdout();
         let fd = new_stdout.as_raw_fd();
 
@@ -103,7 +104,7 @@ fn replace_fds() {
         }
     }
 
-    if is_stderr_interactive() && unsafe { dup2(1, 2) } != 2 {
+    if atty::is(atty::Stream::Stderr) && unsafe { dup2(1, 2) } != 2 {
         crash!(2, "Cannot replace STDERR: {}", Error::last_os_error())
     }
 }

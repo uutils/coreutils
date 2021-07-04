@@ -103,7 +103,7 @@ fn test_wrap_bad_arg() {
             .arg(wrap_param)
             .arg("b")
             .fails()
-            .stderr_only("base32: Invalid wrap size: ‘b’: invalid digit found in string\n");
+            .stderr_only("base32: Invalid wrap size: 'b': invalid digit found in string\n");
     }
 }
 
@@ -114,7 +114,7 @@ fn test_base32_extra_operand() {
         .arg("a.txt")
         .arg("a.txt")
         .fails()
-        .stderr_only("base32: extra operand ‘a.txt’");
+        .stderr_only("base32: extra operand 'a.txt'");
 }
 
 #[test]

@@ -1,3 +1,8 @@
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
+
 extern crate rand;
 extern crate regex;
 
@@ -284,4 +289,54 @@ fn test_filter_command_fails() {
 
     ucmd.args(&["--filter=/a/path/that/totally/does/not/exist", name])
         .fails();
+}
+
+#[test]
+fn test_split_lines_number() {
+    // Test if stdout/stderr for '--lines' option is correct
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("file");
+
+    scene
+        .ucmd()
+        .args(&["--lines", "2", "file"])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+    scene
+        .ucmd()
+        .args(&["--lines", "2fb", "file"])
+        .fails()
+        .code_is(1)
+        .stderr_only("split: invalid number of lines: '2fb'");
+}
+
+#[test]
+fn test_split_invalid_bytes_size() {
+    new_ucmd!()
+        .args(&["-b", "1024R"])
+        .fails()
+        .code_is(1)
+        .stderr_only("split: invalid number of bytes: '1024R'");
+    #[cfg(not(target_pointer_width = "128"))]
+    new_ucmd!()
+        .args(&["-b", "1Y"])
+        .fails()
+        .code_is(1)
+        .stderr_only("split: invalid number of bytes: '1Y': Value too large for defined data type");
+    #[cfg(target_pointer_width = "32")]
+    {
+        let sizes = ["1000G", "10T"];
+        for size in &sizes {
+            new_ucmd!()
+                .args(&["-b", size])
+                .fails()
+                .code_is(1)
+                .stderr_only(format!(
+                    "split: invalid number of bytes: '{}': Value too large for defined data type",
+                    size
+                ));
+        }
+    }
 }

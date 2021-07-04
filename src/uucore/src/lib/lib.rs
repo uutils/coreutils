@@ -19,17 +19,23 @@ pub extern crate winapi;
 
 //## internal modules
 
-mod macros; // crate macros (macro_rules-type; exported to `crate::...`)
-
 mod features; // feature-gated code modules
+mod macros; // crate macros (macro_rules-type; exported to `crate::...`)
 mod mods; // core cross-platform modules
+mod parser; // string parsing modules
 
 // * cross-platform modules
 pub use crate::mods::backup_control;
 pub use crate::mods::coreopts;
+pub use crate::mods::error;
 pub use crate::mods::os;
 pub use crate::mods::panic;
 pub use crate::mods::ranges;
+pub use crate::mods::version_cmp;
+
+// * string parsing modules
+pub use crate::parser::parse_size;
+pub use crate::parser::parse_time;
 
 // * feature-gated modules
 #[cfg(feature = "encoding")]
@@ -38,8 +44,6 @@ pub use crate::features::encoding;
 pub use crate::features::fs;
 #[cfg(feature = "fsext")]
 pub use crate::features::fsext;
-#[cfg(feature = "parse_time")]
-pub use crate::features::parse_time;
 #[cfg(feature = "ringbuffer")]
 pub use crate::features::ringbuffer;
 #[cfg(feature = "zero-copy")]
@@ -184,7 +188,7 @@ mod tests {
     fn make_os_vec(os_str: &OsStr) -> Vec<OsString> {
         vec![
             OsString::from("test"),
-            OsString::from("สวัสดี"),
+            OsString::from("สวัสดี"), // spell-checker:disable-line
             os_str.to_os_string(),
         ]
     }

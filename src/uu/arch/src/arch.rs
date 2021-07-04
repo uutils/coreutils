@@ -12,18 +12,23 @@ extern crate uucore;
 use platform_info::*;
 
 use clap::{crate_version, App};
+use uucore::error::{FromIo, UResult};
 
 static ABOUT: &str = "Display machine architecture";
 static SUMMARY: &str = "Determine architecture name for current machine.";
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    uu_app().get_matches_from(args);
+
+    let uts = PlatformInfo::new().map_err_context(|| "cannot get system name".to_string())?;
+    println!("{}", uts.machine().trim());
+    Ok(())
+}
+
+pub fn uu_app() -> App<'static, 'static> {
     App::new(executable!())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(SUMMARY)
-        .get_matches_from(args);
-
-    let uts = return_if_err!(1, PlatformInfo::new());
-    println!("{}", uts.machine().trim());
-    0
 }

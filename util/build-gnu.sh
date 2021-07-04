@@ -1,16 +1,16 @@
 #!/bin/bash
 
-# spell-checker:ignore (paths) abmon deref discrim getlimits getopt ginstall gnulib inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW ; (vars/env) BUILDDIR SRCDIR
+# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall gnulib inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW ; (vars/env) BUILDDIR SRCDIR
 
 set -e
 if test ! -d ../gnu; then
     echo "Could not find ../gnu"
-    echo "git clone git@github.com:coreutils/coreutils.git ../gnu"
+    echo "git clone git@github.com:coreutils/coreutils.git gnu"
     exit 1
 fi
 if test ! -d ../gnulib; then
     echo "Could not find ../gnulib"
-    echo "git clone git@github.com:coreutils/gnulib.git ../gnulib"
+    echo "git clone git@github.com:coreutils/gnulib.git gnulib"
     exit 1
 fi
 
@@ -44,7 +44,7 @@ sed -i 's|"\$@|/usr/bin/timeout 600 "\$@|' build-aux/test-driver
 # Change the PATH in the Makefile to test the uutils coreutils instead of the GNU coreutils
 sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${BUILDDIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
 sed -i 's| tr | /usr/bin/tr |' tests/init.sh
-make
+make -j "$(nproc)"
 # Generate the factor tests, so they can be fixed
 # Used to be 36. Reduced to 20 to decrease the log size
 for i in {00..20}
@@ -59,7 +59,7 @@ do
 done
 
 
-grep -rl 'path_prepend_' tests/* | xargs sed -i 's|path_prepend_ ./src||'
+grep -rl 'path_prepend_' tests/* | xargs sed -i 's| path_prepend_ ./src||'
 sed -i -e 's|^seq |/usr/bin/seq |' -e 's|sha1sum |/usr/bin/sha1sum |' tests/factor/t*sh
 
 # Remove tests checking for --version & --help
@@ -94,8 +94,28 @@ sed -i 's|cp |/usr/bin/cp |' tests/mv/hard-2.sh
 sed -i 's|paste |/usr/bin/paste |' tests/misc/od-endian.sh
 sed -i 's|seq |/usr/bin/seq |' tests/misc/sort-discrim.sh
 
-#Add specific timeout to tests that currently hang to limit time spent waiting
+# Add specific timeout to tests that currently hang to limit time spent waiting
 sed -i 's|seq \$|/usr/bin/timeout 0.1 seq \$|' tests/misc/seq-precision.sh tests/misc/seq-long-double.sh
 sed -i 's|cat |/usr/bin/timeout 0.1 cat |' tests/misc/cat-self.sh
+
+
+# Remove dup of /usr/bin/ when executed several times
+grep -rl '/usr/bin//usr/bin/' tests/* | xargs --no-run-if-empty sed -i 's|/usr/bin//usr/bin/|/usr/bin/|g'
+
+
+#### Adjust tests to make them work with Rust/coreutils
+# in some cases, what we are doing in rust/coreutils is good (or better)
+# we should not regress our project just to match what GNU is going.
+# So, do some changes on the fly
+
+sed -i -e "s|rm: cannot remove 'e/slink'|rm: cannot remove 'e'|g" tests/rm/fail-eacces.sh
+
+sed -i -e "s|rm: cannot remove 'a/b/file'|rm: cannot remove 'a'|g" tests/rm/cycle.sh
+
+sed -i -e "s|rm: cannot remove directory 'b/a/p'|rm: cannot remove 'b'|g" tests/rm/rm1.sh
+
+sed -i -e "s|rm: cannot remove 'a/1'|rm: cannot remove 'a'|g" tests/rm/rm2.sh
+
+sed -i -e "s|removed directory 'a/'|removed directory 'a'|g" tests/rm/v-slash.sh
 
 test -f "${BUILDDIR}/getlimits" || cp src/getlimits "${BUILDDIR}"
