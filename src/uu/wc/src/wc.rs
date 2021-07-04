@@ -4,6 +4,8 @@
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
+// clippy bug https://github.com/rust-lang/rust-clippy/issues/7422
+#![allow(clippy::nonstandard_macro_braces)]
 
 #[macro_use]
 extern crate uucore;
