@@ -251,25 +251,47 @@ hello
 }
 
 #[test]
+fn test_bad_utf8() {
+    let bytes: &[u8] = b"\xfc\x80\x80\x80\x80\xaf";
+    new_ucmd!()
+        .args(&["-c", "6"])
+        .pipe_in(bytes)
+        .succeeds()
+        .stdout_is_bytes(bytes);
+}
+
+#[test]
+fn test_bad_utf8_lines() {
+    let input: &[u8] =
+        b"\xfc\x80\x80\x80\x80\xaf\nb\xfc\x80\x80\x80\x80\xaf\nb\xfc\x80\x80\x80\x80\xaf";
+    let output = b"\xfc\x80\x80\x80\x80\xaf\nb\xfc\x80\x80\x80\x80\xaf\n";
+    new_ucmd!()
+        .args(&["-n", "2"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is_bytes(output);
+}
+
+#[test]
 fn test_head_invalid_num() {
     new_ucmd!()
         .args(&["-c", "1024R", "emptyfile.txt"])
         .fails()
-        .stderr_is("head: invalid number of bytes: ‘1024R’");
+        .stderr_is("head: invalid number of bytes: '1024R'");
     new_ucmd!()
         .args(&["-n", "1024R", "emptyfile.txt"])
         .fails()
-        .stderr_is("head: invalid number of lines: ‘1024R’");
+        .stderr_is("head: invalid number of lines: '1024R'");
     #[cfg(not(target_pointer_width = "128"))]
     new_ucmd!()
         .args(&["-c", "1Y", "emptyfile.txt"])
         .fails()
-        .stderr_is("head: invalid number of bytes: ‘1Y’: Value too large for defined data type");
+        .stderr_is("head: invalid number of bytes: '1Y': Value too large for defined data type");
     #[cfg(not(target_pointer_width = "128"))]
     new_ucmd!()
         .args(&["-n", "1Y", "emptyfile.txt"])
         .fails()
-        .stderr_is("head: invalid number of lines: ‘1Y’: Value too large for defined data type");
+        .stderr_is("head: invalid number of lines: '1Y': Value too large for defined data type");
     #[cfg(target_pointer_width = "32")]
     {
         let sizes = ["1000G", "10T"];
@@ -279,7 +301,7 @@ fn test_head_invalid_num() {
                 .fails()
                 .code_is(1)
                 .stderr_only(format!(
-                    "head: invalid number of bytes: ‘{}’: Value too large for defined data type",
+                    "head: invalid number of bytes: '{}': Value too large for defined data type",
                     size
                 ));
         }

@@ -13,11 +13,11 @@
 //  http://www.opensource.apple.com/source/shell_cmds/shell_cmds-118/id/id.c
 //
 // * This was partially rewritten in order for stdout/stderr/exit_code
-//   to be conform with GNU coreutils (8.32) testsuite for `id`.
+//   to be conform with GNU coreutils (8.32) test suite for `id`.
 //
 // * This supports multiple users (a feature that was introduced in coreutils 8.31)
 //
-// * This passes GNU's coreutils Testsuite (8.32)
+// * This passes GNU's coreutils Test suite (8.32)
 //   for "tests/id/uid.sh" and "tests/id/zero/sh".
 //
 // * Option '--zero' does not exist for BSD's `id`, therefore '--zero' is only
@@ -26,7 +26,7 @@
 // * Help text based on BSD's `id` manpage and GNU's `id` manpage.
 //
 
-// spell-checker:ignore (ToDO) asid auditid auditinfo auid cstr egid emod euid getaudit getlogin gflag nflag pline rflag termid uflag gsflag zflag cflag testsuite
+// spell-checker:ignore (ToDO) asid auditid auditinfo auid cstr egid emod euid getaudit getlogin gflag nflag pline rflag termid uflag gsflag zflag cflag
 
 #![allow(non_camel_case_types)]
 #![allow(dead_code)]
@@ -119,109 +119,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let after_help = get_description();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = uu_app()
         .usage(&usage[..])
         .after_help(&after_help[..])
-        .arg(
-            Arg::with_name(options::OPT_AUDIT)
-                .short("A")
-                .conflicts_with_all(&[
-                    options::OPT_GROUP,
-                    options::OPT_EFFECTIVE_USER,
-                    options::OPT_HUMAN_READABLE,
-                    options::OPT_PASSWORD,
-                    options::OPT_GROUPS,
-                    options::OPT_ZERO,
-                ])
-                .help(
-                    "Display the process audit user ID and other process audit properties,\n\
-                      which requires privilege (not available on Linux).",
-                ),
-        )
-        .arg(
-            Arg::with_name(options::OPT_EFFECTIVE_USER)
-                .short("u")
-                .long(options::OPT_EFFECTIVE_USER)
-                .conflicts_with(options::OPT_GROUP)
-                .help("Display only the effective user ID as a number."),
-        )
-        .arg(
-            Arg::with_name(options::OPT_GROUP)
-                .short("g")
-                .long(options::OPT_GROUP)
-                .conflicts_with(options::OPT_EFFECTIVE_USER)
-                .help("Display only the effective group ID as a number"),
-        )
-        .arg(
-            Arg::with_name(options::OPT_GROUPS)
-                .short("G")
-                .long(options::OPT_GROUPS)
-                .conflicts_with_all(&[
-                    options::OPT_GROUP,
-                    options::OPT_EFFECTIVE_USER,
-                    options::OPT_CONTEXT,
-                    options::OPT_HUMAN_READABLE,
-                    options::OPT_PASSWORD,
-                    options::OPT_AUDIT,
-                ])
-                .help(
-                    "Display only the different group IDs as white-space separated numbers, \
-                      in no particular order.",
-                ),
-        )
-        .arg(
-            Arg::with_name(options::OPT_HUMAN_READABLE)
-                .short("p")
-                .help("Make the output human-readable. Each display is on a separate line."),
-        )
-        .arg(
-            Arg::with_name(options::OPT_NAME)
-                .short("n")
-                .long(options::OPT_NAME)
-                .help(
-                    "Display the name of the user or group ID for the -G, -g and -u options \
-                      instead of the number.\nIf any of the ID numbers cannot be mapped into \
-                      names, the number will be displayed as usual.",
-                ),
-        )
-        .arg(
-            Arg::with_name(options::OPT_PASSWORD)
-                .short("P")
-                .help("Display the id as a password file entry."),
-        )
-        .arg(
-            Arg::with_name(options::OPT_REAL_ID)
-                .short("r")
-                .long(options::OPT_REAL_ID)
-                .help(
-                    "Display the real ID for the -G, -g and -u options instead of \
-                      the effective ID.",
-                ),
-        )
-        .arg(
-            Arg::with_name(options::OPT_ZERO)
-                .short("z")
-                .long(options::OPT_ZERO)
-                .help(
-                    "delimit entries with NUL characters, not whitespace;\n\
-                      not permitted in default format",
-                ),
-        )
-        .arg(
-            Arg::with_name(options::OPT_CONTEXT)
-                .short("Z")
-                .long(options::OPT_CONTEXT)
-                .conflicts_with_all(&[options::OPT_GROUP, options::OPT_EFFECTIVE_USER])
-                .help("print only the security context of the process"),
-        )
-        .arg(
-            Arg::with_name(options::ARG_USERS)
-                .multiple(true)
-                .takes_value(true)
-                .value_name(options::ARG_USERS),
-        )
         .get_matches_from(args);
 
     let users: Vec<String> = matches
@@ -255,7 +155,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         crash!(1, "cannot print only names or real IDs in default format");
     }
     if state.zflag && default_format && !state.cflag {
-        // NOTE: GNU testsuite "id/zero.sh" needs this stderr output:
+        // NOTE: GNU test suite "id/zero.sh" needs this stderr output:
         crash!(1, "option --zero not permitted in default format");
     }
     if state.user_specified && state.cflag {
@@ -302,7 +202,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             match Passwd::locate(users[i].as_str()) {
                 Ok(p) => Some(p),
                 Err(_) => {
-                    show_error!("‘{}’: no such user", users[i]);
+                    show_error!("'{}': no such user", users[i]);
                     exit_code = 1;
                     if i + 1 >= users.len() {
                         break;
@@ -416,6 +316,110 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     exit_code
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
+        .arg(
+            Arg::with_name(options::OPT_AUDIT)
+                .short("A")
+                .conflicts_with_all(&[
+                    options::OPT_GROUP,
+                    options::OPT_EFFECTIVE_USER,
+                    options::OPT_HUMAN_READABLE,
+                    options::OPT_PASSWORD,
+                    options::OPT_GROUPS,
+                    options::OPT_ZERO,
+                ])
+                .help(
+                    "Display the process audit user ID and other process audit properties,\n\
+                      which requires privilege (not available on Linux).",
+                ),
+        )
+        .arg(
+            Arg::with_name(options::OPT_EFFECTIVE_USER)
+                .short("u")
+                .long(options::OPT_EFFECTIVE_USER)
+                .conflicts_with(options::OPT_GROUP)
+                .help("Display only the effective user ID as a number."),
+        )
+        .arg(
+            Arg::with_name(options::OPT_GROUP)
+                .short("g")
+                .long(options::OPT_GROUP)
+                .conflicts_with(options::OPT_EFFECTIVE_USER)
+                .help("Display only the effective group ID as a number"),
+        )
+        .arg(
+            Arg::with_name(options::OPT_GROUPS)
+                .short("G")
+                .long(options::OPT_GROUPS)
+                .conflicts_with_all(&[
+                    options::OPT_GROUP,
+                    options::OPT_EFFECTIVE_USER,
+                    options::OPT_CONTEXT,
+                    options::OPT_HUMAN_READABLE,
+                    options::OPT_PASSWORD,
+                    options::OPT_AUDIT,
+                ])
+                .help(
+                    "Display only the different group IDs as white-space separated numbers, \
+                      in no particular order.",
+                ),
+        )
+        .arg(
+            Arg::with_name(options::OPT_HUMAN_READABLE)
+                .short("p")
+                .help("Make the output human-readable. Each display is on a separate line."),
+        )
+        .arg(
+            Arg::with_name(options::OPT_NAME)
+                .short("n")
+                .long(options::OPT_NAME)
+                .help(
+                    "Display the name of the user or group ID for the -G, -g and -u options \
+                      instead of the number.\nIf any of the ID numbers cannot be mapped into \
+                      names, the number will be displayed as usual.",
+                ),
+        )
+        .arg(
+            Arg::with_name(options::OPT_PASSWORD)
+                .short("P")
+                .help("Display the id as a password file entry."),
+        )
+        .arg(
+            Arg::with_name(options::OPT_REAL_ID)
+                .short("r")
+                .long(options::OPT_REAL_ID)
+                .help(
+                    "Display the real ID for the -G, -g and -u options instead of \
+                      the effective ID.",
+                ),
+        )
+        .arg(
+            Arg::with_name(options::OPT_ZERO)
+                .short("z")
+                .long(options::OPT_ZERO)
+                .help(
+                    "delimit entries with NUL characters, not whitespace;\n\
+                      not permitted in default format",
+                ),
+        )
+        .arg(
+            Arg::with_name(options::OPT_CONTEXT)
+                .short("Z")
+                .long(options::OPT_CONTEXT)
+                .conflicts_with_all(&[options::OPT_GROUP, options::OPT_EFFECTIVE_USER])
+                .help("print only the security context of the process"),
+        )
+        .arg(
+            Arg::with_name(options::ARG_USERS)
+                .multiple(true)
+                .takes_value(true)
+                .value_name(options::ARG_USERS),
+        )
 }
 
 fn pretty(possible_pw: Option<Passwd>) {

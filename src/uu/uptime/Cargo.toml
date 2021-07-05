@@ -16,7 +16,7 @@ path = "src/uptime.rs"
 
 [dependencies]
 chrono = "0.4"
-clap = "2.33"
+clap = { version = "2.33", features = ["wrap_help"] }
 uucore = { version=">=0.0.8", package="uucore", path="../../uucore", features=["libc", "utmpx"] }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 

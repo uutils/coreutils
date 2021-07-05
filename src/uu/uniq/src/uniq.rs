@@ -238,11 +238,52 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let long_usage = get_long_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = uu_app()
         .usage(&usage[..])
         .after_help(&long_usage[..])
+        .get_matches_from(args);
+
+    let files: Vec<String> = matches
+        .values_of(ARG_FILES)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
+
+    let (in_file_name, out_file_name) = match files.len() {
+        0 => ("-".to_owned(), "-".to_owned()),
+        1 => (files[0].clone(), "-".to_owned()),
+        2 => (files[0].clone(), files[1].clone()),
+        _ => {
+            // Cannot happen as clap will fail earlier
+            crash!(1, "Extra operand: {}", files[2]);
+        }
+    };
+
+    let uniq = Uniq {
+        repeats_only: matches.is_present(options::REPEATED)
+            || matches.is_present(options::ALL_REPEATED),
+        uniques_only: matches.is_present(options::UNIQUE),
+        all_repeated: matches.is_present(options::ALL_REPEATED)
+            || matches.is_present(options::GROUP),
+        delimiters: get_delimiter(&matches),
+        show_counts: matches.is_present(options::COUNT),
+        skip_fields: opt_parsed(options::SKIP_FIELDS, &matches),
+        slice_start: opt_parsed(options::SKIP_CHARS, &matches),
+        slice_stop: opt_parsed(options::CHECK_CHARS, &matches),
+        ignore_case: matches.is_present(options::IGNORE_CASE),
+        zero_terminated: matches.is_present(options::ZERO_TERMINATED),
+    };
+    uniq.print_uniq(
+        &mut open_input_file(in_file_name),
+        &mut open_output_file(out_file_name),
+    );
+
+    0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
         .arg(
             Arg::with_name(options::ALL_REPEATED)
                 .short("D")
@@ -329,43 +370,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .takes_value(true)
                 .max_values(2),
         )
-        .get_matches_from(args);
-
-    let files: Vec<String> = matches
-        .values_of(ARG_FILES)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_default();
-
-    let (in_file_name, out_file_name) = match files.len() {
-        0 => ("-".to_owned(), "-".to_owned()),
-        1 => (files[0].clone(), "-".to_owned()),
-        2 => (files[0].clone(), files[1].clone()),
-        _ => {
-            // Cannot happen as clap will fail earlier
-            crash!(1, "Extra operand: {}", files[2]);
-        }
-    };
-
-    let uniq = Uniq {
-        repeats_only: matches.is_present(options::REPEATED)
-            || matches.is_present(options::ALL_REPEATED),
-        uniques_only: matches.is_present(options::UNIQUE),
-        all_repeated: matches.is_present(options::ALL_REPEATED)
-            || matches.is_present(options::GROUP),
-        delimiters: get_delimiter(&matches),
-        show_counts: matches.is_present(options::COUNT),
-        skip_fields: opt_parsed(options::SKIP_FIELDS, &matches),
-        slice_start: opt_parsed(options::SKIP_CHARS, &matches),
-        slice_stop: opt_parsed(options::CHECK_CHARS, &matches),
-        ignore_case: matches.is_present(options::IGNORE_CASE),
-        zero_terminated: matches.is_present(options::ZERO_TERMINATED),
-    };
-    uniq.print_uniq(
-        &mut open_input_file(in_file_name),
-        &mut open_output_file(out_file_name),
-    );
-
-    0
 }
 
 fn get_delimiter(matches: &ArgMatches) -> Delimiters {

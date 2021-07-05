@@ -8,12 +8,18 @@
 
 // spell-checker:ignore (paths) GPGHome
 
+// clippy bug https://github.com/rust-lang/rust-clippy/issues/7422
+#![allow(clippy::nonstandard_macro_braces)]
+
 #[macro_use]
 extern crate uucore;
 
 use clap::{crate_version, App, Arg};
+use uucore::error::{FromIo, UCustomError, UResult};
 
 use std::env;
+use std::error::Error;
+use std::fmt::Display;
 use std::iter;
 use std::path::{is_separator, PathBuf};
 
@@ -37,13 +43,103 @@ fn get_usage() -> String {
     format!("{0} [OPTION]... [TEMPLATE]", executable!())
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[derive(Debug)]
+enum MkTempError {
+    PersistError(PathBuf),
+    MustEndInX(String),
+    TooFewXs(String),
+    ContainsDirSeparator(String),
+    InvalidTemplate(String),
+}
+
+impl UCustomError for MkTempError {}
+
+impl Error for MkTempError {}
+
+impl Display for MkTempError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use MkTempError::*;
+        match self {
+            PersistError(p) => write!(f, "could not persist file '{}'", p.display()),
+            MustEndInX(s) => write!(f, "with --suffix, template '{}' must end in X", s),
+            TooFewXs(s) => write!(f, "too few X's in template '{}'", s),
+            ContainsDirSeparator(s) => {
+                write!(f, "invalid suffix '{}', contains directory separator", s)
+            }
+            InvalidTemplate(s) => write!(
+                f,
+                "invalid template, '{}'; with --tmpdir, it may not be absolute",
+                s
+            ),
+        }
+    }
+}
+
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+
+    let template = matches.value_of(ARG_TEMPLATE).unwrap();
+    let tmpdir = matches.value_of(OPT_TMPDIR).unwrap_or_default();
+
+    let (template, mut tmpdir) = if matches.is_present(OPT_TMPDIR)
+        && !PathBuf::from(tmpdir).is_dir() // if a temp dir is provided, it must be an actual path
+        && tmpdir.contains("XXX")
+    // If this is a template, it has to contain at least 3 X
+        && template == DEFAULT_TEMPLATE
+    // That means that clap does not think we provided a template
+    {
+        // Special case to workaround a limitation of clap when doing
+        // mktemp --tmpdir apt-key-gpghome.XXX
+        // The behavior should be
+        // mktemp --tmpdir $TMPDIR apt-key-gpghome.XX
+        // As --tmpdir is empty
+        //
+        // Fixed in clap 3
+        // See https://github.com/clap-rs/clap/pull/1587
+        let tmp = env::temp_dir();
+        (tmpdir, tmp)
+    } else if !matches.is_present(OPT_TMPDIR) {
+        let tmp = env::temp_dir();
+        (template, tmp)
+    } else {
+        (template, PathBuf::from(tmpdir))
+    };
+
+    let make_dir = matches.is_present(OPT_DIRECTORY);
+    let dry_run = matches.is_present(OPT_DRY_RUN);
+    let suppress_file_err = matches.is_present(OPT_QUIET);
+
+    let (prefix, rand, suffix) = parse_template(template, matches.value_of(OPT_SUFFIX))?;
+
+    if matches.is_present(OPT_TMPDIR) && PathBuf::from(prefix).is_absolute() {
+        return Err(MkTempError::InvalidTemplate(template.into()).into());
+    }
+
+    if matches.is_present(OPT_T) {
+        tmpdir = env::temp_dir()
+    }
+
+    let res = if dry_run {
+        dry_exec(tmpdir, prefix, rand, suffix)
+    } else {
+        exec(tmpdir, prefix, rand, suffix, make_dir)
+    };
+
+    if suppress_file_err {
+        // Mapping all UErrors to ExitCodes prevents the errors from being printed
+        res.map_err(|e| e.code().into())
+    } else {
+        res
+    }
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .version(crate_version!())
         .about(ABOUT)
-        .usage(&usage[..])
         .arg(
             Arg::with_name(OPT_DIRECTORY)
                 .short("d")
@@ -77,14 +173,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(OPT_TMPDIR)
                 .help(
                     "interpret TEMPLATE relative to DIR; if DIR is not specified, use \
-                     $TMPDIR if set, else /tmp. With this option, TEMPLATE must not \
+                     $TMPDIR ($TMP on windows) if set, else /tmp. With this option, TEMPLATE must not \
                      be an absolute name; unlike with -t, TEMPLATE may contain \
                      slashes, but mktemp creates only the final component",
                 )
                 .value_name("DIR"),
         )
         .arg(Arg::with_name(OPT_T).short(OPT_T).help(
-            "Generate a template (using the supplied prefix and TMPDIR if set) \
+            "Generate a template (using the supplied prefix and TMPDIR (TMP on windows) if set) \
              to create a filename template [deprecated]",
         ))
         .arg(
@@ -94,96 +190,42 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .max_values(1)
                 .default_value(DEFAULT_TEMPLATE),
         )
-        .get_matches_from(args);
-
-    let template = matches.value_of(ARG_TEMPLATE).unwrap();
-    let tmpdir = matches.value_of(OPT_TMPDIR).unwrap_or_default();
-
-    let (template, mut tmpdir) = if matches.is_present(OPT_TMPDIR)
-        && !PathBuf::from(tmpdir).is_dir() // if a temp dir is provided, it must be an actual path
-        && tmpdir.contains("XXX")
-    // If this is a template, it has to contain at least 3 X
-        && template == DEFAULT_TEMPLATE
-    // That means that clap does not think we provided a template
-    {
-        // Special case to workaround a limitation of clap when doing
-        // mktemp --tmpdir apt-key-gpghome.XXX
-        // The behavior should be
-        // mktemp --tmpdir $TMPDIR apt-key-gpghome.XX
-        // As --tmpdir is empty
-        //
-        // Fixed in clap 3
-        // See https://github.com/clap-rs/clap/pull/1587
-        let tmp = env::temp_dir();
-        (tmpdir, tmp)
-    } else if !matches.is_present(OPT_TMPDIR) {
-        let tmp = env::temp_dir();
-        (template, tmp)
-    } else {
-        (template, PathBuf::from(tmpdir))
-    };
-
-    let make_dir = matches.is_present(OPT_DIRECTORY);
-    let dry_run = matches.is_present(OPT_DRY_RUN);
-    let suppress_file_err = matches.is_present(OPT_QUIET);
-
-    let (prefix, rand, suffix) = match parse_template(template) {
-        Some((p, r, s)) => match matches.value_of(OPT_SUFFIX) {
-            Some(suf) => {
-                if s.is_empty() {
-                    (p, r, suf)
-                } else {
-                    crash!(
-                        1,
-                        "Template should end with 'X' when you specify suffix option."
-                    )
-                }
-            }
-            None => (p, r, s),
-        },
-        None => ("", 0, ""),
-    };
-
-    if rand < 3 {
-        crash!(1, "Too few 'X's in template")
-    }
-
-    if suffix.chars().any(is_separator) {
-        crash!(1, "suffix cannot contain any path separators");
-    }
-
-    if matches.is_present(OPT_TMPDIR) && PathBuf::from(prefix).is_absolute() {
-        show_error!(
-            "invalid template, ‘{}’; with --tmpdir, it may not be absolute",
-            template
-        );
-        return 1;
-    };
-
-    if matches.is_present(OPT_T) {
-        tmpdir = env::temp_dir()
-    };
-
-    if dry_run {
-        dry_exec(tmpdir, prefix, rand, suffix)
-    } else {
-        exec(tmpdir, prefix, rand, suffix, make_dir, suppress_file_err)
-    }
 }
 
-fn parse_template(temp: &str) -> Option<(&str, usize, &str)> {
+fn parse_template<'a>(
+    temp: &'a str,
+    suffix: Option<&'a str>,
+) -> UResult<(&'a str, usize, &'a str)> {
     let right = match temp.rfind('X') {
         Some(r) => r + 1,
-        None => return None,
+        None => return Err(MkTempError::TooFewXs(temp.into()).into()),
     };
     let left = temp[..right].rfind(|c| c != 'X').map_or(0, |i| i + 1);
     let prefix = &temp[..left];
     let rand = right - left;
-    let suffix = &temp[right..];
-    Some((prefix, rand, suffix))
+
+    if rand < 3 {
+        return Err(MkTempError::TooFewXs(temp.into()).into());
+    }
+
+    let mut suf = &temp[right..];
+
+    if let Some(s) = suffix {
+        if suf.is_empty() {
+            suf = s;
+        } else {
+            return Err(MkTempError::MustEndInX(temp.into()).into());
+        }
+    };
+
+    if suf.chars().any(is_separator) {
+        return Err(MkTempError::ContainsDirSeparator(suf.into()).into());
+    }
+
+    Ok((prefix, rand, suf))
 }
 
-pub fn dry_exec(mut tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str) -> i32 {
+pub fn dry_exec(mut tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str) -> UResult<()> {
     let len = prefix.len() + suffix.len() + rand;
     let mut buf = String::with_capacity(len);
     buf.push_str(prefix);
@@ -206,51 +248,35 @@ pub fn dry_exec(mut tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str) ->
     }
     tmpdir.push(buf);
     println!("{}", tmpdir.display());
-    0
+    Ok(())
 }
 
-fn exec(dir: PathBuf, prefix: &str, rand: usize, suffix: &str, make_dir: bool, quiet: bool) -> i32 {
-    let res = if make_dir {
-        let tmpdir = Builder::new()
-            .prefix(prefix)
-            .rand_bytes(rand)
-            .suffix(suffix)
-            .tempdir_in(&dir);
-
-        // `into_path` consumes the TempDir without removing it
-        tmpdir.map(|d| d.into_path().to_string_lossy().to_string())
-    } else {
-        let tmpfile = Builder::new()
-            .prefix(prefix)
-            .rand_bytes(rand)
-            .suffix(suffix)
-            .tempfile_in(&dir);
-
-        match tmpfile {
-            Ok(f) => {
-                // `keep` ensures that the file is not deleted
-                match f.keep() {
-                    Ok((_, p)) => Ok(p.to_string_lossy().to_string()),
-                    Err(e) => {
-                        show_error!("'{}': {}", dir.display(), e);
-                        return 1;
-                    }
-                }
-            }
-            Err(x) => Err(x),
-        }
+fn exec(dir: PathBuf, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> UResult<()> {
+    let context = || {
+        format!(
+            "failed to create file via template '{}{}{}'",
+            prefix,
+            "X".repeat(rand),
+            suffix
+        )
     };
 
-    match res {
-        Ok(ref f) => {
-            println!("{}", f);
-            0
-        }
-        Err(e) => {
-            if !quiet {
-                show_error!("{}: {}", e, dir.display());
-            }
-            1
-        }
-    }
+    let mut builder = Builder::new();
+    builder.prefix(prefix).rand_bytes(rand).suffix(suffix);
+
+    let path = if make_dir {
+        builder
+            .tempdir_in(&dir)
+            .map_err_context(context)?
+            .into_path() // `into_path` consumes the TempDir without removing it
+    } else {
+        builder
+            .tempfile_in(&dir)
+            .map_err_context(context)?
+            .keep() // `keep` ensures that the file is not deleted
+            .map_err(|e| MkTempError::PersistError(e.file.path().to_path_buf()))?
+            .1
+    };
+    println!("{}", path.display());
+    Ok(())
 }

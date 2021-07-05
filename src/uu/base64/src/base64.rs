@@ -10,6 +10,7 @@
 extern crate uucore;
 
 use uu_base32::base_common;
+pub use uu_base32::uu_app;
 
 use uucore::encoding::Format;
 

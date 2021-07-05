@@ -30,16 +30,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .usage(USAGE)
-        .about(SUMMARY)
-        .arg(
-            Arg::with_name(options::FILE)
-                .default_value("-")
-                .hidden(true),
-        )
-        .get_matches_from(args);
+    let matches = uu_app().get_matches_from(args);
 
     let input = matches
         .value_of(options::FILE)
@@ -96,6 +87,18 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .usage(USAGE)
+        .about(SUMMARY)
+        .arg(
+            Arg::with_name(options::FILE)
+                .default_value("-")
+                .hidden(true),
+        )
 }
 
 // We use String as a representation of node here

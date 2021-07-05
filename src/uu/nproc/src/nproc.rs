@@ -33,24 +33,7 @@ fn get_usage() -> String {
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
-        .usage(&usage[..])
-        .arg(
-            Arg::with_name(OPT_ALL)
-                .short("")
-                .long(OPT_ALL)
-                .help("print the number of cores available to the system"),
-        )
-        .arg(
-            Arg::with_name(OPT_IGNORE)
-                .short("")
-                .long(OPT_IGNORE)
-                .takes_value(true)
-                .help("ignore up to N cores"),
-        )
-        .get_matches_from(args);
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     let mut ignore = match matches.value_of(OPT_IGNORE) {
         Some(numstr) => match numstr.parse() {
@@ -84,6 +67,25 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
     println!("{}", cores);
     0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
+        .arg(
+            Arg::with_name(OPT_ALL)
+                .short("")
+                .long(OPT_ALL)
+                .help("print the number of cores available to the system"),
+        )
+        .arg(
+            Arg::with_name(OPT_IGNORE)
+                .short("")
+                .long(OPT_IGNORE)
+                .takes_value(true)
+                .help("ignore up to N cores"),
+        )
 }
 
 #[cfg(any(

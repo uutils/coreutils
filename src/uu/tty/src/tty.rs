@@ -33,19 +33,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
-        .usage(&usage[..])
-        .arg(
-            Arg::with_name(options::SILENT)
-                .long(options::SILENT)
-                .visible_alias("quiet")
-                .short("s")
-                .help("print nothing, only return an exit status")
-                .required(false),
-        )
-        .get_matches_from_safe(args);
+    let matches = uu_app().usage(&usage[..]).get_matches_from_safe(args);
 
     let matches = match matches {
         Ok(m) => m,
@@ -87,4 +75,18 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     } else {
         libc::EXIT_FAILURE
     }
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
+        .arg(
+            Arg::with_name(options::SILENT)
+                .long(options::SILENT)
+                .visible_alias("quiet")
+                .short("s")
+                .help("print nothing, only return an exit status")
+                .required(false),
+        )
 }

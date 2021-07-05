@@ -8,7 +8,7 @@
 //! Check if a file is ordered
 
 use crate::{
-    chunks::{self, Chunk},
+    chunks::{self, Chunk, RecycledChunk},
     compare_by, open, GlobalSettings,
 };
 use itertools::Itertools;
@@ -34,7 +34,7 @@ pub fn check(path: &str, settings: &GlobalSettings) -> i32 {
         move || reader(file, recycled_receiver, loaded_sender, &settings)
     });
     for _ in 0..2 {
-        let _ = recycled_sender.send(Chunk::new(vec![0; 100 * 1024], |_| Vec::new()));
+        let _ = recycled_sender.send(RecycledChunk::new(100 * 1024));
     }
 
     let mut prev_chunk: Option<Chunk> = None;
@@ -44,21 +44,29 @@ pub fn check(path: &str, settings: &GlobalSettings) -> i32 {
         if let Some(prev_chunk) = prev_chunk.take() {
             // Check if the first element of the new chunk is greater than the last
             // element from the previous chunk
-            let prev_last = prev_chunk.borrow_lines().last().unwrap();
-            let new_first = chunk.borrow_lines().first().unwrap();
+            let prev_last = prev_chunk.lines().last().unwrap();
+            let new_first = chunk.lines().first().unwrap();
 
-            if compare_by(prev_last, new_first, settings) == Ordering::Greater {
+            if compare_by(
+                prev_last,
+                new_first,
+                settings,
+                prev_chunk.line_data(),
+                chunk.line_data(),
+            ) == Ordering::Greater
+            {
                 if !settings.check_silent {
                     println!("sort: {}:{}: disorder: {}", path, line_idx, new_first.line);
                 }
                 return 1;
             }
-            let _ = recycled_sender.send(prev_chunk);
+            let _ = recycled_sender.send(prev_chunk.recycle());
         }
 
-        for (a, b) in chunk.borrow_lines().iter().tuple_windows() {
+        for (a, b) in chunk.lines().iter().tuple_windows() {
             line_idx += 1;
-            if compare_by(a, b, settings) == Ordering::Greater {
+            if compare_by(a, b, settings, chunk.line_data(), chunk.line_data()) == Ordering::Greater
+            {
                 if !settings.check_silent {
                     println!("sort: {}:{}: disorder: {}", path, line_idx, b.line);
                 }
@@ -74,16 +82,15 @@ pub fn check(path: &str, settings: &GlobalSettings) -> i32 {
 /// The function running on the reader thread.
 fn reader(
     mut file: Box<dyn Read + Send>,
-    receiver: Receiver<Chunk>,
+    receiver: Receiver<RecycledChunk>,
     sender: SyncSender<Chunk>,
     settings: &GlobalSettings,
 ) {
     let mut carry_over = vec![];
-    for chunk in receiver.iter() {
-        let (recycled_lines, recycled_buffer) = chunk.recycle();
+    for recycled_chunk in receiver.iter() {
         let should_continue = chunks::read(
             &sender,
-            recycled_buffer,
+            recycled_chunk,
             None,
             &mut carry_over,
             &mut file,
@@ -93,7 +100,6 @@ fn reader(
             } else {
                 b'\n'
             },
-            recycled_lines,
             settings,
         );
         if !should_continue {

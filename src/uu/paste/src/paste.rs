@@ -37,7 +37,22 @@ fn read_line<R: Read>(
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let matches = App::new(executable!())
+    let matches = uu_app().get_matches_from(args);
+
+    let serial = matches.is_present(options::SERIAL);
+    let delimiters = matches.value_of(options::DELIMITER).unwrap().to_owned();
+    let files = matches
+        .values_of(options::FILE)
+        .unwrap()
+        .map(|s| s.to_owned())
+        .collect();
+    paste(files, serial, delimiters);
+
+    0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .version(crate_version!())
         .about(ABOUT)
         .arg(
@@ -61,18 +76,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .multiple(true)
                 .default_value("-"),
         )
-        .get_matches_from(args);
-
-    let serial = matches.is_present(options::SERIAL);
-    let delimiters = matches.value_of(options::DELIMITER).unwrap().to_owned();
-    let files = matches
-        .values_of(options::FILE)
-        .unwrap()
-        .map(|s| s.to_owned())
-        .collect();
-    paste(files, serial, delimiters);
-
-    0
 }
 
 fn paste(filenames: Vec<String>, serial: bool, delimiters: String) {

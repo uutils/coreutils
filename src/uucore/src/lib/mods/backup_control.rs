@@ -37,6 +37,19 @@ pub fn determine_backup_suffix(supplied_suffix: Option<&str>) -> String {
     }
 }
 
+/// # TODO
+///
+/// This function currently deviates slightly from how the [manual][1] describes
+/// that it should work. In particular, the current implementation:
+///
+/// 1. Doesn't strictly respect the order in which to determine the backup type,
+///    which is (in order of precedence)
+///     1. Take a valid value to the '--backup' option
+///     2. Take the value of the `VERSION_CONTROL` env var
+///     3. default to 'existing'
+/// 2. Doesn't accept abbreviations to the 'backup_option' parameter
+///
+/// [1]: https://www.gnu.org/software/coreutils/manual/html_node/Backup-options.html
 pub fn determine_backup_mode(backup_opt_exists: bool, backup_opt: Option<&str>) -> BackupMode {
     if backup_opt_exists {
         match backup_opt.map(String::from) {

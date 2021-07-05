@@ -63,12 +63,12 @@ fn test_stdbuf_invalid_mode_fails() {
             .args(&[*option, "1024R", "head"])
             .fails()
             .code_is(125)
-            .stderr_only("stdbuf: invalid mode ‘1024R’");
+            .stderr_only("stdbuf: invalid mode '1024R'");
         #[cfg(not(target_pointer_width = "128"))]
         new_ucmd!()
             .args(&[*option, "1Y", "head"])
             .fails()
             .code_is(125)
-            .stderr_contains("stdbuf: invalid mode ‘1Y’: Value too large for defined data type");
+            .stderr_contains("stdbuf: invalid mode '1Y': Value too large for defined data type");
     }
 }

@@ -117,7 +117,26 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
-    let matches = App::new(executable!())
+    let matches = uu_app().get_matches_from(args);
+
+    let no_newline = matches.is_present(options::NO_NEWLINE);
+    let escaped = matches.is_present(options::ENABLE_BACKSLASH_ESCAPE);
+    let values: Vec<String> = match matches.values_of(options::STRING) {
+        Some(s) => s.map(|s| s.to_string()).collect(),
+        None => vec!["".to_string()],
+    };
+
+    match execute(no_newline, escaped, values) {
+        Ok(_) => 0,
+        Err(f) => {
+            show_error!("{}", f);
+            1
+        }
+    }
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .name(NAME)
         // TrailingVarArg specifies the final positional argument is a VarArg
         // and it doesn't attempts the parse any further args.
@@ -154,22 +173,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .multiple(true)
                 .allow_hyphen_values(true),
         )
-        .get_matches_from(args);
-
-    let no_newline = matches.is_present(options::NO_NEWLINE);
-    let escaped = matches.is_present(options::ENABLE_BACKSLASH_ESCAPE);
-    let values: Vec<String> = match matches.values_of(options::STRING) {
-        Some(s) => s.map(|s| s.to_string()).collect(),
-        None => vec!["".to_string()],
-    };
-
-    match execute(no_newline, escaped, values) {
-        Ok(_) => 0,
-        Err(f) => {
-            show_error!("{}", f);
-            1
-        }
-    }
 }
 
 fn execute(no_newline: bool, escaped: bool, free: Vec<String>) -> io::Result<()> {

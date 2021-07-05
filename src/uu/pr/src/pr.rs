@@ -23,6 +23,7 @@ use std::fs::{metadata, File};
 use std::io::{stdin, stdout, BufRead, BufReader, Lines, Read, Stdout, Write};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
+use uucore::executable;
 
 type IOError = std::io::Error;
 
@@ -165,6 +166,11 @@ quick_error! {
             display("pr: cannot open {}, No such file or directory", path)
         }
     }
+}
+
+pub fn uu_app() -> clap::App<'static, 'static> {
+    // TODO: migrate to clap to get more shell completions
+    clap::App::new(executable!())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {

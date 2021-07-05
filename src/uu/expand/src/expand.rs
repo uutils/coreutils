@@ -108,10 +108,16 @@ impl Options {
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
-    let matches = App::new(executable!())
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+
+    expand(Options::new(&matches));
+    0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .version(crate_version!())
         .about(ABOUT)
-        .usage(&usage[..])
         .after_help(LONG_HELP)
         .arg(
             Arg::with_name(options::INITIAL)
@@ -138,10 +144,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .hidden(true)
                 .takes_value(true)
         )
-        .get_matches_from(args);
-
-    expand(Options::new(&matches));
-    0
 }
 
 fn open(path: String) -> BufReader<Box<dyn Read + 'static>> {

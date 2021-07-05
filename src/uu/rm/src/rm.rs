@@ -77,11 +77,72 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let long_usage = get_long_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = uu_app()
         .usage(&usage[..])
         .after_help(&long_usage[..])
+        .get_matches_from(args);
+
+    let files: Vec<String> = matches
+        .values_of(ARG_FILES)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
+
+    let force = matches.is_present(OPT_FORCE);
+
+    if files.is_empty() && !force {
+        // Still check by hand and not use clap
+        // Because "rm -f" is a thing
+        show_error!("missing an argument");
+        show_error!("for help, try '{0} --help'", executable!());
+        return 1;
+    } else {
+        let options = Options {
+            force,
+            interactive: {
+                if matches.is_present(OPT_PROMPT) {
+                    InteractiveMode::Always
+                } else if matches.is_present(OPT_PROMPT_MORE) {
+                    InteractiveMode::Once
+                } else if matches.is_present(OPT_INTERACTIVE) {
+                    match matches.value_of(OPT_INTERACTIVE).unwrap() {
+                        "none" => InteractiveMode::None,
+                        "once" => InteractiveMode::Once,
+                        "always" => InteractiveMode::Always,
+                        val => crash!(1, "Invalid argument to interactive ({})", val),
+                    }
+                } else {
+                    InteractiveMode::None
+                }
+            },
+            one_fs: matches.is_present(OPT_ONE_FILE_SYSTEM),
+            preserve_root: !matches.is_present(OPT_NO_PRESERVE_ROOT),
+            recursive: matches.is_present(OPT_RECURSIVE) || matches.is_present(OPT_RECURSIVE_R),
+            dir: matches.is_present(OPT_DIR),
+            verbose: matches.is_present(OPT_VERBOSE),
+        };
+        if options.interactive == InteractiveMode::Once && (options.recursive || files.len() > 3) {
+            let msg = if options.recursive {
+                "Remove all arguments recursively? "
+            } else {
+                "Remove all arguments? "
+            };
+            if !prompt(msg) {
+                return 0;
+            }
+        }
+
+        if remove(files, options) {
+            return 1;
+        }
+    }
+
+    0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
 
         .arg(
             Arg::with_name(OPT_FORCE)
@@ -151,63 +212,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             .takes_value(true)
             .min_values(1)
         )
-        .get_matches_from(args);
-
-    let files: Vec<String> = matches
-        .values_of(ARG_FILES)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_default();
-
-    let force = matches.is_present(OPT_FORCE);
-
-    if files.is_empty() && !force {
-        // Still check by hand and not use clap
-        // Because "rm -f" is a thing
-        show_error!("missing an argument");
-        show_error!("for help, try '{0} --help'", executable!());
-        return 1;
-    } else {
-        let options = Options {
-            force,
-            interactive: {
-                if matches.is_present(OPT_PROMPT) {
-                    InteractiveMode::Always
-                } else if matches.is_present(OPT_PROMPT_MORE) {
-                    InteractiveMode::Once
-                } else if matches.is_present(OPT_INTERACTIVE) {
-                    match matches.value_of(OPT_INTERACTIVE).unwrap() {
-                        "none" => InteractiveMode::None,
-                        "once" => InteractiveMode::Once,
-                        "always" => InteractiveMode::Always,
-                        val => crash!(1, "Invalid argument to interactive ({})", val),
-                    }
-                } else {
-                    InteractiveMode::None
-                }
-            },
-            one_fs: matches.is_present(OPT_ONE_FILE_SYSTEM),
-            preserve_root: !matches.is_present(OPT_NO_PRESERVE_ROOT),
-            recursive: matches.is_present(OPT_RECURSIVE) || matches.is_present(OPT_RECURSIVE_R),
-            dir: matches.is_present(OPT_DIR),
-            verbose: matches.is_present(OPT_VERBOSE),
-        };
-        if options.interactive == InteractiveMode::Once && (options.recursive || files.len() > 3) {
-            let msg = if options.recursive {
-                "Remove all arguments recursively? "
-            } else {
-                "Remove all arguments? "
-            };
-            if !prompt(msg) {
-                return 0;
-            }
-        }
-
-        if remove(files, options) {
-            return 1;
-        }
-    }
-
-    0
 }
 
 // TODO: implement one-file-system (this may get partially implemented in walkdir)

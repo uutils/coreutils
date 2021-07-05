@@ -35,26 +35,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .accept_any();
     let usage = get_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
-        .usage(&usage[..])
-        .arg(
-            Arg::with_name(options::DIR)
-                .short("d")
-                .takes_value(true)
-                .help("If any of FROM and TO is not subpath of DIR, output absolute path instead of relative"),
-        )
-        .arg(
-            Arg::with_name(options::TO)
-                .required(true)
-                .takes_value(true),
-        )
-        .arg(
-            Arg::with_name(options::FROM)
-                .takes_value(true),
-        )
-        .get_matches_from(args);
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     let to = Path::new(matches.value_of(options::TO).unwrap()).to_path_buf(); // required
     let from = match matches.value_of(options::FROM) {
@@ -98,4 +79,25 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     println!("{}", result.display());
     0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
+        .arg(
+            Arg::with_name(options::DIR)
+                .short("d")
+                .takes_value(true)
+                .help("If any of FROM and TO is not subpath of DIR, output absolute path instead of relative"),
+        )
+        .arg(
+            Arg::with_name(options::TO)
+                .required(true)
+                .takes_value(true),
+        )
+        .arg(
+            Arg::with_name(options::FROM)
+                .takes_value(true),
+        )
 }

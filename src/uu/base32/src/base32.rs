@@ -10,6 +10,7 @@ extern crate uucore;
 
 use std::io::{stdin, Read};
 
+use clap::App;
 use uucore::encoding::Format;
 
 pub mod base_common;
@@ -55,4 +56,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     );
 
     0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    base_common::base_app(executable!(), VERSION, ABOUT)
 }

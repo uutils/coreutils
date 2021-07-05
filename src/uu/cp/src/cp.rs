@@ -290,13 +290,10 @@ static DEFAULT_ATTRIBUTES: &[Attribute] = &[
     Attribute::Timestamps,
 ];
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
-    let matches = App::new(executable!())
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .version(crate_version!())
         .about(ABOUT)
-        .after_help(&*format!("{}\n{}", LONG_HELP, backup_control::BACKUP_CONTROL_LONG_HELP))
-        .usage(&usage[..])
         .arg(Arg::with_name(options::TARGET_DIRECTORY)
              .short("t")
              .conflicts_with(options::NO_TARGET_DIRECTORY)
@@ -378,7 +375,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(Arg::with_name(options::UPDATE)
              .short("u")
              .long(options::UPDATE)
-             .help("copy only when the SOURCE file is newer than the destination file\
+             .help("copy only when the SOURCE file is newer than the destination file \
                     or when the destination file is missing"))
         .arg(Arg::with_name(options::REFLINK)
              .long(options::REFLINK)
@@ -401,7 +398,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
              .conflicts_with_all(&[options::PRESERVE_DEFAULT_ATTRIBUTES, options::NO_PRESERVE])
              // -d sets this option
              // --archive sets this option
-             .help("Preserve the specified attributes (default: mode(unix only),ownership,timestamps),\
+             .help("Preserve the specified attributes (default: mode (unix only), ownership, timestamps), \
                     if possible additional attributes: context, links, xattr, all"))
         .arg(Arg::with_name(options::PRESERVE_DEFAULT_ATTRIBUTES)
              .short("-p")
@@ -464,6 +461,17 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
         .arg(Arg::with_name(options::PATHS)
              .multiple(true))
+}
+
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    let usage = get_usage();
+    let matches = uu_app()
+        .after_help(&*format!(
+            "{}\n{}",
+            LONG_HELP,
+            backup_control::BACKUP_CONTROL_LONG_HELP
+        ))
+        .usage(&usage[..])
         .get_matches_from(args);
 
     let options = crash_if_err!(EXIT_ERR, Options::from_matches(&matches));
@@ -667,7 +675,14 @@ impl Options {
                         }
                     }
                 } else {
-                    ReflinkMode::Never
+                    #[cfg(any(target_os = "linux", target_os = "macos"))]
+                    {
+                        ReflinkMode::Auto
+                    }
+                    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+                    {
+                        ReflinkMode::Never
+                    }
                 }
             },
             backup: backup_mode,
@@ -1218,28 +1233,39 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
 /// Copy the file from `source` to `dest` either using the normal `fs::copy` or a
 /// copy-on-write scheme if --reflink is specified and the filesystem supports it.
 fn copy_helper(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
-    if options.reflink_mode != ReflinkMode::Never {
-        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-        return Err("--reflink is only supported on linux and macOS"
-            .to_string()
-            .into());
-
-        #[cfg(target_os = "macos")]
-        copy_on_write_macos(source, dest, options.reflink_mode)?;
-        #[cfg(target_os = "linux")]
-        copy_on_write_linux(source, dest, options.reflink_mode)?;
-    } else if !options.dereference && fs::symlink_metadata(&source)?.file_type().is_symlink() {
-        copy_link(source, dest)?;
-    } else if source.to_string_lossy() == "/dev/null" {
+    if options.parents {
+        let parent = dest.parent().unwrap_or(dest);
+        fs::create_dir_all(parent)?;
+    }
+    let is_symlink = fs::symlink_metadata(&source)?.file_type().is_symlink();
+    if source.to_string_lossy() == "/dev/null" {
         /* workaround a limitation of fs::copy
          * https://github.com/rust-lang/rust/issues/79390
          */
         File::create(dest)?;
-    } else {
-        if options.parents {
-            let parent = dest.parent().unwrap_or(dest);
-            fs::create_dir_all(parent)?;
+    } else if !options.dereference && is_symlink {
+        copy_link(source, dest)?;
+    } else if options.reflink_mode != ReflinkMode::Never {
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        return Err("--reflink is only supported on linux and macOS"
+            .to_string()
+            .into());
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        if is_symlink {
+            assert!(options.dereference);
+            let real_path = std::fs::read_link(source)?;
+
+            #[cfg(target_os = "macos")]
+            copy_on_write_macos(&real_path, dest, options.reflink_mode)?;
+            #[cfg(target_os = "linux")]
+            copy_on_write_linux(&real_path, dest, options.reflink_mode)?;
+        } else {
+            #[cfg(target_os = "macos")]
+            copy_on_write_macos(source, dest, options.reflink_mode)?;
+            #[cfg(target_os = "linux")]
+            copy_on_write_linux(source, dest, options.reflink_mode)?;
         }
+    } else {
         fs::copy(source, dest).context(&*context_for(source, dest))?;
     }
 
@@ -1254,11 +1280,16 @@ fn copy_link(source: &Path, dest: &Path) -> CopyResult<()> {
             Some(name) => dest.join(name).into(),
             None => crash!(
                 EXIT_ERR,
-                "cannot stat ‘{}’: No such file or directory",
+                "cannot stat '{}': No such file or directory",
                 source.display()
             ),
         }
     } else {
+        // we always need to remove the file to be able to create a symlink,
+        // even if it is writeable.
+        if dest.exists() {
+            fs::remove_file(dest)?;
+        }
         dest.into()
     };
     symlink_file(&link, &dest, &*context_for(&link, &dest))

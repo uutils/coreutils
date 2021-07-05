@@ -87,42 +87,7 @@ impl FromStr for Number {
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
-    let matches = App::new(executable!())
-        .setting(AppSettings::AllowLeadingHyphen)
-        .version(crate_version!())
-        .about(ABOUT)
-        .usage(&usage[..])
-        .arg(
-            Arg::with_name(OPT_SEPARATOR)
-                .short("s")
-                .long("separator")
-                .help("Separator character (defaults to \\n)")
-                .takes_value(true)
-                .number_of_values(1),
-        )
-        .arg(
-            Arg::with_name(OPT_TERMINATOR)
-                .short("t")
-                .long("terminator")
-                .help("Terminator character (defaults to \\n)")
-                .takes_value(true)
-                .number_of_values(1),
-        )
-        .arg(
-            Arg::with_name(OPT_WIDTHS)
-                .short("w")
-                .long("widths")
-                .help("Equalize widths of all numbers by padding with zeros"),
-        )
-        .arg(
-            Arg::with_name(ARG_NUMBERS)
-                .multiple(true)
-                .takes_value(true)
-                .allow_hyphen_values(true)
-                .max_values(3)
-                .required(true),
-        )
-        .get_matches_from(args);
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     let numbers = matches.values_of(ARG_NUMBERS).unwrap().collect::<Vec<_>>();
 
@@ -195,6 +160,43 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         ),
     }
     0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .setting(AppSettings::AllowLeadingHyphen)
+        .version(crate_version!())
+        .about(ABOUT)
+        .arg(
+            Arg::with_name(OPT_SEPARATOR)
+                .short("s")
+                .long("separator")
+                .help("Separator character (defaults to \\n)")
+                .takes_value(true)
+                .number_of_values(1),
+        )
+        .arg(
+            Arg::with_name(OPT_TERMINATOR)
+                .short("t")
+                .long("terminator")
+                .help("Terminator character (defaults to \\n)")
+                .takes_value(true)
+                .number_of_values(1),
+        )
+        .arg(
+            Arg::with_name(OPT_WIDTHS)
+                .short("w")
+                .long("widths")
+                .help("Equalize widths of all numbers by padding with zeros"),
+        )
+        .arg(
+            Arg::with_name(ARG_NUMBERS)
+                .multiple(true)
+                .takes_value(true)
+                .allow_hyphen_values(true)
+                .max_values(3)
+                .required(true),
+        )
 }
 
 fn done_printing<T: Num + PartialOrd>(next: &T, increment: &T, last: &T) -> bool {

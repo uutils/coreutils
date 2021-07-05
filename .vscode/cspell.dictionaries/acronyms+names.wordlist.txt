@@ -12,6 +12,7 @@ FIFOs
 FQDN # fully qualified domain name
 GID # group ID
 GIDs
+GNU
 GNUEABI
 GNUEABIhf
 JFS
@@ -45,6 +46,7 @@ Deno
 EditorConfig
 FreeBSD
 Gmail
+GNU
 Irix
 MS-DOS
 MSDOS

@@ -73,36 +73,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let usage = get_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(SUMMARY)
-        .usage(&usage[..])
-        .after_help(LONG_HELP)
-        .arg(
-            Arg::with_name(options::BOURNE_SHELL)
-                .long("sh")
-                .short("b")
-                .visible_alias("bourne-shell")
-                .help("output Bourne shell code to set LS_COLORS")
-                .display_order(1),
-        )
-        .arg(
-            Arg::with_name(options::C_SHELL)
-                .long("csh")
-                .short("c")
-                .visible_alias("c-shell")
-                .help("output C shell code to set LS_COLORS")
-                .display_order(2),
-        )
-        .arg(
-            Arg::with_name(options::PRINT_DATABASE)
-                .long("print-database")
-                .short("p")
-                .help("print the byte counts")
-                .display_order(3),
-        )
-        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
-        .get_matches_from(&args);
+    let matches = uu_app().usage(&usage[..]).get_matches_from(&args);
 
     let files = matches
         .values_of(options::FILE)
@@ -123,7 +94,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if matches.is_present(options::PRINT_DATABASE) {
         if !files.is_empty() {
             show_usage_error!(
-                "extra operand ‘{}’\nfile operands cannot be combined with \
+                "extra operand '{}'\nfile operands cannot be combined with \
                  --print-database (-p)",
                 files[0]
             );
@@ -155,7 +126,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         result = parse(INTERNAL_DB.lines(), out_format, "")
     } else {
         if files.len() > 1 {
-            show_usage_error!("extra operand ‘{}’", files[1]);
+            show_usage_error!("extra operand '{}'", files[1]);
             return 1;
         }
         match File::open(files[0]) {
@@ -181,6 +152,37 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 }
 
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(SUMMARY)
+        .after_help(LONG_HELP)
+        .arg(
+            Arg::with_name(options::BOURNE_SHELL)
+                .long("sh")
+                .short("b")
+                .visible_alias("bourne-shell")
+                .help("output Bourne shell code to set LS_COLORS")
+                .display_order(1),
+        )
+        .arg(
+            Arg::with_name(options::C_SHELL)
+                .long("csh")
+                .short("c")
+                .visible_alias("c-shell")
+                .help("output C shell code to set LS_COLORS")
+                .display_order(2),
+        )
+        .arg(
+            Arg::with_name(options::PRINT_DATABASE)
+                .long("print-database")
+                .short("p")
+                .help("print the byte counts")
+                .display_order(3),
+        )
+        .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
+}
+
 pub trait StrUtils {
     /// Remove comments and trim whitespace
     fn purify(&self) -> &Self;
@@ -192,21 +194,25 @@ pub trait StrUtils {
 impl StrUtils for str {
     fn purify(&self) -> &Self {
         let mut line = self;
-        for (n, c) in self.chars().enumerate() {
-            if c != '#' {
-                continue;
-            }
-
-            // Ignore if '#' is at the beginning of line
-            if n == 0 {
-                line = &self[..0];
-                break;
-            }
-
+        for (n, _) in self
+            .as_bytes()
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| **c == b'#')
+        {
             // Ignore the content after '#'
             // only if it is preceded by at least one whitespace
-            if self.chars().nth(n - 1).unwrap().is_whitespace() {
-                line = &self[..n];
+            match self[..n].chars().last() {
+                Some(c) if c.is_whitespace() => {
+                    line = &self[..n - c.len_utf8()];
+                    break;
+                }
+                None => {
+                    // n == 0
+                    line = &self[..0];
+                    break;
+                }
+                _ => (),
             }
         }
         line.trim()

@@ -27,9 +27,11 @@ mod parser; // string parsing modules
 // * cross-platform modules
 pub use crate::mods::backup_control;
 pub use crate::mods::coreopts;
+pub use crate::mods::error;
 pub use crate::mods::os;
 pub use crate::mods::panic;
 pub use crate::mods::ranges;
+pub use crate::mods::version_cmp;
 
 // * string parsing modules
 pub use crate::parser::parse_size;
@@ -186,7 +188,7 @@ mod tests {
     fn make_os_vec(os_str: &OsStr) -> Vec<OsString> {
         vec![
             OsString::from("test"),
-            OsString::from("สวัสดี"),
+            OsString::from("สวัสดี"), // spell-checker:disable-line
             os_str.to_os_string(),
         ]
     }

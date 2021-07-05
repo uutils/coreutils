@@ -220,6 +220,7 @@ dependencies = [
  "atty",
  "bitflags",
  "strsim",
+ "term_size",
  "textwrap",
  "unicode-width",
  "vec_map",
@@ -261,6 +262,7 @@ version = "0.0.6"
 dependencies = [
  "atty",
  "chrono",
+ "clap",
  "conv",
  "filetime",
  "glob 0.3.0",
@@ -1567,21 +1569,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "semver"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d7eb9ef2c18661902cc47e535f9bc51b78acd254da71d375c2f6720d9a40403"
-dependencies = [
- "semver-parser",
-]
-
-[[package]]
-name = "semver-parser"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "388a1df253eca08550bef6c72392cfe7c30914bf41df5269b68cbd6ff8f570a3"
-
-[[package]]
 name = "sha1"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2107,6 +2094,7 @@ dependencies = [
 name = "uu_expr"
 version = "0.0.6"
 dependencies = [
+ "clap",
  "libc",
  "num-bigint",
  "num-traits",
@@ -2134,6 +2122,7 @@ dependencies = [
 name = "uu_false"
 version = "0.0.6"
 dependencies = [
+ "clap",
  "uucore",
  "uucore_procs",
 ]
@@ -2199,6 +2188,7 @@ dependencies = [
 name = "uu_hostid"
 version = "0.0.6"
 dependencies = [
+ "clap",
  "libc",
  "uucore",
  "uucore_procs",
@@ -2476,6 +2466,7 @@ name = "uu_pr"
 version = "0.0.6"
 dependencies = [
  "chrono",
+ "clap",
  "getopts",
  "itertools 0.10.0",
  "quick-error 2.0.1",
@@ -2498,6 +2489,7 @@ dependencies = [
 name = "uu_printf"
 version = "0.0.6"
 dependencies = [
+ "clap",
  "itertools 0.8.2",
  "uucore",
  "uucore_procs",
@@ -2631,7 +2623,6 @@ dependencies = [
  "ouroboros",
  "rand 0.7.3",
  "rayon",
- "semver",
  "tempfile",
  "unicode-width",
  "uucore",
@@ -2734,6 +2725,7 @@ dependencies = [
 name = "uu_test"
 version = "0.0.6"
 dependencies = [
+ "clap",
  "libc",
  "redox_syscall 0.1.57",
  "uucore",
@@ -2777,6 +2769,7 @@ dependencies = [
 name = "uu_true"
 version = "0.0.6"
 dependencies = [
+ "clap",
  "uucore",
  "uucore_procs",
 ]

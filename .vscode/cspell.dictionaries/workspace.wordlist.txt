@@ -48,17 +48,19 @@ xattr
 # * rust/rustc
 RUSTDOCFLAGS
 RUSTFLAGS
+clippy
+rustc
+rustfmt
+rustup
+#
 bitor # BitOr trait function
 bitxor # BitXor trait function
-clippy
 concat
 fract
 powi
 println
 repr
 rfind
-rustc
-rustfmt
 struct
 structs
 substr

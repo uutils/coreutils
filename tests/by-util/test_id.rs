@@ -1,6 +1,6 @@
 use crate::common::util::*;
 
-// spell-checker:ignore (ToDO) testsuite coreutil
+// spell-checker:ignore (ToDO) coreutil
 
 // These tests run the GNU coreutils `(g)id` binary in `$PATH` in order to gather reference values.
 // If the `(g)id` in `$PATH` doesn't include a coreutils version string,
@@ -8,11 +8,12 @@ use crate::common::util::*;
 
 // The reference version is 8.32. Here 8.30 was chosen because right now there's no
 // ubuntu image for github action available with a higher version than 8.30.
-const VERSION_EXPECTED: &str = "8.30"; // Version expected for the reference `id` in $PATH
-const VERSION_MULTIPLE_USERS: &str = "8.31";
+const VERSION_MIN: &str = "8.30"; // minimum Version for the reference `id` in $PATH
+const VERSION_MIN_MULTIPLE_USERS: &str = "8.31"; // this feature was introduced in GNU's coreutils 8.31
 const UUTILS_WARNING: &str = "uutils-tests-warning";
 const UUTILS_INFO: &str = "uutils-tests-info";
 
+#[allow(clippy::needless_return)]
 macro_rules! unwrap_or_return {
     ( $e:expr ) => {
         match $e {
@@ -202,13 +203,13 @@ fn test_id_multiple_users() {
     let util_name = util_name!();
     #[cfg(all(unix, not(target_os = "linux")))]
     let util_name = &format!("g{}", util_name!());
-    let version_check_string = check_coreutil_version(util_name, VERSION_MULTIPLE_USERS);
+    let version_check_string = check_coreutil_version(util_name, VERSION_MIN_MULTIPLE_USERS);
     if version_check_string.starts_with(UUTILS_WARNING) {
         println!("{}\ntest skipped", version_check_string);
         return;
     }
 
-    // Same typical users that GNU testsuite is using.
+    // Same typical users that GNU test suite is using.
     let test_users = ["root", "man", "postfix", "sshd", &whoami()];
 
     let scene = TestScenario::new(util_name!());
@@ -270,7 +271,7 @@ fn test_id_multiple_users_non_existing() {
     let util_name = util_name!();
     #[cfg(all(unix, not(target_os = "linux")))]
     let util_name = &format!("g{}", util_name!());
-    let version_check_string = check_coreutil_version(util_name, VERSION_MULTIPLE_USERS);
+    let version_check_string = check_coreutil_version(util_name, VERSION_MIN_MULTIPLE_USERS);
     if version_check_string.starts_with(UUTILS_WARNING) {
         println!("{}\ntest skipped", version_check_string);
         return;
@@ -502,7 +503,6 @@ fn test_id_no_specified_user_posixly() {
                 "{}: test skipped: Kernel has no support for SElinux context",
                 UUTILS_INFO
             );
-            return;
         } else {
             let result = scene.ucmd().succeeds();
             assert!(result.stdout_str().contains("context="));
@@ -517,7 +517,7 @@ fn check_coreutil_version(util_name: &str, version_expected: &str) -> String {
     let scene = TestScenario::new(util_name);
     let version_check = scene
         .cmd_keepenv(&util_name)
-        .env("LANGUAGE", "C")
+        .env("LC_ALL", "C")
         .arg("--version")
         .run();
     version_check
@@ -552,7 +552,7 @@ fn expected_result(args: &[&str]) -> Result<CmdResult, String> {
     #[cfg(all(unix, not(target_os = "linux")))]
     let util_name = &format!("g{}", util_name!());
 
-    let version_check_string = check_coreutil_version(util_name, VERSION_EXPECTED);
+    let version_check_string = check_coreutil_version(util_name, VERSION_MIN);
     if version_check_string.starts_with(UUTILS_WARNING) {
         return Err(version_check_string);
     }
@@ -561,7 +561,7 @@ fn expected_result(args: &[&str]) -> Result<CmdResult, String> {
     let scene = TestScenario::new(util_name);
     let result = scene
         .cmd_keepenv(util_name)
-        .env("LANGUAGE", "C")
+        .env("LC_ALL", "C")
         .args(args)
         .run();
 

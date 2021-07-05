@@ -16,7 +16,7 @@ Synopsis
 Description
 -----------
 
-``uutils`` is a program that contains that other coreutils commands, somewhat
+``uutils`` is a program that contains other coreutils commands, somewhat
 similar to Busybox.
 
 --help, -h      print a help menu for PROGRAM displaying accepted options and
