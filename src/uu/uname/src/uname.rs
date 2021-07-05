@@ -30,8 +30,10 @@ pub mod options {
     pub static OS: &str = "operating-system";
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", any(target_env = "gnu", target_env = "")))]
 const HOST_OS: &str = "GNU/Linux";
+#[cfg(all(target_os = "linux", not(any(target_env = "gnu", target_env = ""))))]
+const HOST_OS: &str = "Linux";
 #[cfg(target_os = "windows")]
 const HOST_OS: &str = "Windows NT";
 #[cfg(target_os = "freebsd")]
