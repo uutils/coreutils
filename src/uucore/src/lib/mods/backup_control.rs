@@ -66,7 +66,7 @@ pub fn determine_backup_suffix(supplied_suffix: Option<&str>) -> String {
 /// fn main() {
 ///     let OPT_BACKUP: &str = "backup";
 ///     let OPT_BACKUP_NO_ARG: &str = "b";
-///     let matches = App::new("myprog")
+///     let matches = App::new("app")
 ///         .arg(Arg::with_name(OPT_BACKUP_NO_ARG)
 ///             .short(OPT_BACKUP_NO_ARG))
 ///         .arg(Arg::with_name(OPT_BACKUP)
@@ -75,7 +75,7 @@ pub fn determine_backup_suffix(supplied_suffix: Option<&str>) -> String {
 ///             .require_equals(true)
 ///             .min_values(0))
 ///         .get_matches_from(vec![
-///             "myprog", "-b", "--backup=t"
+///             "app", "-b", "--backup=t"
 ///         ]);
 ///    
 ///     let backup_mode = backup_control::determine_backup_mode(
@@ -92,7 +92,7 @@ pub fn determine_backup_suffix(supplied_suffix: Option<&str>) -> String {
 /// }
 /// ```
 ///
-/// This example shows an ambiguous imput, as 'n' may resolve to 4 different
+/// This example shows an ambiguous input, as 'n' may resolve to 4 different
 /// backup modes.
 ///
 ///
@@ -105,7 +105,7 @@ pub fn determine_backup_suffix(supplied_suffix: Option<&str>) -> String {
 /// fn main() {
 ///     let OPT_BACKUP: &str = "backup";
 ///     let OPT_BACKUP_NO_ARG: &str = "b";
-///     let matches = App::new("myprog")
+///     let matches = App::new("app")
 ///         .arg(Arg::with_name(OPT_BACKUP_NO_ARG)
 ///             .short(OPT_BACKUP_NO_ARG))
 ///         .arg(Arg::with_name(OPT_BACKUP)
@@ -114,7 +114,7 @@ pub fn determine_backup_suffix(supplied_suffix: Option<&str>) -> String {
 ///             .require_equals(true)
 ///             .min_values(0))
 ///         .get_matches_from(vec![
-///             "myprog", "-b", "--backup=n"
+///             "app", "-b", "--backup=n"
 ///         ]);
 ///    
 ///     let backup_mode = backup_control::determine_backup_mode(
@@ -254,6 +254,19 @@ fn existing_backup_path(path: &Path, suffix: &str) -> PathBuf {
 mod tests {
     use super::*;
     use std::env;
+    // Required to instantiate mutex in shared context
+    use lazy_static::lazy_static;
+    use std::sync::Mutex;
+
+    // The mutex is required here as by default all tests are run as separate
+    // threads under the same parent process. As environment variables are
+    // specific to processes (and thus shared among threads), data races *will*
+    // occur if no precautions are taken. Thus we have all tests that rely on
+    // environment variables lock this empty mutex to ensure they don't access
+    // it concurrently.
+    lazy_static! {
+        static ref TEST_MUTEX: Mutex<()> = Mutex::new(());
+    }
 
     // Environment variable for "VERSION_CONTROL"
     static ENV_VERSION_CONTROL: &str = "VERSION_CONTROL";
@@ -264,26 +277,12 @@ mod tests {
         let short_opt_present = true;
         let long_opt_present = false;
         let long_opt_value = None;
+        let _dummy = TEST_MUTEX.lock().unwrap();
 
         let result =
             determine_backup_mode(short_opt_present, long_opt_present, long_opt_value).unwrap();
 
-        assert!(result == BackupMode::ExistingBackup);
-    }
-
-    // -b ignores the "VERSION_CONTROL" environment variable
-    #[test]
-    fn test_backup_mode_short_only_ignore_env() {
-        let short_opt_present = true;
-        let long_opt_present = false;
-        let long_opt_value = None;
-        env::set_var(ENV_VERSION_CONTROL, "none");
-
-        let result =
-            determine_backup_mode(short_opt_present, long_opt_present, long_opt_value).unwrap();
-
-        assert!(result == BackupMode::ExistingBackup);
-        env::remove_var(ENV_VERSION_CONTROL);
+        assert_eq!(result, BackupMode::ExistingBackup);
     }
 
     // --backup takes precedence over -b
@@ -292,11 +291,12 @@ mod tests {
         let short_opt_present = true;
         let long_opt_present = true;
         let long_opt_value = Some("none");
+        let _dummy = TEST_MUTEX.lock().unwrap();
 
         let result =
             determine_backup_mode(short_opt_present, long_opt_present, long_opt_value).unwrap();
 
-        assert!(result == BackupMode::NoBackup);
+        assert_eq!(result, BackupMode::NoBackup);
     }
 
     // --backup can be passed without an argument
@@ -305,26 +305,12 @@ mod tests {
         let short_opt_present = false;
         let long_opt_present = true;
         let long_opt_value = None;
+        let _dummy = TEST_MUTEX.lock().unwrap();
 
         let result =
             determine_backup_mode(short_opt_present, long_opt_present, long_opt_value).unwrap();
 
-        assert!(result == BackupMode::ExistingBackup);
-    }
-
-    // --backup can be passed without an argument, but reads env var if existant
-    #[test]
-    fn test_backup_mode_long_without_args_with_env() {
-        let short_opt_present = false;
-        let long_opt_present = true;
-        let long_opt_value = None;
-        env::set_var(ENV_VERSION_CONTROL, "none");
-
-        let result =
-            determine_backup_mode(short_opt_present, long_opt_present, long_opt_value).unwrap();
-
-        assert!(result == BackupMode::NoBackup);
-        env::remove_var(ENV_VERSION_CONTROL);
+        assert_eq!(result, BackupMode::ExistingBackup);
     }
 
     // --backup can be passed with an argument only
@@ -333,11 +319,12 @@ mod tests {
         let short_opt_present = false;
         let long_opt_present = true;
         let long_opt_value = Some("simple");
+        let _dummy = TEST_MUTEX.lock().unwrap();
 
         let result =
             determine_backup_mode(short_opt_present, long_opt_present, long_opt_value).unwrap();
 
-        assert!(result == BackupMode::SimpleBackup);
+        assert_eq!(result, BackupMode::SimpleBackup);
     }
 
     // --backup errors on invalid argument
@@ -346,6 +333,7 @@ mod tests {
         let short_opt_present = false;
         let long_opt_present = true;
         let long_opt_value = Some("foobar");
+        let _dummy = TEST_MUTEX.lock().unwrap();
 
         let result = determine_backup_mode(short_opt_present, long_opt_present, long_opt_value);
 
@@ -360,6 +348,7 @@ mod tests {
         let short_opt_present = false;
         let long_opt_present = true;
         let long_opt_value = Some("n");
+        let _dummy = TEST_MUTEX.lock().unwrap();
 
         let result = determine_backup_mode(short_opt_present, long_opt_present, long_opt_value);
 
@@ -368,12 +357,59 @@ mod tests {
         assert!(text.contains("ambiguous argument ‘n’ for ‘backup type’"));
     }
 
+    // --backup accepts shortened arguments (si for simple)
+    #[test]
+    fn test_backup_mode_long_with_arg_shortened() {
+        let short_opt_present = false;
+        let long_opt_present = true;
+        let long_opt_value = Some("si");
+        let _dummy = TEST_MUTEX.lock().unwrap();
+
+        let result =
+            determine_backup_mode(short_opt_present, long_opt_present, long_opt_value).unwrap();
+
+        assert_eq!(result, BackupMode::SimpleBackup);
+    }
+
+    // -b ignores the "VERSION_CONTROL" environment variable
+    #[test]
+    fn test_backup_mode_short_only_ignore_env() {
+        let short_opt_present = true;
+        let long_opt_present = false;
+        let long_opt_value = None;
+        let _dummy = TEST_MUTEX.lock().unwrap();
+        env::set_var(ENV_VERSION_CONTROL, "none");
+
+        let result =
+            determine_backup_mode(short_opt_present, long_opt_present, long_opt_value).unwrap();
+
+        assert_eq!(result, BackupMode::ExistingBackup);
+        env::remove_var(ENV_VERSION_CONTROL);
+    }
+
+    // --backup can be passed without an argument, but reads env var if existent
+    #[test]
+    fn test_backup_mode_long_without_args_with_env() {
+        let short_opt_present = false;
+        let long_opt_present = true;
+        let long_opt_value = None;
+        let _dummy = TEST_MUTEX.lock().unwrap();
+        env::set_var(ENV_VERSION_CONTROL, "none");
+
+        let result =
+            determine_backup_mode(short_opt_present, long_opt_present, long_opt_value).unwrap();
+
+        assert_eq!(result, BackupMode::NoBackup);
+        env::remove_var(ENV_VERSION_CONTROL);
+    }
+
     // --backup errors on invalid VERSION_CONTROL env var
     #[test]
     fn test_backup_mode_long_with_env_var_invalid() {
         let short_opt_present = false;
         let long_opt_present = true;
         let long_opt_value = None;
+        let _dummy = TEST_MUTEX.lock().unwrap();
         env::set_var(ENV_VERSION_CONTROL, "foobar");
 
         let result = determine_backup_mode(short_opt_present, long_opt_present, long_opt_value);
@@ -390,6 +426,7 @@ mod tests {
         let short_opt_present = false;
         let long_opt_present = true;
         let long_opt_value = None;
+        let _dummy = TEST_MUTEX.lock().unwrap();
         env::set_var(ENV_VERSION_CONTROL, "n");
 
         let result = determine_backup_mode(short_opt_present, long_opt_present, long_opt_value);
@@ -400,31 +437,19 @@ mod tests {
         env::remove_var(ENV_VERSION_CONTROL);
     }
 
-    // --backup accepts shortened arguments (si for simple)
-    #[test]
-    fn test_backup_mode_long_with_arg_shortened() {
-        let short_opt_present = false;
-        let long_opt_present = true;
-        let long_opt_value = Some("si");
-
-        let result =
-            determine_backup_mode(short_opt_present, long_opt_present, long_opt_value).unwrap();
-
-        assert!(result == BackupMode::SimpleBackup);
-    }
-
     // --backup accepts shortened env vars (si for simple)
     #[test]
     fn test_backup_mode_long_with_env_var_shortened() {
         let short_opt_present = false;
         let long_opt_present = true;
         let long_opt_value = None;
+        let _dummy = TEST_MUTEX.lock().unwrap();
         env::set_var(ENV_VERSION_CONTROL, "si");
 
         let result =
             determine_backup_mode(short_opt_present, long_opt_present, long_opt_value).unwrap();
 
-        assert!(result == BackupMode::SimpleBackup);
+        assert_eq!(result, BackupMode::SimpleBackup);
         env::remove_var(ENV_VERSION_CONTROL);
     }
 }
