@@ -49,6 +49,12 @@ fn get_usage() -> String {
     format!("{0} [OPTION]... [FILE]...", executable!())
 }
 
+#[cfg(not(target_os = "freebsd"))]
+static LS_BLOCK_SIZE: u64 = 1024;
+
+#[cfg(target_os = "freebsd")]
+static LS_BLOCK_SIZE: u64 = 512;
+
 pub mod options {
 
     pub mod format {
@@ -776,7 +782,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .arg(
             Arg::with_name(options::time::CHANGE)
                 .short(options::time::CHANGE)
-                .help("If the long listing format (e.g., -l, -o) is being used, print the status \
+                .help(
+                    "If the long listing format (e.g., -l, -o) is being used, print the status \
                 change time (the 'ctime' in the inode) instead of the modification time. When \
                 explicitly sorting by time (--sort=time or -t) or when not using a long listing \
                 format, sort according to the status change time.",
@@ -1398,11 +1405,10 @@ fn get_block_size(md: &Metadata, config: &Config) -> u64 {
     #[cfg(unix)]
     {
         // hard-coded for now - enabling setting this remains a TODO
-        let ls_block_size = 1024;
         match config.size_format {
             SizeFormat::Binary => md.blocks() * 512,
             SizeFormat::Decimal => md.blocks() * 512,
-            SizeFormat::Bytes => md.blocks() * 512 / ls_block_size,
+            SizeFormat::Bytes => md.blocks() * 512 / LS_BLOCK_SIZE,
         }
     }
 
