@@ -23,15 +23,16 @@ use std::{
 
 use itertools::Itertools;
 
+use crate::chunks::RecycledChunk;
 use crate::merge::ClosedTmpFile;
 use crate::merge::WriteableCompressedTmpFile;
 use crate::merge::WriteablePlainTmpFile;
 use crate::merge::WriteableTmpFile;
-use crate::Line;
 use crate::{
     chunks::{self, Chunk},
-    compare_by, merge, output_sorted_lines, sort_by, GlobalSettings,
+    compare_by, merge, sort_by, GlobalSettings,
 };
+use crate::{print_sorted, Line};
 use tempfile::TempDir;
 
 const START_BUFFER_SIZE: usize = 8_000;
@@ -98,16 +99,39 @@ fn reader_writer<F: Iterator<Item = Box<dyn Read + Send>>, Tmp: WriteableTmpFile
             merger.write_all(settings);
         }
         ReadResult::SortedSingleChunk(chunk) => {
-            output_sorted_lines(chunk.borrow_lines().iter(), settings);
+            if settings.unique {
+                print_sorted(
+                    chunk.lines().iter().dedup_by(|a, b| {
+                        compare_by(a, b, settings, chunk.line_data(), chunk.line_data())
+                            == Ordering::Equal
+                    }),
+                    settings,
+                );
+            } else {
+                print_sorted(chunk.lines().iter(), settings);
+            }
         }
         ReadResult::SortedTwoChunks([a, b]) => {
-            let merged_iter = a
-                .borrow_lines()
-                .iter()
-                .merge_by(b.borrow_lines().iter(), |line_a, line_b| {
-                    compare_by(line_a, line_b, settings) != Ordering::Greater
-                });
-            output_sorted_lines(merged_iter, settings);
+            let merged_iter = a.lines().iter().map(|line| (line, &a)).merge_by(
+                b.lines().iter().map(|line| (line, &b)),
+                |(line_a, a), (line_b, b)| {
+                    compare_by(line_a, line_b, settings, a.line_data(), b.line_data())
+                        != Ordering::Greater
+                },
+            );
+            if settings.unique {
+                print_sorted(
+                    merged_iter
+                        .dedup_by(|(line_a, a), (line_b, b)| {
+                            compare_by(line_a, line_b, settings, a.line_data(), b.line_data())
+                                == Ordering::Equal
+                        })
+                        .map(|(line, _)| line),
+                    settings,
+                );
+            } else {
+                print_sorted(merged_iter.map(|(line, _)| line), settings);
+            }
         }
         ReadResult::EmptyInput => {
             // don't output anything
@@ -118,7 +142,9 @@ fn reader_writer<F: Iterator<Item = Box<dyn Read + Send>>, Tmp: WriteableTmpFile
 /// The function that is executed on the sorter thread.
 fn sorter(receiver: Receiver<Chunk>, sender: SyncSender<Chunk>, settings: GlobalSettings) {
     while let Ok(mut payload) = receiver.recv() {
-        payload.with_lines_mut(|lines| sort_by(lines, &settings));
+        payload.with_contents_mut(|contents| {
+            sort_by(&mut contents.lines, &settings, &contents.line_data)
+        });
         sender.send(payload).unwrap();
     }
 }
@@ -154,20 +180,16 @@ fn read_write_loop<I: WriteableTmpFile>(
     for _ in 0..2 {
         let should_continue = chunks::read(
             &sender,
-            vec![
-                0;
-                if START_BUFFER_SIZE < buffer_size {
-                    START_BUFFER_SIZE
-                } else {
-                    buffer_size
-                }
-            ],
+            RecycledChunk::new(if START_BUFFER_SIZE < buffer_size {
+                START_BUFFER_SIZE
+            } else {
+                buffer_size
+            }),
             Some(buffer_size),
             &mut carry_over,
             &mut file,
             &mut files,
             separator,
-            Vec::new(),
             settings,
         );
 
@@ -216,18 +238,17 @@ fn read_write_loop<I: WriteableTmpFile>(
 
         file_number += 1;
 
-        let (recycled_lines, recycled_buffer) = chunk.recycle();
+        let recycled_chunk = chunk.recycle();
 
         if let Some(sender) = &sender_option {
             let should_continue = chunks::read(
                 sender,
-                recycled_buffer,
+                recycled_chunk,
                 None,
                 &mut carry_over,
                 &mut file,
                 &mut files,
                 separator,
-                recycled_lines,
                 settings,
             );
             if !should_continue {
@@ -245,12 +266,9 @@ fn write<I: WriteableTmpFile>(
     compress_prog: Option<&str>,
     separator: u8,
 ) -> I::Closed {
-    chunk.with_lines_mut(|lines| {
-        // Write the lines to the file
-        let mut tmp_file = I::create(file, compress_prog);
-        write_lines(lines, tmp_file.as_write(), separator);
-        tmp_file.finished_writing()
-    })
+    let mut tmp_file = I::create(file, compress_prog);
+    write_lines(chunk.lines(), tmp_file.as_write(), separator);
+    tmp_file.finished_writing()
 }
 
 fn write_lines<'a, T: Write>(lines: &[Line<'a>], writer: &mut T, separator: u8) {

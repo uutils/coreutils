@@ -24,7 +24,7 @@ use itertools::Itertools;
 use tempfile::TempDir;
 
 use crate::{
-    chunks::{self, Chunk},
+    chunks::{self, Chunk, RecycledChunk},
     compare_by, GlobalSettings,
 };
 
@@ -125,14 +125,14 @@ fn merge_without_limit<M: MergeInput + 'static, F: Iterator<Item = M>>(
         }));
         // Send the initial chunk to trigger a read for each file
         request_sender
-            .send((file_number, Chunk::new(vec![0; 8 * 1024], |_| Vec::new())))
+            .send((file_number, RecycledChunk::new(8 * 1024)))
             .unwrap();
     }
 
     // Send the second chunk for each file
     for file_number in 0..reader_files.len() {
         request_sender
-            .send((file_number, Chunk::new(vec![0; 8 * 1024], |_| Vec::new())))
+            .send((file_number, RecycledChunk::new(8 * 1024)))
             .unwrap();
     }
 
@@ -181,13 +181,12 @@ struct ReaderFile<M: MergeInput> {
 
 /// The function running on the reader thread.
 fn reader(
-    recycled_receiver: Receiver<(usize, Chunk)>,
+    recycled_receiver: Receiver<(usize, RecycledChunk)>,
     files: &mut [Option<ReaderFile<impl MergeInput>>],
     settings: &GlobalSettings,
     separator: u8,
 ) {
-    for (file_idx, chunk) in recycled_receiver.iter() {
-        let (recycled_lines, recycled_buffer) = chunk.recycle();
+    for (file_idx, recycled_chunk) in recycled_receiver.iter() {
         if let Some(ReaderFile {
             file,
             sender,
@@ -196,13 +195,12 @@ fn reader(
         {
             let should_continue = chunks::read(
                 sender,
-                recycled_buffer,
+                recycled_chunk,
                 None,
                 carry_over,
                 file.as_read(),
                 &mut iter::empty(),
                 separator,
-                recycled_lines,
                 settings,
             );
             if !should_continue {
@@ -234,7 +232,7 @@ struct PreviousLine {
 /// Merges files together. This is **not** an iterator because of lifetime problems.
 pub struct FileMerger<'a> {
     heap: binary_heap_plus::BinaryHeap<MergeableFile, FileComparator<'a>>,
-    request_sender: Sender<(usize, Chunk)>,
+    request_sender: Sender<(usize, RecycledChunk)>,
     prev: Option<PreviousLine>,
 }
 
@@ -257,14 +255,16 @@ impl<'a> FileMerger<'a> {
                 file_number: file.file_number,
             });
 
-            file.current_chunk.with_lines(|lines| {
-                let current_line = &lines[file.line_idx];
+            file.current_chunk.with_contents(|contents| {
+                let current_line = &contents.lines[file.line_idx];
                 if settings.unique {
                     if let Some(prev) = &prev {
                         let cmp = compare_by(
-                            &prev.chunk.borrow_lines()[prev.line_idx],
+                            &prev.chunk.lines()[prev.line_idx],
                             current_line,
                             settings,
+                            prev.chunk.line_data(),
+                            file.current_chunk.line_data(),
                         );
                         if cmp == Ordering::Equal {
                             return;
@@ -274,8 +274,7 @@ impl<'a> FileMerger<'a> {
                 current_line.print(out, settings);
             });
 
-            let was_last_line_for_file =
-                file.current_chunk.borrow_lines().len() == file.line_idx + 1;
+            let was_last_line_for_file = file.current_chunk.lines().len() == file.line_idx + 1;
 
             if was_last_line_for_file {
                 if let Ok(next_chunk) = file.receiver.recv() {
@@ -295,7 +294,7 @@ impl<'a> FileMerger<'a> {
                     // If nothing is referencing the previous chunk anymore, this means that the previous line
                     // was the last line of the chunk. We can recycle the chunk.
                     self.request_sender
-                        .send((prev.file_number, prev_chunk))
+                        .send((prev.file_number, prev_chunk.recycle()))
                         .ok();
                 }
             }
@@ -312,9 +311,11 @@ struct FileComparator<'a> {
 impl<'a> Compare<MergeableFile> for FileComparator<'a> {
     fn compare(&self, a: &MergeableFile, b: &MergeableFile) -> Ordering {
         let mut cmp = compare_by(
-            &a.current_chunk.borrow_lines()[a.line_idx],
-            &b.current_chunk.borrow_lines()[b.line_idx],
+            &a.current_chunk.lines()[a.line_idx],
+            &b.current_chunk.lines()[b.line_idx],
             self.settings,
+            a.current_chunk.line_data(),
+            b.current_chunk.line_data(),
         );
         if cmp == Ordering::Equal {
             // To make sorting stable, we need to consider the file number as well,

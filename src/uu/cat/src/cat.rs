@@ -10,6 +10,9 @@
 
 // spell-checker:ignore (ToDO) nonprint nonblank nonprinting
 
+// clippy bug https://github.com/rust-lang/rust-clippy/issues/7422
+#![allow(clippy::nonstandard_macro_braces)]
+
 #[cfg(unix)]
 extern crate unix_socket;
 #[macro_use]
@@ -169,7 +172,65 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let matches = App::new(executable!())
+    let matches = uu_app().get_matches_from(args);
+
+    let number_mode = if matches.is_present(options::NUMBER_NONBLANK) {
+        NumberingMode::NonEmpty
+    } else if matches.is_present(options::NUMBER) {
+        NumberingMode::All
+    } else {
+        NumberingMode::None
+    };
+
+    let show_nonprint = vec![
+        options::SHOW_ALL.to_owned(),
+        options::SHOW_NONPRINTING_ENDS.to_owned(),
+        options::SHOW_NONPRINTING_TABS.to_owned(),
+        options::SHOW_NONPRINTING.to_owned(),
+    ]
+    .iter()
+    .any(|v| matches.is_present(v));
+
+    let show_ends = vec![
+        options::SHOW_ENDS.to_owned(),
+        options::SHOW_ALL.to_owned(),
+        options::SHOW_NONPRINTING_ENDS.to_owned(),
+    ]
+    .iter()
+    .any(|v| matches.is_present(v));
+
+    let show_tabs = vec![
+        options::SHOW_ALL.to_owned(),
+        options::SHOW_TABS.to_owned(),
+        options::SHOW_NONPRINTING_TABS.to_owned(),
+    ]
+    .iter()
+    .any(|v| matches.is_present(v));
+
+    let squeeze_blank = matches.is_present(options::SQUEEZE_BLANK);
+    let files: Vec<String> = match matches.values_of(options::FILE) {
+        Some(v) => v.clone().map(|v| v.to_owned()).collect(),
+        None => vec!["-".to_owned()],
+    };
+
+    let options = OutputOptions {
+        show_ends,
+        number: number_mode,
+        show_nonprint,
+        show_tabs,
+        squeeze_blank,
+    };
+    let success = cat_files(files, &options).is_ok();
+
+    if success {
+        0
+    } else {
+        1
+    }
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .name(NAME)
         .version(crate_version!())
         .usage(SYNTAX)
@@ -229,61 +290,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .long(options::SHOW_NONPRINTING)
                 .help("use ^ and M- notation, except for LF (\\n) and TAB (\\t)"),
         )
-        .get_matches_from(args);
-
-    let number_mode = if matches.is_present(options::NUMBER_NONBLANK) {
-        NumberingMode::NonEmpty
-    } else if matches.is_present(options::NUMBER) {
-        NumberingMode::All
-    } else {
-        NumberingMode::None
-    };
-
-    let show_nonprint = vec![
-        options::SHOW_ALL.to_owned(),
-        options::SHOW_NONPRINTING_ENDS.to_owned(),
-        options::SHOW_NONPRINTING_TABS.to_owned(),
-        options::SHOW_NONPRINTING.to_owned(),
-    ]
-    .iter()
-    .any(|v| matches.is_present(v));
-
-    let show_ends = vec![
-        options::SHOW_ENDS.to_owned(),
-        options::SHOW_ALL.to_owned(),
-        options::SHOW_NONPRINTING_ENDS.to_owned(),
-    ]
-    .iter()
-    .any(|v| matches.is_present(v));
-
-    let show_tabs = vec![
-        options::SHOW_ALL.to_owned(),
-        options::SHOW_TABS.to_owned(),
-        options::SHOW_NONPRINTING_TABS.to_owned(),
-    ]
-    .iter()
-    .any(|v| matches.is_present(v));
-
-    let squeeze_blank = matches.is_present(options::SQUEEZE_BLANK);
-    let files: Vec<String> = match matches.values_of(options::FILE) {
-        Some(v) => v.clone().map(|v| v.to_owned()).collect(),
-        None => vec!["-".to_owned()],
-    };
-
-    let options = OutputOptions {
-        show_ends,
-        number: number_mode,
-        show_nonprint,
-        show_tabs,
-        squeeze_blank,
-    };
-    let success = cat_files(files, &options).is_ok();
-
-    if success {
-        0
-    } else {
-        1
-    }
 }
 
 fn cat_handle<R: Read>(

@@ -51,7 +51,49 @@ pub mod options {
 const MULTI_FILE_TOP_PROMPT: &str = "::::::::::::::\n{}\n::::::::::::::\n";
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let matches = App::new(executable!())
+    let matches = uu_app().get_matches_from(args);
+
+    let mut buff = String::new();
+    let silent = matches.is_present(options::SILENT);
+    if let Some(files) = matches.values_of(options::FILES) {
+        let mut stdout = setup_term();
+        let length = files.len();
+
+        let mut files_iter = files.peekable();
+        while let (Some(file), next_file) = (files_iter.next(), files_iter.peek()) {
+            let file = Path::new(file);
+            if file.is_dir() {
+                terminal::disable_raw_mode().unwrap();
+                show_usage_error!("'{}' is a directory.", file.display());
+                return 1;
+            }
+            if !file.exists() {
+                terminal::disable_raw_mode().unwrap();
+                show_error!("cannot open {}: No such file or directory", file.display());
+                return 1;
+            }
+            if length > 1 {
+                buff.push_str(&MULTI_FILE_TOP_PROMPT.replace("{}", file.to_str().unwrap()));
+            }
+            let mut reader = BufReader::new(File::open(file).unwrap());
+            reader.read_to_string(&mut buff).unwrap();
+            more(&buff, &mut stdout, next_file.copied(), silent);
+            buff.clear();
+        }
+        reset_term(&mut stdout);
+    } else if atty::isnt(atty::Stream::Stdin) {
+        stdin().read_to_string(&mut buff).unwrap();
+        let mut stdout = setup_term();
+        more(&buff, &mut stdout, None, silent);
+        reset_term(&mut stdout);
+    } else {
+        show_usage_error!("bad usage");
+    }
+    0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .about("A file perusal filter for CRT viewing.")
         .version(crate_version!())
         .arg(
@@ -138,45 +180,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .multiple(true)
                 .help("Path to the files to be read"),
         )
-        .get_matches_from(args);
-
-    let mut buff = String::new();
-    let silent = matches.is_present(options::SILENT);
-    if let Some(files) = matches.values_of(options::FILES) {
-        let mut stdout = setup_term();
-        let length = files.len();
-
-        let mut files_iter = files.peekable();
-        while let (Some(file), next_file) = (files_iter.next(), files_iter.peek()) {
-            let file = Path::new(file);
-            if file.is_dir() {
-                terminal::disable_raw_mode().unwrap();
-                show_usage_error!("'{}' is a directory.", file.display());
-                return 1;
-            }
-            if !file.exists() {
-                terminal::disable_raw_mode().unwrap();
-                show_error!("cannot open {}: No such file or directory", file.display());
-                return 1;
-            }
-            if length > 1 {
-                buff.push_str(&MULTI_FILE_TOP_PROMPT.replace("{}", file.to_str().unwrap()));
-            }
-            let mut reader = BufReader::new(File::open(file).unwrap());
-            reader.read_to_string(&mut buff).unwrap();
-            more(&buff, &mut stdout, next_file.copied(), silent);
-            buff.clear();
-        }
-        reset_term(&mut stdout);
-    } else if atty::isnt(atty::Stream::Stdin) {
-        stdin().read_to_string(&mut buff).unwrap();
-        let mut stdout = setup_term();
-        more(&buff, &mut stdout, None, silent);
-        reset_term(&mut stdout);
-    } else {
-        show_usage_error!("bad usage");
-    }
-    0
 }
 
 #[cfg(not(target_os = "fuchsia"))]
@@ -210,14 +213,14 @@ fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>, silent: bo
     let (cols, rows) = terminal::size().unwrap();
     let lines = break_buff(buff, usize::from(cols));
 
-    let mut pager = Pager::new(rows as usize, lines, next_file, silent);
-    pager.draw(stdout, false);
+    let mut pager = Pager::new(rows, lines, next_file, silent);
+    pager.draw(stdout, None);
     if pager.should_close() {
         return;
     }
 
     loop {
-        let mut wrong_key = false;
+        let mut wrong_key = None;
         if event::poll(Duration::from_millis(10)).unwrap() {
             match event::read().unwrap() {
                 Event::Key(KeyEvent {
@@ -239,7 +242,11 @@ fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>, silent: bo
                     code: KeyCode::Char(' '),
                     modifiers: KeyModifiers::NONE,
                 }) => {
-                    pager.page_down();
+                    if pager.should_close() {
+                        return;
+                    } else {
+                        pager.page_down();
+                    }
                 }
                 Event::Key(KeyEvent {
                     code: KeyCode::Up,
@@ -247,15 +254,17 @@ fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>, silent: bo
                 }) => {
                     pager.page_up();
                 }
-                _ => {
-                    wrong_key = true;
+                Event::Resize(col, row) => {
+                    pager.page_resize(col, row);
                 }
+                Event::Key(KeyEvent {
+                    code: KeyCode::Char(k),
+                    ..
+                }) => wrong_key = Some(k),
+                _ => continue,
             }
 
             pager.draw(stdout, wrong_key);
-            if pager.should_close() {
-                return;
-            }
         }
     }
 }
@@ -264,54 +273,49 @@ struct Pager<'a> {
     // The current line at the top of the screen
     upper_mark: usize,
     // The number of rows that fit on the screen
-    content_rows: usize,
+    content_rows: u16,
     lines: Vec<String>,
     next_file: Option<&'a str>,
     line_count: usize,
-    close_on_down: bool,
     silent: bool,
 }
 
 impl<'a> Pager<'a> {
-    fn new(rows: usize, lines: Vec<String>, next_file: Option<&'a str>, silent: bool) -> Self {
+    fn new(rows: u16, lines: Vec<String>, next_file: Option<&'a str>, silent: bool) -> Self {
         let line_count = lines.len();
         Self {
             upper_mark: 0,
-            content_rows: rows - 1,
+            content_rows: rows.saturating_sub(1),
             lines,
             next_file,
             line_count,
-            close_on_down: false,
             silent,
         }
     }
 
     fn should_close(&mut self) -> bool {
-        if self.upper_mark + self.content_rows >= self.line_count {
-            if self.close_on_down {
-                return true;
-            }
-            if self.next_file.is_none() {
-                return true;
-            } else {
-                self.close_on_down = true;
-            }
-        } else {
-            self.close_on_down = false;
-        }
-        false
+        self.upper_mark
+            .saturating_add(self.content_rows.into())
+            .ge(&self.line_count)
     }
 
     fn page_down(&mut self) {
-        self.upper_mark += self.content_rows;
+        self.upper_mark = self.upper_mark.saturating_add(self.content_rows.into());
     }
 
     fn page_up(&mut self) {
-        self.upper_mark = self.upper_mark.saturating_sub(self.content_rows);
+        self.upper_mark = self.upper_mark.saturating_sub(self.content_rows.into());
     }
 
-    fn draw(&self, stdout: &mut std::io::Stdout, wrong_key: bool) {
-        let lower_mark = self.line_count.min(self.upper_mark + self.content_rows);
+    // TODO: Deal with column size changes.
+    fn page_resize(&mut self, _: u16, row: u16) {
+        self.content_rows = row.saturating_sub(1);
+    }
+
+    fn draw(&self, stdout: &mut std::io::Stdout, wrong_key: Option<char>) {
+        let lower_mark = self
+            .line_count
+            .min(self.upper_mark.saturating_add(self.content_rows.into()));
         self.draw_lines(stdout);
         self.draw_prompt(stdout, lower_mark, wrong_key);
         stdout.flush().unwrap();
@@ -323,7 +327,7 @@ impl<'a> Pager<'a> {
             .lines
             .iter()
             .skip(self.upper_mark)
-            .take(self.content_rows);
+            .take(self.content_rows.into());
 
         for line in displayed_lines {
             stdout
@@ -332,7 +336,7 @@ impl<'a> Pager<'a> {
         }
     }
 
-    fn draw_prompt(&self, stdout: &mut Stdout, lower_mark: usize, wrong_key: bool) {
+    fn draw_prompt(&self, stdout: &mut Stdout, lower_mark: usize, wrong_key: Option<char>) {
         let status_inner = if lower_mark == self.line_count {
             format!("Next file: {}", self.next_file.unwrap_or_default())
         } else {
@@ -345,10 +349,13 @@ impl<'a> Pager<'a> {
         let status = format!("--More--({})", status_inner);
 
         let banner = match (self.silent, wrong_key) {
-            (true, true) => "[Press 'h' for instructions. (unimplemented)]".to_string(),
-            (true, false) => format!("{}[Press space to continue, 'q' to quit.]", status),
-            (false, true) => format!("{}{}", status, BELL),
-            (false, false) => status,
+            (true, Some(key)) => format!(
+                "{} [Unknown key: '{}'. Press 'h' for instructions. (unimplemented)]",
+                status, key
+            ),
+            (true, None) => format!("{}[Press space to continue, 'q' to quit.]", status),
+            (false, Some(_)) => format!("{}{}", status, BELL),
+            (false, None) => status,
         };
 
         write!(
@@ -364,7 +371,7 @@ impl<'a> Pager<'a> {
 
 // Break the lines on the cols of the terminal
 fn break_buff(buff: &str, cols: usize) -> Vec<String> {
-    let mut lines = Vec::new();
+    let mut lines = Vec::with_capacity(buff.lines().count());
 
     for l in buff.lines() {
         lines.append(&mut break_line(l, cols));

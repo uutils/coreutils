@@ -16,7 +16,7 @@ name = "uu_mknod"
 path = "src/mknod.rs"
 
 [dependencies]
-clap = "2.33"
+clap = { version = "2.33", features = ["wrap_help"] }
 libc = "^0.2.42"
 uucore = { version=">=0.0.8", package="uucore", path="../../uucore", features=["mode"] }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }

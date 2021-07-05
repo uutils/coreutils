@@ -38,18 +38,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let after_help = get_long_usage();
 
-    let matches = App::new(executable!())
-        .about(ABOUT)
+    let matches = uu_app()
         .usage(&usage[..])
         .after_help(&after_help[..])
-        .version(crate_version!())
-        .arg(
-            Arg::with_name(options::ZERO)
-                .long(options::ZERO)
-                .short("z")
-                .help("separate output with NUL rather than newline"),
-        )
-        .arg(Arg::with_name(options::DIR).hidden(true).multiple(true))
         .get_matches_from(args);
 
     let separator = if matches.is_present(options::ZERO) {
@@ -91,4 +82,17 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .about(ABOUT)
+        .version(crate_version!())
+        .arg(
+            Arg::with_name(options::ZERO)
+                .long(options::ZERO)
+                .short("z")
+                .help("separate output with NUL rather than newline"),
+        )
+        .arg(Arg::with_name(options::DIR).hidden(true).multiple(true))
 }

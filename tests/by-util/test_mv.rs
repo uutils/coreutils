@@ -614,7 +614,7 @@ fn test_mv_overwrite_nonempty_dir() {
     // Not same error as GNU; the error message is a rust builtin
     // TODO: test (and implement) correct error message (or at least decide whether to do so)
     // Current: "mv: couldn't rename path (Directory not empty; from=a; to=b)"
-    // GNU:     "mv: cannot move ‘a’ to ‘b’: Directory not empty"
+    // GNU:     "mv: cannot move 'a' to 'b': Directory not empty"
 
     // Verbose output for the move should not be shown on failure
     let result = ucmd.arg("-vT").arg(dir_a).arg(dir_b).fails();
@@ -638,7 +638,7 @@ fn test_mv_backup_dir() {
         .arg(dir_b)
         .succeeds()
         .stdout_only(format!(
-            "‘{}’ -> ‘{}’ (backup: ‘{}~’)\n",
+            "'{}' -> '{}' (backup: '{}~')\n",
             dir_a, dir_b, dir_b
         ));
 
@@ -672,7 +672,7 @@ fn test_mv_errors() {
 
     // $ at.touch file && at.mkdir dir
     // $ mv -T file dir
-    // err == mv: cannot overwrite directory ‘dir’ with non-directory
+    // err == mv: cannot overwrite directory 'dir' with non-directory
     scene
         .ucmd()
         .arg("-T")
@@ -680,13 +680,13 @@ fn test_mv_errors() {
         .arg(dir)
         .fails()
         .stderr_is(format!(
-            "mv: cannot overwrite directory ‘{}’ with non-directory\n",
+            "mv: cannot overwrite directory '{}' with non-directory\n",
             dir
         ));
 
     // $ at.mkdir dir && at.touch file
     // $ mv dir file
-    // err == mv: cannot overwrite non-directory ‘file’ with directory ‘dir’
+    // err == mv: cannot overwrite non-directory 'file' with directory 'dir'
     assert!(!scene
         .ucmd()
         .arg(dir)
@@ -713,7 +713,7 @@ fn test_mv_verbose() {
         .arg(file_a)
         .arg(file_b)
         .succeeds()
-        .stdout_only(format!("‘{}’ -> ‘{}’\n", file_a, file_b));
+        .stdout_only(format!("'{}' -> '{}'\n", file_a, file_b));
 
     at.touch(file_a);
     scene
@@ -723,12 +723,13 @@ fn test_mv_verbose() {
         .arg(file_b)
         .succeeds()
         .stdout_only(format!(
-            "‘{}’ -> ‘{}’ (backup: ‘{}~’)\n",
+            "'{}' -> '{}' (backup: '{}~')\n",
             file_a, file_b, file_b
         ));
 }
 
 #[test]
+#[cfg(target_os = "linux")] // mkdir does not support -m on windows. Freebsd doesn't return a permission error either.
 fn test_mv_permission_error() {
     let scene = TestScenario::new("mkdir");
     let folder1 = "bar";
@@ -738,12 +739,11 @@ fn test_mv_permission_error() {
     scene.ucmd().arg("-m777").arg(folder2).succeeds();
 
     scene
-        .cmd_keepenv(util_name!())
+        .ccmd("mv")
         .arg(folder2)
         .arg(folder_to_move)
-        .run()
-        .stderr_str()
-        .ends_with("Permission denied");
+        .fails()
+        .stderr_contains("Permission denied");
 }
 
 // Todo:
@@ -756,5 +756,5 @@ fn test_mv_permission_error() {
 // -r--r--r-- 1 user user 0 okt 25 11:21 b
 // $
 // $ mv -v a b
-// mv: try to overwrite ‘b’, overriding mode 0444 (r--r--r--)? y
-// ‘a’ -> ‘b’
+// mv: try to overwrite 'b', overriding mode 0444 (r--r--r--)? y
+// 'a' -> 'b'

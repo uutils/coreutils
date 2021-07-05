@@ -38,17 +38,7 @@ fn get_usage() -> String {
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
-        .usage(&usage[..])
-        .arg(
-            Arg::with_name(options::SINCE)
-                .short("s")
-                .long(options::SINCE)
-                .help("system up since"),
-        )
-        .get_matches_from(args);
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     let (boot_time, user_count) = process_utmpx();
     let uptime = get_uptime(boot_time);
@@ -71,6 +61,18 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
         0
     }
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
+        .arg(
+            Arg::with_name(options::SINCE)
+                .short("s")
+                .long(options::SINCE)
+                .help("system up since"),
+        )
 }
 
 #[cfg(unix)]

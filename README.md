@@ -134,6 +134,9 @@ $ cargo install --path .
 
 This command will install uutils into Cargo's *bin* folder (*e.g.* `$HOME/.cargo/bin`).
 
+This does not install files necessary for shell completion. For shell completion to work,
+use `GNU Make` or see `Manually install shell completions`.
+
 ### GNU Make
 
 To install all available utilities:
@@ -179,6 +182,10 @@ Set install parent directory (default value is /usr/local):
 $ make PREFIX=/my/path install
 ```
 
+Installing with `make` installs shell completions for all installed utilities
+for `bash`, `fish` and `zsh`. Completions for `elvish` and `powershell` can also
+be generated; See `Manually install shell completions`.
+
 ### NixOS
 
 The [standard package set](https://nixos.org/nixpkgs/manual/) of [NixOS](https://nixos.org/)
@@ -186,6 +193,23 @@ provides this package out of the box since 18.03:
 
 ```shell
 $ nix-env -iA nixos.uutils-coreutils
+```
+
+### Manually install shell completions
+
+The `coreutils` binary can generate completions for the `bash`, `elvish`, `fish`, `powershell`
+and `zsh` shells. It prints the result to stdout.
+
+The syntax is:
+```bash
+cargo run completion <utility> <shell>
+```
+
+So, to install completions for `ls` on `bash` to `/usr/local/share/bash-completion/completions/ls`,
+run:
+
+```bash
+cargo run completion ls bash > /usr/local/share/bash-completion/completions/ls
 ```
 
 ## Un-installation Instructions

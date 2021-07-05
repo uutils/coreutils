@@ -28,7 +28,8 @@ fn test_helper(file_name: &str, possible_args: &[&str]) {
 fn test_buffer_sizes() {
     let buffer_sizes = ["0", "50K", "50k", "1M", "100M"];
     for buffer_size in &buffer_sizes {
-        new_ucmd!()
+        TestScenario::new(util_name!())
+            .ucmd_keepenv()
             .arg("-n")
             .arg("-S")
             .arg(buffer_size)
@@ -40,7 +41,8 @@ fn test_buffer_sizes() {
         {
             let buffer_sizes = ["1000G", "10T"];
             for buffer_size in &buffer_sizes {
-                new_ucmd!()
+                TestScenario::new(util_name!())
+                    .ucmd_keepenv()
                     .arg("-n")
                     .arg("-S")
                     .arg(buffer_size)
@@ -125,11 +127,7 @@ fn test_months_whitespace() {
 
 #[test]
 fn test_version_empty_lines() {
-    new_ucmd!()
-        .arg("-V")
-        .arg("version-empty-lines.txt")
-        .succeeds()
-        .stdout_is("\n\n\n\n\n\n\n1.2.3-alpha\n1.2.3-alpha2\n\t\t\t1.12.4\n11.2.3\n");
+    test_helper("version-empty-lines", &["-V", "--version-sort"]);
 }
 
 #[test]
@@ -454,8 +452,18 @@ fn test_human_block_sizes2() {
             .arg(human_numeric_sort_param)
             .pipe_in(input)
             .succeeds()
-            .stdout_only("-8T\n0.8M\n8981K\n21G\n909991M\n");
+            .stdout_only("-8T\n8981K\n0.8M\n909991M\n21G\n");
     }
+}
+
+#[test]
+fn test_human_numeric_zero_stable() {
+    let input = "0M\n0K\n-0K\n-P\n-0M\n";
+    new_ucmd!()
+        .arg("-hs")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(input);
 }
 
 #[test]
@@ -877,7 +885,8 @@ fn test_compress() {
 
 #[test]
 fn test_compress_fail() {
-    new_ucmd!()
+    TestScenario::new(util_name!())
+        .ucmd_keepenv()
         .args(&[
             "ext_sort.txt",
             "-n",
@@ -892,7 +901,8 @@ fn test_compress_fail() {
 
 #[test]
 fn test_merge_batches() {
-    new_ucmd!()
+    TestScenario::new(util_name!())
+        .ucmd_keepenv()
         .args(&["ext_sort.txt", "-n", "-S", "150b"])
         .succeeds()
         .stdout_only_fixture("ext_sort.expected");
@@ -900,7 +910,8 @@ fn test_merge_batches() {
 
 #[test]
 fn test_merge_batch_size() {
-    new_ucmd!()
+    TestScenario::new(util_name!())
+        .ucmd_keepenv()
         .arg("--batch-size=2")
         .arg("-m")
         .arg("--unique")
@@ -925,4 +936,18 @@ fn test_sigpipe_panic() {
         String::from_utf8(child.wait_with_output().unwrap().stderr),
         Ok(String::new())
     );
+}
+
+#[test]
+fn test_conflict_check_out() {
+    let check_flags = ["-c=silent", "-c=quiet", "-c=diagnose-first", "-c", "-C"];
+    for check_flag in &check_flags {
+        new_ucmd!()
+            .arg(check_flag)
+            .arg("-o=/dev/null")
+            .fails()
+            .stderr_contains(
+                "error: The argument '--output <FILENAME>' cannot be used with '--check",
+            );
+    }
 }

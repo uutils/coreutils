@@ -61,11 +61,64 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let after_help = get_long_usage();
 
-    let matches = App::new(executable!())
-        .version(crate_version!())
-        .about(ABOUT)
+    let matches = uu_app()
         .usage(&usage[..])
         .after_help(&after_help[..])
+        .get_matches_from(args);
+
+    let changes = matches.is_present(options::CHANGES);
+    let quiet = matches.is_present(options::QUIET);
+    let verbose = matches.is_present(options::VERBOSE);
+    let preserve_root = matches.is_present(options::PRESERVE_ROOT);
+    let recursive = matches.is_present(options::RECURSIVE);
+    let fmode = matches
+        .value_of(options::REFERENCE)
+        .and_then(|fref| match fs::metadata(fref) {
+            Ok(meta) => Some(meta.mode()),
+            Err(err) => crash!(1, "cannot stat attributes of '{}': {}", fref, err),
+        });
+    let modes = matches.value_of(options::MODE).unwrap(); // should always be Some because required
+    let cmode = if mode_had_minus_prefix {
+        // clap parsing is finished, now put prefix back
+        format!("-{}", modes)
+    } else {
+        modes.to_string()
+    };
+    let mut files: Vec<String> = matches
+        .values_of(options::FILE)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
+    let cmode = if fmode.is_some() {
+        // "--reference" and MODE are mutually exclusive
+        // if "--reference" was used MODE needs to be interpreted as another FILE
+        // it wasn't possible to implement this behavior directly with clap
+        files.push(cmode);
+        None
+    } else {
+        Some(cmode)
+    };
+
+    let chmoder = Chmoder {
+        changes,
+        quiet,
+        verbose,
+        preserve_root,
+        recursive,
+        fmode,
+        cmode,
+    };
+    match chmoder.chmod(files) {
+        Ok(()) => {}
+        Err(e) => return e,
+    }
+
+    0
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
+        .version(crate_version!())
+        .about(ABOUT)
         .arg(
             Arg::with_name(options::CHANGES)
                 .long(options::CHANGES)
@@ -120,55 +173,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .required_unless(options::MODE)
                 .multiple(true),
         )
-        .get_matches_from(args);
-
-    let changes = matches.is_present(options::CHANGES);
-    let quiet = matches.is_present(options::QUIET);
-    let verbose = matches.is_present(options::VERBOSE);
-    let preserve_root = matches.is_present(options::PRESERVE_ROOT);
-    let recursive = matches.is_present(options::RECURSIVE);
-    let fmode = matches
-        .value_of(options::REFERENCE)
-        .and_then(|fref| match fs::metadata(fref) {
-            Ok(meta) => Some(meta.mode()),
-            Err(err) => crash!(1, "cannot stat attributes of '{}': {}", fref, err),
-        });
-    let modes = matches.value_of(options::MODE).unwrap(); // should always be Some because required
-    let cmode = if mode_had_minus_prefix {
-        // clap parsing is finished, now put prefix back
-        format!("-{}", modes)
-    } else {
-        modes.to_string()
-    };
-    let mut files: Vec<String> = matches
-        .values_of(options::FILE)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_default();
-    let cmode = if fmode.is_some() {
-        // "--reference" and MODE are mutually exclusive
-        // if "--reference" was used MODE needs to be interpreted as another FILE
-        // it wasn't possible to implement this behavior directly with clap
-        files.push(cmode);
-        None
-    } else {
-        Some(cmode)
-    };
-
-    let chmoder = Chmoder {
-        changes,
-        quiet,
-        verbose,
-        preserve_root,
-        recursive,
-        fmode,
-        cmode,
-    };
-    match chmoder.chmod(files) {
-        Ok(()) => {}
-        Err(e) => return e,
-    }
-
-    0
 }
 
 // Iterate 'args' and delete the first occurrence

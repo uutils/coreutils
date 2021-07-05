@@ -15,6 +15,7 @@ extern crate uucore;
 use clap::{crate_version, App, Arg, ArgMatches};
 use file_diff::diff;
 use filetime::{set_file_times, FileTime};
+use uucore::backup_control::{self, BackupMode};
 use uucore::entries::{grp2gid, usr2uid};
 use uucore::perms::{wrap_chgrp, wrap_chown, Verbosity};
 
@@ -33,6 +34,7 @@ const DEFAULT_STRIP_PROGRAM: &str = "strip";
 pub struct Behavior {
     main_function: MainFunction,
     specified_mode: Option<u32>,
+    backup_mode: BackupMode,
     suffix: String,
     owner: String,
     group: String,
@@ -42,6 +44,7 @@ pub struct Behavior {
     strip: bool,
     strip_program: String,
     create_leading: bool,
+    target_dir: Option<String>,
 }
 
 #[derive(Clone, Eq, PartialEq)]
@@ -67,7 +70,7 @@ static ABOUT: &str = "Copy SOURCE to DEST or multiple SOURCE(s) to the existing
 
 static OPT_COMPARE: &str = "compare";
 static OPT_BACKUP: &str = "backup";
-static OPT_BACKUP_2: &str = "backup2";
+static OPT_BACKUP_NO_ARG: &str = "backup2";
 static OPT_DIRECTORY: &str = "directory";
 static OPT_IGNORED: &str = "ignored";
 static OPT_CREATE_LEADING: &str = "create-leading";
@@ -97,21 +100,49 @@ fn get_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+
+    let paths: Vec<String> = matches
+        .values_of(ARG_FILES)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
+
+    if let Err(s) = check_unimplemented(&matches) {
+        show_error!("Unimplemented feature: {}", s);
+        return 2;
+    }
+
+    let behavior = match behavior(&matches) {
+        Ok(x) => x,
+        Err(ret) => {
+            return ret;
+        }
+    };
+
+    match behavior.main_function {
+        MainFunction::Directory => directory(paths, behavior),
+        MainFunction::Standard => standard(paths, behavior),
+    }
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .version(crate_version!())
         .about(ABOUT)
-        .usage(&usage[..])
         .arg(
                 Arg::with_name(OPT_BACKUP)
                 .long(OPT_BACKUP)
-                .help("(unimplemented) make a backup of each existing destination file")
+                .help("make a backup of each existing destination file")
+                .takes_value(true)
+                .require_equals(true)
+                .min_values(0)
                 .value_name("CONTROL")
         )
         .arg(
             // TODO implement flag
-            Arg::with_name(OPT_BACKUP_2)
+            Arg::with_name(OPT_BACKUP_NO_ARG)
             .short("b")
-            .help("(unimplemented) like --backup but does not accept an argument")
+            .help("like --backup but does not accept an argument")
         )
         .arg(
             Arg::with_name(OPT_IGNORED)
@@ -184,7 +215,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(OPT_SUFFIX)
                 .short("S")
                 .long(OPT_SUFFIX)
-                .help("(unimplemented) override the usual backup suffix")
+                .help("override the usual backup suffix")
                 .value_name("SUFFIX")
                 .takes_value(true)
                 .min_values(1)
@@ -194,7 +225,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Arg::with_name(OPT_TARGET_DIRECTORY)
                 .short("t")
                 .long(OPT_TARGET_DIRECTORY)
-                .help("(unimplemented) move all SOURCE arguments into DIRECTORY")
+                .help("move all SOURCE arguments into DIRECTORY")
                 .value_name("DIRECTORY")
         )
         .arg(
@@ -227,29 +258,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .value_name("CONTEXT")
         )
         .arg(Arg::with_name(ARG_FILES).multiple(true).takes_value(true).min_values(1))
-        .get_matches_from(args);
-
-    let paths: Vec<String> = matches
-        .values_of(ARG_FILES)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_default();
-
-    if let Err(s) = check_unimplemented(&matches) {
-        show_error!("Unimplemented feature: {}", s);
-        return 2;
-    }
-
-    let behavior = match behavior(&matches) {
-        Ok(x) => x,
-        Err(ret) => {
-            return ret;
-        }
-    };
-
-    match behavior.main_function {
-        MainFunction::Directory => directory(paths, behavior),
-        MainFunction::Standard => standard(paths, behavior),
-    }
 }
 
 /// Check for unimplemented command line arguments.
@@ -262,15 +270,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 ///
 ///
 fn check_unimplemented<'a>(matches: &ArgMatches) -> Result<(), &'a str> {
-    if matches.is_present(OPT_BACKUP) {
-        Err("--backup")
-    } else if matches.is_present(OPT_BACKUP_2) {
-        Err("-b")
-    } else if matches.is_present(OPT_SUFFIX) {
-        Err("--suffix, -S")
-    } else if matches.is_present(OPT_TARGET_DIRECTORY) {
-        Err("--target-directory, -t")
-    } else if matches.is_present(OPT_NO_TARGET_DIRECTORY) {
+    if matches.is_present(OPT_NO_TARGET_DIRECTORY) {
         Err("--no-target-directory, -T")
     } else if matches.is_present(OPT_PRESERVE_CONTEXT) {
         Err("--preserve-context, -P")
@@ -308,16 +308,16 @@ fn behavior(matches: &ArgMatches) -> Result<Behavior, i32> {
         None
     };
 
-    let backup_suffix = if matches.is_present(OPT_SUFFIX) {
-        matches.value_of(OPT_SUFFIX).ok_or(1)?
-    } else {
-        "~"
-    };
+    let target_dir = matches.value_of(OPT_TARGET_DIRECTORY).map(|d| d.to_owned());
 
     Ok(Behavior {
         main_function,
         specified_mode,
-        suffix: backup_suffix.to_string(),
+        backup_mode: backup_control::determine_backup_mode(
+            matches.is_present(OPT_BACKUP_NO_ARG) || matches.is_present(OPT_BACKUP),
+            matches.value_of(OPT_BACKUP),
+        ),
+        suffix: backup_control::determine_backup_suffix(matches.value_of(OPT_SUFFIX)),
         owner: matches.value_of(OPT_OWNER).unwrap_or("").to_string(),
         group: matches.value_of(OPT_GROUP).unwrap_or("").to_string(),
         verbose: matches.is_present(OPT_VERBOSE),
@@ -330,6 +330,7 @@ fn behavior(matches: &ArgMatches) -> Result<Behavior, i32> {
                 .unwrap_or(DEFAULT_STRIP_PROGRAM),
         ),
         create_leading: matches.is_present(OPT_CREATE_LEADING),
+        target_dir,
     })
 }
 
@@ -392,16 +393,17 @@ fn is_new_file_path(path: &Path) -> bool {
 ///
 /// Returns an integer intended as a program return code.
 ///
-fn standard(paths: Vec<String>, b: Behavior) -> i32 {
-    let sources = &paths[0..paths.len() - 1]
-        .iter()
-        .map(PathBuf::from)
-        .collect::<Vec<_>>();
+fn standard(mut paths: Vec<String>, b: Behavior) -> i32 {
+    let target: PathBuf = b
+        .target_dir
+        .clone()
+        .unwrap_or_else(|| paths.pop().unwrap())
+        .into();
 
-    let target = Path::new(paths.last().unwrap());
+    let sources = &paths.iter().map(PathBuf::from).collect::<Vec<_>>();
 
     if sources.len() > 1 || (target.exists() && target.is_dir()) {
-        copy_files_into_dir(sources, &target.to_path_buf(), &b)
+        copy_files_into_dir(sources, &target, &b)
     } else {
         if let Some(parent) = target.parent() {
             if !parent.exists() && b.create_leading {
@@ -417,8 +419,8 @@ fn standard(paths: Vec<String>, b: Behavior) -> i32 {
             }
         }
 
-        if target.is_file() || is_new_file_path(target) {
-            copy_file_to_file(&sources[0], &target.to_path_buf(), &b)
+        if target.is_file() || is_new_file_path(&target) {
+            copy_file_to_file(&sources[0], &target, &b)
         } else {
             show_error!(
                 "invalid target {}: No such file or directory",
@@ -511,6 +513,28 @@ fn copy_file_to_file(file: &Path, target: &Path, b: &Behavior) -> i32 {
 fn copy(from: &Path, to: &Path, b: &Behavior) -> Result<(), ()> {
     if b.compare && !need_copy(from, to, b) {
         return Ok(());
+    }
+    // Declare the path here as we may need it for the verbose output below.
+    let mut backup_path = None;
+
+    // Perform backup, if any, before overwriting 'to'
+    //
+    // The codes actually making use of the backup process don't seem to agree
+    // on how best to approach the issue. (mv and ln, for example)
+    if to.exists() {
+        backup_path = backup_control::get_backup_path(b.backup_mode, to, &b.suffix);
+        if let Some(ref backup_path) = backup_path {
+            // TODO!!
+            if let Err(err) = fs::rename(to, backup_path) {
+                show_error!(
+                    "install: cannot backup file '{}' to '{}': {}",
+                    to.display(),
+                    backup_path.display(),
+                    err
+                );
+                return Err(());
+            }
+        }
     }
 
     if from.to_string_lossy() == "/dev/null" {
@@ -619,7 +643,11 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> Result<(), ()> {
     }
 
     if b.verbose {
-        show_error!("'{}' -> '{}'", from.display(), to.display());
+        print!("'{}' -> '{}'", from.display(), to.display());
+        match backup_path {
+            Some(path) => println!(" (backup: '{}')", path.display()),
+            None => println!(),
+        }
     }
 
     Ok(())

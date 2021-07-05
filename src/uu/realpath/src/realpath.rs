@@ -29,10 +29,35 @@ fn get_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
 
-    let matches = App::new(executable!())
+    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+
+    /*  the list of files */
+
+    let paths: Vec<PathBuf> = matches
+        .values_of(ARG_FILES)
+        .unwrap()
+        .map(PathBuf::from)
+        .collect();
+
+    let strip = matches.is_present(OPT_STRIP);
+    let zero = matches.is_present(OPT_ZERO);
+    let quiet = matches.is_present(OPT_QUIET);
+    let mut retcode = 0;
+    for path in &paths {
+        if let Err(e) = resolve_path(path, strip, zero) {
+            if !quiet {
+                show_error!("{}: {}", e, path.display());
+            }
+            retcode = 1
+        };
+    }
+    retcode
+}
+
+pub fn uu_app() -> App<'static, 'static> {
+    App::new(executable!())
         .version(crate_version!())
         .about(ABOUT)
-        .usage(&usage[..])
         .arg(
             Arg::with_name(OPT_QUIET)
                 .short("q")
@@ -58,29 +83,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 .required(true)
                 .min_values(1),
         )
-        .get_matches_from(args);
-
-    /*  the list of files */
-
-    let paths: Vec<PathBuf> = matches
-        .values_of(ARG_FILES)
-        .unwrap()
-        .map(PathBuf::from)
-        .collect();
-
-    let strip = matches.is_present(OPT_STRIP);
-    let zero = matches.is_present(OPT_ZERO);
-    let quiet = matches.is_present(OPT_QUIET);
-    let mut retcode = 0;
-    for path in &paths {
-        if let Err(e) = resolve_path(path, strip, zero) {
-            if !quiet {
-                show_error!("{}: {}", e, path.display());
-            }
-            retcode = 1
-        };
-    }
-    retcode
 }
 
 /// Resolve a path to an absolute form and print it.

@@ -18,7 +18,7 @@ use std::fmt;
 ///
 /// # Errors
 ///
-/// Will return `ParseSizeError` if it’s not possible to parse this
+/// Will return `ParseSizeError` if it's not possible to parse this
 /// string into a number, e.g. if the string does not begin with a
 /// numeral, or if the unit is not one of the supported units described
 /// in the preceding section.
@@ -109,19 +109,19 @@ impl fmt::Display for ParseSizeError {
 
 impl ParseSizeError {
     fn parse_failure(s: &str) -> ParseSizeError {
-        // stderr on linux (GNU coreutils 8.32)
+        // stderr on linux (GNU coreutils 8.32) (LC_ALL=C)
         // has to be handled in the respective uutils because strings differ, e.g.:
         //
         // `NUM`
-        // head:     invalid number of bytes: ‘1fb’
-        // tail:     invalid number of bytes: ‘1fb’
+        // head:     invalid number of bytes: '1fb'
+        // tail:     invalid number of bytes: '1fb'
         //
         // `SIZE`
-        // split:    invalid number of bytes: ‘1fb’
-        // truncate: Invalid number: ‘1fb’
+        // split:    invalid number of bytes: '1fb'
+        // truncate: Invalid number: '1fb'
         //
         // `MODE`
-        // stdbuf:   invalid mode ‘1fb’
+        // stdbuf:   invalid mode '1fb'
         //
         // `SIZE`
         // sort:     invalid suffix in --buffer-size argument '1fb'
@@ -140,27 +140,27 @@ impl ParseSizeError {
         //                   --width
         //                   --strings
         // etc.
-        ParseSizeError::ParseFailure(format!("‘{}’", s))
+        ParseSizeError::ParseFailure(format!("'{}'", s))
     }
 
     fn size_too_big(s: &str) -> ParseSizeError {
-        // stderr on linux (GNU coreutils 8.32)
+        // stderr on linux (GNU coreutils 8.32) (LC_ALL=C)
         // has to be handled in the respective uutils because strings differ, e.g.:
         //
-        // head:     invalid number of bytes: ‘1Y’: Value too large for defined data type
-        // tail:     invalid number of bytes: ‘1Y’: Value too large for defined data type
-        // split:    invalid number of bytes: ‘1Y’: Value too large for defined data type
-        // truncate:          Invalid number: ‘1Y’: Value too large for defined data type
-        // stdbuf:               invalid mode ‘1Y’: Value too large for defined data type
+        // head:     invalid number of bytes: '1Y': Value too large for defined data type
+        // tail:     invalid number of bytes: '1Y': Value too large for defined data type
+        // split:    invalid number of bytes: '1Y': Value too large for defined data type
+        // truncate:          Invalid number: '1Y': Value too large for defined data type
+        // stdbuf:               invalid mode '1Y': Value too large for defined data type
         // sort:     -S argument '1Y' too large
         // du:       -B argument '1Y' too large
         // od:       -N argument '1Y' too large
         // etc.
         //
         // stderr on macos (brew - GNU coreutils 8.32) also differs for the same version, e.g.:
-        // ghead:   invalid number of bytes: ‘1Y’: Value too large to be stored in data type
-        // gtail:   invalid number of bytes: ‘1Y’: Value too large to be stored in data type
-        ParseSizeError::SizeTooBig(format!("‘{}’: Value too large for defined data type", s))
+        // ghead:   invalid number of bytes: '1Y': Value too large to be stored in data type
+        // gtail:   invalid number of bytes: '1Y': Value too large to be stored in data type
+        ParseSizeError::SizeTooBig(format!("'{}': Value too large for defined data type", s))
     }
 }
 
@@ -227,7 +227,7 @@ mod tests {
         ));
 
         assert_eq!(
-            ParseSizeError::SizeTooBig("‘1Y’: Value too large for defined data type".to_string()),
+            ParseSizeError::SizeTooBig("'1Y': Value too large for defined data type".to_string()),
             parse_size("1Y").unwrap_err()
         );
     }
@@ -262,7 +262,7 @@ mod tests {
         for &test_string in &test_strings {
             assert_eq!(
                 parse_size(test_string).unwrap_err(),
-                ParseSizeError::ParseFailure(format!("‘{}’", test_string))
+                ParseSizeError::ParseFailure(format!("'{}'", test_string))
             );
         }
     }
