@@ -144,6 +144,13 @@ impl UError {
             UError::Custom(e) => e.code(),
         }
     }
+
+    pub fn usage(&self) -> bool {
+        match self {
+            UError::Common(e) => e.usage(),
+            UError::Custom(e) => e.usage(),
+        }
+    }
 }
 
 impl From<UCommonError> for UError {
@@ -220,6 +227,10 @@ pub trait UCustomError: Error {
     fn code(&self) -> i32 {
         1
     }
+
+    fn usage(&self) -> bool {
+        false
+    }
 }
 
 impl From<Box<dyn UCustomError>> for i32 {
@@ -291,6 +302,37 @@ impl UCustomError for USimpleError {
     }
 }
 
+#[derive(Debug)]
+pub struct UUsageError {
+    pub code: i32,
+    pub message: String,
+}
+
+impl UUsageError {
+    #[allow(clippy::new_ret_no_self)]
+    pub fn new(code: i32, message: String) -> UError {
+        UError::Custom(Box::new(Self { code, message }))
+    }
+}
+
+impl Error for UUsageError {}
+
+impl Display for UUsageError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        self.message.fmt(f)
+    }
+}
+
+impl UCustomError for UUsageError {
+    fn code(&self) -> i32 {
+        self.code
+    }
+
+    fn usage(&self) -> bool {
+        true
+    }
+}
+
 /// Wrapper type around [`std::io::Error`].
 ///
 /// The messages displayed by [`UIoError`] should match the error messages displayed by GNU
@@ -330,6 +372,10 @@ impl UIoError {
 
     pub fn code(&self) -> i32 {
         1
+    }
+
+    pub fn usage(&self) -> bool {
+        false
     }
 }
 
@@ -426,6 +472,10 @@ impl UCommonError {
 
     pub fn code(&self) -> i32 {
         1
+    }
+
+    pub fn usage(&self) -> bool {
+        false
     }
 }
 

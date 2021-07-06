@@ -951,3 +951,11 @@ fn test_conflict_check_out() {
             );
     }
 }
+
+#[test]
+fn test_key_takes_one_arg() {
+    new_ucmd!()
+        .args(&["-k", "2.3", "keys_open_ended.txt"])
+        .succeeds()
+        .stdout_is_fixture("keys_open_ended.expected");
+}

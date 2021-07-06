@@ -10,6 +10,7 @@ extern crate uucore;
 
 use chrono::prelude::DateTime;
 use chrono::Local;
+use clap::ArgMatches;
 use clap::{crate_version, App, Arg};
 use std::collections::HashSet;
 use std::convert::TryFrom;
@@ -63,6 +64,7 @@ mod options {
     pub const TIME_STYLE: &str = "time-style";
     pub const ONE_FILE_SYSTEM: &str = "one-file-system";
     pub const DEREFERENCE: &str = "dereference";
+    pub const INODES: &str = "inodes";
     pub const FILE: &str = "FILE";
 }
 
@@ -89,6 +91,7 @@ struct Options {
     separate_dirs: bool,
     one_file_system: bool,
     dereference: bool,
+    inodes: bool,
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
@@ -102,6 +105,7 @@ struct Stat {
     is_dir: bool,
     size: u64,
     blocks: u64,
+    inodes: u64,
     inode: Option<FileInfo>,
     created: Option<u64>,
     accessed: u64,
@@ -127,6 +131,7 @@ impl Stat {
             is_dir: metadata.is_dir(),
             size: metadata.len(),
             blocks: metadata.blocks() as u64,
+            inodes: 1,
             inode: Some(file_info),
             created: birth_u64(&metadata),
             accessed: metadata.atime() as u64,
@@ -144,6 +149,7 @@ impl Stat {
             size: metadata.len(),
             blocks: size_on_disk / 1024 * 2,
             inode: file_info,
+            inodes: 1,
             created: windows_creation_time_to_unix_time(metadata.creation_time()),
             accessed: windows_time_to_unix_time(metadata.last_access_time()),
             modified: windows_time_to_unix_time(metadata.last_write_time()),
@@ -257,6 +263,18 @@ fn read_block_size(s: Option<&str>) -> usize {
     }
 }
 
+fn choose_size(matches: &ArgMatches, stat: &Stat) -> u64 {
+    if matches.is_present(options::INODES) {
+        stat.inodes
+    } else if matches.is_present(options::APPARENT_SIZE) || matches.is_present(options::BYTES) {
+        stat.size
+    } else {
+        // The st_blocks field indicates the number of blocks allocated to the file, 512-byte units.
+        // See: http://linux.die.net/man/2/stat
+        stat.blocks * 512
+    }
+}
+
 // this takes `my_stat` to avoid having to stat files multiple times.
 // XXX: this should use the impl Trait return type when it is stabilized
 fn du(
@@ -307,6 +325,7 @@ fn du(
                         } else {
                             my_stat.size += this_stat.size;
                             my_stat.blocks += this_stat.blocks;
+                            my_stat.inodes += 1;
                             if options.all {
                                 stats.push(this_stat);
                             }
@@ -330,6 +349,7 @@ fn du(
         if !options.separate_dirs && stat.path.parent().unwrap() == my_stat.path {
             my_stat.size += stat.size;
             my_stat.blocks += stat.blocks;
+            my_stat.inodes += stat.inodes;
         }
         options
             .max_depth
@@ -413,12 +433,19 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         separate_dirs: matches.is_present(options::SEPARATE_DIRS),
         one_file_system: matches.is_present(options::ONE_FILE_SYSTEM),
         dereference: matches.is_present(options::DEREFERENCE),
+        inodes: matches.is_present(options::INODES),
     };
 
     let files = match matches.value_of(options::FILE) {
         Some(_) => matches.values_of(options::FILE).unwrap().collect(),
         None => vec!["."],
     };
+
+    if options.inodes
+        && (matches.is_present(options::APPARENT_SIZE) || matches.is_present(options::BYTES))
+    {
+        show_warning!("options --apparent-size and -b are ineffective with --inodes")
+    }
 
     let block_size = u64::try_from(read_block_size(matches.value_of(options::BLOCK_SIZE))).unwrap();
 
@@ -445,7 +472,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             convert_size_other
         }
     };
-    let convert_size = |size| convert_size_fn(size, multiplier, block_size);
+    let convert_size = |size: u64| {
+        if options.inodes {
+            size.to_string()
+        } else {
+            convert_size_fn(size, multiplier, block_size)
+        }
+    };
 
     let time_format_str = match matches.value_of("time-style") {
         Some(s) => match s {
@@ -488,15 +521,7 @@ Try '{} --help' for more information.",
                 let (_, len) = iter.size_hint();
                 let len = len.unwrap();
                 for (index, stat) in iter.enumerate() {
-                    let size = if matches.is_present(options::APPARENT_SIZE)
-                        || matches.is_present(options::BYTES)
-                    {
-                        stat.size
-                    } else {
-                        // C's stat is such that each block is assume to be 512 bytes
-                        // See: http://linux.die.net/man/2/stat
-                        stat.blocks * 512
-                    };
+                    let size = choose_size(&matches, &stat);
 
                     if threshold.map_or(false, |threshold| threshold.should_exclude(size)) {
                         continue;
@@ -629,8 +654,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 .help("print sizes in human readable format (e.g., 1K 234M 2G)")
         )
         .arg(
-            Arg::with_name("inodes")
-                .long("inodes")
+            Arg::with_name(options::INODES)
+                .long(options::INODES)
                 .help(
                     "list inode usage information instead of block usage like --block-size=1K"
                 )

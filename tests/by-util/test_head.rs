@@ -251,6 +251,28 @@ hello
 }
 
 #[test]
+fn test_bad_utf8() {
+    let bytes: &[u8] = b"\xfc\x80\x80\x80\x80\xaf";
+    new_ucmd!()
+        .args(&["-c", "6"])
+        .pipe_in(bytes)
+        .succeeds()
+        .stdout_is_bytes(bytes);
+}
+
+#[test]
+fn test_bad_utf8_lines() {
+    let input: &[u8] =
+        b"\xfc\x80\x80\x80\x80\xaf\nb\xfc\x80\x80\x80\x80\xaf\nb\xfc\x80\x80\x80\x80\xaf";
+    let output = b"\xfc\x80\x80\x80\x80\xaf\nb\xfc\x80\x80\x80\x80\xaf\n";
+    new_ucmd!()
+        .args(&["-n", "2"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is_bytes(output);
+}
+
+#[test]
 fn test_head_invalid_num() {
     new_ucmd!()
         .args(&["-c", "1024R", "emptyfile.txt"])

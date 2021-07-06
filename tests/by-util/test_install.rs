@@ -696,3 +696,388 @@ fn test_install_dir() {
     assert!(at.file_exists(&format!("{}/{}", dir, file1)));
     assert!(at.file_exists(&format!("{}/{}", dir, file2)));
 }
+//
+// test backup functionality
+#[test]
+fn test_install_backup_short_no_args_files() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_a = "test_install_simple_backup_file_a";
+    let file_b = "test_install_simple_backup_file_b";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    scene
+        .ucmd()
+        .arg("-b")
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
+    assert!(at.file_exists(&format!("{}~", file_b)));
+}
+
+#[test]
+fn test_install_backup_short_no_args_file_to_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file = "test_install_simple_backup_file_a";
+    let dest_dir = "test_install_dest/";
+    let expect = format!("{}{}", dest_dir, file);
+
+    at.touch(file);
+    at.mkdir(dest_dir);
+    at.touch(&expect);
+    scene
+        .ucmd()
+        .arg("-b")
+        .arg(file)
+        .arg(dest_dir)
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file));
+    assert!(at.file_exists(&expect));
+    assert!(at.file_exists(&format!("{}~", expect)));
+}
+
+// Long --backup option is tested separately as it requires a slightly different
+// handling than '-b' does.
+#[test]
+fn test_install_backup_long_no_args_files() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_a = "test_install_simple_backup_file_a";
+    let file_b = "test_install_simple_backup_file_b";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    scene
+        .ucmd()
+        .arg("--backup")
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
+    assert!(at.file_exists(&format!("{}~", file_b)));
+}
+
+#[test]
+fn test_install_backup_long_no_args_file_to_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file = "test_install_simple_backup_file_a";
+    let dest_dir = "test_install_dest/";
+    let expect = format!("{}{}", dest_dir, file);
+
+    at.touch(file);
+    at.mkdir(dest_dir);
+    at.touch(&expect);
+    scene
+        .ucmd()
+        .arg("--backup")
+        .arg(file)
+        .arg(dest_dir)
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file));
+    assert!(at.file_exists(&expect));
+    assert!(at.file_exists(&format!("{}~", expect)));
+}
+
+#[test]
+fn test_install_backup_short_custom_suffix() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_a = "test_install_backup_custom_suffix_file_a";
+    let file_b = "test_install_backup_custom_suffix_file_b";
+    let suffix = "super-suffix-of-the-century";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    scene
+        .ucmd()
+        .arg("-b")
+        .arg(format!("--suffix={}", suffix))
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
+    assert!(at.file_exists(&format!("{}{}", file_b, suffix)));
+}
+
+#[test]
+fn test_install_backup_custom_suffix_via_env() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_a = "test_install_backup_custom_suffix_file_a";
+    let file_b = "test_install_backup_custom_suffix_file_b";
+    let suffix = "super-suffix-of-the-century";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    scene
+        .ucmd()
+        .arg("-b")
+        .env("SIMPLE_BACKUP_SUFFIX", suffix)
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
+    assert!(at.file_exists(&format!("{}{}", file_b, suffix)));
+}
+
+#[test]
+fn test_install_backup_numbered_with_t() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_a = "test_install_backup_numbering_file_a";
+    let file_b = "test_install_backup_numbering_file_b";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    scene
+        .ucmd()
+        .arg("--backup=t")
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
+    assert!(at.file_exists(&format!("{}.~1~", file_b)));
+}
+
+#[test]
+fn test_install_backup_numbered_with_numbered() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_a = "test_install_backup_numbering_file_a";
+    let file_b = "test_install_backup_numbering_file_b";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    scene
+        .ucmd()
+        .arg("--backup=numbered")
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
+    assert!(at.file_exists(&format!("{}.~1~", file_b)));
+}
+
+#[test]
+fn test_install_backup_existing() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_a = "test_install_backup_numbering_file_a";
+    let file_b = "test_install_backup_numbering_file_b";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    scene
+        .ucmd()
+        .arg("--backup=existing")
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
+    assert!(at.file_exists(&format!("{}~", file_b)));
+}
+
+#[test]
+fn test_install_backup_nil() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_a = "test_install_backup_numbering_file_a";
+    let file_b = "test_install_backup_numbering_file_b";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    scene
+        .ucmd()
+        .arg("--backup=nil")
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
+    assert!(at.file_exists(&format!("{}~", file_b)));
+}
+
+#[test]
+fn test_install_backup_numbered_if_existing_backup_existing() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_a = "test_install_backup_numbering_file_a";
+    let file_b = "test_install_backup_numbering_file_b";
+    let file_b_backup = "test_install_backup_numbering_file_b.~1~";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    at.touch(file_b_backup);
+    scene
+        .ucmd()
+        .arg("--backup=existing")
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
+    assert!(at.file_exists(file_b_backup));
+    assert!(at.file_exists(&*format!("{}.~2~", file_b)));
+}
+
+#[test]
+fn test_install_backup_numbered_if_existing_backup_nil() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_a = "test_install_backup_numbering_file_a";
+    let file_b = "test_install_backup_numbering_file_b";
+    let file_b_backup = "test_install_backup_numbering_file_b.~1~";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    at.touch(file_b_backup);
+    scene
+        .ucmd()
+        .arg("--backup=nil")
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
+    assert!(at.file_exists(file_b_backup));
+    assert!(at.file_exists(&*format!("{}.~2~", file_b)));
+}
+
+#[test]
+fn test_install_backup_simple() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_a = "test_install_backup_numbering_file_a";
+    let file_b = "test_install_backup_numbering_file_b";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    scene
+        .ucmd()
+        .arg("--backup=simple")
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
+    assert!(at.file_exists(&format!("{}~", file_b)));
+}
+
+#[test]
+fn test_install_backup_never() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_a = "test_install_backup_numbering_file_a";
+    let file_b = "test_install_backup_numbering_file_b";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    scene
+        .ucmd()
+        .arg("--backup=never")
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
+    assert!(at.file_exists(&format!("{}~", file_b)));
+}
+
+#[test]
+fn test_install_backup_none() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_a = "test_install_backup_numbering_file_a";
+    let file_b = "test_install_backup_numbering_file_b";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    scene
+        .ucmd()
+        .arg("--backup=none")
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
+    assert!(!at.file_exists(&format!("{}~", file_b)));
+}
+
+#[test]
+fn test_install_backup_off() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_a = "test_install_backup_numbering_file_a";
+    let file_b = "test_install_backup_numbering_file_b";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    scene
+        .ucmd()
+        .arg("--backup=off")
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
+    assert!(!at.file_exists(&format!("{}~", file_b)));
+}
