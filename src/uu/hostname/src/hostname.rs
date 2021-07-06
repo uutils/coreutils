@@ -17,6 +17,8 @@ use clap::{crate_version, App, Arg, ArgMatches};
 use std::collections::hash_set::HashSet;
 use std::net::ToSocketAddrs;
 use std::str;
+#[cfg(windows)]
+use uucore::error::UUsageError;
 use uucore::error::{UResult, USimpleError};
 
 #[cfg(windows)]
@@ -40,7 +42,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         #[allow(deprecated)]
         let mut data = std::mem::uninitialized();
         if WSAStartup(MAKEWORD(2, 2), &mut data as *mut _) != 0 {
-            return Err(USimpleError::new(1, format!("Failed to start Winsock 2.2")));
+            return Err(UUsageError::new(
+                1,
+                "Failed to start Winsock 2.2".to_string(),
+            ));
         }
     }
     let result = execute(args);
