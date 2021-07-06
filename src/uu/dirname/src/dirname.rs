@@ -10,6 +10,7 @@ extern crate uucore;
 
 use clap::{crate_version, App, Arg};
 use std::path::Path;
+use uucore::error::{UResult, UUsageError};
 use uucore::InvalidEncodingHandling;
 
 static ABOUT: &str = "strip last component from file name";
@@ -30,7 +31,8 @@ fn get_long_usage() -> String {
     )
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
@@ -77,11 +79,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             print!("{}", separator);
         }
     } else {
-        show_usage_error!("missing operand");
-        return 1;
+        return Err(UUsageError::new(1, "missing operand".to_string()));
     }
 
-    0
+    Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {
