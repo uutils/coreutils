@@ -5,7 +5,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (T0DO)
+// spell-checker:ignore (parseargs xfer cflags iflags parseargs parseargs xfer cflags iflags iflags iflags xfer cflags oflags oflags oflags oflags dsync DSYNC noatime NOATIME noctty NOCTTY nofollow NOFOLLOW nonblock NONBLOCK xfer cflags fname fname tlen rlen fullblock rlen tlen tlen noerror rlen rlen remaing plen plen plen plen oflag dsync DSYNC noatime NOATIME noctty NOCTTY nofollow NOFOLLOW nonblock NONBLOCK fname notrunc nocreat fname wlen wlen wlen wlen rstat rstat curr curr curr curr rposition rstat ctable ctable rstat ctable ctable btotal btotal btotal btotal SIGUSR SIGUSR sigval SIGINFO SIGINFO sigval SIGINFO SIGINFO SIGUSR sigval SIGUSR permenantly sigval itegral itegral wstat rmax rmax rmax rsofar rremain rmax rsofar rremain bmax bmax bmax bremain bmax wstat bremain wstat wstat opertaions Noxfer opertaions fileout Noxfer INFILE OUTFILE fileout fileout INFILE INFILE OUTFILE OUTFILE iflag oflag iflag noxfer ucase lcase ucase lcase nocreat nocreat notrunc noerror IFLAG IFLAG iflag iflag fullblock oflag dsync syncronized syncronized nonblock noatime nocache noctty nofollow notrunc OFLAG OFLAG oflag notrunc dsync syncronized syncronized nonblock noatime nocache noctty nofollow T0DO)
 
 #[macro_use]
 extern crate uucore;
@@ -38,6 +38,7 @@ use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, Write};
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
+use std::path::Path;
 use std::sync::{atomic::AtomicUsize, atomic::Ordering, mpsc, Arc};
 use std::thread;
 use std::time;
@@ -303,11 +304,7 @@ impl Output<io::Stdout> {
 
         let dst = io::stdout();
 
-        Ok(Output {
-            dst,
-            obs,
-            cflags,
-        })
+        Ok(Output { dst, obs, cflags })
     }
 
     fn fsync(&mut self) -> io::Result<()> {
@@ -360,40 +357,42 @@ fn make_unix_oflags(oflags: &OFlags) -> Option<libc::c_int> {
 
 impl Output<File> {
     fn new(matches: &Matches) -> Result<Self, Box<dyn Error>> {
+        fn open_dst(
+            path: &Path,
+            cflags: &OConvFlags,
+            oflags: &OFlags,
+        ) -> Result<File, Box<dyn Error>> {
+            let mut opts = OpenOptions::new();
+            opts.write(true)
+                .create(!cflags.nocreat)
+                .truncate(!cflags.notrunc)
+                .create_new(cflags.excl)
+                .append(oflags.append);
+
+            if cfg!(unix) {
+                if let Some(libc_flags) = make_unix_oflags(oflags) {
+                    opts.custom_flags(libc_flags);
+                }
+            }
+
+            let dst = opts.open(path)?;
+
+            Ok(dst)
+        }
         let obs = parseargs::parse_obs(matches)?;
         let cflags = parseargs::parse_conv_flag_output(matches)?;
         let oflags = parseargs::parse_oflags(matches)?;
         let seek = parseargs::parse_seek_amt(&obs, &oflags, matches)?;
 
         if let Some(fname) = matches.value_of("of") {
-            let mut dst = {
-                let mut opts = OpenOptions::new();
-                opts.write(true)
-                    .create(true)
-                    .truncate(!cflags.notrunc)
-                    .append(oflags.append)
-                    // 'create_new' overrides 'create'
-                    .create_new(cflags.excl && !cflags.nocreat);
-
-                if cfg!(unix) {
-                    if let Some(libc_flags) = make_unix_oflags(&oflags) {
-                        opts.custom_flags(libc_flags);
-                    }
-                }
-
-                opts.open(fname)?
-            };
+            let mut dst = open_dst(Path::new(&fname), &cflags, &oflags)?;
 
             if let Some(amt) = seek {
                 let amt: u64 = amt.try_into()?;
                 dst.seek(io::SeekFrom::Start(amt))?;
             }
 
-            Ok(Output {
-                dst,
-                obs,
-                cflags,
-            })
+            Ok(Output { dst, obs, cflags })
         } else {
             // The following error should only occur if someone
             // mistakenly calls Output::<File>::new() without checking
@@ -1083,7 +1082,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .iter()
         .fold(Vec::new(), append_dashes_if_not_present);
 
-    let matches = build_dd_app!()
+    let matches = uu_app()
         // TODO: usage, after_help
         //.usage(...)
         //.after_help(...)
@@ -1134,14 +1133,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> clap::App<'static, 'static> {
-    build_dd_app!()
-}
-
-#[macro_export]
-macro_rules! build_dd_app (
-    () =>
-    {
-        clap::App::new(executable!())
+    clap::App::new(executable!())
         .version(crate_version!())
         .about(ABOUT)
         .arg(
@@ -1306,5 +1298,176 @@ General-Flags
 
 ")
         )
-    };
-);
+}
+
+// #[macro_export]
+// macro_rules! build_dd_app (
+//     () =>
+//     {
+//         clap::App::new(executable!())
+//         .version(crate_version!())
+//         .about(ABOUT)
+//         .arg(
+//             clap::Arg::with_name(options::INFILE)
+//                 .long(options::INFILE)
+//                 .takes_value(true)
+//                 .help("if=FILE (alternatively --if FILE) specifies the file used for input. When not specified, stdin is used instead")
+//         )
+//         .arg(
+//             clap::Arg::with_name(options::OUTFILE)
+//                 .long(options::OUTFILE)
+//                 .takes_value(true)
+//                 .help("of=FILE (alternatively --of FILE) specifies the file used for output. When not specified, stdout is used instead")
+//         )
+//         .arg(
+//             clap::Arg::with_name(options::IBS)
+//                 .long(options::IBS)
+//                 .takes_value(true)
+//                 .help("ibs=N (alternatively --ibs N) specifies the size of buffer used for reads (default: 512). Multiplier strings permitted.")
+//         )
+//         .arg(
+//             clap::Arg::with_name(options::OBS)
+//                 .long(options::OBS)
+//                 .takes_value(true)
+//                 .help("obs=N (alternatively --obs N) specifies the size of buffer used for writes (default: 512). Multiplier strings permitted.")
+//         )
+//         .arg(
+//             clap::Arg::with_name(options::BS)
+//                 .long(options::BS)
+//                 .takes_value(true)
+//                 .help("bs=N (alternatively --bs N) specifies ibs=N and obs=N (default: 512). If ibs or obs are also specified, bs=N takes precedence. Multiplier strings permitted.")
+//         )
+//         .arg(
+//             clap::Arg::with_name(options::CBS)
+//                 .long(options::CBS)
+//                 .takes_value(true)
+//                 .help("cbs=BYTES (alternatively --cbs BYTES) specifies the 'conversion block size' in bytes. Applies to the conv=block, and conv=unblock operations. Multiplier strings permitted.")
+//         )
+//         .arg(
+//             clap::Arg::with_name(options::SKIP)
+//                 .long(options::SKIP)
+//                 .takes_value(true)
+//                 .help("skip=N (alternatively --skip N) causes N ibs-sized records of input to be skipped before beginning copy/convert operations. See iflag=count_bytes if skipping N bytes is preferred. Multiplier strings permitted.")
+//         )
+//         .arg(
+//             clap::Arg::with_name(options::SEEK)
+//                 .long(options::SEEK)
+//                 .takes_value(true)
+//                 .help("seek=N (alternatively --seek N) seeks N obs-sized records into output before beginning copy/convert operations. See oflag=seek_bytes if seeking N bytes is preferred. Multiplier strings permitted.")
+//         )
+//         .arg(
+//             clap::Arg::with_name(options::COUNT)
+//                 .long(options::COUNT)
+//                 .takes_value(true)
+//                 .help("count=N (alternatively --count N) stop reading input after N ibs-sized read operations rather than proceeding until EOF. See iflag=count_bytes if stopping after N bytes is preferred. Multiplier strings permitted.")
+//         )
+//         .arg(
+//             clap::Arg::with_name(options::STATUS)
+//                 .long(options::STATUS)
+//                 .takes_value(true)
+//                 .help("status=LEVEL (alternatively --status LEVEL) controls whether volume and performance stats are written to stderr.
+//
+// When unspecified, dd will print stats upon completion. An example is below.
+// \t6+0 records in
+// \t16+0 records out
+// \t8192 bytes (8.2 kB, 8.0 KiB) copied, 0.00057009 s, 14.4 MB/s
+// The first two lines are the 'volume' stats and the final line is the 'performance' stats.
+// The volume stats indicate the number of complete and partial ibs-sized reads, or obs-sized writes that took place during the copy. The format of the volume stats is <complete>+<partial>. If records have been truncated (see conv=block), the volume stats will contain the number of truncated records.
+//
+// Permissible LEVEL values are:
+// \t progress: Print periodic performance stats as the copy proceeds.
+// \t noxfer: Print final volume stats, but not performance stats.
+// \t none: Do not print any stats.
+//
+// Printing performance stats is also triggered by the INFO signal (where supported), or the USR1 signal. Setting the POSIXLY_CORRECT environment variable to any value (including an empty value) will cause the USR1 signal to be ignored.
+//
+// ")
+//         )
+//         .arg(
+//             clap::Arg::with_name(options::CONV)
+//                 .long(options::CONV)
+//                 .takes_value(true)
+//                 .help("conv=CONV[,CONV] (alternatively --conv CONV[,CONV]) specifies a comma-separated list of conversion options or (for legacy reasons) file-flags. Conversion options and file flags may be intermixed.
+//
+// Conversion options:
+// \t One of {ascii, ebcdic, ibm} will perform an encoding conversion.
+// \t\t 'ascii' converts from EBCDIC to ASCII. This is the inverse of the 'ebcdic' option.
+// \t\t 'ebcdic' converts from ASCII to EBCDIC. This is the inverse of the 'ascii' option.
+// \t\t 'ibm' converts from ASCII to EBCDIC, applying the conventions for '[', ']' and '~' specified in POSIX.
+//
+// \t One of {ucase, lcase} will perform a case conversion. Works in conjunction with option {ascii, ebcdic, ibm} to infer input encoding. If no other conversion option is specified, input is assumed to be ascii.
+// \t\t 'ucase' converts from lower-case to upper-case
+// \t\t 'lcase' converts from upper-case to lower-case.
+//
+// \t One of {block, unblock}. Convert between lines terminated by newline characters, and fixed-width lines padded by spaces (without any newlines). Both the 'block' and 'unblock' options require cbs=BYTES be specified.
+// \t\t 'block' for each newline less than the size indicated by cbs=BYTES, remove the newline and pad with spaces up to cbs. Lines longer than cbs are truncated.
+// \t\t 'unblock' for each block of input of the size indicated by cbs=BYTES, remove right-trailing spaces and replace with a newline character.
+//
+// \t 'sparse' attempts to seek the output when an obs-sized block consists of only zeros.
+// \t 'swab' swaps each adjacent pair of bytes. If an odd number of bytes is present, the final byte is omitted.
+// \t 'sync' pad each ibs-sided block with zeros. If 'block' or 'unblock' is specified, pad with spaces instead.
+//
+// Flags:
+// \t One of {excl, nocreat}
+// \t\t 'excl' the output file must be created. Fail if the output file is already present.
+// \t\t 'nocreat' the output file will not be created. Fail if the output file in not already present.
+// \t 'notrunc' the output file will not be truncated. If this option is not present, output will be truncated when opened.
+// \t 'noerror' all read errors will be ignored. If this option is not present, dd will only ignore Error::Interrupted.
+// \t 'fdatasync' data will be written before finishing.
+// \t 'fsync' data and metadata will be written before finishing.
+//
+// ")
+//         )
+//         .arg(
+//             clap::Arg::with_name(options::IFLAG)
+//                 .long(options::IFLAG)
+//                 .takes_value(true)
+//                 .help("iflag=FLAG[,FLAG] (alternatively --iflag FLAG[,FLAG]) a comma separated list of input flags which specify how the input source is treated. FLAG may be any of the input-flags or general-flags specified below.
+//
+// Input-Flags
+// \t 'count_bytes' a value to count=N will be interpreted as bytes.
+// \t 'skip_bytes' a value to skip=N will be interpreted as bytes.
+// \t 'fullblock' wait for ibs bytes from each read. zero-length reads are still considered EOF.
+//
+// General-Flags
+// \t 'direct' use direct I/O for data.
+// \t 'directory' fail unless the given input (if used as an iflag) or output (if used as an oflag) is a directory.
+// \t 'dsync' use syncronized I/O for data.
+// \t 'sync' use syncronized I/O for data and metadata.
+// \t 'nonblock' use non-blocking I/O.
+// \t 'noatime' do not update access time.
+// \t 'nocache' request that OS drop cache.
+// \t 'noctty' do not assign a controlling tty.
+// \t 'nofollow' do not follow system links.
+//
+// Output-Flags
+// \t 'append' open file in append mode. Consider setting conv=notrunc as well.
+// \t 'seek_bytes' a value to seek=N will be interpreted as bytes.
+//
+// ")
+//         )
+//         .arg(
+//             clap::Arg::with_name(options::OFLAG)
+//                 .long(options::OFLAG)
+//                 .takes_value(true)
+//                 .help("oflag=FLAG[,FLAG] (alternatively --oflag FLAG[,FLAG]) a comma separated list of output flags which specify how the output source is treated. FLAG may be any of the output-flags or general-flags specified below.
+//
+// Output-Flags
+// \t 'append' open file in append mode. Consider setting conv=notrunc as well.
+// \t 'seek_bytes' a value to seek=N will be interpreted as bytes.
+//
+// General-Flags
+// \t 'direct' use direct I/O for data.
+// \t 'directory' fail unless the given input (if used as an iflag) or output (if used as an oflag) is a directory.
+// \t 'dsync' use syncronized I/O for data.
+// \t 'sync' use syncronized I/O for data and metadata.
+// \t 'nonblock' use non-blocking I/O.
+// \t 'noatime' do not update access time.
+// \t 'nocache' request that OS drop cache.
+// \t 'noctty' do not assign a controlling tty.
+// \t 'nofollow' do not follow system links.
+//
+// ")
+//         )
+//     };
+// );

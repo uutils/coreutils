@@ -313,3 +313,16 @@ fn bsize_test_bs_eq() {
 
     assert_eq!(res, m);
 }
+
+#[test]
+#[should_panic]
+fn test_nocreate_causes_failure_when_ofile_doesnt_exist() {
+    let args = vec![
+        String::from("dd"),
+        String::from("--conv=nocreat"),
+        String::from("--of=not-a-real.file"),
+    ];
+
+    let matches = uu_app().get_matches_from_safe(args).unwrap();
+    let _ = Output::<File>::new(&matches).unwrap();
+}

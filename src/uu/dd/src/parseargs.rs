@@ -1,3 +1,5 @@
+// spell-checker:ignore (parseargs xfer cflags iflags parseargs parseargs xfer cflags iflags iflags iflags xfer cflags oflags oflags oflags oflags dsync DSYNC noatime NOATIME noctty NOCTTY nofollow NOFOLLOW nonblock NONBLOCK xfer cflags fname fname tlen rlen fullblock rlen tlen tlen noerror rlen rlen remaing plen plen plen plen oflag dsync DSYNC noatime NOATIME noctty NOCTTY nofollow NOFOLLOW nonblock NONBLOCK fname notrunc nocreat fname wlen wlen wlen wlen rstat rstat curr curr curr curr rposition rstat ctable ctable rstat ctable ctable btotal btotal btotal btotal SIGUSR SIGUSR sigval SIGINFO SIGINFO sigval SIGINFO SIGINFO SIGUSR sigval SIGUSR permenantly sigval itegral itegral wstat rmax rmax rmax rsofar rremain rmax rsofar rremain bmax bmax bmax bremain bmax wstat bremain wstat wstat opertaions Noxfer opertaions fileout Noxfer INFILE OUTFILE fileout fileout INFILE INFILE OUTFILE OUTFILE iflag oflag iflag noxfer ucase lcase ucase lcase nocreat nocreat notrunc noerror IFLAG IFLAG iflag iflag fullblock oflag dsync syncronized syncronized nonblock noatime nocache noctty nofollow notrunc OFLAG OFLAG oflag notrunc dsync syncronized syncronized nonblock noatime nocache noctty nofollow T0DO)
+
 #[cfg(test)]
 mod unit_tests;
 
@@ -127,6 +129,7 @@ impl std::str::FromStr for ConvFlag {
     }
 }
 
+#[derive(Debug, PartialEq)]
 enum Flag {
     // Input only
     FullBlock,
@@ -317,9 +320,7 @@ fn parse_multiplier<'a>(s: &'a str) -> Result<usize, ParseError> {
     };
 
     mult.try_into()
-        .map_err(|_e| {
-            ParseError::MultiplierStringWouldOverflow(s.to_string())
-        })
+        .map_err(|_e| ParseError::MultiplierStringWouldOverflow(s.to_string()))
 }
 
 fn parse_bytes_only(s: &str) -> Result<usize, ParseError> {

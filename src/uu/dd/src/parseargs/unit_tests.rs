@@ -1,6 +1,6 @@
 use super::*;
 
-use crate::{build_dd_app, StatusLevel};
+use crate::StatusLevel;
 
 #[cfg(not(unix))]
 #[test]
@@ -23,7 +23,7 @@ fn unimplemented_flags_should_error_non_unix() {
             format!("--iflag={}", flag),
             format!("--oflag={}", flag),
         ];
-        let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
+        let matches = uu_app().get_matches_from_safe(args).unwrap();
 
         match parse_iflags(&matches) {
             Ok(_) => unfailed.push(format!("iflag={}", flag)),
@@ -54,7 +54,7 @@ fn unimplemented_flags_should_error() {
             format!("--iflag={}", flag),
             format!("--oflag={}", flag),
         ];
-        let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
+        let matches = uu_app().get_matches_from_safe(args).unwrap();
 
         match parse_iflags(&matches) {
             Ok(_) => unfailed.push(format!("iflag={}", flag)),
@@ -82,7 +82,7 @@ fn test_status_level_absent() {
         String::from("--of=bar.file"),
     ];
 
-    let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().get_matches_from_safe(args).unwrap();
     let st = parse_status_level(&matches).unwrap();
 
     assert_eq!(st, None);
@@ -97,7 +97,7 @@ fn test_status_level_none() {
         String::from("--of=bar.file"),
     ];
 
-    let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().get_matches_from_safe(args).unwrap();
     let st = parse_status_level(&matches).unwrap().unwrap();
 
     assert_eq!(st, StatusLevel::None);
@@ -112,7 +112,7 @@ fn test_status_level_progress() {
         String::from("--status=progress"),
     ];
 
-    let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().get_matches_from_safe(args).unwrap();
     let st = parse_status_level(&matches).unwrap().unwrap();
 
     assert_eq!(st, StatusLevel::Progress);
@@ -127,7 +127,7 @@ fn test_status_level_noxfer() {
         String::from("--of=bar.file"),
     ];
 
-    let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().get_matches_from_safe(args).unwrap();
     let st = parse_status_level(&matches).unwrap().unwrap();
 
     assert_eq!(st, StatusLevel::Noxfer);
@@ -140,7 +140,7 @@ fn test_status_level_noxfer() {
 fn icf_ctable_error() {
     let args = vec![String::from("dd"), String::from("--conv=ascii,ebcdic,ibm")];
 
-    let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().get_matches_from_safe(args).unwrap();
 
     let _ = parse_conv_flag_input(&matches).unwrap();
 }
@@ -150,7 +150,7 @@ fn icf_ctable_error() {
 fn icf_case_error() {
     let args = vec![String::from("dd"), String::from("--conv=ucase,lcase")];
 
-    let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().get_matches_from_safe(args).unwrap();
 
     let _ = parse_conv_flag_input(&matches).unwrap();
 }
@@ -160,7 +160,7 @@ fn icf_case_error() {
 fn icf_block_error() {
     let args = vec![String::from("dd"), String::from("--conv=block,unblock")];
 
-    let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().get_matches_from_safe(args).unwrap();
 
     let _ = parse_conv_flag_input(&matches).unwrap();
 }
@@ -170,7 +170,7 @@ fn icf_block_error() {
 fn icf_creat_error() {
     let args = vec![String::from("dd"), String::from("--conv=excl,nocreat")];
 
-    let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().get_matches_from_safe(args).unwrap();
 
     let _ = parse_conv_flag_output(&matches).unwrap();
 }
@@ -180,7 +180,7 @@ fn parse_icf_token_ibm() {
     let exp = vec![ConvFlag::FmtAtoI];
 
     let args = vec![String::from("dd"), String::from("--conv=ibm")];
-    let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().get_matches_from_safe(args).unwrap();
 
     let act = parse_flag_list::<ConvFlag>("conv", &matches).unwrap();
 
@@ -198,7 +198,7 @@ fn parse_icf_tokens_elu() {
         String::from("dd"),
         String::from("--conv=ebcdic,lcase,unblock"),
     ];
-    let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().get_matches_from_safe(args).unwrap();
     let act = parse_flag_list::<ConvFlag>("conv", &matches).unwrap();
 
     assert_eq!(exp.len(), act.len());
@@ -229,9 +229,85 @@ fn parse_icf_tokens_remaining() {
         String::from("dd"),
         String::from("--conv=ascii,ucase,block,sparse,swab,sync,noerror,excl,nocreat,notrunc,noerror,fdatasync,fsync"),
     ];
-    let matches = build_dd_app!().get_matches_from_safe(args).unwrap();
+    let matches = uu_app().get_matches_from_safe(args).unwrap();
 
     let act = parse_flag_list::<ConvFlag>("conv", &matches).unwrap();
+
+    assert_eq!(exp.len(), act.len());
+    for cf in &exp {
+        assert!(exp.contains(&cf));
+    }
+}
+
+#[test]
+fn parse_iflag_tokens() {
+    let exp = vec![
+        Flag::FullBlock,
+        Flag::CountBytes,
+        Flag::SkipBytes,
+        // Flag::Cio,
+        Flag::Direct,
+        Flag::Directory,
+        Flag::Dsync,
+        Flag::Sync,
+        // Flag::NoCache,
+        Flag::NonBlock,
+        Flag::NoATime,
+        Flag::NoCtty,
+        Flag::NoFollow,
+        // Flag::NoLinks,
+        // Flag::Binary,
+        // Flag::Text,
+        Flag::Append,
+        Flag::SeekBytes,
+    ];
+
+    let args = vec![
+        String::from("dd"),
+        String::from("--iflag=fullblock,count_bytes,skip_bytes,direct,directory,dsync,sync,nonblock,noatime,noctty,nofollow,append,seek_bytes"),
+        // String::from("--iflag=fullblock,count_bytes,skip_bytes,cio,direct,directory,dsync,sync,nocache,nonblock,noatime,noctty,nofollow,nolinks,binary,text,append,seek_bytes"),
+    ];
+    let matches = uu_app().get_matches_from_safe(args).unwrap();
+
+    let act = parse_flag_list::<Flag>("iflag", &matches).unwrap();
+
+    assert_eq!(exp.len(), act.len());
+    for cf in &exp {
+        assert!(exp.contains(&cf));
+    }
+}
+
+#[test]
+fn parse_oflag_tokens() {
+    let exp = vec![
+        Flag::FullBlock,
+        Flag::CountBytes,
+        Flag::SkipBytes,
+        // Flag::Cio,
+        Flag::Direct,
+        Flag::Directory,
+        Flag::Dsync,
+        Flag::Sync,
+        // Flag::NoCache,
+        Flag::NonBlock,
+        Flag::NoATime,
+        Flag::NoCtty,
+        Flag::NoFollow,
+        // Flag::NoLinks,
+        // Flag::Binary,
+        // Flag::Text,
+        Flag::Append,
+        Flag::SeekBytes,
+    ];
+
+    let args = vec![
+        String::from("dd"),
+        String::from("--oflag=fullblock,count_bytes,skip_bytes,direct,directory,dsync,sync,nonblock,noatime,noctty,nofollow,append,seek_bytes"),
+        // String::from("--oflag=fullblock,count_bytes,skip_bytes,cio,direct,directory,dsync,sync,nocache,nonblock,noatime,noctty,nofollow,nolinks,binary,text,append,seek_bytes"),
+    ];
+    let matches = uu_app().get_matches_from_safe(args).unwrap();
+
+    let act = parse_flag_list::<Flag>("oflag", &matches).unwrap();
 
     assert_eq!(exp.len(), act.len());
     for cf in &exp {

@@ -162,10 +162,9 @@ impl std::fmt::Display for InternalError {
             Self::WrongInputType | Self::WrongOutputType => {
                 write!(f, "Internal dd error: Wrong Input/Output data type")
             }
-            Self::InvalidConvBlockUnblockCase => write!(
-                f,
-                "Internal dd error: Invalid Conversion, Block, or Unblock data"
-            ),
+            Self::InvalidConvBlockUnblockCase => {
+                write!(f, "Invalid Conversion, Block, or Unblock data")
+            }
         }
     }
 }
