@@ -2,7 +2,7 @@ use super::*;
 
 use crate::StatusLevel;
 
-#[cfg(not(unix))]
+#[cfg(not(target_os = "linux"))]
 #[test]
 fn unimplemented_flags_should_error_non_unix() {
     let mut unfailed = Vec::new();

@@ -5,7 +5,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (parseargs xfer cflags iflags parseargs parseargs xfer cflags iflags iflags iflags xfer cflags oflags oflags oflags oflags dsync DSYNC noatime NOATIME noctty NOCTTY nofollow NOFOLLOW nonblock NONBLOCK xfer cflags fname fname tlen rlen fullblock rlen tlen tlen noerror rlen rlen remaing plen plen plen plen oflag dsync DSYNC noatime NOATIME noctty NOCTTY nofollow NOFOLLOW nonblock NONBLOCK fname notrunc nocreat fname wlen wlen wlen wlen rstat rstat curr curr curr curr rposition rstat ctable ctable rstat ctable ctable btotal btotal btotal btotal SIGUSR SIGUSR sigval SIGINFO SIGINFO sigval SIGINFO SIGINFO SIGUSR sigval SIGUSR permenantly sigval itegral itegral wstat rmax rmax rmax rsofar rremain rmax rsofar rremain bmax bmax bmax bremain bmax wstat bremain wstat wstat opertaions Noxfer opertaions fileout Noxfer INFILE OUTFILE fileout fileout INFILE INFILE OUTFILE OUTFILE iflag oflag iflag noxfer ucase lcase ucase lcase nocreat nocreat notrunc noerror IFLAG IFLAG iflag iflag fullblock oflag dsync syncronized syncronized nonblock noatime nocache noctty nofollow notrunc OFLAG OFLAG oflag notrunc dsync syncronized syncronized nonblock noatime nocache noctty nofollow T0DO)
+// spell-checker:ignore (bmax bremain btotal cflags ctable curr dsync DSYNC fileout fname fullblock iflags INFILE noatime NOATIME nocreat noctty NOCTTY noerror nofollow NOFOLLOW nonblock NONBLOCK notrunc Noxfer oflag oflags OUTFILE parseargs plen rlen rmax rposition rremain rsofar rstat SIGINFO SIGUSR sigval tlen wlen wstat xfer)
 
 #[macro_use]
 extern crate uucore;
@@ -27,8 +27,6 @@ use byte_unit::Byte;
 use clap::{self, crate_version};
 use debug_print::debug_println;
 use gcd::Gcd;
-#[cfg(unix)]
-use libc;
 use signal_hook::consts::signal;
 use std::cmp;
 use std::convert::TryInto;
@@ -139,10 +137,9 @@ impl Input<File> {
                 let mut opts = OpenOptions::new();
                 opts.read(true);
 
-                if cfg!(unix) {
-                    if let Some(libc_flags) = make_unix_iflags(&iflags) {
-                        opts.custom_flags(libc_flags);
-                    }
+                #[cfg(target_os = "linux")]
+                if let Some(libc_flags) = make_unix_iflags(&iflags) {
+                    opts.custom_flags(libc_flags);
                 }
 
                 opts.open(fname)?
@@ -783,7 +780,7 @@ fn print_xfer_stats(update: &ProgUpdate) {
 fn gen_prog_updater(
     rx: mpsc::Receiver<ProgUpdate>,
     xfer_stats: Option<StatusLevel>,
-) -> impl Fn() -> () {
+) -> impl Fn() {
     // --------------------------------------------------------------
     fn posixly_correct() -> bool {
         env::var("POSIXLY_CORRECT").is_ok()

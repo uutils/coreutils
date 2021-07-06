@@ -1,3 +1,5 @@
+// spell-checker:ignore (Fileio fname fpath fullblock gibi ifile iflag infile lcase noatime nocreat notrunc noxfer ofile oflag outfile specfile testfile TESTFILE tname ucase unspec urand)
+
 use super::*;
 
 const NL: u8 = '\n' as u8;

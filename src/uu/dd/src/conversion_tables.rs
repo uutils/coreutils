@@ -1,6 +1,16 @@
-// Conversion tables are just lookup tables.
+// This file is part of the uutils coreutils package.
+//
+// (c) Tyler Steele <tyler.steele@protonmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+
+// spell-checker:ignore (UCASE LCASE)
+
+// Note: Conversion tables are just lookup tables.
 // eg. The ASCII->EBCDIC table stores the EBCDIC code at the index
 // obtained by treating the ASCII representation as a number.
+
 pub type ConversionTable = [u8; 256];
 
 pub const ASCII_UCASE_TO_LCASE: ConversionTable = [

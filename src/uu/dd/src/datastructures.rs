@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) ctable noerror
+// spell-checker:ignore (TODO ctable noerror)
 
 use crate::conversion_tables::*;
 
@@ -179,17 +179,17 @@ impl std::fmt::Display for InternalError {
 impl Error for InternalError {}
 
 pub mod options {
-    pub const INFILE: &'static str = "if";
-    pub const OUTFILE: &'static str = "of";
-    pub const IBS: &'static str = "ibs";
-    pub const OBS: &'static str = "obs";
-    pub const BS: &'static str = "bs";
-    pub const CBS: &'static str = "cbs";
-    pub const COUNT: &'static str = "count";
-    pub const SKIP: &'static str = "skip";
-    pub const SEEK: &'static str = "seek";
-    pub const STATUS: &'static str = "status";
-    pub const CONV: &'static str = "conv";
-    pub const IFLAG: &'static str = "iflag";
-    pub const OFLAG: &'static str = "oflag";
+    pub const INFILE: &str = "if";
+    pub const OUTFILE: &str = "of";
+    pub const IBS: &str = "ibs";
+    pub const OBS: &str = "obs";
+    pub const BS: &str = "bs";
+    pub const CBS: &str = "cbs";
+    pub const COUNT: &str = "count";
+    pub const SKIP: &str = "skip";
+    pub const SEEK: &str = "seek";
+    pub const STATUS: &str = "status";
+    pub const CONV: &str = "conv";
+    pub const IFLAG: &str = "iflag";
+    pub const OFLAG: &str = "oflag";
 }
