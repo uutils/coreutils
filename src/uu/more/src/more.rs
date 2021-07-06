@@ -349,12 +349,10 @@ impl<'a> Pager<'a> {
         let status = format!("--More--({})", status_inner);
 
         let banner = match (self.silent, wrong_key) {
-            (true, Some(key)) => {
-                format!(
-                    "{} [Unknown key: '{}'. Press 'h' for instructions. (unimplemented)]",
-                    status, key
-                )
-            }
+            (true, Some(key)) => format!(
+                "{} [Unknown key: '{}'. Press 'h' for instructions. (unimplemented)]",
+                status, key
+            ),
             (true, None) => format!("{}[Press space to continue, 'q' to quit.]", status),
             (false, Some(_)) => format!("{}{}", status, BELL),
             (false, None) => status,

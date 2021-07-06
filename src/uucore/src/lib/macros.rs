@@ -27,6 +27,9 @@ macro_rules! show(
         let e = $err;
         uucore::error::set_exit_code(e.code());
         eprintln!("{}: {}", executable!(), e);
+        if e.usage() {
+            eprintln!("Try '{} --help' for more information.", executable!());
+        }
     })
 );
 
