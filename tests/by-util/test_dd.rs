@@ -438,6 +438,7 @@ fn test_zeros_to_file() {
     let tname = "zero-256k";
     let test_fn = format!("{}.txt", tname);
     let tmp_fn = format!("TESTFILE-{}.tmp", &tname);
+    assert_fixture_exists!(test_fn);
 
     let (fix, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["status=none", inf!(test_fn), of!(tmp_fn)])
@@ -457,6 +458,7 @@ fn test_to_file_with_ibs_obs() {
     let tname = "zero-256k";
     let test_fn = format!("{}.txt", tname);
     let tmp_fn = format!("TESTFILE-{}.tmp", &tname);
+    assert_fixture_exists!(test_fn);
 
     let (fix, mut ucmd) = at_and_ucmd!();
     ucmd.args(&[
@@ -529,6 +531,7 @@ fn test_ascii_5_gibi_to_file() {
 #[test]
 fn test_self_transfer() {
     let fname = "self-transfer-256k.txt";
+    assert_fixture_exists!(fname);
 
     let (fix, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["status=none", "conv=notrunc", inf!(fname), of!(fname)]);
@@ -540,6 +543,30 @@ fn test_self_transfer() {
 
     assert!(fix.file_exists(fname));
     assert_eq!(256 * 1024, fix.metadata(fname).len());
+}
+
+#[test]
+fn test_unicode_filenames() {
+    let tname = "😎💚🦊";
+    let test_fn = format!("{}.txt", tname);
+    let tmp_fn = format!("TESTFILE-{}.tmp", &tname);
+    assert_fixture_exists!(test_fn);
+
+    let (fix, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&[
+        "status=none",
+        inf!(test_fn),
+        of!(tmp_fn),
+    ])
+    .run()
+    .no_stderr()
+    .no_stdout()
+    .success();
+
+    cmp_file!(
+        File::open(fixture_path!(&test_fn)).unwrap(),
+        fix.open(&tmp_fn)
+    );
 }
 
 // conv=[ascii,ebcdic,ibm], conv=[ucase,lcase], conv=[block,unblock], conv=sync
