@@ -42,15 +42,17 @@ fn test_long_format() {
         ));
 }
 
-#[cfg(any(target_vendor = "apple", target_os = "linux"))]
+#[cfg(unix)]
 #[test]
 fn test_long_format_multiple_users() {
     let args = ["-l", "root", "root", "root"];
+    let expect = unwrap_or_return!(expected_result(util_name!(), &args));
 
     new_ucmd!()
         .args(&args)
         .succeeds()
-        .stdout_is(expected_result(&args));
+        .stdout_is(expect.stdout_str())
+        .stderr_is(expect.stderr_str());
 }
 
 #[test]
@@ -59,55 +61,38 @@ fn test_long_format_wo_user() {
     new_ucmd!().arg("-l").fails().code_is(1);
 }
 
-#[cfg(any(target_vendor = "apple", target_os = "linux"))]
+#[cfg(unix)]
 #[test]
 fn test_short_format_i() {
     // allow whitespace variation
     // * minor whitespace differences occur between platform built-in outputs; specifically, the number of trailing TABs may be variant
     let args = ["-i"];
     let actual = new_ucmd!().args(&args).succeeds().stdout_move_str();
-    let expect = expected_result(&args);
+    let expect = unwrap_or_return!(expected_result(util_name!(), &args)).stdout_move_str();
     let v_actual: Vec<&str> = actual.split_whitespace().collect();
     let v_expect: Vec<&str> = expect.split_whitespace().collect();
     assert_eq!(v_actual, v_expect);
 }
 
-#[cfg(any(target_vendor = "apple", target_os = "linux"))]
+#[cfg(unix)]
 #[test]
 fn test_short_format_q() {
     // allow whitespace variation
     // * minor whitespace differences occur between platform built-in outputs; specifically, the number of trailing TABs may be variant
     let args = ["-q"];
     let actual = new_ucmd!().args(&args).succeeds().stdout_move_str();
-    let expect = expected_result(&args);
+    let expect = unwrap_or_return!(expected_result(util_name!(), &args)).stdout_move_str();
     let v_actual: Vec<&str> = actual.split_whitespace().collect();
     let v_expect: Vec<&str> = expect.split_whitespace().collect();
     assert_eq!(v_actual, v_expect);
 }
 
-#[cfg(any(target_vendor = "apple", target_os = "linux"))]
+#[cfg(unix)]
 #[test]
 fn test_no_flag() {
     let actual = new_ucmd!().succeeds().stdout_move_str();
-    let expect = expected_result(&[]);
+    let expect = unwrap_or_return!(expected_result(util_name!(), &[])).stdout_move_str();
     let v_actual: Vec<&str> = actual.split_whitespace().collect();
     let v_expect: Vec<&str> = expect.split_whitespace().collect();
     assert_eq!(v_actual, v_expect);
-}
-
-#[cfg(any(target_vendor = "apple", target_os = "linux"))]
-fn expected_result(args: &[&str]) -> String {
-    #[cfg(target_os = "linux")]
-    let util_name = util_name!();
-    #[cfg(target_vendor = "apple")]
-    let util_name = format!("g{}", util_name!());
-
-    // note: clippy::needless_borrow *false positive*
-    #[allow(clippy::needless_borrow)]
-    TestScenario::new(&util_name)
-        .cmd_keepenv(util_name)
-        .env("LC_ALL", "C")
-        .args(args)
-        .succeeds()
-        .stdout_move_str()
 }
