@@ -7,12 +7,16 @@
 
 // spell-checker:ignore (ToDO) signalname pids
 
+// clippy bug https://github.com/rust-lang/rust-clippy/issues/7422
+#![allow(clippy::nonstandard_macro_braces)]
+
 #[macro_use]
 extern crate uucore;
 
 use clap::{crate_version, App, Arg};
 use libc::{c_int, pid_t};
 use std::io::Error;
+use uucore::error::{UResult, USimpleError};
 use uucore::signals::ALL_SIGNALS;
 use uucore::InvalidEncodingHandling;
 
@@ -36,7 +40,8 @@ pub enum Mode {
     List,
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
@@ -72,7 +77,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         Mode::List => list(pids_or_signals.get(0).cloned()),
     }
 
-    EXIT_OK
+    Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -177,23 +182,31 @@ fn list(arg: Option<String>) {
     };
 }
 
-fn kill(signalname: &str, pids: &[String]) -> i32 {
-    let mut status = 0;
+fn kill(signalname: &str, pids: &[String]) -> UResult<()> {
     let optional_signal_value = uucore::signals::signal_by_name_or_value(signalname);
     let signal_value = match optional_signal_value {
         Some(x) => x,
-        None => crash!(EXIT_ERR, "unknown signal name {}", signalname),
+        None => {
+            return Err(USimpleError::new(
+                1,
+                format!("unknown signal name {}", signalname),
+            ));
+        }
     };
     for pid in pids {
         match pid.parse::<usize>() {
             Ok(x) => {
                 if unsafe { libc::kill(x as pid_t, signal_value as c_int) } != 0 {
-                    show_error!("{}", Error::last_os_error());
-                    status = 1;
+                    return Err(USimpleError::new(1, format!("{}", Error::last_os_error())));
                 }
             }
-            Err(e) => crash!(EXIT_ERR, "failed to parse argument {}: {}", pid, e),
+            Err(e) => {
+                return Err(USimpleError::new(
+                    1,
+                    format!("failed to parse argument {}: {}", pid, e),
+                ));
+            }
         };
     }
-    status
+    Ok(())
 }
