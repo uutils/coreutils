@@ -1267,6 +1267,7 @@ pub fn uu_app() -> App<'static, 'static> {
                 .help("sort by a key")
                 .long_help(LONG_HELP_KEYS)
                 .multiple(true)
+                .number_of_values(1)
                 .takes_value(true),
         )
         .arg(
