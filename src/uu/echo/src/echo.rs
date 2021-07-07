@@ -13,6 +13,7 @@ use clap::{crate_version, App, Arg};
 use std::io::{self, Write};
 use std::iter::Peekable;
 use std::str::Chars;
+use uucore::error::{UResult, USimpleError};
 use uucore::InvalidEncodingHandling;
 
 const NAME: &str = "echo";
@@ -113,7 +114,8 @@ fn print_escaped(input: &str, mut output: impl Write) -> io::Result<bool> {
     Ok(should_stop)
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
@@ -127,10 +129,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     };
 
     match execute(no_newline, escaped, values) {
-        Ok(_) => 0,
+        Ok(_) => Ok(()),
         Err(f) => {
-            show_error!("{}", f);
-            1
+            return Err(USimpleError::new(1, format!("{}", f)));
         }
     }
 }
