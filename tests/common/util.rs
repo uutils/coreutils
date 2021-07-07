@@ -1,10 +1,11 @@
-//spell-checker: ignore (linux) rlimit prlimit Rlim
+//spell-checker: ignore (linux) rlimit prlimit Rlim coreutil
 
 #![allow(dead_code)]
 
 use pretty_assertions::assert_eq;
 #[cfg(target_os = "linux")]
 use rlimit::{prlimit, rlim};
+use std::borrow::Cow;
 use std::env;
 #[cfg(not(windows))]
 use std::ffi::CString;
@@ -1036,6 +1037,179 @@ pub fn vec_of_size(n: usize) -> Vec<u8> {
     result
 }
 
+pub fn whoami() -> String {
+    // Apparently some CI environments have configuration issues, e.g. with 'whoami' and 'id'.
+    //
+    // From the Logs: "Build (ubuntu-18.04, x86_64-unknown-linux-gnu, feat_os_unix, use-cross)"
+    //    whoami: cannot find name for user ID 1001
+    // id --name: cannot find name for user ID 1001
+    // id --name: cannot find name for group ID 116
+    //
+    // However, when running "id" from within "/bin/bash" it looks fine:
+    // id: "uid=1001(runner) gid=118(docker) groups=118(docker),4(adm),101(systemd-journal)"
+    // whoami: "runner"
+
+    // Use environment variable to get current user instead of
+    // invoking `whoami` and fall back to user "nobody" on error.
+    std::env::var("USER").unwrap_or_else(|e| {
+        println!("{}: {}, using \"nobody\" instead", UUTILS_WARNING, e);
+        "nobody".to_string()
+    })
+}
+
+/// Add prefix 'g' for `util_name` if not on linux
+#[cfg(unix)]
+pub fn host_name_for<'a>(util_name: &'a str) -> Cow<'a, str> {
+    // In some environments, e.g. macOS/freebsd, the GNU coreutils are prefixed with "g"
+    // to not interfere with the BSD counterparts already in `$PATH`.
+    #[cfg(not(target_os = "linux"))]
+    return format!("g{}", util_name).into();
+    #[cfg(target_os = "linux")]
+    return util_name.into();
+}
+
+// GNU coreutils version 8.32 is the reference version since it is the latest version and the
+// GNU test suite in "coreutils/.github/workflows/GnuTests.yml" runs against it.
+// However, here 8.30 was chosen because right now there's no ubuntu image for the github actions
+// CICD available with a higher version than 8.30.
+// GNU coreutils versions from the CICD images for comparison:
+// ubuntu-2004: 8.30 (latest)
+// ubuntu-1804: 8.28
+// macos-latest: 8.32
+const VERSION_MIN: &str = "8.30"; // minimum Version for the reference `coreutil` in `$PATH`
+
+const UUTILS_WARNING: &str = "uutils-tests-warning";
+const UUTILS_INFO: &str = "uutils-tests-info";
+
+/// Run `util_name --version` and return Ok if the version is >= `version_expected`.
+/// Returns an error if
+///     * `util_name` cannot run
+///     * the version cannot be parsed
+///     * the version is too low
+///
+/// This is used by `expected_result` to check if the coreutils version is >= `VERSION_MIN`.
+/// It makes sense to use this manually in a test if a feature
+/// is tested that was introduced after `VERSION_MIN`
+///
+/// Example:
+///
+/// ```no_run
+/// use crate::common::util::*;
+/// const VERSION_MIN_MULTIPLE_USERS: &str = "8.31";
+///
+/// #[test]
+/// fn test_xyz() {
+///     unwrap_or_return!(check_coreutil_version(
+///         util_name!(),
+///         VERSION_MIN_MULTIPLE_USERS
+///     ));
+///     // proceed with the test...
+/// }
+/// ```
+#[cfg(unix)]
+pub fn check_coreutil_version(
+    util_name: &str,
+    version_expected: &str,
+) -> std::result::Result<String, String> {
+    // example:
+    // $ id --version | head -n 1
+    // id (GNU coreutils) 8.32.162-4eda
+
+    let util_name = &host_name_for(util_name);
+    log_info("run", format!("{} --version", util_name));
+    let version_check = match Command::new(util_name.as_ref())
+        .env("LC_ALL", "C")
+        .arg("--version")
+        .output()
+    {
+        Ok(s) => s,
+        Err(e) => {
+            return Err(format!(
+                "{}: '{}' {}",
+                UUTILS_WARNING,
+                util_name,
+                e.to_string()
+            ))
+        }
+    };
+    std::str::from_utf8(&version_check.stdout).unwrap()
+        .split('\n')
+        .collect::<Vec<_>>()
+        .get(0)
+        .map_or_else(
+            || Err(format!("{}: unexpected output format for reference coreutil: '{} --version'", UUTILS_WARNING, util_name)),
+            |s| {
+                if s.contains(&format!("(GNU coreutils) {}", version_expected)) {
+                    Ok(format!("{}: {}", UUTILS_INFO, s.to_string()))
+                } else if s.contains("(GNU coreutils)") {
+                    let version_found = s.split_whitespace().last().unwrap()[..4].parse::<f32>().unwrap_or_default();
+                    let version_expected = version_expected.parse::<f32>().unwrap_or_default();
+                    if version_found > version_expected {
+                    Ok(format!("{}: version for the reference coreutil '{}' is higher than expected; expected: {}, found: {}", UUTILS_INFO, util_name, version_expected, version_found))
+                    } else {
+                    Err(format!("{}: version for the reference coreutil '{}' does not match; expected: {}, found: {}", UUTILS_WARNING, util_name, version_expected, version_found)) }
+                } else {
+                    Err(format!("{}: no coreutils version string found for reference coreutils '{} --version'", UUTILS_WARNING, util_name))
+                }
+            },
+        )
+}
+
+/// This runs the GNU coreutils `util_name` binary in `$PATH` in order to
+/// dynamically gather reference values on the system.
+/// If the `util_name` in `$PATH` doesn't include a coreutils version string,
+/// or the version is too low, this returns an error and the test should be skipped.
+///
+/// Example:
+///
+/// ```no_run
+/// use crate::common::util::*;
+/// #[test]
+/// fn test_xyz() {
+///     let result = new_ucmd!().run();
+///     let exp_result = unwrap_or_return!(expected_result(util_name!(), &[]));
+///     result
+///         .stdout_is(exp_result.stdout_str())
+///         .stderr_is(exp_result.stderr_str())
+///         .code_is(exp_result.code());
+/// }
+///```
+#[cfg(unix)]
+pub fn expected_result(util_name: &str, args: &[&str]) -> std::result::Result<CmdResult, String> {
+    let util_name = &host_name_for(util_name);
+    println!("{}", check_coreutil_version(util_name, VERSION_MIN)?);
+
+    let scene = TestScenario::new(util_name);
+    let result = scene
+        .cmd_keepenv(util_name.as_ref())
+        .env("LC_ALL", "C")
+        .args(args)
+        .run();
+
+    let (stdout, stderr): (String, String) = if cfg!(target_os = "linux") {
+        (
+            result.stdout_str().to_string(),
+            result.stderr_str().to_string(),
+        )
+    } else {
+        // `host_name_for` added prefix, strip 'g' prefix from results:
+        let from = util_name.to_string() + ":";
+        let to = &from[1..];
+        (
+            result.stdout_str().replace(&from, to),
+            result.stderr_str().replace(&from, to),
+        )
+    };
+
+    Ok(CmdResult::new(
+        Some(result.tmpd()),
+        Some(result.code()),
+        result.succeeded(),
+        stdout.as_bytes(),
+        stderr.as_bytes(),
+    ))
+}
+
 /// Sanity checks for test utils
 #[cfg(test)]
 mod tests {
@@ -1271,5 +1445,27 @@ mod tests {
         };
 
         res.normalized_newlines_stdout_is("A\r\nB\nC\n");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_check_coreutil_version() {
+        match check_coreutil_version("id", VERSION_MIN) {
+            Ok(s) => s.starts_with("uutils-tests-"),
+            Err(s) => s.starts_with("uutils-tests-warning"),
+        };
+        std::assert_eq!(
+            check_coreutil_version("no test name", VERSION_MIN),
+            Err("uutils-tests-warning: 'no test name' \
+            No such file or directory (os error 2)"
+                .to_string())
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_expected_result() {
+        assert!(expected_result("id", &[]).is_ok());
+        assert!(expected_result("no test name", &[]).is_err());
     }
 }
