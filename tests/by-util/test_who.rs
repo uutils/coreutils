@@ -10,32 +10,33 @@ use crate::common::util::*;
 #[cfg(unix)]
 #[test]
 fn test_count() {
+    let ts = TestScenario::new(util_name!());
     for opt in &["-q", "--count"] {
-        let expected_stdout =
-            unwrap_or_return!(expected_result(util_name!(), &[opt])).stdout_move_str();
-        new_ucmd!().arg(opt).succeeds().stdout_is(expected_stdout);
+        let expected_stdout = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
+        ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
     }
 }
 
 #[cfg(unix)]
 #[test]
 fn test_boot() {
+    let ts = TestScenario::new(util_name!());
     for opt in &["-b", "--boot"] {
-        let expected_stdout =
-            unwrap_or_return!(expected_result(util_name!(), &[opt])).stdout_move_str();
-        new_ucmd!().arg(opt).succeeds().stdout_is(expected_stdout);
+        let expected_stdout = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
+        ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
     }
 }
 
 #[cfg(unix)]
 #[test]
 fn test_heading() {
+    let ts = TestScenario::new(util_name!());
     for opt in &["-H", "--heading"] {
         // allow whitespace variation
         // * minor whitespace differences occur between platform built-in outputs;
         //   specifically number of TABs between "TIME" and "COMMENT" may be variant
-        let actual = new_ucmd!().arg(opt).succeeds().stdout_move_str();
-        let expect = unwrap_or_return!(expected_result(util_name!(), &[opt])).stdout_move_str();
+        let actual = ts.ucmd().arg(opt).succeeds().stdout_move_str();
+        let expect = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
         println!("actual: {:?}", actual);
         println!("expect: {:?}", expect);
         let v_actual: Vec<&str> = actual.split_whitespace().collect();
@@ -47,63 +48,63 @@ fn test_heading() {
 #[cfg(unix)]
 #[test]
 fn test_short() {
+    let ts = TestScenario::new(util_name!());
     for opt in &["-s", "--short"] {
-        let expected_stdout =
-            unwrap_or_return!(expected_result(util_name!(), &[opt])).stdout_move_str();
-        new_ucmd!().arg(opt).succeeds().stdout_is(expected_stdout);
+        let expected_stdout = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
+        ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
     }
 }
 
 #[cfg(unix)]
 #[test]
 fn test_login() {
+    let ts = TestScenario::new(util_name!());
     for opt in &["-l", "--login"] {
-        let expected_stdout =
-            unwrap_or_return!(expected_result(util_name!(), &[opt])).stdout_move_str();
-        new_ucmd!().arg(opt).succeeds().stdout_is(expected_stdout);
+        let expected_stdout = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
+        ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
     }
 }
 
 #[cfg(unix)]
 #[test]
 fn test_m() {
+    let ts = TestScenario::new(util_name!());
     for opt in &["-m"] {
-        let expected_stdout =
-            unwrap_or_return!(expected_result(util_name!(), &[opt])).stdout_move_str();
-        new_ucmd!().arg(opt).succeeds().stdout_is(expected_stdout);
+        let expected_stdout = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
+        ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
     }
 }
 
 #[cfg(unix)]
 #[test]
 fn test_process() {
+    let ts = TestScenario::new(util_name!());
     for opt in &["-p", "--process"] {
-        let expected_stdout =
-            unwrap_or_return!(expected_result(util_name!(), &[opt])).stdout_move_str();
-        new_ucmd!().arg(opt).succeeds().stdout_is(expected_stdout);
+        let expected_stdout = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
+        ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
     }
 }
 
 #[cfg(unix)]
 #[test]
 fn test_runlevel() {
+    let ts = TestScenario::new(util_name!());
     for opt in &["-r", "--runlevel"] {
-        let expected_stdout =
-            unwrap_or_return!(expected_result(util_name!(), &[opt])).stdout_move_str();
-        new_ucmd!().arg(opt).succeeds().stdout_is(expected_stdout);
+        let expected_stdout = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
+        ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
 
         #[cfg(not(target_os = "linux"))]
-        new_ucmd!().arg(opt).succeeds().stdout_is("");
+        ts.ucmd().arg(opt).succeeds().stdout_is("");
     }
 }
 
 #[cfg(unix)]
 #[test]
 fn test_time() {
+    let ts = TestScenario::new(util_name!());
     for opt in &["-t", "--time"] {
-        let expected_stdout =
-            unwrap_or_return!(expected_result(util_name!(), &[opt])).stdout_move_str();
-        new_ucmd!().arg(opt).succeeds().stdout_is(expected_stdout);
+        let expected_stdout = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
+        ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
     }
 }
 
@@ -116,10 +117,10 @@ fn test_mesg() {
     //     same as -T
     // --writable
     //     same as -T
+    let ts = TestScenario::new(util_name!());
     for opt in &["-T", "-w", "--mesg", "--message", "--writable"] {
-        let expected_stdout =
-            unwrap_or_return!(expected_result(util_name!(), &[opt])).stdout_move_str();
-        new_ucmd!().arg(opt).succeeds().stdout_is(expected_stdout);
+        let expected_stdout = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
+        ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
     }
 }
 
@@ -127,12 +128,9 @@ fn test_mesg() {
 #[test]
 fn test_arg1_arg2() {
     let args = ["am", "i"];
-    let expected_stdout = unwrap_or_return!(expected_result(util_name!(), &args)).stdout_move_str();
-
-    new_ucmd!()
-        .args(&args)
-        .succeeds()
-        .stdout_is(expected_stdout);
+    let ts = TestScenario::new(util_name!());
+    let expected_stdout = unwrap_or_return!(expected_result(&ts, &args)).stdout_move_str();
+    ts.ucmd().args(&args).succeeds().stdout_is(expected_stdout);
 }
 
 #[test]
@@ -147,9 +145,10 @@ fn test_too_many_args() {
 #[cfg(unix)]
 #[test]
 fn test_users() {
+    let ts = TestScenario::new(util_name!());
     for opt in &["-u", "--users"] {
-        let actual = new_ucmd!().arg(opt).succeeds().stdout_move_str();
-        let expect = unwrap_or_return!(expected_result(util_name!(), &[opt])).stdout_move_str();
+        let actual = ts.ucmd().arg(opt).succeeds().stdout_move_str();
+        let expect = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
         println!("actual: {:?}", actual);
         println!("expect: {:?}", expect);
 
@@ -172,18 +171,18 @@ fn test_users() {
 #[test]
 fn test_lookup() {
     let opt = "--lookup";
-    let expected_stdout =
-        unwrap_or_return!(expected_result(util_name!(), &[opt])).stdout_move_str();
-    new_ucmd!().arg(opt).succeeds().stdout_is(expected_stdout);
+    let ts = TestScenario::new(util_name!());
+    let expected_stdout = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
+    ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
 }
 
 #[cfg(unix)]
 #[test]
 fn test_dead() {
+    let ts = TestScenario::new(util_name!());
     for opt in &["-d", "--dead"] {
-        let expected_stdout =
-            unwrap_or_return!(expected_result(util_name!(), &[opt])).stdout_move_str();
-        new_ucmd!().arg(opt).succeeds().stdout_is(expected_stdout);
+        let expected_stdout = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
+        ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
     }
 }
 
@@ -197,20 +196,11 @@ fn test_all_separately() {
 
     // -a, --all         same as -b -d --login -p -r -t -T -u
     let args = ["-b", "-d", "--login", "-p", "-r", "-t", "-T", "-u"];
-    let expected_stdout = unwrap_or_return!(expected_result(util_name!(), &args)).stdout_move_str();
-    let scene = TestScenario::new(util_name!());
-    scene
-        .ucmd()
-        .args(&args)
-        .succeeds()
-        .stdout_is(expected_stdout);
-    let expected_stdout =
-        unwrap_or_return!(expected_result(util_name!(), &["--all"])).stdout_move_str();
-    scene
-        .ucmd()
-        .arg("--all")
-        .succeeds()
-        .stdout_is(expected_stdout);
+    let ts = TestScenario::new(util_name!());
+    let expected_stdout = unwrap_or_return!(expected_result(&ts, &args)).stdout_move_str();
+    ts.ucmd().args(&args).succeeds().stdout_is(expected_stdout);
+    let expected_stdout = unwrap_or_return!(expected_result(&ts, &["--all"])).stdout_move_str();
+    ts.ucmd().arg("--all").succeeds().stdout_is(expected_stdout);
 }
 
 #[cfg(unix)]
@@ -221,9 +211,9 @@ fn test_all() {
         return;
     }
 
+    let ts = TestScenario::new(util_name!());
     for opt in &["-a", "--all"] {
-        let expected_stdout =
-            unwrap_or_return!(expected_result(util_name!(), &[opt])).stdout_move_str();
-        new_ucmd!().arg(opt).succeeds().stdout_is(expected_stdout);
+        let expected_stdout = unwrap_or_return!(expected_result(&ts, &[opt])).stdout_move_str();
+        ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
     }
 }

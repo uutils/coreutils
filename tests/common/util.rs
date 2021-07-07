@@ -701,7 +701,7 @@ impl AtPath {
 /// Fixtures can be found under `tests/fixtures/$util_name/`
 pub struct TestScenario {
     bin_path: PathBuf,
-    util_name: String,
+    pub util_name: String,
     pub fixtures: AtPath,
     tmpd: Rc<TempDir>,
 }
@@ -1171,8 +1171,9 @@ pub fn check_coreutil_version(
 /// use crate::common::util::*;
 /// #[test]
 /// fn test_xyz() {
-///     let result = new_ucmd!().run();
-///     let exp_result = unwrap_or_return!(expected_result(util_name!(), &[]));
+///     let ts = TestScenario::new(util_name!());
+///     let result = ts.ucmd().run();
+///     let exp_result = unwrap_or_return!(expected_result(&ts, &[]));
 ///     result
 ///         .stdout_is(exp_result.stdout_str())
 ///         .stderr_is(exp_result.stderr_str())
@@ -1180,12 +1181,11 @@ pub fn check_coreutil_version(
 /// }
 ///```
 #[cfg(unix)]
-pub fn expected_result(util_name: &str, args: &[&str]) -> std::result::Result<CmdResult, String> {
-    let util_name = &host_name_for(util_name);
+pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<CmdResult, String> {
+    let util_name = &host_name_for(&ts.util_name);
     println!("{}", check_coreutil_version(util_name, VERSION_MIN)?);
 
-    let scene = TestScenario::new(util_name);
-    let result = scene
+    let result = ts
         .cmd_keepenv(util_name.as_ref())
         .env("LC_ALL", "C")
         .args(args)
@@ -1470,7 +1470,9 @@ mod tests {
     #[test]
     #[cfg(unix)]
     fn test_expected_result() {
-        assert!(expected_result("id", &[]).is_ok());
-        assert!(expected_result("no test name", &[]).is_err());
+        let ts = TestScenario::new("id");
+        assert!(expected_result(&ts, &[]).is_ok());
+        let ts = TestScenario::new("no test name");
+        assert!(expected_result(&ts, &[]).is_err());
     }
 }

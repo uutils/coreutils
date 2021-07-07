@@ -10,8 +10,9 @@ const VERSION_MIN_MULTIPLE_USERS: &str = "8.31"; // this feature was introduced 
 #[test]
 #[cfg(unix)]
 fn test_groups() {
-    let result = new_ucmd!().run();
-    let exp_result = unwrap_or_return!(expected_result(util_name!(), &[]));
+    let ts = TestScenario::new(util_name!());
+    let result = ts.ucmd().run();
+    let exp_result = unwrap_or_return!(expected_result(&ts, &[]));
 
     result
         .stdout_is(exp_result.stdout_str())
@@ -24,8 +25,9 @@ fn test_groups() {
 fn test_groups_username() {
     let test_users = [&whoami()[..]];
 
-    let result = new_ucmd!().args(&test_users).run();
-    let exp_result = unwrap_or_return!(expected_result(util_name!(), &test_users));
+    let ts = TestScenario::new(util_name!());
+    let result = ts.ucmd().args(&test_users).run();
+    let exp_result = unwrap_or_return!(expected_result(&ts, &test_users));
 
     result
         .stdout_is(exp_result.stdout_str())
@@ -42,8 +44,9 @@ fn test_groups_username_multiple() {
     ));
     let test_users = ["root", "man", "postfix", "sshd", &whoami()];
 
-    let result = new_ucmd!().args(&test_users).run();
-    let exp_result = unwrap_or_return!(expected_result(util_name!(), &test_users));
+    let ts = TestScenario::new(util_name!());
+    let result = ts.ucmd().args(&test_users).run();
+    let exp_result = unwrap_or_return!(expected_result(&ts, &test_users));
 
     result
         .stdout_is(exp_result.stdout_str())

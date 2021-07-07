@@ -25,19 +25,16 @@ fn test_long_format() {
     let login = "root";
     let pw: Passwd = Passwd::locate(login).unwrap();
     let real_name = pw.user_info().replace("&", &pw.name().capitalize());
-    new_ucmd!()
-        .arg("-l")
-        .arg(login)
-        .succeeds()
-        .stdout_is(format!(
-            "Login name: {:<28}In real life:  {}\nDirectory: {:<29}Shell:  {}\n\n",
-            login,
-            real_name,
-            pw.user_dir(),
-            pw.user_shell()
-        ));
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd().arg("-l").arg(login).succeeds().stdout_is(format!(
+        "Login name: {:<28}In real life:  {}\nDirectory: {:<29}Shell:  {}\n\n",
+        login,
+        real_name,
+        pw.user_dir(),
+        pw.user_shell()
+    ));
 
-    new_ucmd!()
+    ts.ucmd()
         .arg("-lb")
         .arg(login)
         .succeeds()
@@ -51,9 +48,10 @@ fn test_long_format() {
 #[test]
 fn test_long_format_multiple_users() {
     let args = ["-l", "root", "root", "root"];
-    let expect = unwrap_or_return!(expected_result(util_name!(), &args));
+    let ts = TestScenario::new(util_name!());
+    let expect = unwrap_or_return!(expected_result(&ts, &args));
 
-    new_ucmd!()
+    ts.ucmd()
         .args(&args)
         .succeeds()
         .stdout_is(expect.stdout_str())
@@ -72,8 +70,9 @@ fn test_short_format_i() {
     // allow whitespace variation
     // * minor whitespace differences occur between platform built-in outputs; specifically, the number of trailing TABs may be variant
     let args = ["-i"];
-    let actual = new_ucmd!().args(&args).succeeds().stdout_move_str();
-    let expect = unwrap_or_return!(expected_result(util_name!(), &args)).stdout_move_str();
+    let ts = TestScenario::new(util_name!());
+    let actual = ts.ucmd().args(&args).succeeds().stdout_move_str();
+    let expect = unwrap_or_return!(expected_result(&ts, &args)).stdout_move_str();
     let v_actual: Vec<&str> = actual.split_whitespace().collect();
     let v_expect: Vec<&str> = expect.split_whitespace().collect();
     assert_eq!(v_actual, v_expect);
@@ -85,8 +84,9 @@ fn test_short_format_q() {
     // allow whitespace variation
     // * minor whitespace differences occur between platform built-in outputs; specifically, the number of trailing TABs may be variant
     let args = ["-q"];
-    let actual = new_ucmd!().args(&args).succeeds().stdout_move_str();
-    let expect = unwrap_or_return!(expected_result(util_name!(), &args)).stdout_move_str();
+    let ts = TestScenario::new(util_name!());
+    let actual = ts.ucmd().args(&args).succeeds().stdout_move_str();
+    let expect = unwrap_or_return!(expected_result(&ts, &args)).stdout_move_str();
     let v_actual: Vec<&str> = actual.split_whitespace().collect();
     let v_expect: Vec<&str> = expect.split_whitespace().collect();
     assert_eq!(v_actual, v_expect);
@@ -95,8 +95,9 @@ fn test_short_format_q() {
 #[cfg(unix)]
 #[test]
 fn test_no_flag() {
-    let actual = new_ucmd!().succeeds().stdout_move_str();
-    let expect = unwrap_or_return!(expected_result(util_name!(), &[])).stdout_move_str();
+    let ts = TestScenario::new(util_name!());
+    let actual = ts.ucmd().succeeds().stdout_move_str();
+    let expect = unwrap_or_return!(expected_result(&ts, &[])).stdout_move_str();
     let v_actual: Vec<&str> = actual.split_whitespace().collect();
     let v_expect: Vec<&str> = expect.split_whitespace().collect();
     assert_eq!(v_actual, v_expect);
