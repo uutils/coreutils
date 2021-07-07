@@ -366,14 +366,12 @@ impl Output<File> {
                 .create_new(cflags.excl)
                 .append(oflags.append);
 
-            if cfg!(unix) {
-                if let Some(libc_flags) = make_unix_oflags(oflags) {
-                    opts.custom_flags(libc_flags);
-                }
+            #[cfg(target_os = "linux")]
+            if let Some(libc_flags) = make_unix_oflags(oflags) {
+                opts.custom_flags(libc_flags);
             }
 
             let dst = opts.open(path)?;
-
             Ok(dst)
         }
         let obs = parseargs::parse_obs(matches)?;
@@ -777,10 +775,7 @@ fn print_xfer_stats(update: &ProgUpdate) {
 }
 
 /// Generate a progress updater that tracks progress, receives updates, and responds to signals.
-fn gen_prog_updater(
-    rx: mpsc::Receiver<ProgUpdate>,
-    xfer_stats: Option<StatusLevel>,
-) -> impl Fn() {
+fn gen_prog_updater(rx: mpsc::Receiver<ProgUpdate>, xfer_stats: Option<StatusLevel>) -> impl Fn() {
     // --------------------------------------------------------------
     fn posixly_correct() -> bool {
         env::var("POSIXLY_CORRECT").is_ok()

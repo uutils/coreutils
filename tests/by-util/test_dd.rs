@@ -268,11 +268,10 @@ fn test_nocreat_causes_failure_when_outfile_not_present() {
     assert_fixture_not_exists!(&fname);
 
     let (fix, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["conv=nocreat", of!(&fname)]).pipe_in("").run();
+    ucmd.args(&["conv=nocreat", of!(&fname)]).pipe_in("").fails().stderr_is("dd Error: No such file or directory (os error 2)");
 
     assert!(!fix.file_exists(&fname));
 
-    ucmd.fails();
 }
 
 #[test]

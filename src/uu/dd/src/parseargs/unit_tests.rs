@@ -7,7 +7,7 @@ use crate::StatusLevel;
 fn unimplemented_flags_should_error_non_unix() {
     let mut unfailed = Vec::new();
 
-    // The following flags are only implemented in unix
+    // The following flags are only implemented in linux
     for flag in vec![
         "direct",
         "directory",
