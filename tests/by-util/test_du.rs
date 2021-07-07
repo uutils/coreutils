@@ -573,8 +573,7 @@ fn test_du_bytes() {
     #[cfg(all(
         not(target_vendor = "apple"),
         not(target_os = "windows"),
-        not(target_os = "freebsd"),
-        not(target_os = "linux")
+        not(target_os = "freebsd")
     ))]
     result.stdout_contains("21529\t./subdir\n");
 }

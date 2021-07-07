@@ -10,6 +10,7 @@
 use pretty_assertions::assert_eq;
 #[cfg(target_os = "linux")]
 use rlimit::{prlimit, rlim};
+#[cfg(unix)]
 use std::borrow::Cow;
 use std::env;
 #[cfg(not(windows))]
@@ -1456,9 +1457,10 @@ mod tests {
     #[cfg(unix)]
     fn test_check_coreutil_version() {
         match check_coreutil_version("id", VERSION_MIN) {
-            Ok(s) => s.starts_with("uutils-tests-"),
-            Err(s) => s.starts_with("uutils-tests-warning"),
+            Ok(s) => assert!(s.starts_with("uutils-tests-")),
+            Err(s) => assert!(s.starts_with("uutils-tests-warning")),
         };
+        #[cfg(target_os = "linux")]
         std::assert_eq!(
             check_coreutil_version("no test name", VERSION_MIN),
             Err("uutils-tests-warning: 'no test name' \
@@ -1471,7 +1473,11 @@ mod tests {
     #[cfg(unix)]
     fn test_expected_result() {
         let ts = TestScenario::new("id");
-        assert!(expected_result(&ts, &[]).is_ok());
+        // assert!(expected_result(&ts, &[]).is_ok());
+        match expected_result(&ts, &[]) {
+            Ok(r) => assert!(r.succeeded()),
+            Err(s) => assert!(s.starts_with("uutils-tests-warning")),
+        }
         let ts = TestScenario::new("no test name");
         assert!(expected_result(&ts, &[]).is_err());
     }

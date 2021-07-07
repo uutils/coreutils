@@ -3,6 +3,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
+#[cfg(unix)]
 use crate::common::util::*;
 
 #[test]
@@ -39,7 +40,9 @@ fn test_normal_compare_env() {
     if whoami == "nobody" {
         println!("test skipped:");
         return;
-    } else {
+    } else if !is_ci() {
         new_ucmd!().succeeds().stdout_is(format!("{}\n", whoami));
+    } else {
+        println!("test skipped:");
     }
 }
