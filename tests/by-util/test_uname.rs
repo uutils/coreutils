@@ -1,6 +1,11 @@
 use crate::common::util::*;
 
 #[test]
+fn test_uname() {
+    new_ucmd!().succeeds();
+}
+
+#[test]
 fn test_uname_compatible() {
     new_ucmd!().arg("-a").succeeds();
 }
@@ -44,4 +49,61 @@ fn test_uname_kernel() {
 
     #[cfg(not(target_os = "linux"))]
     ucmd.arg("-o").succeeds();
+}
+
+#[test]
+fn test_uname_operating_system() {
+    #[cfg(target_vendor = "apple")]
+    new_ucmd!()
+        .arg("--operating-system")
+        .succeeds()
+        .stdout_is("Darwin\n");
+    #[cfg(target_os = "freebsd")]
+    new_ucmd!()
+        .arg("--operating-system")
+        .succeeds()
+        .stdout_is("FreeBSD\n");
+    #[cfg(target_os = "fuchsia")]
+    new_ucmd!()
+        .arg("--operating-system")
+        .succeeds()
+        .stdout_is("Fuchsia\n");
+    #[cfg(all(target_os = "linux", any(target_env = "gnu", target_env = "")))]
+    new_ucmd!()
+        .arg("--operating-system")
+        .succeeds()
+        .stdout_is("GNU/Linux\n");
+    #[cfg(all(target_os = "linux", not(any(target_env = "gnu", target_env = ""))))]
+    new_ucmd!()
+        .arg("--operating-system")
+        .succeeds()
+        .stdout_is("Linux\n");
+    #[cfg(target_os = "netbsd")]
+    new_ucmd!()
+        .arg("--operating-system")
+        .succeeds()
+        .stdout_is("NetBSD\n");
+    #[cfg(target_os = "openbsd")]
+    new_ucmd!()
+        .arg("--operating-system")
+        .succeeds()
+        .stdout_is("OpenBSD\n");
+    #[cfg(target_os = "redox")]
+    new_ucmd!()
+        .arg("--operating-system")
+        .succeeds()
+        .stdout_is("Redox\n");
+    #[cfg(target_os = "windows")]
+    new_ucmd!()
+        .arg("--operating-system")
+        .succeeds()
+        .stdout_is("Windows NT\n");
+}
+
+#[test]
+fn test_uname_help() {
+    new_ucmd!()
+        .arg("--help")
+        .succeeds()
+        .stdout_contains("system information");
 }
