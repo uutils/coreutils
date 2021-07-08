@@ -1,3 +1,5 @@
+/* cspell:disable */
+
 use crate::common::util::*;
 
 use std::fs::{File, OpenOptions};
@@ -212,6 +214,7 @@ fn test_excl_causes_failure_when_present() {
         .fails();
 }
 
+#[ignore]
 #[test]
 fn test_atime_updated() {
     let fname = "this-file-exists-no-noatime.txt";
@@ -271,9 +274,7 @@ fn test_nocreat_causes_failure_when_outfile_not_present() {
         .pipe_in("")
         .fails()
         .stderr_is("dd Error: No such file or directory (os error 2)");
-
     assert!(!fix.file_exists(&fname));
-
 }
 
 #[test]
@@ -515,13 +516,7 @@ fn test_ascii_5_gibi_to_file() {
     let tmp_fn = format!("TESTFILE-{}.tmp", &tname);
 
     let (fix, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&[
-        "status=none",
-        "count=5G",
-        "iflag=count_bytes",
-        "if=/dev/zero",
-        of!(tmp_fn),
-    ])
+    ucmd.args(&["status=none", "count=5G", "iflag=count_bytes", "if=/dev/zero", of!(tmp_fn)])
     .run()
     .no_stderr()
     .no_stdout()
@@ -555,15 +550,11 @@ fn test_unicode_filenames() {
     assert_fixture_exists!(test_fn);
 
     let (fix, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&[
-        "status=none",
-        inf!(test_fn),
-        of!(tmp_fn),
-    ])
-    .run()
-    .no_stderr()
-    .no_stdout()
-    .success();
+    ucmd.args(&["status=none", inf!(test_fn), of!(tmp_fn)])
+        .run()
+        .no_stderr()
+        .no_stdout()
+        .success();
 
     cmp_file!(
         File::open(fixture_path!(&test_fn)).unwrap(),

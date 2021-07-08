@@ -1,3 +1,5 @@
+/* cspell:disable */
+
 use super::*;
 
 use crate::StatusLevel;
