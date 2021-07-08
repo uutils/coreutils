@@ -718,3 +718,21 @@ fn test_bracket_syntax_missing_right_bracket() {
         .status_code(2)
         .stderr_is("[: missing ']'");
 }
+
+#[test]
+fn test_bracket_syntax_help() {
+    let scenario = TestScenario::new("[");
+    let mut ucmd = scenario.ucmd();
+
+    ucmd.arg("--help").succeeds().stdout_contains("USAGE:");
+}
+
+#[test]
+fn test_bracket_syntax_version() {
+    let scenario = TestScenario::new("[");
+    let mut ucmd = scenario.ucmd();
+
+    ucmd.arg("--version")
+        .succeeds()
+        .stdout_matches(&r"\[ \d+\.\d+\.\d+".parse().unwrap());
+}
