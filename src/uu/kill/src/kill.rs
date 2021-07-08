@@ -22,9 +22,6 @@ use uucore::InvalidEncodingHandling;
 
 static ABOUT: &str = "Send signal to processes or list information about signals.";
 
-static EXIT_OK: i32 = 0;
-static EXIT_ERR: i32 = 1;
-
 pub mod options {
     pub static PIDS_OR_SIGNALS: &str = "pids_of_signals";
     pub static LIST: &str = "list";
@@ -74,7 +71,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             return kill(&sig, &pids_or_signals);
         }
         Mode::Table => table(),
-        Mode::List => list(pids_or_signals.get(0).cloned()),
+        Mode::List => list(pids_or_signals.get(0).cloned())?,
     }
 
     Ok(())
@@ -147,20 +144,23 @@ fn table() {
     println!()
 }
 
-fn print_signal(signal_name_or_value: &str) {
+fn print_signal(signal_name_or_value: &str) -> UResult<()> {
     for (value, &signal) in ALL_SIGNALS.iter().enumerate() {
         if signal == signal_name_or_value || (format!("SIG{}", signal)) == signal_name_or_value {
             println!("{}", value);
-            exit!(EXIT_OK as i32)
+            return Ok(());
         } else if signal_name_or_value == value.to_string() {
             println!("{}", signal);
-            exit!(EXIT_OK as i32)
+            return Ok(());
         }
     }
-    crash!(EXIT_ERR, "unknown signal name {}", signal_name_or_value)
+    Err(USimpleError::new(
+        1,
+        format!("unknown signal name {}", signal_name_or_value),
+    ))
 }
 
-fn print_signals() {
+fn print_signals() -> UResult<()> {
     let mut pos = 0;
     for (idx, signal) in ALL_SIGNALS.iter().enumerate() {
         pos += signal.len();
@@ -173,13 +173,14 @@ fn print_signals() {
             print!(" ");
         }
     }
+    Ok(())
 }
 
-fn list(arg: Option<String>) {
+fn list(arg: Option<String>) -> UResult<()> {
     match arg {
-        Some(ref x) => print_signal(x),
-        None => print_signals(),
-    };
+        Some(ref x) => Ok(print_signal(x)?),
+        None => Ok(print_signals()?),
+    }
 }
 
 fn kill(signalname: &str, pids: &[String]) -> UResult<()> {
