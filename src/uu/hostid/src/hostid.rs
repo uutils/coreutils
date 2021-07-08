@@ -7,11 +7,15 @@
 
 // spell-checker:ignore (ToDO) gethostid
 
+// Clippy bug: https://github.com/rust-lang/rust-clippy/issues/7422
+#![allow(clippy::nonstandard_macro_braces)]
+
 #[macro_use]
 extern crate uucore;
 
 use clap::{crate_version, App};
 use libc::c_long;
+use uucore::error::UResult;
 
 static SYNTAX: &str = "[options]";
 
@@ -20,10 +24,11 @@ extern "C" {
     pub fn gethostid() -> c_long;
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     uu_app().get_matches_from(args);
     hostid();
-    0
+    Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {

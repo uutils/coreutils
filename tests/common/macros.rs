@@ -1,3 +1,8 @@
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
+
 /// Platform-independent helper for constructing a PathBuf from individual elements
 #[macro_export]
 macro_rules! path_concat {
@@ -65,4 +70,20 @@ macro_rules! at_and_ucmd {
         let ts = TestScenario::new(util_name!());
         (ts.fixtures.clone(), ts.ucmd())
     }};
+}
+
+/// If `common::util::expected_result` returns an error, i.e. the `util` in `$PATH` doesn't
+/// include a coreutils version string or the version is too low,
+/// this macro can be used to automatically skip the test and print the reason.
+#[macro_export]
+macro_rules! unwrap_or_return {
+    ( $e:expr ) => {
+        match $e {
+            Ok(x) => x,
+            Err(e) => {
+                println!("test skipped: {}", e);
+                return;
+            }
+        }
+    };
 }
