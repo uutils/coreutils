@@ -1,5 +1,3 @@
-// spell-checker:ignore (Fileio fname fpath fullblock gibi ifile iflag infile lcase noatime nocreat notrunc noxfer ofile oflag outfile specfile testfile TESTFILE tname ucase unspec urand)
-
 use crate::common::util::*;
 
 use std::fs::{File, OpenOptions};
@@ -225,6 +223,7 @@ fn test_atime_updated() {
     let pre_atime = fix.metadata(&fname).accessed().unwrap();
 
     ucmd.pipe_in("").run().no_stderr().success();
+    std::thread::sleep(std::time::Duration::from_millis(10));
 
     let post_atime = fix.metadata(&fname).accessed().unwrap();
     assert!(pre_atime != post_atime);
@@ -268,7 +267,10 @@ fn test_nocreat_causes_failure_when_outfile_not_present() {
     assert_fixture_not_exists!(&fname);
 
     let (fix, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["conv=nocreat", of!(&fname)]).pipe_in("").fails().stderr_is("dd Error: No such file or directory (os error 2)");
+    ucmd.args(&["conv=nocreat", of!(&fname)])
+        .pipe_in("")
+        .fails()
+        .stderr_is("dd Error: No such file or directory (os error 2)");
 
     assert!(!fix.file_exists(&fname));
 

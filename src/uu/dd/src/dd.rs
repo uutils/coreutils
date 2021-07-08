@@ -5,8 +5,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (bmax bremain btotal cflags ctable curr dsync DSYNC fileout fname fullblock iflags INFILE noatime NOATIME nocreat noctty NOCTTY noerror nofollow NOFOLLOW nonblock NONBLOCK notrunc Noxfer oflag oflags OUTFILE parseargs plen rlen rmax rposition rremain rsofar rstat SIGINFO SIGUSR sigval tlen wlen wstat xfer)
-
 #[macro_use]
 extern crate uucore;
 use uucore::InvalidEncodingHandling;
@@ -34,7 +32,7 @@ use std::env;
 use std::error::Error;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, Write};
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 use std::sync::{atomic::AtomicUsize, atomic::Ordering, mpsc, Arc};
@@ -87,7 +85,8 @@ impl Input<io::Stdin> {
     }
 }
 
-fn make_unix_iflags(oflags: &IFlags) -> Option<libc::c_int> {
+#[cfg(target_os = "linux")]
+fn make_linux_iflags(oflags: &IFlags) -> Option<libc::c_int> {
     let mut flag = 0;
 
     if oflags.direct {
@@ -138,7 +137,7 @@ impl Input<File> {
                 opts.read(true);
 
                 #[cfg(target_os = "linux")]
-                if let Some(libc_flags) = make_unix_iflags(&iflags) {
+                if let Some(libc_flags) = make_linux_iflags(&iflags) {
                     opts.custom_flags(libc_flags);
                 }
 
@@ -225,7 +224,7 @@ impl<R: Read> Input<R> {
 
     /// Fills a given buffer.
     /// Reads in increments of 'self.ibs'.
-    /// The start of each ibs-sized read is aligned to multiples of ibs; remaing space is filled with the 'pad' byte.
+    /// The start of each ibs-sized read is aligned to multiples of ibs; remaining space is filled with the 'pad' byte.
     fn fill_blocks(&mut self, buf: &mut Vec<u8>, pad: u8) -> Result<ReadStat, Box<dyn Error>> {
         let mut reads_complete = 0;
         let mut reads_partial = 0;
@@ -313,7 +312,8 @@ impl Output<io::Stdout> {
     }
 }
 
-fn make_unix_oflags(oflags: &OFlags) -> Option<libc::c_int> {
+#[cfg(target_os = "linux")]
+fn make_linux_oflags(oflags: &OFlags) -> Option<libc::c_int> {
     let mut flag = 0;
 
     // oflag=FLAG
@@ -367,7 +367,7 @@ impl Output<File> {
                 .append(oflags.append);
 
             #[cfg(target_os = "linux")]
-            if let Some(libc_flags) = make_unix_oflags(oflags) {
+            if let Some(libc_flags) = make_linux_oflags(oflags) {
                 opts.custom_flags(libc_flags);
             }
 
@@ -512,20 +512,20 @@ impl Output<File> {
 /// Appends padding as specified by conv=block and cbs=N
 fn block(buf: Vec<u8>, cbs: usize, rstat: &mut ReadStat) -> Vec<Vec<u8>> {
     let mut blocks = buf
-        .split(|&e| e == '\n' as u8)
+        .split(|&e| e == b'\n')
         .fold(Vec::new(), |mut blocks, split| {
             let mut split = split.to_vec();
             if split.len() > cbs {
                 rstat.records_truncated += 1;
             }
-            split.resize(cbs, ' ' as u8);
+            split.resize(cbs, b' ');
             blocks.push(split);
 
             blocks
         });
 
     if let Some(last) = blocks.last() {
-        if last.iter().all(|&e| e == ' ' as u8) {
+        if last.iter().all(|&e| e == b' ') {
             blocks.pop();
         }
     }
@@ -559,13 +559,13 @@ fn unblock(buf: Vec<u8>, cbs: usize) -> Vec<u8> {
     build_blocks(buf, cbs)
         .into_iter()
         .fold(Vec::new(), |mut unblocks, mut block| {
-            let block = if let Some(last_char_idx) = block.iter().rposition(|&e| e != ' ' as u8) {
+            let block = if let Some(last_char_idx) = block.iter().rposition(|&e| e != b' ') {
                 block.truncate(last_char_idx + 1);
-                block.push('\n' as u8);
+                block.push(b'\n');
 
                 block
-            } else if let Some(32u8 /* ' ' as u8 */) = block.get(0) {
-                vec!['\n' as u8]
+            } else if let Some(b' ') = block.get(0) {
+                vec![b'\n']
             } else {
                 block
             };
@@ -612,13 +612,13 @@ fn conv_block_unblock_helper<R: Read>(
         }
     }
     // --------------------------------------------------------------------
-    if conv_only(&i) {
+    if conv_only(i) {
         // no block/unblock
         let ct = i.cflags.ctable.unwrap();
-        apply_ct(&mut buf, &ct);
+        apply_ct(&mut buf, ct);
 
         Ok(buf)
-    } else if should_block_then_conv(&i) {
+    } else if should_block_then_conv(i) {
         // ascii input so perform the block first
         let cbs = i.cflags.block.unwrap();
 
@@ -626,41 +626,41 @@ fn conv_block_unblock_helper<R: Read>(
 
         if let Some(ct) = i.cflags.ctable {
             for buf in blocks.iter_mut() {
-                apply_ct(buf, &ct);
+                apply_ct(buf, ct);
             }
         }
 
         let blocks = blocks.into_iter().flatten().collect();
 
         Ok(blocks)
-    } else if should_conv_then_block(&i) {
+    } else if should_conv_then_block(i) {
         // Non-ascii so perform the conversion first
         let cbs = i.cflags.block.unwrap();
 
         if let Some(ct) = i.cflags.ctable {
-            apply_ct(&mut buf, &ct);
+            apply_ct(&mut buf, ct);
         }
 
         let blocks = block(buf, cbs, rstat).into_iter().flatten().collect();
 
         Ok(blocks)
-    } else if should_unblock_then_conv(&i) {
+    } else if should_unblock_then_conv(i) {
         // ascii input so perform the unblock first
         let cbs = i.cflags.unblock.unwrap();
 
         let mut buf = unblock(buf, cbs);
 
         if let Some(ct) = i.cflags.ctable {
-            apply_ct(&mut buf, &ct);
+            apply_ct(&mut buf, ct);
         }
 
         Ok(buf)
-    } else if should_conv_then_unblock(&i) {
+    } else if should_conv_then_unblock(i) {
         // Non-ascii input so perform the conversion first
         let cbs = i.cflags.unblock.unwrap();
 
         if let Some(ct) = i.cflags.ctable {
-            apply_ct(&mut buf, &ct);
+            apply_ct(&mut buf, ct);
         }
 
         let buf = unblock(buf, cbs);
@@ -720,7 +720,7 @@ fn read_helper<R: Read>(
     if i.cflags.swab {
         perform_swab(&mut buf);
     }
-    if is_conv(&i) || is_block(&i) || is_unblock(&i) {
+    if is_conv(i) || is_block(i) || is_unblock(i) {
         let buf = conv_block_unblock_helper(buf, i, &mut rstat)?;
         Ok((rstat, buf))
     } else {
@@ -761,7 +761,6 @@ fn make_prog_line(update: &ProgUpdate) -> String {
         update.duration.as_secs_f64(),
         xfer_rate
     )
-    .to_string()
 }
 fn reprint_prog_line(update: &ProgUpdate) {
     eprint!("\r{}", make_prog_line(update));
@@ -815,16 +814,18 @@ fn gen_prog_updater(rx: mpsc::Receiver<ProgUpdate>, xfer_stats: Option<StatusLev
                 }
                 (Ok(update), _) => update,
                 (Err(_), _) =>
-                // recv only fails permenantly
+                // recv only fails permanently
                 {
                     break
                 }
             };
             // Handle signals
+            #[allow(clippy::single_match)]
             match sigval.load(Ordering::Relaxed) {
                 SIGUSR1_USIZE => {
                     print_xfer_stats(&update);
                 }
+                // SIGINFO_USIZE => ...
                 _ => { /* no signals recv'd */ }
             };
         }
@@ -833,15 +834,15 @@ fn gen_prog_updater(rx: mpsc::Receiver<ProgUpdate>, xfer_stats: Option<StatusLev
 
 /// Calculate a 'good' internal buffer size.
 /// For performance of the read/write functions, the buffer should hold
-/// both an itegral number of reads and an itegral number of writes. For
+/// both an integral number of reads and an integral number of writes. For
 /// sane real-world memory use, it should not be too large. I believe
 /// the least common multiple is a good representation of these interests.
+/// https://en.wikipedia.org/wiki/Least_common_multiple#Using_the_greatest_common_divisor
 #[inline]
 fn calc_bsize(ibs: usize, obs: usize) -> usize {
     let gcd = Gcd::gcd(ibs, obs);
-    let lcm = (ibs / gcd) * obs;
-
-    lcm
+    // calculate the lcm from gcd
+    (ibs / gcd) * obs
 }
 
 /// Calculate the buffer size appropriate for this loop iteration, respecting
@@ -887,7 +888,7 @@ fn below_count_limit(count: &Option<CountType>, rstat: &ReadStat, wstat: &WriteS
     }
 }
 
-/// Perform the copy/convert opertaions. Stdout version
+/// Perform the copy/convert operations. Stdout version
 // Note: Some of dd's functionality depends on whether the output is actually a file. This breaks the Output<Write> abstraction,
 // and should be fixed in the future.
 fn dd_stdout<R: Read>(mut i: Input<R>, mut o: Output<io::Stdout>) -> Result<(), Box<dyn Error>> {
@@ -962,7 +963,7 @@ fn dd_stdout<R: Read>(mut i: Input<R>, mut o: Output<io::Stdout>) -> Result<(), 
     Ok(())
 }
 
-/// Perform the copy/convert opertaions. File backed output version
+/// Perform the copy/convert operations. File backed output version
 // Note: Some of dd's functionality depends on whether the output is actually a file. This breaks the Output<Write> abstraction,
 // and should be fixed in the future.
 fn dd_fileout<R: Read>(mut i: Input<R>, mut o: Output<File>) -> Result<(), Box<dyn Error>> {
@@ -1037,13 +1038,13 @@ fn dd_fileout<R: Read>(mut i: Input<R>, mut o: Output<File>) -> Result<(), Box<d
     Ok(())
 }
 
+// The compiler does not like Clippy's suggestion to use &str in place of &String here.
+#[allow(clippy::ptr_arg)]
 fn append_dashes_if_not_present(mut acc: Vec<String>, s: &String) -> Vec<String> {
-    if Some("--") == s.get(0..=1) {
-        acc
-    } else {
+    if Some("--") != s.get(0..=1) {
         acc.push(format!("--{}", s));
-        acc
     }
+    acc
 }
 
 macro_rules! unpack_or_rtn (
@@ -1253,8 +1254,8 @@ Input-Flags
 General-Flags
 \t 'direct' use direct I/O for data.
 \t 'directory' fail unless the given input (if used as an iflag) or output (if used as an oflag) is a directory.
-\t 'dsync' use syncronized I/O for data.
-\t 'sync' use syncronized I/O for data and metadata.
+\t 'dsync' use synchronized I/O for data.
+\t 'sync' use synchronized I/O for data and metadata.
 \t 'nonblock' use non-blocking I/O.
 \t 'noatime' do not update access time.
 \t 'nocache' request that OS drop cache.
@@ -1280,8 +1281,8 @@ Output-Flags
 General-Flags
 \t 'direct' use direct I/O for data.
 \t 'directory' fail unless the given input (if used as an iflag) or output (if used as an oflag) is a directory.
-\t 'dsync' use syncronized I/O for data.
-\t 'sync' use syncronized I/O for data and metadata.
+\t 'dsync' use synchronized I/O for data.
+\t 'sync' use synchronized I/O for data and metadata.
 \t 'nonblock' use non-blocking I/O.
 \t 'noatime' do not update access time.
 \t 'nocache' request that OS drop cache.
@@ -1291,175 +1292,3 @@ General-Flags
 ")
         )
 }
-
-// #[macro_export]
-// macro_rules! build_dd_app (
-//     () =>
-//     {
-//         clap::App::new(executable!())
-//         .version(crate_version!())
-//         .about(ABOUT)
-//         .arg(
-//             clap::Arg::with_name(options::INFILE)
-//                 .long(options::INFILE)
-//                 .takes_value(true)
-//                 .help("if=FILE (alternatively --if FILE) specifies the file used for input. When not specified, stdin is used instead")
-//         )
-//         .arg(
-//             clap::Arg::with_name(options::OUTFILE)
-//                 .long(options::OUTFILE)
-//                 .takes_value(true)
-//                 .help("of=FILE (alternatively --of FILE) specifies the file used for output. When not specified, stdout is used instead")
-//         )
-//         .arg(
-//             clap::Arg::with_name(options::IBS)
-//                 .long(options::IBS)
-//                 .takes_value(true)
-//                 .help("ibs=N (alternatively --ibs N) specifies the size of buffer used for reads (default: 512). Multiplier strings permitted.")
-//         )
-//         .arg(
-//             clap::Arg::with_name(options::OBS)
-//                 .long(options::OBS)
-//                 .takes_value(true)
-//                 .help("obs=N (alternatively --obs N) specifies the size of buffer used for writes (default: 512). Multiplier strings permitted.")
-//         )
-//         .arg(
-//             clap::Arg::with_name(options::BS)
-//                 .long(options::BS)
-//                 .takes_value(true)
-//                 .help("bs=N (alternatively --bs N) specifies ibs=N and obs=N (default: 512). If ibs or obs are also specified, bs=N takes precedence. Multiplier strings permitted.")
-//         )
-//         .arg(
-//             clap::Arg::with_name(options::CBS)
-//                 .long(options::CBS)
-//                 .takes_value(true)
-//                 .help("cbs=BYTES (alternatively --cbs BYTES) specifies the 'conversion block size' in bytes. Applies to the conv=block, and conv=unblock operations. Multiplier strings permitted.")
-//         )
-//         .arg(
-//             clap::Arg::with_name(options::SKIP)
-//                 .long(options::SKIP)
-//                 .takes_value(true)
-//                 .help("skip=N (alternatively --skip N) causes N ibs-sized records of input to be skipped before beginning copy/convert operations. See iflag=count_bytes if skipping N bytes is preferred. Multiplier strings permitted.")
-//         )
-//         .arg(
-//             clap::Arg::with_name(options::SEEK)
-//                 .long(options::SEEK)
-//                 .takes_value(true)
-//                 .help("seek=N (alternatively --seek N) seeks N obs-sized records into output before beginning copy/convert operations. See oflag=seek_bytes if seeking N bytes is preferred. Multiplier strings permitted.")
-//         )
-//         .arg(
-//             clap::Arg::with_name(options::COUNT)
-//                 .long(options::COUNT)
-//                 .takes_value(true)
-//                 .help("count=N (alternatively --count N) stop reading input after N ibs-sized read operations rather than proceeding until EOF. See iflag=count_bytes if stopping after N bytes is preferred. Multiplier strings permitted.")
-//         )
-//         .arg(
-//             clap::Arg::with_name(options::STATUS)
-//                 .long(options::STATUS)
-//                 .takes_value(true)
-//                 .help("status=LEVEL (alternatively --status LEVEL) controls whether volume and performance stats are written to stderr.
-//
-// When unspecified, dd will print stats upon completion. An example is below.
-// \t6+0 records in
-// \t16+0 records out
-// \t8192 bytes (8.2 kB, 8.0 KiB) copied, 0.00057009 s, 14.4 MB/s
-// The first two lines are the 'volume' stats and the final line is the 'performance' stats.
-// The volume stats indicate the number of complete and partial ibs-sized reads, or obs-sized writes that took place during the copy. The format of the volume stats is <complete>+<partial>. If records have been truncated (see conv=block), the volume stats will contain the number of truncated records.
-//
-// Permissible LEVEL values are:
-// \t progress: Print periodic performance stats as the copy proceeds.
-// \t noxfer: Print final volume stats, but not performance stats.
-// \t none: Do not print any stats.
-//
-// Printing performance stats is also triggered by the INFO signal (where supported), or the USR1 signal. Setting the POSIXLY_CORRECT environment variable to any value (including an empty value) will cause the USR1 signal to be ignored.
-//
-// ")
-//         )
-//         .arg(
-//             clap::Arg::with_name(options::CONV)
-//                 .long(options::CONV)
-//                 .takes_value(true)
-//                 .help("conv=CONV[,CONV] (alternatively --conv CONV[,CONV]) specifies a comma-separated list of conversion options or (for legacy reasons) file-flags. Conversion options and file flags may be intermixed.
-//
-// Conversion options:
-// \t One of {ascii, ebcdic, ibm} will perform an encoding conversion.
-// \t\t 'ascii' converts from EBCDIC to ASCII. This is the inverse of the 'ebcdic' option.
-// \t\t 'ebcdic' converts from ASCII to EBCDIC. This is the inverse of the 'ascii' option.
-// \t\t 'ibm' converts from ASCII to EBCDIC, applying the conventions for '[', ']' and '~' specified in POSIX.
-//
-// \t One of {ucase, lcase} will perform a case conversion. Works in conjunction with option {ascii, ebcdic, ibm} to infer input encoding. If no other conversion option is specified, input is assumed to be ascii.
-// \t\t 'ucase' converts from lower-case to upper-case
-// \t\t 'lcase' converts from upper-case to lower-case.
-//
-// \t One of {block, unblock}. Convert between lines terminated by newline characters, and fixed-width lines padded by spaces (without any newlines). Both the 'block' and 'unblock' options require cbs=BYTES be specified.
-// \t\t 'block' for each newline less than the size indicated by cbs=BYTES, remove the newline and pad with spaces up to cbs. Lines longer than cbs are truncated.
-// \t\t 'unblock' for each block of input of the size indicated by cbs=BYTES, remove right-trailing spaces and replace with a newline character.
-//
-// \t 'sparse' attempts to seek the output when an obs-sized block consists of only zeros.
-// \t 'swab' swaps each adjacent pair of bytes. If an odd number of bytes is present, the final byte is omitted.
-// \t 'sync' pad each ibs-sided block with zeros. If 'block' or 'unblock' is specified, pad with spaces instead.
-//
-// Flags:
-// \t One of {excl, nocreat}
-// \t\t 'excl' the output file must be created. Fail if the output file is already present.
-// \t\t 'nocreat' the output file will not be created. Fail if the output file in not already present.
-// \t 'notrunc' the output file will not be truncated. If this option is not present, output will be truncated when opened.
-// \t 'noerror' all read errors will be ignored. If this option is not present, dd will only ignore Error::Interrupted.
-// \t 'fdatasync' data will be written before finishing.
-// \t 'fsync' data and metadata will be written before finishing.
-//
-// ")
-//         )
-//         .arg(
-//             clap::Arg::with_name(options::IFLAG)
-//                 .long(options::IFLAG)
-//                 .takes_value(true)
-//                 .help("iflag=FLAG[,FLAG] (alternatively --iflag FLAG[,FLAG]) a comma separated list of input flags which specify how the input source is treated. FLAG may be any of the input-flags or general-flags specified below.
-//
-// Input-Flags
-// \t 'count_bytes' a value to count=N will be interpreted as bytes.
-// \t 'skip_bytes' a value to skip=N will be interpreted as bytes.
-// \t 'fullblock' wait for ibs bytes from each read. zero-length reads are still considered EOF.
-//
-// General-Flags
-// \t 'direct' use direct I/O for data.
-// \t 'directory' fail unless the given input (if used as an iflag) or output (if used as an oflag) is a directory.
-// \t 'dsync' use syncronized I/O for data.
-// \t 'sync' use syncronized I/O for data and metadata.
-// \t 'nonblock' use non-blocking I/O.
-// \t 'noatime' do not update access time.
-// \t 'nocache' request that OS drop cache.
-// \t 'noctty' do not assign a controlling tty.
-// \t 'nofollow' do not follow system links.
-//
-// Output-Flags
-// \t 'append' open file in append mode. Consider setting conv=notrunc as well.
-// \t 'seek_bytes' a value to seek=N will be interpreted as bytes.
-//
-// ")
-//         )
-//         .arg(
-//             clap::Arg::with_name(options::OFLAG)
-//                 .long(options::OFLAG)
-//                 .takes_value(true)
-//                 .help("oflag=FLAG[,FLAG] (alternatively --oflag FLAG[,FLAG]) a comma separated list of output flags which specify how the output source is treated. FLAG may be any of the output-flags or general-flags specified below.
-//
-// Output-Flags
-// \t 'append' open file in append mode. Consider setting conv=notrunc as well.
-// \t 'seek_bytes' a value to seek=N will be interpreted as bytes.
-//
-// General-Flags
-// \t 'direct' use direct I/O for data.
-// \t 'directory' fail unless the given input (if used as an iflag) or output (if used as an oflag) is a directory.
-// \t 'dsync' use syncronized I/O for data.
-// \t 'sync' use syncronized I/O for data and metadata.
-// \t 'nonblock' use non-blocking I/O.
-// \t 'noatime' do not update access time.
-// \t 'nocache' request that OS drop cache.
-// \t 'noctty' do not assign a controlling tty.
-// \t 'nofollow' do not follow system links.
-//
-// ")
-//         )
-//     };
-// );

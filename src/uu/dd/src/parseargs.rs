@@ -1,4 +1,9 @@
-// spell-checker:ignore (parseargs xfer cflags iflags parseargs parseargs xfer cflags iflags iflags iflags xfer cflags oflags oflags oflags oflags dsync DSYNC noatime NOATIME noctty NOCTTY nofollow NOFOLLOW nonblock NONBLOCK xfer cflags fname fname tlen rlen fullblock rlen tlen tlen noerror rlen rlen remaing plen plen plen plen oflag dsync DSYNC noatime NOATIME noctty NOCTTY nofollow NOFOLLOW nonblock NONBLOCK fname notrunc nocreat fname wlen wlen wlen wlen rstat rstat curr curr curr curr rposition rstat ctable ctable rstat ctable ctable btotal btotal btotal btotal SIGUSR SIGUSR sigval SIGINFO SIGINFO sigval SIGINFO SIGINFO SIGUSR sigval SIGUSR permenantly sigval itegral itegral wstat rmax rmax rmax rsofar rremain rmax rsofar rremain bmax bmax bmax bremain bmax wstat bremain wstat wstat opertaions Noxfer opertaions fileout Noxfer INFILE OUTFILE fileout fileout INFILE INFILE OUTFILE OUTFILE iflag oflag iflag noxfer ucase lcase ucase lcase nocreat nocreat notrunc noerror IFLAG IFLAG iflag iflag fullblock oflag dsync syncronized syncronized nonblock noatime nocache noctty nofollow notrunc OFLAG OFLAG oflag notrunc dsync syncronized syncronized nonblock noatime nocache noctty nofollow T0DO)
+// This file is part of the uutils coreutils package.
+//
+// (c) Tyler Steele <tyler.steele@protonmail.com>
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
 #[cfg(test)]
 mod unit_tests;
@@ -295,7 +300,7 @@ impl std::str::FromStr for StatusLevel {
     }
 }
 
-fn parse_multiplier<'a>(s: &'a str) -> Result<usize, ParseError> {
+fn parse_multiplier(s: &'_ str) -> Result<usize, ParseError> {
     let mult: u128 = match s {
         "c" => 1,
         "w" => 2,
@@ -342,7 +347,7 @@ fn parse_bytes_with_opt_multiplier(s: &str) -> Result<usize, ParseError> {
                 Err(ParseError::MultiplierStringWouldOverflow(s.to_string()))
             }
         }
-        _ => parse_bytes_only(&s),
+        _ => parse_bytes_only(s),
     }
 }
 
@@ -429,7 +434,7 @@ fn parse_flag_list<T: std::str::FromStr<Err = ParseError>>(
     let mut flags = Vec::new();
 
     if let Some(comma_str) = matches.value_of(tag) {
-        for s in comma_str.split(",") {
+        for s in comma_str.split(',') {
             let flag = s.parse()?;
             flags.push(flag);
         }
@@ -455,35 +460,35 @@ pub fn parse_conv_flag_input(matches: &Matches) -> Result<IConvFlags, ParseError
     for flag in flags {
         match flag {
             ConvFlag::FmtEtoA => {
-                if let Some(_) = fmt {
+                if fmt.is_some() {
                     return Err(ParseError::MultipleFmtTable);
                 } else {
                     fmt = Some(flag);
                 }
             }
             ConvFlag::FmtAtoE => {
-                if let Some(_) = fmt {
+                if fmt.is_some() {
                     return Err(ParseError::MultipleFmtTable);
                 } else {
                     fmt = Some(flag);
                 }
             }
             ConvFlag::FmtAtoI => {
-                if let Some(_) = fmt {
+                if fmt.is_some() {
                     return Err(ParseError::MultipleFmtTable);
                 } else {
                     fmt = Some(flag);
                 }
             }
             ConvFlag::UCase => {
-                if let Some(_) = case {
+                if case.is_some() {
                     return Err(ParseError::MultipleUCaseLCase);
                 } else {
                     case = Some(flag)
                 }
             }
             ConvFlag::LCase => {
-                if let Some(_) = case {
+                if case.is_some() {
                     return Err(ParseError::MultipleUCaseLCase);
                 } else {
                     case = Some(flag)
@@ -508,7 +513,7 @@ pub fn parse_conv_flag_input(matches: &Matches) -> Result<IConvFlags, ParseError
 
     let ctable = parse_ctable(fmt, case);
     let sync = if sync && (block.is_some() || unblock.is_some()) {
-        Some(' ' as u8)
+        Some(b' ')
     } else if sync {
         Some(0u8)
     } else {
@@ -701,11 +706,10 @@ pub fn parse_skip_amt(
     matches: &Matches,
 ) -> Result<Option<usize>, ParseError> {
     if let Some(amt) = matches.value_of("skip") {
+        let n = parse_bytes_with_opt_multiplier(amt)?;
         if iflags.skip_bytes {
-            let n = parse_bytes_with_opt_multiplier(amt)?;
             Ok(Some(n))
         } else {
-            let n = parse_bytes_with_opt_multiplier(amt)?;
             Ok(Some(ibs * n))
         }
     } else {
@@ -720,11 +724,10 @@ pub fn parse_seek_amt(
     matches: &Matches,
 ) -> Result<Option<usize>, ParseError> {
     if let Some(amt) = matches.value_of("seek") {
+        let n = parse_bytes_with_opt_multiplier(amt)?;
         if oflags.seek_bytes {
-            let n = parse_bytes_with_opt_multiplier(amt)?;
             Ok(Some(n))
         } else {
-            let n = parse_bytes_with_opt_multiplier(amt)?;
             Ok(Some(obs * n))
         }
     } else {
