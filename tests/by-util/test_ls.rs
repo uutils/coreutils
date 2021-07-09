@@ -2046,3 +2046,46 @@ fn test_ls_dangling_symlinks() {
         .succeeds() // this should fail, though at the moment, ls lacks a way to propagate errors encountered during display
         .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
 }
+
+#[test]
+fn test_ls_block_size_display_short() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("dir-test");
+    at.touch("file-1");
+    at.append("file-1", &"x".repeat(1000));
+    at.touch("file-2");
+    at.append("file-2", &"x".repeat(100000));
+
+    let result = scene.ucmd().arg("-s").succeeds();
+    #[cfg(not(windows))]
+    result.stdout_only("  0 dir-test\n  8 file-1\n200 file-2\n");
+    #[cfg(windows)]
+    result.stdout_only("     0 dir-test\n  1000 file-1\n100000 file-2\n");
+}
+
+
+#[test]
+fn test_ls_block_size_display_long() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("dir-test");
+    at.touch("file-1");
+    at.append("file-1", &"x".repeat(1000));
+    at.touch("file-2");
+    at.append("file-2", &"x".repeat(100000));
+
+    let result = scene.ucmd().arg("-ls").succeeds();
+    #[cfg(not(windows))] {
+        result.stdout_contains("\n  0 ");
+        result.stdout_contains("\n  8 "); // for file-1
+        result.stdout_contains("\n200 "); // for file-
+    }
+    #[cfg(windows)] {
+        result.stdout_contains("\n     0 ");
+        result.stdout_contains("\n  1000 "); // for file-1
+        result.stdout_contains("\n100000 "); // for file-2
+    }
+}

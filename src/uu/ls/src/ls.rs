@@ -1386,6 +1386,19 @@ fn get_metadata(entry: &Path, dereference: bool) -> std::io::Result<Metadata> {
     }
 }
 
+fn get_display_size(md: &Metadata) -> u64 {
+    #[cfg(windows)] {
+        if md.is_dir() {
+            return 0
+        }
+        return md.len() as u64;
+    }
+
+    #[cfg(unix)] {
+        return md.blocks() as u64;
+    }
+}
+
 
 // Get maximum string sizes for:
 // - number of links of each items
@@ -1399,7 +1412,7 @@ fn get_max_sizes (items: &[PathData], config: &Config) -> (usize, usize, usize, 
         if let Some(md) = item.md() {
             max_links = display_symlink_count(md).len().max(max_links);
             max_width = display_size_or_rdev(md, config).len().max(max_width);
-            max_blocks = md.blocks().to_string().len().max(max_blocks);
+            max_blocks = get_display_size(md).to_string().len().max(max_blocks);
             total_size += get_block_size(md, config);
         }
     }
@@ -1541,7 +1554,7 @@ fn display_item_long(
         let _ = write!(
             out,
             "{} ",
-            pad_left(md.blocks().to_string(), max_blocks)
+            pad_left(get_display_size(md).to_string(), max_blocks)
         );
     }
 
@@ -1839,7 +1852,7 @@ fn display_file_name(path: &PathData, config: &Config, max_blocks: usize) -> Opt
     if config.format != Format::Long && config.blocks {
         if let Some(md) = path.md() {
             width += max_blocks + 1;
-            name.insert_str(0, &format!("{} ", pad_left(md.blocks().to_string(), max_blocks)));
+            name.insert_str(0, &format!("{} ", pad_left(get_display_size(md).to_string(), max_blocks)));
         } else {
             width += max_blocks + 1;
             name.insert_str(0, &format!("{} ", pad_left(String::from(""), max_blocks)));
