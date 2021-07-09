@@ -173,16 +173,14 @@ struct TranslateAndSqueezeOperation {
 }
 
 impl TranslateAndSqueezeOperation {
-    fn new(
-        set1: ExpandSet,
-        set2: &mut ExpandSet,
-        set2_: ExpandSet,
-        truncate: bool,
-        complement: bool,
-    ) -> TranslateAndSqueezeOperation {
+    fn new(sets: Vec<String>, truncate: bool, complement: bool) -> TranslateAndSqueezeOperation {
+        let set1 = ExpandSet::new(sets[0].as_ref());
+        let set1_ = ExpandSet::new(sets[0].as_ref());
+        let mut set2 = ExpandSet::new(sets[1].as_ref());
+        let set2_ = ExpandSet::new(sets[1].as_ref());
         TranslateAndSqueezeOperation {
-            translate: TranslateOperation::new(set1, set2, truncate, complement),
-            squeeze: SqueezeOperation::new(set2_, complement),
+            translate: TranslateOperation::new(set1, &mut set2, truncate, complement),
+            squeeze: SqueezeOperation::new(if complement { set1_ } else { set2_ }, complement),
         }
     }
 }
@@ -302,15 +300,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             let op = SqueezeOperation::new(set1, complement_flag);
             translate_input(&mut locked_stdin, &mut buffered_stdout, op);
         } else {
-            let mut set2 = ExpandSet::new(sets[1].as_ref());
-            let set2_ = ExpandSet::new(sets[1].as_ref());
-            let op = TranslateAndSqueezeOperation::new(
-                set1,
-                &mut set2,
-                set2_,
-                complement_flag,
-                truncate_flag,
-            );
+            let op = TranslateAndSqueezeOperation::new(sets, truncate_flag, complement_flag);
             translate_input(&mut locked_stdin, &mut buffered_stdout, op);
         }
     } else {
