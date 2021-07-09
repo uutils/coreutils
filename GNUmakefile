@@ -316,6 +316,9 @@ else
 endif
 	$(foreach man, $(filter $(INSTALLEES), $(basename $(notdir $(wildcard $(DOCSDIR)/_build/man/*)))), \
 		cat $(DOCSDIR)/_build/man/$(man).1 | gzip > $(INSTALLDIR_MAN)/$(PROG_PREFIX)$(man).1.gz &&) :
+	mkdir -p $(DESTDIR)$(PREFIX)/share/zsh/site-functions
+	mkdir -p $(DESTDIR)$(PREFIX)/share/bash-completion/completions
+	mkdir -p $(DESTDIR)$(PREFIX)/share/fish/vendor_completions.d
 	$(foreach prog, $(INSTALLEES), \
 		$(BUILDDIR)/coreutils completion $(prog) zsh > $(DESTDIR)$(PREFIX)/share/zsh/site-functions/_$(PROG_PREFIX)$(prog); \
 		$(BUILDDIR)/coreutils completion $(prog) bash > $(DESTDIR)$(PREFIX)/share/bash-completion/completions/$(PROG_PREFIX)$(prog); \
