@@ -119,6 +119,7 @@ pub mod options {
     pub static IGNORE_BACKUPS: &str = "ignore-backups";
     pub static DIRECTORY: &str = "directory";
     pub static INODE: &str = "inode";
+    pub static BLOCKS: &str = "blocks";
     pub static REVERSE: &str = "reverse";
     pub static RECURSIVE: &str = "recursive";
     pub static COLOR: &str = "color";
@@ -230,6 +231,7 @@ struct Config {
     time: Time,
     #[cfg(unix)]
     inode: bool,
+    blocks: bool,
     color: Option<LsColors>,
     long: LongFormat,
     width: Option<u16>,
@@ -571,6 +573,7 @@ impl Config {
             color,
             #[cfg(unix)]
             inode: options.is_present(options::INODE),
+            blocks: options.is_present(options::BLOCKS),
             long,
             width,
             quoting_style,
@@ -1039,6 +1042,12 @@ only ignore '.' and '..'.",
                 .help("print the index number of each file"),
         )
         .arg(
+            Arg::with_name(options::BLOCKS)
+                .short("s")
+                .long(options::BLOCKS)
+                .help("print the number of file system blocks of each file"),
+        )
+        .arg(
             Arg::with_name(options::REVERSE)
                 .short("r")
                 .long(options::REVERSE)
@@ -1377,15 +1386,25 @@ fn get_metadata(entry: &Path, dereference: bool) -> std::io::Result<Metadata> {
     }
 }
 
-fn display_dir_entry_size(entry: &PathData, config: &Config) -> (usize, usize) {
-    if let Some(md) = entry.md() {
-        (
-            display_symlink_count(md).len(),
-            display_size_or_rdev(md, config).len(),
-        )
-    } else {
-        (0, 0)
+
+// Get maximum string sizes for:
+// - number of links of each items
+// - size
+// - blocks
+fn get_max_sizes (items: &[PathData], config: &Config) -> (usize, usize, usize, u64) {
+    let (mut max_links, mut max_width, mut max_blocks) = (1, 1, 1);
+        let mut total_size = 0;
+
+    for item in items {
+        if let Some(md) = item.md() {
+            max_links = display_symlink_count(md).len().max(max_links);
+            max_width = display_size_or_rdev(md, config).len().max(max_width);
+            max_blocks = md.blocks().to_string().len().max(max_blocks);
+            total_size += get_block_size(md, config);
+        }
     }
+
+    return (max_links, max_width, max_blocks, total_size);
 }
 
 fn pad_left(string: String, count: usize) -> String {
@@ -1393,26 +1412,18 @@ fn pad_left(string: String, count: usize) -> String {
 }
 
 fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) {
+    let (max_links, max_width, max_blocks, total_size) = get_max_sizes(items, config);
     if config.format == Format::Long {
-        let (mut max_links, mut max_width) = (1, 1);
-        let mut total_size = 0;
-
-        for item in items {
-            let (links, width) = display_dir_entry_size(item, config);
-            max_links = links.max(max_links);
-            max_width = width.max(max_width);
-            total_size += item.md().map_or(0, |md| get_block_size(md, config));
-        }
 
         if total_size > 0 {
             let _ = writeln!(out, "total {}", display_size(total_size, config));
         }
 
         for item in items {
-            display_item_long(item, max_links, max_width, config, out);
+            display_item_long(item, max_links, max_width, max_blocks, config, out);
         }
     } else {
-        let names = items.iter().filter_map(|i| display_file_name(i, config));
+        let names = items.iter().filter_map(|i| display_file_name(i, config, max_blocks));
 
         match (&config.format, config.width) {
             (Format::Columns, Some(width)) => {
@@ -1507,6 +1518,7 @@ fn display_item_long(
     item: &PathData,
     max_links: usize,
     max_size: usize,
+    max_blocks: usize,
     config: &Config,
     out: &mut BufWriter<Stdout>,
 ) {
@@ -1523,6 +1535,14 @@ fn display_item_long(
         if config.inode {
             let _ = write!(out, "{} ", get_inode(md));
         }
+    }
+
+    if config.blocks {
+        let _ = write!(
+            out,
+            "{} ",
+            pad_left(md.blocks().to_string(), max_blocks)
+        );
     }
 
     let _ = write!(
@@ -1554,7 +1574,7 @@ fn display_item_long(
         // unwrap is fine because it fails when metadata is not available
         // but we already know that it is because it's checked at the
         // start of the function.
-        display_file_name(item, config).unwrap().contents,
+        display_file_name(item, config, 1).unwrap().contents,
     );
 }
 
@@ -1562,6 +1582,7 @@ fn display_item_long(
 fn get_inode(metadata: &Metadata) -> String {
     format!("{:8}", metadata.ino())
 }
+
 
 // Currently getpwuid is `linux` target only. If it's broken out into
 // a posix-compliant attribute this can be updated...
@@ -1765,7 +1786,7 @@ fn classify_file(path: &PathData) -> Option<char> {
     }
 }
 
-fn display_file_name(path: &PathData, config: &Config) -> Option<Cell> {
+fn display_file_name(path: &PathData, config: &Config, max_blocks: usize) -> Option<Cell> {
     let mut name = escape_name(&path.display_name, &config.quoting_style);
 
     #[cfg(unix)]
@@ -1814,6 +1835,17 @@ fn display_file_name(path: &PathData, config: &Config) -> Option<Cell> {
             width += 1;
         }
     }
+
+    if config.format != Format::Long && config.blocks {
+        if let Some(md) = path.md() {
+            width += max_blocks + 1;
+            name.insert_str(0, &format!("{} ", pad_left(md.blocks().to_string(), max_blocks)));
+        } else {
+            width += max_blocks + 1;
+            name.insert_str(0, &format!("{} ", pad_left(String::from(""), max_blocks)));
+        }
+    }
+
 
     if config.format == Format::Long && path.file_type()?.is_symlink() {
         if let Ok(target) = path.p_buf.read_link() {
