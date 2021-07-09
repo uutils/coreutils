@@ -281,15 +281,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         return 1;
     }
 
-    if sets.len() > 2 {
-        show_error!(
-            "extra operand '{}'\nTry `{} --help` for more information.",
-            sets[2],
-            executable!()
-        );
-        return 1;
-    }
-
     let stdin = stdin();
     let mut locked_stdin = stdin.lock();
     let stdout = stdout();
@@ -369,5 +360,10 @@ pub fn uu_app() -> App<'static, 'static> {
                 .short("t")
                 .help("first truncate SET1 to length of SET2"),
         )
-        .arg(Arg::with_name(options::SETS).multiple(true))
+        .arg(
+            Arg::with_name(options::SETS)
+                .multiple(true)
+                .takes_value(true)
+                .max_values(2),
+        )
 }
