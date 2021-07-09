@@ -235,7 +235,7 @@ fn get_usage() -> String {
 }
 
 fn get_long_usage() -> String {
-    String::from(
+    format!(
         "Translate, squeeze, and/or delete characters from standard input,
 writing to standard output.",
     )
@@ -259,7 +259,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let squeeze_flag = matches.is_present(options::SQUEEZE);
     let truncate_flag = matches.is_present(options::TRUNCATE);
 
-    let sets: Vec<String> = match matches.values_of(options::SETS) {
+    let sets = match matches.values_of(options::SETS) {
         Some(v) => v.map(|v| v.to_string()).collect(),
         None => vec![],
     };
@@ -276,6 +276,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         show_error!(
             "missing operand after '{}'\nTry `{} --help` for more information.",
             sets[0],
+            executable!()
+        );
+        return 1;
+    }
+
+    if sets.len() > 2 {
+        show_error!(
+            "extra operand '{}'\nTry `{} --help` for more information.",
+            sets[2],
             executable!()
         );
         return 1;
