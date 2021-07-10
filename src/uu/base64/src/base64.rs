@@ -36,7 +36,7 @@ fn get_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let format = Format::Base64;
     let usage = get_usage();
-    let name = executable!();
+    let name = utility_name!();
     let config_result: Result<base_common::Config, String> =
         base_common::parse_base_cmd_args(args, name, VERSION, ABOUT, &usage);
     let config = config_result.unwrap_or_else(|s| crash!(BASE_CMD_PARSE_ERROR, "{}", s));

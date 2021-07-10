@@ -77,6 +77,7 @@ pub fn main(stream: TokenStream) -> TokenStream {
         fn main() {
             use std::io::Write;
             uucore::panic::mute_sigpipe_panic(); // suppress extraneous error output for SIGPIPE failures/panics
+            uucore::set_exe_name(std::env::args().next().unwrap());
             let code = #f; // execute utility code
             std::io::stdout().flush().expect("could not flush stdout"); // (defensively) flush stdout for utility prior to exit; see <https://github.com/rust-lang/rust/issues/23818>
             std::process::exit(code);

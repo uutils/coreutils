@@ -89,7 +89,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(utility_name!())
         .about(ABOUT)
         .version(crate_version!())
         .arg(

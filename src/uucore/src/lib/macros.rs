@@ -5,18 +5,31 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-/// Deduce the name of the binary from the current source code filename.
-///
-/// e.g.: `src/uu/cp/src/cp.rs` -> `cp`
+/// Get the utility name.
+#[macro_export]
+macro_rules! utility_name(
+    () => ({
+        let crate_name =  env!("CARGO_PKG_NAME");
+        if crate_name.starts_with("uu_") {
+            &crate_name[3..]
+        } else {
+            &crate_name
+        }
+    })
+);
+
+/// Get the executable name.
 #[macro_export]
 macro_rules! executable(
     () => ({
-        let module = module_path!();
-        let module = module.split("::").next().unwrap_or(module);
-        if &module[0..3] == "uu_" {
-            &module[3..]
-        } else {
-            module
+        #[cfg(test)]
+        {
+            // If we're in a unit test we can fall back to the utility name
+            &uucore::get_exe_name().unwrap_or(utility_name!().to_string())
+        }
+        #[cfg(not(test))]
+        {
+            &uucore::get_exe_name().unwrap()
         }
     })
 );

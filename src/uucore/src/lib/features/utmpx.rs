@@ -55,6 +55,7 @@ pub unsafe extern "C" fn utmpxname(_file: *const libc::c_char) -> libc::c_int {
 }
 
 pub use crate::*; // import macros from `../../macros.rs`
+use crate as uucore; // for executable!() to work
 
 // In case the c_char array doesn't end with NULL
 macro_rules! chars2string {

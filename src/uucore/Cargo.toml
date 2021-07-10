@@ -19,10 +19,10 @@ path="src/lib/lib.rs"
 dns-lookup = "1.0.5"
 dunce = "1.0.0"
 getopts = "<= 0.2.21"
+lazy_static = "1.3"
 wild = "2.0.4"
 # * optional
 thiserror = { version="1.0", optional=true }
-lazy_static = { version="1.3", optional=true }
 nix = { version="<= 0.13", optional=true }
 platform-info = { version="<= 0.1", optional=true }
 time = { version="<= 0.1.43", optional=true }
@@ -51,4 +51,4 @@ signals = []
 utf8 = []
 utmpx = ["time", "libc"]
 wide = []
-zero-copy = ["nix", "libc", "lazy_static", "platform-info"]
+zero-copy = ["nix", "libc", "platform-info"]

@@ -35,7 +35,7 @@ fn get_usage() -> String {
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let format = Format::Base32;
     let usage = get_usage();
-    let name = executable!();
+    let name = utility_name!();
 
     let config_result: Result<base_common::Config, String> =
         base_common::parse_base_cmd_args(args, name, VERSION, ABOUT, &usage);
@@ -59,5 +59,5 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    base_common::base_app(executable!(), VERSION, ABOUT)
+    base_common::base_app(utility_name!(), VERSION, ABOUT)
 }

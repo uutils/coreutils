@@ -601,7 +601,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(utility_name!())
         .version(crate_version!())
         .about(
             "By default, ls will list the files and contents of any directories on \

@@ -56,6 +56,7 @@ fn main() {
 
     // binary name equals util name?
     if let Some(&(uumain, _)) = utils.get(binary_as_util) {
+        uucore::set_exe_name(binary_as_util.to_string());
         process::exit(uumain((vec![binary.into()].into_iter()).chain(args)));
     }
 
@@ -67,58 +68,51 @@ fn main() {
                 .ends_with(char::is_alphanumeric)
     }) {
         // prefixed util => replace 0th (aka, executable name) argument
-        Some(OsString::from(*util))
-    } else {
+        uucore::set_exe_name(binary_as_util.to_string());
+        util.to_string()
+    } else if let Some(util) = args.next() {
+        let util = util.to_string_lossy();
         // unmatched binary name => regard as multi-binary container and advance argument list
-        args.next()
-    };
-
-    // 0th argument equals util name?
-    if let Some(util_os) = util_name {
-        let util = util_os.as_os_str().to_string_lossy();
-
-        if util == "completion" {
+        if utils.contains_key(&util.as_ref()) {
+            uucore::set_exe_name(util.to_string());
+            util.to_string()
+        } else if util == "completion" {
             gen_completions(args, utils);
-        }
+        } else if util == "--help" || util == "-h" {
+            // see if they want help on a specific util
+            if let Some(util_os) = args.next() {
+                let util = util_os.as_os_str().to_string_lossy();
 
-        match utils.get(&util[..]) {
-            Some(&(uumain, _)) => {
-                process::exit(uumain((vec![util_os].into_iter()).chain(args)));
-            }
-            None => {
-                if util == "--help" || util == "-h" {
-                    // see if they want help on a specific util
-                    if let Some(util_os) = args.next() {
-                        let util = util_os.as_os_str().to_string_lossy();
-
-                        match utils.get(&util[..]) {
-                            Some(&(uumain, _)) => {
-                                let code = uumain(
-                                    (vec![util_os, OsString::from("--help")].into_iter())
-                                        .chain(args),
-                                );
-                                io::stdout().flush().expect("could not flush stdout");
-                                process::exit(code);
-                            }
-                            None => {
-                                println!("{}: function/utility not found", util);
-                                process::exit(1);
-                            }
-                        }
+                match utils.get(&util[..]) {
+                    Some(&(uumain, _)) => {
+                        uucore::set_exe_name(util.to_string());
+                        let code = uumain(
+                            (vec![util_os, OsString::from("--help")].into_iter()).chain(args),
+                        );
+                        io::stdout().flush().expect("could not flush stdout");
+                        process::exit(code);
                     }
-                    usage(&utils, binary_as_util);
-                    process::exit(0);
-                } else {
-                    println!("{}: function/utility not found", util);
-                    process::exit(1);
+                    None => {
+                        println!("{}: function/utility not found", util);
+                        process::exit(1);
+                    }
                 }
             }
+            usage(&utils, binary_as_util);
+            process::exit(0);
+        } else {
+            println!("{}: function/utility not found", util);
+            process::exit(1);
         }
     } else {
         // no arguments provided
         usage(&utils, binary_as_util);
         process::exit(0);
-    }
+    };
+
+    process::exit((utils.get(&util_name[..]).unwrap().0)(
+        vec![OsString::from(util_name)].into_iter().chain(args),
+    ));
 }
 
 /// Prints completions for the utility in the first parameter for the shell in the second parameter to stdout
