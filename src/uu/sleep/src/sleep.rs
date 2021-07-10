@@ -11,7 +11,7 @@ extern crate uucore;
 use std::thread;
 use std::time::Duration;
 
-use uucore::error::UResult;
+use uucore::error::{UResult, USimpleError};
 
 use clap::{crate_version, App, Arg};
 
@@ -42,7 +42,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if let Some(values) = matches.values_of(options::NUMBER) {
         let numbers = values.collect();
-        sleep(numbers);
+        return sleep(numbers);
     }
 
     Ok(())
@@ -64,15 +64,21 @@ pub fn uu_app() -> App<'static, 'static> {
         )
 }
 
-fn sleep(args: Vec<&str>) {
+fn sleep(args: Vec<&str>) -> UResult<()> {
     let sleep_dur =
-        args.iter().fold(
+        args.iter().try_fold(
             Duration::new(0, 0),
             |result, arg| match uucore::parse_time::from_str(&arg[..]) {
-                Ok(m) => m + result,
-                Err(f) => crash!(1, "{}", f),
+                Ok(m) => Ok(m + result),
+                Err(f) => Err(f),
             },
         );
 
-    thread::sleep(sleep_dur);
+    return match sleep_dur {
+        Ok(dur) => {
+            thread::sleep(dur);
+            Ok(())
+        },
+        Err(err) => Err(USimpleError::new(1, format!("{}", err)))
+    }
 }
