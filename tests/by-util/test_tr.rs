@@ -284,3 +284,11 @@ fn test_interpret_backslash_at_eol_literally() {
         .succeeds()
         .stdout_is("\\");
 }
+
+#[test]
+fn test_more_than_2_sets() {
+    new_ucmd!()
+        .args(&["'abcdefgh'", "'a", "'b'"])
+        .pipe_in("hello world")
+        .fails();
+}
