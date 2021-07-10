@@ -364,6 +364,7 @@ pub fn uu_app() -> App<'static, 'static> {
             Arg::with_name(options::SETS)
                 .multiple(true)
                 .takes_value(true)
+                .min_values(1)
                 .max_values(2),
         )
 }
