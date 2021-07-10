@@ -11,6 +11,8 @@ extern crate uucore;
 use std::thread;
 use std::time::Duration;
 
+use uucore::error::UResult;
+
 use clap::{crate_version, App, Arg};
 
 static ABOUT: &str = "Pause for NUMBER seconds.";
@@ -32,7 +34,8 @@ fn get_usage() -> String {
     )
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = get_usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
@@ -42,7 +45,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         sleep(numbers);
     }
 
-    0
+    Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {
