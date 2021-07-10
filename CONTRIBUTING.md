@@ -25,6 +25,9 @@ search the issues to make sure no one else is working on it.
 1. Don't hesitate to move common functions into uucore if they can be reused by other binaries.
 1. Unsafe code should be documented with Safety comments.
 
+uutils is original code. It cannot contain code from existing GNU or Unix-like
+utilities, nor should it link to or reference GNU libraries.
+
 ## Commit messages
 
 To help the project maintainers review pull requests from contributors across
@@ -82,3 +85,29 @@ uutils: add new utility
 ```
 gitignore: add temporary files
 ```
+
+## Licensing
+
+uutils is distributed under the terms of the MIT License; see the `LICENSE` file
+for details. This is a permissive license, which allows the software to be used
+with few restrictions.
+
+Copyrights in the uutils project are retained by their contributors, and no
+copyright assignment is required to contribute.
+
+If you wish to add or change dependencies as part of a contribution to the
+project, a tool like `cargo-license` can be used to show their license details.
+The following types of license are acceptable:
+
+* MIT License
+* Dual- or tri-license with an MIT License option ("Apache-2.0 or MIT" is a popular combination)
+* "MIT equivalent" license (2-clause BSD, 3-clause BSD, ISC)
+* License less restrictive than the MIT License (CC0 1.0 Universal)
+
+Licenses we will not use:
+
+* An ambiguous license, or no license
+* Strongly reciprocal licenses (GNU GPL, GNU LGPL)
+
+If you wish to add a reference but it doesn't meet these requirements, please
+raise an issue to describe the dependency.
