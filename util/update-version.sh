@@ -9,7 +9,7 @@ TO="0.0.7"
 UUCORE_FROM="0.0.8"
 UUCORE_TO="0.0.9"
 
-PROGS=$(ls -1d src/uu/*/Cargo.toml src/uu/stdbuf/src/libstdbuf/Cargo.toml Cargo.toml)
+PROGS=$(ls -1d src/uu/*/Cargo.toml src/uu/stdbuf/src/libstdbuf/Cargo.toml Cargo.toml src/uu/base64/Cargo.toml)
 
 # update the version of all programs
 sed -i -e "s|version = \"$FROM\"|version = \"$TO\"|" $PROGS

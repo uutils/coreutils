@@ -1,6 +1,6 @@
 [package]
 name = "uu_rm"
-version = "0.0.6"
+version = "0.0.7"
 authors = ["uutils developers"]
 license = "MIT"
 description = "rm ~ (uutils) remove PATHNAME"
@@ -20,7 +20,7 @@ walkdir = "2.2"
 remove_dir_all = "0.5.1"
 winapi = { version="0.3", features=[] }
 
-uucore = { version=">=0.0.8", package="uucore", path="../../uucore", features=["fs"] }
+uucore = { version=">=0.0.9", package="uucore", path="../../uucore", features=["fs"] }
 uucore_procs = { version=">=0.0.5", package="uucore_procs", path="../../uucore_procs" }
 
 
