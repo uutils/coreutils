@@ -20,7 +20,7 @@ num-traits = "0.2.13" # Needs at least version 0.2.13 for "OverflowingAdd"
 rand = { version = "0.7", features = ["small_rng"] }
 smallvec = { version = "0.6.14, < 1.0" }
 uucore = { version = ">=0.0.8", package = "uucore", path = "../../uucore" }
-uucore_procs = { version = ">=0.0.5", package = "uucore_procs", path = "../../uucore_procs" }
+uucore_procs = { version=">=0.0.6", package = "uucore_procs", path = "../../uucore_procs" }
 clap = { version = "2.33", features = ["wrap_help"] }
 
 [dev-dependencies]
