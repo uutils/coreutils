@@ -39,7 +39,6 @@ fn test_normal_compare_env() {
     let whoami = whoami();
     if whoami == "nobody" {
         println!("test skipped:");
-        return;
     } else if !is_ci() {
         new_ucmd!().succeeds().stdout_is(format!("{}\n", whoami));
     } else {

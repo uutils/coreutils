@@ -1065,7 +1065,7 @@ pub fn whoami() -> String {
 
 /// Add prefix 'g' for `util_name` if not on linux
 #[cfg(unix)]
-pub fn host_name_for<'a>(util_name: &'a str) -> Cow<'a, str> {
+pub fn host_name_for(util_name: &str) -> Cow<str> {
     // In some environments, e.g. macOS/freebsd, the GNU coreutils are prefixed with "g"
     // to not interfere with the BSD counterparts already in `$PATH`.
     #[cfg(not(target_os = "linux"))]

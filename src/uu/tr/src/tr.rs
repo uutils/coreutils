@@ -233,10 +233,9 @@ fn get_usage() -> String {
 }
 
 fn get_long_usage() -> String {
-    format!(
-        "Translate, squeeze, and/or delete characters from standard input,
-writing to standard output.",
-    )
+    "Translate, squeeze, and/or delete characters from standard input,
+writing to standard output."
+        .to_string()
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
