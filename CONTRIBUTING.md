@@ -24,9 +24,8 @@ search the issues to make sure no one else is working on it.
 1. The code must be clippy-warning-free and rustfmt-compliant.
 1. Don't hesitate to move common functions into uucore if they can be reused by other binaries.
 1. Unsafe code should be documented with Safety comments.
-
-uutils is original code. It cannot contain code from existing GNU or Unix-like
-utilities, nor should it link to or reference GNU libraries.
+1. uutils is original code. It cannot contain code from existing GNU or Unix-like
+   utilities, nor should it link to or reference GNU libraries.
 
 ## Commit messages
 
