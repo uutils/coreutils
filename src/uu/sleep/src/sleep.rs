@@ -70,15 +70,9 @@ fn sleep(args: Vec<&str>) -> UResult<()> {
             Duration::new(0, 0),
             |result, arg| match uucore::parse_time::from_str(&arg[..]) {
                 Ok(m) => Ok(m + result),
-                Err(f) => Err(f),
+                Err(f) => Err(USimpleError::new(1, format!("{}", f))),
             },
-        );
+        )?;
 
-    return match sleep_dur {
-        Ok(dur) => {
-            thread::sleep(dur);
-            Ok(())
-        },
-        Err(err) => Err(USimpleError::new(1, format!("{}", err)))
-    }
+    Ok(thread::sleep(sleep_dur))
 }
