@@ -128,6 +128,15 @@ fn test_squeeze_complement() {
 }
 
 #[test]
+fn test_squeeze_complement_two_sets() {
+    new_ucmd!()
+        .args(&["-sc", "a", "_"])
+        .pipe_in("test a aa with 3 ___ spaaaces +++") // spell-checker:disable-line
+        .run()
+        .stdout_is("_a_aa_aaa_");
+}
+
+#[test]
 fn test_translate_and_squeeze() {
     new_ucmd!()
         .args(&["-s", "x", "y"])
@@ -274,4 +283,12 @@ fn test_interpret_backslash_at_eol_literally() {
         .pipe_in("X")
         .succeeds()
         .stdout_is("\\");
+}
+
+#[test]
+fn test_more_than_2_sets() {
+    new_ucmd!()
+        .args(&["'abcdefgh'", "'a", "'b'"])
+        .pipe_in("hello world")
+        .fails();
 }
