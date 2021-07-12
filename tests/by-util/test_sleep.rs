@@ -113,7 +113,5 @@ fn test_sleep_sum_duration_many() {
 
 #[test]
 fn test_sleep_wrong_time() {
-    new_ucmd!()
-        .args(&["0.1s", "abc"])
-        .fails();
+    new_ucmd!().args(&["0.1s", "abc"]).fails();
 }
