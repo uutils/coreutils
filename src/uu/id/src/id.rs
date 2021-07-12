@@ -35,8 +35,8 @@
 extern crate uucore;
 
 use clap::{crate_version, App, Arg};
-#[cfg(target_os = "linux")]
-use selinux::{self, KernelSupport, SecurityContext};
+#[cfg(all(target_os = "linux", feature = "selinux"))]
+use selinux;
 use std::ffi::CStr;
 use uucore::entries::{self, Group, Locate, Passwd};
 pub use uucore::libc;
@@ -51,6 +51,11 @@ macro_rules! cstr2cow {
 
 static ABOUT: &str = "Print user and group information for each specified USER,
 or (when USER omitted) for the current user.";
+
+#[cfg(not(feature = "selinux"))]
+static CONTEXT_HELP_TEXT: &str = "print only the security context of the process (not enabled)";
+#[cfg(feature = "selinux")]
+static CONTEXT_HELP_TEXT: &str = "print only the security context of the process";
 
 mod options {
     pub const OPT_AUDIT: &str = "audit"; // GNU's id does not have this
@@ -138,10 +143,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         zflag: matches.is_present(options::OPT_ZERO),
         cflag: matches.is_present(options::OPT_CONTEXT),
 
-        #[cfg(not(target_os = "linux"))]
-        selinux_supported: false,
-        #[cfg(target_os = "linux")]
-        selinux_supported: selinux::kernel_support() != KernelSupport::Unsupported,
+        selinux_supported: {
+            #[cfg(feature = "selinux")]
+            {
+                selinux::kernel_support() != selinux::KernelSupport::Unsupported
+            }
+            #[cfg(not(feature = "selinux"))]
+            {
+                false
+            }
+        },
         user_specified: !users.is_empty(),
         ids: None,
     };
@@ -181,8 +192,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if state.cflag {
         if state.selinux_supported {
             // print SElinux context and exit
-            #[cfg(target_os = "linux")]
-            if let Ok(context) = SecurityContext::current(false) {
+            #[cfg(all(target_os = "linux", feature = "selinux"))]
+            if let Ok(context) = selinux::SecurityContext::current(false) {
                 let bytes = context.as_bytes();
                 print!("{}{}", String::from_utf8_lossy(bytes), line_ending);
             } else {
@@ -412,7 +423,7 @@ pub fn uu_app() -> App<'static, 'static> {
                 .short("Z")
                 .long(options::OPT_CONTEXT)
                 .conflicts_with_all(&[options::OPT_GROUP, options::OPT_EFFECTIVE_USER])
-                .help("print only the security context of the process"),
+                .help(CONTEXT_HELP_TEXT),
         )
         .arg(
             Arg::with_name(options::ARG_USERS)
@@ -555,13 +566,13 @@ fn id_print(state: &State, groups: Vec<u32>) {
             .join(",")
     );
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", feature = "selinux"))]
     if state.selinux_supported
         && !state.user_specified
         && std::env::var_os("POSIXLY_CORRECT").is_none()
     {
         // print SElinux context (does not depend on "-Z")
-        if let Ok(context) = SecurityContext::current(false) {
+        if let Ok(context) = selinux::SecurityContext::current(false) {
             let bytes = context.as_bytes();
             print!(" context={}", String::from_utf8_lossy(bytes));
         }

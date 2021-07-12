@@ -17,6 +17,17 @@ fn test_id_no_specified_user() {
     let exp_result = unwrap_or_return!(expected_result(&ts, &[]));
     let mut _exp_stdout = exp_result.stdout_str().to_string();
 
+    #[cfg(not(feature = "feat_selinux"))]
+    {
+        // NOTE: strip 'context' part from exp_stdout if selinux not enabled:
+        // example:
+        // uid=1001(runner) gid=121(docker) groups=121(docker),4(adm),101(systemd-journal) \
+        // context=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023
+        if let Some(context_offset) = exp_result.stdout_str().find(" context=") {
+            _exp_stdout.replace_range(context_offset.._exp_stdout.len() - 1, "");
+        }
+    }
+
     result
         .stdout_is(_exp_stdout)
         .stderr_is(exp_result.stderr_str())
@@ -354,7 +365,7 @@ fn test_id_zero() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(feature = "feat_selinux")]
 fn test_id_context() {
     use selinux::{self, KernelSupport};
     if selinux::kernel_support() == KernelSupport::Unsupported {
@@ -423,7 +434,7 @@ fn test_id_no_specified_user_posixly() {
     let result = ts.ucmd().env("POSIXLY_CORRECT", "1").succeeds();
     assert!(!result.stdout_str().contains("context="));
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", feature = "feat_selinux"))]
     {
         use selinux::{self, KernelSupport};
         if selinux::kernel_support() == KernelSupport::Unsupported {
