@@ -43,6 +43,7 @@ feat_common_core = [
     "df",
     "dircolors",
     "dirname",
+    "dd",
     "du",
     "echo",
     "env",
