@@ -307,7 +307,7 @@ ifeq (${MULTICALL}, y)
 	$(INSTALL) $(BUILDDIR)/coreutils $(INSTALLDIR_BIN)/$(PROG_PREFIX)coreutils
 	cd $(INSTALLDIR_BIN) && $(foreach prog, $(filter-out coreutils, $(INSTALLEES)), \
 		ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)$(prog) &&) :
-	$(if $(findstring test,$(INSTALLEES)), ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)[)
+	$(if $(findstring test,$(INSTALLEES)), cd $(INSTALLDIR_BIN) && ln -fs $(PROG_PREFIX)coreutils $(PROG_PREFIX)[)
 	cat $(DOCSDIR)/_build/man/coreutils.1 | gzip > $(INSTALLDIR_MAN)/$(PROG_PREFIX)coreutils.1.gz
 else
 	$(foreach prog, $(INSTALLEES), \
@@ -316,6 +316,9 @@ else
 endif
 	$(foreach man, $(filter $(INSTALLEES), $(basename $(notdir $(wildcard $(DOCSDIR)/_build/man/*)))), \
 		cat $(DOCSDIR)/_build/man/$(man).1 | gzip > $(INSTALLDIR_MAN)/$(PROG_PREFIX)$(man).1.gz &&) :
+	mkdir -p $(DESTDIR)$(PREFIX)/share/zsh/site-functions
+	mkdir -p $(DESTDIR)$(PREFIX)/share/bash-completion/completions
+	mkdir -p $(DESTDIR)$(PREFIX)/share/fish/vendor_completions.d
 	$(foreach prog, $(INSTALLEES), \
 		$(BUILDDIR)/coreutils completion $(prog) zsh > $(DESTDIR)$(PREFIX)/share/zsh/site-functions/_$(PROG_PREFIX)$(prog); \
 		$(BUILDDIR)/coreutils completion $(prog) bash > $(DESTDIR)$(PREFIX)/share/bash-completion/completions/$(PROG_PREFIX)$(prog); \
