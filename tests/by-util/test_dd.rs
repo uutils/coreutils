@@ -223,12 +223,12 @@ fn test_atime_updated() {
     let (fix, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["status=none", inf!(fname)]);
 
-    let pre_atime = fix.metadata(&fname).accessed().unwrap();
+    let pre_atime = fix.metadata(fname).accessed().unwrap();
 
     ucmd.pipe_in("").run().no_stderr().success();
     std::thread::sleep(std::time::Duration::from_millis(10));
 
-    let post_atime = fix.metadata(&fname).accessed().unwrap();
+    let post_atime = fix.metadata(fname).accessed().unwrap();
     assert!(pre_atime != post_atime);
 }
 
@@ -240,11 +240,11 @@ fn test_noatime_does_not_update_infile_atime() {
     let (fix, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["status=none", "iflag=noatime", inf!(fname)]);
 
-    let pre_atime = fix.metadata(&fname).accessed().unwrap();
+    let pre_atime = fix.metadata(fname).accessed().unwrap();
 
     ucmd.run().no_stderr().success();
 
-    let post_atime = fix.metadata(&fname).accessed().unwrap();
+    let post_atime = fix.metadata(fname).accessed().unwrap();
     assert_eq!(pre_atime, post_atime);
 }
 
@@ -256,11 +256,11 @@ fn test_noatime_does_not_update_ofile_atime() {
     let (fix, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["status=none", "oflag=noatime", of!(fname)]);
 
-    let pre_atime = fix.metadata(&fname).accessed().unwrap();
+    let pre_atime = fix.metadata(fname).accessed().unwrap();
 
     ucmd.pipe_in("").run().no_stderr().success();
 
-    let post_atime = fix.metadata(&fname).accessed().unwrap();
+    let post_atime = fix.metadata(fname).accessed().unwrap();
     assert_eq!(pre_atime, post_atime);
 }
 
@@ -274,7 +274,7 @@ fn test_nocreat_causes_failure_when_outfile_not_present() {
         .pipe_in("")
         .fails()
         .stderr_is("dd Error: No such file or directory (os error 2)");
-    assert!(!fix.file_exists(&fname));
+    assert!(!fix.file_exists(fname));
 }
 
 #[test]
@@ -294,7 +294,7 @@ fn test_notrunc_does_not_truncate() {
         .no_stderr()
         .success();
 
-    assert_eq!(256, fix.metadata(&fname).len());
+    assert_eq!(256, fix.metadata(fname).len());
 }
 
 #[test]
@@ -314,7 +314,7 @@ fn test_existing_file_truncated() {
         .no_stderr()
         .success();
 
-    assert_eq!(0, fix.metadata(&fname).len());
+    assert_eq!(0, fix.metadata(fname).len());
 }
 
 #[test]
@@ -501,7 +501,7 @@ fn test_ascii_521k_to_file() {
     cmp_file!(
         {
             let mut input_f = tempfile().unwrap();
-            input_f.write(&input).unwrap();
+            input_f.write_all(&input).unwrap();
             input_f
         },
         fix.open(&tmp_fn)
@@ -521,7 +521,7 @@ fn test_ascii_5_gibi_to_file() {
         "count=5G",
         "iflag=count_bytes",
         "if=/dev/zero",
-        of!(tmp_fn)
+        of!(tmp_fn),
     ])
     .run()
     .no_stderr()

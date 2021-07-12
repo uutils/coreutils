@@ -38,7 +38,7 @@
         "ctty",
     ],
     "ignorePaths": [
-        "**/test-fixtures/*.test",
-        "**/test-fixtures/*.spec"
+        "**/test-resources/*.test",
+        "**/test-resources/*.spec"
     ]
 }
