@@ -516,7 +516,13 @@ fn test_ascii_5_gibi_to_file() {
     let tmp_fn = format!("TESTFILE-{}.tmp", &tname);
 
     let (fix, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["status=none", "count=5G", "iflag=count_bytes", "if=/dev/zero", of!(tmp_fn)])
+    ucmd.args(&[
+        "status=none",
+        "count=5G",
+        "iflag=count_bytes",
+        "if=/dev/zero",
+        of!(tmp_fn)
+    ])
     .run()
     .no_stderr()
     .no_stdout()

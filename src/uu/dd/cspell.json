@@ -1,6 +1,6 @@
 {
     "version": "0.1",
-    "language": "en-CA",
+    "language": "en",
     "words": [
         "ucase",
         "lcase",
@@ -38,7 +38,7 @@
         "ctty",
     ],
     "ignorePaths": [
-        "test-fixtures/*.test",
-        "test-fixtures/*.spec"
+        "**/test-fixtures/*.test",
+        "**/test-fixtures/*.spec"
     ]
 }
