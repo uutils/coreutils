@@ -68,13 +68,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 (None, Some(s)) => s.to_owned(),
                 (None, None) => "TERM".to_owned(),
             };
-            return kill(&sig, &pids_or_signals);
+            kill(&sig, &pids_or_signals)
         }
-        Mode::Table => table(),
-        Mode::List => list(pids_or_signals.get(0).cloned())?,
+        Mode::Table => {
+            table();
+            Ok(())
+        }
+        Mode::List => list(pids_or_signals.get(0).cloned()),
     }
-
-    Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -141,7 +142,7 @@ fn table() {
             println!();
         }
     }
-    println!()
+    println!();
 }
 
 fn print_signal(signal_name_or_value: &str) -> UResult<()> {
@@ -160,7 +161,7 @@ fn print_signal(signal_name_or_value: &str) -> UResult<()> {
     ))
 }
 
-fn print_signals() -> UResult<()> {
+fn print_signals() {
     let mut pos = 0;
     for (idx, signal) in ALL_SIGNALS.iter().enumerate() {
         pos += signal.len();
@@ -173,13 +174,15 @@ fn print_signals() -> UResult<()> {
             print!(" ");
         }
     }
-    Ok(())
 }
 
 fn list(arg: Option<String>) -> UResult<()> {
     match arg {
-        Some(ref x) => Ok(print_signal(x)?),
-        None => Ok(print_signals()?),
+        Some(ref x) => print_signal(x),
+        None => {
+            print_signals();
+            Ok(())
+        }
     }
 }
 
@@ -198,7 +201,7 @@ fn kill(signalname: &str, pids: &[String]) -> UResult<()> {
         match pid.parse::<usize>() {
             Ok(x) => {
                 if unsafe { libc::kill(x as pid_t, signal_value as c_int) } != 0 {
-                    return Err(USimpleError::new(1, format!("{}", Error::last_os_error())));
+                    show!(USimpleError::new(1, format!("{}", Error::last_os_error())));
                 }
             }
             Err(e) => {
