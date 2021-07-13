@@ -118,6 +118,7 @@ struct State {
     // 1000 10 968 975
     // +++ exited with 0 +++
     user_specified: bool,
+    exit_code: i32,
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
@@ -155,6 +156,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         },
         user_specified: !users.is_empty(),
         ids: None,
+        exit_code: 0,
     };
 
     let default_format = {
@@ -187,7 +189,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             '\n'
         }
     };
-    let mut exit_code = 0;
 
     if state.cflag {
         if state.selinux_supported {
@@ -200,7 +201,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 // print error because `cflag` was explicitly requested
                 crash!(1, "can't get process context");
             }
-            return exit_code;
+            return state.exit_code;
         } else {
             crash!(1, "--context (-Z) works only on an SELinux-enabled kernel");
         }
@@ -214,7 +215,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 Ok(p) => Some(p),
                 Err(_) => {
                     show_error!("'{}': no such user", users[i]);
-                    exit_code = 1;
+                    state.exit_code = 1;
                     if i + 1 >= users.len() {
                         break;
                     } else {
@@ -228,17 +229,17 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         if matches.is_present(options::OPT_PASSWORD) {
             // BSD's `id` ignores all but the first specified user
             pline(possible_pw.map(|v| v.uid()));
-            return exit_code;
+            return state.exit_code;
         };
         if matches.is_present(options::OPT_HUMAN_READABLE) {
             // BSD's `id` ignores all but the first specified user
             pretty(possible_pw);
-            return exit_code;
+            return state.exit_code;
         }
         if matches.is_present(options::OPT_AUDIT) {
             // BSD's `id` ignores specified users
             auditid();
-            return exit_code;
+            return state.exit_code;
         }
 
         let (uid, gid) = possible_pw.map(|p| (p.uid(), p.gid())).unwrap_or((
@@ -258,7 +259,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 if state.nflag {
                     entries::gid2grp(gid).unwrap_or_else(|_| {
                         show_error!("cannot find name for group ID {}", gid);
-                        exit_code = 1;
+                        state.exit_code = 1;
                         gid.to_string()
                     })
                 } else {
@@ -273,7 +274,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 if state.nflag {
                     entries::uid2usr(uid).unwrap_or_else(|_| {
                         show_error!("cannot find name for user ID {}", uid);
-                        exit_code = 1;
+                        state.exit_code = 1;
                         uid.to_string()
                     })
                 } else {
@@ -298,7 +299,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                         if state.nflag {
                             entries::gid2grp(id).unwrap_or_else(|_| {
                                 show_error!("cannot find name for group ID {}", id);
-                                exit_code = 1;
+                                state.exit_code = 1;
                                 id.to_string()
                             })
                         } else {
@@ -317,7 +318,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
 
         if default_format {
-            id_print(&state, groups);
+            id_print(&mut state, groups);
         }
         print!("{}", line_ending);
 
@@ -326,7 +327,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     }
 
-    exit_code
+    state.exit_code
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -543,25 +544,65 @@ fn auditid() {
     println!("asid={}", auditinfo.ai_asid);
 }
 
-fn id_print(state: &State, groups: Vec<u32>) {
+fn id_print(state: &mut State, groups: Vec<u32>) {
     let uid = state.ids.as_ref().unwrap().uid;
     let gid = state.ids.as_ref().unwrap().gid;
     let euid = state.ids.as_ref().unwrap().euid;
     let egid = state.ids.as_ref().unwrap().egid;
 
-    print!("uid={}({})", uid, entries::uid2usr(uid).unwrap());
-    print!(" gid={}({})", gid, entries::gid2grp(gid).unwrap());
+    print!(
+        "uid={}({})",
+        uid,
+        entries::uid2usr(uid).unwrap_or_else(|_| {
+            show_error!("cannot find name for user ID {}", uid);
+            state.exit_code = 1;
+            uid.to_string()
+        })
+    );
+    print!(
+        " gid={}({})",
+        gid,
+        entries::gid2grp(gid).unwrap_or_else(|_| {
+            show_error!("cannot find name for group ID {}", gid);
+            state.exit_code = 1;
+            gid.to_string()
+        })
+    );
     if !state.user_specified && (euid != uid) {
-        print!(" euid={}({})", euid, entries::uid2usr(euid).unwrap());
+        print!(
+            " euid={}({})",
+            euid,
+            entries::uid2usr(euid).unwrap_or_else(|_| {
+                show_error!("cannot find name for user ID {}", euid);
+                state.exit_code = 1;
+                euid.to_string()
+            })
+        );
     }
     if !state.user_specified && (egid != gid) {
-        print!(" egid={}({})", euid, entries::gid2grp(egid).unwrap());
+        print!(
+            " egid={}({})",
+            euid,
+            entries::gid2grp(egid).unwrap_or_else(|_| {
+                show_error!("cannot find name for group ID {}", egid);
+                state.exit_code = 1;
+                egid.to_string()
+            })
+        );
     }
     print!(
         " groups={}",
         groups
             .iter()
-            .map(|&gr| format!("{}({})", gr, entries::gid2grp(gr).unwrap()))
+            .map(|&gr| format!(
+                "{}({})",
+                gr,
+                entries::gid2grp(gr).unwrap_or_else(|_| {
+                    show_error!("cannot find name for group ID {}", gr);
+                    state.exit_code = 1;
+                    gr.to_string()
+                })
+            ))
             .collect::<Vec<_>>()
             .join(",")
     );

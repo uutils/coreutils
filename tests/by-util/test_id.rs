@@ -431,8 +431,11 @@ fn test_id_no_specified_user_posixly() {
     // gnu/tests/id/no-context.sh
 
     let ts = TestScenario::new(util_name!());
-    let result = ts.ucmd().env("POSIXLY_CORRECT", "1").succeeds();
+    let result = ts.ucmd().env("POSIXLY_CORRECT", "1").run();
     assert!(!result.stdout_str().contains("context="));
+    if !is_ci() {
+        result.success();
+    }
 
     #[cfg(all(target_os = "linux", feature = "feat_selinux"))]
     {
