@@ -138,6 +138,11 @@ feat_os_unix_musl = [
     #
     "feat_require_unix",
 ]
+# "feat_selinux" == set of utilities providing support for SELinux Security Context if enabled with `--features feat_selinux`.
+# NOTE:
+# The selinux(-sys) crate requires `libselinux` headers and shared library to be accessible in the C toolchain at compile time.
+# Running a uutils compiled with `feat_selinux` requires an SELinux enabled Kernel at run time.
+feat_selinux = ["id/selinux", "selinux"]
 ## feature sets with requirements (restricting cross-platform availability)
 #
 # ** NOTE: these `feat_require_...` sets should be minimized as much as possible to encourage cross-platform availability of utilities
@@ -146,7 +151,6 @@ feat_os_unix_musl = [
 feat_require_crate_cpp = [
     "stdbuf",
 ]
-feat_selinux = ["id/selinux", "selinux"]
 # "feat_require_unix" == set of utilities requiring support which is only available on unix platforms (as of 2020-04-23)
 feat_require_unix = [
     "chgrp",

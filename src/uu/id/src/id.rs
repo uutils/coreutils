@@ -5,7 +5,10 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//
+
+// spell-checker:ignore (ToDO) asid auditid auditinfo auid cstr egid emod euid getaudit getlogin gflag nflag pline rflag termid uflag gsflag zflag cflag
+
+// README:
 // This was originally based on BSD's `id`
 // (noticeable in functionality, usage text, options text, etc.)
 // and synced with:
@@ -25,8 +28,10 @@
 //
 // * Help text based on BSD's `id` manpage and GNU's `id` manpage.
 //
-
-// spell-checker:ignore (ToDO) asid auditid auditinfo auid cstr egid emod euid getaudit getlogin gflag nflag pline rflag termid uflag gsflag zflag cflag
+// * This passes GNU's coreutils Test suite (8.32) for "tests/id/context.sh" if compiled with
+//   `--features feat_selinux`. It should also pass "tests/id/no-context.sh", but that depends on
+//   `uu_ls -Z` being implemented and therefore fails at the moment
+//
 
 #![allow(non_camel_case_types)]
 #![allow(dead_code)]
