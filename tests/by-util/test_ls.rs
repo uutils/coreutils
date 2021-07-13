@@ -2063,7 +2063,7 @@ fn test_ls_block_size_display_short() {
     // Block sizes vary by OS. Only values for the following OS'es are checked
     #[cfg(target_os = "macos")]
     result.stdout_only("  0 dir-test\n  8 file-1\n200 file-2\n");
-    #[cfg(any(target_os = "linux", target_os="freebsd"))]
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     result.stdout_only("  8 dir-test\n  8 file-1\n200 file-2\n");
     #[cfg(target_os = "windows")]
     result.stdout_only("     0 dir-test\n  1000 file-1\n100000 file-2\n");
@@ -2088,7 +2088,7 @@ fn test_ls_block_size_display_long() {
         result.stdout_contains("\n  8 "); // for file-1
         result.stdout_contains("\n200 "); // for file-
     }
-    #[cfg(any(target_os = "linux", target_os="freebsd"))]
+    #[cfg(any(target_os = "linux", target_os = "freebsd"))]
     {
         result.stdout_contains("\n  8 "); // for directory
         result.stdout_contains("\n  8 "); // for file-1

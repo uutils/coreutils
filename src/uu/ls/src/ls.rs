@@ -1392,12 +1392,12 @@ fn get_display_size(md: &Metadata) -> u64 {
         if md.is_dir() {
             return 0;
         }
-        return md.len() as u64;
+        md.len() as u64
     }
 
     #[cfg(unix)]
     {
-        return md.blocks() as u64;
+        md.blocks() as u64
     }
 }
 
@@ -1418,7 +1418,7 @@ fn get_max_sizes(items: &[PathData], config: &Config) -> (usize, usize, usize, u
         }
     }
 
-    return (max_links, max_width, max_blocks, total_size);
+    (max_links, max_width, max_blocks, total_size)
 }
 
 fn pad_left(string: impl Display, count: usize) -> String {
