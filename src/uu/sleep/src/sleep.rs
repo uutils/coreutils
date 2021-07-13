@@ -5,6 +5,9 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
+// clippy bug https://github.com/rust-lang/rust-clippy/issues/7422
+#![allow(clippy::nonstandard_macro_braces)]
+
 #[macro_use]
 extern crate uucore;
 
@@ -70,9 +73,9 @@ fn sleep(args: Vec<&str>) -> UResult<()> {
             Duration::new(0, 0),
             |result, arg| match uucore::parse_time::from_str(&arg[..]) {
                 Ok(m) => Ok(m + result),
-                Err(f) => Err(USimpleError::new(1, format!("{}", f))),
+                Err(f) => Err(USimpleError::new(1, f)),
             },
         )?;
-
-    Ok(thread::sleep(sleep_dur))
+    thread::sleep(sleep_dur);
+    Ok(())
 }
