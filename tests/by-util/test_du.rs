@@ -39,13 +39,13 @@ fn _du_basics(s: &str) {
 
 #[test]
 fn test_du_basics_subdir() {
-    let scene = TestScenario::new(util_name!());
+    let ts = TestScenario::new(util_name!());
 
-    let result = scene.ucmd().arg(SUB_DIR).succeeds();
+    let result = ts.ucmd().arg(SUB_DIR).succeeds();
 
     #[cfg(target_os = "linux")]
     {
-        let result_reference = scene.cmd("du").arg(SUB_DIR).run();
+        let result_reference = unwrap_or_return!(expected_result(&ts, &[SUB_DIR]));
         if result_reference.succeeded() {
             assert_eq!(result.stdout_str(), result_reference.stdout_str());
             return;
@@ -83,15 +83,16 @@ fn _du_basics_subdir(s: &str) {
 #[test]
 fn test_du_invalid_size() {
     let args = &["block-size", "threshold"];
+    let ts = TestScenario::new(util_name!());
     for s in args {
-        new_ucmd!()
+        ts.ucmd()
             .arg(format!("--{}=1fb4t", s))
             .arg("/tmp")
             .fails()
             .code_is(1)
             .stderr_only(format!("du: invalid --{} argument '1fb4t'", s));
         #[cfg(not(target_pointer_width = "128"))]
-        new_ucmd!()
+        ts.ucmd()
             .arg(format!("--{}=1Y", s))
             .arg("/tmp")
             .fails()
@@ -110,16 +111,16 @@ fn test_du_basics_bad_name() {
 
 #[test]
 fn test_du_soft_link() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
 
     at.symlink_file(SUB_FILE, SUB_LINK);
 
-    let result = scene.ucmd().arg(SUB_DIR_LINKS).succeeds();
+    let result = ts.ucmd().arg(SUB_DIR_LINKS).succeeds();
 
     #[cfg(target_os = "linux")]
     {
-        let result_reference = scene.cmd("du").arg(SUB_DIR_LINKS).run();
+        let result_reference = unwrap_or_return!(expected_result(&ts, &[SUB_DIR_LINKS]));
         if result_reference.succeeded() {
             assert_eq!(result.stdout_str(), result_reference.stdout_str());
             return;
@@ -157,16 +158,16 @@ fn _du_soft_link(s: &str) {
 
 #[test]
 fn test_du_hard_link() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
 
     at.hard_link(SUB_FILE, SUB_LINK);
 
-    let result = scene.ucmd().arg(SUB_DIR_LINKS).succeeds();
+    let result = ts.ucmd().arg(SUB_DIR_LINKS).succeeds();
 
     #[cfg(target_os = "linux")]
     {
-        let result_reference = scene.cmd("du").arg(SUB_DIR_LINKS).run();
+        let result_reference = unwrap_or_return!(expected_result(&ts, &[SUB_DIR_LINKS]));
         if result_reference.succeeded() {
             assert_eq!(result.stdout_str(), result_reference.stdout_str());
             return;
@@ -204,13 +205,13 @@ fn _du_hard_link(s: &str) {
 
 #[test]
 fn test_du_d_flag() {
-    let scene = TestScenario::new(util_name!());
+    let ts = TestScenario::new(util_name!());
 
-    let result = scene.ucmd().arg("-d1").succeeds();
+    let result = ts.ucmd().arg("-d1").succeeds();
 
     #[cfg(target_os = "linux")]
     {
-        let result_reference = scene.cmd("du").arg("-d1").run();
+        let result_reference = unwrap_or_return!(expected_result(&ts, &["-d1"]));
         if result_reference.succeeded() {
             assert_eq!(result.stdout_str(), result_reference.stdout_str());
             return;
@@ -247,16 +248,17 @@ fn _du_d_flag(s: &str) {
 
 #[test]
 fn test_du_dereference() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
 
     at.symlink_dir(SUB_DEEPER_DIR, SUB_DIR_LINKS_DEEPER_SYM_DIR);
 
-    let result = scene.ucmd().arg("-L").arg(SUB_DIR_LINKS).succeeds();
+    let result = ts.ucmd().arg("-L").arg(SUB_DIR_LINKS).succeeds();
 
     #[cfg(target_os = "linux")]
     {
-        let result_reference = scene.cmd("du").arg("-L").arg(SUB_DIR_LINKS).run();
+        let result_reference = unwrap_or_return!(expected_result(&ts, &["-L", SUB_DIR_LINKS]));
+
         if result_reference.succeeded() {
             assert_eq!(result.stdout_str(), result_reference.stdout_str());
             return;
@@ -294,12 +296,12 @@ fn _du_dereference(s: &str) {
 
 #[test]
 fn test_du_inodes_basic() {
-    let scene = TestScenario::new(util_name!());
-    let result = scene.ucmd().arg("--inodes").succeeds();
+    let ts = TestScenario::new(util_name!());
+    let result = ts.ucmd().arg("--inodes").succeeds();
 
     #[cfg(target_os = "linux")]
     {
-        let result_reference = scene.cmd("du").arg("--inodes").run();
+        let result_reference = unwrap_or_return!(expected_result(&ts, &["--inodes"]));
         assert_eq!(result.stdout_str(), result_reference.stdout_str());
     }
 
@@ -335,20 +337,15 @@ fn _du_inodes_basic(s: &str) {
 
 #[test]
 fn test_du_inodes() {
-    let scene = TestScenario::new(util_name!());
+    let ts = TestScenario::new(util_name!());
 
-    scene
-        .ucmd()
+    ts.ucmd()
         .arg("--summarize")
         .arg("--inodes")
         .succeeds()
         .stdout_only("11\t.\n");
 
-    let result = scene
-        .ucmd()
-        .arg("--separate-dirs")
-        .arg("--inodes")
-        .succeeds();
+    let result = ts.ucmd().arg("--separate-dirs").arg("--inodes").succeeds();
 
     #[cfg(target_os = "windows")]
     result.stdout_contains("3\t.\\subdir\\links\n");
@@ -358,7 +355,8 @@ fn test_du_inodes() {
 
     #[cfg(target_os = "linux")]
     {
-        let result_reference = scene.cmd("du").arg("--separate-dirs").arg("--inodes").run();
+        let result_reference =
+            unwrap_or_return!(expected_result(&ts, &["--separate-dirs", "--inodes"]));
         assert_eq!(result.stdout_str(), result_reference.stdout_str());
     }
 }
@@ -375,31 +373,29 @@ fn test_du_h_flag_empty_file() {
 #[cfg(feature = "touch")]
 #[test]
 fn test_du_time() {
-    let scene = TestScenario::new(util_name!());
+    let ts = TestScenario::new(util_name!());
 
-    scene
-        .ccmd("touch")
+    ts.ccmd("touch")
         .arg("-a")
         .arg("-t")
         .arg("201505150000")
         .arg("date_test")
         .succeeds();
 
-    scene
-        .ccmd("touch")
+    ts.ccmd("touch")
         .arg("-m")
         .arg("-t")
         .arg("201606160000")
         .arg("date_test")
         .succeeds();
 
-    let result = scene.ucmd().arg("--time").arg("date_test").succeeds();
+    let result = ts.ucmd().arg("--time").arg("date_test").succeeds();
     result.stdout_only("0\t2016-06-16 00:00\tdate_test\n");
 
-    let result = scene.ucmd().arg("--time=atime").arg("date_test").succeeds();
+    let result = ts.ucmd().arg("--time=atime").arg("date_test").succeeds();
     result.stdout_only("0\t2015-05-15 00:00\tdate_test\n");
 
-    let result = scene.ucmd().arg("--time=ctime").arg("date_test").succeeds();
+    let result = ts.ucmd().arg("--time=ctime").arg("date_test").succeeds();
     result.stdout_only("0\t2016-06-16 00:00\tdate_test\n");
 
     #[cfg(not(target_env = "musl"))]
@@ -408,7 +404,7 @@ fn test_du_time() {
 
         let re_birth =
             Regex::new(r"0\t[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}\tdate_test").unwrap();
-        let result = scene.ucmd().arg("--time=birth").arg("date_test").succeeds();
+        let result = ts.ucmd().arg("--time=birth").arg("date_test").succeeds();
         result.stdout_matches(&re_birth);
     }
 }
@@ -417,21 +413,21 @@ fn test_du_time() {
 #[cfg(feature = "chmod")]
 #[test]
 fn test_du_no_permission() {
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
 
     at.mkdir_all(SUB_DIR_LINKS);
 
-    scene.ccmd("chmod").arg("-r").arg(SUB_DIR_LINKS).succeeds();
+    ts.ccmd("chmod").arg("-r").arg(SUB_DIR_LINKS).succeeds();
 
-    let result = scene.ucmd().arg(SUB_DIR_LINKS).run(); // TODO: replace with ".fails()" once `du` is fixed
+    let result = ts.ucmd().arg(SUB_DIR_LINKS).run(); // TODO: replace with ".fails()" once `du` is fixed
     result.stderr_contains(
         "du: cannot read directory 'subdir/links': Permission denied (os error 13)",
     );
 
     #[cfg(target_os = "linux")]
     {
-        let result_reference = scene.cmd("du").arg(SUB_DIR_LINKS).fails();
+        let result_reference = unwrap_or_return!(expected_result(&ts, &[SUB_DIR_LINKS]));
         if result_reference
             .stderr_str()
             .contains("du: cannot read directory 'subdir/links': Permission denied")
@@ -455,13 +451,13 @@ fn _du_no_permission(s: &str) {
 
 #[test]
 fn test_du_one_file_system() {
-    let scene = TestScenario::new(util_name!());
+    let ts = TestScenario::new(util_name!());
 
-    let result = scene.ucmd().arg("-x").arg(SUB_DIR).succeeds();
+    let result = ts.ucmd().arg("-x").arg(SUB_DIR).succeeds();
 
     #[cfg(target_os = "linux")]
     {
-        let result_reference = scene.cmd("du").arg("-x").arg(SUB_DIR).run();
+        let result_reference = unwrap_or_return!(expected_result(&ts, &["-x", SUB_DIR]));
         if result_reference.succeeded() {
             assert_eq!(result.stdout_str(), result_reference.stdout_str());
             return;
@@ -472,19 +468,17 @@ fn test_du_one_file_system() {
 
 #[test]
 fn test_du_threshold() {
-    let scene = TestScenario::new(util_name!());
+    let ts = TestScenario::new(util_name!());
 
     let threshold = if cfg!(windows) { "7K" } else { "10K" };
 
-    scene
-        .ucmd()
+    ts.ucmd()
         .arg(format!("--threshold={}", threshold))
         .succeeds()
         .stdout_contains("links")
         .stdout_does_not_contain("deeper_dir");
 
-    scene
-        .ucmd()
+    ts.ucmd()
         .arg(format!("--threshold=-{}", threshold))
         .succeeds()
         .stdout_does_not_contain("links")
@@ -493,12 +487,12 @@ fn test_du_threshold() {
 
 #[test]
 fn test_du_apparent_size() {
-    let scene = TestScenario::new(util_name!());
-    let result = scene.ucmd().arg("--apparent-size").succeeds();
+    let ts = TestScenario::new(util_name!());
+    let result = ts.ucmd().arg("--apparent-size").succeeds();
 
     #[cfg(target_os = "linux")]
     {
-        let result_reference = scene.cmd("du").arg("--apparent-size").run();
+        let result_reference = unwrap_or_return!(expected_result(&ts, &["--apparent-size"]));
         assert_eq!(result.stdout_str(), result_reference.stdout_str());
     }
 
@@ -561,12 +555,12 @@ fn _du_apparent_size(s: &str) {
 
 #[test]
 fn test_du_bytes() {
-    let scene = TestScenario::new(util_name!());
-    let result = scene.ucmd().arg("--bytes").succeeds();
+    let ts = TestScenario::new(util_name!());
+    let result = ts.ucmd().arg("--bytes").succeeds();
 
     #[cfg(target_os = "linux")]
     {
-        let result_reference = scene.cmd("du").arg("--bytes").run();
+        let result_reference = unwrap_or_return!(expected_result(&ts, &["--bytes"]));
         assert_eq!(result.stdout_str(), result_reference.stdout_str());
     }
 
@@ -579,7 +573,8 @@ fn test_du_bytes() {
     #[cfg(all(
         not(target_vendor = "apple"),
         not(target_os = "windows"),
-        not(target_os = "freebsd")
+        not(target_os = "freebsd"),
+        not(target_os = "linux")
     ))]
     result.stdout_contains("21529\t./subdir\n");
 }

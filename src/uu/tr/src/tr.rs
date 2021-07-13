@@ -173,16 +173,14 @@ struct TranslateAndSqueezeOperation {
 }
 
 impl TranslateAndSqueezeOperation {
-    fn new(
-        set1: ExpandSet,
-        set2: &mut ExpandSet,
-        set2_: ExpandSet,
-        truncate: bool,
-        complement: bool,
-    ) -> TranslateAndSqueezeOperation {
+    fn new(sets: Vec<String>, truncate: bool, complement: bool) -> TranslateAndSqueezeOperation {
+        let set1 = ExpandSet::new(sets[0].as_ref());
+        let set1_ = ExpandSet::new(sets[0].as_ref());
+        let mut set2 = ExpandSet::new(sets[1].as_ref());
+        let set2_ = ExpandSet::new(sets[1].as_ref());
         TranslateAndSqueezeOperation {
-            translate: TranslateOperation::new(set1, set2, truncate, complement),
-            squeeze: SqueezeOperation::new(set2_, complement),
+            translate: TranslateOperation::new(set1, &mut set2, truncate, complement),
+            squeeze: SqueezeOperation::new(if complement { set1_ } else { set2_ }, complement),
         }
     }
 }
@@ -235,10 +233,9 @@ fn get_usage() -> String {
 }
 
 fn get_long_usage() -> String {
-    String::from(
-        "Translate, squeeze, and/or delete characters from standard input,
-writing to standard output.",
-    )
+    "Translate, squeeze, and/or delete characters from standard input,
+writing to standard output."
+        .to_string()
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
@@ -259,10 +256,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let squeeze_flag = matches.is_present(options::SQUEEZE);
     let truncate_flag = matches.is_present(options::TRUNCATE);
 
-    let sets: Vec<String> = match matches.values_of(options::SETS) {
-        Some(v) => v.map(|v| v.to_string()).collect(),
-        None => vec![],
-    };
+    let sets = matches
+        .values_of(options::SETS)
+        .map(|v| v.map(ToString::to_string).collect::<Vec<_>>())
+        .unwrap_or_default();
 
     if sets.is_empty() {
         show_error!(
@@ -302,15 +299,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             let op = SqueezeOperation::new(set1, complement_flag);
             translate_input(&mut locked_stdin, &mut buffered_stdout, op);
         } else {
-            let mut set2 = ExpandSet::new(sets[1].as_ref());
-            let set2_ = ExpandSet::new(sets[1].as_ref());
-            let op = TranslateAndSqueezeOperation::new(
-                set1,
-                &mut set2,
-                set2_,
-                complement_flag,
-                truncate_flag,
-            );
+            let op = TranslateAndSqueezeOperation::new(sets, truncate_flag, complement_flag);
             translate_input(&mut locked_stdin, &mut buffered_stdout, op);
         }
     } else {
@@ -360,5 +349,11 @@ pub fn uu_app() -> App<'static, 'static> {
                 .short("t")
                 .help("first truncate SET1 to length of SET2"),
         )
-        .arg(Arg::with_name(options::SETS).multiple(true))
+        .arg(
+            Arg::with_name(options::SETS)
+                .multiple(true)
+                .takes_value(true)
+                .min_values(1)
+                .max_values(2),
+        )
 }

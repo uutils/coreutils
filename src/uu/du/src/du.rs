@@ -5,7 +5,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// clippy bug https://github.com/rust-lang/rust-clippy/issues/7422
+// Clippy bug: https://github.com/rust-lang/rust-clippy/issues/7422
 #![allow(clippy::nonstandard_macro_braces)]
 
 #[macro_use]
@@ -419,26 +419,22 @@ impl Display for DuError {
             DuError::SummarizeDepthConflict(s) => {
                 write!(f, "summarizing conflicts with --max-depth={}", s)
             }
-            DuError::InvalidTimeStyleArg(s) => {
-                write!(
-                    f,
-                    "invalid argument '{}' for 'time style'
+            DuError::InvalidTimeStyleArg(s) => write!(
+                f,
+                "invalid argument '{}' for 'time style'
 Valid arguments are:
 - 'full-iso'
 - 'long-iso'
 - 'iso'
 Try '{} --help' for more information.",
-                    s, NAME
-                )
-            }
-            DuError::InvalidTimeArg(s) => {
-                write!(
-                    f,
-                    "Invalid argument '{}' for --time.
+                s, NAME
+            ),
+            DuError::InvalidTimeArg(s) => write!(
+                f,
+                "Invalid argument '{}' for --time.
 'birth' and 'creation' arguments are not supported on this platform.",
-                    s
-                )
-            }
+                s
+            ),
         }
     }
 }
