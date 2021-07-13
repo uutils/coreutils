@@ -2059,12 +2059,14 @@ fn test_ls_block_size_display_short() {
     at.append("file-2", &"x".repeat(100000));
 
     let result = scene.ucmd().arg("-s").succeeds();
-    #[cfg(not(windows))]
+    // Block sizes vary by OS. Only values for the following OS'es are checked
+    #[cfg(target_os = "macos")]
     result.stdout_only("  0 dir-test\n  8 file-1\n200 file-2\n");
-    #[cfg(windows)]
+    #[cfg(any(target_os = "linux", target_os="freebsd"))]
+    result.stdout_only("  8 dir-test\n  8 file-1\n200 file-2\n");
+    #[cfg(target_os = "windows")]
     result.stdout_only("     0 dir-test\n  1000 file-1\n100000 file-2\n");
 }
-
 
 #[test]
 fn test_ls_block_size_display_long() {
@@ -2078,12 +2080,21 @@ fn test_ls_block_size_display_long() {
     at.append("file-2", &"x".repeat(100000));
 
     let result = scene.ucmd().arg("-ls").succeeds();
-    #[cfg(not(windows))] {
+    // Block sizes vary by OS. Only values for the following OS'es are checked
+    #[cfg(target_os = "macos")]
+    {
         result.stdout_contains("\n  0 ");
         result.stdout_contains("\n  8 "); // for file-1
         result.stdout_contains("\n200 "); // for file-
     }
-    #[cfg(windows)] {
+    #[cfg(any(target_os = "linux", target_os="freebsd"))]
+    {
+        result.stdout_contains("\n  8 "); // for directory
+        result.stdout_contains("\n  8 "); // for file-1
+        result.stdout_contains("\n200 "); // for file-2
+    }
+    #[cfg(target_os = "windows")]
+    {
         result.stdout_contains("\n     0 ");
         result.stdout_contains("\n  1000 "); // for file-1
         result.stdout_contains("\n100000 "); // for file-2

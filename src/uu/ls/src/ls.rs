@@ -1387,26 +1387,27 @@ fn get_metadata(entry: &Path, dereference: bool) -> std::io::Result<Metadata> {
 }
 
 fn get_display_size(md: &Metadata) -> u64 {
-    #[cfg(windows)] {
+    #[cfg(windows)]
+    {
         if md.is_dir() {
-            return 0
+            return 0;
         }
         return md.len() as u64;
     }
 
-    #[cfg(unix)] {
+    #[cfg(unix)]
+    {
         return md.blocks() as u64;
     }
 }
-
 
 // Get maximum string sizes for:
 // - number of links of each items
 // - size
 // - blocks
-fn get_max_sizes (items: &[PathData], config: &Config) -> (usize, usize, usize, u64) {
+fn get_max_sizes(items: &[PathData], config: &Config) -> (usize, usize, usize, u64) {
     let (mut max_links, mut max_width, mut max_blocks) = (1, 1, 1);
-        let mut total_size = 0;
+    let mut total_size = 0;
 
     for item in items {
         if let Some(md) = item.md() {
@@ -1420,14 +1421,13 @@ fn get_max_sizes (items: &[PathData], config: &Config) -> (usize, usize, usize, 
     return (max_links, max_width, max_blocks, total_size);
 }
 
-fn pad_left(string: String, count: usize) -> String {
+fn pad_left(string: impl Display, count: usize) -> String {
     format!("{:>width$}", string, width = count)
 }
 
 fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) {
     let (max_links, max_width, max_blocks, total_size) = get_max_sizes(items, config);
     if config.format == Format::Long {
-
         if total_size > 0 {
             let _ = writeln!(out, "total {}", display_size(total_size, config));
         }
@@ -1436,7 +1436,9 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             display_item_long(item, max_links, max_width, max_blocks, config, out);
         }
     } else {
-        let names = items.iter().filter_map(|i| display_file_name(i, config, max_blocks));
+        let names = items
+            .iter()
+            .filter_map(|i| display_file_name(i, config, max_blocks));
 
         match (&config.format, config.width) {
             (Format::Columns, Some(width)) => {
@@ -1595,7 +1597,6 @@ fn display_item_long(
 fn get_inode(metadata: &Metadata) -> String {
     format!("{:8}", metadata.ino())
 }
-
 
 // Currently getpwuid is `linux` target only. If it's broken out into
 // a posix-compliant attribute this can be updated...
@@ -1850,15 +1851,16 @@ fn display_file_name(path: &PathData, config: &Config, max_blocks: usize) -> Opt
     }
 
     if config.format != Format::Long && config.blocks {
+        width += max_blocks + 1;
         if let Some(md) = path.md() {
-            width += max_blocks + 1;
-            name.insert_str(0, &format!("{} ", pad_left(get_display_size(md).to_string(), max_blocks)));
+            name.insert_str(
+                0,
+                &format!("{} ", pad_left(get_display_size(md), max_blocks)),
+            );
         } else {
-            width += max_blocks + 1;
             name.insert_str(0, &format!("{} ", pad_left(String::from(""), max_blocks)));
         }
     }
-
 
     if config.format == Format::Long && path.file_type()?.is_symlink() {
         if let Ok(target) = path.p_buf.read_link() {
