@@ -2058,7 +2058,8 @@ fn test_ls_block_size_display_short() {
     at.touch("file-2");
     at.append("file-2", &"x".repeat(100000));
 
-    let result = scene.ucmd().arg("-s").succeeds();
+    let result = scene.ucmd().arg("-s").arg("-w=0").succeeds();
+
     // Block sizes vary by OS. Only values for the following OS'es are checked
     #[cfg(target_os = "macos")]
     result.stdout_only("  0 dir-test\n  8 file-1\n200 file-2\n");
