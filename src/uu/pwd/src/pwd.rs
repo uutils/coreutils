@@ -5,6 +5,9 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
+// clippy bug https://github.com/rust-lang/rust-clippy/issues/7422
+#![allow(clippy::nonstandard_macro_braces)]
+
 #[macro_use]
 extern crate uucore;
 
@@ -12,6 +15,8 @@ use clap::{crate_version, App, Arg};
 use std::env;
 use std::io;
 use std::path::{Path, PathBuf};
+
+use uucore::error::{FromIo, UResult, USimpleError};
 
 static ABOUT: &str = "Display the full filename of the current working directory.";
 static OPT_LOGICAL: &str = "logical";
@@ -36,7 +41,8 @@ fn get_usage() -> String {
     format!("{0} [OPTION]... FILE...", executable!())
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = get_usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
@@ -46,16 +52,20 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             if matches.is_present(OPT_LOGICAL) {
                 println!("{}", logical_path.display());
             } else {
-                match absolute_path(&logical_path) {
-                    Ok(physical_path) => println!("{}", physical_path.display()),
-                    Err(e) => crash!(1, "failed to get absolute path {}", e),
-                };
+                let physical_path = absolute_path(&logical_path)
+                    .map_err_context(|| "failed to get absolute path".to_string())?;
+                println!("{}", physical_path.display());
             }
         }
-        Err(e) => crash!(1, "failed to get current directory {}", e),
+        Err(e) => {
+            return Err(USimpleError::new(
+                1,
+                format!("failed to get current directory {}", e),
+            ))
+        }
     };
 
-    0
+    Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {
