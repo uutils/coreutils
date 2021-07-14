@@ -1,5 +1,3 @@
-/* cspell:disable */
-
 use super::*;
 
 mod block_unblock_tests;
@@ -38,24 +36,6 @@ const DEFAULT_IFLAGS: IFlags = IFlags {
     count_bytes: false,
     skip_bytes: false,
 };
-
-// const DEFAULT_OFLAGS: OFlags = OFlags {
-//     append: false,
-//     cio: false,
-//     direct: false,
-//     directory: false,
-//     dsync: false,
-//     sync: false,
-//     nocache: false,
-//     nonblock: false,
-//     noatime: false,
-//     noctty: false,
-//     nofollow: false,
-//     nolinks: false,
-//     binary: false,
-//     text: false,
-//     seek_bytes: false,
-// };
 
 struct LazyReader<R: Read> {
     src: R,
@@ -102,7 +82,7 @@ macro_rules! make_spec_test (
                             src: $src,
                             non_ascii: false,
                             ibs: 512,
-                            xfer_stats: None,
+                            print_level: None,
                             count: None,
                             cflags: icf!(),
                             iflags: DEFAULT_IFLAGS,

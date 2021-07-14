@@ -1,20 +1,7 @@
-/* cspell:disable */
-
 use super::*;
 
-const NL: u8 = '\n' as u8;
-const SPACE: u8 = ' ' as u8;
-
-macro_rules! rs (
-    () =>
-    {
-        ReadStat {
-            reads_complete: 0,
-            reads_partial: 0,
-            records_truncated: 0,
-        }
-   };
- );
+const NL: u8 = b'\n';
+const SPACE: u8 = b' ';
 
 macro_rules! make_block_test (
     ( $test_id:ident, $test_name:expr, $src:expr, $block:expr, $spec:expr ) =>
@@ -25,7 +12,7 @@ macro_rules! make_block_test (
                             src: $src,
                             non_ascii: false,
                             ibs: 512,
-                            xfer_stats: None,
+                            print_level: None,
                             count: None,
                             cflags: IConvFlags {
                                 ctable: None,
@@ -57,7 +44,7 @@ macro_rules! make_unblock_test (
                             src: $src,
                             non_ascii: false,
                             ibs: 512,
-                            xfer_stats: None,
+                            print_level: None,
                             count: None,
                             cflags: IConvFlags {
                                 ctable: None,
@@ -82,7 +69,7 @@ macro_rules! make_unblock_test (
 
 #[test]
 fn block_test_no_nl() {
-    let mut rs = rs!();
+    let mut rs = ReadStat::default();
     let buf = vec![0u8, 1u8, 2u8, 3u8];
     let res = block(buf, 4, &mut rs);
 
@@ -91,7 +78,7 @@ fn block_test_no_nl() {
 
 #[test]
 fn block_test_no_nl_short_record() {
-    let mut rs = rs!();
+    let mut rs = ReadStat::default();
     let buf = vec![0u8, 1u8, 2u8, 3u8];
     let res = block(buf, 8, &mut rs);
 
@@ -103,17 +90,18 @@ fn block_test_no_nl_short_record() {
 
 #[test]
 fn block_test_no_nl_trunc() {
-    let mut rs = rs!();
+    let mut rs = ReadStat::default();
     let buf = vec![0u8, 1u8, 2u8, 3u8, 4u8];
     let res = block(buf, 4, &mut rs);
 
+    // Commented section should be truncated and appear for reference only.
     assert_eq!(res, vec![vec![0u8, 1u8, 2u8, 3u8 /*, 4u8*/],]);
     assert_eq!(rs.records_truncated, 1);
 }
 
 #[test]
 fn block_test_nl_gt_cbs_trunc() {
-    let mut rs = rs!();
+    let mut rs = ReadStat::default();
     let buf = vec![
         0u8, 1u8, 2u8, 3u8, 4u8, NL, 0u8, 1u8, 2u8, 3u8, 4u8, NL, 5u8, 6u8, 7u8, 8u8,
     ];
@@ -122,6 +110,7 @@ fn block_test_nl_gt_cbs_trunc() {
     assert_eq!(
         res,
         vec![
+            // Commented lines should be truncated and appear for reference only.
             vec![0u8, 1u8, 2u8, 3u8],
             // vec![4u8, SPACE, SPACE, SPACE],
             vec![0u8, 1u8, 2u8, 3u8],
@@ -134,7 +123,7 @@ fn block_test_nl_gt_cbs_trunc() {
 
 #[test]
 fn block_test_surrounded_nl() {
-    let mut rs = rs!();
+    let mut rs = ReadStat::default();
     let buf = vec![0u8, 1u8, 2u8, 3u8, NL, 4u8, 5u8, 6u8, 7u8, 8u8];
     let res = block(buf, 8, &mut rs);
 
@@ -149,7 +138,7 @@ fn block_test_surrounded_nl() {
 
 #[test]
 fn block_test_multiple_nl_same_cbs_block() {
-    let mut rs = rs!();
+    let mut rs = ReadStat::default();
     let buf = vec![0u8, 1u8, 2u8, 3u8, NL, 4u8, NL, 5u8, 6u8, 7u8, 8u8, 9u8];
     let res = block(buf, 8, &mut rs);
 
@@ -165,7 +154,7 @@ fn block_test_multiple_nl_same_cbs_block() {
 
 #[test]
 fn block_test_multiple_nl_diff_cbs_block() {
-    let mut rs = rs!();
+    let mut rs = ReadStat::default();
     let buf = vec![0u8, 1u8, 2u8, 3u8, NL, 4u8, 5u8, 6u8, 7u8, NL, 8u8, 9u8];
     let res = block(buf, 8, &mut rs);
 
@@ -181,7 +170,7 @@ fn block_test_multiple_nl_diff_cbs_block() {
 
 #[test]
 fn block_test_end_nl_diff_cbs_block() {
-    let mut rs = rs!();
+    let mut rs = ReadStat::default();
     let buf = vec![0u8, 1u8, 2u8, 3u8, NL];
     let res = block(buf, 4, &mut rs);
 
@@ -190,7 +179,7 @@ fn block_test_end_nl_diff_cbs_block() {
 
 #[test]
 fn block_test_end_nl_same_cbs_block() {
-    let mut rs = rs!();
+    let mut rs = ReadStat::default();
     let buf = vec![0u8, 1u8, 2u8, NL];
     let res = block(buf, 4, &mut rs);
 
@@ -199,7 +188,7 @@ fn block_test_end_nl_same_cbs_block() {
 
 #[test]
 fn block_test_double_end_nl() {
-    let mut rs = rs!();
+    let mut rs = ReadStat::default();
     let buf = vec![0u8, 1u8, 2u8, NL, NL];
     let res = block(buf, 4, &mut rs);
 
@@ -211,7 +200,7 @@ fn block_test_double_end_nl() {
 
 #[test]
 fn block_test_start_nl() {
-    let mut rs = rs!();
+    let mut rs = ReadStat::default();
     let buf = vec![NL, 0u8, 1u8, 2u8, 3u8];
     let res = block(buf, 4, &mut rs);
 
@@ -223,7 +212,7 @@ fn block_test_start_nl() {
 
 #[test]
 fn block_test_double_surrounded_nl_no_trunc() {
-    let mut rs = rs!();
+    let mut rs = ReadStat::default();
     let buf = vec![0u8, 1u8, 2u8, 3u8, NL, NL, 4u8, 5u8, 6u8, 7u8];
     let res = block(buf, 8, &mut rs);
 
@@ -239,13 +228,14 @@ fn block_test_double_surrounded_nl_no_trunc() {
 
 #[test]
 fn block_test_double_surrounded_nl_double_trunc() {
-    let mut rs = rs!();
+    let mut rs = ReadStat::default();
     let buf = vec![0u8, 1u8, 2u8, 3u8, NL, NL, 4u8, 5u8, 6u8, 7u8, 8u8];
     let res = block(buf, 4, &mut rs);
 
     assert_eq!(
         res,
         vec![
+            // Commented section should be truncated and appear for reference only.
             vec![0u8, 1u8, 2u8, 3u8],
             vec![SPACE, SPACE, SPACE, SPACE],
             vec![4u8, 5u8, 6u8, 7u8 /*, 8u8*/],

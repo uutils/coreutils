@@ -5,8 +5,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-/* cspell:disable */
-
 // Note: Conversion tables are just lookup tables.
 // eg. The ASCII->EBCDIC table stores the EBCDIC code at the index
 // obtained by treating the ASCII representation as a number.

@@ -1,5 +1,3 @@
-/* cspell:disable */
-
 use crate::common::util::*;
 
 use std::fs::{File, OpenOptions};

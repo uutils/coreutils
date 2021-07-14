@@ -1,5 +1,3 @@
-/* cspell:disable */
-
 use super::*;
 
 macro_rules! make_conv_test (
@@ -11,7 +9,7 @@ macro_rules! make_conv_test (
                             src: $src,
                             non_ascii: false,
                             ibs: 512,
-                            xfer_stats: None,
+                            print_level: None,
                             count: None,
                             cflags: icf!($ctable),
                             iflags: DEFAULT_IFLAGS,
@@ -36,7 +34,7 @@ macro_rules! make_icf_test (
                             src: $src,
                             non_ascii: false,
                             ibs: 512,
-                            xfer_stats: None,
+                            print_level: None,
                             count: None,
                             cflags: $icf,
                             iflags: DEFAULT_IFLAGS,
@@ -141,7 +139,7 @@ fn all_valid_ascii_ebcdic_ascii_roundtrip_conv_test() {
         .unwrap(),
         non_ascii: false,
         ibs: 128,
-        xfer_stats: None,
+        print_level: None,
         count: None,
         cflags: icf!(Some(&ASCII_TO_EBCDIC)),
         iflags: DEFAULT_IFLAGS,
@@ -163,7 +161,7 @@ fn all_valid_ascii_ebcdic_ascii_roundtrip_conv_test() {
         src: File::open(&tmp_fname_ae).unwrap(),
         non_ascii: false,
         ibs: 256,
-        xfer_stats: None,
+        print_level: None,
         count: None,
         cflags: icf!(Some(&EBCDIC_TO_ASCII)),
         iflags: DEFAULT_IFLAGS,

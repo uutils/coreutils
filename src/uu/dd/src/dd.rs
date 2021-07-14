@@ -5,8 +5,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-/* cspell:disable */
-
 #[macro_use]
 extern crate uucore;
 use uucore::InvalidEncodingHandling;
@@ -25,7 +23,6 @@ use conversion_tables::*;
 
 use byte_unit::Byte;
 use clap::{self, crate_version};
-use debug_print::debug_println;
 use gcd::Gcd;
 use signal_hook::consts::signal;
 use std::cmp;
@@ -51,7 +48,7 @@ struct Input<R: Read> {
     src: R,
     non_ascii: bool,
     ibs: usize,
-    xfer_stats: Option<StatusLevel>,
+    print_level: Option<StatusLevel>,
     count: Option<CountType>,
     cflags: IConvFlags,
     iflags: IFlags,
@@ -61,7 +58,7 @@ impl Input<io::Stdin> {
     fn new(matches: &Matches) -> Result<Self, Box<dyn Error>> {
         let ibs = parseargs::parse_ibs(matches)?;
         let non_ascii = parseargs::parse_input_non_ascii(matches)?;
-        let xfer_stats = parseargs::parse_status_level(matches)?;
+        let print_level = parseargs::parse_status_level(matches)?;
         let cflags = parseargs::parse_conv_flag_input(matches)?;
         let iflags = parseargs::parse_iflags(matches)?;
         let skip = parseargs::parse_skip_amt(&ibs, &iflags, matches)?;
@@ -71,7 +68,7 @@ impl Input<io::Stdin> {
             src: io::stdin(),
             non_ascii,
             ibs,
-            xfer_stats,
+            print_level,
             count,
             cflags,
             iflags,
@@ -88,31 +85,31 @@ impl Input<io::Stdin> {
 }
 
 #[cfg(target_os = "linux")]
-fn make_linux_iflags(oflags: &IFlags) -> Option<libc::c_int> {
+fn make_linux_iflags(iflags: &IFlags) -> Option<libc::c_int> {
     let mut flag = 0;
 
-    if oflags.direct {
+    if iflags.direct {
         flag |= libc::O_DIRECT;
     }
-    if oflags.directory {
+    if iflags.directory {
         flag |= libc::O_DIRECTORY;
     }
-    if oflags.dsync {
+    if iflags.dsync {
         flag |= libc::O_DSYNC;
     }
-    if oflags.noatime {
+    if iflags.noatime {
         flag |= libc::O_NOATIME;
     }
-    if oflags.noctty {
+    if iflags.noctty {
         flag |= libc::O_NOCTTY;
     }
-    if oflags.nofollow {
+    if iflags.nofollow {
         flag |= libc::O_NOFOLLOW;
     }
-    if oflags.nonblock {
+    if iflags.nonblock {
         flag |= libc::O_NONBLOCK;
     }
-    if oflags.sync {
+    if iflags.sync {
         flag |= libc::O_SYNC;
     }
 
@@ -127,13 +124,13 @@ impl Input<File> {
     fn new(matches: &Matches) -> Result<Self, Box<dyn Error>> {
         let ibs = parseargs::parse_ibs(matches)?;
         let non_ascii = parseargs::parse_input_non_ascii(matches)?;
-        let xfer_stats = parseargs::parse_status_level(matches)?;
+        let print_level = parseargs::parse_status_level(matches)?;
         let cflags = parseargs::parse_conv_flag_input(matches)?;
         let iflags = parseargs::parse_iflags(matches)?;
         let skip = parseargs::parse_skip_amt(&ibs, &iflags, matches)?;
         let count = parseargs::parse_count(&iflags, matches)?;
 
-        if let Some(fname) = matches.value_of("if") {
+        if let Some(fname) = matches.value_of(options::INFILE) {
             let mut src = {
                 let mut opts = OpenOptions::new();
                 opts.read(true);
@@ -155,7 +152,7 @@ impl Input<File> {
                 src,
                 non_ascii,
                 ibs,
-                xfer_stats,
+                print_level,
                 count,
                 cflags,
                 iflags,
@@ -198,28 +195,27 @@ impl<R: Read> Input<R> {
     fn fill_consecutive(&mut self, buf: &mut Vec<u8>) -> Result<ReadStat, Box<dyn Error>> {
         let mut reads_complete = 0;
         let mut reads_partial = 0;
-        let mut base_idx = 0;
+        let mut bytes_total = 0;
 
-        while base_idx < buf.len() {
-            let next_blk = cmp::min(base_idx + self.ibs, buf.len());
-
-            match self.read(&mut buf[base_idx..next_blk])? {
+        for chunk in buf.chunks_mut(self.ibs) {
+            match self.read(chunk)? {
                 rlen if rlen == self.ibs => {
-                    base_idx += rlen;
+                    bytes_total += rlen;
                     reads_complete += 1;
                 }
                 rlen if rlen > 0 => {
-                    base_idx += rlen;
+                    bytes_total += rlen;
                     reads_partial += 1;
                 }
                 _ => break,
             }
         }
 
-        buf.truncate(base_idx);
+        buf.truncate(bytes_total);
         Ok(ReadStat {
             reads_complete,
             reads_partial,
+            // Records are not truncated when filling.
             records_truncated: 0,
         })
     }
@@ -234,35 +230,19 @@ impl<R: Read> Input<R> {
 
         while base_idx < buf.len() {
             let next_blk = cmp::min(base_idx + self.ibs, buf.len());
-            let plen = next_blk - base_idx;
+            let target_len = next_blk - base_idx;
 
             match self.read(&mut buf[base_idx..next_blk])? {
                 0 => break,
-                rlen if rlen < plen => {
+                rlen if rlen < target_len => {
                     reads_partial += 1;
-                    let padding = vec![pad; plen - rlen];
+                    let padding = vec![pad; target_len - rlen];
                     buf.splice(base_idx + rlen..next_blk, padding.into_iter());
                 }
                 _ => {
                     reads_complete += 1;
                 }
             }
-            // TODO: Why does this cause the conv=sync tests to hang?
-            // let rlen = self.read(&mut buf[base_idx..next_blk])?;
-            // if rlen < plen
-            // {
-            //     reads_partial += 1;
-            //     let padding = vec![pad; plen-rlen];
-            //     buf.splice(base_idx+rlen..next_blk, padding.into_iter());
-            // }
-            // else
-            // {
-            //     reads_complete += 1;
-            // }
-            // if rlen == 0
-            // {
-            //     break;
-            // }
 
             base_idx += self.ibs;
         }
@@ -356,11 +336,7 @@ fn make_linux_oflags(oflags: &OFlags) -> Option<libc::c_int> {
 
 impl Output<File> {
     fn new(matches: &Matches) -> Result<Self, Box<dyn Error>> {
-        fn open_dst(
-            path: &Path,
-            cflags: &OConvFlags,
-            oflags: &OFlags,
-        ) -> Result<File, Box<dyn Error>> {
+        fn open_dst(path: &Path, cflags: &OConvFlags, oflags: &OFlags) -> Result<File, io::Error> {
             let mut opts = OpenOptions::new();
             opts.write(true)
                 .create(!cflags.nocreat)
@@ -373,15 +349,14 @@ impl Output<File> {
                 opts.custom_flags(libc_flags);
             }
 
-            let dst = opts.open(path)?;
-            Ok(dst)
+            opts.open(path)
         }
         let obs = parseargs::parse_obs(matches)?;
         let cflags = parseargs::parse_conv_flag_output(matches)?;
         let oflags = parseargs::parse_oflags(matches)?;
         let seek = parseargs::parse_seek_amt(&obs, &oflags, matches)?;
 
-        if let Some(fname) = matches.value_of("of") {
+        if let Some(fname) = matches.value_of(options::OUTFILE) {
             let mut dst = open_dst(Path::new(&fname), &cflags, &oflags)?;
 
             if let Some(amt) = seek {
@@ -418,7 +393,6 @@ impl Seek for Output<File> {
 
 impl Write for Output<File> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        #[inline]
         fn is_sparse(buf: &[u8]) -> bool {
             buf.iter().all(|&e| e == 0u8)
         }
@@ -454,20 +428,17 @@ impl Output<io::Stdout> {
     fn write_blocks(&mut self, buf: Vec<u8>) -> io::Result<WriteStat> {
         let mut writes_complete = 0;
         let mut writes_partial = 0;
-        let mut base_idx = 0;
+        let mut bytes_total = 0;
 
-        while base_idx < buf.len() {
-            let next_blk = cmp::min(base_idx + self.obs, buf.len());
-            let plen = next_blk - base_idx;
-
-            match self.write(&buf[base_idx..next_blk])? {
-                wlen if wlen < plen => {
+        for chunk in buf.chunks(self.obs) {
+            match self.write(chunk)? {
+                wlen if wlen < chunk.len() => {
                     writes_partial += 1;
-                    base_idx += wlen;
+                    bytes_total += wlen;
                 }
                 wlen => {
                     writes_complete += 1;
-                    base_idx += wlen;
+                    bytes_total += wlen;
                 }
             }
         }
@@ -475,7 +446,7 @@ impl Output<io::Stdout> {
         Ok(WriteStat {
             writes_complete,
             writes_partial,
-            bytes_total: base_idx.try_into().unwrap_or(0u128),
+            bytes_total: bytes_total.try_into().unwrap_or(0u128),
         })
     }
 }
@@ -484,20 +455,17 @@ impl Output<File> {
     fn write_blocks(&mut self, buf: Vec<u8>) -> io::Result<WriteStat> {
         let mut writes_complete = 0;
         let mut writes_partial = 0;
-        let mut base_idx = 0;
+        let mut bytes_total = 0;
 
-        while base_idx < buf.len() {
-            let next_blk = cmp::min(base_idx + self.obs, buf.len());
-            let plen = next_blk - base_idx;
-
-            match self.write(&buf[base_idx..next_blk])? {
-                wlen if wlen < plen => {
+        for chunk in buf.chunks(self.obs) {
+            match self.write(chunk)? {
+                wlen if wlen < chunk.len() => {
                     writes_partial += 1;
-                    base_idx += wlen;
+                    bytes_total += wlen;
                 }
                 wlen => {
                     writes_complete += 1;
-                    base_idx += wlen;
+                    bytes_total += wlen;
                 }
             }
         }
@@ -505,7 +473,7 @@ impl Output<File> {
         Ok(WriteStat {
             writes_complete,
             writes_partial,
-            bytes_total: base_idx.try_into().unwrap_or(0u128),
+            bytes_total: bytes_total.try_into().unwrap_or(0u128),
         })
     }
 }
@@ -538,47 +506,18 @@ fn block(buf: Vec<u8>, cbs: usize, rstat: &mut ReadStat) -> Vec<Vec<u8>> {
 /// Trims padding from each cbs-length partition of buf
 /// as specified by conv=unblock and cbs=N
 fn unblock(buf: Vec<u8>, cbs: usize) -> Vec<u8> {
-    // Local Helper Fns ----------------------------------------------------
-    #[inline]
-    fn build_blocks(buf: Vec<u8>, cbs: usize) -> Vec<Vec<u8>> {
-        let mut blocks = Vec::new();
-        let mut curr = buf;
-        let mut next;
-        let mut width;
+    buf.chunks(cbs).fold(Vec::new(), |mut acc, block| {
+        if let Some(last_char_idx) = block.iter().rposition(|&e| e != b' ') {
+            // Find last space
+            acc.extend(&block[..=last_char_idx]);
+            acc.push(b'\n');
+        } else {
+            // The block is filled with only spaces
+            acc.push(b'\n');
+        };
 
-        while !curr.is_empty() {
-            width = cmp::min(cbs, curr.len());
-            next = curr.split_off(width);
-
-            blocks.push(curr);
-
-            curr = next;
-        }
-
-        blocks
-    }
-    // ---------------------------------------------------------------------
-    build_blocks(buf, cbs)
-        .into_iter()
-        .fold(Vec::new(), |mut unblocks, mut block| {
-            let block = if let Some(last_char_idx) = block.iter().rposition(|&e| e != b' ') {
-                block.truncate(last_char_idx + 1);
-                block.push(b'\n');
-
-                block
-            } else if let Some(b' ') = block.get(0) {
-                vec![b'\n']
-            } else {
-                block
-            };
-
-            unblocks.push(block);
-
-            unblocks
-        })
-        .into_iter()
-        .flatten()
-        .collect()
+        acc
+    })
 }
 
 fn conv_block_unblock_helper<R: Read>(
@@ -587,19 +526,15 @@ fn conv_block_unblock_helper<R: Read>(
     rstat: &mut ReadStat,
 ) -> Result<Vec<u8>, Box<dyn Error>> {
     // Local Predicate Fns -------------------------------------------------
-    #[inline]
     fn should_block_then_conv<R: Read>(i: &Input<R>) -> bool {
         !i.non_ascii && i.cflags.block.is_some()
     }
-    #[inline]
     fn should_conv_then_block<R: Read>(i: &Input<R>) -> bool {
         i.non_ascii && i.cflags.block.is_some()
     }
-    #[inline]
     fn should_unblock_then_conv<R: Read>(i: &Input<R>) -> bool {
         !i.non_ascii && i.cflags.unblock.is_some()
     }
-    #[inline]
     fn should_conv_then_unblock<R: Read>(i: &Input<R>) -> bool {
         i.non_ascii && i.cflags.unblock.is_some()
     }
@@ -607,8 +542,7 @@ fn conv_block_unblock_helper<R: Read>(
         i.cflags.ctable.is_some() && i.cflags.block.is_none() && i.cflags.unblock.is_none()
     }
     // Local Helper Fns ----------------------------------------------------
-    #[inline]
-    fn apply_ct(buf: &mut [u8], ct: &ConversionTable) {
+    fn apply_conversion(buf: &mut [u8], ct: &ConversionTable) {
         for idx in 0..buf.len() {
             buf[idx] = ct[buf[idx] as usize];
         }
@@ -617,7 +551,7 @@ fn conv_block_unblock_helper<R: Read>(
     if conv_only(i) {
         // no block/unblock
         let ct = i.cflags.ctable.unwrap();
-        apply_ct(&mut buf, ct);
+        apply_conversion(&mut buf, ct);
 
         Ok(buf)
     } else if should_block_then_conv(i) {
@@ -628,7 +562,7 @@ fn conv_block_unblock_helper<R: Read>(
 
         if let Some(ct) = i.cflags.ctable {
             for buf in blocks.iter_mut() {
-                apply_ct(buf, ct);
+                apply_conversion(buf, ct);
             }
         }
 
@@ -640,7 +574,7 @@ fn conv_block_unblock_helper<R: Read>(
         let cbs = i.cflags.block.unwrap();
 
         if let Some(ct) = i.cflags.ctable {
-            apply_ct(&mut buf, ct);
+            apply_conversion(&mut buf, ct);
         }
 
         let blocks = block(buf, cbs, rstat).into_iter().flatten().collect();
@@ -653,7 +587,7 @@ fn conv_block_unblock_helper<R: Read>(
         let mut buf = unblock(buf, cbs);
 
         if let Some(ct) = i.cflags.ctable {
-            apply_ct(&mut buf, ct);
+            apply_conversion(&mut buf, ct);
         }
 
         Ok(buf)
@@ -662,7 +596,7 @@ fn conv_block_unblock_helper<R: Read>(
         let cbs = i.cflags.unblock.unwrap();
 
         if let Some(ct) = i.cflags.ctable {
-            apply_ct(&mut buf, ct);
+            apply_conversion(&mut buf, ct);
         }
 
         let buf = unblock(buf, cbs);
@@ -683,27 +617,19 @@ fn read_helper<R: Read>(
     bsize: usize,
 ) -> Result<(ReadStat, Vec<u8>), Box<dyn Error>> {
     // Local Predicate Fns -----------------------------------------------
-    #[inline]
     fn is_conv<R: Read>(i: &Input<R>) -> bool {
         i.cflags.ctable.is_some()
     }
-    #[inline]
     fn is_block<R: Read>(i: &Input<R>) -> bool {
         i.cflags.block.is_some()
     }
-    #[inline]
     fn is_unblock<R: Read>(i: &Input<R>) -> bool {
         i.cflags.unblock.is_some()
     }
     // Local Helper Fns -------------------------------------------------
-    #[inline]
     fn perform_swab(buf: &mut [u8]) {
-        let mut tmp;
-
         for base in (1..buf.len()).step_by(2) {
-            tmp = buf[base];
-            buf[base] = buf[base - 1];
-            buf[base - 1] = tmp;
+            buf.swap(base, base - 1);
         }
     }
     // ------------------------------------------------------------------
@@ -733,35 +659,35 @@ fn read_helper<R: Read>(
 fn print_io_lines(update: &ProgUpdate) {
     eprintln!(
         "{}+{} records in",
-        update.reads_complete, update.reads_partial
+        update.read_stat.reads_complete, update.read_stat.reads_partial
     );
-    if update.records_truncated > 0 {
-        eprintln!("{} truncated records", update.records_truncated);
+    if update.read_stat.records_truncated > 0 {
+        eprintln!("{} truncated records", update.read_stat.records_truncated);
     }
     eprintln!(
         "{}+{} records out",
-        update.writes_complete, update.writes_partial
+        update.write_stat.writes_complete, update.write_stat.writes_partial
     );
 }
 fn make_prog_line(update: &ProgUpdate) -> String {
-    let btotal_metric = Byte::from_bytes(update.bytes_total)
+    let btotal_metric = Byte::from_bytes(update.write_stat.bytes_total)
         .get_appropriate_unit(false)
         .format(0);
-    let btotal_bin = Byte::from_bytes(update.bytes_total)
+    let btotal_bin = Byte::from_bytes(update.write_stat.bytes_total)
         .get_appropriate_unit(true)
         .format(0);
     let safe_millis = cmp::max(1, update.duration.as_millis());
-    let xfer_rate = Byte::from_bytes(1000 * (update.bytes_total / safe_millis))
+    let transfer_rate = Byte::from_bytes(1000 * (update.write_stat.bytes_total / safe_millis))
         .get_appropriate_unit(false)
         .format(1);
 
     format!(
         "{} bytes ({}, {}) copied, {:.1} s, {}/s",
-        update.bytes_total,
+        update.write_stat.bytes_total,
         btotal_metric,
         btotal_bin,
         update.duration.as_secs_f64(),
-        xfer_rate
+        transfer_rate
     )
 }
 fn reprint_prog_line(update: &ProgUpdate) {
@@ -770,65 +696,60 @@ fn reprint_prog_line(update: &ProgUpdate) {
 fn print_prog_line(update: &ProgUpdate) {
     eprintln!("{}", make_prog_line(update));
 }
-fn print_xfer_stats(update: &ProgUpdate) {
+fn print_transfer_stats(update: &ProgUpdate) {
     print_io_lines(update);
     print_prog_line(update);
 }
 
-/// Generate a progress updater that tracks progress, receives updates, and responds to signals.
-fn gen_prog_updater(rx: mpsc::Receiver<ProgUpdate>, xfer_stats: Option<StatusLevel>) -> impl Fn() {
+/// Generate a progress updater that tracks progress, receives updates, and responds to progress update requests (signals).
+fn gen_prog_updater(rx: mpsc::Receiver<ProgUpdate>, print_level: Option<StatusLevel>) -> impl Fn() {
+    // --------------------------------------------------------------
+    #[cfg(target_os = "linux")]
+    const SIGUSR1_USIZE: usize = signal::SIGUSR1 as usize;
     // --------------------------------------------------------------
     fn posixly_correct() -> bool {
         env::var("POSIXLY_CORRECT").is_ok()
     }
+    fn register_signal_handlers(sigval: Arc<AtomicUsize>) -> Result<(), Box<dyn Error>> {
+        #[cfg(target_os = "linux")]
+        if !posixly_correct() {
+            signal_hook::flag::register_usize(signal::SIGUSR1, sigval, SIGUSR1_USIZE)?;
+        }
+
+        Ok(())
+    }
     // --------------------------------------------------------------
     move || {
-        const SIGUSR1_USIZE: usize = signal::SIGUSR1 as usize;
-
         let sigval = Arc::new(AtomicUsize::new(0));
 
-        // TODO: SIGINFO seems to only exist for BSD (and therefore MACOS)
-        // I will probably want put this behind a feature-gate and may need to pass the value to handle as my own constant.
-        // This may involve some finagling with the signals library.
-        // see -> https://unix.stackexchange.com/questions/179481/siginfo-on-gnu-linux-arch-linux-missing
-        // if let Err(e) = signal_hook::flag::register_usize(signal::SIGINFO, sigval.clone(), signal::SIGINFO as usize)
-        // {
-        //     debug_println!("Internal dd Warning: Unable to register SIGINFO handler \n\t{}", e);
-        // }
-        if !posixly_correct() {
-            if let Err(e) =
-                signal_hook::flag::register_usize(signal::SIGUSR1, sigval.clone(), SIGUSR1_USIZE)
-            {
-                debug_println!(
-                    "Internal dd Warning: Unable to register SIGUSR1 handler \n\t{}",
+        register_signal_handlers(sigval.clone()).unwrap_or_else(|e| {
+            if Some(StatusLevel::None) != print_level {
+                eprintln!(
+                    "Internal dd Warning: Unable to register signal handler \n\t{}",
                     e
                 );
             }
-        }
+        });
 
         loop {
             // Wait for update
-            let update = match (rx.recv(), xfer_stats) {
+            let update = match (rx.recv(), print_level) {
                 (Ok(update), Some(StatusLevel::Progress)) => {
                     reprint_prog_line(&update);
 
                     update
                 }
                 (Ok(update), _) => update,
-                (Err(_), _) =>
-                // recv only fails permanently
-                {
-                    break
+                (Err(_), _) => {
+                    // recv only fails permanently, so we break here to
+                    // avoid recv'ing on a broken pipe
+                    break;
                 }
             };
             // Handle signals
-            #[allow(clippy::single_match)]
-            match sigval.load(Ordering::Relaxed) {
-                SIGUSR1_USIZE => {
-                    print_xfer_stats(&update);
-                }
-                // SIGINFO_USIZE => ...
-                _ => { /* no signals recv'd */ }
+            #[cfg(target_os = "linux")]
+            if let SIGUSR1_USIZE = sigval.load(Ordering::Relaxed) {
+                print_transfer_stats(&update);
             };
         }
     }
@@ -840,7 +761,6 @@ fn gen_prog_updater(rx: mpsc::Receiver<ProgUpdate>, xfer_stats: Option<StatusLev
 /// sane real-world memory use, it should not be too large. I believe
 /// the least common multiple is a good representation of these interests.
 /// https://en.wikipedia.org/wiki/Least_common_multiple#Using_the_greatest_common_divisor
-#[inline]
 fn calc_bsize(ibs: usize, obs: usize) -> usize {
     let gcd = Gcd::gcd(ibs, obs);
     // calculate the lcm from gcd
@@ -878,12 +798,10 @@ fn below_count_limit(count: &Option<CountType>, rstat: &ReadStat, wstat: &WriteS
     match count {
         Some(CountType::Reads(n)) => {
             let n = (*n).try_into().unwrap();
-            // debug_assert!(rstat.reads_complete + rstat.reads_partial >= n);
             rstat.reads_complete + rstat.reads_partial <= n
         }
         Some(CountType::Bytes(n)) => {
             let n = (*n).try_into().unwrap();
-            // debug_assert!(wstat.bytes_total >= n);
             wstat.bytes_total <= n
         }
         None => true,
@@ -891,8 +809,8 @@ fn below_count_limit(count: &Option<CountType>, rstat: &ReadStat, wstat: &WriteS
 }
 
 /// Perform the copy/convert operations. Stdout version
-// Note: Some of dd's functionality depends on whether the output is actually a file. This breaks the Output<Write> abstraction,
-// and should be fixed in the future.
+/// Note: The body of this function should be kept identical to dd_fileout. This is definitely a problem from a maintenance perspective
+/// and should be addressed (TODO). The problem exists because some of dd's functionality depends on whether the output is a file or stdout.
 fn dd_stdout<R: Read>(mut i: Input<R>, mut o: Output<io::Stdout>) -> Result<(), Box<dyn Error>> {
     let mut rstat = ReadStat {
         reads_complete: 0,
@@ -909,7 +827,7 @@ fn dd_stdout<R: Read>(mut i: Input<R>, mut o: Output<io::Stdout>) -> Result<(), 
 
     let prog_tx = {
         let (tx, rx) = mpsc::channel();
-        thread::spawn(gen_prog_updater(rx, i.xfer_stats));
+        thread::spawn(gen_prog_updater(rx, i.print_level));
         tx
     };
 
@@ -934,12 +852,8 @@ fn dd_stdout<R: Read>(mut i: Input<R>, mut o: Output<io::Stdout>) -> Result<(), 
         };
         // Update Prog
         prog_tx.send(ProgUpdate {
-            reads_complete: rstat.reads_complete,
-            reads_partial: rstat.reads_partial,
-            writes_complete: wstat.writes_complete,
-            writes_partial: wstat.writes_partial,
-            bytes_total: wstat.bytes_total,
-            records_truncated: rstat.records_truncated,
+            read_stat: rstat,
+            write_stat: wstat,
             duration: start.elapsed(),
         })?;
     }
@@ -950,15 +864,11 @@ fn dd_stdout<R: Read>(mut i: Input<R>, mut o: Output<io::Stdout>) -> Result<(), 
         o.fdatasync()?;
     }
 
-    match i.xfer_stats {
+    match i.print_level {
         Some(StatusLevel::Noxfer) | Some(StatusLevel::None) => {}
-        _ => print_xfer_stats(&ProgUpdate {
-            reads_complete: rstat.reads_complete,
-            reads_partial: rstat.reads_partial,
-            writes_complete: wstat.writes_complete,
-            writes_partial: wstat.writes_partial,
-            bytes_total: wstat.bytes_total,
-            records_truncated: rstat.records_truncated,
+        _ => print_transfer_stats(&ProgUpdate {
+            read_stat: rstat,
+            write_stat: wstat,
             duration: start.elapsed(),
         }),
     }
@@ -966,8 +876,8 @@ fn dd_stdout<R: Read>(mut i: Input<R>, mut o: Output<io::Stdout>) -> Result<(), 
 }
 
 /// Perform the copy/convert operations. File backed output version
-// Note: Some of dd's functionality depends on whether the output is actually a file. This breaks the Output<Write> abstraction,
-// and should be fixed in the future.
+/// Note: The body of this function should be kept identical to dd_stdout. This is definitely a problem from a maintenance perspective
+/// and should be addressed (TODO). The problem exists because some of dd's functionality depends on whether the output is a file or stdout.
 fn dd_fileout<R: Read>(mut i: Input<R>, mut o: Output<File>) -> Result<(), Box<dyn Error>> {
     let mut rstat = ReadStat {
         reads_complete: 0,
@@ -984,7 +894,7 @@ fn dd_fileout<R: Read>(mut i: Input<R>, mut o: Output<File>) -> Result<(), Box<d
 
     let prog_tx = {
         let (tx, rx) = mpsc::channel();
-        thread::spawn(gen_prog_updater(rx, i.xfer_stats));
+        thread::spawn(gen_prog_updater(rx, i.print_level));
         tx
     };
 
@@ -1009,12 +919,8 @@ fn dd_fileout<R: Read>(mut i: Input<R>, mut o: Output<File>) -> Result<(), Box<d
         };
         // Update Prog
         prog_tx.send(ProgUpdate {
-            reads_complete: rstat.reads_complete,
-            reads_partial: rstat.reads_partial,
-            writes_complete: wstat.writes_complete,
-            writes_partial: wstat.writes_partial,
-            bytes_total: wstat.bytes_total,
-            records_truncated: rstat.records_truncated,
+            read_stat: rstat,
+            write_stat: wstat,
             duration: start.elapsed(),
         })?;
     }
@@ -1025,27 +931,22 @@ fn dd_fileout<R: Read>(mut i: Input<R>, mut o: Output<File>) -> Result<(), Box<d
         o.fdatasync()?;
     }
 
-    match i.xfer_stats {
+    match i.print_level {
         Some(StatusLevel::Noxfer) | Some(StatusLevel::None) => {}
-        _ => print_xfer_stats(&ProgUpdate {
-            reads_complete: rstat.reads_complete,
-            reads_partial: rstat.reads_partial,
-            writes_complete: wstat.writes_complete,
-            writes_partial: wstat.writes_partial,
-            bytes_total: wstat.bytes_total,
-            records_truncated: rstat.records_truncated,
+        _ => print_transfer_stats(&ProgUpdate {
+            read_stat: rstat,
+            write_stat: wstat,
             duration: start.elapsed(),
         }),
     }
     Ok(())
 }
 
-// The compiler does not like Clippy's suggestion to use &str in place of &String here.
-#[allow(clippy::ptr_arg)]
-fn append_dashes_if_not_present(mut acc: Vec<String>, s: &String) -> Vec<String> {
-    if Some("--") != s.get(0..=1) {
-        acc.push(format!("--{}", s));
+fn append_dashes_if_not_present(mut acc: Vec<String>, mut s: String) -> Vec<String> {
+    if !s.starts_with("--") && !s.starts_with("-") {
+        s.insert_str(0, "--");
     }
+    acc.push(s);
     acc
 }
 
@@ -1074,13 +975,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let dashed_args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any()
-        .iter()
+        .into_iter()
         .fold(Vec::new(), append_dashes_if_not_present);
 
     let matches = uu_app()
-        // TODO: usage, after_help
-        //.usage(...)
-        //.after_help(...)
+        //.after_help(TODO: Add note about multiplier strings here.)
         .get_matches_from(dashed_args);
 
     let result = match (
@@ -1121,7 +1020,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     match result {
         Ok(_) => RTN_SUCCESS,
         Err(e) => {
-            debug_println!("dd exiting with error:\n\t{}", e);
+            eprintln!("dd exiting with error:\n\t{}", e);
             RTN_FAILURE
         }
     }
@@ -1211,7 +1110,7 @@ Printing performance stats is also triggered by the INFO signal (where supported
             clap::Arg::with_name(options::CONV)
                 .long(options::CONV)
                 .takes_value(true)
-                .help("conv=CONV[,CONV] (alternatively --conv CONV[,CONV]) specifies a comma-separated list of conversion options or (for legacy reasons) file-flags. Conversion options and file flags may be intermixed.
+                .help("conv=CONV[,CONV] (alternatively --conv CONV[,CONV]) specifies a comma-separated list of conversion options or (for legacy reasons) file flags. Conversion options and file flags may be intermixed.
 
 Conversion options:
 \t One of {ascii, ebcdic, ibm} will perform an encoding conversion.
@@ -1231,7 +1130,7 @@ Conversion options:
 \t 'swab' swaps each adjacent pair of bytes. If an odd number of bytes is present, the final byte is omitted.
 \t 'sync' pad each ibs-sided block with zeros. If 'block' or 'unblock' is specified, pad with spaces instead.
 
-Flags:
+Conversion Flags:
 \t One of {excl, nocreat}
 \t\t 'excl' the output file must be created. Fail if the output file is already present.
 \t\t 'nocreat' the output file will not be created. Fail if the output file in not already present.
@@ -1263,10 +1162,6 @@ General-Flags
 \t 'nocache' request that OS drop cache.
 \t 'noctty' do not assign a controlling tty.
 \t 'nofollow' do not follow system links.
-
-Output-Flags
-\t 'append' open file in append mode. Consider setting conv=notrunc as well.
-\t 'seek_bytes' a value to seek=N will be interpreted as bytes.
 
 ")
         )

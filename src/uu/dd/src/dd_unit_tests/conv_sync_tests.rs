@@ -1,5 +1,3 @@
-/* cspell:disable */
-
 use super::*;
 
 macro_rules! make_sync_test (
@@ -11,7 +9,7 @@ macro_rules! make_sync_test (
                             src: $src,
                             non_ascii: false,
                             ibs: $ibs,
-                            xfer_stats: None,
+                            print_level: None,
                             count: None,
                             cflags: IConvFlags {
                                 ctable: None,

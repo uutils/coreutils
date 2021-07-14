@@ -5,23 +5,18 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-/* cspell:disable */
-
 use crate::conversion_tables::*;
 
 use std::error::Error;
 use std::time;
 
 pub struct ProgUpdate {
-    pub reads_complete: u64,
-    pub reads_partial: u64,
-    pub writes_complete: u64,
-    pub writes_partial: u64,
-    pub bytes_total: u128,
-    pub records_truncated: u32,
+    pub read_stat: ReadStat,
+    pub write_stat: WriteStat,
     pub duration: time::Duration,
 }
 
+#[derive(Clone, Copy, Default)]
 pub struct ReadStat {
     pub reads_complete: u64,
     pub reads_partial: u64,
@@ -37,6 +32,7 @@ impl std::ops::AddAssign for ReadStat {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct WriteStat {
     pub writes_complete: u64,
     pub writes_partial: u64,
@@ -55,6 +51,7 @@ impl std::ops::AddAssign for WriteStat {
 type Cbs = usize;
 
 /// Stores all Conv Flags that apply to the input
+#[derive(Debug, Default, PartialEq)]
 pub struct IConvFlags {
     pub ctable: Option<&'static ConversionTable>,
     pub block: Option<Cbs>,
@@ -65,7 +62,7 @@ pub struct IConvFlags {
 }
 
 /// Stores all Conv Flags that apply to the output
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Default, PartialEq)]
 pub struct OConvFlags {
     pub sparse: bool,
     pub excl: bool,
@@ -76,32 +73,20 @@ pub struct OConvFlags {
 }
 
 /// Stores all Flags that apply to the input
+#[derive(Debug, Default, PartialEq)]
 pub struct IFlags {
-    #[allow(dead_code)]
     pub cio: bool,
-    #[allow(dead_code)]
     pub direct: bool,
-    #[allow(dead_code)]
     pub directory: bool,
-    #[allow(dead_code)]
     pub dsync: bool,
-    #[allow(dead_code)]
     pub sync: bool,
-    #[allow(dead_code)]
     pub nocache: bool,
-    #[allow(dead_code)]
     pub nonblock: bool,
-    #[allow(dead_code)]
     pub noatime: bool,
-    #[allow(dead_code)]
     pub noctty: bool,
-    #[allow(dead_code)]
     pub nofollow: bool,
-    #[allow(dead_code)]
     pub nolinks: bool,
-    #[allow(dead_code)]
     pub binary: bool,
-    #[allow(dead_code)]
     pub text: bool,
     pub fullblock: bool,
     pub count_bytes: bool,
@@ -109,33 +94,21 @@ pub struct IFlags {
 }
 
 /// Stores all Flags that apply to the output
+#[derive(Debug, Default, PartialEq)]
 pub struct OFlags {
     pub append: bool,
-    #[allow(dead_code)]
     pub cio: bool,
-    #[allow(dead_code)]
     pub direct: bool,
-    #[allow(dead_code)]
     pub directory: bool,
-    #[allow(dead_code)]
     pub dsync: bool,
-    #[allow(dead_code)]
     pub sync: bool,
-    #[allow(dead_code)]
     pub nocache: bool,
-    #[allow(dead_code)]
     pub nonblock: bool,
-    #[allow(dead_code)]
     pub noatime: bool,
-    #[allow(dead_code)]
     pub noctty: bool,
-    #[allow(dead_code)]
     pub nofollow: bool,
-    #[allow(dead_code)]
     pub nolinks: bool,
-    #[allow(dead_code)]
     pub binary: bool,
-    #[allow(dead_code)]
     pub text: bool,
     pub seek_bytes: bool,
 }
@@ -153,6 +126,7 @@ pub enum StatusLevel {
 /// Defaults to Reads(N)
 /// if iflag=count_bytes
 /// then becomes Bytes(N)
+#[derive(Debug, PartialEq)]
 pub enum CountType {
     Reads(usize),
     Bytes(usize),

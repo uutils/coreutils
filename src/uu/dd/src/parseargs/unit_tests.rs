@@ -1,5 +1,3 @@
-/* cspell:disable */
-
 use super::*;
 
 use crate::StatusLevel;
@@ -7,7 +5,7 @@ use crate::StatusLevel;
 #[cfg(not(target_os = "linux"))]
 #[test]
 fn unimplemented_flags_should_error_non_unix() {
-    let mut unfailed = Vec::new();
+    let mut succeeded = Vec::new();
 
     // The following flags are only implemented in linux
     for flag in vec![
@@ -28,26 +26,26 @@ fn unimplemented_flags_should_error_non_unix() {
         let matches = uu_app().get_matches_from_safe(args).unwrap();
 
         match parse_iflags(&matches) {
-            Ok(_) => unfailed.push(format!("iflag={}", flag)),
+            Ok(_) => succeeded.push(format!("iflag={}", flag)),
             Err(_) => { /* expected behaviour :-) */ }
         }
         match parse_oflags(&matches) {
-            Ok(_) => unfailed.push(format!("oflag={}", flag)),
+            Ok(_) => succeeded.push(format!("oflag={}", flag)),
             Err(_) => { /* expected behaviour :-) */ }
         }
     }
 
-    if !unfailed.is_empty() {
+    if !succeeded.is_empty() {
         panic!(
             "The following flags did not panic as expected: {:?}",
-            unfailed
+            succeeded
         );
     }
 }
 
 #[test]
 fn unimplemented_flags_should_error() {
-    let mut unfailed = Vec::new();
+    let mut succeeded = Vec::new();
 
     // The following flags are not implemented
     for flag in vec!["cio", "nocache", "nolinks", "text", "binary"] {
@@ -59,19 +57,19 @@ fn unimplemented_flags_should_error() {
         let matches = uu_app().get_matches_from_safe(args).unwrap();
 
         match parse_iflags(&matches) {
-            Ok(_) => unfailed.push(format!("iflag={}", flag)),
+            Ok(_) => succeeded.push(format!("iflag={}", flag)),
             Err(_) => { /* expected behaviour :-) */ }
         }
         match parse_oflags(&matches) {
-            Ok(_) => unfailed.push(format!("oflag={}", flag)),
+            Ok(_) => succeeded.push(format!("oflag={}", flag)),
             Err(_) => { /* expected behaviour :-) */ }
         }
     }
 
-    if !unfailed.is_empty() {
+    if !succeeded.is_empty() {
         panic!(
             "The following flags did not panic as expected: {:?}",
-            unfailed
+            succeeded
         );
     }
 }
@@ -103,6 +101,176 @@ fn test_status_level_none() {
     let st = parse_status_level(&matches).unwrap().unwrap();
 
     assert_eq!(st, StatusLevel::None);
+}
+
+#[test]
+fn test_all_top_level_args_no_leading_dashes_sep_by_equals() {
+    let args = vec![
+        String::from("dd"),
+        String::from("if=foo.file"),
+        String::from("of=bar.file"),
+        String::from("ibs=10"),
+        String::from("obs=10"),
+        String::from("cbs=1"),
+        String::from("bs=100"),
+        String::from("count=2"),
+        String::from("skip=2"),
+        String::from("seek=2"),
+        String::from("status=progress"),
+        String::from("conv=ascii,ucase"),
+        String::from("iflag=count_bytes,skip_bytes"),
+        String::from("oflag=append,seek_bytes"),
+    ];
+    let args = args
+        .into_iter()
+        .fold(Vec::new(), append_dashes_if_not_present);
+
+    let matches = uu_app().get_matches_from_safe(args).unwrap();
+
+    assert_eq!(100, parse_ibs(&matches).unwrap());
+    assert_eq!(100, parse_obs(&matches).unwrap());
+    assert_eq!(1, parse_cbs(&matches).unwrap().unwrap());
+    assert_eq!(
+        CountType::Bytes(2),
+        parse_count(
+            &IFlags {
+                count_bytes: true,
+                ..IFlags::default()
+            },
+            &matches
+        )
+        .unwrap()
+        .unwrap()
+    );
+    assert_eq!(
+        200,
+        parse_skip_amt(&100, &IFlags::default(), &matches)
+            .unwrap()
+            .unwrap()
+    );
+    assert_eq!(
+        200,
+        parse_seek_amt(&100, &OFlags::default(), &matches)
+            .unwrap()
+            .unwrap()
+    );
+    assert_eq!(
+        StatusLevel::Progress,
+        parse_status_level(&matches).unwrap().unwrap()
+    );
+    assert_eq!(
+        IConvFlags {
+            ctable: Some(&EBCDIC_TO_ASCII_LCASE_TO_UCASE),
+            ..IConvFlags::default()
+        },
+        parse_conv_flag_input(&matches).unwrap()
+    );
+    assert_eq!(
+        OConvFlags::default(),
+        parse_conv_flag_output(&matches).unwrap()
+    );
+    assert_eq!(
+        IFlags {
+            count_bytes: true,
+            skip_bytes: true,
+            ..IFlags::default()
+        },
+        parse_iflags(&matches).unwrap()
+    );
+    assert_eq!(
+        OFlags {
+            append: true,
+            seek_bytes: true,
+            ..OFlags::default()
+        },
+        parse_oflags(&matches).unwrap()
+    );
+}
+
+#[ignore]
+#[test]
+// TODO: This should work, but Clap doesn't seem to understand it. Leaving it for now since the traditional dd if=foo.file works just fine.
+fn test_all_top_level_args_leading_dashes_sep_by_spaces() {
+    let args = vec![
+        String::from("dd"),
+        String::from("--if foo.file"),
+        String::from("--of bar.file"),
+        String::from("--ibs 10"),
+        String::from("--obs 10"),
+        String::from("--cbs 1"),
+        String::from("--bs 100"),
+        String::from("--count 2"),
+        String::from("--skip 2"),
+        String::from("--seek 2"),
+        String::from("--status progress"),
+        String::from("--conv ascii,ucase"),
+        String::from("--iflag count_bytes,skip_bytes"),
+        String::from("--oflag append,seek_bytes"),
+    ];
+    let args = args
+        .into_iter()
+        .fold(Vec::new(), append_dashes_if_not_present);
+
+    let matches = uu_app().get_matches_from_safe(args).unwrap();
+
+    assert_eq!(100, parse_ibs(&matches).unwrap());
+    assert_eq!(100, parse_obs(&matches).unwrap());
+    assert_eq!(1, parse_cbs(&matches).unwrap().unwrap());
+    assert_eq!(
+        CountType::Bytes(2),
+        parse_count(
+            &IFlags {
+                count_bytes: true,
+                ..IFlags::default()
+            },
+            &matches
+        )
+        .unwrap()
+        .unwrap()
+    );
+    assert_eq!(
+        200,
+        parse_skip_amt(&100, &IFlags::default(), &matches)
+            .unwrap()
+            .unwrap()
+    );
+    assert_eq!(
+        200,
+        parse_seek_amt(&100, &OFlags::default(), &matches)
+            .unwrap()
+            .unwrap()
+    );
+    assert_eq!(
+        StatusLevel::Progress,
+        parse_status_level(&matches).unwrap().unwrap()
+    );
+    assert_eq!(
+        IConvFlags {
+            ctable: Some(&EBCDIC_TO_ASCII_LCASE_TO_UCASE),
+            ..IConvFlags::default()
+        },
+        parse_conv_flag_input(&matches).unwrap()
+    );
+    assert_eq!(
+        OConvFlags::default(),
+        parse_conv_flag_output(&matches).unwrap()
+    );
+    assert_eq!(
+        IFlags {
+            count_bytes: true,
+            skip_bytes: true,
+            ..IFlags::default()
+        },
+        parse_iflags(&matches).unwrap()
+    );
+    assert_eq!(
+        OFlags {
+            append: true,
+            seek_bytes: true,
+            ..OFlags::default()
+        },
+        parse_oflags(&matches).unwrap()
+    );
 }
 
 #[test]
@@ -376,16 +544,6 @@ test_byte_parser!(
 
 #[test]
 #[should_panic]
-#[allow(non_snake_case)]
-fn test_KB_multiplier_error() {
-    // KB is not valid (kB, K, and KiB are)
-    let bs_str = "2000KB";
-
-    parse_bytes_with_opt_multiplier(bs_str).unwrap();
-}
-
-#[test]
-#[should_panic]
 fn test_overflow_panic() {
     let bs_str = format!("{}KiB", usize::MAX);
 
@@ -395,7 +553,7 @@ fn test_overflow_panic() {
 #[test]
 #[should_panic]
 fn test_neg_panic() {
-    let bs_str = format!("{}KiB", -1);
+    let bs_str = format!("{}", -1);
 
     parse_bytes_with_opt_multiplier(&bs_str).unwrap();
 }

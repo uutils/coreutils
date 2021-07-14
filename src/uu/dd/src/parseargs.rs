@@ -5,8 +5,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-/* cspell:disable */
-
 #[cfg(test)]
 mod unit_tests;
 
@@ -24,9 +22,8 @@ pub enum ParseError {
     MultipleExclNoCreat,
     FlagNoMatch(String),
     ConvFlagNoMatch(String),
-    NoMatchingMultiplier(String),
-    ByteStringContainsNoValue(String),
-    MultiplierStringWouldOverflow(String),
+    MultiplierStringParseFailure(String),
+    MultiplierStringOverflow(String),
     BlockUnblockWithoutCBS,
     StatusLevelNotRecognized(String),
     Unimplemented(String),
@@ -56,13 +53,10 @@ impl std::fmt::Display for ParseError {
             Self::ConvFlagNoMatch(arg) => {
                 write!(f, "Unrecognized conv=CONV -> {}", arg)
             }
-            Self::NoMatchingMultiplier(arg) => {
+            Self::MultiplierStringParseFailure(arg) => {
                 write!(f, "Unrecognized byte multiplier -> {}", arg)
             }
-            Self::ByteStringContainsNoValue(arg) => {
-                write!(f, "Unrecognized byte value -> {}", arg)
-            }
-            Self::MultiplierStringWouldOverflow(arg) => {
+            Self::MultiplierStringOverflow(arg) => {
                 write!(
                     f,
                     "Multiplier string would overflow on current system -> {}",
@@ -302,61 +296,40 @@ impl std::str::FromStr for StatusLevel {
     }
 }
 
-fn parse_multiplier(s: &'_ str) -> Result<usize, ParseError> {
-    let mult: u128 = match s {
-        "c" => 1,
-        "w" => 2,
-        "b" => 512,
-        "kB" => 1000,
-        "K" | "KiB" => 1024,
-        "MB" => 1000 * 1000,
-        "M" | "MiB" => 1024 * 1024,
-        "GB" => 1000 * 1000 * 1000,
-        "G" | "GiB" => 1024 * 1024 * 1024,
-        "TB" => 1000 * 1000 * 1000 * 1000,
-        "T" | "TiB" => 1024 * 1024 * 1024 * 1024,
-        "PB" => 1000 * 1000 * 1000 * 1000 * 1000,
-        "P" | "PiB" => 1024 * 1024 * 1024 * 1024 * 1024,
-        "EB" => 1000 * 1000 * 1000 * 1000 * 1000 * 1000,
-        "E" | "EiB" => 1024 * 1024 * 1024 * 1024 * 1024 * 1024,
-        "ZB" => 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000,
-        "Z" | "ZiB" => 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024,
-        "YB" => 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000,
-        "Y" | "YiB" => 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024,
-        _ => return Err(ParseError::NoMatchingMultiplier(s.to_string())),
-    };
-
-    mult.try_into()
-        .map_err(|_e| ParseError::MultiplierStringWouldOverflow(s.to_string()))
-}
-
+/// Parse bytes using str::parse, then map error if needed.
 fn parse_bytes_only(s: &str) -> Result<usize, ParseError> {
-    match s.parse() {
-        Ok(bytes) => Ok(bytes),
-        Err(_) => Err(ParseError::ByteStringContainsNoValue(s.to_string())),
-    }
+    s.parse()
+        .map_err(|_| ParseError::MultiplierStringParseFailure(s.to_string()))
 }
 
+/// Parse byte and multiplier like 512, 5KiB, or 1G.
+/// Uses uucore::parse_size, and adds the 'w' and 'c' suffixes which are mentioned
+/// in dd's info page.
 fn parse_bytes_with_opt_multiplier(s: &str) -> Result<usize, ParseError> {
-    match s.find(char::is_alphabetic) {
-        Some(idx) => {
-            let base = parse_bytes_only(&s[..idx])?;
-            let mult = parse_multiplier(&s[idx..])?;
+    if let Some(idx) = s.rfind('c') {
+        parse_bytes_only(&s[..idx])
+    } else if let Some(idx) = s.rfind('w') {
+        let partial = parse_bytes_only(&s[..idx])?;
 
-            if let Some(bytes) = base.checked_mul(mult) {
-                Ok(bytes)
-            } else {
-                Err(ParseError::MultiplierStringWouldOverflow(s.to_string()))
+        partial
+            .checked_mul(2)
+            .ok_or_else(|| ParseError::MultiplierStringOverflow(s.to_string()))
+    } else {
+        uucore::parse_size::parse_size(s).map_err(|e| match e {
+            uucore::parse_size::ParseSizeError::ParseFailure(s) => {
+                ParseError::MultiplierStringParseFailure(s)
             }
-        }
-        _ => parse_bytes_only(s),
+            uucore::parse_size::ParseSizeError::SizeTooBig(s) => {
+                ParseError::MultiplierStringOverflow(s)
+            }
+        })
     }
 }
 
 pub fn parse_ibs(matches: &Matches) -> Result<usize, ParseError> {
-    if let Some(mixed_str) = matches.value_of("bs") {
+    if let Some(mixed_str) = matches.value_of(options::BS) {
         parse_bytes_with_opt_multiplier(mixed_str)
-    } else if let Some(mixed_str) = matches.value_of("ibs") {
+    } else if let Some(mixed_str) = matches.value_of(options::IBS) {
         parse_bytes_with_opt_multiplier(mixed_str)
     } else {
         Ok(512)
@@ -364,7 +337,7 @@ pub fn parse_ibs(matches: &Matches) -> Result<usize, ParseError> {
 }
 
 fn parse_cbs(matches: &Matches) -> Result<Option<usize>, ParseError> {
-    if let Some(s) = matches.value_of("cbs") {
+    if let Some(s) = matches.value_of(options::CBS) {
         let bytes = parse_bytes_with_opt_multiplier(s)?;
         Ok(Some(bytes))
     } else {
@@ -373,7 +346,7 @@ fn parse_cbs(matches: &Matches) -> Result<Option<usize>, ParseError> {
 }
 
 pub fn parse_status_level(matches: &Matches) -> Result<Option<StatusLevel>, ParseError> {
-    match matches.value_of("status") {
+    match matches.value_of(options::STATUS) {
         Some(s) => {
             let st = s.parse()?;
             Ok(Some(st))
