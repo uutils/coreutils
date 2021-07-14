@@ -63,7 +63,7 @@ enum InstallError {
     MetadataFailed(std::io::Error),
     NoSuchUser(String),
     NoSuchGroup(String),
-    SilentError(),
+    OmittingDirectory(PathBuf),
 }
 
 impl UCustomError for InstallError {
@@ -119,7 +119,7 @@ impl Display for InstallError {
             IE::MetadataFailed(e) => write!(f, "{}", e.to_string()),
             IE::NoSuchUser(user) => write!(f, "no such user: {}", user),
             IE::NoSuchGroup(group) => write!(f, "no such group: {}", group),
-            IE::SilentError() => write!(f, ""),
+            IE::OmittingDirectory(dir) => write!(f, "omitting directory '{}'", dir.display()),
         }
     }
 }
@@ -416,44 +416,46 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
 /// GNU man pages describe this functionality as creating 'all components of
 /// the specified directories'.
 ///
-/// Returns an integer intended as a program return code.
+/// Returns a Result type with the Err variant containing the error message.
 ///
 fn directory(paths: Vec<String>, b: Behavior) -> UResult<()> {
     if paths.is_empty() {
         Err(InstallError::DirNeedsArg().into())
     } else {
-        let mut all_successful = true;
-
         for path in paths.iter().map(Path::new) {
             // if the path already exist, don't try to create it again
             if !path.exists() {
-                // Differently than the primary functionality (MainFunction::Standard), the directory
-                // functionality should create all ancestors (or components) of a directory regardless
-                // of the presence of the "-D" flag.
-                // NOTE: the GNU "install" sets the expected mode only for the target directory. All
-                // created ancestor directories will have the default mode. Hence it is safe to use
-                // fs::create_dir_all and then only modify the target's dir mode.
-                if let Err(e) = fs::create_dir_all(path) {
-                    show_error!("{}: {}", path.display(), e);
-                    all_successful = false;
+                // Differently than the primary functionality
+                // (MainFunction::Standard), the directory functionality should
+                // create all ancestors (or components) of a directory
+                // regardless of the presence of the "-D" flag.
+                //
+                // NOTE: the GNU "install" sets the expected mode only for the
+                // target directory. All created ancestor directories will have
+                // the default mode. Hence it is safe to use fs::create_dir_all
+                // and then only modify the target's dir mode.
+                if let Err(e) =
+                    fs::create_dir_all(path).map_err_context(|| format!("{}", path.display()))
+                {
+                    show!(e);
                     continue;
                 }
 
                 if b.verbose {
-                    show_error!("creating directory '{}'", path.display());
+                    println!("creating directory '{}'", path.display());
                 }
             }
 
             if mode::chmod(path, b.mode()).is_err() {
-                all_successful = false;
+                // Error messages are printed by the mode::chmod function!
+                uucore::error::set_exit_code(1);
                 continue;
             }
         }
-        if all_successful {
-            Ok(())
-        } else {
-            Err(InstallError::SilentError().into())
-        }
+        // If the exit code was set, or show! has been called at least once
+        // (which sets the exit code as well), function execution will end after
+        // this return.
+        Ok(())
     }
 }
 
@@ -467,7 +469,7 @@ fn is_new_file_path(path: &Path) -> bool {
 
 /// Perform an install, given a list of paths and behavior.
 ///
-/// Returns an integer intended as a program return code.
+/// Returns a Result type with the Err variant containing the error message.
 ///
 fn standard(mut paths: Vec<String>, b: Behavior) -> UResult<()> {
     let target: PathBuf = b
@@ -504,7 +506,7 @@ fn standard(mut paths: Vec<String>, b: Behavior) -> UResult<()> {
 /// Copy some files into a directory.
 ///
 /// Prints verbose information and error messages.
-/// Returns an integer intended as a program return code.
+/// Returns a Result type with the Err variant containing the error message.
 ///
 /// # Parameters
 ///
@@ -515,22 +517,19 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
     if !target_dir.is_dir() {
         return Err(InstallError::TargetDirIsntDir(target_dir.to_path_buf()).into());
     }
-
-    let mut all_successful = true;
     for sourcepath in files.iter() {
         if !sourcepath.exists() {
-            show_error!(
-                "cannot stat '{}': No such file or directory",
-                sourcepath.display()
+            let err = UIoError::new(
+                std::io::ErrorKind::NotFound,
+                format!("cannot stat '{}'", sourcepath.display()),
             );
-
-            all_successful = false;
+            show!(err);
             continue;
         }
 
         if sourcepath.is_dir() {
-            show_error!("omitting directory '{}'", sourcepath.display());
-            all_successful = false;
+            let err = InstallError::OmittingDirectory(sourcepath.to_path_buf());
+            show!(err);
             continue;
         }
 
@@ -538,21 +537,20 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
         let filename = sourcepath.components().last().unwrap();
         targetpath.push(filename);
 
-        if copy(sourcepath, &targetpath, b).is_err() {
-            all_successful = false;
+        if let Err(e) = copy(sourcepath, &targetpath, b) {
+            show!(e);
         }
     }
-    if all_successful {
-        Ok(())
-    } else {
-        Err(InstallError::SilentError().into())
-    }
+    // If the exit code was set, or show! has been called at least once
+    // (which sets the exit code as well), function execution will end after
+    // this return.
+    Ok(())
 }
 
 /// Copy a file to another file.
 ///
 /// Prints verbose information and error messages.
-/// Returns an integer intended as a program return code.
+/// Returns a Result type with the Err variant containing the error message.
 ///
 /// # Parameters
 ///
@@ -564,6 +562,8 @@ fn copy_file_to_file(file: &Path, target: &Path, b: &Behavior) -> UResult<()> {
 }
 
 /// Copy one file to a new location, changing metadata.
+///
+/// Returns a Result type with the Err variant containing the error message.
 ///
 /// # Parameters
 ///
@@ -707,6 +707,7 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
 }
 
 /// Return true if a file is necessary to copy. This is the case when:
+///
 /// - _from_ or _to_ is nonexistent;
 /// - either file has a sticky bit or set[ug]id bit, or the user specified one;
 /// - either file isn't a regular file;
