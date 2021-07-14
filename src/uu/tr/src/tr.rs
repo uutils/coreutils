@@ -12,15 +12,18 @@
 
 #[macro_use]
 extern crate uucore;
+extern crate nom;
 
 mod expand;
+mod operation;
 
 use bit_set::BitSet;
 use clap::{crate_version, App, Arg};
 use fnv::FnvHashMap;
+use operation::{translate_input_new, Sequence, TranslateOperationNew};
 use std::io::{stdin, stdout, BufRead, BufWriter, Write};
 
-use crate::expand::ExpandSet;
+use crate::{expand::ExpandSet, operation::DeleteOperationNew};
 use uucore::InvalidEncodingHandling;
 
 static ABOUT: &str = "translate or delete characters";
@@ -31,7 +34,7 @@ mod options {
     pub const COMPLEMENT: &str = "complement";
     pub const DELETE: &str = "delete";
     pub const SQUEEZE: &str = "squeeze-repeats";
-    pub const TRUNCATE: &str = "truncate";
+    pub const TRUNCATE_SET1: &str = "truncate-set1";
     pub const SETS: &str = "sets";
 }
 
@@ -42,15 +45,6 @@ trait SymbolTranslator {
 struct DeleteOperation {
     bset: BitSet,
     complement: bool,
-}
-
-impl DeleteOperation {
-    fn new(set: ExpandSet, complement: bool) -> DeleteOperation {
-        DeleteOperation {
-            bset: set.map(|c| c as usize).collect(),
-            complement,
-        }
-    }
 }
 
 impl SymbolTranslator for DeleteOperation {
@@ -254,7 +248,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let delete_flag = matches.is_present(options::DELETE);
     let complement_flag = matches.is_present(options::COMPLEMENT) || matches.is_present("C");
     let squeeze_flag = matches.is_present(options::SQUEEZE);
-    let truncate_flag = matches.is_present(options::TRUNCATE);
+    let truncate_set1_flag = matches.is_present(options::TRUNCATE_SET1);
 
     let sets = matches
         .values_of(options::SETS)
@@ -291,21 +285,26 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             let op = DeleteAndSqueezeOperation::new(set1, set2, complement_flag);
             translate_input(&mut locked_stdin, &mut buffered_stdout, op);
         } else {
-            let op = DeleteOperation::new(set1, complement_flag);
-            translate_input(&mut locked_stdin, &mut buffered_stdout, op);
+            let op = DeleteOperationNew::new(Sequence::parse_set_string(&sets[0]), complement_flag);
+            translate_input_new(&mut locked_stdin, &mut buffered_stdout, op);
         }
     } else if squeeze_flag {
         if sets.len() < 2 {
             let op = SqueezeOperation::new(set1, complement_flag);
             translate_input(&mut locked_stdin, &mut buffered_stdout, op);
         } else {
-            let op = TranslateAndSqueezeOperation::new(sets, truncate_flag, complement_flag);
+            let op = TranslateAndSqueezeOperation::new(sets, truncate_set1_flag, complement_flag);
             translate_input(&mut locked_stdin, &mut buffered_stdout, op);
         }
     } else {
-        let mut set2 = ExpandSet::new(sets[1].as_ref());
-        let op = TranslateOperation::new(set1, &mut set2, truncate_flag, complement_flag);
-        translate_input(&mut locked_stdin, &mut buffered_stdout, op);
+        let op = TranslateOperationNew::new(
+            Sequence::parse_set_string(&sets[0]),
+            Sequence::parse_set_string(&sets[1]),
+            truncate_set1_flag,
+            complement_flag,
+        );
+        println!("op:{:#?}", op);
+        translate_input_new(&mut locked_stdin, &mut buffered_stdout, op);
     }
 
     0
@@ -344,8 +343,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 ),
         )
         .arg(
-            Arg::with_name(options::TRUNCATE)
-                .long(options::TRUNCATE)
+            Arg::with_name(options::TRUNCATE_SET1)
+                .long(options::TRUNCATE_SET1)
                 .short("t")
                 .help("first truncate SET1 to length of SET2"),
         )

@@ -292,3 +292,58 @@ fn test_more_than_2_sets() {
         .pipe_in("hello world")
         .fails();
 }
+
+#[test]
+fn test_basic_translation() {
+    new_ucmd!()
+        .args(&["dabcdef", "xyz"])
+        .pipe_in("abcdefabcdef")
+        .succeeds()
+        .stdout_is("yzzzzzyzzzzz");
+}
+
+#[test]
+fn test_basic_translation_with_alnum_1() {
+    new_ucmd!()
+        .args(&["dabcdef[:alnum:]", "xyz"])
+        .pipe_in("abcdefabcdef")
+        .succeeds()
+        .stdout_is("zzzzzzzzzzzz");
+}
+
+#[test]
+fn test_basic_translation_with_alnum_2() {
+    new_ucmd!()
+        .args(&["[:alnum:]abc", "xyz"])
+        .pipe_in("abcdefabcdef")
+        .succeeds()
+        .stdout_is("zzzzzzzzzzzz");
+}
+
+#[test]
+fn test_translation_override_pair() {
+    new_ucmd!()
+        .args(&["aaa", "xyz"])
+        .pipe_in("aaa")
+        .succeeds()
+        .stdout_is("zzz");
+}
+
+#[test]
+fn test_translation_case_conversion_works() {
+    new_ucmd!()
+        .args(&["abcdefghijklmnopqrstuvwxyz", "ABCDEFGHIJKLMNOPQRSTUVWXYZ"])
+        .pipe_in("abcdefghijklmnopqrstuvwxyz")
+        .succeeds()
+        .stdout_is("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+    new_ucmd!()
+        .args(&["a-z", "A-Z"])
+        .pipe_in("abcdefghijklmnopqrstuvwxyz")
+        .succeeds()
+        .stdout_is("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+    new_ucmd!()
+        .args(&["[:lower:]", "[:upper:]"])
+        .pipe_in("abcdefghijklmnopqrstuvwxyz")
+        .succeeds()
+        .stdout_is("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+}
