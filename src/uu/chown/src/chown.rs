@@ -7,12 +7,17 @@
 
 // spell-checker:ignore (ToDO) COMFOLLOW Chowner Passwd RFILE RFILE's derefer dgid duid
 
+// Clippy bug: https://github.com/rust-lang/rust-clippy/issues/7422
+#![allow(clippy::nonstandard_macro_braces)]
+
 #[macro_use]
 extern crate uucore;
 pub use uucore::entries::{self, Group, Locate, Passwd};
 use uucore::fs::resolve_relative_path;
 use uucore::libc::{gid_t, uid_t};
 use uucore::perms::{wrap_chown, Verbosity};
+
+use uucore::error::{UError, UResult, USimpleError};
 
 use clap::{crate_version, App, Arg};
 
@@ -66,7 +71,8 @@ fn get_usage() -> String {
     )
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
@@ -87,9 +93,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let preserve_root = matches.is_present(options::preserve_root::PRESERVE);
 
     let mut derefer = if matches.is_present(options::dereference::NO_DEREFERENCE) {
-        1
+        Err(UError::from(1))
     } else {
-        0
+        Ok(())
     };
 
     let mut bit_flag = if matches.is_present(options::traverse::TRAVERSE) {
@@ -103,11 +109,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let recursive = matches.is_present(options::RECURSIVE);
     if recursive {
         if bit_flag == FTS_PHYSICAL {
-            if derefer == 1 {
-                show_error!("-R --dereference requires -H or -L");
-                return 1;
+            if derefer.is_err() {
+                return Err(USimpleError::new(
+                    1,
+                    "-R --dereference requires -H or -L".to_string(),
+                ));
             }
-            derefer = 0;
+            derefer = Ok(());
         }
     } else {
         bit_flag = FTS_PHYSICAL;
@@ -131,10 +139,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Ok((None, Some(gid))) => IfFrom::Group(gid),
             Ok((Some(uid), Some(gid))) => IfFrom::UserGroup(uid, gid),
             Ok((None, None)) => IfFrom::All,
-            Err(e) => {
-                show_error!("{}", e);
-                return 1;
-            }
+            Err(e) => return Err(USimpleError::new(1, e)),
         }
     } else {
         IfFrom::All
@@ -149,8 +154,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 dest_uid = Some(meta.uid());
             }
             Err(e) => {
-                show_error!("failed to get attributes of '{}': {}", file, e);
-                return 1;
+                return Err(USimpleError::new(
+                    1,
+                    format!("failed to get attributes of '{}': {}", file, e),
+                ));
             }
         }
     } else {
@@ -160,8 +167,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 dest_gid = g;
             }
             Err(e) => {
-                show_error!("{}", e);
-                return 1;
+                return Err(USimpleError::new(1, e));
             }
         }
     }
@@ -171,7 +177,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         dest_gid,
         verbosity,
         recursive,
-        dereference: derefer != 0,
+        dereference: derefer.is_ok(),
         filter,
         preserve_root,
         files,
@@ -330,12 +336,15 @@ macro_rules! unwrap {
 }
 
 impl Chowner {
-    fn exec(&self) -> i32 {
+    fn exec(&self) -> UResult<()> {
         let mut ret = 0;
         for f in &self.files {
             ret |= self.traverse(f);
         }
-        ret
+        if ret != 0 {
+            return Err(UError::from(ret));
+        }
+        Ok(())
     }
 
     fn traverse<P: AsRef<Path>>(&self, root: P) -> i32 {
