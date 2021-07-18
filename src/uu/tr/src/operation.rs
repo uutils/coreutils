@@ -422,7 +422,7 @@ impl SqueezeOperationNew {
 impl SymbolTranslatorNew for SqueezeOperationNew {
     fn translate(&mut self, current: char) -> Option<char> {
         if self.complement {
-            if self.squeeze_set.iter().any(|c| c.eq(&current)) {
+            let next = if self.squeeze_set.iter().any(|c| c.eq(&current)) {
                 Some(current)
             } else {
                 match self.previous {
@@ -439,33 +439,35 @@ impl SymbolTranslatorNew for SqueezeOperationNew {
                         Some(current)
                     }
                 }
-            }
+            };
+            self.previous = Some(current);
+            next
         } else {
-            if self.squeeze_set.iter().any(|c| c.eq(&current)) {
+            let next = if self.squeeze_set.iter().any(|c| c.eq(&current)) {
                 match self.previous {
                     Some(v) => {
                         if v.eq(&current) {
                             None
                         } else {
-                            self.previous = Some(current);
                             Some(current)
                         }
                     }
-                    None => {
-                        self.previous = Some(current);
-                        Some(current)
-                    }
+                    None => Some(current),
                 }
             } else {
                 Some(current)
-            }
+            };
+            self.previous = Some(current);
+            next
         }
     }
 }
 
-pub fn translate_input_new<T>(input: &mut dyn BufRead, output: &mut dyn Write, mut translator: T)
+pub fn translate_input_new<T, R, W>(input: &mut R, output: &mut W, mut translator: T)
 where
     T: SymbolTranslatorNew,
+    R: BufRead,
+    W: Write,
 {
     let mut buf = String::new();
     let mut output_buf = String::new();
