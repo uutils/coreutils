@@ -303,7 +303,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             truncate_set1_flag,
             complement_flag,
         );
-        println!("op:{:#?}", op);
         translate_input_new(&mut locked_stdin, &mut buffered_stdout, op);
     }
 
