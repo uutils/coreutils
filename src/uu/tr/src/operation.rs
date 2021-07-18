@@ -1,7 +1,7 @@
 use nom::{
     branch::alt,
     bytes::complete::{tag, take, take_until},
-    character::complete::one_of,
+    character::complete::{none_of, one_of},
     multi::many0,
     sequence::{separated_pair, tuple},
     IResult,
@@ -21,7 +21,10 @@ impl Sequence {
     pub fn parse_set_string(input: &str) -> Vec<Sequence> {
         many0(alt((
             alt((
-                Sequence::parse_octal,
+                Sequence::parse_3_octal,
+                Sequence::parse_2_octal,
+                Sequence::parse_1_octal,
+                Sequence::parse_unrecognized_backslash,
                 Sequence::parse_backslash,
                 Sequence::parse_audible_bel,
                 Sequence::parse_backspace,
@@ -71,7 +74,44 @@ impl Sequence {
         take(1usize)(input).map(|(l, r)| (l, Sequence::Char(r.chars().next().unwrap())))
     }
 
-    fn parse_octal(input: &str) -> IResult<&str, Sequence> {
+    fn parse_unrecognized_backslash(input: &str) -> IResult<&str, Sequence> {
+        tuple((tag("\\"), none_of("01234567")))(input).map(|(l, (_, a))| {
+            let c = match a {
+                'a' => Sequence::Char('\u{0007}'),
+                'b' => Sequence::Char('\u{0008}'),
+                'f' => Sequence::Char('\u{000C}'),
+                'n' => Sequence::Char('\u{000A}'),
+                'r' => Sequence::Char('\u{000D}'),
+                't' => Sequence::Char('\u{0009}'),
+                'v' => Sequence::Char('\u{000B}'),
+                _ => Sequence::Char(a),
+            };
+            (l, c)
+        })
+    }
+
+    fn parse_1_octal(input: &str) -> IResult<&str, Sequence> {
+        tuple((tag("\\"), one_of("01234567")))(input).map(|(l, (_, a))| {
+            (
+                l,
+                Sequence::Char(std::char::from_u32(a.to_digit(8).unwrap()).unwrap()),
+            )
+        })
+    }
+
+    fn parse_2_octal(input: &str) -> IResult<&str, Sequence> {
+        tuple((tag("\\"), one_of("01234567"), one_of("01234567")))(input).map(|(l, (_, a, b))| {
+            (
+                l,
+                Sequence::Char(
+                    std::char::from_u32(a.to_digit(8).unwrap() * 8 + b.to_digit(8).unwrap())
+                        .unwrap(),
+                ),
+            )
+        })
+    }
+
+    fn parse_3_octal(input: &str) -> IResult<&str, Sequence> {
         tuple((
             tag("\\"),
             one_of("01234567"),
@@ -133,17 +173,13 @@ impl Sequence {
                     u32::from(a.chars().next().unwrap()),
                     u32::from(b.chars().next().unwrap()),
                 );
-                if (start >= 97 && start <= 122 && end >= 97 && end <= 122 && end > start)
-                    || (start >= 65 && start <= 90 && end >= 65 && end <= 90 && end > start)
-                    || (start >= 48 && start <= 57 && end >= 48 && end <= 57 && end > start)
-                {
+                if start >= 48 && start <= 90 && end >= 48 && end <= 90 && end > start {
                     Sequence::CharRange(
                         (start..=end)
                             .map(|c| std::char::from_u32(c).unwrap())
                             .collect(),
                     )
                 } else {
-                    // This part is unchecked...not all `u32` => `char` is valid
                     Sequence::CharRange(
                         (start..=end)
                             .filter_map(|c| std::char::from_u32(c))
@@ -208,7 +244,7 @@ impl Sequence {
     }
 
     fn parse_lower(input: &str) -> IResult<&str, Sequence> {
-        tag("[:lower:]")(input).map(|(_, _)| todo!())
+        tag("[:lower:]")(input).map(|(l, _)| (l, Sequence::CharRange(('a'..='z').collect())))
     }
 
     fn parse_print(input: &str) -> IResult<&str, Sequence> {
@@ -282,37 +318,36 @@ impl TranslateOperationNew {
 
 impl TranslateOperationNew {
     pub fn new(
-        set1: Vec<Sequence>,
-        mut set2: Vec<Sequence>,
-        truncate_set2: bool,
+        pset1: Vec<Sequence>,
+        pset2: Vec<Sequence>,
+        truncate_set1: bool,
         complement: bool,
     ) -> TranslateOperationNew {
-        let fallback = set2.last().cloned().unwrap();
-        println!("fallback:{:#?}", fallback);
-        if truncate_set2 {
-            set2.truncate(set1.len());
+        let mut set1 = pset1
+            .into_iter()
+            .flat_map(Sequence::dissolve)
+            .collect::<Vec<_>>();
+        let set2 = pset2
+            .into_iter()
+            .flat_map(Sequence::dissolve)
+            .collect::<Vec<_>>();
+        if truncate_set1 {
+            set1.truncate(set2.len());
         }
+        let fallback = set2.last().cloned().unwrap();
         if complement {
             TranslateOperationNew::Complement(
                 0,
-                set1.into_iter().flat_map(Sequence::dissolve).collect(),
-                set2.into_iter()
-                    .flat_map(Sequence::dissolve)
-                    .rev()
-                    .collect(),
+                set1,
+                set2,
                 // TODO: Check how `tr` actually handles this
-                fallback.dissolve().first().cloned().unwrap(),
+                fallback,
                 HashMap::new(),
             )
         } else {
             TranslateOperationNew::Standard(
                 set1.into_iter()
-                    .flat_map(Sequence::dissolve)
-                    .zip(
-                        set2.into_iter()
-                            .chain(std::iter::repeat(fallback))
-                            .flat_map(Sequence::dissolve),
-                    )
+                    .zip(set2.into_iter().chain(std::iter::repeat(fallback)))
                     .collect::<HashMap<_, _>>(),
             )
         }
