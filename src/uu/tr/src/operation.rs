@@ -304,7 +304,18 @@ impl SymbolTranslatorNew for DeleteOperationNew {
 #[derive(Debug, Clone)]
 pub enum TranslateOperationNew {
     Standard(HashMap<char, char>),
-    Complement(u32, Vec<char>, Vec<char>, char, HashMap<char, char>),
+    Complement(
+        // iter
+        u32,
+        // set 1
+        Vec<char>,
+        // set 2
+        Vec<char>,
+        // fallback
+        char,
+        // translation map
+        HashMap<char, char>,
+    ),
 }
 
 impl TranslateOperationNew {
@@ -383,6 +394,70 @@ impl SymbolTranslatorNew for TranslateOperationNew {
                     }
                     Some(*mapped_characters.get(&current).unwrap())
                 }
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SqueezeOperationNew {
+    squeeze_set: Vec<char>,
+    complement: bool,
+    previous: Option<char>,
+}
+
+impl SqueezeOperationNew {
+    pub fn new(squeeze_set: Vec<Sequence>, complement: bool) -> SqueezeOperationNew {
+        SqueezeOperationNew {
+            squeeze_set: squeeze_set
+                .into_iter()
+                .flat_map(Sequence::dissolve)
+                .collect(),
+            complement,
+            previous: None,
+        }
+    }
+}
+
+impl SymbolTranslatorNew for SqueezeOperationNew {
+    fn translate(&mut self, current: char) -> Option<char> {
+        if self.complement {
+            if self.squeeze_set.iter().any(|c| c.eq(&current)) {
+                Some(current)
+            } else {
+                match self.previous {
+                    Some(v) => {
+                        if v.eq(&current) {
+                            None
+                        } else {
+                            self.previous = Some(current);
+                            Some(current)
+                        }
+                    }
+                    None => {
+                        self.previous = Some(current);
+                        Some(current)
+                    }
+                }
+            }
+        } else {
+            if self.squeeze_set.iter().any(|c| c.eq(&current)) {
+                match self.previous {
+                    Some(v) => {
+                        if v.eq(&current) {
+                            None
+                        } else {
+                            self.previous = Some(current);
+                            Some(current)
+                        }
+                    }
+                    None => {
+                        self.previous = Some(current);
+                        Some(current)
+                    }
+                }
+            } else {
+                Some(current)
             }
         }
     }

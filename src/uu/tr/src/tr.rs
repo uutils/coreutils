@@ -20,7 +20,7 @@ mod operation;
 use bit_set::BitSet;
 use clap::{crate_version, App, Arg};
 use fnv::FnvHashMap;
-use operation::{translate_input_new, Sequence, TranslateOperationNew};
+use operation::{translate_input_new, Sequence, SqueezeOperationNew, TranslateOperationNew};
 use std::io::{stdin, stdout, BufRead, BufWriter, Write};
 
 use crate::{expand::ExpandSet, operation::DeleteOperationNew};
@@ -278,11 +278,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let locked_stdout = stdout.lock();
     let mut buffered_stdout = BufWriter::new(locked_stdout);
 
-    let set1 = ExpandSet::new(sets[0].as_ref());
     if delete_flag {
         if squeeze_flag {
-            let set2 = ExpandSet::new(sets[1].as_ref());
-            let op = DeleteAndSqueezeOperation::new(set1, set2, complement_flag);
+            let op = DeleteAndSqueezeOperation::new(
+                ExpandSet::new(sets[0].as_ref()),
+                ExpandSet::new(sets[1].as_ref()),
+                complement_flag,
+            );
             translate_input(&mut locked_stdin, &mut buffered_stdout, op);
         } else {
             let op = DeleteOperationNew::new(Sequence::parse_set_string(&sets[0]), complement_flag);
@@ -290,8 +292,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     } else if squeeze_flag {
         if sets.len() < 2 {
-            let op = SqueezeOperation::new(set1, complement_flag);
-            translate_input(&mut locked_stdin, &mut buffered_stdout, op);
+            let op =
+                SqueezeOperationNew::new(Sequence::parse_set_string(&sets[0]), complement_flag);
+            translate_input_new(&mut locked_stdin, &mut buffered_stdout, op);
         } else {
             let op = TranslateAndSqueezeOperation::new(sets, truncate_set1_flag, complement_flag);
             translate_input(&mut locked_stdin, &mut buffered_stdout, op);
