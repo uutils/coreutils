@@ -15,8 +15,6 @@ edition = "2018"
 path = "src/tr.rs"
 
 [dependencies]
-bit-set = "0.5.0"
-fnv = "1.0.5"
 clap = { version = "2.33", features = ["wrap_help"] }
 uucore = { version=">=0.0.9", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.6", package="uucore_procs", path="../../uucore_procs" }
