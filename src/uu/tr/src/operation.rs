@@ -173,18 +173,14 @@ impl Sequence {
                     u32::from(a.chars().next().unwrap()),
                     u32::from(b.chars().next().unwrap()),
                 );
-                if start >= 48 && start <= 90 && end >= 48 && end <= 90 && end > start {
+                if (48..=90).contains(&start) && (48..=90).contains(&end) && end > start {
                     Sequence::CharRange(
                         (start..=end)
                             .map(|c| std::char::from_u32(c).unwrap())
                             .collect(),
                     )
                 } else {
-                    Sequence::CharRange(
-                        (start..=end)
-                            .filter_map(|c| std::char::from_u32(c))
-                            .collect(),
-                    )
+                    Sequence::CharRange((start..=end).filter_map(std::char::from_u32).collect())
                 }
             })
         })
@@ -320,7 +316,7 @@ pub enum TranslateOperationNew {
 
 impl TranslateOperationNew {
     fn next_complement_char(mut iter: u32) -> (u32, char) {
-        while let None = char::from_u32(iter) {
+        while char::from_u32(iter).is_none() {
             iter = iter.saturating_add(1)
         }
         (iter, char::from_u32(iter).unwrap())
@@ -382,7 +378,7 @@ impl SymbolTranslatorNew for TranslateOperationNew {
                 if let Some(c) = set1.iter().find(|c| c.eq(&&current)) {
                     Some(*c)
                 } else {
-                    while let None = mapped_characters.get(&current) {
+                    while mapped_characters.get(&current).is_none() {
                         if let Some(p) = set2.pop() {
                             let (next_index, next_value) =
                                 TranslateOperationNew::next_complement_char(*iter);
