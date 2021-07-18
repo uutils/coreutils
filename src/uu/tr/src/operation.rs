@@ -146,7 +146,7 @@ impl Sequence {
                     // This part is unchecked...not all `u32` => `char` is valid
                     Sequence::CharRange(
                         (start..=end)
-                            .map(|c| std::char::from_u32(c).unwrap())
+                            .filter_map(|c| std::char::from_u32(c))
                             .collect(),
                     )
                 }
@@ -268,7 +268,16 @@ impl SymbolTranslatorNew for DeleteOperationNew {
 #[derive(Debug, Clone)]
 pub enum TranslateOperationNew {
     Standard(HashMap<char, char>),
-    Complement(Vec<char>, Vec<char>, HashMap<char, char>, char),
+    Complement(u32, Vec<char>, Vec<char>, char, HashMap<char, char>),
+}
+
+impl TranslateOperationNew {
+    fn next_complement_char(mut iter: u32) -> (u32, char) {
+        while let None = char::from_u32(iter) {
+            iter = iter.saturating_add(1)
+        }
+        (iter, char::from_u32(iter).unwrap())
+    }
 }
 
 impl TranslateOperationNew {
@@ -279,22 +288,21 @@ impl TranslateOperationNew {
         complement: bool,
     ) -> TranslateOperationNew {
         let fallback = set2.last().cloned().unwrap();
+        println!("fallback:{:#?}", fallback);
         if truncate_set2 {
             set2.truncate(set1.len());
         }
         if complement {
             TranslateOperationNew::Complement(
-                set1.into_iter()
-                    .flat_map(Sequence::dissolve)
-                    .rev()
-                    .collect(),
+                0,
+                set1.into_iter().flat_map(Sequence::dissolve).collect(),
                 set2.into_iter()
                     .flat_map(Sequence::dissolve)
                     .rev()
                     .collect(),
-                HashMap::new(),
                 // TODO: Check how `tr` actually handles this
                 fallback.dissolve().first().cloned().unwrap(),
+                HashMap::new(),
             )
         } else {
             TranslateOperationNew::Standard(
@@ -319,22 +327,26 @@ impl SymbolTranslatorNew for TranslateOperationNew {
                     .find_map(|(l, r)| l.eq(&current).then(|| *r))
                     .unwrap_or(current),
             ),
-            TranslateOperationNew::Complement(set1, set2, mapped_characters, fallback) => {
-                // First, see if we have already mapped this character.
-                // If so, return it.
-                // Else, check if current character is part of set1
-                // If so, return it.
-                // Else, consume from set2, create the translation pair, and return the mapped character
-                match mapped_characters.get(&current) {
-                    Some(k) => Some(*k),
-                    None => match set1.iter().any(|c| c.eq(&&current)) {
-                        true => Some(current),
-                        false => {
-                            let popped = set2.pop().unwrap_or(*fallback);
-                            mapped_characters.insert(current, popped);
-                            Some(popped)
+            TranslateOperationNew::Complement(iter, set1, set2, fallback, mapped_characters) => {
+                // First, try to see if current char is already mapped
+                // If so, return the mapped char
+                // Else, pop from set2
+                // If we popped something, map the next complement character to this value
+                // If set2 is empty, we just map the current char directly to fallback --- to avoid looping unnecessarily
+                if let Some(c) = set1.iter().find(|c| c.eq(&&current)) {
+                    Some(*c)
+                } else {
+                    while let None = mapped_characters.get(&current) {
+                        if let Some(p) = set2.pop() {
+                            let (next_index, next_value) =
+                                TranslateOperationNew::next_complement_char(*iter);
+                            *iter = next_index;
+                            mapped_characters.insert(next_value, p);
+                        } else {
+                            mapped_characters.insert(current, *fallback);
                         }
-                    },
+                    }
+                    Some(*mapped_characters.get(&current).unwrap())
                 }
             }
         }
