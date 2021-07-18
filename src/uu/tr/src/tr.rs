@@ -14,21 +14,17 @@
 extern crate uucore;
 extern crate nom;
 
-mod expand;
 mod operation;
 
-use bit_set::BitSet;
 use clap::{crate_version, App, Arg};
-use fnv::FnvHashMap;
+use nom::AsBytes;
 use operation::{translate_input_new, Sequence, SqueezeOperationNew, TranslateOperationNew};
-use std::io::{stdin, stdout, BufRead, BufWriter, Write};
+use std::io::{stdin, stdout, BufReader, BufWriter};
 
-use crate::{expand::ExpandSet, operation::DeleteOperationNew};
+use crate::operation::DeleteOperationNew;
 use uucore::InvalidEncodingHandling;
 
 static ABOUT: &str = "translate or delete characters";
-
-const BUFFER_LEN: usize = 1024;
 
 mod options {
     pub const COMPLEMENT: &str = "complement";
@@ -36,190 +32,6 @@ mod options {
     pub const SQUEEZE: &str = "squeeze-repeats";
     pub const TRUNCATE_SET1: &str = "truncate-set1";
     pub const SETS: &str = "sets";
-}
-
-trait SymbolTranslator {
-    fn translate(&self, c: char, prev_c: char) -> Option<char>;
-}
-
-struct DeleteOperation {
-    bset: BitSet,
-    complement: bool,
-}
-
-impl SymbolTranslator for DeleteOperation {
-    fn translate(&self, c: char, _prev_c: char) -> Option<char> {
-        let uc = c as usize;
-        if self.complement == self.bset.contains(uc) {
-            Some(c)
-        } else {
-            None
-        }
-    }
-}
-
-struct SqueezeOperation {
-    squeeze_set: BitSet,
-    complement: bool,
-}
-
-impl SqueezeOperation {
-    fn new(squeeze_set: ExpandSet, complement: bool) -> SqueezeOperation {
-        SqueezeOperation {
-            squeeze_set: squeeze_set.map(|c| c as usize).collect(),
-            complement,
-        }
-    }
-}
-
-impl SymbolTranslator for SqueezeOperation {
-    fn translate(&self, c: char, prev_c: char) -> Option<char> {
-        if prev_c == c && self.complement != self.squeeze_set.contains(c as usize) {
-            None
-        } else {
-            Some(c)
-        }
-    }
-}
-
-struct DeleteAndSqueezeOperation {
-    delete_set: BitSet,
-    squeeze_set: BitSet,
-    complement: bool,
-}
-
-impl DeleteAndSqueezeOperation {
-    fn new(
-        delete_set: ExpandSet,
-        squeeze_set: ExpandSet,
-        complement: bool,
-    ) -> DeleteAndSqueezeOperation {
-        DeleteAndSqueezeOperation {
-            delete_set: delete_set.map(|c| c as usize).collect(),
-            squeeze_set: squeeze_set.map(|c| c as usize).collect(),
-            complement,
-        }
-    }
-}
-
-impl SymbolTranslator for DeleteAndSqueezeOperation {
-    fn translate(&self, c: char, prev_c: char) -> Option<char> {
-        if self.complement != self.delete_set.contains(c as usize)
-            || prev_c == c && self.squeeze_set.contains(c as usize)
-        {
-            None
-        } else {
-            Some(c)
-        }
-    }
-}
-
-struct TranslateOperation {
-    translate_map: FnvHashMap<usize, char>,
-    complement: bool,
-    s2_last: char,
-}
-
-impl TranslateOperation {
-    fn new(
-        set1: ExpandSet,
-        set2: &mut ExpandSet,
-        truncate: bool,
-        complement: bool,
-    ) -> TranslateOperation {
-        let mut map = FnvHashMap::default();
-        let mut s2_prev = '_';
-        for i in set1 {
-            let s2_next = set2.next();
-
-            if s2_next.is_none() && truncate {
-                map.insert(i as usize, i);
-            } else {
-                s2_prev = s2_next.unwrap_or(s2_prev);
-                map.insert(i as usize, s2_prev);
-            }
-        }
-        TranslateOperation {
-            translate_map: map,
-            complement,
-            s2_last: set2.last().unwrap_or(s2_prev),
-        }
-    }
-}
-
-impl SymbolTranslator for TranslateOperation {
-    fn translate(&self, c: char, _prev_c: char) -> Option<char> {
-        if self.complement {
-            Some(if self.translate_map.contains_key(&(c as usize)) {
-                c
-            } else {
-                self.s2_last
-            })
-        } else {
-            Some(*self.translate_map.get(&(c as usize)).unwrap_or(&c))
-        }
-    }
-}
-
-struct TranslateAndSqueezeOperation {
-    translate: TranslateOperation,
-    squeeze: SqueezeOperation,
-}
-
-impl TranslateAndSqueezeOperation {
-    fn new(sets: Vec<String>, truncate: bool, complement: bool) -> TranslateAndSqueezeOperation {
-        let set1 = ExpandSet::new(sets[0].as_ref());
-        let set1_ = ExpandSet::new(sets[0].as_ref());
-        let mut set2 = ExpandSet::new(sets[1].as_ref());
-        let set2_ = ExpandSet::new(sets[1].as_ref());
-        TranslateAndSqueezeOperation {
-            translate: TranslateOperation::new(set1, &mut set2, truncate, complement),
-            squeeze: SqueezeOperation::new(if complement { set1_ } else { set2_ }, complement),
-        }
-    }
-}
-
-impl SymbolTranslator for TranslateAndSqueezeOperation {
-    fn translate(&self, c: char, prev_c: char) -> Option<char> {
-        // `unwrap()` will never panic because `Translate.translate()`
-        // always returns `Some`.
-        self.squeeze
-            .translate(self.translate.translate(c, 0 as char).unwrap(), prev_c)
-    }
-}
-
-fn translate_input<T: SymbolTranslator>(
-    input: &mut dyn BufRead,
-    output: &mut dyn Write,
-    translator: T,
-) {
-    let mut buf = String::with_capacity(BUFFER_LEN + 4);
-    let mut output_buf = String::with_capacity(BUFFER_LEN + 4);
-
-    while let Ok(length) = input.read_line(&mut buf) {
-        let mut prev_c = 0 as char;
-        if length == 0 {
-            break;
-        }
-        {
-            // isolation to make borrow checker happy
-            let filtered = buf.chars().filter_map(|c| {
-                let res = translator.translate(c, prev_c);
-                // Set `prev_c` to the post-translate character. This
-                // allows the squeeze operation to correctly function
-                // after the translate operation.
-                if let Some(rc) = res {
-                    prev_c = rc;
-                }
-                res
-            });
-
-            output_buf.extend(filtered);
-            output.write_all(output_buf.as_bytes()).unwrap();
-        }
-        buf.clear();
-        output_buf.clear();
-    }
 }
 
 fn get_usage() -> String {
@@ -280,12 +92,19 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     if delete_flag {
         if squeeze_flag {
-            let op = DeleteAndSqueezeOperation::new(
-                ExpandSet::new(sets[0].as_ref()),
-                ExpandSet::new(sets[1].as_ref()),
-                complement_flag,
-            );
-            translate_input(&mut locked_stdin, &mut buffered_stdout, op);
+            let mut delete_buffer = vec![];
+            {
+                let mut delete_writer = BufWriter::new(&mut delete_buffer);
+                let delete_op =
+                    DeleteOperationNew::new(Sequence::parse_set_string(&sets[0]), complement_flag);
+                translate_input_new(&mut locked_stdin, &mut delete_writer, delete_op);
+            }
+            {
+                let mut squeeze_reader = BufReader::new(delete_buffer.as_bytes());
+                let squeeze_op =
+                    SqueezeOperationNew::new(Sequence::parse_set_string(&sets[1]), complement_flag);
+                translate_input_new(&mut squeeze_reader, &mut buffered_stdout, squeeze_op);
+            }
         } else {
             let op = DeleteOperationNew::new(Sequence::parse_set_string(&sets[0]), complement_flag);
             translate_input_new(&mut locked_stdin, &mut buffered_stdout, op);
@@ -294,10 +113,26 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         if sets.len() < 2 {
             let op =
                 SqueezeOperationNew::new(Sequence::parse_set_string(&sets[0]), complement_flag);
+
             translate_input_new(&mut locked_stdin, &mut buffered_stdout, op);
         } else {
-            let op = TranslateAndSqueezeOperation::new(sets, truncate_set1_flag, complement_flag);
-            translate_input(&mut locked_stdin, &mut buffered_stdout, op);
+            let mut translate_buffer = vec![];
+            {
+                let mut writer = BufWriter::new(&mut translate_buffer);
+                let translate_op = TranslateOperationNew::new(
+                    Sequence::parse_set_string(&sets[0]),
+                    Sequence::parse_set_string(&sets[1]),
+                    truncate_set1_flag,
+                    complement_flag,
+                );
+                translate_input_new(&mut locked_stdin, &mut writer, translate_op);
+            }
+            {
+                let mut reader = BufReader::new(translate_buffer.as_bytes());
+                let squeeze_op =
+                    SqueezeOperationNew::new(Sequence::parse_set_string(&sets[1]), false);
+                translate_input_new(&mut reader, &mut buffered_stdout, squeeze_op);
+            }
         }
     } else {
         let op = TranslateOperationNew::new(
