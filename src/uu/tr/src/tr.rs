@@ -18,10 +18,10 @@ mod operation;
 
 use clap::{crate_version, App, Arg};
 use nom::AsBytes;
-use operation::{translate_input_new, Sequence, SqueezeOperationNew, TranslateOperationNew};
+use operation::{translate_input_new, Sequence, SqueezeOperation, TranslateOperation};
 use std::io::{stdin, stdout, BufReader, BufWriter};
 
-use crate::operation::DeleteOperationNew;
+use crate::operation::DeleteOperation;
 use uucore::InvalidEncodingHandling;
 
 static ABOUT: &str = "translate or delete characters";
@@ -96,30 +96,30 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             {
                 let mut delete_writer = BufWriter::new(&mut delete_buffer);
                 let delete_op =
-                    DeleteOperationNew::new(Sequence::parse_set_string(&sets[0]), complement_flag);
+                    DeleteOperation::new(Sequence::parse_set_string(&sets[0]), complement_flag);
                 translate_input_new(&mut locked_stdin, &mut delete_writer, delete_op);
             }
             {
                 let mut squeeze_reader = BufReader::new(delete_buffer.as_bytes());
                 let squeeze_op =
-                    SqueezeOperationNew::new(Sequence::parse_set_string(&sets[1]), complement_flag);
+                    SqueezeOperation::new(Sequence::parse_set_string(&sets[1]), complement_flag);
                 translate_input_new(&mut squeeze_reader, &mut buffered_stdout, squeeze_op);
             }
         } else {
-            let op = DeleteOperationNew::new(Sequence::parse_set_string(&sets[0]), complement_flag);
+            let op = DeleteOperation::new(Sequence::parse_set_string(&sets[0]), complement_flag);
             translate_input_new(&mut locked_stdin, &mut buffered_stdout, op);
         }
     } else if squeeze_flag {
         if sets.len() < 2 {
             let op =
-                SqueezeOperationNew::new(Sequence::parse_set_string(&sets[0]), complement_flag);
+                SqueezeOperation::new(Sequence::parse_set_string(&sets[0]), complement_flag);
 
             translate_input_new(&mut locked_stdin, &mut buffered_stdout, op);
         } else {
             let mut translate_buffer = vec![];
             {
                 let mut writer = BufWriter::new(&mut translate_buffer);
-                let translate_op = TranslateOperationNew::new(
+                let translate_op = TranslateOperation::new(
                     Sequence::parse_set_string(&sets[0]),
                     Sequence::parse_set_string(&sets[1]),
                     truncate_set1_flag,
@@ -130,12 +130,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             {
                 let mut reader = BufReader::new(translate_buffer.as_bytes());
                 let squeeze_op =
-                    SqueezeOperationNew::new(Sequence::parse_set_string(&sets[1]), false);
+                    SqueezeOperation::new(Sequence::parse_set_string(&sets[1]), false);
                 translate_input_new(&mut reader, &mut buffered_stdout, squeeze_op);
             }
         }
     } else {
-        let op = TranslateOperationNew::new(
+        let op = TranslateOperation::new(
             Sequence::parse_set_string(&sets[0]),
             Sequence::parse_set_string(&sets[1]),
             truncate_set1_flag,
