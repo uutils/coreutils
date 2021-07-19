@@ -22,7 +22,7 @@ use std::os::unix::fs::symlink;
 #[cfg(windows)]
 use std::os::windows::fs::{symlink_dir, symlink_file};
 use std::path::{Path, PathBuf};
-use uucore::fs::{canonicalize, CanonicalizeMode};
+use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
 
 pub struct Settings {
     overwrite: OverwriteMode,
@@ -375,8 +375,12 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
 }
 
 fn relative_path<'a>(src: &Path, dst: &Path) -> Result<Cow<'a, Path>> {
-    let src_abs = canonicalize(src, CanonicalizeMode::Normal)?;
-    let mut dst_abs = canonicalize(dst.parent().unwrap(), CanonicalizeMode::Normal)?;
+    let src_abs = canonicalize(src, MissingHandling::Normal, ResolveMode::Logical)?;
+    let mut dst_abs = canonicalize(
+        dst.parent().unwrap(),
+        MissingHandling::Normal,
+        ResolveMode::Logical,
+    )?;
     dst_abs.push(dst.components().last().unwrap());
     let suffix_pos = src_abs
         .components()

@@ -13,7 +13,7 @@ extern crate uucore;
 use clap::{crate_version, App, Arg};
 use std::env;
 use std::path::{Path, PathBuf};
-use uucore::fs::{canonicalize, CanonicalizeMode};
+use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
 use uucore::InvalidEncodingHandling;
 
 static ABOUT: &str = "Convert TO destination to the relative path from the FROM dir.
@@ -42,12 +42,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         Some(p) => Path::new(p).to_path_buf(),
         None => env::current_dir().unwrap(),
     };
-    let absto = canonicalize(to, CanonicalizeMode::Normal).unwrap();
-    let absfrom = canonicalize(from, CanonicalizeMode::Normal).unwrap();
+    let absto = canonicalize(to, MissingHandling::Normal, ResolveMode::Logical).unwrap();
+    let absfrom = canonicalize(from, MissingHandling::Normal, ResolveMode::Logical).unwrap();
 
     if matches.is_present(options::DIR) {
         let base = Path::new(&matches.value_of(options::DIR).unwrap()).to_path_buf();
-        let absbase = canonicalize(base, CanonicalizeMode::Normal).unwrap();
+        let absbase = canonicalize(base, MissingHandling::Normal, ResolveMode::Logical).unwrap();
         if !absto.as_path().starts_with(absbase.as_path())
             || !absfrom.as_path().starts_with(absbase.as_path())
         {
