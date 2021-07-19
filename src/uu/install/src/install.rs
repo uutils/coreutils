@@ -5,7 +5,7 @@
 //  * For the full copyright and license information, please view the LICENSE file
 //  * that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) rwxr sourcepath targetpath Isnt
+// spell-checker:ignore (ToDO) rwxr sourcepath targetpath Isnt uioerror
 
 mod mode;
 
@@ -57,7 +57,7 @@ enum InstallError {
     ChmodFailed(PathBuf),
     InvalidTarget(PathBuf),
     TargetDirIsntDir(PathBuf),
-    BackupFailed(PathBuf, PathBuf, String),
+    BackupFailed(PathBuf, PathBuf, std::io::Error),
     InstallFailed(PathBuf, PathBuf, std::io::Error),
     StripProgramFailed(String),
     MetadataFailed(std::io::Error),
@@ -91,7 +91,9 @@ impl Display for InstallError {
                 "{} with -d requires at least one argument.",
                 executable!()
             ),
-            IE::CreateDirFailed(dir, e) => write!(f, "failed to create {}: {}", dir.display(), e),
+            IE::CreateDirFailed(dir, e) => {
+                Display::fmt(&uio_error!(e, "failed to create {}", dir.display()), f)
+            }
             IE::ChmodFailed(file) => write!(f, "failed to chmod {}", file.display()),
             IE::InvalidTarget(target) => write!(
                 f,
@@ -101,22 +103,26 @@ impl Display for InstallError {
             IE::TargetDirIsntDir(target) => {
                 write!(f, "target '{}' is not a directory", target.display())
             }
-            IE::BackupFailed(from, to, e) => write!(
+            IE::BackupFailed(from, to, e) => Display::fmt(
+                &uio_error!(
+                    e,
+                    "cannot backup '{}' to '{}'",
+                    from.display(),
+                    to.display()
+                ),
                 f,
-                "cannot backup file '{}' to '{}': {}",
-                from.display(),
-                to.display(),
-                e
             ),
-            IE::InstallFailed(from, to, e) => write!(
+            IE::InstallFailed(from, to, e) => Display::fmt(
+                &uio_error!(
+                    e,
+                    "cannot install '{}' to '{}'",
+                    from.display(),
+                    to.display()
+                ),
                 f,
-                "cannot install '{}' to '{}': {}",
-                from.display(),
-                to.display(),
-                e
             ),
             IE::StripProgramFailed(msg) => write!(f, "strip program failed: {}", msg),
-            IE::MetadataFailed(e) => write!(f, "{}", e.to_string()),
+            IE::MetadataFailed(e) => Display::fmt(&uio_error!(e, ""), f),
             IE::NoSuchUser(user) => write!(f, "no such user: {}", user),
             IE::NoSuchGroup(group) => write!(f, "no such group: {}", group),
             IE::OmittingDirectory(dir) => write!(f, "omitting directory '{}'", dir.display()),
@@ -594,7 +600,7 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
                 return Err(InstallError::BackupFailed(
                     to.to_path_buf(),
                     backup_path.to_path_buf(),
-                    err.to_string(),
+                    err,
                 )
                 .into());
             }
