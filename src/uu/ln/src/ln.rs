@@ -381,6 +381,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
                 srcpath.display(),
                 e
             );
+            all_successful = false;
         }
     }
 
