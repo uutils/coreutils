@@ -268,26 +268,26 @@ impl Sequence {
     }
 }
 
-pub trait SymbolTranslatorNew {
+pub trait SymbolTranslator {
     fn translate(&mut self, current: char) -> Option<char>;
 }
 
 #[derive(Debug, Clone)]
-pub struct DeleteOperationNew {
+pub struct DeleteOperation {
     set: Vec<Sequence>,
     complement_flag: bool,
 }
 
-impl DeleteOperationNew {
-    pub fn new(set: Vec<Sequence>, complement_flag: bool) -> DeleteOperationNew {
-        DeleteOperationNew {
+impl DeleteOperation {
+    pub fn new(set: Vec<Sequence>, complement_flag: bool) -> DeleteOperation {
+        DeleteOperation {
             set,
             complement_flag,
         }
     }
 }
 
-impl SymbolTranslatorNew for DeleteOperationNew {
+impl SymbolTranslator for DeleteOperation {
     fn translate(&mut self, current: char) -> Option<char> {
         let found = self.set.iter().any(|sequence| match sequence {
             Sequence::Char(c) => c.eq(&current),
@@ -298,7 +298,7 @@ impl SymbolTranslatorNew for DeleteOperationNew {
 }
 
 #[derive(Debug, Clone)]
-pub enum TranslateOperationNew {
+pub enum TranslateOperation {
     Standard(HashMap<char, char>),
     Complement(
         // iter
@@ -314,7 +314,7 @@ pub enum TranslateOperationNew {
     ),
 }
 
-impl TranslateOperationNew {
+impl TranslateOperation {
     fn next_complement_char(mut iter: u32) -> (u32, char) {
         while char::from_u32(iter).is_none() {
             iter = iter.saturating_add(1)
@@ -323,13 +323,13 @@ impl TranslateOperationNew {
     }
 }
 
-impl TranslateOperationNew {
+impl TranslateOperation {
     pub fn new(
         pset1: Vec<Sequence>,
         pset2: Vec<Sequence>,
         truncate_set1: bool,
         complement: bool,
-    ) -> TranslateOperationNew {
+    ) -> TranslateOperation {
         let mut set1 = pset1
             .into_iter()
             .flat_map(Sequence::dissolve)
@@ -343,7 +343,7 @@ impl TranslateOperationNew {
         }
         let fallback = set2.last().cloned().unwrap();
         if complement {
-            TranslateOperationNew::Complement(
+            TranslateOperation::Complement(
                 0,
                 set1,
                 set2,
@@ -352,7 +352,7 @@ impl TranslateOperationNew {
                 HashMap::new(),
             )
         } else {
-            TranslateOperationNew::Standard(
+            TranslateOperation::Standard(
                 set1.into_iter()
                     .zip(set2.into_iter().chain(std::iter::repeat(fallback)))
                     .collect::<HashMap<_, _>>(),
@@ -361,15 +361,15 @@ impl TranslateOperationNew {
     }
 }
 
-impl SymbolTranslatorNew for TranslateOperationNew {
+impl SymbolTranslator for TranslateOperation {
     fn translate(&mut self, current: char) -> Option<char> {
         match self {
-            TranslateOperationNew::Standard(map) => Some(
+            TranslateOperation::Standard(map) => Some(
                 map.iter()
                     .find_map(|(l, r)| l.eq(&current).then(|| *r))
                     .unwrap_or(current),
             ),
-            TranslateOperationNew::Complement(iter, set1, set2, fallback, mapped_characters) => {
+            TranslateOperation::Complement(iter, set1, set2, fallback, mapped_characters) => {
                 // First, try to see if current char is already mapped
                 // If so, return the mapped char
                 // Else, pop from set2
@@ -381,7 +381,7 @@ impl SymbolTranslatorNew for TranslateOperationNew {
                     while mapped_characters.get(&current).is_none() {
                         if let Some(p) = set2.pop() {
                             let (next_index, next_value) =
-                                TranslateOperationNew::next_complement_char(*iter);
+                                TranslateOperation::next_complement_char(*iter);
                             *iter = next_index;
                             mapped_characters.insert(next_value, p);
                         } else {
@@ -396,15 +396,15 @@ impl SymbolTranslatorNew for TranslateOperationNew {
 }
 
 #[derive(Debug, Clone)]
-pub struct SqueezeOperationNew {
+pub struct SqueezeOperation {
     squeeze_set: Vec<char>,
     complement: bool,
     previous: Option<char>,
 }
 
-impl SqueezeOperationNew {
-    pub fn new(squeeze_set: Vec<Sequence>, complement: bool) -> SqueezeOperationNew {
-        SqueezeOperationNew {
+impl SqueezeOperation {
+    pub fn new(squeeze_set: Vec<Sequence>, complement: bool) -> SqueezeOperation {
+        SqueezeOperation {
             squeeze_set: squeeze_set
                 .into_iter()
                 .flat_map(Sequence::dissolve)
@@ -415,7 +415,7 @@ impl SqueezeOperationNew {
     }
 }
 
-impl SymbolTranslatorNew for SqueezeOperationNew {
+impl SymbolTranslator for SqueezeOperation {
     fn translate(&mut self, current: char) -> Option<char> {
         if self.complement {
             let next = if self.squeeze_set.iter().any(|c| c.eq(&current)) {
@@ -461,7 +461,7 @@ impl SymbolTranslatorNew for SqueezeOperationNew {
 
 pub fn translate_input_new<T, R, W>(input: &mut R, output: &mut W, mut translator: T)
 where
-    T: SymbolTranslatorNew,
+    T: SymbolTranslator,
     R: BufRead,
     W: Write,
 {
