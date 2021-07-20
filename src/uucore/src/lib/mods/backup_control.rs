@@ -25,6 +25,39 @@ pub enum BackupMode {
     ExistingBackup,
 }
 
+pub mod arguments {
+    extern crate clap;
+
+    pub static OPT_BACKUP: &str = "backupopt_backup";
+    pub static OPT_BACKUP_NO_ARG: &str = "backupopt_b";
+    pub static OPT_SUFFIX: &str = "backupopt_suffix";
+
+    pub fn backup() -> clap::Arg<'static, 'static> {
+        clap::Arg::with_name(OPT_BACKUP)
+            .long("backup")
+            .help("make a backup of each existing destination file")
+            .takes_value(true)
+            .require_equals(true)
+            .min_values(0)
+            .value_name("CONTROL")
+    }
+
+    pub fn backup_no_args() -> clap::Arg<'static, 'static> {
+        clap::Arg::with_name(OPT_BACKUP_NO_ARG)
+            .short("b")
+            .help("like --backup but does not accept an argument")
+    }
+
+    pub fn suffix() -> clap::Arg<'static, 'static> {
+        clap::Arg::with_name(OPT_SUFFIX)
+            .short("S")
+            .long("suffix")
+            .help("override the usual backup suffix")
+            .takes_value(true)
+            .value_name("SUFFIX")
+    }
+}
+
 pub fn determine_backup_suffix(supplied_suffix: Option<&str>) -> String {
     if let Some(suffix) = supplied_suffix {
         String::from(suffix)
