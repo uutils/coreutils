@@ -1,8 +1,9 @@
+use crate::unicode_table;
 use nom::{
     branch::alt,
     bytes::complete::{tag, take_while1},
     character::complete::{anychar, one_of},
-    combinator::{map_opt, recognize, value},
+    combinator::{map_opt, recognize},
     multi::{many0, many_m_n},
     sequence::{preceded, separated_pair, tuple},
     IResult,
@@ -13,12 +14,20 @@ use std::{
     io::{BufRead, Write},
 };
 
-use crate::unicode_table;
+static SPACES: &'static [char] = &[
+    unicode_table::HT,
+    unicode_table::LF,
+    unicode_table::VT,
+    unicode_table::FF,
+    unicode_table::CR,
+    unicode_table::SPACE,
+];
+static BLANK: &'static [char] = &[unicode_table::SPACE, unicode_table::HT];
 
-#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Sequence {
     Char(char),
-    CharRange(Vec<char>),
+    CharRange(Box<dyn Iterator<Item = char>>),
+    CharStar(char),
 }
 
 impl Sequence {
@@ -53,10 +62,11 @@ impl Sequence {
         .unwrap()
     }
 
-    pub fn dissolve(self) -> Vec<char> {
+    pub fn dissolve(self) -> Box<dyn Iterator<Item = char>> {
         match self {
-            Sequence::Char(c) => vec![c],
+            Sequence::Char(c) => Box::new(std::iter::once(c)),
             Sequence::CharRange(r) => r,
+            Sequence::CharStar(c) => Box::new(std::iter::repeat(c)),
         }
     }
 
@@ -97,13 +107,14 @@ impl Sequence {
         separated_pair(anychar, tag("-"), anychar)(input).map(|(l, (a, b))| {
             (l, {
                 let (start, end) = (u32::from(a), u32::from(b));
-                Sequence::CharRange((start..=end).filter_map(std::char::from_u32).collect())
+                Sequence::CharRange(Box::new((start..=end).filter_map(std::char::from_u32)))
             })
         })
     }
 
     fn parse_char_star(input: &str) -> IResult<&str, Sequence> {
-        tuple((tag("["), anychar, tag("*]")))(input).map(|(_, (_, _, _))| todo!())
+        tuple((tag("["), anychar, tag("*]")))(input)
+            .map(|(l, (_, c, _))| (l, Sequence::CharStar(c)))
     }
 
     fn parse_char_repeat(input: &str) -> IResult<&str, Sequence> {
@@ -118,7 +129,7 @@ impl Sequence {
         .map(|(l, (_, c, _, n, _))| {
             (
                 l,
-                Sequence::CharRange(std::iter::repeat(c).take(n.parse().unwrap()).collect()),
+                Sequence::CharRange(Box::new(std::iter::repeat(c).take(n.parse().unwrap()))),
             )
         })
     }
@@ -127,104 +138,118 @@ impl Sequence {
         tag("[:alnum:]")(input).map(|(l, _)| {
             (
                 l,
-                Sequence::CharRange(('0'..='9').chain('A'..='Z').chain('a'..='z').collect()),
+                Sequence::CharRange(Box::new(('0'..='9').chain('A'..='Z').chain('a'..='z'))),
             )
         })
     }
 
     fn parse_alpha(input: &str) -> IResult<&str, Sequence> {
-        value(
-            Sequence::CharRange(('A'..='Z').chain('a'..='z').collect()),
-            tag("[:alpha:]"),
-        )(input)
+        tag("[:alpha:]")(input).map(|(l, _)| {
+            (
+                l,
+                Sequence::CharRange(Box::new(('A'..='Z').chain('a'..='z'))),
+            )
+        })
     }
 
     fn parse_blank(input: &str) -> IResult<&str, Sequence> {
-        value(
-            Sequence::CharRange(vec![unicode_table::SPACE, unicode_table::HT]),
-            tag("[:blank:]"),
-        )(input)
+        tag("[:blank:]")(input)
+            .map(|(l, _)| (l, Sequence::CharRange(Box::new(BLANK.into_iter().cloned()))))
     }
 
     fn parse_control(input: &str) -> IResult<&str, Sequence> {
-        value(
-            Sequence::CharRange(
-                (0..=31)
-                    .chain(std::iter::once(127))
-                    .flat_map(char::from_u32)
-                    .collect(),
-            ),
-            tag("[:cntrl:]"),
-        )(input)
+        tag("[:cntrl:]")(input).map(|(l, _)| {
+            (
+                l,
+                Sequence::CharRange(Box::new(
+                    (0..=31)
+                        .chain(std::iter::once(127))
+                        .flat_map(char::from_u32),
+                )),
+            )
+        })
     }
 
     fn parse_digit(input: &str) -> IResult<&str, Sequence> {
-        value(Sequence::CharRange(('0'..='9').collect()), tag("[:digit:]"))(input)
+        tag("[:digit:]")(input).map(|(l, _)| (l, Sequence::CharRange(Box::new('0'..='9'))))
     }
 
     fn parse_graph(input: &str) -> IResult<&str, Sequence> {
-        value(
-            Sequence::CharRange(
-                (48..=57) // digit
-                    .chain(65..=90) // uppercase
-                    .chain(97..=122) // lowercase
-                    // punctuations
-                    .chain(33..=47)
-                    .chain(58..=64)
-                    .chain(91..=96)
-                    .chain(123..=126)
-                    .flat_map(char::from_u32)
-                    .collect(),
-            ),
-            tag("[:graph:]"),
-        )(input)
+        tag("[:graph:]")(input).map(|(l, _)| {
+            (
+                l,
+                Sequence::CharRange(Box::new(
+                    (48..=57) // digit
+                        .chain(65..=90) // uppercase
+                        .chain(97..=122) // lowercase
+                        // punctuations
+                        .chain(33..=47)
+                        .chain(58..=64)
+                        .chain(91..=96)
+                        .chain(123..=126)
+                        .chain(std::iter::once(32)) // space
+                        .flat_map(char::from_u32),
+                )),
+            )
+        })
     }
 
     fn parse_lower(input: &str) -> IResult<&str, Sequence> {
-        value(Sequence::CharRange(('a'..='z').collect()), tag("[:lower:]"))(input)
+        tag("[:lower:]")(input).map(|(l, _)| (l, Sequence::CharRange(Box::new('a'..='z'))))
     }
 
     fn parse_print(input: &str) -> IResult<&str, Sequence> {
-        tag("[:print:]")(input).map(|(_, _)| todo!())
+        tag("[:print:]")(input).map(|(l, _)| {
+            (
+                l,
+                Sequence::CharRange(Box::new(
+                    (48..=57) // digit
+                        .chain(65..=90) // uppercase
+                        .chain(97..=122) // lowercase
+                        // punctuations
+                        .chain(33..=47)
+                        .chain(58..=64)
+                        .chain(91..=96)
+                        .chain(123..=126)
+                        .flat_map(char::from_u32),
+                )),
+            )
+        })
     }
 
     fn parse_punct(input: &str) -> IResult<&str, Sequence> {
-        value(
-            Sequence::CharRange(
-                (33..=47)
-                    .chain(58..=64)
-                    .chain(91..=96)
-                    .chain(123..=126)
-                    .flat_map(char::from_u32)
-                    .collect(),
-            ),
-            tag("[:punct:]"),
-        )(input)
+        tag("[:punct:]")(input).map(|(l, _)| {
+            (
+                l,
+                Sequence::CharRange(Box::new(
+                    (33..=47)
+                        .chain(58..=64)
+                        .chain(91..=96)
+                        .chain(123..=126)
+                        .flat_map(char::from_u32),
+                )),
+            )
+        })
     }
 
     fn parse_space(input: &str) -> IResult<&str, Sequence> {
-        value(
-            Sequence::CharRange(vec![
-                unicode_table::HT,
-                unicode_table::LF,
-                unicode_table::VT,
-                unicode_table::FF,
-                unicode_table::CR,
-                unicode_table::SPACE,
-            ]),
-            tag("[:space:]"),
-        )(input)
+        tag("[:space:]")(input).map(|(l, _)| {
+            (
+                l,
+                Sequence::CharRange(Box::new(SPACES.into_iter().cloned())),
+            )
+        })
     }
 
     fn parse_upper(input: &str) -> IResult<&str, Sequence> {
-        tag("[:upper:]")(input).map(|(l, _)| (l, Sequence::CharRange(('A'..='Z').collect())))
+        tag("[:upper:]")(input).map(|(l, _)| (l, Sequence::CharRange(Box::new('A'..='Z'))))
     }
 
     fn parse_xdigit(input: &str) -> IResult<&str, Sequence> {
         tag("[:xdigit:]")(input).map(|(l, _)| {
             (
                 l,
-                Sequence::CharRange(('0'..='9').chain('A'..='F').chain('a'..='f').collect()),
+                Sequence::CharRange(Box::new(('0'..='9').chain('A'..='F').chain('a'..='f'))),
             )
         })
     }
@@ -238,16 +263,18 @@ pub trait SymbolTranslator {
     fn translate(&mut self, current: char) -> Option<char>;
 }
 
-#[derive(Debug, Clone)]
 pub struct DeleteOperation {
-    set: Vec<Sequence>,
+    set: Vec<char>,
     complement_flag: bool,
 }
 
 impl DeleteOperation {
     pub fn new(set: Vec<Sequence>, complement_flag: bool) -> DeleteOperation {
         DeleteOperation {
-            set,
+            set: set
+                .into_iter()
+                .flat_map(Sequence::dissolve)
+                .collect::<Vec<_>>(),
             complement_flag,
         }
     }
@@ -255,10 +282,7 @@ impl DeleteOperation {
 
 impl SymbolTranslator for DeleteOperation {
     fn translate(&mut self, current: char) -> Option<char> {
-        let found = self.set.iter().any(|sequence| match sequence {
-            Sequence::Char(c) => c.eq(&current),
-            Sequence::CharRange(r) => r.iter().any(|c| c.eq(&current)),
-        });
+        let found = self.set.iter().any(|sequence| sequence.eq(&current));
         (self.complement_flag == found).then(|| current)
     }
 }
@@ -461,41 +485,6 @@ where
         buf.clear();
         output_buf.clear();
     }
-}
-
-#[test]
-fn test_parse_char_range() {
-    assert_eq!(Sequence::parse_set_string(""), vec![]);
-    assert_eq!(
-        Sequence::parse_set_string("a-z"),
-        vec![Sequence::CharRange(vec![
-            'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q',
-            'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
-        ])]
-    );
-    assert_eq!(
-        Sequence::parse_set_string("a-zA-Z"),
-        vec![
-            Sequence::CharRange(vec![
-                'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p',
-                'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
-            ]),
-            Sequence::CharRange(vec![
-                'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
-                'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
-            ])
-        ]
-    );
-    assert_eq!(
-        Sequence::parse_set_string(", ┬─┬"),
-        vec![
-            Sequence::Char(','),
-            Sequence::Char(' '),
-            Sequence::Char('┬'),
-            Sequence::Char('─'),
-            Sequence::Char('┬')
-        ]
-    );
 }
 
 #[test]
