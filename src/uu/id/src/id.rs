@@ -5,7 +5,10 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//
+
+// spell-checker:ignore (ToDO) asid auditid auditinfo auid cstr egid emod euid getaudit getlogin gflag nflag pline rflag termid uflag gsflag zflag cflag
+
+// README:
 // This was originally based on BSD's `id`
 // (noticeable in functionality, usage text, options text, etc.)
 // and synced with:
@@ -25,8 +28,10 @@
 //
 // * Help text based on BSD's `id` manpage and GNU's `id` manpage.
 //
-
-// spell-checker:ignore (ToDO) asid auditid auditinfo auid cstr egid emod euid getaudit getlogin gflag nflag pline rflag termid uflag gsflag zflag
+// * This passes GNU's coreutils Test suite (8.32) for "tests/id/context.sh" if compiled with
+//   `--features feat_selinux`. It should also pass "tests/id/no-context.sh", but that depends on
+//   `uu_ls -Z` being implemented and therefore fails at the moment
+//
 
 #![allow(non_camel_case_types)]
 #![allow(dead_code)]
@@ -35,6 +40,8 @@
 extern crate uucore;
 
 use clap::{crate_version, App, Arg};
+#[cfg(all(target_os = "linux", feature = "selinux"))]
+use selinux;
 use std::ffi::CStr;
 use uucore::entries::{self, Group, Locate, Passwd};
 pub use uucore::libc;
@@ -49,6 +56,11 @@ macro_rules! cstr2cow {
 
 static ABOUT: &str = "Print user and group information for each specified USER,
 or (when USER omitted) for the current user.";
+
+#[cfg(not(feature = "selinux"))]
+static CONTEXT_HELP_TEXT: &str = "print only the security context of the process (not enabled)";
+#[cfg(feature = "selinux")]
+static CONTEXT_HELP_TEXT: &str = "print only the security context of the process";
 
 mod options {
     pub const OPT_AUDIT: &str = "audit"; // GNU's id does not have this
@@ -93,6 +105,8 @@ struct State {
     gsflag: bool, // --groups
     rflag: bool,  // --real
     zflag: bool,  // --zero
+    cflag: bool,  // --context
+    selinux_supported: bool,
     ids: Option<Ids>,
     // The behavior for calling GNU's `id` and calling GNU's `id $USER` is similar but different.
     // * The SELinux context is only displayed without a specified user.
@@ -109,6 +123,7 @@ struct State {
     // 1000 10 968 975
     // +++ exited with 0 +++
     user_specified: bool,
+    exit_code: i32,
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
@@ -132,8 +147,21 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         gsflag: matches.is_present(options::OPT_GROUPS),
         rflag: matches.is_present(options::OPT_REAL_ID),
         zflag: matches.is_present(options::OPT_ZERO),
+        cflag: matches.is_present(options::OPT_CONTEXT),
+
+        selinux_supported: {
+            #[cfg(feature = "selinux")]
+            {
+                selinux::kernel_support() != selinux::KernelSupport::Unsupported
+            }
+            #[cfg(not(feature = "selinux"))]
+            {
+                false
+            }
+        },
         user_specified: !users.is_empty(),
         ids: None,
+        exit_code: 0,
     };
 
     let default_format = {
@@ -141,12 +169,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         !(state.uflag || state.gflag || state.gsflag)
     };
 
-    if (state.nflag || state.rflag) && default_format {
+    if (state.nflag || state.rflag) && default_format && !state.cflag {
         crash!(1, "cannot print only names or real IDs in default format");
     }
-    if (state.zflag) && default_format {
+    if state.zflag && default_format && !state.cflag {
         // NOTE: GNU test suite "id/zero.sh" needs this stderr output:
         crash!(1, "option --zero not permitted in default format");
+    }
+    if state.user_specified && state.cflag {
+        crash!(1, "cannot print security context when user specified");
     }
 
     let delimiter = {
@@ -163,7 +194,23 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             '\n'
         }
     };
-    let mut exit_code = 0;
+
+    if state.cflag {
+        if state.selinux_supported {
+            // print SElinux context and exit
+            #[cfg(all(target_os = "linux", feature = "selinux"))]
+            if let Ok(context) = selinux::SecurityContext::current(false) {
+                let bytes = context.as_bytes();
+                print!("{}{}", String::from_utf8_lossy(bytes), line_ending);
+            } else {
+                // print error because `cflag` was explicitly requested
+                crash!(1, "can't get process context");
+            }
+            return state.exit_code;
+        } else {
+            crash!(1, "--context (-Z) works only on an SELinux-enabled kernel");
+        }
+    }
 
     for i in 0..=users.len() {
         let possible_pw = if !state.user_specified {
@@ -173,7 +220,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 Ok(p) => Some(p),
                 Err(_) => {
                     show_error!("'{}': no such user", users[i]);
-                    exit_code = 1;
+                    state.exit_code = 1;
                     if i + 1 >= users.len() {
                         break;
                     } else {
@@ -187,17 +234,17 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         if matches.is_present(options::OPT_PASSWORD) {
             // BSD's `id` ignores all but the first specified user
             pline(possible_pw.map(|v| v.uid()));
-            return exit_code;
+            return state.exit_code;
         };
         if matches.is_present(options::OPT_HUMAN_READABLE) {
             // BSD's `id` ignores all but the first specified user
             pretty(possible_pw);
-            return exit_code;
+            return state.exit_code;
         }
         if matches.is_present(options::OPT_AUDIT) {
             // BSD's `id` ignores specified users
             auditid();
-            return exit_code;
+            return state.exit_code;
         }
 
         let (uid, gid) = possible_pw.map(|p| (p.uid(), p.gid())).unwrap_or((
@@ -217,7 +264,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 if state.nflag {
                     entries::gid2grp(gid).unwrap_or_else(|_| {
                         show_error!("cannot find name for group ID {}", gid);
-                        exit_code = 1;
+                        state.exit_code = 1;
                         gid.to_string()
                     })
                 } else {
@@ -232,7 +279,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 if state.nflag {
                     entries::uid2usr(uid).unwrap_or_else(|_| {
                         show_error!("cannot find name for user ID {}", uid);
-                        exit_code = 1;
+                        state.exit_code = 1;
                         uid.to_string()
                     })
                 } else {
@@ -257,7 +304,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                         if state.nflag {
                             entries::gid2grp(id).unwrap_or_else(|_| {
                                 show_error!("cannot find name for group ID {}", id);
-                                exit_code = 1;
+                                state.exit_code = 1;
                                 id.to_string()
                             })
                         } else {
@@ -276,7 +323,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
 
         if default_format {
-            id_print(&state, groups);
+            id_print(&mut state, groups);
         }
         print!("{}", line_ending);
 
@@ -285,7 +332,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     }
 
-    exit_code
+    state.exit_code
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -319,6 +366,7 @@ pub fn uu_app() -> App<'static, 'static> {
             Arg::with_name(options::OPT_GROUP)
                 .short("g")
                 .long(options::OPT_GROUP)
+                .conflicts_with(options::OPT_EFFECTIVE_USER)
                 .help("Display only the effective group ID as a number"),
         )
         .arg(
@@ -328,6 +376,7 @@ pub fn uu_app() -> App<'static, 'static> {
                 .conflicts_with_all(&[
                     options::OPT_GROUP,
                     options::OPT_EFFECTIVE_USER,
+                    options::OPT_CONTEXT,
                     options::OPT_HUMAN_READABLE,
                     options::OPT_PASSWORD,
                     options::OPT_AUDIT,
@@ -379,7 +428,8 @@ pub fn uu_app() -> App<'static, 'static> {
             Arg::with_name(options::OPT_CONTEXT)
                 .short("Z")
                 .long(options::OPT_CONTEXT)
-                .help("NotImplemented: print only the security context of the process"),
+                .conflicts_with_all(&[options::OPT_GROUP, options::OPT_EFFECTIVE_USER])
+                .help(CONTEXT_HELP_TEXT),
         )
         .arg(
             Arg::with_name(options::ARG_USERS)
@@ -499,34 +549,80 @@ fn auditid() {
     println!("asid={}", auditinfo.ai_asid);
 }
 
-fn id_print(state: &State, groups: Vec<u32>) {
+fn id_print(state: &mut State, groups: Vec<u32>) {
     let uid = state.ids.as_ref().unwrap().uid;
     let gid = state.ids.as_ref().unwrap().gid;
     let euid = state.ids.as_ref().unwrap().euid;
     let egid = state.ids.as_ref().unwrap().egid;
 
-    print!("uid={}({})", uid, entries::uid2usr(uid).unwrap());
-    print!(" gid={}({})", gid, entries::gid2grp(gid).unwrap());
+    print!(
+        "uid={}({})",
+        uid,
+        entries::uid2usr(uid).unwrap_or_else(|_| {
+            show_error!("cannot find name for user ID {}", uid);
+            state.exit_code = 1;
+            uid.to_string()
+        })
+    );
+    print!(
+        " gid={}({})",
+        gid,
+        entries::gid2grp(gid).unwrap_or_else(|_| {
+            show_error!("cannot find name for group ID {}", gid);
+            state.exit_code = 1;
+            gid.to_string()
+        })
+    );
     if !state.user_specified && (euid != uid) {
-        print!(" euid={}({})", euid, entries::uid2usr(euid).unwrap());
+        print!(
+            " euid={}({})",
+            euid,
+            entries::uid2usr(euid).unwrap_or_else(|_| {
+                show_error!("cannot find name for user ID {}", euid);
+                state.exit_code = 1;
+                euid.to_string()
+            })
+        );
     }
     if !state.user_specified && (egid != gid) {
-        print!(" egid={}({})", euid, entries::gid2grp(egid).unwrap());
+        print!(
+            " egid={}({})",
+            euid,
+            entries::gid2grp(egid).unwrap_or_else(|_| {
+                show_error!("cannot find name for group ID {}", egid);
+                state.exit_code = 1;
+                egid.to_string()
+            })
+        );
     }
     print!(
         " groups={}",
         groups
             .iter()
-            .map(|&gr| format!("{}({})", gr, entries::gid2grp(gr).unwrap()))
+            .map(|&gr| format!(
+                "{}({})",
+                gr,
+                entries::gid2grp(gr).unwrap_or_else(|_| {
+                    show_error!("cannot find name for group ID {}", gr);
+                    state.exit_code = 1;
+                    gr.to_string()
+                })
+            ))
             .collect::<Vec<_>>()
             .join(",")
     );
 
-    // NOTE: (SELinux NotImplemented) placeholder:
-    // if !state.user_specified {
-    //     // print SElinux context (does not depend on "-Z")
-    //     print!(" context={}", get_selinux_contexts().join(":"));
-    // }
+    #[cfg(all(target_os = "linux", feature = "selinux"))]
+    if state.selinux_supported
+        && !state.user_specified
+        && std::env::var_os("POSIXLY_CORRECT").is_none()
+    {
+        // print SElinux context (does not depend on "-Z")
+        if let Ok(context) = selinux::SecurityContext::current(false) {
+            let bytes = context.as_bytes();
+            print!(" context={}", String::from_utf8_lossy(bytes));
+        }
+    }
 }
 
 #[cfg(not(target_os = "linux"))]
