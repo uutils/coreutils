@@ -111,9 +111,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     } else if squeeze_flag {
         if sets.len() < 2 {
-            let op =
-                SqueezeOperation::new(Sequence::parse_set_string(&sets[0]), complement_flag);
-
+            let op = SqueezeOperation::new(Sequence::parse_set_string(&sets[0]), complement_flag);
             translate_input_new(&mut locked_stdin, &mut buffered_stdout, op);
         } else {
             let mut translate_buffer = vec![];
@@ -129,8 +127,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             }
             {
                 let mut reader = BufReader::new(translate_buffer.as_bytes());
-                let squeeze_op =
-                    SqueezeOperation::new(Sequence::parse_set_string(&sets[1]), false);
+                let squeeze_op = SqueezeOperation::new(Sequence::parse_set_string(&sets[1]), false);
                 translate_input_new(&mut reader, &mut buffered_stdout, squeeze_op);
             }
         }
