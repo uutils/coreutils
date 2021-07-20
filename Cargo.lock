@@ -133,6 +133,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "560c32574a12a89ecd91f5e742165893f86e3ab98d21f8ea548658eb9eef5f40"
 
 [[package]]
+name = "byte-unit"
+version = "4.0.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "063197e6eb4b775b64160dedde7a0986bb2836cce140e9492e9e96f28e18bcd8"
+dependencies = [
+ "utf8-width",
+]
+
+[[package]]
 name = "byteorder"
 version = "1.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -254,6 +263,7 @@ dependencies = [
  "uu_csplit",
  "uu_cut",
  "uu_date",
+ "uu_dd",
  "uu_df",
  "uu_dircolors",
  "uu_dirname",
@@ -534,6 +544,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f4f47ca1860a761136924ddd2422ba77b2ea54fe8cc75b9040804a0d9d32ad97"
 
 [[package]]
+name = "debug_print"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f215f9b7224f49fb73256115331f677d868b34d18b65dbe4db392e6021eea90"
+
+[[package]]
 name = "diff"
 version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -623,6 +639,12 @@ name = "fuchsia-cprng"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a06f77d526c1a601b7c4cdd98f54b5eaabffc14d5f2f0296febdc7f357c6d3ba"
+
+[[package]]
+name = "gcd"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c7cd301bf2ab11ae4e5bdfd79c221d97a25e46c089144a62ee9d09cb32d2b92"
 
 [[package]]
 name = "generic-array"
@@ -1720,6 +1742,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "utf8-width"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7cf7d77f457ef8dfa11e4cd5933c5ddb5dc52a94664071951219a97710f0a32b"
+
+[[package]]
 name = "uu_arch"
 version = "0.0.7"
 dependencies = [
@@ -1881,6 +1909,21 @@ dependencies = [
  "uucore",
  "uucore_procs",
  "winapi 0.3.9",
+]
+
+[[package]]
+name = "uu_dd"
+version = "0.0.7"
+dependencies = [
+ "byte-unit",
+ "clap",
+ "debug_print",
+ "gcd",
+ "libc",
+ "signal-hook",
+ "tempfile",
+ "uucore",
+ "uucore_procs",
 ]
 
 [[package]]
