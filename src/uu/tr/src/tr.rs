@@ -19,7 +19,7 @@ mod unicode_table;
 
 use clap::{crate_version, App, Arg};
 use nom::AsBytes;
-use operation::{translate_input_new, Sequence, SqueezeOperation, TranslateOperation};
+use operation::{translate_input, Sequence, SqueezeOperation, TranslateOperation};
 use std::io::{stdin, stdout, BufReader, BufWriter};
 
 use crate::operation::DeleteOperation;
@@ -98,22 +98,22 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 let mut delete_writer = BufWriter::new(&mut delete_buffer);
                 let delete_op =
                     DeleteOperation::new(Sequence::parse_set_string(&sets[0]), complement_flag);
-                translate_input_new(&mut locked_stdin, &mut delete_writer, delete_op);
+                translate_input(&mut locked_stdin, &mut delete_writer, delete_op);
             }
             {
                 let mut squeeze_reader = BufReader::new(delete_buffer.as_bytes());
                 let squeeze_op =
                     SqueezeOperation::new(Sequence::parse_set_string(&sets[1]), complement_flag);
-                translate_input_new(&mut squeeze_reader, &mut buffered_stdout, squeeze_op);
+                translate_input(&mut squeeze_reader, &mut buffered_stdout, squeeze_op);
             }
         } else {
             let op = DeleteOperation::new(Sequence::parse_set_string(&sets[0]), complement_flag);
-            translate_input_new(&mut locked_stdin, &mut buffered_stdout, op);
+            translate_input(&mut locked_stdin, &mut buffered_stdout, op);
         }
     } else if squeeze_flag {
         if sets.len() < 2 {
             let op = SqueezeOperation::new(Sequence::parse_set_string(&sets[0]), complement_flag);
-            translate_input_new(&mut locked_stdin, &mut buffered_stdout, op);
+            translate_input(&mut locked_stdin, &mut buffered_stdout, op);
         } else {
             let mut translate_buffer = vec![];
             {
@@ -124,12 +124,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     truncate_set1_flag,
                     complement_flag,
                 );
-                translate_input_new(&mut locked_stdin, &mut writer, translate_op);
+                translate_input(&mut locked_stdin, &mut writer, translate_op);
             }
             {
                 let mut reader = BufReader::new(translate_buffer.as_bytes());
                 let squeeze_op = SqueezeOperation::new(Sequence::parse_set_string(&sets[1]), false);
-                translate_input_new(&mut reader, &mut buffered_stdout, squeeze_op);
+                translate_input(&mut reader, &mut buffered_stdout, squeeze_op);
             }
         }
     } else {
@@ -139,7 +139,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             truncate_set1_flag,
             complement_flag,
         );
-        translate_input_new(&mut locked_stdin, &mut buffered_stdout, op);
+        translate_input(&mut locked_stdin, &mut buffered_stdout, op);
     }
 
     0

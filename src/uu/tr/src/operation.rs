@@ -45,6 +45,7 @@ impl Sequence {
                 Sequence::parse_upper,
                 Sequence::parse_xdigit,
                 Sequence::parse_char_equal,
+                // NOTE: This must be the last one
                 Sequence::parse_char,
             )),
         )))(input)
@@ -110,6 +111,7 @@ impl Sequence {
             tag("["),
             anychar,
             tag("*"),
+            // TODO: Extend this to support octal as well. Octal starts with 0.
             take_while1(|c: char| c.is_digit(10)),
             tag("]"),
         ))(input)
@@ -440,7 +442,7 @@ impl SymbolTranslator for SqueezeOperation {
     }
 }
 
-pub fn translate_input_new<T, R, W>(input: &mut R, output: &mut W, mut translator: T)
+pub fn translate_input<T, R, W>(input: &mut R, output: &mut W, mut translator: T)
 where
     T: SymbolTranslator,
     R: BufRead,
