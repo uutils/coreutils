@@ -1,13 +1,15 @@
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take, take_until},
-    character::complete::{none_of, one_of},
-    multi::many0,
-    sequence::{separated_pair, tuple},
+    bytes::complete::{tag, take_while1},
+    character::complete::{anychar, one_of},
+    combinator::{map_opt, recognize},
+    multi::{many0, many_m_n},
+    sequence::{preceded, separated_pair, tuple},
     IResult,
 };
 use std::{
     collections::HashMap,
+    fmt::Debug,
     io::{BufRead, Write},
 };
 
@@ -20,20 +22,7 @@ pub enum Sequence {
 impl Sequence {
     pub fn parse_set_string(input: &str) -> Vec<Sequence> {
         many0(alt((
-            alt((
-                Sequence::parse_3_octal,
-                Sequence::parse_2_octal,
-                Sequence::parse_1_octal,
-                Sequence::parse_unrecognized_backslash,
-                Sequence::parse_backslash,
-                Sequence::parse_audible_bel,
-                Sequence::parse_backspace,
-                Sequence::parse_form_feed,
-                Sequence::parse_newline,
-                Sequence::parse_return,
-                Sequence::parse_horizontal_tab,
-                Sequence::parse_vertical_tab,
-            )),
+            alt((Sequence::parse_octal, Sequence::parse_backslash)),
             alt((
                 Sequence::parse_char_range,
                 Sequence::parse_char_star,
@@ -71,11 +60,11 @@ impl Sequence {
     /// Sequence parsers
 
     fn parse_char(input: &str) -> IResult<&str, Sequence> {
-        take(1usize)(input).map(|(l, r)| (l, Sequence::Char(r.chars().next().unwrap())))
+        anychar(input).map(|(l, r)| (l, Sequence::Char(r)))
     }
 
-    fn parse_unrecognized_backslash(input: &str) -> IResult<&str, Sequence> {
-        tuple((tag("\\"), none_of("01234567")))(input).map(|(l, (_, a))| {
+    fn parse_backslash(input: &str) -> IResult<&str, Sequence> {
+        preceded(tag("\\"), anychar)(input).map(|(l, a)| {
             let c = match a {
                 'a' => Sequence::Char('\u{0007}'),
                 'b' => Sequence::Char('\u{0008}'),
@@ -84,132 +73,57 @@ impl Sequence {
                 'r' => Sequence::Char('\u{000D}'),
                 't' => Sequence::Char('\u{0009}'),
                 'v' => Sequence::Char('\u{000B}'),
-                _ => Sequence::Char(a),
+                x => Sequence::Char(x),
             };
             (l, c)
         })
     }
 
-    fn parse_1_octal(input: &str) -> IResult<&str, Sequence> {
-        tuple((tag("\\"), one_of("01234567")))(input).map(|(l, (_, a))| {
-            (
-                l,
-                Sequence::Char(std::char::from_u32(a.to_digit(8).unwrap()).unwrap()),
-            )
-        })
-    }
-
-    fn parse_2_octal(input: &str) -> IResult<&str, Sequence> {
-        tuple((tag("\\"), one_of("01234567"), one_of("01234567")))(input).map(|(l, (_, a, b))| {
-            (
-                l,
-                Sequence::Char(
-                    std::char::from_u32(a.to_digit(8).unwrap() * 8 + b.to_digit(8).unwrap())
-                        .unwrap(),
-                ),
-            )
-        })
-    }
-
-    fn parse_3_octal(input: &str) -> IResult<&str, Sequence> {
-        tuple((
-            tag("\\"),
-            one_of("01234567"),
-            one_of("01234567"),
-            one_of("01234567"),
-        ))(input)
-        .map(|(l, (_, a, b, c))| {
-            (
-                l,
-                Sequence::Char(
-                    // SAFETY: All the values from \000 to \777 is valid based on a test below...
-                    std::char::from_u32(
-                        a.to_digit(8).unwrap() * 8 * 8
-                            + b.to_digit(8).unwrap() * 8
-                            + c.to_digit(8).unwrap(),
-                    )
-                    .unwrap(),
-                ),
-            )
-        })
-    }
-
-    fn parse_backslash(input: &str) -> IResult<&str, Sequence> {
-        tuple((tag("\\"), tag("\\")))(input).map(|(l, _)| (l, Sequence::Char('\\')))
-    }
-
-    fn parse_audible_bel(input: &str) -> IResult<&str, Sequence> {
-        tuple((tag("\\"), tag("a")))(input).map(|(l, _)| (l, Sequence::Char('\u{0007}')))
-    }
-
-    fn parse_backspace(input: &str) -> IResult<&str, Sequence> {
-        tuple((tag("\\"), tag("b")))(input).map(|(l, _)| (l, Sequence::Char('\u{0008}')))
-    }
-
-    fn parse_form_feed(input: &str) -> IResult<&str, Sequence> {
-        tuple((tag("\\"), tag("f")))(input).map(|(l, _)| (l, Sequence::Char('\u{000C}')))
-    }
-
-    fn parse_newline(input: &str) -> IResult<&str, Sequence> {
-        tuple((tag("\\"), tag("n")))(input).map(|(l, _)| (l, Sequence::Char('\u{000A}')))
-    }
-
-    fn parse_return(input: &str) -> IResult<&str, Sequence> {
-        tuple((tag("\\"), tag("r")))(input).map(|(l, _)| (l, Sequence::Char('\u{000D}')))
-    }
-
-    fn parse_horizontal_tab(input: &str) -> IResult<&str, Sequence> {
-        tuple((tag("\\"), tag("t")))(input).map(|(l, _)| (l, Sequence::Char('\u{0009}')))
-    }
-
-    fn parse_vertical_tab(input: &str) -> IResult<&str, Sequence> {
-        tuple((tag("\\"), tag("v")))(input).map(|(l, _)| (l, Sequence::Char('\u{000B}')))
+    fn parse_octal(input: &str) -> IResult<&str, Sequence> {
+        map_opt(
+            preceded(tag("\\"), recognize(many_m_n(1, 3, one_of("01234567")))),
+            |out: &str| {
+                u32::from_str_radix(out, 8)
+                    .map(|u| Sequence::Char(char::from_u32(u).unwrap()))
+                    .ok()
+            },
+        )(input)
     }
 
     fn parse_char_range(input: &str) -> IResult<&str, Sequence> {
-        separated_pair(take(1usize), tag("-"), take(1usize))(input).map(|(l, (a, b))| {
+        separated_pair(anychar, tag("-"), anychar)(input).map(|(l, (a, b))| {
             (l, {
-                let (start, end) = (
-                    u32::from(a.chars().next().unwrap()),
-                    u32::from(b.chars().next().unwrap()),
-                );
-                if (48..=90).contains(&start) && (48..=90).contains(&end) && end > start {
-                    Sequence::CharRange(
-                        (start..=end)
-                            .map(|c| std::char::from_u32(c).unwrap())
-                            .collect(),
-                    )
-                } else {
-                    Sequence::CharRange((start..=end).filter_map(std::char::from_u32).collect())
-                }
+                let (start, end) = (u32::from(a), u32::from(b));
+                Sequence::CharRange((start..=end).filter_map(std::char::from_u32).collect())
             })
         })
     }
 
     fn parse_char_star(input: &str) -> IResult<&str, Sequence> {
-        tuple((tag("["), take(1usize), tag("*"), tag("]")))(input).map(|(_, (_, _, _, _))| todo!())
+        tuple((tag("["), anychar, tag("*]")))(input).map(|(_, (_, _, _))| todo!())
     }
 
     fn parse_char_repeat(input: &str) -> IResult<&str, Sequence> {
-        tuple((tag("["), take(1usize), tag("*"), take_until("]"), tag("]")))(input).map(
-            |(l, (_, c, _, n, _))| {
-                (
-                    l,
-                    Sequence::CharRange(
-                        std::iter::repeat(c.chars().next().unwrap())
-                            .take(n.parse().unwrap())
-                            .collect(),
-                    ),
-                )
-            },
-        )
+        tuple((
+            tag("["),
+            anychar,
+            tag("*"),
+            take_while1(|c: char| c.is_digit(10)),
+            tag("]"),
+        ))(input)
+        .map(|(l, (_, c, _, n, _))| {
+            (
+                l,
+                Sequence::CharRange(std::iter::repeat(c).take(n.parse().unwrap()).collect()),
+            )
+        })
     }
 
     fn parse_alnum(input: &str) -> IResult<&str, Sequence> {
         tag("[:alnum:]")(input).map(|(l, _)| {
             (
                 l,
-                Sequence::CharRange(('a'..='z').chain('A'..'Z').chain('0'..'9').collect()),
+                Sequence::CharRange(('0'..='9').chain('A'..='Z').chain('a'..='z').collect()),
             )
         })
     }
@@ -218,7 +132,7 @@ impl Sequence {
         tag("[:alpha:]")(input).map(|(l, _)| {
             (
                 l,
-                Sequence::CharRange(('a'..='z').chain('A'..'Z').collect()),
+                Sequence::CharRange(('A'..='Z').chain('a'..='z').collect()),
             )
         })
     }
@@ -260,11 +174,16 @@ impl Sequence {
     }
 
     fn parse_xdigit(input: &str) -> IResult<&str, Sequence> {
-        tag("[:xdigit:]")(input).map(|(_, _)| todo!())
+        tag("[:xdigit:]")(input).map(|(l, _)| {
+            (
+                l,
+                Sequence::CharRange(('0'..='9').chain('A'..='Z').chain('a'..='z').collect()),
+            )
+        })
     }
 
     fn parse_char_equal(input: &str) -> IResult<&str, Sequence> {
-        tuple((tag("[="), take(1usize), tag("=]")))(input).map(|(_, (_, _, _))| todo!())
+        tuple((tag("[="), anychar, tag("=]")))(input).map(|(_, (_, _, _))| todo!())
     }
 }
 
@@ -298,20 +217,46 @@ impl SymbolTranslator for DeleteOperation {
 }
 
 #[derive(Debug, Clone)]
+pub struct TranslateOperationComplement {
+    iter: u32,
+    set1: Vec<char>,
+    set2: Vec<char>,
+    fallback: char,
+    translation_map: HashMap<char, char>,
+}
+
+impl TranslateOperationComplement {
+    fn new(set1: Vec<char>, set2: Vec<char>, fallback: char) -> TranslateOperationComplement {
+        TranslateOperationComplement {
+            iter: 0,
+            set1,
+            set2: set2.into_iter().rev().collect(),
+            fallback,
+            translation_map: HashMap::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct TranslateOperationStandard {
+    translation_map: HashMap<char, char>,
+}
+
+impl TranslateOperationStandard {
+    fn new(set1: Vec<char>, set2: Vec<char>, fallback: char) -> TranslateOperationStandard {
+        TranslateOperationStandard {
+            translation_map: set1
+                .into_iter()
+                .zip(set2.into_iter().chain(std::iter::repeat(fallback)))
+                .collect::<HashMap<_, _>>(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum TranslateOperation {
-    Standard(HashMap<char, char>),
-    Complement(
-        // iter
-        u32,
-        // set 1
-        Vec<char>,
-        // set 2
-        Vec<char>,
-        // fallback
-        char,
-        // translation map
-        HashMap<char, char>,
-    ),
+    Standard(TranslateOperationStandard),
+    Complement(TranslateOperationComplement),
 }
 
 impl TranslateOperation {
@@ -319,7 +264,7 @@ impl TranslateOperation {
         while char::from_u32(iter).is_none() {
             iter = iter.saturating_add(1)
         }
-        (iter, char::from_u32(iter).unwrap())
+        (iter.saturating_add(1), char::from_u32(iter).unwrap())
     }
 }
 
@@ -330,6 +275,7 @@ impl TranslateOperation {
         truncate_set1: bool,
         complement: bool,
     ) -> TranslateOperation {
+        // TODO: Only some translation is acceptable i.e. uppercase/lowercase transform.
         let mut set1 = pset1
             .into_iter()
             .flat_map(Sequence::dissolve)
@@ -338,25 +284,14 @@ impl TranslateOperation {
             .into_iter()
             .flat_map(Sequence::dissolve)
             .collect::<Vec<_>>();
+        let fallback = set2.last().cloned().unwrap();
         if truncate_set1 {
             set1.truncate(set2.len());
         }
-        let fallback = set2.last().cloned().unwrap();
         if complement {
-            TranslateOperation::Complement(
-                0,
-                set1,
-                set2,
-                // TODO: Check how `tr` actually handles this
-                fallback,
-                HashMap::new(),
-            )
+            TranslateOperation::Complement(TranslateOperationComplement::new(set1, set2, fallback))
         } else {
-            TranslateOperation::Standard(
-                set1.into_iter()
-                    .zip(set2.into_iter().chain(std::iter::repeat(fallback)))
-                    .collect::<HashMap<_, _>>(),
-            )
+            TranslateOperation::Standard(TranslateOperationStandard::new(set1, set2, fallback))
         }
     }
 }
@@ -364,12 +299,19 @@ impl TranslateOperation {
 impl SymbolTranslator for TranslateOperation {
     fn translate(&mut self, current: char) -> Option<char> {
         match self {
-            TranslateOperation::Standard(map) => Some(
-                map.iter()
+            TranslateOperation::Standard(TranslateOperationStandard { translation_map }) => Some(
+                translation_map
+                    .iter()
                     .find_map(|(l, r)| l.eq(&current).then(|| *r))
                     .unwrap_or(current),
             ),
-            TranslateOperation::Complement(iter, set1, set2, fallback, mapped_characters) => {
+            TranslateOperation::Complement(TranslateOperationComplement {
+                iter,
+                set1,
+                set2,
+                fallback,
+                translation_map,
+            }) => {
                 // First, try to see if current char is already mapped
                 // If so, return the mapped char
                 // Else, pop from set2
@@ -378,17 +320,17 @@ impl SymbolTranslator for TranslateOperation {
                 if let Some(c) = set1.iter().find(|c| c.eq(&&current)) {
                     Some(*c)
                 } else {
-                    while mapped_characters.get(&current).is_none() {
+                    while translation_map.get(&current).is_none() {
                         if let Some(p) = set2.pop() {
                             let (next_index, next_value) =
                                 TranslateOperation::next_complement_char(*iter);
                             *iter = next_index;
-                            mapped_characters.insert(next_value, p);
+                            translation_map.insert(next_value, p);
                         } else {
-                            mapped_characters.insert(current, *fallback);
+                            translation_map.insert(current, *fallback);
                         }
                     }
-                    Some(*mapped_characters.get(&current).unwrap())
+                    Some(*translation_map.get(&current).unwrap())
                 }
             }
         }
@@ -441,14 +383,8 @@ impl SymbolTranslator for SqueezeOperation {
         } else {
             let next = if self.squeeze_set.iter().any(|c| c.eq(&current)) {
                 match self.previous {
-                    Some(v) => {
-                        if v.eq(&current) {
-                            None
-                        } else {
-                            Some(current)
-                        }
-                    }
-                    None => Some(current),
+                    Some(v) if v == current => None,
+                    _ => Some(current),
                 }
             } else {
                 Some(current)
