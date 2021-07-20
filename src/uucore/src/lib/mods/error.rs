@@ -48,6 +48,8 @@
 //! * Using [`ExitCode`] is not recommended but can be useful for converting utils to use
 //!   [`UResult`].
 
+// spell-checker:ignore uioerror
+
 use std::{
     error::Error,
     fmt::{Display, Formatter},
@@ -577,6 +579,73 @@ impl From<UIoError> for UError {
         common.into()
     }
 }
+
+/// Shorthand to construct [`UIoError`]-instances.
+///
+/// This macro serves as a convenience call to quickly construct instances of
+/// [`UIoError`]. It takes:
+///
+/// - An instance of [`std::io::Error`]
+/// - A `format!`-compatible string and
+/// - An arbitrary number of arguments to the format string
+///
+/// In exactly this order. It is equivalent to the more verbose code seen in the
+/// example.
+///
+/// # Examples
+///
+/// ```
+/// use uucore::error::UIoError;
+/// use uucore::uio_error;
+///
+/// let io_err = std::io::Error::new(
+///     std::io::ErrorKind::PermissionDenied, "fix me please!"
+/// );
+///
+/// let uio_err = UIoError::new(
+///     io_err.kind(),
+///     format!("Error code: {}", 2)
+/// );
+///
+/// let other_uio_err = uio_error!(io_err, "Error code: {}", 2);
+///
+/// // prints "fix me please!: Permission denied"
+/// println!("{}", uio_err);
+/// // prints "Error code: 2: Permission denied"
+/// println!("{}", other_uio_err);
+/// ```
+///
+/// The [`std::fmt::Display`] impl of [`UIoError`] will then ensure that an
+/// appropriate error message relating to the actual error kind of the
+/// [`std::io::Error`] is appended to whatever error message is defined in
+/// addition (as secondary argument).
+///
+/// If you want to show only the error message for the [`std::io::ErrorKind`]
+/// that's contained in [`UIoError`], pass the second argument as empty string:
+///
+/// ```
+/// use uucore::error::UIoError;
+/// use uucore::uio_error;
+///
+/// let io_err = std::io::Error::new(
+///     std::io::ErrorKind::PermissionDenied, "fix me please!"
+/// );
+///
+/// let other_uio_err = uio_error!(io_err, "");
+///
+/// // prints: ": Permission denied"
+/// println!("{}", other_uio_err);
+/// ```
+//#[macro_use]
+#[macro_export]
+macro_rules! uio_error(
+    ($err:expr, $($args:tt)+) => ({
+        UIoError::new(
+            $err.kind(),
+            format!($($args)+)
+        )
+    })
+);
 
 /// Common errors for utilities.
 ///
