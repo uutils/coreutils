@@ -308,15 +308,25 @@ fn behavior(matches: &ArgMatches) -> Result<Behavior, i32> {
         None
     };
 
+    let backup_mode = backup_control::determine_backup_mode(
+        matches.is_present(OPT_BACKUP_NO_ARG),
+        matches.is_present(OPT_BACKUP),
+        matches.value_of(OPT_BACKUP),
+    );
+    let backup_mode = match backup_mode {
+        Err(err) => {
+            show_usage_error!("{}", err);
+            return Err(1);
+        }
+        Ok(mode) => mode,
+    };
+
     let target_dir = matches.value_of(OPT_TARGET_DIRECTORY).map(|d| d.to_owned());
 
     Ok(Behavior {
         main_function,
         specified_mode,
-        backup_mode: backup_control::determine_backup_mode(
-            matches.is_present(OPT_BACKUP_NO_ARG) || matches.is_present(OPT_BACKUP),
-            matches.value_of(OPT_BACKUP),
-        ),
+        backup_mode,
         suffix: backup_control::determine_backup_suffix(matches.value_of(OPT_SUFFIX)),
         owner: matches.value_of(OPT_OWNER).unwrap_or("").to_string(),
         group: matches.value_of(OPT_GROUP).unwrap_or("").to_string(),
