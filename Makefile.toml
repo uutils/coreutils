@@ -41,7 +41,7 @@ if is_empty "${env_features}"
 		features = set "unix"
 	else
 		if eq "${CARGO_MAKE_RUST_TARGET_OS}" "linux"
-			features = set "unix"
+			features = set "linux"
 		else
 			if eq "${CARGO_MAKE_RUST_TARGET_OS}" "windows"
 				features = set "windows"
