@@ -70,13 +70,22 @@ impl Default for Settings {
 
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let mut settings: Settings = Default::default();
+    let mut settings = Settings::default();
 
+    let mut args = args.peekable();
+    let name = args.next().unwrap();
+    if let Some(arg) = args.peek() {
+        // If the first argument is the obsolete syntax, remove it for the rest of the parsing
+        if parse_obsolete(&arg.to_string_lossy(), &mut settings) {
+            args.next();
+        }
+    }
     let app = uu_app();
 
-    let matches = app.get_matches_from(args);
+    let matches = app.get_matches_from(std::iter::once(name).chain(args));
 
-    settings.follow = matches.is_present(options::FOLLOW);
+    // follow might already been set with the obsolete syntax
+    settings.follow |= matches.is_present(options::FOLLOW);
     if settings.follow {
         if let Some(n) = matches.value_of(options::SLEEP_INT) {
             let parsed: Option<u32> = n.parse().ok();
@@ -113,7 +122,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Err(e) => crash!(1, "invalid number of lines: {}", e.to_string()),
         }
     } else {
-        (FilterMode::Lines(10, b'\n'), false)
+        (settings.mode, settings.beginning)
     };
     settings.mode = mode_and_beginning.0;
     settings.beginning = mode_and_beginning.1;
@@ -175,6 +184,60 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     0
+}
+
+/// Parses the argument syntax `-[NUM][bcl][f]` and applying the settings.
+/// It is not a problem the settings argument is changed even though the argument
+/// was not correct, because clap will error on it and the program won't run.
+/// Returns a boolean indicating whether the argument was valid obsolete syntax.
+fn parse_obsolete(arg: &str, settings: &mut Settings) -> bool {
+    if let Some(arg) = arg.strip_prefix('-') {
+        if !arg.starts_with(|c: char| c.is_digit(10)) {
+            return false;
+        }
+        let idx = arg.find(|c: char| !c.is_digit(10));
+        let num_slice = match idx {
+            Some(i) => &arg[..i],
+            None => arg,
+        };
+        // Unwrap is safe because we selected only the digits.
+        let num = num_slice.parse::<usize>().unwrap();
+        match idx {
+            Some(i) => {
+                let rest = &arg[i..];
+                let mut chars = rest.chars();
+                let mut char = chars.next().unwrap();
+                match char {
+                    'b' => {
+                        settings.mode = FilterMode::Bytes(num * 512);
+                    }
+                    'c' => {
+                        settings.mode = FilterMode::Bytes(num);
+                    }
+                    'l' => {
+                        settings.mode = FilterMode::Lines(num, b'\n');
+                    }
+                    _ => {}
+                }
+                if "bcl".contains(char) {
+                    if let Some(c) = chars.next() {
+                        char = c;
+                    } else {
+                        return true;
+                    }
+                }
+                if char == 'f' {
+                    settings.follow = true;
+                }
+                return chars.next().is_none();
+            }
+            None => {
+                settings.mode = FilterMode::Lines(num, b'\n');
+                return true;
+            }
+        }
+    }
+    false
 }
 
 pub fn uu_app() -> App<'static, 'static> {
