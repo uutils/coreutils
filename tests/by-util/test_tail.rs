@@ -416,3 +416,57 @@ fn test_tail_num_with_undocumented_sign_bytes() {
         .succeeds()
         .stdout_is("efghijklmnopqrstuvwxyz");
 }
+
+#[test]
+fn test_tail_obsolete() {
+    new_ucmd!()
+        .args(&["-5c"])
+        .pipe_in_fixture(FOOBAR_TXT)
+        .succeeds()
+        .stdout_is("once\n");
+
+    new_ucmd!()
+        .args(&["-3"])
+        .pipe_in_fixture(FOOBAR_TXT)
+        .succeeds()
+        // spell-checker:disable-next-line
+        .stdout_is("nueve\ndiez\nonce\n");
+
+    new_ucmd!()
+        .args(&["-3l"])
+        .pipe_in_fixture(FOOBAR_TXT)
+        .succeeds()
+        // spell-checker:disable-next-line
+        .stdout_is("nueve\ndiez\nonce\n");
+
+    new_ucmd!()
+        .args(&["-1b"])
+        .pipe_in(
+            (b'0'..=b'9')
+                .into_iter()
+                .cycle()
+                .take(520)
+                .collect::<Vec<_>>(),
+        )
+        .succeeds()
+        .stdout_is(
+            ('0'..='9')
+                .into_iter()
+                .cycle()
+                .skip(8)
+                .take(512)
+                .collect::<String>(),
+        );
+
+    new_ucmd!()
+        .arg("-10f")
+        .pipe_in_fixture(FOOBAR_TXT)
+        .run()
+        .stdout_is_fixture("follow_stdin.expected");
+
+    new_ucmd!()
+        .arg("+2")
+        .pipe_in_fixture(FOOBAR_TXT)
+        .run()
+        .stdout_is_fixture("follow_stdin.expected");
+}

@@ -76,7 +76,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let name = args.next().unwrap();
     if let Some(arg) = args.peek() {
         // If the first argument is the obsolete syntax, remove it for the rest of the parsing
-        if parse_obsolete(&arg.to_string_lossy(), &mut settings) {
+        if parse_obsolete(&arg.to_string_lossy(), &mut settings).is_some() {
             args.next();
         }
     }
@@ -187,57 +187,46 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 /// Parses the argument syntax `-[NUM][bcl][f]` and applying the settings.
-/// It is not a problem the settings argument is changed even though the argument
+/// It is not a problem that the settings argument is changed even though the argument
 /// was not correct, because clap will error on it and the program won't run.
-/// Returns a boolean indicating whether the argument was valid obsolete syntax.
-fn parse_obsolete(arg: &str, settings: &mut Settings) -> bool {
-    if let Some(arg) = arg.strip_prefix('-') {
-        if !arg.starts_with(|c: char| c.is_digit(10)) {
-            return false;
-        }
-        let idx = arg.find(|c: char| !c.is_digit(10));
-        let num_slice = match idx {
-            Some(i) => &arg[..i],
-            None => arg,
-        };
-        // Unwrap is safe because we selected only the digits.
-        let num = num_slice.parse::<usize>().unwrap();
-        match idx {
-            Some(i) => {
-                let rest = &arg[i..];
-                let mut chars = rest.chars();
-                let mut char = chars.next().unwrap();
-                match char {
-                    'b' => {
-                        settings.mode = FilterMode::Bytes(num * 512);
-                    }
-                    'c' => {
-                        settings.mode = FilterMode::Bytes(num);
-                    }
-                    'l' => {
-                        settings.mode = FilterMode::Lines(num, b'\n');
-                    }
-                    _ => {}
-                }
-                if "bcl".contains(char) {
-                    if let Some(c) = chars.next() {
-                        char = c;
-                    } else {
-                        return true;
-                    }
-                }
-                if char == 'f' {
-                    settings.follow = true;
-                }
-                return chars.next().is_none();
-            }
-            None => {
-                settings.mode = FilterMode::Lines(num, b'\n');
-                return true;
-            }
-        }
+/// Returns `Some` if the argument is valid obsolete syntax.
+fn parse_obsolete(arg: &str, settings: &mut Settings) -> Option<()> {
+    if arg.starts_with('+') {
+        settings.beginning = true;
     }
-    false
+
+    let arg = arg.strip_prefix(&['+', '-'][..])?;
+    if !arg.starts_with(|c: char| c.is_digit(10)) {
+        return None;
+    }
+
+    // Parse the NUM part
+    let idx = arg
+        .find(|c: char| !c.is_digit(10))
+        .unwrap_or_else(|| arg.len());
+    let num = arg[..idx].parse::<usize>().ok()?;
+
+    let mut chars = arg[idx..].chars();
+    let mut char = chars.next();
+
+    // Parse the [bcl] part. Note that `l` is redundant.
+    settings.mode = match char {
+        Some('b') => FilterMode::Bytes(num * 512),
+        Some('c') => FilterMode::Bytes(num),
+        _ => FilterMode::Lines(num, b'\n'),
+    };
+    if let Some('b') | Some('c') | Some('l') = char {
+        char = chars.next();
+    }
+
+    // Parse the [f] part
+    if let Some('f') = char {
+        settings.follow = true;
+        char = chars.next();
+    }
+
+    // There should be no more characters left.
+    char.is_none().then(|| ())
 }
 
 pub fn uu_app() -> App<'static, 'static> {
