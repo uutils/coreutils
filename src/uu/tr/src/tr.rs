@@ -15,6 +15,7 @@ extern crate uucore;
 extern crate nom;
 
 mod operation;
+mod unicode_table;
 
 use clap::{crate_version, App, Arg};
 use nom::AsBytes;

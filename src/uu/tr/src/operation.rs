@@ -2,7 +2,7 @@ use nom::{
     branch::alt,
     bytes::complete::{tag, take_while1},
     character::complete::{anychar, one_of},
-    combinator::{map_opt, recognize},
+    combinator::{map_opt, recognize, value},
     multi::{many0, many_m_n},
     sequence::{preceded, separated_pair, tuple},
     IResult,
@@ -12,6 +12,8 @@ use std::{
     fmt::Debug,
     io::{BufRead, Write},
 };
+
+use crate::unicode_table;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Sequence {
@@ -66,13 +68,13 @@ impl Sequence {
     fn parse_backslash(input: &str) -> IResult<&str, Sequence> {
         preceded(tag("\\"), anychar)(input).map(|(l, a)| {
             let c = match a {
-                'a' => Sequence::Char('\u{0007}'),
-                'b' => Sequence::Char('\u{0008}'),
-                'f' => Sequence::Char('\u{000C}'),
-                'n' => Sequence::Char('\u{000A}'),
-                'r' => Sequence::Char('\u{000D}'),
-                't' => Sequence::Char('\u{0009}'),
-                'v' => Sequence::Char('\u{000B}'),
+                'a' => Sequence::Char(unicode_table::BEL),
+                'b' => Sequence::Char(unicode_table::BS),
+                'f' => Sequence::Char(unicode_table::FF),
+                'n' => Sequence::Char(unicode_table::LF),
+                'r' => Sequence::Char(unicode_table::CR),
+                't' => Sequence::Char(unicode_table::HT),
+                'v' => Sequence::Char(unicode_table::VT),
                 x => Sequence::Char(x),
             };
             (l, c)
@@ -129,32 +131,55 @@ impl Sequence {
     }
 
     fn parse_alpha(input: &str) -> IResult<&str, Sequence> {
-        tag("[:alpha:]")(input).map(|(l, _)| {
-            (
-                l,
-                Sequence::CharRange(('A'..='Z').chain('a'..='z').collect()),
-            )
-        })
+        value(
+            Sequence::CharRange(('A'..='Z').chain('a'..='z').collect()),
+            tag("[:alpha:]"),
+        )(input)
     }
 
     fn parse_blank(input: &str) -> IResult<&str, Sequence> {
-        tag("[:blank:]")(input).map(|(_, _)| todo!())
+        value(
+            Sequence::CharRange(vec![unicode_table::SPACE, unicode_table::HT]),
+            tag("[:blank:]"),
+        )(input)
     }
 
     fn parse_control(input: &str) -> IResult<&str, Sequence> {
-        tag("[:cntrl:]")(input).map(|(_, _)| todo!())
+        value(
+            Sequence::CharRange(
+                (0..=31)
+                    .chain(std::iter::once(127))
+                    .flat_map(char::from_u32)
+                    .collect(),
+            ),
+            tag("[:cntrl:]"),
+        )(input)
     }
 
     fn parse_digit(input: &str) -> IResult<&str, Sequence> {
-        tag("[:digit:]")(input).map(|(l, _)| (l, Sequence::CharRange(('0'..='9').collect())))
+        value(Sequence::CharRange(('0'..='9').collect()), tag("[:digit:]"))(input)
     }
 
     fn parse_graph(input: &str) -> IResult<&str, Sequence> {
-        tag("[:graph:]")(input).map(|(_, _)| todo!())
+        value(
+            Sequence::CharRange(
+                (48..=57) // digit
+                    .chain(65..=90) // uppercase
+                    .chain(97..=122) // lowercase
+                    // punctuations
+                    .chain(33..=47)
+                    .chain(58..=64)
+                    .chain(91..=96)
+                    .chain(123..=126)
+                    .flat_map(char::from_u32)
+                    .collect(),
+            ),
+            tag("[:graph:]"),
+        )(input)
     }
 
     fn parse_lower(input: &str) -> IResult<&str, Sequence> {
-        tag("[:lower:]")(input).map(|(l, _)| (l, Sequence::CharRange(('a'..='z').collect())))
+        value(Sequence::CharRange(('a'..='z').collect()), tag("[:lower:]"))(input)
     }
 
     fn parse_print(input: &str) -> IResult<&str, Sequence> {
@@ -162,11 +187,31 @@ impl Sequence {
     }
 
     fn parse_punct(input: &str) -> IResult<&str, Sequence> {
-        tag("[:punct:]")(input).map(|(_, _)| todo!())
+        value(
+            Sequence::CharRange(
+                (33..=47)
+                    .chain(58..=64)
+                    .chain(91..=96)
+                    .chain(123..=126)
+                    .flat_map(char::from_u32)
+                    .collect(),
+            ),
+            tag("[:punct:]"),
+        )(input)
     }
 
     fn parse_space(input: &str) -> IResult<&str, Sequence> {
-        tag("[:space:]")(input).map(|(_, _)| todo!())
+        value(
+            Sequence::CharRange(vec![
+                unicode_table::HT,
+                unicode_table::LF,
+                unicode_table::VT,
+                unicode_table::FF,
+                unicode_table::CR,
+                unicode_table::SPACE,
+            ]),
+            tag("[:space:]"),
+        )(input)
     }
 
     fn parse_upper(input: &str) -> IResult<&str, Sequence> {
@@ -177,7 +222,7 @@ impl Sequence {
         tag("[:xdigit:]")(input).map(|(l, _)| {
             (
                 l,
-                Sequence::CharRange(('0'..='9').chain('A'..='Z').chain('a'..='z').collect()),
+                Sequence::CharRange(('0'..='9').chain('A'..='F').chain('a'..='f').collect()),
             )
         })
     }
