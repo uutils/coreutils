@@ -294,34 +294,38 @@ fn test_more_than_2_sets() {
 }
 
 #[test]
-fn test_basic_translation() {
+fn basic_translation_works() {
+    // echo -n "abcdefabcdef" | tr "dabcdef"  "xyz"
     new_ucmd!()
-        .args(&["dabcdef", "xyz"])
+        .args(&["abcdef", "xyz"])
         .pipe_in("abcdefabcdef")
         .succeeds()
-        .stdout_is("yzzzzzyzzzzz");
+        .stdout_is("xyzzzzxyzzzz");
 }
 
 #[test]
-fn test_basic_translation_with_alnum_1() {
+fn alnum_overrides_translation_to_fallback_1() {
+    // echo -n "abcdefghijklmnopqrstuvwxyz" | tr "abc[:alpha:]" "xyz"
     new_ucmd!()
-        .args(&["dabcdef[:alnum:]", "xyz"])
-        .pipe_in("abcdefabcdef")
+        .args(&["abc[:alpha:]", "xyz"])
+        .pipe_in("abcdefghijklmnopqrstuvwxyz")
         .succeeds()
-        .stdout_is("zzzzzzzzzzzz");
+        .stdout_is("zzzzzzzzzzzzzzzzzzzzzzzzzz");
 }
 
 #[test]
-fn test_basic_translation_with_alnum_2() {
+fn alnum_overrides_translation_to_fallback_2() {
+    // echo -n "abcdefghijklmnopqrstuvwxyz" | tr "[:alpha:]abc" "xyz"
     new_ucmd!()
-        .args(&["[:alnum:]abc", "xyz"])
-        .pipe_in("abcdefabcdef")
+        .args(&["[:alpha:]abc", "xyz"])
+        .pipe_in("abcdefghijklmnopqrstuvwxyz")
         .succeeds()
-        .stdout_is("zzzzzzzzzzzz");
+        .stdout_is("zzzzzzzzzzzzzzzzzzzzzzzzzz");
 }
 
 #[test]
-fn test_translation_override_pair() {
+fn overrides_translation_pair_if_repeats() {
+    // echo -n 'aaa' | tr "aaa" "xyz"
     new_ucmd!()
         .args(&["aaa", "xyz"])
         .pipe_in("aaa")
@@ -330,20 +334,61 @@ fn test_translation_override_pair() {
 }
 
 #[test]
-fn test_translation_case_conversion_works() {
+fn uppercase_conversion_works_1() {
+    // echo -n 'abcdefghijklmnopqrstuvwxyz' | tr "abcdefghijklmnopqrstuvwxyz" "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     new_ucmd!()
         .args(&["abcdefghijklmnopqrstuvwxyz", "ABCDEFGHIJKLMNOPQRSTUVWXYZ"])
         .pipe_in("abcdefghijklmnopqrstuvwxyz")
         .succeeds()
         .stdout_is("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+}
+
+#[test]
+fn uppercase_conversion_works_2() {
+    // echo -n 'abcdefghijklmnopqrstuvwxyz' | tr "a-z" "A-Z"
     new_ucmd!()
         .args(&["a-z", "A-Z"])
         .pipe_in("abcdefghijklmnopqrstuvwxyz")
         .succeeds()
         .stdout_is("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+}
+
+#[test]
+fn uppercase_conversion_works_3() {
+    // echo -n 'abcdefghijklmnopqrstuvwxyz' | tr "[:lower:]" "[:upper:]"
     new_ucmd!()
         .args(&["[:lower:]", "[:upper:]"])
         .pipe_in("abcdefghijklmnopqrstuvwxyz")
         .succeeds()
         .stdout_is("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+}
+
+#[test]
+fn translate_complement_set_in_order() {
+    // echo -n '01234' | tr -c '@-~' ' -^'
+    new_ucmd!()
+        .args(&["-c", "@-~", " -^"])
+        .pipe_in("01234")
+        .succeeds()
+        .stdout_is("PQRST");
+}
+
+#[test]
+fn alpha_expands_uppercase_lowercase() {
+    // echo -n "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz" | tr "[:alpha:]" " -_"
+    new_ucmd!()
+        .args(&["[:alpha:]", " -_"])
+        .pipe_in("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
+        .succeeds()
+        .stdout_is(r##" !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRS"##);
+}
+
+#[test]
+fn alnum_expands_number_uppercase_lowercase() {
+    // echo -n "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz" | tr "[:alnum:]" " -_"
+    new_ucmd!()
+        .args(&["[:alnum:]", " -_"])
+        .pipe_in("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
+        .succeeds()
+        .stdout_is(r##" !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]"##);
 }
