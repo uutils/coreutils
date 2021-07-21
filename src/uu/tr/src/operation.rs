@@ -1,12 +1,12 @@
 use crate::unicode_table;
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take_until},
+    bytes::complete::tag,
     character::complete::{anychar, digit1, one_of},
-    combinator::{map_opt, opt, recognize},
+    combinator::{map_opt, recognize},
     multi::{many0, many_m_n},
-    sequence::{delimited, preceded, separated_pair, tuple},
-    take_until1, IResult,
+    sequence::{delimited, preceded, separated_pair},
+    IResult,
 };
 use std::{
     collections::HashMap,
@@ -34,6 +34,10 @@ impl Sequence {
     pub fn parse_set_string(input: &str) -> Vec<Sequence> {
         many0(alt((
             alt((
+                Sequence::parse_char_range_octal_leftright,
+                Sequence::parse_char_range_octal_left,
+                Sequence::parse_char_range_octal_right,
+                Sequence::parse_char_range_backslash_collapse,
                 Sequence::parse_char_range,
                 Sequence::parse_char_star,
                 Sequence::parse_char_repeat,
@@ -109,6 +113,65 @@ impl Sequence {
         separated_pair(anychar, tag("-"), anychar)(input).map(|(l, (a, b))| {
             (l, {
                 let (start, end) = (u32::from(a), u32::from(b));
+                Sequence::CharRange(Box::new((start..=end).filter_map(std::char::from_u32)))
+            })
+        })
+    }
+
+    fn parse_char_range_backslash_collapse(input: &str) -> IResult<&str, Sequence> {
+        separated_pair(
+            preceded(tag("\\"), anychar),
+            tag("-"),
+            preceded(tag("\\"), anychar),
+        )(input)
+        .map(|(l, (a, b))| {
+            (l, {
+                let (start, end) = (u32::from(a), u32::from(b));
+                Sequence::CharRange(Box::new((start..=end).filter_map(std::char::from_u32)))
+            })
+        })
+    }
+
+    fn parse_char_range_octal_left(input: &str) -> IResult<&str, Sequence> {
+        separated_pair(
+            preceded(tag("\\"), recognize(many_m_n(1, 3, one_of("01234567")))),
+            tag("-"),
+            anychar,
+        )(input)
+        .map(|(l, (a, b))| {
+            (l, {
+                let (start, end) = (u32::from_str_radix(a, 8).unwrap(), u32::from(b));
+                Sequence::CharRange(Box::new((start..=end).filter_map(std::char::from_u32)))
+            })
+        })
+    }
+
+    fn parse_char_range_octal_right(input: &str) -> IResult<&str, Sequence> {
+        separated_pair(
+            anychar,
+            tag("-"),
+            preceded(tag("\\"), recognize(many_m_n(1, 3, one_of("01234567")))),
+        )(input)
+        .map(|(l, (a, b))| {
+            (l, {
+                let (start, end) = (u32::from(a), u32::from_str_radix(b, 8).unwrap());
+                Sequence::CharRange(Box::new((start..=end).filter_map(std::char::from_u32)))
+            })
+        })
+    }
+
+    fn parse_char_range_octal_leftright(input: &str) -> IResult<&str, Sequence> {
+        separated_pair(
+            preceded(tag("\\"), recognize(many_m_n(1, 3, one_of("01234567")))),
+            tag("-"),
+            preceded(tag("\\"), recognize(many_m_n(1, 3, one_of("01234567")))),
+        )(input)
+        .map(|(l, (a, b))| {
+            (l, {
+                let (start, end) = (
+                    u32::from_str_radix(a, 8).unwrap(),
+                    u32::from_str_radix(b, 8).unwrap(),
+                );
                 Sequence::CharRange(Box::new((start..=end).filter_map(std::char::from_u32)))
             })
         })
@@ -261,6 +324,7 @@ pub trait SymbolTranslator {
     fn translate(&mut self, current: char) -> Option<char>;
 }
 
+#[derive(Debug)]
 pub struct DeleteOperation {
     set: Vec<char>,
     complement_flag: bool,
@@ -285,7 +349,7 @@ impl SymbolTranslator for DeleteOperation {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct TranslateOperationComplement {
     iter: u32,
     set1: Vec<char>,
@@ -306,7 +370,7 @@ impl TranslateOperationComplement {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct TranslateOperationStandard {
     translation_map: HashMap<char, char>,
 }
@@ -322,15 +386,21 @@ impl TranslateOperationStandard {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum TranslateOperation {
     Standard(TranslateOperationStandard),
     Complement(TranslateOperationComplement),
 }
 
 impl TranslateOperation {
-    fn next_complement_char(mut iter: u32) -> (u32, char) {
-        while char::from_u32(iter).is_none() {
+    fn next_complement_char(mut iter: u32, ignore_list: &[char]) -> (u32, char) {
+        while (char::from_u32(iter).is_none()
+            || ignore_list
+                .iter()
+                .map(|c| u32::from(*c))
+                .any(|c| iter.eq(&c)))
+            && iter.ne(&u32::MAX)
+        {
             iter = iter.saturating_add(1)
         }
         (iter.saturating_add(1), char::from_u32(iter).unwrap())
@@ -392,7 +462,7 @@ impl SymbolTranslator for TranslateOperation {
                     while translation_map.get(&current).is_none() {
                         if let Some(p) = set2.pop() {
                             let (next_index, next_value) =
-                                TranslateOperation::next_complement_char(*iter);
+                                TranslateOperation::next_complement_char(*iter, &*set1);
                             *iter = next_index;
                             translation_map.insert(next_value, p);
                         } else {
@@ -466,7 +536,7 @@ impl SymbolTranslator for SqueezeOperation {
 
 pub fn translate_input<T, R, W>(input: &mut R, output: &mut W, mut translator: T)
 where
-    T: SymbolTranslator,
+    T: SymbolTranslator + Debug,
     R: BufRead,
     W: Write,
 {
