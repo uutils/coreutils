@@ -1,12 +1,12 @@
 use crate::unicode_table;
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take_while1},
-    character::complete::{anychar, one_of},
-    combinator::{map_opt, recognize},
+    bytes::complete::{tag, take_until},
+    character::complete::{anychar, digit1, one_of},
+    combinator::{map_opt, opt, recognize},
     multi::{many0, many_m_n},
-    sequence::{preceded, separated_pair, tuple},
-    IResult,
+    sequence::{delimited, preceded, separated_pair, tuple},
+    take_until1, IResult,
 };
 use std::{
     collections::HashMap,
@@ -33,7 +33,6 @@ pub enum Sequence {
 impl Sequence {
     pub fn parse_set_string(input: &str) -> Vec<Sequence> {
         many0(alt((
-            alt((Sequence::parse_octal, Sequence::parse_backslash)),
             alt((
                 Sequence::parse_char_range,
                 Sequence::parse_char_star,
@@ -50,11 +49,14 @@ impl Sequence {
                 Sequence::parse_print,
                 Sequence::parse_punct,
                 Sequence::parse_space,
-                Sequence::parse_space,
                 Sequence::parse_upper,
                 Sequence::parse_xdigit,
                 Sequence::parse_char_equal,
                 // NOTE: This must be the last one
+            )),
+            alt((
+                Sequence::parse_octal,
+                Sequence::parse_backslash,
                 Sequence::parse_char,
             )),
         )))(input)
@@ -113,20 +115,16 @@ impl Sequence {
     }
 
     fn parse_char_star(input: &str) -> IResult<&str, Sequence> {
-        tuple((tag("["), anychar, tag("*]")))(input)
-            .map(|(l, (_, c, _))| (l, Sequence::CharStar(c)))
+        delimited(tag("["), anychar, tag("*]"))(input).map(|(l, c)| (l, Sequence::CharStar(c)))
     }
 
     fn parse_char_repeat(input: &str) -> IResult<&str, Sequence> {
-        tuple((
+        delimited(
             tag("["),
-            anychar,
-            tag("*"),
-            // TODO: Extend this to support octal as well. Octal starts with 0.
-            take_while1(|c: char| c.is_digit(10)),
+            separated_pair(anychar, tag("*"), digit1),
             tag("]"),
-        ))(input)
-        .map(|(l, (_, c, _, n, _))| {
+        )(input)
+        .map(|(l, (c, n))| {
             (
                 l,
                 Sequence::CharRange(Box::new(std::iter::repeat(c).take(n.parse().unwrap()))),
@@ -255,7 +253,7 @@ impl Sequence {
     }
 
     fn parse_char_equal(input: &str) -> IResult<&str, Sequence> {
-        tuple((tag("[="), anychar, tag("=]")))(input).map(|(_, (_, _, _))| todo!())
+        delimited(tag("[="), anychar, tag("=]"))(input).map(|(_, _)| todo!())
     }
 }
 
