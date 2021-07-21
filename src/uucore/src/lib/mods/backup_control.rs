@@ -107,18 +107,37 @@ static VALID_ARGS_HELP: &str = "Valid arguments are:
   - ‘existing’, ‘nil’
   - ‘numbered’, ‘t’";
 
+/// Available backup modes.
+///
+/// The mapping of the backup modes to the CLI arguments is annotated on the
+/// enum variants.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum BackupMode {
+    /// Argument 'none', 'off'
     NoBackup,
+    /// Argument 'simple', 'never'
     SimpleBackup,
+    /// Argument 'numbered', 't'
     NumberedBackup,
+    /// Argument 'existing', 'nil'
     ExistingBackup,
 }
 
+/// Backup error types.
+///
+/// Errors are currently raised by [`determine_backup_mode`] only. All errors
+/// are implemented as [`UCustomError`] for uniform handling across utilities.
 #[derive(Debug, Eq, PartialEq)]
 pub enum BackupError {
+    /// An invalid argument (e.g. 'foo') was given as backup type. First
+    /// parameter is the argument, second is the arguments origin (CLI or
+    /// ENV-var)
     InvalidArgument(String, String),
+    /// An ambiguous argument (e.g. 'n') was given as backup type. First
+    /// parameter is the argument, second is the arguments origin (CLI or
+    /// ENV-var)
     AmbiguousArgument(String, String),
+    /// Currently unused
     BackupImpossible(),
     // BackupFailed(PathBuf, PathBuf, std::io::Error),
 }
@@ -166,7 +185,12 @@ impl Display for BackupError {
     }
 }
 
-/// Arguments for backup-related functionality
+/// Arguments for backup-related functionality.
+///
+/// Rather than implementing the `clap`-Arguments for every utility, it is
+/// recommended to include the `clap` arguments via the functions provided here.
+/// This way the backup-specific arguments are handled uniformly across
+/// utilities and can be maintained in one central place.
 pub mod arguments {
     extern crate clap;
 
@@ -174,6 +198,7 @@ pub mod arguments {
     pub static OPT_BACKUP_NO_ARG: &str = "backupopt_b";
     pub static OPT_SUFFIX: &str = "backupopt_suffix";
 
+    /// '--backup' argument
     pub fn backup() -> clap::Arg<'static, 'static> {
         clap::Arg::with_name(OPT_BACKUP)
             .long("backup")
@@ -184,12 +209,14 @@ pub mod arguments {
             .value_name("CONTROL")
     }
 
+    /// '-b' argument
     pub fn backup_no_args() -> clap::Arg<'static, 'static> {
         clap::Arg::with_name(OPT_BACKUP_NO_ARG)
             .short("b")
             .help("like --backup but does not accept an argument")
     }
 
+    /// '-S, --suffix' argument
     pub fn suffix() -> clap::Arg<'static, 'static> {
         clap::Arg::with_name(OPT_SUFFIX)
             .short("S")
@@ -200,6 +227,16 @@ pub mod arguments {
     }
 }
 
+/// Obtain the suffix to use for a backup.
+///
+/// In order of precedence, this function obtains the backup suffix
+///
+/// 1. From the '-S' or '--suffix' CLI argument, if present
+/// 2. From the "SIMPLE_BACKUP_SUFFIX" environment variable, if present
+/// 3. By using the default '~' if none of the others apply
+///
+/// This function directly takes [`clap::ArgMatches`] as argument and looks for
+/// the '-S' and '--suffix' arguments itself.
 pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
     let supplied_suffix = matches.value_of(arguments::OPT_SUFFIX);
     if let Some(suffix) = supplied_suffix {
@@ -214,7 +251,13 @@ pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
 /// Parses the backup options according to the [GNU manual][1], and converts
 /// them to an instance of `BackupMode` for further processing.
 ///
-/// For an explanation of what the arguments mean, refer to the examples below.
+/// Takes [`clap::ArgMatches`] as argument which **must** contain the options
+/// from [`arguments::backup()`] and [`arguments::backup_no_args()`]. Otherwise
+/// the `NoBackup` mode is returned unconditionally.
+///
+/// It is recommended for anyone who would like to implement the
+/// backup-functionality to use the arguments prepared in the `arguments`
+/// submodule (see examples)
 ///
 /// [1]: https://www.gnu.org/software/coreutils/manual/html_node/Backup-options.html
 ///
@@ -223,9 +266,11 @@ pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
 ///
 /// If an argument supplied directly to the long `backup` option, or read in
 /// through the `VERSION CONTROL` env var is ambiguous (i.e. may resolve to
-/// multiple backup modes) or invalid, an error is returned. The error contains
-/// the formatted error string which may then be passed to the
-/// [`show_usage_error`] macro.
+/// multiple backup modes) or invalid, an [`InvalidArgument`][10] or
+/// [`AmbiguousArgument`][11] error is returned, respectively.
+///
+/// [10]: BackupError::InvalidArgument
+/// [11]: BackupError::AmbiguousArgument
 ///
 ///
 /// # Examples
@@ -237,34 +282,18 @@ pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
 /// #[macro_use]
 /// extern crate uucore;
 /// use uucore::backup_control::{self, BackupMode};
-/// use clap::{App, Arg};
+/// use clap::{App, Arg, ArgMatches};
 ///
 /// fn main() {
-///     let OPT_BACKUP: &str = "backup";
-///     let OPT_BACKUP_NO_ARG: &str = "b";
 ///     let matches = App::new("app")
-///         .arg(Arg::with_name(OPT_BACKUP_NO_ARG)
-///             .short(OPT_BACKUP_NO_ARG))
-///         .arg(Arg::with_name(OPT_BACKUP)
-///             .long(OPT_BACKUP)
-///             .takes_value(true)
-///             .require_equals(true)
-///             .min_values(0))
+///         .arg(backup_control::arguments::backup())
+///         .arg(backup_control::arguments::backup_no_args())
 ///         .get_matches_from(vec![
 ///             "app", "-b", "--backup=t"
 ///         ]);
-///    
-///     let backup_mode = backup_control::determine_backup_mode(
-///         matches.is_present(OPT_BACKUP_NO_ARG), matches.is_present(OPT_BACKUP),
-///         matches.value_of(OPT_BACKUP)
-///     );
-///     let backup_mode = match backup_mode {
-///         Err(err) => {
-///             show_usage_error!("{}", err);
-///             return;
-///         },
-///         Ok(mode) => mode,
-///     };
+///
+///     let backup_mode = backup_control::determine_backup_mode(&matches).unwrap();
+///     assert_eq!(backup_mode, BackupMode::NumberedBackup)
 /// }
 /// ```
 ///
@@ -275,35 +304,24 @@ pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
 /// ```
 /// #[macro_use]
 /// extern crate uucore;
-/// use uucore::backup_control::{self, BackupMode};
-/// use clap::{crate_version, App, Arg, ArgMatches};
+/// use uucore::backup_control::{self, BackupMode, BackupError};
+/// use clap::{App, Arg, ArgMatches};
 ///
 /// fn main() {
-///     let OPT_BACKUP: &str = "backup";
-///     let OPT_BACKUP_NO_ARG: &str = "b";
 ///     let matches = App::new("app")
-///         .arg(Arg::with_name(OPT_BACKUP_NO_ARG)
-///             .short(OPT_BACKUP_NO_ARG))
-///         .arg(Arg::with_name(OPT_BACKUP)
-///             .long(OPT_BACKUP)
-///             .takes_value(true)
-///             .require_equals(true)
-///             .min_values(0))
+///         .arg(backup_control::arguments::backup())
+///         .arg(backup_control::arguments::backup_no_args())
 ///         .get_matches_from(vec![
 ///             "app", "-b", "--backup=n"
 ///         ]);
 ///    
-///     let backup_mode = backup_control::determine_backup_mode(
-///         matches.is_present(OPT_BACKUP_NO_ARG), matches.is_present(OPT_BACKUP),
-///         matches.value_of(OPT_BACKUP)
-///     );
-///     let backup_mode = match backup_mode {
-///         Err(err) => {
-///             show_usage_error!("{}", err);
-///             return;
-///         },
-///         Ok(mode) => mode,
-///     };
+///     let backup_mode = backup_control::determine_backup_mode(&matches);
+///
+///     assert!(backup_mode.is_err());
+///     let err = backup_mode.unwrap_err();
+///     // assert_eq!(err, BackupError::AmbiguousArgument);
+///     // Use uucore functionality to show the error to the user
+///     show!(err);
 /// }
 /// ```
 pub fn determine_backup_mode(matches: &ArgMatches) -> UResult<BackupMode> {
@@ -319,6 +337,7 @@ pub fn determine_backup_mode(matches: &ArgMatches) -> UResult<BackupMode> {
             // Second argument is for the error string that is returned.
             match_method(&method, "$VERSION_CONTROL")
         } else {
+            // Default if no argument is provided to '--backup'
             Ok(BackupMode::ExistingBackup)
         }
     } else if matches.is_present(arguments::OPT_BACKUP_NO_ARG) {
