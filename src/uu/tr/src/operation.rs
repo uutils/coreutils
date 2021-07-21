@@ -1,4 +1,3 @@
-use crate::unicode_table;
 use nom::{
     branch::alt,
     bytes::complete::tag,
@@ -14,15 +13,18 @@ use std::{
     io::{BufRead, Write},
 };
 
-static SPACES: &'static [char] = &[
-    unicode_table::HT,
-    unicode_table::LF,
-    unicode_table::VT,
-    unicode_table::FF,
-    unicode_table::CR,
-    unicode_table::SPACE,
-];
-static BLANK: &'static [char] = &[unicode_table::SPACE, unicode_table::HT];
+mod unicode_table {
+    pub static BEL: char = '\u{0007}';
+    pub static BS: char = '\u{0008}';
+    pub static HT: char = '\u{0009}';
+    pub static LF: char = '\u{000A}';
+    pub static VT: char = '\u{000B}';
+    pub static FF: char = '\u{000C}';
+    pub static CR: char = '\u{000D}';
+    pub static SPACE: char = '\u{0020}';
+    pub static SPACES: &'static [char] = &[HT, LF, VT, FF, CR, SPACE];
+    pub static BLANK: &'static [char] = &[SPACE, HT];
+}
 
 pub enum Sequence {
     Char(char),
@@ -214,8 +216,12 @@ impl Sequence {
     }
 
     fn parse_blank(input: &str) -> IResult<&str, Sequence> {
-        tag("[:blank:]")(input)
-            .map(|(l, _)| (l, Sequence::CharRange(Box::new(BLANK.into_iter().cloned()))))
+        tag("[:blank:]")(input).map(|(l, _)| {
+            (
+                l,
+                Sequence::CharRange(Box::new(unicode_table::BLANK.into_iter().cloned())),
+            )
+        })
     }
 
     fn parse_control(input: &str) -> IResult<&str, Sequence> {
@@ -297,7 +303,7 @@ impl Sequence {
         tag("[:space:]")(input).map(|(l, _)| {
             (
                 l,
-                Sequence::CharRange(Box::new(SPACES.into_iter().cloned())),
+                Sequence::CharRange(Box::new(unicode_table::SPACES.into_iter().cloned())),
             )
         })
     }
