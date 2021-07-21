@@ -16,6 +16,7 @@ edition = "2018"
 path="src/lib/lib.rs"
 
 [dependencies]
+clap = "2.33.3"
 dns-lookup = { version="1.0.5", optional=true }
 dunce = "1.0.0"
 getopts = "<= 0.2.21"
