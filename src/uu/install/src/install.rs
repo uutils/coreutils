@@ -17,7 +17,7 @@ use file_diff::diff;
 use filetime::{set_file_times, FileTime};
 use uucore::backup_control::{self, BackupMode};
 use uucore::entries::{grp2gid, usr2uid};
-use uucore::error::{FromIo, UError, UIoError, UResult, USimpleError};
+use uucore::error::{FromIo, UError, UIoError, UResult};
 use uucore::perms::{wrap_chown, Verbosity, VerbosityLevel};
 
 use libc::{getegid, geteuid};
@@ -154,8 +154,6 @@ static ABOUT: &str = "Copy SOURCE to DEST or multiple SOURCE(s) to the existing
  DIRECTORY, while setting permission modes and owner/group";
 
 static OPT_COMPARE: &str = "compare";
-static OPT_BACKUP: &str = "backup";
-static OPT_BACKUP_NO_ARG: &str = "backup2";
 static OPT_DIRECTORY: &str = "directory";
 static OPT_IGNORED: &str = "ignored";
 static OPT_CREATE_LEADING: &str = "create-leading";
@@ -165,7 +163,6 @@ static OPT_OWNER: &str = "owner";
 static OPT_PRESERVE_TIMESTAMPS: &str = "preserve-timestamps";
 static OPT_STRIP: &str = "strip";
 static OPT_STRIP_PROGRAM: &str = "strip-program";
-static OPT_SUFFIX: &str = "suffix";
 static OPT_TARGET_DIRECTORY: &str = "target-directory";
 static OPT_NO_TARGET_DIRECTORY: &str = "no-target-directory";
 static OPT_VERBOSE: &str = "verbose";
@@ -208,19 +205,10 @@ pub fn uu_app() -> App<'static, 'static> {
         .version(crate_version!())
         .about(ABOUT)
         .arg(
-                Arg::with_name(OPT_BACKUP)
-                .long(OPT_BACKUP)
-                .help("make a backup of each existing destination file")
-                .takes_value(true)
-                .require_equals(true)
-                .min_values(0)
-                .value_name("CONTROL")
+            backup_control::arguments::backup()
         )
         .arg(
-            // TODO implement flag
-            Arg::with_name(OPT_BACKUP_NO_ARG)
-            .short("b")
-            .help("like --backup but does not accept an argument")
+            backup_control::arguments::backup_no_args()
         )
         .arg(
             Arg::with_name(OPT_IGNORED)
@@ -278,9 +266,9 @@ pub fn uu_app() -> App<'static, 'static> {
         )
         .arg(
             Arg::with_name(OPT_STRIP)
-            .short("s")
-            .long(OPT_STRIP)
-            .help("strip symbol tables (no action Windows)")
+                .short("s")
+                .long(OPT_STRIP)
+                .help("strip symbol tables (no action Windows)")
         )
         .arg(
             Arg::with_name(OPT_STRIP_PROGRAM)
@@ -289,14 +277,7 @@ pub fn uu_app() -> App<'static, 'static> {
                 .value_name("PROGRAM")
         )
         .arg(
-            // TODO implement flag
-            Arg::with_name(OPT_SUFFIX)
-                .short("S")
-                .long(OPT_SUFFIX)
-                .help("override the usual backup suffix")
-                .value_name("SUFFIX")
-                .takes_value(true)
-                .min_values(1)
+            backup_control::arguments::suffix()
         )
         .arg(
             // TODO implement flag
@@ -386,23 +367,14 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         None
     };
 
-    let backup_mode = backup_control::determine_backup_mode(
-        matches.is_present(OPT_BACKUP_NO_ARG),
-        matches.is_present(OPT_BACKUP),
-        matches.value_of(OPT_BACKUP),
-    );
-    let backup_mode = match backup_mode {
-        Err(err) => return Err(USimpleError::new(1, err)),
-        Ok(mode) => mode,
-    };
-
+    let backup_mode = backup_control::determine_backup_mode(matches)?;
     let target_dir = matches.value_of(OPT_TARGET_DIRECTORY).map(|d| d.to_owned());
 
     Ok(Behavior {
         main_function,
         specified_mode,
         backup_mode,
-        suffix: backup_control::determine_backup_suffix(matches.value_of(OPT_SUFFIX)),
+        suffix: backup_control::determine_backup_suffix(matches),
         owner: matches.value_of(OPT_OWNER).unwrap_or("").to_string(),
         group: matches.value_of(OPT_GROUP).unwrap_or("").to_string(),
         verbose: matches.is_present(OPT_VERBOSE),
