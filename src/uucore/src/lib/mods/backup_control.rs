@@ -200,7 +200,8 @@ pub mod arguments {
     }
 }
 
-pub fn determine_backup_suffix(supplied_suffix: Option<&str>) -> String {
+pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
+    let supplied_suffix = matches.value_of(arguments::OPT_SUFFIX);
     if let Some(suffix) = supplied_suffix {
         String::from(suffix)
     } else {
@@ -305,17 +306,13 @@ pub fn determine_backup_suffix(supplied_suffix: Option<&str>) -> String {
 ///     };
 /// }
 /// ```
-pub fn determine_backup_mode(
-    short_opt_present: bool,
-    long_opt_present: bool,
-    long_opt_value: Option<&str>,
-) -> Result<BackupMode, String> {
-    if long_opt_present {
+pub fn determine_backup_mode(matches: &ArgMatches) -> UResult<BackupMode> {
+    if matches.is_present(arguments::OPT_BACKUP) {
         // Use method to determine the type of backups to make. When this option
         // is used but method is not specified, then the value of the
         // VERSION_CONTROL environment variable is used. And if VERSION_CONTROL
         // is not set, the default backup type is ‘existing’.
-        if let Some(method) = long_opt_value {
+        if let Some(method) = matches.value_of(arguments::OPT_BACKUP) {
             // Second argument is for the error string that is returned.
             match_method(method, "backup type")
         } else if let Ok(method) = env::var("VERSION_CONTROL") {
@@ -324,7 +321,7 @@ pub fn determine_backup_mode(
         } else {
             Ok(BackupMode::ExistingBackup)
         }
-    } else if short_opt_present {
+    } else if matches.is_present(arguments::OPT_BACKUP_NO_ARG) {
         // the short form of this option, -b does not accept any argument.
         // Using -b is equivalent to using --backup=existing.
         Ok(BackupMode::ExistingBackup)
@@ -347,10 +344,13 @@ pub fn determine_backup_mode(
 ///
 /// # Errors
 ///
-/// If `method` is ambiguous (i.e. may resolve to multiple backup modes) or
-/// invalid, an error is returned. The error contains the formatted error string
-/// which may then be passed to the [`show_usage_error`] macro.
-fn match_method(method: &str, origin: &str) -> Result<BackupMode, String> {
+/// If `method` is invalid or ambiguous (i.e. may resolve to multiple backup
+/// modes), an [`InvalidArgument`][10] or [`AmbiguousArgument`][11] error is
+/// returned, respectively.
+///
+/// [10]: BackupError::InvalidArgument
+/// [11]: BackupError::AmbiguousArgument
+fn match_method(method: &str, origin: &str) -> UResult<BackupMode> {
     let matches: Vec<&&str> = BACKUP_CONTROL_VALUES
         .iter()
         .filter(|val| val.starts_with(method))
@@ -364,21 +364,10 @@ fn match_method(method: &str, origin: &str) -> Result<BackupMode, String> {
             _ => unreachable!(), // cannot happen as we must have exactly one match
                                  // from the list above.
         }
+    } else if matches.is_empty() {
+        Err(BackupError::InvalidArgument(method.to_string(), origin.to_string()).into())
     } else {
-        let error_type = if matches.is_empty() {
-            "invalid"
-        } else {
-            "ambiguous"
-        };
-        Err(format!(
-            "{0} argument ‘{1}’ for ‘{2}’
-Valid arguments are:
-  - ‘none’, ‘off’
-  - ‘simple’, ‘never’
-  - ‘existing’, ‘nil’
-  - ‘numbered’, ‘t’",
-            error_type, method, origin
-        ))
+        Err(BackupError::AmbiguousArgument(method.to_string(), origin.to_string()).into())
     }
 }
 
