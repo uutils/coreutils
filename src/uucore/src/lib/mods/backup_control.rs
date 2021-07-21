@@ -1,5 +1,9 @@
+use crate::error::{UCustomError, UResult};
+use clap::ArgMatches;
 use std::{
     env,
+    error::Error,
+    fmt::{Debug, Display},
     path::{Path, PathBuf},
 };
 
@@ -17,6 +21,12 @@ the VERSION_CONTROL environment variable.  Here are the values:
   existing, nil   numbered if numbered backups exist, simple otherwise
   simple, never   always make simple backups";
 
+static VALID_ARGS_HELP: &str = "Valid arguments are:
+  - ‘none’, ‘off’
+  - ‘simple’, ‘never’
+  - ‘existing’, ‘nil’
+  - ‘numbered’, ‘t’";
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum BackupMode {
     NoBackup,
@@ -25,6 +35,65 @@ pub enum BackupMode {
     ExistingBackup,
 }
 
+#[derive(Debug, Eq, PartialEq)]
+pub enum BackupError {
+    InvalidArgument(String, String),
+    AmbiguousArgument(String, String),
+    BackupImpossible(),
+    // BackupFailed(PathBuf, PathBuf, std::io::Error),
+}
+
+impl UCustomError for BackupError {
+    fn code(&self) -> i32 {
+        match self {
+            BackupError::BackupImpossible() => 2,
+            _ => 1,
+        }
+    }
+
+    fn usage(&self) -> bool {
+        // Suggested by clippy.
+        matches!(
+            self,
+            BackupError::InvalidArgument(_, _) | BackupError::AmbiguousArgument(_, _)
+        )
+    }
+}
+
+impl Error for BackupError {}
+
+impl Display for BackupError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use BackupError as BE;
+        match self {
+            BE::InvalidArgument(arg, origin) => write!(
+                f,
+                "invalid argument ‘{}’ for ‘{}’\n{}",
+                arg, origin, VALID_ARGS_HELP
+            ),
+            BE::AmbiguousArgument(arg, origin) => write!(
+                f,
+                "ambiguous argument ‘{}’ for ‘{}’\n{}",
+                arg, origin, VALID_ARGS_HELP
+            ),
+            BE::BackupImpossible() => write!(f, "cannot create backup"),
+            // BE::BackupFailed(from, to, e) => write!(
+            //     f,
+            //     "failed to backup '{}' to '{}': {}",
+            //     from.display(),
+            //     to.display(),
+            //     e
+            // )
+            // This is for when #2500 lands in master
+            // Display::fmt(
+            //     &uio_error!(e, "failed to backup '{}' to '{}'", from.display(), to.display()),
+            //     f
+            // ),
+        }
+    }
+}
+
+/// Arguments for backup-related functionality
 pub mod arguments {
     extern crate clap;
 
