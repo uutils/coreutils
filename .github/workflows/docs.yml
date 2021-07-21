@@ -1,0 +1,32 @@
+name: Docs
+
+on:
+  # * only trigger on pull request closed to specific branches
+  # ref: https://github.community/t/trigger-workflow-only-on-pull-request-merge/17359/9
+  pull_request:
+    branches: [ master ]
+    types: [ closed ]
+
+jobs:
+  docs:
+    if: github.event.pull_request.merged == true ## only for PR merges
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Install `rust` toolchain (v${{ env.RUST_MIN_SRV }})
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        default: true
+        profile: minimal
+
+    - name: Build Documentation
+      run: cargo doc --no-deps --all-features --workspace
+
+    - name: Deploy Docs
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./target/doc
