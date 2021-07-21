@@ -98,9 +98,8 @@ fn test_complement4() {
 }
 
 #[test]
-#[ignore = "fixme: GNU tr returns '0a1b2c3' instead of '0~1~2~3', see #2158"]
 fn test_complement5() {
-    // $ echo '0x1y2z3' | tr -c '\0-@' '*-~'
+    // $ echo -n '0x1y2z3' | tr -c '\0-@' '*-~'
     // 0a1b2c3
     new_ucmd!()
         .args(&["-c", "\\0-@", "*-~"])
@@ -291,4 +290,130 @@ fn test_more_than_2_sets() {
         .args(&["'abcdefgh'", "'a", "'b'"])
         .pipe_in("hello world")
         .fails();
+}
+
+#[test]
+fn basic_translation_works() {
+    // echo -n "abcdefabcdef" | tr "dabcdef"  "xyz"
+    new_ucmd!()
+        .args(&["abcdef", "xyz"])
+        .pipe_in("abcdefabcdef")
+        .succeeds()
+        .stdout_is("xyzzzzxyzzzz");
+}
+
+#[test]
+fn alnum_overrides_translation_to_fallback_1() {
+    // echo -n "abcdefghijklmnopqrstuvwxyz" | tr "abc[:alpha:]" "xyz"
+    new_ucmd!()
+        .args(&["abc[:alpha:]", "xyz"])
+        .pipe_in("abcdefghijklmnopqrstuvwxyz")
+        .succeeds()
+        .stdout_is("zzzzzzzzzzzzzzzzzzzzzzzzzz");
+}
+
+#[test]
+fn alnum_overrides_translation_to_fallback_2() {
+    // echo -n "abcdefghijklmnopqrstuvwxyz" | tr "[:alpha:]abc" "xyz"
+    new_ucmd!()
+        .args(&["[:alpha:]abc", "xyz"])
+        .pipe_in("abcdefghijklmnopqrstuvwxyz")
+        .succeeds()
+        .stdout_is("zzzzzzzzzzzzzzzzzzzzzzzzzz");
+}
+
+#[test]
+fn overrides_translation_pair_if_repeats() {
+    // echo -n 'aaa' | tr "aaa" "xyz"
+    new_ucmd!()
+        .args(&["aaa", "xyz"])
+        .pipe_in("aaa")
+        .succeeds()
+        .stdout_is("zzz");
+}
+
+#[test]
+fn uppercase_conversion_works_1() {
+    // echo -n 'abcdefghijklmnopqrstuvwxyz' | tr "abcdefghijklmnopqrstuvwxyz" "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    new_ucmd!()
+        .args(&["abcdefghijklmnopqrstuvwxyz", "ABCDEFGHIJKLMNOPQRSTUVWXYZ"])
+        .pipe_in("abcdefghijklmnopqrstuvwxyz")
+        .succeeds()
+        .stdout_is("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+}
+
+#[test]
+fn uppercase_conversion_works_2() {
+    // echo -n 'abcdefghijklmnopqrstuvwxyz' | tr "a-z" "A-Z"
+    new_ucmd!()
+        .args(&["a-z", "A-Z"])
+        .pipe_in("abcdefghijklmnopqrstuvwxyz")
+        .succeeds()
+        .stdout_is("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+}
+
+#[test]
+fn uppercase_conversion_works_3() {
+    // echo -n 'abcdefghijklmnopqrstuvwxyz' | tr "[:lower:]" "[:upper:]"
+    new_ucmd!()
+        .args(&["[:lower:]", "[:upper:]"])
+        .pipe_in("abcdefghijklmnopqrstuvwxyz")
+        .succeeds()
+        .stdout_is("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+}
+
+#[test]
+fn translate_complement_set_in_order() {
+    // echo -n '01234' | tr -c '@-~' ' -^'
+    new_ucmd!()
+        .args(&["-c", "@-~", " -^"])
+        .pipe_in("01234")
+        .succeeds()
+        .stdout_is("PQRST");
+}
+
+#[test]
+fn alpha_expands_uppercase_lowercase() {
+    // echo -n "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz" | tr "[:alpha:]" " -_"
+    new_ucmd!()
+        .args(&["[:alpha:]", " -_"])
+        .pipe_in("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
+        .succeeds()
+        .stdout_is(r##" !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRS"##);
+}
+
+#[test]
+fn alnum_expands_number_uppercase_lowercase() {
+    // echo -n "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz" | tr "[:alnum:]" " -_"
+    new_ucmd!()
+        .args(&["[:alnum:]", " -_"])
+        .pipe_in("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
+        .succeeds()
+        .stdout_is(r##" !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]"##);
+}
+
+#[test]
+#[ignore = "not expected to fully pass -- any help appreciated!"]
+fn check_against_gnu_tr_tests() {
+    // echo -n "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz" | tr "[:alnum:]" " -_"
+    new_ucmd!()
+        .args(&["abcd", "[]*]"])
+        .pipe_in("abcd")
+        .succeeds()
+        .stdout_is("]]]]");
+    new_ucmd!()
+        .args(&["abc", "[%*]xyz"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_is("xyz");
+    new_ucmd!()
+        .args(&["", "[.*]"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_is("abc");
+    new_ucmd!()
+        .args(&["-t", "abcd", "xy"])
+        .pipe_in("abcde")
+        .succeeds()
+        .stdout_is("xycde");
 }
