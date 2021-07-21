@@ -44,13 +44,10 @@ pub enum OverwriteMode {
 static ABOUT: &str = "Move SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.";
 static LONG_HELP: &str = "";
 
-static OPT_BACKUP: &str = "backup";
-static OPT_BACKUP_NO_ARG: &str = "b";
 static OPT_FORCE: &str = "force";
 static OPT_INTERACTIVE: &str = "interactive";
 static OPT_NO_CLOBBER: &str = "no-clobber";
 static OPT_STRIP_TRAILING_SLASHES: &str = "strip-trailing-slashes";
-static OPT_SUFFIX: &str = "suffix";
 static OPT_TARGET_DIRECTORY: &str = "target-directory";
 static OPT_NO_TARGET_DIRECTORY: &str = "no-target-directory";
 static OPT_UPDATE: &str = "update";
@@ -85,14 +82,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .unwrap_or_default();
 
     let overwrite_mode = determine_overwrite_mode(&matches);
-    let backup_mode = backup_control::determine_backup_mode(
-        matches.is_present(OPT_BACKUP_NO_ARG),
-        matches.is_present(OPT_BACKUP),
-        matches.value_of(OPT_BACKUP),
-    );
-    let backup_mode = match backup_mode {
-        Err(err) => {
-            show_usage_error!("{}", err);
+    let backup_mode = match backup_control::determine_backup_mode(&matches) {
+        Err(e) => {
+            show!(e);
             return 1;
         }
         Ok(mode) => mode,
@@ -103,7 +95,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         return 1;
     }
 
-    let backup_suffix = backup_control::determine_backup_suffix(matches.value_of(OPT_SUFFIX));
+    let backup_suffix = backup_control::determine_backup_suffix(&matches);
 
     let behavior = Behavior {
         overwrite: overwrite_mode,
@@ -137,18 +129,10 @@ pub fn uu_app() -> App<'static, 'static> {
         .version(crate_version!())
         .about(ABOUT)
     .arg(
-            Arg::with_name(OPT_BACKUP)
-            .long(OPT_BACKUP)
-            .help("make a backup of each existing destination file")
-            .takes_value(true)
-            .require_equals(true)
-            .min_values(0)
-            .value_name("CONTROL")
+        backup_control::arguments::backup()
     )
     .arg(
-            Arg::with_name(OPT_BACKUP_NO_ARG)
-            .short(OPT_BACKUP_NO_ARG)
-            .help("like --backup but does not accept an argument")
+        backup_control::arguments::backup_no_args()
     )
     .arg(
             Arg::with_name(OPT_FORCE)
@@ -173,12 +157,7 @@ pub fn uu_app() -> App<'static, 'static> {
             .help("remove any trailing slashes from each SOURCE argument")
     )
     .arg(
-            Arg::with_name(OPT_SUFFIX)
-            .short("S")
-            .long(OPT_SUFFIX)
-            .help("override the usual backup suffix")
-            .takes_value(true)
-            .value_name("SUFFIX")
+        backup_control::arguments::suffix()
     )
     .arg(
         Arg::with_name(OPT_TARGET_DIRECTORY)
