@@ -98,9 +98,8 @@ fn test_complement4() {
 }
 
 #[test]
-#[ignore = "fixme: GNU tr returns '0a1b2c3' instead of '0~1~2~3', see #2158"]
 fn test_complement5() {
-    // $ echo '0x1y2z3' | tr -c '\0-@' '*-~'
+    // $ echo -n '0x1y2z3' | tr -c '\0-@' '*-~'
     // 0a1b2c3
     new_ucmd!()
         .args(&["-c", "\\0-@", "*-~"])
@@ -391,4 +390,50 @@ fn alnum_expands_number_uppercase_lowercase() {
         .pipe_in("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
         .succeeds()
         .stdout_is(r##" !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]"##);
+}
+
+#[test]
+#[ignore = "not expected to fully pass -- any help appreciated!"]
+fn check_against_gnu_tr_tests() {
+    // echo -n "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz" | tr "[:alnum:]" " -_"
+    new_ucmd!()
+        .args(&["abcd", "[]*]"])
+        .pipe_in("abcd")
+        .succeeds()
+        .stdout_is("]]]]");
+    new_ucmd!()
+        .args(&["abc", "[%*]xyz"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_is("xyz");
+    new_ucmd!()
+        .args(&["", "[.*]"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_is("abc");
+    new_ucmd!()
+        .args(&["-t", "abcd", "xy"])
+        .pipe_in("abcde")
+        .succeeds()
+        .stdout_is("xycde");
+    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
+    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
+    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
+    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
+    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
+    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
+    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
+    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
+    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
+    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
+    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
+    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
+    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
+    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
+    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
+    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
+    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
+    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
+    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
+    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
 }
