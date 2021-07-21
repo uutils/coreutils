@@ -416,24 +416,4 @@ fn check_against_gnu_tr_tests() {
         .pipe_in("abcde")
         .succeeds()
         .stdout_is("xycde");
-    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
-    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
-    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
-    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
-    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
-    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
-    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
-    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
-    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
-    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
-    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
-    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
-    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
-    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
-    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
-    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
-    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
-    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
-    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
-    new_ucmd!().args(&[""]).pipe_in("").succeeds().stdout_is("");
 }
