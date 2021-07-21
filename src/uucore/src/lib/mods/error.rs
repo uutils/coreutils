@@ -132,6 +132,7 @@ impl<T> UResultTrait<T> for UResult<T> {
 /// assert_eq!(1, err.code());
 /// assert_eq!(String::from("Error!!"), format!("{}", err));
 /// ```
+#[derive(Debug)]
 pub enum UError {
     Common(UCommonError),
     Custom(Box<dyn UCustomError>),

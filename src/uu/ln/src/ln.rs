@@ -71,13 +71,10 @@ fn get_long_usage() -> String {
 static ABOUT: &str = "change file owner and group";
 
 mod options {
-    pub const BACKUP_NO_ARG: &str = "b";
-    pub const BACKUP: &str = "backup";
     pub const FORCE: &str = "force";
     pub const INTERACTIVE: &str = "interactive";
     pub const NO_DEREFERENCE: &str = "no-dereference";
     pub const SYMBOLIC: &str = "symbolic";
-    pub const SUFFIX: &str = "suffix";
     pub const TARGET_DIRECTORY: &str = "target-directory";
     pub const NO_TARGET_DIRECTORY: &str = "no-target-directory";
     pub const RELATIVE: &str = "relative";
@@ -115,20 +112,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         OverwriteMode::NoClobber
     };
 
-    let backup_mode = backup_control::determine_backup_mode(
-        matches.is_present(options::BACKUP_NO_ARG),
-        matches.is_present(options::BACKUP),
-        matches.value_of(options::BACKUP),
-    );
-    let backup_mode = match backup_mode {
-        Err(err) => {
-            show_usage_error!("{}", err);
-            return 1;
-        }
+    let backup_mode = match backup_control::determine_backup_mode(&matches) {
+        Err(_) => return 1,
         Ok(mode) => mode,
     };
 
-    let backup_suffix = backup_control::determine_backup_suffix(matches.value_of(options::SUFFIX));
+    let backup_suffix = backup_control::determine_backup_suffix(&matches);
 
     let settings = Settings {
         overwrite: overwrite_mode,
@@ -151,20 +140,8 @@ pub fn uu_app() -> App<'static, 'static> {
     App::new(executable!())
         .version(crate_version!())
         .about(ABOUT)
-        .arg(
-            Arg::with_name(options::BACKUP)
-                .long(options::BACKUP)
-                .help("make a backup of each existing destination file")
-                .takes_value(true)
-                .require_equals(true)
-                .min_values(0)
-                .value_name("CONTROL"),
-        )
-        .arg(
-            Arg::with_name(options::BACKUP_NO_ARG)
-                .short(options::BACKUP_NO_ARG)
-                .help("like --backup but does not accept an argument"),
-        )
+        .arg(backup_control::arguments::backup())
+        .arg(backup_control::arguments::backup_no_args())
         // TODO: opts.arg(
         //    Arg::with_name(("d", "directory", "allow users with appropriate privileges to attempt \
         //                                       to make hard links to directories");
@@ -202,14 +179,7 @@ pub fn uu_app() -> App<'static, 'static> {
                 // override added for https://github.com/uutils/coreutils/issues/2359
                 .overrides_with(options::SYMBOLIC),
         )
-        .arg(
-            Arg::with_name(options::SUFFIX)
-                .short("S")
-                .long(options::SUFFIX)
-                .help("override the usual backup suffix")
-                .value_name("SUFFIX")
-                .takes_value(true),
-        )
+        .arg(backup_control::arguments::suffix())
         .arg(
             Arg::with_name(options::TARGET_DIRECTORY)
                 .short("t")
