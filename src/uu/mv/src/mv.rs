@@ -86,9 +86,17 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let overwrite_mode = determine_overwrite_mode(&matches);
     let backup_mode = backup_control::determine_backup_mode(
-        matches.is_present(OPT_BACKUP_NO_ARG) || matches.is_present(OPT_BACKUP),
+        matches.is_present(OPT_BACKUP_NO_ARG),
+        matches.is_present(OPT_BACKUP),
         matches.value_of(OPT_BACKUP),
     );
+    let backup_mode = match backup_mode {
+        Err(err) => {
+            show_usage_error!("{}", err);
+            return 1;
+        }
+        Ok(mode) => mode,
+    };
 
     if overwrite_mode == OverwriteMode::NoClobber && backup_mode != BackupMode::NoBackup {
         show_usage_error!("options --backup and --no-clobber are mutually exclusive");
@@ -135,7 +143,6 @@ pub fn uu_app() -> App<'static, 'static> {
             .takes_value(true)
             .require_equals(true)
             .min_values(0)
-            .possible_values(backup_control::BACKUP_CONTROL_VALUES)
             .value_name("CONTROL")
     )
     .arg(

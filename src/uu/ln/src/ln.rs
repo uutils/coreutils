@@ -22,6 +22,7 @@ use std::os::unix::fs::symlink;
 #[cfg(windows)]
 use std::os::windows::fs::{symlink_dir, symlink_file};
 use std::path::{Path, PathBuf};
+use uucore::backup_control::{self, BackupMode};
 use uucore::fs::{canonicalize, CanonicalizeMode};
 
 pub struct Settings {
@@ -41,14 +42,6 @@ pub enum OverwriteMode {
     NoClobber,
     Interactive,
     Force,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum BackupMode {
-    NoBackup,
-    SimpleBackup,
-    NumberedBackup,
-    ExistingBackup,
 }
 
 fn get_usage() -> String {
@@ -78,7 +71,7 @@ fn get_long_usage() -> String {
 static ABOUT: &str = "change file owner and group";
 
 mod options {
-    pub const B: &str = "b";
+    pub const BACKUP_NO_ARG: &str = "b";
     pub const BACKUP: &str = "backup";
     pub const FORCE: &str = "force";
     pub const INTERACTIVE: &str = "interactive";
@@ -99,7 +92,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let matches = uu_app()
         .usage(&usage[..])
-        .after_help(&long_usage[..])
+        .after_help(&*format!(
+            "{}\n{}",
+            long_usage,
+            backup_control::BACKUP_CONTROL_LONG_HELP
+        ))
         .get_matches_from(args);
 
     /* the list of files */
@@ -118,33 +115,25 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         OverwriteMode::NoClobber
     };
 
-    let backup_mode = if matches.is_present(options::B) {
-        BackupMode::ExistingBackup
-    } else if matches.is_present(options::BACKUP) {
-        match matches.value_of(options::BACKUP) {
-            None => BackupMode::ExistingBackup,
-            Some(mode) => match mode {
-                "simple" | "never" => BackupMode::SimpleBackup,
-                "numbered" | "t" => BackupMode::NumberedBackup,
-                "existing" | "nil" => BackupMode::ExistingBackup,
-                "none" | "off" => BackupMode::NoBackup,
-                _ => panic!(), // cannot happen as it is managed by clap
-            },
+    let backup_mode = backup_control::determine_backup_mode(
+        matches.is_present(options::BACKUP_NO_ARG),
+        matches.is_present(options::BACKUP),
+        matches.value_of(options::BACKUP),
+    );
+    let backup_mode = match backup_mode {
+        Err(err) => {
+            show_usage_error!("{}", err);
+            return 1;
         }
-    } else {
-        BackupMode::NoBackup
+        Ok(mode) => mode,
     };
 
-    let backup_suffix = if matches.is_present(options::SUFFIX) {
-        matches.value_of(options::SUFFIX).unwrap()
-    } else {
-        "~"
-    };
+    let backup_suffix = backup_control::determine_backup_suffix(matches.value_of(options::SUFFIX));
 
     let settings = Settings {
         overwrite: overwrite_mode,
         backup: backup_mode,
-        suffix: backup_suffix.to_string(),
+        suffix: backup_suffix,
         symbolic: matches.is_present(options::SYMBOLIC),
         relative: matches.is_present(options::RELATIVE),
         target_dir: matches
@@ -162,22 +151,19 @@ pub fn uu_app() -> App<'static, 'static> {
     App::new(executable!())
         .version(crate_version!())
         .about(ABOUT)
-        .arg(Arg::with_name(options::B).short(options::B).help(
-            "make a backup of each file that would otherwise be overwritten or \
-             removed",
-        ))
         .arg(
             Arg::with_name(options::BACKUP)
                 .long(options::BACKUP)
-                .help(
-                    "make a backup of each file that would otherwise be overwritten \
-                     or removed",
-                )
+                .help("make a backup of each existing destination file")
                 .takes_value(true)
-                .possible_values(&[
-                    "simple", "never", "numbered", "t", "existing", "nil", "none", "off",
-                ])
-                .value_name("METHOD"),
+                .require_equals(true)
+                .min_values(0)
+                .value_name("CONTROL"),
+        )
+        .arg(
+            Arg::with_name(options::BACKUP_NO_ARG)
+                .short(options::BACKUP_NO_ARG)
+                .help("like --backup but does not accept an argument"),
         )
         // TODO: opts.arg(
         //    Arg::with_name(("d", "directory", "allow users with appropriate privileges to attempt \

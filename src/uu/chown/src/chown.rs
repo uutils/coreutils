@@ -14,6 +14,8 @@ use uucore::fs::resolve_relative_path;
 use uucore::libc::{gid_t, uid_t};
 use uucore::perms::{wrap_chown, Verbosity};
 
+use uucore::error::{FromIo, UError, UResult, USimpleError};
+
 use clap::{crate_version, App, Arg};
 
 use walkdir::WalkDir;
@@ -66,7 +68,8 @@ fn get_usage() -> String {
     )
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
@@ -104,8 +107,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if recursive {
         if bit_flag == FTS_PHYSICAL {
             if derefer == 1 {
-                show_error!("-R --dereference requires -H or -L");
-                return 1;
+                return Err(USimpleError::new(
+                    1,
+                    "-R --dereference requires -H or -L".to_string(),
+                ));
             }
             derefer = 0;
         }
@@ -126,15 +131,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     };
 
     let filter = if let Some(spec) = matches.value_of(options::FROM) {
-        match parse_spec(spec) {
-            Ok((Some(uid), None)) => IfFrom::User(uid),
-            Ok((None, Some(gid))) => IfFrom::Group(gid),
-            Ok((Some(uid), Some(gid))) => IfFrom::UserGroup(uid, gid),
-            Ok((None, None)) => IfFrom::All,
-            Err(e) => {
-                show_error!("{}", e);
-                return 1;
-            }
+        match parse_spec(spec)? {
+            (Some(uid), None) => IfFrom::User(uid),
+            (None, Some(gid)) => IfFrom::Group(gid),
+            (Some(uid), Some(gid)) => IfFrom::UserGroup(uid, gid),
+            (None, None) => IfFrom::All,
         }
     } else {
         IfFrom::All
@@ -143,27 +144,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let dest_uid: Option<u32>;
     let dest_gid: Option<u32>;
     if let Some(file) = matches.value_of(options::REFERENCE) {
-        match fs::metadata(&file) {
-            Ok(meta) => {
-                dest_gid = Some(meta.gid());
-                dest_uid = Some(meta.uid());
-            }
-            Err(e) => {
-                show_error!("failed to get attributes of '{}': {}", file, e);
-                return 1;
-            }
-        }
+        let meta = fs::metadata(&file)
+            .map_err_context(|| format!("failed to get attributes of '{}'", file))?;
+        dest_gid = Some(meta.gid());
+        dest_uid = Some(meta.uid());
     } else {
-        match parse_spec(owner) {
-            Ok((u, g)) => {
-                dest_uid = u;
-                dest_gid = g;
-            }
-            Err(e) => {
-                show_error!("{}", e);
-                return 1;
-            }
-        }
+        let (u, g) = parse_spec(owner)?;
+        dest_uid = u;
+        dest_gid = g;
     }
     let executor = Chowner {
         bit_flag,
@@ -275,7 +263,7 @@ pub fn uu_app() -> App<'static, 'static> {
         )
 }
 
-fn parse_spec(spec: &str) -> Result<(Option<u32>, Option<u32>), String> {
+fn parse_spec(spec: &str) -> UResult<(Option<u32>, Option<u32>)> {
     let args = spec.split_terminator(':').collect::<Vec<_>>();
     let usr_only = args.len() == 1 && !args[0].is_empty();
     let grp_only = args.len() == 2 && args[0].is_empty();
@@ -283,7 +271,7 @@ fn parse_spec(spec: &str) -> Result<(Option<u32>, Option<u32>), String> {
     let uid = if usr_only || usr_grp {
         Some(
             Passwd::locate(args[0])
-                .map_err(|_| format!("invalid user: '{}'", spec))?
+                .map_err(|_| USimpleError::new(1, format!("invalid user: '{}'", spec)))?
                 .uid(),
         )
     } else {
@@ -292,7 +280,7 @@ fn parse_spec(spec: &str) -> Result<(Option<u32>, Option<u32>), String> {
     let gid = if grp_only || usr_grp {
         Some(
             Group::locate(args[1])
-                .map_err(|_| format!("invalid group: '{}'", spec))?
+                .map_err(|_| USimpleError::new(1, format!("invalid group: '{}'", spec)))?
                 .gid(),
         )
     } else {
@@ -330,12 +318,15 @@ macro_rules! unwrap {
 }
 
 impl Chowner {
-    fn exec(&self) -> i32 {
+    fn exec(&self) -> UResult<()> {
         let mut ret = 0;
         for f in &self.files {
             ret |= self.traverse(f);
         }
-        ret
+        if ret != 0 {
+            return Err(UError::from(ret));
+        }
+        Ok(())
     }
 
     fn traverse<P: AsRef<Path>>(&self, root: P) -> i32 {
