@@ -442,39 +442,119 @@ fn check_against_gnu_tr_tests() {
         .stdout_is("%.$");
     // ['8', qw(-s a-p '[.*]$'), {IN=>'abcdefghijklmnop'}, {OUT=>'.$'}],
     new_ucmd!()
-        .args(&["-s", "a-p"])
+        .args(&["-s", "a-p", "[.*]$"])
         .pipe_in("abcdefghijklmnop")
         .succeeds()
         .stdout_is(".$");
-    //
     // ['9', qw(-s a-p '%[.*]'), {IN=>'abcdefghijklmnop'}, {OUT=>'%.'}],
+    new_ucmd!()
+        .args(&["-s", "a-p", "%[.*]"])
+        .pipe_in("abcdefghijklmnop")
+        .succeeds()
+        .stdout_is("%.");
     // ['a', qw(-s '[a-z]'), {IN=>'aabbcc'}, {OUT=>'abc'}],
+    new_ucmd!()
+        .args(&["-s", "[a-z]"])
+        .pipe_in("aabbcc")
+        .succeeds()
+        .stdout_is("abc");
     // ['b', qw(-s '[a-c]'), {IN=>'aabbcc'}, {OUT=>'abc'}],
+    new_ucmd!()
+        .args(&["-s", "[a-c]"])
+        .pipe_in("aabbcc")
+        .succeeds()
+        .stdout_is("abc");
     // ['c', qw(-s '[a-b]'), {IN=>'aabbcc'}, {OUT=>'abcc'}],
+    new_ucmd!()
+        .args(&["-s", "[a-b]"])
+        .pipe_in("aabbcc")
+        .succeeds()
+        .stdout_is("abcc");
     // ['d', qw(-s '[b-c]'), {IN=>'aabbcc'}, {OUT=>'aabc'}],
-    // ['e', qw(-s '[\0-\5]'),
-    //  {IN=>"\0\0a\1\1b\2\2\2c\3\3\3d\4\4\4\4e\5\5"}, {OUT=>"\0a\1b\2c\3d\4e\5"}],
+    new_ucmd!()
+        .args(&["-s", "[b-c]"])
+        .pipe_in("aabbcc")
+        .succeeds()
+        .stdout_is("aabc");
+    // ['e', qw(-s '[\0-\5]'), {IN=>"\0\0a\1\1b\2\2\2c\3\3\3d\4\4\4\4e\5\5"}, {OUT=>"\0a\1b\2c\3d\4e\5"}],
+    new_ucmd!()
+        .args(&["-s", r#"[\0-\5]"#])
+        .pipe_in(r#"\0\0a\1\1b\2\2\2c\3\3\3d\4\4\4\4e\5\5"#)
+        .succeeds()
+        .stdout_is(r#"\0a\1b\2c\3d\4e\5"#);
     // # tests of delete
     // ['f', qw(-d '[=[=]'), {IN=>'[[[[[[[]]]]]]]]'}, {OUT=>']]]]]]]]'}],
+    new_ucmd!()
+        .args(&["-d", "[=[=]"])
+        .pipe_in("[[[[[[[]]]]]]]]")
+        .succeeds()
+        .stdout_is("]]]]]]]]");
     // ['g', qw(-d '[=]=]'), {IN=>'[[[[[[[]]]]]]]]'}, {OUT=>'[[[[[[['}],
+    new_ucmd!()
+        .args(&["-d", "[=]=]"])
+        .pipe_in("[[[[[[[]]]]]]]]")
+        .succeeds()
+        .stdout_is("[[[[[[[");
     // ['h', qw(-d '[:xdigit:]'), {IN=>'0123456789acbdefABCDEF'}, {OUT=>''}],
-    // ['i', qw(-d '[:xdigit:]'), {IN=>'w0x1y2z3456789acbdefABCDEFz'},
-    //  {OUT=>'wxyzz'}],
+    new_ucmd!()
+        .args(&["-d", "[:xdigit:]"])
+        .pipe_in("0123456789acbdefABCDEF")
+        .succeeds()
+        .stdout_is("");
+    // ['i', qw(-d '[:xdigit:]'), {IN=>'w0x1y2z3456789acbdefABCDEFz'}, {OUT=>'wxyzz'}],
+    new_ucmd!()
+        .args(&["-d", "[:xdigit:]"])
+        .pipe_in("w0x1y2z3456789acbdefABCDEFz")
+        .succeeds()
+        .stdout_is("wxyzz");
     // ['j', qw(-d '[:digit:]'), {IN=>'0123456789'}, {OUT=>''}],
-    // ['k', qw(-d '[:digit:]'),
-    //  {IN=>'a0b1c2d3e4f5g6h7i8j9k'}, {OUT=>'abcdefghijk'}],
+    new_ucmd!()
+        .args(&["", "", ""])
+        .pipe_in("")
+        .succeeds()
+        .stdout_is("");
+    // ['k', qw(-d '[:digit:]'), {IN=>'a0b1c2d3e4f5g6h7i8j9k'}, {OUT=>'abcdefghijk'}],
+    new_ucmd!()
+        .args(&["-d", "[:digit:]"])
+        .pipe_in("a0b1c2d3e4f5g6h7i8j9k")
+        .succeeds()
+        .stdout_is("abcdefghijk");
     // ['l', qw(-d '[:lower:]'), {IN=>'abcdefghijklmnopqrstuvwxyz'}, {OUT=>''}],
+    new_ucmd!()
+        .args(&["-d", "[:lower:]"])
+        .pipe_in("abcdefghijklmnopqrstuvwxyz")
+        .succeeds()
+        .stdout_is("");
     // ['m', qw(-d '[:upper:]'), {IN=>'ABCDEFGHIJKLMNOPQRSTUVWXYZ'}, {OUT=>''}],
-    // ['n', qw(-d '[:lower:][:upper:]'),
-    //  {IN=>'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'}, {OUT=>''}],
-    // ['o', qw(-d '[:alpha:]'),
-    //  {IN=>'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'}, {OUT=>''}],
-    // ['p', qw(-d '[:alnum:]'),
-    //  {IN=>'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'},
-    //  {OUT=>''}],
-    // ['q', qw(-d '[:alnum:]'),
-    //  {IN=>'.abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.'},
-    //  {OUT=>'..'}],
+    new_ucmd!()
+        .args(&["-d", "[:upper:]"])
+        .pipe_in("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+        .succeeds()
+        .stdout_is("");
+    // ['n', qw(-d '[:lower:][:upper:]'), {IN=>'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'}, {OUT=>''}],
+    new_ucmd!()
+        .args(&["-d", "[:lower:][:upper:]"])
+        .pipe_in("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+        .succeeds()
+        .stdout_is("");
+    // ['o', qw(-d '[:alpha:]'), {IN=>'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'}, {OUT=>''}],
+    new_ucmd!()
+        .args(&["-d", "[:alpha:]"])
+        .pipe_in("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+        .succeeds()
+        .stdout_is("");
+    // ['p', qw(-d '[:alnum:]'), {IN=>'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'}, {OUT=>''}],
+    new_ucmd!()
+        .args(&["-d", "[:alnum:]", ""])
+        .pipe_in("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+        .succeeds()
+        .stdout_is("");
+    // ['q', qw(-d '[:alnum:]'), {IN=>'.abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.'}, {OUT=>'..'}],
+    new_ucmd!()
+        .args(&["-d", "[:alnum:]"])
+        .pipe_in(".abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.")
+        .succeeds()
+        .stdout_is("..");
     // ['r', qw(-ds '[:alnum:]' .),
     //  {IN=>'.abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.'},
     //  {OUT=>'.'}],
