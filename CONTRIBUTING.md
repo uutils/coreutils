@@ -103,6 +103,13 @@ The following types of license are acceptable:
 * "MIT equivalent" license (2-clause BSD, 3-clause BSD, ISC)
 * License less restrictive than the MIT License (CC0 1.0 Universal)
 
+Some licenses are similar to the above, but are not preferable because they
+contain additional conditions not present in the MIT License. The following are
+accepted in referenced dependencies, on a case-by-case basis, when there is no
+MIT-licensed alternative:
+
+* Apache License version 2.0
+
 Licenses we will not use:
 
 * An ambiguous license, or no license
