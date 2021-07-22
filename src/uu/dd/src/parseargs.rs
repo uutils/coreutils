@@ -508,170 +508,136 @@ pub fn parse_conv_flag_input(matches: &Matches) -> Result<IConvFlags, ParseError
 /// Parse Conversion Options (Output Variety)
 /// Construct and validate a OConvFlags
 pub fn parse_conv_flag_output(matches: &Matches) -> Result<OConvFlags, ParseError> {
-    let flags = parse_flag_list("conv", matches)?;
+    let flags = parse_flag_list(options::CONV, matches)?;
 
-    let mut sparse = false;
-    let mut excl = false;
-    let mut nocreat = false;
-    let mut notrunc = false;
-    let mut fdatasync = false;
-    let mut fsync = false;
+    let mut oconvflags = OConvFlags {
+        sparse: false,
+        excl: false,
+        nocreat: false,
+        notrunc: false,
+        fdatasync: false,
+        fsync: false,
+    };
 
     for flag in flags {
         match flag {
-            ConvFlag::Sparse => sparse = true,
+            ConvFlag::Sparse => oconvflags.sparse = true,
             ConvFlag::Excl => {
-                if !nocreat {
-                    excl = true;
+                if !oconvflags.nocreat {
+                    oconvflags.excl = true;
                 } else {
                     return Err(ParseError::MultipleExclNoCreat);
                 }
             }
             ConvFlag::NoCreat => {
-                if !excl {
-                    nocreat = true;
+                if !oconvflags.excl {
+                    oconvflags.nocreat = true;
                 } else {
                     return Err(ParseError::MultipleExclNoCreat);
                 }
             }
-            ConvFlag::NoTrunc => notrunc = true,
-            ConvFlag::FDataSync => fdatasync = true,
-            ConvFlag::FSync => fsync = true,
+            ConvFlag::NoTrunc => oconvflags.notrunc = true,
+            ConvFlag::FDataSync => oconvflags.fdatasync = true,
+            ConvFlag::FSync => oconvflags.fsync = true,
             _ => {}
         }
     }
 
-    Ok(OConvFlags {
-        sparse,
-        excl,
-        nocreat,
-        notrunc,
-        fdatasync,
-        fsync,
-    })
+    Ok(oconvflags)
 }
 
 /// Parse IFlags struct from CL-input
 pub fn parse_iflags(matches: &Matches) -> Result<IFlags, ParseError> {
-    let mut cio = false;
-    let mut direct = false;
-    let mut directory = false;
-    let mut dsync = false;
-    let mut sync = false;
-    let mut nocache = false;
-    let mut nonblock = false;
-    let mut noatime = false;
-    let mut noctty = false;
-    let mut nofollow = false;
-    let mut nolinks = false;
-    let mut binary = false;
-    let mut text = false;
-    let mut fullblock = false;
-    let mut count_bytes = false;
-    let mut skip_bytes = false;
+    let mut iflags = IFlags {
+        cio: false,
+        direct: false,
+        directory: false,
+        dsync: false,
+        sync: false,
+        nocache: false,
+        nonblock: false,
+        noatime: false,
+        noctty: false,
+        nofollow: false,
+        nolinks: false,
+        binary: false,
+        text: false,
+        fullblock: false,
+        count_bytes: false,
+        skip_bytes: false,
+    };
 
-    let flags = parse_flag_list("iflag", matches)?;
+    let flags = parse_flag_list(options::IFLAG, matches)?;
 
     for flag in flags {
         match flag {
-            Flag::Cio => cio = true,
-            Flag::Direct => direct = true,
-            Flag::Directory => directory = true,
-            Flag::Dsync => dsync = true,
-            Flag::Sync => sync = true,
-            Flag::NoCache => nocache = true,
-            Flag::NonBlock => nonblock = true,
-            Flag::NoATime => noatime = true,
-            Flag::NoCtty => noctty = true,
-            Flag::NoFollow => nofollow = true,
-            Flag::NoLinks => nolinks = true,
-            Flag::Binary => binary = true,
-            Flag::Text => text = true,
-            Flag::FullBlock => fullblock = true,
-            Flag::CountBytes => count_bytes = true,
-            Flag::SkipBytes => skip_bytes = true,
+            Flag::Cio => iflags.cio = true,
+            Flag::Direct => iflags.direct = true,
+            Flag::Directory => iflags.directory = true,
+            Flag::Dsync => iflags.dsync = true,
+            Flag::Sync => iflags.sync = true,
+            Flag::NoCache => iflags.nocache = true,
+            Flag::NonBlock => iflags.nonblock = true,
+            Flag::NoATime => iflags.noatime = true,
+            Flag::NoCtty => iflags.noctty = true,
+            Flag::NoFollow => iflags.nofollow = true,
+            Flag::NoLinks => iflags.nolinks = true,
+            Flag::Binary => iflags.binary = true,
+            Flag::Text => iflags.text = true,
+            Flag::FullBlock => iflags.fullblock = true,
+            Flag::CountBytes => iflags.count_bytes = true,
+            Flag::SkipBytes => iflags.skip_bytes = true,
             _ => {}
         }
     }
 
-    Ok(IFlags {
-        cio,
-        direct,
-        directory,
-        dsync,
-        sync,
-        nocache,
-        nonblock,
-        noatime,
-        noctty,
-        nofollow,
-        nolinks,
-        binary,
-        text,
-        fullblock,
-        count_bytes,
-        skip_bytes,
-    })
+    Ok(iflags)
 }
 
 /// Parse OFlags struct from CL-input
 pub fn parse_oflags(matches: &Matches) -> Result<OFlags, ParseError> {
-    let mut append = false;
-    let mut cio = false;
-    let mut direct = false;
-    let mut directory = false;
-    let mut dsync = false;
-    let mut sync = false;
-    let mut nocache = false;
-    let mut nonblock = false;
-    let mut noatime = false;
-    let mut noctty = false;
-    let mut nofollow = false;
-    let mut nolinks = false;
-    let mut binary = false;
-    let mut text = false;
-    let mut seek_bytes = false;
+    let mut oflags = OFlags {
+        append: false,
+        cio: false,
+        direct: false,
+        directory: false,
+        dsync: false,
+        sync: false,
+        nocache: false,
+        nonblock: false,
+        noatime: false,
+        noctty: false,
+        nofollow: false,
+        nolinks: false,
+        binary: false,
+        text: false,
+        seek_bytes: false,
+    };
 
-    let flags = parse_flag_list("oflag", matches)?;
+    let flags = parse_flag_list(options::OFLAG, matches)?;
 
     for flag in flags {
         match flag {
-            Flag::Append => append = true,
-            Flag::Cio => cio = true,
-            Flag::Direct => direct = true,
-            Flag::Directory => directory = true,
-            Flag::Dsync => dsync = true,
-            Flag::Sync => sync = true,
-            Flag::NoCache => nocache = true,
-            Flag::NonBlock => nonblock = true,
-            Flag::NoATime => noatime = true,
-            Flag::NoCtty => noctty = true,
-            Flag::NoFollow => nofollow = true,
-            Flag::NoLinks => nolinks = true,
-            Flag::Binary => binary = true,
-            Flag::Text => text = true,
-            Flag::SeekBytes => seek_bytes = true,
+            Flag::Append => oflags.append = true,
+            Flag::Cio => oflags.cio = true,
+            Flag::Direct => oflags.direct = true,
+            Flag::Directory => oflags.directory = true,
+            Flag::Dsync => oflags.dsync = true,
+            Flag::Sync => oflags.sync = true,
+            Flag::NoCache => oflags.nocache = true,
+            Flag::NonBlock => oflags.nonblock = true,
+            Flag::NoATime => oflags.noatime = true,
+            Flag::NoCtty => oflags.noctty = true,
+            Flag::NoFollow => oflags.nofollow = true,
+            Flag::NoLinks => oflags.nolinks = true,
+            Flag::Binary => oflags.binary = true,
+            Flag::Text => oflags.text = true,
+            Flag::SeekBytes => oflags.seek_bytes = true,
             _ => {}
         }
     }
 
-    Ok(OFlags {
-        append,
-        cio,
-        direct,
-        directory,
-        dsync,
-        sync,
-        nocache,
-        nonblock,
-        noatime,
-        noctty,
-        nofollow,
-        nolinks,
-        binary,
-        text,
-        seek_bytes,
-    })
+    Ok(oflags)
 }
 
 /// Parse the amount of the input file to skip.
@@ -680,7 +646,7 @@ pub fn parse_skip_amt(
     iflags: &IFlags,
     matches: &Matches,
 ) -> Result<Option<usize>, ParseError> {
-    if let Some(amt) = matches.value_of("skip") {
+    if let Some(amt) = matches.value_of(options::SKIP) {
         let n = parse_bytes_with_opt_multiplier(amt)?;
         if iflags.skip_bytes {
             Ok(Some(n))
@@ -698,7 +664,7 @@ pub fn parse_seek_amt(
     oflags: &OFlags,
     matches: &Matches,
 ) -> Result<Option<usize>, ParseError> {
-    if let Some(amt) = matches.value_of("seek") {
+    if let Some(amt) = matches.value_of(options::SEEK) {
         let n = parse_bytes_with_opt_multiplier(amt)?;
         if oflags.seek_bytes {
             Ok(Some(n))
@@ -712,7 +678,7 @@ pub fn parse_seek_amt(
 
 /// Parse the value of count=N and the type of N implied by iflags
 pub fn parse_count(iflags: &IFlags, matches: &Matches) -> Result<Option<CountType>, ParseError> {
-    if let Some(amt) = matches.value_of("count") {
+    if let Some(amt) = matches.value_of(options::COUNT) {
         let n = parse_bytes_with_opt_multiplier(amt)?;
         if iflags.count_bytes {
             Ok(Some(CountType::Bytes(n)))
@@ -726,7 +692,7 @@ pub fn parse_count(iflags: &IFlags, matches: &Matches) -> Result<Option<CountTyp
 
 /// Parse whether the args indicate the input is not ascii
 pub fn parse_input_non_ascii(matches: &Matches) -> Result<bool, ParseError> {
-    if let Some(conv_opts) = matches.value_of("conv") {
+    if let Some(conv_opts) = matches.value_of(options::CONV) {
         Ok(conv_opts.contains("ascii"))
     } else {
         Ok(false)

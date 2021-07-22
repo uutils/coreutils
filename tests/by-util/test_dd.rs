@@ -202,6 +202,7 @@ fn test_final_stats_unspec() {
     new_ucmd!().run().stderr_only(&output).success();
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 fn test_excl_causes_failure_when_present() {
     let fname = "this-file-exists-excl.txt";
@@ -212,7 +213,7 @@ fn test_excl_causes_failure_when_present() {
         .fails();
 }
 
-#[ignore]
+#[cfg(target_os = "linux")]
 #[test]
 fn test_atime_updated() {
     let fname = "this-file-exists-no-noatime.txt";
@@ -230,6 +231,7 @@ fn test_atime_updated() {
     assert!(pre_atime != post_atime);
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 fn test_noatime_does_not_update_infile_atime() {
     let fname = "this-ifile-exists-noatime.txt";
@@ -246,6 +248,7 @@ fn test_noatime_does_not_update_infile_atime() {
     assert_eq!(pre_atime, post_atime);
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 fn test_noatime_does_not_update_ofile_atime() {
     let fname = "this-ofile-exists-noatime.txt";
@@ -262,6 +265,7 @@ fn test_noatime_does_not_update_ofile_atime() {
     assert_eq!(pre_atime, post_atime);
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 fn test_nocreat_causes_failure_when_outfile_not_present() {
     let fname = "this-file-does-not-exist.txt";
@@ -345,7 +349,7 @@ fn test_null_fullblock() {
 }
 
 #[cfg(unix)]
-// #[ignore] // See note below before running this test!
+#[ignore] // See note below before using this test.
 #[test]
 fn test_fullblock() {
     let tname = "fullblock-from-urand";

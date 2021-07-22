@@ -943,7 +943,7 @@ fn dd_fileout<R: Read>(mut i: Input<R>, mut o: Output<File>) -> Result<(), Box<d
 }
 
 fn append_dashes_if_not_present(mut acc: Vec<String>, mut s: String) -> Vec<String> {
-    if !s.starts_with("--") && !s.starts_with("-") {
+    if !s.starts_with("--") && !s.starts_with('-') {
         s.insert_str(0, "--");
     }
     acc.push(s);
