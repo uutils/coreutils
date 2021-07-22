@@ -4,7 +4,7 @@ use crate::StatusLevel;
 
 #[cfg(not(target_os = "linux"))]
 #[test]
-fn unimplemented_flags_should_error_non_unix() {
+fn unimplemented_flags_should_error_non_linux() {
     let mut succeeded = Vec::new();
 
     // The following flags are only implemented in linux
@@ -518,29 +518,35 @@ test_byte_parser!(test_bytes_GB, "3GB", 3 * 1000 * 1000 * 1000);
 test_byte_parser!(test_bytes_G, "3G", 3 * 1024 * 1024 * 1024);
 test_byte_parser!(test_bytes_Gi, "3GiB", 3 * 1024 * 1024 * 1024);
 
-test_byte_parser!(test_bytes_TB, "4TB", 4 * 1000 * 1000 * 1000 * 1000);
-test_byte_parser!(test_bytes_T, "4T", 4 * 1024 * 1024 * 1024 * 1024);
-test_byte_parser!(test_bytes_Ti, "4TiB", 4 * 1024 * 1024 * 1024 * 1024);
+#[cfg(target_pointer_width = "64")]
+#[cfg(test)]
+mod test_64bit_arch {
+    use super::*;
 
-test_byte_parser!(test_bytes_PB, "5PB", 5 * 1000 * 1000 * 1000 * 1000 * 1000);
-test_byte_parser!(test_bytes_P, "5P", 5 * 1024 * 1024 * 1024 * 1024 * 1024);
-test_byte_parser!(test_bytes_Pi, "5PiB", 5 * 1024 * 1024 * 1024 * 1024 * 1024);
+    test_byte_parser!(test_bytes_TB, "4TB", 4 * 1000 * 1000 * 1000 * 1000);
+    test_byte_parser!(test_bytes_T, "4T", 4 * 1024 * 1024 * 1024 * 1024);
+    test_byte_parser!(test_bytes_Ti, "4TiB", 4 * 1024 * 1024 * 1024 * 1024);
 
-test_byte_parser!(
-    test_bytes_EB,
-    "6EB",
-    6 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000
-);
-test_byte_parser!(
-    test_bytes_E,
-    "6E",
-    6 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024
-);
-test_byte_parser!(
-    test_bytes_Ei,
-    "6EiB",
-    6 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024
-);
+    test_byte_parser!(test_bytes_PB, "5PB", 5 * 1000 * 1000 * 1000 * 1000 * 1000);
+    test_byte_parser!(test_bytes_P, "5P", 5 * 1024 * 1024 * 1024 * 1024 * 1024);
+    test_byte_parser!(test_bytes_Pi, "5PiB", 5 * 1024 * 1024 * 1024 * 1024 * 1024);
+
+    test_byte_parser!(
+        test_bytes_EB,
+        "6EB",
+        6 * 1000 * 1000 * 1000 * 1000 * 1000 * 1000
+    );
+    test_byte_parser!(
+        test_bytes_E,
+        "6E",
+        6 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024
+    );
+    test_byte_parser!(
+        test_bytes_Ei,
+        "6EiB",
+        6 * 1024 * 1024 * 1024 * 1024 * 1024 * 1024
+    );
+}
 
 #[test]
 #[should_panic]

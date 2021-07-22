@@ -12,12 +12,12 @@ macro_rules! make_conv_test (
                             print_level: None,
                             count: None,
                             cflags: icf!($ctable),
-                            iflags: DEFAULT_IFLAGS,
+                            iflags: IFlags::default(),
                         },
                         Output {
                             dst: File::create(format!("./test-resources/FAILED-{}.test", $test_name)).unwrap(),
                             obs: 512,
-                            cflags: DEFAULT_CFO,
+                            cflags: OConvFlags::default(),
                         },
                         $spec,
                         format!("./test-resources/FAILED-{}.test", $test_name)
@@ -37,12 +37,12 @@ macro_rules! make_icf_test (
                             print_level: None,
                             count: None,
                             cflags: $icf,
-                            iflags: DEFAULT_IFLAGS,
+                            iflags: IFlags::default(),
                         },
                         Output {
                             dst: File::create(format!("./test-resources/FAILED-{}.test", $test_name)).unwrap(),
                             obs: 512,
-                            cflags: DEFAULT_CFO,
+                            cflags: OConvFlags::default(),
                         },
                         $spec,
                         format!("./test-resources/FAILED-{}.test", $test_name)

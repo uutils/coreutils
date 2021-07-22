@@ -9,34 +9,6 @@ use std::fs;
 use std::io::prelude::*;
 use std::io::BufReader;
 
-const DEFAULT_CFO: OConvFlags = OConvFlags {
-    sparse: false,
-    excl: false,
-    nocreat: false,
-    notrunc: false,
-    fdatasync: false,
-    fsync: false,
-};
-
-const DEFAULT_IFLAGS: IFlags = IFlags {
-    cio: false,
-    direct: false,
-    directory: false,
-    dsync: false,
-    sync: false,
-    nocache: false,
-    nonblock: false,
-    noatime: false,
-    noctty: false,
-    nofollow: false,
-    nolinks: false,
-    binary: false,
-    text: false,
-    fullblock: false,
-    count_bytes: false,
-    skip_bytes: false,
-};
-
 struct LazyReader<R: Read> {
     src: R,
 }
@@ -50,19 +22,11 @@ impl<R: Read> Read for LazyReader<R> {
 
 #[macro_export]
 macro_rules! icf (
-    () =>
-    {
-        icf!(None)
-    };
     ( $ctable:expr ) =>
     {
         IConvFlags {
             ctable: $ctable,
-            block: None,
-            unblock: None,
-            swab: false,
-            sync: None,
-            noerror: false,
+            ..IConvFlags::default()
         }
     };
 );
@@ -84,13 +48,13 @@ macro_rules! make_spec_test (
                             ibs: 512,
                             print_level: None,
                             count: None,
-                            cflags: icf!(),
-                            iflags: DEFAULT_IFLAGS,
+                            cflags: IConvFlags::default(),
+                            iflags: IFlags::default(),
                         },
                         Output {
                             dst: File::create(format!("./test-resources/FAILED-{}.test", $test_name)).unwrap(),
                             obs: 512,
-                            cflags: DEFAULT_CFO,
+                            cflags: OConvFlags::default(),
                         },
                         $spec,
                         format!("./test-resources/FAILED-{}.test", $test_name)

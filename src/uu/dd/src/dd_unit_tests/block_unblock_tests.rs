@@ -15,19 +15,15 @@ macro_rules! make_block_test (
                             print_level: None,
                             count: None,
                             cflags: IConvFlags {
-                                ctable: None,
                                 block: $block,
-                                unblock: None,
-                                swab: false,
-                                sync: None,
-                                noerror: false,
+                                ..IConvFlags::default()
                             },
-                            iflags: DEFAULT_IFLAGS,
+                            iflags: IFlags::default(),
                         },
                         Output {
                             dst: File::create(format!("./test-resources/FAILED-{}.test", $test_name)).unwrap(),
                             obs: 512,
-                            cflags: DEFAULT_CFO,
+                            cflags: OConvFlags::default(),
                         },
                         $spec,
                         format!("./test-resources/FAILED-{}.test", $test_name)
@@ -54,12 +50,12 @@ macro_rules! make_unblock_test (
                                 sync: None,
                                 noerror: false,
                             },
-                            iflags: DEFAULT_IFLAGS,
+                            iflags: IFlags::default(),
                         },
                         Output {
                             dst: File::create(format!("./test-resources/FAILED-{}.test", $test_name)).unwrap(),
                             obs: 512,
-                            cflags: DEFAULT_CFO,
+                            cflags: OConvFlags::default(),
                         },
                         $spec,
                         format!("./test-resources/FAILED-{}.test", $test_name)
@@ -247,7 +243,11 @@ fn block_test_double_surrounded_nl_double_trunc() {
 make_block_test!(
     block_cbs16,
     "block-cbs-16",
-    File::open("./test-resources/dd-block-cbs16.test").unwrap(),
+    if cfg!(unix) {
+        File::open("./test-resources/dd-block-cbs16.test").unwrap()
+    } else {
+        File::open("./test-resources/dd-block-cbs16-win.test").unwrap()
+    },
     Some(16),
     File::open("./test-resources/dd-block-cbs16.spec").unwrap()
 );
@@ -255,7 +255,11 @@ make_block_test!(
 make_block_test!(
     block_cbs16_as_cbs8,
     "block-cbs-16-as-cbs8",
-    File::open("./test-resources/dd-block-cbs16.test").unwrap(),
+    if cfg!(unix) {
+        File::open("./test-resources/dd-block-cbs16.test").unwrap()
+    } else {
+        File::open("./test-resources/dd-block-cbs16-win.test").unwrap()
+    },
     Some(8),
     File::open("./test-resources/dd-block-cbs8.spec").unwrap()
 );
@@ -263,7 +267,11 @@ make_block_test!(
 make_block_test!(
     block_consecutive_nl,
     "block-consecutive-nl",
-    File::open("./test-resources/dd-block-consecutive-nl.test").unwrap(),
+    if cfg!(unix) {
+        File::open("./test-resources/dd-block-consecutive-nl.test").unwrap()
+    } else {
+        File::open("./test-resources/dd-block-consecutive-nl-win.test").unwrap()
+    },
     Some(16),
     File::open("./test-resources/dd-block-consecutive-nl-cbs16.spec").unwrap()
 );
@@ -335,7 +343,11 @@ make_unblock_test!(
     "unblock-multi-16",
     File::open("./test-resources/dd-unblock-cbs16.test").unwrap(),
     Some(16),
-    File::open("./test-resources/dd-unblock-cbs16.spec").unwrap()
+    if cfg!(unix) {
+        File::open("./test-resources/dd-unblock-cbs16.spec").unwrap()
+    } else {
+        File::open("./test-resources/dd-unblock-cbs16-win.spec").unwrap()
+    },
 );
 
 make_unblock_test!(
@@ -343,5 +355,9 @@ make_unblock_test!(
     "unblock-multi-16-as-8",
     File::open("./test-resources/dd-unblock-cbs16.test").unwrap(),
     Some(8),
-    File::open("./test-resources/dd-unblock-cbs8.spec").unwrap()
+    if cfg!(unix) {
+        File::open("./test-resources/dd-unblock-cbs8.spec").unwrap()
+    } else {
+        File::open("./test-resources/dd-unblock-cbs8-win.spec").unwrap()
+    },
 );

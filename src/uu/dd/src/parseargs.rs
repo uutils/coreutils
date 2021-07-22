@@ -186,7 +186,7 @@ impl std::str::FromStr for Flag {
             "direct" =>
             // Ok(Self::Direct),
             {
-                if cfg!(unix) {
+                if cfg!(target_os = "linux") {
                     Ok(Self::Direct)
                 } else {
                     Err(ParseError::Unimplemented(s.to_string()))
@@ -195,7 +195,7 @@ impl std::str::FromStr for Flag {
             "directory" =>
             // Ok(Self::Directory),
             {
-                if cfg!(unix) {
+                if cfg!(target_os = "linux") {
                     Ok(Self::Directory)
                 } else {
                     Err(ParseError::Unimplemented(s.to_string()))
@@ -204,7 +204,7 @@ impl std::str::FromStr for Flag {
             "dsync" =>
             // Ok(Self::Dsync),
             {
-                if cfg!(unix) {
+                if cfg!(target_os = "linux") {
                     Ok(Self::Dsync)
                 } else {
                     Err(ParseError::Unimplemented(s.to_string()))
@@ -213,7 +213,7 @@ impl std::str::FromStr for Flag {
             "sync" =>
             // Ok(Self::Sync),
             {
-                if cfg!(unix) {
+                if cfg!(target_os = "linux") {
                     Ok(Self::Sync)
                 } else {
                     Err(ParseError::Unimplemented(s.to_string()))
@@ -227,7 +227,7 @@ impl std::str::FromStr for Flag {
             "nonblock" =>
             // Ok(Self::NonBlock),
             {
-                if cfg!(unix) {
+                if cfg!(target_os = "linux") {
                     Ok(Self::NonBlock)
                 } else {
                     Err(ParseError::Unimplemented(s.to_string()))
@@ -236,7 +236,7 @@ impl std::str::FromStr for Flag {
             "noatime" =>
             // Ok(Self::NoATime),
             {
-                if cfg!(unix) {
+                if cfg!(target_os = "linux") {
                     Ok(Self::NoATime)
                 } else {
                     Err(ParseError::Unimplemented(s.to_string()))
@@ -245,7 +245,7 @@ impl std::str::FromStr for Flag {
             "noctty" =>
             // Ok(Self::NoCtty),
             {
-                if cfg!(unix) {
+                if cfg!(target_os = "linux") {
                     Ok(Self::NoCtty)
                 } else {
                     Err(ParseError::Unimplemented(s.to_string()))
@@ -254,7 +254,7 @@ impl std::str::FromStr for Flag {
             "nofollow" =>
             // Ok(Self::NoFollow),
             {
-                if cfg!(unix) {
+                if cfg!(target_os = "linux") {
                     Ok(Self::NoFollow)
                 } else {
                     Err(ParseError::Unimplemented(s.to_string()))
@@ -421,16 +421,13 @@ fn parse_flag_list<T: std::str::FromStr<Err = ParseError>>(
 /// Parse Conversion Options (Input Variety)
 /// Construct and validate a IConvFlags
 pub fn parse_conv_flag_input(matches: &Matches) -> Result<IConvFlags, ParseError> {
-    let flags = parse_flag_list("conv", matches)?;
-    let cbs = parse_cbs(matches)?;
-
+    let mut iconvflags = IConvFlags::default();
     let mut fmt = None;
     let mut case = None;
-    let mut block = None;
-    let mut unblock = None;
-    let mut swab = false;
-    let mut sync = false;
-    let mut noerror = false;
+    let mut is_sync = false;
+
+    let flags = parse_flag_list(options::CONV, matches)?;
+    let cbs = parse_cbs(matches)?;
 
     for flag in flags {
         match flag {
@@ -469,27 +466,36 @@ pub fn parse_conv_flag_input(matches: &Matches) -> Result<IConvFlags, ParseError
                     case = Some(flag)
                 }
             }
-            ConvFlag::Block => match (cbs, unblock) {
-                (Some(cbs), None) => block = Some(cbs),
+            ConvFlag::Block => match (cbs, iconvflags.unblock) {
+                (Some(cbs), None) => iconvflags.block = Some(cbs),
                 (None, _) => return Err(ParseError::BlockUnblockWithoutCBS),
                 (_, Some(_)) => return Err(ParseError::MultipleBlockUnblock),
             },
-            ConvFlag::Unblock => match (cbs, block) {
-                (Some(cbs), None) => unblock = Some(cbs),
+            ConvFlag::Unblock => match (cbs, iconvflags.block) {
+                (Some(cbs), None) => iconvflags.unblock = Some(cbs),
                 (None, _) => return Err(ParseError::BlockUnblockWithoutCBS),
                 (_, Some(_)) => return Err(ParseError::MultipleBlockUnblock),
             },
-            ConvFlag::Swab => swab = true,
-            ConvFlag::Sync => sync = true,
-            ConvFlag::NoError => noerror = true,
+            ConvFlag::Swab => iconvflags.swab = true,
+            ConvFlag::Sync => is_sync = true,
+            ConvFlag::NoError => iconvflags.noerror = true,
             _ => {}
         }
     }
 
+    // The final conversion table depends on both
+    // fmt (eg. ASCII -> EBCDIC)
+    // case (eg. UCASE -> LCASE)
+    // So the final value can't be set until all flags are parsed.
     let ctable = parse_ctable(fmt, case);
-    let sync = if sync && (block.is_some() || unblock.is_some()) {
+
+    // The final value of sync depends on block/unblock
+    // block implies sync with ' '
+    // unblock implies sync with 0
+    // So the final value can't be set until all flags are parsed.
+    let sync = if is_sync && (iconvflags.block.is_some() || iconvflags.unblock.is_some()) {
         Some(b' ')
-    } else if sync {
+    } else if is_sync {
         Some(0u8)
     } else {
         None
@@ -497,27 +503,17 @@ pub fn parse_conv_flag_input(matches: &Matches) -> Result<IConvFlags, ParseError
 
     Ok(IConvFlags {
         ctable,
-        block,
-        unblock,
-        swab,
         sync,
-        noerror,
+        ..iconvflags
     })
 }
 
 /// Parse Conversion Options (Output Variety)
 /// Construct and validate a OConvFlags
 pub fn parse_conv_flag_output(matches: &Matches) -> Result<OConvFlags, ParseError> {
-    let flags = parse_flag_list(options::CONV, matches)?;
+    let mut oconvflags = OConvFlags::default();
 
-    let mut oconvflags = OConvFlags {
-        sparse: false,
-        excl: false,
-        nocreat: false,
-        notrunc: false,
-        fdatasync: false,
-        fsync: false,
-    };
+    let flags = parse_flag_list(options::CONV, matches)?;
 
     for flag in flags {
         match flag {
@@ -548,24 +544,7 @@ pub fn parse_conv_flag_output(matches: &Matches) -> Result<OConvFlags, ParseErro
 
 /// Parse IFlags struct from CL-input
 pub fn parse_iflags(matches: &Matches) -> Result<IFlags, ParseError> {
-    let mut iflags = IFlags {
-        cio: false,
-        direct: false,
-        directory: false,
-        dsync: false,
-        sync: false,
-        nocache: false,
-        nonblock: false,
-        noatime: false,
-        noctty: false,
-        nofollow: false,
-        nolinks: false,
-        binary: false,
-        text: false,
-        fullblock: false,
-        count_bytes: false,
-        skip_bytes: false,
-    };
+    let mut iflags = IFlags::default();
 
     let flags = parse_flag_list(options::IFLAG, matches)?;
 
@@ -596,23 +575,7 @@ pub fn parse_iflags(matches: &Matches) -> Result<IFlags, ParseError> {
 
 /// Parse OFlags struct from CL-input
 pub fn parse_oflags(matches: &Matches) -> Result<OFlags, ParseError> {
-    let mut oflags = OFlags {
-        append: false,
-        cio: false,
-        direct: false,
-        directory: false,
-        dsync: false,
-        sync: false,
-        nocache: false,
-        nonblock: false,
-        noatime: false,
-        noctty: false,
-        nofollow: false,
-        nolinks: false,
-        binary: false,
-        text: false,
-        seek_bytes: false,
-    };
+    let mut oflags = OFlags::default();
 
     let flags = parse_flag_list(options::OFLAG, matches)?;
 

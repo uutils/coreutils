@@ -12,19 +12,15 @@ macro_rules! make_sync_test (
                             print_level: None,
                             count: None,
                             cflags: IConvFlags {
-                                ctable: None,
-                                block: None,
-                                unblock: None,
-                                swab: false,
                                 sync: $sync,
-                                noerror: false,
+                                ..IConvFlags::default()
                             },
-                            iflags: DEFAULT_IFLAGS,
+                            iflags: IFlags::default(),
                         },
                         Output {
                             dst: File::create(format!("./test-resources/FAILED-{}.test", $test_name)).unwrap(),
                             obs: $obs,
-                            cflags: DEFAULT_CFO,
+                            cflags: OConvFlags::default(),
                         },
                         $spec,
                         format!("./test-resources/FAILED-{}.test", $test_name)
