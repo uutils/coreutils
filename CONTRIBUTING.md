@@ -17,7 +17,7 @@ search the issues to make sure no one else is working on it.
 
 ## Best practices
 
-1. Follow what GNU is doing in term of options and behavior.
+1. Follow what GNU is doing in terms of options and behavior. It is recommended to look at the GNU Coreutils manual ([on the web](https://www.gnu.org/software/coreutils/manual/html_node/index.html), or locally using `info <utility>`). It is more in depth than the man pages and provides a good description of available features and their implementation details.
 1. If possible, look at the GNU test suite execution in the CI and make the test work if failing.
 1. Use clap for argument management.
 1. Make sure that the code coverage is covering all of the cases, including errors.     

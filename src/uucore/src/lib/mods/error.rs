@@ -138,6 +138,12 @@ pub enum UError {
 }
 
 impl UError {
+    /// The error code of [`UResult`]
+    ///
+    /// This function defines the error code associated with an instance of
+    /// [`UResult`]. To associate error codes for self-defined instances of
+    /// `UResult::Custom` (i.e. [`UCustomError`]), implement the
+    /// [`code`-function there](UCustomError::code).
     pub fn code(&self) -> i32 {
         match self {
             UError::Common(e) => e.code(),
@@ -145,6 +151,13 @@ impl UError {
         }
     }
 
+    /// Whether to print usage help for a [`UResult`]
+    ///
+    /// Defines if a variant of [`UResult`] should print a short usage message
+    /// below the error. The usage message is printed when this function returns
+    /// `true`. To do this for self-defined instances of `UResult::Custom` (i.e.
+    /// [`UCustomError`]), implement the [`usage`-function
+    /// there](UCustomError::usage).
     pub fn usage(&self) -> bool {
         match self {
             UError::Common(e) => e.usage(),
@@ -183,12 +196,13 @@ impl Display for UError {
 /// Custom errors defined by the utils.
 ///
 /// All errors should implement [`std::error::Error`], [`std::fmt::Display`] and
-/// [`std::fmt::Debug`] and have an additional `code` method that specifies the exit code of the
-/// program if the error is returned from `uumain`.
+/// [`std::fmt::Debug`] and have an additional `code` method that specifies the
+/// exit code of the program if the error is returned from `uumain`.
 ///
 /// An example of a custom error from `ls`:
+///
 /// ```
-/// use uucore::error::{UCustomError};
+/// use uucore::error::{UCustomError, UResult};
 /// use std::{
 ///     error::Error,
 ///     fmt::{Display, Debug},
@@ -221,13 +235,121 @@ impl Display for UError {
 ///     }
 /// }
 /// ```
-/// A crate like [`quick_error`](https://crates.io/crates/quick-error) might also be used, but will
-/// still require an `impl` for the `code` method.
+///
+/// The main routine would look like this:
+///
+/// ```ignore
+/// #[uucore_procs::gen_uumain]
+/// pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+///     // Perform computations here ...
+///     return Err(LsError::InvalidLineWidth(String::from("test")).into())
+/// }
+/// ```
+///
+/// The call to `into()` is required to convert the [`UCustomError`] to an
+/// instance of [`UError`].
+///
+/// A crate like [`quick_error`](https://crates.io/crates/quick-error) might
+/// also be used, but will still require an `impl` for the `code` method.
 pub trait UCustomError: Error {
+    /// Error code of a custom error.
+    ///
+    /// Set a return value for each variant of an enum-type to associate an
+    /// error code (which is returned to the system shell) with an error
+    /// variant.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use uucore::error::{UCustomError};
+    /// use std::{
+    ///     error::Error,
+    ///     fmt::{Display, Debug},
+    ///     path::PathBuf
+    /// };
+    ///
+    /// #[derive(Debug)]
+    /// enum MyError {
+    ///     Foo(String),
+    ///     Bar(PathBuf),
+    ///     Bing(),
+    /// }
+    ///
+    /// impl UCustomError for MyError {
+    ///     fn code(&self) -> i32 {
+    ///         match self {
+    ///             MyError::Foo(_) => 2,
+    ///             // All other errors yield the same error code, there's no
+    ///             // need to list them explicitly.
+    ///             _ => 1,
+    ///         }
+    ///     }
+    /// }
+    ///
+    /// impl Error for MyError {}
+    ///
+    /// impl Display for MyError {
+    ///     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    ///         use MyError as ME;
+    ///         match self {
+    ///             ME::Foo(s) => write!(f, "Unknown Foo: '{}'", s),
+    ///             ME::Bar(p) => write!(f, "Couldn't find Bar: '{}'", p.display()),
+    ///             ME::Bing() => write!(f, "Exterminate!"),
+    ///         }
+    ///     }
+    /// }
+    /// ```
     fn code(&self) -> i32 {
         1
     }
 
+    /// Print usage help to a custom error.
+    ///
+    /// Return true or false to control whether a short usage help is printed
+    /// below the error message. The usage help is in the format: "Try '{name}
+    /// --help' for more information." and printed only if `true` is returned.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use uucore::error::{UCustomError};
+    /// use std::{
+    ///     error::Error,
+    ///     fmt::{Display, Debug},
+    ///     path::PathBuf
+    /// };
+    ///
+    /// #[derive(Debug)]
+    /// enum MyError {
+    ///     Foo(String),
+    ///     Bar(PathBuf),
+    ///     Bing(),
+    /// }
+    ///
+    /// impl UCustomError for MyError {
+    ///     fn usage(&self) -> bool {
+    ///         match self {
+    ///             // This will have a short usage help appended
+    ///             MyError::Bar(_) => true,
+    ///             // These matches won't have a short usage help appended
+    ///             _ => false,
+    ///         }
+    ///     }
+    /// }
+    ///
+    /// impl Error for MyError {}
+    ///
+    /// impl Display for MyError {
+    ///     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    ///         use MyError as ME;
+    ///         match self {
+    ///             ME::Foo(s) => write!(f, "Unknown Foo: '{}'", s),
+    ///             ME::Bar(p) => write!(f, "Couldn't find Bar: '{}'", p.display()),
+    ///             ME::Bing() => write!(f, "Exterminate!"),
+    ///         }
+    ///     }
+    /// }
+    /// ```
     fn usage(&self) -> bool {
         false
     }

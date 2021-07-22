@@ -398,8 +398,7 @@ fn test_du_time() {
     let result = ts.ucmd().arg("--time=ctime").arg("date_test").succeeds();
     result.stdout_only("0\t2016-06-16 00:00\tdate_test\n");
 
-    #[cfg(not(target_env = "musl"))]
-    {
+    if birth_supported() {
         use regex::Regex;
 
         let re_birth =
@@ -407,6 +406,16 @@ fn test_du_time() {
         let result = ts.ucmd().arg("--time=birth").arg("date_test").succeeds();
         result.stdout_matches(&re_birth);
     }
+}
+
+#[cfg(feature = "touch")]
+fn birth_supported() -> bool {
+    let ts = TestScenario::new(util_name!());
+    let m = match std::fs::metadata(ts.fixtures.subdir) {
+        Ok(m) => m,
+        Err(e) => panic!("{}", e),
+    };
+    m.created().is_ok()
 }
 
 #[cfg(not(target_os = "windows"))]

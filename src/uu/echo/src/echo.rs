@@ -6,6 +6,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// clippy bug https://github.com/rust-lang/rust-clippy/issues/7422
+#![allow(clippy::nonstandard_macro_braces)]
+
 #[macro_use]
 extern crate uucore;
 
@@ -13,6 +16,7 @@ use clap::{crate_version, App, Arg};
 use std::io::{self, Write};
 use std::iter::Peekable;
 use std::str::Chars;
+use uucore::error::{FromIo, UResult};
 use uucore::InvalidEncodingHandling;
 
 const NAME: &str = "echo";
@@ -113,7 +117,8 @@ fn print_escaped(input: &str, mut output: impl Write) -> io::Result<bool> {
     Ok(should_stop)
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
@@ -126,13 +131,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         None => vec!["".to_string()],
     };
 
-    match execute(no_newline, escaped, values) {
-        Ok(_) => 0,
-        Err(f) => {
-            show_error!("{}", f);
-            1
-        }
-    }
+    execute(no_newline, escaped, values).map_err_context(|| "could not write to stdout".to_string())
 }
 
 pub fn uu_app() -> App<'static, 'static> {
