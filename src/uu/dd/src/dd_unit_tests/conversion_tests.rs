@@ -12,12 +12,12 @@ macro_rules! make_conv_test (
                             print_level: None,
                             count: None,
                             cflags: icf!($ctable),
-                            iflags: DEFAULT_IFLAGS,
+                            iflags: IFlags::default(),
                         },
                         Output {
                             dst: File::create(format!("./test-resources/FAILED-{}.test", $test_name)).unwrap(),
                             obs: 512,
-                            cflags: DEFAULT_CFO,
+                            cflags: OConvFlags::default(),
                         },
                         $spec,
                         format!("./test-resources/FAILED-{}.test", $test_name)
@@ -37,12 +37,12 @@ macro_rules! make_icf_test (
                             print_level: None,
                             count: None,
                             cflags: $icf,
-                            iflags: DEFAULT_IFLAGS,
+                            iflags: IFlags::default(),
                         },
                         Output {
                             dst: File::create(format!("./test-resources/FAILED-{}.test", $test_name)).unwrap(),
                             obs: 512,
-                            cflags: DEFAULT_CFO,
+                            cflags: OConvFlags::default(),
                         },
                         $spec,
                         format!("./test-resources/FAILED-{}.test", $test_name)
@@ -142,13 +142,13 @@ fn all_valid_ascii_ebcdic_ascii_roundtrip_conv_test() {
         print_level: None,
         count: None,
         cflags: icf!(Some(&ASCII_TO_EBCDIC)),
-        iflags: DEFAULT_IFLAGS,
+        iflags: IFlags::default(),
     };
 
     let o = Output {
         dst: File::create(&tmp_fname_ae).unwrap(),
         obs: 1024,
-        cflags: DEFAULT_CFO,
+        cflags: OConvFlags::default(),
     };
 
     dd_fileout(i, o).unwrap();
@@ -164,13 +164,13 @@ fn all_valid_ascii_ebcdic_ascii_roundtrip_conv_test() {
         print_level: None,
         count: None,
         cflags: icf!(Some(&EBCDIC_TO_ASCII)),
-        iflags: DEFAULT_IFLAGS,
+        iflags: IFlags::default(),
     };
 
     let o = Output {
         dst: File::create(&tmp_fname_ea).unwrap(),
         obs: 1024,
-        cflags: DEFAULT_CFO,
+        cflags: OConvFlags::default(),
     };
 
     dd_fileout(i, o).unwrap();

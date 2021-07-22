@@ -52,13 +52,13 @@ make_io_test!(
         ibs: 521,
         print_level: None,
         count: None,
-        cflags: icf!(),
-        iflags: DEFAULT_IFLAGS,
+        cflags: IConvFlags::default(),
+        iflags: IFlags::default(),
     },
     Output {
         dst: DST_PLACEHOLDER,
         obs: 1031,
-        cflags: DEFAULT_CFO,
+        cflags: OConvFlags::default(),
     },
     File::open("./test-resources/random-5828891cb1230748e146f34223bbd3b5.test").unwrap()
 );
@@ -72,13 +72,13 @@ make_io_test!(
         ibs: 1031,
         print_level: None,
         count: None,
-        cflags: icf!(),
-        iflags: DEFAULT_IFLAGS,
+        cflags: IConvFlags::default(),
+        iflags: IFlags::default(),
     },
     Output {
         dst: DST_PLACEHOLDER,
         obs: 521,
-        cflags: DEFAULT_CFO,
+        cflags: OConvFlags::default(),
     },
     File::open("./test-resources/random-5828891cb1230748e146f34223bbd3b5.test").unwrap()
 );
@@ -92,13 +92,13 @@ make_io_test!(
         ibs: 1024,
         print_level: None,
         count: Some(CountType::Reads(32)),
-        cflags: icf!(),
-        iflags: DEFAULT_IFLAGS,
+        cflags: IConvFlags::default(),
+        iflags: IFlags::default(),
     },
     Output {
         dst: DST_PLACEHOLDER,
         obs: 1024,
-        cflags: DEFAULT_CFO,
+        cflags: OConvFlags::default(),
     },
     File::open("./test-resources/deadbeef-18d99661a1de1fc9af21b0ec2cd67ba3.test").unwrap()
 );
@@ -112,13 +112,13 @@ make_io_test!(
         ibs: 531,
         print_level: None,
         count: Some(CountType::Bytes(32 * 1024)),
-        cflags: icf!(),
-        iflags: DEFAULT_IFLAGS,
+        cflags: IConvFlags::default(),
+        iflags: IFlags::default(),
     },
     Output {
         dst: DST_PLACEHOLDER,
         obs: 1031,
-        cflags: DEFAULT_CFO,
+        cflags: OConvFlags::default(),
     },
     File::open("./test-resources/deadbeef-18d99661a1de1fc9af21b0ec2cd67ba3.test").unwrap()
 );
@@ -132,13 +132,13 @@ make_io_test!(
         ibs: 1024,
         print_level: None,
         count: Some(CountType::Reads(16)),
-        cflags: icf!(),
-        iflags: DEFAULT_IFLAGS,
+        cflags: IConvFlags::default(),
+        iflags: IFlags::default(),
     },
     Output {
         dst: DST_PLACEHOLDER,
         obs: 1031,
-        cflags: DEFAULT_CFO,
+        cflags: OConvFlags::default(),
     },
     File::open("./test-resources/gnudd-deadbeef-first-16k.spec").unwrap()
 );
@@ -152,13 +152,13 @@ make_io_test!(
         ibs: 531,
         print_level: None,
         count: Some(CountType::Bytes(12345)),
-        cflags: icf!(),
-        iflags: DEFAULT_IFLAGS,
+        cflags: IConvFlags::default(),
+        iflags: IFlags::default(),
     },
     Output {
         dst: DST_PLACEHOLDER,
         obs: 1031,
-        cflags: DEFAULT_CFO,
+        cflags: OConvFlags::default(),
     },
     File::open("./test-resources/gnudd-deadbeef-first-12345.spec").unwrap()
 );
@@ -172,13 +172,13 @@ make_io_test!(
         ibs: 1024,
         print_level: None,
         count: Some(CountType::Reads(32)),
-        cflags: icf!(),
-        iflags: DEFAULT_IFLAGS,
+        cflags: IConvFlags::default(),
+        iflags: IFlags::default(),
     },
     Output {
         dst: DST_PLACEHOLDER,
         obs: 1024,
-        cflags: DEFAULT_CFO,
+        cflags: OConvFlags::default(),
     },
     File::open("./test-resources/gnudd-random-first-32k.spec").unwrap()
 );
@@ -192,13 +192,13 @@ make_io_test!(
         ibs: 521,
         print_level: None,
         count: Some(CountType::Bytes(32 * 1024)),
-        cflags: icf!(),
-        iflags: DEFAULT_IFLAGS,
+        cflags: IConvFlags::default(),
+        iflags: IFlags::default(),
     },
     Output {
         dst: DST_PLACEHOLDER,
         obs: 1031,
-        cflags: DEFAULT_CFO,
+        cflags: OConvFlags::default(),
     },
     File::open("./test-resources/gnudd-random-first-32k.spec").unwrap()
 );
@@ -215,30 +215,16 @@ make_io_test!(
         ibs: 521,
         print_level: None,
         count: None,
-        cflags: icf!(),
+        cflags: IConvFlags::default(),
         iflags: IFlags {
             fullblock: true,
-            cio: false,
-            direct: false,
-            directory: false,
-            dsync: false,
-            sync: false,
-            nocache: false,
-            nonblock: false,
-            noatime: false,
-            noctty: false,
-            nofollow: false,
-            nolinks: false,
-            binary: false,
-            text: false,
-            count_bytes: false,
-            skip_bytes: false,
+            ..IFlags::default()
         },
     },
     Output {
         dst: DST_PLACEHOLDER,
         obs: 1031,
-        cflags: DEFAULT_CFO,
+        cflags: OConvFlags::default(),
     },
     File::open("./test-resources/random-5828891cb1230748e146f34223bbd3b5.test").unwrap()
 );
@@ -316,7 +302,7 @@ fn bsize_test_bs_eq() {
 
 #[test]
 #[should_panic]
-fn test_nocreate_causes_failure_when_ofile_doesnt_exist() {
+fn test_nocreat_causes_failure_when_ofile_doesnt_exist() {
     let args = vec![
         String::from("dd"),
         String::from("--conv=nocreat"),

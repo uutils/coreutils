@@ -215,25 +215,10 @@ fn test_excl_causes_failure_when_present() {
 
 #[cfg(target_os = "linux")]
 #[test]
-fn test_atime_updated() {
-    let fname = "this-file-exists-no-noatime.txt";
-    assert_fixture_exists!(&fname);
-
-    let (fix, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["status=none", inf!(fname)]);
-
-    let pre_atime = fix.metadata(fname).accessed().unwrap();
-
-    ucmd.pipe_in("").run().no_stderr().success();
-    std::thread::sleep(std::time::Duration::from_millis(10));
-
-    let post_atime = fix.metadata(fname).accessed().unwrap();
-    assert!(pre_atime != post_atime);
-}
-
-#[cfg(target_os = "linux")]
-#[test]
 fn test_noatime_does_not_update_infile_atime() {
+    // NOTE: Not all environments support tracking access time. If this
+    // test fails on some systems and passes on others, assume the functionality
+    // is not working and the systems that pass it simply don't update file access time.
     let fname = "this-ifile-exists-noatime.txt";
     assert_fixture_exists!(&fname);
 
@@ -251,6 +236,9 @@ fn test_noatime_does_not_update_infile_atime() {
 #[cfg(target_os = "linux")]
 #[test]
 fn test_noatime_does_not_update_ofile_atime() {
+    // NOTE: Not all environments support tracking access time. If this
+    // test fails on some systems and passes on others, assume the functionality
+    // is not working and the systems that pass it simply don't update file access time.
     let fname = "this-ofile-exists-noatime.txt";
     assert_fixture_exists!(&fname);
 

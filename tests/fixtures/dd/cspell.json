@@ -1,6 +1,29 @@
 {
     "version": "0.1",
     "language": "en",
+    "words": [
+        "fname",
+        "fpath",
+        "specfile",
+        "testfile",
+        "iflag",
+        "iflags",
+        "oflag",
+        "oflags",
+        "noxfer",
+        "nocreat",
+        "noatime",
+        "infile",
+        "outfile",
+        "unspec",
+        "fullblock",
+        "urand",
+        "tname",
+        "fileio",
+        "gibi",
+        "ucase",
+        "lcase"
+    ],
     "ignorePaths": [
         "*.txt",
         "*.spec"

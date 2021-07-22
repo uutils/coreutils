@@ -17,7 +17,6 @@ path = "src/dd.rs"
 [dependencies]
 byte-unit = "4.0"
 clap = { version = "2.33", features = [ "wrap_help" ] }
-debug_print = "1.0"
 gcd = "2.0"
 libc = "0.2"
 signal-hook = "0.3.9"

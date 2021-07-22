@@ -24,6 +24,7 @@ use conversion_tables::*;
 use byte_unit::Byte;
 use clap::{self, crate_version};
 use gcd::Gcd;
+#[cfg(target_os = "linux")]
 use signal_hook::consts::signal;
 use std::cmp;
 use std::convert::TryInto;
@@ -34,7 +35,9 @@ use std::io::{self, Read, Seek, Write};
 #[cfg(target_os = "linux")]
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
-use std::sync::{atomic::AtomicUsize, atomic::Ordering, mpsc, Arc};
+#[cfg(target_os = "linux")]
+use std::sync::atomic::Ordering;
+use std::sync::{atomic::AtomicUsize, mpsc, Arc};
 use std::thread;
 use std::time;
 
@@ -168,15 +171,15 @@ impl Input<File> {
 impl<R: Read> Read for Input<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let mut base_idx = 0;
-        let tlen = buf.len();
+        let target_len = buf.len();
         loop {
             match self.src.read(&mut buf[base_idx..]) {
                 Ok(0) => return Ok(base_idx),
                 Ok(rlen) if self.iflags.fullblock => {
                     base_idx += rlen;
 
-                    if base_idx >= tlen {
-                        return Ok(tlen);
+                    if base_idx >= target_len {
+                        return Ok(target_len);
                     }
                 }
                 Ok(len) => return Ok(len),
@@ -707,6 +710,7 @@ fn gen_prog_updater(rx: mpsc::Receiver<ProgUpdate>, print_level: Option<StatusLe
     #[cfg(target_os = "linux")]
     const SIGUSR1_USIZE: usize = signal::SIGUSR1 as usize;
     // --------------------------------------------------------------
+    #[cfg(target_os = "linux")]
     fn posixly_correct() -> bool {
         env::var("POSIXLY_CORRECT").is_ok()
     }
@@ -731,21 +735,11 @@ fn gen_prog_updater(rx: mpsc::Receiver<ProgUpdate>, print_level: Option<StatusLe
             }
         });
 
-        loop {
-            // Wait for update
-            let update = match (rx.recv(), print_level) {
-                (Ok(update), Some(StatusLevel::Progress)) => {
-                    reprint_prog_line(&update);
-
-                    update
-                }
-                (Ok(update), _) => update,
-                (Err(_), _) => {
-                    // recv only fails permanently, so we break here to
-                    // avoid recv'ing on a broken pipe
-                    break;
-                }
-            };
+        while let Ok(update) = rx.recv() {
+            // (Re)print status line if progress is requested.
+            if Some(StatusLevel::Progress) == print_level {
+                reprint_prog_line(&update);
+            }
             // Handle signals
             #[cfg(target_os = "linux")]
             if let SIGUSR1_USIZE = sigval.load(Ordering::Relaxed) {
