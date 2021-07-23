@@ -104,7 +104,7 @@ fn test_status_level_none() {
 }
 
 #[test]
-fn test_all_top_level_args_no_leading_dashes_sep_by_equals() {
+fn test_all_top_level_args_no_leading_dashes() {
     let args = vec![
         String::from("dd"),
         String::from("if=foo.file"),
@@ -187,25 +187,23 @@ fn test_all_top_level_args_no_leading_dashes_sep_by_equals() {
     );
 }
 
-#[ignore]
 #[test]
-// TODO: This should work, but Clap doesn't seem to understand it. Leaving it for now since the traditional dd if=foo.file works just fine.
-fn test_all_top_level_args_leading_dashes_sep_by_spaces() {
+fn test_all_top_level_args_with_leading_dashes() {
     let args = vec![
         String::from("dd"),
-        String::from("--if foo.file"),
-        String::from("--of bar.file"),
-        String::from("--ibs 10"),
-        String::from("--obs 10"),
-        String::from("--cbs 1"),
-        String::from("--bs 100"),
-        String::from("--count 2"),
-        String::from("--skip 2"),
-        String::from("--seek 2"),
-        String::from("--status progress"),
-        String::from("--conv ascii,ucase"),
-        String::from("--iflag count_bytes,skip_bytes"),
-        String::from("--oflag append,seek_bytes"),
+        String::from("--if=foo.file"),
+        String::from("--of=bar.file"),
+        String::from("--ibs=10"),
+        String::from("--obs=10"),
+        String::from("--cbs=1"),
+        String::from("--bs=100"),
+        String::from("--count=2"),
+        String::from("--skip=2"),
+        String::from("--seek=2"),
+        String::from("--status=progress"),
+        String::from("--conv=ascii,ucase"),
+        String::from("--iflag=count_bytes,skip_bytes"),
+        String::from("--oflag=append,seek_bytes"),
     ];
     let args = args
         .into_iter()
@@ -415,27 +413,13 @@ fn parse_iflag_tokens() {
         Flag::FullBlock,
         Flag::CountBytes,
         Flag::SkipBytes,
-        // Flag::Cio,
-        Flag::Direct,
-        Flag::Directory,
-        Flag::Dsync,
-        Flag::Sync,
-        // Flag::NoCache,
-        Flag::NonBlock,
-        Flag::NoATime,
-        Flag::NoCtty,
-        Flag::NoFollow,
-        // Flag::NoLinks,
-        // Flag::Binary,
-        // Flag::Text,
         Flag::Append,
         Flag::SeekBytes,
     ];
 
     let args = vec![
         String::from("dd"),
-        String::from("--iflag=fullblock,count_bytes,skip_bytes,direct,directory,dsync,sync,nonblock,noatime,noctty,nofollow,append,seek_bytes"),
-        // String::from("--iflag=fullblock,count_bytes,skip_bytes,cio,direct,directory,dsync,sync,nocache,nonblock,noatime,noctty,nofollow,nolinks,binary,text,append,seek_bytes"),
+        String::from("--iflag=fullblock,count_bytes,skip_bytes,append,seek_bytes"),
     ];
     let matches = uu_app().get_matches_from_safe(args).unwrap();
 
@@ -453,27 +437,69 @@ fn parse_oflag_tokens() {
         Flag::FullBlock,
         Flag::CountBytes,
         Flag::SkipBytes,
-        // Flag::Cio,
-        Flag::Direct,
-        Flag::Directory,
-        Flag::Dsync,
-        Flag::Sync,
-        // Flag::NoCache,
-        Flag::NonBlock,
-        Flag::NoATime,
-        Flag::NoCtty,
-        Flag::NoFollow,
-        // Flag::NoLinks,
-        // Flag::Binary,
-        // Flag::Text,
         Flag::Append,
         Flag::SeekBytes,
     ];
 
     let args = vec![
         String::from("dd"),
-        String::from("--oflag=fullblock,count_bytes,skip_bytes,direct,directory,dsync,sync,nonblock,noatime,noctty,nofollow,append,seek_bytes"),
-        // String::from("--oflag=fullblock,count_bytes,skip_bytes,cio,direct,directory,dsync,sync,nocache,nonblock,noatime,noctty,nofollow,nolinks,binary,text,append,seek_bytes"),
+        String::from("--oflag=fullblock,count_bytes,skip_bytes,append,seek_bytes"),
+    ];
+    let matches = uu_app().get_matches_from_safe(args).unwrap();
+
+    let act = parse_flag_list::<Flag>("oflag", &matches).unwrap();
+
+    assert_eq!(exp.len(), act.len());
+    for cf in &exp {
+        assert!(exp.contains(&cf));
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn parse_iflag_tokens_linux() {
+    let exp = vec![
+        Flag::Direct,
+        Flag::Directory,
+        Flag::Dsync,
+        Flag::Sync,
+        Flag::NonBlock,
+        Flag::NoATime,
+        Flag::NoCtty,
+        Flag::NoFollow,
+    ];
+
+    let args = vec![
+        String::from("dd"),
+        String::from("--iflag=direct,directory,dsync,sync,nonblock,noatime,noctty,nofollow"),
+    ];
+    let matches = uu_app().get_matches_from_safe(args).unwrap();
+
+    let act = parse_flag_list::<Flag>("iflag", &matches).unwrap();
+
+    assert_eq!(exp.len(), act.len());
+    for cf in &exp {
+        assert!(exp.contains(&cf));
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn parse_oflag_tokens_linux() {
+    let exp = vec![
+        Flag::Direct,
+        Flag::Directory,
+        Flag::Dsync,
+        Flag::Sync,
+        Flag::NonBlock,
+        Flag::NoATime,
+        Flag::NoCtty,
+        Flag::NoFollow,
+    ];
+
+    let args = vec![
+        String::from("dd"),
+        String::from("--oflag=direct,directory,dsync,sync,nonblock,noatime,noctty,nofollow"),
     ];
     let matches = uu_app().get_matches_from_safe(args).unwrap();
 

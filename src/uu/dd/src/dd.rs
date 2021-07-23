@@ -714,6 +714,10 @@ fn gen_prog_updater(rx: mpsc::Receiver<ProgUpdate>, print_level: Option<StatusLe
     fn posixly_correct() -> bool {
         env::var("POSIXLY_CORRECT").is_ok()
     }
+    // Since signal-prompted progress printing is only availible on Linux so far, we allow unused
+    // variables to remove build warnings on Windows and other platforms.
+    // Remove when possible.
+    #[allow(unused_variables)]
     fn register_signal_handlers(sigval: Arc<AtomicUsize>) -> Result<(), Box<dyn Error>> {
         #[cfg(target_os = "linux")]
         if !posixly_correct() {
@@ -1028,61 +1032,81 @@ pub fn uu_app() -> clap::App<'static, 'static> {
             clap::Arg::with_name(options::INFILE)
                 .long(options::INFILE)
                 .takes_value(true)
-                .help("if=FILE (alternatively --if FILE) specifies the file used for input. When not specified, stdin is used instead")
+                .require_equals(true)
+                .value_name("FILE")
+                .help("(alternatively if=FILE) specifies the file used for input. When not specified, stdin is used instead")
         )
         .arg(
             clap::Arg::with_name(options::OUTFILE)
                 .long(options::OUTFILE)
                 .takes_value(true)
-                .help("of=FILE (alternatively --of FILE) specifies the file used for output. When not specified, stdout is used instead")
+                .require_equals(true)
+                .value_name("FILE")
+                .help("(alternatively of=FILE) specifies the file used for output. When not specified, stdout is used instead")
         )
         .arg(
             clap::Arg::with_name(options::IBS)
                 .long(options::IBS)
                 .takes_value(true)
-                .help("ibs=N (alternatively --ibs N) specifies the size of buffer used for reads (default: 512). Multiplier strings permitted.")
+                .require_equals(true)
+                .value_name("N")
+                .help("(alternatively ibs=N) specifies the size of buffer used for reads (default: 512). Multiplier strings permitted.")
         )
         .arg(
             clap::Arg::with_name(options::OBS)
                 .long(options::OBS)
                 .takes_value(true)
-                .help("obs=N (alternatively --obs N) specifies the size of buffer used for writes (default: 512). Multiplier strings permitted.")
+                .require_equals(true)
+                .value_name("N")
+                .help("(alternatively obs=N) specifies the size of buffer used for writes (default: 512). Multiplier strings permitted.")
         )
         .arg(
             clap::Arg::with_name(options::BS)
                 .long(options::BS)
                 .takes_value(true)
-                .help("bs=N (alternatively --bs N) specifies ibs=N and obs=N (default: 512). If ibs or obs are also specified, bs=N takes precedence. Multiplier strings permitted.")
+                .require_equals(true)
+                .value_name("N")
+                .help("(alternatively bs=N) specifies ibs=N and obs=N (default: 512). If ibs or obs are also specified, bs=N takes precedence. Multiplier strings permitted.")
         )
         .arg(
             clap::Arg::with_name(options::CBS)
                 .long(options::CBS)
                 .takes_value(true)
-                .help("cbs=BYTES (alternatively --cbs BYTES) specifies the 'conversion block size' in bytes. Applies to the conv=block, and conv=unblock operations. Multiplier strings permitted.")
+                .require_equals(true)
+                .value_name("N")
+                .help("(alternatively cbs=BYTES) specifies the 'conversion block size' in bytes. Applies to the conv=block, and conv=unblock operations. Multiplier strings permitted.")
         )
         .arg(
             clap::Arg::with_name(options::SKIP)
                 .long(options::SKIP)
                 .takes_value(true)
-                .help("skip=N (alternatively --skip N) causes N ibs-sized records of input to be skipped before beginning copy/convert operations. See iflag=count_bytes if skipping N bytes is preferred. Multiplier strings permitted.")
+                .require_equals(true)
+                .value_name("N")
+                .help("(alternatively skip=N) causes N ibs-sized records of input to be skipped before beginning copy/convert operations. See iflag=count_bytes if skipping N bytes is preferred. Multiplier strings permitted.")
         )
         .arg(
             clap::Arg::with_name(options::SEEK)
                 .long(options::SEEK)
                 .takes_value(true)
-                .help("seek=N (alternatively --seek N) seeks N obs-sized records into output before beginning copy/convert operations. See oflag=seek_bytes if seeking N bytes is preferred. Multiplier strings permitted.")
+                .require_equals(true)
+                .value_name("N")
+                .help("(alternatively seek=N) seeks N obs-sized records into output before beginning copy/convert operations. See oflag=seek_bytes if seeking N bytes is preferred. Multiplier strings permitted.")
         )
         .arg(
             clap::Arg::with_name(options::COUNT)
                 .long(options::COUNT)
                 .takes_value(true)
-                .help("count=N (alternatively --count N) stop reading input after N ibs-sized read operations rather than proceeding until EOF. See iflag=count_bytes if stopping after N bytes is preferred. Multiplier strings permitted.")
+                .require_equals(true)
+                .value_name("N")
+                .help("(alternatively count=N) stop reading input after N ibs-sized read operations rather than proceeding until EOF. See iflag=count_bytes if stopping after N bytes is preferred. Multiplier strings permitted.")
         )
         .arg(
             clap::Arg::with_name(options::STATUS)
                 .long(options::STATUS)
                 .takes_value(true)
-                .help("status=LEVEL (alternatively --status LEVEL) controls whether volume and performance stats are written to stderr.
+                .require_equals(true)
+                .value_name("LEVEL")
+                .help("(alternatively status=LEVEL) controls whether volume and performance stats are written to stderr.
 
 When unspecified, dd will print stats upon completion. An example is below.
 \t6+0 records in
@@ -1104,7 +1128,9 @@ Printing performance stats is also triggered by the INFO signal (where supported
             clap::Arg::with_name(options::CONV)
                 .long(options::CONV)
                 .takes_value(true)
-                .help("conv=CONV[,CONV] (alternatively --conv CONV[,CONV]) specifies a comma-separated list of conversion options or (for legacy reasons) file flags. Conversion options and file flags may be intermixed.
+                .require_equals(true)
+                .value_name("CONV")
+                .help("(alternatively conv=CONV[,CONV]) specifies a comma-separated list of conversion options or (for legacy reasons) file flags. Conversion options and file flags may be intermixed.
 
 Conversion options:
 \t One of {ascii, ebcdic, ibm} will perform an encoding conversion.
@@ -1139,7 +1165,9 @@ Conversion Flags:
             clap::Arg::with_name(options::IFLAG)
                 .long(options::IFLAG)
                 .takes_value(true)
-                .help("iflag=FLAG[,FLAG] (alternatively --iflag FLAG[,FLAG]) a comma separated list of input flags which specify how the input source is treated. FLAG may be any of the input-flags or general-flags specified below.
+                .require_equals(true)
+                .value_name("FLAG")
+                .help("(alternatively iflag=FLAG[,FLAG]) a comma separated list of input flags which specify how the input source is treated. FLAG may be any of the input-flags or general-flags specified below.
 
 Input-Flags
 \t 'count_bytes' a value to count=N will be interpreted as bytes.
@@ -1163,7 +1191,9 @@ General-Flags
             clap::Arg::with_name(options::OFLAG)
                 .long(options::OFLAG)
                 .takes_value(true)
-                .help("oflag=FLAG[,FLAG] (alternatively --oflag FLAG[,FLAG]) a comma separated list of output flags which specify how the output source is treated. FLAG may be any of the output-flags or general-flags specified below.
+                .require_equals(true)
+                .value_name("FLAG")
+                .help("(alternatively oflag=FLAG[,FLAG]) a comma separated list of output flags which specify how the output source is treated. FLAG may be any of the output-flags or general-flags specified below.
 
 Output-Flags
 \t 'append' open file in append mode. Consider setting conv=notrunc as well.

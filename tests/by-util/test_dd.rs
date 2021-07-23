@@ -1,3 +1,5 @@
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio
+
 use crate::common::util::*;
 
 use std::fs::{File, OpenOptions};
