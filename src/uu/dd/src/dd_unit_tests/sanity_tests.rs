@@ -1,3 +1,5 @@
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio
+
 use super::*;
 
 const DST_PLACEHOLDER: Vec<u8> = Vec::new();

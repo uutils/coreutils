@@ -1,3 +1,5 @@
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio
+
 use super::*;
 
 macro_rules! make_conv_test (

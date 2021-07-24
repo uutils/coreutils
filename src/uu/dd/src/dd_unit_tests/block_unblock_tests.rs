@@ -1,3 +1,5 @@
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio
+
 use super::*;
 
 const NL: u8 = b'\n';
@@ -86,7 +88,7 @@ fn block_test_no_nl_trunc() {
     let buf = vec![0u8, 1u8, 2u8, 3u8, 4u8];
     let res = block(buf, 4, &mut rs);
 
-    // Commented section should be truncated and appear for reference only.
+    // Commented section(s) should be truncated and appear for reference only.
     assert_eq!(res, vec![vec![0u8, 1u8, 2u8, 3u8 /*, 4u8*/],]);
     assert_eq!(rs.records_truncated, 1);
 }
@@ -102,7 +104,7 @@ fn block_test_nl_gt_cbs_trunc() {
     assert_eq!(
         res,
         vec![
-            // Commented lines should be truncated and appear for reference only.
+            // Commented section(s) should be truncated and appear for reference only.
             vec![0u8, 1u8, 2u8, 3u8],
             // vec![4u8, SPACE, SPACE, SPACE],
             vec![0u8, 1u8, 2u8, 3u8],
@@ -227,7 +229,7 @@ fn block_test_double_surrounded_nl_double_trunc() {
     assert_eq!(
         res,
         vec![
-            // Commented section should be truncated and appear for reference only.
+            // Commented section(s) should be truncated and appear for reference only.
             vec![0u8, 1u8, 2u8, 3u8],
             vec![SPACE, SPACE, SPACE, SPACE],
             vec![4u8, 5u8, 6u8, 7u8 /*, 8u8*/],
