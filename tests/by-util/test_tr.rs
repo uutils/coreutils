@@ -191,6 +191,7 @@ fn test_set1_shorter_than_set2() {
 
 #[test]
 fn test_truncate() {
+    // echo -n "abcde" | tr -t "abc" "xy"
     new_ucmd!()
         .args(&["-t", "abc", "xy"])
         .pipe_in("abcde")
