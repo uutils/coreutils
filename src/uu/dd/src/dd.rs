@@ -5,6 +5,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat
+
 #[macro_use]
 extern crate uucore;
 use uucore::InvalidEncodingHandling;
@@ -41,7 +43,6 @@ use std::sync::{atomic::AtomicUsize, mpsc, Arc};
 use std::thread;
 use std::time;
 
-// const SYNTAX: &str = "dd [OPERAND]...\ndd OPTION";
 const ABOUT: &str = "copy, and optionally convert, a file system resource";
 const BUF_INIT_BYTE: u8 = 0xDD;
 const RTN_SUCCESS: i32 = 0;
@@ -428,6 +429,7 @@ impl Write for Output<io::Stdout> {
 }
 
 impl Output<io::Stdout> {
+    /// Write all data in the given buffer in writes of size obs.
     fn write_blocks(&mut self, buf: Vec<u8>) -> io::Result<WriteStat> {
         let mut writes_complete = 0;
         let mut writes_partial = 0;
@@ -455,6 +457,7 @@ impl Output<io::Stdout> {
 }
 
 impl Output<File> {
+    /// Write all data in the given buffer in writes of size obs.
     fn write_blocks(&mut self, buf: Vec<u8>) -> io::Result<WriteStat> {
         let mut writes_complete = 0;
         let mut writes_partial = 0;
@@ -483,6 +486,7 @@ impl Output<File> {
 
 /// Splits the content of buf into cbs-length blocks
 /// Appends padding as specified by conv=block and cbs=N
+/// Expects ascii encoded data
 fn block(buf: Vec<u8>, cbs: usize, rstat: &mut ReadStat) -> Vec<Vec<u8>> {
     let mut blocks = buf
         .split(|&e| e == b'\n')
@@ -508,6 +512,7 @@ fn block(buf: Vec<u8>, cbs: usize, rstat: &mut ReadStat) -> Vec<Vec<u8>> {
 
 /// Trims padding from each cbs-length partition of buf
 /// as specified by conv=unblock and cbs=N
+/// Expects ascii encoded data
 fn unblock(buf: Vec<u8>, cbs: usize) -> Vec<u8> {
     buf.chunks(cbs).fold(Vec::new(), |mut acc, block| {
         if let Some(last_char_idx) = block.iter().rposition(|&e| e != b' ') {
@@ -523,6 +528,13 @@ fn unblock(buf: Vec<u8>, cbs: usize) -> Vec<u8> {
     })
 }
 
+/// A helper for teasing out which options must be applied and in which order.
+/// Some user options, such as the presence of conversion tables, will determine whether the input is assumed to be ascii. The parser sets the Input::non_ascii flag accordingly.
+/// Examples:
+///     - If conv=ebcdic or conv=ibm is specified then block, unblock or swab must be performed before the conversion happens since the source will start in ascii.
+///     - If conv=ascii is specified then block, unblock or swab must be performed after the conversion since the source starts in ebcdic.
+///     - If no conversion is specified then the source is assumed to be in ascii.
+/// For more info see `info dd`
 fn conv_block_unblock_helper<R: Read>(
     mut buf: Vec<u8>,
     i: &mut Input<R>,
@@ -615,6 +627,7 @@ fn conv_block_unblock_helper<R: Read>(
     }
 }
 
+/// Read helper performs read operations common to all dd reads, and dispatches the buffer to relevent helper functions as dictated by the operations requested by the user.
 fn read_helper<R: Read>(
     i: &mut Input<R>,
     bsize: usize,
@@ -659,6 +672,9 @@ fn read_helper<R: Read>(
     }
 }
 
+// Print io lines of a status update:
+// <complete>+<partial> records in
+// <complete>+<partial> records out
 fn print_io_lines(update: &ProgUpdate) {
     eprintln!(
         "{}+{} records in",
@@ -672,6 +688,8 @@ fn print_io_lines(update: &ProgUpdate) {
         update.write_stat.writes_complete, update.write_stat.writes_partial
     );
 }
+// Print the progress line of a status update:
+// <byte-count> bytes (<base-1000-size>, <base-2-size>) copied, <time> s, <base-2-rate>/s
 fn make_prog_line(update: &ProgUpdate) -> String {
     let btotal_metric = Byte::from_bytes(update.write_stat.bytes_total)
         .get_appropriate_unit(false)
@@ -693,18 +711,24 @@ fn make_prog_line(update: &ProgUpdate) -> String {
         transfer_rate
     )
 }
+// Print progress line only. Overwrite the current line.
 fn reprint_prog_line(update: &ProgUpdate) {
     eprint!("\r{}", make_prog_line(update));
 }
+// Print progress line only. Print as a new line.
 fn print_prog_line(update: &ProgUpdate) {
     eprintln!("{}", make_prog_line(update));
 }
+// Print both io lines and progress line.
 fn print_transfer_stats(update: &ProgUpdate) {
     print_io_lines(update);
     print_prog_line(update);
 }
 
-/// Generate a progress updater that tracks progress, receives updates, and responds to progress update requests (signals).
+// Generate a progress updater that tracks progress, receives updates, and responds to progress update requests (signals).
+// Signals:
+// - SIGUSR1: Trigger progress line reprint. Linux (GNU & BSD) only.
+// - TODO: SIGINFO: Trigger progress line reprint. BSD-style Linux only.
 fn gen_prog_updater(rx: mpsc::Receiver<ProgUpdate>, print_level: Option<StatusLevel>) -> impl Fn() {
     // --------------------------------------------------------------
     #[cfg(target_os = "linux")]
@@ -753,20 +777,20 @@ fn gen_prog_updater(rx: mpsc::Receiver<ProgUpdate>, print_level: Option<StatusLe
     }
 }
 
-/// Calculate a 'good' internal buffer size.
-/// For performance of the read/write functions, the buffer should hold
-/// both an integral number of reads and an integral number of writes. For
-/// sane real-world memory use, it should not be too large. I believe
-/// the least common multiple is a good representation of these interests.
-/// https://en.wikipedia.org/wiki/Least_common_multiple#Using_the_greatest_common_divisor
+// Calculate a 'good' internal buffer size.
+// For performance of the read/write functions, the buffer should hold
+// both an integral number of reads and an integral number of writes. For
+// sane real-world memory use, it should not be too large. I believe
+// the least common multiple is a good representation of these interests.
+// https://en.wikipedia.org/wiki/Least_common_multiple#Using_the_greatest_common_divisor
 fn calc_bsize(ibs: usize, obs: usize) -> usize {
     let gcd = Gcd::gcd(ibs, obs);
     // calculate the lcm from gcd
     (ibs / gcd) * obs
 }
 
-/// Calculate the buffer size appropriate for this loop iteration, respecting
-/// a count=N if present.
+// Calculate the buffer size appropriate for this loop iteration, respecting
+// a count=N if present.
 fn calc_loop_bsize(
     count: &Option<CountType>,
     rstat: &ReadStat,
@@ -790,8 +814,8 @@ fn calc_loop_bsize(
     }
 }
 
-/// Decide if the current progress is below a count=N limit or return
-/// true if no such limit is set.
+// Decide if the current progress is below a count=N limit or return
+// true if no such limit is set.
 fn below_count_limit(count: &Option<CountType>, rstat: &ReadStat, wstat: &WriteStat) -> bool {
     match count {
         Some(CountType::Reads(n)) => {
