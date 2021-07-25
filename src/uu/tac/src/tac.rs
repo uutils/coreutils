@@ -35,15 +35,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let before = matches.is_present(options::BEFORE);
     let regex = matches.is_present(options::REGEX);
-    let separator = match matches.value_of(options::SEPARATOR) {
-        Some(m) => {
-            if m.is_empty() {
-                crash!(1, "separator cannot be empty")
-            } else {
-                m.to_owned()
-            }
-        }
-        None => "\n".to_owned(),
+    let raw_separator = matches.value_of(options::SEPARATOR).unwrap_or("\n");
+    let separator = if raw_separator.is_empty() {
+        "\0"
+    } else {
+        raw_separator
     };
 
     let files: Vec<String> = match matches.values_of(options::FILE) {
@@ -51,7 +47,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         None => vec!["-".to_owned()],
     };
 
-    tac(files, before, regex, &separator[..])
+    tac(files, before, regex, separator)
 }
 
 pub fn uu_app() -> App<'static, 'static> {
