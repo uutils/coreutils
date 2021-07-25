@@ -215,7 +215,7 @@ impl GlobalSettings {
                 Ok(f) => BufWriter::new(Box::new(f) as Box<dyn Write>),
                 Err(e) => {
                     show_error!("{0}: {1}", filename, e.to_string());
-                    panic!("Could not open output file");
+                    crash!(2, "Could not open output file");
                 }
             },
             None => BufWriter::new(Box::new(stdout()) as Box<dyn Write>),
@@ -942,7 +942,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let mut settings: GlobalSettings = Default::default();
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().usage(&usage[..]).get_matches_from_safe(args);
+
+    let matches = crash_if_err!(2, matches);
 
     settings.debug = matches.is_present(options::DEBUG);
 
@@ -1060,14 +1062,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         /* if no file, default to stdin */
         files.push("-".to_owned());
     } else if settings.check && files.len() != 1 {
-        crash!(1, "extra operand `{}' not allowed with -c", files[1])
+        crash!(2, "extra operand `{}' not allowed with -c", files[1])
     }
 
     if let Some(arg) = matches.args.get(options::SEPARATOR) {
         let separator = arg.vals[0].to_string_lossy();
         let separator = separator;
         if separator.len() != 1 {
-            crash!(1, "separator must be exactly one character long");
+            crash!(2, "separator must be exactly one character long");
         }
         settings.separator = Some(separator.chars().next().unwrap())
     }
@@ -1338,7 +1340,7 @@ fn exec(files: &[String], settings: &GlobalSettings) -> i32 {
         file_merger.write_all(settings);
     } else if settings.check {
         if files.len() > 1 {
-            crash!(1, "only one file allowed with -c");
+            crash!(2, "only one file allowed with -c");
         }
         return check::check(files.first().unwrap(), settings);
     } else {
@@ -1623,7 +1625,11 @@ fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(iter: T, settings: &Global
     }
 }
 
-// from cat.rs
+/// Strips the trailing " (os error XX)" from io error strings.
+fn strip_errno(err: &str) -> &str {
+    &err[..err.find(" (os error ").unwrap_or(err.len())]
+}
+
 fn open(path: impl AsRef<OsStr>) -> Box<dyn Read + Send> {
     let path = path.as_ref();
     if path == "-" {
@@ -1631,10 +1637,17 @@ fn open(path: impl AsRef<OsStr>) -> Box<dyn Read + Send> {
         return Box::new(stdin) as Box<dyn Read + Send>;
     }
 
-    match File::open(Path::new(path)) {
+    let path = Path::new(path);
+
+    match File::open(path) {
         Ok(f) => Box::new(f) as Box<dyn Read + Send>,
         Err(e) => {
-            crash!(2, "cannot read: {0:?}: {1}", path, e);
+            crash!(
+                2,
+                "cannot read: {0}: {1}",
+                path.to_string_lossy(),
+                strip_errno(&e.to_string())
+            );
         }
     }
 }

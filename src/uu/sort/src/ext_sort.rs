@@ -211,7 +211,7 @@ fn read_write_loop<I: WriteableTmpFile>(
     }
 
     let tmp_dir = crash_if_err!(
-        1,
+        2,
         tempfile::Builder::new()
             .prefix("uutils_sort")
             .tempdir_in(tmp_dir_parent)
