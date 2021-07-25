@@ -69,7 +69,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     if sets.is_empty() {
         show_error!(
-            "missing operand\nTry `{} --help` for more information.",
+            "missing operand\nTry '{} --help' for more information.",
             executable!()
         );
         return 1;
@@ -77,7 +77,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     if !(delete_flag || squeeze_flag) && sets.len() < 2 {
         show_error!(
-            "missing operand after '{}'\nTry `{} --help` for more information.",
+            "missing operand after '{}'\nTry '{} --help' for more information.",
+            sets[0],
+            executable!()
+        );
+        return 1;
+    }
+
+    if sets.len() > 2 {
+        show_error!(
+            "extra operand '{}'\nTry '{} --help' for more information.",
             sets[0],
             executable!()
         );
@@ -95,50 +104,58 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             let mut delete_buffer = vec![];
             {
                 let mut delete_writer = BufWriter::new(&mut delete_buffer);
-                let delete_op =
-                    DeleteOperation::new(Sequence::parse_set_string(&sets[0]), complement_flag);
+                let delete_op = DeleteOperation::new(Sequence::from_str(&sets[0]), complement_flag);
                 translate_input(&mut locked_stdin, &mut delete_writer, delete_op);
             }
             {
                 let mut squeeze_reader = BufReader::new(delete_buffer.as_bytes());
-                let squeeze_op =
-                    SqueezeOperation::new(Sequence::parse_set_string(&sets[1]), complement_flag);
-                translate_input(&mut squeeze_reader, &mut buffered_stdout, squeeze_op);
+                let op = SqueezeOperation::new(Sequence::from_str(&sets[1]), complement_flag);
+                translate_input(&mut squeeze_reader, &mut buffered_stdout, op);
             }
         } else {
-            let op = DeleteOperation::new(Sequence::parse_set_string(&sets[0]), complement_flag);
+            let op = DeleteOperation::new(Sequence::from_str(&sets[0]), complement_flag);
             translate_input(&mut locked_stdin, &mut buffered_stdout, op);
         }
     } else if squeeze_flag {
         if sets.len() < 2 {
-            let op = SqueezeOperation::new(Sequence::parse_set_string(&sets[0]), complement_flag);
+            let op = SqueezeOperation::new(Sequence::from_str(&sets[0]), complement_flag);
             translate_input(&mut locked_stdin, &mut buffered_stdout, op);
         } else {
             let mut translate_buffer = vec![];
             {
                 let mut writer = BufWriter::new(&mut translate_buffer);
-                let translate_op = TranslateOperation::new(
-                    Sequence::parse_set_string(&sets[0]),
-                    Sequence::parse_set_string(&sets[1]),
+                match TranslateOperation::new(
+                    Sequence::from_str(&sets[0]),
+                    Sequence::from_str(&sets[1]),
                     truncate_set1_flag,
                     complement_flag,
-                );
-                translate_input(&mut locked_stdin, &mut writer, translate_op);
+                ) {
+                    Ok(op) => translate_input(&mut locked_stdin, &mut writer, op),
+                    Err(s) => {
+                        show_error!("{}", s);
+                        return 1;
+                    }
+                };
             }
             {
                 let mut reader = BufReader::new(translate_buffer.as_bytes());
-                let squeeze_op = SqueezeOperation::new(Sequence::parse_set_string(&sets[1]), false);
+                let squeeze_op = SqueezeOperation::new(Sequence::from_str(&sets[1]), false);
                 translate_input(&mut reader, &mut buffered_stdout, squeeze_op);
             }
         }
     } else {
-        let op = TranslateOperation::new(
-            Sequence::parse_set_string(&sets[0]),
-            Sequence::parse_set_string(&sets[1]),
+        match TranslateOperation::new(
+            Sequence::from_str(&sets[0]),
+            Sequence::from_str(&sets[1]),
             truncate_set1_flag,
             complement_flag,
-        );
-        translate_input(&mut locked_stdin, &mut buffered_stdout, op);
+        ) {
+            Ok(op) => translate_input(&mut locked_stdin, &mut buffered_stdout, op),
+            Err(s) => {
+                show_error!("{}", s);
+                return 1;
+            }
+        };
     }
 
     0

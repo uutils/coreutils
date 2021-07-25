@@ -26,44 +26,6 @@ mod unicode_table {
     pub static BLANK: &'static [char] = &[SPACE, HT];
 }
 
-struct Repeat(char);
-
-impl Repeat {
-    fn new(element: char) -> Repeat {
-        Repeat(element)
-    }
-}
-
-impl Iterator for Repeat {
-    type Item = char;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        Some(self.0)
-    }
-
-    fn last(self) -> Option<Self::Item> {
-        Some(self.0)
-    }
-
-    fn any<F>(&mut self, mut f: F) -> bool
-    where
-        Self: Sized,
-        F: FnMut(Self::Item) -> bool,
-    {
-        f(self.0)
-    }
-}
-
-fn truncate_iterator<T>(input: Option<usize>) -> impl Fn((usize, T)) -> Option<T> {
-    move |(idx, c)| match input {
-        Some(s) => match s.cmp(&idx) {
-            std::cmp::Ordering::Greater => Some(c),
-            _ => None,
-        },
-        None => Some(c),
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 pub enum Sequence {
     Char(char),
@@ -89,8 +51,8 @@ impl Sequence {
         match self {
             Sequence::Char(c) => Box::new(std::iter::once(*c)),
             Sequence::CharRange(l, r) => Box::new((*l..=*r).flat_map(char::from_u32)),
-            Sequence::CharStar(c) => Box::new(Repeat::new(*c)),
-            Sequence::CharRepeat(c, n) => Box::new(Repeat::new(*c).take(*n)),
+            Sequence::CharStar(c) => Box::new(std::iter::repeat(*c)),
+            Sequence::CharRepeat(c, n) => Box::new(std::iter::repeat(*c).take(*n)),
             Sequence::Alnum => Box::new(('0'..='9').chain('A'..='Z').chain('a'..='z')),
             Sequence::Alpha => Box::new(('A'..='Z').chain('a'..='z')),
             Sequence::Blank => Box::new(unicode_table::BLANK.into_iter().cloned()),
@@ -140,22 +102,99 @@ impl Sequence {
     pub fn last(&self) -> Option<char> {
         match self {
             Sequence::CharStar(c) => Some(*c),
-            // TODO: Can be optimized further...
             rest => rest.flatten().last(),
         }
     }
 
-    pub fn len(&self) -> Option<usize> {
-        match self {
-            Sequence::CharStar(_) => None,
-            // TODO: Is there a fix for this?
-            rest => Some(rest.flatten().count()),
+    // Hide all the nasty sh*t in here
+    pub fn solve_set_characters(
+        set1: &Vec<Sequence>,
+        set2: &Vec<Sequence>,
+    ) -> Result<(Vec<char>, Vec<char>), String> {
+        let is_char_star = |s: &&Sequence| -> bool {
+            match s {
+                Sequence::CharStar(_) => true,
+                _ => false,
+            }
+        };
+        let set1_star_count = set1.iter().filter(is_char_star).count();
+        if set1_star_count == 0 {
+            let set2_star_count = set2.iter().filter(is_char_star).count();
+            if set2_star_count < 2 {
+                let char_star = set2.iter().find_map(|s| match s {
+                    Sequence::CharStar(c) => Some(c),
+                    _ => None,
+                });
+                let mut partition = set2.as_slice().split(|s| match s {
+                    Sequence::CharStar(_) => true,
+                    _ => false,
+                });
+                let set1_len = set1.iter().flat_map(Sequence::flatten).count();
+                let set2_len = set2
+                    .iter()
+                    .filter_map(|s| match s {
+                        Sequence::CharStar(_) => None,
+                        r => Some(r),
+                    })
+                    .flat_map(Sequence::flatten)
+                    .count();
+                let star_compensate_len = set1_len.saturating_sub(set2_len);
+                let set2_solved = match (partition.next(), partition.next()) {
+                    (None, None) => match char_star {
+                        Some(c) => std::iter::repeat(*c).take(star_compensate_len).collect(),
+                        None => std::iter::empty().collect(),
+                    },
+                    (None, Some(set2_b)) => {
+                        if let Some(c) = char_star {
+                            std::iter::repeat(*c)
+                                .take(star_compensate_len)
+                                .chain(set2_b.iter().flat_map(Sequence::flatten))
+                                .collect()
+                        } else {
+                            set2_b.iter().flat_map(Sequence::flatten).collect()
+                        }
+                    }
+                    (Some(set2_a), None) => match char_star {
+                        Some(c) => set2_a
+                            .iter()
+                            .flat_map(Sequence::flatten)
+                            .chain(std::iter::repeat(*c).take(star_compensate_len))
+                            .collect(),
+                        None => set2_a.iter().flat_map(Sequence::flatten).collect(),
+                    },
+                    (Some(set2_a), Some(set2_b)) => match char_star {
+                        Some(c) => set2_a
+                            .iter()
+                            .flat_map(Sequence::flatten)
+                            .chain(std::iter::repeat(*c).take(star_compensate_len))
+                            .chain(set2_b.iter().flat_map(Sequence::flatten))
+                            .collect(),
+                        None => set2_a
+                            .iter()
+                            .chain(set2_b.iter())
+                            .flat_map(Sequence::flatten)
+                            .collect(),
+                    },
+                };
+                let set1_solved = set1.iter().flat_map(Sequence::flatten).collect();
+                return Ok((set1_solved, set2_solved));
+            } else {
+                Err(format!(
+                    "{}: only one [c*] repeat construct may appear in string2",
+                    executable!()
+                ))
+            }
+        } else {
+            Err(format!(
+                "{}: the [c*] repeat construct may not appear in string1",
+                executable!()
+            ))
         }
     }
 }
 
 impl Sequence {
-    pub fn parse_set_string(input: &str) -> Vec<Sequence> {
+    pub fn from_str(input: &str) -> Vec<Sequence> {
         many0(alt((
             alt((
                 Sequence::parse_char_range_octal_leftright,
@@ -385,28 +424,20 @@ impl SymbolTranslator for DeleteOperation {
 
 pub struct TranslateOperationComplement {
     iter: u32,
+    set2_iter: usize,
     set1: Vec<char>,
-    set2: Box<dyn Iterator<Item = char>>,
+    set2: Vec<char>,
     fallback: char,
     translation_map: HashMap<char, char>,
 }
 
 impl TranslateOperationComplement {
-    fn new(
-        set1: Vec<Sequence>,
-        set2: Vec<Sequence>,
-        set1_truncate_length: Option<usize>,
-        fallback: char,
-    ) -> TranslateOperationComplement {
+    fn new(set1: Vec<char>, set2: Vec<char>, fallback: char) -> TranslateOperationComplement {
         TranslateOperationComplement {
             iter: 0,
-            set1: set1
-                .iter()
-                .flat_map(Sequence::flatten)
-                .enumerate()
-                .filter_map(truncate_iterator(set1_truncate_length))
-                .collect(),
-            set2: Box::new(set2.into_iter().flat_map(|c| Sequence::flatten(&c))),
+            set2_iter: 0,
+            set1,
+            set2,
             fallback,
             translation_map: HashMap::new(),
         }
@@ -419,23 +450,11 @@ pub struct TranslateOperationStandard {
 }
 
 impl TranslateOperationStandard {
-    fn new(
-        set1: Vec<Sequence>,
-        set2: Vec<Sequence>,
-        set1_truncate_length: Option<usize>,
-        fallback: char,
-    ) -> TranslateOperationStandard {
+    fn new(set1: Vec<char>, set2: Vec<char>, fallback: char) -> TranslateOperationStandard {
         TranslateOperationStandard {
             translation_map: set1
-                .iter()
-                .flat_map(Sequence::flatten)
-                .zip(
-                    set2.iter()
-                        .flat_map(Sequence::flatten)
-                        .chain(Repeat(fallback)),
-                )
-                .enumerate()
-                .filter_map(truncate_iterator(set1_truncate_length))
+                .into_iter()
+                .zip(set2.into_iter().chain(std::iter::repeat(fallback)))
                 .collect::<HashMap<_, _>>(),
         }
     }
@@ -461,40 +480,27 @@ impl TranslateOperation {
     pub fn new(
         set1: Vec<Sequence>,
         set2: Vec<Sequence>,
-        truncate_set1: bool,
+        truncate_set1_flag: bool,
         complement: bool,
-    ) -> TranslateOperation {
-        let fallback = set2
-            .iter()
-            .rev()
-            .next()
-            .map(Sequence::last)
-            .flatten()
-            .unwrap();
-        let set1_truncate_length = if truncate_set1 {
-            set2.iter()
-                .map(Sequence::len)
-                .reduce(|a, b| match (a, b) {
-                    (Some(l), Some(r)) => Some(l + r),
-                    _ => None,
-                })
-                .flatten()
-        } else {
-            None
-        };
+    ) -> Result<TranslateOperation, String> {
+        let (mut set1_solved, set2_solved) = Sequence::solve_set_characters(&set1, &set2)?;
+        if truncate_set1_flag {
+            set1_solved.truncate(set2_solved.len());
+        }
+        let fallback = set2.iter().map(Sequence::last).last().flatten().expect(
+            format!(
+                "{}: when not truncating set1, string2 must be non-empty",
+                executable!()
+            )
+            .as_str(),
+        );
         if complement {
-            TranslateOperation::Complement(TranslateOperationComplement::new(
-                set1,
-                set2,
-                set1_truncate_length,
-                fallback,
+            Ok(TranslateOperation::Complement(
+                TranslateOperationComplement::new(set1_solved, set2_solved, fallback),
             ))
         } else {
-            TranslateOperation::Standard(TranslateOperationStandard::new(
-                set1,
-                set2,
-                set1_truncate_length,
-                fallback,
+            Ok(TranslateOperation::Standard(
+                TranslateOperationStandard::new(set1_solved, set2_solved, fallback),
             ))
         }
     }
@@ -511,6 +517,7 @@ impl SymbolTranslator for TranslateOperation {
             ),
             TranslateOperation::Complement(TranslateOperationComplement {
                 iter,
+                set2_iter,
                 set1,
                 set2,
                 fallback,
@@ -525,11 +532,12 @@ impl SymbolTranslator for TranslateOperation {
                     Some(*c)
                 } else {
                     while translation_map.get(&current).is_none() {
-                        if let Some(p) = set2.next() {
-                            let (next_index, next_value) =
+                        if let Some(value) = set2.get(*set2_iter) {
+                            let (next_iter, next_key) =
                                 TranslateOperation::next_complement_char(*iter, &*set1);
-                            *iter = next_index;
-                            translation_map.insert(next_value, p);
+                            *iter = next_iter;
+                            *set2_iter = set2_iter.saturating_add(1);
+                            translation_map.insert(next_key, *value);
                         } else {
                             translation_map.insert(current, *fallback);
                         }
@@ -622,9 +630,7 @@ fn test_parse_octal() {
     for a in '0'..='7' {
         for b in '0'..='7' {
             for c in '0'..='7' {
-                assert!(
-                    Sequence::parse_set_string(format!("\\{}{}{}", a, b, c).as_str()).len() == 1
-                );
+                assert!(Sequence::from_str(format!("\\{}{}{}", a, b, c).as_str()).len() == 1);
             }
         }
     }
