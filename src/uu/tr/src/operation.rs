@@ -99,17 +99,11 @@ impl Sequence {
         }
     }
 
-    pub fn last(&self) -> Option<char> {
-        match self {
-            Sequence::CharStar(c) => Some(*c),
-            rest => rest.flatten().last(),
-        }
-    }
-
     // Hide all the nasty sh*t in here
     pub fn solve_set_characters(
-        set1: &Vec<Sequence>,
-        set2: &Vec<Sequence>,
+        set1: Vec<Sequence>,
+        set2: Vec<Sequence>,
+        truncate_set1_flag: bool,
     ) -> Result<(Vec<char>, Vec<char>), String> {
         let is_char_star = |s: &&Sequence| -> bool {
             match s {
@@ -139,7 +133,8 @@ impl Sequence {
                     .flat_map(Sequence::flatten)
                     .count();
                 let star_compensate_len = set1_len.saturating_sub(set2_len);
-                let set2_solved = match (partition.next(), partition.next()) {
+                let (left, right) = (partition.next(), partition.next());
+                let set2_solved: Vec<char> = match (left, right) {
                     (None, None) => match char_star {
                         Some(c) => std::iter::repeat(*c).take(star_compensate_len).collect(),
                         None => std::iter::empty().collect(),
@@ -176,7 +171,10 @@ impl Sequence {
                             .collect(),
                     },
                 };
-                let set1_solved = set1.iter().flat_map(Sequence::flatten).collect();
+                let mut set1_solved: Vec<char> = set1.iter().flat_map(Sequence::flatten).collect();
+                if truncate_set1_flag {
+                    set1_solved.truncate(set2_solved.len());
+                }
                 return Ok((set1_solved, set2_solved));
             } else {
                 Err(format!(
@@ -407,9 +405,9 @@ pub struct DeleteOperation {
 }
 
 impl DeleteOperation {
-    pub fn new(set: Vec<Sequence>, complement_flag: bool) -> DeleteOperation {
+    pub fn new(set: Vec<char>, complement_flag: bool) -> DeleteOperation {
         DeleteOperation {
-            set: set.iter().flat_map(Sequence::flatten).collect::<Vec<_>>(),
+            set,
             complement_flag,
         }
     }
@@ -427,18 +425,16 @@ pub struct TranslateOperationComplement {
     set2_iter: usize,
     set1: Vec<char>,
     set2: Vec<char>,
-    fallback: char,
     translation_map: HashMap<char, char>,
 }
 
 impl TranslateOperationComplement {
-    fn new(set1: Vec<char>, set2: Vec<char>, fallback: char) -> TranslateOperationComplement {
+    fn new(set1: Vec<char>, set2: Vec<char>) -> TranslateOperationComplement {
         TranslateOperationComplement {
             iter: 0,
             set2_iter: 0,
             set1,
             set2,
-            fallback,
             translation_map: HashMap::new(),
         }
     }
@@ -450,12 +446,22 @@ pub struct TranslateOperationStandard {
 }
 
 impl TranslateOperationStandard {
-    fn new(set1: Vec<char>, set2: Vec<char>, fallback: char) -> TranslateOperationStandard {
-        TranslateOperationStandard {
-            translation_map: set1
-                .into_iter()
-                .zip(set2.into_iter().chain(std::iter::repeat(fallback)))
-                .collect::<HashMap<_, _>>(),
+    fn new(set1: Vec<char>, set2: Vec<char>) -> Result<TranslateOperationStandard, String> {
+        if let Some(fallback) = set2.last().map(|s| *s) {
+            Ok(TranslateOperationStandard {
+                translation_map: set1
+                    .into_iter()
+                    .zip(set2.into_iter().chain(std::iter::repeat(fallback)))
+                    .collect::<HashMap<_, _>>(),
+            })
+        } else {
+            if set1.is_empty() && set2.is_empty() {
+                Ok(TranslateOperationStandard {
+                    translation_map: HashMap::new(),
+                })
+            } else {
+                Err("when not truncating set1, string2 must be non-empty".to_string())
+            }
         }
     }
 }
@@ -478,29 +484,17 @@ impl TranslateOperation {
 
 impl TranslateOperation {
     pub fn new(
-        set1: Vec<Sequence>,
-        set2: Vec<Sequence>,
-        truncate_set1_flag: bool,
+        set1: Vec<char>,
+        set2: Vec<char>,
         complement: bool,
     ) -> Result<TranslateOperation, String> {
-        let (mut set1_solved, set2_solved) = Sequence::solve_set_characters(&set1, &set2)?;
-        if truncate_set1_flag {
-            set1_solved.truncate(set2_solved.len());
-        }
-        let fallback = set2.last().map(Sequence::last).flatten().expect(
-            format!(
-                "{}: when not truncating set1, string2 must be non-empty",
-                executable!()
-            )
-            .as_str(),
-        );
         if complement {
             Ok(TranslateOperation::Complement(
-                TranslateOperationComplement::new(set1_solved, set2_solved, fallback),
+                TranslateOperationComplement::new(set1, set2),
             ))
         } else {
             Ok(TranslateOperation::Standard(
-                TranslateOperationStandard::new(set1_solved, set2_solved, fallback),
+                TranslateOperationStandard::new(set1, set2)?,
             ))
         }
     }
@@ -520,7 +514,6 @@ impl SymbolTranslator for TranslateOperation {
                 set2_iter,
                 set1,
                 set2,
-                fallback,
                 translation_map,
             }) => {
                 // First, try to see if current char is already mapped
@@ -539,7 +532,7 @@ impl SymbolTranslator for TranslateOperation {
                             *set2_iter = set2_iter.saturating_add(1);
                             translation_map.insert(next_key, *value);
                         } else {
-                            translation_map.insert(current, *fallback);
+                            translation_map.insert(current, *set2.last().unwrap());
                         }
                     }
                     Some(*translation_map.get(&current).unwrap())
@@ -557,9 +550,9 @@ pub struct SqueezeOperation {
 }
 
 impl SqueezeOperation {
-    pub fn new(set1: Vec<Sequence>, complement: bool) -> SqueezeOperation {
+    pub fn new(set1: Vec<char>, complement: bool) -> SqueezeOperation {
         SqueezeOperation {
-            set1: set1.iter().flat_map(Sequence::flatten).collect(),
+            set1,
             complement,
             previous: None,
         }
