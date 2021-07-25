@@ -181,7 +181,7 @@ fn test_check_zero_terminated_failure() {
         .arg("-c")
         .arg("zero-terminated.txt")
         .fails()
-        .stdout_is("sort: zero-terminated.txt:2: disorder: ../../fixtures/du\n");
+        .stderr_only("sort: zero-terminated.txt:2: disorder: ../../fixtures/du\n");
 }
 
 #[test]
@@ -775,13 +775,13 @@ fn test_check() {
             .arg(diagnose_arg)
             .arg("check_fail.txt")
             .fails()
-            .stdout_is("sort: check_fail.txt:6: disorder: 5\n");
+            .stderr_only("sort: check_fail.txt:6: disorder: 5\n");
 
         new_ucmd!()
             .arg(diagnose_arg)
             .arg("multiple_files.expected")
             .succeeds()
-            .stdout_is("");
+            .stderr_is("");
     }
 }
 
