@@ -7,9 +7,6 @@
 
 // spell-checker:ignore (ToDO) gethostid
 
-// Clippy bug: https://github.com/rust-lang/rust-clippy/issues/7422
-#![allow(clippy::nonstandard_macro_braces)]
-
 #[macro_use]
 extern crate uucore;
 
