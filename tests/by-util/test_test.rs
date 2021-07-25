@@ -36,6 +36,35 @@ fn test_solo_and_or_or_is_a_literal() {
 }
 
 #[test]
+fn test_some_literals() {
+    let scenario = TestScenario::new(util_name!());
+    let tests = [
+        "a string",
+        "(",
+        ")",
+        "-",
+        "--",
+        "-0",
+        "-f",
+        "--help",
+        "--version",
+        "-eq",
+        "-lt",
+        "-ef",
+        "[",
+    ];
+
+    for test in &tests {
+        scenario.ucmd().arg(test).succeeds();
+    }
+
+    // run the inverse of all these tests
+    for test in &tests {
+        scenario.ucmd().arg("!").arg(test).run().status_code(1);
+    }
+}
+
+#[test]
 fn test_double_not_is_false() {
     new_ucmd!().args(&["!", "!"]).run().status_code(1);
 }
@@ -100,21 +129,6 @@ fn test_zero_len_of_empty() {
 }
 
 #[test]
-fn test_solo_parenthesis_is_literal() {
-    let scenario = TestScenario::new(util_name!());
-    let tests = [["("], [")"]];
-
-    for test in &tests {
-        scenario.ucmd().args(&test[..]).succeeds();
-    }
-}
-
-#[test]
-fn test_solo_empty_parenthetical_is_error() {
-    new_ucmd!().args(&["(", ")"]).run().status_code(2);
-}
-
-#[test]
 fn test_zero_len_equals_zero_len() {
     new_ucmd!().args(&["", "=", ""]).succeeds();
 }
@@ -139,6 +153,7 @@ fn test_string_comparison() {
         ["contained\nnewline", "=", "contained\nnewline"],
         ["(", "=", "("],
         ["(", "!=", ")"],
+        ["(", "!=", "="],
         ["!", "=", "!"],
         ["=", "=", "="],
     ];
@@ -199,11 +214,13 @@ fn test_a_bunch_of_not() {
 
 #[test]
 fn test_pseudofloat_equal() {
+    // string comparison; test(1) doesn't support comparison of actual floats
     new_ucmd!().args(&["123.45", "=", "123.45"]).succeeds();
 }
 
 #[test]
 fn test_pseudofloat_not_equal() {
+    // string comparison; test(1) doesn't support comparison of actual floats
     new_ucmd!().args(&["123.45", "!=", "123.450"]).succeeds();
 }
 
@@ -229,6 +246,16 @@ fn test_some_int_compares() {
 
     for test in &tests {
         scenario.ucmd().args(&test[..]).succeeds();
+    }
+
+    // run the inverse of all these tests
+    for test in &tests {
+        scenario
+            .ucmd()
+            .arg("!")
+            .args(&test[..])
+            .run()
+            .status_code(1);
     }
 }
 
@@ -256,6 +283,16 @@ fn test_negative_int_compare() {
 
     for test in &tests {
         scenario.ucmd().args(&test[..]).succeeds();
+    }
+
+    // run the inverse of all these tests
+    for test in &tests {
+        scenario
+            .ucmd()
+            .arg("!")
+            .args(&test[..])
+            .run()
+            .status_code(1);
     }
 }
 
@@ -493,6 +530,93 @@ fn test_file_is_sticky() {
 fn test_file_is_not_sticky() {
     new_ucmd!()
         .args(&["-k", "regular_file"])
+        .run()
+        .status_code(1);
+}
+
+#[test]
+fn test_solo_empty_parenthetical_is_error() {
+    new_ucmd!().args(&["(", ")"]).run().status_code(2);
+}
+
+#[test]
+fn test_parenthesized_literal() {
+    let scenario = TestScenario::new(util_name!());
+    let tests = [
+        "a string",
+        "(",
+        ")",
+        "-",
+        "--",
+        "-0",
+        "-f",
+        "--help",
+        "--version",
+        "-e",
+        "-t",
+        "!",
+        "-n",
+        "-z",
+        "[",
+        "-a",
+        "-o",
+    ];
+
+    for test in &tests {
+        scenario.ucmd().arg("(").arg(test).arg(")").succeeds();
+    }
+
+    // run the inverse of all these tests
+    for test in &tests {
+        scenario
+            .ucmd()
+            .arg("!")
+            .arg("(")
+            .arg(test)
+            .arg(")")
+            .run()
+            .status_code(1);
+    }
+}
+
+#[test]
+fn test_parenthesized_op_compares_literal_parenthesis() {
+    // ensure we aren’t treating this case as “string length of literal equal
+    // sign”
+    new_ucmd!().args(&["(", "=", ")"]).run().status_code(1);
+}
+
+#[test]
+fn test_parenthesized_string_comparison() {
+    let scenario = TestScenario::new(util_name!());
+    let tests = [
+        ["(", "foo", "!=", "bar", ")"],
+        ["(", "contained\nnewline", "=", "contained\nnewline", ")"],
+        ["(", "(", "=", "(", ")"],
+        ["(", "(", "!=", ")", ")"],
+        ["(", "!", "=", "!", ")"],
+        ["(", "=", "=", "=", ")"],
+    ];
+
+    for test in &tests {
+        scenario.ucmd().args(&test[..]).succeeds();
+    }
+
+    // run the inverse of all these tests
+    for test in &tests {
+        scenario
+            .ucmd()
+            .arg("!")
+            .args(&test[..])
+            .run()
+            .status_code(1);
+    }
+}
+
+#[test]
+fn test_parenthesized_right_parenthesis_as_literal() {
+    new_ucmd!()
+        .args(&["(", "-f", ")", ")"])
         .run()
         .status_code(1);
 }
