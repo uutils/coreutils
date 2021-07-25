@@ -502,7 +502,7 @@ fn standard(mut paths: Vec<String>, b: Behavior) -> UResult<()> {
         }
 
         if target.is_file() || is_new_file_path(&target) {
-            copy_file_to_file(&sources[0], &target, &b)
+            copy(&sources[0], &target, &b)
         } else {
             Err(InstallError::InvalidTarget(target).into())
         }
@@ -543,28 +543,12 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
         let filename = sourcepath.components().last().unwrap();
         targetpath.push(filename);
 
-        if let Err(e) = copy(sourcepath, &targetpath, b) {
-            show!(e);
-        }
+        show_if_err!(copy(sourcepath, &targetpath, b));
     }
     // If the exit code was set, or show! has been called at least once
     // (which sets the exit code as well), function execution will end after
     // this return.
     Ok(())
-}
-
-/// Copy a file to another file.
-///
-/// Prints verbose information and error messages.
-/// Returns a Result type with the Err variant containing the error message.
-///
-/// # Parameters
-///
-/// _file_ must exist as a non-directory.
-/// _target_ must be a non-directory
-///
-fn copy_file_to_file(file: &Path, target: &Path, b: &Behavior) -> UResult<()> {
-    copy(file, target, b)
 }
 
 /// Copy one file to a new location, changing metadata.
