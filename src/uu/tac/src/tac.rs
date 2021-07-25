@@ -140,40 +140,56 @@ fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) -> i32 {
             }
         }
 
-        // if there isn't a separator at the end of the file, fake it
-        if offsets.is_empty() || *offsets.last().unwrap() < data.len() - slen {
-            offsets.push(data.len());
+        // If the file contains no line separators, then simply write
+        // the contents of the file directly to stdout.
+        if offsets.is_empty() {
+            out.write_all(&data)
+                .unwrap_or_else(|e| crash!(1, "failed to write to stdout: {}", e));
+            return exit_code;
         }
 
-        let mut prev = *offsets.last().unwrap();
-        let mut start = true;
-        for off in offsets.iter().rev().skip(1) {
-            // correctly handle case of no final separator in file
-            if start && prev == data.len() {
-                show_line(&mut out, &[], &data[*off + slen..prev], before);
-                start = false;
-            } else {
-                show_line(&mut out, sbytes, &data[*off + slen..prev], before);
+        // If the `-b` option was given, assume the line separators are
+        // at the *beginning* of the line. Otherwise, assume the line
+        // separators are at the *end* of the line.
+        if before {
+            if *offsets.first().unwrap() > 0 {
+                offsets.insert(0, 0);
             }
-            prev = *off;
+            offsets.push(data.len());
+            let n = offsets.len();
+            for i in (0..n - 1).rev() {
+                let start = offsets[i as usize];
+                let end = offsets[i as usize + 1];
+                show_line(&mut out, &[], &data[start..end]);
+            }
+        } else {
+            // if there isn't a separator at the end of the file, fake it
+            if *offsets.last().unwrap() < data.len() - slen {
+                offsets.push(data.len());
+            }
+
+            let mut prev = *offsets.last().unwrap();
+            let mut start = true;
+            for off in offsets.iter().rev().skip(1) {
+                // correctly handle case of no final separator in file
+                if start && prev == data.len() {
+                    show_line(&mut out, &[], &data[*off + slen..prev]);
+                    start = false;
+                } else {
+                    show_line(&mut out, sbytes, &data[*off + slen..prev]);
+                }
+                prev = *off;
+            }
+            show_line(&mut out, sbytes, &data[0..prev]);
         }
-        show_line(&mut out, sbytes, &data[0..prev], before);
     }
 
     exit_code
 }
 
-fn show_line(out: &mut Stdout, sep: &[u8], dat: &[u8], before: bool) {
-    if before {
-        out.write_all(sep)
-            .unwrap_or_else(|e| crash!(1, "failed to write to stdout: {}", e));
-    }
-
+fn show_line(out: &mut Stdout, sep: &[u8], dat: &[u8]) {
     out.write_all(dat)
         .unwrap_or_else(|e| crash!(1, "failed to write to stdout: {}", e));
-
-    if !before {
-        out.write_all(sep)
-            .unwrap_or_else(|e| crash!(1, "failed to write to stdout: {}", e));
-    }
+    out.write_all(sep)
+        .unwrap_or_else(|e| crash!(1, "failed to write to stdout: {}", e));
 }
