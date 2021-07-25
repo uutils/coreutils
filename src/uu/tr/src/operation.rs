@@ -487,7 +487,7 @@ impl TranslateOperation {
         if truncate_set1_flag {
             set1_solved.truncate(set2_solved.len());
         }
-        let fallback = set2.iter().map(Sequence::last).last().flatten().expect(
+        let fallback = set2.last().map(Sequence::last).flatten().expect(
             format!(
                 "{}: when not truncating set1, string2 must be non-empty",
                 executable!()
