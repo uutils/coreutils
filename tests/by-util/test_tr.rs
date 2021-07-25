@@ -394,7 +394,6 @@ fn alnum_expands_number_uppercase_lowercase() {
 }
 
 #[test]
-#[ignore = "not expected to fully pass -- any help appreciated!"]
 fn check_against_gnu_tr_tests() {
     // ['1', qw(abcd '[]*]'),   {IN=>'abcd'}, {OUT=>']]]]'}],
     new_ucmd!()
@@ -402,18 +401,30 @@ fn check_against_gnu_tr_tests() {
         .pipe_in("abcd")
         .succeeds()
         .stdout_is("]]]]");
+}
+
+#[test]
+fn check_against_gnu_tr_tests_2() {
     // ['2', qw(abc '[%*]xyz'), {IN=>'abc'}, {OUT=>'xyz'}],
     new_ucmd!()
         .args(&["abc", "[%*]xyz"])
         .pipe_in("abc")
         .succeeds()
         .stdout_is("xyz");
+}
+
+#[test]
+fn check_against_gnu_tr_tests_3() {
     // ['3', qw('' '[.*]'),     {IN=>'abc'}, {OUT=>'abc'}],
     new_ucmd!()
         .args(&["", "[.*]"])
         .pipe_in("abc")
         .succeeds()
         .stdout_is("abc");
+}
+
+#[test]
+fn check_against_gnu_tr_tests_4() {
     // # Test --truncate-set1 behavior when string1 is longer than string2
     // ['4', qw(-t abcd xy), {IN=>'abcde'}, {OUT=>'xycde'}],
     new_ucmd!()
@@ -421,6 +432,10 @@ fn check_against_gnu_tr_tests() {
         .pipe_in("abcde")
         .succeeds()
         .stdout_is("xycde");
+}
+
+#[test]
+fn check_against_gnu_tr_tests_5() {
     // # Test bsd behavior (the default) when string1 is longer than string2
     // ['5', qw(abcd xy), {IN=>'abcde'}, {OUT=>'xyyye'}],
     new_ucmd!()
@@ -428,6 +443,10 @@ fn check_against_gnu_tr_tests() {
         .pipe_in("abcde")
         .succeeds()
         .stdout_is("xyyye");
+}
+
+#[test]
+fn check_against_gnu_tr_tests_6() {
     // # Do it the posix way
     // ['6', qw(abcd 'x[y*]'), {IN=>'abcde'}, {OUT=>'xyyye'}],
     new_ucmd!()
@@ -435,54 +454,90 @@ fn check_against_gnu_tr_tests() {
         .pipe_in("abcde")
         .succeeds()
         .stdout_is("xyyye");
-    // ['7', qw(-s a-p ,"'), {IN=>'abcdefghijklmnop'}, {OUT=>'%.$'}],
+}
+
+#[test]
+fn check_against_gnu_tr_tests_7() {
+    // ['7', qw(-s a-p '%[.*]$'), {IN=>'abcdefghijklmnop'}, {OUT=>'%.$'}],
     new_ucmd!()
-        .args(&["-s", "a-p", "\"'"])
+        .args(&["-s", "a-p", "%[.*]$"])
         .pipe_in("abcdefghijklmnop")
         .succeeds()
         .stdout_is("%.$");
+}
+
+#[test]
+fn check_against_gnu_tr_tests_8() {
     // ['8', qw(-s a-p '[.*]$'), {IN=>'abcdefghijklmnop'}, {OUT=>'.$'}],
     new_ucmd!()
         .args(&["-s", "a-p", "[.*]$"])
         .pipe_in("abcdefghijklmnop")
         .succeeds()
         .stdout_is(".$");
+}
+
+#[test]
+fn check_against_gnu_tr_tests_9() {
     // ['9', qw(-s a-p '%[.*]'), {IN=>'abcdefghijklmnop'}, {OUT=>'%.'}],
     new_ucmd!()
         .args(&["-s", "a-p", "%[.*]"])
         .pipe_in("abcdefghijklmnop")
         .succeeds()
         .stdout_is("%.");
+}
+
+#[test]
+fn check_against_gnu_tr_tests_a() {
     // ['a', qw(-s '[a-z]'), {IN=>'aabbcc'}, {OUT=>'abc'}],
     new_ucmd!()
         .args(&["-s", "[a-z]"])
         .pipe_in("aabbcc")
         .succeeds()
         .stdout_is("abc");
+}
+
+#[test]
+fn check_against_gnu_tr_tests_b() {
     // ['b', qw(-s '[a-c]'), {IN=>'aabbcc'}, {OUT=>'abc'}],
     new_ucmd!()
         .args(&["-s", "[a-c]"])
         .pipe_in("aabbcc")
         .succeeds()
         .stdout_is("abc");
+}
+
+#[test]
+fn check_against_gnu_tr_tests_c() {
     // ['c', qw(-s '[a-b]'), {IN=>'aabbcc'}, {OUT=>'abcc'}],
     new_ucmd!()
         .args(&["-s", "[a-b]"])
         .pipe_in("aabbcc")
         .succeeds()
         .stdout_is("abcc");
+}
+
+#[test]
+fn check_against_gnu_tr_tests_d() {
     // ['d', qw(-s '[b-c]'), {IN=>'aabbcc'}, {OUT=>'aabc'}],
     new_ucmd!()
         .args(&["-s", "[b-c]"])
         .pipe_in("aabbcc")
         .succeeds()
         .stdout_is("aabc");
+}
+
+#[test]
+fn check_against_gnu_tr_tests_e() {
     // ['e', qw(-s '[\0-\5]'), {IN=>"\0\0a\1\1b\2\2\2c\3\3\3d\4\4\4\4e\5\5"}, {OUT=>"\0a\1b\2c\3d\4e\5"}],
     new_ucmd!()
         .args(&["-s", r#"[\0-\5]"#])
         .pipe_in(r#"\0\0a\1\1b\2\2\2c\3\3\3d\4\4\4\4e\5\5"#)
         .succeeds()
         .stdout_is(r#"\0a\1b\2c\3d\4e\5"#);
+}
+
+#[test]
+fn check_against_gnu_tr_tests_f() {
     // # tests of delete
     // ['f', qw(-d '[=[=]'), {IN=>'[[[[[[[]]]]]]]]'}, {OUT=>']]]]]]]]'}],
     new_ucmd!()
@@ -490,66 +545,110 @@ fn check_against_gnu_tr_tests() {
         .pipe_in("[[[[[[[]]]]]]]]")
         .succeeds()
         .stdout_is("]]]]]]]]");
+}
+
+#[test]
+fn check_against_gnu_tr_tests_g() {
     // ['g', qw(-d '[=]=]'), {IN=>'[[[[[[[]]]]]]]]'}, {OUT=>'[[[[[[['}],
     new_ucmd!()
         .args(&["-d", "[=]=]"])
         .pipe_in("[[[[[[[]]]]]]]]")
         .succeeds()
         .stdout_is("[[[[[[[");
+}
+
+#[test]
+fn check_against_gnu_tr_tests_h() {
     // ['h', qw(-d '[:xdigit:]'), {IN=>'0123456789acbdefABCDEF'}, {OUT=>''}],
     new_ucmd!()
         .args(&["-d", "[:xdigit:]"])
         .pipe_in("0123456789acbdefABCDEF")
         .succeeds()
         .stdout_is("");
+}
+
+#[test]
+fn check_against_gnu_tr_tests_i() {
     // ['i', qw(-d '[:xdigit:]'), {IN=>'w0x1y2z3456789acbdefABCDEFz'}, {OUT=>'wxyzz'}],
     new_ucmd!()
         .args(&["-d", "[:xdigit:]"])
         .pipe_in("w0x1y2z3456789acbdefABCDEFz")
         .succeeds()
         .stdout_is("wxyzz");
+}
+
+#[test]
+fn check_against_gnu_tr_tests_j() {
     // ['j', qw(-d '[:digit:]'), {IN=>'0123456789'}, {OUT=>''}],
     new_ucmd!()
         .args(&["", "", ""])
         .pipe_in("")
         .succeeds()
         .stdout_is("");
+}
+
+#[test]
+fn check_against_gnu_tr_tests_k() {
     // ['k', qw(-d '[:digit:]'), {IN=>'a0b1c2d3e4f5g6h7i8j9k'}, {OUT=>'abcdefghijk'}],
     new_ucmd!()
         .args(&["-d", "[:digit:]"])
         .pipe_in("a0b1c2d3e4f5g6h7i8j9k")
         .succeeds()
         .stdout_is("abcdefghijk");
+}
+
+#[test]
+fn check_against_gnu_tr_tests_l() {
     // ['l', qw(-d '[:lower:]'), {IN=>'abcdefghijklmnopqrstuvwxyz'}, {OUT=>''}],
     new_ucmd!()
         .args(&["-d", "[:lower:]"])
         .pipe_in("abcdefghijklmnopqrstuvwxyz")
         .succeeds()
         .stdout_is("");
+}
+
+#[test]
+fn check_against_gnu_tr_tests_m() {
     // ['m', qw(-d '[:upper:]'), {IN=>'ABCDEFGHIJKLMNOPQRSTUVWXYZ'}, {OUT=>''}],
     new_ucmd!()
         .args(&["-d", "[:upper:]"])
         .pipe_in("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
         .succeeds()
         .stdout_is("");
+}
+
+#[test]
+fn check_against_gnu_tr_tests_n() {
     // ['n', qw(-d '[:lower:][:upper:]'), {IN=>'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'}, {OUT=>''}],
     new_ucmd!()
         .args(&["-d", "[:lower:][:upper:]"])
         .pipe_in("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
         .succeeds()
         .stdout_is("");
+}
+
+#[test]
+fn check_against_gnu_tr_tests_o() {
     // ['o', qw(-d '[:alpha:]'), {IN=>'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'}, {OUT=>''}],
     new_ucmd!()
         .args(&["-d", "[:alpha:]"])
         .pipe_in("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
         .succeeds()
         .stdout_is("");
+}
+
+#[test]
+fn check_against_gnu_tr_tests_p() {
     // ['p', qw(-d '[:alnum:]'), {IN=>'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'}, {OUT=>''}],
     new_ucmd!()
         .args(&["-d", "[:alnum:]", ""])
         .pipe_in("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
         .succeeds()
         .stdout_is("");
+}
+
+#[test]
+fn check_against_gnu_tr_tests_q() {
     // ['q', qw(-d '[:alnum:]'), {IN=>'.abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.'}, {OUT=>'..'}],
     new_ucmd!()
         .args(&["-d", "[:alnum:]"])
