@@ -47,18 +47,6 @@ pub enum Sequence {
 }
 
 impl Sequence {
-    // TODO: Can we do better?
-    pub fn convert_octal_to_char(input: &str) -> char {
-        if input.starts_with("\\") && input.len() > 1 {
-            u32::from_str_radix(&input[1..], 8)
-                .map(|u| char::from_u32(u))
-                .unwrap()
-                .unwrap()
-        } else {
-            input.chars().next().unwrap()
-        }
-    }
-
     pub fn flatten(&self) -> Box<dyn Iterator<Item = char>> {
         match self {
             Sequence::Char(c) => Box::new(std::iter::once(*c)),
@@ -243,7 +231,16 @@ impl Sequence {
             preceded(tag("\\"), recognize(many_m_n(1, 3, one_of("01234567")))),
             recognize(anychar),
         )))(input)
-        .map(|(l, a)| (l, Sequence::convert_octal_to_char(a)))
+        .map(|(l, a)| {
+            (
+                l,
+                if let Some(input) = a.strip_prefix('\\') {
+                    char::from_u32(u32::from_str_radix(&input, 8).unwrap()).unwrap()
+                } else {
+                    input.chars().next().unwrap()
+                },
+            )
+        })
     }
 
     fn parse_char(input: &str) -> IResult<&str, Sequence> {
