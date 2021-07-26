@@ -29,7 +29,6 @@ use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
 use fnv::FnvHasher;
 use numeric_str_cmp::{human_numeric_str_cmp, numeric_str_cmp, NumInfo, NumInfoParseSettings};
-use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use rayon::prelude::*;
 use std::cmp::Ordering;
@@ -183,7 +182,7 @@ pub struct GlobalSettings {
     unique: bool,
     check: bool,
     check_silent: bool,
-    salt: String,
+    salt: Option<[u8; 16]>,
     selectors: Vec<FieldSelector>,
     separator: Option<char>,
     threads: String,
@@ -266,7 +265,7 @@ impl Default for GlobalSettings {
             unique: false,
             check: false,
             check_silent: false,
-            salt: String::new(),
+            salt: None,
             selectors: vec![],
             separator: None,
             threads: String::new(),
@@ -1006,7 +1005,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     } else if matches.is_present(options::modes::RANDOM)
         || matches.value_of(options::modes::SORT) == Some("random")
     {
-        settings.salt = get_rand_string();
+        settings.salt = Some(get_rand_string());
         SortMode::Random
     } else {
         SortMode::Default
@@ -1086,9 +1085,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     if let Some(values) = matches.values_of(options::KEY) {
         for value in values {
-            settings
-                .selectors
-                .push(FieldSelector::parse(value, &settings));
+            let selector = FieldSelector::parse(value, &settings);
+            if selector.settings.mode == SortMode::Random && settings.salt.is_none() {
+                settings.salt = Some(get_rand_string());
+            }
+            settings.selectors.push(selector);
         }
     }
 
@@ -1397,7 +1398,7 @@ fn compare_by<'a>(
         let settings = &selector.settings;
 
         let cmp: Ordering = match settings.mode {
-            SortMode::Random => random_shuffle(a_str, b_str, &global_settings.salt),
+            SortMode::Random => random_shuffle(a_str, b_str, &global_settings.salt.unwrap()),
             SortMode::Numeric => {
                 let a_num_info = &a_line_data.num_infos
                     [a.index * global_settings.precomputed.num_infos_per_line + num_info_index];
@@ -1546,12 +1547,8 @@ fn general_numeric_compare(a: &GeneralF64ParseResult, b: &GeneralF64ParseResult)
     a.partial_cmp(b).unwrap()
 }
 
-fn get_rand_string() -> String {
-    thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(16)
-        .map(char::from)
-        .collect::<String>()
+fn get_rand_string() -> [u8; 16] {
+    thread_rng().sample(rand::distributions::Standard)
 }
 
 fn get_hash<T: Hash>(t: &T) -> u64 {
@@ -1560,10 +1557,9 @@ fn get_hash<T: Hash>(t: &T) -> u64 {
     s.finish()
 }
 
-fn random_shuffle(a: &str, b: &str, salt: &str) -> Ordering {
-    let da = get_hash(&[a, salt].concat());
-    let db = get_hash(&[b, salt].concat());
-
+fn random_shuffle(a: &str, b: &str, salt: &[u8]) -> Ordering {
+    let da = get_hash(&(a, salt));
+    let db = get_hash(&(b, salt));
     da.cmp(&db)
 }
 
