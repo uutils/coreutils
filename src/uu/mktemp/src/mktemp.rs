@@ -8,9 +8,6 @@
 
 // spell-checker:ignore (paths) GPGHome
 
-// clippy bug https://github.com/rust-lang/rust-clippy/issues/7422
-#![allow(clippy::nonstandard_macro_braces)]
-
 #[macro_use]
 extern crate uucore;
 
