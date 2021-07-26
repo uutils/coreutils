@@ -8,7 +8,7 @@ use nom::{
     IResult,
 };
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fmt::Debug,
     io::{BufRead, Write},
 };
@@ -47,6 +47,18 @@ pub enum Sequence {
 }
 
 impl Sequence {
+    // TODO: Can we do better?
+    pub fn convert_octal_to_char(input: &str) -> char {
+        if input.starts_with("\\") && input.len() > 1 {
+            u32::from_str_radix(&input[1..], 8)
+                .map(|u| char::from_u32(u))
+                .unwrap()
+                .unwrap()
+        } else {
+            input.chars().next().unwrap()
+        }
+    }
+
     pub fn flatten(&self) -> Box<dyn Iterator<Item = char>> {
         match self {
             Sequence::Char(c) => Box::new(std::iter::once(*c)),
@@ -196,9 +208,6 @@ impl Sequence {
         many0(alt((
             alt((
                 Sequence::parse_char_range_octal_leftright,
-                Sequence::parse_char_range_octal_left,
-                Sequence::parse_char_range_octal_right,
-                Sequence::parse_char_range_backslash_collapse,
                 Sequence::parse_char_range,
                 Sequence::parse_char_star,
                 Sequence::parse_char_repeat,
@@ -227,6 +236,14 @@ impl Sequence {
         )))(input)
         .map(|(_, r)| r)
         .unwrap()
+    }
+
+    fn parse_octal_or_char(input: &str) -> IResult<&str, char> {
+        recognize(alt((
+            preceded(tag("\\"), recognize(many_m_n(1, 3, one_of("01234567")))),
+            recognize(anychar),
+        )))(input)
+        .map(|(l, a)| (l, Sequence::convert_octal_to_char(a)))
     }
 
     fn parse_char(input: &str) -> IResult<&str, Sequence> {
@@ -261,51 +278,14 @@ impl Sequence {
     }
 
     fn parse_char_range(input: &str) -> IResult<&str, Sequence> {
-        separated_pair(anychar, tag("-"), anychar)(input).map(|(l, (a, b))| {
-            (l, {
-                let (start, end) = (u32::from(a), u32::from(b));
-                Sequence::CharRange(start, end)
-            })
-        })
-    }
-
-    fn parse_char_range_backslash_collapse(input: &str) -> IResult<&str, Sequence> {
         separated_pair(
-            preceded(tag("\\"), anychar),
+            Sequence::parse_octal_or_char,
             tag("-"),
-            preceded(tag("\\"), anychar),
+            Sequence::parse_octal_or_char,
         )(input)
         .map(|(l, (a, b))| {
             (l, {
                 let (start, end) = (u32::from(a), u32::from(b));
-                Sequence::CharRange(start, end)
-            })
-        })
-    }
-
-    fn parse_char_range_octal_left(input: &str) -> IResult<&str, Sequence> {
-        separated_pair(
-            preceded(tag("\\"), recognize(many_m_n(1, 3, one_of("01234567")))),
-            tag("-"),
-            anychar,
-        )(input)
-        .map(|(l, (a, b))| {
-            (l, {
-                let (start, end) = (u32::from_str_radix(a, 8).unwrap(), u32::from(b));
-                Sequence::CharRange(start, end)
-            })
-        })
-    }
-
-    fn parse_char_range_octal_right(input: &str) -> IResult<&str, Sequence> {
-        separated_pair(
-            anychar,
-            tag("-"),
-            preceded(tag("\\"), recognize(many_m_n(1, 3, one_of("01234567")))),
-        )(input)
-        .map(|(l, (a, b))| {
-            (l, {
-                let (start, end) = (u32::from(a), u32::from_str_radix(b, 8).unwrap());
                 Sequence::CharRange(start, end)
             })
         })
@@ -313,29 +293,27 @@ impl Sequence {
 
     fn parse_char_range_octal_leftright(input: &str) -> IResult<&str, Sequence> {
         separated_pair(
-            preceded(tag("\\"), recognize(many_m_n(1, 3, one_of("01234567")))),
+            Sequence::parse_octal_or_char,
             tag("-"),
-            preceded(tag("\\"), recognize(many_m_n(1, 3, one_of("01234567")))),
+            Sequence::parse_octal_or_char,
         )(input)
         .map(|(l, (a, b))| {
             (l, {
-                let (start, end) = (
-                    u32::from_str_radix(a, 8).unwrap(),
-                    u32::from_str_radix(b, 8).unwrap(),
-                );
+                let (start, end) = (u32::from(a), u32::from(b));
                 Sequence::CharRange(start, end)
             })
         })
     }
 
     fn parse_char_star(input: &str) -> IResult<&str, Sequence> {
-        delimited(tag("["), anychar, tag("*]"))(input).map(|(l, c)| (l, Sequence::CharStar(c)))
+        delimited(tag("["), Sequence::parse_octal_or_char, tag("*]"))(input)
+            .map(|(l, a)| (l, Sequence::CharStar(a)))
     }
 
     fn parse_char_repeat(input: &str) -> IResult<&str, Sequence> {
         delimited(
             tag("["),
-            separated_pair(anychar, tag("*"), digit1),
+            separated_pair(Sequence::parse_octal_or_char, tag("*"), digit1),
             tag("]"),
         )(input)
         .map(|(l, (c, n))| (l, Sequence::CharRepeat(c, n.parse().unwrap())))
@@ -390,7 +368,8 @@ impl Sequence {
     }
 
     fn parse_char_equal(input: &str) -> IResult<&str, Sequence> {
-        delimited(tag("[="), anychar, tag("=]"))(input).map(|(_, _)| todo!())
+        delimited(tag("[="), Sequence::parse_octal_or_char, tag("=]"))(input)
+            .map(|(l, c)| (l, Sequence::Char(c)))
     }
 }
 
@@ -544,7 +523,7 @@ impl SymbolTranslator for TranslateOperation {
 
 #[derive(Debug, Clone)]
 pub struct SqueezeOperation {
-    set1: Vec<char>,
+    set1: HashSet<char>,
     complement: bool,
     previous: Option<char>,
 }
@@ -552,7 +531,7 @@ pub struct SqueezeOperation {
 impl SqueezeOperation {
     pub fn new(set1: Vec<char>, complement: bool) -> SqueezeOperation {
         SqueezeOperation {
-            set1,
+            set1: set1.into_iter().collect(),
             complement,
             previous: None,
         }
@@ -562,7 +541,7 @@ impl SqueezeOperation {
 impl SymbolTranslator for SqueezeOperation {
     fn translate(&mut self, current: char) -> Option<char> {
         if self.complement {
-            let next = if self.set1.iter().any(|c| c.eq(&current)) {
+            let next = if self.set1.contains(&current) {
                 Some(current)
             } else {
                 match self.previous {
@@ -570,20 +549,16 @@ impl SymbolTranslator for SqueezeOperation {
                         if v.eq(&current) {
                             None
                         } else {
-                            self.previous = Some(current);
                             Some(current)
                         }
                     }
-                    None => {
-                        self.previous = Some(current);
-                        Some(current)
-                    }
+                    None => Some(current),
                 }
             };
             self.previous = Some(current);
             next
         } else {
-            let next = if self.set1.iter().any(|c| c.eq(&current)) {
+            let next = if self.set1.contains(&current) {
                 match self.previous {
                     Some(v) if v == current => None,
                     _ => Some(current),
