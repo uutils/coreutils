@@ -26,6 +26,13 @@ use std::{
 ///
 /// The code we should exit with.
 pub fn check(path: &str, settings: &GlobalSettings) -> i32 {
+    let max_allowed_cmp = if settings.unique {
+        // If `unique` is enabled, the previous line must compare _less_ to the next one.
+        Ordering::Less
+    } else {
+        // Otherwise, the line previous line must compare _less or equal_ to the next one.
+        Ordering::Equal
+    };
     let file = open(path);
     let (recycled_sender, recycled_receiver) = sync_channel(2);
     let (loaded_sender, loaded_receiver) = sync_channel(2);
@@ -53,7 +60,7 @@ pub fn check(path: &str, settings: &GlobalSettings) -> i32 {
                 settings,
                 prev_chunk.line_data(),
                 chunk.line_data(),
-            ) == Ordering::Greater
+            ) > max_allowed_cmp
             {
                 if !settings.check_silent {
                     eprintln!("sort: {}:{}: disorder: {}", path, line_idx, new_first.line);
@@ -65,8 +72,7 @@ pub fn check(path: &str, settings: &GlobalSettings) -> i32 {
 
         for (a, b) in chunk.lines().iter().tuple_windows() {
             line_idx += 1;
-            if compare_by(a, b, settings, chunk.line_data(), chunk.line_data()) == Ordering::Greater
-            {
+            if compare_by(a, b, settings, chunk.line_data(), chunk.line_data()) > max_allowed_cmp {
                 if !settings.check_silent {
                     eprintln!("sort: {}:{}: disorder: {}", path, line_idx, b.line);
                 }
