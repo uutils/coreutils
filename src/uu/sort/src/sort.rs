@@ -1398,7 +1398,22 @@ fn compare_by<'a>(
         let settings = &selector.settings;
 
         let cmp: Ordering = match settings.mode {
-            SortMode::Random => random_shuffle(a_str, b_str, &global_settings.salt.unwrap()),
+            SortMode::Random => {
+                // check if the two strings are equal
+                if custom_str_cmp(
+                    a_str,
+                    b_str,
+                    settings.ignore_non_printing,
+                    settings.dictionary_order,
+                    settings.ignore_case,
+                ) == Ordering::Equal
+                {
+                    Ordering::Equal
+                } else {
+                    // Only if they are not equal compare by the hash
+                    random_shuffle(a_str, b_str, &global_settings.salt.unwrap())
+                }
+            }
             SortMode::Numeric => {
                 let a_num_info = &a_line_data.num_infos
                     [a.index * global_settings.precomputed.num_infos_per_line + num_info_index];

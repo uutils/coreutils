@@ -236,6 +236,16 @@ fn test_random_shuffle_two_runs_not_the_same() {
 }
 
 #[test]
+fn test_random_ignore_case() {
+    let input = "ABC\nABc\nAbC\nAbc\naBC\naBc\nabC\nabc\n";
+    new_ucmd!()
+        .args(&["-fR"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(input);
+}
+
+#[test]
 fn test_numeric_floats_and_ints() {
     test_helper(
         "numeric_floats_and_ints",
