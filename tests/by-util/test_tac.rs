@@ -23,7 +23,7 @@ fn test_stdin_non_newline_separator_before() {
         .args(&["-b", "-s", ":"])
         .pipe_in("100:200:300:400:500")
         .run()
-        .stdout_is("500:400:300:200:100");
+        .stdout_is(":500:400:300:200100");
 }
 
 #[test]
@@ -72,4 +72,54 @@ fn test_invalid_input() {
 #[test]
 fn test_no_line_separators() {
     new_ucmd!().pipe_in("a").succeeds().stdout_is("a");
+}
+
+#[test]
+fn test_before_trailing_separator_no_leading_separator() {
+    new_ucmd!()
+        .arg("-b")
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_is("\n\nba");
+}
+
+#[test]
+fn test_before_trailing_separator_and_leading_separator() {
+    new_ucmd!()
+        .arg("-b")
+        .pipe_in("\na\nb\n")
+        .succeeds()
+        .stdout_is("\n\nb\na");
+}
+
+#[test]
+fn test_before_leading_separator_no_trailing_separator() {
+    new_ucmd!()
+        .arg("-b")
+        .pipe_in("\na\nb")
+        .succeeds()
+        .stdout_is("\nb\na");
+}
+
+#[test]
+fn test_before_no_separator() {
+    new_ucmd!()
+        .arg("-b")
+        .pipe_in("ab")
+        .succeeds()
+        .stdout_is("ab");
+}
+
+#[test]
+fn test_before_empty_file() {
+    new_ucmd!().arg("-b").pipe_in("").succeeds().stdout_is("");
+}
+
+#[test]
+fn test_multi_char_separator() {
+    new_ucmd!()
+        .args(&["-s", "xx"])
+        .pipe_in("axxbxx")
+        .succeeds()
+        .stdout_is("bxxaxx");
 }
