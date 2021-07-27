@@ -916,9 +916,7 @@ impl FieldSelector {
 
 fn get_usage() -> String {
     format!(
-        "{0}
-Usage:
- {0} [OPTION]... [FILE]...
+        "{0} [OPTION]... [FILE]...
 Write the sorted concatenation of all FILE(s) to standard output.
 Mandatory arguments for long options are mandatory for short options too.
 With no FILE, or when FILE is -, read standard input.",
