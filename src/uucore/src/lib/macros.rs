@@ -55,7 +55,7 @@ macro_rules! show(
     ($err:expr) => ({
         let e = $err;
         uucore::error::set_exit_code(e.code());
-        eprintln!("{}: {}", $crate::executable_name!(), e);
+        eprintln!("{}: {}", $crate::util_name!(), e);
     })
 );
 
@@ -72,7 +72,7 @@ macro_rules! show_if_err(
 #[macro_export]
 macro_rules! show_error(
     ($($args:tt)+) => ({
-        eprint!("{}: ", $crate::executable_name!());
+        eprint!("{}: ", $crate::util_name!());
         eprintln!($($args)+);
     })
 );
@@ -81,7 +81,7 @@ macro_rules! show_error(
 #[macro_export]
 macro_rules! show_error_custom_description (
     ($err:expr,$($args:tt)+) => ({
-        eprint!("{}: {}: ", $crate::executable_name!(), $err);
+        eprint!("{}: {}: ", $crate::util_name!(), $err);
         eprintln!($($args)+);
     })
 );
@@ -89,7 +89,7 @@ macro_rules! show_error_custom_description (
 #[macro_export]
 macro_rules! show_warning(
     ($($args:tt)+) => ({
-        eprint!("{}: warning: ", $crate::executable_name!());
+        eprint!("{}: warning: ", $crate::util_name!());
         eprintln!($($args)+);
     })
 );
@@ -98,7 +98,7 @@ macro_rules! show_warning(
 #[macro_export]
 macro_rules! show_usage_error(
     ($($args:tt)+) => ({
-        eprint!("{}: ", $crate::executable_name!());
+        eprint!("{}: ", $crate::util_name!());
         eprintln!($($args)+);
         eprintln!("Try `{:?} --help` for more information.", $crate::executable!());
     })

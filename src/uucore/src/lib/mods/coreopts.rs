@@ -120,7 +120,7 @@ impl<'a> CoreOptions<'a> {
 macro_rules! app {
     ($syntax: expr, $summary: expr, $long_help: expr) => {
         uucore::coreopts::CoreOptions::new(uucore::coreopts::HelpText {
-            name: executable!(),
+            name: util_name!(),
             version: env!("CARGO_PKG_VERSION"),
             syntax: $syntax,
             summary: $summary,
@@ -130,7 +130,7 @@ macro_rules! app {
     };
     ($syntax: expr, $summary: expr, $long_help: expr, $display_usage: expr) => {
         uucore::coreopts::CoreOptions::new(uucore::coreopts::HelpText {
-            name: executable!(),
+            name: util_name!(),
             version: env!("CARGO_PKG_VERSION"),
             syntax: $syntax,
             summary: $summary,
