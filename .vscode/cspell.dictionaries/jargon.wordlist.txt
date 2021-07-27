@@ -59,7 +59,13 @@ microbenchmarking
 multibyte
 multicall
 noatime
+nocache
 nocreat
+noctty
+noerror
+nofollow
+nolinks
+nonblock
 nonportable
 nonprinting
 notrunc
@@ -86,6 +92,8 @@ semiprime
 semiprimes
 shortcode
 shortcodes
+siginfo
+sigusr
 subcommand
 subexpression
 submodule

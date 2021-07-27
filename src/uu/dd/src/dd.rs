@@ -5,7 +5,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat
 
 #[macro_use]
 extern crate uucore;
@@ -47,6 +47,7 @@ const ABOUT: &str = "copy, and optionally convert, a file system resource";
 const BUF_INIT_BYTE: u8 = 0xDD;
 const RTN_SUCCESS: i32 = 0;
 const RTN_FAILURE: i32 = 1;
+const SYSTEM_NEWLINE: &[u8] = if cfg!(target_os = "windows") { b"\r\n" } else { b"\n" };
 
 struct Input<R: Read> {
     src: R,
@@ -489,9 +490,18 @@ impl Output<File> {
 /// Expects ascii encoded data
 fn block(buf: Vec<u8>, cbs: usize, rstat: &mut ReadStat) -> Vec<Vec<u8>> {
     let mut blocks = buf
-        .split(|&e| e == b'\n')
-        .fold(Vec::new(), |mut blocks, split| {
-            let mut split = split.to_vec();
+        .split(| &e | e == b'\n')
+        .map(| split | {
+            if cfg!(target_os = "windows") {
+                // Since newlines are LF ('\n') in Unix and CR+LF ("\r\n") on Windows,
+                // the split above will leave a trailing CR on Windows.
+                // This must be removed before proceeding.
+                split[..split.len()-1].to_vec()
+            } else {
+                split.to_vec()
+            }
+        })
+        .fold(Vec::new(), |mut blocks, mut split| {
             if split.len() > cbs {
                 rstat.records_truncated += 1;
             }
@@ -516,14 +526,11 @@ fn block(buf: Vec<u8>, cbs: usize, rstat: &mut ReadStat) -> Vec<Vec<u8>> {
 fn unblock(buf: Vec<u8>, cbs: usize) -> Vec<u8> {
     buf.chunks(cbs).fold(Vec::new(), |mut acc, block| {
         if let Some(last_char_idx) = block.iter().rposition(|&e| e != b' ') {
-            // Find last space
+            // Include text up to last space.
             acc.extend(&block[..=last_char_idx]);
-            acc.push(b'\n');
-        } else {
-            // The block is filled with only spaces
-            acc.push(b'\n');
-        };
+        }
 
+        acc.extend(SYSTEM_NEWLINE);
         acc
     })
 }
@@ -627,7 +634,7 @@ fn conv_block_unblock_helper<R: Read>(
     }
 }
 
-/// Read helper performs read operations common to all dd reads, and dispatches the buffer to relevent helper functions as dictated by the operations requested by the user.
+/// Read helper performs read operations common to all dd reads, and dispatches the buffer to relevant helper functions as dictated by the operations requested by the user.
 fn read_helper<R: Read>(
     i: &mut Input<R>,
     bsize: usize,
@@ -738,12 +745,8 @@ fn gen_prog_updater(rx: mpsc::Receiver<ProgUpdate>, print_level: Option<StatusLe
     fn posixly_correct() -> bool {
         env::var("POSIXLY_CORRECT").is_ok()
     }
-    // Since signal-prompted progress printing is only availible on Linux so far, we allow unused
-    // variables to remove build warnings on Windows and other platforms.
-    // Remove when possible.
-    #[allow(unused_variables)]
-    fn register_signal_handlers(sigval: Arc<AtomicUsize>) -> Result<(), Box<dyn Error>> {
-        #[cfg(target_os = "linux")]
+    #[cfg(target_os = "linux")]
+    fn register_linux_signal_handler(sigval: Arc<AtomicUsize>) -> Result<(), Box<dyn Error>> {
         if !posixly_correct() {
             signal_hook::flag::register_usize(signal::SIGUSR1, sigval, SIGUSR1_USIZE)?;
         }
@@ -752,9 +755,11 @@ fn gen_prog_updater(rx: mpsc::Receiver<ProgUpdate>, print_level: Option<StatusLe
     }
     // --------------------------------------------------------------
     move || {
+        #[cfg(target_os = "linux")]
         let sigval = Arc::new(AtomicUsize::new(0));
 
-        register_signal_handlers(sigval.clone()).unwrap_or_else(|e| {
+        #[cfg(target_os = "linux")]
+        register_linux_signal_handler(sigval.clone()).unwrap_or_else(|e| {
             if Some(StatusLevel::None) != print_level {
                 eprintln!(
                     "Internal dd Warning: Unable to register signal handler \n\t{}",
