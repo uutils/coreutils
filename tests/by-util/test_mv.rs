@@ -522,14 +522,17 @@ fn test_mv_backup_off() {
 
 #[test]
 fn test_mv_backup_no_clobber_conflicting_options() {
-    let (_, mut ucmd) = at_and_ucmd!();
+    let ts = TestScenario::new(util_name!());
 
-    ucmd.arg("--backup")
+    ts.ucmd().arg("--backup")
         .arg("--no-clobber")
         .arg("file1")
         .arg("file2")
         .fails()
-        .stderr_is("mv: options --backup and --no-clobber are mutually exclusive\nTry 'mv --help' for more information.");
+        .stderr_is(&format!("{0}: options --backup and --no-clobber are mutually exclusive\nTry `{1} {0} --help` for more information.",
+            ts.util_name,
+            ts.bin_path.to_string_lossy()
+        ));
 }
 
 #[test]

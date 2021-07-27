@@ -22,10 +22,15 @@ fn test_negative_adjustment() {
 
 #[test]
 fn test_adjustment_with_no_command_should_error() {
-    new_ucmd!()
+    let ts = TestScenario::new(util_name!());
+
+    ts.ucmd()
     .args(&["-n", "19"])
     .run()
-    .stderr_is("nice: A command must be given with an adjustment.\nTry \"nice --help\" for more information.\n");
+    .stderr_is(&format!("{0}: A command must be given with an adjustment.\nTry `{1} {0} --help` for more information.\n",
+        ts.util_name,
+        ts.bin_path.to_string_lossy()
+    ));
 }
 
 #[test]

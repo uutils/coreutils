@@ -14,17 +14,20 @@ fn test_unlink_file() {
 
 #[test]
 fn test_unlink_multiple_files() {
-    let (at, mut ucmd) = at_and_ucmd!();
+    let ts = TestScenario::new(util_name!());
+
+    let (at, mut ucmd) = (ts.fixtures.clone(), ts.ucmd());
     let file_a = "test_unlink_multiple_file_a";
     let file_b = "test_unlink_multiple_file_b";
 
     at.touch(file_a);
     at.touch(file_b);
 
-    ucmd.arg(file_a).arg(file_b).fails().stderr_is(
-        "unlink: extra operand: 'test_unlink_multiple_file_b'\nTry 'unlink --help' \
-         for more information.\n",
-    );
+    ucmd.arg(file_a).arg(file_b).fails().stderr_is(&format!(
+        "{0}: extra operand: 'test_unlink_multiple_file_b'\nTry `{1} {0} --help` for more information.",
+        ts.util_name,
+        ts.bin_path.to_string_lossy()
+    ));
 }
 
 #[test]

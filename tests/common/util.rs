@@ -713,7 +713,7 @@ impl AtPath {
 ///
 /// Fixtures can be found under `tests/fixtures/$util_name/`
 pub struct TestScenario {
-    bin_path: PathBuf,
+    pub bin_path: PathBuf,
     pub util_name: String,
     pub fixtures: AtPath,
     tmpd: Rc<TempDir>,
