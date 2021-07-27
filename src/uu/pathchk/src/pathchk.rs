@@ -170,7 +170,7 @@ fn check_basic(path: &[String]) -> bool {
 fn check_extra(path: &[String]) -> bool {
     // components: leading hyphens
     for p in path {
-        if !no_leading_hyphen(p) {
+        if p.starts_with('-') {
             writeln!(
                 &mut std::io::stderr(),
                 "leading hyphen in file name component '{}'",
@@ -234,11 +234,6 @@ fn check_searchable(path: &str) -> bool {
             }
         }
     }
-}
-
-// check for a hyphen at the beginning of a path segment
-fn no_leading_hyphen(path_segment: &str) -> bool {
-    !path_segment.starts_with('-')
 }
 
 // check whether a path segment contains only valid (read: portable) characters
