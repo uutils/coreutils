@@ -45,7 +45,7 @@ static RUNLEVEL_HELP: &str = "print current runlevel";
 static RUNLEVEL_HELP: &str = "print current runlevel (This is meaningless on non Linux)";
 
 fn usage() -> String {
-    format!("{0} [OPTION]... [ FILE | ARG1 ARG2 ]", executable!())
+    format!("{0} [OPTION]... [ FILE | ARG1 ARG2 ]", execution_phrase!())
 }
 
 fn get_long_usage() -> String {

@@ -23,7 +23,7 @@ mod options {
 }
 
 fn usage() -> String {
-    format!("{0} [OPTION]... [USER]", executable!())
+    format!("{0} [OPTION]... [USER]", execution_phrase!())
 }
 
 #[uucore_procs::gen_uumain]
@@ -103,7 +103,7 @@ fn mkdir(path: &Path, recursive: bool, mode: u16, verbose: bool) -> UResult<()> 
     create_dir(path).map_err_context(|| format!("cannot create directory '{}'", path.display()))?;
 
     if verbose {
-        println!("{}: created directory '{}'", executable!(), path.display());
+        println!("{}: created directory '{}'", util_name!(), path.display());
     }
 
     chmod(path, mode)

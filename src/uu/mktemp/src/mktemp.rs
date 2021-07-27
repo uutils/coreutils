@@ -37,7 +37,7 @@ static OPT_T: &str = "t";
 static ARG_TEMPLATE: &str = "template";
 
 fn usage() -> String {
-    format!("{0} [OPTION]... [TEMPLATE]", executable!())
+    format!("{0} [OPTION]... [TEMPLATE]", execution_phrase!())
 }
 
 #[derive(Debug)]

@@ -63,7 +63,7 @@ pub fn guess_syntax() -> OutputFmt {
 }
 
 fn usage() -> String {
-    format!("{0} {1}", executable!(), SYNTAX)
+    format!("{0} {1}", execution_phrase!(), SYNTAX)
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {

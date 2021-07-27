@@ -28,7 +28,7 @@ static OPT_IGNORE: &str = "ignore";
 static ABOUT: &str = "Print the number of cores available to the current process.";
 
 fn usage() -> String {
-    format!("{0} [OPTIONS]...", executable!())
+    format!("{0} [OPTIONS]...", execution_phrase!())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {

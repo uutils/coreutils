@@ -48,7 +48,7 @@ fn local_tm_to_filetime(tm: time::Tm) -> FileTime {
 }
 
 fn usage() -> String {
-    format!("{0} [OPTION]... [USER]", executable!())
+    format!("{0} [OPTION]... [USER]", execution_phrase!())
 }
 
 #[uucore_procs::gen_uumain]

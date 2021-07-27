@@ -27,7 +27,7 @@ fn usage() -> String {
         "{0} [OPTION]... LAST
     {0} [OPTION]... FIRST LAST
     {0} [OPTION]... FIRST INCREMENT LAST",
-        executable!()
+        execution_phrase!()
     )
 }
 #[derive(Clone)]
@@ -72,13 +72,13 @@ impl FromStr for Number {
                 Ok(value) if value.is_nan() => Err(format!(
                     "invalid 'not-a-number' argument: '{}'\nTry `{} --help` for more information.",
                     s,
-                    executable!(),
+                    execution_phrase!(),
                 )),
                 Ok(value) => Ok(Number::F64(value)),
                 Err(_) => Err(format!(
                     "invalid floating point argument: '{}'\nTry `{} --help` for more information.",
                     s,
-                    executable!(),
+                    execution_phrase!(),
                 )),
             },
         }
@@ -123,7 +123,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         show_error!(
             "invalid Zero increment value: '{}'\nTry `{} --help` for more information.",
             numbers[1],
-            executable!()
+            execution_phrase!()
         );
         return 1;
     }

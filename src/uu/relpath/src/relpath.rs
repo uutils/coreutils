@@ -26,7 +26,7 @@ mod options {
 }
 
 fn usage() -> String {
-    format!("{} [-d DIR] TO [FROM]", executable!())
+    format!("{} [-d DIR] TO [FROM]", execution_phrase!())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {

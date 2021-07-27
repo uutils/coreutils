@@ -41,7 +41,7 @@ fn usage() -> String {
         "{0} [OPTION]... MODE[,MODE]... FILE...
 or: {0} [OPTION]... OCTAL-MODE FILE...
 or: {0} [OPTION]... --reference=RFILE FILE...",
-        executable!()
+        execution_phrase!()
     )
 }
 

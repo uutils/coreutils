@@ -29,7 +29,7 @@ mod options {
 fn usage() -> String {
     format!(
         "{0} {1}[SUFFIX]... \n    {0} OPTION",
-        executable!(),
+        execution_phrase!(),
         options::NUMBER
     )
 }

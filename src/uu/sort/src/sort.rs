@@ -52,7 +52,6 @@ use uucore::InvalidEncodingHandling;
 
 use crate::tmp_dir::TmpDirWrapper;
 
-const NAME: &str = "sort";
 const ABOUT: &str = "Display sorted concatenation of all FILE(s).";
 
 const LONG_HELP_KEYS: &str = "The key format is FIELD[.CHAR][OPTIONS][,FIELD[.CHAR]][OPTIONS].
@@ -1061,7 +1060,7 @@ fn usage() -> String {
 Write the sorted concatenation of all FILE(s) to standard output.
 Mandatory arguments for long options are mandatory for short options too.
 With no FILE, or when FILE is -, read standard input.",
-        NAME
+        execution_phrase!()
     )
 }
 

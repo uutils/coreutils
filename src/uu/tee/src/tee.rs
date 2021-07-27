@@ -33,7 +33,7 @@ struct Options {
 }
 
 fn usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", executable!())
+    format!("{0} [OPTION]... [FILE]...", execution_phrase!())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {

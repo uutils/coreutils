@@ -35,7 +35,7 @@ mod options {
 }
 
 fn usage() -> String {
-    format!("{0} [OPTION]... FILE PATTERN...", executable!())
+    format!("{0} [OPTION]... FILE PATTERN...", execution_phrase!())
 }
 
 /// Command line options for csplit.

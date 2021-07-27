@@ -20,7 +20,7 @@ static OPT_NULL: &str = "null";
 static ARG_VARIABLES: &str = "variables";
 
 fn usage() -> String {
-    format!("{0} [VARIABLE]... [OPTION]...", executable!())
+    format!("{0} [VARIABLE]... [OPTION]...", execution_phrase!())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {

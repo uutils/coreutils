@@ -51,7 +51,7 @@ static OPT_TAB_WIDTH: &str = "tab-width";
 static ARG_FILES: &str = "files";
 
 fn usage() -> String {
-    format!("{} [OPTION]... [FILE]...", executable!())
+    format!("{} [OPTION]... [FILE]...", execution_phrase!())
 }
 
 pub type FileOrStdReader = BufReader<Box<dyn Read + 'static>>;

@@ -20,7 +20,7 @@ pub mod options {
 }
 
 fn usage() -> String {
-    format!("{0} FILE1 FILE2", executable!())
+    format!("{0} FILE1 FILE2", execution_phrase!())
 }
 
 pub fn normalize_error_message(e: Error) -> String {

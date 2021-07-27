@@ -51,7 +51,7 @@ Multiple fields/ranges can be separated with commas
 ";
 
 fn usage() -> String {
-    format!("{0} [OPTION]... [NUMBER]...", executable!())
+    format!("{0} [OPTION]... [NUMBER]...", execution_phrase!())
 }
 
 fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: NumfmtOptions) -> Result<()> {

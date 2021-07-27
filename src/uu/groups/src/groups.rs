@@ -29,7 +29,7 @@ static ABOUT: &str = "Print group memberships for each USERNAME or, \
                       (which may differ if the groups data‐base has changed).";
 
 fn usage() -> String {
-    format!("{0} [OPTION]... [USERNAME]...", executable!())
+    format!("{0} [OPTION]... [USERNAME]...", execution_phrase!())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {

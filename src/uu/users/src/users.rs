@@ -19,7 +19,7 @@ static ABOUT: &str = "Print the user names of users currently logged in to the c
 static ARG_FILES: &str = "files";
 
 fn usage() -> String {
-    format!("{0} [FILE]", executable!())
+    format!("{0} [FILE]", execution_phrase!())
 }
 
 fn get_long_usage() -> String {

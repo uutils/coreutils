@@ -89,7 +89,7 @@ impl Display for InstallError {
             IE::DirNeedsArg() => write!(
                 f,
                 "{} with -d requires at least one argument.",
-                executable!()
+                util_name!()
             ),
             IE::CreateDirFailed(dir, e) => {
                 Display::fmt(&uio_error!(e, "failed to create {}", dir.display()), f)
@@ -173,7 +173,7 @@ static OPT_CONTEXT: &str = "context";
 static ARG_FILES: &str = "files";
 
 fn usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", executable!())
+    format!("{0} [OPTION]... [FILE]...", execution_phrase!())
 }
 
 /// Main install utility function, called from main.rs.

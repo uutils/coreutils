@@ -54,7 +54,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 fn usage() -> String {
-    format!("{0} [OPTION]... [HOSTNAME]", executable!())
+    format!("{0} [OPTION]... [HOSTNAME]", execution_phrase!())
 }
 
 fn execute(args: impl uucore::Args) -> UResult<()> {

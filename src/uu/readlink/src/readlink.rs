@@ -16,7 +16,6 @@ use std::io::{stdout, Write};
 use std::path::{Path, PathBuf};
 use uucore::fs::{canonicalize, CanonicalizeMode};
 
-const NAME: &str = "readlink";
 const ABOUT: &str = "Print value of a symbolic link or canonical file name.";
 const OPT_CANONICALIZE: &str = "canonicalize";
 const OPT_CANONICALIZE_MISSING: &str = "canonicalize-missing";
@@ -30,7 +29,7 @@ const OPT_ZERO: &str = "zero";
 const ARG_FILES: &str = "files";
 
 fn usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", executable!())
+    format!("{0} [OPTION]... [FILE]...", execution_phrase!())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
@@ -60,12 +59,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         crash!(
             1,
             "missing operand\nTry `{} --help` for more information",
-            NAME
+            execution_phrase!()
         );
     }
 
     if no_newline && files.len() > 1 && !silent {
-        eprintln!("{}: ignoring --no-newline with multiple arguments", NAME);
+        eprintln!(
+            "{}: ignoring --no-newline with multiple arguments",
+            util_name!()
+        );
         no_newline = false;
     }
 
@@ -76,7 +78,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 Ok(path) => show(&path, no_newline, use_zero),
                 Err(err) => {
                     if verbose {
-                        eprintln!("{}: {}: errno {}", NAME, f, err.raw_os_error().unwrap());
+                        eprintln!(
+                            "{}: {}: errno {}",
+                            util_name!(),
+                            f,
+                            err.raw_os_error().unwrap()
+                        );
                     }
                     return 1;
                 }
@@ -86,7 +93,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 Ok(path) => show(&path, no_newline, use_zero),
                 Err(err) => {
                     if verbose {
-                        eprintln!("{}: {}: errno {:?}", NAME, f, err.raw_os_error().unwrap());
+                        eprintln!(
+                            "{}: {}: errno {:?}",
+                            util_name!(),
+                            f,
+                            err.raw_os_error().unwrap()
+                        );
                     }
                     return 1;
                 }

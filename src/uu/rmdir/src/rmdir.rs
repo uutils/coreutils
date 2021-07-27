@@ -27,7 +27,7 @@ static ENOTDIR: i32 = 20;
 static ENOTDIR: i32 = 267;
 
 fn usage() -> String {
-    format!("{0} [OPTION]... DIRECTORY...", executable!())
+    format!("{0} [OPTION]... DIRECTORY...", execution_phrase!())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {

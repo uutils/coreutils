@@ -63,7 +63,7 @@ fn usage() -> String {
         "{0} [OPTION]... [-T] SOURCE DEST
 {0} [OPTION]... SOURCE... DIRECTORY
 {0} [OPTION]... -t DIRECTORY SOURCE...",
-        executable!()
+        execution_phrase!()
     )
 }
 
@@ -296,7 +296,7 @@ fn exec(files: &[PathBuf], b: Behavior) -> i32 {
                     "mv: extra operand '{}'\n\
                      Try `{} --help` for more information.",
                     files[2].display(),
-                    executable!()
+                    execution_phrase!()
                 );
                 return 1;
             }
@@ -353,7 +353,7 @@ fn rename(from: &Path, to: &Path, b: &Behavior) -> io::Result<()> {
         match b.overwrite {
             OverwriteMode::NoClobber => return Ok(()),
             OverwriteMode::Interactive => {
-                println!("{}: overwrite '{}'? ", executable!(), to.display());
+                println!("{}: overwrite '{}'? ", util_name!(), to.display());
                 if !read_yes() {
                     return Ok(());
                 }

@@ -70,7 +70,7 @@ impl Display for LnError {
                 f,
                 "extra operand '{}'\nTry `{} --help` for more information.",
                 s,
-                executable!()
+                execution_phrase!()
             ),
             Self::InvalidBackupMode(s) => write!(f, "{}", s),
         }
@@ -98,7 +98,7 @@ fn usage() -> String {
        {0} [OPTION]... TARGET                  (2nd form)
        {0} [OPTION]... TARGET... DIRECTORY     (3rd form)
        {0} [OPTION]... -t DIRECTORY TARGET...  (4th form)",
-        executable!()
+        execution_phrase!()
     )
 }
 
@@ -431,7 +431,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> Result<()> {
         match settings.overwrite {
             OverwriteMode::NoClobber => {}
             OverwriteMode::Interactive => {
-                print!("{}: overwrite '{}'? ", executable!(), dst.display());
+                print!("{}: overwrite '{}'? ", util_name!(), dst.display());
                 if !read_yes() {
                     return Ok(());
                 }

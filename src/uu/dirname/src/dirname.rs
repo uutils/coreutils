@@ -21,7 +21,7 @@ mod options {
 }
 
 fn usage() -> String {
-    format!("{0} [OPTION] NAME...", executable!())
+    format!("{0} [OPTION] NAME...", execution_phrase!())
 }
 
 fn get_long_usage() -> String {

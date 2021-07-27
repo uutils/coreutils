@@ -25,7 +25,6 @@ enum Mode {
     Both,    // a combination of `Basic` and `Extra`
 }
 
-static NAME: &str = "pathchk";
 static ABOUT: &str = "Check whether file names are valid or portable";
 
 mod options {
@@ -40,7 +39,7 @@ const POSIX_PATH_MAX: usize = 256;
 const POSIX_NAME_MAX: usize = 14;
 
 fn usage() -> String {
-    format!("{0} [OPTION]... NAME...", executable!())
+    format!("{0} [OPTION]... NAME...", execution_phrase!())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
@@ -71,7 +70,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let mut res = if paths.is_none() {
         show_error!(
             "missing operand\nTry `{} --help` for more information",
-            NAME
+            execution_phrase!()
         );
         false
     } else {

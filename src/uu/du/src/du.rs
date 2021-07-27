@@ -396,7 +396,7 @@ fn usage() -> String {
     format!(
         "{0} [OPTION]... [FILE]...
     {0} [OPTION]... --files0-from=F",
-        executable!()
+        execution_phrase!()
     )
 }
 
@@ -424,7 +424,7 @@ Valid arguments are:
 - 'iso'
 Try `{} --help` for more information.",
                 s,
-                executable!()
+                execution_phrase!()
             ),
             DuError::InvalidTimeArg(s) => write!(
                 f,

@@ -24,7 +24,7 @@ mod options {
 }
 
 fn usage() -> String {
-    format!("{0} [OPTION]...", executable!())
+    format!("{0} [OPTION]...", execution_phrase!())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {

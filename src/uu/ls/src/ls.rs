@@ -47,7 +47,7 @@ use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 use uucore::{fs::display_permissions, version_cmp::version_cmp};
 
 fn usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", executable!())
+    format!("{0} [OPTION]... [FILE]...", execution_phrase!())
 }
 
 pub mod options {

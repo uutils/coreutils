@@ -32,7 +32,7 @@ mod options {
 }
 
 fn usage() -> String {
-    format!("{} [OPTION]... FILE1 FILE2", executable!())
+    format!("{} [OPTION]... FILE1 FILE2", execution_phrase!())
 }
 
 fn mkdelim(col: usize, opts: &ArgMatches) -> String {

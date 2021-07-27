@@ -62,7 +62,7 @@ const FTS_LOGICAL: u8 = 1 << 2;
 fn usage() -> String {
     format!(
         "{0} [OPTION]... GROUP FILE...\n    {0} [OPTION]... --reference=RFILE FILE...",
-        executable!()
+        execution_phrase!()
     )
 }
 

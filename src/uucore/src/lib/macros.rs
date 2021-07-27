@@ -125,7 +125,7 @@ macro_rules! show_usage_error(
     ($($args:tt)+) => ({
         eprint!("{}: ", $crate::util_name!());
         eprintln!($($args)+);
-        eprintln!("Try `{:?} --help` for more information.", $crate::executable!());
+        eprintln!("Try `{} --help` for more information.", $crate::execution_phrase!());
     })
 );
 

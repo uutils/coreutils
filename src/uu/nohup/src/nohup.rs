@@ -157,7 +157,7 @@ fn find_stdout() -> File {
 }
 
 fn usage() -> String {
-    format!("{0} COMMAND [ARG]...\n    {0} FLAG", executable!())
+    format!("{0} COMMAND [ARG]...\n    {0} FLAG", execution_phrase!())
 }
 
 #[cfg(target_vendor = "apple")]

@@ -99,7 +99,7 @@ quick_error! {
         NotImplemented(opt: String) { display("Option '{}' not yet implemented.", opt) }
 
         /// Invalid arguments to backup
-        Backup(description: String) { display("{}\nTry `{} --help` for more information.", description, executable!()) }
+        Backup(description: String) { display("{}\nTry `{} --help` for more information.", description, execution_phrase!()) }
     }
 }
 
@@ -223,7 +223,7 @@ fn usage() -> String {
         "{0} [OPTION]... [-T] SOURCE DEST
     {0} [OPTION]... SOURCE... DIRECTORY
     {0} [OPTION]... -t DIRECTORY SOURCE...",
-        executable!()
+        execution_phrase!()
     )
 }
 
@@ -1060,7 +1060,7 @@ impl OverwriteMode {
         match *self {
             OverwriteMode::NoClobber => Err(Error::NotAllFilesCopied),
             OverwriteMode::Interactive(_) => {
-                if prompt_yes!("{}: overwrite {}? ", executable!(), path.display()) {
+                if prompt_yes!("{}: overwrite {}? ", util_name!(), path.display()) {
                     Ok(())
                 } else {
                     Err(Error::Skipped(format!(

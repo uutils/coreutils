@@ -48,7 +48,7 @@ mod options {
 }
 
 fn usage() -> String {
-    format!("{0} OPTION... COMMAND", executable!())
+    format!("{0} OPTION... COMMAND", execution_phrase!())
 }
 
 const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.so"));
@@ -161,7 +161,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             125,
             "{}\nTry `{} --help` for more information.",
             e.0,
-            executable!()
+            execution_phrase!()
         )
     });
 

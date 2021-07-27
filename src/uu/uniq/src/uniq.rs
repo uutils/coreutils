@@ -222,7 +222,7 @@ fn opt_parsed<T: FromStr>(opt_name: &str, matches: &ArgMatches) -> Option<T> {
 }
 
 fn usage() -> String {
-    format!("{0} [OPTION]... [INPUT [OUTPUT]]...", executable!())
+    format!("{0} [OPTION]... [INPUT [OUTPUT]]...", execution_phrase!())
 }
 
 fn get_long_usage() -> String {

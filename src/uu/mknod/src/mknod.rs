@@ -18,7 +18,6 @@ use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOT
 
 use uucore::InvalidEncodingHandling;
 
-static NAME: &str = "mknod";
 static ABOUT: &str = "Create the special file NAME of the given TYPE.";
 static USAGE: &str = "mknod [OPTION]... NAME TYPE [MAJOR MINOR]";
 static LONG_HELP: &str = "Mandatory arguments to long options are mandatory for short options too.
@@ -72,7 +71,8 @@ fn _mknod(file_name: &str, mode: mode_t, dev: dev_t) -> i32 {
         }
 
         if errno == -1 {
-            let c_str = CString::new(NAME).expect("Failed to convert to CString");
+            let c_str =
+                CString::new(execution_phrase!().as_bytes()).expect("Failed to convert to CString");
             // shows the error from the mknod syscall
             libc::perror(c_str.as_ptr());
         }
@@ -113,7 +113,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if ch == 'p' {
         if matches.is_present("major") || matches.is_present("minor") {
             eprintln!("Fifos do not have major and minor device numbers.");
-            eprintln!("Try `{} --help` for more information.", NAME);
+            eprintln!("Try `{} --help` for more information.", execution_phrase!());
             1
         } else {
             _mknod(file_name, S_IFIFO | mode, 0)
@@ -122,7 +122,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         match (matches.value_of("major"), matches.value_of("minor")) {
             (None, None) | (_, None) | (None, _) => {
                 eprintln!("Special files require major and minor device numbers.");
-                eprintln!("Try `{} --help` for more information.", NAME);
+                eprintln!("Try `{} --help` for more information.", execution_phrase!());
                 1
             }
             (Some(major), Some(minor)) => {

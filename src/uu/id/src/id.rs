@@ -77,7 +77,7 @@ mod options {
 }
 
 fn usage() -> String {
-    format!("{0} [OPTION]... [USER]...", executable!())
+    format!("{0} [OPTION]... [USER]...", execution_phrase!())
 }
 
 fn get_description() -> String {

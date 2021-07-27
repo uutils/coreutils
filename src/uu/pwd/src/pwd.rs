@@ -35,7 +35,7 @@ pub fn absolute_path(path: &Path) -> io::Result<PathBuf> {
 }
 
 fn usage() -> String {
-    format!("{0} [OPTION]... FILE...", executable!())
+    format!("{0} [OPTION]... FILE...", execution_phrase!())
 }
 
 #[uucore_procs::gen_uumain]

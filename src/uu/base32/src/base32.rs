@@ -29,13 +29,13 @@ static VERSION: &str = env!("CARGO_PKG_VERSION");
 static BASE_CMD_PARSE_ERROR: i32 = 1;
 
 fn usage() -> String {
-    format!("{0} [OPTION]... [FILE]", executable!())
+    format!("{0} [OPTION]... [FILE]", execution_phrase!())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let format = Format::Base32;
     let usage = usage();
-    let name = executable!();
+    let name = util_name!();
 
     let config_result: Result<base_common::Config, String> =
         base_common::parse_base_cmd_args(args, name, VERSION, ABOUT, &usage);
@@ -59,5 +59,5 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    base_common::base_app(executable!(), VERSION, ABOUT)
+    base_common::base_app(util_name!(), VERSION, ABOUT)
 }

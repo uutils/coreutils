@@ -140,5 +140,5 @@ Environment variables:
 }
 
 fn print_version() {
-    println!("{} {}", executable!(), crate_version!());
+    println!("{} {}", util_name!(), crate_version!());
 }

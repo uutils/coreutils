@@ -33,7 +33,7 @@ static LONG_HELP: &str = "";
 static DEFAULT_TABSTOP: usize = 8;
 
 fn usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", executable!())
+    format!("{0} [OPTION]... [FILE]...", execution_phrase!())
 }
 
 /// The mode to use when replacing tabs beyond the last one specified in

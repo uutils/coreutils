@@ -21,7 +21,7 @@ fn usage() -> String {
     format!(
         "{0} NAME [SUFFIX]
     {0} OPTION... NAME...",
-        executable!()
+        execution_phrase!()
     )
 }
 
@@ -47,7 +47,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         crash!(
             1,
             "{1}\nTry `{0} --help` for more information.",
-            executable!(),
+            execution_phrase!(),
             "missing operand"
         );
     }
@@ -61,7 +61,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         crash!(
             1,
             "extra operand '{1}'\nTry `{0} --help` for more information.",
-            executable!(),
+            execution_phrase!(),
             matches.values_of(options::NAME).unwrap().nth(2).unwrap()
         );
     }

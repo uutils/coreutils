@@ -16,9 +16,8 @@ use std::io::Error;
 use std::path::Path;
 use std::process::Command;
 use uucore::libc::{self, chroot, setgid, setgroups, setuid};
-use uucore::{entries, InvalidEncodingHandling};
+use uucore::{entries, execution_phrase, InvalidEncodingHandling};
 
-static NAME: &str = "chroot";
 static ABOUT: &str = "Run COMMAND with root directory set to NEWROOT.";
 static SYNTAX: &str = "[OPTION]... NEWROOT [COMMAND [ARG]...]";
 
@@ -47,7 +46,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         None => crash!(
             1,
             "Missing operand: NEWROOT\nTry `{} --help` for more information.",
-            NAME
+            execution_phrase!()
         ),
     };
 

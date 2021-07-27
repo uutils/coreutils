@@ -80,7 +80,7 @@ struct Filesystem {
 }
 
 fn usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", executable!())
+    format!("{0} [OPTION]... [FILE]...", execution_phrase!())
 }
 
 impl FsSelector {
@@ -295,7 +295,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     #[cfg(windows)]
     {
         if matches.is_present(OPT_INODES) {
-            println!("{}: doesn't support -i option", executable!());
+            println!("{}: doesn't support -i option", util_name!());
             return Ok(());
         }
     }

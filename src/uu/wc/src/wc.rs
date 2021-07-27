@@ -99,7 +99,7 @@ fn usage() -> String {
     format!(
         "{0} [OPTION]... [FILE]...
  With no FILE, or when FILE is -, read standard input.",
-        executable!()
+        execution_phrase!()
     )
 }
 

@@ -214,7 +214,7 @@ for even very expensive hardware probing to recover the data.
 ";
 
 fn usage() -> String {
-    format!("{} [OPTION]... FILE...", executable!())
+    format!("{} [OPTION]... FILE...", execution_phrase!())
 }
 
 static AFTER_HELP: &str =

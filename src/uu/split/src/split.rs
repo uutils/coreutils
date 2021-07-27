@@ -21,8 +21,6 @@ use std::path::Path;
 use std::{char, fs::remove_file};
 use uucore::parse_size::parse_size;
 
-static NAME: &str = "split";
-
 static OPT_BYTES: &str = "bytes";
 static OPT_LINE_BYTES: &str = "line-bytes";
 static OPT_LINES: &str = "lines";
@@ -37,7 +35,7 @@ static ARG_INPUT: &str = "input";
 static ARG_PREFIX: &str = "prefix";
 
 fn usage() -> String {
-    format!("{0} [OPTION]... [INPUT [PREFIX]]", NAME)
+    format!("{0} [OPTION]... [INPUT [PREFIX]]", execution_phrase!())
 }
 fn get_long_usage() -> String {
     format!(
