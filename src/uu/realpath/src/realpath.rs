@@ -19,6 +19,8 @@ static ABOUT: &str = "print the resolved path";
 static OPT_QUIET: &str = "quiet";
 static OPT_STRIP: &str = "strip";
 static OPT_ZERO: &str = "zero";
+static OPT_LOGICAL: &str = "logical";
+static OPT_PHYSICAL: &str = "physical";
 
 static ARG_FILES: &str = "files";
 
@@ -42,9 +44,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let strip = matches.is_present(OPT_STRIP);
     let zero = matches.is_present(OPT_ZERO);
     let quiet = matches.is_present(OPT_QUIET);
+    let logical = matches.is_present(OPT_LOGICAL);
+    let physical = matches.is_present(OPT_PHYSICAL);
+    // If neither `-P` nor `-L` are present, use the default behavior `-P`.
+    let logical = logical && !physical;
     let mut retcode = 0;
     for path in &paths {
-        if let Err(e) = resolve_path(path, strip, zero) {
+        if let Err(e) = resolve_path(path, strip, zero, logical) {
             if !quiet {
                 show_error!("{}: {}", e, path.display());
             }
@@ -58,6 +64,22 @@ pub fn uu_app() -> App<'static, 'static> {
     App::new(executable!())
         .version(crate_version!())
         .about(ABOUT)
+        .arg(
+            Arg::with_name(OPT_LOGICAL)
+                .short("L")
+                .long(OPT_LOGICAL)
+                .help("resolve '..' components before symlinks")
+                .takes_value(false)
+                .overrides_with(OPT_PHYSICAL),
+        )
+        .arg(
+            Arg::with_name(OPT_PHYSICAL)
+                .short("P")
+                .long(OPT_PHYSICAL)
+                .help("resolve symlinks as encountered (default)")
+                .takes_value(false)
+                .overrides_with(OPT_LOGICAL),
+        )
         .arg(
             Arg::with_name(OPT_QUIET)
                 .short("q")
@@ -88,21 +110,25 @@ pub fn uu_app() -> App<'static, 'static> {
 /// Resolve a path to an absolute form and print it.
 ///
 /// If `strip` is `true`, then this function does not attempt to resolve
-/// symbolic links in the path. If `zero` is `true`, then this function
-/// prints the path followed by the null byte (`'\0'`) instead of a
-/// newline character (`'\n'`).
+/// symbolic links in the path.
+///
+/// If `zero` is `true`, then this function prints the path followed by
+/// the null byte (`'\0'`) instead of a newline character (`'\n'`).
+///
+/// If `logical` is `true`, then this function resolves ".." components
+/// before symbolic links.
 ///
 /// # Errors
 ///
 /// This function returns an error if there is a problem resolving
 /// symbolic links.
-fn resolve_path(p: &Path, strip: bool, zero: bool) -> std::io::Result<()> {
+fn resolve_path(p: &Path, strip: bool, zero: bool, logical: bool) -> std::io::Result<()> {
     let mode = if strip {
         CanonicalizeMode::None
     } else {
         CanonicalizeMode::Normal
     };
-    let abs = canonicalize(p, mode, true)?;
+    let abs = canonicalize(p, mode, logical)?;
     let line_ending = if zero { '\0' } else { '\n' };
     print!("{}{}", abs.display(), line_ending);
     Ok(())
