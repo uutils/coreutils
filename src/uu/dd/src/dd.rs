@@ -37,9 +37,9 @@ use std::io::{self, Read, Seek, Write};
 #[cfg(target_os = "linux")]
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
+use std::sync::mpsc;
 #[cfg(target_os = "linux")]
-use std::sync::atomic::Ordering;
-use std::sync::{atomic::AtomicUsize, mpsc, Arc};
+use std::sync::{atomic::AtomicUsize, atomic::Ordering, Arc};
 use std::thread;
 use std::time;
 
@@ -47,7 +47,11 @@ const ABOUT: &str = "copy, and optionally convert, a file system resource";
 const BUF_INIT_BYTE: u8 = 0xDD;
 const RTN_SUCCESS: i32 = 0;
 const RTN_FAILURE: i32 = 1;
-const SYSTEM_NEWLINE: &[u8] = if cfg!(target_os = "windows") { b"\r\n" } else { b"\n" };
+const SYSTEM_NEWLINE: &[u8] = if cfg!(target_os = "windows") {
+    b"\r\n"
+} else {
+    b"\n"
+};
 
 struct Input<R: Read> {
     src: R,
@@ -490,13 +494,13 @@ impl Output<File> {
 /// Expects ascii encoded data
 fn block(buf: Vec<u8>, cbs: usize, rstat: &mut ReadStat) -> Vec<Vec<u8>> {
     let mut blocks = buf
-        .split(| &e | e == b'\n')
-        .map(| split | {
+        .split(|&e| e == b'\n')
+        .map(|split| {
             if cfg!(target_os = "windows") {
                 // Since newlines are LF ('\n') in Unix and CR+LF ("\r\n") on Windows,
                 // the split above will leave a trailing CR on Windows.
                 // This must be removed before proceeding.
-                split[..split.len()-1].to_vec()
+                split[..split.len() - 1].to_vec()
             } else {
                 split.to_vec()
             }
