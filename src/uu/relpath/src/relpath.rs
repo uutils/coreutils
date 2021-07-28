@@ -42,12 +42,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         Some(p) => Path::new(p).to_path_buf(),
         None => env::current_dir().unwrap(),
     };
-    let absto = canonicalize(to, CanonicalizeMode::Normal).unwrap();
-    let absfrom = canonicalize(from, CanonicalizeMode::Normal).unwrap();
+    let absto = canonicalize(to, CanonicalizeMode::Normal, true).unwrap();
+    let absfrom = canonicalize(from, CanonicalizeMode::Normal, true).unwrap();
 
     if matches.is_present(options::DIR) {
         let base = Path::new(&matches.value_of(options::DIR).unwrap()).to_path_buf();
-        let absbase = canonicalize(base, CanonicalizeMode::Normal).unwrap();
+        let absbase = canonicalize(base, CanonicalizeMode::Normal, true).unwrap();
         if !absto.as_path().starts_with(absbase.as_path())
             || !absfrom.as_path().starts_with(absbase.as_path())
         {

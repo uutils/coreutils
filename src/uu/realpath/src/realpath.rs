@@ -102,7 +102,7 @@ fn resolve_path(p: &Path, strip: bool, zero: bool) -> std::io::Result<()> {
     } else {
         CanonicalizeMode::Normal
     };
-    let abs = canonicalize(p, mode)?;
+    let abs = canonicalize(p, mode, true)?;
     let line_ending = if zero { '\0' } else { '\n' };
     print!("{}{}", abs.display(), line_ending);
     Ok(())

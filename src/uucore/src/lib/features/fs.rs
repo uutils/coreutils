@@ -102,10 +102,19 @@ pub fn normalize_path(path: &Path) -> PathBuf {
     ret
 }
 
-fn resolve<P: AsRef<Path>>(original: P) -> IOResult<PathBuf> {
+fn resolve<P: AsRef<Path>>(original: P, resolve_parents: bool) -> IOResult<PathBuf> {
     const MAX_LINKS_FOLLOWED: u32 = 255;
     let mut followed = 0;
     let mut result = original.as_ref().to_path_buf();
+
+    if resolve_parents {
+        // TODO Error handling.
+        while result.components().last().unwrap() == Component::ParentDir {
+            result.pop();
+            result.pop();
+        }
+    }
+
     loop {
         if followed == MAX_LINKS_FOLLOWED {
             return Err(Error::new(
@@ -136,7 +145,7 @@ fn get_absolute(path: &Path) -> IOResult<PathBuf> {
     }
 }
 
-fn get_parts(path: &Path) -> (Option<&OsStr>, Vec<&OsStr>) {
+fn get_parts(path: &Path, resolve_parents: bool) -> (Option<&OsStr>, Vec<&OsStr>) {
     let mut parts = vec![];
 
     // Split path by directory separator; add prefix (Windows-only) and root
@@ -148,7 +157,11 @@ fn get_parts(path: &Path) -> (Option<&OsStr>, Vec<&OsStr>) {
             Component::Prefix(_) | Component::RootDir => prefix = Some(part.as_os_str()),
             Component::CurDir => (),
             Component::ParentDir => {
-                parts.pop();
+                if resolve_parents {
+                    parts.pop();
+                } else {
+                    parts.push(part.as_os_str());
+                }
             }
             Component::Normal(_) => {
                 parts.push(part.as_os_str());
@@ -181,10 +194,16 @@ where
 ///
 /// `mode` specifies the strategy to use to resolve links and/or handle
 /// errors that occur.
+///
+/// If `resolve_parents` is `true`, then this function will resolve ".."
+/// components that appear in `parts` by traversing to the parent
+/// directory. If `false`, the ".." components will just be added to
+/// `result` unresolved.
 fn resolve_all_links(
     result: &mut PathBuf,
     parts: Vec<&OsStr>,
     mode: CanonicalizeMode,
+    resolve_parents: bool,
 ) -> IOResult<()> {
     // As a pre-condition of calling this function, `result` must be an
     // absolute path. In the code below, we will repeatedly add a
@@ -201,7 +220,7 @@ fn resolve_all_links(
         CanonicalizeMode::Missing => {
             for part in parts {
                 result.push(part);
-                if let Ok(path) = resolve(&result) {
+                if let Ok(path) = resolve(&result, resolve_parents) {
                     *result = path;
                 }
             }
@@ -210,7 +229,7 @@ fn resolve_all_links(
         CanonicalizeMode::Existing => {
             for part in parts {
                 result.push(part);
-                *result = resolve(&result)?;
+                *result = resolve(&result, resolve_parents)?;
             }
         }
         // Resolve all links, propagating errors on all but the last component.
@@ -218,11 +237,11 @@ fn resolve_all_links(
             let n = parts.len();
             for part in &parts[..n - 1] {
                 result.push(part);
-                *result = resolve(&result)?;
+                *result = resolve(&result, resolve_parents)?;
             }
             let p = parts.last().unwrap();
             result.push(p);
-            if let Ok(path) = resolve(&result) {
+            if let Ok(path) = resolve(&result, resolve_parents) {
                 *result = path;
             }
         }
@@ -248,12 +267,22 @@ fn resolve_all_links(
 /// * [`CanonicalizeMode::None`] makes this function not try to resolve
 ///   any symbolic links.
 ///
-pub fn canonicalize<P: AsRef<Path>>(original: P, can_mode: CanonicalizeMode) -> IOResult<PathBuf> {
+/// If `logical` is set to `true`, then ".." entries are resolved
+/// *before* symbolic links are resolved. If `logical` is set to
+/// `false`, then ".." entries are resolved *after* symbolic links are
+/// resolved.
+pub fn canonicalize<P: AsRef<Path>>(
+    original: P,
+    can_mode: CanonicalizeMode,
+    logical: bool,
+) -> IOResult<PathBuf> {
     // Get the absolute path. For example, convert "a/b" into "/a/b".
     let absolute_path = get_absolute(original.as_ref())?;
 
-    // Convert the absolute path into its components, resolving ".." entries.
-    let (maybe_prefix, parts) = get_parts(&absolute_path);
+    // Convert the absolute path into its components, resolving ".."
+    // entries if requested.
+    let resolve_parents = logical;
+    let (maybe_prefix, parts) = get_parts(&absolute_path, resolve_parents);
 
     // If there is a prefix, insert it into the `PathBuf` as the first element.
     let mut result = PathBuf::new();
@@ -266,10 +295,11 @@ pub fn canonicalize<P: AsRef<Path>>(original: P, can_mode: CanonicalizeMode) -> 
         return Ok(result);
     }
 
-    // Resolve all links in the path.
+    // Resolve all links in the path, resolving ".." entries if requested.
     //
     // This function modifies `result` in-place.
-    resolve_all_links(&mut result, parts, can_mode)?;
+    let resolve_parents = !logical;
+    resolve_all_links(&mut result, parts, can_mode, resolve_parents)?;
     Ok(result)
 }
 
