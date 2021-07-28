@@ -101,10 +101,19 @@ pub fn normalize_path(path: &Path) -> PathBuf {
     ret
 }
 
-fn resolve<P: AsRef<Path>>(original: P) -> IOResult<PathBuf> {
+fn resolve<P: AsRef<Path>>(original: P, resolve_parents: bool) -> IOResult<PathBuf> {
     const MAX_LINKS_FOLLOWED: u32 = 255;
     let mut followed = 0;
     let mut result = original.as_ref().to_path_buf();
+
+    if resolve_parents {
+        // TODO Error handling.
+        while result.components().last().unwrap() == Component::ParentDir {
+            result.pop();
+            result.pop();
+        }
+    }
+
     loop {
         if followed == MAX_LINKS_FOLLOWED {
             return Err(Error::new(
@@ -143,7 +152,15 @@ fn resolve<P: AsRef<Path>>(original: P) -> IOResult<PathBuf> {
 /// * [`CanonicalizeMode::None`] makes this function not try to resolve
 ///   any symbolic links.
 ///
-pub fn canonicalize<P: AsRef<Path>>(original: P, can_mode: CanonicalizeMode) -> IOResult<PathBuf> {
+/// If `logical` is set to `true`, then ".." entries are resolved
+/// *before* symbolic links are resolved. If `logical` is set to
+/// `false`, then ".." entries are resolved *after* symbolic links are
+/// resolved.
+pub fn canonicalize<P: AsRef<Path>>(
+    original: P,
+    can_mode: CanonicalizeMode,
+    logical: bool,
+) -> IOResult<PathBuf> {
     // Create an absolute path
     let original = original.as_ref();
     let original = if original.is_absolute() {
@@ -167,7 +184,11 @@ pub fn canonicalize<P: AsRef<Path>>(original: P, can_mode: CanonicalizeMode) -> 
             }
             Component::CurDir => (),
             Component::ParentDir => {
-                parts.pop();
+                if logical {
+                    parts.pop();
+                } else {
+                    parts.push(part.as_os_str());
+                }
             }
             Component::Normal(_) => {
                 parts.push(part.as_os_str());
@@ -184,7 +205,7 @@ pub fn canonicalize<P: AsRef<Path>>(original: P, can_mode: CanonicalizeMode) -> 
                 continue;
             }
 
-            match resolve(&result) {
+            match resolve(&result, !logical) {
                 Err(_) if can_mode == CanonicalizeMode::Missing => continue,
                 Err(e) => return Err(e),
                 Ok(path) => {
@@ -200,7 +221,7 @@ pub fn canonicalize<P: AsRef<Path>>(original: P, can_mode: CanonicalizeMode) -> 
             return Ok(result);
         }
 
-        match resolve(&result) {
+        match resolve(&result, !logical) {
             Err(e) if can_mode == CanonicalizeMode::Existing => {
                 return Err(e);
             }

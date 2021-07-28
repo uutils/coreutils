@@ -82,7 +82,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 }
             }
         } else {
-            match canonicalize(&p, can_mode) {
+            match canonicalize(&p, can_mode, true) {
                 Ok(path) => show(&path, no_newline, use_zero),
                 Err(err) => {
                     if verbose {
