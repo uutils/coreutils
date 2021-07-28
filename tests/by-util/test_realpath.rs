@@ -106,3 +106,88 @@ fn test_realpath_file_and_links_strip_zero() {
         .succeeds()
         .stdout_contains("bar\u{0}");
 }
+
+#[test]
+fn test_logical() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("dir1");
+    at.mkdir("dir1/dir2");
+    at.symlink_dir("dir1/dir2", "link_to_dir2");
+
+    let expected = format!("{}\n", at.as_string());
+    scene
+        .ucmd()
+        .args(&["-L", "link_to_dir2/.."])
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+fn test_physical() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("dir1");
+    at.mkdir("dir1/dir2");
+    at.symlink_dir("dir1/dir2", "link_to_dir2");
+
+    let expected = format!("{}/dir1\n", at.as_string());
+    scene
+        .ucmd()
+        .args(&["-P", "link_to_dir2/.."])
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+fn test_physical_default() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("dir1");
+    at.mkdir("dir1/dir2");
+    at.symlink_dir("dir1/dir2", "link_to_dir2");
+
+    let expected = format!("{}/dir1\n", at.as_string());
+    scene
+        .ucmd()
+        .arg("link_to_dir2/..")
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+fn test_physical_overrides_logical() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("dir1");
+    at.mkdir("dir1/dir2");
+    at.symlink_dir("dir1/dir2", "link_to_dir2");
+
+    let expected = format!("{}/dir1\n", at.as_string());
+    scene
+        .ucmd()
+        .args(&["-L", "-P", "link_to_dir2/.."])
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+fn test_logical_overrides_physical() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("dir1");
+    at.mkdir("dir1/dir2");
+    at.symlink_dir("dir1/dir2", "link_to_dir2");
+
+    let expected = format!("{}\n", at.as_string());
+    scene
+        .ucmd()
+        .args(&["-P", "-L", "link_to_dir2/.."])
+        .succeeds()
+        .stdout_is(expected);
+}
