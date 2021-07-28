@@ -20,7 +20,7 @@ macro_rules! executable(
         let exe = match $crate::executable_os!().to_str() {
             // * UTF-8
             Some(s) => s.to_string(),
-            // * "lossless" debug format if `executable_os!()` is not well-formed UTF-8
+            // * "lossless" debug format (if/when `executable_os!()` is not well-formed UTF-8)
             None => format!("{:?}", $crate::executable_os!())
         };
         &exe.to_owned()
@@ -31,7 +31,14 @@ macro_rules! executable(
 #[macro_export]
 macro_rules! executable_name(
     () => ({
-        &std::path::Path::new($crate::executable_os!()).file_stem().unwrap().to_string_lossy()
+        let stem = &std::path::Path::new($crate::executable_os!()).file_stem().unwrap().to_owned();
+        let exe = match stem.to_str() {
+            // * UTF-8
+            Some(s) => s.to_string(),
+            // * "lossless" debug format (if/when `executable_os!()` is not well-formed UTF-8)
+            None => format!("{:?}", stem)
+        };
+        &exe.to_owned()
     })
 );
 
@@ -40,11 +47,12 @@ macro_rules! executable_name(
 macro_rules! util_name(
     () => ({
         let crate_name = env!("CARGO_PKG_NAME");
-        if crate_name.starts_with("uu_") {
+        let name = if crate_name.starts_with("uu_") {
             &crate_name[3..]
         } else {
-            &crate_name
-        }
+            crate_name
+        };
+        &name.to_owned()
     })
 );
 
