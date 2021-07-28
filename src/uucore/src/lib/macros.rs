@@ -9,7 +9,7 @@
 #[macro_export]
 macro_rules! executable_os(
     () => ({
-        &std::env::args_os().next().unwrap()
+        &uucore::args_os().next().unwrap()
     })
 );
 
