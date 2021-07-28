@@ -58,6 +58,23 @@ macro_rules! util_name(
 
 //====
 
+/// Derive the complete execution phrase for "usage".
+#[macro_export]
+macro_rules! execution_phrase(
+    () => ({
+        let exe = if (executable_name!() == util_name!()) {
+        executable!().to_string()
+    } else {
+        format!("{} {}", executable!(), util_name!())
+            .as_str()
+            .to_owned()
+    };
+    &exe.to_owned()
+    })
+);
+
+//====
+
 #[macro_export]
 macro_rules! show(
     ($err:expr) => ({
