@@ -14,6 +14,7 @@ use libc::{
 };
 use std::borrow::Cow;
 use std::env;
+use std::ffi::OsStr;
 use std::fs;
 #[cfg(target_os = "redox")]
 use std::io;
@@ -125,6 +126,110 @@ fn resolve<P: AsRef<Path>>(original: P) -> IOResult<PathBuf> {
     Ok(result)
 }
 
+fn get_absolute(path: &Path) -> IOResult<PathBuf> {
+    if path.is_absolute() {
+        Ok(path.to_path_buf())
+    } else {
+        let current_dir = env::current_dir()?;
+        let canonical_dir = dunce::canonicalize(current_dir)?;
+        Ok(canonical_dir.join(path))
+    }
+}
+
+fn get_parts(path: &Path) -> (Option<&OsStr>, Vec<&OsStr>) {
+    let mut parts = vec![];
+
+    // Split path by directory separator; add prefix (Windows-only) and root
+    // directory to final path buffer; add remaining parts to temporary
+    // vector for canonicalization.
+    let mut prefix = None;
+    for part in path.components() {
+        match part {
+            Component::Prefix(_) | Component::RootDir => prefix = Some(part.as_os_str()),
+            Component::CurDir => (),
+            Component::ParentDir => {
+                parts.pop();
+            }
+            Component::Normal(_) => {
+                parts.push(part.as_os_str());
+            }
+        }
+    }
+    (prefix, parts)
+}
+
+fn path_buf_append<P>(buf: &mut PathBuf, paths: &[P])
+where
+    P: AsRef<Path>,
+{
+    for path in paths {
+        buf.push(path)
+    }
+}
+
+/// Resolve all symbolic links in a path.
+///
+/// `result` is a mutable reference to a [`PathBuf`] that initially
+/// contains the prefix of the path (for example, `/` on Unix, `C:\` on
+/// Windows). It will be modified in-place by this function. It must be
+/// an absolute path.
+///
+/// `parts` comprises the remaining components of the path that for
+/// which we will resolve symbolic links, from left to right. After
+/// visiting each element of `parts`, the path that results from
+/// resolving the symbolic links will be assigned to `result`.
+///
+/// `mode` specifies the strategy to use to resolve links and/or handle
+/// errors that occur.
+fn resolve_all_links(
+    result: &mut PathBuf,
+    parts: Vec<&OsStr>,
+    mode: CanonicalizeMode,
+) -> IOResult<()> {
+    // As a pre-condition of calling this function, `result` must be an
+    // absolute path. In the code below, we will repeatedly add a
+    // component to the end of the path and then call `resolve()`, which
+    // resolves a symbolic link if the new path is one. Since
+    // `resolve()` will also return an absolute path, we will *replace*
+    // the value of `result` each time we `resolve()`.
+    match mode {
+        // Resolve no links.
+        CanonicalizeMode::None => {
+            path_buf_append(result, &parts);
+        }
+        // Resolve all links, ignoring all errors.
+        CanonicalizeMode::Missing => {
+            for part in parts {
+                result.push(part);
+                if let Ok(path) = resolve(&result) {
+                    *result = path;
+                }
+            }
+        }
+        // Resolve all links, propagating all errors.
+        CanonicalizeMode::Existing => {
+            for part in parts {
+                result.push(part);
+                *result = resolve(&result)?;
+            }
+        }
+        // Resolve all links, propagating errors on all but the last component.
+        CanonicalizeMode::Normal => {
+            let n = parts.len();
+            for part in &parts[..n - 1] {
+                result.push(part);
+                *result = resolve(&result)?;
+            }
+            let p = parts.last().unwrap();
+            result.push(p);
+            if let Ok(path) = resolve(&result) {
+                *result = path;
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Return the canonical, absolute form of a path.
 ///
 /// This function is a generalization of [`std::fs::canonicalize`] that
@@ -144,73 +249,27 @@ fn resolve<P: AsRef<Path>>(original: P) -> IOResult<PathBuf> {
 ///   any symbolic links.
 ///
 pub fn canonicalize<P: AsRef<Path>>(original: P, can_mode: CanonicalizeMode) -> IOResult<PathBuf> {
-    // Create an absolute path
-    let original = original.as_ref();
-    let original = if original.is_absolute() {
-        original.to_path_buf()
-    } else {
-        dunce::canonicalize(env::current_dir().unwrap())
-            .unwrap()
-            .join(original)
-    };
+    // Get the absolute path. For example, convert "a/b" into "/a/b".
+    let absolute_path = get_absolute(original.as_ref())?;
 
+    // Convert the absolute path into its components, resolving ".." entries.
+    let (maybe_prefix, parts) = get_parts(&absolute_path);
+
+    // If there is a prefix, insert it into the `PathBuf` as the first element.
     let mut result = PathBuf::new();
-    let mut parts = vec![];
-
-    // Split path by directory separator; add prefix (Windows-only) and root
-    // directory to final path buffer; add remaining parts to temporary
-    // vector for canonicalization.
-    for part in original.components() {
-        match part {
-            Component::Prefix(_) | Component::RootDir => {
-                result.push(part.as_os_str());
-            }
-            Component::CurDir => (),
-            Component::ParentDir => {
-                parts.pop();
-            }
-            Component::Normal(_) => {
-                parts.push(part.as_os_str());
-            }
-        }
+    if let Some(prefix) = maybe_prefix {
+        result.push(prefix);
     }
 
-    // Resolve the symlinks where possible
-    if !parts.is_empty() {
-        for part in parts[..parts.len() - 1].iter() {
-            result.push(part);
-
-            if can_mode == CanonicalizeMode::None {
-                continue;
-            }
-
-            match resolve(&result) {
-                Err(_) if can_mode == CanonicalizeMode::Missing => continue,
-                Err(e) => return Err(e),
-                Ok(path) => {
-                    result.pop();
-                    result.push(path);
-                }
-            }
-        }
-
-        result.push(parts.last().unwrap());
-
-        if can_mode == CanonicalizeMode::None {
-            return Ok(result);
-        }
-
-        match resolve(&result) {
-            Err(e) if can_mode == CanonicalizeMode::Existing => {
-                return Err(e);
-            }
-            Ok(path) => {
-                result.pop();
-                result.push(path);
-            }
-            Err(_) => (),
-        }
+    // If there were no other components in the path, then do nothing else.
+    if parts.is_empty() {
+        return Ok(result);
     }
+
+    // Resolve all links in the path.
+    //
+    // This function modifies `result` in-place.
+    resolve_all_links(&mut result, parts, can_mode)?;
     Ok(result)
 }
 
