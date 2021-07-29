@@ -641,7 +641,7 @@ fn check_against_gnu_tr_tests_o() {
 fn check_against_gnu_tr_tests_p() {
     // ['p', qw(-d '[:alnum:]'), {IN=>'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'}, {OUT=>''}],
     new_ucmd!()
-        .args(&["-d", "[:alnum:]", ""])
+        .args(&["-d", "[:alnum:]"])
         .pipe_in("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
         .succeeds()
         .stdout_is("");
