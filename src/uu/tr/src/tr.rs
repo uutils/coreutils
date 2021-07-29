@@ -112,6 +112,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             return 1;
         }
     };
+
+    if set2.len() == 1 && set2[0] == '\\' {
+        show_error!(
+            "{}",
+            "warning: an unescaped backslash at end of string is not portable"
+        );
+    }
+
     if delete_flag {
         if squeeze_flag {
             let mut delete_buffer = vec![];

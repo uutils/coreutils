@@ -235,9 +235,20 @@ impl Sequence {
             (
                 l,
                 if let Some(input) = a.strip_prefix('\\') {
-                    char::from_u32(u32::from_str_radix(&input, 8).unwrap()).unwrap()
+                    if input.is_empty() {
+                        '\\'
+                    } else {
+                        char::from_u32(
+                            u32::from_str_radix(&input, 8)
+                                .expect("We only matched against 0-7 so it should not fail"),
+                        )
+                        .expect("Cannot convert octal value to character")
+                    }
                 } else {
-                    input.chars().next().unwrap()
+                    input
+                        .chars()
+                        .next()
+                        .expect("We recognized a character so this should not fail")
                 },
             )
         })
