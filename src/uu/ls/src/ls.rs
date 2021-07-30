@@ -35,6 +35,7 @@ use std::{
 #[cfg(unix)]
 use std::{
     collections::HashMap,
+    env,
     os::unix::fs::{FileTypeExt, MetadataExt},
     time::Duration,
 };
@@ -84,6 +85,7 @@ pub mod options {
     pub mod size {
         pub static HUMAN_READABLE: &str = "human-readable";
         pub static SI: &str = "si";
+        pub static BLOCK_SIZE: &str = "block-size";
     }
 
     pub mod quoting {
@@ -233,6 +235,7 @@ struct Config {
     quoting_style: QuotingStyle,
     indicator_style: IndicatorStyle,
     time_style: TimeStyle,
+    block_size: Option<DisplaySystemBlocks>,
 }
 
 // Fields that can be removed or added to the long format
@@ -242,6 +245,10 @@ struct LongFormat {
     owner: bool,
     #[cfg(unix)]
     numeric_uid_gid: bool,
+}
+
+struct DisplaySystemBlocks {
+    kilobytes: bool,
 }
 
 impl Config {
@@ -554,6 +561,15 @@ impl Config {
             Dereference::DirArgs
         };
 
+        let block_size = if options.is_present(options::size::BLOCK_SIZE) {
+            let disp_in_kilo_bytes = false;
+            Some(DisplaySystemBlocks {
+                kilobytes: disp_in_kilo_bytes,
+            })
+        } else {
+            None
+        };
+
         Ok(Config {
             format,
             files,
@@ -573,6 +589,7 @@ impl Config {
             quoting_style,
             indicator_style,
             time_style,
+            block_size,
         })
     }
 }
@@ -712,6 +729,19 @@ pub fn uu_app() -> App<'static, 'static> {
                 .short("n")
                 .long(options::format::LONG_NUMERIC_UID_GID)
                 .help("-l with numeric UIDs and GIDs.")
+                .multiple(true),
+        )
+        .arg(
+            Arg::with_name(options::size::BLOCK_SIZE)
+                .short("s")
+                .long(options::size::BLOCK_SIZE)
+                .help(
+                    "Display the number of file system blocks actually used by each file, \
+                in units of 512 bytes, where partial units are rounded up to the next integer \
+                value.  If the output is to a terminal, a total sum for all the file sizes is \
+                output on a line before the listing.  The environment variable BLOCKSIZE \
+                overrides the unit size of 512 bytes.",
+                )
                 .multiple(true),
         )
         // Quoting style
@@ -1520,6 +1550,21 @@ fn display_item_long(
         if config.inode {
             let _ = write!(out, "{} ", get_inode(md));
         }
+    }
+
+    #[cfg(unix)]
+    {
+        // for long format, display the block_size as-well
+        let env_block_size =
+            env::var("BLOCKSIZE").map_or(512, |blk_sz| blk_sz.parse::<u64>().map_or(512, |v| v));
+        let block_size = config.block_size.as_ref().map_or(env_block_size, |s| {
+            if s.kilobytes {
+                1024
+            } else {
+                env_block_size
+            }
+        });
+        let _ = write!(out, "{:8} ", md.blocks() * 512 / block_size);
     }
 
     let _ = write!(
