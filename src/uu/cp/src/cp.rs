@@ -55,7 +55,6 @@ use walkdir::WalkDir;
 use std::os::unix::fs::PermissionsExt;
 
 #[cfg(target_os = "linux")]
-#[allow(clippy::missing_safety_doc)]
 ioctl!(write ficlone with 0x94, 9; std::os::raw::c_int);
 
 quick_error! {
