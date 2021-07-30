@@ -1106,6 +1106,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         );
     }
 
+    // Verify that we can open all input files.
+    // It is the correct behavior to close all files afterwards,
+    // and to reopen them at a later point. This is different from how the output file is handled,
+    // probably to prevent running out of file descriptors.
+    for file in &files {
+        open(file);
+    }
+
     let output = Output::new(matches.value_of(options::OUTPUT));
 
     settings.init_precomputed();

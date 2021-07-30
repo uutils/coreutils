@@ -979,10 +979,26 @@ fn test_verifies_out_file() {
 }
 
 #[test]
-fn test_verifies_out_file_after_keys() {
+fn test_verifies_files_after_keys() {
     new_ucmd!()
-        .args(&["-o", "nonexistent_dir/nonexistent_file", "-k", "0"])
+        .args(&[
+            "-o",
+            "nonexistent_dir/nonexistent_file",
+            "-k",
+            "0",
+            "nonexistent_dir/input_file",
+        ])
         .fails()
         .status_code(2)
         .stderr_contains("failed to parse key");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_verifies_input_files() {
+    new_ucmd!()
+        .args(&["/dev/random", "nonexistent_file"])
+        .fails()
+        .status_code(2)
+        .stderr_is("sort: cannot read: nonexistent_file: No such file or directory");
 }
