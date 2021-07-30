@@ -28,6 +28,7 @@ use crate::merge::ClosedTmpFile;
 use crate::merge::WriteableCompressedTmpFile;
 use crate::merge::WriteablePlainTmpFile;
 use crate::merge::WriteableTmpFile;
+use crate::Output;
 use crate::{
     chunks::{self, Chunk},
     compare_by, merge, sort_by, GlobalSettings,
@@ -38,7 +39,11 @@ use tempfile::TempDir;
 const START_BUFFER_SIZE: usize = 8_000;
 
 /// Sort files by using auxiliary files for storing intermediate chunks (if needed), and output the result.
-pub fn ext_sort(files: &mut impl Iterator<Item = Box<dyn Read + Send>>, settings: &GlobalSettings) {
+pub fn ext_sort(
+    files: &mut impl Iterator<Item = Box<dyn Read + Send>>,
+    settings: &GlobalSettings,
+    output: Output,
+) {
     let (sorted_sender, sorted_receiver) = std::sync::mpsc::sync_channel(1);
     let (recycled_sender, recycled_receiver) = std::sync::mpsc::sync_channel(1);
     thread::spawn({
@@ -51,6 +56,7 @@ pub fn ext_sort(files: &mut impl Iterator<Item = Box<dyn Read + Send>>, settings
             settings,
             sorted_receiver,
             recycled_sender,
+            output,
         );
     } else {
         reader_writer::<_, WriteablePlainTmpFile>(
@@ -58,6 +64,7 @@ pub fn ext_sort(files: &mut impl Iterator<Item = Box<dyn Read + Send>>, settings
             settings,
             sorted_receiver,
             recycled_sender,
+            output,
         );
     }
 }
@@ -67,6 +74,7 @@ fn reader_writer<F: Iterator<Item = Box<dyn Read + Send>>, Tmp: WriteableTmpFile
     settings: &GlobalSettings,
     receiver: Receiver<Chunk>,
     sender: SyncSender<Chunk>,
+    output: Output,
 ) {
     let separator = if settings.zero_terminated {
         b'\0'
@@ -96,7 +104,7 @@ fn reader_writer<F: Iterator<Item = Box<dyn Read + Send>>, Tmp: WriteableTmpFile
                 settings,
                 Some((tmp_dir, tmp_dir_size)),
             );
-            merger.write_all(settings);
+            merger.write_all(settings, output);
         }
         ReadResult::SortedSingleChunk(chunk) => {
             if settings.unique {
@@ -106,9 +114,10 @@ fn reader_writer<F: Iterator<Item = Box<dyn Read + Send>>, Tmp: WriteableTmpFile
                             == Ordering::Equal
                     }),
                     settings,
+                    output,
                 );
             } else {
-                print_sorted(chunk.lines().iter(), settings);
+                print_sorted(chunk.lines().iter(), settings, output);
             }
         }
         ReadResult::SortedTwoChunks([a, b]) => {
@@ -128,9 +137,10 @@ fn reader_writer<F: Iterator<Item = Box<dyn Read + Send>>, Tmp: WriteableTmpFile
                         })
                         .map(|(line, _)| line),
                     settings,
+                    output,
                 );
             } else {
-                print_sorted(merged_iter.map(|(line, _)| line), settings);
+                print_sorted(merged_iter.map(|(line, _)| line), settings, output);
             }
         }
         ReadResult::EmptyInput => {

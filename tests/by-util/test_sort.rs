@@ -959,3 +959,30 @@ fn test_key_takes_one_arg() {
         .succeeds()
         .stdout_is_fixture("keys_open_ended.expected");
 }
+
+#[test]
+fn test_verifies_out_file() {
+    let inputs = ["" /* no input */, "some input"];
+    for &input in &inputs {
+        new_ucmd!()
+            .args(&["-o", "nonexistent_dir/nonexistent_file"])
+            .pipe_in(input)
+            .fails()
+            .status_code(2)
+            .stderr_only(
+                #[cfg(not(windows))]
+                "sort: open failed: nonexistent_dir/nonexistent_file: No such file or directory",
+                #[cfg(windows)]
+                "sort: open failed: nonexistent_dir/nonexistent_file: The system cannot find the path specified.",
+            );
+    }
+}
+
+#[test]
+fn test_verifies_out_file_after_keys() {
+    new_ucmd!()
+        .args(&["-o", "nonexistent_dir/nonexistent_file", "-k", "0"])
+        .fails()
+        .status_code(2)
+        .stderr_contains("failed to parse key");
+}

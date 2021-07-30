@@ -37,7 +37,7 @@ use std::env;
 use std::ffi::OsStr;
 use std::fs::File;
 use std::hash::{Hash, Hasher};
-use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
+use std::io::{stdin, stdout, BufRead, BufReader, Read, Write};
 use std::ops::Range;
 use std::path::Path;
 use std::path::PathBuf;
@@ -146,6 +146,29 @@ impl SortMode {
     }
 }
 
+pub struct Output {
+    file: Option<File>,
+}
+
+impl Output {
+    fn new(name: Option<&str>) -> Self {
+        Self {
+            file: name.map(|name| {
+                File::create(name).unwrap_or_else(|e| {
+                    crash!(2, "open failed: {}: {}", name, strip_errno(&e.to_string()))
+                })
+            }),
+        }
+    }
+
+    fn into_write(self) -> Box<dyn Write> {
+        match self.file {
+            Some(file) => Box::new(file),
+            None => Box::new(stdout()),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct GlobalSettings {
     mode: SortMode,
@@ -156,7 +179,6 @@ pub struct GlobalSettings {
     ignore_non_printing: bool,
     merge: bool,
     reverse: bool,
-    output_file: Option<String>,
     stable: bool,
     unique: bool,
     check: bool,
@@ -209,19 +231,6 @@ impl GlobalSettings {
         }
     }
 
-    fn out_writer(&self) -> BufWriter<Box<dyn Write>> {
-        match self.output_file {
-            Some(ref filename) => match File::create(Path::new(&filename)) {
-                Ok(f) => BufWriter::new(Box::new(f) as Box<dyn Write>),
-                Err(e) => {
-                    show_error!("{0}: {1}", filename, e.to_string());
-                    crash!(2, "Could not open output file");
-                }
-            },
-            None => BufWriter::new(Box::new(stdout()) as Box<dyn Write>),
-        }
-    }
-
     /// Precompute some data needed for sorting.
     /// This function **must** be called before starting to sort, and `GlobalSettings` may not be altered
     /// afterwards.
@@ -253,7 +262,6 @@ impl Default for GlobalSettings {
             ignore_non_printing: false,
             merge: false,
             reverse: false,
-            output_file: None,
             stable: false,
             unique: false,
             check: false,
@@ -1053,7 +1061,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     settings.ignore_leading_blanks = matches.is_present(options::IGNORE_LEADING_BLANKS);
 
-    settings.output_file = matches.value_of(options::OUTPUT).map(String::from);
     settings.reverse = matches.is_present(options::REVERSE);
     settings.stable = matches.is_present(options::STABLE);
     settings.unique = matches.is_present(options::UNIQUE);
@@ -1099,9 +1106,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         );
     }
 
+    let output = Output::new(matches.value_of(options::OUTPUT));
+
     settings.init_precomputed();
 
-    exec(&files, &settings)
+    exec(&files, &settings, output)
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -1334,10 +1343,10 @@ pub fn uu_app() -> App<'static, 'static> {
         .arg(Arg::with_name(options::FILES).multiple(true).takes_value(true))
 }
 
-fn exec(files: &[String], settings: &GlobalSettings) -> i32 {
+fn exec(files: &[String], settings: &GlobalSettings, output: Output) -> i32 {
     if settings.merge {
         let mut file_merger = merge::merge(files.iter().map(open), settings);
-        file_merger.write_all(settings);
+        file_merger.write_all(settings, output);
     } else if settings.check {
         if files.len() > 1 {
             crash!(2, "only one file allowed with -c");
@@ -1346,7 +1355,7 @@ fn exec(files: &[String], settings: &GlobalSettings) -> i32 {
     } else {
         let mut lines = files.iter().map(open);
 
-        ext_sort(&mut lines, settings);
+        ext_sort(&mut lines, settings, output);
     }
     0
 }
@@ -1618,8 +1627,12 @@ fn month_compare(a: &str, b: &str) -> Ordering {
     }
 }
 
-fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(iter: T, settings: &GlobalSettings) {
-    let mut writer = settings.out_writer();
+fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
+    iter: T,
+    settings: &GlobalSettings,
+    output: Output,
+) {
+    let mut writer = output.into_write();
     for line in iter {
         line.print(&mut writer, settings);
     }
