@@ -1129,73 +1129,57 @@ pub fn uu_app() -> App<'static, 'static> {
             Arg::with_name(options::modes::SORT)
                 .long(options::modes::SORT)
                 .takes_value(true)
-                .possible_values(
-                    &[
-                        "general-numeric",
-                        "human-numeric",
-                        "month",
-                        "numeric",
-                        "version",
-                        "random",
-                    ]
-                )
-                .conflicts_with_all(&options::modes::ALL_SORT_MODES)
+                .possible_values(&[
+                    "general-numeric",
+                    "human-numeric",
+                    "month",
+                    "numeric",
+                    "version",
+                    "random",
+                ])
+                .conflicts_with_all(&options::modes::ALL_SORT_MODES),
         )
-        .arg(
-            make_sort_mode_arg(
-                options::modes::HUMAN_NUMERIC,
-                "h",
-                "compare according to human readable sizes, eg 1M > 100k"
-            ),
-        )
-        .arg(
-            make_sort_mode_arg(
-                options::modes::MONTH,
-                "M",
-                "compare according to month name abbreviation"
-            ),
-        )
-        .arg(
-            make_sort_mode_arg(
-                options::modes::NUMERIC,
-                "n",
-                "compare according to string numerical value"
-            ),
-        )
-        .arg(
-            make_sort_mode_arg(
-                options::modes::GENERAL_NUMERIC,
-                "g",
-                "compare according to string general numerical value"
-            ),
-        )
-        .arg(
-            make_sort_mode_arg(
-                options::modes::VERSION,
-                "V",
-                "Sort by SemVer version number, eg 1.12.2 > 1.1.2",
-            ),
-        )
-        .arg(
-            make_sort_mode_arg(
-                options::modes::RANDOM,
-                "R",
-                "shuffle in random order",
-            ),
-        )
+        .arg(make_sort_mode_arg(
+            options::modes::HUMAN_NUMERIC,
+            "h",
+            "compare according to human readable sizes, eg 1M > 100k",
+        ))
+        .arg(make_sort_mode_arg(
+            options::modes::MONTH,
+            "M",
+            "compare according to month name abbreviation",
+        ))
+        .arg(make_sort_mode_arg(
+            options::modes::NUMERIC,
+            "n",
+            "compare according to string numerical value",
+        ))
+        .arg(make_sort_mode_arg(
+            options::modes::GENERAL_NUMERIC,
+            "g",
+            "compare according to string general numerical value",
+        ))
+        .arg(make_sort_mode_arg(
+            options::modes::VERSION,
+            "V",
+            "Sort by SemVer version number, eg 1.12.2 > 1.1.2",
+        ))
+        .arg(make_sort_mode_arg(
+            options::modes::RANDOM,
+            "R",
+            "shuffle in random order",
+        ))
         .arg(
             Arg::with_name(options::DICTIONARY_ORDER)
                 .short("d")
                 .long(options::DICTIONARY_ORDER)
                 .help("consider only blanks and alphanumeric characters")
-                .conflicts_with_all(
-                    &[
-                        options::modes::NUMERIC,
-                        options::modes::GENERAL_NUMERIC,
-                        options::modes::HUMAN_NUMERIC,
-                        options::modes::MONTH,
-                    ]
-                ),
+                .conflicts_with_all(&[
+                    options::modes::NUMERIC,
+                    options::modes::GENERAL_NUMERIC,
+                    options::modes::HUMAN_NUMERIC,
+                    options::modes::MONTH,
+                ]),
         )
         .arg(
             Arg::with_name(options::MERGE)
@@ -1223,7 +1207,10 @@ pub fn uu_app() -> App<'static, 'static> {
                 .short("C")
                 .long(options::check::CHECK_SILENT)
                 .conflicts_with(options::OUTPUT)
-                .help("exit successfully if the given file is already sorted, and exit with status 1 otherwise."),
+                .help(
+                    "exit successfully if the given file is already sorted,\
+                and exit with status 1 otherwise.",
+                ),
         )
         .arg(
             Arg::with_name(options::IGNORE_CASE)
@@ -1236,14 +1223,12 @@ pub fn uu_app() -> App<'static, 'static> {
                 .short("i")
                 .long(options::IGNORE_NONPRINTING)
                 .help("ignore nonprinting characters")
-                .conflicts_with_all(
-                    &[
-                        options::modes::NUMERIC,
-                        options::modes::GENERAL_NUMERIC,
-                        options::modes::HUMAN_NUMERIC,
-                        options::modes::MONTH
-                    ]
-                ),
+                .conflicts_with_all(&[
+                    options::modes::NUMERIC,
+                    options::modes::GENERAL_NUMERIC,
+                    options::modes::HUMAN_NUMERIC,
+                    options::modes::MONTH,
+                ]),
         )
         .arg(
             Arg::with_name(options::IGNORE_LEADING_BLANKS)
@@ -1292,7 +1277,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 .short("t")
                 .long(options::SEPARATOR)
                 .help("custom separator for -k")
-                .takes_value(true))
+                .takes_value(true),
+        )
         .arg(
             Arg::with_name(options::ZERO_TERMINATED)
                 .short("z")
@@ -1327,13 +1313,13 @@ pub fn uu_app() -> App<'static, 'static> {
                 .long(options::COMPRESS_PROG)
                 .help("compress temporary files with PROG, decompress with PROG -d")
                 .long_help("PROG has to take input from stdin and output to stdout")
-                .value_name("PROG")
+                .value_name("PROG"),
         )
         .arg(
             Arg::with_name(options::BATCH_SIZE)
                 .long(options::BATCH_SIZE)
                 .help("Merge at most N_MERGE inputs at once.")
-                .value_name("N_MERGE")
+                .value_name("N_MERGE"),
         )
         .arg(
             Arg::with_name(options::FILES0_FROM)
@@ -1348,7 +1334,11 @@ pub fn uu_app() -> App<'static, 'static> {
                 .long(options::DEBUG)
                 .help("underline the parts of the line that are actually used for sorting"),
         )
-        .arg(Arg::with_name(options::FILES).multiple(true).takes_value(true))
+        .arg(
+            Arg::with_name(options::FILES)
+                .multiple(true)
+                .takes_value(true),
+        )
 }
 
 fn exec(files: &[String], settings: &GlobalSettings, output: Output) -> i32 {
