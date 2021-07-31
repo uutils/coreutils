@@ -86,6 +86,7 @@ pub mod options {
         pub static HUMAN_READABLE: &str = "human-readable";
         pub static SI: &str = "si";
         pub static BLOCK_SIZE: &str = "block-size";
+        pub static KB_BLOCK_SIZE: &str = "kb-block-size";
     }
 
     pub mod quoting {
@@ -235,7 +236,7 @@ struct Config {
     quoting_style: QuotingStyle,
     indicator_style: IndicatorStyle,
     time_style: TimeStyle,
-    block_size: Option<DisplaySystemBlocks>,
+    block_size: Option<u64>,
 }
 
 // Fields that can be removed or added to the long format
@@ -245,10 +246,6 @@ struct LongFormat {
     owner: bool,
     #[cfg(unix)]
     numeric_uid_gid: bool,
-}
-
-struct DisplaySystemBlocks {
-    kilobytes: bool,
 }
 
 impl Config {
@@ -562,10 +559,13 @@ impl Config {
         };
 
         let block_size = if options.is_present(options::size::BLOCK_SIZE) {
-            let disp_in_kilo_bytes = false;
-            Some(DisplaySystemBlocks {
-                kilobytes: disp_in_kilo_bytes,
-            })
+            let block_size = if options.is_present(options::size::KB_BLOCK_SIZE) {
+                1024
+            } else {
+                env::var("BLOCKSIZE").map_or(512, |blk_sz| blk_sz.parse::<u64>().map_or(512, |v| v))
+            };
+
+            Some(block_size)
         } else {
             None
         };
@@ -741,6 +741,16 @@ pub fn uu_app() -> App<'static, 'static> {
                 value.  If the output is to a terminal, a total sum for all the file sizes is \
                 output on a line before the listing.  The environment variable BLOCKSIZE \
                 overrides the unit size of 512 bytes.",
+                )
+                .multiple(true),
+        )
+        .arg(
+            Arg::with_name(options::size::KB_BLOCK_SIZE)
+                .short("k")
+                .help(
+                    "If the -s option is specified, print the file size allocation in \
+                     kilobytes, not blocks.  This option overrides the environment \
+                     variable BLOCKSIZE.",
                 )
                 .multiple(true),
         )
@@ -1555,15 +1565,7 @@ fn display_item_long(
     #[cfg(unix)]
     {
         // for long format, display the block_size as-well
-        let env_block_size =
-            env::var("BLOCKSIZE").map_or(512, |blk_sz| blk_sz.parse::<u64>().map_or(512, |v| v));
-        let block_size = config.block_size.as_ref().map_or(env_block_size, |s| {
-            if s.kilobytes {
-                1024
-            } else {
-                env_block_size
-            }
-        });
+        let block_size = config.block_size.map_or(512, |v| v);
         let _ = write!(out, "{:8} ", md.blocks() * 512 / block_size);
     }
 
