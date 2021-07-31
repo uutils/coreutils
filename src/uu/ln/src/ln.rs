@@ -11,6 +11,7 @@
 extern crate uucore;
 
 use clap::{crate_version, App, Arg};
+use uucore::error::{UError, UResult, USimpleError};
 
 use std::borrow::Cow;
 use std::ffi::OsStr;
@@ -86,7 +87,8 @@ mod options {
 
 static ARG_FILES: &str = "files";
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = get_usage();
     let long_usage = get_long_usage();
 
@@ -115,6 +117,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         OverwriteMode::NoClobber
     };
 
+<<<<<<< HEAD
     let backup_mode = backup_control::determine_backup_mode(
         matches.is_present(options::BACKUP_NO_ARG),
         matches.is_present(options::BACKUP),
@@ -124,6 +127,20 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         Err(err) => {
             show_usage_error!("{}", err);
             return 1;
+=======
+    let backup_mode = if matches.is_present(options::B) {
+        BackupMode::ExistingBackup
+    } else if matches.is_present(options::BACKUP) {
+        match matches.value_of(options::BACKUP) {
+            None => BackupMode::ExistingBackup,
+            Some(mode) => match mode {
+                "simple" | "never" => BackupMode::SimpleBackup,
+                "numbered" | "t" => BackupMode::NumberedBackup,
+                "existing" | "nil" => BackupMode::ExistingBackup,
+                "none" | "off" => BackupMode::NoBackup,
+                _ => unreachable!(), // cannot happen as it is managed by clap
+            },
+>>>>>>> c2ac985a (ln: use UResult)
         }
         Ok(mode) => mode,
     };
@@ -246,7 +263,7 @@ pub fn uu_app() -> App<'static, 'static> {
         )
 }
 
-fn exec(files: &[PathBuf], settings: &Settings) -> i32 {
+fn exec(files: &[PathBuf], settings: &Settings) -> UResult<()> {
     // Handle cases where we create links in a directory first.
     if let Some(ref name) = settings.target_dir {
         // 4th form: a directory is specified by -t.
@@ -271,7 +288,8 @@ fn exec(files: &[PathBuf], settings: &Settings) -> i32 {
             "missing destination file operand after '{}'",
             files[0].to_string_lossy()
         );
-        return 1;
+
+        return Err(UError::from(1));
     }
     if files.len() > 2 {
         show_error!(
@@ -279,26 +297,30 @@ fn exec(files: &[PathBuf], settings: &Settings) -> i32 {
             files[2].display(),
             executable!()
         );
-        return 1;
+        return Err(UError::from(1));
     }
     assert!(!files.is_empty());
 
     match link(&files[0], &files[1], settings) {
-        Ok(_) => 0,
+        Ok(_) => UResult::Ok(()),
         Err(e) => {
-            show_error!("{}", e);
-            1
+            show!(USimpleError::new(1, format!("{}", e)));
+            return Err(UError::from(1));
         }
     }
 }
 
-fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) -> i32 {
+fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) -> UResult<()> {
     if !target_dir.is_dir() {
-        show_error!("target '{}' is not a directory", target_dir.display());
-        return 1;
+        show!(USimpleError::new(
+            1,
+            format!("{} is not a directory", target_dir.display())
+        ));
+        return Err(UError::from(1));
     }
 
-    let mut all_successful = true;
+    let mut all_successful: bool = true;
+
     for srcpath in files.iter() {
         let targetpath =
             if settings.no_dereference && matches!(settings.overwrite, OverwriteMode::Force) {
@@ -307,7 +329,10 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
                 if is_symlink(target_dir) {
                     if target_dir.is_file() {
                         if let Err(e) = fs::remove_file(target_dir) {
-                            show_error!("Could not update {}: {}", target_dir.display(), e)
+                            show!(USimpleError::new(
+                                1,
+                                format!("Could not update {}: {}", target_dir.display(), e)
+                            ))
                         };
                     }
                     if target_dir.is_dir() {
@@ -315,7 +340,10 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
                         // considered as a dir
                         // See test_ln::test_symlink_no_deref_dir
                         if let Err(e) = fs::remove_dir(target_dir) {
-                            show_error!("Could not update {}: {}", target_dir.display(), e)
+                            show!(USimpleError::new(
+                                1,
+                                format!("Could not update {}: {}", target_dir.display(), e)
+                            ))
                         };
                     }
                 }
@@ -333,10 +361,13 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
                         }
                     }
                     None => {
-                        show_error!(
-                            "cannot stat '{}': No such file or directory",
-                            srcpath.display()
-                        );
+                        show!(USimpleError::new(
+                            1,
+                            format!(
+                                "cannot stat '{}': No such file or directory",
+                                srcpath.display()
+                            )
+                        ));
                         all_successful = false;
                         continue;
                     }
@@ -350,13 +381,13 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
                 srcpath.display(),
                 e
             );
-            all_successful = false;
         }
     }
+
     if all_successful {
-        0
+        return UResult::Ok(());
     } else {
-        1
+        return Err(UError::from(1));
     }
 }
 
@@ -381,6 +412,7 @@ fn relative_path<'a>(src: &Path, dst: &Path) -> Result<Cow<'a, Path>> {
     if result.as_os_str().is_empty() {
         result.push(".");
     }
+
     Ok(result.into())
 }
 
@@ -429,6 +461,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> Result<()> {
             None => println!(),
         }
     }
+
     Ok(())
 }
 
