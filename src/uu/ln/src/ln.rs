@@ -171,7 +171,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     );
     let backup_mode = match backup_mode {
         Err(err) => {
-            return Err(LnError::InvalidBackupMode(err.to_string().into()).into());
+            return Err(LnError::InvalidBackupMode(err).into());
         }
         Ok(mode) => mode,
     };
@@ -318,13 +318,13 @@ fn exec(files: &[PathBuf], settings: &Settings) -> UResult<()> {
         return Err(LnError::MissingDestination(files[0].to_string_lossy().into()).into());
     }
     if files.len() > 2 {
-        return Err(LnError::ExtraOperand(files[2].display().to_string().into()).into());
+        return Err(LnError::ExtraOperand(files[2].display().to_string()).into());
     }
     assert!(!files.is_empty());
 
     match link(&files[0], &files[1], settings) {
         Ok(_) => Ok(()),
-        Err(e) => Err(LnError::FailedToLink(e.to_string().into()).into()),
+        Err(e) => Err(LnError::FailedToLink(e.to_string()).into()),
     }
 }
 
