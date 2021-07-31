@@ -436,6 +436,7 @@ impl Stater {
                             'f' => tokens.push(Token::Char('\x0C')),
                             'n' => tokens.push(Token::Char('\n')),
                             'r' => tokens.push(Token::Char('\r')),
+                            't' => tokens.push(Token::Char('\t')),
                             'v' => tokens.push(Token::Char('\x0B')),
                             c => {
                                 show_warning!("unrecognized escape '\\{}'", c);
