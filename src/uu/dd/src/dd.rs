@@ -39,7 +39,9 @@ use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 #[cfg(target_os = "linux")]
 use std::sync::atomic::Ordering;
-use std::sync::{atomic::AtomicUsize, mpsc, Arc};
+#[cfg(target_os = "linux")]
+use std::sync::{atomic::AtomicUsize, Arc};
+use std::sync::mpsc, Arc;
 use std::thread;
 use std::time;
 
