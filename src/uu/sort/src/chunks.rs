@@ -175,7 +175,7 @@ pub fn read<T: Read>(
                 // because it was only temporarily transmuted to a Vec<Line<'static>> to make recycling possible.
                 std::mem::transmute::<Vec<Line<'static>>, Vec<Line<'_>>>(lines)
             };
-            let read = crash_if_err!(1, std::str::from_utf8(&buffer[..read]));
+            let read = crash_if_err!(2, std::str::from_utf8(&buffer[..read]));
             let mut line_data = LineData {
                 selections,
                 num_infos,
@@ -313,7 +313,7 @@ fn read_to_buffer<T: Read>(
             Err(e) if e.kind() == ErrorKind::Interrupted => {
                 // retry
             }
-            Err(e) => crash!(1, "{}", e),
+            Err(e) => crash!(2, "{}", e),
         }
     }
 }

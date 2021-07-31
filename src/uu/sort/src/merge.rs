@@ -25,7 +25,7 @@ use tempfile::TempDir;
 
 use crate::{
     chunks::{self, Chunk, RecycledChunk},
-    compare_by, GlobalSettings,
+    compare_by, GlobalSettings, Output,
 };
 
 /// Merge pre-sorted `Box<dyn Read>`s.
@@ -238,8 +238,8 @@ pub struct FileMerger<'a> {
 
 impl<'a> FileMerger<'a> {
     /// Write the merged contents to the output file.
-    pub fn write_all(&mut self, settings: &GlobalSettings) {
-        let mut out = settings.out_writer();
+    pub fn write_all(&mut self, settings: &GlobalSettings, output: Output) {
+        let mut out = output.into_write();
         self.write_all_to(settings, &mut out);
     }
 

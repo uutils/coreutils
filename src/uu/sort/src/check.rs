@@ -56,7 +56,7 @@ pub fn check(path: &str, settings: &GlobalSettings) -> i32 {
             ) == Ordering::Greater
             {
                 if !settings.check_silent {
-                    println!("sort: {}:{}: disorder: {}", path, line_idx, new_first.line);
+                    eprintln!("sort: {}:{}: disorder: {}", path, line_idx, new_first.line);
                 }
                 return 1;
             }
@@ -68,7 +68,7 @@ pub fn check(path: &str, settings: &GlobalSettings) -> i32 {
             if compare_by(a, b, settings, chunk.line_data(), chunk.line_data()) == Ordering::Greater
             {
                 if !settings.check_silent {
-                    println!("sort: {}:{}: disorder: {}", path, line_idx, b.line);
+                    eprintln!("sort: {}:{}: disorder: {}", path, line_idx, b.line);
                 }
                 return 1;
             }

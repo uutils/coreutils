@@ -37,7 +37,7 @@ use std::env;
 use std::ffi::OsStr;
 use std::fs::File;
 use std::hash::{Hash, Hasher};
-use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
+use std::io::{stdin, stdout, BufRead, BufReader, Read, Write};
 use std::ops::Range;
 use std::path::Path;
 use std::path::PathBuf;
@@ -146,6 +146,29 @@ impl SortMode {
     }
 }
 
+pub struct Output {
+    file: Option<File>,
+}
+
+impl Output {
+    fn new(name: Option<&str>) -> Self {
+        Self {
+            file: name.map(|name| {
+                File::create(name).unwrap_or_else(|e| {
+                    crash!(2, "open failed: {}: {}", name, strip_errno(&e.to_string()))
+                })
+            }),
+        }
+    }
+
+    fn into_write(self) -> Box<dyn Write> {
+        match self.file {
+            Some(file) => Box::new(file),
+            None => Box::new(stdout()),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct GlobalSettings {
     mode: SortMode,
@@ -156,7 +179,6 @@ pub struct GlobalSettings {
     ignore_non_printing: bool,
     merge: bool,
     reverse: bool,
-    output_file: Option<String>,
     stable: bool,
     unique: bool,
     check: bool,
@@ -209,19 +231,6 @@ impl GlobalSettings {
         }
     }
 
-    fn out_writer(&self) -> BufWriter<Box<dyn Write>> {
-        match self.output_file {
-            Some(ref filename) => match File::create(Path::new(&filename)) {
-                Ok(f) => BufWriter::new(Box::new(f) as Box<dyn Write>),
-                Err(e) => {
-                    show_error!("{0}: {1}", filename, e.to_string());
-                    panic!("Could not open output file");
-                }
-            },
-            None => BufWriter::new(Box::new(stdout()) as Box<dyn Write>),
-        }
-    }
-
     /// Precompute some data needed for sorting.
     /// This function **must** be called before starting to sort, and `GlobalSettings` may not be altered
     /// afterwards.
@@ -253,7 +262,6 @@ impl Default for GlobalSettings {
             ignore_non_printing: false,
             merge: false,
             reverse: false,
-            output_file: None,
             stable: false,
             unique: false,
             check: false,
@@ -942,7 +950,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let mut settings: GlobalSettings = Default::default();
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from(args);
+    let matches = uu_app().usage(&usage[..]).get_matches_from_safe(args);
+
+    let matches = crash_if_err!(2, matches);
 
     settings.debug = matches.is_present(options::DEBUG);
 
@@ -1051,7 +1061,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     settings.ignore_leading_blanks = matches.is_present(options::IGNORE_LEADING_BLANKS);
 
-    settings.output_file = matches.value_of(options::OUTPUT).map(String::from);
     settings.reverse = matches.is_present(options::REVERSE);
     settings.stable = matches.is_present(options::STABLE);
     settings.unique = matches.is_present(options::UNIQUE);
@@ -1060,7 +1069,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         /* if no file, default to stdin */
         files.push("-".to_owned());
     } else if settings.check && files.len() != 1 {
-        crash!(1, "extra operand `{}' not allowed with -c", files[1])
+        crash!(2, "extra operand `{}' not allowed with -c", files[1])
     }
 
     if let Some(arg) = matches.args.get(options::SEPARATOR) {
@@ -1070,7 +1079,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             separator = "\0";
         }
         if separator.len() != 1 {
-            crash!(1, "separator must be exactly one character long");
+            crash!(2, "separator must be exactly one character long");
         }
         settings.separator = Some(separator.chars().next().unwrap())
     }
@@ -1100,9 +1109,19 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         );
     }
 
+    // Verify that we can open all input files.
+    // It is the correct behavior to close all files afterwards,
+    // and to reopen them at a later point. This is different from how the output file is handled,
+    // probably to prevent running out of file descriptors.
+    for file in &files {
+        open(file);
+    }
+
+    let output = Output::new(matches.value_of(options::OUTPUT));
+
     settings.init_precomputed();
 
-    exec(&files, &settings)
+    exec(&files, &settings, output)
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -1113,73 +1132,57 @@ pub fn uu_app() -> App<'static, 'static> {
             Arg::with_name(options::modes::SORT)
                 .long(options::modes::SORT)
                 .takes_value(true)
-                .possible_values(
-                    &[
-                        "general-numeric",
-                        "human-numeric",
-                        "month",
-                        "numeric",
-                        "version",
-                        "random",
-                    ]
-                )
-                .conflicts_with_all(&options::modes::ALL_SORT_MODES)
+                .possible_values(&[
+                    "general-numeric",
+                    "human-numeric",
+                    "month",
+                    "numeric",
+                    "version",
+                    "random",
+                ])
+                .conflicts_with_all(&options::modes::ALL_SORT_MODES),
         )
-        .arg(
-            make_sort_mode_arg(
-                options::modes::HUMAN_NUMERIC,
-                "h",
-                "compare according to human readable sizes, eg 1M > 100k"
-            ),
-        )
-        .arg(
-            make_sort_mode_arg(
-                options::modes::MONTH,
-                "M",
-                "compare according to month name abbreviation"
-            ),
-        )
-        .arg(
-            make_sort_mode_arg(
-                options::modes::NUMERIC,
-                "n",
-                "compare according to string numerical value"
-            ),
-        )
-        .arg(
-            make_sort_mode_arg(
-                options::modes::GENERAL_NUMERIC,
-                "g",
-                "compare according to string general numerical value"
-            ),
-        )
-        .arg(
-            make_sort_mode_arg(
-                options::modes::VERSION,
-                "V",
-                "Sort by SemVer version number, eg 1.12.2 > 1.1.2",
-            ),
-        )
-        .arg(
-            make_sort_mode_arg(
-                options::modes::RANDOM,
-                "R",
-                "shuffle in random order",
-            ),
-        )
+        .arg(make_sort_mode_arg(
+            options::modes::HUMAN_NUMERIC,
+            "h",
+            "compare according to human readable sizes, eg 1M > 100k",
+        ))
+        .arg(make_sort_mode_arg(
+            options::modes::MONTH,
+            "M",
+            "compare according to month name abbreviation",
+        ))
+        .arg(make_sort_mode_arg(
+            options::modes::NUMERIC,
+            "n",
+            "compare according to string numerical value",
+        ))
+        .arg(make_sort_mode_arg(
+            options::modes::GENERAL_NUMERIC,
+            "g",
+            "compare according to string general numerical value",
+        ))
+        .arg(make_sort_mode_arg(
+            options::modes::VERSION,
+            "V",
+            "Sort by SemVer version number, eg 1.12.2 > 1.1.2",
+        ))
+        .arg(make_sort_mode_arg(
+            options::modes::RANDOM,
+            "R",
+            "shuffle in random order",
+        ))
         .arg(
             Arg::with_name(options::DICTIONARY_ORDER)
                 .short("d")
                 .long(options::DICTIONARY_ORDER)
                 .help("consider only blanks and alphanumeric characters")
-                .conflicts_with_all(
-                    &[
-                        options::modes::NUMERIC,
-                        options::modes::GENERAL_NUMERIC,
-                        options::modes::HUMAN_NUMERIC,
-                        options::modes::MONTH,
-                    ]
-                ),
+                .conflicts_with_all(&[
+                    options::modes::NUMERIC,
+                    options::modes::GENERAL_NUMERIC,
+                    options::modes::HUMAN_NUMERIC,
+                    options::modes::MONTH,
+                ]),
         )
         .arg(
             Arg::with_name(options::MERGE)
@@ -1207,7 +1210,10 @@ pub fn uu_app() -> App<'static, 'static> {
                 .short("C")
                 .long(options::check::CHECK_SILENT)
                 .conflicts_with(options::OUTPUT)
-                .help("exit successfully if the given file is already sorted, and exit with status 1 otherwise."),
+                .help(
+                    "exit successfully if the given file is already sorted,\
+                and exit with status 1 otherwise.",
+                ),
         )
         .arg(
             Arg::with_name(options::IGNORE_CASE)
@@ -1220,14 +1226,12 @@ pub fn uu_app() -> App<'static, 'static> {
                 .short("i")
                 .long(options::IGNORE_NONPRINTING)
                 .help("ignore nonprinting characters")
-                .conflicts_with_all(
-                    &[
-                        options::modes::NUMERIC,
-                        options::modes::GENERAL_NUMERIC,
-                        options::modes::HUMAN_NUMERIC,
-                        options::modes::MONTH
-                    ]
-                ),
+                .conflicts_with_all(&[
+                    options::modes::NUMERIC,
+                    options::modes::GENERAL_NUMERIC,
+                    options::modes::HUMAN_NUMERIC,
+                    options::modes::MONTH,
+                ]),
         )
         .arg(
             Arg::with_name(options::IGNORE_LEADING_BLANKS)
@@ -1276,7 +1280,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 .short("t")
                 .long(options::SEPARATOR)
                 .help("custom separator for -k")
-                .takes_value(true))
+                .takes_value(true),
+        )
         .arg(
             Arg::with_name(options::ZERO_TERMINATED)
                 .short("z")
@@ -1311,13 +1316,13 @@ pub fn uu_app() -> App<'static, 'static> {
                 .long(options::COMPRESS_PROG)
                 .help("compress temporary files with PROG, decompress with PROG -d")
                 .long_help("PROG has to take input from stdin and output to stdout")
-                .value_name("PROG")
+                .value_name("PROG"),
         )
         .arg(
             Arg::with_name(options::BATCH_SIZE)
                 .long(options::BATCH_SIZE)
                 .help("Merge at most N_MERGE inputs at once.")
-                .value_name("N_MERGE")
+                .value_name("N_MERGE"),
         )
         .arg(
             Arg::with_name(options::FILES0_FROM)
@@ -1332,22 +1337,26 @@ pub fn uu_app() -> App<'static, 'static> {
                 .long(options::DEBUG)
                 .help("underline the parts of the line that are actually used for sorting"),
         )
-        .arg(Arg::with_name(options::FILES).multiple(true).takes_value(true))
+        .arg(
+            Arg::with_name(options::FILES)
+                .multiple(true)
+                .takes_value(true),
+        )
 }
 
-fn exec(files: &[String], settings: &GlobalSettings) -> i32 {
+fn exec(files: &[String], settings: &GlobalSettings, output: Output) -> i32 {
     if settings.merge {
         let mut file_merger = merge::merge(files.iter().map(open), settings);
-        file_merger.write_all(settings);
+        file_merger.write_all(settings, output);
     } else if settings.check {
         if files.len() > 1 {
-            crash!(1, "only one file allowed with -c");
+            crash!(2, "only one file allowed with -c");
         }
         return check::check(files.first().unwrap(), settings);
     } else {
         let mut lines = files.iter().map(open);
 
-        ext_sort(&mut lines, settings);
+        ext_sort(&mut lines, settings, output);
     }
     0
 }
@@ -1619,14 +1628,22 @@ fn month_compare(a: &str, b: &str) -> Ordering {
     }
 }
 
-fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(iter: T, settings: &GlobalSettings) {
-    let mut writer = settings.out_writer();
+fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
+    iter: T,
+    settings: &GlobalSettings,
+    output: Output,
+) {
+    let mut writer = output.into_write();
     for line in iter {
         line.print(&mut writer, settings);
     }
 }
 
-// from cat.rs
+/// Strips the trailing " (os error XX)" from io error strings.
+fn strip_errno(err: &str) -> &str {
+    &err[..err.find(" (os error ").unwrap_or(err.len())]
+}
+
 fn open(path: impl AsRef<OsStr>) -> Box<dyn Read + Send> {
     let path = path.as_ref();
     if path == "-" {
@@ -1634,10 +1651,17 @@ fn open(path: impl AsRef<OsStr>) -> Box<dyn Read + Send> {
         return Box::new(stdin) as Box<dyn Read + Send>;
     }
 
-    match File::open(Path::new(path)) {
+    let path = Path::new(path);
+
+    match File::open(path) {
         Ok(f) => Box::new(f) as Box<dyn Read + Send>,
         Err(e) => {
-            crash!(2, "cannot read: {0:?}: {1}", path, e);
+            crash!(
+                2,
+                "cannot read: {0}: {1}",
+                path.to_string_lossy(),
+                strip_errno(&e.to_string())
+            );
         }
     }
 }

@@ -181,7 +181,7 @@ fn test_check_zero_terminated_failure() {
         .arg("-c")
         .arg("zero-terminated.txt")
         .fails()
-        .stdout_is("sort: zero-terminated.txt:2: disorder: ../../fixtures/du\n");
+        .stderr_only("sort: zero-terminated.txt:2: disorder: ../../fixtures/du\n");
 }
 
 #[test]
@@ -775,13 +775,13 @@ fn test_check() {
             .arg(diagnose_arg)
             .arg("check_fail.txt")
             .fails()
-            .stdout_is("sort: check_fail.txt:6: disorder: 5\n");
+            .stderr_only("sort: check_fail.txt:6: disorder: 5\n");
 
         new_ucmd!()
             .arg(diagnose_arg)
             .arg("multiple_files.expected")
             .succeeds()
-            .stdout_is("");
+            .stderr_is("");
     }
 }
 
@@ -839,9 +839,9 @@ fn test_nonexistent_file() {
         .status_code(2)
         .stderr_only(
             #[cfg(not(windows))]
-            "sort: cannot read: \"nonexistent.txt\": No such file or directory (os error 2)",
+            "sort: cannot read: nonexistent.txt: No such file or directory",
             #[cfg(windows)]
-            "sort: cannot read: \"nonexistent.txt\": The system cannot find the file specified. (os error 2)",
+            "sort: cannot read: nonexistent.txt: The system cannot find the file specified.",
         );
 }
 
@@ -958,6 +958,49 @@ fn test_key_takes_one_arg() {
         .args(&["-k", "2.3", "keys_open_ended.txt"])
         .succeeds()
         .stdout_is_fixture("keys_open_ended.expected");
+}
+
+#[test]
+fn test_verifies_out_file() {
+    let inputs = ["" /* no input */, "some input"];
+    for &input in &inputs {
+        new_ucmd!()
+            .args(&["-o", "nonexistent_dir/nonexistent_file"])
+            .pipe_in(input)
+            .fails()
+            .status_code(2)
+            .stderr_only(
+                #[cfg(not(windows))]
+                "sort: open failed: nonexistent_dir/nonexistent_file: No such file or directory",
+                #[cfg(windows)]
+                "sort: open failed: nonexistent_dir/nonexistent_file: The system cannot find the path specified.",
+            );
+    }
+}
+
+#[test]
+fn test_verifies_files_after_keys() {
+    new_ucmd!()
+        .args(&[
+            "-o",
+            "nonexistent_dir/nonexistent_file",
+            "-k",
+            "0",
+            "nonexistent_dir/input_file",
+        ])
+        .fails()
+        .status_code(2)
+        .stderr_contains("failed to parse key");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_verifies_input_files() {
+    new_ucmd!()
+        .args(&["/dev/random", "nonexistent_file"])
+        .fails()
+        .status_code(2)
+        .stderr_is("sort: cannot read: nonexistent_file: No such file or directory");
 }
 
 #[test]
