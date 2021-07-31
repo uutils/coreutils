@@ -1074,7 +1074,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     if let Some(arg) = matches.args.get(options::SEPARATOR) {
         let separator = arg.vals[0].to_string_lossy();
-        let separator = separator;
+        let mut separator = separator.as_ref();
+        if separator == "\\0" {
+            separator = "\0";
+        }
         if separator.len() != 1 {
             crash!(2, "separator must be exactly one character long");
         }

@@ -1002,3 +1002,12 @@ fn test_verifies_input_files() {
         .status_code(2)
         .stderr_is("sort: cannot read: nonexistent_file: No such file or directory");
 }
+
+#[test]
+fn test_separator_null() {
+    new_ucmd!()
+        .args(&["-k1,1", "-k3,3", "-t", "\\0"])
+        .pipe_in("z\0a\0b\nz\0b\0a\na\0z\0z\n")
+        .succeeds()
+        .stdout_only("a\0z\0z\nz\0b\0a\nz\0a\0b\n");
+}
