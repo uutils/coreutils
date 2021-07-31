@@ -1,4 +1,5 @@
 use crate::common::util::*;
+// spell-checker:ignore (ToDO) taaaa tbbbb tcccc
 
 #[test]
 fn test_with_tab() {
