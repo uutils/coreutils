@@ -567,8 +567,7 @@ impl Config {
                 let block_size = if options.is_present(options::size::KB_BLOCK_SIZE) {
                     1024
                 } else {
-                    env::var("BLOCKSIZE")
-                        .map_or(512, |blk_sz| blk_sz.parse::<u64>().map_or(512, |v| v))
+                    get_env_block_size()
                 };
 
                 Some(block_size)
@@ -1453,7 +1452,7 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
 
             #[cfg(unix)]
             {
-                let block_size = config.block_size.map_or(512, |v| v) as u64;
+                let block_size = config.block_size.map_or_else(get_env_block_size, |v| v) as u64;
                 max_blk_width = cmp::max(
                     max_blk_width,
                     item.md()
@@ -1589,7 +1588,7 @@ fn display_item_long(
     #[cfg(unix)]
     {
         // for long format, display the block_size as-well
-        let block_size = config.block_size.map_or(512, |v| v);
+        let block_size = config.block_size.map_or_else(get_env_block_size, |v| v);
         let _ = write!(
             out,
             "{} ",
@@ -1842,6 +1841,18 @@ fn display_file_name(path: &PathData, config: &Config) -> Option<Cell> {
 
     #[cfg(unix)]
     {
+        if config.format != Format::Long && config.block_size.is_some() {
+            let block_size = config.block_size.map_or_else(get_env_block_size, |v| v);
+            name = path.md().map_or_else(
+                || "?".to_string(),
+                |md| (md.blocks() * 512 / block_size).to_string(),
+            ) + " "
+                + &name;
+        }
+    }
+
+    #[cfg(unix)]
+    {
         if config.format != Format::Long && config.inode {
             name = path
                 .md()
@@ -1917,4 +1928,9 @@ fn display_symlink_count(_metadata: &Metadata) -> String {
 #[cfg(unix)]
 fn display_symlink_count(metadata: &Metadata) -> String {
     metadata.nlink().to_string()
+}
+
+#[cfg(unix)]
+fn get_env_block_size() -> u64 {
+    env::var("BLOCKSIZE").map_or(512, |blk_sz| blk_sz.parse::<u64>().map_or(512, |v| v))
 }
