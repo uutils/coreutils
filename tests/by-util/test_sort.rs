@@ -959,3 +959,12 @@ fn test_key_takes_one_arg() {
         .succeeds()
         .stdout_is_fixture("keys_open_ended.expected");
 }
+
+#[test]
+fn test_separator_null() {
+    new_ucmd!()
+        .args(&["-k1,1", "-k3,3", "-t", "\\0"])
+        .pipe_in("z\0a\0b\nz\0b\0a\na\0z\0z\n")
+        .succeeds()
+        .stdout_only("a\0z\0z\nz\0b\0a\nz\0a\0b\n");
+}
