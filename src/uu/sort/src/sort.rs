@@ -36,7 +36,7 @@ use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{File, OpenOptions};
 use std::hash::{Hash, Hasher};
-use std::io::{stdin, stdout, BufRead, BufReader, Read, Write};
+use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::ops::Range;
 use std::path::Path;
 use std::path::PathBuf;
@@ -169,15 +169,15 @@ impl Output {
         }
     }
 
-    fn into_write(self) -> Box<dyn Write> {
-        match self.file {
+    fn into_write(self) -> BufWriter<Box<dyn Write>> {
+        BufWriter::new(match self.file {
             Some((_name, file)) => {
                 // truncate the file
                 file.set_len(0).unwrap();
                 Box::new(file)
             }
             None => Box::new(stdout()),
-        }
+        })
     }
 
     fn as_output_name(&self) -> Option<&str> {
