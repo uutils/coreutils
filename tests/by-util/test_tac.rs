@@ -68,3 +68,8 @@ fn test_invalid_input() {
         .fails()
         .stderr_contains("dir: read error: Invalid argument");
 }
+
+#[test]
+fn test_no_line_separators() {
+    new_ucmd!().pipe_in("a").succeeds().stdout_is("a");
+}

@@ -139,9 +139,16 @@ fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) -> i32 {
                 i += 1;
             }
         }
+        // If the file contains no line separators, then simply write
+        // the contents of the file directly to stdout.
+        if offsets.is_empty() {
+            out.write_all(&data)
+                .unwrap_or_else(|e| crash!(1, "failed to write to stdout: {}", e));
+            return exit_code;
+        }
 
         // if there isn't a separator at the end of the file, fake it
-        if offsets.is_empty() || *offsets.last().unwrap() < data.len() - slen {
+        if *offsets.last().unwrap() < data.len() - slen {
             offsets.push(data.len());
         }
 
