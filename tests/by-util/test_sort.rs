@@ -797,6 +797,18 @@ fn test_check_silent() {
 }
 
 #[test]
+fn test_check_unique() {
+    // Due to a clap bug the combination "-cu" does not work. "-c -u" works.
+    // See https://github.com/clap-rs/clap/issues/2624
+    new_ucmd!()
+        .args(&["-c", "-u"])
+        .pipe_in("A\nA\n")
+        .fails()
+        .code_is(1)
+        .stderr_only("sort: -:2: disorder: A");
+}
+
+#[test]
 fn test_dictionary_and_nonprinting_conflicts() {
     let conflicting_args = ["n", "h", "g", "M"];
     for restricted_arg in &["d", "i"] {
