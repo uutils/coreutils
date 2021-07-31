@@ -66,7 +66,7 @@ fn test_invalid_input() {
         .ucmd()
         .arg("a")
         .fails()
-        .stderr_contains("dir: read error: Invalid argument");
+        .stderr_contains("a: read error: Invalid argument");
 }
 
 #[test]
