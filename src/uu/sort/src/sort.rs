@@ -173,7 +173,7 @@ impl Output {
         BufWriter::new(match self.file {
             Some((_name, file)) => {
                 // truncate the file
-                file.set_len(0).unwrap();
+                let _ = file.set_len(0);
                 Box::new(file)
             }
             None => Box::new(stdout()),

@@ -1030,3 +1030,12 @@ fn test_output_is_input() {
     cmd.args(&["-m", "-o", "file", "file"]).succeeds();
     assert_eq!(at.read("file"), input);
 }
+
+#[test]
+#[cfg(unix)]
+fn test_output_device() {
+    new_ucmd!()
+        .args(&["-o", "/dev/null"])
+        .pipe_in("input")
+        .succeeds();
+}
