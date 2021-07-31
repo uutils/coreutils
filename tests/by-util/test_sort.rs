@@ -1039,3 +1039,12 @@ fn test_output_device() {
         .pipe_in("input")
         .succeeds();
 }
+
+#[test]
+fn test_merge_empty_input() {
+    new_ucmd!()
+        .args(&["-m", "empty.txt"])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+}

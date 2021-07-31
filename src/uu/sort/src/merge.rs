@@ -194,12 +194,14 @@ fn merge_without_limit<M: MergeInput + 'static, F: Iterator<Item = M>>(
     let mut mergeable_files = vec![];
 
     for (file_number, receiver) in loaded_receivers.into_iter().enumerate() {
-        mergeable_files.push(MergeableFile {
-            current_chunk: Rc::new(receiver.recv().unwrap()),
-            file_number,
-            line_idx: 0,
-            receiver,
-        })
+        if let Ok(chunk) = receiver.recv() {
+            mergeable_files.push(MergeableFile {
+                current_chunk: Rc::new(chunk),
+                file_number,
+                line_idx: 0,
+                receiver,
+            })
+        }
     }
 
     FileMerger {
