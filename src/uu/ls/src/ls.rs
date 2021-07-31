@@ -236,6 +236,7 @@ struct Config {
     quoting_style: QuotingStyle,
     indicator_style: IndicatorStyle,
     time_style: TimeStyle,
+    #[cfg(unix)]
     block_size: Option<u64>,
 }
 
@@ -558,17 +559,22 @@ impl Config {
             Dereference::DirArgs
         };
 
-        let block_size = if options.is_present(options::size::BLOCK_SIZE) {
-            let block_size = if options.is_present(options::size::KB_BLOCK_SIZE) {
-                1024
-            } else {
-                env::var("BLOCKSIZE").map_or(512, |blk_sz| blk_sz.parse::<u64>().map_or(512, |v| v))
-            };
+        let block_size;
+        #[cfg(unix)]
+        {
+            block_size = if options.is_present(options::size::BLOCK_SIZE) {
+                let block_size = if options.is_present(options::size::KB_BLOCK_SIZE) {
+                    1024
+                } else {
+                    env::var("BLOCKSIZE")
+                        .map_or(512, |blk_sz| blk_sz.parse::<u64>().map_or(512, |v| v))
+                };
 
-            Some(block_size)
-        } else {
-            None
-        };
+                Some(block_size)
+            } else {
+                None
+            };
+        }
 
         Ok(Config {
             format,
@@ -589,6 +595,7 @@ impl Config {
             quoting_style,
             indicator_style,
             time_style,
+            #[cfg(unix)]
             block_size,
         })
     }
