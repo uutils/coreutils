@@ -1094,4 +1094,9 @@ fn check_against_gnu_tr_tests_fowler_1() {
 fn check_against_gnu_tr_tests_no_abort_1() {
     // # Up to coreutils-6.9, this would provoke a failed assertion.
     // ['no-abort-1', qw(-c a '[b*256]'), {IN=>'abc'}, {OUT=>'abb'}],
+    new_ucmd!()
+        .args(&["-c", "a", "[b*256]"])
+        .pipe_in("abc")
+        .succeeds()
+        .stdout_is("abb");
 }
