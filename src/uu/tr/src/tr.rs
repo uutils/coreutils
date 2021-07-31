@@ -100,10 +100,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let locked_stdout = stdout.lock();
     let mut buffered_stdout = BufWriter::new(locked_stdout);
 
-    let mut sets_iter = sets.into_iter();
+    let mut sets_iter = sets.iter().map(|c| c.as_str());
     let (set1, set2) = match Sequence::solve_set_characters(
-        Sequence::from_str(sets_iter.next().unwrap_or_default().as_str()),
-        Sequence::from_str(sets_iter.next().unwrap_or_default().as_str()),
+        sets_iter.next().unwrap_or_default(),
+        sets_iter.next().unwrap_or_default(),
         truncate_set1_flag,
     ) {
         Ok(r) => r,

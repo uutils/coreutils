@@ -1,15 +1,15 @@
 use nom::{
     branch::alt,
     bytes::complete::tag,
-    character::complete::{anychar, digit1, one_of},
+    character::complete::{anychar, one_of},
     combinator::{map_opt, recognize},
-    multi::{many0, many_m_n},
+    multi::{many0, many1, many_m_n},
     sequence::{delimited, preceded, separated_pair},
     IResult,
 };
 use std::{
     collections::{HashMap, HashSet},
-    fmt::Debug,
+    fmt::{Debug, Display},
     io::{BufRead, Write},
 };
 
@@ -24,6 +24,33 @@ mod unicode_table {
     pub static SPACE: char = '\u{0020}';
     pub static SPACES: &'static [char] = &[HT, LF, VT, FF, CR, SPACE];
     pub static BLANK: &'static [char] = &[SPACE, HT];
+}
+
+#[derive(Debug)]
+pub enum BadSequence {
+    MissingCharClassName,
+    MissingEquivalentClassChar,
+    MultipleCharRepeatInSet2,
+    CharRepeatInSet1,
+}
+
+impl Display for BadSequence {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BadSequence::MissingCharClassName => {
+                writeln!(f, "missing character class name '[::]'")
+            }
+            BadSequence::MissingEquivalentClassChar => {
+                writeln!(f, "missing equivalence class character '[==]'")
+            }
+            BadSequence::MultipleCharRepeatInSet2 => {
+                writeln!(f, "only one [c*] repeat construct may appear in string2")
+            }
+            BadSequence::CharRepeatInSet1 => {
+                writeln!(f, "the [c*] repeat construct may not appear in string1")
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -100,11 +127,14 @@ impl Sequence {
     }
 
     // Hide all the nasty sh*t in here
+    // TODO: Make the 2 set lazily generate the character mapping as necessary.
     pub fn solve_set_characters(
-        set1: Vec<Sequence>,
-        set2: Vec<Sequence>,
+        set1_str: &str,
+        set2_str: &str,
         truncate_set1_flag: bool,
-    ) -> Result<(Vec<char>, Vec<char>), String> {
+    ) -> Result<(Vec<char>, Vec<char>), BadSequence> {
+        let set1 = Sequence::from_str(set1_str)?;
+        let set2 = Sequence::from_str(set2_str)?;
         let is_char_star = |s: &&Sequence| -> bool {
             match s {
                 Sequence::CharStar(_) => true,
@@ -177,23 +207,17 @@ impl Sequence {
                 }
                 return Ok((set1_solved, set2_solved));
             } else {
-                Err(format!(
-                    "{}: only one [c*] repeat construct may appear in string2",
-                    executable!()
-                ))
+                Err(BadSequence::MultipleCharRepeatInSet2)
             }
         } else {
-            Err(format!(
-                "{}: the [c*] repeat construct may not appear in string1",
-                executable!()
-            ))
+            Err(BadSequence::CharRepeatInSet1)
         }
     }
 }
 
 impl Sequence {
-    pub fn from_str(input: &str) -> Vec<Sequence> {
-        many0(alt((
+    pub fn from_str(input: &str) -> Result<Vec<Sequence>, BadSequence> {
+        let result = many0(alt((
             alt((
                 Sequence::parse_char_range_octal_leftright,
                 Sequence::parse_char_range,
@@ -214,8 +238,13 @@ impl Sequence {
                 Sequence::parse_upper,
                 Sequence::parse_xdigit,
                 Sequence::parse_char_equal,
-                // NOTE: This must be the last one
             )),
+            // NOTE: Specific error cases
+            alt((
+                Sequence::parse_empty_bracket,
+                Sequence::parse_empty_equivalant_char,
+            )),
+            // NOTE: This must be the last one
             alt((
                 Sequence::parse_octal,
                 Sequence::parse_backslash,
@@ -224,11 +253,16 @@ impl Sequence {
         )))(input)
         .map(|(_, r)| r)
         .unwrap()
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>();
+        result
     }
 
+    // TODO: We can surely do better than this :(
     fn parse_octal_or_char(input: &str) -> IResult<&str, char> {
         recognize(alt((
             preceded(tag("\\"), recognize(many_m_n(1, 3, one_of("01234567")))),
+            preceded(tag("\\"), recognize(anychar)),
             recognize(anychar),
         )))(input)
         .map(|(l, a)| {
@@ -238,10 +272,19 @@ impl Sequence {
                     if input.is_empty() {
                         '\\'
                     } else {
-                        char::from_u32(
-                            u32::from_str_radix(&input, 8)
-                                .expect("We only matched against 0-7 so it should not fail"),
-                        )
+                        char::from_u32(u32::from_str_radix(&input, 8).unwrap_or_else(|_| {
+                            let c = match input.chars().next().unwrap() {
+                                'a' => unicode_table::BEL,
+                                'b' => unicode_table::BS,
+                                'f' => unicode_table::FF,
+                                'n' => unicode_table::LF,
+                                'r' => unicode_table::CR,
+                                't' => unicode_table::HT,
+                                'v' => unicode_table::VT,
+                                x => x,
+                            };
+                            u32::from(c)
+                        }))
                         .expect("Cannot convert octal value to character")
                     }
                 } else {
@@ -254,11 +297,11 @@ impl Sequence {
         })
     }
 
-    fn parse_char(input: &str) -> IResult<&str, Sequence> {
-        anychar(input).map(|(l, r)| (l, Sequence::Char(r)))
+    fn parse_char(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
+        anychar(input).map(|(l, r)| (l, Ok(Sequence::Char(r))))
     }
 
-    fn parse_backslash(input: &str) -> IResult<&str, Sequence> {
+    fn parse_backslash(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
         preceded(tag("\\"), anychar)(input).map(|(l, a)| {
             let c = match a {
                 'a' => Sequence::Char(unicode_table::BEL),
@@ -270,22 +313,22 @@ impl Sequence {
                 'v' => Sequence::Char(unicode_table::VT),
                 x => Sequence::Char(x),
             };
-            (l, c)
+            (l, Ok(c))
         })
     }
 
-    fn parse_octal(input: &str) -> IResult<&str, Sequence> {
+    fn parse_octal(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
         map_opt(
             preceded(tag("\\"), recognize(many_m_n(1, 3, one_of("01234567")))),
             |out: &str| {
                 u32::from_str_radix(out, 8)
-                    .map(|u| Sequence::Char(char::from_u32(u).unwrap()))
+                    .map(|u| Ok(Sequence::Char(char::from_u32(u).unwrap())))
                     .ok()
             },
         )(input)
     }
 
-    fn parse_char_range(input: &str) -> IResult<&str, Sequence> {
+    fn parse_char_range(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
         separated_pair(
             Sequence::parse_octal_or_char,
             tag("-"),
@@ -294,12 +337,14 @@ impl Sequence {
         .map(|(l, (a, b))| {
             (l, {
                 let (start, end) = (u32::from(a), u32::from(b));
-                Sequence::CharRange(start, end)
+                Ok(Sequence::CharRange(start, end))
             })
         })
     }
 
-    fn parse_char_range_octal_leftright(input: &str) -> IResult<&str, Sequence> {
+    fn parse_char_range_octal_leftright(
+        input: &str,
+    ) -> IResult<&str, Result<Sequence, BadSequence>> {
         separated_pair(
             Sequence::parse_octal_or_char,
             tag("-"),
@@ -308,76 +353,96 @@ impl Sequence {
         .map(|(l, (a, b))| {
             (l, {
                 let (start, end) = (u32::from(a), u32::from(b));
-                Sequence::CharRange(start, end)
+                Ok(Sequence::CharRange(start, end))
             })
         })
     }
 
-    fn parse_char_star(input: &str) -> IResult<&str, Sequence> {
+    fn parse_char_star(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
         delimited(tag("["), Sequence::parse_octal_or_char, tag("*]"))(input)
-            .map(|(l, a)| (l, Sequence::CharStar(a)))
+            .map(|(l, a)| (l, Ok(Sequence::CharStar(a))))
     }
 
-    fn parse_char_repeat(input: &str) -> IResult<&str, Sequence> {
+    fn parse_char_repeat(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
         delimited(
             tag("["),
-            separated_pair(Sequence::parse_octal_or_char, tag("*"), digit1),
+            separated_pair(
+                Sequence::parse_octal_or_char,
+                tag("*"),
+                recognize(many1(one_of("01234567"))),
+            ),
             tag("]"),
         )(input)
-        .map(|(l, (c, n))| (l, Sequence::CharRepeat(c, n.parse().unwrap())))
+        .map(|(l, (c, n))| {
+            (
+                l,
+                Ok(Sequence::CharRepeat(
+                    c,
+                    usize::from_str_radix(n, 8).expect("This should not fail "),
+                )),
+            )
+        })
     }
 
-    fn parse_alnum(input: &str) -> IResult<&str, Sequence> {
-        tag("[:alnum:]")(input).map(|(l, _)| (l, Sequence::Alnum))
+    fn parse_alnum(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
+        tag("[:alnum:]")(input).map(|(l, _)| (l, Ok(Sequence::Alnum)))
     }
 
-    fn parse_alpha(input: &str) -> IResult<&str, Sequence> {
-        tag("[:alpha:]")(input).map(|(l, _)| (l, Sequence::Alpha))
+    fn parse_alpha(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
+        tag("[:alpha:]")(input).map(|(l, _)| (l, Ok(Sequence::Alpha)))
     }
 
-    fn parse_blank(input: &str) -> IResult<&str, Sequence> {
-        tag("[:blank:]")(input).map(|(l, _)| (l, Sequence::Blank))
+    fn parse_blank(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
+        tag("[:blank:]")(input).map(|(l, _)| (l, Ok(Sequence::Blank)))
     }
 
-    fn parse_control(input: &str) -> IResult<&str, Sequence> {
-        tag("[:cntrl:]")(input).map(|(l, _)| (l, Sequence::Control))
+    fn parse_control(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
+        tag("[:cntrl:]")(input).map(|(l, _)| (l, Ok(Sequence::Control)))
     }
 
-    fn parse_digit(input: &str) -> IResult<&str, Sequence> {
-        tag("[:digit:]")(input).map(|(l, _)| (l, Sequence::Digit))
+    fn parse_digit(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
+        tag("[:digit:]")(input).map(|(l, _)| (l, Ok(Sequence::Digit)))
     }
 
-    fn parse_graph(input: &str) -> IResult<&str, Sequence> {
-        tag("[:graph:]")(input).map(|(l, _)| (l, Sequence::Graph))
+    fn parse_graph(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
+        tag("[:graph:]")(input).map(|(l, _)| (l, Ok(Sequence::Graph)))
     }
 
-    fn parse_lower(input: &str) -> IResult<&str, Sequence> {
-        tag("[:lower:]")(input).map(|(l, _)| (l, Sequence::Lower))
+    fn parse_lower(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
+        tag("[:lower:]")(input).map(|(l, _)| (l, Ok(Sequence::Lower)))
     }
 
-    fn parse_print(input: &str) -> IResult<&str, Sequence> {
-        tag("[:print:]")(input).map(|(l, _)| (l, Sequence::Print))
+    fn parse_print(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
+        tag("[:print:]")(input).map(|(l, _)| (l, Ok(Sequence::Print)))
     }
 
-    fn parse_punct(input: &str) -> IResult<&str, Sequence> {
-        tag("[:punct:]")(input).map(|(l, _)| (l, Sequence::Punct))
+    fn parse_punct(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
+        tag("[:punct:]")(input).map(|(l, _)| (l, Ok(Sequence::Punct)))
     }
 
-    fn parse_space(input: &str) -> IResult<&str, Sequence> {
-        tag("[:space:]")(input).map(|(l, _)| (l, Sequence::Space))
+    fn parse_space(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
+        tag("[:space:]")(input).map(|(l, _)| (l, Ok(Sequence::Space)))
     }
 
-    fn parse_upper(input: &str) -> IResult<&str, Sequence> {
-        tag("[:upper:]")(input).map(|(l, _)| (l, Sequence::Upper))
+    fn parse_upper(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
+        tag("[:upper:]")(input).map(|(l, _)| (l, Ok(Sequence::Upper)))
     }
 
-    fn parse_xdigit(input: &str) -> IResult<&str, Sequence> {
-        tag("[:xdigit:]")(input).map(|(l, _)| (l, Sequence::Xdigit))
+    fn parse_xdigit(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
+        tag("[:xdigit:]")(input).map(|(l, _)| (l, Ok(Sequence::Xdigit)))
     }
 
-    fn parse_char_equal(input: &str) -> IResult<&str, Sequence> {
+    fn parse_char_equal(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
         delimited(tag("[="), Sequence::parse_octal_or_char, tag("=]"))(input)
-            .map(|(l, c)| (l, Sequence::Char(c)))
+            .map(|(l, c)| (l, Ok(Sequence::Char(c))))
+    }
+
+    fn parse_empty_bracket(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
+        tag("[::]")(input).map(|(l, _)| (l, Err(BadSequence::MissingCharClassName)))
+    }
+
+    fn parse_empty_equivalant_char(input: &str) -> IResult<&str, Result<Sequence, BadSequence>> {
+        tag("[==]")(input).map(|(l, _)| (l, Err(BadSequence::MissingEquivalentClassChar)))
     }
 }
 
@@ -606,7 +671,12 @@ fn test_parse_octal() {
     for a in '0'..='7' {
         for b in '0'..='7' {
             for c in '0'..='7' {
-                assert!(Sequence::from_str(format!("\\{}{}{}", a, b, c).as_str()).len() == 1);
+                assert!(
+                    Sequence::from_str(format!("\\{}{}{}", a, b, c).as_str())
+                        .unwrap()
+                        .len()
+                        == 1
+                );
             }
         }
     }
