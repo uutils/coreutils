@@ -324,10 +324,7 @@ fn exec(files: &[PathBuf], settings: &Settings) -> UResult<()> {
 
     match link(&files[0], &files[1], settings) {
         Ok(_) => Ok(()),
-        Err(e) => {
-            // show_error!("{}", e);
-            Err(LnError::FailedToLink(e.to_string().into()).into())
-        }
+        Err(e) => Err(LnError::FailedToLink(e.to_string().into()).into()),
     }
 }
 
