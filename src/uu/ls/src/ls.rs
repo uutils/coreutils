@@ -23,6 +23,14 @@ use once_cell::unsync::OnceCell;
 use quoting_style::{escape_name, QuotingStyle};
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
+#[cfg(unix)]
+use std::{
+    cmp,
+    collections::HashMap,
+    env,
+    os::unix::fs::{FileTypeExt, MetadataExt},
+    time::Duration,
+};
 use std::{
     cmp::Reverse,
     error::Error,
@@ -31,13 +39,6 @@ use std::{
     io::{stdout, BufWriter, Stdout, Write},
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
-};
-#[cfg(unix)]
-use std::{
-    collections::HashMap,
-    env,
-    os::unix::fs::{FileTypeExt, MetadataExt},
-    time::Duration,
 };
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use uucore::error::{set_exit_code, FromIo, UCustomError, UResult};
@@ -1439,12 +1440,27 @@ fn pad_left(string: String, count: usize) -> String {
 fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) {
     if config.format == Format::Long {
         let (mut max_links, mut max_width) = (1, 1);
+
+        #[cfg(unix)]
+        let mut max_blk_width = 1;
+
         let mut total_size = 0;
 
         for item in items {
             let (links, width) = display_dir_entry_size(item, config);
             max_links = links.max(max_links);
             max_width = width.max(max_width);
+
+            #[cfg(unix)]
+            {
+                let block_size = config.block_size.map_or(512, |v| v) as u64;
+                max_blk_width = cmp::max(
+                    max_blk_width,
+                    item.md()
+                        .map_or(0, |md| (md.blocks() * 512 / block_size).to_string().len()),
+                );
+            }
+
             total_size += item.md().map_or(0, |md| get_block_size(md, config));
         }
 
@@ -1453,7 +1469,7 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
         }
 
         for item in items {
-            display_item_long(item, max_links, max_width, config, out);
+            display_item_long(item, max_links, max_width, max_blk_width, config, out);
         }
     } else {
         let names = items.iter().filter_map(|i| display_file_name(i, config));
@@ -1551,6 +1567,7 @@ fn display_item_long(
     item: &PathData,
     max_links: usize,
     max_size: usize,
+    _max_blk_width: usize,
     config: &Config,
     out: &mut BufWriter<Stdout>,
 ) {
@@ -1573,7 +1590,11 @@ fn display_item_long(
     {
         // for long format, display the block_size as-well
         let block_size = config.block_size.map_or(512, |v| v);
-        let _ = write!(out, "{:8} ", md.blocks() * 512 / block_size);
+        let _ = write!(
+            out,
+            "{} ",
+            pad_left((md.blocks() * 512 / block_size).to_string(), _max_blk_width)
+        );
     }
 
     let _ = write!(
