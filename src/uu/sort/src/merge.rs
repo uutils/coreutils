@@ -9,10 +9,11 @@
 
 use std::{
     cmp::Ordering,
+    ffi::OsString,
     fs::{self, File},
     io::{BufWriter, Read, Write},
     iter,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
     rc::Rc,
     sync::mpsc::{channel, sync_channel, Receiver, Sender, SyncSender},
@@ -25,28 +26,66 @@ use tempfile::TempDir;
 
 use crate::{
     chunks::{self, Chunk, RecycledChunk},
-    compare_by, GlobalSettings, Output,
+    compare_by, open, GlobalSettings, Output,
 };
+
+/// If the output file occurs in the input files as well, copy the contents of the output file
+/// and replace its occurrences in the inputs with that copy.
+fn replace_output_file_in_input_files(
+    files: &mut [OsString],
+    settings: &GlobalSettings,
+    output: Option<&str>,
+) -> Option<(TempDir, usize)> {
+    let mut copy: Option<(TempDir, PathBuf)> = None;
+    if let Some(Ok(output_path)) = output.map(|path| Path::new(path).canonicalize()) {
+        for file in files {
+            if let Ok(file_path) = Path::new(file).canonicalize() {
+                if file_path == output_path {
+                    if let Some((_dir, copy)) = &copy {
+                        *file = copy.clone().into_os_string();
+                    } else {
+                        let tmp_dir = tempfile::Builder::new()
+                            .prefix("uutils_sort")
+                            .tempdir_in(&settings.tmp_dir)
+                            .unwrap();
+                        let copy_path = tmp_dir.path().join("0");
+                        std::fs::copy(file_path, &copy_path).unwrap();
+                        *file = copy_path.clone().into_os_string();
+                        copy = Some((tmp_dir, copy_path))
+                    }
+                }
+            }
+        }
+    }
+    // if we created a TempDir its size must be one.
+    copy.map(|(dir, _copy)| (dir, 1))
+}
 
 /// Merge pre-sorted `Box<dyn Read>`s.
 ///
 /// If `settings.merge_batch_size` is greater than the length of `files`, intermediate files will be used.
 /// If `settings.compress_prog` is `Some`, intermediate files will be compressed with it.
-pub fn merge<Files: ExactSizeIterator<Item = Box<dyn Read + Send>>>(
-    files: Files,
-    settings: &GlobalSettings,
-) -> FileMerger {
+pub fn merge<'a>(
+    files: &mut [OsString],
+    settings: &'a GlobalSettings,
+    output: Option<&str>,
+) -> FileMerger<'a> {
+    let tmp_dir = replace_output_file_in_input_files(files, settings, output);
     if settings.compress_prog.is_none() {
         merge_with_file_limit::<_, _, WriteablePlainTmpFile>(
-            files.map(|file| PlainMergeInput { inner: file }),
+            files
+                .iter()
+                .map(|file| PlainMergeInput { inner: open(file) }),
             settings,
-            None,
+            tmp_dir,
         )
     } else {
         merge_with_file_limit::<_, _, WriteableCompressedTmpFile>(
-            files.map(|file| PlainMergeInput { inner: file }),
+            files
+                .iter()
+                .map(|file| PlainMergeInput { inner: open(file) }),
             settings,
-            None,
+            tmp_dir,
         )
     }
 }

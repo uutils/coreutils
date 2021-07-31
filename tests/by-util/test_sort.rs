@@ -1020,3 +1020,13 @@ fn test_separator_null() {
         .succeeds()
         .stdout_only("a\0z\0z\nz\0b\0a\nz\0a\0b\n");
 }
+
+#[test]
+fn test_output_is_input() {
+    let input = "a\nb\nc\n";
+    let (at, mut cmd) = at_and_ucmd!();
+    at.touch("file");
+    at.append("file", input);
+    cmd.args(&["-m", "-o", "file", "file"]).succeeds();
+    assert_eq!(at.read("file"), input);
+}
