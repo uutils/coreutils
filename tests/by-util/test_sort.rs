@@ -771,6 +771,7 @@ fn test_check() {
         new_ucmd!()
             .arg(diagnose_arg)
             .arg("check_fail.txt")
+            .arg("--buffer-size=10b")
             .fails()
             .stderr_only("sort: check_fail.txt:6: disorder: 5\n");
 
@@ -890,6 +891,29 @@ fn test_compress() {
         ])
         .succeeds()
         .stdout_only_fixture("ext_sort.expected");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_compress_merge() {
+    new_ucmd!()
+        .args(&[
+            "--compress-program",
+            "gzip",
+            "-S",
+            "10",
+            "--batch-size=2",
+            "-m",
+            "--unique",
+            "merge_ints_interleaved_1.txt",
+            "merge_ints_interleaved_2.txt",
+            "merge_ints_interleaved_3.txt",
+            "merge_ints_interleaved_3.txt",
+            "merge_ints_interleaved_2.txt",
+            "merge_ints_interleaved_1.txt",
+        ])
+        .succeeds()
+        .stdout_only_fixture("merge_ints_interleaved.expected");
 }
 
 #[test]
@@ -1027,7 +1051,8 @@ fn test_output_is_input() {
     let (at, mut cmd) = at_and_ucmd!();
     at.touch("file");
     at.append("file", input);
-    cmd.args(&["-m", "-o", "file", "file"]).succeeds();
+    cmd.args(&["-m", "-u", "-o", "file", "file", "file", "file"])
+        .succeeds();
     assert_eq!(at.read("file"), input);
 }
 

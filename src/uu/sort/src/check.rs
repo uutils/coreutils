@@ -42,7 +42,13 @@ pub fn check(path: &OsStr, settings: &GlobalSettings) -> i32 {
         move || reader(file, recycled_receiver, loaded_sender, &settings)
     });
     for _ in 0..2 {
-        let _ = recycled_sender.send(RecycledChunk::new(100 * 1024));
+        let _ = recycled_sender.send(RecycledChunk::new(if settings.buffer_size < 100 * 1024 {
+            // when the buffer size is smaller than 100KiB we choose it instead of the default.
+            // this improves testability.
+            settings.buffer_size
+        } else {
+            100 * 1024
+        }));
     }
 
     let mut prev_chunk: Option<Chunk> = None;
