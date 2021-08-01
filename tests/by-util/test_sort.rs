@@ -1020,3 +1020,20 @@ fn test_separator_null() {
         .succeeds()
         .stdout_only("a\0z\0z\nz\0b\0a\nz\0a\0b\n");
 }
+
+#[test]
+fn test_no_error_for_version() {
+    new_ucmd!()
+        .arg("--version")
+        .succeeds()
+        .stdout_contains("sort");
+}
+
+#[test]
+fn test_wrong_args_exit_code() {
+    new_ucmd!()
+        .arg("--misspelled")
+        .fails()
+        .status_code(2)
+        .stderr_contains("--misspelled");
+}
