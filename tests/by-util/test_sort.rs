@@ -1000,6 +1000,7 @@ fn test_verifies_out_file() {
         new_ucmd!()
             .args(&["-o", "nonexistent_dir/nonexistent_file"])
             .pipe_in(input)
+            .ignore_stdin_write_error()
             .fails()
             .status_code(2)
             .stderr_only(
