@@ -969,9 +969,23 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = get_usage();
     let mut settings: GlobalSettings = Default::default();
 
-    let matches = uu_app().usage(&usage[..]).get_matches_from_safe(args);
-
-    let matches = crash_if_err!(2, matches);
+    let matches = match uu_app().usage(&usage[..]).get_matches_from_safe(args) {
+        Ok(t) => t,
+        Err(e) => {
+            // not all clap "Errors" are because of a failure to parse arguments.
+            // "--version" also causes an Error to be returned, but we should not print to stderr
+            // nor return with a non-zero exit code in this case (we should print to stdout and return 0).
+            // This logic is similar to the code in clap, but we return 2 as the exit code in case of real failure
+            // (clap returns 1).
+            if e.use_stderr() {
+                eprintln!("{}", e.message);
+                return 2;
+            } else {
+                println!("{}", e.message);
+                return 0;
+            }
+        }
+    };
 
     settings.debug = matches.is_present(options::DEBUG);
 

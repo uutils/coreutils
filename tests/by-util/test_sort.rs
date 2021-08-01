@@ -1048,3 +1048,20 @@ fn test_merge_empty_input() {
         .no_stderr()
         .no_stdout();
 }
+
+#[test]
+fn test_no_error_for_version() {
+    new_ucmd!()
+        .arg("--version")
+        .succeeds()
+        .stdout_contains("sort");
+}
+
+#[test]
+fn test_wrong_args_exit_code() {
+    new_ucmd!()
+        .arg("--misspelled")
+        .fails()
+        .status_code(2)
+        .stderr_contains("--misspelled");
+}
