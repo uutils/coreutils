@@ -1,3 +1,5 @@
+// spell-checker:ignore (strings) anychar combinator Alnum Punct Xdigit alnum punct xdigit cntrl
+
 use nom::{
     branch::alt,
     bytes::complete::tag,
@@ -234,7 +236,7 @@ impl Sequence {
             alt((
                 Sequence::error_parse_char_repeat,
                 Sequence::error_parse_empty_bracket,
-                Sequence::error_parse_empty_equivalant_char,
+                Sequence::error_parse_empty_equivalent_char,
             )),
             // NOTE: This must be the last one
             map(Sequence::parse_backslash_or_char, |s| Ok(Sequence::Char(s))),
@@ -379,7 +381,7 @@ impl Sequence {
         tag("[::]")(input).map(|(l, _)| (l, Err(BadSequence::MissingCharClassName)))
     }
 
-    fn error_parse_empty_equivalant_char(
+    fn error_parse_empty_equivalent_char(
         input: &str,
     ) -> IResult<&str, Result<Sequence, BadSequence>> {
         tag("[==]")(input).map(|(l, _)| (l, Err(BadSequence::MissingEquivalentClassChar)))

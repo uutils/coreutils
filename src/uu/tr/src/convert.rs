@@ -1,3 +1,5 @@
+// spell-checker:ignore (strings) anychar combinator
+
 use nom::{
     branch::alt,
     bytes::complete::tag,
