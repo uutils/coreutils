@@ -89,8 +89,6 @@ fn reader_writer<F: Iterator<Item = Box<dyn Read + Send>>, Tmp: WriteableTmpFile
         files,
         &settings.tmp_dir,
         separator,
-        // Heuristically chosen: Dividing by 10 seems to keep our memory usage roughly
-        // around settings.buffer_size as a whole.
         buffer_size,
         settings,
         receiver,
