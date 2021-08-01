@@ -11,7 +11,7 @@
 
 ### Others
 
-- [ ] The current implementation does not handle `-` as an alias for stdin.
+- [ ] The current implementation doesn't follow stdin in non-unix platforms
 
 ## Possible optimizations
 

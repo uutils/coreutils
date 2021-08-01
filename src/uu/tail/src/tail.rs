@@ -2,6 +2,7 @@
 //  *
 //  * (c) Morten Olsen Lysgaard <morten@lysgaard.no>
 //  * (c) Alexander Batischev <eual.jp@gmail.com>
+//  * (c) Thomas Queiroz <thomasqueirozb@gmail.com>
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
@@ -28,6 +29,9 @@ use std::thread::sleep;
 use std::time::Duration;
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::ringbuffer::RingBuffer;
+
+#[cfg(unix)]
+use crate::platform::stdin_is_pipe_or_fifo;
 
 pub mod options {
     pub mod verbosity {
@@ -130,25 +134,56 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let files: Vec<String> = matches
         .values_of(options::ARG_FILES)
         .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_default();
+        .unwrap_or_else(|| vec![String::from("-")]);
 
-    if files.is_empty() {
-        let mut buffer = BufReader::new(stdin());
-        unbounded_tail(&mut buffer, &settings);
-    } else {
-        let multiple = files.len() > 1;
-        let mut first_header = true;
-        let mut readers = Vec::new();
+    let multiple = files.len() > 1;
+    let mut first_header = true;
+    let mut readers: Vec<(Box<dyn BufRead>, &String)> = Vec::new();
 
-        for filename in &files {
-            if (multiple || verbose) && !quiet {
-                if !first_header {
-                    println!();
-                }
+    #[cfg(unix)]
+    let stdin_string = String::from("standard input");
+
+    for filename in &files {
+        let use_stdin = filename.as_str() == "-";
+        if (multiple || verbose) && !quiet {
+            if !first_header {
+                println!();
+            }
+            if use_stdin {
+                println!("==> standard input <==");
+            } else {
                 println!("==> {} <==", filename);
             }
-            first_header = false;
+        }
+        first_header = false;
 
+        if use_stdin {
+            let mut reader = BufReader::new(stdin());
+            unbounded_tail(&mut reader, &settings);
+
+            // Don't follow stdin since there are no checks for pipes/FIFOs
+            //
+            // FIXME windows has GetFileType which can determine if the file is a pipe/FIFO
+            // so this check can also be performed
+
+            #[cfg(unix)]
+            {
+                /*
+                POSIX specification regarding tail -f
+
+                If the input file is a regular file or if the file operand specifies a FIFO, do not
+                terminate after the last line of the input file has been copied, but read and copy
+                further bytes from the input file when they become available. If no file operand is
+                specified and standard input is a pipe or FIFO, the -f option shall be ignored. If
+                the input file is not a FIFO, pipe, or regular file, it is unspecified whether or
+                not the -f option shall be ignored.
+                */
+
+                if settings.follow && !stdin_is_pipe_or_fifo() {
+                    readers.push((Box::new(reader), &stdin_string));
+                }
+            }
+        } else {
             let path = Path::new(filename);
             if path.is_dir() {
                 continue;
@@ -158,20 +193,20 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 bounded_tail(&mut file, &settings);
                 if settings.follow {
                     let reader = BufReader::new(file);
-                    readers.push(reader);
+                    readers.push((Box::new(reader), filename));
                 }
             } else {
                 let mut reader = BufReader::new(file);
                 unbounded_tail(&mut reader, &settings);
                 if settings.follow {
-                    readers.push(reader);
+                    readers.push((Box::new(reader), filename));
                 }
             }
         }
+    }
 
-        if settings.follow {
-            follow(&mut readers[..], &files[..], &settings);
-        }
+    if settings.follow {
+        follow(&mut readers[..], &settings);
     }
 
     0
@@ -248,8 +283,12 @@ pub fn uu_app() -> App<'static, 'static> {
         )
 }
 
-fn follow<T: Read>(readers: &mut [BufReader<T>], filenames: &[String], settings: &Settings) {
+fn follow<T: BufRead>(readers: &mut [(T, &String)], settings: &Settings) {
     assert!(settings.follow);
+    if readers.is_empty() {
+        return;
+    }
+
     let mut last = readers.len() - 1;
     let mut read_some = false;
     let mut process = platform::ProcessChecker::new(settings.pid);
@@ -260,7 +299,7 @@ fn follow<T: Read>(readers: &mut [BufReader<T>], filenames: &[String], settings:
         let pid_is_dead = !read_some && settings.pid != 0 && process.is_dead();
         read_some = false;
 
-        for (i, reader) in readers.iter_mut().enumerate() {
+        for (i, (reader, filename)) in readers.iter_mut().enumerate() {
             // Print all new content since the last pass
             loop {
                 let mut datum = String::new();
@@ -269,7 +308,7 @@ fn follow<T: Read>(readers: &mut [BufReader<T>], filenames: &[String], settings:
                     Ok(_) => {
                         read_some = true;
                         if i != last {
-                            println!("\n==> {} <==", filenames[i]);
+                            println!("\n==> {} <==", filename);
                             last = i;
                         }
                         print!("{}", datum);

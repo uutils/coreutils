@@ -2567,6 +2567,7 @@ version = "0.0.7"
 dependencies = [
  "clap",
  "libc",
+ "nix 0.20.0",
  "redox_syscall 0.1.57",
  "uucore",
  "uucore_procs",

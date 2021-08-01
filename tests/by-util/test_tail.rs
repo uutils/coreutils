@@ -24,6 +24,15 @@ fn test_stdin_default() {
 }
 
 #[test]
+fn test_stdin_explicit() {
+    new_ucmd!()
+        .pipe_in_fixture(FOOBAR_TXT)
+        .arg("-")
+        .run()
+        .stdout_is_fixture("foobar_stdin_default.expected");
+}
+
+#[test]
 fn test_single_default() {
     new_ucmd!()
         .arg(FOOBAR_TXT)
