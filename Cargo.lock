@@ -3051,6 +3051,7 @@ version = "0.0.7"
 dependencies = [
  "clap",
  "memchr 2.4.0",
+ "regex",
  "uucore",
  "uucore_procs",
 ]
