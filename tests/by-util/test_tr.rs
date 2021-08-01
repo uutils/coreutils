@@ -527,11 +527,11 @@ fn check_against_gnu_tr_tests_d() {
 }
 
 #[test]
-#[ignore = "the character from \\0->\\5 is not printable (meaning that they wont even get piped in). So its kind of tricky to test them"]
+#[ignore = "I cannot tell if this means that tr preserve the octal representation?"]
 fn check_against_gnu_tr_tests_e() {
     // ['e', qw(-s '[\0-\5]'), {IN=>"\0\0a\1\1b\2\2\2c\3\3\3d\4\4\4\4e\5\5"}, {OUT=>"\0a\1b\2c\3d\4e\5"}],
     new_ucmd!()
-        .args(&["-s", "[\\0-\\5]"])
+        .args(&["-s", r"[\0-\5]"])
         .pipe_in(
             "\u{0}\u{0}a\u{1}\u{1}b\u{2}\u{2}\u{2}c\u{3}\u{3}\u{3}d\u{4}\u{4}\u{4}\u{4}e\u{5}\u{5}",
         )
