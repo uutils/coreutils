@@ -605,19 +605,3 @@ where
         output_buf.clear();
     }
 }
-
-#[test]
-fn test_parse_octal() {
-    for a in '0'..='7' {
-        for b in '0'..='7' {
-            for c in '0'..='7' {
-                assert!(
-                    Sequence::from_str(format!("\\{}{}{}", a, b, c).as_str())
-                        .unwrap()
-                        .len()
-                        == 1
-                );
-            }
-        }
-    }
-}
