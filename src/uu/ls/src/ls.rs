@@ -1587,13 +1587,14 @@ fn display_item_long(
 
     #[cfg(unix)]
     {
-        // for long format, display the block_size as-well
-        let block_size = config.block_size.map_or_else(get_env_block_size, |v| v);
-        let _ = write!(
-            out,
-            "{} ",
-            pad_left((md.blocks() * 512 / block_size).to_string(), _max_blk_width)
-        );
+        if config.block_size.is_some() {
+            let block_size = config.block_size.map_or_else(get_env_block_size, |v| v);
+            let _ = write!(
+                out,
+                "{} ",
+                pad_left((md.blocks() * 512 / block_size).to_string(), _max_blk_width)
+            );
+        }
     }
 
     let _ = write!(
