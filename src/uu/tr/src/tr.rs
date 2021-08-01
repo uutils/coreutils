@@ -101,7 +101,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     if let Some(first) = sets.get(0) {
-        if first.ends_with(r"\") {
+        if first.ends_with('\\') {
             show_error!("warning: an unescaped backslash at end of string is not portable");
         }
     }
@@ -130,7 +130,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             let mut delete_buffer = vec![];
             {
                 let mut delete_writer = BufWriter::new(&mut delete_buffer);
-                let delete_op = DeleteOperation::new(set1.clone(), complement_flag);
+                let delete_op = DeleteOperation::new(set1, complement_flag);
                 translate_input(&mut locked_stdin, &mut delete_writer, delete_op);
             }
             {
@@ -150,7 +150,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             let mut translate_buffer = vec![];
             {
                 let mut writer = BufWriter::new(&mut translate_buffer);
-                match TranslateOperation::new(set1.clone(), set2.clone(), complement_flag) {
+                match TranslateOperation::new(set1, set2.clone(), complement_flag) {
                     Ok(op) => translate_input(&mut locked_stdin, &mut writer, op),
                     Err(s) => {
                         show_error!("{}", s);

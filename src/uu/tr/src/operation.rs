@@ -75,7 +75,7 @@ impl Sequence {
             Sequence::CharRepeat(c, n) => Box::new(std::iter::repeat(*c).take(*n)),
             Sequence::Alnum => Box::new(('0'..='9').chain('A'..='Z').chain('a'..='z')),
             Sequence::Alpha => Box::new(('A'..='Z').chain('a'..='z')),
-            Sequence::Blank => Box::new(unicode_table::BLANK.into_iter().cloned()),
+            Sequence::Blank => Box::new(unicode_table::BLANK.iter().cloned()),
             Sequence::Control => Box::new(
                 (0..=31)
                     .chain(std::iter::once(127))
@@ -113,7 +113,7 @@ impl Sequence {
                     .chain(123..=126)
                     .flat_map(char::from_u32),
             ),
-            Sequence::Space => Box::new(unicode_table::SPACES.into_iter().cloned()),
+            Sequence::Space => Box::new(unicode_table::SPACES.iter().cloned()),
             Sequence::Upper => Box::new('A'..='Z'),
             Sequence::Xdigit => Box::new(('0'..='9').chain('A'..='F').chain('a'..='f')),
         }
@@ -129,12 +129,7 @@ impl Sequence {
         let set1 = Sequence::from_str(set1_str)?;
         let set2 = Sequence::from_str(set2_str)?;
 
-        let is_char_star = |s: &&Sequence| -> bool {
-            match s {
-                Sequence::CharStar(_) => true,
-                _ => false,
-            }
-        };
+        let is_char_star = |s: &&Sequence| -> bool { matches!(s, Sequence::CharStar(_)) };
         let set1_star_count = set1.iter().filter(is_char_star).count();
         if set1_star_count == 0 {
             let set2_star_count = set2.iter().filter(is_char_star).count();
@@ -143,10 +138,9 @@ impl Sequence {
                     Sequence::CharStar(c) => Some(c),
                     _ => None,
                 });
-                let mut partition = set2.as_slice().split(|s| match s {
-                    Sequence::CharStar(_) => true,
-                    _ => false,
-                });
+                let mut partition = set2
+                    .as_slice()
+                    .split(|s| matches!(s, Sequence::CharStar(_)));
                 let set1_len = set1.iter().flat_map(Sequence::flatten).count();
                 let set2_len = set2
                     .iter()
@@ -199,7 +193,7 @@ impl Sequence {
                 if truncate_set1_flag {
                     set1_solved.truncate(set2_solved.len());
                 }
-                return Ok((set1_solved, set2_solved));
+                Ok((set1_solved, set2_solved))
             } else {
                 Err(BadSequence::MultipleCharRepeatInSet2)
             }
@@ -211,7 +205,7 @@ impl Sequence {
 
 impl Sequence {
     pub fn from_str(input: &str) -> Result<Vec<Sequence>, BadSequence> {
-        let result = many0(alt((
+        many0(alt((
             alt((
                 Sequence::parse_char_range,
                 Sequence::parse_char_star,
@@ -244,8 +238,7 @@ impl Sequence {
         .map(|(_, r)| r)
         .unwrap()
         .into_iter()
-        .collect::<Result<Vec<_>, _>>();
-        result
+        .collect::<Result<Vec<_>, _>>()
     }
 
     fn parse_backslash(input: &str) -> IResult<&str, char> {
@@ -442,21 +435,19 @@ pub struct TranslateOperationStandard {
 
 impl TranslateOperationStandard {
     fn new(set1: Vec<char>, set2: Vec<char>) -> Result<TranslateOperationStandard, String> {
-        if let Some(fallback) = set2.last().map(|s| *s) {
+        if let Some(fallback) = set2.last().copied() {
             Ok(TranslateOperationStandard {
                 translation_map: set1
                     .into_iter()
                     .zip(set2.into_iter().chain(std::iter::repeat(fallback)))
                     .collect::<HashMap<_, _>>(),
             })
+        } else if set1.is_empty() && set2.is_empty() {
+            Ok(TranslateOperationStandard {
+                translation_map: HashMap::new(),
+            })
         } else {
-            if set1.is_empty() && set2.is_empty() {
-                Ok(TranslateOperationStandard {
-                    translation_map: HashMap::new(),
-                })
-            } else {
-                Err("when not truncating set1, string2 must be non-empty".to_string())
-            }
+            Err("when not truncating set1, string2 must be non-empty".to_string())
         }
     }
 }

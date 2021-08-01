@@ -6,5 +6,5 @@ pub static VT: char = '\u{000B}';
 pub static FF: char = '\u{000C}';
 pub static CR: char = '\u{000D}';
 pub static SPACE: char = '\u{0020}';
-pub static SPACES: &'static [char] = &[HT, LF, VT, FF, CR, SPACE];
-pub static BLANK: &'static [char] = &[SPACE, HT];
+pub static SPACES: &[char] = &[HT, LF, VT, FF, CR, SPACE];
+pub static BLANK: &[char] = &[SPACE, HT];
