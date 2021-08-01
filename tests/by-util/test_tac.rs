@@ -1,3 +1,4 @@
+// spell-checker:ignore axxbxx bxxaxx
 use crate::common::util::*;
 
 #[test]
