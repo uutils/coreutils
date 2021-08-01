@@ -22,6 +22,7 @@ use std::{
 };
 
 use itertools::Itertools;
+use uucore::error::UResult;
 
 use crate::chunks::RecycledChunk;
 use crate::merge::ClosedTmpFile;
@@ -29,6 +30,7 @@ use crate::merge::WriteableCompressedTmpFile;
 use crate::merge::WriteablePlainTmpFile;
 use crate::merge::WriteableTmpFile;
 use crate::Output;
+use crate::SortError;
 use crate::{
     chunks::{self, Chunk},
     compare_by, merge, sort_by, GlobalSettings,
@@ -40,10 +42,10 @@ const START_BUFFER_SIZE: usize = 8_000;
 
 /// Sort files by using auxiliary files for storing intermediate chunks (if needed), and output the result.
 pub fn ext_sort(
-    files: &mut impl Iterator<Item = Box<dyn Read + Send>>,
+    files: &mut impl Iterator<Item = UResult<Box<dyn Read + Send>>>,
     settings: &GlobalSettings,
     output: Output,
-) {
+) -> UResult<()> {
     let (sorted_sender, sorted_receiver) = std::sync::mpsc::sync_channel(1);
     let (recycled_sender, recycled_receiver) = std::sync::mpsc::sync_channel(1);
     thread::spawn({
@@ -57,7 +59,7 @@ pub fn ext_sort(
             sorted_receiver,
             recycled_sender,
             output,
-        );
+        )
     } else {
         reader_writer::<_, WriteablePlainTmpFile>(
             files,
@@ -65,17 +67,20 @@ pub fn ext_sort(
             sorted_receiver,
             recycled_sender,
             output,
-        );
+        )
     }
 }
 
-fn reader_writer<F: Iterator<Item = Box<dyn Read + Send>>, Tmp: WriteableTmpFile + 'static>(
+fn reader_writer<
+    F: Iterator<Item = UResult<Box<dyn Read + Send>>>,
+    Tmp: WriteableTmpFile + 'static,
+>(
     files: F,
     settings: &GlobalSettings,
     receiver: Receiver<Chunk>,
     sender: SyncSender<Chunk>,
     output: Output,
-) {
+) -> UResult<()> {
     let separator = if settings.zero_terminated {
         b'\0'
     } else {
@@ -93,16 +98,16 @@ fn reader_writer<F: Iterator<Item = Box<dyn Read + Send>>, Tmp: WriteableTmpFile
         settings,
         receiver,
         sender,
-    );
+    )?;
     match read_result {
         ReadResult::WroteChunksToFile { tmp_files, tmp_dir } => {
             let tmp_dir_size = tmp_files.len();
-            let mut merger = merge::merge_with_file_limit::<_, _, Tmp>(
+            let merger = merge::merge_with_file_limit::<_, _, Tmp>(
                 tmp_files.into_iter().map(|c| c.reopen()),
                 settings,
                 Some((tmp_dir, tmp_dir_size)),
-            );
-            merger.write_all(settings, output);
+            )?;
+            merger.write_all(settings, output)?;
         }
         ReadResult::SortedSingleChunk(chunk) => {
             if settings.unique {
@@ -145,6 +150,7 @@ fn reader_writer<F: Iterator<Item = Box<dyn Read + Send>>, Tmp: WriteableTmpFile
             // don't output anything
         }
     }
+    Ok(())
 }
 
 /// The function that is executed on the sorter thread.
@@ -153,7 +159,11 @@ fn sorter(receiver: Receiver<Chunk>, sender: SyncSender<Chunk>, settings: Global
         payload.with_contents_mut(|contents| {
             sort_by(&mut contents.lines, &settings, &contents.line_data)
         });
-        sender.send(payload).unwrap();
+        if sender.send(payload).is_err() {
+            // The receiver has gone away, likely because the other thread hit an error.
+            // We stop silently because the actual error is printed by the other thread.
+            return;
+        }
     }
 }
 
@@ -173,15 +183,15 @@ enum ReadResult<I: WriteableTmpFile> {
 }
 /// The function that is executed on the reader/writer thread.
 fn read_write_loop<I: WriteableTmpFile>(
-    mut files: impl Iterator<Item = Box<dyn Read + Send>>,
+    mut files: impl Iterator<Item = UResult<Box<dyn Read + Send>>>,
     tmp_dir_parent: &Path,
     separator: u8,
     buffer_size: usize,
     settings: &GlobalSettings,
     receiver: Receiver<Chunk>,
     sender: SyncSender<Chunk>,
-) -> ReadResult<I> {
-    let mut file = files.next().unwrap();
+) -> UResult<ReadResult<I>> {
+    let mut file = files.next().unwrap()?;
 
     let mut carry_over = vec![];
     // kick things off with two reads
@@ -199,14 +209,14 @@ fn read_write_loop<I: WriteableTmpFile>(
             &mut files,
             separator,
             settings,
-        );
+        )?;
 
         if !should_continue {
             drop(sender);
             // We have already read the whole input. Since we are in our first two reads,
             // this means that we can fit the whole input into memory. Bypass writing below and
             // handle this case in a more straightforward way.
-            return if let Ok(first_chunk) = receiver.recv() {
+            return Ok(if let Ok(first_chunk) = receiver.recv() {
                 if let Ok(second_chunk) = receiver.recv() {
                     ReadResult::SortedTwoChunks([first_chunk, second_chunk])
                 } else {
@@ -214,16 +224,14 @@ fn read_write_loop<I: WriteableTmpFile>(
                 }
             } else {
                 ReadResult::EmptyInput
-            };
+            });
         }
     }
 
-    let tmp_dir = crash_if_err!(
-        2,
-        tempfile::Builder::new()
-            .prefix("uutils_sort")
-            .tempdir_in(tmp_dir_parent)
-    );
+    let tmp_dir = tempfile::Builder::new()
+        .prefix("uutils_sort")
+        .tempdir_in(tmp_dir_parent)
+        .map_err(|_| SortError::TmpDirCreationFailed)?;
 
     let mut sender_option = Some(sender);
     let mut file_number = 0;
@@ -232,7 +240,7 @@ fn read_write_loop<I: WriteableTmpFile>(
         let mut chunk = match receiver.recv() {
             Ok(it) => it,
             _ => {
-                return ReadResult::WroteChunksToFile { tmp_files, tmp_dir };
+                return Ok(ReadResult::WroteChunksToFile { tmp_files, tmp_dir });
             }
         };
 
@@ -241,7 +249,7 @@ fn read_write_loop<I: WriteableTmpFile>(
             tmp_dir.path().join(file_number.to_string()),
             settings.compress_prog.as_deref(),
             separator,
-        );
+        )?;
         tmp_files.push(tmp_file);
 
         file_number += 1;
@@ -258,7 +266,7 @@ fn read_write_loop<I: WriteableTmpFile>(
                 &mut files,
                 separator,
                 settings,
-            );
+            )?;
             if !should_continue {
                 sender_option = None;
             }
@@ -273,8 +281,8 @@ fn write<I: WriteableTmpFile>(
     file: PathBuf,
     compress_prog: Option<&str>,
     separator: u8,
-) -> I::Closed {
-    let mut tmp_file = I::create(file, compress_prog);
+) -> UResult<I::Closed> {
+    let mut tmp_file = I::create(file, compress_prog)?;
     write_lines(chunk.lines(), tmp_file.as_write(), separator);
     tmp_file.finished_writing()
 }
