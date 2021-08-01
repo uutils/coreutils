@@ -13,7 +13,7 @@ fn parse_octal(input: &str) -> IResult<&str, char> {
         preceded(tag("\\"), recognize(many_m_n(1, 3, one_of("01234567")))),
         |out: &str| {
             u32::from_str_radix(out, 8)
-                .map(|u| char::from_u32(u))
+                .map(char::from_u32)
                 .ok()
                 .flatten()
         },
