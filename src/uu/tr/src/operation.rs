@@ -22,6 +22,7 @@ pub enum BadSequence {
     MultipleCharRepeatInSet2,
     CharRepeatInSet1,
     InvalidRepeatCount(String),
+    EmptySet2WhenNotTruncatingSet1,
 }
 
 impl Display for BadSequence {
@@ -41,6 +42,9 @@ impl Display for BadSequence {
             }
             BadSequence::InvalidRepeatCount(count) => {
                 writeln!(f, "invalid repeat count '{}' in [c*n] construct", count)
+            }
+            BadSequence::EmptySet2WhenNotTruncatingSet1 => {
+                writeln!(f, "when not truncating set1, string2 must be non-empty")
             }
         }
     }
@@ -434,7 +438,7 @@ pub struct TranslateOperationStandard {
 }
 
 impl TranslateOperationStandard {
-    fn new(set1: Vec<char>, set2: Vec<char>) -> Result<TranslateOperationStandard, String> {
+    fn new(set1: Vec<char>, set2: Vec<char>) -> Result<TranslateOperationStandard, BadSequence> {
         if let Some(fallback) = set2.last().copied() {
             Ok(TranslateOperationStandard {
                 translation_map: set1
@@ -447,7 +451,7 @@ impl TranslateOperationStandard {
                 translation_map: HashMap::new(),
             })
         } else {
-            Err("when not truncating set1, string2 must be non-empty".to_string())
+            Err(BadSequence::EmptySet2WhenNotTruncatingSet1)
         }
     }
 }
@@ -473,7 +477,7 @@ impl TranslateOperation {
         set1: Vec<char>,
         set2: Vec<char>,
         complement: bool,
-    ) -> Result<TranslateOperation, String> {
+    ) -> Result<TranslateOperation, BadSequence> {
         if complement {
             Ok(TranslateOperation::Complement(
                 TranslateOperationComplement::new(set1, set2),
