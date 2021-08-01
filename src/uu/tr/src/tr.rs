@@ -14,7 +14,9 @@
 extern crate uucore;
 extern crate nom;
 
+mod convert;
 mod operation;
+mod unicode_table;
 
 use clap::{crate_version, App, Arg};
 use nom::AsBytes;
@@ -64,7 +66,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let sets = matches
         .values_of(options::SETS)
-        .map(|v| v.map(ToString::to_string).collect::<Vec<_>>())
+        .map(|v| {
+            v.map(ToString::to_string)
+                .map(convert::reduce_octal_to_char)
+                .collect::<Vec<_>>()
+        })
         .unwrap_or_default();
     let sets_len = sets.len();
 
@@ -94,6 +100,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         return 1;
     }
 
+    if let Some(first) = sets.get(0) {
+        if first.ends_with(r"\") {
+            show_error!("warning: an unescaped backslash at end of string is not portable");
+        }
+    }
+
     let stdin = stdin();
     let mut locked_stdin = stdin.lock();
     let stdout = stdout();
@@ -112,13 +124,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             return 1;
         }
     };
-
-    if set2.len() == 1 && set2[0] == '\\' {
-        show_error!(
-            "{}",
-            "warning: an unescaped backslash at end of string is not portable"
-        );
-    }
 
     if delete_flag {
         if squeeze_flag {
