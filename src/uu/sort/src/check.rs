@@ -14,6 +14,7 @@ use crate::{
 use itertools::Itertools;
 use std::{
     cmp::Ordering,
+    ffi::OsStr,
     io::Read,
     iter,
     sync::mpsc::{sync_channel, Receiver, SyncSender},
@@ -25,7 +26,7 @@ use std::{
 /// # Returns
 ///
 /// The code we should exit with.
-pub fn check(path: &str, settings: &GlobalSettings) -> i32 {
+pub fn check(path: &OsStr, settings: &GlobalSettings) -> i32 {
     let max_allowed_cmp = if settings.unique {
         // If `unique` is enabled, the previous line must compare _less_ to the next one.
         Ordering::Less
@@ -41,7 +42,13 @@ pub fn check(path: &str, settings: &GlobalSettings) -> i32 {
         move || reader(file, recycled_receiver, loaded_sender, &settings)
     });
     for _ in 0..2 {
-        let _ = recycled_sender.send(RecycledChunk::new(100 * 1024));
+        let _ = recycled_sender.send(RecycledChunk::new(if settings.buffer_size < 100 * 1024 {
+            // when the buffer size is smaller than 100KiB we choose it instead of the default.
+            // this improves testability.
+            settings.buffer_size
+        } else {
+            100 * 1024
+        }));
     }
 
     let mut prev_chunk: Option<Chunk> = None;
@@ -63,7 +70,12 @@ pub fn check(path: &str, settings: &GlobalSettings) -> i32 {
             ) > max_allowed_cmp
             {
                 if !settings.check_silent {
-                    eprintln!("sort: {}:{}: disorder: {}", path, line_idx, new_first.line);
+                    eprintln!(
+                        "sort: {}:{}: disorder: {}",
+                        path.to_string_lossy(),
+                        line_idx,
+                        new_first.line
+                    );
                 }
                 return 1;
             }
@@ -74,7 +86,12 @@ pub fn check(path: &str, settings: &GlobalSettings) -> i32 {
             line_idx += 1;
             if compare_by(a, b, settings, chunk.line_data(), chunk.line_data()) > max_allowed_cmp {
                 if !settings.check_silent {
-                    eprintln!("sort: {}:{}: disorder: {}", path, line_idx, b.line);
+                    eprintln!(
+                        "sort: {}:{}: disorder: {}",
+                        path.to_string_lossy(),
+                        line_idx,
+                        b.line
+                    );
                 }
                 return 1;
             }

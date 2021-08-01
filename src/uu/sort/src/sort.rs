@@ -33,10 +33,10 @@ use rand::{thread_rng, Rng};
 use rayon::prelude::*;
 use std::cmp::Ordering;
 use std::env;
-use std::ffi::OsStr;
-use std::fs::File;
+use std::ffi::{OsStr, OsString};
+use std::fs::{File, OpenOptions};
 use std::hash::{Hash, Hasher};
-use std::io::{stdin, stdout, BufRead, BufReader, Read, Write};
+use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::ops::Range;
 use std::path::Path;
 use std::path::PathBuf;
@@ -146,24 +146,44 @@ impl SortMode {
 }
 
 pub struct Output {
-    file: Option<File>,
+    file: Option<(String, File)>,
 }
 
 impl Output {
     fn new(name: Option<&str>) -> Self {
         Self {
             file: name.map(|name| {
-                File::create(name).unwrap_or_else(|e| {
-                    crash!(2, "open failed: {}: {}", name, strip_errno(&e.to_string()))
-                })
+                // This is different from `File::create()` because we don't truncate the output yet.
+                // This allows using the output file as an input file.
+                (
+                    name.to_owned(),
+                    OpenOptions::new()
+                        .write(true)
+                        .create(true)
+                        .open(name)
+                        .unwrap_or_else(|e| {
+                            crash!(2, "open failed: {}: {}", name, strip_errno(&e.to_string()))
+                        }),
+                )
             }),
         }
     }
 
-    fn into_write(self) -> Box<dyn Write> {
-        match self.file {
-            Some(file) => Box::new(file),
+    fn into_write(self) -> BufWriter<Box<dyn Write>> {
+        BufWriter::new(match self.file {
+            Some((_name, file)) => {
+                // truncate the file
+                let _ = file.set_len(0);
+                Box::new(file)
+            }
             None => Box::new(stdout()),
+        })
+    }
+
+    fn as_output_name(&self) -> Option<&str> {
+        match &self.file {
+            Some((name, _file)) => Some(name),
+            None => None,
         }
     }
 }
@@ -970,29 +990,28 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     settings.debug = matches.is_present(options::DEBUG);
 
     // check whether user specified a zero terminated list of files for input, otherwise read files from args
-    let mut files: Vec<String> = if matches.is_present(options::FILES0_FROM) {
-        let files0_from: Vec<String> = matches
-            .values_of(options::FILES0_FROM)
-            .map(|v| v.map(ToString::to_string).collect())
+    let mut files: Vec<OsString> = if matches.is_present(options::FILES0_FROM) {
+        let files0_from: Vec<OsString> = matches
+            .values_of_os(options::FILES0_FROM)
+            .map(|v| v.map(ToOwned::to_owned).collect())
             .unwrap_or_default();
 
         let mut files = Vec::new();
         for path in &files0_from {
-            let reader = open(path.as_str());
+            let reader = open(&path);
             let buf_reader = BufReader::new(reader);
             for line in buf_reader.split(b'\0').flatten() {
-                files.push(
+                files.push(OsString::from(
                     std::str::from_utf8(&line)
-                        .expect("Could not parse string from zero terminated input.")
-                        .to_string(),
-                );
+                        .expect("Could not parse string from zero terminated input."),
+                ));
             }
         }
         files
     } else {
         matches
-            .values_of(options::FILES)
-            .map(|v| v.map(ToString::to_string).collect())
+            .values_of_os(options::FILES)
+            .map(|v| v.map(ToOwned::to_owned).collect())
             .unwrap_or_default()
     };
 
@@ -1080,9 +1099,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     if files.is_empty() {
         /* if no file, default to stdin */
-        files.push("-".to_owned());
+        files.push("-".to_string().into());
     } else if settings.check && files.len() != 1 {
-        crash!(2, "extra operand `{}' not allowed with -c", files[1])
+        crash!(
+            2,
+            "extra operand `{}' not allowed with -c",
+            files[1].to_string_lossy()
+        )
     }
 
     if let Some(arg) = matches.args.get(options::SEPARATOR) {
@@ -1136,7 +1159,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     settings.init_precomputed();
 
-    exec(&files, &settings, output)
+    exec(&mut files, &settings, output)
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -1359,9 +1382,9 @@ pub fn uu_app() -> App<'static, 'static> {
         )
 }
 
-fn exec(files: &[String], settings: &GlobalSettings, output: Output) -> i32 {
+fn exec(files: &mut [OsString], settings: &GlobalSettings, output: Output) -> i32 {
     if settings.merge {
-        let mut file_merger = merge::merge(files.iter().map(open), settings);
+        let mut file_merger = merge::merge(files, settings, output.as_output_name());
         file_merger.write_all(settings, output);
     } else if settings.check {
         if files.len() > 1 {

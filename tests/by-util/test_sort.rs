@@ -771,6 +771,7 @@ fn test_check() {
         new_ucmd!()
             .arg(diagnose_arg)
             .arg("check_fail.txt")
+            .arg("--buffer-size=10b")
             .fails()
             .stderr_only("sort: check_fail.txt:6: disorder: 5\n");
 
@@ -893,6 +894,29 @@ fn test_compress() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_compress_merge() {
+    new_ucmd!()
+        .args(&[
+            "--compress-program",
+            "gzip",
+            "-S",
+            "10",
+            "--batch-size=2",
+            "-m",
+            "--unique",
+            "merge_ints_interleaved_1.txt",
+            "merge_ints_interleaved_2.txt",
+            "merge_ints_interleaved_3.txt",
+            "merge_ints_interleaved_3.txt",
+            "merge_ints_interleaved_2.txt",
+            "merge_ints_interleaved_1.txt",
+        ])
+        .succeeds()
+        .stdout_only_fixture("merge_ints_interleaved.expected");
+}
+
+#[test]
 fn test_compress_fail() {
     TestScenario::new(util_name!())
         .ucmd_keepenv()
@@ -976,6 +1000,7 @@ fn test_verifies_out_file() {
         new_ucmd!()
             .args(&["-o", "nonexistent_dir/nonexistent_file"])
             .pipe_in(input)
+            .ignore_stdin_write_error()
             .fails()
             .status_code(2)
             .stderr_only(
@@ -1019,6 +1044,35 @@ fn test_separator_null() {
         .pipe_in("z\0a\0b\nz\0b\0a\na\0z\0z\n")
         .succeeds()
         .stdout_only("a\0z\0z\nz\0b\0a\nz\0a\0b\n");
+}
+
+#[test]
+fn test_output_is_input() {
+    let input = "a\nb\nc\n";
+    let (at, mut cmd) = at_and_ucmd!();
+    at.touch("file");
+    at.append("file", input);
+    cmd.args(&["-m", "-u", "-o", "file", "file", "file", "file"])
+        .succeeds();
+    assert_eq!(at.read("file"), input);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_output_device() {
+    new_ucmd!()
+        .args(&["-o", "/dev/null"])
+        .pipe_in("input")
+        .succeeds();
+}
+
+#[test]
+fn test_merge_empty_input() {
+    new_ucmd!()
+        .args(&["-m", "empty.txt"])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
 }
 
 #[test]
