@@ -343,24 +343,23 @@ fn cat_files(files: Vec<String>, options: &OutputOptions) -> UResult<()> {
         line_number: 1,
         at_line_start: true,
     };
-    let mut error_messages : Vec<String> = Vec::new();
+    let mut error_messages: Vec<String> = Vec::new();
 
     for path in &files {
         if let Err(err) = cat_path(path, options, &mut state) {
-            error_messages.push(
-                format!("{}: {}", path, err));
+            error_messages.push(format!("{}: {}", path, err));
         }
     }
-    if error_messages.len() == 0 {
+    if error_messages.is_empty() {
         Ok(())
     } else {
         // each next line is expected to display "cat: …"
-        let line_joiner = format!("\n{}: ",
-                                  executable!()).to_owned();
+        let line_joiner = format!("\n{}: ", executable!());
 
         Err(uucore::error::USimpleError::new(
-                error_messages.len() as i32,
-                error_messages.join(&line_joiner).into()))
+            error_messages.len() as i32,
+            error_messages.join(&line_joiner),
+        ))
     }
 }
 
