@@ -11,9 +11,12 @@
 extern crate uucore;
 
 use clap::{crate_version, App, Arg};
+use uucore::error::{UCustomError, UResult};
 
 use std::borrow::Cow;
+use std::error::Error;
 use std::ffi::OsStr;
+use std::fmt::Display;
 use std::fs;
 
 use std::io::{stdin, Result};
@@ -22,6 +25,7 @@ use std::os::unix::fs::symlink;
 #[cfg(windows)]
 use std::os::windows::fs::{symlink_dir, symlink_file};
 use std::path::{Path, PathBuf};
+use uucore::backup_control::{self, BackupMode};
 use uucore::fs::{canonicalize, CanonicalizeMode};
 
 pub struct Settings {
@@ -43,12 +47,49 @@ pub enum OverwriteMode {
     Force,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum BackupMode {
-    NoBackup,
-    SimpleBackup,
-    NumberedBackup,
-    ExistingBackup,
+#[derive(Debug)]
+enum LnError {
+    TargetIsDirectory(String),
+    SomeLinksFailed,
+    FailedToLink(String),
+    MissingDestination(String),
+    ExtraOperand(String),
+    InvalidBackupMode(String),
+}
+
+impl Display for LnError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::TargetIsDirectory(s) => write!(f, "target '{}' is not a directory", s),
+            Self::FailedToLink(s) => write!(f, "failed to link '{}'", s),
+            Self::SomeLinksFailed => write!(f, "some links failed to create"),
+            Self::MissingDestination(s) => {
+                write!(f, "missing destination file operand after '{}'", s)
+            }
+            Self::ExtraOperand(s) => write!(
+                f,
+                "extra operand '{}'\nTry '{} --help' for more information.",
+                s,
+                executable!()
+            ),
+            Self::InvalidBackupMode(s) => write!(f, "{}", s),
+        }
+    }
+}
+
+impl Error for LnError {}
+
+impl UCustomError for LnError {
+    fn code(&self) -> i32 {
+        match self {
+            Self::TargetIsDirectory(_) => 1,
+            Self::SomeLinksFailed => 1,
+            Self::FailedToLink(_) => 1,
+            Self::MissingDestination(_) => 1,
+            Self::ExtraOperand(_) => 1,
+            Self::InvalidBackupMode(_) => 1,
+        }
+    }
 }
 
 fn get_usage() -> String {
@@ -78,7 +119,7 @@ fn get_long_usage() -> String {
 static ABOUT: &str = "change file owner and group";
 
 mod options {
-    pub const B: &str = "b";
+    pub const BACKUP_NO_ARG: &str = "b";
     pub const BACKUP: &str = "backup";
     pub const FORCE: &str = "force";
     pub const INTERACTIVE: &str = "interactive";
@@ -93,13 +134,18 @@ mod options {
 
 static ARG_FILES: &str = "files";
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = get_usage();
     let long_usage = get_long_usage();
 
     let matches = uu_app()
         .usage(&usage[..])
-        .after_help(&long_usage[..])
+        .after_help(&*format!(
+            "{}\n{}",
+            long_usage,
+            backup_control::BACKUP_CONTROL_LONG_HELP
+        ))
         .get_matches_from(args);
 
     /* the list of files */
@@ -118,33 +164,24 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         OverwriteMode::NoClobber
     };
 
-    let backup_mode = if matches.is_present(options::B) {
-        BackupMode::ExistingBackup
-    } else if matches.is_present(options::BACKUP) {
-        match matches.value_of(options::BACKUP) {
-            None => BackupMode::ExistingBackup,
-            Some(mode) => match mode {
-                "simple" | "never" => BackupMode::SimpleBackup,
-                "numbered" | "t" => BackupMode::NumberedBackup,
-                "existing" | "nil" => BackupMode::ExistingBackup,
-                "none" | "off" => BackupMode::NoBackup,
-                _ => panic!(), // cannot happen as it is managed by clap
-            },
+    let backup_mode = backup_control::determine_backup_mode(
+        matches.is_present(options::BACKUP_NO_ARG),
+        matches.is_present(options::BACKUP),
+        matches.value_of(options::BACKUP),
+    );
+    let backup_mode = match backup_mode {
+        Err(err) => {
+            return Err(LnError::InvalidBackupMode(err).into());
         }
-    } else {
-        BackupMode::NoBackup
+        Ok(mode) => mode,
     };
 
-    let backup_suffix = if matches.is_present(options::SUFFIX) {
-        matches.value_of(options::SUFFIX).unwrap()
-    } else {
-        "~"
-    };
+    let backup_suffix = backup_control::determine_backup_suffix(matches.value_of(options::SUFFIX));
 
     let settings = Settings {
         overwrite: overwrite_mode,
         backup: backup_mode,
-        suffix: backup_suffix.to_string(),
+        suffix: backup_suffix,
         symbolic: matches.is_present(options::SYMBOLIC),
         relative: matches.is_present(options::RELATIVE),
         target_dir: matches
@@ -162,22 +199,19 @@ pub fn uu_app() -> App<'static, 'static> {
     App::new(executable!())
         .version(crate_version!())
         .about(ABOUT)
-        .arg(Arg::with_name(options::B).short(options::B).help(
-            "make a backup of each file that would otherwise be overwritten or \
-             removed",
-        ))
         .arg(
             Arg::with_name(options::BACKUP)
                 .long(options::BACKUP)
-                .help(
-                    "make a backup of each file that would otherwise be overwritten \
-                     or removed",
-                )
+                .help("make a backup of each existing destination file")
                 .takes_value(true)
-                .possible_values(&[
-                    "simple", "never", "numbered", "t", "existing", "nil", "none", "off",
-                ])
-                .value_name("METHOD"),
+                .require_equals(true)
+                .min_values(0)
+                .value_name("CONTROL"),
+        )
+        .arg(
+            Arg::with_name(options::BACKUP_NO_ARG)
+                .short(options::BACKUP_NO_ARG)
+                .help("like --backup but does not accept an argument"),
         )
         // TODO: opts.arg(
         //    Arg::with_name(("d", "directory", "allow users with appropriate privileges to attempt \
@@ -260,7 +294,7 @@ pub fn uu_app() -> App<'static, 'static> {
         )
 }
 
-fn exec(files: &[PathBuf], settings: &Settings) -> i32 {
+fn exec(files: &[PathBuf], settings: &Settings) -> UResult<()> {
     // Handle cases where we create links in a directory first.
     if let Some(ref name) = settings.target_dir {
         // 4th form: a directory is specified by -t.
@@ -281,35 +315,22 @@ fn exec(files: &[PathBuf], settings: &Settings) -> i32 {
     // 1st form. Now there should be only two operands, but if -T is
     // specified we may have a wrong number of operands.
     if files.len() == 1 {
-        show_error!(
-            "missing destination file operand after '{}'",
-            files[0].to_string_lossy()
-        );
-        return 1;
+        return Err(LnError::MissingDestination(files[0].to_string_lossy().into()).into());
     }
     if files.len() > 2 {
-        show_error!(
-            "extra operand '{}'\nTry '{} --help' for more information.",
-            files[2].display(),
-            executable!()
-        );
-        return 1;
+        return Err(LnError::ExtraOperand(files[2].display().to_string()).into());
     }
     assert!(!files.is_empty());
 
     match link(&files[0], &files[1], settings) {
-        Ok(_) => 0,
-        Err(e) => {
-            show_error!("{}", e);
-            1
-        }
+        Ok(_) => Ok(()),
+        Err(e) => Err(LnError::FailedToLink(e.to_string()).into()),
     }
 }
 
-fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) -> i32 {
+fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) -> UResult<()> {
     if !target_dir.is_dir() {
-        show_error!("target '{}' is not a directory", target_dir.display());
-        return 1;
+        return Err(LnError::TargetIsDirectory(target_dir.display().to_string()).into());
     }
 
     let mut all_successful = true;
@@ -368,9 +389,9 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
         }
     }
     if all_successful {
-        0
+        Ok(())
     } else {
-        1
+        Err(LnError::SomeLinksFailed.into())
     }
 }
 

@@ -7,9 +7,6 @@
 
 // spell-checker:ignore (strings) ABCDEFGHIJKLMNOPQRSTUVWXYZ
 
-// clippy bug https://github.com/rust-lang/rust-clippy/issues/7422
-#![allow(clippy::nonstandard_macro_braces)]
-
 extern crate data_encoding;
 
 use self::data_encoding::{DecodeError, BASE32, BASE64};

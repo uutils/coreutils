@@ -8,9 +8,6 @@
 
 // spell-checker:ignore (ToDO) filetime strptime utcoff strs datetime MMDDhhmm
 
-// clippy bug https://github.com/rust-lang/rust-clippy/issues/7422
-#![allow(clippy::nonstandard_macro_braces)]
-
 pub extern crate filetime;
 
 #[macro_use]

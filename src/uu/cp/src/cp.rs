@@ -55,7 +55,6 @@ use walkdir::WalkDir;
 use std::os::unix::fs::PermissionsExt;
 
 #[cfg(target_os = "linux")]
-#[allow(clippy::missing_safety_doc)]
 ioctl!(write ficlone with 0x94, 9; std::os::raw::c_int);
 
 quick_error! {
@@ -98,6 +97,9 @@ quick_error! {
         /// path, but those that are not implemented yet should return
         /// a NotImplemented error.
         NotImplemented(opt: String) { display("Option '{}' not yet implemented.", opt) }
+
+        /// Invalid arguments to backup
+        Backup(description: String) { display("{}\nTry 'cp --help' for more information.", description) }
     }
 }
 
@@ -359,7 +361,6 @@ pub fn uu_app() -> App<'static, 'static> {
              .takes_value(true)
              .require_equals(true)
              .min_values(0)
-             .possible_values(backup_control::BACKUP_CONTROL_VALUES)
              .value_name("CONTROL")
         )
         .arg(Arg::with_name(options::BACKUP_NO_ARG)
@@ -604,9 +605,17 @@ impl Options {
             || matches.is_present(options::ARCHIVE);
 
         let backup_mode = backup_control::determine_backup_mode(
-            matches.is_present(options::BACKUP_NO_ARG) || matches.is_present(options::BACKUP),
+            matches.is_present(options::BACKUP_NO_ARG),
+            matches.is_present(options::BACKUP),
             matches.value_of(options::BACKUP),
         );
+        let backup_mode = match backup_mode {
+            Err(err) => {
+                return Err(Error::Backup(err));
+            }
+            Ok(mode) => mode,
+        };
+
         let backup_suffix =
             backup_control::determine_backup_suffix(matches.value_of(options::SUFFIX));
 

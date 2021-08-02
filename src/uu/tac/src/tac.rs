@@ -97,7 +97,7 @@ fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) -> i32 {
             let path = Path::new(filename);
             if path.is_dir() || path.metadata().is_err() {
                 if path.is_dir() {
-                    show_error!("dir: read error: Invalid argument");
+                    show_error!("{}: read error: Invalid argument", filename);
                 } else {
                     show_error!(
                         "failed to open '{}' for reading: No such file or directory",
@@ -139,9 +139,16 @@ fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) -> i32 {
                 i += 1;
             }
         }
+        // If the file contains no line separators, then simply write
+        // the contents of the file directly to stdout.
+        if offsets.is_empty() {
+            out.write_all(&data)
+                .unwrap_or_else(|e| crash!(1, "failed to write to stdout: {}", e));
+            return exit_code;
+        }
 
         // if there isn't a separator at the end of the file, fake it
-        if offsets.is_empty() || *offsets.last().unwrap() < data.len() - slen {
+        if *offsets.last().unwrap() < data.len() - slen {
             offsets.push(data.len());
         }
 

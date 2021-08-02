@@ -10,9 +10,6 @@
 
 // spell-checker:ignore (ToDO) nonprint nonblank nonprinting
 
-// clippy bug https://github.com/rust-lang/rust-clippy/issues/7422
-#![allow(clippy::nonstandard_macro_braces)]
-
 #[cfg(unix)]
 extern crate unix_socket;
 #[macro_use]
