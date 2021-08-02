@@ -9,7 +9,7 @@
 
 use crate::{
     chunks::{self, Chunk, RecycledChunk},
-    compare_by, open, GlobalSettings,
+    compare_by, open, GlobalSettings, SortError,
 };
 use itertools::Itertools;
 use std::{
@@ -20,13 +20,14 @@ use std::{
     sync::mpsc::{sync_channel, Receiver, SyncSender},
     thread,
 };
+use uucore::error::UResult;
 
 /// Check if the file at `path` is ordered.
 ///
 /// # Returns
 ///
 /// The code we should exit with.
-pub fn check(path: &OsStr, settings: &GlobalSettings) -> i32 {
+pub fn check(path: &OsStr, settings: &GlobalSettings) -> UResult<()> {
     let max_allowed_cmp = if settings.unique {
         // If `unique` is enabled, the previous line must compare _less_ to the next one.
         Ordering::Less
@@ -34,7 +35,7 @@ pub fn check(path: &OsStr, settings: &GlobalSettings) -> i32 {
         // Otherwise, the line previous line must compare _less or equal_ to the next one.
         Ordering::Equal
     };
-    let file = open(path);
+    let file = open(path)?;
     let (recycled_sender, recycled_receiver) = sync_channel(2);
     let (loaded_sender, loaded_receiver) = sync_channel(2);
     thread::spawn({
@@ -69,15 +70,13 @@ pub fn check(path: &OsStr, settings: &GlobalSettings) -> i32 {
                 chunk.line_data(),
             ) > max_allowed_cmp
             {
-                if !settings.check_silent {
-                    eprintln!(
-                        "sort: {}:{}: disorder: {}",
-                        path.to_string_lossy(),
-                        line_idx,
-                        new_first.line
-                    );
+                return Err(SortError::Disorder {
+                    file: path.to_owned(),
+                    line_number: line_idx,
+                    line: new_first.line.to_owned(),
+                    silent: settings.check_silent,
                 }
-                return 1;
+                .into());
             }
             let _ = recycled_sender.send(prev_chunk.recycle());
         }
@@ -85,21 +84,19 @@ pub fn check(path: &OsStr, settings: &GlobalSettings) -> i32 {
         for (a, b) in chunk.lines().iter().tuple_windows() {
             line_idx += 1;
             if compare_by(a, b, settings, chunk.line_data(), chunk.line_data()) > max_allowed_cmp {
-                if !settings.check_silent {
-                    eprintln!(
-                        "sort: {}:{}: disorder: {}",
-                        path.to_string_lossy(),
-                        line_idx,
-                        b.line
-                    );
+                return Err(SortError::Disorder {
+                    file: path.to_owned(),
+                    line_number: line_idx,
+                    line: b.line.to_owned(),
+                    silent: settings.check_silent,
                 }
-                return 1;
+                .into());
             }
         }
 
         prev_chunk = Some(chunk);
     }
-    0
+    Ok(())
 }
 
 /// The function running on the reader thread.
@@ -108,7 +105,7 @@ fn reader(
     receiver: Receiver<RecycledChunk>,
     sender: SyncSender<Chunk>,
     settings: &GlobalSettings,
-) {
+) -> UResult<()> {
     let mut carry_over = vec![];
     for recycled_chunk in receiver.iter() {
         let should_continue = chunks::read(
@@ -124,9 +121,10 @@ fn reader(
                 b'\n'
             },
             settings,
-        );
+        )?;
         if !should_continue {
             break;
         }
     }
+    Ok(())
 }

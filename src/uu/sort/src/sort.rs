@@ -33,14 +33,18 @@ use rand::{thread_rng, Rng};
 use rayon::prelude::*;
 use std::cmp::Ordering;
 use std::env;
+use std::error::Error;
 use std::ffi::{OsStr, OsString};
+use std::fmt::Display;
 use std::fs::{File, OpenOptions};
 use std::hash::{Hash, Hasher};
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::ops::Range;
 use std::path::Path;
 use std::path::PathBuf;
+use std::str::Utf8Error;
 use unicode_width::UnicodeWidthStr;
+use uucore::error::{set_exit_code, UCustomError, UResult, USimpleError, UUsageError};
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::version_cmp::version_cmp;
 use uucore::InvalidEncodingHandling;
@@ -120,6 +124,111 @@ const POSITIVE: char = '+';
 // available memory into consideration, instead of relying on this constant only.
 const DEFAULT_BUF_SIZE: usize = 1_000_000_000; // 1 GB
 
+#[derive(Debug)]
+enum SortError {
+    Disorder {
+        file: OsString,
+        line_number: usize,
+        line: String,
+        silent: bool,
+    },
+    OpenFailed {
+        path: String,
+        error: std::io::Error,
+    },
+    ReadFailed {
+        path: String,
+        error: std::io::Error,
+    },
+    ParseKeyError {
+        key: String,
+        msg: String,
+    },
+    OpenTmpFileFailed {
+        error: std::io::Error,
+    },
+    CompressProgExecutionFailed {
+        code: i32,
+    },
+    CompressProgTerminatedAbnormally {
+        prog: String,
+    },
+    TmpDirCreationFailed,
+    Uft8Error {
+        error: Utf8Error,
+    },
+}
+
+impl Error for SortError {}
+
+impl UCustomError for SortError {
+    fn code(&self) -> i32 {
+        match self {
+            SortError::Disorder { .. } => 1,
+            _ => 2,
+        }
+    }
+
+    fn usage(&self) -> bool {
+        false
+    }
+}
+
+impl Display for SortError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SortError::Disorder {
+                file,
+                line_number,
+                line,
+                silent,
+            } => {
+                if !silent {
+                    write!(
+                        f,
+                        "{}:{}: disorder: {}",
+                        file.to_string_lossy(),
+                        line_number,
+                        line
+                    )
+                } else {
+                    Ok(())
+                }
+            }
+            SortError::OpenFailed { path, error } => write!(
+                f,
+                "open failed: {}: {}",
+                path,
+                strip_errno(&error.to_string())
+            ),
+            SortError::ParseKeyError { key, msg } => {
+                write!(f, "failed to parse key `{}`: {}", key, msg)
+            }
+            SortError::ReadFailed { path, error } => write!(
+                f,
+                "cannot read: {}: {}",
+                path,
+                strip_errno(&error.to_string())
+            ),
+            SortError::OpenTmpFileFailed { error } => {
+                write!(
+                    f,
+                    "failed to open temporary file: {}",
+                    strip_errno(&error.to_string())
+                )
+            }
+            SortError::CompressProgExecutionFailed { code } => {
+                write!(f, "couldn't execute compress program: errno {}", code)
+            }
+            SortError::CompressProgTerminatedAbnormally { prog } => {
+                write!(f, "'{}' terminated abnormally", prog)
+            }
+            SortError::TmpDirCreationFailed => write!(f, "could not create temporary directory"),
+            SortError::Uft8Error { error } => write!(f, "{}", error),
+        }
+    }
+}
+
 #[derive(Eq, Ord, PartialEq, PartialOrd, Clone, Copy, Debug)]
 enum SortMode {
     Numeric,
@@ -150,23 +259,23 @@ pub struct Output {
 }
 
 impl Output {
-    fn new(name: Option<&str>) -> Self {
-        Self {
-            file: name.map(|name| {
-                // This is different from `File::create()` because we don't truncate the output yet.
-                // This allows using the output file as an input file.
-                (
-                    name.to_owned(),
-                    OpenOptions::new()
-                        .write(true)
-                        .create(true)
-                        .open(name)
-                        .unwrap_or_else(|e| {
-                            crash!(2, "open failed: {}: {}", name, strip_errno(&e.to_string()))
-                        }),
-                )
-            }),
-        }
+    fn new(name: Option<&str>) -> UResult<Self> {
+        let file = if let Some(name) = name {
+            // This is different from `File::create()` because we don't truncate the output yet.
+            // This allows using the output file as an input file.
+            let file = OpenOptions::new()
+                .write(true)
+                .create(true)
+                .open(name)
+                .map_err(|e| SortError::OpenFailed {
+                    path: name.to_owned(),
+                    error: e,
+                })?;
+            Some((name.to_owned(), file))
+        } else {
+            None
+        };
+        Ok(Self { file })
     }
 
     fn into_write(self) -> BufWriter<Box<dyn Write>> {
@@ -724,33 +833,37 @@ impl FieldSelector {
         }
     }
 
-    fn parse(key: &str, global_settings: &GlobalSettings) -> Self {
+    fn parse(key: &str, global_settings: &GlobalSettings) -> UResult<Self> {
         let mut from_to = key.split(',');
         let (from, from_options) = Self::split_key_options(from_to.next().unwrap());
         let to = from_to.next().map(|to| Self::split_key_options(to));
         let options_are_empty = from_options.is_empty() && matches!(to, None | Some((_, "")));
-        crash_if_err!(
-            2,
-            if options_are_empty {
-                // Inherit the global settings if there are no options attached to this key.
-                (|| {
-                    // This would be ideal for a try block, I think. In the meantime this closure allows
-                    // to use the `?` operator here.
-                    Self::new(
-                        KeyPosition::new(from, 1, global_settings.ignore_leading_blanks)?,
-                        to.map(|(to, _)| {
-                            KeyPosition::new(to, 0, global_settings.ignore_leading_blanks)
-                        })
-                        .transpose()?,
-                        KeySettings::from(global_settings),
-                    )
-                })()
-            } else {
-                // Do not inherit from `global_settings`, as there are options attached to this key.
-                Self::parse_with_options((from, from_options), to)
+
+        if options_are_empty {
+            // Inherit the global settings if there are no options attached to this key.
+            (|| {
+                // This would be ideal for a try block, I think. In the meantime this closure allows
+                // to use the `?` operator here.
+                Self::new(
+                    KeyPosition::new(from, 1, global_settings.ignore_leading_blanks)?,
+                    to.map(|(to, _)| {
+                        KeyPosition::new(to, 0, global_settings.ignore_leading_blanks)
+                    })
+                    .transpose()?,
+                    KeySettings::from(global_settings),
+                )
+            })()
+        } else {
+            // Do not inherit from `global_settings`, as there are options attached to this key.
+            Self::parse_with_options((from, from_options), to)
+        }
+        .map_err(|msg| {
+            SortError::ParseKeyError {
+                key: key.to_owned(),
+                msg,
             }
-            .map_err(|e| format!("failed to parse key `{}`: {}", key, e))
-        )
+            .into()
+        })
     }
 
     fn parse_with_options(
@@ -962,7 +1075,8 @@ fn make_sort_mode_arg<'a, 'b>(mode: &'a str, short: &'b str, help: &'b str) -> A
     arg
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
@@ -979,11 +1093,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             // (clap returns 1).
             if e.use_stderr() {
                 eprintln!("{}", e.message);
-                return 2;
+                set_exit_code(2);
             } else {
                 println!("{}", e.message);
-                return 0;
             }
+            return Ok(());
         }
     };
 
@@ -998,7 +1112,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
         let mut files = Vec::new();
         for path in &files0_from {
-            let reader = open(&path);
+            let reader = open(&path)?;
             let buf_reader = BufReader::new(reader);
             for line in buf_reader.split(b'\0').flatten() {
                 files.push(OsString::from(
@@ -1055,12 +1169,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         env::set_var("RAYON_NUM_THREADS", &settings.threads);
     }
 
-    settings.buffer_size = matches
-        .value_of(options::BUF_SIZE)
-        .map_or(DEFAULT_BUF_SIZE, |s| {
-            GlobalSettings::parse_byte_count(s)
-                .unwrap_or_else(|e| crash!(2, "{}", format_error_message(e, s, options::BUF_SIZE)))
-        });
+    settings.buffer_size =
+        matches
+            .value_of(options::BUF_SIZE)
+            .map_or(Ok(DEFAULT_BUF_SIZE), |s| {
+                GlobalSettings::parse_byte_count(s).map_err(|e| {
+                    USimpleError::new(2, format_error_message(e, s, options::BUF_SIZE))
+                })
+            })?;
 
     settings.tmp_dir = matches
         .value_of(options::TMP_DIR)
@@ -1070,9 +1186,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     settings.compress_prog = matches.value_of(options::COMPRESS_PROG).map(String::from);
 
     if let Some(n_merge) = matches.value_of(options::BATCH_SIZE) {
-        settings.merge_batch_size = n_merge
-            .parse()
-            .unwrap_or_else(|_| crash!(2, "invalid --batch-size argument '{}'", n_merge));
+        settings.merge_batch_size = n_merge.parse().map_err(|_| {
+            UUsageError::new(2, format!("invalid --batch-size argument '{}'", n_merge))
+        })?;
     }
 
     settings.zero_terminated = matches.is_present(options::ZERO_TERMINATED);
@@ -1101,11 +1217,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         /* if no file, default to stdin */
         files.push("-".to_string().into());
     } else if settings.check && files.len() != 1 {
-        crash!(
+        return Err(UUsageError::new(
             2,
-            "extra operand `{}' not allowed with -c",
-            files[1].to_string_lossy()
-        )
+            format!(
+                "extra operand `{}' not allowed with -c",
+                files[1].to_string_lossy()
+            ),
+        ));
     }
 
     if let Some(arg) = matches.args.get(options::SEPARATOR) {
@@ -1115,14 +1233,17 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             separator = "\0";
         }
         if separator.len() != 1 {
-            crash!(2, "separator must be exactly one character long");
+            return Err(UUsageError::new(
+                2,
+                "separator must be exactly one character long".into(),
+            ));
         }
         settings.separator = Some(separator.chars().next().unwrap())
     }
 
     if let Some(values) = matches.values_of(options::KEY) {
         for value in values {
-            let selector = FieldSelector::parse(value, &settings);
+            let selector = FieldSelector::parse(value, &settings)?;
             if selector.settings.mode == SortMode::Random && settings.salt.is_none() {
                 settings.salt = Some(get_rand_string());
             }
@@ -1152,10 +1273,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     // and to reopen them at a later point. This is different from how the output file is handled,
     // probably to prevent running out of file descriptors.
     for file in &files {
-        open(file);
+        open(file)?;
     }
 
-    let output = Output::new(matches.value_of(options::OUTPUT));
+    let output = Output::new(matches.value_of(options::OUTPUT))?;
 
     settings.init_precomputed();
 
@@ -1382,21 +1503,20 @@ pub fn uu_app() -> App<'static, 'static> {
         )
 }
 
-fn exec(files: &mut [OsString], settings: &GlobalSettings, output: Output) -> i32 {
+fn exec(files: &mut [OsString], settings: &GlobalSettings, output: Output) -> UResult<()> {
     if settings.merge {
-        let mut file_merger = merge::merge(files, settings, output.as_output_name());
-        file_merger.write_all(settings, output);
+        let file_merger = merge::merge(files, settings, output.as_output_name())?;
+        file_merger.write_all(settings, output)
     } else if settings.check {
         if files.len() > 1 {
-            crash!(2, "only one file allowed with -c");
+            Err(UUsageError::new(2, "only one file allowed with -c".into()))
+        } else {
+            check::check(files.first().unwrap(), settings)
         }
-        return check::check(files.first().unwrap(), settings);
     } else {
         let mut lines = files.iter().map(open);
-
-        ext_sort(&mut lines, settings, output);
+        ext_sort(&mut lines, settings, output)
     }
-    0
 }
 
 fn sort_by<'a>(unsorted: &mut Vec<Line<'a>>, settings: &GlobalSettings, line_data: &LineData<'a>) {
@@ -1692,25 +1812,22 @@ fn strip_errno(err: &str) -> &str {
     &err[..err.find(" (os error ").unwrap_or(err.len())]
 }
 
-fn open(path: impl AsRef<OsStr>) -> Box<dyn Read + Send> {
+fn open(path: impl AsRef<OsStr>) -> UResult<Box<dyn Read + Send>> {
     let path = path.as_ref();
     if path == "-" {
         let stdin = stdin();
-        return Box::new(stdin) as Box<dyn Read + Send>;
+        return Ok(Box::new(stdin) as Box<dyn Read + Send>);
     }
 
     let path = Path::new(path);
 
     match File::open(path) {
-        Ok(f) => Box::new(f) as Box<dyn Read + Send>,
-        Err(e) => {
-            crash!(
-                2,
-                "cannot read: {0}: {1}",
-                path.to_string_lossy(),
-                strip_errno(&e.to_string())
-            );
+        Ok(f) => Ok(Box::new(f) as Box<dyn Read + Send>),
+        Err(error) => Err(SortError::ReadFailed {
+            path: path.to_string_lossy().to_string(),
+            error,
         }
+        .into()),
     }
 }
 
