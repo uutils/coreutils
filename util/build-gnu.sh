@@ -123,3 +123,6 @@ test -f "${BUILDDIR}/getlimits" || cp src/getlimits "${BUILDDIR}"
 # When decoding an invalid base32/64 string, gnu writes everything it was able to decode until
 # it hit the decode error, while we don't write anything if the input is invalid.
 sed -i "s/\(baddecode.*OUT=>\"\).*\"/\1\"/g" tests/misc/base64.pl
+
+# Remove the check whether a util was built. Otherwise tests against utils like "arch" are not run.
+sed -i "s|require_built_ |# require_built_ |g" init.cfg
