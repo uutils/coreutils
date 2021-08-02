@@ -22,45 +22,41 @@ use std::{
 
 use compare::Compare;
 use itertools::Itertools;
-use tempfile::TempDir;
 use uucore::error::UResult;
 
 use crate::{
     chunks::{self, Chunk, RecycledChunk},
-    compare_by, open, GlobalSettings, Output, SortError,
+    compare_by, open,
+    tmp_dir::TmpDirWrapper,
+    GlobalSettings, Output, SortError,
 };
 
 /// If the output file occurs in the input files as well, copy the contents of the output file
 /// and replace its occurrences in the inputs with that copy.
 fn replace_output_file_in_input_files(
     files: &mut [OsString],
-    settings: &GlobalSettings,
     output: Option<&str>,
-) -> UResult<Option<(TempDir, usize)>> {
-    let mut copy: Option<(TempDir, PathBuf)> = None;
+    tmp_dir: &mut TmpDirWrapper,
+) -> UResult<()> {
+    let mut copy: Option<PathBuf> = None;
     if let Some(Ok(output_path)) = output.map(|path| Path::new(path).canonicalize()) {
         for file in files {
             if let Ok(file_path) = Path::new(file).canonicalize() {
                 if file_path == output_path {
-                    if let Some((_dir, copy)) = &copy {
+                    if let Some(copy) = &copy {
                         *file = copy.clone().into_os_string();
                     } else {
-                        let tmp_dir = tempfile::Builder::new()
-                            .prefix("uutils_sort")
-                            .tempdir_in(&settings.tmp_dir)
-                            .map_err(|_| SortError::TmpDirCreationFailed)?;
-                        let copy_path = tmp_dir.path().join("0");
+                        let copy_path = tmp_dir.next_file_path()?;
                         std::fs::copy(file_path, &copy_path)
                             .map_err(|error| SortError::OpenTmpFileFailed { error })?;
                         *file = copy_path.clone().into_os_string();
-                        copy = Some((tmp_dir, copy_path))
+                        copy = Some(copy_path)
                     }
                 }
             }
         }
     }
-    // if we created a TempDir its size must be one.
-    Ok(copy.map(|(dir, _copy)| (dir, 1)))
+    Ok(())
 }
 
 /// Merge pre-sorted `Box<dyn Read>`s.
@@ -71,8 +67,9 @@ pub fn merge<'a>(
     files: &mut [OsString],
     settings: &'a GlobalSettings,
     output: Option<&str>,
+    tmp_dir: &mut TmpDirWrapper,
 ) -> UResult<FileMerger<'a>> {
-    let tmp_dir = replace_output_file_in_input_files(files, settings, output)?;
+    replace_output_file_in_input_files(files, output, tmp_dir)?;
     if settings.compress_prog.is_none() {
         merge_with_file_limit::<_, _, WriteablePlainTmpFile>(
             files
@@ -94,26 +91,16 @@ pub fn merge<'a>(
 
 // Merge already sorted `MergeInput`s.
 pub fn merge_with_file_limit<
+    'a,
     M: MergeInput + 'static,
     F: ExactSizeIterator<Item = UResult<M>>,
     Tmp: WriteableTmpFile + 'static,
 >(
     files: F,
-    settings: &GlobalSettings,
-    tmp_dir: Option<(TempDir, usize)>,
-) -> UResult<FileMerger> {
+    settings: &'a GlobalSettings,
+    tmp_dir: &mut TmpDirWrapper,
+) -> UResult<FileMerger<'a>> {
     if files.len() > settings.merge_batch_size {
-        // If we did not get a tmp_dir, create one.
-        let (tmp_dir, mut tmp_dir_size) = match tmp_dir {
-            Some(x) => x,
-            None => (
-                tempfile::Builder::new()
-                    .prefix("uutils_sort")
-                    .tempdir_in(&settings.tmp_dir)
-                    .map_err(|_| SortError::TmpDirCreationFailed)?,
-                0,
-            ),
-        };
         let mut remaining_files = files.len();
         let batches = files.chunks(settings.merge_batch_size);
         let mut batches = batches.into_iter();
@@ -122,11 +109,8 @@ pub fn merge_with_file_limit<
             // Work around the fact that `Chunks` is not an `ExactSizeIterator`.
             remaining_files = remaining_files.saturating_sub(settings.merge_batch_size);
             let merger = merge_without_limit(batches.next().unwrap(), settings)?;
-            let mut tmp_file = Tmp::create(
-                tmp_dir.path().join(tmp_dir_size.to_string()),
-                settings.compress_prog.as_deref(),
-            )?;
-            tmp_dir_size += 1;
+            let mut tmp_file =
+                Tmp::create(tmp_dir.next_file_path()?, settings.compress_prog.as_deref())?;
             merger.write_all_to(settings, tmp_file.as_write())?;
             temporary_files.push(tmp_file.finished_writing()?);
         }
@@ -139,7 +123,7 @@ pub fn merge_with_file_limit<
                         dyn FnMut(Tmp::Closed) -> UResult<<Tmp::Closed as ClosedTmpFile>::Reopened>,
                     >),
             settings,
-            Some((tmp_dir, tmp_dir_size)),
+            tmp_dir,
         )
     } else {
         merge_without_limit(files, settings)

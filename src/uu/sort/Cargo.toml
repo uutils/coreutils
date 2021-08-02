@@ -18,10 +18,11 @@ path = "src/sort.rs"
 binary-heap-plus = "0.4.1"
 clap = { version = "2.33", features = ["wrap_help"] }
 compare = "0.1.0"
+ctrlc = { version = "3.0", features = ["termination"] }
 fnv = "1.0.7"
 itertools = "0.10.0"
 memchr = "2.4.0"
-ouroboros = "0.9.3"
+ouroboros = "0.10.1"
 rand = "0.7"
 rayon = "1.5"
 tempfile = "3"
