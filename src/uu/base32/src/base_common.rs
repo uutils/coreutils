@@ -61,7 +61,7 @@ impl Config {
             .value_of(options::WRAP)
             .map(|num| {
                 num.parse::<usize>()
-                    .map_err(|e| format!("Invalid wrap size: '{}': {}", num, e))
+                    .map_err(|_| format!("invalid wrap size: '{}'", num))
             })
             .transpose()?;
 
