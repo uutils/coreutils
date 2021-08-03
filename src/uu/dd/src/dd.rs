@@ -40,6 +40,7 @@ use std::path::Path;
 use std::sync::mpsc;
 #[cfg(target_os = "linux")]
 use std::sync::{atomic::AtomicUsize, atomic::Ordering, Arc};
+use std::sync::mpsc;
 use std::thread;
 use std::time;
 
