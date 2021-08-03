@@ -98,9 +98,9 @@ fn test_base64_extra_operand() {
     // Expect a failure when multiple files are specified.
     new_ucmd!()
         .arg("a.txt")
-        .arg("a.txt")
+        .arg("b.txt")
         .fails()
-        .stderr_only("base64: extra operand 'a.txt'");
+        .stderr_only("base64: extra operand 'b.txt'");
 }
 
 #[test]
