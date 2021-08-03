@@ -73,3 +73,12 @@ fn test_invalid_input() {
 fn test_no_line_separators() {
     new_ucmd!().pipe_in("a").succeeds().stdout_is("a");
 }
+
+#[test]
+fn test_null_separator() {
+    new_ucmd!()
+        .args(&["-s", ""])
+        .pipe_in("a\0b\0")
+        .succeeds()
+        .stdout_is("b\0a\0");
+}
