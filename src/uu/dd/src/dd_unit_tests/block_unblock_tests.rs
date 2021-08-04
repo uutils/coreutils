@@ -2,9 +2,6 @@
 
 use super::*;
 
-const NL: u8 = b'\n';
-const SPACE: u8 = b' ';
-
 macro_rules! make_block_test (
     ( $test_id:ident, $test_name:expr, $src:expr, $block:expr, $spec:expr ) =>
     {
@@ -97,7 +94,7 @@ fn block_test_no_nl_trunc() {
 fn block_test_nl_gt_cbs_trunc() {
     let mut rs = ReadStat::default();
     let buf = vec![
-        0u8, 1u8, 2u8, 3u8, 4u8, NL, 0u8, 1u8, 2u8, 3u8, 4u8, NL, 5u8, 6u8, 7u8, 8u8,
+        0u8, 1u8, 2u8, 3u8, 4u8, NEWLINE, 0u8, 1u8, 2u8, 3u8, 4u8, NEWLINE, 5u8, 6u8, 7u8, 8u8,
     ];
     let res = block(buf, 4, &mut rs);
 
@@ -118,7 +115,7 @@ fn block_test_nl_gt_cbs_trunc() {
 #[test]
 fn block_test_surrounded_nl() {
     let mut rs = ReadStat::default();
-    let buf = vec![0u8, 1u8, 2u8, 3u8, NL, 4u8, 5u8, 6u8, 7u8, 8u8];
+    let buf = vec![0u8, 1u8, 2u8, 3u8, NEWLINE, 4u8, 5u8, 6u8, 7u8, 8u8];
     let res = block(buf, 8, &mut rs);
 
     assert_eq!(
@@ -133,7 +130,9 @@ fn block_test_surrounded_nl() {
 #[test]
 fn block_test_multiple_nl_same_cbs_block() {
     let mut rs = ReadStat::default();
-    let buf = vec![0u8, 1u8, 2u8, 3u8, NL, 4u8, NL, 5u8, 6u8, 7u8, 8u8, 9u8];
+    let buf = vec![
+        0u8, 1u8, 2u8, 3u8, NEWLINE, 4u8, NEWLINE, 5u8, 6u8, 7u8, 8u8, 9u8,
+    ];
     let res = block(buf, 8, &mut rs);
 
     assert_eq!(
@@ -149,7 +148,9 @@ fn block_test_multiple_nl_same_cbs_block() {
 #[test]
 fn block_test_multiple_nl_diff_cbs_block() {
     let mut rs = ReadStat::default();
-    let buf = vec![0u8, 1u8, 2u8, 3u8, NL, 4u8, 5u8, 6u8, 7u8, NL, 8u8, 9u8];
+    let buf = vec![
+        0u8, 1u8, 2u8, 3u8, NEWLINE, 4u8, 5u8, 6u8, 7u8, NEWLINE, 8u8, 9u8,
+    ];
     let res = block(buf, 8, &mut rs);
 
     assert_eq!(
@@ -165,7 +166,7 @@ fn block_test_multiple_nl_diff_cbs_block() {
 #[test]
 fn block_test_end_nl_diff_cbs_block() {
     let mut rs = ReadStat::default();
-    let buf = vec![0u8, 1u8, 2u8, 3u8, NL];
+    let buf = vec![0u8, 1u8, 2u8, 3u8, NEWLINE];
     let res = block(buf, 4, &mut rs);
 
     assert_eq!(res, vec![vec![0u8, 1u8, 2u8, 3u8],]);
@@ -174,7 +175,7 @@ fn block_test_end_nl_diff_cbs_block() {
 #[test]
 fn block_test_end_nl_same_cbs_block() {
     let mut rs = ReadStat::default();
-    let buf = vec![0u8, 1u8, 2u8, NL];
+    let buf = vec![0u8, 1u8, 2u8, NEWLINE];
     let res = block(buf, 4, &mut rs);
 
     assert_eq!(res, vec![vec![0u8, 1u8, 2u8, SPACE]]);
@@ -183,7 +184,7 @@ fn block_test_end_nl_same_cbs_block() {
 #[test]
 fn block_test_double_end_nl() {
     let mut rs = ReadStat::default();
-    let buf = vec![0u8, 1u8, 2u8, NL, NL];
+    let buf = vec![0u8, 1u8, 2u8, NEWLINE, NEWLINE];
     let res = block(buf, 4, &mut rs);
 
     assert_eq!(
@@ -195,7 +196,7 @@ fn block_test_double_end_nl() {
 #[test]
 fn block_test_start_nl() {
     let mut rs = ReadStat::default();
-    let buf = vec![NL, 0u8, 1u8, 2u8, 3u8];
+    let buf = vec![NEWLINE, 0u8, 1u8, 2u8, 3u8];
     let res = block(buf, 4, &mut rs);
 
     assert_eq!(
@@ -207,7 +208,7 @@ fn block_test_start_nl() {
 #[test]
 fn block_test_double_surrounded_nl_no_trunc() {
     let mut rs = ReadStat::default();
-    let buf = vec![0u8, 1u8, 2u8, 3u8, NL, NL, 4u8, 5u8, 6u8, 7u8];
+    let buf = vec![0u8, 1u8, 2u8, 3u8, NEWLINE, NEWLINE, 4u8, 5u8, 6u8, 7u8];
     let res = block(buf, 8, &mut rs);
 
     assert_eq!(
@@ -223,7 +224,9 @@ fn block_test_double_surrounded_nl_no_trunc() {
 #[test]
 fn block_test_double_surrounded_nl_double_trunc() {
     let mut rs = ReadStat::default();
-    let buf = vec![0u8, 1u8, 2u8, 3u8, NL, NL, 4u8, 5u8, 6u8, 7u8, 8u8];
+    let buf = vec![
+        0u8, 1u8, 2u8, 3u8, NEWLINE, NEWLINE, 4u8, 5u8, 6u8, 7u8, 8u8,
+    ];
     let res = block(buf, 4, &mut rs);
 
     assert_eq!(
@@ -238,38 +241,29 @@ fn block_test_double_surrounded_nl_double_trunc() {
     assert_eq!(rs.records_truncated, 1);
 }
 
+#[cfg(unix)]
 make_block_test!(
     block_cbs16,
     "block-cbs-16",
-    if cfg!(unix) {
-        File::open("./test-resources/dd-block-cbs16.test").unwrap()
-    } else {
-        File::open("./test-resources/dd-block-cbs16-win.test").unwrap()
-    },
+    File::open("./test-resources/dd-block-cbs16.test").unwrap(),
     Some(16),
     File::open("./test-resources/dd-block-cbs16.spec").unwrap()
 );
 
+#[cfg(unix)]
 make_block_test!(
     block_cbs16_as_cbs8,
     "block-cbs-16-as-cbs8",
-    if cfg!(unix) {
-        File::open("./test-resources/dd-block-cbs16.test").unwrap()
-    } else {
-        File::open("./test-resources/dd-block-cbs16-win.test").unwrap()
-    },
+    File::open("./test-resources/dd-block-cbs16.test").unwrap(),
     Some(8),
     File::open("./test-resources/dd-block-cbs8.spec").unwrap()
 );
 
+#[cfg(unix)]
 make_block_test!(
     block_consecutive_nl,
     "block-consecutive-nl",
-    if cfg!(unix) {
-        File::open("./test-resources/dd-block-consecutive-nl.test").unwrap()
-    } else {
-        File::open("./test-resources/dd-block-consecutive-nl-win.test").unwrap()
-    },
+    File::open("./test-resources/dd-block-consecutive-nl.test").unwrap(),
     Some(16),
     File::open("./test-resources/dd-block-consecutive-nl-cbs16.spec").unwrap()
 );
@@ -279,7 +273,7 @@ fn unblock_test_full_cbs() {
     let buf = vec![0u8, 1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8];
     let res = unblock(buf, 8);
 
-    assert_eq!(res, vec![0u8, 1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, NL],);
+    assert_eq!(res, vec![0u8, 1u8, 2u8, 3u8, 4u8, 5u8, 6u8, 7u8, NEWLINE],);
 }
 
 #[test]
@@ -287,7 +281,7 @@ fn unblock_test_all_space() {
     let buf = vec![SPACE, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE];
     let res = unblock(buf, 8);
 
-    assert_eq!(res, vec![NL],);
+    assert_eq!(res, vec![NEWLINE],);
 }
 
 #[test]
@@ -297,7 +291,7 @@ fn unblock_test_decoy_spaces() {
 
     assert_eq!(
         res,
-        vec![0u8, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE, 7u8, NL],
+        vec![0u8, SPACE, SPACE, SPACE, SPACE, SPACE, SPACE, 7u8, NEWLINE],
     );
 }
 
@@ -306,7 +300,7 @@ fn unblock_test_strip_single_cbs() {
     let buf = vec![0u8, 1u8, 2u8, 3u8, SPACE, SPACE, SPACE, SPACE];
     let res = unblock(buf, 8);
 
-    assert_eq!(res, vec![0u8, 1u8, 2u8, 3u8, NL],);
+    assert_eq!(res, vec![0u8, 1u8, 2u8, 3u8, NEWLINE],);
 }
 
 #[test]
@@ -324,10 +318,10 @@ fn unblock_test_strip_multi_cbs() {
     let res = unblock(buf, 8);
 
     let exp = vec![
-        vec![0u8, NL],
-        vec![0u8, 1u8, NL],
-        vec![0u8, 1u8, 2u8, NL],
-        vec![0u8, 1u8, 2u8, 3u8, NL],
+        vec![0u8, NEWLINE],
+        vec![0u8, 1u8, NEWLINE],
+        vec![0u8, 1u8, 2u8, NEWLINE],
+        vec![0u8, 1u8, 2u8, 3u8, NEWLINE],
     ]
     .into_iter()
     .flatten()
@@ -336,26 +330,20 @@ fn unblock_test_strip_multi_cbs() {
     assert_eq!(res, exp);
 }
 
+#[cfg(unix)]
 make_unblock_test!(
     unblock_multi_16,
     "unblock-multi-16",
     File::open("./test-resources/dd-unblock-cbs16.test").unwrap(),
     Some(16),
-    if cfg!(unix) {
-        File::open("./test-resources/dd-unblock-cbs16.spec").unwrap()
-    } else {
-        File::open("./test-resources/dd-unblock-cbs16-win.spec").unwrap()
-    }
+    File::open("./test-resources/dd-unblock-cbs16.spec").unwrap()
 );
 
+#[cfg(unix)]
 make_unblock_test!(
     unblock_multi_16_as_8,
     "unblock-multi-16-as-8",
     File::open("./test-resources/dd-unblock-cbs16.test").unwrap(),
     Some(8),
-    if cfg!(unix) {
-        File::open("./test-resources/dd-unblock-cbs8.spec").unwrap()
-    } else {
-        File::open("./test-resources/dd-unblock-cbs8-win.spec").unwrap()
-    }
+    File::open("./test-resources/dd-unblock-cbs8.spec").unwrap()
 );

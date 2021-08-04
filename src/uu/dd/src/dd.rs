@@ -40,7 +40,6 @@ use std::path::Path;
 use std::sync::mpsc;
 #[cfg(target_os = "linux")]
 use std::sync::{atomic::AtomicUsize, atomic::Ordering, Arc};
-use std::sync::mpsc;
 use std::thread;
 use std::time;
 
@@ -48,11 +47,8 @@ const ABOUT: &str = "copy, and optionally convert, a file system resource";
 const BUF_INIT_BYTE: u8 = 0xDD;
 const RTN_SUCCESS: i32 = 0;
 const RTN_FAILURE: i32 = 1;
-const SYSTEM_NEWLINE: &[u8] = if cfg!(target_os = "windows") {
-    b"\r\n"
-} else {
-    b"\n"
-};
+const NEWLINE: u8 = b'\n';
+const SPACE: u8 = b' ';
 
 struct Input<R: Read> {
     src: R,
@@ -495,29 +491,20 @@ impl Output<File> {
 /// Expects ascii encoded data
 fn block(buf: Vec<u8>, cbs: usize, rstat: &mut ReadStat) -> Vec<Vec<u8>> {
     let mut blocks = buf
-        .split(|&e| e == b'\n')
-        .map(|split| {
-            if cfg!(target_os = "windows") {
-                // Since newlines are LF ('\n') in Unix and CR+LF ("\r\n") on Windows,
-                // the split above will leave a trailing CR on Windows.
-                // This must be removed before proceeding.
-                split[..split.len() - 1].to_vec()
-            } else {
-                split.to_vec()
-            }
-        })
+        .split(|&e| e == NEWLINE)
+        .map(|split| split.to_vec())
         .fold(Vec::new(), |mut blocks, mut split| {
             if split.len() > cbs {
                 rstat.records_truncated += 1;
             }
-            split.resize(cbs, b' ');
+            split.resize(cbs, SPACE);
             blocks.push(split);
 
             blocks
         });
 
     if let Some(last) = blocks.last() {
-        if last.iter().all(|&e| e == b' ') {
+        if last.iter().all(|&e| e == SPACE) {
             blocks.pop();
         }
     }
@@ -530,12 +517,12 @@ fn block(buf: Vec<u8>, cbs: usize, rstat: &mut ReadStat) -> Vec<Vec<u8>> {
 /// Expects ascii encoded data
 fn unblock(buf: Vec<u8>, cbs: usize) -> Vec<u8> {
     buf.chunks(cbs).fold(Vec::new(), |mut acc, block| {
-        if let Some(last_char_idx) = block.iter().rposition(|&e| e != b' ') {
+        if let Some(last_char_idx) = block.iter().rposition(|&e| e != SPACE) {
             // Include text up to last space.
             acc.extend(&block[..=last_char_idx]);
         }
 
-        acc.extend(SYSTEM_NEWLINE);
+        acc.push(NEWLINE);
         acc
     })
 }
