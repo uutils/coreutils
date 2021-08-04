@@ -36,28 +36,86 @@ fn get_usage() -> String {
     format!("{0} [OPTION]... [FILE]...", executable!())
 }
 
-fn tabstops_parse(s: String) -> Vec<usize> {
-    let words = s.split(',');
+/// The mode to use when replacing tabs beyond the last one specified in
+/// the `--tabs` argument.
+enum RemainingMode {
+    None,
+    Slash,
+    Plus,
+}
 
-    let nums = words
-        .map(|sn| {
-            sn.parse::<usize>()
-                .unwrap_or_else(|_| crash!(1, "{}\n", "tab size contains invalid character(s)"))
-        })
-        .collect::<Vec<usize>>();
+/// Decide whether the character is either a space or a comma.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// assert!(is_space_or_comma(' '))
+/// assert!(is_space_or_comma(','))
+/// assert!(!is_space_or_comma('a'))
+/// ```
+fn is_space_or_comma(c: char) -> bool {
+    c == ' ' || c == ','
+}
 
-    if nums.iter().any(|&n| n == 0) {
-        crash!(1, "{}\n", "tab size cannot be 0");
+/// Parse a list of tabstops from a `--tabs` argument.
+///
+/// This function returns both the vector of numbers appearing in the
+/// comma- or space-separated list, and also an optional mode, specified
+/// by either a "/" or a "+" character appearing before the final number
+/// in the list. This mode defines the strategy to use for computing the
+/// number of spaces to use for columns beyond the end of the tab stop
+/// list specified here.
+fn tabstops_parse(s: String) -> (RemainingMode, Vec<usize>) {
+    // Leading commas and spaces are ignored.
+    let s = s.trim_start_matches(is_space_or_comma);
+
+    // If there were only commas and spaces in the string, just use the
+    // default tabstops.
+    if s.is_empty() {
+        return (RemainingMode::None, vec![DEFAULT_TABSTOP]);
     }
 
-    if let (false, _) = nums
-        .iter()
-        .fold((true, 0), |(acc, last), &n| (acc && last <= n, n))
-    {
-        crash!(1, "{}\n", "tab sizes must be ascending");
-    }
+    let mut nums = vec![];
+    let mut remaining_mode = RemainingMode::None;
+    for word in s.split(is_space_or_comma) {
+        let bytes = word.as_bytes();
+        for i in 0..bytes.len() {
+            match bytes[i] {
+                b'+' => {
+                    remaining_mode = RemainingMode::Plus;
+                }
+                b'/' => {
+                    remaining_mode = RemainingMode::Slash;
+                }
+                _ => {
+                    // Parse a number from the byte sequence.
+                    let num = from_utf8(&bytes[i..]).unwrap().parse::<usize>().unwrap();
 
-    nums
+                    // Tab size must be positive.
+                    if num == 0 {
+                        crash!(1, "{}\n", "tab size cannot be 0");
+                    }
+
+                    // Tab sizes must be ascending.
+                    if let Some(last_stop) = nums.last() {
+                        if *last_stop >= num {
+                            crash!(1, "tab sizes must be ascending");
+                        }
+                    }
+
+                    // Append this tab stop to the list of all tabstops.
+                    nums.push(num);
+                    break;
+                }
+            }
+        }
+    }
+    // If no numbers could be parsed (for example, if `s` were "+,+,+"),
+    // then just use the default tabstops.
+    if nums.is_empty() {
+        nums = vec![DEFAULT_TABSTOP];
+    }
+    (remaining_mode, nums)
 }
 
 struct Options {
@@ -66,13 +124,17 @@ struct Options {
     tspaces: String,
     iflag: bool,
     uflag: bool,
+
+    /// Strategy for expanding tabs for columns beyond those specified
+    /// in `tabstops`.
+    remaining_mode: RemainingMode,
 }
 
 impl Options {
     fn new(matches: &ArgMatches) -> Options {
-        let tabstops = match matches.value_of(options::TABS) {
+        let (remaining_mode, tabstops) = match matches.value_of(options::TABS) {
             Some(s) => tabstops_parse(s.to_string()),
-            None => vec![DEFAULT_TABSTOP],
+            None => (RemainingMode::None, vec![DEFAULT_TABSTOP]),
         };
 
         let iflag = matches.is_present(options::INITIAL);
@@ -102,6 +164,7 @@ impl Options {
             tspaces,
             iflag,
             uflag,
+            remaining_mode,
         }
     }
 }
@@ -159,13 +222,41 @@ fn open(path: String) -> BufReader<Box<dyn Read + 'static>> {
     }
 }
 
-fn next_tabstop(tabstops: &[usize], col: usize) -> usize {
-    if tabstops.len() == 1 {
-        tabstops[0] - col % tabstops[0]
-    } else {
-        match tabstops.iter().find(|&&t| t > col) {
+/// Compute the number of spaces to the next tabstop.
+///
+/// `tabstops` is the sequence of tabstop locations.
+///
+/// `col` is the index of the current cursor in the line being written.
+///
+/// If `remaining_mode` is [`RemainingMode::Plus`], then the last entry
+/// in the `tabstops` slice is interpreted as a relative number of
+/// spaces, which this function will return for every input value of
+/// `col` beyond the end of the second-to-last element of `tabstops`.
+///
+/// If `remaining_mode` is [`RemainingMode::Plus`], then the last entry
+/// in the `tabstops` slice is interpreted as a relative number of
+/// spaces, which this function will return for every input value of
+/// `col` beyond the end of the second-to-last element of `tabstops`.
+fn next_tabstop(tabstops: &[usize], col: usize, remaining_mode: &RemainingMode) -> usize {
+    let num_tabstops = tabstops.len();
+    match remaining_mode {
+        RemainingMode::Plus => match tabstops[0..num_tabstops - 1].iter().find(|&&t| t > col) {
             Some(t) => t - col,
-            None => 1,
+            None => tabstops[num_tabstops - 1] - 1,
+        },
+        RemainingMode::Slash => match tabstops[0..num_tabstops - 1].iter().find(|&&t| t > col) {
+            Some(t) => t - col,
+            None => tabstops[num_tabstops - 1] - col % tabstops[num_tabstops - 1],
+        },
+        RemainingMode::None => {
+            if num_tabstops == 1 {
+                tabstops[0] - col % tabstops[0]
+            } else {
+                match tabstops.iter().find(|&&t| t > col) {
+                    Some(t) => t - col,
+                    None => 1,
+                }
+            }
         }
     }
 }
@@ -232,12 +323,16 @@ fn expand(options: Options) {
                 match ctype {
                     Tab => {
                         // figure out how many spaces to the next tabstop
-                        let nts = next_tabstop(ts, col);
+                        let nts = next_tabstop(ts, col, &options.remaining_mode);
                         col += nts;
 
                         // now dump out either spaces if we're expanding, or a literal tab if we're not
                         if init || !options.iflag {
-                            safe_unwrap!(output.write_all(options.tspaces[..nts].as_bytes()));
+                            if nts <= options.tspaces.len() {
+                                safe_unwrap!(output.write_all(options.tspaces[..nts].as_bytes()));
+                            } else {
+                                safe_unwrap!(output.write_all(" ".repeat(nts).as_bytes()));
+                            };
                         } else {
                             safe_unwrap!(output.write_all(&buf[byte..byte + nbytes]));
                         }
@@ -267,5 +362,32 @@ fn expand(options: Options) {
             safe_unwrap!(output.flush());
             buf.truncate(0); // clear the buffer
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::next_tabstop;
+    use super::RemainingMode;
+
+    #[test]
+    fn test_next_tabstop_remaining_mode_none() {
+        assert_eq!(next_tabstop(&[1, 5], 0, &RemainingMode::None), 1);
+        assert_eq!(next_tabstop(&[1, 5], 3, &RemainingMode::None), 2);
+        assert_eq!(next_tabstop(&[1, 5], 6, &RemainingMode::None), 1);
+    }
+
+    #[test]
+    fn test_next_tabstop_remaining_mode_plus() {
+        assert_eq!(next_tabstop(&[1, 5], 0, &RemainingMode::Plus), 1);
+        assert_eq!(next_tabstop(&[1, 5], 3, &RemainingMode::Plus), 4);
+        assert_eq!(next_tabstop(&[1, 5], 6, &RemainingMode::Plus), 4);
+    }
+
+    #[test]
+    fn test_next_tabstop_remaining_mode_slash() {
+        assert_eq!(next_tabstop(&[1, 5], 0, &RemainingMode::Slash), 1);
+        assert_eq!(next_tabstop(&[1, 5], 3, &RemainingMode::Slash), 2);
+        assert_eq!(next_tabstop(&[1, 5], 6, &RemainingMode::Slash), 4);
     }
 }

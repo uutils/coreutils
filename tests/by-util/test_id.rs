@@ -17,9 +17,9 @@ fn test_id_no_specified_user() {
     let exp_result = unwrap_or_return!(expected_result(&ts, &[]));
     let mut _exp_stdout = exp_result.stdout_str().to_string();
 
-    #[cfg(target_os = "linux")]
+    #[cfg(not(feature = "feat_selinux"))]
     {
-        // NOTE: (SELinux NotImplemented) strip 'context' part from exp_stdout:
+        // NOTE: strip 'context' part from exp_stdout if selinux not enabled:
         // example:
         // uid=1001(runner) gid=121(docker) groups=121(docker),4(adm),101(systemd-journal) \
         // context=unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023
@@ -360,6 +360,91 @@ fn test_id_zero() {
                 .args(&args)
                 .succeeds()
                 .stdout_only(unwrap_or_return!(expected_result(&ts, &args)).stdout_str());
+        }
+    }
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_id_context() {
+    use selinux::{self, KernelSupport};
+    if selinux::kernel_support() == KernelSupport::Unsupported {
+        println!("test skipped: Kernel has no support for SElinux context",);
+        return;
+    }
+    let ts = TestScenario::new(util_name!());
+    for c_flag in &["-Z", "--context"] {
+        ts.ucmd()
+            .args(&[c_flag])
+            .succeeds()
+            .stdout_only(unwrap_or_return!(expected_result(&ts, &[c_flag])).stdout_str());
+        for &z_flag in &["-z", "--zero"] {
+            let args = [c_flag, z_flag];
+            ts.ucmd()
+                .args(&args)
+                .succeeds()
+                .stdout_only(unwrap_or_return!(expected_result(&ts, &args)).stdout_str());
+            for &opt1 in &["--name", "--real"] {
+                // id: cannot print only names or real IDs in default format
+                let args = [opt1, c_flag];
+                ts.ucmd()
+                    .args(&args)
+                    .succeeds()
+                    .stdout_only(unwrap_or_return!(expected_result(&ts, &args)).stdout_str());
+                let args = [opt1, c_flag, z_flag];
+                ts.ucmd()
+                    .args(&args)
+                    .succeeds()
+                    .stdout_only(unwrap_or_return!(expected_result(&ts, &args)).stdout_str());
+                for &opt2 in &["--user", "--group", "--groups"] {
+                    // u/g/G n/r z Z
+                    // for now, we print clap's standard response for "conflicts_with" instead of:
+                    // id: cannot print "only" of more than one choice
+                    let args = [opt2, c_flag, opt1];
+                    let _result = ts.ucmd().args(&args).fails();
+                    // let exp_result = unwrap_or_return!(expected_result(&args));
+                    // result
+                    //     .stdout_is(exp_result.stdout_str())
+                    //     .stderr_is(exp_result.stderr_str())
+                    //     .code_is(exp_result.code());
+                }
+            }
+            for &opt2 in &["--user", "--group", "--groups"] {
+                // u/g/G z Z
+                // for now, we print clap's standard response for "conflicts_with" instead of:
+                // id: cannot print "only" of more than one choice
+                let args = [opt2, c_flag];
+                let _result = ts.ucmd().args(&args).fails();
+                // let exp_result = unwrap_or_return!(expected_result(&args));
+                // result
+                //     .stdout_is(exp_result.stdout_str())
+                //     .stderr_is(exp_result.stderr_str())
+                //     .code_is(exp_result.code());
+            }
+        }
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn test_id_no_specified_user_posixly() {
+    // gnu/tests/id/no-context.sh
+
+    let ts = TestScenario::new(util_name!());
+    let result = ts.ucmd().env("POSIXLY_CORRECT", "1").run();
+    assert!(!result.stdout_str().contains("context="));
+    if !is_ci() {
+        result.success();
+    }
+
+    #[cfg(all(target_os = "linux", feature = "feat_selinux"))]
+    {
+        use selinux::{self, KernelSupport};
+        if selinux::kernel_support() == KernelSupport::Unsupported {
+            println!("test skipped: Kernel has no support for SElinux context",);
+        } else {
+            let result = ts.ucmd().succeeds();
+            assert!(result.stdout_str().contains("context="));
         }
     }
 }

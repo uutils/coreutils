@@ -11,9 +11,12 @@
 extern crate uucore;
 
 use clap::{crate_version, App, Arg};
+use uucore::error::{UCustomError, UResult};
 
 use std::borrow::Cow;
+use std::error::Error;
 use std::ffi::OsStr;
+use std::fmt::Display;
 use std::fs;
 
 use std::io::{stdin, Result};
@@ -42,6 +45,51 @@ pub enum OverwriteMode {
     NoClobber,
     Interactive,
     Force,
+}
+
+#[derive(Debug)]
+enum LnError {
+    TargetIsDirectory(String),
+    SomeLinksFailed,
+    FailedToLink(String),
+    MissingDestination(String),
+    ExtraOperand(String),
+    InvalidBackupMode(String),
+}
+
+impl Display for LnError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::TargetIsDirectory(s) => write!(f, "target '{}' is not a directory", s),
+            Self::FailedToLink(s) => write!(f, "failed to link '{}'", s),
+            Self::SomeLinksFailed => write!(f, "some links failed to create"),
+            Self::MissingDestination(s) => {
+                write!(f, "missing destination file operand after '{}'", s)
+            }
+            Self::ExtraOperand(s) => write!(
+                f,
+                "extra operand '{}'\nTry '{} --help' for more information.",
+                s,
+                executable!()
+            ),
+            Self::InvalidBackupMode(s) => write!(f, "{}", s),
+        }
+    }
+}
+
+impl Error for LnError {}
+
+impl UCustomError for LnError {
+    fn code(&self) -> i32 {
+        match self {
+            Self::TargetIsDirectory(_) => 1,
+            Self::SomeLinksFailed => 1,
+            Self::FailedToLink(_) => 1,
+            Self::MissingDestination(_) => 1,
+            Self::ExtraOperand(_) => 1,
+            Self::InvalidBackupMode(_) => 1,
+        }
+    }
 }
 
 fn get_usage() -> String {
@@ -86,7 +134,8 @@ mod options {
 
 static ARG_FILES: &str = "files";
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = get_usage();
     let long_usage = get_long_usage();
 
@@ -122,8 +171,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     );
     let backup_mode = match backup_mode {
         Err(err) => {
-            show_usage_error!("{}", err);
-            return 1;
+            return Err(LnError::InvalidBackupMode(err).into());
         }
         Ok(mode) => mode,
     };
@@ -246,7 +294,7 @@ pub fn uu_app() -> App<'static, 'static> {
         )
 }
 
-fn exec(files: &[PathBuf], settings: &Settings) -> i32 {
+fn exec(files: &[PathBuf], settings: &Settings) -> UResult<()> {
     // Handle cases where we create links in a directory first.
     if let Some(ref name) = settings.target_dir {
         // 4th form: a directory is specified by -t.
@@ -267,35 +315,22 @@ fn exec(files: &[PathBuf], settings: &Settings) -> i32 {
     // 1st form. Now there should be only two operands, but if -T is
     // specified we may have a wrong number of operands.
     if files.len() == 1 {
-        show_error!(
-            "missing destination file operand after '{}'",
-            files[0].to_string_lossy()
-        );
-        return 1;
+        return Err(LnError::MissingDestination(files[0].to_string_lossy().into()).into());
     }
     if files.len() > 2 {
-        show_error!(
-            "extra operand '{}'\nTry '{} --help' for more information.",
-            files[2].display(),
-            executable!()
-        );
-        return 1;
+        return Err(LnError::ExtraOperand(files[2].display().to_string()).into());
     }
     assert!(!files.is_empty());
 
     match link(&files[0], &files[1], settings) {
-        Ok(_) => 0,
-        Err(e) => {
-            show_error!("{}", e);
-            1
-        }
+        Ok(_) => Ok(()),
+        Err(e) => Err(LnError::FailedToLink(e.to_string()).into()),
     }
 }
 
-fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) -> i32 {
+fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) -> UResult<()> {
     if !target_dir.is_dir() {
-        show_error!("target '{}' is not a directory", target_dir.display());
-        return 1;
+        return Err(LnError::TargetIsDirectory(target_dir.display().to_string()).into());
     }
 
     let mut all_successful = true;
@@ -354,9 +389,9 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
         }
     }
     if all_successful {
-        0
+        Ok(())
     } else {
-        1
+        Err(LnError::SomeLinksFailed.into())
     }
 }
 
