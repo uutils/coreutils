@@ -34,6 +34,7 @@ macro_rules! assert_fixture_exists {
     }};
 }
 
+#[cfg(target_os = "linux")]
 macro_rules! assert_fixture_not_exists {
     ($fname:expr) => {{
         let fpath = PathBuf::from(format!("./fixtures/dd/{}", $fname));

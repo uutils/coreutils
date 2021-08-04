@@ -2,6 +2,7 @@
 
 use super::*;
 
+#[cfg(unix)]
 macro_rules! make_block_test (
     ( $test_id:ident, $test_name:expr, $src:expr, $block:expr, $spec:expr ) =>
     {
@@ -30,6 +31,7 @@ macro_rules! make_block_test (
     };
 );
 
+#[cfg(unix)]
 macro_rules! make_unblock_test (
     ( $test_id:ident, $test_name:expr, $src:expr, $unblock:expr, $spec:expr ) =>
     {
