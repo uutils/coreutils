@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall gnulib inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW ; (vars/env) BUILDDIR SRCDIR
+# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall gnulib inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW baddecode ; (vars/env) BUILDDIR SRCDIR
 
 set -e
 if test ! -d ../gnu; then
@@ -119,3 +119,7 @@ sed -i -e "s|rm: cannot remove 'a/1'|rm: cannot remove 'a'|g" tests/rm/rm2.sh
 sed -i -e "s|removed directory 'a/'|removed directory 'a'|g" tests/rm/v-slash.sh
 
 test -f "${BUILDDIR}/getlimits" || cp src/getlimits "${BUILDDIR}"
+
+# When decoding an invalid base32/64 string, gnu writes everything it was able to decode until
+# it hit the decode error, while we don't write anything if the input is invalid.
+sed -i "s/\(baddecode.*OUT=>\"\).*\"/\1\"/g" tests/misc/base64.pl

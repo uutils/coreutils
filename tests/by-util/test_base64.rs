@@ -89,7 +89,7 @@ fn test_wrap_bad_arg() {
             .arg(wrap_param)
             .arg("b")
             .fails()
-            .stderr_only("base64: Invalid wrap size: 'b': invalid digit found in string\n");
+            .stderr_only("base64: invalid wrap size: 'b'\n");
     }
 }
 
@@ -98,9 +98,9 @@ fn test_base64_extra_operand() {
     // Expect a failure when multiple files are specified.
     new_ucmd!()
         .arg("a.txt")
-        .arg("a.txt")
+        .arg("b.txt")
         .fails()
-        .stderr_only("base64: extra operand 'a.txt'");
+        .stderr_only("base64: extra operand 'b.txt'\nTry 'base64 --help' for more information.");
 }
 
 #[test]
