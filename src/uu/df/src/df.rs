@@ -8,6 +8,8 @@
 
 #[macro_use]
 extern crate uucore;
+use uucore::error::UCustomError;
+use uucore::error::UResult;
 #[cfg(unix)]
 use uucore::fsext::statfs_fn;
 use uucore::fsext::{read_fs_list, FsUsage, MountInfo};
@@ -19,8 +21,10 @@ use std::cell::Cell;
 use std::collections::HashMap;
 use std::collections::HashSet;
 
+use std::error::Error;
 #[cfg(unix)]
 use std::ffi::CString;
+use std::fmt::Display;
 #[cfg(unix)]
 use std::mem;
 
@@ -32,9 +36,6 @@ use std::path::Path;
 
 static ABOUT: &str = "Show information about the file system on which each FILE resides,\n\
                       or all file systems by default.";
-
-static EXIT_OK: i32 = 0;
-static EXIT_ERR: i32 = 1;
 
 static OPT_ALL: &str = "all";
 static OPT_BLOCKSIZE: &str = "blocksize";
@@ -226,8 +227,8 @@ fn filter_mount_list(vmi: Vec<MountInfo>, paths: &[String], opt: &Options) -> Ve
 /// Convert `value` to a human readable string based on `base`.
 /// e.g. It returns 1G when value is 1 * 1024 * 1024 * 1024 and base is 1024.
 /// Note: It returns `value` if `base` isn't positive.
-fn human_readable(value: u64, base: i64) -> String {
-    match base {
+fn human_readable(value: u64, base: i64) -> UResult<String> {
+    let base_str = match base {
         d if d < 0 => value.to_string(),
 
         // ref: [Binary prefix](https://en.wikipedia.org/wiki/Binary_prefix) @@ <https://archive.is/cnwmF>
@@ -242,8 +243,10 @@ fn human_readable(value: u64, base: i64) -> String {
             NumberPrefix::Prefixed(prefix, bytes) => format!("{:.1}{}", bytes, prefix.symbol()),
         },
 
-        _ => crash!(EXIT_ERR, "Internal error: Unknown base value {}", base),
-    }
+        _ => return Err(DfError::InvalidBaseValue(base.to_string()).into()),
+    };
+
+    Ok(base_str)
 }
 
 fn use_size(free_size: u64, total_size: u64) -> String {
@@ -256,7 +259,31 @@ fn use_size(free_size: u64, total_size: u64) -> String {
     );
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[derive(Debug)]
+enum DfError {
+    InvalidBaseValue(String),
+}
+
+impl Display for DfError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DfError::InvalidBaseValue(s) => write!(f, "Internal error: Unknown base value {}", s),
+        }
+    }
+}
+
+impl Error for DfError {}
+
+impl UCustomError for DfError {
+    fn code(&self) -> i32 {
+        match self {
+            DfError::InvalidBaseValue(_) => 1,
+        }
+    }
+}
+
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = get_usage();
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
@@ -269,7 +296,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     {
         if matches.is_present(OPT_INODES) {
             println!("{}: doesn't support -i option", executable!());
-            return EXIT_OK;
+            return Ok(());
         }
     }
 
@@ -353,15 +380,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         if opt.show_inode_instead {
             print!(
                 "{0: >12} ",
-                human_readable(fs.usage.files, opt.human_readable_base)
+                human_readable(fs.usage.files, opt.human_readable_base)?
             );
             print!(
                 "{0: >12} ",
-                human_readable(fs.usage.files - fs.usage.ffree, opt.human_readable_base)
+                human_readable(fs.usage.files - fs.usage.ffree, opt.human_readable_base)?
             );
             print!(
                 "{0: >12} ",
-                human_readable(fs.usage.ffree, opt.human_readable_base)
+                human_readable(fs.usage.ffree, opt.human_readable_base)?
             );
             print!(
                 "{0: >5} ",
@@ -375,15 +402,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             let free_size = fs.usage.blocksize * fs.usage.bfree;
             print!(
                 "{0: >12} ",
-                human_readable(total_size, opt.human_readable_base)
+                human_readable(total_size, opt.human_readable_base)?
             );
             print!(
                 "{0: >12} ",
-                human_readable(total_size - free_size, opt.human_readable_base)
+                human_readable(total_size - free_size, opt.human_readable_base)?
             );
             print!(
                 "{0: >12} ",
-                human_readable(free_size, opt.human_readable_base)
+                human_readable(free_size, opt.human_readable_base)?
             );
             if cfg!(target_os = "macos") {
                 let used = fs.usage.blocks - fs.usage.bfree;
@@ -396,7 +423,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         println!();
     }
 
-    EXIT_OK
+    Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {

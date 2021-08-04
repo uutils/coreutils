@@ -35,15 +35,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let before = matches.is_present(options::BEFORE);
     let regex = matches.is_present(options::REGEX);
-    let separator = match matches.value_of(options::SEPARATOR) {
-        Some(m) => {
-            if m.is_empty() {
-                crash!(1, "separator cannot be empty")
-            } else {
-                m.to_owned()
-            }
-        }
-        None => "\n".to_owned(),
+    let raw_separator = matches.value_of(options::SEPARATOR).unwrap_or("\n");
+    let separator = if raw_separator.is_empty() {
+        "\0"
+    } else {
+        raw_separator
     };
 
     let files: Vec<String> = match matches.values_of(options::FILE) {
@@ -51,7 +47,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         None => vec!["-".to_owned()],
     };
 
-    tac(files, before, regex, &separator[..])
+    tac(files, before, regex, separator)
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -97,7 +93,7 @@ fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) -> i32 {
             let path = Path::new(filename);
             if path.is_dir() || path.metadata().is_err() {
                 if path.is_dir() {
-                    show_error!("dir: read error: Invalid argument");
+                    show_error!("{}: read error: Invalid argument", filename);
                 } else {
                     show_error!(
                         "failed to open '{}' for reading: No such file or directory",
@@ -139,9 +135,16 @@ fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) -> i32 {
                 i += 1;
             }
         }
+        // If the file contains no line separators, then simply write
+        // the contents of the file directly to stdout.
+        if offsets.is_empty() {
+            out.write_all(&data)
+                .unwrap_or_else(|e| crash!(1, "failed to write to stdout: {}", e));
+            return exit_code;
+        }
 
         // if there isn't a separator at the end of the file, fake it
-        if offsets.is_empty() || *offsets.last().unwrap() < data.len() - slen {
+        if *offsets.last().unwrap() < data.len() - slen {
             offsets.push(data.len());
         }
 

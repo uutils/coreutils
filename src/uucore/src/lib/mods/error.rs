@@ -251,7 +251,7 @@ impl Display for UError {
 ///
 /// A crate like [`quick_error`](https://crates.io/crates/quick-error) might
 /// also be used, but will still require an `impl` for the `code` method.
-pub trait UCustomError: Error {
+pub trait UCustomError: Error + Send {
     /// Error code of a custom error.
     ///
     /// Set a return value for each variant of an enum-type to associate an

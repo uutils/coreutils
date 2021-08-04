@@ -591,28 +591,40 @@ impl AtPath {
         }
     }
 
-    pub fn hard_link(&self, src: &str, dst: &str) {
+    pub fn hard_link(&self, original: &str, link: &str) {
         log_info(
             "hard_link",
-            &format!("{},{}", self.plus_as_string(src), self.plus_as_string(dst)),
+            &format!(
+                "{},{}",
+                self.plus_as_string(original),
+                self.plus_as_string(link)
+            ),
         );
-        hard_link(&self.plus(src), &self.plus(dst)).unwrap();
+        hard_link(&self.plus(original), &self.plus(link)).unwrap();
     }
 
-    pub fn symlink_file(&self, src: &str, dst: &str) {
+    pub fn symlink_file(&self, original: &str, link: &str) {
         log_info(
             "symlink",
-            &format!("{},{}", self.plus_as_string(src), self.plus_as_string(dst)),
+            &format!(
+                "{},{}",
+                self.plus_as_string(original),
+                self.plus_as_string(link)
+            ),
         );
-        symlink_file(&self.plus(src), &self.plus(dst)).unwrap();
+        symlink_file(&self.plus(original), &self.plus(link)).unwrap();
     }
 
-    pub fn symlink_dir(&self, src: &str, dst: &str) {
+    pub fn symlink_dir(&self, original: &str, link: &str) {
         log_info(
             "symlink",
-            &format!("{},{}", self.plus_as_string(src), self.plus_as_string(dst)),
+            &format!(
+                "{},{}",
+                self.plus_as_string(original),
+                self.plus_as_string(link)
+            ),
         );
-        symlink_dir(&self.plus(src), &self.plus(dst)).unwrap();
+        symlink_dir(&self.plus(original), &self.plus(link)).unwrap();
     }
 
     pub fn is_symlink(&self, path: &str) -> bool {

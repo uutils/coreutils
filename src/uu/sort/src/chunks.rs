@@ -14,8 +14,9 @@ use std::{
 
 use memchr::memchr_iter;
 use ouroboros::self_referencing;
+use uucore::error::{UResult, USimpleError};
 
-use crate::{numeric_str_cmp::NumInfo, GeneralF64ParseResult, GlobalSettings, Line};
+use crate::{numeric_str_cmp::NumInfo, GeneralF64ParseResult, GlobalSettings, Line, SortError};
 
 /// The chunk that is passed around between threads.
 /// `lines` consist of slices into `buffer`.
@@ -137,10 +138,10 @@ pub fn read<T: Read>(
     max_buffer_size: Option<usize>,
     carry_over: &mut Vec<u8>,
     file: &mut T,
-    next_files: &mut impl Iterator<Item = T>,
+    next_files: &mut impl Iterator<Item = UResult<T>>,
     separator: u8,
     settings: &GlobalSettings,
-) -> bool {
+) -> UResult<bool> {
     let RecycledChunk {
         lines,
         selections,
@@ -159,12 +160,12 @@ pub fn read<T: Read>(
         max_buffer_size,
         carry_over.len(),
         separator,
-    );
+    )?;
     carry_over.clear();
     carry_over.extend_from_slice(&buffer[read..]);
 
     if read != 0 {
-        let payload = Chunk::new(buffer, |buffer| {
+        let payload: UResult<Chunk> = Chunk::try_new(buffer, |buffer| {
             let selections = unsafe {
                 // SAFETY: It is safe to transmute to an empty vector of selections with shorter lifetime.
                 // It was only temporarily transmuted to a Vec<Line<'static>> to make recycling possible.
@@ -175,18 +176,19 @@ pub fn read<T: Read>(
                 // because it was only temporarily transmuted to a Vec<Line<'static>> to make recycling possible.
                 std::mem::transmute::<Vec<Line<'static>>, Vec<Line<'_>>>(lines)
             };
-            let read = crash_if_err!(1, std::str::from_utf8(&buffer[..read]));
+            let read = std::str::from_utf8(&buffer[..read])
+                .map_err(|error| SortError::Uft8Error { error })?;
             let mut line_data = LineData {
                 selections,
                 num_infos,
                 parsed_floats,
             };
             parse_lines(read, &mut lines, &mut line_data, separator, settings);
-            ChunkContents { lines, line_data }
+            Ok(ChunkContents { lines, line_data })
         });
-        sender.send(payload).unwrap();
+        sender.send(payload?).unwrap();
     }
-    should_continue
+    Ok(should_continue)
 }
 
 /// Split `read` into `Line`s, and add them to `lines`.
@@ -242,12 +244,12 @@ fn parse_lines<'a>(
 /// * Whether this function should be called again.
 fn read_to_buffer<T: Read>(
     file: &mut T,
-    next_files: &mut impl Iterator<Item = T>,
+    next_files: &mut impl Iterator<Item = UResult<T>>,
     buffer: &mut Vec<u8>,
     max_buffer_size: Option<usize>,
     start_offset: usize,
     separator: u8,
-) -> (usize, bool) {
+) -> UResult<(usize, bool)> {
     let mut read_target = &mut buffer[start_offset..];
     let mut last_file_target_size = read_target.len();
     loop {
@@ -274,7 +276,7 @@ fn read_to_buffer<T: Read>(
                         // We read enough lines.
                         let end = last_line_end.unwrap();
                         // We want to include the separator here, because it shouldn't be carried over.
-                        return (end + 1, true);
+                        return Ok((end + 1, true));
                     } else {
                         // We need to read more lines
                         let len = buffer.len();
@@ -299,11 +301,11 @@ fn read_to_buffer<T: Read>(
                     if let Some(next_file) = next_files.next() {
                         // There is another file.
                         last_file_target_size = leftover_len;
-                        *file = next_file;
+                        *file = next_file?;
                     } else {
                         // This was the last file.
                         let read_len = buffer.len() - leftover_len;
-                        return (read_len, false);
+                        return Ok((read_len, false));
                     }
                 }
             }
@@ -313,7 +315,7 @@ fn read_to_buffer<T: Read>(
             Err(e) if e.kind() == ErrorKind::Interrupted => {
                 // retry
             }
-            Err(e) => crash!(1, "{}", e),
+            Err(e) => return Err(USimpleError::new(2, e.to_string())),
         }
     }
 }

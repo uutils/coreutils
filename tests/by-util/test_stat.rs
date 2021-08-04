@@ -64,7 +64,7 @@ mod test_generate_tokens {
 
     #[test]
     fn printf_format() {
-        let s = "%-# 15a\\r\\\"\\\\\\a\\b\\e\\f\\v%+020.-23w\\x12\\167\\132\\112\\n";
+        let s = "%-# 15a\\t\\r\\\"\\\\\\a\\b\\e\\f\\v%+020.-23w\\x12\\167\\132\\112\\n";
         let expected = vec![
             Token::Directive {
                 flag: F_LEFT | F_ALTER | F_SPACE,
@@ -72,6 +72,7 @@ mod test_generate_tokens {
                 precision: -1,
                 format: 'a',
             },
+            Token::Char('\t'),
             Token::Char('\r'),
             Token::Char('"'),
             Token::Char('\\'),
