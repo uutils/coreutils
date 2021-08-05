@@ -485,10 +485,7 @@ mod test {
 
     #[test]
     fn test_parse_spec() {
-        assert_eq!(parse_spec(":"), Ok((None, None)));
-        assert!(parse_spec("::")
-            .err()
-            .unwrap()
-            .starts_with("invalid group: "));
+        assert!(matches!(parse_spec(":"), Ok((None, None))));
+        assert!(format!("{}", parse_spec("::").err().unwrap()).starts_with("invalid group: "));
     }
 }
