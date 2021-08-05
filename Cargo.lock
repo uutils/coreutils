@@ -309,6 +309,7 @@ dependencies = [
  "uu_base64",
  "uu_basename",
  "uu_cat",
+ "uu_chcon",
  "uu_chgrp",
  "uu_chmod",
  "uu_chown",
@@ -696,6 +697,16 @@ name = "fs_extra"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2022715d62ab30faffd124d40b76f4134a550a87792276512b18d63272333394"
+
+[[package]]
+name = "fts-sys"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d31ec9f1580e270ee49a1fae7b102f54514142d9be2d4aa363c361363d65cac9"
+dependencies = [
+ "bindgen",
+ "libc",
+]
 
 [[package]]
 name = "fuchsia-cprng"
@@ -1968,6 +1979,19 @@ dependencies = [
  "nix 0.20.0",
  "thiserror",
  "unix_socket",
+ "uucore",
+ "uucore_procs",
+]
+
+[[package]]
+name = "uu_chcon"
+version = "0.0.7"
+dependencies = [
+ "clap",
+ "fts-sys",
+ "libc",
+ "selinux-sys",
+ "thiserror",
  "uucore",
  "uucore_procs",
 ]

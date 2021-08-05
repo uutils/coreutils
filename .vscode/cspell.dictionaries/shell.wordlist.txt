@@ -63,6 +63,7 @@ abspath
 addprefix
 addsuffix
 endef
+findstring
 firstword
 ifeq
 ifneq
@@ -89,5 +90,9 @@ markdownlint
 rerast
 rollup
 sed
+selinuxenabled
 wslpath
 xargs
+
+# * directories
+sbin
