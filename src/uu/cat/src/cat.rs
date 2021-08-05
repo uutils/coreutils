@@ -20,6 +20,7 @@ use clap::{crate_version, App, Arg};
 use std::fs::{metadata, File};
 use std::io::{self, Read, Write};
 use thiserror::Error;
+use uucore::error::UResult;
 
 /// Linux splice support
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -164,7 +165,8 @@ mod options {
     pub static SHOW_NONPRINTING: &str = "show-nonprinting";
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
@@ -217,13 +219,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         show_tabs,
         squeeze_blank,
     };
-    let success = cat_files(files, &options).is_ok();
-
-    if success {
-        0
-    } else {
-        1
-    }
+    cat_files(files, &options)
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -339,23 +335,28 @@ fn cat_path(path: &str, options: &OutputOptions, state: &mut OutputState) -> Cat
     }
 }
 
-fn cat_files(files: Vec<String>, options: &OutputOptions) -> Result<(), u32> {
-    let mut error_count = 0;
+fn cat_files(files: Vec<String>, options: &OutputOptions) -> UResult<()> {
     let mut state = OutputState {
         line_number: 1,
         at_line_start: true,
     };
+    let mut error_messages: Vec<String> = Vec::new();
 
     for path in &files {
         if let Err(err) = cat_path(path, options, &mut state) {
-            show_error!("{}: {}", path, err);
-            error_count += 1;
+            error_messages.push(format!("{}: {}", path, err));
         }
     }
-    if error_count == 0 {
+    if error_messages.is_empty() {
         Ok(())
     } else {
-        Err(error_count)
+        // each next line is expected to display "cat: …"
+        let line_joiner = format!("\n{}: ", executable!());
+
+        Err(uucore::error::USimpleError::new(
+            error_messages.len() as i32,
+            error_messages.join(&line_joiner),
+        ))
     }
 }
 
