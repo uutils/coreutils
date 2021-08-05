@@ -90,3 +90,16 @@ jobs:
       with:
         name: gnu-result
         path: gnu-result.json
+    - name: Download the result
+      uses: dawidd6/action-download-artifact@v2
+      with:
+        workflow: GnuTests.yml
+        name: gnu-result
+        repo: uutils/coreutils
+        branch: master
+        path: dl
+    - name: Compare against master results
+      shell: bash
+      run: |
+        mv dl/gnu-result.json master-gnu-result.json
+        python uutils/util/compare_gnu_result.py
