@@ -308,6 +308,7 @@ dependencies = [
  "uu_base32",
  "uu_base64",
  "uu_basename",
+ "uu_basenc",
  "uu_cat",
  "uu_chcon",
  "uu_chgrp",
@@ -596,9 +597,29 @@ checksum = "ef8ae57c4978a2acd8b869ce6b9ca1dfe817bff704c220209fdef2c0b75a01b9"
 
 [[package]]
 name = "data-encoding"
-version = "2.1.2"
+version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4f47ca1860a761136924ddd2422ba77b2ea54fe8cc75b9040804a0d9d32ad97"
+checksum = "3ee2393c4a91429dffb4bedf19f4d6abf27d8a732c8ce4980305d782e5426d57"
+
+[[package]]
+name = "data-encoding-macro"
+version = "0.1.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "86927b7cd2fe88fa698b87404b287ab98d1a0063a34071d92e575b72d3029aca"
+dependencies = [
+ "data-encoding",
+ "data-encoding-macro-internal",
+]
+
+[[package]]
+name = "data-encoding-macro-internal"
+version = "0.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a5bbed42daaa95e780b60a50546aa345b8413a1e46f9a40a12907d3598f038db"
+dependencies = [
+ "data-encoding",
+ "syn",
+]
 
 [[package]]
 name = "diff"
@@ -1971,6 +1992,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "uu_basenc"
+version = "0.0.7"
+dependencies = [
+ "clap",
+ "uu_base32",
+ "uucore",
+ "uucore_procs",
+]
+
+[[package]]
 name = "uu_cat"
 version = "0.0.7"
 dependencies = [
@@ -3014,6 +3045,7 @@ version = "0.0.9"
 dependencies = [
  "clap",
  "data-encoding",
+ "data-encoding-macro",
  "dns-lookup",
  "dunce",
  "getopts",
@@ -3026,6 +3058,7 @@ dependencies = [
  "time",
  "wild",
  "winapi 0.3.9",
+ "z85",
 ]
 
 [[package]]
@@ -3153,3 +3186,9 @@ checksum = "244c3741f4240ef46274860397c7c74e50eb23624996930e484c16679633a54c"
 dependencies = [
  "libc",
 ]
+
+[[package]]
+name = "z85"
+version = "3.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5ac8b56e4f9906a4ef5412875e9ce448364023335cec645fd457ecf51d4f2781"

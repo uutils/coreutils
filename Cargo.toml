@@ -35,6 +35,7 @@ feat_common_core = [
     "base32",
     "base64",
     "basename",
+    "basenc",
     "cat",
     "cksum",
     "comm",
@@ -249,6 +250,7 @@ arch     = { optional=true, version="0.0.7", package="uu_arch", path="src/uu/arc
 base32   = { optional=true, version="0.0.7", package="uu_base32", path="src/uu/base32" }
 base64   = { optional=true, version="0.0.7", package="uu_base64", path="src/uu/base64" }
 basename = { optional=true, version="0.0.7", package="uu_basename", path="src/uu/basename" }
+basenc   = { optional=true, version="0.0.7", package="uu_basenc", path="src/uu/basenc" }
 cat      = { optional=true, version="0.0.7", package="uu_cat", path="src/uu/cat" }
 chcon    = { optional=true, version="0.0.7", package="uu_chcon", path="src/uu/chcon" }
 chgrp    = { optional=true, version="0.0.7", package="uu_chgrp", path="src/uu/chgrp" }

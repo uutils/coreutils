@@ -68,6 +68,7 @@ splitn
 trunc
 
 # * uutils
+basenc
 chcon
 chgrp
 chmod

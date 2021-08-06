@@ -369,20 +369,22 @@ To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 | base32    | date      | runcon |
 | base64    | dd        | stty   |
 | basename  | df        |        |
-| cat       | expr      |        |
-| chcon     | install   |        |
-| chgrp     | join      |        |
-| chmod     | ls        |        |
-| chown     | more      |        |
-| chroot    | numfmt    |        |
-| cksum     | od (`--strings` and 128-bit data types missing) | |
-| comm      | pr        |        |
-| csplit    | printf    |        |
-| cut       | sort      |        |
-| dircolors | split     |        |
-| dirname   | tac       |        |
-| du        | tail      |        |
-| echo      | test      |        |
+| basenc    | expr      |        |
+| cat       | install   |        |
+| chcon     | join      |        |
+| cat       | ls        |        |
+| chgrp     | more      |        |
+| chmod     | numfmt    |        |
+| chown     | od (`--strings` and 128-bit data types missing) | |
+| chroot    | pr        |        |
+| cksum     | printf    |        |
+| comm      | sort      |        |
+| csplit    | split     |        |
+| cut       | tac       |        |
+| dircolors | tail      |        |
+| dirname   | test      |        |
+| du        |           |        |
+| echo      |           |        |
 | env       |           |        |
 | expand    |           |        |
 | factor    |           |        |
