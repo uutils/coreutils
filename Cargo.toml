@@ -217,9 +217,8 @@ feat_os_unix_fuchsia = [
 feat_os_unix_redox = [
     "feat_common_core",
     #
-    "uname",
     "chmod",
-    "install",
+    "uname",
 ]
 # "feat_os_windows_legacy" == slightly restricted set of utilities which can be built/run on early windows platforms (eg, "WinXP")
 feat_os_windows_legacy = [
