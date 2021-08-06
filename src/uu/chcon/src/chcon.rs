@@ -5,14 +5,18 @@
 use uucore::{executable, show_error, show_usage_error, show_warning};
 
 use clap::{App, Arg};
+use selinux::{OpaqueSecurityContext, SecurityContext};
 
+use std::borrow::Cow;
 use std::ffi::{CStr, CString, OsStr, OsString};
-use std::fmt::Write;
-use std::os::raw::{c_char, c_int};
+use std::os::raw::c_int;
 use std::path::{Path, PathBuf};
-use std::{fs, io, ptr, slice};
+use std::{fs, io};
 
-type Result<T> = std::result::Result<T, Error>;
+mod errors;
+mod fts;
+
+use errors::*;
 
 static VERSION: &str = env!("CARGO_PKG_VERSION");
 static ABOUT: &str = "Change the SELinux security context of each FILE to CONTEXT. \n\
@@ -81,15 +85,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let context = match &options.mode {
         CommandLineMode::ReferenceBased { reference } => {
-            let result = selinux::FileContext::new(reference, true)
-                .and_then(|r| {
-                    if r.is_empty() {
-                        Err(io::Error::from_raw_os_error(libc::ENODATA))
-                    } else {
-                        Ok(r)
-                    }
-                })
-                .map_err(|r| Error::io1("Getting security context", reference, r));
+            let result = match SecurityContext::of_path(reference, true, false) {
+                Ok(Some(context)) => Ok(context),
+
+                Ok(None) => {
+                    let err = io::Error::from_raw_os_error(libc::ENODATA);
+                    Err(Error::from_io1("Getting security context", reference, err))
+                }
+
+                Err(r) => Err(Error::from_selinux("Getting security context", r)),
+            };
 
             match result {
                 Err(r) => {
@@ -102,33 +107,24 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
 
         CommandLineMode::ContextBased { context } => {
-            match selinux::SecurityContext::security_check_context(context)
-                .map_err(|r| Error::io1("Checking security context", context, r))
-            {
-                Err(r) => {
-                    show_error!("{}.", report_full_error(&r));
-                    return libc::EXIT_FAILURE;
-                }
+            let c_context = match os_str_to_c_string(context) {
+                Ok(context) => context,
 
-                Ok(Some(false)) => {
+                Err(_r) => {
                     show_error!("Invalid security context '{}'.", context.to_string_lossy());
                     return libc::EXIT_FAILURE;
                 }
-
-                Ok(Some(true)) | Ok(None) => {}
-            }
-
-            let c_context = if let Ok(value) = os_str_to_c_string(context) {
-                value
-            } else {
-                show_error!("Invalid security context '{}'.", context.to_string_lossy());
-                return libc::EXIT_FAILURE;
             };
 
-            SELinuxSecurityContext::String(c_context)
+            if SecurityContext::from_c_str(&c_context, false).check() == Some(false) {
+                show_error!("Invalid security context '{}'.", context.to_string_lossy());
+                return libc::EXIT_FAILURE;
+            }
+
+            SELinuxSecurityContext::String(Some(c_context))
         }
 
-        CommandLineMode::Custom { .. } => SELinuxSecurityContext::default(),
+        CommandLineMode::Custom { .. } => SELinuxSecurityContext::String(None),
     };
 
     let root_dev_ino = if options.preserve_root && options.recursive_mode.is_recursive() {
@@ -280,65 +276,6 @@ pub fn uu_app() -> App<'static, 'static> {
                 .help("Output a diagnostic for every file processed."),
         )
         .arg(Arg::with_name("FILE").multiple(true).min_values(1))
-}
-
-fn report_full_error(mut err: &dyn std::error::Error) -> String {
-    let mut desc = String::with_capacity(256);
-    write!(&mut desc, "{}", err).unwrap();
-    while let Some(source) = err.source() {
-        err = source;
-        write!(&mut desc, ". {}", err).unwrap();
-    }
-    desc
-}
-
-#[derive(thiserror::Error, Debug)]
-enum Error {
-    #[error("No context is specified")]
-    MissingContext,
-
-    #[error("No files are specified")]
-    MissingFiles,
-
-    #[error("{0}")]
-    ArgumentsMismatch(String),
-
-    #[error(transparent)]
-    CommandLine(#[from] clap::Error),
-
-    #[error("{operation} failed")]
-    Io {
-        operation: &'static str,
-        source: io::Error,
-    },
-
-    #[error("{operation} failed on '{}'", .operand1.to_string_lossy())]
-    Io1 {
-        operation: &'static str,
-        operand1: OsString,
-        source: io::Error,
-    },
-}
-
-impl Error {
-    fn io1(operation: &'static str, operand1: impl Into<OsString>, source: io::Error) -> Self {
-        Self::Io1 {
-            operation,
-            operand1: operand1.into(),
-            source,
-        }
-    }
-
-    #[cfg(unix)]
-    fn io1_c_str(operation: &'static str, operand1: &CStr, source: io::Error) -> Self {
-        if operand1.to_bytes().is_empty() {
-            Self::Io { operation, source }
-        } else {
-            use std::os::unix::ffi::OsStrExt;
-
-            Self::io1(operation, OsStr::from_bytes(operand1.to_bytes()), source)
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -500,39 +437,29 @@ fn process_files(
     root_dev_ino: Option<(libc::ino_t, libc::dev_t)>,
 ) -> Vec<Error> {
     let fts_options = options.recursive_mode.fts_open_options();
-    let mut fts = match fts::FTS::new(options.files.iter(), fts_options, None) {
+    let mut fts = match fts::FTS::new(options.files.iter(), fts_options) {
         Ok(fts) => fts,
-        Err(source) => {
-            return vec![Error::Io {
-                operation: "fts_open()",
-                source,
-            }]
-        }
+        Err(err) => return vec![err],
     };
 
-    let mut results = vec![];
-
+    let mut errors = Vec::default();
     loop {
         match fts.read_next_entry() {
             Ok(true) => {
                 if let Err(err) = process_file(options, context, &mut fts, root_dev_ino) {
-                    results.push(err);
+                    errors.push(err);
                 }
             }
 
             Ok(false) => break,
 
-            Err(source) => {
-                results.push(Error::Io {
-                    operation: "fts_read()",
-                    source,
-                });
-
+            Err(err) => {
+                errors.push(err);
                 break;
             }
         }
     }
-    results
+    errors
 }
 
 fn process_file(
@@ -541,46 +468,40 @@ fn process_file(
     fts: &mut fts::FTS,
     root_dev_ino: Option<(libc::ino_t, libc::dev_t)>,
 ) -> Result<()> {
-    let entry = fts.last_entry_mut().unwrap();
+    let mut entry = fts.last_entry_ref().unwrap();
 
-    let file_full_name = if entry.fts_path.is_null() {
-        None
-    } else {
-        let fts_path_size = usize::from(entry.fts_pathlen).saturating_add(1);
-
-        // SAFETY: `entry.fts_path` is a non-null pointer that is assumed to be valid.
-        let bytes = unsafe { slice::from_raw_parts(entry.fts_path.cast(), fts_path_size) };
-        CStr::from_bytes_with_nul(bytes).ok()
-    }
-    .ok_or_else(|| Error::Io {
-        operation: "File name validation",
-        source: io::ErrorKind::InvalidInput.into(),
+    let file_full_name = entry.path().map(PathBuf::from).ok_or_else(|| {
+        Error::from_io("File name validation", io::ErrorKind::InvalidInput.into())
     })?;
 
-    let fts_access_path = ptr_to_c_str(entry.fts_accpath)
-        .map_err(|r| Error::io1_c_str("File name validation", file_full_name, r))?;
+    let fts_access_path = entry.access_path().ok_or_else(|| {
+        let err = io::ErrorKind::InvalidInput.into();
+        Error::from_io1("File name validation", &file_full_name, err)
+    })?;
 
-    let err = |s, k: io::ErrorKind| Error::io1_c_str(s, file_full_name, k.into());
+    let err = |s, k: io::ErrorKind| Error::from_io1(s, &file_full_name, k.into());
 
     let fts_err = |s| {
-        let r = io::Error::from_raw_os_error(entry.fts_errno);
-        Err(Error::io1_c_str(s, file_full_name, r))
+        let r = io::Error::from_raw_os_error(entry.errno());
+        Err(Error::from_io1(s, &file_full_name, r))
     };
 
     // SAFETY: If `entry.fts_statp` is not null, then is is assumed to be valid.
-    let file_dev_ino = unsafe { entry.fts_statp.as_ref() }
-        .map(|stat| (stat.st_ino, stat.st_dev))
-        .ok_or_else(|| err("Getting meta data", io::ErrorKind::InvalidInput))?;
+    let file_dev_ino = if let Some(stat) = entry.stat() {
+        (stat.st_ino, stat.st_dev)
+    } else {
+        return Err(err("Getting meta data", io::ErrorKind::InvalidInput));
+    };
 
     let mut result = Ok(());
 
-    match c_int::from(entry.fts_info) {
+    match entry.flags() {
         fts_sys::FTS_D => {
             if options.recursive_mode.is_recursive() {
                 if root_dev_ino_check(root_dev_ino, file_dev_ino) {
                     // This happens e.g., with "chcon -R --preserve-root ... /"
                     // and with "chcon -RH --preserve-root ... symlink-to-root".
-                    root_dev_ino_warn(file_full_name);
+                    root_dev_ino_warn(&file_full_name);
 
                     // Tell fts not to traverse into this hierarchy.
                     let _ignored = fts.set(fts_sys::FTS_SKIP);
@@ -607,8 +528,8 @@ fn process_file(
             // that modify permissions, it is possible that the file in question is accessible when
             // control reaches this point. So, if this is the first time we've seen the FTS_NS for
             // this file, tell fts_read to stat it "again".
-            if entry.fts_level == 0 && entry.fts_number == 0 {
-                entry.fts_number = 1;
+            if entry.level() == 0 && entry.number() == 0 {
+                entry.set_number(1);
                 let _ignored = fts.set(fts_sys::FTS_AGAIN);
                 return Ok(());
             }
@@ -621,8 +542,8 @@ fn process_file(
         fts_sys::FTS_DNR => result = fts_err("Reading directory"),
 
         fts_sys::FTS_DC => {
-            if cycle_warning_required(options.recursive_mode.fts_open_options(), entry) {
-                emit_cycle_warning(file_full_name);
+            if cycle_warning_required(options.recursive_mode.fts_open_options(), &entry) {
+                emit_cycle_warning(&file_full_name);
                 return Err(err("Reading cyclic directory", io::ErrorKind::InvalidData));
             }
         }
@@ -630,11 +551,11 @@ fn process_file(
         _ => {}
     }
 
-    if c_int::from(entry.fts_info) == fts_sys::FTS_DP
+    if entry.flags() == fts_sys::FTS_DP
         && result.is_ok()
         && root_dev_ino_check(root_dev_ino, file_dev_ino)
     {
-        root_dev_ino_warn(file_full_name);
+        root_dev_ino_warn(&file_full_name);
         result = Err(err("Modifying root path", io::ErrorKind::PermissionDenied));
     }
 
@@ -656,24 +577,10 @@ fn process_file(
     result
 }
 
-fn set_file_security_context(
-    path: &Path,
-    context: *const c_char,
-    follow_symbolic_links: bool,
-) -> Result<()> {
-    let mut file_context = selinux::FileContext::from_ptr(context as *mut c_char);
-    if file_context.context.is_null() {
-        Err(io::Error::from(io::ErrorKind::InvalidInput))
-    } else {
-        file_context.set_for_file(path, follow_symbolic_links)
-    }
-    .map_err(|r| Error::io1("Setting security context", path, r))
-}
-
 fn change_file_context(
     options: &Options,
     context: &SELinuxSecurityContext,
-    file: &CStr,
+    path: &Path,
 ) -> Result<()> {
     match &options.mode {
         CommandLineMode::Custom {
@@ -682,91 +589,88 @@ fn change_file_context(
             the_type,
             range,
         } => {
-            let path = PathBuf::from(c_str_to_os_string(file));
-            let file_context = selinux::FileContext::new(&path, options.affect_symlink_referent)
-                .map_err(|r| Error::io1("Getting security context", &path, r))?;
+            let err0 = || -> Result<()> {
+                // If the file doesn't have a context, and we're not setting all of the context
+                // components, there isn't really an obvious default. Thus, we just give up.
+                let op = "Applying partial security context to unlabeled file";
+                let err = io::ErrorKind::InvalidInput.into();
+                Err(Error::from_io1(op, path, err))
+            };
 
-            // If the file doesn't have a context, and we're not setting all of the context
-            // components, there isn't really an obvious default. Thus, we just give up.
-            if file_context.is_empty() {
-                return Err(Error::io1(
-                    "Applying partial security context to unlabeled file",
-                    path,
-                    io::ErrorKind::InvalidInput.into(),
-                ));
-            }
+            let file_context =
+                match SecurityContext::of_path(path, options.affect_symlink_referent, false) {
+                    Ok(Some(context)) => context,
 
-            let mut se_context = selinux::SecurityContext::new(file_context.as_ptr())
-                .map_err(|r| Error::io1("Creating security context", &path, r))?;
+                    Ok(None) => return err0(),
+                    Err(r) => return Err(Error::from_selinux("Getting security context", r)),
+                };
 
-            if let Some(user) = user {
-                se_context
-                    .set_user(user)
-                    .map_err(|r| Error::io1("Setting security context user", &path, r))?;
-            }
+            let c_file_context = match file_context.to_c_string() {
+                Ok(Some(context)) => context,
 
-            if let Some(role) = role {
-                se_context
-                    .set_role(role)
-                    .map_err(|r| Error::io1("Setting security context role", &path, r))?;
-            }
+                Ok(None) => return err0(),
+                Err(r) => return Err(Error::from_selinux("Getting security context", r)),
+            };
 
-            if let Some(the_type) = the_type {
-                se_context
-                    .set_type(the_type)
-                    .map_err(|r| Error::io1("Setting security context type", &path, r))?;
-            }
+            let se_context =
+                OpaqueSecurityContext::from_c_str(c_file_context.as_ref()).map_err(|_r| {
+                    let err = io::ErrorKind::InvalidInput.into();
+                    Error::from_io1("Creating security context", path, err)
+                })?;
 
-            if let Some(range) = range {
-                se_context
-                    .set_range(range)
-                    .map_err(|r| Error::io1("Setting security context range", &path, r))?;
+            type SetValueProc = fn(&OpaqueSecurityContext, &CStr) -> selinux::errors::Result<()>;
+
+            let list: &[(&Option<OsString>, SetValueProc)] = &[
+                (user, OpaqueSecurityContext::set_user),
+                (role, OpaqueSecurityContext::set_role),
+                (the_type, OpaqueSecurityContext::set_type),
+                (range, OpaqueSecurityContext::set_range),
+            ];
+
+            for (new_value, set_value_proc) in list {
+                if let Some(new_value) = new_value {
+                    let c_new_value = os_str_to_c_string(new_value).map_err(|_r| {
+                        let err = io::ErrorKind::InvalidInput.into();
+                        Error::from_io1("Creating security context", path, err)
+                    })?;
+
+                    set_value_proc(&se_context, &c_new_value)
+                        .map_err(|r| Error::from_selinux("Setting security context user", r))?;
+                }
             }
 
             let context_string = se_context
-                .str_bytes()
-                .map_err(|r| Error::io1("Getting security context", &path, r))?;
+                .to_c_string()
+                .map_err(|r| Error::from_selinux("Getting security context", r))?;
 
-            if !file_context.is_empty() && file_context.as_bytes() == context_string {
+            if c_file_context.as_ref().to_bytes() == context_string.as_ref().to_bytes() {
                 Ok(()) // Nothing to change.
             } else {
-                set_file_security_context(
-                    &path,
-                    context_string.as_ptr().cast(),
-                    options.affect_symlink_referent,
-                )
+                SecurityContext::from_c_str(&context_string, false)
+                    .set_for_path(path, options.affect_symlink_referent, false)
+                    .map_err(|r| Error::from_selinux("Setting security context", r))
             }
         }
 
         CommandLineMode::ReferenceBased { .. } | CommandLineMode::ContextBased { .. } => {
-            let path = PathBuf::from(c_str_to_os_string(file));
-            let ctx_ptr = context.as_ptr() as *mut c_char;
-            set_file_security_context(&path, ctx_ptr, options.affect_symlink_referent)
+            if let Some(c_context) = context.to_c_string()? {
+                SecurityContext::from_c_str(c_context.as_ref(), false)
+                    .set_for_path(path, options.affect_symlink_referent, false)
+                    .map_err(|r| Error::from_selinux("Setting security context", r))
+            } else {
+                let err = io::ErrorKind::InvalidInput.into();
+                Err(Error::from_io1("Setting security context", path, err))
+            }
         }
     }
 }
 
 #[cfg(unix)]
-fn c_str_to_os_string(s: &CStr) -> OsString {
-    use std::os::unix::ffi::OsStringExt;
-
-    OsString::from_vec(s.to_bytes().to_vec())
-}
-
-#[cfg(unix)]
-pub(crate) fn os_str_to_c_string(s: &OsStr) -> io::Result<CString> {
+pub(crate) fn os_str_to_c_string(s: &OsStr) -> Result<CString> {
     use std::os::unix::ffi::OsStrExt;
 
-    CString::new(s.as_bytes()).map_err(|_r| io::ErrorKind::InvalidInput.into())
-}
-
-/// SAFETY:
-/// - If `p` is not null, then it is assumed to be a valid null-terminated C string.
-/// - The returned `CStr` must not live more than the data pointed-to by `p`.
-fn ptr_to_c_str<'s>(p: *const c_char) -> io::Result<&'s CStr> {
-    ptr::NonNull::new(p as *mut c_char)
-        .map(|p| unsafe { CStr::from_ptr(p.as_ptr()) })
-        .ok_or_else(|| io::ErrorKind::InvalidInput.into())
+    CString::new(s.as_bytes())
+        .map_err(|_r| Error::from_io("CString::new()", io::ErrorKind::InvalidInput.into()))
 }
 
 /// Call `lstat()` to get the device and inode numbers for `/`.
@@ -776,7 +680,7 @@ fn get_root_dev_ino() -> Result<(libc::ino_t, libc::dev_t)> {
 
     fs::symlink_metadata("/")
         .map(|md| (md.ino(), md.dev()))
-        .map_err(|r| Error::io1("std::fs::symlink_metadata", "/", r))
+        .map_err(|r| Error::from_io1("std::fs::symlink_metadata", "/", r))
 }
 
 fn root_dev_ino_check(
@@ -786,8 +690,8 @@ fn root_dev_ino_check(
     root_dev_ino.map_or(false, |root_dev_ino| root_dev_ino == dir_dev_ino)
 }
 
-fn root_dev_ino_warn(dir_name: &CStr) {
-    if dir_name.to_bytes() == b"/" {
+fn root_dev_ino_warn(dir_name: &Path) {
+    if dir_name.as_os_str() == "/" {
         show_warning!(
             "It is dangerous to operate recursively on '/'. \
              Use --{} to override this failsafe.",
@@ -810,370 +714,37 @@ fn root_dev_ino_warn(dir_name: &CStr) {
 // However, when invoked with "-P -R", it deserves a warning.
 // The fts_options parameter records the options that control this aspect of fts's behavior,
 // so test that.
-fn cycle_warning_required(fts_options: c_int, entry: &fts_sys::FTSENT) -> bool {
+fn cycle_warning_required(fts_options: c_int, entry: &fts::EntryRef) -> bool {
     // When dereferencing no symlinks, or when dereferencing only those listed on the command line
     // and we're not processing a command-line argument, then a cycle is a serious problem.
     ((fts_options & fts_sys::FTS_PHYSICAL) != 0)
-        && (((fts_options & fts_sys::FTS_COMFOLLOW) == 0) || entry.fts_level != 0)
+        && (((fts_options & fts_sys::FTS_COMFOLLOW) == 0) || entry.level() != 0)
 }
 
-fn emit_cycle_warning(file_name: &CStr) {
+fn emit_cycle_warning(file_name: &Path) {
     show_warning!(
         "Circular directory structure.\n\
 This almost certainly means that you have a corrupted file system.\n\
 NOTIFY YOUR SYSTEM MANAGER.\n\
 The following directory is part of the cycle '{}'.",
-        file_name.to_string_lossy()
+        file_name.display()
     )
 }
 
 #[derive(Debug)]
-enum SELinuxSecurityContext {
-    File(selinux::FileContext),
-    String(CString),
+enum SELinuxSecurityContext<'t> {
+    File(SecurityContext<'t>),
+    String(Option<CString>),
 }
 
-impl Default for SELinuxSecurityContext {
-    fn default() -> Self {
-        Self::String(CString::default())
-    }
-}
-
-impl SELinuxSecurityContext {
-    #[cfg(unix)]
-    fn as_ptr(&self) -> *const c_char {
+impl<'t> SELinuxSecurityContext<'t> {
+    fn to_c_string(&self) -> Result<Option<Cow<CStr>>> {
         match self {
-            SELinuxSecurityContext::File(context) => context.as_ptr(),
-            SELinuxSecurityContext::String(context) => context.to_bytes_with_nul().as_ptr().cast(),
-        }
-    }
-}
+            Self::File(context) => context
+                .to_c_string()
+                .map_err(|r| Error::from_selinux("SELinuxSecurityContext::to_c_string()", r)),
 
-mod fts {
-    use std::ffi::{CStr, CString, OsStr};
-    use std::os::raw::c_int;
-    use std::{io, iter, ptr};
-
-    use super::os_str_to_c_string;
-
-    pub(crate) type FTSOpenCallBack = unsafe extern "C" fn(
-        arg1: *mut *const fts_sys::FTSENT,
-        arg2: *mut *const fts_sys::FTSENT,
-    ) -> c_int;
-
-    #[derive(Debug)]
-    pub(crate) struct FTS {
-        fts: ptr::NonNull<fts_sys::FTS>,
-        entry: *mut fts_sys::FTSENT,
-    }
-
-    impl FTS {
-        pub(crate) fn new<I>(
-            paths: I,
-            options: c_int,
-            compar: Option<FTSOpenCallBack>,
-        ) -> io::Result<Self>
-        where
-            I: IntoIterator,
-            I::Item: AsRef<OsStr>,
-        {
-            let files_paths = paths
-                .into_iter()
-                .map(|s| os_str_to_c_string(s.as_ref()))
-                .collect::<io::Result<Vec<_>>>()?;
-
-            if files_paths.is_empty() {
-                return Err(io::ErrorKind::InvalidInput.into());
-            }
-
-            let path_argv = files_paths
-                .iter()
-                .map(CString::as_ref)
-                .map(CStr::as_ptr)
-                .chain(iter::once(ptr::null()))
-                .collect::<Vec<_>>();
-
-            // SAFETY: We assume calling fts_open() is safe:
-            // - `path_argv` is an array holding at least one path, and null-terminated.
-            let r = unsafe { fts_sys::fts_open(path_argv.as_ptr().cast(), options, compar) };
-            let fts = ptr::NonNull::new(r).ok_or_else(io::Error::last_os_error)?;
-
-            Ok(Self {
-                fts,
-                entry: ptr::null_mut(),
-            })
-        }
-
-        pub(crate) fn read_next_entry(&mut self) -> io::Result<bool> {
-            // SAFETY: We assume calling fts_read() is safe with a non-null `fts`
-            // pointer assumed to be valid.
-            self.entry = unsafe { fts_sys::fts_read(self.fts.as_ptr()) };
-            if self.entry.is_null() {
-                let r = io::Error::last_os_error();
-                if let Some(0) = r.raw_os_error() {
-                    Ok(false)
-                } else {
-                    Err(r)
-                }
-            } else {
-                Ok(true)
-            }
-        }
-
-        pub(crate) fn last_entry_mut(&mut self) -> Option<&mut fts_sys::FTSENT> {
-            // SAFETY: If `self.entry` is not null, then is is assumed to be valid.
-            unsafe { self.entry.as_mut() }
-        }
-
-        pub(crate) fn set(&mut self, instr: c_int) -> io::Result<()> {
-            let fts = self.fts.as_ptr();
-
-            let entry = self
-                .last_entry_mut()
-                .ok_or_else(|| io::Error::from(io::ErrorKind::UnexpectedEof))?;
-
-            // SAFETY: We assume calling fts_set() is safe with non-null `fts`
-            // and `entry` pointers assumed to be valid.
-            if unsafe { fts_sys::fts_set(fts, entry, instr) } == -1 {
-                Err(io::Error::last_os_error())
-            } else {
-                Ok(())
-            }
-        }
-    }
-
-    impl Drop for FTS {
-        fn drop(&mut self) {
-            // SAFETY: We assume calling fts_close() is safe with a non-null `fts`
-            // pointer assumed to be valid.
-            unsafe { fts_sys::fts_close(self.fts.as_ptr()) };
-        }
-    }
-}
-
-mod selinux {
-    use std::ffi::OsStr;
-    use std::os::raw::c_char;
-    use std::path::Path;
-    use std::{io, ptr, slice};
-
-    use super::os_str_to_c_string;
-
-    #[derive(Debug)]
-    pub(crate) struct SecurityContext(ptr::NonNull<selinux_sys::context_s_t>);
-
-    impl SecurityContext {
-        pub(crate) fn new(context_str: *const c_char) -> io::Result<Self> {
-            if context_str.is_null() {
-                Err(io::ErrorKind::InvalidInput.into())
-            } else {
-                // SAFETY: We assume calling context_new() is safe with
-                // a non-null `context_str` pointer assumed to be valid.
-                let p = unsafe { selinux_sys::context_new(context_str) };
-                ptr::NonNull::new(p)
-                    .ok_or_else(io::Error::last_os_error)
-                    .map(Self)
-            }
-        }
-
-        pub(crate) fn is_selinux_enabled() -> bool {
-            // SAFETY: We assume calling is_selinux_enabled() is always safe.
-            unsafe { selinux_sys::is_selinux_enabled() != 0 }
-        }
-
-        pub(crate) fn security_check_context(context: &OsStr) -> io::Result<Option<bool>> {
-            let c_context = os_str_to_c_string(context)?;
-
-            // SAFETY: We assume calling security_check_context() is safe with
-            // a non-null `context` pointer assumed to be valid.
-            if unsafe { selinux_sys::security_check_context(c_context.as_ptr()) } == 0 {
-                Ok(Some(true))
-            } else if Self::is_selinux_enabled() {
-                Ok(Some(false))
-            } else {
-                Ok(None)
-            }
-        }
-
-        pub(crate) fn str_bytes(&self) -> io::Result<&[u8]> {
-            // SAFETY: We assume calling context_str() is safe with
-            // a non-null `context` pointer assumed to be valid.
-            let p = unsafe { selinux_sys::context_str(self.0.as_ptr()) };
-            if p.is_null() {
-                Err(io::ErrorKind::InvalidInput.into())
-            } else {
-                let len = unsafe { libc::strlen(p.cast()) }.saturating_add(1);
-                Ok(unsafe { slice::from_raw_parts(p.cast(), len) })
-            }
-        }
-
-        pub(crate) fn set_user(&mut self, user: &OsStr) -> io::Result<()> {
-            let c_user = os_str_to_c_string(user)?;
-
-            // SAFETY: We assume calling context_user_set() is safe with non-null
-            // `context` and `user` pointers assumed to be valid.
-            if unsafe { selinux_sys::context_user_set(self.0.as_ptr(), c_user.as_ptr()) } == 0 {
-                Ok(())
-            } else {
-                Err(io::Error::last_os_error())
-            }
-        }
-
-        pub(crate) fn set_role(&mut self, role: &OsStr) -> io::Result<()> {
-            let c_role = os_str_to_c_string(role)?;
-
-            // SAFETY: We assume calling context_role_set() is safe with non-null
-            // `context` and `role` pointers assumed to be valid.
-            if unsafe { selinux_sys::context_role_set(self.0.as_ptr(), c_role.as_ptr()) } == 0 {
-                Ok(())
-            } else {
-                Err(io::Error::last_os_error())
-            }
-        }
-
-        pub(crate) fn set_type(&mut self, the_type: &OsStr) -> io::Result<()> {
-            let c_type = os_str_to_c_string(the_type)?;
-
-            // SAFETY: We assume calling context_type_set() is safe with non-null
-            // `context` and `the_type` pointers assumed to be valid.
-            if unsafe { selinux_sys::context_type_set(self.0.as_ptr(), c_type.as_ptr()) } == 0 {
-                Ok(())
-            } else {
-                Err(io::Error::last_os_error())
-            }
-        }
-
-        pub(crate) fn set_range(&mut self, range: &OsStr) -> io::Result<()> {
-            let c_range = os_str_to_c_string(range)?;
-
-            // SAFETY: We assume calling context_range_set() is safe with non-null
-            // `context` and `range` pointers assumed to be valid.
-            if unsafe { selinux_sys::context_range_set(self.0.as_ptr(), c_range.as_ptr()) } == 0 {
-                Ok(())
-            } else {
-                Err(io::Error::last_os_error())
-            }
-        }
-    }
-
-    impl Drop for SecurityContext {
-        fn drop(&mut self) {
-            // SAFETY: We assume calling context_free() is safe with
-            // a non-null `context` pointer assumed to be valid.
-            unsafe { selinux_sys::context_free(self.0.as_ptr()) }
-        }
-    }
-
-    #[derive(Debug)]
-    pub(crate) struct FileContext {
-        pub context: *mut c_char,
-        pub len: usize,
-        pub allocated: bool,
-    }
-
-    impl FileContext {
-        pub(crate) fn new(path: &Path, follow_symbolic_links: bool) -> io::Result<Self> {
-            let c_path = os_str_to_c_string(path.as_os_str())?;
-            let mut context: *mut c_char = ptr::null_mut();
-
-            // SAFETY: We assume calling getfilecon()/lgetfilecon() is safe with
-            // non-null `path` and `context` pointers assumed to be valid.
-            let len = if follow_symbolic_links {
-                unsafe { selinux_sys::getfilecon(c_path.as_ptr(), &mut context) }
-            } else {
-                unsafe { selinux_sys::lgetfilecon(c_path.as_ptr(), &mut context) }
-            };
-
-            if len == -1 {
-                let err = io::Error::last_os_error();
-                if let Some(libc::ENODATA) = err.raw_os_error() {
-                    Ok(Self::default())
-                } else {
-                    Err(err)
-                }
-            } else if context.is_null() {
-                Ok(Self::default())
-            } else {
-                Ok(Self {
-                    context,
-                    len: len as usize,
-                    allocated: true,
-                })
-            }
-        }
-
-        pub(crate) fn from_ptr(context: *mut c_char) -> Self {
-            if context.is_null() {
-                Self::default()
-            } else {
-                // SAFETY: We assume calling strlen() is safe with a non-null
-                // `context` pointer assumed to be valid.
-                let len = unsafe { libc::strlen(context) };
-                Self {
-                    context,
-                    len,
-                    allocated: false,
-                }
-            }
-        }
-
-        pub(crate) fn set_for_file(
-            &mut self,
-            path: &Path,
-            follow_symbolic_links: bool,
-        ) -> io::Result<()> {
-            let c_path = os_str_to_c_string(path.as_os_str())?;
-
-            // SAFETY: We assume calling setfilecon()/lsetfilecon() is safe with
-            // non-null `path` and `context` pointers assumed to be valid.
-            let r = if follow_symbolic_links {
-                unsafe { selinux_sys::setfilecon(c_path.as_ptr(), self.context) }
-            } else {
-                unsafe { selinux_sys::lsetfilecon(c_path.as_ptr(), self.context) }
-            };
-
-            if r == -1 {
-                Err(io::Error::last_os_error())
-            } else {
-                Ok(())
-            }
-        }
-
-        pub(crate) fn as_ptr(&self) -> *const c_char {
-            self.context
-        }
-
-        pub(crate) fn is_empty(&self) -> bool {
-            self.context.is_null() || self.len == 0
-        }
-
-        pub(crate) fn as_bytes(&self) -> &[u8] {
-            if self.context.is_null() {
-                &[]
-            } else {
-                // SAFETY: `self.0.context` is a non-null pointer that is assumed to be valid.
-                unsafe { slice::from_raw_parts(self.context.cast(), self.len) }
-            }
-        }
-    }
-
-    impl Default for FileContext {
-        fn default() -> Self {
-            Self {
-                context: ptr::null_mut(),
-                len: 0,
-                allocated: false,
-            }
-        }
-    }
-
-    impl Drop for FileContext {
-        fn drop(&mut self) {
-            if self.allocated && !self.context.is_null() {
-                // SAFETY: We assume calling freecon() is safe with a non-null
-                // `context` pointer assumed to be valid.
-                unsafe { selinux_sys::freecon(self.context) }
-            }
+            Self::String(context) => Ok(context.as_deref().map(Cow::Borrowed)),
         }
     }
 }
