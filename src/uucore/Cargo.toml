@@ -16,7 +16,7 @@ edition = "2018"
 path="src/lib/lib.rs"
 
 [dependencies]
-dns-lookup = "1.0.5"
+dns-lookup = { version="1.0.5", optional=true }
 dunce = "1.0.0"
 getopts = "<= 0.2.21"
 wild = "2.0.4"
@@ -55,6 +55,6 @@ process = ["libc"]
 ringbuffer = []
 signals = []
 utf8 = []
-utmpx = ["time", "libc"]
+utmpx = ["time", "libc", "dns-lookup"]
 wide = []
 zero-copy = ["nix", "libc", "lazy_static", "platform-info"]

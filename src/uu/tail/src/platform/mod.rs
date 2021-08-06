@@ -14,14 +14,8 @@ pub use self::unix::{stdin_is_pipe_or_fifo, supports_pid_checks, Pid, ProcessChe
 #[cfg(windows)]
 pub use self::windows::{supports_pid_checks, Pid, ProcessChecker};
 
-#[cfg(target_os = "redox")]
-pub use self::redox::{supports_pid_checks, Pid, ProcessChecker};
-
 #[cfg(unix)]
 mod unix;
 
 #[cfg(windows)]
 mod windows;
-
-#[cfg(target_os = "redox")]
-mod redox;

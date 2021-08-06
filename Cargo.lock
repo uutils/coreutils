@@ -719,7 +719,7 @@ checksum = "1d34cfa13a63ae058bfa601fe9e313bbdb3746427c1459185464ce0fcf62e1e8"
 dependencies = [
  "cfg-if 1.0.0",
  "libc",
- "redox_syscall 0.2.9",
+ "redox_syscall",
  "winapi 0.3.9",
 ]
 
@@ -1238,7 +1238,7 @@ dependencies = [
  "cfg-if 1.0.0",
  "instant",
  "libc",
- "redox_syscall 0.2.9",
+ "redox_syscall",
  "smallvec 1.6.1",
  "winapi 0.3.9",
 ]
@@ -1532,15 +1532,9 @@ dependencies = [
 
 [[package]]
 name = "redox_syscall"
-version = "0.1.57"
+version = "0.2.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41cc0f7e4d5d4544e8861606a285bb08d3e70712ccc7d2b84d7c0ccfaf4b05ce"
-
-[[package]]
-name = "redox_syscall"
-version = "0.2.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ab49abadf3f9e1c4bc499e8845e152ad87d2ad2d30371841171169e9d75feee"
+checksum = "8383f39639269cde97d255a32bdb68c047337295414940c68bdd30c2e13203ff"
 dependencies = [
  "bitflags",
 ]
@@ -1551,7 +1545,7 @@ version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8440d8acb4fd3d277125b4bd01a6f38aee8d814b3b5fc09b3f2b825d37d3fe8f"
 dependencies = [
- "redox_syscall 0.2.9",
+ "redox_syscall",
 ]
 
 [[package]]
@@ -1810,7 +1804,7 @@ dependencies = [
  "cfg-if 1.0.0",
  "libc",
  "rand 0.8.4",
- "redox_syscall 0.2.9",
+ "redox_syscall",
  "remove_dir_all",
  "winapi 0.3.9",
 ]
@@ -1851,7 +1845,7 @@ checksum = "077185e2eac69c3f8379a4298e1e07cd36beb962290d4a51199acf0fdc10607e"
 dependencies = [
  "libc",
  "numtoa",
- "redox_syscall 0.2.9",
+ "redox_syscall",
  "redox_termios",
 ]
 
@@ -2499,7 +2493,7 @@ dependencies = [
  "clap",
  "crossterm",
  "nix 0.13.1",
- "redox_syscall 0.1.57",
+ "redox_syscall",
  "redox_termios",
  "unicode-segmentation",
  "unicode-width",
@@ -2858,7 +2852,7 @@ dependencies = [
  "clap",
  "libc",
  "nix 0.20.0",
- "redox_syscall 0.1.57",
+ "redox_syscall",
  "uucore",
  "uucore_procs",
  "winapi 0.3.9",
@@ -2881,7 +2875,7 @@ version = "0.0.7"
 dependencies = [
  "clap",
  "libc",
- "redox_syscall 0.1.57",
+ "redox_syscall",
  "uucore",
  "uucore_procs",
 ]
