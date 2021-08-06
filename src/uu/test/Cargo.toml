@@ -21,7 +21,7 @@ uucore = { version=">=0.0.9", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.6", package="uucore_procs", path="../../uucore_procs" }
 
 [target.'cfg(target_os = "redox")'.dependencies]
-redox_syscall = "0.1"
+redox_syscall = "0.2"
 
 [[bin]]
 name = "test"
