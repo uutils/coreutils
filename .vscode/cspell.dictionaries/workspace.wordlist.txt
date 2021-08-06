@@ -107,6 +107,7 @@ whoami
 # * vars/errno
 errno
 EEXIST
+ENODATA
 ENOENT
 ENOSYS
 EPERM
@@ -119,7 +120,9 @@ fcntl
 vmsplice
 
 # * vars/libc
+COMFOLLOW
 FILENO
+FTSENT
 HOSTSIZE
 IDSIZE
 IFBLK
@@ -152,6 +155,7 @@ SIGTERM
 SYS_fdatasync
 SYS_syncfs
 USERSIZE
+accpath
 addrinfo
 addrlen
 blocksize
@@ -175,15 +179,18 @@ inode
 inodes
 isatty
 lchown
+pathlen
 setgid
 setgroups
 settime
 setuid
 socktype
 statfs
+statp
 statvfs
 strcmp
 strerror
+strlen
 syncfs
 umask
 waitpid
@@ -274,6 +281,13 @@ winbase
 winerror
 winnt
 winsock
+
+# * vars/selinux
+freecon
+getfilecon
+lgetfilecon
+lsetfilecon
+setfilecon
 
 # * vars/uucore
 optflag
