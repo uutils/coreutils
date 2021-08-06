@@ -22,6 +22,7 @@ mod custom_str_cmp;
 mod ext_sort;
 mod merge;
 mod numeric_str_cmp;
+mod tmp_dir;
 
 use chunks::LineData;
 use clap::{crate_version, App, Arg};
@@ -48,6 +49,8 @@ use uucore::error::{set_exit_code, UCustomError, UResult, USimpleError, UUsageEr
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::version_cmp::version_cmp;
 use uucore::InvalidEncodingHandling;
+
+use crate::tmp_dir::TmpDirWrapper;
 
 const NAME: &str = "sort";
 const ABOUT: &str = "Display sorted concatenation of all FILE(s).";
@@ -317,7 +320,6 @@ pub struct GlobalSettings {
     threads: String,
     zero_terminated: bool,
     buffer_size: usize,
-    tmp_dir: PathBuf,
     compress_prog: Option<String>,
     merge_batch_size: usize,
     precomputed: Precomputed,
@@ -400,7 +402,6 @@ impl Default for GlobalSettings {
             threads: String::new(),
             zero_terminated: false,
             buffer_size: DEFAULT_BUF_SIZE,
-            tmp_dir: PathBuf::new(),
             compress_prog: None,
             merge_batch_size: 32,
             precomputed: Precomputed {
@@ -1178,10 +1179,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 })
             })?;
 
-    settings.tmp_dir = matches
-        .value_of(options::TMP_DIR)
-        .map(PathBuf::from)
-        .unwrap_or_else(env::temp_dir);
+    let mut tmp_dir = TmpDirWrapper::new(
+        matches
+            .value_of(options::TMP_DIR)
+            .map(PathBuf::from)
+            .unwrap_or_else(env::temp_dir),
+    );
 
     settings.compress_prog = matches.value_of(options::COMPRESS_PROG).map(String::from);
 
@@ -1280,7 +1283,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     settings.init_precomputed();
 
-    exec(&mut files, &settings, output)
+    exec(&mut files, &settings, output, &mut tmp_dir)
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -1503,9 +1506,14 @@ pub fn uu_app() -> App<'static, 'static> {
         )
 }
 
-fn exec(files: &mut [OsString], settings: &GlobalSettings, output: Output) -> UResult<()> {
+fn exec(
+    files: &mut [OsString],
+    settings: &GlobalSettings,
+    output: Output,
+    tmp_dir: &mut TmpDirWrapper,
+) -> UResult<()> {
     if settings.merge {
-        let file_merger = merge::merge(files, settings, output.as_output_name())?;
+        let file_merger = merge::merge(files, settings, output.as_output_name(), tmp_dir)?;
         file_merger.write_all(settings, output)
     } else if settings.check {
         if files.len() > 1 {
@@ -1515,7 +1523,7 @@ fn exec(files: &mut [OsString], settings: &GlobalSettings, output: Output) -> UR
         }
     } else {
         let mut lines = files.iter().map(open);
-        ext_sort(&mut lines, settings, output)
+        ext_sort(&mut lines, settings, output, tmp_dir)
     }
 }
 

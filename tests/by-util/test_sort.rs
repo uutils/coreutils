@@ -1091,3 +1091,30 @@ fn test_wrong_args_exit_code() {
         .status_code(2)
         .stderr_contains("--misspelled");
 }
+
+#[test]
+#[cfg(unix)]
+fn test_tmp_files_deleted_on_sigint() {
+    use std::{fs::read_dir, time::Duration};
+
+    use nix::{sys::signal, unistd::Pid};
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("tmp_dir");
+    ucmd.args(&[
+        "ext_sort.txt",
+        "--buffer-size=1", // with a small buffer size `sort` will be forced to create a temporary directory very soon.
+        "--temporary-directory=tmp_dir",
+    ]);
+    let mut child = ucmd.run_no_wait();
+    // wait a short amount of time so that `sort` can create a temporary directory.
+    std::thread::sleep(Duration::from_millis(100));
+    // `sort` should have created a temporary directory.
+    assert!(read_dir(at.plus("tmp_dir")).unwrap().next().is_some());
+    // kill sort with SIGINT
+    signal::kill(Pid::from_raw(child.id() as i32), signal::SIGINT).unwrap();
+    // wait for `sort` to exit
+    assert_eq!(child.wait().unwrap().code(), Some(2));
+    // `sort` should have deleted the temporary directory again.
+    assert!(read_dir(at.plus("tmp_dir")).unwrap().next().is_none());
+}

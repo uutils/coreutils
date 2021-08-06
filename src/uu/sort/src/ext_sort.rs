@@ -13,7 +13,6 @@
 
 use std::cmp::Ordering;
 use std::io::Write;
-use std::path::Path;
 use std::path::PathBuf;
 use std::{
     io::Read,
@@ -29,14 +28,13 @@ use crate::merge::ClosedTmpFile;
 use crate::merge::WriteableCompressedTmpFile;
 use crate::merge::WriteablePlainTmpFile;
 use crate::merge::WriteableTmpFile;
+use crate::tmp_dir::TmpDirWrapper;
 use crate::Output;
-use crate::SortError;
 use crate::{
     chunks::{self, Chunk},
     compare_by, merge, sort_by, GlobalSettings,
 };
 use crate::{print_sorted, Line};
-use tempfile::TempDir;
 
 const START_BUFFER_SIZE: usize = 8_000;
 
@@ -45,6 +43,7 @@ pub fn ext_sort(
     files: &mut impl Iterator<Item = UResult<Box<dyn Read + Send>>>,
     settings: &GlobalSettings,
     output: Output,
+    tmp_dir: &mut TmpDirWrapper,
 ) -> UResult<()> {
     let (sorted_sender, sorted_receiver) = std::sync::mpsc::sync_channel(1);
     let (recycled_sender, recycled_receiver) = std::sync::mpsc::sync_channel(1);
@@ -59,6 +58,7 @@ pub fn ext_sort(
             sorted_receiver,
             recycled_sender,
             output,
+            tmp_dir,
         )
     } else {
         reader_writer::<_, WriteablePlainTmpFile>(
@@ -67,6 +67,7 @@ pub fn ext_sort(
             sorted_receiver,
             recycled_sender,
             output,
+            tmp_dir,
         )
     }
 }
@@ -80,6 +81,7 @@ fn reader_writer<
     receiver: Receiver<Chunk>,
     sender: SyncSender<Chunk>,
     output: Output,
+    tmp_dir: &mut TmpDirWrapper,
 ) -> UResult<()> {
     let separator = if settings.zero_terminated {
         b'\0'
@@ -92,7 +94,7 @@ fn reader_writer<
     let buffer_size = settings.buffer_size / 10;
     let read_result: ReadResult<Tmp> = read_write_loop(
         files,
-        &settings.tmp_dir,
+        tmp_dir,
         separator,
         buffer_size,
         settings,
@@ -100,12 +102,11 @@ fn reader_writer<
         sender,
     )?;
     match read_result {
-        ReadResult::WroteChunksToFile { tmp_files, tmp_dir } => {
-            let tmp_dir_size = tmp_files.len();
+        ReadResult::WroteChunksToFile { tmp_files } => {
             let merger = merge::merge_with_file_limit::<_, _, Tmp>(
                 tmp_files.into_iter().map(|c| c.reopen()),
                 settings,
-                Some((tmp_dir, tmp_dir_size)),
+                tmp_dir,
             )?;
             merger.write_all(settings, output)?;
         }
@@ -176,15 +177,12 @@ enum ReadResult<I: WriteableTmpFile> {
     /// The input fits into two chunks, which were kept in memory.
     SortedTwoChunks([Chunk; 2]),
     /// The input was read into multiple chunks, which were written to auxiliary files.
-    WroteChunksToFile {
-        tmp_files: Vec<I::Closed>,
-        tmp_dir: TempDir,
-    },
+    WroteChunksToFile { tmp_files: Vec<I::Closed> },
 }
 /// The function that is executed on the reader/writer thread.
 fn read_write_loop<I: WriteableTmpFile>(
     mut files: impl Iterator<Item = UResult<Box<dyn Read + Send>>>,
-    tmp_dir_parent: &Path,
+    tmp_dir: &mut TmpDirWrapper,
     separator: u8,
     buffer_size: usize,
     settings: &GlobalSettings,
@@ -228,31 +226,23 @@ fn read_write_loop<I: WriteableTmpFile>(
         }
     }
 
-    let tmp_dir = tempfile::Builder::new()
-        .prefix("uutils_sort")
-        .tempdir_in(tmp_dir_parent)
-        .map_err(|_| SortError::TmpDirCreationFailed)?;
-
     let mut sender_option = Some(sender);
-    let mut file_number = 0;
     let mut tmp_files = vec![];
     loop {
         let mut chunk = match receiver.recv() {
             Ok(it) => it,
             _ => {
-                return Ok(ReadResult::WroteChunksToFile { tmp_files, tmp_dir });
+                return Ok(ReadResult::WroteChunksToFile { tmp_files });
             }
         };
 
         let tmp_file = write::<I>(
             &mut chunk,
-            tmp_dir.path().join(file_number.to_string()),
+            tmp_dir.next_file_path()?,
             settings.compress_prog.as_deref(),
             separator,
         )?;
         tmp_files.push(tmp_file);
-
-        file_number += 1;
 
         let recycled_chunk = chunk.recycle();
 
