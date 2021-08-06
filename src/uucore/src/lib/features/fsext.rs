@@ -440,6 +440,11 @@ pub fn read_fs_list() -> Vec<MountInfo> {
         }
         mounts
     }
+    #[cfg(target_os = "redox")]
+    {
+        // No method to read mounts, yet
+        Vec::new()
+    }
 }
 
 #[derive(Debug, Clone)]
