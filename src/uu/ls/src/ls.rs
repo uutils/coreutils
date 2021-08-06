@@ -1590,7 +1590,7 @@ fn display_uname(metadata: &Metadata, config: &Config) -> String {
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "redox")))]
 fn cached_gid2grp(gid: u32) -> String {
     lazy_static! {
         static ref GID_CACHE: Mutex<HashMap<u32, String>> = Mutex::new(HashMap::new());
@@ -1603,13 +1603,18 @@ fn cached_gid2grp(gid: u32) -> String {
         .clone()
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "redox")))]
 fn display_group(metadata: &Metadata, config: &Config) -> String {
     if config.long.numeric_uid_gid {
         metadata.gid().to_string()
     } else {
         cached_gid2grp(metadata.gid())
     }
+}
+
+#[cfg(target_os = "redox")]
+fn display_group(metadata: &Metadata, config: &Config) -> String {
+    metadata.gid().to_string()
 }
 
 #[cfg(not(unix))]
