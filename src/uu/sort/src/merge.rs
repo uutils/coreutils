@@ -46,7 +46,7 @@ fn replace_output_file_in_input_files(
                     if let Some(copy) = &copy {
                         *file = copy.clone().into_os_string();
                     } else {
-                        let copy_path = tmp_dir.next_file_path()?;
+                        let (_file, copy_path) = tmp_dir.next_file()?;
                         std::fs::copy(file_path, &copy_path)
                             .map_err(|error| SortError::OpenTmpFileFailed { error })?;
                         *file = copy_path.clone().into_os_string();
@@ -110,7 +110,7 @@ pub fn merge_with_file_limit<
             remaining_files = remaining_files.saturating_sub(settings.merge_batch_size);
             let merger = merge_without_limit(batches.next().unwrap(), settings)?;
             let mut tmp_file =
-                Tmp::create(tmp_dir.next_file_path()?, settings.compress_prog.as_deref())?;
+                Tmp::create(tmp_dir.next_file()?, settings.compress_prog.as_deref())?;
             merger.write_all_to(settings, tmp_file.as_write())?;
             temporary_files.push(tmp_file.finished_writing()?);
         }
@@ -379,7 +379,7 @@ fn check_child_success(mut child: Child, program: &str) -> UResult<()> {
 pub trait WriteableTmpFile: Sized {
     type Closed: ClosedTmpFile;
     type InnerWrite: Write;
-    fn create(path: PathBuf, compress_prog: Option<&str>) -> UResult<Self>;
+    fn create(file: (File, PathBuf), compress_prog: Option<&str>) -> UResult<Self>;
     /// Closes the temporary file.
     fn finished_writing(self) -> UResult<Self::Closed>;
     fn as_write(&mut self) -> &mut Self::InnerWrite;
@@ -414,11 +414,9 @@ impl WriteableTmpFile for WriteablePlainTmpFile {
     type Closed = ClosedPlainTmpFile;
     type InnerWrite = BufWriter<File>;
 
-    fn create(path: PathBuf, _: Option<&str>) -> UResult<Self> {
+    fn create((file, path): (File, PathBuf), _: Option<&str>) -> UResult<Self> {
         Ok(WriteablePlainTmpFile {
-            file: BufWriter::new(
-                File::create(&path).map_err(|error| SortError::OpenTmpFileFailed { error })?,
-            ),
+            file: BufWriter::new(file),
             path,
         })
     }
@@ -476,12 +474,10 @@ impl WriteableTmpFile for WriteableCompressedTmpFile {
     type Closed = ClosedCompressedTmpFile;
     type InnerWrite = BufWriter<ChildStdin>;
 
-    fn create(path: PathBuf, compress_prog: Option<&str>) -> UResult<Self> {
+    fn create((file, path): (File, PathBuf), compress_prog: Option<&str>) -> UResult<Self> {
         let compress_prog = compress_prog.unwrap();
         let mut command = Command::new(compress_prog);
-        let tmp_file =
-            File::create(&path).map_err(|error| SortError::OpenTmpFileFailed { error })?;
-        command.stdin(Stdio::piped()).stdout(tmp_file);
+        command.stdin(Stdio::piped()).stdout(file);
         let mut child = command
             .spawn()
             .map_err(|err| SortError::CompressProgExecutionFailed {
