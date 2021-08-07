@@ -273,6 +273,14 @@ fn test_stdin_show_ends() {
             .stdout_only("\t\0$\n\t");
     }
 }
+#[test]
+fn test_show_ends_crlf() {
+    new_ucmd!()
+        .arg("-E")
+        .pipe_in("a\nb\r\n\rc\n\r\n\r")
+        .succeeds()
+        .stdout_only("a$\nb^M$\n\rc$\n^M$\n\r");
+}
 
 #[test]
 fn test_stdin_show_all() {
