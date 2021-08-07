@@ -126,6 +126,9 @@ struct OutputState {
 
     /// Whether we skipped a \r, which still needs to be printed
     skipped_carriage_return: bool,
+
+    /// Whether we have already printed a blank line
+    one_blank_kept: bool,
 }
 
 /// Represents an open file handle, stream, or other device
@@ -343,6 +346,7 @@ fn cat_files(files: Vec<String>, options: &OutputOptions) -> UResult<()> {
         line_number: 1,
         at_line_start: true,
         skipped_carriage_return: false,
+        one_blank_kept: false,
     };
     let mut error_messages: Vec<String> = Vec::new();
 
@@ -431,7 +435,6 @@ fn write_lines<R: Read>(
     let mut in_buf = [0; 1024 * 31];
     let stdout = io::stdout();
     let mut writer = stdout.lock();
-    let mut one_blank_kept = false;
 
     while let Ok(n) = handle.reader.read(&mut in_buf) {
         if n == 0 {
@@ -447,8 +450,8 @@ fn write_lines<R: Read>(
                     writer.write_all(b"^M")?;
                     state.skipped_carriage_return = false;
                 }
-                if !state.at_line_start || !options.squeeze_blank || !one_blank_kept {
-                    one_blank_kept = true;
+                if !state.at_line_start || !options.squeeze_blank || !state.one_blank_kept {
+                    state.one_blank_kept = true;
                     if state.at_line_start && options.number == NumberingMode::All {
                         write!(&mut writer, "{0:6}\t", state.line_number)?;
                         state.line_number += 1;
@@ -467,7 +470,7 @@ fn write_lines<R: Read>(
                 state.skipped_carriage_return = false;
                 state.at_line_start = false;
             }
-            one_blank_kept = false;
+            state.one_blank_kept = false;
             if state.at_line_start && options.number != NumberingMode::None {
                 write!(&mut writer, "{0:6}\t", state.line_number)?;
                 state.line_number += 1;

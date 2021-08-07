@@ -273,6 +273,18 @@ fn test_stdin_show_ends() {
             .stdout_only("\t\0$\n\t");
     }
 }
+
+#[test]
+fn squeeze_all_files() {
+    // empty lines at the end of a file are "squeezed" together with empty lines at the beginning
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input1", "a\n\n");
+    at.write("input2", "\n\nb");
+    ucmd.args(&["input1", "input2", "-s"])
+        .succeeds()
+        .stdout_only("a\n\nb");
+}
+
 #[test]
 fn test_show_ends_crlf() {
     new_ucmd!()
