@@ -2023,6 +2023,7 @@ dependencies = [
  "unix_socket",
  "uucore",
  "uucore_procs",
+ "winapi-util",
 ]
 
 [[package]]

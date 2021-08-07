@@ -1,5 +1,4 @@
 use crate::common::util::*;
-#[cfg(unix)]
 use std::fs::OpenOptions;
 #[cfg(unix)]
 use std::io::Read;
@@ -442,4 +441,50 @@ fn test_domain_socket() {
     assert_eq!("a\tb", output);
 
     thread.join().unwrap();
+}
+
+#[test]
+fn test_write_to_self_empty() {
+    // it's ok if the input file is also the output file if it's empty
+    let s = TestScenario::new(util_name!());
+    let file_path = s.fixtures.plus("file.txt");
+
+    let file = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .append(true)
+        .open(&file_path)
+        .unwrap();
+
+    s.ucmd().set_stdout(file).arg(&file_path).succeeds();
+}
+
+#[test]
+fn test_write_to_self() {
+    let s = TestScenario::new(util_name!());
+    let file_path = s.fixtures.plus("first_file");
+    s.fixtures.write("second_file", "second_file_content.");
+
+    let file = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .append(true)
+        .open(&file_path)
+        .unwrap();
+
+    s.fixtures.append("first_file", "first_file_content.");
+
+    s.ucmd()
+        .set_stdout(file)
+        .arg("first_file")
+        .arg("first_file")
+        .arg("second_file")
+        .fails()
+        .code_is(2)
+        .stderr_only("cat: first_file: input file is output file\ncat: first_file: input file is output file");
+
+    assert_eq!(
+        s.fixtures.read("first_file"),
+        "first_file_content.second_file_content."
+    );
 }
