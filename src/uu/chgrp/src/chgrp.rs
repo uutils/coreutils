@@ -364,7 +364,9 @@ impl Chgrper {
             self.verbosity.clone(),
         ) {
             Ok(n) => {
-                show_error!("{}", n);
+                if !n.is_empty() {
+                    show_error!("{}", n);
+                }
                 0
             }
             Err(e) => {
