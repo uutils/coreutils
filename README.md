@@ -372,18 +372,17 @@ To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 | basenc    | expr      |        |
 | cat       | install   |        |
 | chcon     | join      |        |
-| cat       | ls        |        |
-| chgrp     | more      |        |
-| chmod     | numfmt    |        |
-| chown     | od (`--strings` and 128-bit data types missing) | |
-| chroot    | pr        |        |
-| cksum     | printf    |        |
-| comm      | sort      |        |
-| csplit    | split     |        |
-| cut       | tac       |        |
-| dircolors | tail      |        |
-| dirname   | test      |        |
-| du        |           |        |
+| chgrp     | ls        |        |
+| chmod     | more      |        |
+| chown     | numfmt    |        |
+| chroot    | od (`--strings` and 128-bit data types missing) | |
+| cksum     | pr        |        |
+| comm      | printf    |        |
+| csplit    | sort      |        |
+| cut       | split     |        |
+| dircolors | tac       |        |
+| dirname   | tail      |        |
+| du        | test      |        |
 | echo      |           |        |
 | env       |           |        |
 | expand    |           |        |
