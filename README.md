@@ -365,9 +365,9 @@ To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 
 | Done      | Semi-Done | To Do  |
 |-----------|-----------|--------|
-| arch      | cp        | chcon  |
-| base32    | date      | runcon |
-| base64    | dd        | stty   |
+| arch      | cp        | runcon |
+| base32    | date      | stty   |
+| base64    | dd        |        |
 | basename  | df        |        |
 | basenc    | expr      |        |
 | cat       | install   |        |
