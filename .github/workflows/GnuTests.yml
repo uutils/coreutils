@@ -98,6 +98,32 @@ jobs:
         repo: uutils/coreutils
         branch: master
         path: dl
+    - name: Download the log
+      uses: dawidd6/action-download-artifact@v2
+      with:
+        workflow: GnuTests.yml
+        name: test-report
+        repo: uutils/coreutils
+        branch: master
+        path: dl
+    - name: Compare failing tests against master
+      shell: bash
+      run: |
+            OLD_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" dl/test-suite.log | sort)
+            NEW_FAILING=$(sed -n "s/^FAIL: \([[:print:]]\+\).*/\1/p" gnu/tests/test-suite.log | sort)
+            for LINE in $OLD_FAILING
+            do
+              if ! grep -Fxq $LINE<<<"$NEW_FAILING"; then
+                echo "::warning ::Congrats! The gnu test $LINE is now passing!"
+              fi
+            done
+            for LINE in $NEW_FAILING
+            do
+              if ! grep -Fxq $LINE<<<"$OLD_FAILING"
+              then
+                echo "::error ::GNU test failed: $LINE. $LINE is passing on 'master'. Maybe you have to rebase?"
+              fi
+            done
     - name: Compare against master results
       shell: bash
       run: |
