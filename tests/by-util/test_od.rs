@@ -46,6 +46,17 @@ fn test_file() {
         .succeeds()
         .no_stderr()
         .stdout_is(unindent(ALPHA_OUT));
+
+    // Ensure that default format matches `-t o2`, and that `-t` does not absorb file argument
+    new_ucmd!()
+        .arg("--endian=little")
+        .arg("-t")
+        .arg("o2")
+        .arg(file.as_os_str())
+        .succeeds()
+        .no_stderr()
+        .stdout_is(unindent(ALPHA_OUT));
+
     let _ = remove_file(file);
 }
 
