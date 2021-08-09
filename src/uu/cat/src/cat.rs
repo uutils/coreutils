@@ -128,6 +128,12 @@ struct OutputState {
 
     /// Whether the output cursor is at the beginning of a new line
     at_line_start: bool,
+
+    /// Whether we skipped a \r, which still needs to be printed
+    skipped_carriage_return: bool,
+
+    /// Whether we have already printed a blank line
+    one_blank_kept: bool,
 }
 
 /// Represents an open file handle, stream, or other device
@@ -373,6 +379,8 @@ fn cat_files(files: Vec<String>, options: &OutputOptions) -> UResult<()> {
     let mut state = OutputState {
         line_number: 1,
         at_line_start: true,
+        skipped_carriage_return: false,
+        one_blank_kept: false,
     };
     let mut error_messages: Vec<String> = Vec::new();
 
@@ -380,6 +388,9 @@ fn cat_files(files: Vec<String>, options: &OutputOptions) -> UResult<()> {
         if let Err(err) = cat_path(path, options, &mut state, &out_info) {
             error_messages.push(format!("{}: {}", path, err));
         }
+    }
+    if state.skipped_carriage_return {
+        print!("\r");
     }
     if error_messages.is_empty() {
         Ok(())
@@ -458,7 +469,6 @@ fn write_lines<R: Read>(
     let mut in_buf = [0; 1024 * 31];
     let stdout = io::stdout();
     let mut writer = stdout.lock();
-    let mut one_blank_kept = false;
 
     while let Ok(n) = handle.reader.read(&mut in_buf) {
         if n == 0 {
@@ -469,8 +479,13 @@ fn write_lines<R: Read>(
         while pos < n {
             // skip empty line_number enumerating them if needed
             if in_buf[pos] == b'\n' {
-                if !state.at_line_start || !options.squeeze_blank || !one_blank_kept {
-                    one_blank_kept = true;
+                // \r followed by \n is printed as ^M when show_ends is enabled, so that \r\n prints as ^M$
+                if state.skipped_carriage_return && options.show_ends {
+                    writer.write_all(b"^M")?;
+                    state.skipped_carriage_return = false;
+                }
+                if !state.at_line_start || !options.squeeze_blank || !state.one_blank_kept {
+                    state.one_blank_kept = true;
                     if state.at_line_start && options.number == NumberingMode::All {
                         write!(&mut writer, "{0:6}\t", state.line_number)?;
                         state.line_number += 1;
@@ -484,7 +499,12 @@ fn write_lines<R: Read>(
                 pos += 1;
                 continue;
             }
-            one_blank_kept = false;
+            if state.skipped_carriage_return {
+                writer.write_all(b"\r")?;
+                state.skipped_carriage_return = false;
+                state.at_line_start = false;
+            }
+            state.one_blank_kept = false;
             if state.at_line_start && options.number != NumberingMode::None {
                 write!(&mut writer, "{0:6}\t", state.line_number)?;
                 state.line_number += 1;
@@ -499,17 +519,22 @@ fn write_lines<R: Read>(
                 write_to_end(&in_buf[pos..], &mut writer)
             };
             // end of buffer?
-            if offset == 0 {
+            if offset + pos == in_buf.len() {
                 state.at_line_start = false;
                 break;
             }
-            // print suitable end of line
-            writer.write_all(options.end_of_line().as_bytes())?;
-            if handle.is_interactive {
-                writer.flush()?;
+            if in_buf[pos + offset] == b'\r' {
+                state.skipped_carriage_return = true;
+            } else {
+                assert_eq!(in_buf[pos + offset], b'\n');
+                // print suitable end of line
+                writer.write_all(options.end_of_line().as_bytes())?;
+                if handle.is_interactive {
+                    writer.flush()?;
+                }
+                state.at_line_start = true;
             }
-            state.at_line_start = true;
-            pos += offset;
+            pos += offset + 1;
         }
     }
 
@@ -517,17 +542,19 @@ fn write_lines<R: Read>(
 }
 
 // write***_to_end methods
-// Write all symbols till end of line or end of buffer is reached
-// Return the (number of written symbols + 1) or 0 if the end of buffer is reached
+// Write all symbols till \n or \r or end of buffer is reached
+// We need to stop at \r because it may be written as ^M depending on the byte after and settings;
+// however, write_nonprint_to_end doesn't need to stop at \r because it will always write \r as ^M.
+// Return the number of written symbols
 fn write_to_end<W: Write>(in_buf: &[u8], writer: &mut W) -> usize {
-    match in_buf.iter().position(|c| *c == b'\n') {
+    match in_buf.iter().position(|c| *c == b'\n' || *c == b'\r') {
         Some(p) => {
             writer.write_all(&in_buf[..p]).unwrap();
-            p + 1
+            p
         }
         None => {
             writer.write_all(in_buf).unwrap();
-            0
+            in_buf.len()
         }
     }
 }
@@ -535,20 +562,25 @@ fn write_to_end<W: Write>(in_buf: &[u8], writer: &mut W) -> usize {
 fn write_tab_to_end<W: Write>(mut in_buf: &[u8], writer: &mut W) -> usize {
     let mut count = 0;
     loop {
-        match in_buf.iter().position(|c| *c == b'\n' || *c == b'\t') {
+        match in_buf
+            .iter()
+            .position(|c| *c == b'\n' || *c == b'\t' || *c == b'\r')
+        {
             Some(p) => {
                 writer.write_all(&in_buf[..p]).unwrap();
                 if in_buf[p] == b'\n' {
-                    return count + p + 1;
-                } else {
+                    return count + p;
+                } else if in_buf[p] == b'\t' {
                     writer.write_all(b"^I").unwrap();
                     in_buf = &in_buf[p + 1..];
                     count += p + 1;
+                } else {
+                    return count + p;
                 }
             }
             None => {
                 writer.write_all(in_buf).unwrap();
-                return 0;
+                return in_buf.len();
             }
         };
     }
@@ -573,11 +605,7 @@ fn write_nonprint_to_end<W: Write>(in_buf: &[u8], writer: &mut W, tab: &[u8]) ->
         .unwrap();
         count += 1;
     }
-    if count != in_buf.len() {
-        count + 1
-    } else {
-        0
-    }
+    count
 }
 
 #[cfg(test)]
