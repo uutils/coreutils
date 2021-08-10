@@ -279,7 +279,10 @@ pub struct USimpleError {
 impl USimpleError {
     #[allow(clippy::new_ret_no_self)]
     pub fn new<S: Into<String>>(code: i32, message: S) -> Box<dyn UError> {
-        Box::new(Self { code, message: message.into() })
+        Box::new(Self {
+            code,
+            message: message.into(),
+        })
     }
 }
 
@@ -306,7 +309,10 @@ pub struct UUsageError {
 impl UUsageError {
     #[allow(clippy::new_ret_no_self)]
     pub fn new<S: Into<String>>(code: i32, message: S) -> Box<dyn UError> {
-        Box::new(Self { code, message: message.into() })
+        Box::new(Self {
+            code,
+            message: message.into(),
+        })
     }
 }
 

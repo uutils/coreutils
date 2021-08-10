@@ -107,10 +107,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if recursive {
         if bit_flag == FTS_PHYSICAL {
             if derefer == 1 {
-                return Err(USimpleError::new(
-                    1,
-                    "-R --dereference requires -H or -L",
-                ));
+                return Err(USimpleError::new(1, "-R --dereference requires -H or -L"));
             }
             derefer = 0;
         }
