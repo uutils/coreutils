@@ -12,7 +12,7 @@
 extern crate uucore;
 
 use clap::{crate_version, App, Arg};
-use uucore::error::{FromIo, UCustomError, UResult};
+use uucore::error::{FromIo, UError, UResult};
 
 use std::env;
 use std::error::Error;
@@ -49,7 +49,7 @@ enum MkTempError {
     InvalidTemplate(String),
 }
 
-impl UCustomError for MkTempError {}
+impl UError for MkTempError {}
 
 impl Error for MkTempError {}
 

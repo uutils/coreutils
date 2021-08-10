@@ -11,7 +11,7 @@
 extern crate uucore;
 
 use clap::{crate_version, App, Arg};
-use uucore::error::{UCustomError, UResult};
+use uucore::error::{UError, UResult};
 
 use std::borrow::Cow;
 use std::error::Error;
@@ -79,7 +79,7 @@ impl Display for LnError {
 
 impl Error for LnError {}
 
-impl UCustomError for LnError {
+impl UError for LnError {
     fn code(&self) -> i32 {
         match self {
             Self::TargetIsDirectory(_) => 1,

@@ -45,7 +45,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::str::Utf8Error;
 use unicode_width::UnicodeWidthStr;
-use uucore::error::{set_exit_code, UCustomError, UResult, USimpleError, UUsageError};
+use uucore::error::{set_exit_code, UError, UResult, USimpleError, UUsageError};
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::version_cmp::version_cmp;
 use uucore::InvalidEncodingHandling;
@@ -164,7 +164,7 @@ enum SortError {
 
 impl Error for SortError {}
 
-impl UCustomError for SortError {
+impl UError for SortError {
     fn code(&self) -> i32 {
         match self {
             SortError::Disorder { .. } => 1,

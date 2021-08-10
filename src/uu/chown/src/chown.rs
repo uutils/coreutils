@@ -14,7 +14,7 @@ use uucore::fs::resolve_relative_path;
 use uucore::libc::{gid_t, uid_t};
 use uucore::perms::{wrap_chown, Verbosity};
 
-use uucore::error::{FromIo, UError, UResult, USimpleError};
+use uucore::error::{FromIo, UResult, USimpleError};
 
 use clap::{crate_version, App, Arg};
 
@@ -324,7 +324,7 @@ impl Chowner {
             ret |= self.traverse(f);
         }
         if ret != 0 {
-            return Err(UError::from(ret));
+            return Err(ret.into());
         }
         Ok(())
     }
