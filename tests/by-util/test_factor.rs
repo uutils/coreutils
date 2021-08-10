@@ -8,7 +8,10 @@
 
 // spell-checker:ignore (methods) hexdigest
 
+use tempfile::TempDir;
+
 use crate::common::util::*;
+use std::fs::OpenOptions;
 use std::time::SystemTime;
 
 #[path = "../../src/uu/factor/sieve.rs"]
@@ -23,6 +26,43 @@ use self::sieve::Sieve;
 
 const NUM_PRIMES: usize = 10000;
 const NUM_TESTS: usize = 100;
+
+#[test]
+fn test_parallel() {
+    // factor should only flush the buffer at line breaks
+    let n_integers = 100_000;
+    let mut input_string = String::new();
+    for i in 0..=n_integers {
+        input_string.push_str(&(format!("{} ", i))[..]);
+    }
+
+    let tmp_dir = TempDir::new().unwrap();
+    let tmp_dir = AtPath::new(tmp_dir.path());
+    tmp_dir.touch("output");
+    let output = OpenOptions::new()
+        .append(true)
+        .open(tmp_dir.plus("output"))
+        .unwrap();
+
+    for mut child in (0..10)
+        .map(|_| {
+            new_ucmd!()
+                .set_stdout(output.try_clone().unwrap())
+                .pipe_in(input_string.clone())
+                .run_no_wait()
+        })
+        .collect::<Vec<_>>()
+    {
+        assert_eq!(child.wait().unwrap().code().unwrap(), 0);
+    }
+
+    let result = TestScenario::new(util_name!())
+        .ccmd("sort")
+        .arg(tmp_dir.plus("output"))
+        .succeeds();
+    let hash_check = sha1::Sha1::from(result.stdout()).hexdigest();
+    assert_eq!(hash_check, "cc743607c0ff300ff575d92f4ff0c87d5660c393");
+}
 
 #[test]
 fn test_first_100000_integers() {
