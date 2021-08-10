@@ -268,7 +268,7 @@ where
 /// let err = USimpleError { code: 1, message: "error!".into()};
 /// let res: UResult<()> = Err(err.into());
 /// // or using the `new` method:
-/// let res: UResult<()> = Err(USimpleError::new(1, "error!".into()));
+/// let res: UResult<()> = Err(USimpleError::new(1, "error!"));
 /// ```
 #[derive(Debug)]
 pub struct USimpleError {
@@ -278,8 +278,8 @@ pub struct USimpleError {
 
 impl USimpleError {
     #[allow(clippy::new_ret_no_self)]
-    pub fn new(code: i32, message: String) -> Box<dyn UError> {
-        Box::new(Self { code, message })
+    pub fn new<S: Into<String>>(code: i32, message: S) -> Box<dyn UError> {
+        Box::new(Self { code, message: message.into() })
     }
 }
 
@@ -305,8 +305,8 @@ pub struct UUsageError {
 
 impl UUsageError {
     #[allow(clippy::new_ret_no_self)]
-    pub fn new(code: i32, message: String) -> Box<dyn UError> {
-        Box::new(Self { code, message })
+    pub fn new<S: Into<String>>(code: i32, message: S) -> Box<dyn UError> {
+        Box::new(Self { code, message: message.into() })
     }
 }
 
@@ -359,9 +359,9 @@ pub struct UIoError {
 
 impl UIoError {
     #[allow(clippy::new_ret_no_self)]
-    pub fn new(kind: std::io::ErrorKind, context: String) -> Box<dyn UError> {
+    pub fn new<S: Into<String>>(kind: std::io::ErrorKind, context: S) -> Box<dyn UError> {
         Box::new(Self {
-            context,
+            context: context.into(),
             inner: std::io::Error::new(kind, ""),
         })
     }

@@ -109,7 +109,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             if derefer == 1 {
                 return Err(USimpleError::new(
                     1,
-                    "-R --dereference requires -H or -L".to_string(),
+                    "-R --dereference requires -H or -L",
                 ));
             }
             derefer = 0;

@@ -1238,7 +1238,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if separator.len() != 1 {
             return Err(UUsageError::new(
                 2,
-                "separator must be exactly one character long".into(),
+                "separator must be exactly one character long",
             ));
         }
         settings.separator = Some(separator.chars().next().unwrap())
@@ -1517,7 +1517,7 @@ fn exec(
         file_merger.write_all(settings, output)
     } else if settings.check {
         if files.len() > 1 {
-            Err(UUsageError::new(2, "only one file allowed with -c".into()))
+            Err(UUsageError::new(2, "only one file allowed with -c"))
         } else {
             check::check(files.first().unwrap(), settings)
         }
