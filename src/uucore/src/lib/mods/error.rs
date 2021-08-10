@@ -367,15 +367,7 @@ impl UIoError {
     }
 }
 
-impl UError for UIoError {
-    fn code(&self) -> i32 {
-        1
-    }
-
-    fn usage(&self) -> bool {
-        false
-    }
-}
+impl UError for UIoError {}
 
 impl Error for UIoError {}
 
