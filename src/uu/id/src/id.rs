@@ -40,8 +40,6 @@
 extern crate uucore;
 
 use clap::{crate_version, App, Arg};
-#[cfg(all(target_os = "linux", feature = "selinux"))]
-use selinux;
 use std::ffi::CStr;
 use uucore::entries::{self, Group, Locate, Passwd};
 use uucore::error::UResult;
