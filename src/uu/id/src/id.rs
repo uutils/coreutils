@@ -214,7 +214,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 print!("{}{}", String::from_utf8_lossy(bytes), line_ending);
             } else {
                 // print error because `cflag` was explicitly requested
-                return Err(USimpleError::new(1, "can't get process context"));
+                return Err(USimpleError::new(
+                    1,
+                    "can't get process context".to_string(),
+                ));
             }
             return Ok(());
         } else {
