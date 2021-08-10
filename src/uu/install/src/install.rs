@@ -660,7 +660,7 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
             Ok(g) => g,
             _ => return Err(InstallError::NoSuchGroup(b.group.clone()).into()),
         };
-        match wrap_chgrp(to, &meta, group_id, false, Verbosity::Normal) {
+        match wrap_chgrp(to, &meta, Some(group_id), false, Verbosity::Normal) {
             Ok(n) => {
                 if !n.is_empty() {
                     show_error!("{}", n);
