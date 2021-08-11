@@ -260,16 +260,20 @@ impl Config {
                     // below should never happen as clap already restricts the values.
                     _ => unreachable!("Invalid field for --format"),
                 },
-                options::FORMAT,
+                Some(options::FORMAT),
             )
         } else if options.is_present(options::format::LONG) {
-            (Format::Long, options::format::LONG)
+            (Format::Long, Some(options::format::LONG))
         } else if options.is_present(options::format::ACROSS) {
-            (Format::Across, options::format::ACROSS)
+            (Format::Across, Some(options::format::ACROSS))
         } else if options.is_present(options::format::COMMAS) {
-            (Format::Commas, options::format::COMMAS)
+            (Format::Commas, Some(options::format::COMMAS))
+        } else if options.is_present(options::format::COLUMNS) {
+            (Format::Columns, Some(options::format::COLUMNS))
+        } else if atty::is(atty::Stream::Stdout) {
+            (Format::Columns, None)
         } else {
-            (Format::Columns, options::format::COLUMNS)
+            (Format::OneLine, None)
         };
 
         // The -o, -n and -g options are tricky. They cannot override with each
@@ -288,9 +292,8 @@ impl Config {
         // options, but manually whether they have an index that's greater than
         // the other format options. If so, we set the appropriate format.
         if format != Format::Long {
-            let idx = options
-                .indices_of(opt)
-                .map(|x| x.max().unwrap())
+            let idx = opt
+                .and_then(|opt| options.indices_of(opt).map(|x| x.max().unwrap()))
                 .unwrap_or(0);
             if [
                 options::format::LONG_NO_OWNER,

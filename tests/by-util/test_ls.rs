@@ -128,6 +128,7 @@ fn test_ls_width() {
         scene
             .ucmd()
             .args(&option.split(' ').collect::<Vec<_>>())
+            .arg("-C")
             .succeeds()
             .stdout_only("test-width-1  test-width-2  test-width-3  test-width-4\n");
     }
@@ -136,6 +137,7 @@ fn test_ls_width() {
         scene
             .ucmd()
             .args(&option.split(' ').collect::<Vec<_>>())
+            .arg("-C")
             .succeeds()
             .stdout_only("test-width-1  test-width-3\ntest-width-2  test-width-4\n");
     }
@@ -144,6 +146,7 @@ fn test_ls_width() {
         scene
             .ucmd()
             .args(&option.split(' ').collect::<Vec<_>>())
+            .arg("-C")
             .succeeds()
             .stdout_only("test-width-1\ntest-width-2\ntest-width-3\ntest-width-4\n");
     }
@@ -152,6 +155,7 @@ fn test_ls_width() {
         scene
             .ucmd()
             .args(&option.split(' ').collect::<Vec<_>>())
+            .arg("-C")
             .succeeds()
             .stdout_only("test-width-1  test-width-2  test-width-3  test-width-4\n");
     }
@@ -159,6 +163,7 @@ fn test_ls_width() {
     scene
         .ucmd()
         .arg("-w=bad")
+        .arg("-C")
         .fails()
         .stderr_contains("invalid line width");
 
@@ -166,6 +171,7 @@ fn test_ls_width() {
         scene
             .ucmd()
             .args(&option.split(' ').collect::<Vec<_>>())
+            .arg("-C")
             .fails()
             .stderr_only("ls: invalid line width: '1a'");
     }
@@ -183,7 +189,7 @@ fn test_ls_columns() {
     // Columns is the default
     let result = scene.ucmd().succeeds();
 
-    result.stdout_only("test-columns-1  test-columns-2  test-columns-3  test-columns-4\n");
+    result.stdout_only("test-columns-1\ntest-columns-2\ntest-columns-3\ntest-columns-4\n");
 
     for option in &["-C", "--format=columns"] {
         let result = scene.ucmd().arg(option).succeeds();
@@ -215,13 +221,14 @@ fn test_ls_columns() {
         scene
             .ucmd()
             .env("COLUMNS", "garbage")
+            .arg("-C")
             .succeeds()
             .stdout_is("test-columns-1  test-columns-2  test-columns-3  test-columns-4\n")
             .stderr_is("ls: ignoring invalid width in environment variable COLUMNS: 'garbage'");
     }
     scene
         .ucmd()
-        .arg("-w0")
+        .arg("-Cw0")
         .succeeds()
         .stdout_only("test-columns-1  test-columns-2  test-columns-3  test-columns-4\n");
     scene
@@ -591,7 +598,7 @@ fn test_ls_sort_name() {
         .ucmd()
         .arg("--sort=name")
         .succeeds()
-        .stdout_is("test-1  test-2  test-3\n");
+        .stdout_is("test-1\ntest-2\ntest-3\n");
 
     let scene_dot = TestScenario::new(util_name!());
     let at = &scene_dot.fixtures;
@@ -605,7 +612,7 @@ fn test_ls_sort_name() {
         .arg("--sort=name")
         .arg("-A")
         .succeeds()
-        .stdout_is(".a  .b  a  b\n");
+        .stdout_is(".a\n.b\na\nb\n");
 }
 
 #[test]
@@ -626,16 +633,16 @@ fn test_ls_order_size() {
     scene.ucmd().arg("-al").succeeds();
 
     let result = scene.ucmd().arg("-S").succeeds();
-    result.stdout_only("test-4  test-3  test-2  test-1\n");
+    result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
 
     let result = scene.ucmd().arg("-S").arg("-r").succeeds();
-    result.stdout_only("test-1  test-2  test-3  test-4\n");
+    result.stdout_only("test-1\ntest-2\ntest-3\ntest-4\n");
 
     let result = scene.ucmd().arg("--sort=size").succeeds();
-    result.stdout_only("test-4  test-3  test-2  test-1\n");
+    result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
 
     let result = scene.ucmd().arg("--sort=size").arg("-r").succeeds();
-    result.stdout_only("test-1  test-2  test-3  test-4\n");
+    result.stdout_only("test-1\ntest-2\ntest-3\ntest-4\n");
 }
 
 #[test]
@@ -793,16 +800,16 @@ fn test_ls_order_time() {
 
     // ctime was changed at write, so the order is 4 3 2 1
     let result = scene.ucmd().arg("-t").succeeds();
-    result.stdout_only("test-4  test-3  test-2  test-1\n");
+    result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
 
     let result = scene.ucmd().arg("--sort=time").succeeds();
-    result.stdout_only("test-4  test-3  test-2  test-1\n");
+    result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
 
     let result = scene.ucmd().arg("-tr").succeeds();
-    result.stdout_only("test-1  test-2  test-3  test-4\n");
+    result.stdout_only("test-1\ntest-2\ntest-3\ntest-4\n");
 
     let result = scene.ucmd().arg("--sort=time").arg("-r").succeeds();
-    result.stdout_only("test-1  test-2  test-3  test-4\n");
+    result.stdout_only("test-1\ntest-2\ntest-3\ntest-4\n");
 
     // 3 was accessed last in the read
     // So the order should be 2 3 4 1
@@ -813,11 +820,11 @@ fn test_ls_order_time() {
 
         // It seems to be dependent on the platform whether the access time is actually set
         if file3_access > file4_access {
-            result.stdout_only("test-3  test-4  test-2  test-1\n");
+            result.stdout_only("test-3\ntest-4\ntest-2\ntest-1\n");
         } else {
             // Access time does not seem to be set on Windows and some other
             // systems so the order is 4 3 2 1
-            result.stdout_only("test-4  test-3  test-2  test-1\n");
+            result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
         }
     }
 
@@ -826,7 +833,7 @@ fn test_ls_order_time() {
     #[cfg(unix)]
     {
         let result = scene.ucmd().arg("-tc").succeeds();
-        result.stdout_only("test-2  test-4  test-3  test-1\n");
+        result.stdout_only("test-2\ntest-4\ntest-3\ntest-1\n");
     }
 }
 
@@ -970,6 +977,7 @@ fn test_ls_color() {
         .ucmd()
         .arg("--color")
         .arg("-w=15")
+        .arg("-C")
         .succeeds()
         .stdout_only(format!(
             "{}  test-color\nb  {}\n",
@@ -1988,7 +1996,7 @@ fn test_ls_path() {
     };
     scene.ucmd().arg(&abs_path).run().stdout_is(expected_stdout);
 
-    let expected_stdout = format!("{}  {}\n", path, file1);
+    let expected_stdout = format!("{}\n{}\n", path, file1);
     scene
         .ucmd()
         .arg(file1)
