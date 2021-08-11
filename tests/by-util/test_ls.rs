@@ -140,21 +140,20 @@ fn test_ls_width() {
             .stdout_only("test-width-1  test-width-3\ntest-width-2  test-width-4\n");
     }
 
-    for option in &[
-        "-w 25",
-        "-w=25",
-        "--width=25",
-        "--width 25",
-        "-w 0",
-        "-w=0",
-        "--width=0",
-        "--width 0",
-    ] {
+    for option in &["-w 25", "-w=25", "--width=25", "--width 25"] {
         scene
             .ucmd()
             .args(&option.split(' ').collect::<Vec<_>>())
             .succeeds()
             .stdout_only("test-width-1\ntest-width-2\ntest-width-3\ntest-width-4\n");
+    }
+
+    for option in &["-w 0", "-w=0", "--width=0", "--width 0"] {
+        scene
+            .ucmd()
+            .args(&option.split(' ').collect::<Vec<_>>())
+            .succeeds()
+            .stdout_only("test-width-1  test-width-2  test-width-3  test-width-4\n");
     }
 
     scene
@@ -200,21 +199,36 @@ fn test_ls_columns() {
             .stdout_only("test-columns-1  test-columns-3\ntest-columns-2  test-columns-4\n");
     }
 
-    for option in &["-C", "--format=columns"] {
+    // On windows we are always able to get the terminal size, so we can't simulate falling back to the
+    // environment variable.
+    #[cfg(not(windows))]
+    {
+        for option in &["-C", "--format=columns"] {
+            scene
+                .ucmd()
+                .env("COLUMNS", "40")
+                .arg(option)
+                .succeeds()
+                .stdout_only("test-columns-1  test-columns-3\ntest-columns-2  test-columns-4\n");
+        }
+
         scene
             .ucmd()
-            .env("COLUMNS", "40")
-            .arg(option)
+            .env("COLUMNS", "garbage")
             .succeeds()
-            .stdout_only("test-columns-1  test-columns-3\ntest-columns-2  test-columns-4\n");
+            .stdout_is("test-columns-1  test-columns-2  test-columns-3  test-columns-4\n")
+            .stderr_is("ls: ignoring invalid width in environment variable COLUMNS: 'garbage'");
     }
-
     scene
         .ucmd()
-        .env("COLUMNS", "garbage")
+        .arg("-w0")
         .succeeds()
-        .stdout_is("test-columns-1  test-columns-2  test-columns-3  test-columns-4\n")
-        .stderr_is("ls: ignoring invalid width in environment variable COLUMNS: 'garbage'");
+        .stdout_only("test-columns-1  test-columns-2  test-columns-3  test-columns-4\n");
+    scene
+        .ucmd()
+        .arg("-mw0")
+        .succeeds()
+        .stdout_only("test-columns-1, test-columns-2, test-columns-3, test-columns-4\n");
 }
 
 #[test]

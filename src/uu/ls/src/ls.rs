@@ -1440,7 +1440,8 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
                 }
                 for name in names {
                     let name_width = name.width as u16;
-                    if current_col + name_width + 1 > config.width {
+                    // If the width is 0 we print one single line
+                    if config.width != 0 && current_col + name_width + 1 > config.width {
                         current_col = name_width + 2;
                         let _ = write!(out, ",\n{}", name.contents);
                     } else {
@@ -1492,22 +1493,37 @@ fn display_grid(
     direction: Direction,
     out: &mut BufWriter<Stdout>,
 ) {
-    let mut grid = Grid::new(GridOptions {
-        filling: Filling::Spaces(2),
-        direction,
-    });
-
-    for name in names {
-        grid.add(name);
-    }
-
-    match grid.fit_into_width(width as usize) {
-        Some(output) => {
-            let _ = write!(out, "{}", output);
+    if width == 0 {
+        // If the width is 0 we print one single line
+        let mut printed_something = false;
+        for name in names {
+            if printed_something {
+                let _ = write!(out, "  ");
+            }
+            printed_something = true;
+            let _ = write!(out, "{}", name.contents);
         }
-        // Width is too small for the grid, so we fit it in one column
-        None => {
-            let _ = write!(out, "{}", grid.fit_into_columns(1));
+        if printed_something {
+            let _ = writeln!(out);
+        }
+    } else {
+        let mut grid = Grid::new(GridOptions {
+            filling: Filling::Spaces(2),
+            direction,
+        });
+
+        for name in names {
+            grid.add(name);
+        }
+
+        match grid.fit_into_width(width as usize) {
+            Some(output) => {
+                let _ = write!(out, "{}", output);
+            }
+            // Width is too small for the grid, so we fit it in one column
+            None => {
+                let _ = write!(out, "{}", grid.fit_into_columns(1));
+            }
         }
     }
 }
