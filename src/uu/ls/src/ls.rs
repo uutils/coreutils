@@ -127,6 +127,8 @@ pub mod options {
     pub static IGNORE: &str = "ignore";
 }
 
+const DEFAULT_TERM_WIDTH: u16 = 80;
+
 #[derive(Debug)]
 enum LsError {
     InvalidLineWidth(String),
@@ -229,7 +231,7 @@ struct Config {
     inode: bool,
     color: Option<LsColors>,
     long: LongFormat,
-    width: Option<u16>,
+    width: u16,
     quoting_style: QuotingStyle,
     indicator_style: IndicatorStyle,
     time_style: TimeStyle,
@@ -399,10 +401,25 @@ impl Config {
 
         let width = match options.value_of(options::WIDTH) {
             Some(x) => match x.parse::<u16>() {
-                Ok(u) => Some(u),
+                Ok(u) => u,
                 Err(_) => return Err(LsError::InvalidLineWidth(x.into()).into()),
             },
-            None => termsize::get().map(|s| s.cols),
+            None => match termsize::get() {
+                Some(size) => size.cols,
+                None => match std::env::var("COLUMNS") {
+                    Ok(columns) => match columns.parse() {
+                        Ok(columns) => columns,
+                        Err(_) => {
+                            show_error!(
+                                "ignoring invalid width in environment variable COLUMNS: '{}'",
+                                columns
+                            );
+                            DEFAULT_TERM_WIDTH
+                        }
+                    },
+                    Err(_) => DEFAULT_TERM_WIDTH,
+                },
+            },
         };
 
         #[allow(clippy::needless_bool)]
@@ -1411,15 +1428,10 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
     } else {
         let names = items.iter().filter_map(|i| display_file_name(i, config));
 
-        match (&config.format, config.width) {
-            (Format::Columns, Some(width)) => {
-                display_grid(names, width, Direction::TopToBottom, out)
-            }
-            (Format::Across, Some(width)) => {
-                display_grid(names, width, Direction::LeftToRight, out)
-            }
-            (Format::Commas, width_opt) => {
-                let term_width = width_opt.unwrap_or(1);
+        match config.format {
+            Format::Columns => display_grid(names, config.width, Direction::TopToBottom, out),
+            Format::Across => display_grid(names, config.width, Direction::LeftToRight, out),
+            Format::Commas => {
                 let mut current_col = 0;
                 let mut names = names;
                 if let Some(name) = names.next() {
@@ -1428,7 +1440,7 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
                 }
                 for name in names {
                     let name_width = name.width as u16;
-                    if current_col + name_width + 1 > term_width {
+                    if current_col + name_width + 1 > config.width {
                         current_col = name_width + 2;
                         let _ = write!(out, ",\n{}", name.contents);
                     } else {
