@@ -10,20 +10,12 @@
 #[macro_use]
 extern crate uucore;
 
-use libc::{c_char, c_int, execvp};
+use libc::{c_char, c_int, execvp, PRIO_PROCESS};
 use std::ffi::CString;
 use std::io::Error;
 use std::ptr;
 
 use clap::{crate_version, App, AppSettings, Arg};
-
-// XXX: PRIO_PROCESS is 0 on at least FreeBSD and Linux.  Don't know about Mac OS X.
-const PRIO_PROCESS: c_int = 0;
-
-extern "C" {
-    fn getpriority(which: c_int, who: c_int) -> c_int;
-    fn setpriority(which: c_int, who: c_int, prio: c_int) -> c_int;
-}
 
 pub mod options {
     pub static ADJUSTMENT: &str = "adjustment";
@@ -50,7 +42,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let mut niceness = unsafe {
         nix::errno::Errno::clear();
-        getpriority(PRIO_PROCESS, 0)
+        libc::getpriority(PRIO_PROCESS, 0)
     };
     if Error::last_os_error().raw_os_error().unwrap() != 0 {
         show_error!("getpriority: {}", Error::last_os_error());
@@ -84,7 +76,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     };
 
     niceness += adjustment;
-    if unsafe { setpriority(PRIO_PROCESS, 0, niceness) } == -1 {
+    if unsafe { libc::setpriority(PRIO_PROCESS, 0, niceness) } == -1 {
         show_warning!("setpriority: {}", Error::last_os_error());
     }
 

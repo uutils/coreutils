@@ -39,7 +39,7 @@ use std::{
     time::Duration,
 };
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
-use uucore::error::{set_exit_code, FromIo, UCustomError, UResult};
+use uucore::error::{set_exit_code, FromIo, UError, UResult};
 
 use unicode_width::UnicodeWidthStr;
 #[cfg(unix)]
@@ -127,13 +127,15 @@ pub mod options {
     pub static IGNORE: &str = "ignore";
 }
 
+const DEFAULT_TERM_WIDTH: u16 = 80;
+
 #[derive(Debug)]
 enum LsError {
     InvalidLineWidth(String),
     NoMetadata(PathBuf),
 }
 
-impl UCustomError for LsError {
+impl UError for LsError {
     fn code(&self) -> i32 {
         match self {
             LsError::InvalidLineWidth(_) => 2,
@@ -229,7 +231,7 @@ struct Config {
     inode: bool,
     color: Option<LsColors>,
     long: LongFormat,
-    width: Option<u16>,
+    width: u16,
     quoting_style: QuotingStyle,
     indicator_style: IndicatorStyle,
     time_style: TimeStyle,
@@ -258,16 +260,20 @@ impl Config {
                     // below should never happen as clap already restricts the values.
                     _ => unreachable!("Invalid field for --format"),
                 },
-                options::FORMAT,
+                Some(options::FORMAT),
             )
         } else if options.is_present(options::format::LONG) {
-            (Format::Long, options::format::LONG)
+            (Format::Long, Some(options::format::LONG))
         } else if options.is_present(options::format::ACROSS) {
-            (Format::Across, options::format::ACROSS)
+            (Format::Across, Some(options::format::ACROSS))
         } else if options.is_present(options::format::COMMAS) {
-            (Format::Commas, options::format::COMMAS)
+            (Format::Commas, Some(options::format::COMMAS))
+        } else if options.is_present(options::format::COLUMNS) {
+            (Format::Columns, Some(options::format::COLUMNS))
+        } else if atty::is(atty::Stream::Stdout) {
+            (Format::Columns, None)
         } else {
-            (Format::Columns, options::format::COLUMNS)
+            (Format::OneLine, None)
         };
 
         // The -o, -n and -g options are tricky. They cannot override with each
@@ -286,9 +292,8 @@ impl Config {
         // options, but manually whether they have an index that's greater than
         // the other format options. If so, we set the appropriate format.
         if format != Format::Long {
-            let idx = options
-                .indices_of(opt)
-                .map(|x| x.max().unwrap())
+            let idx = opt
+                .and_then(|opt| options.indices_of(opt).map(|x| x.max().unwrap()))
                 .unwrap_or(0);
             if [
                 options::format::LONG_NO_OWNER,
@@ -399,10 +404,25 @@ impl Config {
 
         let width = match options.value_of(options::WIDTH) {
             Some(x) => match x.parse::<u16>() {
-                Ok(u) => Some(u),
+                Ok(u) => u,
                 Err(_) => return Err(LsError::InvalidLineWidth(x.into()).into()),
             },
-            None => termsize::get().map(|s| s.cols),
+            None => match termsize::get() {
+                Some(size) => size.cols,
+                None => match std::env::var("COLUMNS") {
+                    Ok(columns) => match columns.parse() {
+                        Ok(columns) => columns,
+                        Err(_) => {
+                            show_error!(
+                                "ignoring invalid width in environment variable COLUMNS: '{}'",
+                                columns
+                            );
+                            DEFAULT_TERM_WIDTH
+                        }
+                    },
+                    Err(_) => DEFAULT_TERM_WIDTH,
+                },
+            },
         };
 
         #[allow(clippy::needless_bool)]
@@ -1411,15 +1431,10 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
     } else {
         let names = items.iter().filter_map(|i| display_file_name(i, config));
 
-        match (&config.format, config.width) {
-            (Format::Columns, Some(width)) => {
-                display_grid(names, width, Direction::TopToBottom, out)
-            }
-            (Format::Across, Some(width)) => {
-                display_grid(names, width, Direction::LeftToRight, out)
-            }
-            (Format::Commas, width_opt) => {
-                let term_width = width_opt.unwrap_or(1);
+        match config.format {
+            Format::Columns => display_grid(names, config.width, Direction::TopToBottom, out),
+            Format::Across => display_grid(names, config.width, Direction::LeftToRight, out),
+            Format::Commas => {
                 let mut current_col = 0;
                 let mut names = names;
                 if let Some(name) = names.next() {
@@ -1428,7 +1443,8 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
                 }
                 for name in names {
                     let name_width = name.width as u16;
-                    if current_col + name_width + 1 > term_width {
+                    // If the width is 0 we print one single line
+                    if config.width != 0 && current_col + name_width + 1 > config.width {
                         current_col = name_width + 2;
                         let _ = write!(out, ",\n{}", name.contents);
                     } else {
@@ -1480,22 +1496,37 @@ fn display_grid(
     direction: Direction,
     out: &mut BufWriter<Stdout>,
 ) {
-    let mut grid = Grid::new(GridOptions {
-        filling: Filling::Spaces(2),
-        direction,
-    });
-
-    for name in names {
-        grid.add(name);
-    }
-
-    match grid.fit_into_width(width as usize) {
-        Some(output) => {
-            let _ = write!(out, "{}", output);
+    if width == 0 {
+        // If the width is 0 we print one single line
+        let mut printed_something = false;
+        for name in names {
+            if printed_something {
+                let _ = write!(out, "  ");
+            }
+            printed_something = true;
+            let _ = write!(out, "{}", name.contents);
         }
-        // Width is too small for the grid, so we fit it in one column
-        None => {
-            let _ = write!(out, "{}", grid.fit_into_columns(1));
+        if printed_something {
+            let _ = writeln!(out);
+        }
+    } else {
+        let mut grid = Grid::new(GridOptions {
+            filling: Filling::Spaces(2),
+            direction,
+        });
+
+        for name in names {
+            grid.add(name);
+        }
+
+        match grid.fit_into_width(width as usize) {
+            Some(output) => {
+                let _ = write!(out, "{}", output);
+            }
+            // Width is too small for the grid, so we fit it in one column
+            None => {
+                let _ = write!(out, "{}", grid.fit_into_columns(1));
+            }
         }
     }
 }

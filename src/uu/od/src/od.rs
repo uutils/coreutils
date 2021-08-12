@@ -435,6 +435,7 @@ pub fn uu_app() -> clap::App<'static, 'static> {
                 .long(options::FORMAT)
                 .help("select output format or formats")
                 .multiple(true)
+                .number_of_values(1)
                 .value_name("TYPE"),
         )
         .arg(

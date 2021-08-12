@@ -49,13 +49,14 @@ fn chgrp<P: AsRef<Path>>(path: P, gid: gid_t, follow: bool) -> IOResult<()> {
 pub fn wrap_chgrp<P: AsRef<Path>>(
     path: P,
     meta: &Metadata,
-    dest_gid: gid_t,
+    dest_gid: Option<gid_t>,
     follow: bool,
     verbosity: Verbosity,
 ) -> Result<String, String> {
     use self::Verbosity::*;
     let path = path.as_ref();
     let mut out: String = String::new();
+    let dest_gid = dest_gid.unwrap_or_else(|| meta.gid());
 
     if let Err(e) = chgrp(path, dest_gid, follow) {
         match verbosity {

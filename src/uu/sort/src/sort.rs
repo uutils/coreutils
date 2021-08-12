@@ -45,7 +45,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::str::Utf8Error;
 use unicode_width::UnicodeWidthStr;
-use uucore::error::{set_exit_code, UCustomError, UResult, USimpleError, UUsageError};
+use uucore::error::{set_exit_code, UError, UResult, USimpleError, UUsageError};
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::version_cmp::version_cmp;
 use uucore::InvalidEncodingHandling;
@@ -164,7 +164,7 @@ enum SortError {
 
 impl Error for SortError {}
 
-impl UCustomError for SortError {
+impl UError for SortError {
     fn code(&self) -> i32 {
         match self {
             SortError::Disorder { .. } => 1,
@@ -1238,7 +1238,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if separator.len() != 1 {
             return Err(UUsageError::new(
                 2,
-                "separator must be exactly one character long".into(),
+                "separator must be exactly one character long",
             ));
         }
         settings.separator = Some(separator.chars().next().unwrap())
@@ -1517,7 +1517,7 @@ fn exec(
         file_merger.write_all(settings, output)
     } else if settings.check {
         if files.len() > 1 {
-            Err(UUsageError::new(2, "only one file allowed with -c".into()))
+            Err(UUsageError::new(2, "only one file allowed with -c"))
         } else {
             check::check(files.first().unwrap(), settings)
         }

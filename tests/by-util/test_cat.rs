@@ -1,5 +1,4 @@
 use crate::common::util::*;
-#[cfg(unix)]
 use std::fs::OpenOptions;
 #[cfg(unix)]
 use std::io::Read;
@@ -275,6 +274,26 @@ fn test_stdin_show_ends() {
 }
 
 #[test]
+fn squeeze_all_files() {
+    // empty lines at the end of a file are "squeezed" together with empty lines at the beginning
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input1", "a\n\n");
+    at.write("input2", "\n\nb");
+    ucmd.args(&["input1", "input2", "-s"])
+        .succeeds()
+        .stdout_only("a\n\nb");
+}
+
+#[test]
+fn test_show_ends_crlf() {
+    new_ucmd!()
+        .arg("-E")
+        .pipe_in("a\nb\r\n\rc\n\r\n\r")
+        .succeeds()
+        .stdout_only("a$\nb^M$\n\rc$\n^M$\n\r");
+}
+
+#[test]
 fn test_stdin_show_all() {
     for same_param in &["-A", "--show-all"] {
         new_ucmd!()
@@ -442,4 +461,50 @@ fn test_domain_socket() {
     assert_eq!("a\tb", output);
 
     thread.join().unwrap();
+}
+
+#[test]
+fn test_write_to_self_empty() {
+    // it's ok if the input file is also the output file if it's empty
+    let s = TestScenario::new(util_name!());
+    let file_path = s.fixtures.plus("file.txt");
+
+    let file = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .append(true)
+        .open(&file_path)
+        .unwrap();
+
+    s.ucmd().set_stdout(file).arg(&file_path).succeeds();
+}
+
+#[test]
+fn test_write_to_self() {
+    let s = TestScenario::new(util_name!());
+    let file_path = s.fixtures.plus("first_file");
+    s.fixtures.write("second_file", "second_file_content.");
+
+    let file = OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .append(true)
+        .open(&file_path)
+        .unwrap();
+
+    s.fixtures.append("first_file", "first_file_content.");
+
+    s.ucmd()
+        .set_stdout(file)
+        .arg("first_file")
+        .arg("first_file")
+        .arg("second_file")
+        .fails()
+        .code_is(2)
+        .stderr_only("cat: first_file: input file is output file\ncat: first_file: input file is output file");
+
+    assert_eq!(
+        s.fixtures.read("first_file"),
+        "first_file_content.second_file_content."
+    );
 }

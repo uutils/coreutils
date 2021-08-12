@@ -96,7 +96,6 @@ sed -i 's|seq |/usr/bin/seq |' tests/misc/sort-discrim.sh
 
 # Add specific timeout to tests that currently hang to limit time spent waiting
 sed -i 's|seq \$|/usr/bin/timeout 0.1 seq \$|' tests/misc/seq-precision.sh tests/misc/seq-long-double.sh
-sed -i 's|cat |/usr/bin/timeout 0.1 cat |' tests/misc/cat-self.sh
 
 
 # Remove dup of /usr/bin/ when executed several times
