@@ -171,20 +171,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if (state.nflag || state.rflag) && default_format && !state.cflag {
         return Err(USimpleError::new(
             1,
-            "cannot print only names or real IDs in default format".to_string(),
+            "cannot print only names or real IDs in default format",
         ));
     }
     if state.zflag && default_format && !state.cflag {
         // NOTE: GNU test suite "id/zero.sh" needs this stderr output:
         return Err(USimpleError::new(
             1,
-            "option --zero not permitted in default format".to_string(),
+            "option --zero not permitted in default format",
         ));
     }
     if state.user_specified && state.cflag {
         return Err(USimpleError::new(
             1,
-            "cannot print security context when user specified".to_string(),
+            "cannot print security context when user specified",
         ));
     }
 
@@ -218,7 +218,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         } else {
             return Err(USimpleError::new(
                 1,
-                "--context (-Z) works only on an SELinux-enabled kernel".to_string(),
+                "--context (-Z) works only on an SELinux-enabled kernel",
             ));
         }
     }

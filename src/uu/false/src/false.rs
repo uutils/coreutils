@@ -9,13 +9,12 @@
 extern crate uucore;
 
 use clap::App;
-use uucore::error::{UError, UResult};
-use uucore::executable;
+use uucore::{error::UResult, executable};
 
 #[uucore_procs::gen_uumain]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     uu_app().get_matches_from(args);
-    Err(UError::from(1))
+    Err(1.into())
 }
 
 pub fn uu_app() -> App<'static, 'static> {

@@ -6,11 +6,11 @@
 //! This module provides types to reconcile these exit codes with idiomatic Rust error
 //! handling. This has a couple advantages over manually using [`std::process::exit`]:
 //! 1. It enables the use of `?`, `map_err`, `unwrap_or`, etc. in `uumain`.
-//! 1. It encourages the use of `UResult`/`Result` in functions in the utils.
+//! 1. It encourages the use of [`UResult`]/[`Result`] in functions in the utils.
 //! 1. The error messages are largely standardized across utils.
 //! 1. Standardized error messages can be created from external result types
 //!    (i.e. [`std::io::Result`] & `clap::ClapResult`).
-//! 1. `set_exit_code` takes away the burden of manually tracking exit codes for non-fatal errors.
+//! 1. [`set_exit_code`] takes away the burden of manually tracking exit codes for non-fatal errors.
 //!
 //! # Usage
 //! The signature of a typical util should be:
@@ -19,7 +19,7 @@
 //!     ...
 //! }
 //! ```
-//! [`UResult`] is a simple wrapper around [`Result`] with a custom error type: [`UError`]. The
+//! [`UResult`] is a simple wrapper around [`Result`] with a custom error trait: [`UError`]. The
 //! most important difference with types implementing [`std::error::Error`] is that [`UError`]s
 //! can specify the exit code of the program when they are returned from `uumain`:
 //! * When `Ok` is returned, the code set with [`set_exit_code`] is used as exit code. If
@@ -41,8 +41,8 @@
 //! [`set_exit_code`]. See the documentation on that function for more information.
 //!
 //! # Guidelines
-//! * Use common errors where possible.
-//! * Add variants to [`UCommonError`] if an error appears in multiple utils.
+//! * Use error types from `uucore` where possible.
+//! * Add error types to `uucore` if an error appears in multiple utils.
 //! * Prefer proper custom error types over [`ExitCode`] and [`USimpleError`].
 //! * [`USimpleError`] may be used in small utils with simple error handling.
 //! * Using [`ExitCode`] is not recommended but can be useful for converting utils to use
@@ -87,115 +87,10 @@ pub fn set_exit_code(code: i32) {
     EXIT_CODE.store(code, Ordering::SeqCst);
 }
 
-/// Should be returned by all utils.
-///
-/// Two additional methods are implemented on [`UResult`] on top of the normal [`Result`] methods:
-/// `map_err_code` & `map_err_code_message`.
-///
-/// These methods are used to convert [`UCommonError`]s into errors with a custom error code and
-/// message.
-pub type UResult<T> = Result<T, UError>;
+/// Result type that should be returned by all utils.
+pub type UResult<T> = Result<T, Box<dyn UError>>;
 
-trait UResultTrait<T> {
-    fn map_err_code(self, mapper: fn(&UCommonError) -> Option<i32>) -> Self;
-    fn map_err_code_and_message(self, mapper: fn(&UCommonError) -> Option<(i32, String)>) -> Self;
-}
-
-impl<T> UResultTrait<T> for UResult<T> {
-    fn map_err_code(self, mapper: fn(&UCommonError) -> Option<i32>) -> Self {
-        if let Err(UError::Common(error)) = self {
-            if let Some(code) = mapper(&error) {
-                Err(UCommonErrorWithCode { code, error }.into())
-            } else {
-                Err(error.into())
-            }
-        } else {
-            self
-        }
-    }
-
-    fn map_err_code_and_message(self, mapper: fn(&UCommonError) -> Option<(i32, String)>) -> Self {
-        if let Err(UError::Common(ref error)) = self {
-            if let Some((code, message)) = mapper(error) {
-                return Err(USimpleError { code, message }.into());
-            }
-        }
-        self
-    }
-}
-
-/// The error type of [`UResult`].
-///
-/// `UError::Common` errors are defined in [`uucore`](crate) while `UError::Custom` errors are
-/// defined by the utils.
-/// ```
-/// use uucore::error::USimpleError;
-/// let err = USimpleError::new(1, "Error!!".into());
-/// assert_eq!(1, err.code());
-/// assert_eq!(String::from("Error!!"), format!("{}", err));
-/// ```
-pub enum UError {
-    Common(UCommonError),
-    Custom(Box<dyn UCustomError>),
-}
-
-impl UError {
-    /// The error code of [`UResult`]
-    ///
-    /// This function defines the error code associated with an instance of
-    /// [`UResult`]. To associate error codes for self-defined instances of
-    /// `UResult::Custom` (i.e. [`UCustomError`]), implement the
-    /// [`code`-function there](UCustomError::code).
-    pub fn code(&self) -> i32 {
-        match self {
-            UError::Common(e) => e.code(),
-            UError::Custom(e) => e.code(),
-        }
-    }
-
-    /// Whether to print usage help for a [`UResult`]
-    ///
-    /// Defines if a variant of [`UResult`] should print a short usage message
-    /// below the error. The usage message is printed when this function returns
-    /// `true`. To do this for self-defined instances of `UResult::Custom` (i.e.
-    /// [`UCustomError`]), implement the [`usage`-function
-    /// there](UCustomError::usage).
-    pub fn usage(&self) -> bool {
-        match self {
-            UError::Common(e) => e.usage(),
-            UError::Custom(e) => e.usage(),
-        }
-    }
-}
-
-impl From<UCommonError> for UError {
-    fn from(v: UCommonError) -> Self {
-        UError::Common(v)
-    }
-}
-
-impl From<i32> for UError {
-    fn from(v: i32) -> Self {
-        UError::Custom(Box::new(ExitCode(v)))
-    }
-}
-
-impl<E: UCustomError + 'static> From<E> for UError {
-    fn from(v: E) -> Self {
-        UError::Custom(Box::new(v) as Box<dyn UCustomError>)
-    }
-}
-
-impl Display for UError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            UError::Common(e) => e.fmt(f),
-            UError::Custom(e) => e.fmt(f),
-        }
-    }
-}
-
-/// Custom errors defined by the utils.
+/// Custom errors defined by the utils and `uucore`.
 ///
 /// All errors should implement [`std::error::Error`], [`std::fmt::Display`] and
 /// [`std::fmt::Debug`] and have an additional `code` method that specifies the
@@ -204,7 +99,7 @@ impl Display for UError {
 /// An example of a custom error from `ls`:
 ///
 /// ```
-/// use uucore::error::{UCustomError, UResult};
+/// use uucore::error::{UError, UResult};
 /// use std::{
 ///     error::Error,
 ///     fmt::{Display, Debug},
@@ -217,7 +112,7 @@ impl Display for UError {
 ///     NoMetadata(PathBuf),
 /// }
 ///
-/// impl UCustomError for LsError {
+/// impl UError for LsError {
 ///     fn code(&self) -> i32 {
 ///         match self {
 ///             LsError::InvalidLineWidth(_) => 2,
@@ -248,12 +143,12 @@ impl Display for UError {
 /// }
 /// ```
 ///
-/// The call to `into()` is required to convert the [`UCustomError`] to an
-/// instance of [`UError`].
+/// The call to `into()` is required to convert the `LsError` to
+/// [`Box<dyn UError>`]. The implementation for `From` is provided automatically.
 ///
 /// A crate like [`quick_error`](https://crates.io/crates/quick-error) might
 /// also be used, but will still require an `impl` for the `code` method.
-pub trait UCustomError: Error + Send {
+pub trait UError: Error + Send {
     /// Error code of a custom error.
     ///
     /// Set a return value for each variant of an enum-type to associate an
@@ -263,7 +158,7 @@ pub trait UCustomError: Error + Send {
     /// # Example
     ///
     /// ```
-    /// use uucore::error::{UCustomError};
+    /// use uucore::error::{UError};
     /// use std::{
     ///     error::Error,
     ///     fmt::{Display, Debug},
@@ -277,7 +172,7 @@ pub trait UCustomError: Error + Send {
     ///     Bing(),
     /// }
     ///
-    /// impl UCustomError for MyError {
+    /// impl UError for MyError {
     ///     fn code(&self) -> i32 {
     ///         match self {
     ///             MyError::Foo(_) => 2,
@@ -314,7 +209,7 @@ pub trait UCustomError: Error + Send {
     /// # Example
     ///
     /// ```
-    /// use uucore::error::{UCustomError};
+    /// use uucore::error::{UError};
     /// use std::{
     ///     error::Error,
     ///     fmt::{Display, Debug},
@@ -328,7 +223,7 @@ pub trait UCustomError: Error + Send {
     ///     Bing(),
     /// }
     ///
-    /// impl UCustomError for MyError {
+    /// impl UError for MyError {
     ///     fn usage(&self) -> bool {
     ///         match self {
     ///             // This will have a short usage help appended
@@ -357,47 +252,23 @@ pub trait UCustomError: Error + Send {
     }
 }
 
-impl From<Box<dyn UCustomError>> for i32 {
-    fn from(e: Box<dyn UCustomError>) -> i32 {
-        e.code()
+impl<T> From<T> for Box<dyn UError>
+where
+    T: UError + 'static,
+{
+    fn from(t: T) -> Box<dyn UError> {
+        Box::new(t)
     }
 }
 
-/// A [`UCommonError`] with an overridden exit code.
+/// A simple error type with an exit code and a message that implements [`UError`].
 ///
-/// This exit code is returned instead of the default exit code for the [`UCommonError`]. This is
-/// typically created with the either the `UResult::map_err_code` or `UCommonError::with_code`
-/// method.
-#[derive(Debug)]
-pub struct UCommonErrorWithCode {
-    code: i32,
-    error: UCommonError,
-}
-
-impl Error for UCommonErrorWithCode {}
-
-impl Display for UCommonErrorWithCode {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        self.error.fmt(f)
-    }
-}
-
-impl UCustomError for UCommonErrorWithCode {
-    fn code(&self) -> i32 {
-        self.code
-    }
-}
-
-/// A simple error type with an exit code and a message that implements [`UCustomError`].
-///
-/// It is typically created with the `UResult::map_err_code_and_message` method. Alternatively, it
-/// can be constructed by manually:
 /// ```
 /// use uucore::error::{UResult, USimpleError};
 /// let err = USimpleError { code: 1, message: "error!".into()};
 /// let res: UResult<()> = Err(err.into());
 /// // or using the `new` method:
-/// let res: UResult<()> = Err(USimpleError::new(1, "error!".into()));
+/// let res: UResult<()> = Err(USimpleError::new(1, "error!"));
 /// ```
 #[derive(Debug)]
 pub struct USimpleError {
@@ -407,8 +278,11 @@ pub struct USimpleError {
 
 impl USimpleError {
     #[allow(clippy::new_ret_no_self)]
-    pub fn new(code: i32, message: String) -> UError {
-        UError::Custom(Box::new(Self { code, message }))
+    pub fn new<S: Into<String>>(code: i32, message: S) -> Box<dyn UError> {
+        Box::new(Self {
+            code,
+            message: message.into(),
+        })
     }
 }
 
@@ -420,7 +294,7 @@ impl Display for USimpleError {
     }
 }
 
-impl UCustomError for USimpleError {
+impl UError for USimpleError {
     fn code(&self) -> i32 {
         self.code
     }
@@ -434,8 +308,11 @@ pub struct UUsageError {
 
 impl UUsageError {
     #[allow(clippy::new_ret_no_self)]
-    pub fn new(code: i32, message: String) -> UError {
-        UError::Custom(Box::new(Self { code, message }))
+    pub fn new<S: Into<String>>(code: i32, message: S) -> Box<dyn UError> {
+        Box::new(Self {
+            code,
+            message: message.into(),
+        })
     }
 }
 
@@ -447,7 +324,7 @@ impl Display for UUsageError {
     }
 }
 
-impl UCustomError for UUsageError {
+impl UError for UUsageError {
     fn code(&self) -> i32 {
         self.code
     }
@@ -465,13 +342,13 @@ impl UCustomError for UUsageError {
 /// There are two ways to construct this type: with [`UIoError::new`] or by calling the
 /// [`FromIo::map_err_context`] method on a [`std::io::Result`] or [`std::io::Error`].
 /// ```
-/// use uucore::error::{FromIo, UResult, UIoError, UCommonError};
+/// use uucore::error::{FromIo, UResult, UIoError, UError};
 /// use std::fs::File;
 /// use std::path::Path;
 /// let path = Path::new("test.txt");
 ///
 /// // Manual construction
-/// let e: UIoError = UIoError::new(
+/// let e: Box<dyn UError> = UIoError::new(
 ///     std::io::ErrorKind::NotFound,
 ///     format!("cannot access '{}'", path.display())
 /// );
@@ -487,21 +364,16 @@ pub struct UIoError {
 }
 
 impl UIoError {
-    pub fn new(kind: std::io::ErrorKind, context: String) -> Self {
-        Self {
-            context,
+    #[allow(clippy::new_ret_no_self)]
+    pub fn new<S: Into<String>>(kind: std::io::ErrorKind, context: S) -> Box<dyn UError> {
+        Box::new(Self {
+            context: context.into(),
             inner: std::io::Error::new(kind, ""),
-        }
-    }
-
-    pub fn code(&self) -> i32 {
-        1
-    }
-
-    pub fn usage(&self) -> bool {
-        false
+        })
     }
 }
+
+impl UError for UIoError {}
 
 impl Error for UIoError {}
 
@@ -537,46 +409,33 @@ impl Display for UIoError {
     }
 }
 
-/// Enables the conversion from `std::io::Error` to `UError` and from `std::io::Result` to
-/// `UResult`.
+/// Enables the conversion from [`std::io::Error`] to [`UError`] and from [`std::io::Result`] to
+/// [`UResult`].
 pub trait FromIo<T> {
     fn map_err_context(self, context: impl FnOnce() -> String) -> T;
 }
 
-impl FromIo<UIoError> for std::io::Error {
-    fn map_err_context(self, context: impl FnOnce() -> String) -> UIoError {
-        UIoError {
+impl FromIo<Box<UIoError>> for std::io::Error {
+    fn map_err_context(self, context: impl FnOnce() -> String) -> Box<UIoError> {
+        Box::new(UIoError {
             context: (context)(),
             inner: self,
-        }
+        })
     }
 }
 
 impl<T> FromIo<UResult<T>> for std::io::Result<T> {
     fn map_err_context(self, context: impl FnOnce() -> String) -> UResult<T> {
-        self.map_err(|e| UError::Common(UCommonError::Io(e.map_err_context(context))))
+        self.map_err(|e| e.map_err_context(context) as Box<dyn UError>)
     }
 }
 
-impl FromIo<UIoError> for std::io::ErrorKind {
-    fn map_err_context(self, context: impl FnOnce() -> String) -> UIoError {
-        UIoError {
+impl FromIo<Box<UIoError>> for std::io::ErrorKind {
+    fn map_err_context(self, context: impl FnOnce() -> String) -> Box<UIoError> {
+        Box::new(UIoError {
             context: (context)(),
             inner: std::io::Error::new(self, ""),
-        }
-    }
-}
-
-impl From<UIoError> for UCommonError {
-    fn from(e: UIoError) -> UCommonError {
-        UCommonError::Io(e)
-    }
-}
-
-impl From<UIoError> for UError {
-    fn from(e: UIoError) -> UError {
-        let common: UCommonError = e.into();
-        common.into()
+        })
     }
 }
 
@@ -647,47 +506,6 @@ macro_rules! uio_error(
     })
 );
 
-/// Common errors for utilities.
-///
-/// If identical errors appear across multiple utilities, they should be added here.
-#[derive(Debug)]
-pub enum UCommonError {
-    Io(UIoError),
-    // Clap(UClapError),
-}
-
-impl UCommonError {
-    pub fn with_code(self, code: i32) -> UCommonErrorWithCode {
-        UCommonErrorWithCode { code, error: self }
-    }
-
-    pub fn code(&self) -> i32 {
-        1
-    }
-
-    pub fn usage(&self) -> bool {
-        false
-    }
-}
-
-impl From<UCommonError> for i32 {
-    fn from(common: UCommonError) -> i32 {
-        match common {
-            UCommonError::Io(e) => e.code(),
-        }
-    }
-}
-
-impl Error for UCommonError {}
-
-impl Display for UCommonError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        match self {
-            UCommonError::Io(e) => e.fmt(f),
-        }
-    }
-}
-
 /// A special error type that does not print any message when returned from
 /// `uumain`. Especially useful for porting utilities to using [`UResult`].
 ///
@@ -705,6 +523,13 @@ impl Display for UCommonError {
 #[derive(Debug)]
 pub struct ExitCode(pub i32);
 
+impl ExitCode {
+    #[allow(clippy::new_ret_no_self)]
+    pub fn new(code: i32) -> Box<dyn UError> {
+        Box::new(Self(code))
+    }
+}
+
 impl Error for ExitCode {}
 
 impl Display for ExitCode {
@@ -713,8 +538,14 @@ impl Display for ExitCode {
     }
 }
 
-impl UCustomError for ExitCode {
+impl UError for ExitCode {
     fn code(&self) -> i32 {
         self.0
+    }
+}
+
+impl From<i32> for Box<dyn UError> {
+    fn from(i: i32) -> Self {
+        ExitCode::new(i)
     }
 }

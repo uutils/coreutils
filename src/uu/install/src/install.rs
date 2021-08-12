@@ -17,7 +17,7 @@ use file_diff::diff;
 use filetime::{set_file_times, FileTime};
 use uucore::backup_control::{self, BackupMode};
 use uucore::entries::{grp2gid, usr2uid};
-use uucore::error::{FromIo, UCustomError, UIoError, UResult, USimpleError};
+use uucore::error::{FromIo, UError, UIoError, UResult, USimpleError};
 use uucore::perms::{wrap_chgrp, wrap_chown, Verbosity};
 
 use libc::{getegid, geteuid};
@@ -66,7 +66,7 @@ enum InstallError {
     OmittingDirectory(PathBuf),
 }
 
-impl UCustomError for InstallError {
+impl UError for InstallError {
     fn code(&self) -> i32 {
         match self {
             InstallError::Unimplemented(_) => 2,

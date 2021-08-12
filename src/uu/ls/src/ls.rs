@@ -39,7 +39,7 @@ use std::{
     time::Duration,
 };
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
-use uucore::error::{set_exit_code, FromIo, UCustomError, UResult};
+use uucore::error::{set_exit_code, FromIo, UError, UResult};
 
 use unicode_width::UnicodeWidthStr;
 #[cfg(unix)]
@@ -135,7 +135,7 @@ enum LsError {
     NoMetadata(PathBuf),
 }
 
-impl UCustomError for LsError {
+impl UError for LsError {
     fn code(&self) -> i32 {
         match self {
             LsError::InvalidLineWidth(_) => 2,
