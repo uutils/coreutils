@@ -228,3 +228,10 @@ fn test_big_h() {
         );
     }
 }
+
+#[test]
+fn test_no_change() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    ucmd.arg("").arg(at.plus("file")).succeeds();
+}
