@@ -15,7 +15,7 @@ use chrono::{DateTime, FixedOffset, Local, Offset, Utc};
 #[cfg(windows)]
 use chrono::{Datelike, Timelike};
 use clap::{crate_version, App, Arg};
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
 use libc::{clock_settime, timespec, CLOCK_REALTIME};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -67,10 +67,12 @@ static RFC_3339_HELP_STRING: &str = "output date/time in RFC 3339 format.
  for date and time to the indicated precision.
  Example: 2006-08-14 02:34:56-06:00";
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "redox")))]
 static OPT_SET_HELP_STRING: &str = "set time described by STRING";
 #[cfg(target_os = "macos")]
 static OPT_SET_HELP_STRING: &str = "set time described by STRING (not available on mac yet)";
+#[cfg(target_os = "redox")]
+static OPT_SET_HELP_STRING: &str = "set time described by STRING (not available on redox yet)";
 
 /// Settings for this program, parsed from the command line
 struct Settings {
@@ -357,7 +359,13 @@ fn set_system_datetime(_date: DateTime<Utc>) -> i32 {
     1
 }
 
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(target_os = "redox")]
+fn set_system_datetime(_date: DateTime<Utc>) -> i32 {
+    eprintln!("date: setting the date is not supported by Redox");
+    1
+}
+
+#[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
 /// System call to set date (unix).
 /// See here for more:
 /// https://doc.rust-lang.org/libc/i686-unknown-linux-gnu/libc/fn.clock_settime.html

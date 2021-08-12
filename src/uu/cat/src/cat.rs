@@ -20,12 +20,16 @@ use clap::{crate_version, App, Arg};
 use std::fs::{metadata, File};
 use std::io::{self, Read, Write};
 use thiserror::Error;
+use uucore::error::UResult;
+
+#[cfg(unix)]
+use std::os::unix::io::AsRawFd;
 
 /// Linux splice support
 #[cfg(any(target_os = "linux", target_os = "android"))]
 mod splice;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use std::os::unix::io::{AsRawFd, RawFd};
+use std::os::unix::io::RawFd;
 
 /// Unix domain socket support
 #[cfg(unix)]
@@ -58,6 +62,8 @@ enum CatError {
     },
     #[error("Is a directory")]
     IsDirectory,
+    #[error("input file is output file")]
+    OutputIsInput,
 }
 
 type CatResult<T> = Result<T, CatError>;
@@ -122,6 +128,12 @@ struct OutputState {
 
     /// Whether the output cursor is at the beginning of a new line
     at_line_start: bool,
+
+    /// Whether we skipped a \r, which still needs to be printed
+    skipped_carriage_return: bool,
+
+    /// Whether we have already printed a blank line
+    one_blank_kept: bool,
 }
 
 /// Represents an open file handle, stream, or other device
@@ -164,7 +176,8 @@ mod options {
     pub static SHOW_NONPRINTING: &str = "show-nonprinting";
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
@@ -217,13 +230,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         show_tabs,
         squeeze_blank,
     };
-    let success = cat_files(files, &options).is_ok();
-
-    if success {
-        0
-    } else {
-        1
-    }
+    cat_files(files, &options)
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -301,7 +308,13 @@ fn cat_handle<R: Read>(
     }
 }
 
-fn cat_path(path: &str, options: &OutputOptions, state: &mut OutputState) -> CatResult<()> {
+fn cat_path(
+    path: &str,
+    options: &OutputOptions,
+    state: &mut OutputState,
+    #[cfg(unix)] out_info: &nix::sys::stat::FileStat,
+    #[cfg(windows)] out_info: &winapi_util::file::Information,
+) -> CatResult<()> {
     if path == "-" {
         let stdin = io::stdin();
         let mut handle = InputHandle {
@@ -328,6 +341,10 @@ fn cat_path(path: &str, options: &OutputOptions, state: &mut OutputState) -> Cat
         }
         _ => {
             let file = File::open(path)?;
+            #[cfg(any(windows, unix))]
+            if same_file(out_info, &file) {
+                return Err(CatError::OutputIsInput);
+            }
             let mut handle = InputHandle {
                 #[cfg(any(target_os = "linux", target_os = "android"))]
                 file_descriptor: file.as_raw_fd(),
@@ -339,23 +356,52 @@ fn cat_path(path: &str, options: &OutputOptions, state: &mut OutputState) -> Cat
     }
 }
 
-fn cat_files(files: Vec<String>, options: &OutputOptions) -> Result<(), u32> {
-    let mut error_count = 0;
+#[cfg(unix)]
+fn same_file(a_info: &nix::sys::stat::FileStat, b: &File) -> bool {
+    let b_info = nix::sys::stat::fstat(b.as_raw_fd()).unwrap();
+    b_info.st_size != 0 && b_info.st_dev == a_info.st_dev && b_info.st_ino == a_info.st_ino
+}
+
+#[cfg(windows)]
+fn same_file(a_info: &winapi_util::file::Information, b: &File) -> bool {
+    let b_info = winapi_util::file::information(b).unwrap();
+    b_info.file_size() != 0
+        && b_info.volume_serial_number() == a_info.volume_serial_number()
+        && b_info.file_index() == a_info.file_index()
+}
+
+fn cat_files(files: Vec<String>, options: &OutputOptions) -> UResult<()> {
+    #[cfg(windows)]
+    let out_info = winapi_util::file::information(&std::io::stdout()).unwrap();
+    #[cfg(unix)]
+    let out_info = nix::sys::stat::fstat(std::io::stdout().as_raw_fd()).unwrap();
+
     let mut state = OutputState {
         line_number: 1,
         at_line_start: true,
+        skipped_carriage_return: false,
+        one_blank_kept: false,
     };
+    let mut error_messages: Vec<String> = Vec::new();
 
     for path in &files {
-        if let Err(err) = cat_path(path, options, &mut state) {
-            show_error!("{}: {}", path, err);
-            error_count += 1;
+        if let Err(err) = cat_path(path, options, &mut state, &out_info) {
+            error_messages.push(format!("{}: {}", path, err));
         }
     }
-    if error_count == 0 {
+    if state.skipped_carriage_return {
+        print!("\r");
+    }
+    if error_messages.is_empty() {
         Ok(())
     } else {
-        Err(error_count)
+        // each next line is expected to display "cat: …"
+        let line_joiner = format!("\n{}: ", executable!());
+
+        Err(uucore::error::USimpleError::new(
+            error_messages.len() as i32,
+            error_messages.join(&line_joiner),
+        ))
     }
 }
 
@@ -423,7 +469,6 @@ fn write_lines<R: Read>(
     let mut in_buf = [0; 1024 * 31];
     let stdout = io::stdout();
     let mut writer = stdout.lock();
-    let mut one_blank_kept = false;
 
     while let Ok(n) = handle.reader.read(&mut in_buf) {
         if n == 0 {
@@ -434,8 +479,13 @@ fn write_lines<R: Read>(
         while pos < n {
             // skip empty line_number enumerating them if needed
             if in_buf[pos] == b'\n' {
-                if !state.at_line_start || !options.squeeze_blank || !one_blank_kept {
-                    one_blank_kept = true;
+                // \r followed by \n is printed as ^M when show_ends is enabled, so that \r\n prints as ^M$
+                if state.skipped_carriage_return && options.show_ends {
+                    writer.write_all(b"^M")?;
+                    state.skipped_carriage_return = false;
+                }
+                if !state.at_line_start || !options.squeeze_blank || !state.one_blank_kept {
+                    state.one_blank_kept = true;
                     if state.at_line_start && options.number == NumberingMode::All {
                         write!(&mut writer, "{0:6}\t", state.line_number)?;
                         state.line_number += 1;
@@ -449,7 +499,12 @@ fn write_lines<R: Read>(
                 pos += 1;
                 continue;
             }
-            one_blank_kept = false;
+            if state.skipped_carriage_return {
+                writer.write_all(b"\r")?;
+                state.skipped_carriage_return = false;
+                state.at_line_start = false;
+            }
+            state.one_blank_kept = false;
             if state.at_line_start && options.number != NumberingMode::None {
                 write!(&mut writer, "{0:6}\t", state.line_number)?;
                 state.line_number += 1;
@@ -464,17 +519,22 @@ fn write_lines<R: Read>(
                 write_to_end(&in_buf[pos..], &mut writer)
             };
             // end of buffer?
-            if offset == 0 {
+            if offset + pos == in_buf.len() {
                 state.at_line_start = false;
                 break;
             }
-            // print suitable end of line
-            writer.write_all(options.end_of_line().as_bytes())?;
-            if handle.is_interactive {
-                writer.flush()?;
+            if in_buf[pos + offset] == b'\r' {
+                state.skipped_carriage_return = true;
+            } else {
+                assert_eq!(in_buf[pos + offset], b'\n');
+                // print suitable end of line
+                writer.write_all(options.end_of_line().as_bytes())?;
+                if handle.is_interactive {
+                    writer.flush()?;
+                }
+                state.at_line_start = true;
             }
-            state.at_line_start = true;
-            pos += offset;
+            pos += offset + 1;
         }
     }
 
@@ -482,17 +542,19 @@ fn write_lines<R: Read>(
 }
 
 // write***_to_end methods
-// Write all symbols till end of line or end of buffer is reached
-// Return the (number of written symbols + 1) or 0 if the end of buffer is reached
+// Write all symbols till \n or \r or end of buffer is reached
+// We need to stop at \r because it may be written as ^M depending on the byte after and settings;
+// however, write_nonprint_to_end doesn't need to stop at \r because it will always write \r as ^M.
+// Return the number of written symbols
 fn write_to_end<W: Write>(in_buf: &[u8], writer: &mut W) -> usize {
-    match in_buf.iter().position(|c| *c == b'\n') {
+    match in_buf.iter().position(|c| *c == b'\n' || *c == b'\r') {
         Some(p) => {
             writer.write_all(&in_buf[..p]).unwrap();
-            p + 1
+            p
         }
         None => {
             writer.write_all(in_buf).unwrap();
-            0
+            in_buf.len()
         }
     }
 }
@@ -500,20 +562,25 @@ fn write_to_end<W: Write>(in_buf: &[u8], writer: &mut W) -> usize {
 fn write_tab_to_end<W: Write>(mut in_buf: &[u8], writer: &mut W) -> usize {
     let mut count = 0;
     loop {
-        match in_buf.iter().position(|c| *c == b'\n' || *c == b'\t') {
+        match in_buf
+            .iter()
+            .position(|c| *c == b'\n' || *c == b'\t' || *c == b'\r')
+        {
             Some(p) => {
                 writer.write_all(&in_buf[..p]).unwrap();
                 if in_buf[p] == b'\n' {
-                    return count + p + 1;
-                } else {
+                    return count + p;
+                } else if in_buf[p] == b'\t' {
                     writer.write_all(b"^I").unwrap();
                     in_buf = &in_buf[p + 1..];
                     count += p + 1;
+                } else {
+                    return count + p;
                 }
             }
             None => {
                 writer.write_all(in_buf).unwrap();
-                return 0;
+                return in_buf.len();
             }
         };
     }
@@ -538,11 +605,7 @@ fn write_nonprint_to_end<W: Write>(in_buf: &[u8], writer: &mut W, tab: &[u8]) ->
         .unwrap();
         count += 1;
     }
-    if count != in_buf.len() {
-        count + 1
-    } else {
-        0
-    }
+    count
 }
 
 #[cfg(test)]

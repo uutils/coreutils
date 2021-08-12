@@ -16,7 +16,7 @@ edition = "2018"
 path="src/lib/lib.rs"
 
 [dependencies]
-dns-lookup = "1.0.5"
+dns-lookup = { version="1.0.5", optional=true }
 dunce = "1.0.0"
 getopts = "<= 0.2.21"
 wild = "2.0.4"
@@ -27,7 +27,9 @@ nix = { version="<= 0.13", optional=true }
 platform-info = { version="<= 0.1", optional=true }
 time = { version="<= 0.1.43", optional=true }
 # * "problem" dependencies (pinned)
-data-encoding = { version="~2.1", optional=true } ## data-encoding: require v2.1; but v2.2.0 breaks the build for MinSRV v1.31.0
+data-encoding = { version="2.1", optional=true }
+data-encoding-macro = { version="0.1.12", optional=true }
+z85 = { version="3.0.3", optional=true }
 libc = { version="0.2.15, <= 0.2.85", optional=true } ## libc: initial utmp support added in v0.2.15; but v0.2.68 breaks the build for MinSRV v1.31.0
 
 [dev-dependencies]
@@ -43,7 +45,7 @@ termion = "1.5"
 [features]
 default = []
 # * non-default features
-encoding = ["data-encoding", "thiserror"]
+encoding = ["data-encoding", "data-encoding-macro", "z85", "thiserror"]
 entries = ["libc"]
 fs = ["libc"]
 fsext = ["libc", "time"]
@@ -53,6 +55,6 @@ process = ["libc"]
 ringbuffer = []
 signals = []
 utf8 = []
-utmpx = ["time", "libc"]
+utmpx = ["time", "libc", "dns-lookup"]
 wide = []
 zero-copy = ["nix", "libc", "lazy_static", "platform-info"]

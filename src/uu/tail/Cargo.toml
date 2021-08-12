@@ -22,7 +22,11 @@ uucore_procs = { version=">=0.0.6", package="uucore_procs", path="../../uucore_p
 winapi = { version="0.3", features=["fileapi", "handleapi", "processthreadsapi", "synchapi", "winbase"] }
 
 [target.'cfg(target_os = "redox")'.dependencies]
-redox_syscall = "0.1"
+redox_syscall = "0.2"
+
+[target.'cfg(unix)'.dependencies]
+nix = "0.20"
+libc = "0.2"
 
 [[bin]]
 name = "tail"

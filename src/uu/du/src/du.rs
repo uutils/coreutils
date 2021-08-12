@@ -32,7 +32,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::{Duration, UNIX_EPOCH};
 use std::{error::Error, fmt::Display};
-use uucore::error::{UCustomError, UResult};
+use uucore::error::{UError, UResult};
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::InvalidEncodingHandling;
 #[cfg(windows)]
@@ -438,7 +438,7 @@ Try '{} --help' for more information.",
 
 impl Error for DuError {}
 
-impl UCustomError for DuError {
+impl UError for DuError {
     fn code(&self) -> i32 {
         match self {
             Self::InvalidMaxDepthArg(_) => 1,

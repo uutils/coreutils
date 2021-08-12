@@ -94,7 +94,8 @@ pub use libc::statfs as StatFs;
     target_os = "netbsd",
     target_os = "openbsd",
     target_os = "bitrig",
-    target_os = "dragonfly"
+    target_os = "dragonfly",
+    target_os = "redox"
 ))]
 pub use libc::statvfs as StatFs;
 
@@ -110,7 +111,8 @@ pub use libc::statfs as statfs_fn;
     target_os = "netbsd",
     target_os = "openbsd",
     target_os = "bitrig",
-    target_os = "dragonfly"
+    target_os = "dragonfly",
+    target_os = "redox"
 ))]
 pub use libc::statvfs as statfs_fn;
 
@@ -437,6 +439,11 @@ pub fn read_fs_list() -> Vec<MountInfo> {
             FindVolumeClose(find_handle);
         }
         mounts
+    }
+    #[cfg(target_os = "redox")]
+    {
+        // No method to read mounts, yet
+        Vec::new()
     }
 }
 

@@ -16,8 +16,6 @@ use std::os::windows::fs::symlink_file;
 use filetime::FileTime;
 #[cfg(target_os = "linux")]
 use rlimit::Resource;
-#[cfg(not(windows))]
-use std::env;
 #[cfg(target_os = "linux")]
 use std::fs as std_fs;
 #[cfg(target_os = "linux")]
@@ -743,20 +741,16 @@ fn test_cp_deref_folder_to_folder() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    let cwd = env::current_dir().unwrap();
+    let path_to_new_symlink = at.plus(TEST_COPY_FROM_FOLDER);
 
-    let path_to_new_symlink = at.subdir.join(TEST_COPY_FROM_FOLDER);
-
-    // Change the cwd to have a correct symlink
-    assert!(env::set_current_dir(&path_to_new_symlink).is_ok());
-
-    #[cfg(not(windows))]
-    let _r = fs::symlink(TEST_HELLO_WORLD_SOURCE, TEST_HELLO_WORLD_SOURCE_SYMLINK);
-    #[cfg(windows)]
-    let _r = symlink_file(TEST_HELLO_WORLD_SOURCE, TEST_HELLO_WORLD_SOURCE_SYMLINK);
-
-    // Back to the initial cwd (breaks the other tests)
-    assert!(env::set_current_dir(&cwd).is_ok());
+    at.symlink_file(
+        &path_to_new_symlink
+            .join(TEST_HELLO_WORLD_SOURCE)
+            .to_string_lossy(),
+        &path_to_new_symlink
+            .join(TEST_HELLO_WORLD_SOURCE_SYMLINK)
+            .to_string_lossy(),
+    );
 
     //using -P -R option
     scene
@@ -843,20 +837,16 @@ fn test_cp_no_deref_folder_to_folder() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    let cwd = env::current_dir().unwrap();
+    let path_to_new_symlink = at.plus(TEST_COPY_FROM_FOLDER);
 
-    let path_to_new_symlink = at.subdir.join(TEST_COPY_FROM_FOLDER);
-
-    // Change the cwd to have a correct symlink
-    assert!(env::set_current_dir(&path_to_new_symlink).is_ok());
-
-    #[cfg(not(windows))]
-    let _r = fs::symlink(TEST_HELLO_WORLD_SOURCE, TEST_HELLO_WORLD_SOURCE_SYMLINK);
-    #[cfg(windows)]
-    let _r = symlink_file(TEST_HELLO_WORLD_SOURCE, TEST_HELLO_WORLD_SOURCE_SYMLINK);
-
-    // Back to the initial cwd (breaks the other tests)
-    assert!(env::set_current_dir(&cwd).is_ok());
+    at.symlink_file(
+        &path_to_new_symlink
+            .join(TEST_HELLO_WORLD_SOURCE)
+            .to_string_lossy(),
+        &path_to_new_symlink
+            .join(TEST_HELLO_WORLD_SOURCE_SYMLINK)
+            .to_string_lossy(),
+    );
 
     //using -P -R option
     scene
@@ -969,10 +959,9 @@ fn test_cp_archive() {
 }
 
 #[test]
-#[cfg(target_os = "unix")]
+#[cfg(unix)]
 fn test_cp_archive_recursive() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let cwd = env::current_dir().unwrap();
 
     // creates
     // dir/1
@@ -988,26 +977,13 @@ fn test_cp_archive_recursive() {
     at.touch(&file_1.to_string_lossy());
     at.touch(&file_2.to_string_lossy());
 
-    // Change the cwd to have a correct symlink
-    assert!(env::set_current_dir(&at.subdir.join(TEST_COPY_TO_FOLDER)).is_ok());
-
-    #[cfg(not(windows))]
-    {
-        let _r = fs::symlink("1", &file_1_link);
-        let _r = fs::symlink("2", &file_2_link);
-    }
-    #[cfg(windows)]
-    {
-        let _r = symlink_file("1", &file_1_link);
-        let _r = symlink_file("2", &file_2_link);
-    }
-    // Back to the initial cwd (breaks the other tests)
-    assert!(env::set_current_dir(&cwd).is_ok());
+    at.symlink_file("1", &file_1_link.to_string_lossy());
+    at.symlink_file("2", &file_2_link.to_string_lossy());
 
     ucmd.arg("--archive")
         .arg(TEST_COPY_TO_FOLDER)
         .arg(TEST_COPY_TO_FOLDER_NEW)
-        .fails(); // fails for now
+        .succeeds();
 
     let scene2 = TestScenario::new("ls");
     let result = scene2
@@ -1025,18 +1001,6 @@ fn test_cp_archive_recursive() {
         .run();
 
     println!("ls dest {}", result.stdout_str());
-    assert!(at.file_exists(
-        &at.subdir
-            .join(TEST_COPY_TO_FOLDER_NEW)
-            .join("1.link")
-            .to_string_lossy()
-    ));
-    assert!(at.file_exists(
-        &at.subdir
-            .join(TEST_COPY_TO_FOLDER_NEW)
-            .join("2.link")
-            .to_string_lossy()
-    ));
     assert!(at.file_exists(
         &at.subdir
             .join(TEST_COPY_TO_FOLDER_NEW)

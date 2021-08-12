@@ -17,7 +17,7 @@ use clap::{crate_version, App, Arg, ArgGroup};
 use filetime::*;
 use std::fs::{self, File};
 use std::path::Path;
-use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::error::{FromIo, UError, UResult, USimpleError};
 
 static ABOUT: &str = "Update the access and modification times of each FILE to the current time.";
 pub mod options {

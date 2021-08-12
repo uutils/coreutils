@@ -151,6 +151,9 @@ Sylvestre Ledru
 T Jameson Little
     Jameson
     Little
+Thomas Queiroz
+    Thomas
+    Queiroz
 Tobias Bohumir Schottdorf
     Tobias
     Bohumir

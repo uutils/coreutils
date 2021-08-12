@@ -5,7 +5,7 @@
 //  * For the full copyright and license information, please view the LICENSE file
 //  * that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) rwxr sourcepath targetpath
+// spell-checker:ignore (ToDO) rwxr sourcepath targetpath Isnt uioerror
 
 mod mode;
 
@@ -17,15 +17,17 @@ use file_diff::diff;
 use filetime::{set_file_times, FileTime};
 use uucore::backup_control::{self, BackupMode};
 use uucore::entries::{grp2gid, usr2uid};
+use uucore::error::{FromIo, UError, UIoError, UResult, USimpleError};
 use uucore::perms::{wrap_chgrp, wrap_chown, Verbosity};
 
 use libc::{getegid, geteuid};
+use std::error::Error;
+use std::fmt::{Debug, Display};
 use std::fs;
 use std::fs::File;
 use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::result::Result;
 
 const DEFAULT_MODE: u32 = 0o755;
 const DEFAULT_STRIP_PROGRAM: &str = "strip";
@@ -45,6 +47,87 @@ pub struct Behavior {
     strip_program: String,
     create_leading: bool,
     target_dir: Option<String>,
+}
+
+#[derive(Debug)]
+enum InstallError {
+    Unimplemented(String),
+    DirNeedsArg(),
+    CreateDirFailed(PathBuf, std::io::Error),
+    ChmodFailed(PathBuf),
+    InvalidTarget(PathBuf),
+    TargetDirIsntDir(PathBuf),
+    BackupFailed(PathBuf, PathBuf, std::io::Error),
+    InstallFailed(PathBuf, PathBuf, std::io::Error),
+    StripProgramFailed(String),
+    MetadataFailed(std::io::Error),
+    NoSuchUser(String),
+    NoSuchGroup(String),
+    OmittingDirectory(PathBuf),
+}
+
+impl UError for InstallError {
+    fn code(&self) -> i32 {
+        match self {
+            InstallError::Unimplemented(_) => 2,
+            _ => 1,
+        }
+    }
+
+    fn usage(&self) -> bool {
+        false
+    }
+}
+
+impl Error for InstallError {}
+
+impl Display for InstallError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use InstallError as IE;
+        match self {
+            IE::Unimplemented(opt) => write!(f, "Unimplemented feature: {}", opt),
+            IE::DirNeedsArg() => write!(
+                f,
+                "{} with -d requires at least one argument.",
+                executable!()
+            ),
+            IE::CreateDirFailed(dir, e) => {
+                Display::fmt(&uio_error!(e, "failed to create {}", dir.display()), f)
+            }
+            IE::ChmodFailed(file) => write!(f, "failed to chmod {}", file.display()),
+            IE::InvalidTarget(target) => write!(
+                f,
+                "invalid target {}: No such file or directory",
+                target.display()
+            ),
+            IE::TargetDirIsntDir(target) => {
+                write!(f, "target '{}' is not a directory", target.display())
+            }
+            IE::BackupFailed(from, to, e) => Display::fmt(
+                &uio_error!(
+                    e,
+                    "cannot backup '{}' to '{}'",
+                    from.display(),
+                    to.display()
+                ),
+                f,
+            ),
+            IE::InstallFailed(from, to, e) => Display::fmt(
+                &uio_error!(
+                    e,
+                    "cannot install '{}' to '{}'",
+                    from.display(),
+                    to.display()
+                ),
+                f,
+            ),
+            IE::StripProgramFailed(msg) => write!(f, "strip program failed: {}", msg),
+            IE::MetadataFailed(e) => Display::fmt(&uio_error!(e, ""), f),
+            IE::NoSuchUser(user) => write!(f, "no such user: {}", user),
+            IE::NoSuchGroup(group) => write!(f, "no such group: {}", group),
+            IE::OmittingDirectory(dir) => write!(f, "omitting directory '{}'", dir.display()),
+        }
+    }
 }
 
 #[derive(Clone, Eq, PartialEq)]
@@ -97,7 +180,8 @@ fn get_usage() -> String {
 ///
 /// Returns a program return code.
 ///
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = get_usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
@@ -107,17 +191,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    if let Err(s) = check_unimplemented(&matches) {
-        show_error!("Unimplemented feature: {}", s);
-        return 2;
-    }
+    check_unimplemented(&matches)?;
 
-    let behavior = match behavior(&matches) {
-        Ok(x) => x,
-        Err(ret) => {
-            return ret;
-        }
-    };
+    let behavior = behavior(&matches)?;
 
     match behavior.main_function {
         MainFunction::Directory => directory(paths, behavior),
@@ -269,13 +345,13 @@ pub fn uu_app() -> App<'static, 'static> {
 /// Error datum is a string of the unimplemented argument.
 ///
 ///
-fn check_unimplemented<'a>(matches: &ArgMatches) -> Result<(), &'a str> {
+fn check_unimplemented(matches: &ArgMatches) -> UResult<()> {
     if matches.is_present(OPT_NO_TARGET_DIRECTORY) {
-        Err("--no-target-directory, -T")
+        Err(InstallError::Unimplemented(String::from("--no-target-directory, -T")).into())
     } else if matches.is_present(OPT_PRESERVE_CONTEXT) {
-        Err("--preserve-context, -P")
+        Err(InstallError::Unimplemented(String::from("--preserve-context, -P")).into())
     } else if matches.is_present(OPT_CONTEXT) {
-        Err("--context, -Z")
+        Err(InstallError::Unimplemented(String::from("--context, -Z")).into())
     } else {
         Ok(())
     }
@@ -289,7 +365,7 @@ fn check_unimplemented<'a>(matches: &ArgMatches) -> Result<(), &'a str> {
 ///
 /// In event of failure, returns an integer intended as a program return code.
 ///
-fn behavior(matches: &ArgMatches) -> Result<Behavior, i32> {
+fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     let main_function = if matches.is_present(OPT_DIRECTORY) {
         MainFunction::Directory
     } else {
@@ -314,10 +390,7 @@ fn behavior(matches: &ArgMatches) -> Result<Behavior, i32> {
         matches.value_of(OPT_BACKUP),
     );
     let backup_mode = match backup_mode {
-        Err(err) => {
-            show_usage_error!("{}", err);
-            return Err(1);
-        }
+        Err(err) => return Err(USimpleError::new(1, err)),
         Ok(mode) => mode,
     };
 
@@ -349,45 +422,46 @@ fn behavior(matches: &ArgMatches) -> Result<Behavior, i32> {
 /// GNU man pages describe this functionality as creating 'all components of
 /// the specified directories'.
 ///
-/// Returns an integer intended as a program return code.
+/// Returns a Result type with the Err variant containing the error message.
 ///
-fn directory(paths: Vec<String>, b: Behavior) -> i32 {
+fn directory(paths: Vec<String>, b: Behavior) -> UResult<()> {
     if paths.is_empty() {
-        println!("{} with -d requires at least one argument.", executable!());
-        1
+        Err(InstallError::DirNeedsArg().into())
     } else {
-        let mut all_successful = true;
-
         for path in paths.iter().map(Path::new) {
             // if the path already exist, don't try to create it again
             if !path.exists() {
-                // Differently than the primary functionality (MainFunction::Standard), the directory
-                // functionality should create all ancestors (or components) of a directory regardless
-                // of the presence of the "-D" flag.
-                // NOTE: the GNU "install" sets the expected mode only for the target directory. All
-                // created ancestor directories will have the default mode. Hence it is safe to use
-                // fs::create_dir_all and then only modify the target's dir mode.
-                if let Err(e) = fs::create_dir_all(path) {
-                    show_error!("{}: {}", path.display(), e);
-                    all_successful = false;
+                // Differently than the primary functionality
+                // (MainFunction::Standard), the directory functionality should
+                // create all ancestors (or components) of a directory
+                // regardless of the presence of the "-D" flag.
+                //
+                // NOTE: the GNU "install" sets the expected mode only for the
+                // target directory. All created ancestor directories will have
+                // the default mode. Hence it is safe to use fs::create_dir_all
+                // and then only modify the target's dir mode.
+                if let Err(e) =
+                    fs::create_dir_all(path).map_err_context(|| format!("{}", path.display()))
+                {
+                    show!(e);
                     continue;
                 }
 
                 if b.verbose {
-                    show_error!("creating directory '{}'", path.display());
+                    println!("creating directory '{}'", path.display());
                 }
             }
 
             if mode::chmod(path, b.mode()).is_err() {
-                all_successful = false;
+                // Error messages are printed by the mode::chmod function!
+                uucore::error::set_exit_code(1);
                 continue;
             }
         }
-        if all_successful {
-            0
-        } else {
-            1
-        }
+        // If the exit code was set, or show! has been called at least once
+        // (which sets the exit code as well), function execution will end after
+        // this return.
+        Ok(())
     }
 }
 
@@ -401,9 +475,9 @@ fn is_new_file_path(path: &Path) -> bool {
 
 /// Perform an install, given a list of paths and behavior.
 ///
-/// Returns an integer intended as a program return code.
+/// Returns a Result type with the Err variant containing the error message.
 ///
-fn standard(mut paths: Vec<String>, b: Behavior) -> i32 {
+fn standard(mut paths: Vec<String>, b: Behavior) -> UResult<()> {
     let target: PathBuf = b
         .target_dir
         .clone()
@@ -418,25 +492,19 @@ fn standard(mut paths: Vec<String>, b: Behavior) -> i32 {
         if let Some(parent) = target.parent() {
             if !parent.exists() && b.create_leading {
                 if let Err(e) = fs::create_dir_all(parent) {
-                    show_error!("failed to create {}: {}", parent.display(), e);
-                    return 1;
+                    return Err(InstallError::CreateDirFailed(parent.to_path_buf(), e).into());
                 }
 
                 if mode::chmod(parent, b.mode()).is_err() {
-                    show_error!("failed to chmod {}", parent.display());
-                    return 1;
+                    return Err(InstallError::ChmodFailed(parent.to_path_buf()).into());
                 }
             }
         }
 
         if target.is_file() || is_new_file_path(&target) {
-            copy_file_to_file(&sources[0], &target, &b)
+            copy(&sources[0], &target, &b)
         } else {
-            show_error!(
-                "invalid target {}: No such file or directory",
-                target.display()
-            );
-            1
+            Err(InstallError::InvalidTarget(target).into())
         }
     }
 }
@@ -444,34 +512,30 @@ fn standard(mut paths: Vec<String>, b: Behavior) -> i32 {
 /// Copy some files into a directory.
 ///
 /// Prints verbose information and error messages.
-/// Returns an integer intended as a program return code.
+/// Returns a Result type with the Err variant containing the error message.
 ///
 /// # Parameters
 ///
 /// _files_ must all exist as non-directories.
 /// _target_dir_ must be a directory.
 ///
-fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> i32 {
+fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UResult<()> {
     if !target_dir.is_dir() {
-        show_error!("target '{}' is not a directory", target_dir.display());
-        return 1;
+        return Err(InstallError::TargetDirIsntDir(target_dir.to_path_buf()).into());
     }
-
-    let mut all_successful = true;
     for sourcepath in files.iter() {
         if !sourcepath.exists() {
-            show_error!(
-                "cannot stat '{}': No such file or directory",
-                sourcepath.display()
+            let err = UIoError::new(
+                std::io::ErrorKind::NotFound,
+                format!("cannot stat '{}'", sourcepath.display()),
             );
-
-            all_successful = false;
+            show!(err);
             continue;
         }
 
         if sourcepath.is_dir() {
-            show_error!("omitting directory '{}'", sourcepath.display());
-            all_successful = false;
+            let err = InstallError::OmittingDirectory(sourcepath.to_path_buf());
+            show!(err);
             continue;
         }
 
@@ -479,36 +543,17 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> i3
         let filename = sourcepath.components().last().unwrap();
         targetpath.push(filename);
 
-        if copy(sourcepath, &targetpath, b).is_err() {
-            all_successful = false;
-        }
+        show_if_err!(copy(sourcepath, &targetpath, b));
     }
-    if all_successful {
-        0
-    } else {
-        1
-    }
-}
-
-/// Copy a file to another file.
-///
-/// Prints verbose information and error messages.
-/// Returns an integer intended as a program return code.
-///
-/// # Parameters
-///
-/// _file_ must exist as a non-directory.
-/// _target_ must be a non-directory
-///
-fn copy_file_to_file(file: &Path, target: &Path, b: &Behavior) -> i32 {
-    if copy(file, target, b).is_err() {
-        1
-    } else {
-        0
-    }
+    // If the exit code was set, or show! has been called at least once
+    // (which sets the exit code as well), function execution will end after
+    // this return.
+    Ok(())
 }
 
 /// Copy one file to a new location, changing metadata.
+///
+/// Returns a Result type with the Err variant containing the error message.
 ///
 /// # Parameters
 ///
@@ -520,8 +565,8 @@ fn copy_file_to_file(file: &Path, target: &Path, b: &Behavior) -> i32 {
 /// If the copy system call fails, we print a verbose error and return an empty error value.
 ///
 #[allow(clippy::cognitive_complexity)]
-fn copy(from: &Path, to: &Path, b: &Behavior) -> Result<(), ()> {
-    if b.compare && !need_copy(from, to, b) {
+fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
+    if b.compare && !need_copy(from, to, b)? {
         return Ok(());
     }
     // Declare the path here as we may need it for the verbose output below.
@@ -536,13 +581,12 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> Result<(), ()> {
         if let Some(ref backup_path) = backup_path {
             // TODO!!
             if let Err(err) = fs::rename(to, backup_path) {
-                show_error!(
-                    "install: cannot backup file '{}' to '{}': {}",
-                    to.display(),
-                    backup_path.display(),
-                    err
-                );
-                return Err(());
+                return Err(InstallError::BackupFailed(
+                    to.to_path_buf(),
+                    backup_path.to_path_buf(),
+                    err,
+                )
+                .into());
             }
         }
     }
@@ -552,52 +596,41 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> Result<(), ()> {
          * https://github.com/rust-lang/rust/issues/79390
          */
         if let Err(err) = File::create(to) {
-            show_error!(
-                "install: cannot install '{}' to '{}': {}",
-                from.display(),
-                to.display(),
-                err
+            return Err(
+                InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err).into(),
             );
-            return Err(());
         }
     } else if let Err(err) = fs::copy(from, to) {
-        show_error!(
-            "cannot install '{}' to '{}': {}",
-            from.display(),
-            to.display(),
-            err
-        );
-        return Err(());
+        return Err(InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err).into());
     }
 
     if b.strip && cfg!(not(windows)) {
         match Command::new(&b.strip_program).arg(to).output() {
             Ok(o) => {
                 if !o.status.success() {
-                    crash!(
-                        1,
-                        "strip program failed: {}",
-                        String::from_utf8(o.stderr).unwrap_or_default()
-                    );
+                    return Err(InstallError::StripProgramFailed(
+                        String::from_utf8(o.stderr).unwrap_or_default(),
+                    )
+                    .into());
                 }
             }
-            Err(e) => crash!(1, "strip program execution failed: {}", e),
+            Err(e) => return Err(InstallError::StripProgramFailed(e.to_string()).into()),
         }
     }
 
     if mode::chmod(to, b.mode()).is_err() {
-        return Err(());
+        return Err(InstallError::ChmodFailed(to.to_path_buf()).into());
     }
 
     if !b.owner.is_empty() {
         let meta = match fs::metadata(to) {
             Ok(meta) => meta,
-            Err(f) => crash!(1, "{}", f.to_string()),
+            Err(e) => return Err(InstallError::MetadataFailed(e).into()),
         };
 
         let owner_id = match usr2uid(&b.owner) {
             Ok(g) => g,
-            _ => crash!(1, "no such user: {}", b.owner),
+            _ => return Err(InstallError::NoSuchUser(b.owner.clone()).into()),
         };
         let gid = meta.gid();
         match wrap_chown(
@@ -620,14 +653,14 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> Result<(), ()> {
     if !b.group.is_empty() {
         let meta = match fs::metadata(to) {
             Ok(meta) => meta,
-            Err(f) => crash!(1, "{}", f.to_string()),
+            Err(e) => return Err(InstallError::MetadataFailed(e).into()),
         };
 
         let group_id = match grp2gid(&b.group) {
             Ok(g) => g,
-            _ => crash!(1, "no such group: {}", b.group),
+            _ => return Err(InstallError::NoSuchGroup(b.group.clone()).into()),
         };
-        match wrap_chgrp(to, &meta, group_id, false, Verbosity::Normal) {
+        match wrap_chgrp(to, &meta, Some(group_id), false, Verbosity::Normal) {
             Ok(n) => {
                 if !n.is_empty() {
                     show_error!("{}", n);
@@ -640,7 +673,7 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> Result<(), ()> {
     if b.preserve_timestamps {
         let meta = match fs::metadata(from) {
             Ok(meta) => meta,
-            Err(f) => crash!(1, "{}", f.to_string()),
+            Err(e) => return Err(InstallError::MetadataFailed(e).into()),
         };
 
         let modified_time = FileTime::from_last_modification_time(&meta);
@@ -664,6 +697,7 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> Result<(), ()> {
 }
 
 /// Return true if a file is necessary to copy. This is the case when:
+///
 /// - _from_ or _to_ is nonexistent;
 /// - either file has a sticky bit or set[ug]id bit, or the user specified one;
 /// - either file isn't a regular file;
@@ -679,14 +713,14 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> Result<(), ()> {
 ///
 /// Crashes the program if a nonexistent owner or group is specified in _b_.
 ///
-fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
+fn need_copy(from: &Path, to: &Path, b: &Behavior) -> UResult<bool> {
     let from_meta = match fs::metadata(from) {
         Ok(meta) => meta,
-        Err(_) => return true,
+        Err(_) => return Ok(true),
     };
     let to_meta = match fs::metadata(to) {
         Ok(meta) => meta,
-        Err(_) => return true,
+        Err(_) => return Ok(true),
     };
 
     // setuid || setgid || sticky
@@ -696,15 +730,15 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
         || from_meta.mode() & extra_mode != 0
         || to_meta.mode() & extra_mode != 0
     {
-        return true;
+        return Ok(true);
     }
 
     if !from_meta.is_file() || !to_meta.is_file() {
-        return true;
+        return Ok(true);
     }
 
     if from_meta.len() != to_meta.len() {
-        return true;
+        return Ok(true);
     }
 
     // TODO: if -P (#1809) and from/to contexts mismatch, return true.
@@ -712,31 +746,31 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
     if !b.owner.is_empty() {
         let owner_id = match usr2uid(&b.owner) {
             Ok(id) => id,
-            _ => crash!(1, "no such user: {}", b.owner),
+            _ => return Err(InstallError::NoSuchUser(b.owner.clone()).into()),
         };
         if owner_id != to_meta.uid() {
-            return true;
+            return Ok(true);
         }
     } else if !b.group.is_empty() {
         let group_id = match grp2gid(&b.group) {
             Ok(id) => id,
-            _ => crash!(1, "no such group: {}", b.group),
+            _ => return Err(InstallError::NoSuchGroup(b.group.clone()).into()),
         };
         if group_id != to_meta.gid() {
-            return true;
+            return Ok(true);
         }
     } else {
         #[cfg(not(target_os = "windows"))]
         unsafe {
             if to_meta.uid() != geteuid() || to_meta.gid() != getegid() {
-                return true;
+                return Ok(true);
             }
         }
     }
 
     if !diff(from.to_str().unwrap(), to.to_str().unwrap()) {
-        return true;
+        return Ok(true);
     }
 
-    false
+    Ok(false)
 }

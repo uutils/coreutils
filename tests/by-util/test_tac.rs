@@ -124,3 +124,12 @@ fn test_multi_char_separator() {
         .succeeds()
         .stdout_is("bxxaxx");
 }
+
+#[test]
+fn test_null_separator() {
+    new_ucmd!()
+        .args(&["-s", ""])
+        .pipe_in("a\0b\0")
+        .succeeds()
+        .stdout_is("b\0a\0");
+}
