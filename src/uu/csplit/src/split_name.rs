@@ -47,7 +47,7 @@ impl SplitName {
             }),
             Some(custom) => {
                 let spec =
-                    Regex::new(r"(?P<ALL>%(?P<FLAG>[0#-])(?P<WIDTH>\d+)?(?P<TYPE>[diuoxX]))")
+                    Regex::new(r"(?P<ALL>%((?P<FLAG>[0#-])(?P<WIDTH>\d+)?)?(?P<TYPE>[diuoxX]))")
                         .unwrap();
                 let mut captures_iter = spec.captures_iter(&custom);
                 let custom_fn: Box<dyn Fn(usize) -> String> = match captures_iter.next() {
@@ -60,6 +60,21 @@ impl SplitName {
                             Some(m) => m.as_str().parse::<usize>().unwrap(),
                         };
                         match (captures.name("FLAG"), captures.name("TYPE")) {
+                            (None, Some(ref t)) => match t.as_str() {
+                                "d" | "i" | "u" => Box::new(move |n: usize| -> String {
+                                    format!("{}{}{}{}", prefix, before, n, after)
+                                }),
+                                "o" => Box::new(move |n: usize| -> String {
+                                    format!("{}{}{:o}{}", prefix, before, n, after)
+                                }),
+                                "x" => Box::new(move |n: usize| -> String {
+                                    format!("{}{}{:x}{}", prefix, before, n, after)
+                                }),
+                                "X" => Box::new(move |n: usize| -> String {
+                                    format!("{}{}{:X}{}", prefix, before, n, after)
+                                }),
+                                _ => return Err(CsplitError::SuffixFormatIncorrect),
+                            },
                             (Some(ref f), Some(ref t)) => {
                                 match (f.as_str(), t.as_str()) {
                                     /*
@@ -274,6 +289,12 @@ mod tests {
     fn default_formatter_with_width() {
         let split_name = SplitName::new(None, None, Some(String::from("5"))).unwrap();
         assert_eq!(split_name.get(2), "xx00002");
+    }
+
+    #[test]
+    fn no_padding_decimal() {
+        let split_name = SplitName::new(None, Some(String::from("cst-%d-")), None).unwrap();
+        assert_eq!(split_name.get(2), "xxcst-2-");
     }
 
     #[test]
