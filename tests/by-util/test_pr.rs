@@ -68,41 +68,36 @@ fn test_with_numbering_option_with_number_width() {
 fn test_with_long_header_option() {
     let test_file_path = "test_one_page.log";
     let expected_test_file_path = "test_one_page_header.log.expected";
-    let mut scenario = new_ucmd!();
-    let value = file_last_modified_time(&scenario, test_file_path);
     let header = "new file";
-    scenario
-        .args(&["--header=new file", test_file_path])
-        .succeeds()
-        .stdout_is_templated_fixture(
-            expected_test_file_path,
-            &[("{last_modified_time}", &value), ("{header}", header)],
-        );
-
-    new_ucmd!()
-        .args(&["-h", header, test_file_path])
-        .succeeds()
-        .stdout_is_templated_fixture(
-            expected_test_file_path,
-            &[("{last_modified_time}", &value), ("{header}", header)],
-        );
+    for args in &[&["-h", header][..], &["--header=new file"][..]] {
+        let mut scenario = new_ucmd!();
+        let value = file_last_modified_time(&scenario, test_file_path);
+        scenario
+            .args(args)
+            .arg(test_file_path)
+            .succeeds()
+            .stdout_is_templated_fixture(
+                expected_test_file_path,
+                &[("{last_modified_time}", &value), ("{header}", header)],
+            );
+    }
 }
 
 #[test]
 fn test_with_double_space_option() {
     let test_file_path = "test_one_page.log";
     let expected_test_file_path = "test_one_page_double_line.log.expected";
-    let mut scenario = new_ucmd!();
-    let value = file_last_modified_time(&scenario, test_file_path);
-    scenario
-        .args(&["-d", test_file_path])
-        .succeeds()
-        .stdout_is_templated_fixture(expected_test_file_path, &[("{last_modified_time}", &value)]);
-
-    new_ucmd!()
-        .args(&["--double-space", test_file_path])
-        .succeeds()
-        .stdout_is_templated_fixture(expected_test_file_path, &[("{last_modified_time}", &value)]);
+    for &arg in &["-d", "--double-space"] {
+        let mut scenario = new_ucmd!();
+        let value = file_last_modified_time(&scenario, test_file_path);
+        scenario
+            .args(&[arg, test_file_path])
+            .succeeds()
+            .stdout_is_templated_fixture(
+                expected_test_file_path,
+                &[("{last_modified_time}", &value)],
+            );
+    }
 }
 
 #[test]
@@ -188,33 +183,28 @@ fn test_with_page_range() {
     let test_file_path = "test.log";
     let expected_test_file_path = "test_page_range_1.log.expected";
     let expected_test_file_path1 = "test_page_range_2.log.expected";
-    let mut scenario = new_ucmd!();
-    let value = file_last_modified_time(&scenario, test_file_path);
-    scenario
-        .args(&["--pages=15", test_file_path])
-        .succeeds()
-        .stdout_is_templated_fixture(expected_test_file_path, &[("{last_modified_time}", &value)]);
-
-    new_ucmd!()
-        .args(&["+15", test_file_path])
-        .succeeds()
-        .stdout_is_templated_fixture(expected_test_file_path, &[("{last_modified_time}", &value)]);
-
-    new_ucmd!()
-        .args(&["--pages=15:17", test_file_path])
-        .succeeds()
-        .stdout_is_templated_fixture(
-            expected_test_file_path1,
-            &[("{last_modified_time}", &value)],
-        );
-
-    new_ucmd!()
-        .args(&["+15:17", test_file_path])
-        .succeeds()
-        .stdout_is_templated_fixture(
-            expected_test_file_path1,
-            &[("{last_modified_time}", &value)],
-        );
+    for &arg in &["--pages=15", "+15"] {
+        let mut scenario = new_ucmd!();
+        let value = file_last_modified_time(&scenario, test_file_path);
+        scenario
+            .args(&[arg, test_file_path])
+            .succeeds()
+            .stdout_is_templated_fixture(
+                expected_test_file_path,
+                &[("{last_modified_time}", &value)],
+            );
+    }
+    for &arg in &["--pages=15:17", "+15:17"] {
+        let mut scenario = new_ucmd!();
+        let value = file_last_modified_time(&scenario, test_file_path);
+        scenario
+            .args(&[arg, test_file_path])
+            .succeeds()
+            .stdout_is_templated_fixture(
+                expected_test_file_path1,
+                &[("{last_modified_time}", &value)],
+            );
+    }
 }
 
 #[test]
@@ -232,19 +222,17 @@ fn test_with_no_header_trailer_option() {
 #[test]
 fn test_with_page_length_option() {
     let test_file_path = "test.log";
-    let expected_test_file_path = "test_page_length.log.expected";
-    let expected_test_file_path1 = "test_page_length1.log.expected";
-    let mut scenario = new_ucmd!();
-    let value = file_last_modified_time(&scenario, test_file_path);
-    scenario
-        .args(&["--pages=2:3", "-l", "100", "-n", test_file_path])
-        .succeeds()
-        .stdout_is_templated_fixture(expected_test_file_path, &[("{last_modified_time}", &value)]);
-
-    new_ucmd!()
-        .args(&["--pages=2:3", "-l", "5", "-n", test_file_path])
-        .succeeds()
-        .stdout_is_fixture(expected_test_file_path1);
+    for (arg, expected) in &[
+        ("100", "test_page_length.log.expected"),
+        ("5", "test_page_length1.log.expected"),
+    ] {
+        let mut scenario = new_ucmd!();
+        let value = file_last_modified_time(&scenario, test_file_path);
+        scenario
+            .args(&["--pages=2:3", "-l", arg, "-n", test_file_path])
+            .succeeds()
+            .stdout_is_templated_fixture(expected, &[("{last_modified_time}", &value)]);
+    }
 }
 
 #[test]
@@ -277,17 +265,17 @@ fn test_with_stdin() {
 fn test_with_column() {
     let test_file_path = "column.log";
     let expected_test_file_path = "column.log.expected";
-    let mut scenario = new_ucmd!();
-    let value = file_last_modified_time(&scenario, test_file_path);
-    scenario
-        .args(&["--pages=3:5", "--column=3", "-n", test_file_path])
-        .succeeds()
-        .stdout_is_templated_fixture(expected_test_file_path, &[("{last_modified_time}", &value)]);
-
-    new_ucmd!()
-        .args(&["--pages=3:5", "-3", "-n", test_file_path])
-        .succeeds()
-        .stdout_is_templated_fixture(expected_test_file_path, &[("{last_modified_time}", &value)]);
+    for arg in &["-3", "--column=3"] {
+        let mut scenario = new_ucmd!();
+        let value = file_last_modified_time(&scenario, test_file_path);
+        scenario
+            .args(&["--pages=3:5", arg, "-n", test_file_path])
+            .succeeds()
+            .stdout_is_templated_fixture(
+                expected_test_file_path,
+                &[("{last_modified_time}", &value)],
+            );
+    }
 }
 
 #[test]
@@ -305,36 +293,17 @@ fn test_with_column_across_option() {
 #[test]
 fn test_with_column_across_option_and_column_separator() {
     let test_file_path = "column.log";
-    let expected_test_file_path = "column_across_sep.log.expected";
-    let expected_test_file_path1 = "column_across_sep1.log.expected";
-    let mut scenario = new_ucmd!();
-    let value = file_last_modified_time(&scenario, test_file_path);
-    scenario
-        .args(&[
-            "--pages=3:5",
-            "--column=3",
-            "-s|",
-            "-a",
-            "-n",
-            test_file_path,
-        ])
-        .succeeds()
-        .stdout_is_templated_fixture(expected_test_file_path, &[("{last_modified_time}", &value)]);
-
-    new_ucmd!()
-        .args(&[
-            "--pages=3:5",
-            "--column=3",
-            "-Sdivide",
-            "-a",
-            "-n",
-            test_file_path,
-        ])
-        .succeeds()
-        .stdout_is_templated_fixture(
-            expected_test_file_path1,
-            &[("{last_modified_time}", &value)],
-        );
+    for (arg, expected) in &[
+        ("-s|", "column_across_sep.log.expected"),
+        ("-Sdivide", "column_across_sep1.log.expected"),
+    ] {
+        let mut scenario = new_ucmd!();
+        let value = file_last_modified_time(&scenario, test_file_path);
+        scenario
+            .args(&["--pages=3:5", "--column=3", arg, "-a", "-n", test_file_path])
+            .succeeds()
+            .stdout_is_templated_fixture(expected, &[("{last_modified_time}", &value)]);
+    }
 }
 
 #[test]
