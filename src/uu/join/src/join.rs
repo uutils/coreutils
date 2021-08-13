@@ -19,7 +19,6 @@ static NAME: &str = "join";
 
 #[derive(Copy, Clone, PartialEq)]
 enum FileNum {
-    None,
     File1,
     File2,
 }
@@ -41,7 +40,8 @@ enum CheckOrder {
 struct Settings {
     key1: usize,
     key2: usize,
-    print_unpaired: FileNum,
+    print_unpaired1: bool,
+    print_unpaired2: bool,
     print_joined: bool,
     ignore_case: bool,
     separator: Sep,
@@ -57,7 +57,8 @@ impl Default for Settings {
         Settings {
             key1: 0,
             key2: 0,
-            print_unpaired: FileNum::None,
+            print_unpaired1: false,
+            print_unpaired2: false,
             print_joined: true,
             ignore_case: false,
             separator: Sep::Whitespaces,
@@ -243,7 +244,7 @@ impl<'a> State<'a> {
         name: &'a str,
         stdin: &'a Stdin,
         key: usize,
-        print_unpaired: FileNum,
+        print_unpaired: bool,
     ) -> State<'a> {
         let f = if name == "-" {
             Box::new(stdin.lock()) as Box<dyn BufRead>
@@ -258,7 +259,7 @@ impl<'a> State<'a> {
             key,
             file_name: name,
             file_num,
-            print_unpaired: print_unpaired == file_num,
+            print_unpaired,
             lines: f.lines(),
             seq: Vec::new(),
             max_fields: None,
@@ -450,11 +451,19 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let mut settings: Settings = Default::default();
 
-    if let Some(value) = matches.value_of("v") {
-        settings.print_unpaired = parse_file_number(value);
+    let v_values = matches.values_of("v");
+    if v_values.is_some() {
         settings.print_joined = false;
-    } else if let Some(value) = matches.value_of("a") {
-        settings.print_unpaired = parse_file_number(value);
+    }
+
+    let unpaired = v_values
+        .unwrap_or_default()
+        .chain(matches.values_of("a").unwrap_or_default());
+    for file_num in unpaired {
+        match parse_file_number(file_num) {
+            FileNum::File1 => settings.print_unpaired1 = true,
+            FileNum::File2 => settings.print_unpaired2 = true,
+        }
     }
 
     settings.ignore_case = matches.is_present("i");
@@ -520,7 +529,8 @@ When FILE1 or FILE2 (not both) is -, read standard input.",
         .arg(
             Arg::with_name("a")
                 .short("a")
-                .takes_value(true)
+                .multiple(true)
+                .number_of_values(1)
                 .possible_values(&["1", "2"])
                 .value_name("FILENUM")
                 .help(
@@ -531,6 +541,9 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
         .arg(
             Arg::with_name("v")
                 .short("v")
+                .multiple(true)
+                .number_of_values(1)
+                .possible_values(&["1", "2"])
                 .value_name("FILENUM")
                 .help("like -a FILENUM, but suppress joined output lines"),
         )
@@ -617,7 +630,7 @@ fn exec(file1: &str, file2: &str, settings: &Settings) -> i32 {
         file1,
         &stdin,
         settings.key1,
-        settings.print_unpaired,
+        settings.print_unpaired1,
     );
 
     let mut state2 = State::new(
@@ -625,7 +638,7 @@ fn exec(file1: &str, file2: &str, settings: &Settings) -> i32 {
         file2,
         &stdin,
         settings.key2,
-        settings.print_unpaired,
+        settings.print_unpaired2,
     );
 
     let input = Input::new(
