@@ -43,7 +43,7 @@ fn test_invalid_group() {
         .arg("__nosuchgroup__")
         .arg("/")
         .fails()
-        .stderr_is("chgrp: invalid group: __nosuchgroup__");
+        .stderr_is("chgrp: invalid group: '__nosuchgroup__'");
 }
 
 #[test]

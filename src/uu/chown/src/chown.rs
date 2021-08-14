@@ -12,7 +12,7 @@ extern crate uucore;
 pub use uucore::entries::{self, Group, Locate, Passwd};
 use uucore::fs::resolve_relative_path;
 use uucore::libc::{gid_t, uid_t};
-use uucore::perms::{wrap_chown, Verbosity};
+use uucore::perms::{wrap_chown, Verbosity, VerbosityLevel};
 
 use uucore::error::{FromIo, UResult, USimpleError};
 
@@ -116,15 +116,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let verbosity = if matches.is_present(options::verbosity::CHANGES) {
-        Verbosity::Changes
+        VerbosityLevel::Changes
     } else if matches.is_present(options::verbosity::SILENT)
         || matches.is_present(options::verbosity::QUIET)
     {
-        Verbosity::Silent
+        VerbosityLevel::Silent
     } else if matches.is_present(options::verbosity::VERBOSE) {
-        Verbosity::Verbose
+        VerbosityLevel::Verbose
     } else {
-        Verbosity::Normal
+        VerbosityLevel::Normal
     };
 
     let filter = if let Some(spec) = matches.value_of(options::FROM) {
@@ -154,7 +154,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         bit_flag,
         dest_uid,
         dest_gid,
-        verbosity,
+        verbosity: Verbosity {
+            groups_only: false,
+            level: verbosity,
+        },
         recursive,
         dereference: derefer != 0,
         filter,
@@ -286,23 +289,23 @@ fn parse_spec(spec: &str) -> UResult<(Option<u32>, Option<u32>)> {
     Ok((uid, gid))
 }
 
-enum IfFrom {
+pub enum IfFrom {
     All,
     User(u32),
     Group(u32),
     UserGroup(u32, u32),
 }
 
-struct Chowner {
-    dest_uid: Option<u32>,
-    dest_gid: Option<u32>,
-    bit_flag: u8,
-    verbosity: Verbosity,
-    filter: IfFrom,
-    files: Vec<String>,
-    recursive: bool,
-    preserve_root: bool,
-    dereference: bool,
+pub struct Chowner {
+    pub dest_uid: Option<u32>,
+    pub dest_gid: Option<u32>,
+    pub bit_flag: u8,
+    pub verbosity: Verbosity,
+    pub filter: IfFrom,
+    pub files: Vec<String>,
+    pub recursive: bool,
+    pub preserve_root: bool,
+    pub dereference: bool,
 }
 
 macro_rules! unwrap {
@@ -315,7 +318,7 @@ macro_rules! unwrap {
 }
 
 impl Chowner {
-    fn exec(&self) -> UResult<()> {
+    pub fn exec(&self) -> UResult<()> {
         let mut ret = 0;
         for f in &self.files {
             ret |= self.traverse(f);
@@ -377,7 +380,7 @@ impl Chowner {
                     0
                 }
                 Err(e) => {
-                    if self.verbosity != Verbosity::Silent {
+                    if self.verbosity.level != VerbosityLevel::Silent {
                         show_error!("{}", e);
                     }
                     1
@@ -432,7 +435,7 @@ impl Chowner {
                     0
                 }
                 Err(e) => {
-                    if self.verbosity != Verbosity::Silent {
+                    if self.verbosity.level != VerbosityLevel::Silent {
                         show_error!("{}", e);
                     }
                     1
@@ -443,20 +446,19 @@ impl Chowner {
     }
 
     fn obtain_meta<P: AsRef<Path>>(&self, path: P, follow: bool) -> Option<Metadata> {
-        use self::Verbosity::*;
         let path = path.as_ref();
         let meta = if follow {
             unwrap!(path.metadata(), e, {
-                match self.verbosity {
-                    Silent => (),
+                match self.verbosity.level {
+                    VerbosityLevel::Silent => (),
                     _ => show_error!("cannot access '{}': {}", path.display(), e),
                 }
                 return None;
             })
         } else {
             unwrap!(path.symlink_metadata(), e, {
-                match self.verbosity {
-                    Silent => (),
+                match self.verbosity.level {
+                    VerbosityLevel::Silent => (),
                     _ => show_error!("cannot dereference '{}': {}", path.display(), e),
                 }
                 return None;

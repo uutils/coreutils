@@ -18,86 +18,16 @@ use std::path::Path;
 
 /// The various level of verbosity
 #[derive(PartialEq, Clone, Debug)]
-pub enum Verbosity {
+pub enum VerbosityLevel {
     Silent,
     Changes,
     Verbose,
     Normal,
 }
-
-/// Actually perform the change of group on a path
-fn chgrp<P: AsRef<Path>>(path: P, gid: gid_t, follow: bool) -> IOResult<()> {
-    let path = path.as_ref();
-    let s = CString::new(path.as_os_str().as_bytes()).unwrap();
-    let ret = unsafe {
-        if follow {
-            libc::chown(s.as_ptr(), 0_u32.wrapping_sub(1), gid)
-        } else {
-            lchown(s.as_ptr(), 0_u32.wrapping_sub(1), gid)
-        }
-    };
-    if ret == 0 {
-        Ok(())
-    } else {
-        Err(IOError::last_os_error())
-    }
-}
-
-/// Perform the change of group on a path
-/// with the various options
-/// and error messages management
-pub fn wrap_chgrp<P: AsRef<Path>>(
-    path: P,
-    meta: &Metadata,
-    dest_gid: Option<gid_t>,
-    follow: bool,
-    verbosity: Verbosity,
-) -> Result<String, String> {
-    use self::Verbosity::*;
-    let path = path.as_ref();
-    let mut out: String = String::new();
-    let dest_gid = dest_gid.unwrap_or_else(|| meta.gid());
-
-    if let Err(e) = chgrp(path, dest_gid, follow) {
-        match verbosity {
-            Silent => (),
-            _ => {
-                out = format!("changing group of '{}': {}", path.display(), e);
-                if verbosity == Verbose {
-                    out = format!(
-                        "{}\nfailed to change group of '{}' from {} to {}",
-                        out,
-                        path.display(),
-                        entries::gid2grp(meta.gid()).unwrap(),
-                        entries::gid2grp(dest_gid).unwrap()
-                    );
-                };
-            }
-        }
-        return Err(out);
-    } else {
-        let changed = dest_gid != meta.gid();
-        if changed {
-            match verbosity {
-                Changes | Verbose => {
-                    out = format!(
-                        "changed group of '{}' from {} to {}",
-                        path.display(),
-                        entries::gid2grp(meta.gid()).unwrap(),
-                        entries::gid2grp(dest_gid).unwrap()
-                    );
-                }
-                _ => (),
-            };
-        } else if verbosity == Verbose {
-            out = format!(
-                "group of '{}' retained as {}",
-                path.display(),
-                entries::gid2grp(dest_gid).unwrap_or_default()
-            );
-        }
-    }
-    Ok(out)
+#[derive(PartialEq, Clone, Debug)]
+pub struct Verbosity {
+    pub groups_only: bool,
+    pub level: VerbosityLevel,
 }
 
 /// Actually perform the change of owner on a path
@@ -129,27 +59,45 @@ pub fn wrap_chown<P: AsRef<Path>>(
     follow: bool,
     verbosity: Verbosity,
 ) -> Result<String, String> {
-    use self::Verbosity::*;
     let dest_uid = dest_uid.unwrap_or_else(|| meta.uid());
     let dest_gid = dest_gid.unwrap_or_else(|| meta.gid());
     let path = path.as_ref();
     let mut out: String = String::new();
 
     if let Err(e) = chown(path, dest_uid, dest_gid, follow) {
-        match verbosity {
-            Silent => (),
-            _ => {
-                out = format!("changing ownership of '{}': {}", path.display(), e);
-                if verbosity == Verbose {
-                    out = format!(
-                        "{}\nfailed to change ownership of '{}' from {}:{} to {}:{}",
-                        out,
-                        path.display(),
-                        entries::uid2usr(meta.uid()).unwrap(),
-                        entries::gid2grp(meta.gid()).unwrap(),
-                        entries::uid2usr(dest_uid).unwrap(),
-                        entries::gid2grp(dest_gid).unwrap()
-                    );
+        match verbosity.level {
+            VerbosityLevel::Silent => (),
+            level => {
+                out = format!(
+                    "changing {} of '{}': {}",
+                    if verbosity.groups_only {
+                        "group"
+                    } else {
+                        "ownership"
+                    },
+                    path.display(),
+                    e
+                );
+                if level == VerbosityLevel::Verbose {
+                    out = if verbosity.groups_only {
+                        format!(
+                            "{}\nfailed to change group of '{}' from {} to {}",
+                            out,
+                            path.display(),
+                            entries::gid2grp(meta.gid()).unwrap(),
+                            entries::gid2grp(dest_gid).unwrap()
+                        )
+                    } else {
+                        format!(
+                            "{}\nfailed to change ownership of '{}' from {}:{} to {}:{}",
+                            out,
+                            path.display(),
+                            entries::uid2usr(meta.uid()).unwrap(),
+                            entries::gid2grp(meta.gid()).unwrap(),
+                            entries::uid2usr(dest_uid).unwrap(),
+                            entries::gid2grp(dest_gid).unwrap()
+                        )
+                    };
                 };
             }
         }
@@ -157,26 +105,43 @@ pub fn wrap_chown<P: AsRef<Path>>(
     } else {
         let changed = dest_uid != meta.uid() || dest_gid != meta.gid();
         if changed {
-            match verbosity {
-                Changes | Verbose => {
-                    out = format!(
-                        "changed ownership of '{}' from {}:{} to {}:{}",
-                        path.display(),
-                        entries::uid2usr(meta.uid()).unwrap(),
-                        entries::gid2grp(meta.gid()).unwrap(),
-                        entries::uid2usr(dest_uid).unwrap(),
-                        entries::gid2grp(dest_gid).unwrap()
-                    );
+            match verbosity.level {
+                VerbosityLevel::Changes | VerbosityLevel::Verbose => {
+                    out = if verbosity.groups_only {
+                        format!(
+                            "changed group of '{}' from {} to {}",
+                            path.display(),
+                            entries::gid2grp(meta.gid()).unwrap(),
+                            entries::gid2grp(dest_gid).unwrap()
+                        )
+                    } else {
+                        format!(
+                            "changed ownership of '{}' from {}:{} to {}:{}",
+                            path.display(),
+                            entries::uid2usr(meta.uid()).unwrap(),
+                            entries::gid2grp(meta.gid()).unwrap(),
+                            entries::uid2usr(dest_uid).unwrap(),
+                            entries::gid2grp(dest_gid).unwrap()
+                        )
+                    };
                 }
                 _ => (),
             };
-        } else if verbosity == Verbose {
-            out = format!(
-                "ownership of '{}' retained as {}:{}",
-                path.display(),
-                entries::uid2usr(dest_uid).unwrap(),
-                entries::gid2grp(dest_gid).unwrap()
-            );
+        } else if verbosity.level == VerbosityLevel::Verbose {
+            out = if verbosity.groups_only {
+                format!(
+                    "group of '{}' retained as {}",
+                    path.display(),
+                    entries::gid2grp(dest_gid).unwrap_or_default()
+                )
+            } else {
+                format!(
+                    "ownership of '{}' retained as {}:{}",
+                    path.display(),
+                    entries::uid2usr(dest_uid).unwrap(),
+                    entries::gid2grp(dest_gid).unwrap()
+                )
+            };
         }
     }
     Ok(out)
