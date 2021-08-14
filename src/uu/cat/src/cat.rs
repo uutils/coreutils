@@ -396,7 +396,7 @@ fn cat_files(files: Vec<String>, options: &OutputOptions) -> UResult<()> {
         Ok(())
     } else {
         // each next line is expected to display "cat: …"
-        let line_joiner = format!("\n{}: ", executable!());
+        let line_joiner = format!("\n{}: ", util_name!());
 
         Err(uucore::error::USimpleError::new(
             error_messages.len() as i32,
