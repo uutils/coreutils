@@ -33,7 +33,7 @@ struct Options {
 }
 
 fn usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", execution_phrase!())
+    format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
@@ -57,7 +57,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help("If a FILE is -, it refers to a file named - .")

@@ -41,7 +41,7 @@ fn usage() -> String {
         "{0} [OPTION]... MODE[,MODE]... FILE...
 or: {0} [OPTION]... OCTAL-MODE FILE...
 or: {0} [OPTION]... --reference=RFILE FILE...",
-        execution_phrase!()
+        uucore::execution_phrase()
     )
 }
 
@@ -116,7 +116,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(

@@ -7,9 +7,6 @@
 
 /* last synced with: printenv (GNU coreutils) 8.13 */
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, App, Arg};
 use std::env;
 
@@ -20,7 +17,7 @@ static OPT_NULL: &str = "null";
 static ARG_VARIABLES: &str = "variables";
 
 fn usage() -> String {
-    format!("{0} [VARIABLE]... [OPTION]...", execution_phrase!())
+    format!("{0} [VARIABLE]... [OPTION]...", uucore::execution_phrase())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
@@ -55,7 +52,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(

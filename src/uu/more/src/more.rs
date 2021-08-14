@@ -93,7 +93,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .about("A file perusal filter for CRT viewing.")
         .version(crate_version!())
         .arg(

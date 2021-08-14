@@ -86,11 +86,13 @@ impl Display for InstallError {
         use InstallError as IE;
         match self {
             IE::Unimplemented(opt) => write!(f, "Unimplemented feature: {}", opt),
-            IE::DirNeedsArg() => write!(
-                f,
-                "{} with -d requires at least one argument.",
-                util_name!()
-            ),
+            IE::DirNeedsArg() => {
+                write!(
+                    f,
+                    "{} with -d requires at least one argument.",
+                    uucore::util_name()
+                )
+            }
             IE::CreateDirFailed(dir, e) => {
                 Display::fmt(&uio_error!(e, "failed to create {}", dir.display()), f)
             }
@@ -173,7 +175,7 @@ static OPT_CONTEXT: &str = "context";
 static ARG_FILES: &str = "files";
 
 fn usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", execution_phrase!())
+    format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
 }
 
 /// Main install utility function, called from main.rs.
@@ -202,7 +204,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(

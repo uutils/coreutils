@@ -21,7 +21,7 @@ mod options {
 }
 
 fn usage() -> String {
-    format!("{0} [OPTION] NAME...", execution_phrase!())
+    format!("{0} [OPTION] NAME...", uucore::execution_phrase())
 }
 
 fn get_long_usage() -> String {
@@ -86,7 +86,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .about(ABOUT)
         .version(crate_version!())
         .arg(

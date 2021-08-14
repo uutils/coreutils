@@ -396,7 +396,7 @@ fn usage() -> String {
     format!(
         "{0} [OPTION]... [FILE]...
     {0} [OPTION]... --files0-from=F",
-        execution_phrase!()
+        uucore::execution_phrase()
     )
 }
 
@@ -424,7 +424,7 @@ Valid arguments are:
 - 'iso'
 Try '{} --help' for more information.",
                 s,
-                execution_phrase!()
+                uucore::execution_phrase()
             ),
             DuError::InvalidTimeArg(s) => write!(
                 f,
@@ -466,7 +466,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let options = Options {
         all: matches.is_present(options::ALL),
-        util_name: util_name!(),
+        util_name: uucore::util_name(),
         max_depth,
         total: matches.is_present(options::TOTAL),
         separate_dirs: matches.is_present(options::SEPARATE_DIRS),
@@ -625,7 +625,7 @@ fn parse_depth(max_depth_str: Option<&str>, summarize: bool) -> UResult<Option<u
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(SUMMARY)
         .after_help(LONG_HELP)

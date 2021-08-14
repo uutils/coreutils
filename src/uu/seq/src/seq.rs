@@ -27,7 +27,7 @@ fn usage() -> String {
         "{0} [OPTION]... LAST
     {0} [OPTION]... FIRST LAST
     {0} [OPTION]... FIRST INCREMENT LAST",
-        execution_phrase!()
+        uucore::execution_phrase()
     )
 }
 #[derive(Clone)]
@@ -72,13 +72,13 @@ impl FromStr for Number {
                 Ok(value) if value.is_nan() => Err(format!(
                     "invalid 'not-a-number' argument: '{}'\nTry '{} --help' for more information.",
                     s,
-                    execution_phrase!(),
+                    uucore::execution_phrase(),
                 )),
                 Ok(value) => Ok(Number::F64(value)),
                 Err(_) => Err(format!(
                     "invalid floating point argument: '{}'\nTry '{} --help' for more information.",
                     s,
-                    execution_phrase!(),
+                    uucore::execution_phrase(),
                 )),
             },
         }
@@ -123,7 +123,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         show_error!(
             "invalid Zero increment value: '{}'\nTry '{} --help' for more information.",
             numbers[1],
-            execution_phrase!()
+            uucore::execution_phrase()
         );
         return 1;
     }
@@ -163,7 +163,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .setting(AppSettings::AllowLeadingHyphen)
         .version(crate_version!())
         .about(ABOUT)

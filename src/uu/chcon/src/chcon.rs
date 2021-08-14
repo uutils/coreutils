@@ -2,7 +2,7 @@
 
 #![allow(clippy::upper_case_acronyms)]
 
-use uucore::{execution_phrase, show_error, show_usage_error, show_warning, util_name};
+use uucore::{show_error, show_usage_error, show_warning};
 
 use clap::{App, Arg};
 use selinux::{OpaqueSecurityContext, SecurityContext};
@@ -56,7 +56,7 @@ fn get_usage() -> String {
         "{0} [OPTION]... CONTEXT FILE... \n    \
          {0} [OPTION]... [-u USER] [-r ROLE] [-l RANGE] [-t TYPE] FILE... \n    \
          {0} [OPTION]... --reference=RFILE FILE...",
-        execution_phrase!()
+        uucore::execution_phrase()
     )
 }
 
@@ -152,7 +152,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .version(VERSION)
         .about(ABOUT)
         .arg(
@@ -563,7 +563,7 @@ fn process_file(
         if options.verbose {
             println!(
                 "{}: Changing security context of: {}",
-                util_name!(),
+                uucore::util_name(),
                 file_full_name.to_string_lossy()
             );
         }

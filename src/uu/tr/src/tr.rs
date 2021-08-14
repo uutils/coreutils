@@ -229,7 +229,7 @@ fn translate_input<T: SymbolTranslator>(
 }
 
 fn usage() -> String {
-    format!("{} [OPTION]... SET1 [SET2]", execution_phrase!())
+    format!("{} [OPTION]... SET1 [SET2]", uucore::execution_phrase())
 }
 
 fn get_long_usage() -> String {
@@ -264,7 +264,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if sets.is_empty() {
         show_error!(
             "missing operand\nTry '{} --help' for more information.",
-            execution_phrase!()
+            uucore::execution_phrase()
         );
         return 1;
     }
@@ -273,7 +273,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         show_error!(
             "missing operand after '{}'\nTry '{} --help' for more information.",
             sets[0],
-            execution_phrase!()
+            uucore::execution_phrase()
         );
         return 1;
     }
@@ -312,7 +312,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(

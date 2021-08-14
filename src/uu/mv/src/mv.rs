@@ -63,7 +63,7 @@ fn usage() -> String {
         "{0} [OPTION]... [-T] SOURCE DEST
 {0} [OPTION]... SOURCE... DIRECTORY
 {0} [OPTION]... -t DIRECTORY SOURCE...",
-        execution_phrase!()
+        uucore::execution_phrase()
     )
 }
 
@@ -133,7 +133,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
     .arg(
@@ -296,7 +296,7 @@ fn exec(files: &[PathBuf], b: Behavior) -> i32 {
                     "mv: extra operand '{}'\n\
                      Try '{} --help' for more information.",
                     files[2].display(),
-                    execution_phrase!()
+                    uucore::execution_phrase()
                 );
                 return 1;
             }
@@ -353,7 +353,7 @@ fn rename(from: &Path, to: &Path, b: &Behavior) -> io::Result<()> {
         match b.overwrite {
             OverwriteMode::NoClobber => return Ok(()),
             OverwriteMode::Interactive => {
-                println!("{}: overwrite '{}'? ", util_name!(), to.display());
+                println!("{}: overwrite '{}'? ", uucore::util_name(), to.display());
                 if !read_yes() {
                     return Ok(());
                 }

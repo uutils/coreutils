@@ -35,7 +35,10 @@ static ARG_INPUT: &str = "input";
 static ARG_PREFIX: &str = "prefix";
 
 fn usage() -> String {
-    format!("{0} [OPTION]... [INPUT [PREFIX]]", execution_phrase!())
+    format!(
+        "{0} [OPTION]... [INPUT [PREFIX]]",
+        uucore::execution_phrase()
+    )
 }
 fn get_long_usage() -> String {
     format!(
@@ -125,7 +128,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about("Create output files containing consecutive or interleaved sections of input")
         // strategy (mutually exclusive)

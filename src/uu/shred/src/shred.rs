@@ -214,7 +214,7 @@ for even very expensive hardware probing to recover the data.
 ";
 
 fn usage() -> String {
-    format!("{} [OPTION]... FILE...", execution_phrase!())
+    format!("{} [OPTION]... FILE...", uucore::execution_phrase())
 }
 
 static AFTER_HELP: &str =
@@ -330,7 +330,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(AFTER_HELP)

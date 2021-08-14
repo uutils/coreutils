@@ -23,7 +23,7 @@ static ABOUT: &str = "Unlink the file at [FILE].";
 static OPT_PATH: &str = "FILE";
 
 fn usage() -> String {
-    format!("{} [OPTION]... FILE", execution_phrase!())
+    format!("{} [OPTION]... FILE", uucore::execution_phrase())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
@@ -44,13 +44,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         crash!(
             1,
             "missing operand\nTry '{0} --help' for more information.",
-            execution_phrase!()
+            uucore::execution_phrase()
         );
     } else if paths.len() > 1 {
         crash!(
             1,
             "extra operand: '{1}'\nTry '{0} --help' for more information.",
-            execution_phrase!(),
+            uucore::execution_phrase(),
             paths[1]
         );
     }
@@ -95,7 +95,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(Arg::with_name(OPT_PATH).hidden(true).multiple(true))

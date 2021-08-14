@@ -29,7 +29,7 @@ static ABOUT: &str = "Print group memberships for each USERNAME or, \
                       (which may differ if the groups data‐base has changed).";
 
 fn usage() -> String {
-    format!("{0} [OPTION]... [USERNAME]...", execution_phrase!())
+    format!("{0} [OPTION]... [USERNAME]...", uucore::execution_phrase())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
@@ -85,7 +85,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(

@@ -9,7 +9,7 @@ use clap::{crate_version, App, Arg};
 use std::convert::TryFrom;
 use std::ffi::OsString;
 use std::io::{self, ErrorKind, Read, Seek, SeekFrom, Write};
-use uucore::{crash, show_error_custom_description, util_name};
+use uucore::{crash, show_error_custom_description};
 
 const EXIT_FAILURE: i32 = 1;
 const EXIT_SUCCESS: i32 = 0;
@@ -41,7 +41,7 @@ use lines::zlines;
 use take::take_all_but;
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .usage(USAGE)

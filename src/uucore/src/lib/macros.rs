@@ -10,67 +10,14 @@ use std::sync::atomic::AtomicBool;
 /// Whether we were called as a multicall binary ("coreutils <utility>")
 pub static UTILITY_IS_SECOND_ARG: AtomicBool = AtomicBool::new(false);
 
-/// Get the executable path (as `OsString`).
-#[macro_export]
-macro_rules! executable_os(
-    () => ({
-        $crate::args_os().next().unwrap()
-    })
-);
-
-/// Get the executable path (as `String`).
-#[macro_export]
-#[deprecated = "Use util_name!() or execution_phrase!() instead"]
-macro_rules! executable(
-    () => ({
-        $crate::executable_os!().to_string_lossy().to_string()
-    })
-);
-
-/// Derive the utility name.
-#[macro_export]
-macro_rules! util_name(
-    () => ({
-        if $crate::get_utility_is_second_arg() {
-            $crate::args_os().nth(1).unwrap().to_string_lossy().to_string()
-        } else {
-            #[allow(deprecated)]
-            {
-                $crate::executable!()
-            }
-        }
-    })
-);
-
-//====
-
-/// Derive the complete execution phrase for "usage".
-#[macro_export]
-macro_rules! execution_phrase(
-    () => ({
-        if $crate::get_utility_is_second_arg() {
-            $crate::args_os()
-            .take(2)
-            .map(|os_str| os_str.to_string_lossy().to_string())
-            .collect::<Vec<_>>()
-            .join(" ")
-        } else {
-            #[allow(deprecated)]
-            {
-                $crate::executable!()
-            }
-        }
-    })
-);
-
 //====
 
 #[macro_export]
 macro_rules! show(
     ($err:expr) => ({
         let e = $err;
-        uucore::error::set_exit_code(e.code());
-        eprintln!("{}: {}", $crate::util_name!(), e);
+        $crate::error::set_exit_code(e.code());
+        eprintln!("{}: {}", $crate::util_name(), e);
     })
 );
 
@@ -87,7 +34,7 @@ macro_rules! show_if_err(
 #[macro_export]
 macro_rules! show_error(
     ($($args:tt)+) => ({
-        eprint!("{}: ", $crate::util_name!());
+        eprint!("{}: ", $crate::util_name());
         eprintln!($($args)+);
     })
 );
@@ -96,7 +43,7 @@ macro_rules! show_error(
 #[macro_export]
 macro_rules! show_error_custom_description (
     ($err:expr,$($args:tt)+) => ({
-        eprint!("{}: {}: ", $crate::util_name!(), $err);
+        eprint!("{}: {}: ", $crate::util_name(), $err);
         eprintln!($($args)+);
     })
 );
@@ -104,7 +51,7 @@ macro_rules! show_error_custom_description (
 #[macro_export]
 macro_rules! show_warning(
     ($($args:tt)+) => ({
-        eprint!("{}: warning: ", $crate::util_name!());
+        eprint!("{}: warning: ", $crate::util_name());
         eprintln!($($args)+);
     })
 );
@@ -113,9 +60,9 @@ macro_rules! show_warning(
 #[macro_export]
 macro_rules! show_usage_error(
     ($($args:tt)+) => ({
-        eprint!("{}: ", $crate::util_name!());
+        eprint!("{}: ", $crate::util_name());
         eprintln!($($args)+);
-        eprintln!("Try '{} --help' for more information.", $crate::execution_phrase!());
+        eprintln!("Try '{} --help' for more information.", $crate::execution_phrase());
     })
 );
 

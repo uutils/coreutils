@@ -29,7 +29,7 @@ const OPT_ZERO: &str = "zero";
 const ARG_FILES: &str = "files";
 
 fn usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", execution_phrase!())
+    format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
@@ -59,14 +59,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         crash!(
             1,
             "missing operand\nTry '{} --help' for more information",
-            execution_phrase!()
+            uucore::execution_phrase()
         );
     }
 
     if no_newline && files.len() > 1 && !silent {
         eprintln!(
             "{}: ignoring --no-newline with multiple arguments",
-            util_name!()
+            uucore::util_name()
         );
         no_newline = false;
     }
@@ -80,7 +80,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     if verbose {
                         eprintln!(
                             "{}: {}: errno {}",
-                            util_name!(),
+                            uucore::util_name(),
                             f,
                             err.raw_os_error().unwrap()
                         );
@@ -95,7 +95,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     if verbose {
                         eprintln!(
                             "{}: {}: errno {:?}",
-                            util_name!(),
+                            uucore::util_name(),
                             f,
                             err.raw_os_error().unwrap()
                         );
@@ -110,7 +110,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(

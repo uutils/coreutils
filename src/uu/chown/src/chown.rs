@@ -64,7 +64,7 @@ const FTS_LOGICAL: u8 = 1 << 2;
 fn usage() -> String {
     format!(
         "{0} [OPTION]... [OWNER][:[GROUP]] FILE...\n{0} [OPTION]... --reference=RFILE FILE...",
-        execution_phrase!()
+        uucore::execution_phrase()
     )
 }
 
@@ -165,7 +165,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(

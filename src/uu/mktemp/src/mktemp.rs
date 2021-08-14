@@ -37,7 +37,7 @@ static OPT_T: &str = "t";
 static ARG_TEMPLATE: &str = "template";
 
 fn usage() -> String {
-    format!("{0} [OPTION]... [TEMPLATE]", execution_phrase!())
+    format!("{0} [OPTION]... [TEMPLATE]", uucore::execution_phrase())
 }
 
 #[derive(Debug)]
@@ -134,7 +134,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(

@@ -87,6 +87,38 @@ pub fn set_utility_is_second_arg() {
     crate::macros::UTILITY_IS_SECOND_ARG.store(true, Ordering::SeqCst)
 }
 
+/// Get the executable path (as `OsString`).
+fn executable_os() -> OsString {
+    args_os().next().unwrap()
+}
+
+/// Get the executable path (as `String`).
+fn executable() -> String {
+    executable_os().to_string_lossy().into_owned()
+}
+
+/// Derive the utility name.
+pub fn util_name() -> String {
+    if get_utility_is_second_arg() {
+        args_os().nth(1).unwrap().to_string_lossy().into_owned()
+    } else {
+        executable()
+    }
+}
+
+/// Derive the complete execution phrase for "usage".
+pub fn execution_phrase() -> String {
+    if get_utility_is_second_arg() {
+        args_os()
+            .take(2)
+            .map(|os_str| os_str.to_string_lossy().into_owned())
+            .collect::<Vec<_>>()
+            .join(" ")
+    } else {
+        executable()
+    }
+}
+
 pub enum InvalidEncodingHandling {
     Ignore,
     ConvertLossy,

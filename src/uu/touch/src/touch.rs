@@ -48,7 +48,7 @@ fn local_tm_to_filetime(tm: time::Tm) -> FileTime {
 }
 
 fn usage() -> String {
-    format!("{0} [OPTION]... [USER]", execution_phrase!())
+    format!("{0} [OPTION]... [USER]", uucore::execution_phrase())
 }
 
 #[uucore_procs::gen_uumain]
@@ -129,7 +129,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(

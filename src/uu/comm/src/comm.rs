@@ -7,9 +7,6 @@
 
 // spell-checker:ignore (ToDO) delim mkdelim
 
-#[macro_use]
-extern crate uucore;
-
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{self, stdin, BufRead, BufReader, Stdin};
@@ -32,7 +29,7 @@ mod options {
 }
 
 fn usage() -> String {
-    format!("{} [OPTION]... FILE1 FILE2", execution_phrase!())
+    format!("{} [OPTION]... FILE1 FILE2", uucore::execution_phrase())
 }
 
 fn mkdelim(col: usize, opts: &ArgMatches) -> String {
@@ -148,7 +145,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)

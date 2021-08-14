@@ -71,8 +71,8 @@ fn _mknod(file_name: &str, mode: mode_t, dev: dev_t) -> i32 {
         }
 
         if errno == -1 {
-            let c_str =
-                CString::new(execution_phrase!().as_bytes()).expect("Failed to convert to CString");
+            let c_str = CString::new(uucore::execution_phrase().as_bytes())
+                .expect("Failed to convert to CString");
             // shows the error from the mknod syscall
             libc::perror(c_str.as_ptr());
         }
@@ -113,7 +113,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if ch == 'p' {
         if matches.is_present("major") || matches.is_present("minor") {
             eprintln!("Fifos do not have major and minor device numbers.");
-            eprintln!("Try '{} --help' for more information.", execution_phrase!());
+            eprintln!(
+                "Try '{} --help' for more information.",
+                uucore::execution_phrase()
+            );
             1
         } else {
             _mknod(file_name, S_IFIFO | mode, 0)
@@ -122,7 +125,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         match (matches.value_of("major"), matches.value_of("minor")) {
             (None, None) | (_, None) | (None, _) => {
                 eprintln!("Special files require major and minor device numbers.");
-                eprintln!("Try '{} --help' for more information.", execution_phrase!());
+                eprintln!(
+                    "Try '{} --help' for more information.",
+                    uucore::execution_phrase()
+                );
                 1
             }
             (Some(major), Some(minor)) => {
@@ -145,7 +151,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .usage(USAGE)
         .after_help(LONG_HELP)

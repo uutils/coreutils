@@ -47,7 +47,7 @@ use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 use uucore::{fs::display_permissions, version_cmp::version_cmp};
 
 fn usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", execution_phrase!())
+    format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
 }
 
 pub mod options {
@@ -618,7 +618,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(
             "By default, ls will list the files and contents of any directories on \

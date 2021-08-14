@@ -35,7 +35,7 @@ pub fn absolute_path(path: &Path) -> io::Result<PathBuf> {
 }
 
 fn usage() -> String {
-    format!("{0} [OPTION]... FILE...", execution_phrase!())
+    format!("{0} [OPTION]... FILE...", uucore::execution_phrase())
 }
 
 #[uucore_procs::gen_uumain]
@@ -66,7 +66,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(

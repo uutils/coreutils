@@ -39,7 +39,7 @@ const POSIX_PATH_MAX: usize = 256;
 const POSIX_NAME_MAX: usize = 14;
 
 fn usage() -> String {
-    format!("{0} [OPTION]... NAME...", execution_phrase!())
+    format!("{0} [OPTION]... NAME...", uucore::execution_phrase())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
@@ -70,7 +70,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let mut res = if paths.is_none() {
         show_error!(
             "missing operand\nTry '{} --help' for more information",
-            execution_phrase!()
+            uucore::execution_phrase()
         );
         false
     } else {
@@ -98,7 +98,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(

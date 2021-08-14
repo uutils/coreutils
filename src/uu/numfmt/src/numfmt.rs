@@ -51,7 +51,7 @@ Multiple fields/ranges can be separated with commas
 ";
 
 fn usage() -> String {
-    format!("{0} [OPTION]... [NUMBER]...", execution_phrase!())
+    format!("{0} [OPTION]... [NUMBER]...", uucore::execution_phrase())
 }
 
 fn handle_args<'a>(args: impl Iterator<Item = &'a str>, options: NumfmtOptions) -> Result<()> {
@@ -175,7 +175,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)

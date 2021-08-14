@@ -50,7 +50,7 @@ const HOST_OS: &str = "Fuchsia";
 const HOST_OS: &str = "Redox";
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = format!("{} [OPTION]...", execution_phrase!());
+    let usage = format!("{} [OPTION]...", uucore::execution_phrase());
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     let uname = return_if_err!(1, PlatformInfo::new());
@@ -119,7 +119,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(Arg::with_name(options::ALL)

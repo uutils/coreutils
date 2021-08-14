@@ -45,7 +45,10 @@ static RUNLEVEL_HELP: &str = "print current runlevel";
 static RUNLEVEL_HELP: &str = "print current runlevel (This is meaningless on non Linux)";
 
 fn usage() -> String {
-    format!("{0} [OPTION]... [ FILE | ARG1 ARG2 ]", execution_phrase!())
+    format!(
+        "{0} [OPTION]... [ FILE | ARG1 ARG2 ]",
+        uucore::execution_phrase()
+    )
 }
 
 fn get_long_usage() -> String {
@@ -160,7 +163,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(

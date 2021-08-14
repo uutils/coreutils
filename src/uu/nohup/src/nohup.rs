@@ -71,7 +71,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)
@@ -157,7 +157,10 @@ fn find_stdout() -> File {
 }
 
 fn usage() -> String {
-    format!("{0} COMMAND [ARG]...\n    {0} FLAG", execution_phrase!())
+    format!(
+        "{0} COMMAND [ARG]...\n    {0} FLAG",
+        uucore::execution_phrase()
+    )
 }
 
 #[cfg(target_vendor = "apple")]

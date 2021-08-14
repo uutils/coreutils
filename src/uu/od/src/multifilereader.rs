@@ -57,7 +57,7 @@ impl<'b> MultifileReader<'b> {
                             // print an error at the time that the file is needed,
                             // then move on the the next file.
                             // This matches the behavior of the original `od`
-                            eprintln!("{}: '{}': {}", util_name!(), fname, e);
+                            eprintln!("{}: '{}': {}", uucore::util_name(), fname, e);
                             self.any_err = true
                         }
                     }
@@ -90,7 +90,7 @@ impl<'b> io::Read for MultifileReader<'b> {
                             Ok(0) => break,
                             Ok(n) => n,
                             Err(e) => {
-                                eprintln!("{}: I/O: {}", util_name!(), e);
+                                eprintln!("{}: I/O: {}", uucore::util_name(), e);
                                 self.any_err = true;
                                 break;
                             }

@@ -99,7 +99,7 @@ quick_error! {
         NotImplemented(opt: String) { display("Option '{}' not yet implemented.", opt) }
 
         /// Invalid arguments to backup
-        Backup(description: String) { display("{}\nTry '{} --help' for more information.", description, execution_phrase!()) }
+        Backup(description: String) { display("{}\nTry '{} --help' for more information.", description, uucore::execution_phrase()) }
     }
 }
 
@@ -223,7 +223,7 @@ fn usage() -> String {
         "{0} [OPTION]... [-T] SOURCE DEST
     {0} [OPTION]... SOURCE... DIRECTORY
     {0} [OPTION]... -t DIRECTORY SOURCE...",
-        execution_phrase!()
+        uucore::execution_phrase()
     )
 }
 
@@ -293,7 +293,7 @@ static DEFAULT_ATTRIBUTES: &[Attribute] = &[
 ];
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(Arg::with_name(options::TARGET_DIRECTORY)
@@ -1060,7 +1060,7 @@ impl OverwriteMode {
         match *self {
             OverwriteMode::NoClobber => Err(Error::NotAllFilesCopied),
             OverwriteMode::Interactive(_) => {
-                if prompt_yes!("{}: overwrite {}? ", util_name!(), path.display()) {
+                if prompt_yes!("{}: overwrite {}? ", uucore::util_name(), path.display()) {
                     Ok(())
                 } else {
                     Err(Error::Skipped(format!(

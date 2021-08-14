@@ -18,7 +18,7 @@ const VERSION: &str = "version";
 const HELP: &str = "help";
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .arg(Arg::with_name(VERSION).long(VERSION))
         .arg(Arg::with_name(HELP).long(HELP))
 }
@@ -140,5 +140,5 @@ Environment variables:
 }
 
 fn print_version() {
-    println!("{} {}", util_name!(), crate_version!());
+    println!("{} {}", uucore::util_name(), crate_version!());
 }

@@ -29,7 +29,7 @@ mod options {
 fn usage() -> String {
     format!(
         "{0} {1}[SUFFIX]... \n    {0} OPTION",
-        execution_phrase!(),
+        uucore::execution_phrase(),
         options::NUMBER
     )
 }
@@ -49,7 +49,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)

@@ -99,7 +99,7 @@ fn usage() -> String {
     format!(
         "{0} [OPTION]... [FILE]...
  With no FILE, or when FILE is -, read standard input.",
-        execution_phrase!()
+        uucore::execution_phrase()
     )
 }
 
@@ -164,7 +164,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(

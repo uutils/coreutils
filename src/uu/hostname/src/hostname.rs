@@ -54,7 +54,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 fn usage() -> String {
-    format!("{0} [OPTION]... [HOSTNAME]", execution_phrase!())
+    format!("{0} [OPTION]... [HOSTNAME]", uucore::execution_phrase())
 }
 
 fn execute(args: impl uucore::Args) -> UResult<()> {
@@ -74,7 +74,7 @@ fn execute(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(

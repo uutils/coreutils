@@ -9,9 +9,6 @@
 
 // spell-checker:ignore (ToDO) ttyname filedesc
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, App, Arg};
 use std::ffi::CStr;
 use std::io::Write;
@@ -24,7 +21,7 @@ mod options {
 }
 
 fn usage() -> String {
-    format!("{0} [OPTION]...", execution_phrase!())
+    format!("{0} [OPTION]...", uucore::execution_phrase())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
@@ -78,7 +75,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(

@@ -14,7 +14,6 @@ use clap::{crate_version, App, AppSettings};
 use parser::{parse, Symbol};
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
-use uucore::util_name;
 
 const USAGE: &str = "test EXPRESSION
 or:  test
@@ -87,7 +86,7 @@ the version described here.  Please refer to your shell's documentation
 for details about the options it supports.";
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(util_name!())
+    App::new(uucore::util_name())
         .setting(AppSettings::DisableHelpFlags)
         .setting(AppSettings::DisableVersion)
 }
