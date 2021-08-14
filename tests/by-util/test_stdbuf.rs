@@ -59,7 +59,7 @@ fn test_stdbuf_line_buffering_stdin_fails() {
         .args(&["-i", "L", "head"])
         .fails()
         .stderr_is(&format!(
-            "{0}: line buffering stdin is meaningless\nTry `{1} {0} --help` for more information.",
+            "{0}: line buffering stdin is meaningless\nTry '{1} {0} --help' for more information.",
             ts.util_name,
             ts.bin_path.to_string_lossy()
         ));

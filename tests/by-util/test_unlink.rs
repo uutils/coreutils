@@ -24,7 +24,7 @@ fn test_unlink_multiple_files() {
     at.touch(file_b);
 
     ucmd.arg(file_a).arg(file_b).fails().stderr_is(&format!(
-        "{0}: extra operand: 'test_unlink_multiple_file_b'\nTry `{1} {0} --help` for more information.",
+        "{0}: extra operand: 'test_unlink_multiple_file_b'\nTry '{1} {0} --help' for more information.",
         ts.util_name,
         ts.bin_path.to_string_lossy()
     ));

@@ -159,7 +159,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let options = ProgramOptions::try_from(&matches).unwrap_or_else(|e| {
         crash!(
             125,
-            "{}\nTry `{} --help` for more information.",
+            "{}\nTry '{} --help' for more information.",
             e.0,
             execution_phrase!()
         )

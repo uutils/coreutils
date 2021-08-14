@@ -5,7 +5,7 @@ fn test_rejects_nan() {
     let ts = TestScenario::new(util_name!());
 
     ts.ucmd().args(&["NaN"]).fails().stderr_only(format!(
-        "{0}: invalid 'not-a-number' argument: 'NaN'\nTry `{1} {0} --help` for more information.",
+        "{0}: invalid 'not-a-number' argument: 'NaN'\nTry '{1} {0} --help' for more information.",
         ts.util_name,
         ts.bin_path.to_string_lossy()
     ));
@@ -16,7 +16,7 @@ fn test_rejects_non_floats() {
     let ts = TestScenario::new(util_name!());
 
     ts.ucmd().args(&["foo"]).fails().stderr_only(&format!(
-        "{0}: invalid floating point argument: 'foo'\nTry `{1} {0} --help` for more information.",
+        "{0}: invalid floating point argument: 'foo'\nTry '{1} {0} --help' for more information.",
         ts.util_name,
         ts.bin_path.to_string_lossy()
     ));

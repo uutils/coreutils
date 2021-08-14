@@ -58,7 +58,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if files.is_empty() {
         crash!(
             1,
-            "missing operand\nTry `{} --help` for more information",
+            "missing operand\nTry '{} --help' for more information",
             execution_phrase!()
         );
     }

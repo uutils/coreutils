@@ -568,7 +568,7 @@ fn test_cp_backup_no_clobber_conflicting_options() {
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_HOW_ARE_YOU_SOURCE)
         .fails().stderr_is(&format!(
-            "{0}: options --backup and --no-clobber are mutually exclusive\nTry `{1} {0} --help` for more information.",
+            "{0}: options --backup and --no-clobber are mutually exclusive\nTry '{1} {0} --help' for more information.",
             ts.util_name,
             ts.bin_path.to_string_lossy()
         ));

@@ -116,7 +116,7 @@ fn test_no_args() {
 fn test_no_args_output() {
     let ts = TestScenario::new(util_name!());
     ts.ucmd().fails().stderr_is(&format!(
-        "{0}: missing operand\nTry `{1} {0} --help` for more information.",
+        "{0}: missing operand\nTry '{1} {0} --help' for more information.",
         ts.util_name,
         ts.bin_path.to_string_lossy()
     ));
@@ -131,7 +131,7 @@ fn test_too_many_args() {
 fn test_too_many_args_output() {
     let ts = TestScenario::new(util_name!());
     ts.ucmd().args(&["a", "b", "c"]).fails().stderr_is(format!(
-        "{0}: extra operand 'c'\nTry `{1} {0} --help` for more information.",
+        "{0}: extra operand 'c'\nTry '{1} {0} --help' for more information.",
         ts.util_name,
         ts.bin_path.to_string_lossy()
     ));

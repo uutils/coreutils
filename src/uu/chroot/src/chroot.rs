@@ -45,7 +45,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         Some(v) => Path::new(v),
         None => crash!(
             1,
-            "Missing operand: NEWROOT\nTry `{} --help` for more information.",
+            "Missing operand: NEWROOT\nTry '{} --help' for more information.",
             execution_phrase!()
         ),
     };

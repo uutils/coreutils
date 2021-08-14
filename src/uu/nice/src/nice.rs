@@ -53,7 +53,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         Some(nstr) => {
             if !matches.is_present(options::COMMAND) {
                 show_error!(
-                    "A command must be given with an adjustment.\nTry `{} --help` for more information.",
+                    "A command must be given with an adjustment.\nTry '{} --help' for more information.",
                     execution_phrase!()
                 );
                 return 125;

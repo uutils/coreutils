@@ -294,7 +294,7 @@ fn exec(files: &[PathBuf], b: Behavior) -> i32 {
             if b.no_target_dir {
                 show_error!(
                     "mv: extra operand '{}'\n\
-                     Try `{} --help` for more information.",
+                     Try '{} --help' for more information.",
                     files[2].display(),
                     execution_phrase!()
                 );

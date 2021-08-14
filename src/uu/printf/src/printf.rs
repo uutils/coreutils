@@ -283,7 +283,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     if args.len() <= 1 {
         println!(
-            "{0}: missing operand\nTry `{1} --help` for more information.",
+            "{0}: missing operand\nTry '{1} --help' for more information.",
             util_name!(),
             execution_phrase!()
         );

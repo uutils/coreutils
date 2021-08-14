@@ -68,7 +68,7 @@ impl Display for LnError {
             }
             Self::ExtraOperand(s) => write!(
                 f,
-                "extra operand '{}'\nTry `{} --help` for more information.",
+                "extra operand '{}'\nTry '{} --help' for more information.",
                 s,
                 execution_phrase!()
             ),

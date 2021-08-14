@@ -529,7 +529,7 @@ fn test_mv_backup_no_clobber_conflicting_options() {
         .arg("file1")
         .arg("file2")
         .fails()
-        .stderr_is(&format!("{0}: options --backup and --no-clobber are mutually exclusive\nTry `{1} {0} --help` for more information.",
+        .stderr_is(&format!("{0}: options --backup and --no-clobber are mutually exclusive\nTry '{1} {0} --help' for more information.",
             ts.util_name,
             ts.bin_path.to_string_lossy()
         ));

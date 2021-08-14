@@ -104,7 +104,7 @@ pub fn gen_uumain(_args: TokenStream, stream: TokenStream) -> TokenStream {
                         show_error!("{}", s);
                     }
                     if e.usage() {
-                        eprintln!("Try `{} --help` for more information.", execution_phrase!());
+                        eprintln!("Try '{} --help' for more information.", execution_phrase!());
                     }
                     e.code()
                 }

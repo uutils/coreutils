@@ -19,7 +19,7 @@ fn test_more_dir_arg() {
         let result = ts.ucmd().arg(".").run();
         result.failure();
         let expected_error_message = &format!(
-            "{0}: '.' is a directory.\nTry `{1} {0} --help` for more information.",
+            "{0}: '.' is a directory.\nTry '{1} {0} --help' for more information.",
             ts.util_name,
             ts.bin_path.to_string_lossy()
         );
