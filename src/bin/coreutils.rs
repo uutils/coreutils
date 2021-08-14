@@ -70,6 +70,7 @@ fn main() {
         Some(OsString::from(*util))
     } else {
         // unmatched binary name => regard as multi-binary container and advance argument list
+        uucore::set_utility_is_second_arg();
         args.next()
     };
 

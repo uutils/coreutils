@@ -77,6 +77,15 @@ pub use crate::features::wide;
 //## core functions
 
 use std::ffi::OsString;
+use std::sync::atomic::Ordering;
+
+pub fn get_utility_is_second_arg() -> bool {
+    crate::macros::UTILITY_IS_SECOND_ARG.load(Ordering::SeqCst)
+}
+
+pub fn set_utility_is_second_arg() {
+    crate::macros::UTILITY_IS_SECOND_ARG.store(true, Ordering::SeqCst)
+}
 
 pub enum InvalidEncodingHandling {
     Ignore,

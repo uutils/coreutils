@@ -38,7 +38,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = usage();
     let name = util_name!();
     let config_result: Result<base_common::Config, String> =
-        base_common::parse_base_cmd_args(args, name, VERSION, ABOUT, &usage);
+        base_common::parse_base_cmd_args(args, &name, VERSION, ABOUT, &usage);
     let config = config_result.unwrap_or_else(|s| crash!(BASE_CMD_PARSE_ERROR, "{}", s));
 
     // Create a reference to stdin so we can return a locked stdin from
@@ -52,7 +52,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         config.wrap_cols,
         config.ignore_garbage,
         config.decode,
-        name,
+        &name,
     );
 
     0

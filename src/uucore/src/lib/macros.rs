@@ -1,3 +1,5 @@
+use std::sync::atomic::AtomicBool;
+
 // This file is part of the uutils coreutils package.
 //
 // (c) Alex Lyon <arcterus@mail.com>
@@ -5,40 +7,22 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+/// Whether we were called as a multicall binary ("coreutils <utility>")
+pub static UTILITY_IS_SECOND_ARG: AtomicBool = AtomicBool::new(false);
+
 /// Get the executable path (as `OsString`).
 #[macro_export]
 macro_rules! executable_os(
     () => ({
-        &uucore::args_os().next().unwrap()
+        $crate::args_os().next().unwrap()
     })
 );
 
-/// Get the executable path (as `String`; lossless).
+/// Get the executable path (as `String`).
 #[macro_export]
 macro_rules! executable(
     () => ({
-        let exe = match $crate::executable_os!().to_str() {
-            // * UTF-8
-            Some(s) => s.to_string(),
-            // * "lossless" debug format (if/when `executable_os!()` is not well-formed UTF-8)
-            None => format!("{:?}", $crate::executable_os!())
-        };
-        &exe.to_owned()
-    })
-);
-
-/// Get the executable name.
-#[macro_export]
-macro_rules! executable_name(
-    () => ({
-        let stem = &std::path::Path::new($crate::executable_os!()).file_stem().unwrap().to_owned();
-        let exe = match stem.to_str() {
-            // * UTF-8
-            Some(s) => s.to_string(),
-            // * "lossless" debug format (if/when `executable_os!()` is not well-formed UTF-8)
-            None => format!("{:?}", stem)
-        };
-        &exe.to_owned()
+        $crate::executable_os!().to_string_lossy().to_string()
     })
 );
 
@@ -46,13 +30,11 @@ macro_rules! executable_name(
 #[macro_export]
 macro_rules! util_name(
     () => ({
-        let crate_name = env!("CARGO_PKG_NAME");
-        let name = if crate_name.starts_with("uu_") {
-            &crate_name[3..]
+        if $crate::get_utility_is_second_arg() {
+            $crate::args_os().nth(1).unwrap().to_string_lossy().to_string()
         } else {
-            crate_name
-        };
-        &name.to_owned()
+            $crate::executable!()
+        }
     })
 );
 
@@ -62,14 +44,15 @@ macro_rules! util_name(
 #[macro_export]
 macro_rules! execution_phrase(
     () => ({
-        let exe = if (executable_name!() == util_name!()) {
-        executable!().to_string()
-    } else {
-        format!("{} {}", executable!(), util_name!())
-            .as_str()
-            .to_owned()
-    };
-    &exe.to_owned()
+        if $crate::get_utility_is_second_arg() {
+            $crate::args_os()
+            .take(2)
+            .map(|os_str| os_str.to_string_lossy().to_string())
+            .collect::<Vec<_>>()
+            .join(" ")
+        } else {
+            $crate::executable!()
+        }
     })
 );
 
