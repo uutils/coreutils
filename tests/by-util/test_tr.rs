@@ -892,6 +892,7 @@ fn check_against_gnu_tr_tests_bs_055() {
 }
 
 #[test]
+#[ignore = "Failing in Windows because it will not separate '\' and 'x' as separate arguments"]
 fn check_against_gnu_tr_tests_bs_at_end() {
     // ['bs-at-end', qw('\\' x), {IN=>"\\"}, {OUT=>'x'},
     //  {ERR=>"$prog: warning: an unescaped backslash at end of "
