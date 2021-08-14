@@ -20,6 +20,7 @@ macro_rules! executable_os(
 
 /// Get the executable path (as `String`).
 #[macro_export]
+#[deprecated = "Use util_name!() or execution_phrase!() instead"]
 macro_rules! executable(
     () => ({
         $crate::executable_os!().to_string_lossy().to_string()
@@ -33,7 +34,10 @@ macro_rules! util_name(
         if $crate::get_utility_is_second_arg() {
             $crate::args_os().nth(1).unwrap().to_string_lossy().to_string()
         } else {
-            $crate::executable!()
+            #[allow(deprecated)]
+            {
+                $crate::executable!()
+            }
         }
     })
 );
@@ -51,7 +55,10 @@ macro_rules! execution_phrase(
             .collect::<Vec<_>>()
             .join(" ")
         } else {
-            $crate::executable!()
+            #[allow(deprecated)]
+            {
+                $crate::executable!()
+            }
         }
     })
 );
