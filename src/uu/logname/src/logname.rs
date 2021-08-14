@@ -36,7 +36,7 @@ fn get_userlogin() -> Option<String> {
 static SUMMARY: &str = "Print user's login name";
 
 fn usage() -> String {
-    execution_phrase!().to_string()
+    execution_phrase!()
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
