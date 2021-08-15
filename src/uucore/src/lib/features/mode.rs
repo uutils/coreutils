@@ -11,19 +11,21 @@ use libc::{mode_t, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
 
 pub fn parse_numeric(fperm: u32, mut mode: &str) -> Result<u32, String> {
     let (op, pos) = parse_op(mode, Some('='))?;
-    mode = mode[pos..].trim().trim_start_matches('0');
-    if mode.len() > 4 {
-        Err(format!("mode is too large ({} > 7777)", mode))
-    } else {
-        match u32::from_str_radix(mode, 8) {
-            Ok(change) => Ok(match op {
-                '+' => fperm | change,
-                '-' => fperm & !change,
-                '=' => change,
-                _ => unreachable!(),
-            }),
-            Err(err) => Err(err.to_string()),
+    mode = mode[pos..].trim();
+    match u32::from_str_radix(mode, 8) {
+        Ok(change) => {
+            if change > 0o7777 {
+                Err(format!("mode is too large ({} > 7777", mode))
+            } else {
+                Ok(match op {
+                    '+' => fperm | change,
+                    '-' => fperm & !change,
+                    '=' => change,
+                    _ => unreachable!(),
+                })
+            }
         }
+        Err(err) => Err(err.to_string()),
     }
 }
 
