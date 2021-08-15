@@ -323,7 +323,7 @@ impl Chmoder {
             }
             if self.verbose {
                 show_error!(
-                    "failed to change mode of file '{}' from {:o} ({}) to {:o} ({})",
+                    "failed to change mode of file '{}' from {:04o} ({}) to {:04o} ({})",
                     file.display(),
                     fperm,
                     display_permissions_unix(fperm as mode_t, false),
@@ -335,7 +335,7 @@ impl Chmoder {
         } else {
             if self.verbose || self.changes {
                 show_error!(
-                    "mode of '{}' changed from {:o} ({}) to {:o} ({})",
+                    "mode of '{}' changed from {:04o} ({}) to {:04o} ({})",
                     file.display(),
                     fperm,
                     display_permissions_unix(fperm as mode_t, false),
