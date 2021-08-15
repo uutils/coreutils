@@ -330,8 +330,8 @@ fn test_chmod_recursive() {
         .arg("a")
         .arg("z")
         .succeeds()
-        .stderr_contains(&"to 0333 (-wx-wx-wx)")
-        .stderr_contains(&"to 0222 (-w--w--w-)");
+        .stdout_contains(&"to 0333 (-wx-wx-wx)")
+        .stdout_contains(&"to 0222 (-w--w--w-)");
 
     assert_eq!(at.metadata("z/y").permissions().mode(), 0o100222);
     assert_eq!(at.metadata("a/a").permissions().mode(), 0o100222);

@@ -322,7 +322,7 @@ impl Chmoder {
                 show_error!("{}", err);
             }
             if self.verbose {
-                show_error!(
+                println!(
                     "failed to change mode of file '{}' from {:04o} ({}) to {:04o} ({})",
                     file.display(),
                     fperm,
@@ -334,7 +334,7 @@ impl Chmoder {
             Err(1)
         } else {
             if self.verbose || self.changes {
-                show_error!(
+                println!(
                     "mode of '{}' changed from {:04o} ({}) to {:04o} ({})",
                     file.display(),
                     fperm,
