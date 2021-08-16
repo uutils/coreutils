@@ -255,7 +255,9 @@ impl Chmoder {
     }
     #[cfg(any(unix, target_os = "redox"))]
     fn chmod_file(&self, file: &Path) -> Result<(), i32> {
-        let mut fperm = match fs::metadata(file) {
+        use uucore::mode::get_umask;
+
+        let fperm = match fs::metadata(file) {
             Ok(meta) => meta.mode() & 0o7777,
             Err(err) => {
                 if is_symlink(file) {
@@ -278,18 +280,30 @@ impl Chmoder {
             Some(mode) => self.change_file(fperm, mode, file)?,
             None => {
                 let cmode_unwrapped = self.cmode.clone().unwrap();
+                let mut new_mode = fperm;
+                let mut naively_expected_new_mode = new_mode;
                 for mode in cmode_unwrapped.split(',') {
                     // cmode is guaranteed to be Some in this case
                     let arr: &[char] = &['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
                     let result = if mode.contains(arr) {
-                        mode::parse_numeric(fperm, mode, file.is_dir())
+                        mode::parse_numeric(new_mode, mode, file.is_dir()).map(|v| (v, v))
                     } else {
-                        mode::parse_symbolic(fperm, mode, file.is_dir())
+                        mode::parse_symbolic(new_mode, mode, get_umask(), file.is_dir()).map(|m| {
+                            // calculate the new mode as if umask was 0
+                            let naive_mode = mode::parse_symbolic(
+                                naively_expected_new_mode,
+                                mode,
+                                0,
+                                file.is_dir(),
+                            )
+                            .unwrap(); // we know that mode must be valid, so this cannot fail
+                            (m, naive_mode)
+                        })
                     };
                     match result {
-                        Ok(mode) => {
-                            self.change_file(fperm, mode, file)?;
-                            fperm = mode;
+                        Ok((mode, naive_mode)) => {
+                            new_mode = mode;
+                            naively_expected_new_mode = naive_mode;
                         }
                         Err(f) => {
                             if !self.quiet {
@@ -298,6 +312,17 @@ impl Chmoder {
                             return Err(1);
                         }
                     }
+                }
+                self.change_file(fperm, new_mode, file)?;
+                // if a permission would have been removed if umask was 0, but it wasn't because umask was not 0, print an error and fail
+                if (new_mode & !naively_expected_new_mode) != 0 {
+                    show_error!(
+                        "{}: new permissions are {}, not {}",
+                        file.display(),
+                        display_permissions_unix(new_mode, false),
+                        display_permissions_unix(naively_expected_new_mode, false)
+                    );
+                    return Err(1);
                 }
             }
         }

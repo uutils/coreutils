@@ -18,6 +18,7 @@ use filetime::{set_file_times, FileTime};
 use uucore::backup_control::{self, BackupMode};
 use uucore::entries::{grp2gid, usr2uid};
 use uucore::error::{FromIo, UError, UIoError, UResult, USimpleError};
+use uucore::mode::get_umask;
 use uucore::perms::{wrap_chown, Verbosity, VerbosityLevel};
 
 use libc::{getegid, geteuid};
@@ -378,7 +379,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
 
     let specified_mode: Option<u32> = if matches.is_present(OPT_MODE) {
         let x = matches.value_of(OPT_MODE).ok_or(1)?;
-        Some(mode::parse(x, considering_dir).map_err(|err| {
+        Some(mode::parse(x, considering_dir, get_umask()).map_err(|err| {
             show_error!("Invalid mode string: {}", err);
             1
         })?)

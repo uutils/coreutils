@@ -202,17 +202,27 @@ fn test_chmod_ugoa() {
             after: 0o100755,
         },
         TestCase {
-            args: vec!["-w", TEST_FILE],
-            before: 0o100777,
-            after: 0o100577,
-        },
-        TestCase {
             args: vec!["-x", TEST_FILE],
             before: 0o100777,
             after: 0o100666,
         },
     ];
     run_tests(tests);
+
+    // check that we print an error if umask prevents us from removing a permission
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    set_permissions(at.plus("file"), Permissions::from_mode(0o777)).unwrap();
+    ucmd.args(&["-w", "file"])
+        .fails()
+        .code_is(1)
+        // spell-checker:disable-next-line
+        .stderr_is("chmod: file: new permissions are r-xrwxrwx, not r-xr-xr-x");
+    assert_eq!(
+        metadata(at.plus("file")).unwrap().permissions().mode(),
+        0o100577
+    );
+
     unsafe {
         umask(last);
     }

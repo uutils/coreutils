@@ -7,7 +7,7 @@
 
 // spell-checker:ignore (vars) fperm srwx
 
-use libc::{mode_t, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
+use libc::{mode_t, umask, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
 
 pub fn parse_numeric(fperm: u32, mut mode: &str, considering_dir: bool) -> Result<u32, String> {
     let (op, pos) = parse_op(mode).map_or_else(|_| (None, 0), |(op, pos)| (Some(op), pos));
@@ -35,24 +35,21 @@ pub fn parse_numeric(fperm: u32, mut mode: &str, considering_dir: bool) -> Resul
 pub fn parse_symbolic(
     mut fperm: u32,
     mut mode: &str,
+    umask: u32,
     considering_dir: bool,
 ) -> Result<u32, String> {
-    #[cfg(unix)]
-    use libc::umask;
-
     let (mask, pos) = parse_levels(mode);
     if pos == mode.len() {
         return Err(format!("invalid mode ({})", mode));
     }
     let respect_umask = pos == 0;
-    let last_umask = unsafe { umask(0) };
     mode = &mode[pos..];
     while !mode.is_empty() {
         let (op, pos) = parse_op(mode)?;
         mode = &mode[pos..];
         let (mut srwx, pos) = parse_change(mode, fperm, considering_dir);
         if respect_umask {
-            srwx &= !(last_umask as u32);
+            srwx &= !(umask as u32);
         }
         mode = &mode[pos..];
         match op {
@@ -67,9 +64,6 @@ pub fn parse_symbolic(
             }
             _ => unreachable!(),
         }
-    }
-    unsafe {
-        umask(last_umask);
     }
     Ok(fperm)
 }
@@ -141,9 +135,15 @@ pub fn parse_mode(mode: &str) -> Result<mode_t, String> {
     let result = if mode.contains(arr) {
         parse_numeric(fperm as u32, mode, true)
     } else {
-        parse_symbolic(fperm as u32, mode, true)
+        parse_symbolic(fperm as u32, mode, get_umask(), true)
     };
     result.map(|mode| mode as mode_t)
+}
+
+pub fn get_umask() -> u32 {
+    let mask = unsafe { umask(0) };
+    unsafe { umask(mask) };
+    mask
 }
 
 #[cfg(test)]
