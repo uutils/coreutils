@@ -9,7 +9,7 @@ pub fn parse(mode_string: &str, considering_dir: bool) -> Result<u32, String> {
 
     // Passing 000 as the existing permissions seems to mirror GNU behavior.
     if mode_string.contains(numbers) {
-        mode::parse_numeric(0, mode_string)
+        mode::parse_numeric(0, mode_string, considering_dir)
     } else {
         mode::parse_symbolic(0, mode_string, considering_dir)
     }

@@ -1,5 +1,5 @@
 use crate::common::util::*;
-use std::fs::{metadata, set_permissions, OpenOptions};
+use std::fs::{metadata, set_permissions, OpenOptions, Permissions};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::sync::Mutex;
 
@@ -488,5 +488,28 @@ fn test_chmod_strip_minus_from_mode() {
         let mut args: Vec<String> = test.0.split(' ').map(|v| v.to_string()).collect();
         let _mode_had_minus_prefix = strip_minus_from_mode(&mut args);
         assert_eq!(test.1, args.join(" "));
+    }
+}
+
+#[test]
+fn test_chmod_keep_setgid() {
+    for &(from, arg, to) in &[
+        (0o7777, "777", 0o46777),
+        (0o7777, "=777", 0o40777),
+        (0o7777, "0777", 0o46777),
+        (0o7777, "=0777", 0o40777),
+        (0o7777, "00777", 0o40777),
+        (0o2444, "a+wx", 0o42777),
+        (0o2444, "a=wx", 0o42333),
+        (0o1444, "g+s", 0o43444),
+        (0o4444, "u-s", 0o40444),
+        (0o7444, "a-s", 0o41444),
+    ] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkdir("dir");
+        set_permissions(at.plus("dir"), Permissions::from_mode(from)).unwrap();
+        let r = ucmd.arg(arg).arg("dir").succeeds();
+        println!("{}", r.stderr_str());
+        assert_eq!(at.metadata("dir").permissions().mode(), to);
     }
 }

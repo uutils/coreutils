@@ -282,7 +282,7 @@ impl Chmoder {
                     // cmode is guaranteed to be Some in this case
                     let arr: &[char] = &['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
                     let result = if mode.contains(arr) {
-                        mode::parse_numeric(fperm, mode)
+                        mode::parse_numeric(fperm, mode, file.is_dir())
                     } else {
                         mode::parse_symbolic(fperm, mode, file.is_dir())
                     };
