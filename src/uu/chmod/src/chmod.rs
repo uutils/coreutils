@@ -98,6 +98,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         Some(cmode)
     };
 
+    if files.is_empty() {
+        crash!(1, "missing operand");
+    }
+
     let chmoder = Chmoder {
         changes,
         quiet,

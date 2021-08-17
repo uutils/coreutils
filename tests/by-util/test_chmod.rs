@@ -523,3 +523,12 @@ fn test_chmod_keep_setgid() {
         assert_eq!(at.metadata("dir").permissions().mode(), to);
     }
 }
+
+#[test]
+fn test_no_operands() {
+    new_ucmd!()
+        .arg("777")
+        .fails()
+        .code_is(1)
+        .stderr_is("chmod: missing operand");
+}
