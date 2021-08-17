@@ -326,8 +326,8 @@ impl Chmoder {
                     show_error!(
                         "{}: new permissions are {}, not {}",
                         file.display(),
-                        display_permissions_unix(new_mode, false),
-                        display_permissions_unix(naively_expected_new_mode, false)
+                        display_permissions_unix(new_mode as mode_t, false),
+                        display_permissions_unix(naively_expected_new_mode as mode_t, false)
                     );
                     return Err(1);
                 }

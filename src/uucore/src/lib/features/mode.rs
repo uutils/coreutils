@@ -143,7 +143,7 @@ pub fn parse_mode(mode: &str) -> Result<mode_t, String> {
 pub fn get_umask() -> u32 {
     let mask = unsafe { umask(0) };
     unsafe { umask(mask) };
-    mask
+    mask as u32
 }
 
 #[cfg(test)]
