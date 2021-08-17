@@ -2126,7 +2126,6 @@ name = "uu_chgrp"
 version = "0.0.7"
 dependencies = [
  "clap",
- "uu_chown",
  "uucore",
  "uucore_procs",
 ]
@@ -2147,10 +2146,8 @@ name = "uu_chown"
 version = "0.0.7"
 dependencies = [
  "clap",
- "glob",
  "uucore",
  "uucore_procs",
- "walkdir",
 ]
 
 [[package]]
@@ -3165,6 +3162,7 @@ dependencies = [
  "termion",
  "thiserror",
  "time",
+ "walkdir",
  "wild",
  "winapi 0.3.9",
  "z85",

@@ -9,10 +9,11 @@
 
 #[macro_use]
 extern crate uucore;
-use uu_chown::{Chowner, IfFrom};
 pub use uucore::entries;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::perms::{Verbosity, VerbosityLevel};
+use uucore::perms::{
+    ChownExecutor, IfFrom, Verbosity, VerbosityLevel, FTS_COMFOLLOW, FTS_LOGICAL, FTS_PHYSICAL,
+};
 
 use clap::{App, Arg};
 
@@ -50,11 +51,7 @@ pub mod options {
     pub static ARG_FILES: &str = "FILE";
 }
 
-const FTS_COMFOLLOW: u8 = 1;
-const FTS_PHYSICAL: u8 = 1 << 1;
-const FTS_LOGICAL: u8 = 1 << 2;
-
-fn usage() -> String {
+fn get_usage() -> String {
     format!(
         "{0} [OPTION]... GROUP FILE...\n    {0} [OPTION]... --reference=RFILE FILE...",
         uucore::execution_phrase()
@@ -67,7 +64,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let usage = usage();
+    let usage = get_usage();
 
     let mut app = uu_app().usage(&usage[..]);
 
@@ -172,7 +169,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
-    let executor = Chowner {
+    let executor = ChownExecutor {
         bit_flag,
         dest_gid,
         verbosity: Verbosity {

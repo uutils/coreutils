@@ -26,6 +26,7 @@ lazy_static = { version="1.3", optional=true }
 nix = { version="<= 0.19", optional=true }
 platform-info = { version="<= 0.1", optional=true }
 time = { version="<= 0.1.43", optional=true }
+walkdir = { version="2.3.2", optional=true }
 # * "problem" dependencies (pinned)
 data-encoding = { version="2.1", optional=true }
 data-encoding-macro = { version="0.1.12", optional=true }
@@ -50,7 +51,7 @@ entries = ["libc"]
 fs = ["libc"]
 fsext = ["libc", "time"]
 mode = ["libc"]
-perms = ["libc"]
+perms = ["libc", "walkdir"]
 process = ["libc"]
 ringbuffer = []
 signals = []

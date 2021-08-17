@@ -5,26 +5,22 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) COMFOLLOW Chowner Passwd RFILE RFILE's derefer dgid duid
+// spell-checker:ignore (ToDO) COMFOLLOW Passwd RFILE RFILE's derefer dgid duid
 
 #[macro_use]
 extern crate uucore;
 pub use uucore::entries::{self, Group, Locate, Passwd};
-use uucore::fs::resolve_relative_path;
-use uucore::libc::{gid_t, uid_t};
-use uucore::perms::{wrap_chown, Verbosity, VerbosityLevel};
+use uucore::perms::{
+    ChownExecutor, IfFrom, Verbosity, VerbosityLevel, FTS_COMFOLLOW, FTS_LOGICAL, FTS_PHYSICAL,
+};
 
 use uucore::error::{FromIo, UResult, USimpleError};
 
 use clap::{crate_version, App, Arg};
 
-use walkdir::WalkDir;
-
-use std::fs::{self, Metadata};
+use std::fs;
 use std::os::unix::fs::MetadataExt;
 
-use std::convert::AsRef;
-use std::path::Path;
 use uucore::InvalidEncodingHandling;
 
 static ABOUT: &str = "change file owner and group";
@@ -57,11 +53,7 @@ pub mod options {
 static ARG_OWNER: &str = "owner";
 static ARG_FILES: &str = "files";
 
-const FTS_COMFOLLOW: u8 = 1;
-const FTS_PHYSICAL: u8 = 1 << 1;
-const FTS_LOGICAL: u8 = 1 << 2;
-
-fn usage() -> String {
+fn get_usage() -> String {
     format!(
         "{0} [OPTION]... [OWNER][:[GROUP]] FILE...\n{0} [OPTION]... --reference=RFILE FILE...",
         uucore::execution_phrase()
@@ -74,7 +66,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let usage = usage();
+    let usage = get_usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
@@ -150,7 +142,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         dest_uid = u;
         dest_gid = g;
     }
-    let executor = Chowner {
+    let executor = ChownExecutor {
         bit_flag,
         dest_uid,
         dest_gid,
@@ -287,195 +279,6 @@ fn parse_spec(spec: &str) -> UResult<(Option<u32>, Option<u32>)> {
         None
     };
     Ok((uid, gid))
-}
-
-pub enum IfFrom {
-    All,
-    User(u32),
-    Group(u32),
-    UserGroup(u32, u32),
-}
-
-pub struct Chowner {
-    pub dest_uid: Option<u32>,
-    pub dest_gid: Option<u32>,
-    pub bit_flag: u8,
-    pub verbosity: Verbosity,
-    pub filter: IfFrom,
-    pub files: Vec<String>,
-    pub recursive: bool,
-    pub preserve_root: bool,
-    pub dereference: bool,
-}
-
-macro_rules! unwrap {
-    ($m:expr, $e:ident, $err:block) => {
-        match $m {
-            Ok(meta) => meta,
-            Err($e) => $err,
-        }
-    };
-}
-
-impl Chowner {
-    pub fn exec(&self) -> UResult<()> {
-        let mut ret = 0;
-        for f in &self.files {
-            ret |= self.traverse(f);
-        }
-        if ret != 0 {
-            return Err(ret.into());
-        }
-        Ok(())
-    }
-
-    fn traverse<P: AsRef<Path>>(&self, root: P) -> i32 {
-        let follow_arg = self.dereference || self.bit_flag != FTS_PHYSICAL;
-        let path = root.as_ref();
-        let meta = match self.obtain_meta(path, follow_arg) {
-            Some(m) => m,
-            _ => return 1,
-        };
-
-        // Prohibit only if:
-        // (--preserve-root and -R present) &&
-        // (
-        //     (argument is not symlink && resolved to be '/') ||
-        //     (argument is symlink && should follow argument && resolved to be '/')
-        // )
-        if self.recursive && self.preserve_root {
-            let may_exist = if follow_arg {
-                path.canonicalize().ok()
-            } else {
-                let real = resolve_relative_path(path);
-                if real.is_dir() {
-                    Some(real.canonicalize().expect("failed to get real path"))
-                } else {
-                    Some(real.into_owned())
-                }
-            };
-
-            if let Some(p) = may_exist {
-                if p.parent().is_none() {
-                    show_error!("it is dangerous to operate recursively on '/'");
-                    show_error!("use --no-preserve-root to override this failsafe");
-                    return 1;
-                }
-            }
-        }
-
-        let ret = if self.matched(meta.uid(), meta.gid()) {
-            match wrap_chown(
-                path,
-                &meta,
-                self.dest_uid,
-                self.dest_gid,
-                follow_arg,
-                self.verbosity.clone(),
-            ) {
-                Ok(n) => {
-                    if !n.is_empty() {
-                        show_error!("{}", n);
-                    }
-                    0
-                }
-                Err(e) => {
-                    if self.verbosity.level != VerbosityLevel::Silent {
-                        show_error!("{}", e);
-                    }
-                    1
-                }
-            }
-        } else {
-            0
-        };
-
-        if !self.recursive {
-            ret
-        } else {
-            ret | self.dive_into(&root)
-        }
-    }
-
-    fn dive_into<P: AsRef<Path>>(&self, root: P) -> i32 {
-        let mut ret = 0;
-        let root = root.as_ref();
-        let follow = self.dereference || self.bit_flag & FTS_LOGICAL != 0;
-        for entry in WalkDir::new(root).follow_links(follow).min_depth(1) {
-            let entry = unwrap!(entry, e, {
-                ret = 1;
-                show_error!("{}", e);
-                continue;
-            });
-            let path = entry.path();
-            let meta = match self.obtain_meta(path, follow) {
-                Some(m) => m,
-                _ => {
-                    ret = 1;
-                    continue;
-                }
-            };
-
-            if !self.matched(meta.uid(), meta.gid()) {
-                continue;
-            }
-
-            ret = match wrap_chown(
-                path,
-                &meta,
-                self.dest_uid,
-                self.dest_gid,
-                follow,
-                self.verbosity.clone(),
-            ) {
-                Ok(n) => {
-                    if !n.is_empty() {
-                        show_error!("{}", n);
-                    }
-                    0
-                }
-                Err(e) => {
-                    if self.verbosity.level != VerbosityLevel::Silent {
-                        show_error!("{}", e);
-                    }
-                    1
-                }
-            }
-        }
-        ret
-    }
-
-    fn obtain_meta<P: AsRef<Path>>(&self, path: P, follow: bool) -> Option<Metadata> {
-        let path = path.as_ref();
-        let meta = if follow {
-            unwrap!(path.metadata(), e, {
-                match self.verbosity.level {
-                    VerbosityLevel::Silent => (),
-                    _ => show_error!("cannot access '{}': {}", path.display(), e),
-                }
-                return None;
-            })
-        } else {
-            unwrap!(path.symlink_metadata(), e, {
-                match self.verbosity.level {
-                    VerbosityLevel::Silent => (),
-                    _ => show_error!("cannot dereference '{}': {}", path.display(), e),
-                }
-                return None;
-            })
-        };
-        Some(meta)
-    }
-
-    #[inline]
-    fn matched(&self, uid: uid_t, gid: gid_t) -> bool {
-        match self.filter {
-            IfFrom::All => true,
-            IfFrom::User(u) => u == uid,
-            IfFrom::Group(g) => g == gid,
-            IfFrom::UserGroup(u, g) => u == uid && g == gid,
-        }
-    }
 }
 
 #[cfg(test)]

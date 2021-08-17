@@ -18,7 +18,6 @@ path = "src/chgrp.rs"
 clap = { version = "2.33", features = ["wrap_help"] }
 uucore = { version=">=0.0.9", package="uucore", path="../../uucore", features=["entries", "fs", "perms"] }
 uucore_procs = { version=">=0.0.6", package="uucore_procs", path="../../uucore_procs" }
-uu_chown = { version=">=0.0.6", package="uu_chown", path="../chown"}
 
 [[bin]]
 name = "chgrp"
