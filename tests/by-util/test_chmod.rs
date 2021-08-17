@@ -360,11 +360,22 @@ fn test_chmod_recursive() {
 fn test_chmod_non_existing_file() {
     new_ucmd!()
         .arg("-R")
-        .arg("--verbose")
         .arg("-r,a+w")
         .arg("does-not-exist")
         .fails()
         .stderr_contains(&"cannot access 'does-not-exist': No such file or directory");
+}
+
+#[test]
+fn test_chmod_non_existing_file_silent() {
+    new_ucmd!()
+        .arg("-R")
+        .arg("--quiet")
+        .arg("-r,a+w")
+        .arg("does-not-exist")
+        .fails()
+        .no_stderr()
+        .code_is(1);
 }
 
 #[test]

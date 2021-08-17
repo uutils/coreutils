@@ -229,7 +229,7 @@ impl Chmoder {
                     if !self.quiet {
                         show_error!("cannot operate on dangling symlink '{}'", filename);
                     }
-                } else {
+                } else if !self.quiet {
                     show_error!("cannot access '{}': No such file or directory", filename);
                 }
                 return Err(1);
