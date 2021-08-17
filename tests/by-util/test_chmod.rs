@@ -532,3 +532,17 @@ fn test_no_operands() {
         .code_is(1)
         .stderr_is("chmod: missing operand");
 }
+
+#[test]
+fn test_mode_after_dash_dash() {
+    let (at, ucmd) = at_and_ucmd!();
+    run_single_test(
+        &TestCase {
+            args: vec!["--", "-r", TEST_FILE],
+            before: 0o100777,
+            after: 0o100333,
+        },
+        at,
+        ucmd,
+    );
+}

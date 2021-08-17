@@ -184,6 +184,9 @@ pub fn uu_app() -> App<'static, 'static> {
 // e.g. "chmod -v -xw -R FILE" -> "chmod -v xw -R FILE"
 pub fn strip_minus_from_mode(args: &mut Vec<String>) -> bool {
     for arg in args {
+        if arg == "--" {
+            break;
+        }
         if arg.starts_with('-') {
             if let Some(second) = arg.chars().nth(1) {
                 match second {
