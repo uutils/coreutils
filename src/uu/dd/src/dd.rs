@@ -275,13 +275,19 @@ impl<R: Read> Input<R> {
     }
 }
 
+trait OutputTrait: Sized + Write {
+    fn new(matches: &Matches) -> Result<Self, Box<dyn Error>>;
+    fn fsync(&mut self) -> io::Result<()>;
+    fn fdatasync(&mut self) -> io::Result<()>;
+}
+
 struct Output<W: Write> {
     dst: W,
     obs: usize,
     cflags: OConvFlags,
 }
 
-impl Output<io::Stdout> {
+impl OutputTrait for Output<io::Stdout> {
     fn new(matches: &Matches) -> Result<Self, Box<dyn Error>> {
         let obs = parseargs::parse_obs(matches)?;
         let cflags = parseargs::parse_conv_flag_output(matches)?;
@@ -297,6 +303,100 @@ impl Output<io::Stdout> {
 
     fn fdatasync(&mut self) -> io::Result<()> {
         self.dst.flush()
+    }
+}
+
+impl<W: Write> Output<W>
+where
+    Self: OutputTrait,
+{
+    fn write_blocks(&mut self, buf: Vec<u8>) -> io::Result<WriteStat> {
+        let mut writes_complete = 0;
+        let mut writes_partial = 0;
+        let mut bytes_total = 0;
+
+        for chunk in buf.chunks(self.obs) {
+            match self.write(chunk)? {
+                wlen if wlen < chunk.len() => {
+                    writes_partial += 1;
+                    bytes_total += wlen;
+                }
+                wlen => {
+                    writes_complete += 1;
+                    bytes_total += wlen;
+                }
+            }
+        }
+
+        Ok(WriteStat {
+            writes_complete,
+            writes_partial,
+            bytes_total: bytes_total.try_into().unwrap_or(0u128),
+        })
+    }
+
+    fn dd_out<R: Read>(mut self, mut i: Input<R>) -> Result<(), Box<dyn Error>> {
+        let mut rstat = ReadStat {
+            reads_complete: 0,
+            reads_partial: 0,
+            records_truncated: 0,
+        };
+        let mut wstat = WriteStat {
+            writes_complete: 0,
+            writes_partial: 0,
+            bytes_total: 0,
+        };
+        let start = time::Instant::now();
+        let bsize = calc_bsize(i.ibs, self.obs);
+
+        let prog_tx = {
+            let (tx, rx) = mpsc::channel();
+            thread::spawn(gen_prog_updater(rx, i.print_level));
+            tx
+        };
+
+        while below_count_limit(&i.count, &rstat, &wstat) {
+            // Read/Write
+            let loop_bsize = calc_loop_bsize(&i.count, &rstat, &wstat, i.ibs, bsize);
+            match read_helper(&mut i, loop_bsize)? {
+                (
+                    ReadStat {
+                        reads_complete: 0,
+                        reads_partial: 0,
+                        ..
+                    },
+                    _,
+                ) => break,
+                (rstat_update, buf) => {
+                    let wstat_update = self.write_blocks(buf)?;
+
+                    rstat += rstat_update;
+                    wstat += wstat_update;
+                }
+            };
+            // Update Prog
+            prog_tx.send(ProgUpdate {
+                read_stat: rstat,
+                write_stat: wstat,
+                duration: start.elapsed(),
+            })?;
+        }
+
+        if self.cflags.fsync {
+            self.fsync()?;
+        } else if self.cflags.fdatasync {
+            self.fdatasync()?;
+        }
+
+        match i.print_level {
+            Some(StatusLevel::Noxfer) | Some(StatusLevel::None) => {}
+            _ => print_transfer_stats(&ProgUpdate {
+                read_stat: rstat,
+                write_stat: wstat,
+                duration: start.elapsed(),
+            }),
+        }
+        Ok(())
     }
 }
 
@@ -340,7 +440,7 @@ fn make_linux_oflags(oflags: &OFlags) -> Option<libc::c_int> {
     }
 }
 
-impl Output<File> {
+impl OutputTrait for Output<File> {
     fn new(matches: &Matches) -> Result<Self, Box<dyn Error>> {
         fn open_dst(path: &Path, cflags: &OConvFlags, oflags: &OFlags) -> Result<File, io::Error> {
             let mut opts = OpenOptions::new();
@@ -427,62 +527,6 @@ impl Write for Output<io::Stdout> {
 
     fn flush(&mut self) -> io::Result<()> {
         self.dst.flush()
-    }
-}
-
-impl Output<io::Stdout> {
-    /// Write all data in the given buffer in writes of size obs.
-    fn write_blocks(&mut self, buf: Vec<u8>) -> io::Result<WriteStat> {
-        let mut writes_complete = 0;
-        let mut writes_partial = 0;
-        let mut bytes_total = 0;
-
-        for chunk in buf.chunks(self.obs) {
-            match self.write(chunk)? {
-                wlen if wlen < chunk.len() => {
-                    writes_partial += 1;
-                    bytes_total += wlen;
-                }
-                wlen => {
-                    writes_complete += 1;
-                    bytes_total += wlen;
-                }
-            }
-        }
-
-        Ok(WriteStat {
-            writes_complete,
-            writes_partial,
-            bytes_total: bytes_total.try_into().unwrap_or(0u128),
-        })
-    }
-}
-
-impl Output<File> {
-    /// Write all data in the given buffer in writes of size obs.
-    fn write_blocks(&mut self, buf: Vec<u8>) -> io::Result<WriteStat> {
-        let mut writes_complete = 0;
-        let mut writes_partial = 0;
-        let mut bytes_total = 0;
-
-        for chunk in buf.chunks(self.obs) {
-            match self.write(chunk)? {
-                wlen if wlen < chunk.len() => {
-                    writes_partial += 1;
-                    bytes_total += wlen;
-                }
-                wlen => {
-                    writes_complete += 1;
-                    bytes_total += wlen;
-                }
-            }
-        }
-
-        Ok(WriteStat {
-            writes_complete,
-            writes_partial,
-            bytes_total: bytes_total.try_into().unwrap_or(0u128),
-        })
     }
 }
 
@@ -827,140 +871,6 @@ fn below_count_limit(count: &Option<CountType>, rstat: &ReadStat, wstat: &WriteS
     }
 }
 
-/// Perform the copy/convert operations. Stdout version
-/// Note: The body of this function should be kept identical to dd_fileout. This is definitely a problem from a maintenance perspective
-/// and should be addressed (TODO). The problem exists because some of dd's functionality depends on whether the output is a file or stdout.
-fn dd_stdout<R: Read>(mut i: Input<R>, mut o: Output<io::Stdout>) -> Result<(), Box<dyn Error>> {
-    let mut rstat = ReadStat {
-        reads_complete: 0,
-        reads_partial: 0,
-        records_truncated: 0,
-    };
-    let mut wstat = WriteStat {
-        writes_complete: 0,
-        writes_partial: 0,
-        bytes_total: 0,
-    };
-    let start = time::Instant::now();
-    let bsize = calc_bsize(i.ibs, o.obs);
-
-    let prog_tx = {
-        let (tx, rx) = mpsc::channel();
-        thread::spawn(gen_prog_updater(rx, i.print_level));
-        tx
-    };
-
-    while below_count_limit(&i.count, &rstat, &wstat) {
-        // Read/Write
-        let loop_bsize = calc_loop_bsize(&i.count, &rstat, &wstat, i.ibs, bsize);
-        match read_helper(&mut i, loop_bsize)? {
-            (
-                ReadStat {
-                    reads_complete: 0,
-                    reads_partial: 0,
-                    ..
-                },
-                _,
-            ) => break,
-            (rstat_update, buf) => {
-                let wstat_update = o.write_blocks(buf)?;
-
-                rstat += rstat_update;
-                wstat += wstat_update;
-            }
-        };
-        // Update Prog
-        prog_tx.send(ProgUpdate {
-            read_stat: rstat,
-            write_stat: wstat,
-            duration: start.elapsed(),
-        })?;
-    }
-
-    if o.cflags.fsync {
-        o.fsync()?;
-    } else if o.cflags.fdatasync {
-        o.fdatasync()?;
-    }
-
-    match i.print_level {
-        Some(StatusLevel::Noxfer) | Some(StatusLevel::None) => {}
-        _ => print_transfer_stats(&ProgUpdate {
-            read_stat: rstat,
-            write_stat: wstat,
-            duration: start.elapsed(),
-        }),
-    }
-    Ok(())
-}
-
-/// Perform the copy/convert operations. File backed output version
-/// Note: The body of this function should be kept identical to dd_stdout. This is definitely a problem from a maintenance perspective
-/// and should be addressed (TODO). The problem exists because some of dd's functionality depends on whether the output is a file or stdout.
-fn dd_fileout<R: Read>(mut i: Input<R>, mut o: Output<File>) -> Result<(), Box<dyn Error>> {
-    let mut rstat = ReadStat {
-        reads_complete: 0,
-        reads_partial: 0,
-        records_truncated: 0,
-    };
-    let mut wstat = WriteStat {
-        writes_complete: 0,
-        writes_partial: 0,
-        bytes_total: 0,
-    };
-    let start = time::Instant::now();
-    let bsize = calc_bsize(i.ibs, o.obs);
-
-    let prog_tx = {
-        let (tx, rx) = mpsc::channel();
-        thread::spawn(gen_prog_updater(rx, i.print_level));
-        tx
-    };
-
-    while below_count_limit(&i.count, &rstat, &wstat) {
-        // Read/Write
-        let loop_bsize = calc_loop_bsize(&i.count, &rstat, &wstat, i.ibs, bsize);
-        match read_helper(&mut i, loop_bsize)? {
-            (
-                ReadStat {
-                    reads_complete: 0,
-                    reads_partial: 0,
-                    ..
-                },
-                _,
-            ) => break,
-            (rstat_update, buf) => {
-                let wstat_update = o.write_blocks(buf)?;
-
-                rstat += rstat_update;
-                wstat += wstat_update;
-            }
-        };
-        // Update Prog
-        prog_tx.send(ProgUpdate {
-            read_stat: rstat,
-            write_stat: wstat,
-            duration: start.elapsed(),
-        })?;
-    }
-
-    if o.cflags.fsync {
-        o.fsync()?;
-    } else if o.cflags.fdatasync {
-        o.fdatasync()?;
-    }
-
-    match i.print_level {
-        Some(StatusLevel::Noxfer) | Some(StatusLevel::None) => {}
-        _ => print_transfer_stats(&ProgUpdate {
-            read_stat: rstat,
-            write_stat: wstat,
-            duration: start.elapsed(),
-        }),
-    }
-    Ok(())
-}
-
 fn append_dashes_if_not_present(mut acc: Vec<String>, mut s: String) -> Vec<String> {
     if !s.starts_with("--") && !s.starts_with('-') {
         s.insert_str(0, "--");
@@ -1009,7 +919,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             let (i, o) =
                 unpack_or_rtn!(Input::<File>::new(&matches), Output::<File>::new(&matches));
 
-            dd_fileout(i, o)
+            o.dd_out(i)
         }
         (false, true) => {
             let (i, o) = unpack_or_rtn!(
@@ -1017,7 +927,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 Output::<File>::new(&matches)
             );
 
-            dd_fileout(i, o)
+            o.dd_out(i)
         }
         (true, false) => {
             let (i, o) = unpack_or_rtn!(
@@ -1025,7 +935,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 Output::<io::Stdout>::new(&matches)
             );
 
-            dd_stdout(i, o)
+            o.dd_out(i)
         }
         (false, false) => {
             let (i, o) = unpack_or_rtn!(
@@ -1033,7 +943,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 Output::<io::Stdout>::new(&matches)
             );
 
-            dd_stdout(i, o)
+            o.dd_out(i)
         }
     };
     match result {
