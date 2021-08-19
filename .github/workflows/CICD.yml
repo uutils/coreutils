@@ -625,7 +625,7 @@ jobs:
       uses: actions-rs/install@v0.1
       with:
         crate: grcov
-        version: 0.8.0
+        version: latest
         use-tool-cache: false
     - name: Generate coverage data (via `grcov`)
       id: coverage
