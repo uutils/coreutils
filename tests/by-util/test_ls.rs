@@ -128,6 +128,7 @@ fn test_ls_width() {
         scene
             .ucmd()
             .args(&option.split(' ').collect::<Vec<_>>())
+            .arg("-C")
             .succeeds()
             .stdout_only("test-width-1  test-width-2  test-width-3  test-width-4\n");
     }
@@ -136,30 +137,33 @@ fn test_ls_width() {
         scene
             .ucmd()
             .args(&option.split(' ').collect::<Vec<_>>())
+            .arg("-C")
             .succeeds()
             .stdout_only("test-width-1  test-width-3\ntest-width-2  test-width-4\n");
     }
 
-    for option in &[
-        "-w 25",
-        "-w=25",
-        "--width=25",
-        "--width 25",
-        "-w 0",
-        "-w=0",
-        "--width=0",
-        "--width 0",
-    ] {
+    for option in &["-w 25", "-w=25", "--width=25", "--width 25"] {
         scene
             .ucmd()
             .args(&option.split(' ').collect::<Vec<_>>())
+            .arg("-C")
             .succeeds()
             .stdout_only("test-width-1\ntest-width-2\ntest-width-3\ntest-width-4\n");
+    }
+
+    for option in &["-w 0", "-w=0", "--width=0", "--width 0"] {
+        scene
+            .ucmd()
+            .args(&option.split(' ').collect::<Vec<_>>())
+            .arg("-C")
+            .succeeds()
+            .stdout_only("test-width-1  test-width-2  test-width-3  test-width-4\n");
     }
 
     scene
         .ucmd()
         .arg("-w=bad")
+        .arg("-C")
         .fails()
         .stderr_contains("invalid line width");
 
@@ -167,6 +171,7 @@ fn test_ls_width() {
         scene
             .ucmd()
             .args(&option.split(' ').collect::<Vec<_>>())
+            .arg("-C")
             .fails()
             .stderr_only("ls: invalid line width: '1a'");
     }
@@ -184,16 +189,10 @@ fn test_ls_columns() {
     // Columns is the default
     let result = scene.ucmd().succeeds();
 
-    #[cfg(not(windows))]
     result.stdout_only("test-columns-1\ntest-columns-2\ntest-columns-3\ntest-columns-4\n");
-    #[cfg(windows)]
-    result.stdout_only("test-columns-1  test-columns-2  test-columns-3  test-columns-4\n");
 
     for option in &["-C", "--format=columns"] {
         let result = scene.ucmd().arg(option).succeeds();
-        #[cfg(not(windows))]
-        result.stdout_only("test-columns-1\ntest-columns-2\ntest-columns-3\ntest-columns-4\n");
-        #[cfg(windows)]
         result.stdout_only("test-columns-1  test-columns-2  test-columns-3  test-columns-4\n");
     }
 
@@ -205,6 +204,38 @@ fn test_ls_columns() {
             .succeeds()
             .stdout_only("test-columns-1  test-columns-3\ntest-columns-2  test-columns-4\n");
     }
+
+    // On windows we are always able to get the terminal size, so we can't simulate falling back to the
+    // environment variable.
+    #[cfg(not(windows))]
+    {
+        for option in &["-C", "--format=columns"] {
+            scene
+                .ucmd()
+                .env("COLUMNS", "40")
+                .arg(option)
+                .succeeds()
+                .stdout_only("test-columns-1  test-columns-3\ntest-columns-2  test-columns-4\n");
+        }
+
+        scene
+            .ucmd()
+            .env("COLUMNS", "garbage")
+            .arg("-C")
+            .succeeds()
+            .stdout_is("test-columns-1  test-columns-2  test-columns-3  test-columns-4\n")
+            .stderr_is("ls: ignoring invalid width in environment variable COLUMNS: 'garbage'");
+    }
+    scene
+        .ucmd()
+        .arg("-Cw0")
+        .succeeds()
+        .stdout_only("test-columns-1  test-columns-2  test-columns-3  test-columns-4\n");
+    scene
+        .ucmd()
+        .arg("-mw0")
+        .succeeds()
+        .stdout_only("test-columns-1, test-columns-2, test-columns-3, test-columns-4\n");
 }
 
 #[test]
@@ -220,11 +251,7 @@ fn test_ls_across() {
         let result = scene.ucmd().arg(option).succeeds();
         // Because the test terminal has width 0, this is the same output as
         // the columns option.
-        if cfg!(unix) {
-            result.stdout_only("test-across-1\ntest-across-2\ntest-across-3\ntest-across-4\n");
-        } else {
-            result.stdout_only("test-across-1  test-across-2  test-across-3  test-across-4\n");
-        }
+        result.stdout_only("test-across-1  test-across-2  test-across-3  test-across-4\n");
     }
 
     for option in &["-x", "--format=across"] {
@@ -250,11 +277,7 @@ fn test_ls_commas() {
 
     for option in &["-m", "--format=commas"] {
         let result = scene.ucmd().arg(option).succeeds();
-        if cfg!(unix) {
-            result.stdout_only("test-commas-1,\ntest-commas-2,\ntest-commas-3,\ntest-commas-4\n");
-        } else {
-            result.stdout_only("test-commas-1, test-commas-2, test-commas-3, test-commas-4\n");
-        }
+        result.stdout_only("test-commas-1, test-commas-2, test-commas-3, test-commas-4\n");
     }
 
     for option in &["-m", "--format=commas"] {
@@ -571,13 +594,11 @@ fn test_ls_sort_name() {
     at.touch("test-1");
     at.touch("test-2");
 
-    let sep = if cfg!(unix) { "\n" } else { "  " };
-
     scene
         .ucmd()
         .arg("--sort=name")
         .succeeds()
-        .stdout_is(["test-1", "test-2", "test-3\n"].join(sep));
+        .stdout_is("test-1\ntest-2\ntest-3\n");
 
     let scene_dot = TestScenario::new(util_name!());
     let at = &scene_dot.fixtures;
@@ -591,7 +612,7 @@ fn test_ls_sort_name() {
         .arg("--sort=name")
         .arg("-A")
         .succeeds()
-        .stdout_is([".a", ".b", "a", "b\n"].join(sep));
+        .stdout_is(".a\n.b\na\nb\n");
 }
 
 #[test]
@@ -612,28 +633,16 @@ fn test_ls_order_size() {
     scene.ucmd().arg("-al").succeeds();
 
     let result = scene.ucmd().arg("-S").succeeds();
-    #[cfg(not(windows))]
     result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
-    #[cfg(windows)]
-    result.stdout_only("test-4  test-3  test-2  test-1\n");
 
     let result = scene.ucmd().arg("-S").arg("-r").succeeds();
-    #[cfg(not(windows))]
     result.stdout_only("test-1\ntest-2\ntest-3\ntest-4\n");
-    #[cfg(windows)]
-    result.stdout_only("test-1  test-2  test-3  test-4\n");
 
     let result = scene.ucmd().arg("--sort=size").succeeds();
-    #[cfg(not(windows))]
     result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
-    #[cfg(windows)]
-    result.stdout_only("test-4  test-3  test-2  test-1\n");
 
     let result = scene.ucmd().arg("--sort=size").arg("-r").succeeds();
-    #[cfg(not(windows))]
     result.stdout_only("test-1\ntest-2\ntest-3\ntest-4\n");
-    #[cfg(windows)]
-    result.stdout_only("test-1  test-2  test-3  test-4\n");
 }
 
 #[test]
@@ -755,9 +764,6 @@ fn test_ls_styles() {
 
     at.touch("test2");
     let result = scene.ucmd().arg("--full-time").arg("-x").succeeds();
-    #[cfg(not(windows))]
-    assert_eq!(result.stdout_str(), "test\ntest2\n");
-    #[cfg(windows)]
     assert_eq!(result.stdout_str(), "test  test2\n");
 }
 
@@ -794,28 +800,16 @@ fn test_ls_order_time() {
 
     // ctime was changed at write, so the order is 4 3 2 1
     let result = scene.ucmd().arg("-t").succeeds();
-    #[cfg(not(windows))]
     result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
-    #[cfg(windows)]
-    result.stdout_only("test-4  test-3  test-2  test-1\n");
 
     let result = scene.ucmd().arg("--sort=time").succeeds();
-    #[cfg(not(windows))]
     result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
-    #[cfg(windows)]
-    result.stdout_only("test-4  test-3  test-2  test-1\n");
 
     let result = scene.ucmd().arg("-tr").succeeds();
-    #[cfg(not(windows))]
     result.stdout_only("test-1\ntest-2\ntest-3\ntest-4\n");
-    #[cfg(windows)]
-    result.stdout_only("test-1  test-2  test-3  test-4\n");
 
     let result = scene.ucmd().arg("--sort=time").arg("-r").succeeds();
-    #[cfg(not(windows))]
     result.stdout_only("test-1\ntest-2\ntest-3\ntest-4\n");
-    #[cfg(windows)]
-    result.stdout_only("test-1  test-2  test-3  test-4\n");
 
     // 3 was accessed last in the read
     // So the order should be 2 3 4 1
@@ -826,19 +820,11 @@ fn test_ls_order_time() {
 
         // It seems to be dependent on the platform whether the access time is actually set
         if file3_access > file4_access {
-            if cfg!(not(windows)) {
-                result.stdout_only("test-3\ntest-4\ntest-2\ntest-1\n");
-            } else {
-                result.stdout_only("test-3  test-4  test-2  test-1\n");
-            }
+            result.stdout_only("test-3\ntest-4\ntest-2\ntest-1\n");
         } else {
             // Access time does not seem to be set on Windows and some other
             // systems so the order is 4 3 2 1
-            if cfg!(not(windows)) {
-                result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
-            } else {
-                result.stdout_only("test-4  test-3  test-2  test-1\n");
-            }
+            result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
         }
     }
 
@@ -991,6 +977,7 @@ fn test_ls_color() {
         .ucmd()
         .arg("--color")
         .arg("-w=15")
+        .arg("-C")
         .succeeds()
         .stdout_only(format!(
             "{}  test-color\nb  {}\n",
@@ -2009,11 +1996,7 @@ fn test_ls_path() {
     };
     scene.ucmd().arg(&abs_path).run().stdout_is(expected_stdout);
 
-    let expected_stdout = if cfg!(windows) {
-        format!("{}  {}\n", path, file1)
-    } else {
-        format!("{}\n{}\n", path, file1)
-    };
+    let expected_stdout = format!("{}\n{}\n", path, file1);
     scene
         .ucmd()
         .arg(file1)

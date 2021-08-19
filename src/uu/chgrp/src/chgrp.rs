@@ -161,12 +161,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         Verbosity::Normal
     };
 
-    let dest_gid: u32;
-    if let Some(file) = matches.value_of(options::REFERENCE) {
+    let dest_gid = if let Some(file) = matches.value_of(options::REFERENCE) {
         match fs::metadata(&file) {
-            Ok(meta) => {
-                dest_gid = meta.gid();
-            }
+            Ok(meta) => Some(meta.gid()),
             Err(e) => {
                 show_error!("failed to get attributes of '{}': {}", file, e);
                 return 1;
@@ -174,16 +171,18 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     } else {
         let group = matches.value_of(options::ARG_GROUP).unwrap_or_default();
-        match entries::grp2gid(group) {
-            Ok(g) => {
-                dest_gid = g;
-            }
-            _ => {
-                show_error!("invalid group: {}", group);
-                return 1;
+        if group.is_empty() {
+            None
+        } else {
+            match entries::grp2gid(group) {
+                Ok(g) => Some(g),
+                _ => {
+                    show_error!("invalid group: {}", group);
+                    return 1;
+                }
             }
         }
-    }
+    };
 
     let executor = Chgrper {
         bit_flag,
@@ -278,7 +277,7 @@ pub fn uu_app() -> App<'static, 'static> {
 }
 
 struct Chgrper {
-    dest_gid: gid_t,
+    dest_gid: Option<gid_t>,
     bit_flag: u8,
     verbosity: Verbosity,
     files: Vec<String>,
@@ -364,7 +363,9 @@ impl Chgrper {
             self.verbosity.clone(),
         ) {
             Ok(n) => {
-                show_error!("{}", n);
+                if !n.is_empty() {
+                    show_error!("{}", n);
+                }
                 0
             }
             Err(e) => {

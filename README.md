@@ -365,24 +365,26 @@ To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 
 | Done      | Semi-Done | To Do  |
 |-----------|-----------|--------|
-| arch      | cp        | chcon  |
-| base32    | date      | runcon |
-| base64    | dd        | stty   |
+| arch      | cp        | runcon |
+| base32    | date      | stty   |
+| base64    | dd        |        |
 | basename  | df        |        |
-| cat       | expr      |        |
-| chgrp     | install   |        |
-| chmod     | join      |        |
-| chown     | ls        |        |
-| chroot    | more      |        |
-| cksum     | numfmt    |        |
-| comm      | od (`--strings` and 128-bit data types missing) |
-| csplit    | pr        |        |
-| cut       | printf    |        |
-| dircolors | sort      |        |
-| dirname   | split     |        |
-| du        | tac       |        |
-| echo      | tail      |        |
-| env       | test      |        |
+| basenc    | expr      |        |
+| cat       | install   |        |
+| chcon     | join      |        |
+| chgrp     | ls        |        |
+| chmod     | more      |        |
+| chown     | numfmt    |        |
+| chroot    | od (`--strings` and 128-bit data types missing) | |
+| cksum     | pr        |        |
+| comm      | printf    |        |
+| csplit    | sort      |        |
+| cut       | split     |        |
+| dircolors | tac       |        |
+| dirname   | tail      |        |
+| du        | test      |        |
+| echo      |           |        |
+| env       |           |        |
 | expand    |           |        |
 | factor    |           |        |
 | false     |           |        |

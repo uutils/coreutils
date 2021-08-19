@@ -46,6 +46,15 @@ BUSYBOX_ROOT := $(BASEDIR)/tmp
 BUSYBOX_VER  := 1.32.1
 BUSYBOX_SRC  := $(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER)
 
+ifeq ($(SELINUX_ENABLED),)
+    SELINUX_ENABLED := 0
+    ifneq ($(OS),Windows_NT)
+        ifeq ($(shell /sbin/selinuxenabled 2>/dev/null ; echo $$?),0)
+            SELINUX_ENABLED := 1
+        endif
+    endif
+endif
+
 # Possible programs
 PROGS       := \
 	base32 \
@@ -147,8 +156,15 @@ UNIX_PROGS := \
 	users \
 	who
 
+SELINUX_PROGS := \
+	chcon
+
 ifneq ($(OS),Windows_NT)
 	PROGS    := $(PROGS) $(UNIX_PROGS)
+endif
+
+ifeq ($(SELINUX_ENABLED),1)
+    PROGS := $(PROGS) $(SELINUX_PROGS)
 endif
 
 UTILS ?= $(PROGS)
@@ -159,6 +175,7 @@ TEST_PROGS  := \
 	base64 \
 	basename \
 	cat \
+	chcon \
 	chgrp \
 	chmod \
 	chown \
@@ -228,6 +245,9 @@ TEST_SPEC_FEATURE :=
 ifneq ($(SPEC),)
 TEST_NO_FAIL_FAST :=--no-fail-fast
 TEST_SPEC_FEATURE := test_unimplemented
+else ifeq ($(SELINUX_ENABLED),1)
+TEST_NO_FAIL_FAST :=
+TEST_SPEC_FEATURE := feat_selinux
 endif
 
 define TEST_BUSYBOX

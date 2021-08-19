@@ -8,7 +8,7 @@
 
 #[macro_use]
 extern crate uucore;
-use uucore::error::UCustomError;
+use uucore::error::UError;
 use uucore::error::UResult;
 #[cfg(unix)]
 use uucore::fsext::statfs_fn;
@@ -274,7 +274,7 @@ impl Display for DfError {
 
 impl Error for DfError {}
 
-impl UCustomError for DfError {
+impl UError for DfError {
     fn code(&self) -> i32 {
         match self {
             DfError::InvalidBaseValue(_) => 1,

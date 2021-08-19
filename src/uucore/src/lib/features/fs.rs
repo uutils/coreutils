@@ -15,8 +15,6 @@ use libc::{
 use std::borrow::Cow;
 use std::env;
 use std::fs;
-#[cfg(target_os = "redox")]
-use std::io;
 use std::io::Result as IOResult;
 use std::io::{Error, ErrorKind};
 #[cfg(any(unix, target_os = "redox"))]

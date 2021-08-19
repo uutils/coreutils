@@ -65,6 +65,7 @@ pub use crate::features::signals;
 #[cfg(all(
     unix,
     not(target_os = "fuchsia"),
+    not(target_os = "redox"),
     not(target_env = "musl"),
     feature = "utmpx"
 ))]

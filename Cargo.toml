@@ -35,6 +35,7 @@ feat_common_core = [
     "base32",
     "base64",
     "basename",
+    "basenc",
     "cat",
     "cksum",
     "comm",
@@ -145,7 +146,7 @@ feat_os_unix_musl = [
 # NOTE:
 # The selinux(-sys) crate requires `libselinux` headers and shared library to be accessible in the C toolchain at compile time.
 # Running a uutils compiled with `feat_selinux` requires an SELinux enabled Kernel at run time.
-feat_selinux = ["id/selinux", "selinux"]
+feat_selinux = ["id/selinux", "selinux", "feat_require_selinux"]
 ## feature sets with requirements (restricting cross-platform availability)
 #
 # ** NOTE: these `feat_require_...` sets should be minimized as much as possible to encourage cross-platform availability of utilities
@@ -185,6 +186,10 @@ feat_require_unix_utmpx = [
     "users",
     "who",
 ]
+# "feat_require_selinux" == set of utilities depending on SELinux.
+feat_require_selinux = [
+    "chcon",
+]
 ## (alternate/newer/smaller platforms) feature sets
 # "feat_os_unix_fuchsia" == set of utilities which can be built/run on the "Fuchsia" OS (refs: <https://fuchsia.dev>; <https://en.wikipedia.org/wiki/Google_Fuchsia>)
 feat_os_unix_fuchsia = [
@@ -212,9 +217,8 @@ feat_os_unix_fuchsia = [
 feat_os_unix_redox = [
     "feat_common_core",
     #
-    "uname",
     "chmod",
-    "install",
+    "uname",
 ]
 # "feat_os_windows_legacy" == slightly restricted set of utilities which can be built/run on early windows platforms (eg, "WinXP")
 feat_os_windows_legacy = [
@@ -237,7 +241,7 @@ clap = { version = "2.33", features = ["wrap_help"] }
 lazy_static = { version="1.3" }
 textwrap = { version="=0.11.0", features=["term_size"] } # !maint: [2020-05-10; rivy] unstable crate using undocumented features; pinned currently, will review
 uucore = { version=">=0.0.9", package="uucore", path="src/uucore" }
-selinux = { version="0.1.3", optional = true }
+selinux = { version="0.2.1", optional = true }
 # * uutils
 uu_test  = { optional=true, version="0.0.7", package="uu_test", path="src/uu/test" }
 #
@@ -245,7 +249,9 @@ arch     = { optional=true, version="0.0.7", package="uu_arch", path="src/uu/arc
 base32   = { optional=true, version="0.0.7", package="uu_base32", path="src/uu/base32" }
 base64   = { optional=true, version="0.0.7", package="uu_base64", path="src/uu/base64" }
 basename = { optional=true, version="0.0.7", package="uu_basename", path="src/uu/basename" }
+basenc   = { optional=true, version="0.0.7", package="uu_basenc", path="src/uu/basenc" }
 cat      = { optional=true, version="0.0.7", package="uu_cat", path="src/uu/cat" }
+chcon    = { optional=true, version="0.0.7", package="uu_chcon", path="src/uu/chcon" }
 chgrp    = { optional=true, version="0.0.7", package="uu_chgrp", path="src/uu/chgrp" }
 chmod    = { optional=true, version="0.0.7", package="uu_chmod", path="src/uu/chmod" }
 chown    = { optional=true, version="0.0.7", package="uu_chown", path="src/uu/chown" }

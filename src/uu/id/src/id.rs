@@ -40,10 +40,10 @@
 extern crate uucore;
 
 use clap::{crate_version, App, Arg};
-#[cfg(all(target_os = "linux", feature = "selinux"))]
-use selinux;
 use std::ffi::CStr;
 use uucore::entries::{self, Group, Locate, Passwd};
+use uucore::error::UResult;
+use uucore::error::{set_exit_code, USimpleError};
 pub use uucore::libc;
 use uucore::libc::{getlogin, uid_t};
 use uucore::process::{getegid, geteuid, getgid, getuid};
@@ -123,10 +123,10 @@ struct State {
     // 1000 10 968 975
     // +++ exited with 0 +++
     user_specified: bool,
-    exit_code: i32,
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = get_usage();
     let after_help = get_description();
 
@@ -161,7 +161,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         },
         user_specified: !users.is_empty(),
         ids: None,
-        exit_code: 0,
     };
 
     let default_format = {
@@ -170,14 +169,23 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     };
 
     if (state.nflag || state.rflag) && default_format && !state.cflag {
-        crash!(1, "cannot print only names or real IDs in default format");
+        return Err(USimpleError::new(
+            1,
+            "cannot print only names or real IDs in default format",
+        ));
     }
     if state.zflag && default_format && !state.cflag {
         // NOTE: GNU test suite "id/zero.sh" needs this stderr output:
-        crash!(1, "option --zero not permitted in default format");
+        return Err(USimpleError::new(
+            1,
+            "option --zero not permitted in default format",
+        ));
     }
     if state.user_specified && state.cflag {
-        crash!(1, "cannot print security context when user specified");
+        return Err(USimpleError::new(
+            1,
+            "cannot print security context when user specified",
+        ));
     }
 
     let delimiter = {
@@ -204,11 +212,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 print!("{}{}", String::from_utf8_lossy(bytes), line_ending);
             } else {
                 // print error because `cflag` was explicitly requested
-                crash!(1, "can't get process context");
+                return Err(USimpleError::new(1, "can't get process context"));
             }
-            return state.exit_code;
+            return Ok(());
         } else {
-            crash!(1, "--context (-Z) works only on an SELinux-enabled kernel");
+            return Err(USimpleError::new(
+                1,
+                "--context (-Z) works only on an SELinux-enabled kernel",
+            ));
         }
     }
 
@@ -220,7 +231,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 Ok(p) => Some(p),
                 Err(_) => {
                     show_error!("'{}': no such user", users[i]);
-                    state.exit_code = 1;
+                    set_exit_code(1);
                     if i + 1 >= users.len() {
                         break;
                     } else {
@@ -234,17 +245,17 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         if matches.is_present(options::OPT_PASSWORD) {
             // BSD's `id` ignores all but the first specified user
             pline(possible_pw.map(|v| v.uid()));
-            return state.exit_code;
+            return Ok(());
         };
         if matches.is_present(options::OPT_HUMAN_READABLE) {
             // BSD's `id` ignores all but the first specified user
             pretty(possible_pw);
-            return state.exit_code;
+            return Ok(());
         }
         if matches.is_present(options::OPT_AUDIT) {
             // BSD's `id` ignores specified users
             auditid();
-            return state.exit_code;
+            return Ok(());
         }
 
         let (uid, gid) = possible_pw.map(|p| (p.uid(), p.gid())).unwrap_or((
@@ -264,7 +275,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 if state.nflag {
                     entries::gid2grp(gid).unwrap_or_else(|_| {
                         show_error!("cannot find name for group ID {}", gid);
-                        state.exit_code = 1;
+                        set_exit_code(1);
                         gid.to_string()
                     })
                 } else {
@@ -279,7 +290,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 if state.nflag {
                     entries::uid2usr(uid).unwrap_or_else(|_| {
                         show_error!("cannot find name for user ID {}", uid);
-                        state.exit_code = 1;
+                        set_exit_code(1);
                         uid.to_string()
                     })
                 } else {
@@ -304,7 +315,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                         if state.nflag {
                             entries::gid2grp(id).unwrap_or_else(|_| {
                                 show_error!("cannot find name for group ID {}", id);
-                                state.exit_code = 1;
+                                set_exit_code(1);
                                 id.to_string()
                             })
                         } else {
@@ -332,7 +343,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         }
     }
 
-    state.exit_code
+    Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -560,7 +571,7 @@ fn id_print(state: &mut State, groups: Vec<u32>) {
         uid,
         entries::uid2usr(uid).unwrap_or_else(|_| {
             show_error!("cannot find name for user ID {}", uid);
-            state.exit_code = 1;
+            set_exit_code(1);
             uid.to_string()
         })
     );
@@ -569,7 +580,7 @@ fn id_print(state: &mut State, groups: Vec<u32>) {
         gid,
         entries::gid2grp(gid).unwrap_or_else(|_| {
             show_error!("cannot find name for group ID {}", gid);
-            state.exit_code = 1;
+            set_exit_code(1);
             gid.to_string()
         })
     );
@@ -579,7 +590,7 @@ fn id_print(state: &mut State, groups: Vec<u32>) {
             euid,
             entries::uid2usr(euid).unwrap_or_else(|_| {
                 show_error!("cannot find name for user ID {}", euid);
-                state.exit_code = 1;
+                set_exit_code(1);
                 euid.to_string()
             })
         );
@@ -590,7 +601,7 @@ fn id_print(state: &mut State, groups: Vec<u32>) {
             euid,
             entries::gid2grp(egid).unwrap_or_else(|_| {
                 show_error!("cannot find name for group ID {}", egid);
-                state.exit_code = 1;
+                set_exit_code(1);
                 egid.to_string()
             })
         );
@@ -604,7 +615,7 @@ fn id_print(state: &mut State, groups: Vec<u32>) {
                 gr,
                 entries::gid2grp(gr).unwrap_or_else(|_| {
                     show_error!("cannot find name for group ID {}", gr);
-                    state.exit_code = 1;
+                    set_exit_code(1);
                     gr.to_string()
                 })
             ))

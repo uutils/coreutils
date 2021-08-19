@@ -35,12 +35,6 @@ pub fn parse_symbolic(
     #[cfg(unix)]
     use libc::umask;
 
-    #[cfg(target_os = "redox")]
-    unsafe fn umask(_mask: u32) -> u32 {
-        // XXX Redox does not currently have umask
-        0
-    }
-
     let (mask, pos) = parse_levels(mode);
     if pos == mode.len() {
         return Err(format!("invalid mode ({})", mode));
