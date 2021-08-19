@@ -2,6 +2,11 @@ mod common;
 
 use common::util::TestScenario;
 
+#[cfg(unix)]
+use std::os::unix::fs::symlink as symlink_file;
+#[cfg(windows)]
+use std::os::windows::fs::symlink_file;
+
 #[test]
 #[cfg(feature = "ls")]
 fn execution_phrase_double() {
@@ -24,7 +29,7 @@ fn execution_phrase_single() {
     use std::process::Command;
 
     let scenario = TestScenario::new("ls");
-    std::fs::copy(scenario.bin_path, scenario.fixtures.plus("uu-ls")).unwrap();
+    symlink_file(scenario.bin_path, scenario.fixtures.plus("uu-ls")).unwrap();
     let output = Command::new(scenario.fixtures.plus("uu-ls"))
         .arg("--some-invalid-arg")
         .output()
@@ -65,7 +70,7 @@ fn util_name_single() {
     };
 
     let scenario = TestScenario::new("sort");
-    std::fs::copy(scenario.bin_path, scenario.fixtures.plus("uu-sort")).unwrap();
+    symlink_file(scenario.bin_path, scenario.fixtures.plus("uu-sort")).unwrap();
     let mut child = Command::new(scenario.fixtures.plus("uu-sort"))
         .stdin(Stdio::piped())
         .stderr(Stdio::piped())
