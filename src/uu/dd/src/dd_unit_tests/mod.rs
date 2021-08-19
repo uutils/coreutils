@@ -67,7 +67,7 @@ macro_rules! make_spec_test (
         #[test]
         fn $test_id()
         {
-            dd_fileout($i,$o).unwrap();
+            $o.dd_out($i).unwrap();
 
             let res = File::open($tmp_fname).unwrap();
             // Check test file isn't empty (unless spec file is too)

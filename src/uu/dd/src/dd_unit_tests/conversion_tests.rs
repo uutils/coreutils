@@ -153,7 +153,7 @@ fn all_valid_ascii_ebcdic_ascii_roundtrip_conv_test() {
         cflags: OConvFlags::default(),
     };
 
-    dd_fileout(i, o).unwrap();
+    o.dd_out(i).unwrap();
 
     // EBCDIC->ASCII
     let test_name = "all-valid-ebcdic-to-ascii";
@@ -175,7 +175,7 @@ fn all_valid_ascii_ebcdic_ascii_roundtrip_conv_test() {
         cflags: OConvFlags::default(),
     };
 
-    dd_fileout(i, o).unwrap();
+    o.dd_out(i).unwrap();
 
     // Final Comparison
     let res = File::open(&tmp_fname_ea).unwrap();
