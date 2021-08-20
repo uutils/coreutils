@@ -347,6 +347,7 @@ fn digit_width(input: &Input) -> WcResult<Option<usize>> {
 /// let inputs = vec![Input::Stdin(StdinKind::Explicit)];
 /// assert_eq!(7, max_width(&inputs));
 /// ```
+#[allow(clippy::collapsible_match)]
 fn max_width(inputs: &[Input]) -> usize {
     let mut result = 1;
     for input in inputs {
