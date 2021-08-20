@@ -189,6 +189,7 @@ feat_require_unix_utmpx = [
 # "feat_require_selinux" == set of utilities depending on SELinux.
 feat_require_selinux = [
     "chcon",
+    "runcon",
 ]
 ## (alternate/newer/smaller platforms) feature sets
 # "feat_os_unix_fuchsia" == set of utilities which can be built/run on the "Fuchsia" OS (refs: <https://fuchsia.dev>; <https://en.wikipedia.org/wiki/Google_Fuchsia>)
@@ -241,7 +242,7 @@ clap = { version = "2.33", features = ["wrap_help"] }
 lazy_static = { version="1.3" }
 textwrap = { version="0.14", features=["terminal_size"] }
 uucore = { version=">=0.0.9", package="uucore", path="src/uucore" }
-selinux = { version="0.2.1", optional = true }
+selinux = { version="0.2.3", optional = true }
 # * uutils
 uu_test  = { optional=true, version="0.0.7", package="uu_test", path="src/uu/test" }
 #
@@ -313,6 +314,7 @@ realpath = { optional=true, version="0.0.7", package="uu_realpath", path="src/uu
 relpath  = { optional=true, version="0.0.7", package="uu_relpath", path="src/uu/relpath" }
 rm       = { optional=true, version="0.0.7", package="uu_rm", path="src/uu/rm" }
 rmdir    = { optional=true, version="0.0.7", package="uu_rmdir", path="src/uu/rmdir" }
+runcon   = { optional=true, version="0.0.7", package="uu_runcon", path="src/uu/runcon" }
 seq      = { optional=true, version="0.0.7", package="uu_seq", path="src/uu/seq" }
 shred    = { optional=true, version="0.0.7", package="uu_shred", path="src/uu/shred" }
 shuf     = { optional=true, version="0.0.7", package="uu_shuf", path="src/uu/shuf" }

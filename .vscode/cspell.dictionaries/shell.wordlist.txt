@@ -91,6 +91,7 @@ rerast
 rollup
 sed
 selinuxenabled
+sestatus
 wslpath
 xargs
 
