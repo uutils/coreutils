@@ -125,9 +125,9 @@ checksum = "349f9b6a179ed607305526ca489b34ad0a41aed5f7980fa90eb03160b69598fb"
 
 [[package]]
 name = "bitflags"
-version = "1.2.1"
+version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
+checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
 name = "bitvec"
@@ -384,6 +384,7 @@ dependencies = [
  "uu_relpath",
  "uu_rm",
  "uu_rmdir",
+ "uu_runcon",
  "uu_seq",
  "uu_shred",
  "uu_shuf",
@@ -1675,9 +1676,9 @@ checksum = "d29ab0c6d3fc0ee92fe66e2d99f700eab17a8d57d1c1d3b748380fb20baa78cd"
 
 [[package]]
 name = "selinux"
-version = "0.2.1"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1aa2f705dd871c2eb90888bb2d44b13218b34f5c7318c3971df62f799d0143eb"
+checksum = "1cf704a543fe60d898f3253f1cc37655d0f0e9cdb68ef6230557e0e031b80608"
 dependencies = [
  "bitflags",
  "libc",
@@ -2791,6 +2792,19 @@ name = "uu_rmdir"
 version = "0.0.7"
 dependencies = [
  "clap",
+ "uucore",
+ "uucore_procs",
+]
+
+[[package]]
+name = "uu_runcon"
+version = "0.0.7"
+dependencies = [
+ "clap",
+ "fts-sys",
+ "libc",
+ "selinux",
+ "thiserror",
  "uucore",
  "uucore_procs",
 ]

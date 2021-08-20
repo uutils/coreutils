@@ -162,6 +162,7 @@ blocksize
 canonname
 chroot
 dlsym
+execvp
 fdatasync
 freeaddrinfo
 getaddrinfo
