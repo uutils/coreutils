@@ -92,7 +92,7 @@ fn buffer_tac(data: &[u8], before: bool, separator: &str) -> std::io::Result<()>
     // entire buffer to stdout.
     let dlen = data.len();
     if dlen < slen {
-        return out.write_all(&data);
+        return out.write_all(data);
     }
 
     // Iterate over each byte in the buffer in reverse. When we find a
