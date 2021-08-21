@@ -14,7 +14,7 @@ use clap::{crate_version, App, Arg};
 use std::fs;
 use std::io::{stdout, Write};
 use std::path::{Path, PathBuf};
-use uucore::fs::{canonicalize, CanonicalizeMode};
+use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
 
 const NAME: &str = "readlink";
 const ABOUT: &str = "Print value of a symbolic link or canonical file name.";
@@ -42,14 +42,21 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let silent = matches.is_present(OPT_SILENT) || matches.is_present(OPT_QUIET);
     let verbose = matches.is_present(OPT_VERBOSE);
 
-    let can_mode = if matches.is_present(OPT_CANONICALIZE) {
-        CanonicalizeMode::Normal
-    } else if matches.is_present(OPT_CANONICALIZE_EXISTING) {
-        CanonicalizeMode::Existing
-    } else if matches.is_present(OPT_CANONICALIZE_MISSING) {
-        CanonicalizeMode::Missing
+    let res_mode = if matches.is_present(OPT_CANONICALIZE)
+        || matches.is_present(OPT_CANONICALIZE_EXISTING)
+        || matches.is_present(OPT_CANONICALIZE_MISSING)
+    {
+        ResolveMode::Logical
     } else {
-        CanonicalizeMode::None
+        ResolveMode::None
+    };
+
+    let can_mode = if matches.is_present(OPT_CANONICALIZE_EXISTING) {
+        MissingHandling::Existing
+    } else if matches.is_present(OPT_CANONICALIZE_MISSING) {
+        MissingHandling::Missing
+    } else {
+        MissingHandling::Normal
     };
 
     let files: Vec<String> = matches
@@ -71,7 +78,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     for f in &files {
         let p = PathBuf::from(f);
-        if can_mode == CanonicalizeMode::None {
+        if res_mode == ResolveMode::None {
             match fs::read_link(&p) {
                 Ok(path) => show(&path, no_newline, use_zero),
                 Err(err) => {
@@ -82,7 +89,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 }
             }
         } else {
-            match canonicalize(&p, can_mode) {
+            match canonicalize(&p, can_mode, res_mode) {
                 Ok(path) => show(&path, no_newline, use_zero),
                 Err(err) => {
                     if verbose {

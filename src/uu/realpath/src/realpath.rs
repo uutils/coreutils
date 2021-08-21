@@ -12,13 +12,15 @@ extern crate uucore;
 
 use clap::{crate_version, App, Arg};
 use std::path::{Path, PathBuf};
-use uucore::fs::{canonicalize, CanonicalizeMode};
+use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
 
 static ABOUT: &str = "print the resolved path";
 
 static OPT_QUIET: &str = "quiet";
 static OPT_STRIP: &str = "strip";
 static OPT_ZERO: &str = "zero";
+static OPT_PHYSICAL: &str = "physical";
+static OPT_LOGICAL: &str = "logical";
 
 static ARG_FILES: &str = "files";
 
@@ -42,9 +44,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let strip = matches.is_present(OPT_STRIP);
     let zero = matches.is_present(OPT_ZERO);
     let quiet = matches.is_present(OPT_QUIET);
+    let logical = matches.is_present(OPT_LOGICAL);
     let mut retcode = 0;
     for path in &paths {
-        if let Err(e) = resolve_path(path, strip, zero) {
+        if let Err(e) = resolve_path(path, strip, zero, logical) {
             if !quiet {
                 show_error!("{}: {}", e, path.display());
             }
@@ -77,6 +80,19 @@ pub fn uu_app() -> App<'static, 'static> {
                 .help("Separate output filenames with \\0 rather than newline"),
         )
         .arg(
+            Arg::with_name(OPT_LOGICAL)
+                .short("L")
+                .long(OPT_LOGICAL)
+                .help("resolve '..' components before symlinks"),
+        )
+        .arg(
+            Arg::with_name(OPT_PHYSICAL)
+                .short("P")
+                .long(OPT_PHYSICAL)
+                .overrides_with_all(&[OPT_STRIP, OPT_LOGICAL])
+                .help("resolve symlinks as encountered (default)"),
+        )
+        .arg(
             Arg::with_name(ARG_FILES)
                 .multiple(true)
                 .takes_value(true)
@@ -96,14 +112,17 @@ pub fn uu_app() -> App<'static, 'static> {
 ///
 /// This function returns an error if there is a problem resolving
 /// symbolic links.
-fn resolve_path(p: &Path, strip: bool, zero: bool) -> std::io::Result<()> {
-    let mode = if strip {
-        CanonicalizeMode::None
+fn resolve_path(p: &Path, strip: bool, zero: bool, logical: bool) -> std::io::Result<()> {
+    let resolve = if strip {
+        ResolveMode::None
+    } else if logical {
+        ResolveMode::Logical
     } else {
-        CanonicalizeMode::Normal
+        ResolveMode::Physical
     };
-    let abs = canonicalize(p, mode)?;
+    let abs = canonicalize(p, MissingHandling::Normal, resolve)?;
     let line_ending = if zero { '\0' } else { '\n' };
+
     print!("{}{}", abs.display(), line_ending);
     Ok(())
 }

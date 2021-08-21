@@ -54,11 +54,8 @@ pub fn resolve_relative_path(path: &Path) -> Cow<Path> {
 
 /// Controls how symbolic links should be handled when canonicalizing a path.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum CanonicalizeMode {
-    /// Do not resolve any symbolic links.
-    None,
-
-    /// Resolve all symbolic links.
+pub enum MissingHandling {
+    /// Return an error if any part of the path is missing.
     Normal,
 
     /// Resolve symbolic links, ignoring errors on the final component.
@@ -66,6 +63,19 @@ pub enum CanonicalizeMode {
 
     /// Resolve symbolic links, ignoring errors on the non-final components.
     Missing,
+}
+
+/// Controls when symbolic links are resolved
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ResolveMode {
+    /// Do not resolve any symbolic links.
+    None,
+
+    /// Resolve symlinks as encountered when processing the path
+    Physical,
+
+    /// Resolve '..' elements before symlinks
+    Logical,
 }
 
 // copied from https://github.com/rust-lang/cargo/blob/2e4cfc2b7d43328b207879228a2ca7d427d188bb/src/cargo/util/paths.rs#L65-L90
@@ -128,20 +138,32 @@ fn resolve<P: AsRef<Path>>(original: P) -> IOResult<PathBuf> {
 /// This function is a generalization of [`std::fs::canonicalize`] that
 /// allows controlling how symbolic links are resolved and how to deal
 /// with missing components. It returns the canonical, absolute form of
-/// a path. The `can_mode` parameter controls how symbolic links are
-/// resolved:
+/// a path.
+/// The `miss_mode` parameter controls how missing path elements are handled
 ///
-/// * [`CanonicalizeMode::Normal`] makes this function behave like
+/// * [`MissingHandling::Normal`] makes this function behave like
 ///   [`std::fs::canonicalize`], resolving symbolic links and returning
 ///   an error if the path does not exist.
-/// * [`CanonicalizeMode::Missing`] makes this function ignore non-final
+/// * [`MissingHandling::Missing`] makes this function ignore non-final
 ///   components of the path that could not be resolved.
-/// * [`CanonicalizeMode::Existing`] makes this function return an error
+/// * [`MissingHandling::Existing`] makes this function return an error
 ///   if the final component of the path does not exist.
-/// * [`CanonicalizeMode::None`] makes this function not try to resolve
-///   any symbolic links.
 ///
-pub fn canonicalize<P: AsRef<Path>>(original: P, can_mode: CanonicalizeMode) -> IOResult<PathBuf> {
+/// The `res_mode` parameter controls how symbolic links are
+/// resolved:
+///
+/// * [`ResolveMode::None`] makes this function not try to resolve
+///   any symbolic links.
+/// * [`ResolveMode::Physical`] makes this function resolve symlinks as they
+///   are encountered
+/// * [`ResolveMode::Logical`] makes this function resolve '..' components
+///   before symlinks
+///
+pub fn canonicalize<P: AsRef<Path>>(
+    original: P,
+    miss_mode: MissingHandling,
+    res_mode: ResolveMode,
+) -> IOResult<PathBuf> {
     // Create an absolute path
     let original = original.as_ref();
     let original = if original.is_absolute() {
@@ -165,7 +187,11 @@ pub fn canonicalize<P: AsRef<Path>>(original: P, can_mode: CanonicalizeMode) -> 
             }
             Component::CurDir => (),
             Component::ParentDir => {
-                parts.pop();
+                if res_mode == ResolveMode::Logical {
+                    parts.pop();
+                } else {
+                    parts.push(part.as_os_str());
+                }
             }
             Component::Normal(_) => {
                 parts.push(part.as_os_str());
@@ -178,12 +204,17 @@ pub fn canonicalize<P: AsRef<Path>>(original: P, can_mode: CanonicalizeMode) -> 
         for part in parts[..parts.len() - 1].iter() {
             result.push(part);
 
-            if can_mode == CanonicalizeMode::None {
+            //resolve as we go to handle long relative paths on windows
+            if res_mode == ResolveMode::Physical {
+                result = normalize_path(&result);
+            }
+
+            if res_mode == ResolveMode::None {
                 continue;
             }
 
             match resolve(&result) {
-                Err(_) if can_mode == CanonicalizeMode::Missing => continue,
+                Err(_) if miss_mode == MissingHandling::Missing => continue,
                 Err(e) => return Err(e),
                 Ok(path) => {
                     result.pop();
@@ -194,12 +225,12 @@ pub fn canonicalize<P: AsRef<Path>>(original: P, can_mode: CanonicalizeMode) -> 
 
         result.push(parts.last().unwrap());
 
-        if can_mode == CanonicalizeMode::None {
+        if res_mode == ResolveMode::None {
             return Ok(result);
         }
 
         match resolve(&result) {
-            Err(e) if can_mode == CanonicalizeMode::Existing => {
+            Err(e) if miss_mode == MissingHandling::Existing => {
                 return Err(e);
             }
             Ok(path) => {
@@ -207,6 +238,9 @@ pub fn canonicalize<P: AsRef<Path>>(original: P, can_mode: CanonicalizeMode) -> 
                 result.push(path);
             }
             Err(_) => (),
+        }
+        if res_mode == ResolveMode::Physical {
+            result = normalize_path(&result);
         }
     }
     Ok(result)
