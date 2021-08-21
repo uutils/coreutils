@@ -28,7 +28,7 @@ uucore_procs = { version=">=0.0.6", package="uucore_procs", path="../../uucore_p
 walkdir = "2.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
-ioctl-sys = "0.5.2"
+ioctl-sys = "0.6"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi = { version="0.3", features=["fileapi"] }

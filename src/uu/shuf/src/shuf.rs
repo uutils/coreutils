@@ -240,10 +240,12 @@ fn shuf_bytes(input: &mut Vec<&[u8]>, opts: Options) {
     });
 
     let mut rng = match opts.random_source {
-        Some(r) => WrappedRng::RngFile(rand::read::ReadRng::new(match File::open(&r[..]) {
-            Ok(f) => f,
-            Err(e) => crash!(1, "failed to open random source '{}': {}", &r[..], e),
-        })),
+        Some(r) => WrappedRng::RngFile(rand::rngs::adapter::ReadRng::new(
+            match File::open(&r[..]) {
+                Ok(f) => f,
+                Err(e) => crash!(1, "failed to open random source '{}': {}", &r[..], e),
+            },
+        )),
         None => WrappedRng::RngDefault(rand::thread_rng()),
     };
 
@@ -299,8 +301,8 @@ fn parse_range(input_range: &str) -> Result<(usize, usize), String> {
 }
 
 enum WrappedRng {
-    RngFile(rand::read::ReadRng<File>),
-    RngDefault(rand::ThreadRng),
+    RngFile(rand::rngs::adapter::ReadRng<File>),
+    RngDefault(rand::rngs::ThreadRng),
 }
 
 impl WrappedRng {
