@@ -9,7 +9,8 @@
 // spell-checker:ignore (words) writeback wipesync
 
 use clap::{crate_version, App, Arg};
-use rand::{Rng, ThreadRng};
+use rand::prelude::SliceRandom;
+use rand::Rng;
 use std::cell::{Cell, RefCell};
 use std::fs;
 use std::fs::{File, OpenOptions};
@@ -119,7 +120,7 @@ struct BytesGenerator<'a> {
     block_size: usize,
     exact: bool, // if false, every block's size is block_size
     gen_type: PassType<'a>,
-    rng: Option<RefCell<ThreadRng>>,
+    rng: Option<RefCell<rand::rngs::ThreadRng>>,
     bytes: [u8; BLOCK_SIZE],
 }
 
@@ -499,7 +500,8 @@ fn wipe_file(
         for pattern in PATTERNS.iter().take(remainder) {
             pass_sequence.push(PassType::Pattern(pattern));
         }
-        rand::thread_rng().shuffle(&mut pass_sequence[..]); // randomize the order of application
+        let mut rng = rand::thread_rng();
+        pass_sequence.shuffle(&mut rng); // randomize the order of application
 
         let n_random = 3 + n_passes / 10; // Minimum 3 random passes; ratio of 10 after
                                           // Evenly space random passes; ensures one at the beginning and end

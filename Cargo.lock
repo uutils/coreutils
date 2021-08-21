@@ -9,6 +9,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fe438c63458706e03479442743baae6c88256498e6431708f6dfc520a26515d3"
 
 [[package]]
+name = "ahash"
+version = "0.4.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "739f4a8db6605981345c5654f3a85b056ce52f37a39d34da03f25bf2151ea16e"
+
+[[package]]
 name = "aho-corasick"
 version = "0.7.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -234,7 +240,7 @@ version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "853eda514c284c2287f4bf20ae614f8781f40a81d32ecda6e91449304dfe077c"
 dependencies = [
- "glob 0.3.0",
+ "glob",
  "libc",
  "libloading",
 ]
@@ -294,7 +300,7 @@ dependencies = [
  "clap",
  "conv",
  "filetime",
- "glob 0.3.0",
+ "glob",
  "lazy_static",
  "libc",
  "nix 0.20.0",
@@ -653,6 +659,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "dlv-list"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "68df3f2b690c1b86e65ef7830956aededf3cb0a16f898f79b9a6f421a7b6211b"
+dependencies = [
+ "rand 0.8.4",
+]
+
+[[package]]
 name = "dns-lookup"
 version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -806,12 +821,6 @@ dependencies = [
 
 [[package]]
 name = "glob"
-version = "0.2.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8be18de09a56b60ed0edf84bc9df007e30040691af7acd1c41874faac5895bfb"
-
-[[package]]
-name = "glob"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b919933a397b79c37e33b77bb2aa3dc8eb6e165ad809e58ff75bc7db2e34574"
@@ -834,6 +843,15 @@ name = "half"
 version = "1.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "62aca2aba2d62b4a7f5b33f3712cb1b0692779a56fb510499d5c0aa594daeaf3"
+
+[[package]]
+name = "hashbrown"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d7afe4a420e3fe79967a00898cc1f4db7c8a49a9333a29f8a4bd76a253d5cd04"
+dependencies = [
+ "ahash",
+]
 
 [[package]]
 name = "heck"
@@ -893,9 +911,9 @@ dependencies = [
 
 [[package]]
 name = "ioctl-sys"
-version = "0.5.2"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e2c4b26352496eaaa8ca7cfa9bd99e93419d3f7983dc6e99c2a35fe9e33504a"
+checksum = "1c429fffa658f288669529fc26565f728489a2e39bc7b24a428aaaf51355182e"
 
 [[package]]
 name = "itertools"
@@ -1068,6 +1086,18 @@ dependencies = [
 
 [[package]]
 name = "nix"
+version = "0.19.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b2ccba0cfe4fdf15982d1674c69b1fd80bad427d293849982668dfe454bd61f2"
+dependencies = [
+ "bitflags",
+ "cc",
+ "cfg-if 1.0.0",
+ "libc",
+]
+
+[[package]]
+name = "nix"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fa9b4819da1bc61c0ea48b63b7bc8604064dd43013e7cc325df098d49cd7c18a"
@@ -1183,6 +1213,16 @@ checksum = "388410bf5fa341f10e58e6db3975f4bea1ac30247dd79d37a9e5ced3cb4cc3b0"
 dependencies = [
  "cc",
  "pkg-config",
+]
+
+[[package]]
+name = "ordered-multimap"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c672c7ad9ec066e428c00eb917124a06f08db19e2584de982cc34b1f4c12485"
+dependencies = [
+ "dlv-list",
+ "hashbrown",
 ]
 
 [[package]]
@@ -1604,9 +1644,13 @@ dependencies = [
 
 [[package]]
 name = "rust-ini"
-version = "0.13.0"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e52c148ef37f8c375d49d5a73aa70713125b7f19095948a923f80afdeb22ec2"
+checksum = "63471c4aa97a1cf8332a5f97709a79a4234698de6a1f5087faf66f2dae810e22"
+dependencies = [
+ "cfg-if 1.0.0",
+ "ordered-multimap",
+]
 
 [[package]]
 name = "rustc-hash"
@@ -2065,7 +2109,7 @@ name = "uu_chown"
 version = "0.0.7"
 dependencies = [
  "clap",
- "glob 0.3.0",
+ "glob",
  "uucore",
  "uucore_procs",
  "walkdir",
@@ -2121,7 +2165,7 @@ name = "uu_csplit"
 version = "0.0.7"
 dependencies = [
  "clap",
- "glob 0.2.11",
+ "glob",
  "regex",
  "thiserror",
  "uucore",
@@ -2181,7 +2225,7 @@ name = "uu_dircolors"
 version = "0.0.7"
 dependencies = [
  "clap",
- "glob 0.3.0",
+ "glob",
  "uucore",
  "uucore_procs",
 ]
@@ -2493,7 +2537,7 @@ dependencies = [
  "atty",
  "clap",
  "crossterm",
- "nix 0.13.1",
+ "nix 0.19.1",
  "redox_syscall",
  "redox_termios",
  "unicode-segmentation",
@@ -2732,7 +2776,7 @@ dependencies = [
  "clap",
  "filetime",
  "libc",
- "rand 0.5.6",
+ "rand 0.7.3",
  "time",
  "uucore",
  "uucore_procs",
@@ -3064,7 +3108,7 @@ dependencies = [
  "getopts",
  "lazy_static",
  "libc",
- "nix 0.13.1",
+ "nix 0.19.1",
  "platform-info",
  "termion",
  "thiserror",
@@ -3139,7 +3183,7 @@ version = "2.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "035793abb854745033f01a07647a79831eba29ec0be377205f2a25b0aa830020"
 dependencies = [
- "glob 0.3.0",
+ "glob",
 ]
 
 [[package]]
