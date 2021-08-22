@@ -12,6 +12,7 @@ macro_rules! test_digest {
         static DIGEST_ARG: &'static str = concat!("--", stringify!($t));
         static BITS_ARG: &'static str = concat!("--bits=", stringify!($size));
         static EXPECTED_FILE: &'static str = concat!(stringify!($id), ".expected");
+        static CHECK_FILE: &'static str = concat!(stringify!($id), ".checkfile");
 
         #[test]
         fn test_single_file() {
@@ -25,6 +26,16 @@ macro_rules! test_digest {
             let ts = TestScenario::new("hashsum");
             assert_eq!(ts.fixtures.read(EXPECTED_FILE),
                        get_hash!(ts.ucmd().arg(DIGEST_ARG).arg(BITS_ARG).pipe_in_fixture("input.txt").succeeds().no_stderr().stdout_str()));
+        }
+
+        #[test]
+        fn test_check() {
+            let ts = TestScenario::new("hashsum");
+            ts.ucmd()
+                .args(&[DIGEST_ARG, BITS_ARG, "--check", CHECK_FILE])
+                .succeeds()
+                .no_stderr()
+                .stdout_is("input.txt: OK\n");
         }
     }
     )*)
