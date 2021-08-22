@@ -119,8 +119,14 @@ pub fn uu_app() -> App<'static, 'static> {
 }
 
 fn basename(fullname: &str, suffix: &str) -> String {
-    // Remove all platform-specific path separators from the end
+    // Remove all platform-specific path separators from the end.
     let path = fullname.trim_end_matches(is_separator);
+
+    // If the path contained *only* suffix characters (for example, if
+    // `fullname` were "///" and `suffix` were "/"), then `path` would
+    // be left with the empty string. In that case, we set `path` to be
+    // the original `fullname` to avoid returning the empty path.
+    let path = if path.is_empty() { fullname } else { path };
 
     // Convert to path buffer and get last path component
     let pb = PathBuf::from(path);
