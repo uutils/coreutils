@@ -350,13 +350,8 @@ fn digit_width(input: &Input) -> WcResult<Option<usize>> {
 fn max_width(inputs: &[Input]) -> usize {
     let mut result = 1;
     for input in inputs {
-        match digit_width(input) {
-            Ok(maybe_n) => {
-                if let Some(n) = maybe_n {
-                    result = result.max(n);
-                }
-            }
-            Err(_) => continue,
+        if let Ok(Some(n)) = digit_width(input) {
+            result = result.max(n);
         }
     }
     result

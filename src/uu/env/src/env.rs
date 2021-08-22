@@ -89,7 +89,7 @@ fn load_config_file(opts: &mut Options) -> Result<(), i32> {
 
         for (_, prop) in &conf {
             // ignore all INI section lines (treat them as comments)
-            for (key, value) in prop {
+            for (key, value) in prop.iter() {
                 env::set_var(key, value);
             }
         }
