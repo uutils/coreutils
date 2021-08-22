@@ -1,4 +1,4 @@
-// spell-checker:ignore axxbxx bxxaxx
+// spell-checker:ignore axxbxx bxxaxx axxx axxxx xxaxx xxax xxxxa
 use crate::common::util::*;
 
 #[test]
@@ -123,6 +123,78 @@ fn test_multi_char_separator() {
         .pipe_in("axxbxx")
         .succeeds()
         .stdout_is("bxxaxx");
+}
+
+#[test]
+fn test_multi_char_separator_overlap() {
+    // The right-most pair of "x" characters in the input is treated as
+    // the only line separator. That is, "axxx" is interpreted as having
+    // one line comprising the string "ax" followed by the line
+    // separator "xx".
+    new_ucmd!()
+        .args(&["-s", "xx"])
+        .pipe_in("axxx")
+        .succeeds()
+        .stdout_is("axxx");
+
+    // Each non-overlapping pair of "x" characters in the input is
+    // treated as a line separator. That is, "axxxx" is interpreted as
+    // having two lines:
+    //
+    // * the second line is the empty string "" followed by the line
+    //   separator "xx",
+    // * the first line is the string "a" followed by the line separator
+    //   "xx".
+    //
+    // The lines are printed in reverse, resulting in "xx" followed by
+    // "axx".
+    new_ucmd!()
+        .args(&["-s", "xx"])
+        .pipe_in("axxxx")
+        .succeeds()
+        .stdout_is("xxaxx");
+}
+
+#[test]
+fn test_multi_char_separator_overlap_before() {
+    // With the "-b" option, the line separator is assumed to be at the
+    // beginning of the line. In this case, That is, "axxx" is
+    // interpreted as having two lines:
+    //
+    // * the second line is the empty string "" preceded by the line
+    //   separator "xx",
+    // * the first line is the string "ax" preceded by no line
+    //   separator, since there are no more characters preceding it.
+    //
+    // The lines are printed in reverse, resulting in "xx" followed by
+    // "ax".
+    new_ucmd!()
+        .args(&["-b", "-s", "xx"])
+        .pipe_in("axxx")
+        .succeeds()
+        .stdout_is("xxax");
+
+    // With the "-b" option, the line separator is assumed to be at the
+    // beginning of the line. Each non-overlapping pair of "x"
+    // characters in the input is treated as a line separator. That is,
+    // "axxxx" is interpreted as having three lines:
+    //
+    // * the third line is the empty string "" preceded by the line
+    //   separator "xx" (the last two "x" characters in the input
+    //   string),
+    // * the second line is the empty string "" preceded by the line
+    //   separator "xx" (the first two "x" characters in the input
+    //   string),
+    // * the first line is the string "a" preceded by no line separator,
+    //   since there are no more characters preceding it.
+    //
+    // The lines are printed in reverse, resulting in "xx" followed by
+    // "xx" followed by "a".
+    new_ucmd!()
+        .args(&["-b", "-s", "xx"])
+        .pipe_in("axxxx")
+        .succeeds()
+        .stdout_is("xxxxa");
 }
 
 #[test]

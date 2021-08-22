@@ -5,12 +5,13 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) sbytes slen dlen
+// spell-checker:ignore (ToDO) sbytes slen dlen memmem
 
 #[macro_use]
 extern crate uucore;
 
 use clap::{crate_version, App, Arg};
+use memchr::memmem;
 use std::io::{stdin, stdout, BufReader, Read, Write};
 use std::{fs::File, path::Path};
 use uucore::InvalidEncodingHandling;
@@ -80,20 +81,33 @@ pub fn uu_app() -> App<'static, 'static> {
         .arg(Arg::with_name(options::FILE).hidden(true).multiple(true))
 }
 
+/// Write lines from `data` to stdout in reverse.
+///
+/// This function writes to [`stdout`] each line appearing in `data`,
+/// starting with the last line and ending with the first line. The
+/// `separator` parameter defines what characters to use as a line
+/// separator.
+///
+/// If `before` is `false`, then this function assumes that the
+/// `separator` appears at the end of each line, as in `"abc\ndef\n"`.
+/// If `before` is `true`, then this function assumes that the
+/// `separator` appears at the beginning of each line, as in
+/// `"/abc/def"`.
 fn buffer_tac(data: &[u8], before: bool, separator: &str) -> std::io::Result<()> {
     let mut out = stdout();
 
-    // Convert the line separator to a byte sequence.
-    let sbytes = separator.as_bytes();
-    let slen = sbytes.len();
+    // The number of bytes in the line separator.
+    let slen = separator.as_bytes().len();
 
-    // If there are more characters in the separator than in the data,
-    // we can't possibly split the data on the separator. Write the
-    // entire buffer to stdout.
-    let dlen = data.len();
-    if dlen < slen {
-        return out.write_all(data);
-    }
+    // The index of the start of the next line in the `data`.
+    //
+    // As we scan through the `data` from right to left, we update this
+    // variable each time we find a new line.
+    //
+    // If `before` is `true`, then each line starts immediately before
+    // the line separator. Otherwise, each line starts immediately after
+    // the line separator.
+    let mut following_line_start = data.len();
 
     // Iterate over each byte in the buffer in reverse. When we find a
     // line separator, write the line to stdout.
@@ -101,16 +115,13 @@ fn buffer_tac(data: &[u8], before: bool, separator: &str) -> std::io::Result<()>
     // The `before` flag controls whether the line separator appears at
     // the end of the line (as in "abc\ndef\n") or at the beginning of
     // the line (as in "/abc/def").
-    let mut following_line_start = data.len();
-    for i in (0..dlen - slen + 1).rev() {
-        if &data[i..i + slen] == sbytes {
-            if before {
-                out.write_all(&data[i..following_line_start])?;
-                following_line_start = i;
-            } else {
-                out.write_all(&data[i + slen..following_line_start])?;
-                following_line_start = i + slen;
-            }
+    for i in memmem::rfind_iter(data, separator) {
+        if before {
+            out.write_all(&data[i..following_line_start])?;
+            following_line_start = i;
+        } else {
+            out.write_all(&data[i + slen..following_line_start])?;
+            following_line_start = i + slen;
         }
     }
 
