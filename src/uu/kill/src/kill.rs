@@ -41,7 +41,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .accept_any();
     let (args, obs_signal) = handle_obsolete(args);
 
-    let usage = format!("{} [OPTIONS]... PID...", executable!());
+    let usage = format!("{} [OPTIONS]... PID...", uucore::execution_phrase());
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     let mode = if matches.is_present(options::TABLE) || matches.is_present(options::TABLE_OLD) {
@@ -76,7 +76,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(

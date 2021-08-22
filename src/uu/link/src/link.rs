@@ -19,8 +19,8 @@ pub mod options {
     pub static FILES: &str = "FILES";
 }
 
-fn get_usage() -> String {
-    format!("{0} FILE1 FILE2", executable!())
+fn usage() -> String {
+    format!("{0} FILE1 FILE2", uucore::execution_phrase())
 }
 
 pub fn normalize_error_message(e: Error) -> String {
@@ -31,7 +31,7 @@ pub fn normalize_error_message(e: Error) -> String {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     let files: Vec<_> = matches
@@ -51,7 +51,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(

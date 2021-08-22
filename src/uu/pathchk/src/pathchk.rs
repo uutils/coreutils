@@ -25,7 +25,6 @@ enum Mode {
     Both,    // a combination of `Basic` and `Extra`
 }
 
-static NAME: &str = "pathchk";
 static ABOUT: &str = "Check whether file names are valid or portable";
 
 mod options {
@@ -39,12 +38,12 @@ mod options {
 const POSIX_PATH_MAX: usize = 256;
 const POSIX_NAME_MAX: usize = 14;
 
-fn get_usage() -> String {
-    format!("{0} [OPTION]... NAME...", executable!())
+fn usage() -> String {
+    format!("{0} [OPTION]... NAME...", uucore::execution_phrase())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
@@ -69,7 +68,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     // take necessary actions
     let paths = matches.values_of(options::PATH);
     let mut res = if paths.is_none() {
-        show_error!("missing operand\nTry {} --help for more information", NAME);
+        show_error!(
+            "missing operand\nTry '{} --help' for more information",
+            uucore::execution_phrase()
+        );
         false
     } else {
         true
@@ -96,7 +98,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(

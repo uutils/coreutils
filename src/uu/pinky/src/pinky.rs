@@ -40,8 +40,8 @@ mod options {
     pub const USER: &str = "user";
 }
 
-fn get_usage() -> String {
-    format!("{0} [OPTION]... [USER]...", executable!())
+fn usage() -> String {
+    format!("{0} [OPTION]... [USER]...", uucore::execution_phrase())
 }
 
 fn get_long_usage() -> String {
@@ -57,7 +57,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let usage = get_usage();
+    let usage = usage();
     let after_help = get_long_usage();
 
     let matches = uu_app()
@@ -130,7 +130,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(

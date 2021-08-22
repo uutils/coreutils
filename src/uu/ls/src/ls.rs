@@ -46,8 +46,8 @@ use unicode_width::UnicodeWidthStr;
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 use uucore::{fs::display_permissions, version_cmp::version_cmp};
 
-fn get_usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", executable!())
+fn usage() -> String {
+    format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
 }
 
 pub mod options {
@@ -603,7 +603,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let usage = get_usage();
+    let usage = usage();
 
     let app = uu_app().usage(&usage[..]);
 
@@ -618,7 +618,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(
             "By default, ls will list the files and contents of any directories on \

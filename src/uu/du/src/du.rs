@@ -70,7 +70,6 @@ mod options {
     pub const FILE: &str = "FILE";
 }
 
-const NAME: &str = "du";
 const SUMMARY: &str = "estimate file space usage";
 const LONG_HELP: &str = "
 Display values are in units of the first available SIZE from --block-size,
@@ -87,7 +86,7 @@ const UNITS: [(char, u32); 6] = [('E', 6), ('P', 5), ('T', 4), ('G', 3), ('M', 2
 
 struct Options {
     all: bool,
-    program_name: String,
+    util_name: String,
     max_depth: Option<usize>,
     total: bool,
     separate_dirs: bool,
@@ -295,7 +294,7 @@ fn du(
                 safe_writeln!(
                     stderr(),
                     "{}: cannot read directory '{}': {}",
-                    options.program_name,
+                    options.util_name,
                     my_stat.path.display(),
                     e
                 );
@@ -393,11 +392,11 @@ fn convert_size_other(size: u64, _multiplier: u64, block_size: u64) -> String {
     format!("{}", ((size as f64) / (block_size as f64)).ceil())
 }
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!(
         "{0} [OPTION]... [FILE]...
     {0} [OPTION]... --files0-from=F",
-        executable!()
+        uucore::execution_phrase()
     )
 }
 
@@ -424,7 +423,8 @@ Valid arguments are:
 - 'long-iso'
 - 'iso'
 Try '{} --help' for more information.",
-                s, NAME
+                s,
+                uucore::execution_phrase()
             ),
             DuError::InvalidTimeArg(s) => write!(
                 f,
@@ -456,7 +456,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let usage = get_usage();
+    let usage = usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
@@ -466,7 +466,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let options = Options {
         all: matches.is_present(options::ALL),
-        program_name: NAME.to_owned(),
+        util_name: uucore::util_name(),
         max_depth,
         total: matches.is_present(options::TOTAL),
         separate_dirs: matches.is_present(options::SEPARATE_DIRS),
@@ -625,7 +625,7 @@ fn parse_depth(max_depth_str: Option<&str>, summarize: bool) -> UResult<Option<u
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(SUMMARY)
         .after_help(LONG_HELP)

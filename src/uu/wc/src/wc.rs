@@ -95,11 +95,11 @@ pub mod options {
 
 static ARG_FILES: &str = "files";
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!(
         "{0} [OPTION]... [FILE]...
  With no FILE, or when FILE is -, read standard input.",
-        executable!()
+        uucore::execution_phrase()
     )
 }
 
@@ -132,7 +132,7 @@ impl Input {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
@@ -164,7 +164,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(

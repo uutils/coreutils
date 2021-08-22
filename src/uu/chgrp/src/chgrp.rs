@@ -59,10 +59,10 @@ const FTS_COMFOLLOW: u8 = 1;
 const FTS_PHYSICAL: u8 = 1 << 1;
 const FTS_LOGICAL: u8 = 1 << 2;
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!(
         "{0} [OPTION]... GROUP FILE...\n    {0} [OPTION]... --reference=RFILE FILE...",
-        executable!()
+        uucore::execution_phrase()
     )
 }
 
@@ -71,7 +71,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let usage = get_usage();
+    let usage = usage();
 
     let mut app = uu_app().usage(&usage[..]);
 
@@ -197,7 +197,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(VERSION)
         .about(ABOUT)
         .arg(

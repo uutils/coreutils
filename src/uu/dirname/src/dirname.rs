@@ -20,8 +20,8 @@ mod options {
     pub const DIR: &str = "dir";
 }
 
-fn get_usage() -> String {
-    format!("{0} [OPTION] NAME...", executable!())
+fn usage() -> String {
+    format!("{0} [OPTION] NAME...", uucore::execution_phrase())
 }
 
 fn get_long_usage() -> String {
@@ -37,7 +37,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let usage = get_usage();
+    let usage = usage();
     let after_help = get_long_usage();
 
     let matches = uu_app()
@@ -86,7 +86,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .about(ABOUT)
         .version(crate_version!())
         .arg(

@@ -7,8 +7,6 @@
 
 // spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat
 
-#[macro_use]
-extern crate uucore;
 use uucore::InvalidEncodingHandling;
 
 #[cfg(test)]
@@ -956,7 +954,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> clap::App<'static, 'static> {
-    clap::App::new(executable!())
+    clap::App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(

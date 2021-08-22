@@ -21,8 +21,6 @@ use std::path::Path;
 use std::{char, fs::remove_file};
 use uucore::parse_size::parse_size;
 
-static NAME: &str = "split";
-
 static OPT_BYTES: &str = "bytes";
 static OPT_LINE_BYTES: &str = "line-bytes";
 static OPT_LINES: &str = "lines";
@@ -36,8 +34,11 @@ static OPT_VERBOSE: &str = "verbose";
 static ARG_INPUT: &str = "input";
 static ARG_PREFIX: &str = "prefix";
 
-fn get_usage() -> String {
-    format!("{0} [OPTION]... [INPUT [PREFIX]]", NAME)
+fn usage() -> String {
+    format!(
+        "{0} [OPTION]... [INPUT [PREFIX]]",
+        uucore::execution_phrase()
+    )
 }
 fn get_long_usage() -> String {
     format!(
@@ -47,12 +48,12 @@ fn get_long_usage() -> String {
 Output fixed-size pieces of INPUT to PREFIXaa, PREFIX ab, ...; default
 size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
 -, read standard input.",
-        get_usage()
+        usage()
     )
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
     let long_usage = get_long_usage();
 
     let matches = uu_app()
@@ -127,7 +128,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about("Create output files containing consecutive or interleaved sections of input")
         // strategy (mutually exclusive)

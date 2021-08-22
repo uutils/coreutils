@@ -22,8 +22,8 @@ use uucore::InvalidEncodingHandling;
 static ABOUT: &str = "Unlink the file at [FILE].";
 static OPT_PATH: &str = "FILE";
 
-fn get_usage() -> String {
-    format!("{} [OPTION]... FILE", executable!())
+fn usage() -> String {
+    format!("{} [OPTION]... FILE", uucore::execution_phrase())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
@@ -31,7 +31,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let usage = get_usage();
+    let usage = usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
@@ -44,13 +44,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         crash!(
             1,
             "missing operand\nTry '{0} --help' for more information.",
-            executable!()
+            uucore::execution_phrase()
         );
     } else if paths.len() > 1 {
         crash!(
             1,
             "extra operand: '{1}'\nTry '{0} --help' for more information.",
-            executable!(),
+            uucore::execution_phrase(),
             paths[1]
         );
     }
@@ -95,7 +95,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(Arg::with_name(OPT_PATH).hidden(true).multiple(true))

@@ -16,7 +16,6 @@ use std::io::{stdout, Write};
 use std::path::{Path, PathBuf};
 use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
 
-const NAME: &str = "readlink";
 const ABOUT: &str = "Print value of a symbolic link or canonical file name.";
 const OPT_CANONICALIZE: &str = "canonicalize";
 const OPT_CANONICALIZE_MISSING: &str = "canonicalize-missing";
@@ -29,12 +28,12 @@ const OPT_ZERO: &str = "zero";
 
 const ARG_FILES: &str = "files";
 
-fn get_usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", executable!())
+fn usage() -> String {
+    format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     let mut no_newline = matches.is_present(OPT_NO_NEWLINE);
@@ -66,13 +65,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if files.is_empty() {
         crash!(
             1,
-            "missing operand\nTry {} --help for more information",
-            NAME
+            "missing operand\nTry '{} --help' for more information",
+            uucore::execution_phrase()
         );
     }
 
     if no_newline && files.len() > 1 && !silent {
-        eprintln!("{}: ignoring --no-newline with multiple arguments", NAME);
+        eprintln!(
+            "{}: ignoring --no-newline with multiple arguments",
+            uucore::util_name()
+        );
         no_newline = false;
     }
 
@@ -83,7 +85,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 Ok(path) => show(&path, no_newline, use_zero),
                 Err(err) => {
                     if verbose {
-                        eprintln!("{}: {}: errno {}", NAME, f, err.raw_os_error().unwrap());
+                        eprintln!(
+                            "{}: {}: errno {}",
+                            uucore::util_name(),
+                            f,
+                            err.raw_os_error().unwrap()
+                        );
                     }
                     return 1;
                 }
@@ -93,7 +100,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 Ok(path) => show(&path, no_newline, use_zero),
                 Err(err) => {
                     if verbose {
-                        eprintln!("{}: {}: errno {:?}", NAME, f, err.raw_os_error().unwrap());
+                        eprintln!(
+                            "{}: {}: errno {:?}",
+                            uucore::util_name(),
+                            f,
+                            err.raw_os_error().unwrap()
+                        );
                     }
                     return 1;
                 }
@@ -105,7 +117,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(

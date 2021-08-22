@@ -52,7 +52,6 @@ use uucore::InvalidEncodingHandling;
 
 use crate::tmp_dir::TmpDirWrapper;
 
-const NAME: &str = "sort";
 const ABOUT: &str = "Display sorted concatenation of all FILE(s).";
 
 const LONG_HELP_KEYS: &str = "The key format is FIELD[.CHAR][OPTIONS][,FIELD[.CHAR]][OPTIONS].
@@ -1055,13 +1054,13 @@ impl FieldSelector {
     }
 }
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!(
         "{0} [OPTION]... [FILE]...
 Write the sorted concatenation of all FILE(s) to standard output.
 Mandatory arguments for long options are mandatory for short options too.
 With no FILE, or when FILE is -, read standard input.",
-        NAME
+        uucore::execution_phrase()
     )
 }
 
@@ -1081,7 +1080,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
-    let usage = get_usage();
+    let usage = usage();
     let mut settings: GlobalSettings = Default::default();
 
     let matches = match uu_app().usage(&usage[..]).get_matches_from_safe(args) {
@@ -1287,7 +1286,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(

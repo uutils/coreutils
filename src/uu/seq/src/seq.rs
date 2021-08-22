@@ -22,12 +22,12 @@ static OPT_WIDTHS: &str = "widths";
 
 static ARG_NUMBERS: &str = "numbers";
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!(
         "{0} [OPTION]... LAST
     {0} [OPTION]... FIRST LAST
     {0} [OPTION]... FIRST INCREMENT LAST",
-        executable!()
+        uucore::execution_phrase()
     )
 }
 #[derive(Clone)]
@@ -72,13 +72,13 @@ impl FromStr for Number {
                 Ok(value) if value.is_nan() => Err(format!(
                     "invalid 'not-a-number' argument: '{}'\nTry '{} --help' for more information.",
                     s,
-                    executable!(),
+                    uucore::execution_phrase(),
                 )),
                 Ok(value) => Ok(Number::F64(value)),
                 Err(_) => Err(format!(
                     "invalid floating point argument: '{}'\nTry '{} --help' for more information.",
                     s,
-                    executable!(),
+                    uucore::execution_phrase(),
                 )),
             },
         }
@@ -86,7 +86,7 @@ impl FromStr for Number {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     let numbers = matches.values_of(ARG_NUMBERS).unwrap().collect::<Vec<_>>();
@@ -123,7 +123,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         show_error!(
             "invalid Zero increment value: '{}'\nTry '{} --help' for more information.",
             numbers[1],
-            executable!()
+            uucore::execution_phrase()
         );
         return 1;
     }
@@ -163,7 +163,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .setting(AppSettings::AllowLeadingHyphen)
         .version(crate_version!())
         .about(ABOUT)

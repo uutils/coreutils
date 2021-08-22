@@ -79,8 +79,8 @@ struct Filesystem {
     usage: FsUsage,
 }
 
-fn get_usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", executable!())
+fn usage() -> String {
+    format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
 }
 
 impl FsSelector {
@@ -284,7 +284,7 @@ impl UError for DfError {
 
 #[uucore_procs::gen_uumain]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = get_usage();
+    let usage = usage();
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     let paths: Vec<String> = matches
@@ -295,7 +295,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     #[cfg(windows)]
     {
         if matches.is_present(OPT_INODES) {
-            println!("{}: doesn't support -i option", executable!());
+            println!("{}: doesn't support -i option", uucore::util_name());
             return Ok(());
         }
     }
@@ -427,7 +427,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(

@@ -36,8 +36,8 @@ static OPT_T: &str = "t";
 
 static ARG_TEMPLATE: &str = "template";
 
-fn get_usage() -> String {
-    format!("{0} [OPTION]... [TEMPLATE]", executable!())
+fn usage() -> String {
+    format!("{0} [OPTION]... [TEMPLATE]", uucore::execution_phrase())
 }
 
 #[derive(Debug)]
@@ -74,7 +74,7 @@ impl Display for MkTempError {
 
 #[uucore_procs::gen_uumain]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = get_usage();
+    let usage = usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
@@ -134,7 +134,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(

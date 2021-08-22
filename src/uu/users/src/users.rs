@@ -8,9 +8,6 @@
 
 // spell-checker:ignore (paths) wtmp
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, App, Arg};
 use uucore::utmpx::{self, Utmpx};
 
@@ -18,8 +15,8 @@ static ABOUT: &str = "Print the user names of users currently logged in to the c
 
 static ARG_FILES: &str = "files";
 
-fn get_usage() -> String {
-    format!("{0} [FILE]", executable!())
+fn usage() -> String {
+    format!("{0} [FILE]", uucore::execution_phrase())
 }
 
 fn get_long_usage() -> String {
@@ -31,7 +28,7 @@ If FILE is not specified, use {}.  /var/log/wtmp as FILE is common.",
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
     let after_help = get_long_usage();
 
     let matches = uu_app()
@@ -65,7 +62,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(Arg::with_name(ARG_FILES).takes_value(true).max_values(1))

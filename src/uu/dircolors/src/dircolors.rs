@@ -62,8 +62,8 @@ pub fn guess_syntax() -> OutputFmt {
     }
 }
 
-fn get_usage() -> String {
-    format!("{0} {1}", executable!(), SYNTAX)
+fn usage() -> String {
+    format!("{0} {1}", uucore::execution_phrase(), SYNTAX)
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
@@ -71,7 +71,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let usage = get_usage();
+    let usage = usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(&args);
 
@@ -153,7 +153,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(SUMMARY)
         .after_help(LONG_HELP)

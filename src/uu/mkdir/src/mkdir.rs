@@ -22,13 +22,13 @@ mod options {
     pub const DIRS: &str = "dirs";
 }
 
-fn get_usage() -> String {
-    format!("{0} [OPTION]... [USER]", executable!())
+fn usage() -> String {
+    format!("{0} [OPTION]... [USER]", uucore::execution_phrase())
 }
 
 #[uucore_procs::gen_uumain]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = get_usage();
+    let usage = usage();
 
     // Linux-specific options, not implemented
     // opts.optflag("Z", "context", "set SELinux security context" +
@@ -51,7 +51,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(
@@ -103,7 +103,11 @@ fn mkdir(path: &Path, recursive: bool, mode: u16, verbose: bool) -> UResult<()> 
     create_dir(path).map_err_context(|| format!("cannot create directory '{}'", path.display()))?;
 
     if verbose {
-        println!("{}: created directory '{}'", executable!(), path.display());
+        println!(
+            "{}: created directory '{}'",
+            uucore::util_name(),
+            path.display()
+        );
     }
 
     chmod(path, mode)

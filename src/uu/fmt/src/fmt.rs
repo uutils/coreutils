@@ -50,8 +50,8 @@ static OPT_TAB_WIDTH: &str = "tab-width";
 
 static ARG_FILES: &str = "files";
 
-fn get_usage() -> String {
-    format!("{} [OPTION]... [FILE]...", executable!())
+fn usage() -> String {
+    format!("{} [OPTION]... [FILE]...", uucore::execution_phrase())
 }
 
 pub type FileOrStdReader = BufReader<Box<dyn Read + 'static>>;
@@ -75,7 +75,7 @@ pub struct FmtOptions {
 
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
@@ -211,7 +211,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(

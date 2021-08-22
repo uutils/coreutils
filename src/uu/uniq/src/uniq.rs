@@ -221,8 +221,11 @@ fn opt_parsed<T: FromStr>(opt_name: &str, matches: &ArgMatches) -> Option<T> {
     })
 }
 
-fn get_usage() -> String {
-    format!("{0} [OPTION]... [INPUT [OUTPUT]]...", executable!())
+fn usage() -> String {
+    format!(
+        "{0} [OPTION]... [INPUT [OUTPUT]]...",
+        uucore::execution_phrase()
+    )
 }
 
 fn get_long_usage() -> String {
@@ -235,7 +238,7 @@ fn get_long_usage() -> String {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
     let long_usage = get_long_usage();
 
     let matches = uu_app()
@@ -281,7 +284,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(

@@ -42,12 +42,12 @@ const ENCODINGS: &[(&str, Format)] = &[
     ("base2m", Format::Base2Msbf),
 ];
 
-fn get_usage() -> String {
-    format!("{0} [OPTION]... [FILE]", executable!())
+fn usage() -> String {
+    format!("{0} [OPTION]... [FILE]", uucore::execution_phrase())
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    let mut app = base_common::base_app(executable!(), crate_version!(), ABOUT);
+    let mut app = base_common::base_app(&uucore::util_name(), crate_version!(), ABOUT);
     for encoding in ENCODINGS {
         app = app.arg(Arg::with_name(encoding.0).long(encoding.0));
     }
@@ -55,7 +55,7 @@ pub fn uu_app() -> App<'static, 'static> {
 }
 
 fn parse_cmd_args(args: impl uucore::Args) -> (Config, Format) {
-    let usage = get_usage();
+    let usage = usage();
     let matches = uu_app().usage(&usage[..]).get_matches_from(
         args.collect_str(InvalidEncodingHandling::ConvertLossy)
             .accept_any(),
@@ -75,7 +75,7 @@ fn parse_cmd_args(args: impl uucore::Args) -> (Config, Format) {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let name = executable!();
+    let name = uucore::util_name();
     let (config, format) = parse_cmd_args(args);
     // Create a reference to stdin so we can return a locked stdin from
     // parse_base_cmd_args
@@ -88,7 +88,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         config.wrap_cols,
         config.ignore_garbage,
         config.decode,
-        name,
+        &name,
     );
 
     0

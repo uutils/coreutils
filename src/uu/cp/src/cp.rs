@@ -99,7 +99,7 @@ quick_error! {
         NotImplemented(opt: String) { display("Option '{}' not yet implemented.", opt) }
 
         /// Invalid arguments to backup
-        Backup(description: String) { display("{}\nTry 'cp --help' for more information.", description) }
+        Backup(description: String) { display("{}\nTry '{} --help' for more information.", description, uucore::execution_phrase()) }
     }
 }
 
@@ -218,12 +218,12 @@ static LONG_HELP: &str = "";
 static EXIT_OK: i32 = 0;
 static EXIT_ERR: i32 = 1;
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!(
         "{0} [OPTION]... [-T] SOURCE DEST
     {0} [OPTION]... SOURCE... DIRECTORY
     {0} [OPTION]... -t DIRECTORY SOURCE...",
-        executable!()
+        uucore::execution_phrase()
     )
 }
 
@@ -293,7 +293,7 @@ static DEFAULT_ATTRIBUTES: &[Attribute] = &[
 ];
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(Arg::with_name(options::TARGET_DIRECTORY)
@@ -465,7 +465,7 @@ pub fn uu_app() -> App<'static, 'static> {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
     let matches = uu_app()
         .after_help(&*format!(
             "{}\n{}",
@@ -1060,7 +1060,7 @@ impl OverwriteMode {
         match *self {
             OverwriteMode::NoClobber => Err(Error::NotAllFilesCopied),
             OverwriteMode::Interactive(_) => {
-                if prompt_yes!("{}: overwrite {}? ", executable!(), path.display()) {
+                if prompt_yes!("{}: overwrite {}? ", uucore::util_name(), path.display()) {
                     Ok(())
                 } else {
                     Err(Error::Skipped(format!(

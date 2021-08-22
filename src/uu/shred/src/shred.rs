@@ -214,8 +214,8 @@ static ABOUT: &str = "Overwrite the specified FILE(s) repeatedly, in order to ma
 for even very expensive hardware probing to recover the data.
 ";
 
-fn get_usage() -> String {
-    format!("{} [OPTION]... FILE...", executable!())
+fn usage() -> String {
+    format!("{} [OPTION]... FILE...", uucore::execution_phrase())
 }
 
 static AFTER_HELP: &str =
@@ -271,7 +271,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let usage = get_usage();
+    let usage = usage();
 
     let app = uu_app().usage(&usage[..]);
 
@@ -331,7 +331,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(AFTER_HELP)

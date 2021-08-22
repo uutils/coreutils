@@ -40,7 +40,7 @@ mod options {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
@@ -71,7 +71,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)
@@ -156,8 +156,11 @@ fn find_stdout() -> File {
     }
 }
 
-fn get_usage() -> String {
-    format!("{0} COMMAND [ARG]...\n    {0} FLAG", executable!())
+fn usage() -> String {
+    format!(
+        "{0} COMMAND [ARG]...\n    {0} FLAG",
+        uucore::execution_phrase()
+    )
 }
 
 #[cfg(target_vendor = "apple")]

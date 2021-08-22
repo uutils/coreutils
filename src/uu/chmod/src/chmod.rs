@@ -36,12 +36,12 @@ mod options {
     pub const FILE: &str = "FILE";
 }
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!(
         "{0} [OPTION]... MODE[,MODE]... FILE...
 or: {0} [OPTION]... OCTAL-MODE FILE...
 or: {0} [OPTION]... --reference=RFILE FILE...",
-        executable!()
+        uucore::execution_phrase()
     )
 }
 
@@ -58,7 +58,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     // a possible MODE prefix '-' needs to be removed (e.g. "chmod -x FILE").
     let mode_had_minus_prefix = strip_minus_from_mode(&mut args);
 
-    let usage = get_usage();
+    let usage = usage();
     let after_help = get_long_usage();
 
     let matches = uu_app()
@@ -116,7 +116,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(
