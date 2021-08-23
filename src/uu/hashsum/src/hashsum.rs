@@ -473,15 +473,26 @@ where
         });
         if options.check {
             // Set up Regexes for line validation and parsing
+            //
+            // First, we compute the number of bytes we expect to be in
+            // the digest string. If the algorithm has a variable number
+            // of output bits, then we use the `+` modifier in the
+            // regular expression, otherwise we use the `{n}` modifier,
+            // where `n` is the number of bytes.
             let bytes = options.digest.output_bits() / 4;
+            let modifier = if bytes > 0 {
+                format!("{{{}}}", bytes)
+            } else {
+                "+".to_string()
+            };
             let gnu_re = safe_unwrap!(Regex::new(&format!(
-                r"^(?P<digest>[a-fA-F0-9]{{{}}}) (?P<binary>[ \*])(?P<fileName>.*)",
-                bytes
+                r"^(?P<digest>[a-fA-F0-9]{}) (?P<binary>[ \*])(?P<fileName>.*)",
+                modifier,
             )));
             let bsd_re = safe_unwrap!(Regex::new(&format!(
-                r"^{algorithm} \((?P<fileName>.*)\) = (?P<digest>[a-fA-F0-9]{{{digest_size}}})",
+                r"^{algorithm} \((?P<fileName>.*)\) = (?P<digest>[a-fA-F0-9]{digest_size})",
                 algorithm = options.algoname,
-                digest_size = bytes
+                digest_size = modifier,
             )));
 
             let buffer = file;
