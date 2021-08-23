@@ -492,7 +492,7 @@ impl Who {
         };
 
         let s = if self.do_lookup {
-            safe_unwrap!(ut.canon_host())
+            crash_if_err!(1, ut.canon_host())
         } else {
             ut.host()
         };

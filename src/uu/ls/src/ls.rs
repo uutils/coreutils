@@ -1362,8 +1362,8 @@ fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>)
         vec![]
     };
 
-    let mut temp: Vec<_> = safe_unwrap!(fs::read_dir(&dir.p_buf))
-        .map(|res| safe_unwrap!(res))
+    let mut temp: Vec<_> = crash_if_err!(1, fs::read_dir(&dir.p_buf))
+        .map(|res| crash_if_err!(1, res))
         .filter(|e| should_display(e, config))
         .map(|e| PathData::new(DirEntry::path(&e), Some(e.file_type()), None, config, false))
         .collect();

@@ -291,7 +291,7 @@ impl Pinky {
 
         let mut s = ut.host();
         if self.include_where && !s.is_empty() {
-            s = safe_unwrap!(ut.canon_host());
+            s = crash_if_err!(1, ut.canon_host());
             print!(" {}", s);
         }
 
