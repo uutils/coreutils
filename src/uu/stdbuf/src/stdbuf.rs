@@ -170,7 +170,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let command_params: Vec<&str> = command_values.collect();
 
     let mut tmp_dir = tempdir().unwrap();
-    let (preload_env, libstdbuf) = return_if_err!(1, get_preload_env(&mut tmp_dir));
+    let (preload_env, libstdbuf) = crash_if_err!(1, get_preload_env(&mut tmp_dir));
     command.env(preload_env, libstdbuf);
     set_command_env(&mut command, "_STDBUF_I", options.stdin);
     set_command_env(&mut command, "_STDBUF_O", options.stdout);

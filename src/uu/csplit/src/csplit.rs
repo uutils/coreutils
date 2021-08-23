@@ -725,14 +725,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .unwrap()
         .map(str::to_string)
         .collect();
-    let patterns = return_if_err!(1, patterns::get_patterns(&patterns[..]));
+    let patterns = crash_if_err!(1, patterns::get_patterns(&patterns[..]));
     let options = CsplitOptions::new(&matches);
     if file_name == "-" {
         let stdin = io::stdin();
         crash_if_err!(1, csplit(&options, patterns, stdin.lock()));
     } else {
-        let file = return_if_err!(1, File::open(file_name));
-        let file_metadata = return_if_err!(1, file.metadata());
+        let file = crash_if_err!(1, File::open(file_name));
+        let file_metadata = crash_if_err!(1, file.metadata());
         if !file_metadata.is_file() {
             crash!(1, "'{}' is not a regular file", file_name);
         }
