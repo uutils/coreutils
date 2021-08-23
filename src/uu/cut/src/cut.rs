@@ -12,12 +12,15 @@ extern crate uucore;
 
 use bstr::io::BufReadExt;
 use clap::{crate_version, App, Arg};
+use std::error::Error;
+use std::fmt::{Debug, Display};
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 use uucore::display::Quotable;
 
 use self::searcher::Searcher;
+use uucore::error::{UError, UResult, USimpleError};
 use uucore::ranges::Range;
 use uucore::InvalidEncodingHandling;
 
@@ -124,6 +127,48 @@ enum Mode {
     Bytes(Vec<Range>, Options),
     Characters(Vec<Range>, Options),
     Fields(Vec<Range>, FieldOptions),
+}
+
+#[derive(Debug)]
+enum CutError {
+    OnlyOneListAllowed(),
+    NeedOneList(),
+    InputDelimOnlyOnFields(),
+    SuppressingOnlyOnFields(),
+    DelimSingleChar(),
+}
+
+impl UError for CutError {
+    fn code(&self) -> i32 {
+        1
+    }
+
+    fn usage(&self) -> bool {
+        true
+    }
+}
+
+impl Error for CutError {}
+
+impl Display for CutError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use CutError as CE;
+        match self {
+            CE::OnlyOneListAllowed() => write!(f, "only one type of list may be specified"),
+            CE::NeedOneList() => {
+                write!(f, "you must specify a list of bytes, characters, or fields")
+            }
+            CE::InputDelimOnlyOnFields() => write!(
+                f,
+                "an input delimiter may be specified only when operating on fields"
+            ),
+            CE::SuppressingOnlyOnFields() => write!(
+                f,
+                "suppressing non-delimited lines makes sense\n        only when operating on fields"
+            ),
+            CE::DelimSingleChar() => write!(f, "the delimiter must be a single character"),
+        }
+    }
 }
 
 fn stdout_writer() -> Box<dyn Write> {
