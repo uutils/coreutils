@@ -178,13 +178,13 @@ fn write_tabs(
                 break;
             }
 
-            safe_unwrap!(output.write_all(b"\t"));
+            crash_if_err!(1, output.write_all(b"\t"));
             scol += nts;
         }
     }
 
     while col > scol {
-        safe_unwrap!(output.write_all(b" "));
+        crash_if_err!(1, output.write_all(b" "));
         scol += 1;
     }
 }
@@ -272,7 +272,7 @@ fn unexpand(options: Options) {
                         init,
                         true,
                     );
-                    safe_unwrap!(output.write_all(&buf[byte..]));
+                    crash_if_err!(1, output.write_all(&buf[byte..]));
                     scol = col;
                     break;
                 }
@@ -292,7 +292,7 @@ fn unexpand(options: Options) {
                         };
 
                         if !tabs_buffered {
-                            safe_unwrap!(output.write_all(&buf[byte..byte + nbytes]));
+                            crash_if_err!(1, output.write_all(&buf[byte..byte + nbytes]));
                             scol = col; // now printed up to this column
                         }
                     }
@@ -317,7 +317,7 @@ fn unexpand(options: Options) {
                         } else {
                             0
                         };
-                        safe_unwrap!(output.write_all(&buf[byte..byte + nbytes]));
+                        crash_if_err!(1, output.write_all(&buf[byte..byte + nbytes]));
                         scol = col; // we've now printed up to this column
                     }
                 }
@@ -336,7 +336,7 @@ fn unexpand(options: Options) {
                 init,
                 true,
             );
-            safe_unwrap!(output.flush());
+            crash_if_err!(1, output.flush());
             buf.truncate(0); // clear out the buffer
         }
     }

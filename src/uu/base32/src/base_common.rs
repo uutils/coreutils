@@ -122,7 +122,7 @@ pub fn base_app<'a>(name: &str, version: &'a str, about: &'a str) -> App<'static
 pub fn get_input<'a>(config: &Config, stdin_ref: &'a Stdin) -> Box<dyn Read + 'a> {
     match &config.to_read {
         Some(name) => {
-            let file_buf = safe_unwrap!(File::open(Path::new(name)));
+            let file_buf = crash_if_err!(1, File::open(Path::new(name)));
             Box::new(BufReader::new(file_buf)) // as Box<dyn Read>
         }
         None => {

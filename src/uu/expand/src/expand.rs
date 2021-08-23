@@ -329,12 +329,15 @@ fn expand(options: Options) {
                         // now dump out either spaces if we're expanding, or a literal tab if we're not
                         if init || !options.iflag {
                             if nts <= options.tspaces.len() {
-                                safe_unwrap!(output.write_all(options.tspaces[..nts].as_bytes()));
+                                crash_if_err!(
+                                    1,
+                                    output.write_all(options.tspaces[..nts].as_bytes())
+                                );
                             } else {
-                                safe_unwrap!(output.write_all(" ".repeat(nts).as_bytes()));
+                                crash_if_err!(1, output.write_all(" ".repeat(nts).as_bytes()));
                             };
                         } else {
-                            safe_unwrap!(output.write_all(&buf[byte..byte + nbytes]));
+                            crash_if_err!(1, output.write_all(&buf[byte..byte + nbytes]));
                         }
                     }
                     _ => {
@@ -352,14 +355,14 @@ fn expand(options: Options) {
                             init = false;
                         }
 
-                        safe_unwrap!(output.write_all(&buf[byte..byte + nbytes]));
+                        crash_if_err!(1, output.write_all(&buf[byte..byte + nbytes]));
                     }
                 }
 
                 byte += nbytes; // advance the pointer
             }
 
-            safe_unwrap!(output.flush());
+            crash_if_err!(1, output.flush());
             buf.truncate(0); // clear the buffer
         }
     }
