@@ -221,7 +221,7 @@ fn timeout(
                     cmd[0]
                 );
             }
-            return_if_err!(ERR_EXIT_STATUS, process.send_signal(signal));
+            crash_if_err!(ERR_EXIT_STATUS, process.send_signal(signal));
             if let Some(kill_after) = kill_after {
                 match process.wait_or_timeout(kill_after) {
                     Ok(Some(status)) => {
@@ -235,13 +235,13 @@ fn timeout(
                         if verbose {
                             show_error!("sending signal KILL to command '{}'", cmd[0]);
                         }
-                        return_if_err!(
+                        crash_if_err!(
                             ERR_EXIT_STATUS,
                             process.send_signal(
                                 uucore::signals::signal_by_name_or_value("KILL").unwrap()
                             )
                         );
-                        return_if_err!(ERR_EXIT_STATUS, process.wait());
+                        crash_if_err!(ERR_EXIT_STATUS, process.wait());
                         137
                     }
                     Err(_) => 124,
@@ -251,7 +251,7 @@ fn timeout(
             }
         }
         Err(_) => {
-            return_if_err!(ERR_EXIT_STATUS, process.send_signal(signal));
+            crash_if_err!(ERR_EXIT_STATUS, process.send_signal(signal));
             ERR_EXIT_STATUS
         }
     }

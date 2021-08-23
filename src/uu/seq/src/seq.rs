@@ -105,7 +105,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         let dec = slice.find('.').unwrap_or(len);
         largest_dec = len - dec;
         padding = dec;
-        return_if_err!(1, slice.parse())
+        crash_if_err!(1, slice.parse())
     } else {
         Number::BigInt(BigInt::one())
     };
@@ -115,7 +115,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         let dec = slice.find('.').unwrap_or(len);
         largest_dec = cmp::max(largest_dec, len - dec);
         padding = cmp::max(padding, dec);
-        return_if_err!(1, slice.parse())
+        crash_if_err!(1, slice.parse())
     } else {
         Number::BigInt(BigInt::one())
     };
@@ -130,7 +130,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let last = {
         let slice = numbers[numbers.len() - 1];
         padding = cmp::max(padding, slice.find('.').unwrap_or_else(|| slice.len()));
-        return_if_err!(1, slice.parse())
+        crash_if_err!(1, slice.parse())
     };
     if largest_dec > 0 {
         largest_dec -= 1;

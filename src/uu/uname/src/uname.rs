@@ -53,7 +53,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = format!("{} [OPTION]...", uucore::execution_phrase());
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
-    let uname = return_if_err!(1, PlatformInfo::new());
+    let uname = crash_if_err!(1, PlatformInfo::new());
     let mut output = String::new();
 
     let all = matches.is_present(options::ALL);
