@@ -372,7 +372,7 @@ fn cut_fields<R: Read>(reader: R, ranges: &[Range], opts: &FieldOptions) -> i32 
     0
 }
 
-fn cut_files(mut filenames: Vec<String>, mode: Mode) -> i32 {
+fn cut_files(mut filenames: Vec<String>, mode: Mode) -> UResult<()> {
     let mut stdin_read = false;
     let mut exit_code = 0;
 
@@ -422,7 +422,8 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> i32 {
         }
     }
 
-    exit_code
+    uucore::error::set_exit_code(exit_code);
+    Ok(())
 }
 
 mod options {
@@ -437,7 +438,8 @@ mod options {
     pub const FILE: &str = "file";
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
@@ -480,77 +482,76 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             )
         }),
         (None, None, Some(field_ranges)) => {
-            list_to_ranges(field_ranges, complement).and_then(|ranges| {
-                let out_delim = match matches.value_of(options::OUTPUT_DELIMITER) {
-                    Some(s) => {
-                        if s.is_empty() {
-                            Some("\0".to_owned())
-                        } else {
-                            Some(s.to_owned())
-                        }
-                    }
-                    None => None,
-                };
-
-                let only_delimited = matches.is_present(options::ONLY_DELIMITED);
-                let zero_terminated = matches.is_present(options::ZERO_TERMINATED);
-
-                match matches.value_of(options::DELIMITER) {
-                    Some(mut delim) => {
-                        // GNU's `cut` supports `-d=` to set the delimiter to `=`.
-                        // Clap parsing is limited in this situation, see:
-                        // https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242
-                        // Since clap parsing handles `-d=` as delimiter explicitly set to "" and
-                        // an empty delimiter is not accepted by GNU's `cut` (and makes no sense),
-                        // we can use this as basis for a simple workaround:
-                        if delim.is_empty() {
-                            delim = "=";
-                        }
-                        if delim.chars().count() > 1 {
-                            Err(msg_opt_invalid_should_be!(
-                                "empty or 1 character long",
-                                "a value 2 characters or longer",
-                                "--delimiter",
-                                "-d"
-                            ))
-                        } else {
-                            let delim = if delim.is_empty() {
-                                "\0".to_owned()
-                            } else {
-                                delim.to_owned()
-                            };
-
-                            Ok(Mode::Fields(
-                                ranges,
-                                FieldOptions {
-                                    delimiter: delim,
-                                    out_delimiter: out_delim,
-                                    only_delimited,
-                                    zero_terminated,
-                                },
-                            ))
-                        }
-                    }
-                    None => Ok(Mode::Fields(
-                        ranges,
-                        FieldOptions {
-                            delimiter: "\t".to_owned(),
-                            out_delimiter: out_delim,
-                            only_delimited,
-                            zero_terminated,
-                        },
-                    )),
+            match list_to_ranges(field_ranges, complement) {
+                Err(e) => {
+                    return Err(USimpleError::new(
+                        1,
+                        format!("failed processing list: {}", e),
+                    ))
                 }
-            })
+                Ok(ranges) => {
+                    let out_delim = match matches.value_of(options::OUTPUT_DELIMITER) {
+                        Some(s) => {
+                            if s.is_empty() {
+                                Some("\0".to_owned())
+                            } else {
+                                Some(s.to_owned())
+                            }
+                        }
+                        None => None,
+                    };
+
+                    let only_delimited = matches.is_present(options::ONLY_DELIMITED);
+                    let zero_terminated = matches.is_present(options::ZERO_TERMINATED);
+
+                    match matches.value_of(options::DELIMITER) {
+                        Some(mut delim) => {
+                            // GNU's `cut` supports `-d=` to set the delimiter to `=`.
+                            // Clap parsing is limited in this situation, see:
+                            // https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242
+                            // Since clap parsing handles `-d=` as delimiter explicitly set to "" and
+                            // an empty delimiter is not accepted by GNU's `cut` (and makes no sense),
+                            // we can use this as basis for a simple workaround:
+                            if delim.is_empty() {
+                                delim = "=";
+                            }
+                            if delim.chars().count() > 1 {
+                                return Err(CutError::DelimSingleChar().into());
+                            } else {
+                                let delim = if delim.is_empty() {
+                                    "\0".to_owned()
+                                } else {
+                                    delim.to_owned()
+                                };
+
+                                Ok(Mode::Fields(
+                                    ranges,
+                                    FieldOptions {
+                                        delimiter: delim,
+                                        out_delimiter: out_delim,
+                                        only_delimited,
+                                        zero_terminated,
+                                    },
+                                ))
+                            }
+                        }
+                        None => Ok(Mode::Fields(
+                            ranges,
+                            FieldOptions {
+                                delimiter: "\t".to_owned(),
+                                out_delimiter: out_delim,
+                                only_delimited,
+                                zero_terminated,
+                            },
+                        )),
+                    }
+                }
+            }
         }
-        (ref b, ref c, ref f) if b.is_some() || c.is_some() || f.is_some() => Err(
-            msg_expects_no_more_than_one_of!("--fields (-f)", "--chars (-c)", "--bytes (-b)"),
-        ),
-        _ => Err(msg_expects_one_of!(
-            "--fields (-f)",
-            "--chars (-c)",
-            "--bytes (-b)"
-        )),
+        (ref b, ref c, ref f) if b.is_some() || c.is_some() || f.is_some() => {
+            return Err(CutError::OnlyOneListAllowed().into())
+        }
+        _ => return Err(CutError::NeedOneList().into()),
     };
 
     let mode_parse = match mode_parse {
@@ -559,20 +560,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Mode::Bytes(_, _) | Mode::Characters(_, _)
                 if matches.is_present(options::DELIMITER) =>
             {
-                Err(msg_opt_only_usable_if!(
-                    "printing a sequence of fields",
-                    "--delimiter",
-                    "-d"
-                ))
+                return Err(CutError::InputDelimOnlyOnFields().into());
             }
             Mode::Bytes(_, _) | Mode::Characters(_, _)
                 if matches.is_present(options::ONLY_DELIMITED) =>
             {
-                Err(msg_opt_only_usable_if!(
-                    "printing a sequence of fields",
-                    "--only-delimited",
-                    "-s"
-                ))
+                return Err(CutError::SuppressingOnlyOnFields().into());
             }
             _ => Ok(mode),
         },
@@ -587,8 +580,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     match mode_parse {
         Ok(mode) => cut_files(files, mode),
         Err(err_msg) => {
-            show_error!("{}", err_msg);
-            1
+            crash!(1, "{}", err_msg);
         }
     }
 }
