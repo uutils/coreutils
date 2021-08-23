@@ -20,13 +20,7 @@ pub(super) fn write_fast_using_splice<R: Read>(
     handle: &mut InputHandle<R>,
     write_fd: RawFd,
 ) -> CatResult<bool> {
-    let (pipe_rd, pipe_wr) = match pipe() {
-        Ok(r) => r,
-        Err(_) => {
-            // It is very rare that creating a pipe fails, but it can happen.
-            return Ok(true);
-        }
-    };
+    let (pipe_rd, pipe_wr) = pipe()?;
 
     // Ensure the pipe is closed when the function returns.
     // SAFETY: The file descriptors do not have other owners.
