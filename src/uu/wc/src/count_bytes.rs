@@ -1,7 +1,7 @@
 use super::{WcResult, WordCountable};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use std::fs::OpenOptions;
+use std::fs::{File, OpenOptions};
 use std::io::ErrorKind;
 
 #[cfg(unix)]
@@ -9,7 +9,7 @@ use libc::S_IFREG;
 #[cfg(unix)]
 use nix::sys::stat::fstat;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use std::os::unix::io::{AsRawFd, RawFd};
+use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use libc::S_IFIFO;
@@ -46,6 +46,10 @@ fn count_bytes_using_splice(fd: RawFd) -> nix::Result<usize> {
         .map_err(|_| nix::Error::last())?;
     let null = null_file.as_raw_fd();
     let (pipe_rd, pipe_wr) = pipe()?;
+
+    // Ensure the pipe is closed when the function returns.
+    // SAFETY: The file descriptors do not have other owners.
+    let _handles = unsafe { (File::from_raw_fd(pipe_rd), File::from_raw_fd(pipe_wr)) };
 
     let mut byte_count = 0;
     loop {

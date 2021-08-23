@@ -2,8 +2,9 @@ use super::{CatResult, InputHandle};
 
 use nix::fcntl::{splice, SpliceFFlags};
 use nix::unistd::{self, pipe};
+use std::fs::File;
 use std::io::Read;
-use std::os::unix::io::RawFd;
+use std::os::unix::io::{FromRawFd, RawFd};
 
 const BUF_SIZE: usize = 1024 * 16;
 
@@ -26,6 +27,10 @@ pub(super) fn write_fast_using_splice<R: Read>(
             return Ok(true);
         }
     };
+
+    // Ensure the pipe is closed when the function returns.
+    // SAFETY: The file descriptors do not have other owners.
+    let _handles = unsafe { (File::from_raw_fd(pipe_rd), File::from_raw_fd(pipe_wr)) };
 
     loop {
         match splice(
