@@ -1,3 +1,5 @@
+// spell-checker:ignore NOFILE
+
 use crate::common::util::*;
 use std::fs::OpenOptions;
 #[cfg(unix)]
