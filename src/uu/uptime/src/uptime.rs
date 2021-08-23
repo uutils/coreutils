@@ -6,7 +6,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) getloadavg upsecs updays nusers loadavg boottime uphours upmins
+// spell-checker:ignore (ToDO) getloadavg upsecs updays nusers loadavg boottime uphours upmins timeval
 
 use chrono::{Local, TimeZone, Utc};
 use clap::{crate_version, App, Arg};
@@ -148,6 +148,8 @@ fn get_uptime(boot_time: Option<time_t>) -> i64 {
     use std::fs::File;
     use std::io::Read;
 
+    use sysctl::Sysctl;
+
     let mut proc_uptime_s = String::new();
 
     let proc_uptime = File::open("/proc/uptime")
@@ -156,13 +158,26 @@ fn get_uptime(boot_time: Option<time_t>) -> i64 {
         .and_then(|_| proc_uptime_s.split_whitespace().next())
         .and_then(|s| s.split('.').next().unwrap_or("0").parse().ok());
 
-    proc_uptime.unwrap_or_else(|| match boot_time {
-        Some(t) => {
-            let now = Local::now().timestamp();
-            let boottime = t as i64;
-            now - boottime
+    proc_uptime.unwrap_or_else(|| {
+        match boot_time.or_else(|| {
+            #[cfg(unix)]
+            {
+                // try to get the boottime with sysctl as a last resort
+                let timeval: Option<Box<libc::timeval>> = sysctl::Ctl::new("kern.boottime")
+                    .and_then(|value| value.value_as())
+                    .ok();
+                timeval.map(|val| val.tv_sec)
+            }
+            #[cfg(not(unix))]
+            None
+        }) {
+            Some(t) => {
+                let now = Local::now().timestamp();
+                let boottime = t as i64;
+                now - boottime
+            }
+            None => -1,
         }
-        None => -1,
     })
 }
 

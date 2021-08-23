@@ -1841,6 +1841,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "sysctl"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "963488c73b34185a9028742c2be0219ed1d8558e59f85c3b466a4f54affba936"
+dependencies = [
+ "bitflags",
+ "byteorder",
+ "libc",
+ "thiserror",
+ "walkdir",
+]
+
+[[package]]
 name = "tap"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3094,6 +3107,7 @@ version = "0.0.7"
 dependencies = [
  "chrono",
  "clap",
+ "sysctl",
  "uucore",
  "uucore_procs",
 ]

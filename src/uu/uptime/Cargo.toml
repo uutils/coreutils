@@ -20,6 +20,9 @@ clap = { version = "2.33", features = ["wrap_help"] }
 uucore = { version=">=0.0.9", package="uucore", path="../../uucore", features=["libc", "utmpx"] }
 uucore_procs = { version=">=0.0.6", package="uucore_procs", path="../../uucore_procs" }
 
+[target.'cfg(unix)'.dependencies]
+sysctl = "0.4.2"
+
 [[bin]]
 name = "uptime"
 path = "src/main.rs"
