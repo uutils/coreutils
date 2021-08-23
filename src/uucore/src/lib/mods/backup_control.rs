@@ -102,10 +102,10 @@ the VERSION_CONTROL environment variable.  Here are the values:
   simple, never   always make simple backups";
 
 static VALID_ARGS_HELP: &str = "Valid arguments are:
-  - ‘none’, ‘off’
-  - ‘simple’, ‘never’
-  - ‘existing’, ‘nil’
-  - ‘numbered’, ‘t’";
+  - 'none', 'off'
+  - 'simple', 'never'
+  - 'existing', 'nil'
+  - 'numbered', 't'";
 
 /// Available backup modes.
 ///
@@ -167,12 +167,12 @@ impl Display for BackupError {
         match self {
             BE::InvalidArgument(arg, origin) => write!(
                 f,
-                "invalid argument ‘{}’ for ‘{}’\n{}",
+                "invalid argument '{}' for '{}'\n{}",
                 arg, origin, VALID_ARGS_HELP
             ),
             BE::AmbiguousArgument(arg, origin) => write!(
                 f,
-                "ambiguous argument ‘{}’ for ‘{}’\n{}",
+                "ambiguous argument '{}' for '{}'\n{}",
                 arg, origin, VALID_ARGS_HELP
             ),
             BE::BackupImpossible() => write!(f, "cannot create backup"),
@@ -329,7 +329,7 @@ pub fn determine_backup_mode(matches: &ArgMatches) -> UResult<BackupMode> {
         // Use method to determine the type of backups to make. When this option
         // is used but method is not specified, then the value of the
         // VERSION_CONTROL environment variable is used. And if VERSION_CONTROL
-        // is not set, the default backup type is ‘existing’.
+        // is not set, the default backup type is 'existing'.
         if let Some(method) = matches.value_of(arguments::OPT_BACKUP) {
             // Second argument is for the error string that is returned.
             match_method(method, "backup type")
@@ -516,7 +516,7 @@ mod tests {
 
         assert!(result.is_err());
         let text = format!("{}", result.unwrap_err());
-        assert!(text.contains("invalid argument ‘foobar’ for ‘backup type’"));
+        assert!(text.contains("invalid argument 'foobar' for 'backup type'"));
     }
 
     // --backup errors on ambiguous argument
@@ -529,7 +529,7 @@ mod tests {
 
         assert!(result.is_err());
         let text = format!("{}", result.unwrap_err());
-        assert!(text.contains("ambiguous argument ‘n’ for ‘backup type’"));
+        assert!(text.contains("ambiguous argument 'n' for 'backup type'"));
     }
 
     // --backup accepts shortened arguments (si for simple)
@@ -580,7 +580,7 @@ mod tests {
 
         assert!(result.is_err());
         let text = format!("{}", result.unwrap_err());
-        assert!(text.contains("invalid argument ‘foobar’ for ‘$VERSION_CONTROL’"));
+        assert!(text.contains("invalid argument 'foobar' for '$VERSION_CONTROL'"));
         env::remove_var(ENV_VERSION_CONTROL);
     }
 
@@ -595,7 +595,7 @@ mod tests {
 
         assert!(result.is_err());
         let text = format!("{}", result.unwrap_err());
-        assert!(text.contains("ambiguous argument ‘n’ for ‘$VERSION_CONTROL’"));
+        assert!(text.contains("ambiguous argument 'n' for '$VERSION_CONTROL'"));
         env::remove_var(ENV_VERSION_CONTROL);
     }
 
