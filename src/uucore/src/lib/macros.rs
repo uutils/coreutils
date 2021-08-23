@@ -99,24 +99,6 @@ macro_rules! crash_if_err(
 
 //====
 
-/// Unwraps the Result. Instead of panicking, it shows the error and then
-/// returns from the function with the provided exit code.
-/// Assumes the current function returns an i32 value.
-#[macro_export]
-macro_rules! return_if_err(
-    ($exit_code:expr, $exp:expr) => (
-        match $exp {
-            Ok(m) => m,
-            Err(f) => {
-                $crate::show_error!("{}", f);
-                return $exit_code;
-            }
-        }
-    )
-);
-
-//====
-
 #[macro_export]
 macro_rules! safe_write(
     ($fd:expr, $($args:tt)+) => (
@@ -133,18 +115,6 @@ macro_rules! safe_writeln(
         match writeln!($fd, $($args)+) {
             Ok(_) => {}
             Err(f) => panic!("{}", f)
-        }
-    )
-);
-
-/// Unwraps the Result. Instead of panicking, it exists the program with exit
-/// code 1.
-#[macro_export]
-macro_rules! safe_unwrap(
-    ($exp:expr) => (
-        match $exp {
-            Ok(m) => m,
-            Err(f) => $crate::crash!(1, "{}", f.to_string())
         }
     )
 );
