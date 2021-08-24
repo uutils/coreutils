@@ -2392,6 +2392,7 @@ dependencies = [
  "hex",
  "libc",
  "md5",
+ "memchr 2.4.0",
  "regex",
  "regex-syntax",
  "sha1",
