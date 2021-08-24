@@ -107,6 +107,12 @@ jobs:
           - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v2
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        case '${{ matrix.job.os }}' in
+          macos-latest) brew install coreutils ;; # needed for show-utils.sh
+        esac
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -116,7 +122,7 @@ jobs:
         # target-specific options
         # * CARGO_FEATURES_OPTION
         CARGO_FEATURES_OPTION='--all-features' ;
-        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
+        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features ${{ matrix.job.features }}' ; fi
         outputs CARGO_FEATURES_OPTION
         # * determine sub-crate utility list
         UTILITY_LIST="$(./util/show-utils.sh ${CARGO_FEATURES_OPTION})"
