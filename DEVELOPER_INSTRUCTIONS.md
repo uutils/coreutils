@@ -1,3 +1,14 @@
+Documentation
+-------------
+
+The source of the documentation is available on:
+
+https://uutils.github.io/coreutils-docs/coreutils/
+
+The documentation is updated everyday on this repository:
+
+https://github.com/uutils/coreutils-docs
+
 Code Coverage Report Generation
 ---------------------------------
 
