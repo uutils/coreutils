@@ -28,9 +28,6 @@ use std::fmt::Display;
 #[cfg(unix)]
 use std::mem;
 
-#[cfg(target_os = "freebsd")]
-use uucore::libc::{c_char, fsid_t, uid_t};
-
 #[cfg(windows)]
 use std::path::Path;
 

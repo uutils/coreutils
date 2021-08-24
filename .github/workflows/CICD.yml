@@ -521,6 +521,51 @@ jobs:
         n_fails=$(echo "$output" | grep "^FAIL:\s" | wc --lines)
         if [ $n_fails -gt 0 ] ; then echo "::warning ::${n_fails}+ test failures" ; fi
 
+  test_freebsd:
+    runs-on: macos-latest
+    name: Tests/FreeBSD test suite
+    env:
+      mem: 2048
+    steps:
+    - uses: actions/checkout@v2
+    - name: Prepare, build and test
+      id: test
+      uses: vmactions/freebsd-vm@v0.1.4
+      with:
+        usesh: true
+        prepare: pkg install -y curl gmake sudo
+        run: |
+          # Need to be run in the same block. Otherwise, we are back on the mac host.
+          set -e
+          pw adduser -n cuuser -d /root/ -g wheel -c "Coreutils user to build" -w random
+          chown -R cuuser:wheel /root/ /Users/runner/work/coreutils/
+          whoami
+
+          # Needs to be done in a sudo as we are changing users
+          sudo -i -u cuuser sh << EOF
+          whoami
+          curl https://sh.rustup.rs -sSf --output rustup.sh
+          sh rustup.sh -y --profile=minimal
+          ## Info
+          # environment
+          echo "## environment"
+          echo "CI='${CI}'"
+          # tooling info display
+          echo "## tooling"
+          . $HOME/.cargo/env
+          cargo -V
+          rustc -V
+          env
+
+          # where the files are resynced
+          cd /Users/runner/work/coreutils/coreutils/
+          cargo build
+          cargo test --features feat_os_unix -p uucore -p coreutils
+          # Clean to avoid to rsync back the files
+          cargo clean
+          EOF
+
+
   coverage:
     name: Code Coverage
     runs-on: ${{ matrix.job.os }}

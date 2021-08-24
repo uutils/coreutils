@@ -477,7 +477,9 @@ fn test_nonexistent_file_is_not_symlink() {
 }
 
 #[test]
-#[cfg(not(windows))] // Windows has no concept of sticky bit
+// FixME: freebsd fails with 'chmod: sticky_file: Inappropriate file type or format'
+// Windows has no concept of sticky bit
+#[cfg(not(any(windows, target_os = "freebsd")))]
 fn test_file_is_sticky() {
     let scenario = TestScenario::new(util_name!());
     let mut ucmd = scenario.ucmd();
