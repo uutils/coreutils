@@ -15,6 +15,7 @@ use libc::{
 use std::borrow::Cow;
 use std::env;
 use std::fs;
+use std::io::Error as IOError;
 use std::io::Result as IOResult;
 use std::io::{Error, ErrorKind};
 #[cfg(any(unix, target_os = "redox"))]
@@ -109,26 +110,42 @@ pub fn normalize_path(path: &Path) -> PathBuf {
     ret
 }
 
-fn resolve<P: AsRef<Path>>(original: P) -> IOResult<PathBuf> {
+fn resolve<P: AsRef<Path>>(original: P) -> Result<PathBuf, (PathBuf, IOError)> {
     const MAX_LINKS_FOLLOWED: u32 = 255;
     let mut followed = 0;
     let mut result = original.as_ref().to_path_buf();
+
+    let mut first_resolution = None;
     loop {
         if followed == MAX_LINKS_FOLLOWED {
-            return Err(Error::new(
-                ErrorKind::InvalidInput,
-                "maximum links followed",
+            return Err((
+                // When we hit MAX_LINKS_FOLLOWED we should return the first resolution (that's what GNU does - for whatever reason)
+                first_resolution.unwrap(),
+                Error::new(ErrorKind::InvalidInput, "maximum links followed"),
             ));
         }
 
-        if !fs::symlink_metadata(&result)?.file_type().is_symlink() {
-            break;
+        match fs::symlink_metadata(&result) {
+            Ok(meta) => {
+                if !meta.file_type().is_symlink() {
+                    break;
+                }
+            }
+            Err(e) => return Err((result, e)),
         }
 
         followed += 1;
-        let path = fs::read_link(&result)?;
-        result.pop();
-        result.push(path);
+        match fs::read_link(&result) {
+            Ok(path) => {
+                result.pop();
+                result.push(path);
+            }
+            Err(e) => return Err((result, e)),
+        }
+
+        if first_resolution.is_none() {
+            first_resolution = Some(result.clone());
+        }
     }
     Ok(result)
 }
@@ -214,11 +231,10 @@ pub fn canonicalize<P: AsRef<Path>>(
             }
 
             match resolve(&result) {
-                Err(_) if miss_mode == MissingHandling::Missing => continue,
-                Err(e) => return Err(e),
+                Err((path, _)) if miss_mode == MissingHandling::Missing => result = path,
+                Err((_, e)) => return Err(e),
                 Ok(path) => {
-                    result.pop();
-                    result.push(path);
+                    result = path;
                 }
             }
         }
@@ -230,14 +246,12 @@ pub fn canonicalize<P: AsRef<Path>>(
         }
 
         match resolve(&result) {
-            Err(e) if miss_mode == MissingHandling::Existing => {
+            Err((_, e)) if miss_mode == MissingHandling::Existing => {
                 return Err(e);
             }
-            Ok(path) => {
-                result.pop();
-                result.push(path);
+            Ok(path) | Err((path, _)) => {
+                result = path;
             }
-            Err(_) => (),
         }
         if res_mode == ResolveMode::Physical {
             result = normalize_path(&result);
