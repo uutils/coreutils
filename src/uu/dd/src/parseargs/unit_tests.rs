@@ -10,7 +10,7 @@ fn unimplemented_flags_should_error_non_linux() {
     let mut succeeded = Vec::new();
 
     // The following flags are only implemented in linux
-    for flag in vec![
+    for &flag in &[
         "direct",
         "directory",
         "dsync",
@@ -27,13 +27,11 @@ fn unimplemented_flags_should_error_non_linux() {
         ];
         let matches = uu_app().get_matches_from_safe(args).unwrap();
 
-        match parse_iflags(&matches) {
-            Ok(_) => succeeded.push(format!("iflag={}", flag)),
-            Err(_) => { /* expected behaviour :-) */ }
+        if parse_iflags(&matches).is_ok() {
+            succeeded.push(format!("iflag={}", flag));
         }
-        match parse_oflags(&matches) {
-            Ok(_) => succeeded.push(format!("oflag={}", flag)),
-            Err(_) => { /* expected behaviour :-) */ }
+        if parse_oflags(&matches).is_ok() {
+            succeeded.push(format!("oflag={}", flag));
         }
     }
 

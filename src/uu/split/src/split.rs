@@ -104,7 +104,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     settings.strategy = String::from(OPT_LINES);
     settings.strategy_param = matches.value_of(OPT_LINES).unwrap().to_owned();
     // take any (other) defined strategy
-    for strategy in vec![OPT_LINE_BYTES, OPT_BYTES].into_iter() {
+    for &strategy in &[OPT_LINE_BYTES, OPT_BYTES] {
         if matches.occurrences_of(strategy) > 0 {
             settings.strategy = String::from(strategy);
             settings.strategy_param = matches.value_of(strategy).unwrap().to_owned();
