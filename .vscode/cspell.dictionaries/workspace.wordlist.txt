@@ -106,12 +106,14 @@ whoami
 
 # * vars/errno
 errno
+EBADF
 EEXIST
+EINVAL
 ENODATA
 ENOENT
 ENOSYS
-EPERM
 EOPNOTSUPP
+EPERM
 
 # * vars/fcntl
 F_GETFL

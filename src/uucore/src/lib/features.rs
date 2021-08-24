@@ -8,8 +8,6 @@ pub mod fs;
 pub mod fsext;
 #[cfg(feature = "ringbuffer")]
 pub mod ringbuffer;
-#[cfg(feature = "zero-copy")]
-pub mod zero_copy;
 
 // * (platform-specific) feature-gated modules
 // ** non-windows

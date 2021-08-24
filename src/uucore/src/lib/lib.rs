@@ -3,14 +3,6 @@
 // Copyright (C) ~ Alex Lyon <arcterus@mail.com>
 // Copyright (C) ~ Roy Ivy III <rivy.dev@gmail.com>; MIT license
 
-// * feature-gated external crates
-#[cfg(all(feature = "lazy_static", target_os = "linux"))]
-extern crate lazy_static;
-#[cfg(feature = "nix")]
-extern crate nix;
-#[cfg(feature = "platform-info")]
-extern crate platform_info;
-
 // * feature-gated external crates (re-shared as public internal modules)
 #[cfg(feature = "libc")]
 pub extern crate libc;
@@ -46,8 +38,6 @@ pub use crate::features::fs;
 pub use crate::features::fsext;
 #[cfg(feature = "ringbuffer")]
 pub use crate::features::ringbuffer;
-#[cfg(feature = "zero-copy")]
-pub use crate::features::zero_copy;
 
 // * (platform-specific) feature-gated modules
 // ** non-windows

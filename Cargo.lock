@@ -3141,6 +3141,7 @@ name = "uu_yes"
 version = "0.0.7"
 dependencies = [
  "clap",
+ "nix 0.20.0",
  "uucore",
  "uucore_procs",
 ]
@@ -3157,8 +3158,6 @@ dependencies = [
  "getopts",
  "lazy_static",
  "libc",
- "nix 0.19.1",
- "platform-info",
  "termion",
  "thiserror",
  "time",
