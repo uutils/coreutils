@@ -309,9 +309,9 @@ impl MountInfo {
     }
 }
 
-#[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
+#[cfg(any(target_vendor = "apple", target_os = "freebsd", target_os = "netbsd"))]
 use std::ffi::CStr;
-#[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+#[cfg(any(target_os = "freebsd", target_vendor = "apple", target_os = "netbsd"))]
 impl From<StatFs> for MountInfo {
     fn from(statfs: StatFs) -> Self {
         let mut info = MountInfo {
@@ -344,9 +344,9 @@ impl From<StatFs> for MountInfo {
     }
 }
 
-#[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+#[cfg(any(target_os = "freebsd", target_vendor = "apple", target_os = "netbsd"))]
 use libc::c_int;
-#[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+#[cfg(any(target_os = "freebsd", target_vendor = "apple", target_os = "netbsd"))]
 extern "C" {
     #[cfg(all(target_vendor = "apple", target_arch = "x86_64"))]
     #[link_name = "getmntinfo$INODE64"] // spell-checker:disable-line
@@ -354,6 +354,7 @@ extern "C" {
 
     #[cfg(any(
         all(target_os = "freebsd"),
+        all(target_os = "netbsd"),
         all(target_vendor = "apple", target_arch = "aarch64")
     ))]
     #[link_name = "getmntinfo"] // spell-checker:disable-line
@@ -364,9 +365,14 @@ extern "C" {
 use std::fs::File;
 #[cfg(target_os = "linux")]
 use std::io::{BufRead, BufReader};
-#[cfg(any(target_vendor = "apple", target_os = "freebsd", target_os = "windows"))]
+#[cfg(any(
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "windows",
+    target_os = "netbsd"
+))]
 use std::ptr;
-#[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
+#[cfg(any(target_vendor = "apple", target_os = "freebsd", target_os = "netbsd"))]
 use std::slice;
 /// Read file system list.
 pub fn read_fs_list() -> Vec<MountInfo> {
@@ -386,7 +392,7 @@ pub fn read_fs_list() -> Vec<MountInfo> {
             })
             .collect::<Vec<_>>()
     }
-    #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+    #[cfg(any(target_os = "freebsd", target_vendor = "apple", target_os = "netbsd"))]
     {
         let mut mount_buffer_ptr: *mut StatFs = ptr::null_mut();
         let len = unsafe { get_mount_info(&mut mount_buffer_ptr, 1_i32) };
@@ -582,12 +588,17 @@ impl FsMeta for StatFs {
     fn io_size(&self) -> u64 {
         self.f_frsize as u64
     }
-    #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
+    #[cfg(any(target_vendor = "apple", target_os = "freebsd", target_os = "netbsd"))]
     fn io_size(&self) -> u64 {
         self.f_iosize as u64
     }
     // XXX: dunno if this is right
-    #[cfg(not(any(target_vendor = "apple", target_os = "freebsd", target_os = "linux")))]
+    #[cfg(not(any(
+        target_vendor = "apple",
+        target_os = "freebsd",
+        target_os = "linux",
+        target_os = "netbsd"
+    )))]
     fn io_size(&self) -> u64 {
         self.f_bsize as u64
     }
@@ -617,12 +628,17 @@ impl FsMeta for StatFs {
     fn namelen(&self) -> u64 {
         1024
     }
-    #[cfg(target_os = "freebsd")]
+    #[cfg(any(target_os = "freebsd", target_os = "netbsd"))]
     fn namelen(&self) -> u64 {
         self.f_namemax as u64 // spell-checker:disable-line
     }
     // XXX: should everything just use statvfs?
-    #[cfg(not(any(target_vendor = "apple", target_os = "freebsd", target_os = "linux")))]
+    #[cfg(not(any(
+        target_vendor = "apple",
+        target_os = "freebsd",
+        target_os = "linux",
+        target_os = "netbsd"
+    )))]
     fn namelen(&self) -> u64 {
         self.f_namemax as u64 // spell-checker:disable-line
     }
