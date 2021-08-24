@@ -102,11 +102,17 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest  , features: feat_os_unix }
+          - { os: ubuntu-latest }
           - { os: macos-latest   , features: feat_os_macos }
           - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v2
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        case '${{ matrix.job.os }}' in
+          macos-latest) brew install coreutils ;; # needed for show-utils.sh
+        esac
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -115,9 +121,14 @@ jobs:
         outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
         # target-specific options
         # * CARGO_FEATURES_OPTION
-        CARGO_FEATURES_OPTION='' ;
-        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
+        CARGO_FEATURES_OPTION='--all-features' ;
+        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features ${{ matrix.job.features }}' ; fi
         outputs CARGO_FEATURES_OPTION
+        # * determine sub-crate utility list
+        UTILITY_LIST="$(./util/show-utils.sh ${CARGO_FEATURES_OPTION})"
+        echo UTILITY_LIST=${UTILITY_LIST}
+        CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo "-puu_${u}"; done;)"
+        outputs CARGO_UTILITY_LIST_OPTIONS
     - name: Install `rust` toolchain
       uses: actions-rs/toolchain@v1
       with:
@@ -130,7 +141,7 @@ jobs:
       run: |
         ## `clippy` lint testing
         # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-        S=$(cargo +nightly clippy --workspace --all-targets ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -- -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+${PWD//\//\\/}\/(.*):([0-9]+):([0-9]+).*$/::error file=\2,line=\3,col=\4::ERROR: \`cargo clippy\`: \1 (file:'\2', line:\3)/p;" -e '}' ; exit 1 ; }
+        S=$(cargo +nightly clippy --all-targets ${{ steps.vars.outputs.CARGO_UTILITY_LIST_OPTIONS }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -- -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+${PWD//\//\\/}\/(.*):([0-9]+):([0-9]+).*$/::error file=\2,line=\3,col=\4::ERROR: \`cargo clippy\`: \1 (file:'\2', line:\3)/p;" -e '}' ; exit 1 ; }
 
   code_spellcheck:
     name: Style/spelling
