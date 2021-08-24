@@ -102,9 +102,9 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest  , features: feat_os_unix }
-          - { os: macos-latest   , features: feat_os_macos }
-          - { os: windows-latest , features: feat_os_windows }
+          - { os: ubuntu-latest  , features: feat_os_unix    , utilities: --all-features }
+          - { os: macos-latest   , features: feat_os_macos   , utilities: --features feat_os_macos }
+          - { os: windows-latest , features: feat_os_windows , utilities: --features feat_os_windows }
     steps:
     - uses: actions/checkout@v2
     - name: Initialize workflow variables
@@ -119,7 +119,7 @@ jobs:
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
         outputs CARGO_FEATURES_OPTION
         # * determine sub-crate utility list
-        UTILITY_LIST="$(./util/show-utils.sh ${CARGO_FEATURES_OPTION})"
+        UTILITY_LIST="$(./util/show-utils.sh ${{ matrix.job.utilities }})"
         echo UTILITY_LIST=${UTILITY_LIST}
         CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo "-puu_${u}"; done;)"
         outputs CARGO_UTILITY_LIST_OPTIONS
