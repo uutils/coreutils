@@ -18,7 +18,7 @@ use filetime::{set_file_times, FileTime};
 use uucore::backup_control::{self, BackupMode};
 use uucore::entries::{grp2gid, usr2uid};
 use uucore::error::{FromIo, UError, UIoError, UResult, USimpleError};
-use uucore::perms::{wrap_chgrp, wrap_chown, Verbosity};
+use uucore::perms::{wrap_chown, Verbosity, VerbosityLevel};
 
 use libc::{getegid, geteuid};
 use std::error::Error;
@@ -641,7 +641,10 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
             Some(owner_id),
             Some(gid),
             false,
-            Verbosity::Normal,
+            Verbosity {
+                groups_only: false,
+                level: VerbosityLevel::Normal,
+            },
         ) {
             Ok(n) => {
                 if !n.is_empty() {
@@ -662,7 +665,17 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
             Ok(g) => g,
             _ => return Err(InstallError::NoSuchGroup(b.group.clone()).into()),
         };
-        match wrap_chgrp(to, &meta, Some(group_id), false, Verbosity::Normal) {
+        match wrap_chown(
+            to,
+            &meta,
+            Some(group_id),
+            None,
+            false,
+            Verbosity {
+                groups_only: true,
+                level: VerbosityLevel::Normal,
+            },
+        ) {
             Ok(n) => {
                 if !n.is_empty() {
                     show_error!("{}", n);
