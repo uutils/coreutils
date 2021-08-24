@@ -7,7 +7,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) algo, algoname, regexes, nread
+// spell-checker:ignore (ToDO) algo, algoname, regexes, nread memmem
 
 #[macro_use]
 extern crate clap;
@@ -22,6 +22,7 @@ use self::digest::Digest;
 use clap::{App, Arg, ArgMatches};
 use hex::ToHex;
 use md5::Context as Md5;
+use memchr::memmem;
 use regex::Regex;
 use sha1::Sha1;
 use sha2::{Sha224, Sha256, Sha384, Sha512};
@@ -586,8 +587,6 @@ fn digest_reader<'a, T: Read>(
     // Digest file, do not hold too much in memory at any given moment
     let windows = cfg!(windows);
     let mut buffer = Vec::with_capacity(524_288);
-    let mut vec = Vec::with_capacity(524_288);
-    let mut looking_for_newline = false;
     loop {
         match reader.read_to_end(&mut buffer) {
             Ok(0) => {
@@ -595,34 +594,29 @@ fn digest_reader<'a, T: Read>(
             }
             Ok(nread) => {
                 if windows && !binary {
-                    // Windows text mode returns '\n' when reading '\r\n'
-                    for &b in buffer.iter().take(nread) {
-                        if looking_for_newline {
-                            if b != b'\n' {
-                                vec.push(b'\r');
-                            }
-                            if b != b'\r' {
-                                vec.push(b);
-                                looking_for_newline = false;
-                            }
-                        } else if b != b'\r' {
-                            vec.push(b);
-                        } else {
-                            looking_for_newline = true;
-                        }
+                    // In Windows text mode, replace each occurrence of
+                    // "\r\n" with "\n".
+                    //
+                    // Find all occurrences of "\r\n", inputting the
+                    // slice just before the "\n" in the previous
+                    // instance of "\r\n" and the beginning of this
+                    // "\r\n".
+                    //
+                    // FIXME This fails if one call to `read()` ends
+                    // with the "\r" and the next call to `read()`
+                    // begins with the "\n".
+                    let mut i_prev = 0;
+                    for i in memmem::find_iter(&buffer[0..nread], b"\r\n") {
+                        digest.input(&buffer[i_prev..i]);
+                        i_prev = i + 1;
                     }
-                    digest.input(&vec);
-                    vec.clear();
+                    digest.input(&buffer[i_prev..nread]);
                 } else {
                     digest.input(&buffer[..nread]);
                 }
             }
             Err(e) => return Err(e),
         }
-    }
-    if windows && looking_for_newline {
-        vec.push(b'\r');
-        digest.input(&vec);
     }
 
     if digest.output_bits() > 0 {
