@@ -106,7 +106,6 @@ mod tests {
 
     use crate::ringbuffer::RingBuffer;
     use std::collections::VecDeque;
-    use std::iter::FromIterator;
 
     #[test]
     fn test_size_limit_zero() {
@@ -128,7 +127,7 @@ mod tests {
     fn test_from_iter() {
         let iter = [0, 1, 2].iter();
         let actual = RingBuffer::from_iter(iter, 2).data;
-        let expected = VecDeque::from_iter([1, 2].iter());
+        let expected: VecDeque<&i32> = [1, 2].iter().collect();
         assert_eq!(expected, actual);
     }
 }

@@ -10,7 +10,7 @@ fn unimplemented_flags_should_error_non_linux() {
     let mut succeeded = Vec::new();
 
     // The following flags are only implemented in linux
-    for flag in vec![
+    for &flag in &[
         "direct",
         "directory",
         "dsync",
@@ -27,13 +27,11 @@ fn unimplemented_flags_should_error_non_linux() {
         ];
         let matches = uu_app().get_matches_from_safe(args).unwrap();
 
-        match parse_iflags(&matches) {
-            Ok(_) => succeeded.push(format!("iflag={}", flag)),
-            Err(_) => { /* expected behaviour :-) */ }
+        if parse_iflags(&matches).is_ok() {
+            succeeded.push(format!("iflag={}", flag));
         }
-        match parse_oflags(&matches) {
-            Ok(_) => succeeded.push(format!("oflag={}", flag)),
-            Err(_) => { /* expected behaviour :-) */ }
+        if parse_oflags(&matches).is_ok() {
+            succeeded.push(format!("oflag={}", flag));
         }
     }
 
@@ -50,7 +48,7 @@ fn unimplemented_flags_should_error() {
     let mut succeeded = Vec::new();
 
     // The following flags are not implemented
-    for flag in vec!["cio", "nocache", "nolinks", "text", "binary"] {
+    for &flag in &["cio", "nocache", "nolinks", "text", "binary"] {
         let args = vec![
             String::from("dd"),
             format!("--iflag={}", flag),
@@ -58,13 +56,11 @@ fn unimplemented_flags_should_error() {
         ];
         let matches = uu_app().get_matches_from_safe(args).unwrap();
 
-        match parse_iflags(&matches) {
-            Ok(_) => succeeded.push(format!("iflag={}", flag)),
-            Err(_) => { /* expected behaviour :-) */ }
+        if parse_iflags(&matches).is_ok() {
+            succeeded.push(format!("iflag={}", flag))
         }
-        match parse_oflags(&matches) {
-            Ok(_) => succeeded.push(format!("oflag={}", flag)),
-            Err(_) => { /* expected behaviour :-) */ }
+        if parse_oflags(&matches).is_ok() {
+            succeeded.push(format!("oflag={}", flag))
         }
     }
 
@@ -356,7 +352,7 @@ fn parse_icf_token_ibm() {
 
     assert_eq!(exp.len(), act.len());
     for cf in &exp {
-        assert!(exp.contains(&cf));
+        assert!(exp.contains(cf));
     }
 }
 
@@ -373,7 +369,7 @@ fn parse_icf_tokens_elu() {
 
     assert_eq!(exp.len(), act.len());
     for cf in &exp {
-        assert!(exp.contains(&cf));
+        assert!(exp.contains(cf));
     }
 }
 
@@ -405,7 +401,7 @@ fn parse_icf_tokens_remaining() {
 
     assert_eq!(exp.len(), act.len());
     for cf in &exp {
-        assert!(exp.contains(&cf));
+        assert!(exp.contains(cf));
     }
 }
 
@@ -429,7 +425,7 @@ fn parse_iflag_tokens() {
 
     assert_eq!(exp.len(), act.len());
     for cf in &exp {
-        assert!(exp.contains(&cf));
+        assert!(exp.contains(cf));
     }
 }
 
@@ -453,7 +449,7 @@ fn parse_oflag_tokens() {
 
     assert_eq!(exp.len(), act.len());
     for cf in &exp {
-        assert!(exp.contains(&cf));
+        assert!(exp.contains(cf));
     }
 }
 
@@ -481,7 +477,7 @@ fn parse_iflag_tokens_linux() {
 
     assert_eq!(exp.len(), act.len());
     for cf in &exp {
-        assert!(exp.contains(&cf));
+        assert!(exp.contains(cf));
     }
 }
 
@@ -509,7 +505,7 @@ fn parse_oflag_tokens_linux() {
 
     assert_eq!(exp.len(), act.len());
     for cf in &exp {
-        assert!(exp.contains(&cf));
+        assert!(exp.contains(cf));
     }
 }
 

@@ -130,7 +130,7 @@ jobs:
       run: |
         ## `clippy` lint testing
         # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-        S=$(cargo +nightly clippy --all-targets ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -- -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+${PWD//\//\\/}\/(.*):([0-9]+):([0-9]+).*$/::error file=\2,line=\3,col=\4::ERROR: \`cargo clippy\`: \1 (file:'\2', line:\3)/p;" -e '}' ; exit 1 ; }
+        S=$(cargo +nightly clippy --workspace --all-targets ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -- -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+${PWD//\//\\/}\/(.*):([0-9]+):([0-9]+).*$/::error file=\2,line=\3,col=\4::ERROR: \`cargo clippy\`: \1 (file:'\2', line:\3)/p;" -e '}' ; exit 1 ; }
 
   code_spellcheck:
     name: Style/spelling

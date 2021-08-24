@@ -86,7 +86,7 @@ mod tests {
             let mut n_c: [u64; CHUNK_SIZE] = rng.gen();
             let mut f_c: [Factors; CHUNK_SIZE] = rng.gen();
 
-            let mut n_i = n_c.clone();
+            let mut n_i = n_c;
             let mut f_i = f_c.clone();
             for (n, f) in n_i.iter_mut().zip(f_i.iter_mut()) {
                 factor(n, f);

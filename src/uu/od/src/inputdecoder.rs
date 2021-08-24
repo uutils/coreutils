@@ -161,6 +161,7 @@ mod tests {
     use std::io::Cursor;
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn smoke_test() {
         let data = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0, 0xff, 0xff];
         let mut input = PeekReader::new(Cursor::new(&data));

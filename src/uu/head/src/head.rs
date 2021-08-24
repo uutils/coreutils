@@ -483,7 +483,7 @@ mod tests {
     fn options(args: &str) -> Result<HeadOptions, String> {
         let combined = "head ".to_owned() + args;
         let args = combined.split_whitespace();
-        HeadOptions::get_from(args.map(|s| OsString::from(s)))
+        HeadOptions::get_from(args.map(OsString::from))
     }
     #[test]
     fn test_args_modes() {
@@ -522,6 +522,7 @@ mod tests {
         assert!(options("-c IsThisJustFantasy").is_err());
     }
     #[test]
+    #[allow(clippy::bool_comparison)]
     fn test_options_correct_defaults() {
         let opts = HeadOptions::new();
         let opts2: HeadOptions = Default::default();
@@ -552,7 +553,7 @@ mod tests {
         assert!(parse_mode("1T", Modes::Bytes).is_err());
     }
     fn arg_outputs(src: &str) -> Result<String, String> {
-        let split = src.split_whitespace().map(|x| OsString::from(x));
+        let split = src.split_whitespace().map(OsString::from);
         match arg_iterate(split) {
             Ok(args) => {
                 let vec = args
