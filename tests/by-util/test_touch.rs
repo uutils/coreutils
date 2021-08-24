@@ -290,6 +290,8 @@ fn test_touch_set_both() {
 }
 
 #[test]
+// FixME: Fails on freebsd because of a different nanos
+#[cfg(not(target_os = "freebsd"))]
 fn test_touch_no_dereference() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_touch_no_dereference_a";

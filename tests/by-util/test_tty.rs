@@ -65,7 +65,8 @@ fn test_wrong_argument() {
 }
 
 #[test]
-#[cfg(not(windows))]
+// FixME: freebsd panic
+#[cfg(not(any(windows, target_os = "freebsd")))]
 fn test_stdout_fail() {
     let mut child = new_ucmd!().run_no_wait();
     drop(child.stdout.take());

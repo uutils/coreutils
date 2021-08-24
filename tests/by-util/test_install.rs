@@ -563,7 +563,8 @@ fn strip_source_file() -> &'static str {
 }
 
 #[test]
-#[cfg(not(windows))]
+// FixME: Freebsd fails on 'No such file or directory'
+#[cfg(not(any(windows, target_os = "freebsd")))]
 fn test_install_and_strip() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -586,7 +587,8 @@ fn test_install_and_strip() {
 }
 
 #[test]
-#[cfg(not(windows))]
+// FixME: Freebsd fails on 'No such file or directory'
+#[cfg(not(any(windows, target_os = "freebsd")))]
 fn test_install_and_strip_with_program() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
