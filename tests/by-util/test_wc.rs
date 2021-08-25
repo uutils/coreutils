@@ -205,22 +205,27 @@ fn test_file_bytes_dictate_width() {
 /// Test that getting counts from a directory is an error.
 #[test]
 fn test_read_from_directory_error() {
-    // TODO To match GNU `wc`, the `stdout` should be:
-    //
-    //     "      0       0       0 .\n"
-    //
+    #[cfg(not(windows))]
+    const MSG: &str = ".: Is a directory";
+    #[cfg(windows)]
+    const MSG: &str = ".: Access is denied";
     new_ucmd!()
         .args(&["."])
         .fails()
-        .stderr_contains(".: Is a directory")
+        .stderr_contains(MSG)
         .stdout_is("      0       0       0 .\n");
 }
 
 /// Test that getting counts from nonexistent file is an error.
 #[test]
 fn test_read_from_nonexistent_file() {
+    #[cfg(not(windows))]
+    const MSG: &str = "bogusfile: No such file or directory";
+    #[cfg(windows)]
+    const MSG: &str = "bogusfile: The system cannot find the file specified";
     new_ucmd!()
         .args(&["bogusfile"])
         .fails()
-        .stderr_contains("bogusfile: No such file or directory");
+        .stderr_contains(MSG)
+        .stdout_is("");
 }
