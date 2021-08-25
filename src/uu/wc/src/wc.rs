@@ -324,9 +324,9 @@ fn show_error(input: &Input, err: io::Error) {
 /// let input = Input::Stdin(StdinKind::Explicit);
 /// assert_eq!(7, digit_width(input));
 /// ```
-fn digit_width(input: &Input) -> io::Result<Option<usize>> {
+fn digit_width(input: &Input) -> io::Result<usize> {
     match input {
-        Input::Stdin(_) => Ok(Some(MINIMUM_WIDTH)),
+        Input::Stdin(_) => Ok(MINIMUM_WIDTH),
         Input::Path(filename) => {
             let path = Path::new(filename);
             let metadata = fs::metadata(path)?;
@@ -337,9 +337,9 @@ fn digit_width(input: &Input) -> io::Result<Option<usize>> {
                 // instead). See GitHub issue #2201.
                 let num_bytes = metadata.len();
                 let num_digits = num_bytes.to_string().len();
-                Ok(Some(num_digits))
+                Ok(num_digits)
             } else {
-                Ok(None)
+                Ok(MINIMUM_WIDTH)
             }
         }
     }
@@ -377,7 +377,7 @@ fn digit_width(input: &Input) -> io::Result<Option<usize>> {
 fn max_width(inputs: &[Input]) -> usize {
     let mut result = 1;
     for input in inputs {
-        if let Ok(Some(n)) = digit_width(input) {
+        if let Ok(n) = digit_width(input) {
             result = result.max(n);
         }
     }
