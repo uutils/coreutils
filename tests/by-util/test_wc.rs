@@ -53,11 +53,16 @@ fn test_utf8() {
         .args(&["-lwmcL"])
         .pipe_in_fixture("UTF_8_test.txt")
         .run()
-        .stdout_is("    300    4969   22781   22213      79\n");
-    // GNU returns "    300    2086   22219   22781      79"
-    //
-    // TODO: we should fix the word, character, and byte count to
-    // match the behavior of GNU wc
+        .stdout_is("    303    2119   23025   22457      79\n");
+}
+
+#[test]
+fn test_utf8_extra() {
+    new_ucmd!()
+        .arg("-lwmcL")
+        .pipe_in_fixture("UTF_8_weirdchars.txt")
+        .run()
+        .stdout_is("     25      87     513     442      48\n");
 }
 
 #[test]
