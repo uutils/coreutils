@@ -9,6 +9,7 @@ aho-corasick
 backtrace
 blake2b_simd
 bstr
+bytecount
 byteorder
 chacha
 chrono
