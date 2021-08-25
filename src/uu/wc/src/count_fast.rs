@@ -1,13 +1,15 @@
+use crate::word_count::WordCount;
+
 use super::{WcResult, WordCountable};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::fs::{File, OpenOptions};
-use std::io::ErrorKind;
+use std::io::{ErrorKind, Read};
 
 #[cfg(unix)]
 use libc::S_IFREG;
 #[cfg(unix)]
-use nix::sys::stat::fstat;
+use nix::sys::stat;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
 
@@ -18,7 +20,8 @@ use nix::fcntl::{splice, SpliceFFlags};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::unistd::pipe;
 
-const BUF_SIZE: usize = 16384;
+const BUF_SIZE: usize = 16 * 1024;
+const SPLICE_SIZE: usize = 128 * 1024;
 
 /// Splice wrapper which handles short writes
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -37,15 +40,24 @@ fn splice_exact(read_fd: RawFd, write_fd: RawFd, num_bytes: usize) -> nix::Resul
 
 /// This is a Linux-specific function to count the number of bytes using the
 /// `splice` system call, which is faster than using `read`.
+///
+/// On error it returns the number of bytes it did manage to read, since the
+/// caller will fall back to a simpler method.
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn count_bytes_using_splice(fd: RawFd) -> nix::Result<usize> {
+fn count_bytes_using_splice(fd: RawFd) -> Result<usize, usize> {
     let null_file = OpenOptions::new()
         .write(true)
         .open("/dev/null")
-        .map_err(|_| nix::Error::last())?;
+        .map_err(|_| 0_usize)?;
     let null = null_file.as_raw_fd();
-    let (pipe_rd, pipe_wr) = pipe()?;
+    let null_rdev = stat::fstat(null).map_err(|_| 0_usize)?.st_rdev;
+    if (stat::major(null_rdev), stat::minor(null_rdev)) != (1, 3) {
+        // This is not a proper /dev/null, writing to it is probably bad
+        // Bit of an edge case, but it has been known to happen
+        return Err(0);
+    }
+    let (pipe_rd, pipe_wr) = pipe().map_err(|_| 0_usize)?;
 
     // Ensure the pipe is closed when the function returns.
     // SAFETY: The file descriptors do not have other owners.
@@ -53,12 +65,16 @@ fn count_bytes_using_splice(fd: RawFd) -> nix::Result<usize> {
 
     let mut byte_count = 0;
     loop {
-        let res = splice(fd, None, pipe_wr, None, BUF_SIZE, SpliceFFlags::empty())?;
-        if res == 0 {
-            break;
-        }
-        byte_count += res;
-        splice_exact(pipe_rd, null, res)?;
+        match splice(fd, None, pipe_wr, None, SPLICE_SIZE, SpliceFFlags::empty()) {
+            Ok(0) => break,
+            Ok(res) => {
+                byte_count += res;
+                if splice_exact(pipe_rd, null, res).is_err() {
+                    return Err(byte_count);
+                }
+            }
+            Err(_) => return Err(byte_count),
+        };
     }
 
     Ok(byte_count)
@@ -73,10 +89,12 @@ fn count_bytes_using_splice(fd: RawFd) -> nix::Result<usize> {
 ///      other things such as lines and words.
 #[inline]
 pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> WcResult<usize> {
+    let mut byte_count = 0;
+
     #[cfg(unix)]
     {
         let fd = handle.as_raw_fd();
-        if let Ok(stat) = fstat(fd) {
+        if let Ok(stat) = stat::fstat(fd) {
             // If the file is regular, then the `st_size` should hold
             // the file's size in bytes.
             if (stat.st_mode & S_IFREG) != 0 {
@@ -87,8 +105,9 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> WcResult<usi
                 // Else, if we're on Linux and our file is a FIFO pipe
                 // (or stdin), we use splice to count the number of bytes.
                 if (stat.st_mode & S_IFIFO) != 0 {
-                    if let Ok(n) = count_bytes_using_splice(fd) {
-                        return Ok(n);
+                    match count_bytes_using_splice(fd) {
+                        Ok(n) => return Ok(n),
+                        Err(n) => byte_count = n,
                     }
                 }
             }
@@ -97,12 +116,27 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> WcResult<usi
 
     // Fall back on `read`, but without the overhead of counting words and lines.
     let mut buf = [0_u8; BUF_SIZE];
-    let mut byte_count = 0;
     loop {
         match handle.read(&mut buf) {
             Ok(0) => return Ok(byte_count),
             Ok(n) => {
                 byte_count += n;
+            }
+            Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
+            Err(e) => return Err(e.into()),
+        }
+    }
+}
+
+pub(crate) fn count_bytes_and_lines_fast<R: Read>(handle: &mut R) -> WcResult<WordCount> {
+    let mut total = WordCount::default();
+    let mut buf = [0; BUF_SIZE];
+    loop {
+        match handle.read(&mut buf) {
+            Ok(0) => return Ok(total),
+            Ok(n) => {
+                total.bytes += n;
+                total.lines += bytecount::count(&buf[..n], b'\n');
             }
             Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
             Err(e) => return Err(e.into()),

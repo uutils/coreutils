@@ -74,15 +74,11 @@ impl WordCount {
     /// fields will be set to 0. If it is `true`, this function will
     /// attempt to decode the bytes first as UTF-8, and failing that,
     /// as ASCII.
-    pub fn from_line(line: &[u8], decode_chars: bool) -> WordCount {
+    pub fn from_line(line: &[u8]) -> WordCount {
         // GNU 'wc' only counts lines that end in LF as lines
         let lines = (*line.last().unwrap() == LF) as usize;
         let bytes = line.len();
-        let (words, chars) = if decode_chars {
-            WordCount::word_and_char_count(line)
-        } else {
-            (0, 0)
-        };
+        let (words, chars) = WordCount::word_and_char_count(line);
         // -L is a GNU 'wc' extension so same behavior on LF
         let max_line_length = if chars > 0 { chars - lines } else { 0 };
         WordCount {

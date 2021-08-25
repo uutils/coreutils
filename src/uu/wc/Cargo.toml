@@ -19,6 +19,7 @@ clap = { version = "2.33", features = ["wrap_help"] }
 uucore = { version=">=0.0.9", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.6", package="uucore_procs", path="../../uucore_procs" }
 thiserror = "1.0"
+bytecount = "0.6.2"
 
 [target.'cfg(unix)'.dependencies]
 nix = "0.20"
