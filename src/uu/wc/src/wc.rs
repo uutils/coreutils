@@ -460,18 +460,18 @@ fn print_stats(
         write!(stdout_lock, "{:1$}", result.count.words, min_width)?;
         is_first = false;
     }
-    if settings.show_bytes {
-        if !is_first {
-            write!(stdout_lock, " ")?;
-        }
-        write!(stdout_lock, "{:1$}", result.count.bytes, min_width)?;
-        is_first = false;
-    }
     if settings.show_chars {
         if !is_first {
             write!(stdout_lock, " ")?;
         }
         write!(stdout_lock, "{:1$}", result.count.chars, min_width)?;
+        is_first = false;
+    }
+    if settings.show_bytes {
+        if !is_first {
+            write!(stdout_lock, " ")?;
+        }
+        write!(stdout_lock, "{:1$}", result.count.bytes, min_width)?;
         is_first = false;
     }
     if settings.show_max_line_length {
