@@ -21,6 +21,7 @@ use nix::fcntl::{splice, SpliceFFlags};
 use nix::unistd::pipe;
 
 const BUF_SIZE: usize = 16 * 1024;
+#[cfg(any(target_os = "linux", target_os = "android"))]
 const SPLICE_SIZE: usize = 128 * 1024;
 
 /// Splice wrapper which handles short writes
