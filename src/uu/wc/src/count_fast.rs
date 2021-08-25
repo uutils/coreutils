@@ -88,7 +88,7 @@ fn count_bytes_using_splice(fd: RawFd) -> Result<usize, usize> {
 ///   3. Otherwise, we just read normally, but without the overhead of counting
 ///      other things such as lines and words.
 #[inline]
-pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> io::Result<usize> {
+pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Option<io::Error>) {
     let mut byte_count = 0;
 
     #[cfg(unix)]
@@ -98,7 +98,7 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> io::Result<u
             // If the file is regular, then the `st_size` should hold
             // the file's size in bytes.
             if (stat.st_mode & S_IFREG) != 0 {
-                return Ok(stat.st_size as usize);
+                return (stat.st_size as usize, None);
             }
             #[cfg(any(target_os = "linux", target_os = "android"))]
             {
@@ -106,7 +106,7 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> io::Result<u
                 // (or stdin), we use splice to count the number of bytes.
                 if (stat.st_mode & S_IFIFO) != 0 {
                     match count_bytes_using_splice(fd) {
-                        Ok(n) => return Ok(n),
+                        Ok(n) => return (n, None),
                         Err(n) => byte_count = n,
                     }
                 }
@@ -118,28 +118,30 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> io::Result<u
     let mut buf = [0_u8; BUF_SIZE];
     loop {
         match handle.read(&mut buf) {
-            Ok(0) => return Ok(byte_count),
+            Ok(0) => return (byte_count, None),
             Ok(n) => {
                 byte_count += n;
             }
             Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
-            Err(e) => return Err(e),
+            Err(e) => return (byte_count, Some(e)),
         }
     }
 }
 
-pub(crate) fn count_bytes_and_lines_fast<R: Read>(handle: &mut R) -> io::Result<WordCount> {
+pub(crate) fn count_bytes_and_lines_fast<R: Read>(
+    handle: &mut R,
+) -> (WordCount, Option<io::Error>) {
     let mut total = WordCount::default();
     let mut buf = [0; BUF_SIZE];
     loop {
         match handle.read(&mut buf) {
-            Ok(0) => return Ok(total),
+            Ok(0) => return (total, None),
             Ok(n) => {
                 total.bytes += n;
                 total.lines += bytecount::count(&buf[..n], b'\n');
             }
             Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
-            Err(e) => return Err(e),
+            Err(e) => return (total, Some(e)),
         }
     }
 }

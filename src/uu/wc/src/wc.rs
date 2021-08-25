@@ -202,17 +202,21 @@ pub fn uu_app() -> App<'static, 'static> {
 fn word_count_from_reader<T: WordCountable>(
     mut reader: T,
     settings: &Settings,
-) -> io::Result<WordCount> {
+) -> (WordCount, Option<io::Error>) {
     let only_count_bytes = settings.show_bytes
         && (!(settings.show_chars
             || settings.show_lines
             || settings.show_max_line_length
             || settings.show_words));
     if only_count_bytes {
-        return Ok(WordCount {
-            bytes: count_bytes_fast(&mut reader)?,
-            ..WordCount::default()
-        });
+        let (bytes, error) = count_bytes_fast(&mut reader);
+        return (
+            WordCount {
+                bytes,
+                ..WordCount::default()
+            },
+            error,
+        );
     }
 
     // we do not need to decode the byte stream if we're only counting bytes/newlines
@@ -268,27 +272,47 @@ fn word_count_from_reader<T: WordCountable>(
                 total.bytes += bytes.len();
             }
             Err(BufReadDecoderError::Io(e)) => {
-                return Err(e);
+                return (total, Some(e));
             }
         }
     }
 
     total.max_line_length = max(current_len, total.max_line_length);
 
-    Ok(total)
+    (total, None)
 }
 
-fn word_count_from_input(input: &Input, settings: &Settings) -> io::Result<WordCount> {
+enum CountResult {
+    /// Nothing went wrong.
+    Success(WordCount),
+    /// Managed to open but failed to read.
+    Interrupted(WordCount, io::Error),
+    /// Didn't even manage to open.
+    Failure(io::Error),
+}
+
+/// If we fail opening a file we only show the error. If we fail reading it
+/// we show a count for what we managed to read.
+///
+/// Therefore the reading implementations always return a total and sometimes
+/// return an error: (WordCount, Option<io::Error>).
+fn word_count_from_input(input: &Input, settings: &Settings) -> CountResult {
     match input {
         Input::Stdin(_) => {
             let stdin = io::stdin();
             let stdin_lock = stdin.lock();
-            word_count_from_reader(stdin_lock, settings)
+            match word_count_from_reader(stdin_lock, settings) {
+                (total, Some(error)) => CountResult::Interrupted(total, error),
+                (total, None) => CountResult::Success(total),
+            }
         }
-        Input::Path(path) => {
-            let file = File::open(path)?;
-            word_count_from_reader(file, settings)
-        }
+        Input::Path(path) => match File::open(path) {
+            Err(error) => CountResult::Failure(error),
+            Ok(file) => match word_count_from_reader(file, settings) {
+                (total, Some(error)) => CountResult::Interrupted(total, error),
+                (total, None) => CountResult::Success(total),
+            },
+        },
     }
 }
 
@@ -390,7 +414,7 @@ fn wc(inputs: Vec<Input>, settings: &Settings) -> Result<(), u32> {
     // The width is the number of digits needed to print the number of
     // bytes in the largest file. This is true regardless of whether
     // the `settings` indicate that the bytes will be displayed.
-    let mut error_count = 0;
+    let mut failure = false;
     let max_width = max_width(&inputs);
 
     let mut total_word_count = WordCount::default();
@@ -398,11 +422,19 @@ fn wc(inputs: Vec<Input>, settings: &Settings) -> Result<(), u32> {
     let num_inputs = inputs.len();
 
     for input in &inputs {
-        let word_count = word_count_from_input(input, settings).unwrap_or_else(|err| {
-            show_error(input, err);
-            error_count += 1;
-            WordCount::default()
-        });
+        let word_count = match word_count_from_input(input, settings) {
+            CountResult::Success(word_count) => word_count,
+            CountResult::Interrupted(word_count, error) => {
+                show_error(input, error);
+                failure = true;
+                word_count
+            }
+            CountResult::Failure(error) => {
+                show_error(input, error);
+                failure = true;
+                continue;
+            }
+        };
         total_word_count += word_count;
         let result = word_count.with_title(input.to_title());
         if let Err(err) = print_stats(settings, &result, max_width) {
@@ -411,7 +443,7 @@ fn wc(inputs: Vec<Input>, settings: &Settings) -> Result<(), u32> {
                 result.title.unwrap_or_else(|| "<stdin>".as_ref()).display(),
                 err
             );
-            error_count += 1;
+            failure = true;
         }
     }
 
@@ -419,14 +451,14 @@ fn wc(inputs: Vec<Input>, settings: &Settings) -> Result<(), u32> {
         let total_result = total_word_count.with_title(Some("total".as_ref()));
         if let Err(err) = print_stats(settings, &total_result, max_width) {
             show_warning!("failed to print total: {}", err);
-            error_count += 1;
+            failure = true;
         }
     }
 
-    if error_count == 0 {
-        Ok(())
+    if failure {
+        Err(1)
     } else {
-        Err(error_count)
+        Ok(())
     }
 }
 
