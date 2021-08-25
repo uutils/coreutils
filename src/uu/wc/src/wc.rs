@@ -13,11 +13,14 @@ mod countable;
 mod word_count;
 use count_fast::{count_bytes_and_lines_fast, count_bytes_fast};
 use countable::WordCountable;
+use unicode_width::UnicodeWidthChar;
+use utf8::{BufReadDecoder, BufReadDecoderError};
 use word_count::{TitledWordCount, WordCount};
 
 use clap::{crate_version, App, Arg, ArgMatches};
 use thiserror::Error;
 
+use std::cmp::max;
 use std::fs::{self, File};
 use std::io::{self, ErrorKind, Write};
 use std::path::Path;
@@ -224,16 +227,59 @@ fn word_count_from_reader<T: WordCountable>(
         return count_bytes_and_lines_fast(&mut reader);
     }
 
-    // Sum the WordCount for each line. Show a warning for each line
-    // that results in an IO error when trying to read it.
-    let mut lines = reader.lines();
     let mut total = WordCount::default();
-    while let Some(res) = lines.next() {
-        match res {
-            Ok(line) => total += WordCount::from_line(line),
-            Err(e) => show_warning!("Error while reading {}: {}", path, e),
+    let mut reader = BufReadDecoder::new(reader.buffered());
+    let mut in_word = false;
+    let mut current_len = 0;
+
+    while let Some(chunk) = reader.next_strict() {
+        match chunk {
+            Ok(text) => {
+                for ch in text.chars() {
+                    if ch.is_whitespace() {
+                        in_word = false;
+                    } else if ch.is_ascii_control() {
+                        // These count as characters but do not affect the word state
+                    } else if !in_word {
+                        in_word = true;
+                        total.words += 1;
+                    }
+                    match ch {
+                        '\n' => {
+                            total.max_line_length = max(current_len, total.max_line_length);
+                            current_len = 0;
+                            total.lines += 1;
+                        }
+                        // '\x0c' = '\f'
+                        '\r' | '\x0c' => {
+                            total.max_line_length = max(current_len, total.max_line_length);
+                            current_len = 0;
+                        }
+                        '\t' => {
+                            current_len -= current_len % 8;
+                            current_len += 8;
+                        }
+                        _ => {
+                            current_len += ch.width().unwrap_or(0);
+                        }
+                    }
+                    total.chars += 1;
+                }
+                total.bytes += text.len();
+            }
+            Err(BufReadDecoderError::InvalidByteSequence(bytes)) => {
+                // GNU wc treats invalid data as neither word nor char nor whitespace,
+                // so no other counters are affected
+                total.bytes += bytes.len();
+            }
+            Err(BufReadDecoderError::Io(e)) => {
+                show_warning!("Error while reading {}: {}", path, e);
+            }
         }
     }
+
+    total.max_line_length = max(current_len, total.max_line_length);
+
     Ok(total)
 }
 
