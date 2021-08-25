@@ -312,8 +312,8 @@ fn cat_path(
     path: &str,
     options: &OutputOptions,
     state: &mut OutputState,
-    #[cfg(unix)] out_info: &nix::sys::stat::FileStat,
-    #[cfg(windows)] out_info: &winapi_util::file::Information,
+    #[cfg(unix)] out_info: Option<&nix::sys::stat::FileStat>,
+    #[cfg(windows)] out_info: Option<&winapi_util::file::Information>,
 ) -> CatResult<()> {
     if path == "-" {
         let stdin = io::stdin();
@@ -342,8 +342,10 @@ fn cat_path(
         _ => {
             let file = File::open(path)?;
             #[cfg(any(windows, unix))]
-            if same_file(out_info, &file) {
-                return Err(CatError::OutputIsInput);
+            if let Some(out_info) = out_info {
+                if same_file(out_info, &file) {
+                    return Err(CatError::OutputIsInput);
+                }
             }
             let mut handle = InputHandle {
                 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -372,9 +374,9 @@ fn same_file(a_info: &winapi_util::file::Information, b: &File) -> bool {
 
 fn cat_files(files: Vec<String>, options: &OutputOptions) -> UResult<()> {
     #[cfg(windows)]
-    let out_info = winapi_util::file::information(&std::io::stdout()).unwrap();
+    let out_info = winapi_util::file::information(&std::io::stdout()).ok();
     #[cfg(unix)]
-    let out_info = nix::sys::stat::fstat(std::io::stdout().as_raw_fd()).unwrap();
+    let out_info = nix::sys::stat::fstat(std::io::stdout().as_raw_fd()).ok();
 
     let mut state = OutputState {
         line_number: 1,
@@ -385,7 +387,13 @@ fn cat_files(files: Vec<String>, options: &OutputOptions) -> UResult<()> {
     let mut error_messages: Vec<String> = Vec::new();
 
     for path in &files {
-        if let Err(err) = cat_path(path, options, &mut state, &out_info) {
+        if let Err(err) = cat_path(
+            path,
+            options,
+            &mut state,
+            #[cfg(any(windows, unix))]
+            out_info.as_ref(),
+        ) {
             error_messages.push(format!("{}: {}", path, err));
         }
     }
