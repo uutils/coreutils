@@ -24,7 +24,10 @@ use uucore::error::{UError, UResult, USimpleError};
 use uucore::ranges::Range;
 use uucore::InvalidEncodingHandling;
 
-mod searcher;
+
+/* ****************************************************************************
+ * Help text and option definitions
+ * ****************************************************************************/
 
 static NAME: &str = "cut";
 static ABOUT: &str =
@@ -46,23 +49,26 @@ Each range is one of:
 
 ";
 
-struct Options {
-    out_delim: Option<String>,
-    zero_terminated: bool,
+mod options {
+    // Flags
+    pub const COMPLEMENT: &str = "complement";
+    pub const DONT_SPLIT_MULTIBYTES: &str = "n";
+    pub const ONLY_DELIMITED: &str = "only-delimited";
+    pub const ZERO_TERMINATED: &str = "zero-terminated";
+    // Options
+    pub const BYTES: &str = "bytes";
+    pub const CHARACTERS: &str = "characters";
+    pub const DELIMITER: &str = "delimiter";
+    pub const FIELDS: &str = "fields";
+    pub const OUTPUT_DELIMITER: &str = "output-delimiter";
+    // File input
+    pub const FILE: &str = "FILE";
 }
 
-struct FieldOptions {
-    delimiter: String, // one char long, String because of UTF8 representation
-    out_delimiter: Option<String>,
-    only_delimited: bool,
-    zero_terminated: bool,
-}
 
-enum Mode {
-    Bytes(Vec<Range>, Options),
-    Characters(Vec<Range>, Options),
-    Fields(Vec<Range>, FieldOptions),
-}
+/* ****************************************************************************
+ * Error handling and custom error
+ * ****************************************************************************/
 
 #[derive(Debug)]
 enum CutError {
@@ -105,6 +111,34 @@ impl Display for CutError {
         }
     }
 }
+
+
+/* ****************************************************************************
+ * Custom data types and structures
+ * ****************************************************************************/
+
+struct Options {
+    out_delim: Option<String>,
+    zero_terminated: bool,
+}
+
+struct FieldOptions {
+    delimiter: String, // one char long, String because of UTF8 representation
+    out_delimiter: Option<String>,
+    only_delimited: bool,
+    zero_terminated: bool,
+}
+
+enum Mode {
+    Bytes(Vec<Range>, Options),
+    Characters(Vec<Range>, Options),
+    Fields(Vec<Range>, FieldOptions),
+}
+
+
+/* ****************************************************************************
+ * Helper functions
+ * ****************************************************************************/
 
 fn stdout_writer() -> Box<dyn Write> {
     if atty::is(atty::Stream::Stdout) {
@@ -361,18 +395,9 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> UResult<()> {
     Ok(())
 }
 
-mod options {
-    pub const BYTES: &str = "bytes";
-    pub const CHARACTERS: &str = "characters";
-    pub const DELIMITER: &str = "delimiter";
-    pub const FIELDS: &str = "fields";
-    pub const ZERO_TERMINATED: &str = "zero-terminated";
-    pub const ONLY_DELIMITED: &str = "only-delimited";
-    pub const OUTPUT_DELIMITER: &str = "output-delimiter";
-    pub const COMPLEMENT: &str = "complement";
-    pub const FILE: &str = "FILE";
-    pub const N: &str = "n";
-}
+/* ****************************************************************************
+ * Main routine
+ * ****************************************************************************/
 
 #[uucore_procs::gen_uumain]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -565,8 +590,8 @@ pub fn uu_app() -> App<'static, 'static> {
                 .value_name("LIST"),
         )
         .arg(
-            Arg::with_name(options::N)
-                .short(options::N)
+            Arg::with_name(options::DONT_SPLIT_MULTIBYTES)
+                .short(options::DONT_SPLIT_MULTIBYTES)
                 .help("with -b: don't split multibyte characters")
                 .takes_value(false),
         )
