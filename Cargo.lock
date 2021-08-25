@@ -3125,7 +3125,6 @@ dependencies = [
  "clap",
  "libc",
  "nix 0.20.0",
- "thiserror",
  "unicode-width",
  "utf-8",
  "uucore",

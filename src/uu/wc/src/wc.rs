@@ -18,25 +18,14 @@ use utf8::{BufReadDecoder, BufReadDecoderError};
 use word_count::{TitledWordCount, WordCount};
 
 use clap::{crate_version, App, Arg, ArgMatches};
-use thiserror::Error;
 
 use std::cmp::max;
 use std::fs::{self, File};
-use std::io::{self, ErrorKind, Write};
+use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 /// The minimum character width for formatting counts when reading from stdin.
 const MINIMUM_WIDTH: usize = 7;
-
-#[derive(Error, Debug)]
-pub enum WcError {
-    #[error("{0}")]
-    Io(#[from] io::Error),
-    #[error("Expected a file, found directory {0}")]
-    IsDirectory(PathBuf),
-}
-
-type WcResult<T> = Result<T, WcError>;
 
 struct Settings {
     show_bytes: bool,
@@ -132,6 +121,13 @@ impl Input {
             Input::Stdin(StdinKind::Implicit) => None,
         }
     }
+
+    fn path_display(&self) -> std::path::Display<'_> {
+        match self {
+            Input::Path(path) => path.display(),
+            Input::Stdin(_) => Path::display("'standard input'".as_ref()),
+        }
+    }
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
@@ -206,8 +202,7 @@ pub fn uu_app() -> App<'static, 'static> {
 fn word_count_from_reader<T: WordCountable>(
     mut reader: T,
     settings: &Settings,
-    path: &Path,
-) -> WcResult<WordCount> {
+) -> io::Result<WordCount> {
     let only_count_bytes = settings.show_bytes
         && (!(settings.show_chars
             || settings.show_lines
@@ -273,7 +268,7 @@ fn word_count_from_reader<T: WordCountable>(
                 total.bytes += bytes.len();
             }
             Err(BufReadDecoderError::Io(e)) => {
-                show_warning!("Error while reading {}: {}", path.display(), e);
+                return Err(e);
             }
         }
     }
@@ -283,20 +278,16 @@ fn word_count_from_reader<T: WordCountable>(
     Ok(total)
 }
 
-fn word_count_from_input(input: &Input, settings: &Settings) -> WcResult<WordCount> {
+fn word_count_from_input(input: &Input, settings: &Settings) -> io::Result<WordCount> {
     match input {
         Input::Stdin(_) => {
             let stdin = io::stdin();
             let stdin_lock = stdin.lock();
-            word_count_from_reader(stdin_lock, settings, "-".as_ref())
+            word_count_from_reader(stdin_lock, settings)
         }
         Input::Path(path) => {
-            if path.is_dir() {
-                Err(WcError::IsDirectory(path.to_owned()))
-            } else {
-                let file = File::open(path)?;
-                word_count_from_reader(file, settings, path)
-            }
+            let file = File::open(path)?;
+            word_count_from_reader(file, settings)
         }
     }
 }
@@ -310,18 +301,8 @@ fn word_count_from_input(input: &Input, settings: &Settings) -> WcResult<WordCou
 /// ```rust,ignore
 /// show_error(Input::Path("/tmp"), WcError::IsDirectory("/tmp"))
 /// ```
-fn show_error(input: &Input, err: WcError) {
-    match (input, err) {
-        (_, WcError::IsDirectory(path)) => {
-            show_error_custom_description!(path.display(), "Is a directory");
-        }
-        (Input::Path(path), WcError::Io(e)) if e.kind() == ErrorKind::NotFound => {
-            show_error_custom_description!(path.display(), "No such file or directory");
-        }
-        (_, e) => {
-            show_error!("{}", e);
-        }
-    };
+fn show_error(input: &Input, err: io::Error) {
+    show_error!("{}: {}", input.path_display(), err);
 }
 
 /// Compute the number of digits needed to represent any count for this input.
@@ -343,7 +324,7 @@ fn show_error(input: &Input, err: WcError) {
 /// let input = Input::Stdin(StdinKind::Explicit);
 /// assert_eq!(7, digit_width(input));
 /// ```
-fn digit_width(input: &Input) -> WcResult<Option<usize>> {
+fn digit_width(input: &Input) -> io::Result<Option<usize>> {
     match input {
         Input::Stdin(_) => Ok(Some(MINIMUM_WIDTH)),
         Input::Path(filename) => {
@@ -453,7 +434,7 @@ fn print_stats(
     settings: &Settings,
     result: &TitledWordCount,
     mut min_width: usize,
-) -> WcResult<()> {
+) -> io::Result<()> {
     let stdout = io::stdout();
     let mut stdout_lock = stdout.lock();
 
