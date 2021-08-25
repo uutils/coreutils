@@ -8,10 +8,10 @@
 #[macro_use]
 extern crate uucore;
 
-mod count_bytes;
+mod count_fast;
 mod countable;
 mod word_count;
-use count_bytes::count_bytes_fast;
+use count_fast::{count_bytes_and_lines_fast, count_bytes_fast};
 use countable::WordCountable;
 use word_count::{TitledWordCount, WordCount};
 
@@ -220,19 +220,20 @@ fn word_count_from_reader<T: WordCountable>(
     // we do not need to decode the byte stream if we're only counting bytes/newlines
     let decode_chars = settings.show_chars || settings.show_words || settings.show_max_line_length;
 
+    if !decode_chars {
+        return count_bytes_and_lines_fast(&mut reader);
+    }
+
     // Sum the WordCount for each line. Show a warning for each line
     // that results in an IO error when trying to read it.
-    let total = reader
-        .lines()
-        .filter_map(|res| match res {
-            Ok(line) => Some(line),
-            Err(e) => {
-                show_warning!("Error while reading {}: {}", path, e);
-                None
-            }
-        })
-        .map(|line| WordCount::from_line(&line, decode_chars))
-        .sum();
+    let mut lines = reader.lines();
+    let mut total = WordCount::default();
+    while let Some(res) = lines.next() {
+        match res {
+            Ok(line) => total += WordCount::from_line(line),
+            Err(e) => show_warning!("Error while reading {}: {}", path, e),
+        }
+    }
     Ok(total)
 }
 

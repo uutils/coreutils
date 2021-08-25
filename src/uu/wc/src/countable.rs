@@ -28,7 +28,7 @@ impl WordCountable for StdinLock<'_> {
     where
         Self: Sized,
     {
-        Lines { buf: self }
+        Lines::new(self)
     }
 }
 impl WordCountable for File {
@@ -38,9 +38,7 @@ impl WordCountable for File {
     where
         Self: Sized,
     {
-        Lines {
-            buf: BufReader::new(self),
-        }
+        Lines::new(BufReader::new(self))
     }
 }
 
@@ -53,19 +51,25 @@ impl WordCountable for File {
 /// [`io::Lines`]:: io::Lines
 pub struct Lines<B> {
     buf: B,
+    line: Vec<u8>,
 }
 
-impl<B: BufRead> Iterator for Lines<B> {
-    type Item = io::Result<Vec<u8>>;
+impl<B: BufRead> Lines<B> {
+    fn new(reader: B) -> Self {
+        Lines {
+            buf: reader,
+            line: Vec::new(),
+        }
+    }
 
-    fn next(&mut self) -> Option<Self::Item> {
-        let mut line = Vec::new();
+    pub fn next(&mut self) -> Option<io::Result<&[u8]>> {
+        self.line.clear();
 
         // reading from a TTY seems to raise a condition on, rather than return Some(0) like a file.
         // hence the option wrapped in a result here
-        match self.buf.read_until(b'\n', &mut line) {
+        match self.buf.read_until(b'\n', &mut self.line) {
             Ok(0) => None,
-            Ok(_n) => Some(Ok(line)),
+            Ok(_n) => Some(Ok(&self.line)),
             Err(e) => Some(Err(e)),
         }
     }
