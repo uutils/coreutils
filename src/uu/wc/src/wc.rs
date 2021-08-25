@@ -235,34 +235,42 @@ fn word_count_from_reader<T: WordCountable>(
         match chunk {
             Ok(text) => {
                 for ch in text.chars() {
-                    if ch.is_whitespace() {
-                        in_word = false;
-                    } else if ch.is_ascii_control() {
-                        // These count as characters but do not affect the word state
-                    } else if !in_word {
-                        in_word = true;
-                        total.words += 1;
-                    }
-                    match ch {
-                        '\n' => {
-                            total.max_line_length = max(current_len, total.max_line_length);
-                            current_len = 0;
-                            total.lines += 1;
-                        }
-                        // '\x0c' = '\f'
-                        '\r' | '\x0c' => {
-                            total.max_line_length = max(current_len, total.max_line_length);
-                            current_len = 0;
-                        }
-                        '\t' => {
-                            current_len -= current_len % 8;
-                            current_len += 8;
-                        }
-                        _ => {
-                            current_len += ch.width().unwrap_or(0);
+                    if settings.show_words {
+                        if ch.is_whitespace() {
+                            in_word = false;
+                        } else if ch.is_ascii_control() {
+                            // These count as characters but do not affect the word state
+                        } else if !in_word {
+                            in_word = true;
+                            total.words += 1;
                         }
                     }
-                    total.chars += 1;
+                    if settings.show_max_line_length {
+                        match ch {
+                            '\n' => {
+                                total.max_line_length = max(current_len, total.max_line_length);
+                                current_len = 0;
+                            }
+                            // '\x0c' = '\f'
+                            '\r' | '\x0c' => {
+                                total.max_line_length = max(current_len, total.max_line_length);
+                                current_len = 0;
+                            }
+                            '\t' => {
+                                current_len -= current_len % 8;
+                                current_len += 8;
+                            }
+                            _ => {
+                                current_len += ch.width().unwrap_or(0);
+                            }
+                        }
+                    }
+                    if settings.show_lines && ch == '\n' {
+                        total.lines += 1;
+                    }
+                    if settings.show_chars {
+                        total.chars += 1;
+                    }
                 }
                 total.bytes += text.len();
             }
