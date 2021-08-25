@@ -23,7 +23,7 @@ use thiserror::Error;
 use std::cmp::max;
 use std::fs::{self, File};
 use std::io::{self, ErrorKind, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// The minimum character width for formatting counts when reading from stdin.
 const MINIMUM_WIDTH: usize = 7;
@@ -33,7 +33,7 @@ pub enum WcError {
     #[error("{0}")]
     Io(#[from] io::Error),
     #[error("Expected a file, found directory {0}")]
-    IsDirectory(String),
+    IsDirectory(PathBuf),
 }
 
 type WcResult<T> = Result<T, WcError>;
@@ -117,7 +117,7 @@ enum StdinKind {
 /// Supported inputs.
 enum Input {
     /// A regular file.
-    Path(String),
+    Path(PathBuf),
 
     /// Standard input.
     Stdin(StdinKind),
@@ -125,10 +125,10 @@ enum Input {
 
 impl Input {
     /// Converts input to title that appears in stats.
-    fn to_title(&self) -> Option<&str> {
+    fn to_title(&self) -> Option<&Path> {
         match self {
             Input::Path(path) => Some(path),
-            Input::Stdin(StdinKind::Explicit) => Some("-"),
+            Input::Stdin(StdinKind::Explicit) => Some("-".as_ref()),
             Input::Stdin(StdinKind::Implicit) => None,
         }
     }
@@ -140,13 +140,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     let mut inputs: Vec<Input> = matches
-        .values_of(ARG_FILES)
+        .values_of_os(ARG_FILES)
         .map(|v| {
             v.map(|i| {
                 if i == "-" {
                     Input::Stdin(StdinKind::Explicit)
                 } else {
-                    Input::Path(ToString::to_string(i))
+                    Input::Path(i.into())
                 }
             })
             .collect()
@@ -206,7 +206,7 @@ pub fn uu_app() -> App<'static, 'static> {
 fn word_count_from_reader<T: WordCountable>(
     mut reader: T,
     settings: &Settings,
-    path: &str,
+    path: &Path,
 ) -> WcResult<WordCount> {
     let only_count_bytes = settings.show_bytes
         && (!(settings.show_chars
@@ -273,7 +273,7 @@ fn word_count_from_reader<T: WordCountable>(
                 total.bytes += bytes.len();
             }
             Err(BufReadDecoderError::Io(e)) => {
-                show_warning!("Error while reading {}: {}", path, e);
+                show_warning!("Error while reading {}: {}", path.display(), e);
             }
         }
     }
@@ -288,11 +288,10 @@ fn word_count_from_input(input: &Input, settings: &Settings) -> WcResult<WordCou
         Input::Stdin(_) => {
             let stdin = io::stdin();
             let stdin_lock = stdin.lock();
-            word_count_from_reader(stdin_lock, settings, "-")
+            word_count_from_reader(stdin_lock, settings, "-".as_ref())
         }
         Input::Path(path) => {
-            let path_obj = Path::new(path);
-            if path_obj.is_dir() {
+            if path.is_dir() {
                 Err(WcError::IsDirectory(path.to_owned()))
             } else {
                 let file = File::open(path)?;
@@ -314,10 +313,10 @@ fn word_count_from_input(input: &Input, settings: &Settings) -> WcResult<WordCou
 fn show_error(input: &Input, err: WcError) {
     match (input, err) {
         (_, WcError::IsDirectory(path)) => {
-            show_error_custom_description!(path, "Is a directory");
+            show_error_custom_description!(path.display(), "Is a directory");
         }
         (Input::Path(path), WcError::Io(e)) if e.kind() == ErrorKind::NotFound => {
-            show_error_custom_description!(path, "No such file or directory");
+            show_error_custom_description!(path.display(), "No such file or directory");
         }
         (_, e) => {
             show_error!("{}", e);
@@ -428,7 +427,7 @@ fn wc(inputs: Vec<Input>, settings: &Settings) -> Result<(), u32> {
         if let Err(err) = print_stats(settings, &result, max_width) {
             show_warning!(
                 "failed to print result for {}: {}",
-                result.title.unwrap_or("<stdin>"),
+                result.title.unwrap_or_else(|| "<stdin>".as_ref()).display(),
                 err
             );
             error_count += 1;
@@ -436,7 +435,7 @@ fn wc(inputs: Vec<Input>, settings: &Settings) -> Result<(), u32> {
     }
 
     if num_inputs > 1 {
-        let total_result = total_word_count.with_title(Some("total"));
+        let total_result = total_word_count.with_title(Some("total".as_ref()));
         if let Err(err) = print_stats(settings, &total_result, max_width) {
             show_warning!("failed to print total: {}", err);
             error_count += 1;
@@ -506,7 +505,7 @@ fn print_stats(
     }
 
     if let Some(title) = result.title {
-        writeln!(stdout_lock, " {}", title)?;
+        writeln!(stdout_lock, " {}", title.display())?;
     } else {
         writeln!(stdout_lock)?;
     }
