@@ -213,7 +213,7 @@ fn test_read_from_directory_error() {
         .args(&["."])
         .fails()
         .stderr_contains(".: Is a directory")
-        .stdout_is("0 0 0 .\n");
+        .stdout_is("      0       0       0 .\n");
 }
 
 /// Test that getting counts from nonexistent file is an error.
