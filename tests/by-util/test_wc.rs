@@ -206,14 +206,20 @@ fn test_file_bytes_dictate_width() {
 #[test]
 fn test_read_from_directory_error() {
     #[cfg(not(windows))]
-    const MSG: &str = ".: Is a directory";
+    const STDERR: &str = ".: Is a directory";
     #[cfg(windows)]
-    const MSG: &str = ".: Access is denied";
+    const STDERR: &str = ".: Access is denied";
+
+    #[cfg(not(windows))]
+    const STDOUT: &str = "      0       0       0 .\n";
+    #[cfg(windows)]
+    const STDOUT: &str = "";
+
     new_ucmd!()
         .args(&["."])
         .fails()
-        .stderr_contains(MSG)
-        .stdout_is("      0       0       0 .\n");
+        .stderr_contains(STDERR)
+        .stdout_is(STDOUT);
 }
 
 /// Test that getting counts from nonexistent file is an error.
