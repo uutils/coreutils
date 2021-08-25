@@ -212,7 +212,7 @@ fn test_read_from_directory_error() {
     new_ucmd!()
         .args(&["."])
         .fails()
-        .stderr_contains(".: Is a directory\n")
+        .stderr_contains(".: Is a directory")
         .stdout_is("0 0 0 .\n");
 }
 
@@ -222,5 +222,5 @@ fn test_read_from_nonexistent_file() {
     new_ucmd!()
         .args(&["bogusfile"])
         .fails()
-        .stderr_contains("bogusfile: No such file or directory\n");
+        .stderr_contains("bogusfile: No such file or directory");
 }

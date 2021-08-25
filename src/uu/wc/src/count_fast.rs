@@ -1,10 +1,10 @@
 use crate::word_count::WordCount;
 
-use super::{WcResult, WordCountable};
+use super::WordCountable;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::fs::{File, OpenOptions};
-use std::io::{ErrorKind, Read};
+use std::io::{self, ErrorKind, Read};
 
 #[cfg(unix)]
 use libc::S_IFREG;
@@ -88,7 +88,7 @@ fn count_bytes_using_splice(fd: RawFd) -> Result<usize, usize> {
 ///   3. Otherwise, we just read normally, but without the overhead of counting
 ///      other things such as lines and words.
 #[inline]
-pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> WcResult<usize> {
+pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> io::Result<usize> {
     let mut byte_count = 0;
 
     #[cfg(unix)]
@@ -123,12 +123,12 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> WcResult<usi
                 byte_count += n;
             }
             Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
-            Err(e) => return Err(e.into()),
+            Err(e) => return Err(e),
         }
     }
 }
 
-pub(crate) fn count_bytes_and_lines_fast<R: Read>(handle: &mut R) -> WcResult<WordCount> {
+pub(crate) fn count_bytes_and_lines_fast<R: Read>(handle: &mut R) -> io::Result<WordCount> {
     let mut total = WordCount::default();
     let mut buf = [0; BUF_SIZE];
     loop {
@@ -139,7 +139,7 @@ pub(crate) fn count_bytes_and_lines_fast<R: Read>(handle: &mut R) -> WcResult<Wo
                 total.lines += bytecount::count(&buf[..n], b'\n');
             }
             Err(ref e) if e.kind() == ErrorKind::Interrupted => continue,
-            Err(e) => return Err(e.into()),
+            Err(e) => return Err(e),
         }
     }
 }
