@@ -6,6 +6,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+//! Set of functions to manage files and symlinks
+
 #[cfg(unix)]
 use libc::{
     mode_t, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK, S_IRGRP,
