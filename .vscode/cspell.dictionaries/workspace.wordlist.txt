@@ -317,3 +317,6 @@ uucore_procs
 uumain
 uutil
 uutils
+
+# * function names
+getcwd

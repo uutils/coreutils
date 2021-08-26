@@ -31,7 +31,11 @@ macro_rules! path_concat {
 #[macro_export]
 macro_rules! util_name {
     () => {
-        module_path!().split("_").nth(1).expect("no test name")
+        module_path!()
+            .split("_")
+            .nth(1)
+            .and_then(|s| s.split("::").next())
+            .expect("no test name")
     };
 }
 
