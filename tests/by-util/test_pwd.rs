@@ -1,5 +1,7 @@
 // spell-checker:ignore (words) symdir somefakedir
 
+use std::path::PathBuf;
+
 use crate::common::util::*;
 
 #[test]
@@ -39,42 +41,52 @@ fn test_deleted_dir() {
     );
 }
 
-fn symlinked_at_and_ucmd() -> (AtPath, UCommand) {
+struct Env {
+    ucmd: UCommand,
+    root: String,
+    subdir: String,
+    symdir: String,
+}
+
+fn symlinked_env() -> Env {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("subdir");
     // Note: on Windows this requires admin permissions
     at.symlink_dir("subdir", "symdir");
-    ucmd.raw.current_dir(at.plus("symdir"));
+    let root = PathBuf::from(at.root_dir_resolved());
+    ucmd.raw.current_dir(root.join("symdir"));
     #[cfg(not(windows))]
-    ucmd.env("PWD", at.plus("symdir"));
-    (at, ucmd)
+    ucmd.env("PWD", root.join("symdir"));
+    Env {
+        ucmd,
+        root: root.to_string_lossy().into_owned(),
+        subdir: root.join("subdir").to_string_lossy().into_owned(),
+        symdir: root.join("symdir").to_string_lossy().into_owned(),
+    }
 }
 
 #[test]
 fn test_symlinked_logical() {
-    let (at, mut ucmd) = symlinked_at_and_ucmd();
-    ucmd.arg("-L")
-        .succeeds()
-        .stdout_is(at.plus("symdir").to_string_lossy() + "\n");
+    let mut env = symlinked_env();
+    env.ucmd.arg("-L").succeeds().stdout_is(env.symdir + "\n");
 }
 
 #[test]
 fn test_symlinked_physical() {
-    let (at, mut ucmd) = symlinked_at_and_ucmd();
-    ucmd.arg("-P")
-        .succeeds()
-        .stdout_is(at.plus("subdir").to_string_lossy() + "\n");
+    let mut env = symlinked_env();
+    env.ucmd.arg("-P").succeeds().stdout_is(env.subdir + "\n");
 }
 
 #[test]
 fn test_symlinked_default() {
-    let (at, mut ucmd) = symlinked_at_and_ucmd();
-    ucmd.succeeds()
-        .stdout_is(at.plus("subdir").to_string_lossy() + "\n");
+    let mut env = symlinked_env();
+    env.ucmd.succeeds().stdout_is(env.subdir + "\n");
 }
 
 #[cfg(not(windows))]
 pub mod untrustworthy_pwd_var {
+    use std::path::Path;
+
     use super::*;
 
     #[test]
@@ -88,28 +100,31 @@ pub mod untrustworthy_pwd_var {
 
     #[test]
     fn test_wrong_logical() {
-        let (at, mut ucmd) = symlinked_at_and_ucmd();
-        ucmd.arg("-L")
-            .env("PWD", at.root_dir_resolved())
+        let mut env = symlinked_env();
+        env.ucmd
+            .arg("-L")
+            .env("PWD", env.root)
             .succeeds()
-            .stdout_is(at.plus("subdir").to_string_lossy() + "\n");
+            .stdout_is(env.subdir + "\n");
     }
 
     #[test]
     fn test_redundant_logical() {
-        let (at, mut ucmd) = symlinked_at_and_ucmd();
-        ucmd.arg("-L")
-            .env("PWD", at.plus("symdir").join("."))
+        let mut env = symlinked_env();
+        env.ucmd
+            .arg("-L")
+            .env("PWD", Path::new(&env.symdir).join("."))
             .succeeds()
-            .stdout_is(at.plus("subdir").to_string_lossy() + "\n");
+            .stdout_is(env.subdir + "\n");
     }
 
     #[test]
     fn test_relative_logical() {
-        let (at, mut ucmd) = symlinked_at_and_ucmd();
-        ucmd.arg("-L")
+        let mut env = symlinked_env();
+        env.ucmd
+            .arg("-L")
             .env("PWD", ".")
             .succeeds()
-            .stdout_is(at.plus("subdir").to_string_lossy() + "\n");
+            .stdout_is(env.subdir + "\n");
     }
 }
