@@ -2802,6 +2802,7 @@ name = "uu_rmdir"
 version = "0.0.7"
 dependencies = [
  "clap",
+ "libc",
  "uucore",
  "uucore_procs",
 ]
