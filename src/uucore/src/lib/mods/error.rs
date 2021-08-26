@@ -409,6 +409,15 @@ impl Display for UIoError {
     }
 }
 
+/// Strip the trailing " (os error XX)" from io error strings.
+pub fn strip_errno(err: &std::io::Error) -> String {
+    let mut msg = err.to_string();
+    if let Some(pos) = msg.find(" (os error ") {
+        msg.drain(pos..);
+    }
+    msg
+}
+
 /// Enables the conversion from [`std::io::Error`] to [`UError`] and from [`std::io::Result`] to
 /// [`UResult`].
 pub trait FromIo<T> {
