@@ -12,6 +12,8 @@ https://github.com/uutils/coreutils-docs
 Running GNU tests
 -----------------
 
+<!-- spell-checker:ignore gnulib -->
+
 - Check out https://github.com/coreutils/coreutils next to your fork as gnu
 - Check out https://github.com/coreutils/gnulib next to your fork as gnulib
 - Rename the checkout of your fork to uutils
