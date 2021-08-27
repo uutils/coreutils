@@ -16,7 +16,7 @@ path = "src/wc.rs"
 
 [dependencies]
 clap = { version = "2.33", features = ["wrap_help"] }
-uucore = { version=">=0.0.9", package="uucore", path="../../uucore" }
+uucore = { version=">=0.0.9", package="uucore", path="../../uucore", features=["pipes"] }
 uucore_procs = { version=">=0.0.6", package="uucore_procs", path="../../uucore_procs" }
 bytecount = "0.6.2"
 utf-8 = "0.7.6"

@@ -1,10 +1,9 @@
-use super::{CatResult, InputHandle};
+use super::{CatResult, FdReadable, InputHandle};
 
-use nix::fcntl::{splice, SpliceFFlags};
-use nix::unistd::{self, pipe};
-use std::fs::File;
-use std::io::Read;
-use std::os::unix::io::{FromRawFd, RawFd};
+use nix::unistd;
+use std::os::unix::io::{AsRawFd, RawFd};
+
+use uucore::pipes::{pipe, splice, splice_exact};
 
 const BUF_SIZE: usize = 1024 * 16;
 
@@ -16,36 +15,25 @@ const BUF_SIZE: usize = 1024 * 16;
 /// The `bool` in the result value indicates if we need to fall back to normal
 /// copying or not. False means we don't have to.
 #[inline]
-pub(super) fn write_fast_using_splice<R: Read>(
+pub(super) fn write_fast_using_splice<R: FdReadable>(
     handle: &mut InputHandle<R>,
-    write_fd: RawFd,
+    write_fd: &impl AsRawFd,
 ) -> CatResult<bool> {
     let (pipe_rd, pipe_wr) = pipe()?;
 
-    // Ensure the pipe is closed when the function returns.
-    // SAFETY: The file descriptors do not have other owners.
-    let _handles = unsafe { (File::from_raw_fd(pipe_rd), File::from_raw_fd(pipe_wr)) };
-
     loop {
-        match splice(
-            handle.file_descriptor,
-            None,
-            pipe_wr,
-            None,
-            BUF_SIZE,
-            SpliceFFlags::empty(),
-        ) {
+        match splice(&handle.reader, &pipe_wr, BUF_SIZE) {
             Ok(n) => {
                 if n == 0 {
                     return Ok(false);
                 }
-                if splice_exact(pipe_rd, write_fd, n).is_err() {
+                if splice_exact(&pipe_rd, write_fd, n).is_err() {
                     // If the first splice manages to copy to the intermediate
                     // pipe, but the second splice to stdout fails for some reason
                     // we can recover by copying the data that we have from the
                     // intermediate pipe to stdout using normal read/write. Then
                     // we tell the caller to fall back.
-                    copy_exact(pipe_rd, write_fd, n)?;
+                    copy_exact(pipe_rd.as_raw_fd(), write_fd.as_raw_fd(), n)?;
                     return Ok(true);
                 }
             }
@@ -54,20 +42,6 @@ pub(super) fn write_fast_using_splice<R: Read>(
             }
         }
     }
-}
-
-/// Splice wrapper which handles short writes.
-#[inline]
-fn splice_exact(read_fd: RawFd, write_fd: RawFd, num_bytes: usize) -> nix::Result<()> {
-    let mut left = num_bytes;
-    loop {
-        let written = splice(read_fd, None, write_fd, None, left, SpliceFFlags::empty())?;
-        left -= written;
-        if left == 0 {
-            break;
-        }
-    }
-    Ok(())
 }
 
 /// Caller must ensure that `num_bytes <= BUF_SIZE`, otherwise this function
