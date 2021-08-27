@@ -41,6 +41,7 @@ use libc::{c_char, c_int, gid_t, uid_t};
 use libc::{getgrgid, getgrnam, getgroups};
 use libc::{getpwnam, getpwuid, group, passwd};
 
+use std::convert::TryInto;
 use std::ffi::{CStr, CString};
 use std::io::Error as IOError;
 use std::io::ErrorKind;
@@ -75,14 +76,14 @@ pub fn get_groups() -> IOResult<Vec<gid_t>> {
     if ngroups == -1 {
         return Err(IOError::last_os_error());
     }
-    let mut groups = Vec::with_capacity(ngroups as usize);
+    let mut groups = vec![0; ngroups.try_into().unwrap()];
     let ngroups = unsafe { getgroups(ngroups, groups.as_mut_ptr()) };
     if ngroups == -1 {
         Err(IOError::last_os_error())
     } else {
-        unsafe {
-            groups.set_len(ngroups as usize);
-        }
+        let ngroups = ngroups.try_into().unwrap();
+        assert!(ngroups <= groups.len());
+        groups.truncate(ngroups);
         Ok(groups)
     }
 }
@@ -196,7 +197,7 @@ impl Passwd {
     pub fn belongs_to(&self) -> Vec<gid_t> {
         let mut ngroups: c_int = 8;
         let mut ngroups_old: c_int;
-        let mut groups = Vec::with_capacity(ngroups as usize);
+        let mut groups = vec![0; ngroups.try_into().unwrap()];
         let name = CString::new(self.name.clone()).unwrap();
         loop {
             ngroups_old = ngroups;
@@ -206,15 +207,14 @@ impl Passwd {
                 if ngroups == ngroups_old {
                     ngroups *= 2;
                 }
-                groups.resize(ngroups as usize, 0);
+                groups.resize(ngroups.try_into().unwrap(), 0);
             } else {
                 break;
             }
         }
-        unsafe {
-            groups.set_len(ngroups as usize);
-        }
-        groups.truncate(ngroups as usize);
+        let ngroups = ngroups.try_into().unwrap();
+        assert!(ngroups <= groups.len());
+        groups.truncate(ngroups);
         groups
     }
 }
