@@ -5,6 +5,7 @@ use std::os::unix::io::{AsRawFd, RawFd};
 
 use uucore::pipes::{pipe, splice, splice_exact};
 
+const SPLICE_SIZE: usize = 1024 * 128;
 const BUF_SIZE: usize = 1024 * 16;
 
 /// This function is called from `write_fast()` on Linux and Android. The
@@ -22,7 +23,7 @@ pub(super) fn write_fast_using_splice<R: FdReadable>(
     let (pipe_rd, pipe_wr) = pipe()?;
 
     loop {
-        match splice(&handle.reader, &pipe_wr, BUF_SIZE) {
+        match splice(&handle.reader, &pipe_wr, SPLICE_SIZE) {
             Ok(n) => {
                 if n == 0 {
                     return Ok(false);
