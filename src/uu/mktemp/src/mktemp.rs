@@ -229,25 +229,24 @@ fn parse_template<'a>(
 
 pub fn dry_exec(mut tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str) -> UResult<()> {
     let len = prefix.len() + suffix.len() + rand;
-    let mut buf = String::with_capacity(len);
-    buf.push_str(prefix);
-    buf.extend(iter::repeat('X').take(rand));
-    buf.push_str(suffix);
+    let mut buf = Vec::with_capacity(len);
+    buf.extend(prefix.as_bytes());
+    buf.extend(iter::repeat(b'X').take(rand));
+    buf.extend(suffix.as_bytes());
 
     // Randomize.
-    unsafe {
-        // We guarantee utf8.
-        let bytes = &mut buf.as_mut_vec()[prefix.len()..prefix.len() + rand];
-        rand::thread_rng().fill(bytes);
-        for byte in bytes.iter_mut() {
-            *byte = match *byte % 62 {
-                v @ 0..=9 => (v + b'0'),
-                v @ 10..=35 => (v - 10 + b'a'),
-                v @ 36..=61 => (v - 36 + b'A'),
-                _ => unreachable!(),
-            }
+    let bytes = &mut buf[prefix.len()..prefix.len() + rand];
+    rand::thread_rng().fill(bytes);
+    for byte in bytes.iter_mut() {
+        *byte = match *byte % 62 {
+            v @ 0..=9 => (v + b'0'),
+            v @ 10..=35 => (v - 10 + b'a'),
+            v @ 36..=61 => (v - 36 + b'A'),
+            _ => unreachable!(),
         }
     }
+    // We guarantee utf8.
+    let buf = String::from_utf8(buf).unwrap();
     tmpdir.push(buf);
     println_verbatim(tmpdir).map_err_context(|| "failed to print directory name".to_owned())
 }
