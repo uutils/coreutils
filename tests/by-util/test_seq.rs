@@ -140,3 +140,21 @@ fn test_seq_wrong_arg_floats() {
 fn test_zero_step_floats() {
     new_ucmd!().args(&["10.0", "0", "32"]).fails();
 }
+
+#[test]
+fn test_preserve_negative_zero_start() {
+    new_ucmd!()
+        .args(&["-0", "1"])
+        .succeeds()
+        .stdout_is("-0\n1\n")
+        .no_stderr();
+}
+
+#[test]
+fn test_drop_negative_zero_end() {
+    new_ucmd!()
+        .args(&["1", "-1", "-0"])
+        .succeeds()
+        .stdout_is("1\n0\n")
+        .no_stderr();
+}
