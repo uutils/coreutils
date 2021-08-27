@@ -3270,6 +3270,7 @@ dependencies = [
  "walkdir",
  "wild",
  "winapi 0.3.9",
+ "winapi-util",
  "z85",
 ]
 
