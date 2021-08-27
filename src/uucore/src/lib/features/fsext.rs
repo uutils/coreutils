@@ -26,7 +26,7 @@ const MAX_PATH: usize = 266;
 static EXIT_ERR: i32 = 1;
 
 #[cfg(windows)]
-use std::ffi::OsString;
+use std::ffi::OsStr;
 #[cfg(windows)]
 use std::os::windows::ffi::OsStrExt;
 #[cfg(windows)]
@@ -43,11 +43,12 @@ use winapi::um::handleapi::INVALID_HANDLE_VALUE;
 #[cfg(windows)]
 use winapi::um::winbase::DRIVE_REMOTE;
 
+// Warning: the pointer has to be used *immediately* or the Vec
+// it points to will be dropped!
 #[cfg(windows)]
 macro_rules! String2LPWSTR {
     ($str: expr) => {
-        OsString::from($str.clone())
-            .as_os_str()
+        OsStr::new(&$str)
             .encode_wide()
             .chain(Some(0))
             .collect::<Vec<u16>>()
@@ -238,8 +239,7 @@ impl MountInfo {
         volume_name.pop();
         unsafe {
             QueryDosDeviceW(
-                OsString::from(volume_name.clone())
-                    .as_os_str()
+                OsStr::new(&volume_name)
                     .encode_wide()
                     .chain(Some(0))
                     .skip(4)
