@@ -1,5 +1,3 @@
-use clap::App;
-
 //  * This file is part of the uutils coreutils package.
 //  *
 //  * (c) Jordi Boggiano <j.boggiano@seld.be>
@@ -14,46 +12,25 @@ extern crate clap;
 #[macro_use]
 extern crate uucore;
 
-use uucore::error::{UResult, USimpleError};
+use clap::App;
+
+use uucore::display::println_verbatim;
+use uucore::error::{FromIo, UResult};
 
 mod platform;
 
+static ABOUT: &str = "Print the current username.";
+
 #[uucore_procs::gen_uumain]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let app = uu_app();
-
-    if let Err(err) = app.get_matches_from_safe(args) {
-        if err.kind == clap::ErrorKind::HelpDisplayed
-            || err.kind == clap::ErrorKind::VersionDisplayed
-        {
-            println!("{}", err);
-            Ok(())
-        } else {
-            return Err(USimpleError::new(1, format!("{}", err)));
-        }
-    } else {
-        exec()
-    }
+    uu_app().get_matches_from(args);
+    let username = platform::get_username().map_err_context(|| "failed to get username".into())?;
+    println_verbatim(&username).map_err_context(|| "failed to print username".into())?;
+    Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    app_from_crate!()
-}
-
-pub fn exec() -> UResult<()> {
-    unsafe {
-        match platform::get_username() {
-            Ok(username) => {
-                println!("{}", username);
-                Ok(())
-            }
-            Err(err) => match err.raw_os_error() {
-                Some(0) | None => Err(USimpleError::new(1, "failed to get username")),
-                Some(_) => Err(USimpleError::new(
-                    1,
-                    format!("failed to get username: {}", err),
-                )),
-            },
-        }
-    }
+    App::new(uucore::util_name())
+        .version(crate_version!())
+        .about(ABOUT)
 }

@@ -3222,6 +3222,7 @@ name = "uu_whoami"
 version = "0.0.7"
 dependencies = [
  "clap",
+ "libc",
  "uucore",
  "uucore_procs",
  "winapi 0.3.9",
