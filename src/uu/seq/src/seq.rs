@@ -85,6 +85,16 @@ impl FromStr for Number {
     }
 }
 
+/// A range of integers.
+///
+/// The elements are (first, increment, last).
+type RangeInt = (BigInt, BigInt, BigInt);
+
+/// A range of f64.
+///
+/// The elements are (first, increment, last).
+type RangeF64 = (f64, f64, f64);
+
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = usage();
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
@@ -139,9 +149,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     match (first, last, increment) {
         (Number::BigInt(first), Number::BigInt(last), Number::BigInt(increment)) => {
             print_seq_integers(
-                first,
-                increment,
-                last,
+                (first, increment, last),
                 options.separator,
                 options.terminator,
                 options.widths,
@@ -149,9 +157,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             )
         }
         (first, last, increment) => print_seq(
-            first.into_f64(),
-            increment.into_f64(),
-            last.into_f64(),
+            (first.into_f64(), increment.into_f64(), last.into_f64()),
             largest_dec,
             options.separator,
             options.terminator,
@@ -208,17 +214,15 @@ fn done_printing<T: Num + PartialOrd>(next: &T, increment: &T, last: &T) -> bool
 }
 
 /// Floating point based code path
-#[allow(clippy::too_many_arguments)]
 fn print_seq(
-    first: f64,
-    increment: f64,
-    last: f64,
+    range: RangeF64,
     largest_dec: usize,
     separator: String,
     terminator: String,
     pad: bool,
     padding: usize,
 ) {
+    let (first, increment, last) = range;
     let mut i = 0isize;
     let mut value = first + i as f64 * increment;
     while !done_printing(&value, &increment, &last) {
@@ -245,14 +249,13 @@ fn print_seq(
 
 /// BigInt based code path
 fn print_seq_integers(
-    first: BigInt,
-    increment: BigInt,
-    last: BigInt,
+    range: RangeInt,
     separator: String,
     terminator: String,
     pad: bool,
     padding: usize,
 ) {
+    let (first, increment, last) = range;
     let mut value = first;
     let mut is_first_iteration = true;
     while !done_printing(&value, &increment, &last) {
