@@ -95,6 +95,7 @@ feat_common_core = [
     "true",
     "truncate",
     "tsort",
+    "touch",
     "unexpand",
     "uniq",
     "wc",
