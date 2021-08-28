@@ -4,7 +4,7 @@ use crate::common::util::*;
 use filetime::FileTime;
 use rust_users::*;
 use std::os::unix::fs::PermissionsExt;
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "freebsd")))]
 use std::process::Command;
 #[cfg(target_os = "linux")]
 use std::thread::sleep;
@@ -551,7 +551,9 @@ fn test_install_copy_then_compare_file_with_extra_mode() {
 }
 
 const STRIP_TARGET_FILE: &str = "helloworld_installed";
+#[cfg(not(any(windows, target_os = "freebsd")))]
 const SYMBOL_DUMP_PROGRAM: &str = "objdump";
+#[cfg(not(any(windows, target_os = "freebsd")))]
 const STRIP_SOURCE_FILE_SYMBOL: &str = "main";
 
 fn strip_source_file() -> &'static str {
