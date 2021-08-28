@@ -3,6 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+//! Common functions to manage permissions
+
 use crate::error::UResult;
 pub use crate::features::entries;
 use crate::fs::resolve_relative_path;

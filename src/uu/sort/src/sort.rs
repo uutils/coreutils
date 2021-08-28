@@ -45,7 +45,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::str::Utf8Error;
 use unicode_width::UnicodeWidthStr;
-use uucore::error::{set_exit_code, UError, UResult, USimpleError, UUsageError};
+use uucore::error::{set_exit_code, strip_errno, UError, UResult, USimpleError, UUsageError};
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::version_cmp::version_cmp;
 use uucore::InvalidEncodingHandling;
@@ -197,27 +197,17 @@ impl Display for SortError {
                     Ok(())
                 }
             }
-            SortError::OpenFailed { path, error } => write!(
-                f,
-                "open failed: {}: {}",
-                path,
-                strip_errno(&error.to_string())
-            ),
+            SortError::OpenFailed { path, error } => {
+                write!(f, "open failed: {}: {}", path, strip_errno(error))
+            }
             SortError::ParseKeyError { key, msg } => {
                 write!(f, "failed to parse key `{}`: {}", key, msg)
             }
-            SortError::ReadFailed { path, error } => write!(
-                f,
-                "cannot read: {}: {}",
-                path,
-                strip_errno(&error.to_string())
-            ),
+            SortError::ReadFailed { path, error } => {
+                write!(f, "cannot read: {}: {}", path, strip_errno(error))
+            }
             SortError::OpenTmpFileFailed { error } => {
-                write!(
-                    f,
-                    "failed to open temporary file: {}",
-                    strip_errno(&error.to_string())
-                )
+                write!(f, "failed to open temporary file: {}", strip_errno(error))
             }
             SortError::CompressProgExecutionFailed { code } => {
                 write!(f, "couldn't execute compress program: errno {}", code)
@@ -1812,11 +1802,6 @@ fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
     for line in iter {
         line.print(&mut writer, settings);
     }
-}
-
-/// Strips the trailing " (os error XX)" from io error strings.
-fn strip_errno(err: &str) -> &str {
-    &err[..err.find(" (os error ").unwrap_or(err.len())]
 }
 
 fn open(path: impl AsRef<OsStr>) -> UResult<Box<dyn Read + Send>> {

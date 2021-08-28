@@ -189,6 +189,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "bytecount"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72feb31ffc86498dacdbd0fcebb56138e7177a8cc5cea4516031d15ae85a742e"
+
+[[package]]
 name = "byteorder"
 version = "1.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2041,6 +2047,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "utf-8"
+version = "0.7.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09cc8ee72d2a9becf2f2febe0205bbed8fc6615b7cb429ad062dc7b7ddd036a9"
+
+[[package]]
 name = "utf8-width"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2790,6 +2802,7 @@ name = "uu_rmdir"
 version = "0.0.7"
 dependencies = [
  "clap",
+ "libc",
  "uucore",
  "uucore_procs",
 ]
@@ -3110,10 +3123,12 @@ dependencies = [
 name = "uu_wc"
 version = "0.0.7"
 dependencies = [
+ "bytecount",
  "clap",
  "libc",
  "nix 0.20.0",
- "thiserror",
+ "unicode-width",
+ "utf-8",
  "uucore",
  "uucore_procs",
 ]

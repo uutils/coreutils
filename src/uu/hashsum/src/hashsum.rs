@@ -469,7 +469,7 @@ where
             stdin_buf = stdin();
             Box::new(stdin_buf) as Box<dyn Read>
         } else {
-            file_buf = safe_unwrap!(File::open(filename));
+            file_buf = crash_if_err!(1, File::open(filename));
             Box::new(file_buf) as Box<dyn Read>
         });
         if options.check {
@@ -486,19 +486,25 @@ where
             } else {
                 "+".to_string()
             };
-            let gnu_re = safe_unwrap!(Regex::new(&format!(
-                r"^(?P<digest>[a-fA-F0-9]{}) (?P<binary>[ \*])(?P<fileName>.*)",
-                modifier,
-            )));
-            let bsd_re = safe_unwrap!(Regex::new(&format!(
-                r"^{algorithm} \((?P<fileName>.*)\) = (?P<digest>[a-fA-F0-9]{digest_size})",
-                algorithm = options.algoname,
-                digest_size = modifier,
-            )));
+            let gnu_re = crash_if_err!(
+                1,
+                Regex::new(&format!(
+                    r"^(?P<digest>[a-fA-F0-9]{}) (?P<binary>[ \*])(?P<fileName>.*)",
+                    modifier,
+                ))
+            );
+            let bsd_re = crash_if_err!(
+                1,
+                Regex::new(&format!(
+                    r"^{algorithm} \((?P<fileName>.*)\) = (?P<digest>[a-fA-F0-9]{digest_size})",
+                    algorithm = options.algoname,
+                    digest_size = modifier,
+                ))
+            );
 
             let buffer = file;
             for (i, line) in buffer.lines().enumerate() {
-                let line = safe_unwrap!(line);
+                let line = crash_if_err!(1, line);
                 let (ck_filename, sum, binary_check) = match gnu_re.captures(&line) {
                     Some(caps) => (
                         caps.name("fileName").unwrap().as_str(),
@@ -528,14 +534,17 @@ where
                         }
                     },
                 };
-                let f = safe_unwrap!(File::open(ck_filename));
+                let f = crash_if_err!(1, File::open(ck_filename));
                 let mut ckf = BufReader::new(Box::new(f) as Box<dyn Read>);
-                let real_sum = safe_unwrap!(digest_reader(
-                    &mut *options.digest,
-                    &mut ckf,
-                    binary_check,
-                    options.output_bits
-                ))
+                let real_sum = crash_if_err!(
+                    1,
+                    digest_reader(
+                        &mut *options.digest,
+                        &mut ckf,
+                        binary_check,
+                        options.output_bits
+                    )
+                )
                 .to_ascii_lowercase();
                 if sum == real_sum {
                     if !options.quiet {
@@ -549,12 +558,15 @@ where
                 }
             }
         } else {
-            let sum = safe_unwrap!(digest_reader(
-                &mut *options.digest,
-                &mut file,
-                options.binary,
-                options.output_bits
-            ));
+            let sum = crash_if_err!(
+                1,
+                digest_reader(
+                    &mut *options.digest,
+                    &mut file,
+                    options.binary,
+                    options.output_bits
+                )
+            );
             if options.tag {
                 println!("{} ({}) = {}", options.algoname, filename.display(), sum);
             } else {

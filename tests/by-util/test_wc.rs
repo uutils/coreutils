@@ -1,6 +1,6 @@
 use crate::common::util::*;
 
-// spell-checker:ignore (flags) lwmcL clmwL ; (path) bogusfile emptyfile manyemptylines moby notrailingnewline onelongemptyline onelongword
+// spell-checker:ignore (flags) lwmcL clmwL ; (path) bogusfile emptyfile manyemptylines moby notrailingnewline onelongemptyline onelongword weirdchars
 
 #[test]
 fn test_count_bytes_large_stdin() {
@@ -53,11 +53,16 @@ fn test_utf8() {
         .args(&["-lwmcL"])
         .pipe_in_fixture("UTF_8_test.txt")
         .run()
-        .stdout_is("    300    4969   22781   22213      79\n");
-    // GNU returns "    300    2086   22219   22781      79"
-    //
-    // TODO: we should fix the word, character, and byte count to
-    // match the behavior of GNU wc
+        .stdout_is("    303    2119   22457   23025      79\n");
+}
+
+#[test]
+fn test_utf8_extra() {
+    new_ucmd!()
+        .arg("-lwmcL")
+        .pipe_in_fixture("UTF_8_weirdchars.txt")
+        .run()
+        .stdout_is("     25      87     442     513      48\n");
 }
 
 #[test]
@@ -200,22 +205,33 @@ fn test_file_bytes_dictate_width() {
 /// Test that getting counts from a directory is an error.
 #[test]
 fn test_read_from_directory_error() {
-    // TODO To match GNU `wc`, the `stdout` should be:
-    //
-    //     "      0       0       0 .\n"
-    //
+    #[cfg(not(windows))]
+    const STDERR: &str = ".: Is a directory";
+    #[cfg(windows)]
+    const STDERR: &str = ".: Access is denied";
+
+    #[cfg(not(windows))]
+    const STDOUT: &str = "      0       0       0 .\n";
+    #[cfg(windows)]
+    const STDOUT: &str = "";
+
     new_ucmd!()
         .args(&["."])
         .fails()
-        .stderr_contains(".: Is a directory\n")
-        .stdout_is("0 0 0 .\n");
+        .stderr_contains(STDERR)
+        .stdout_is(STDOUT);
 }
 
 /// Test that getting counts from nonexistent file is an error.
 #[test]
 fn test_read_from_nonexistent_file() {
+    #[cfg(not(windows))]
+    const MSG: &str = "bogusfile: No such file or directory";
+    #[cfg(windows)]
+    const MSG: &str = "bogusfile: The system cannot find the file specified";
     new_ucmd!()
         .args(&["bogusfile"])
         .fails()
-        .stderr_contains("bogusfile: No such file or directory\n");
+        .stderr_contains(MSG)
+        .stdout_is("");
 }

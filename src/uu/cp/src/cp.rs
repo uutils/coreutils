@@ -231,8 +231,6 @@ fn usage() -> String {
 mod options {
     pub const ARCHIVE: &str = "archive";
     pub const ATTRIBUTES_ONLY: &str = "attributes-only";
-    pub const BACKUP: &str = "backup";
-    pub const BACKUP_NO_ARG: &str = "b";
     pub const CLI_SYMBOLIC_LINKS: &str = "cli-symbolic-links";
     pub const CONTEXT: &str = "context";
     pub const COPY_CONTENTS: &str = "copy-contents";
@@ -257,7 +255,6 @@ mod options {
     pub const REMOVE_DESTINATION: &str = "remove-destination";
     pub const SPARSE: &str = "sparse";
     pub const STRIP_TRAILING_SLASHES: &str = "strip-trailing-slashes";
-    pub const SUFFIX: &str = "suffix";
     pub const SYMBOLIC_LINK: &str = "symbolic-link";
     pub const TARGET_DIRECTORY: &str = "target-directory";
     pub const UPDATE: &str = "update";
@@ -355,24 +352,9 @@ pub fn uu_app() -> App<'static, 'static> {
              .conflicts_with(options::FORCE)
              .help("remove each existing destination file before attempting to open it \
                     (contrast with --force). On Windows, current only works for writeable files."))
-        .arg(Arg::with_name(options::BACKUP)
-             .long(options::BACKUP)
-             .help("make a backup of each existing destination file")
-             .takes_value(true)
-             .require_equals(true)
-             .min_values(0)
-             .value_name("CONTROL")
-        )
-        .arg(Arg::with_name(options::BACKUP_NO_ARG)
-             .short(options::BACKUP_NO_ARG)
-             .help("like --backup but does not accept an argument")
-        )
-        .arg(Arg::with_name(options::SUFFIX)
-             .short("S")
-             .long(options::SUFFIX)
-             .takes_value(true)
-             .value_name("SUFFIX")
-             .help("override the usual backup suffix"))
+        .arg(backup_control::arguments::backup())
+        .arg(backup_control::arguments::backup_no_args())
+        .arg(backup_control::arguments::suffix())
         .arg(Arg::with_name(options::UPDATE)
              .short("u")
              .long(options::UPDATE)
@@ -604,20 +586,12 @@ impl Options {
             || matches.is_present(options::RECURSIVE_ALIAS)
             || matches.is_present(options::ARCHIVE);
 
-        let backup_mode = backup_control::determine_backup_mode(
-            matches.is_present(options::BACKUP_NO_ARG),
-            matches.is_present(options::BACKUP),
-            matches.value_of(options::BACKUP),
-        );
-        let backup_mode = match backup_mode {
-            Err(err) => {
-                return Err(Error::Backup(err));
-            }
+        let backup_mode = match backup_control::determine_backup_mode(matches) {
+            Err(e) => return Err(Error::Backup(format!("{}", e))),
             Ok(mode) => mode,
         };
 
-        let backup_suffix =
-            backup_control::determine_backup_suffix(matches.value_of(options::SUFFIX));
+        let backup_suffix = backup_control::determine_backup_suffix(matches);
 
         let overwrite = OverwriteMode::from_matches(matches);
 

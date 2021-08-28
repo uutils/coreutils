@@ -9,6 +9,8 @@
 // spell-checker:ignore (vars) cvar exitstatus
 // spell-checker:ignore (sys/unix) WIFSIGNALED
 
+//! Set of functions to manage IDs
+
 use libc::{gid_t, pid_t, uid_t};
 use std::fmt;
 use std::io;
