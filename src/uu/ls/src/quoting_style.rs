@@ -1,6 +1,9 @@
 use std::char::from_digit;
 
-const SPECIAL_SHELL_CHARS: &str = "~`#$&*()|[]{};\\'\"<>?! ";
+// These are characters with special meaning in the shell (e.g. bash).
+// The first const contains characters that only have a special meaning when they appear at the beginning of a name.
+const SPECIAL_SHELL_CHARS_START: &[char] = &['~', '#'];
+const SPECIAL_SHELL_CHARS: &str = "`$&*()|[]{};\\'\"<>?! ";
 
 pub(super) enum QuotingStyle {
     Shell {
@@ -198,6 +201,8 @@ fn shell_without_escape(name: &str, quotes: Quotes, show_control_chars: bool) ->
             }
         }
     }
+
+    must_quote = must_quote || name.starts_with(SPECIAL_SHELL_CHARS_START);
     (escaped_str, must_quote)
 }
 
@@ -246,6 +251,7 @@ fn shell_with_escape(name: &str, quotes: Quotes) -> (String, bool) {
             }
         }
     }
+    must_quote = must_quote || name.starts_with(SPECIAL_SHELL_CHARS_START);
     (escaped_str, must_quote)
 }
 
@@ -658,5 +664,30 @@ mod tests {
                 ("'one\\two'", "shell-escape-always"),
             ],
         );
+    }
+
+    #[test]
+    fn test_tilde_and_hash() {
+        check_names("~", vec![("'~'", "shell"), ("'~'", "shell-escape")]);
+        check_names(
+            "~name",
+            vec![("'~name'", "shell"), ("'~name'", "shell-escape")],
+        );
+        check_names(
+            "some~name",
+            vec![("some~name", "shell"), ("some~name", "shell-escape")],
+        );
+        check_names("name~", vec![("name~", "shell"), ("name~", "shell-escape")]);
+
+        check_names("#", vec![("'#'", "shell"), ("'#'", "shell-escape")]);
+        check_names(
+            "#name",
+            vec![("'#name'", "shell"), ("'#name'", "shell-escape")],
+        );
+        check_names(
+            "some#name",
+            vec![("some#name", "shell"), ("some#name", "shell-escape")],
+        );
+        check_names("name#", vec![("name#", "shell"), ("name#", "shell-escape")]);
     }
 }
