@@ -17,7 +17,7 @@ use file_diff::diff;
 use filetime::{set_file_times, FileTime};
 use uucore::backup_control::{self, BackupMode};
 use uucore::entries::{grp2gid, usr2uid};
-use uucore::error::{FromIo, UError, UIoError, UResult, USimpleError};
+use uucore::error::{FromIo, UError, UIoError, UResult};
 use uucore::mode::get_umask;
 use uucore::perms::{wrap_chown, Verbosity, VerbosityLevel};
 
