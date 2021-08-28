@@ -50,6 +50,7 @@ iflags
 kibi
 kibibytes
 lcase
+lossily
 mebi
 mebibytes
 mergeable
