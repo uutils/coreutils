@@ -158,3 +158,21 @@ fn test_drop_negative_zero_end() {
         .stdout_is("1\n0\n")
         .no_stderr();
 }
+
+#[test]
+fn test_width_scientific_notation() {
+    new_ucmd!()
+        .args(&["-w", "999", "1e3"])
+        .succeeds()
+        .stdout_is("0999\n1000\n")
+        .no_stderr();
+}
+
+#[test]
+fn test_width_negative_zero() {
+    new_ucmd!()
+        .args(&["-w", "-0", "1"])
+        .succeeds()
+        .stdout_is("-0\n01\n")
+        .no_stderr();
+}
