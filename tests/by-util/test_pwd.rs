@@ -43,6 +43,7 @@ fn test_deleted_dir() {
 
 struct Env {
     ucmd: UCommand,
+    #[cfg(not(windows))]
     root: String,
     subdir: String,
     symdir: String,
@@ -59,6 +60,7 @@ fn symlinked_env() -> Env {
     ucmd.env("PWD", root.join("symdir"));
     Env {
         ucmd,
+        #[cfg(not(windows))]
         root: root.to_string_lossy().into_owned(),
         subdir: root.join("subdir").to_string_lossy().into_owned(),
         symdir: root.join("symdir").to_string_lossy().into_owned(),
