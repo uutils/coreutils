@@ -1,5 +1,5 @@
 use crate::common::util::*;
-use std::fs::{metadata, set_permissions, OpenOptions};
+use std::fs::{metadata, set_permissions, OpenOptions, Permissions};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::sync::Mutex;
 
@@ -202,17 +202,27 @@ fn test_chmod_ugoa() {
             after: 0o100755,
         },
         TestCase {
-            args: vec!["-w", TEST_FILE],
-            before: 0o100777,
-            after: 0o100577,
-        },
-        TestCase {
             args: vec!["-x", TEST_FILE],
             before: 0o100777,
             after: 0o100666,
         },
     ];
     run_tests(tests);
+
+    // check that we print an error if umask prevents us from removing a permission
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    set_permissions(at.plus("file"), Permissions::from_mode(0o777)).unwrap();
+    ucmd.args(&["-w", "file"])
+        .fails()
+        .code_is(1)
+        // spell-checker:disable-next-line
+        .stderr_is("chmod: file: new permissions are r-xrwxrwx, not r-xr-xr-x");
+    assert_eq!(
+        metadata(at.plus("file")).unwrap().permissions().mode(),
+        0o100577
+    );
+
     unsafe {
         umask(last);
     }
@@ -330,8 +340,8 @@ fn test_chmod_recursive() {
         .arg("a")
         .arg("z")
         .succeeds()
-        .stderr_contains(&"to 333 (-wx-wx-wx)")
-        .stderr_contains(&"to 222 (-w--w--w-)");
+        .stdout_contains(&"to 0333 (-wx-wx-wx)")
+        .stdout_contains(&"to 0222 (-w--w--w-)");
 
     assert_eq!(at.metadata("z/y").permissions().mode(), 0o100222);
     assert_eq!(at.metadata("a/a").permissions().mode(), 0o100222);
@@ -350,11 +360,22 @@ fn test_chmod_recursive() {
 fn test_chmod_non_existing_file() {
     new_ucmd!()
         .arg("-R")
-        .arg("--verbose")
         .arg("-r,a+w")
         .arg("does-not-exist")
         .fails()
         .stderr_contains(&"cannot access 'does-not-exist': No such file or directory");
+}
+
+#[test]
+fn test_chmod_non_existing_file_silent() {
+    new_ucmd!()
+        .arg("-R")
+        .arg("--quiet")
+        .arg("-r,a+w")
+        .arg("does-not-exist")
+        .fails()
+        .no_stderr()
+        .code_is(1);
 }
 
 #[test]
@@ -489,4 +510,50 @@ fn test_chmod_strip_minus_from_mode() {
         let _mode_had_minus_prefix = strip_minus_from_mode(&mut args);
         assert_eq!(test.1, args.join(" "));
     }
+}
+
+#[test]
+fn test_chmod_keep_setgid() {
+    for &(from, arg, to) in &[
+        (0o7777, "777", 0o46777),
+        (0o7777, "=777", 0o40777),
+        (0o7777, "0777", 0o46777),
+        (0o7777, "=0777", 0o40777),
+        (0o7777, "00777", 0o40777),
+        (0o2444, "a+wx", 0o42777),
+        (0o2444, "a=wx", 0o42333),
+        (0o1444, "g+s", 0o43444),
+        (0o4444, "u-s", 0o40444),
+        (0o7444, "a-s", 0o41444),
+    ] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkdir("dir");
+        set_permissions(at.plus("dir"), Permissions::from_mode(from)).unwrap();
+        let r = ucmd.arg(arg).arg("dir").succeeds();
+        println!("{}", r.stderr_str());
+        assert_eq!(at.metadata("dir").permissions().mode(), to);
+    }
+}
+
+#[test]
+fn test_no_operands() {
+    new_ucmd!()
+        .arg("777")
+        .fails()
+        .code_is(1)
+        .stderr_is("chmod: missing operand");
+}
+
+#[test]
+fn test_mode_after_dash_dash() {
+    let (at, ucmd) = at_and_ucmd!();
+    run_single_test(
+        &TestCase {
+            args: vec!["--", "-r", TEST_FILE],
+            before: 0o100777,
+            after: 0o100333,
+        },
+        at,
+        ucmd,
+    );
 }
