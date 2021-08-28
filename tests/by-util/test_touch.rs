@@ -16,6 +16,7 @@ fn get_file_times(at: &AtPath, path: &str) -> (FileTime, FileTime) {
     )
 }
 
+#[cfg(not(target_os = "freebsd"))]
 fn get_symlink_times(at: &AtPath, path: &str) -> (FileTime, FileTime) {
     let m = at.symlink_metadata(path);
     (
