@@ -139,3 +139,23 @@ fn test_realpath_logical_mode() {
         .succeeds()
         .stdout_contains("dir1\n");
 }
+
+#[test]
+fn test_realpath_dangling() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.symlink_file("nonexistent-file", "link");
+    ucmd.arg("link")
+        .succeeds()
+        .stdout_only(at.plus_as_string("nonexistent-file\n"));
+}
+
+#[test]
+fn test_realpath_loop() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.symlink_file("2", "1");
+    at.symlink_file("3", "2");
+    at.symlink_file("1", "3");
+    ucmd.arg("1")
+        .succeeds()
+        .stdout_only(at.plus_as_string("2\n"));
+}
