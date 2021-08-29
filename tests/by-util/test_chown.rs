@@ -326,6 +326,8 @@ fn test_chown_only_user_id() {
 }
 
 #[test]
+// FixME: stderr = chown: ownership of 'test_chown_file1' retained as cuuser:wheel
+// #[cfg(not(target_os = "freebsd"))]
 fn test_chown_only_group_id() {
     // test chown :1111 file.txt
 
