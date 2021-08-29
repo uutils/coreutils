@@ -23,7 +23,8 @@ clap = { version = "2.33", features = ["wrap_help"] }
 filetime = "0.2"
 libc = "0.2.85"
 quick-error = "1.2.3"
-uucore = { version=">=0.0.9", package="uucore", path="../../uucore", features=["fs"] }
+selinux = { version="0.2.3", optional=true }
+uucore = { version=">=0.0.9", package="uucore", path="../../uucore", features=["fs", "perms"] }
 uucore_procs = { version=">=0.0.6", package="uucore_procs", path="../../uucore_procs" }
 walkdir = "2.2"
 
@@ -35,7 +36,12 @@ winapi = { version="0.3", features=["fileapi"] }
 
 [target.'cfg(unix)'.dependencies]
 xattr="0.2.1"
+exacl= { version = "0.6.0", optional=true }
 
 [[bin]]
 name = "cp"
 path = "src/main.rs"
+
+[features]
+feat_selinux = ["selinux"]
+feat_acl = ["exacl"]

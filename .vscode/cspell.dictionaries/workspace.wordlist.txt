@@ -16,6 +16,7 @@ chrono
 conv
 corasick
 crossterm
+exacl
 filetime
 formatteriteminfo
 fsext
