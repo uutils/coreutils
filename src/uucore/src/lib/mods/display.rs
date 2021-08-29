@@ -5,6 +5,9 @@
 /// will wrap quotes around the filename and add the necessary escapes to make
 /// it copy/paste-able into a shell.
 ///
+/// For writing raw paths to stdout when the output should not be quoted or escaped,
+/// use `println_verbatim`. This will preserve invalid unicode.
+///
 /// # Examples
 /// ```
 /// use std::path::Path;
@@ -13,6 +16,7 @@
 /// let path = Path::new("foo/bar.baz");
 ///
 /// println!("Found file {}", path.quote()); // Prints "Found file 'foo/bar.baz'"
+/// println_verbatim(path)?; // Prints "foo/bar.baz"
 /// # Ok::<(), std::io::Error>(())
 /// ```
 // spell-checker:ignore Fbar
@@ -20,6 +24,7 @@ use std::ffi::OsStr;
 #[cfg(any(unix, target_os = "wasi", windows))]
 use std::fmt::Write as FmtWrite;
 use std::fmt::{self, Display, Formatter};
+use std::io::{self, Write as IoWrite};
 
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
@@ -266,6 +271,31 @@ fn from_utf8_iter(mut bytes: &[u8]) -> impl Iterator<Item = Result<&str, u8>> {
             }
         }
     })
+}
+
+/// Print a path (or `OsStr`-like object) directly to stdout, with a trailing newline,
+/// without losing any information if its encoding is invalid.
+///
+/// This function is appropriate for commands where printing paths is the point and the
+/// output is likely to be captured, like `pwd` and `basename`. For informational output
+/// use `Quotable::quote`.
+///
+/// FIXME: This is lossy on Windows. It could probably be implemented using some low-level
+/// API that takes UTF-16, without going through io::Write. This is not a big priority
+/// because broken filenames are much rarer on Windows than on Unix.
+pub fn println_verbatim<S: AsRef<OsStr>>(text: S) -> io::Result<()> {
+    let stdout = io::stdout();
+    let mut stdout = stdout.lock();
+    #[cfg(any(unix, target_os = "wasi"))]
+    {
+        stdout.write_all(text.as_ref().as_bytes())?;
+        stdout.write_all(b"\n")?;
+    }
+    #[cfg(not(any(unix, target_os = "wasi")))]
+    {
+        writeln!(stdout, "{}", std::path::Path::new(text.as_ref()).display())?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
