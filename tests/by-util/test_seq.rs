@@ -200,3 +200,45 @@ fn test_neg_inf() {
 fn test_inf() {
     run(&["inf"], b"1\n2\n3\n");
 }
+
+#[test]
+fn test_negative_zero_scientific_notation() {
+    new_ucmd!()
+        .args(&["-0e0", "1"])
+        .succeeds()
+        .stdout_is("-0\n1\n")
+        .no_stderr();
+}
+
+#[test]
+fn test_float_precision_increment() {
+    new_ucmd!()
+        .args(&["999", "0.1", "1000.1"])
+        .succeeds()
+        .stdout_is(
+            "999.0
+999.1
+999.2
+999.3
+999.4
+999.5
+999.6
+999.7
+999.8
+999.9
+1000.0
+1000.1
+",
+        )
+        .no_stderr();
+}
+
+/// Test for floating point precision issues.
+#[test]
+fn test_negative_increment_decimal() {
+    new_ucmd!()
+        .args(&["0.1", "-0.1", "-0.2"])
+        .succeeds()
+        .stdout_is("0.1\n0.0\n-0.1\n-0.2\n")
+        .no_stderr();
+}

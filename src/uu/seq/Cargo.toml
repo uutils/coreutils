@@ -1,3 +1,4 @@
+# spell-checker:ignore bigdecimal
 [package]
 name = "uu_seq"
 version = "0.0.7"
@@ -18,6 +19,7 @@ path = "src/seq.rs"
 clap = { version = "2.33", features = ["wrap_help"] }
 num-bigint = "0.4.0"
 num-traits = "0.2.14"
+bigdecimal = "0.3"
 uucore = { version=">=0.0.9", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.6", package="uucore_procs", path="../../uucore_procs" }
 

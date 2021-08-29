@@ -1,11 +1,12 @@
 // TODO: Make -w flag work with decimals
 // TODO: Support -f flag
 
-// spell-checker:ignore (ToDO) istr chiter argptr ilen
+// spell-checker:ignore (ToDO) istr chiter argptr ilen bigdecimal
 
 #[macro_use]
 extern crate uucore;
 
+use bigdecimal::BigDecimal;
 use clap::{crate_version, App, AppSettings, Arg};
 use num_bigint::BigInt;
 use num_traits::Num;
@@ -44,10 +45,10 @@ struct SeqOptions {
 /// The elements are (first, increment, last).
 type RangeInt = (BigInt, BigInt, BigInt);
 
-/// A range of f64.
+/// A range of `BigDecimal` numbers.
 ///
 /// The elements are (first, increment, last).
-type RangeF64 = (f64, f64, f64);
+type RangeBigDecimal = (BigDecimal, BigDecimal, BigDecimal);
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let usage = usage();
@@ -95,20 +96,21 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if largest_dec > 0 {
         largest_dec -= 1;
     }
-
     let padding = first
         .num_digits()
         .max(increment.num_digits())
         .max(last.num_digits());
     let result = match (first, last, increment) {
-        (Number::MinusZero, Number::BigInt(last), Number::BigInt(increment)) => print_seq_integers(
-            (BigInt::zero(), increment, last),
-            options.separator,
-            options.terminator,
-            options.widths,
-            padding,
-            true,
-        ),
+        (Number::MinusZeroInt, Number::BigInt(last), Number::BigInt(increment)) => {
+            print_seq_integers(
+                (BigInt::zero(), increment, last),
+                options.separator,
+                options.terminator,
+                options.widths,
+                padding,
+                true,
+            )
+        }
         (Number::BigInt(first), Number::BigInt(last), Number::BigInt(increment)) => {
             print_seq_integers(
                 (first, increment, last),
@@ -119,13 +121,31 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 false,
             )
         }
-        (first, last, increment) => print_seq(
-            (first.into_f64(), increment.into_f64(), last.into_f64()),
+        (Number::MinusZeroFloat, last, increment) => print_seq(
+            (
+                BigDecimal::zero(),
+                increment.into_big_decimal(),
+                last.into_big_decimal(),
+            ),
             largest_dec,
             options.separator,
             options.terminator,
             options.widths,
             padding,
+            true,
+        ),
+        (first, last, increment) => print_seq(
+            (
+                first.into_big_decimal(),
+                increment.into_big_decimal(),
+                last.into_big_decimal(),
+            ),
+            largest_dec,
+            options.separator,
+            options.terminator,
+            options.widths,
+            padding,
+            false,
         ),
     };
     match result {
@@ -180,37 +200,60 @@ fn done_printing<T: Num + PartialOrd>(next: &T, increment: &T, last: &T) -> bool
     }
 }
 
-/// Floating point based code path
+/// Print a sequence of floating point numbers.
+///
+/// This function prints a sequence of floating point numbers. The
+/// first, last, and increment are given in the triple `range`. Each is
+/// a [`BigDecimal`]. The `separator` is printed between the elements of
+/// the sequence and `terminator` after the last element.
+///
+/// `largest_dec` gives the number of digits of precision to use when
+/// printing the digits after the decimal point, padded with zeros on
+/// the right. If `pad` is true, then `padding` is used to determine the
+/// number of digits to print before the decimal point, padded with
+/// zeros on the left.
+///
+/// If `is_first_minus_zero` is `true`, then the `first` parameter is
+/// printed as if it were negative zero. Only set this to `true` if
+/// `first` is actually zero.
 fn print_seq(
-    range: RangeF64,
+    range: RangeBigDecimal,
     largest_dec: usize,
     separator: String,
     terminator: String,
     pad: bool,
     padding: usize,
+    is_first_minus_zero: bool,
 ) -> std::io::Result<()> {
     let stdout = stdout();
     let mut stdout = stdout.lock();
     let (first, increment, last) = range;
-    let mut i = 0isize;
-    let mut value = first + i as f64 * increment;
+    let mut value = first.clone();
+    let mut is_first_iteration = true;
     while !done_printing(&value, &increment, &last) {
+        let mut width = padding;
+        if is_first_iteration && is_first_minus_zero {
+            print!("-");
+            width -= 1;
+        }
+        is_first_iteration = false;
         let istr = format!("{:.*}", largest_dec, value);
         let ilen = istr.len();
         let before_dec = istr.find('.').unwrap_or(ilen);
-        if pad && before_dec < padding {
-            for _ in 0..(padding - before_dec) {
+        if pad && before_dec < width {
+            for _ in 0..(width - before_dec) {
                 write!(stdout, "0")?;
             }
         }
         write!(stdout, "{}", istr)?;
-        i += 1;
-        value = first + i as f64 * increment;
+        value += increment.clone();
         if !done_printing(&value, &increment, &last) {
             write!(stdout, "{}", separator)?;
         }
     }
-    if (first >= last && increment < 0f64) || (first <= last && increment > 0f64) {
+    if (first >= last && increment < BigDecimal::zero())
+        || (first <= last && increment > BigDecimal::zero())
+    {
         write!(stdout, "{}", terminator)?;
     }
     stdout.flush()?;
