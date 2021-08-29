@@ -551,7 +551,10 @@ jobs:
           set -e
           pw adduser -n cuuser -d /root/ -g wheel -c "Coreutils user to build" -w random
           whoami
-          #chown -R cuuser:wheel /root/ /Users/runner/work/coreutils/
+          ls -al /root/
+          ls -al /Users/runner/work/
+          ls -al /Users/runner/work/coreutils/
+          chown -R cuuser:wheel /root/ /Users/runner/work/coreutils/ || true
           whoami
 
           # Needs to be done in a sudo as we are changing users
