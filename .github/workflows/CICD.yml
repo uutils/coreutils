@@ -541,7 +541,7 @@ jobs:
     - uses: actions/checkout@v2
     - name: Prepare, build and test
       id: test
-      uses: vmactions/freebsd-vm@v0.1.4
+      uses: vmactions/freebsd-vm@v0.1.5
       with:
         usesh: true
         sync: sshfs
