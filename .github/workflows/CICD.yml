@@ -544,6 +544,7 @@ jobs:
       uses: vmactions/freebsd-vm@v0.1.4
       with:
         usesh: true
+        sync: sshfs
         prepare: pkg install -y curl gmake sudo
         run: |
           # Need to be run in the same block. Otherwise, we are back on the mac host.
