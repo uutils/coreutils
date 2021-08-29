@@ -21,6 +21,8 @@ static OPT_STRIP: &str = "strip";
 static OPT_ZERO: &str = "zero";
 static OPT_PHYSICAL: &str = "physical";
 static OPT_LOGICAL: &str = "logical";
+const OPT_CANONICALIZE_MISSING: &str = "canonicalize-missing";
+const OPT_CANONICALIZE_EXISTING: &str = "canonicalize-existing";
 
 static ARG_FILES: &str = "files";
 
@@ -45,9 +47,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let zero = matches.is_present(OPT_ZERO);
     let quiet = matches.is_present(OPT_QUIET);
     let logical = matches.is_present(OPT_LOGICAL);
+    let can_mode = if matches.is_present(OPT_CANONICALIZE_EXISTING) {
+        MissingHandling::Existing
+    } else if matches.is_present(OPT_CANONICALIZE_MISSING) {
+        MissingHandling::Missing
+    } else {
+        MissingHandling::Normal
+    };
     let mut retcode = 0;
     for path in &paths {
-        if let Err(e) = resolve_path(path, strip, zero, logical) {
+        if let Err(e) = resolve_path(path, strip, zero, logical, can_mode) {
             if !quiet {
                 show_error!("{}: {}", e, path.display());
             }
@@ -93,6 +102,24 @@ pub fn uu_app() -> App<'static, 'static> {
                 .help("resolve symlinks as encountered (default)"),
         )
         .arg(
+            Arg::with_name(OPT_CANONICALIZE_EXISTING)
+                .short("e")
+                .long(OPT_CANONICALIZE_EXISTING)
+                .help(
+                    "canonicalize by following every symlink in every component of the \
+                     given name recursively, all components must exist",
+                ),
+        )
+        .arg(
+            Arg::with_name(OPT_CANONICALIZE_MISSING)
+                .short("m")
+                .long(OPT_CANONICALIZE_MISSING)
+                .help(
+                    "canonicalize by following every symlink in every component of the \
+                     given name recursively, without requirements on components existence",
+                ),
+        )
+        .arg(
             Arg::with_name(ARG_FILES)
                 .multiple(true)
                 .takes_value(true)
@@ -112,7 +139,13 @@ pub fn uu_app() -> App<'static, 'static> {
 ///
 /// This function returns an error if there is a problem resolving
 /// symbolic links.
-fn resolve_path(p: &Path, strip: bool, zero: bool, logical: bool) -> std::io::Result<()> {
+fn resolve_path(
+    p: &Path,
+    strip: bool,
+    zero: bool,
+    logical: bool,
+    can_mode: MissingHandling,
+) -> std::io::Result<()> {
     let resolve = if strip {
         ResolveMode::None
     } else if logical {
@@ -120,7 +153,7 @@ fn resolve_path(p: &Path, strip: bool, zero: bool, logical: bool) -> std::io::Re
     } else {
         ResolveMode::Physical
     };
-    let abs = canonicalize(p, MissingHandling::Normal, resolve)?;
+    let abs = canonicalize(p, can_mode, resolve)?;
     let line_ending = if zero { '\0' } else { '\n' };
 
     print!("{}{}", abs.display(), line_ending);
