@@ -550,7 +550,8 @@ jobs:
           # Need to be run in the same block. Otherwise, we are back on the mac host.
           set -e
           pw adduser -n cuuser -d /root/ -g wheel -c "Coreutils user to build" -w random
-          chown -R cuuser:wheel /root/ /Users/runner/work/coreutils/
+          whoami
+          #chown -R cuuser:wheel /root/ /Users/runner/work/coreutils/
           whoami
 
           # Needs to be done in a sudo as we are changing users
