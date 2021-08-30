@@ -1409,7 +1409,7 @@ fn pad_left(string: String, count: usize) -> String {
     format!("{:>width$}", string, width = count)
 }
 
-fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) {
+fn display_items(items: &Vec<PathData>, config: &Config, out: &mut BufWriter<Stdout>) {
     if config.format == Format::Long {
         let (mut max_links, mut max_width) = (1, 1);
         let mut total_size = 0;
