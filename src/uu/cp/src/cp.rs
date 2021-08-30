@@ -18,7 +18,6 @@ extern crate quick_error;
 #[macro_use]
 extern crate uucore;
 
-use quick_error::Context;
 #[cfg(windows)]
 use winapi::um::fileapi::CreateFileW;
 #[cfg(windows)]
@@ -1056,23 +1055,12 @@ impl OverwriteMode {
     }
 }
 
-fn copy_attribute(
-    source: &Path,
-    dest: &Path,
-    attribute: &Attribute,
-    options: &Options,
-) -> CopyResult<()> {
+fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResult<()> {
     let context = &*format!("'{}' -> '{}'", source.display().to_string(), dest.display());
-    let source_metadata = if options.dereference {
-        source.metadata()
-    } else {
-        source.symlink_metadata()
-    }
-    .context(context)?;
+    let source_metadata = fs::symlink_metadata(source).context(context)?;
     match *attribute {
         Attribute::Mode => {
             fs::set_permissions(dest, source_metadata.permissions()).context(context)?;
-            dest.metadata().unwrap().permissions();
             // FIXME: Implement this for windows as well
             #[cfg(feature = "feat_acl")]
             exacl::getfacl(source, None)
@@ -1091,7 +1079,7 @@ fn copy_attribute(
 
             wrap_chown(
                 dest,
-                &dest.metadata().context(context)?,
+                &dest.symlink_metadata().context(context)?,
                 Some(dest_uid),
                 Some(dest_gid),
                 false,
@@ -1111,14 +1099,13 @@ fn copy_attribute(
         }
         #[cfg(feature = "feat_selinux")]
         Attribute::Context => {
-            let context = selinux::SecurityContext::of_path(source, options.dereference, false)
-                .map_err(|e| {
-                    format!(
-                        "failed to get security context of {}: {}",
-                        source.display(),
-                        e
-                    )
-                })?;
+            let context = selinux::SecurityContext::of_path(source, false, false).map_err(|e| {
+                format!(
+                    "failed to get security context of {}: {}",
+                    source.display(),
+                    e
+                )
+            })?;
             if let Some(context) = context {
                 context.set_for_path(dest, false, false).map_err(|e| {
                     format!(
@@ -1146,7 +1133,6 @@ fn copy_attribute(
             }
         }
     };
-    dest.metadata().unwrap().permissions();
 
     Ok(())
 }
@@ -1203,8 +1189,8 @@ fn handle_existing_dest(source: &Path, dest: &Path, options: &Options) -> CopyRe
     Ok(())
 }
 
-/// Copy the a file from `source` to `dest`. No path manipulation is
-/// done on either `source` or `dest`, the are used as provided.
+/// Copy the a file from `source` to `dest`. `source` will be dereferenced if
+/// `options.dereference` is set to true. `dest` will always be dereferenced.
 ///
 /// Behavior when copying to existing files is contingent on the
 /// `options.overwrite` mode. If a file is skipped, the return type
@@ -1220,19 +1206,24 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
     if options.verbose {
         println!("{}", context_for(source, dest));
     }
-    // FIXME: `source` and `dest` should be dereferenced here if appropriate, so that the rest
-    // of the code does not have to check `options.dereference` all the time and can work with the paths directly.
+
+    // Calculate the context upfront before canonicalizing the path
+    let context = context_for(source, dest);
+    let context = context.as_str();
+
+    // canonicalize dest and source so that later steps can work with the paths directly
+    let dest = canonicalize(dest, MissingHandling::Missing, ResolveMode::Physical).unwrap();
+    let source = if options.dereference {
+        canonicalize(source, MissingHandling::Missing, ResolveMode::Physical).unwrap()
+    } else {
+        source.to_owned()
+    };
 
     let dest_permissions = if dest.exists() {
-        dest.metadata()
-            .map_err(|e| Context(context_for(dest, source), e))?
-            .permissions()
+        dest.symlink_metadata().context(context)?.permissions()
     } else {
         #[allow(unused_mut)]
-        let mut permissions = source
-            .metadata()
-            .map_err(|e| Context(context_for(dest, source), e))?
-            .permissions();
+        let mut permissions = source.symlink_metadata().context(context)?.permissions();
         #[cfg(unix)]
         {
             use uucore::mode::get_umask;
@@ -1253,29 +1244,29 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
 
     match options.copy_mode {
         CopyMode::Link => {
-            fs::hard_link(source, dest).context(&*context_for(source, dest))?;
+            fs::hard_link(&source, &dest).context(context)?;
         }
         CopyMode::Copy => {
-            copy_helper(source, dest, options)?;
+            copy_helper(&source, &dest, options, context)?;
         }
         CopyMode::SymLink => {
-            symlink_file(source, dest, &*context_for(source, dest))?;
+            symlink_file(&source, &dest, context)?;
         }
         CopyMode::Sparse => return Err(Error::NotImplemented(options::SPARSE.to_string())),
         CopyMode::Update => {
             if dest.exists() {
-                let src_metadata = fs::metadata(source)?;
-                let dest_metadata = fs::metadata(dest)?;
+                let src_metadata = fs::symlink_metadata(&source)?;
+                let dest_metadata = fs::symlink_metadata(&dest)?;
 
                 let src_time = src_metadata.modified()?;
                 let dest_time = dest_metadata.modified()?;
                 if src_time <= dest_time {
                     return Ok(());
                 } else {
-                    copy_helper(source, dest, options)?;
+                    copy_helper(&source, &dest, options, context)?;
                 }
             } else {
-                copy_helper(source, dest, options)?;
+                copy_helper(&source, &dest, options, context)?;
             }
         }
         CopyMode::AttrOnly => {
@@ -1283,54 +1274,51 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
                 .write(true)
                 .truncate(false)
                 .create(true)
-                .open(dest)
+                .open(&dest)
                 .unwrap();
         }
     };
-    fs::set_permissions(dest, dest_permissions).unwrap();
+
+    // TODO: implement something similar to gnu's lchown
+    if fs::symlink_metadata(&dest)
+        .map(|meta| !meta.file_type().is_symlink())
+        .unwrap_or(false)
+    {
+        fs::set_permissions(&dest, dest_permissions).unwrap();
+    }
     for attribute in &options.preserve_attributes {
-        copy_attribute(source, dest, attribute, options)?;
+        copy_attribute(&source, &dest, attribute)?;
     }
     Ok(())
 }
 
 /// Copy the file from `source` to `dest` either using the normal `fs::copy` or a
 /// copy-on-write scheme if --reflink is specified and the filesystem supports it.
-fn copy_helper(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
+fn copy_helper(source: &Path, dest: &Path, options: &Options, context: &str) -> CopyResult<()> {
     if options.parents {
         let parent = dest.parent().unwrap_or(dest);
         fs::create_dir_all(parent)?;
     }
     let is_symlink = fs::symlink_metadata(&source)?.file_type().is_symlink();
-    if source.to_string_lossy() == "/dev/null" {
+    if source.as_os_str() == "/dev/null" {
         /* workaround a limitation of fs::copy
          * https://github.com/rust-lang/rust/issues/79390
          */
         File::create(dest)?;
-    } else if !options.dereference && is_symlink {
+    } else if is_symlink {
         copy_link(source, dest)?;
     } else if options.reflink_mode != ReflinkMode::Never {
         #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         return Err("--reflink is only supported on linux and macOS"
             .to_string()
             .into());
-        #[cfg(any(target_os = "linux", target_os = "macos"))]
-        if is_symlink {
-            assert!(options.dereference);
-            let real_path = std::fs::read_link(source)?;
 
-            #[cfg(target_os = "macos")]
-            copy_on_write_macos(&real_path, dest, options.reflink_mode)?;
-            #[cfg(target_os = "linux")]
-            copy_on_write_linux(&real_path, dest, options.reflink_mode)?;
-        } else {
-            #[cfg(target_os = "macos")]
-            copy_on_write_macos(source, dest, options.reflink_mode)?;
-            #[cfg(target_os = "linux")]
-            copy_on_write_linux(source, dest, options.reflink_mode)?;
-        }
+        #[cfg(target_os = "macos")]
+        copy_on_write_macos(source, dest, options.reflink_mode, context)?;
+        #[cfg(target_os = "linux")]
+        copy_on_write_linux(source, dest, options.reflink_mode, context)?;
     } else {
-        fs::copy(source, dest).context(&*context_for(source, dest))?;
+        fs::copy(source, dest).context(context)?;
     }
 
     Ok(())
@@ -1361,16 +1349,21 @@ fn copy_link(source: &Path, dest: &Path) -> CopyResult<()> {
 
 /// Copies `source` to `dest` using copy-on-write if possible.
 #[cfg(target_os = "linux")]
-fn copy_on_write_linux(source: &Path, dest: &Path, mode: ReflinkMode) -> CopyResult<()> {
+fn copy_on_write_linux(
+    source: &Path,
+    dest: &Path,
+    mode: ReflinkMode,
+    context: &str,
+) -> CopyResult<()> {
     debug_assert!(mode != ReflinkMode::Never);
 
-    let src_file = File::open(source).context(&*context_for(source, dest))?;
+    let src_file = File::open(source).context(context)?;
     let dst_file = OpenOptions::new()
         .write(true)
         .truncate(false)
         .create(true)
         .open(dest)
-        .context(&*context_for(source, dest))?;
+        .context(context)?;
     match mode {
         ReflinkMode::Always => unsafe {
             let result = ficlone(dst_file.as_raw_fd(), src_file.as_raw_fd() as *const i32);
@@ -1389,7 +1382,7 @@ fn copy_on_write_linux(source: &Path, dest: &Path, mode: ReflinkMode) -> CopyRes
         ReflinkMode::Auto => unsafe {
             let result = ficlone(dst_file.as_raw_fd(), src_file.as_raw_fd() as *const i32);
             if result != 0 {
-                fs::copy(source, dest).context(&*context_for(source, dest))?;
+                fs::copy(source, dest).context(context)?;
             }
             Ok(())
         },
@@ -1399,7 +1392,12 @@ fn copy_on_write_linux(source: &Path, dest: &Path, mode: ReflinkMode) -> CopyRes
 
 /// Copies `source` to `dest` using copy-on-write if possible.
 #[cfg(target_os = "macos")]
-fn copy_on_write_macos(source: &Path, dest: &Path, mode: ReflinkMode) -> CopyResult<()> {
+fn copy_on_write_macos(
+    source: &Path,
+    dest: &Path,
+    mode: ReflinkMode,
+    context: &str,
+) -> CopyResult<()> {
     debug_assert!(mode != ReflinkMode::Never);
 
     // Extract paths in a form suitable to be passed to a syscall.
@@ -1444,7 +1442,7 @@ fn copy_on_write_macos(source: &Path, dest: &Path, mode: ReflinkMode) -> CopyRes
                     format!("failed to clone {:?} from {:?}: {}", source, dest, error).into(),
                 )
             }
-            ReflinkMode::Auto => fs::copy(source, dest).context(&*context_for(source, dest))?,
+            ReflinkMode::Auto => fs::copy(source, dest).context(context)?,
             ReflinkMode::Never => unreachable!(),
         };
     }
