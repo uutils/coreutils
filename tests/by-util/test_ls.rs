@@ -334,6 +334,62 @@ fn test_ls_long() {
 }
 
 #[test]
+fn test_ls_long_format() {
+    #[cfg(not(windows))]
+    let last;
+    #[cfg(not(windows))]
+    {
+        let _guard = UMASK_MUTEX.lock();
+        last = unsafe { umask(0) };
+
+        unsafe {
+            umask(0o002);
+        }
+    }
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir(&at.plus_as_string("test-long-dir"));
+    at.touch(&at.plus_as_string("test-long-dir/test-long-file"));
+    at.mkdir(&at.plus_as_string("test-long-dir/test-long-dir"));
+
+
+    for arg in &["-l", "--long", "--format=long", "--format=verbose"] {
+        let result = scene.ucmd().arg(arg).arg("test-long-dir").succeeds();
+        // Assuming sane unames and groups do not have spaces within them.
+        // A line of the output should be:
+        // One of the characters -bcCdDlMnpPsStTx?
+        // rwx, with - for missing permissions, thrice.
+        // A number, preceded by column whitespace, and followed by a single space.
+        // A uname/group, currently [^ ], followed by column whitespace, twice (or thrice for Hurd).
+        // A number, followed by a single space.
+        // A month, followed by a single space.
+        // A day, preceded by column whitespace, and followed by a single space.
+        // Either a year or a time, currently [0-9:]+, preceded by column whitespace,
+        // and followed by a single space.
+        // Whatever comes after is irrelevant to this specific test.
+        #[cfg(not(windows))]
+        result.stdout_matches(&Regex::new(
+            r"\n[-bcCdDlMnpPsStTx?]([r-][w-][xt-]){3} +\d+ [^ ]+ +[^ ]+( +[^ ]+)? +\d+ [A-Z][a-z]{2} {0,2}\d{0,2} {0,2}[0-9:]+ "
+        ).unwrap());
+    }
+
+    let result = scene.ucmd().arg("-lan").arg("test-long-dir").succeeds();
+    // This checks for the line with the .. entry. The uname and group should be digits.
+    #[cfg(not(windows))]
+    result.stdout_matches(&Regex::new(
+        r"\nd([r-][w-][xt-]){3} +\d+ \d+ +\d+( +\d+)? +\d+ [A-Z][a-z]{2} {0,2}\d{0,2} {0,2}[0-9:]+ \.\."
+    ).unwrap());
+
+    #[cfg(not(windows))]
+    {
+        unsafe {
+            umask(last);
+        }
+    }
+}
+
+#[test]
 fn test_ls_long_total_size() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
