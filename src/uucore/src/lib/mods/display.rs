@@ -59,21 +59,55 @@ where
     T: AsRef<OsStr>,
 {
     fn quote(&self) -> Quoted<'_> {
-        Quoted(self.as_ref())
+        Quoted {
+            text: self.as_ref(),
+            force_quote: true,
+        }
     }
 }
 
 /// A wrapper around [`OsStr`] for printing paths with quoting and escaping applied.
-#[derive(Debug)]
-pub struct Quoted<'a>(&'a OsStr);
+#[derive(Debug, Copy, Clone)]
+pub struct Quoted<'a> {
+    text: &'a OsStr,
+    force_quote: bool,
+}
+
+impl Quoted<'_> {
+    /// Add quotes even if not strictly necessary. `true` by default.
+    pub fn force_quote(mut self, force: bool) -> Self {
+        self.force_quote = force;
+        self
+    }
+}
 
 impl Display for Quoted<'_> {
     #[cfg(any(unix, target_os = "wasi"))]
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let text = self.0.as_bytes();
+        /// Characters with special meaning outside quotes.
+        // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_02
+        // % seems obscure enough to ignore, it's for job control only.
+        // {} were used in a version elsewhere but seem unnecessary, GNU doesn't escape them.
+        // ! is a common extension.
+        const SPECIAL_SHELL_CHARS: &[u8] = b"|&;<>()$`\\\"'*?[]=! ";
+        /// Characters with a special meaning at the beginning of a name.
+        const SPECIAL_SHELL_CHARS_START: &[u8] = b"~#";
+
+        let text = self.text.as_bytes();
 
         let mut is_single_safe = true;
         let mut is_double_safe = true;
+        let mut requires_quote = self.force_quote;
+
+        if let Some(first) = text.get(0) {
+            if SPECIAL_SHELL_CHARS_START.contains(first) {
+                requires_quote = true;
+            }
+        } else {
+            // Empty string
+            requires_quote = true;
+        }
+
         for &ch in text {
             match ch {
                 ch if ch.is_ascii_control() => return write_escaped(f, text),
@@ -83,12 +117,21 @@ impl Display for Quoted<'_> {
                 b'"' | b'`' | b'$' | b'\\' => is_double_safe = false,
                 _ => (),
             }
+            if !requires_quote && SPECIAL_SHELL_CHARS.contains(&ch) {
+                requires_quote = true;
+            }
         }
         let text = match from_utf8(text) {
             Err(_) => return write_escaped(f, text),
             Ok(text) => text,
         };
-        if is_single_safe {
+        if !requires_quote && text.find(char::is_whitespace).is_some() {
+            requires_quote = true;
+        }
+
+        if !requires_quote {
+            return f.write_str(text);
+        } else if is_single_safe {
             return write_simple(f, text, '\'');
         } else if is_double_safe {
             return write_simple(f, text, '\"');
@@ -176,25 +219,57 @@ impl Display for Quoted<'_> {
         use std::char::decode_utf16;
         use std::os::windows::ffi::OsStrExt;
 
+        /// Characters with special meaning outside quotes.
+        // FIXME: I'm not a PowerShell wizard and don't know if this is correct.
+        // I just copied the Unix version, removed \, and added {}@ based on
+        // experimentation.
+        // I have noticed that ~?*[] only get expanded in some contexts, so watch
+        // out for that if doing your own tests.
+        // Get-ChildItem seems unwilling to quote anything so it doesn't help.
+        // There's the additional wrinkle that Windows has stricter requirements
+        // for filenames: I've been testing using a Linux build of PowerShell, but
+        // this code doesn't even compile on Linux.
+        const SPECIAL_SHELL_CHARS: &str = "|&;<>()$`\"'*?[]=!{}@ ";
+        /// Characters with a special meaning at the beginning of a name.
+        const SPECIAL_SHELL_CHARS_START: &[char] = &['~', '#'];
+
         // Getting the "raw" representation of an OsStr is actually expensive,
         // so avoid it if unnecessary.
-        let text = match self.0.to_str() {
-            None => return write_escaped(f, self.0),
+        let text = match self.text.to_str() {
+            None => return write_escaped(f, self.text),
             Some(text) => text,
         };
 
         let mut is_single_safe = true;
         let mut is_double_safe = true;
+        let mut requires_quote = self.force_quote;
+
+        if let Some(first) = text.chars().next() {
+            if SPECIAL_SHELL_CHARS_START.contains(&first) {
+                requires_quote = true;
+            }
+        } else {
+            // Empty string
+            requires_quote = true;
+        }
+
         for ch in text.chars() {
             match ch {
-                ch if ch.is_ascii_control() => return write_escaped(f, self.0),
+                ch if ch.is_ascii_control() => return write_escaped(f, self.text),
                 '\'' => is_single_safe = false,
                 '"' | '`' | '$' => is_double_safe = false,
                 _ => (),
             }
+            if !requires_quote
+                && ((ch.is_ascii() && SPECIAL_SHELL_CHARS.contains(ch)) || ch.is_whitespace())
+            {
+                requires_quote = true;
+            }
         }
 
-        if is_single_safe || !is_double_safe {
+        if !requires_quote {
+            return f.write_str(text);
+        } else if is_single_safe || !is_double_safe {
             return write_simple(f, text, '\'');
         } else {
             return write_simple(f, text, '"');
@@ -244,7 +319,12 @@ impl Display for Quoted<'_> {
         // As a fallback, we use Rust's own escaping rules.
         // This is reasonably sane and very easy to implement.
         // We use single quotes because that's hardcoded in a lot of tests.
-        write!(f, "'{}'", self.0.to_string_lossy().escape_debug())
+        let text = self.text.to_string_lossy();
+        if self.force_quote || !text.chars().all(|ch| ch.is_alphanumeric() || ch == '.') {
+            write!(f, "'{}'", text.escape_debug())
+        } else {
+            f.write_str(&text)
+        }
     }
 }
 
@@ -308,7 +388,7 @@ mod tests {
         }
     }
 
-    /// This should hold on any platform, or else a lot of other tests will fail.
+    /// This should hold on any platform.
     #[test]
     fn test_basic() {
         verify_quote(&[
@@ -316,6 +396,13 @@ mod tests {
             ("", "''"),
             ("foo/bar.baz", "'foo/bar.baz'"),
         ]);
+        assert_eq!("foo".quote().force_quote(false).to_string(), "foo");
+        assert_eq!("".quote().force_quote(false).to_string(), "''");
+        assert_eq!(
+            "foo bar".quote().force_quote(false).to_string(),
+            "'foo bar'"
+        );
+        assert_eq!("$foo".quote().force_quote(false).to_string(), "'$foo'");
     }
 
     #[cfg(any(unix, target_os = "wasi"))]
