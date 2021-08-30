@@ -1539,6 +1539,42 @@ fn display_grid(
     }
 }
 
+/// This writes to the BufWriter out a single string of the output of `ls -l`.
+///
+/// It writes the following keys, in order:
+/// * `inode` ([`get_inode`], config-optional)
+/// * `permissions` ([`display_permissions`])
+/// * `symlink_count` ([`display_symlink_count`])
+/// * `owner` ([`display_uname`], config-optional)
+/// * `group` ([`display_group`], config-optional)
+/// * `author` ([`display_uname`], config-optional)
+/// * `size / rdev` ([`display_size_or_rdev`])
+/// * `system_time` ([`get_system_time`])
+/// * `file_name` ([`display_file_name`])
+///
+/// This function needs to display information in columns:
+/// * permissions and system_time are already guaranteed to be pre-formatted in fixed length.
+/// * file_name is the last column and is left-aligned.
+/// * Everything else needs to be padded using [`pad_left`].
+///
+/// That's why we have the parameters:
+/// ```txt
+///    max_links: usize,
+///    longest_uname_len: usize,
+///    longest_group_len: usize,
+///    max_size: usize,
+/// ```
+/// that decide the maximum possible character count of each field.
+///
+/// [`get_inode`]: ls::get_inode
+/// [`display_permissions`]: ls::display_permissions
+/// [`display_symlink_count`]: ls::display_symlink_count
+/// [`display_uname`]: ls::display_uname
+/// [`display_group`]: ls::display_group
+/// [`display_size_or_rdev`]: ls::display_size_or_rdev
+/// [`get_system_time`]: ls::get_system_time
+/// [`display_file_name`]: ls::display_file_name
+/// [`pad_left`]: ls::pad_left
 fn display_item_long(
     item: &PathData,
     longest_link_count_len: usize,
