@@ -248,7 +248,7 @@ struct LongFormat {
 
 impl Config {
     #[allow(clippy::cognitive_complexity)]
-    fn from(options: clap::ArgMatches) -> UResult<Config> {
+    fn from(options: &clap::ArgMatches) -> UResult<Config> {
         let (mut format, opt) = if let Some(format_) = options.value_of(options::FORMAT) {
             (
                 match format_ {
@@ -599,22 +599,19 @@ impl Config {
 
 #[uucore_procs::gen_uumain]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args
-        .collect_str(InvalidEncodingHandling::Ignore)
-        .accept_any();
-
     let usage = usage();
 
     let app = uu_app().usage(&usage[..]);
 
     let matches = app.get_matches_from(args);
 
+    let config = Config::from(&matches)?;
     let locs = matches
-        .values_of(options::PATHS)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_else(|| vec![String::from(".")]);
+        .values_of_os(options::PATHS)
+        .map(|v| v.map(Path::new).collect())
+        .unwrap_or_else(|| vec![Path::new(".")]);
 
-    list(locs, Config::from(matches)?)
+    list(locs, config)
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -1249,14 +1246,14 @@ impl PathData {
     }
 }
 
-fn list(locs: Vec<String>, config: Config) -> UResult<()> {
+fn list(locs: Vec<&Path>, config: Config) -> UResult<()> {
     let mut files = Vec::<PathData>::new();
     let mut dirs = Vec::<PathData>::new();
 
     let mut out = BufWriter::new(stdout());
 
     for loc in &locs {
-        let p = PathBuf::from(&loc);
+        let p = PathBuf::from(loc);
         let path_data = PathData::new(p, None, None, &config, true);
 
         if path_data.md().is_none() {
@@ -1286,6 +1283,7 @@ fn list(locs: Vec<String>, config: Config) -> UResult<()> {
     sort_entries(&mut dirs, &config);
     for dir in dirs {
         if locs.len() > 1 || config.recursive {
+            // FIXME: This should use the quoting style and propagate errors
             let _ = writeln!(out, "\n{}:", dir.p_buf.display());
         }
         enter_directory(&dir, &config, &mut out);
@@ -1671,7 +1669,6 @@ fn get_inode(metadata: &Metadata) -> String {
 use std::sync::Mutex;
 #[cfg(unix)]
 use uucore::entries;
-use uucore::InvalidEncodingHandling;
 
 #[cfg(unix)]
 fn cached_uid2usr(uid: u32) -> String {
