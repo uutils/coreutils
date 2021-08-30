@@ -1394,14 +1394,16 @@ fn get_metadata(entry: &Path, dereference: bool) -> std::io::Result<Metadata> {
     }
 }
 
-fn display_dir_entry_size(entry: &PathData, config: &Config) -> (usize, usize) {
+fn display_dir_entry_size(entry: &PathData, config: &Config) -> (usize, usize, usize, usize) {
     if let Some(md) = entry.md() {
         (
             display_symlink_count(md).len(),
+            display_uname(md, config).len(),
+            display_group(md, config).len(),
             display_size_or_rdev(md, config).len(),
         )
     } else {
-        (0, 0)
+        (0, 0, 0, 0)
     }
 }
 
@@ -1413,13 +1415,16 @@ fn pad_right(string: String, count: usize) -> String { format!("{:<width$}", str
 
 fn display_items(items: &Vec<PathData>, config: &Config, out: &mut BufWriter<Stdout>) {
     if config.format == Format::Long {
-        let (mut max_links, mut max_width) = (1, 1);
+        let (mut longest_link_count_len, mut longest_uname_len, mut longest_group_len, mut longest_size_len) = (1, 1, 1, 1);
         let mut total_size = 0;
 
         for item in items {
-            let (links, width) = display_dir_entry_size(item, config);
-            max_links = links.max(max_links);
-            max_width = width.max(max_width);
+            let (link_count_len, uname_len, group_len, size_len) = display_dir_entry_size(item, config);
+            longest_link_count_len = link_count_len.max(longest_link_count_len);
+            longest_size_len = size_len.max(longest_size_len);
+            longest_uname_len = uname_len.max(longest_uname_len);
+            longest_group_len = group_len.max(longest_group_len);
+            longest_size_len = size_len.max(longest_size_len);
             total_size += item.md().map_or(0, |md| get_block_size(md, config));
         }
 
@@ -1428,7 +1433,7 @@ fn display_items(items: &Vec<PathData>, config: &Config, out: &mut BufWriter<Std
         }
 
         for item in items {
-            display_item_long(item, max_links, max_width, config, out);
+            display_item_long(item, longest_link_count_len, longest_uname_len, longest_group_len,longest_size_len, config, out);
         }
     } else {
         let names = items.iter().filter_map(|i| display_file_name(i, config));
@@ -1535,8 +1540,10 @@ fn display_grid(
 
 fn display_item_long(
     item: &PathData,
-    max_links: usize,
-    max_size: usize,
+    longest_link_count_len: usize,
+    longest_uname_len: usize,
+    longest_group_len: usize,
+    longest_size_len: usize,
     config: &Config,
     out: &mut BufWriter<Stdout>,
 ) {
@@ -1559,27 +1566,27 @@ fn display_item_long(
         out,
         "{} {}",
         display_permissions(md, true),
-        pad_left(display_symlink_count(md), max_links),
+        pad_left(display_symlink_count(md), longest_link_count_len),
     );
 
     if config.long.owner {
-        let _ = write!(out, " {}", display_uname(md, config));
+        let _ = write!(out, " {}", pad_right(display_uname(md, config), longest_uname_len));
     }
 
     if config.long.group {
-        let _ = write!(out, " {}", display_group(md, config));
+        let _ = write!(out, " {}", pad_right(display_group(md, config), longest_group_len));
     }
 
     // Author is only different from owner on GNU/Hurd, so we reuse
     // the owner, since GNU/Hurd is not currently supported by Rust.
     if config.long.author {
-        let _ = write!(out, " {}", display_uname(md, config));
+        let _ = write!(out, " {}", pad_right(display_uname(md, config), longest_uname_len));
     }
 
     let _ = writeln!(
         out,
         " {} {} {}",
-        pad_left(display_size_or_rdev(md, config), max_size),
+        pad_left(display_size_or_rdev(md, config), longest_size_len),
         display_date(md, config),
         // unwrap is fine because it fails when metadata is not available
         // but we already know that it is because it's checked at the
