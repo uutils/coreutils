@@ -1395,6 +1395,7 @@ fn get_metadata(entry: &Path, dereference: bool) -> std::io::Result<Metadata> {
 }
 
 fn display_dir_entry_size(entry: &PathData, config: &Config) -> (usize, usize, usize, usize) {
+    // TODO: Cache/memoize the display_* results so we don't have to recalculate them.
     if let Some(md) = entry.md() {
         (
             display_symlink_count(md).len(),
