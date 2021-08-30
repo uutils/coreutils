@@ -1412,15 +1412,23 @@ fn pad_left(string: String, count: usize) -> String {
     format!("{:>width$}", string, width = count)
 }
 
-fn pad_right(string: String, count: usize) -> String { format!("{:<width$}", string, width = count) }
+fn pad_right(string: String, count: usize) -> String {
+    format!("{:<width$}", string, width = count)
+}
 
 fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) {
     if config.format == Format::Long {
-        let (mut longest_link_count_len, mut longest_uname_len, mut longest_group_len, mut longest_size_len) = (1, 1, 1, 1);
+        let (
+            mut longest_link_count_len,
+            mut longest_uname_len,
+            mut longest_group_len,
+            mut longest_size_len,
+        ) = (1, 1, 1, 1);
         let mut total_size = 0;
 
         for item in items {
-            let (link_count_len, uname_len, group_len, size_len) = display_dir_entry_size(item, config);
+            let (link_count_len, uname_len, group_len, size_len) =
+                display_dir_entry_size(item, config);
             longest_link_count_len = link_count_len.max(longest_link_count_len);
             longest_size_len = size_len.max(longest_size_len);
             longest_uname_len = uname_len.max(longest_uname_len);
@@ -1434,7 +1442,15 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
         }
 
         for item in items {
-            display_item_long(item, longest_link_count_len, longest_uname_len, longest_group_len,longest_size_len, config, out);
+            display_item_long(
+                item,
+                longest_link_count_len,
+                longest_uname_len,
+                longest_group_len,
+                longest_size_len,
+                config,
+                out,
+            );
         }
     } else {
         let names = items.iter().filter_map(|i| display_file_name(i, config));
@@ -1607,17 +1623,29 @@ fn display_item_long(
     );
 
     if config.long.owner {
-        let _ = write!(out, " {}", pad_right(display_uname(md, config), longest_uname_len));
+        let _ = write!(
+            out,
+            " {}",
+            pad_right(display_uname(md, config), longest_uname_len)
+        );
     }
 
     if config.long.group {
-        let _ = write!(out, " {}", pad_right(display_group(md, config), longest_group_len));
+        let _ = write!(
+            out,
+            " {}",
+            pad_right(display_group(md, config), longest_group_len)
+        );
     }
 
     // Author is only different from owner on GNU/Hurd, so we reuse
     // the owner, since GNU/Hurd is not currently supported by Rust.
     if config.long.author {
-        let _ = write!(out, " {}", pad_right(display_uname(md, config), longest_uname_len));
+        let _ = write!(
+            out,
+            " {}",
+            pad_right(display_uname(md, config), longest_uname_len)
+        );
     }
 
     let _ = writeln!(
