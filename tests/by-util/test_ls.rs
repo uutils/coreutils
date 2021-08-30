@@ -353,15 +353,14 @@ fn test_ls_long_format() {
     at.touch(&at.plus_as_string("test-long-dir/test-long-file"));
     at.mkdir(&at.plus_as_string("test-long-dir/test-long-dir"));
 
-
     for arg in &["-l", "--long", "--format=long", "--format=verbose"] {
         let result = scene.ucmd().arg(arg).arg("test-long-dir").succeeds();
-        // Assuming sane unames and groups do not have spaces within them.
+        // Assuming sane username do not have spaces within them.
         // A line of the output should be:
         // One of the characters -bcCdDlMnpPsStTx?
         // rwx, with - for missing permissions, thrice.
         // A number, preceded by column whitespace, and followed by a single space.
-        // A uname/group, currently [^ ], followed by column whitespace, twice (or thrice for Hurd).
+        // A username, currently [^ ], followed by column whitespace, twice (or thrice for Hurd).
         // A number, followed by a single space.
         // A month, followed by a single space.
         // A day, preceded by column whitespace, and followed by a single space.
