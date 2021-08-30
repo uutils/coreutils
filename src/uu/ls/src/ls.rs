@@ -1238,7 +1238,7 @@ impl PathData {
 
     fn md(&self) -> Option<&Metadata> {
         self.md
-            .get_or_init(|| get_metadata(&self.p_buf, self.must_dereference).ok())
+            .get_or_init(|| get_metadata(&self.p_buf.as_path(), self.must_dereference).ok())
             .as_ref()
     }
 
@@ -1799,7 +1799,7 @@ fn classify_file(path: &PathData) -> Option<char> {
 }
 
 fn display_file_name(path: &PathData, config: &Config) -> Option<Cell> {
-    let mut name = escape_name(&path.display_name, &config.quoting_style);
+    let mut name = escape_name(&path.display_name.as_str(), &config.quoting_style);
 
     #[cfg(unix)]
     {
@@ -1817,7 +1817,7 @@ fn display_file_name(path: &PathData, config: &Config) -> Option<Cell> {
     let mut width = name.width();
 
     if let Some(ls_colors) = &config.color {
-        name = color_name(ls_colors, &path.p_buf, name, path.md()?);
+        name = color_name(ls_colors, &path.p_buf.as_path(), name, path.md()?);
     }
 
     if config.indicator_style != IndicatorStyle::None {
