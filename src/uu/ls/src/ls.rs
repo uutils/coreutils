@@ -1414,7 +1414,7 @@ fn pad_left(string: String, count: usize) -> String {
 
 fn pad_right(string: String, count: usize) -> String { format!("{:<width$}", string, width = count) }
 
-fn display_items(items: &Vec<PathData>, config: &Config, out: &mut BufWriter<Stdout>) {
+fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) {
     if config.format == Format::Long {
         let (mut longest_link_count_len, mut longest_uname_len, mut longest_group_len, mut longest_size_len) = (1, 1, 1, 1);
         let mut total_size = 0;
