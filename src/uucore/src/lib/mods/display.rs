@@ -20,7 +20,7 @@
 /// # Ok::<(), std::io::Error>(())
 /// ```
 // spell-checker:ignore Fbar
-use std::borrow::{Borrow, Cow};
+use std::borrow::Cow;
 use std::ffi::OsStr;
 #[cfg(any(unix, target_os = "wasi", windows))]
 use std::fmt::Write as FmtWrite;
@@ -79,8 +79,8 @@ impl_as_ref!(std::ffi::OsString);
 // for backward compatibility reasons. Otherwise we'd use a blanket impl.
 impl Quotable for Cow<'_, str> {
     fn quote(&self) -> Quoted<'_> {
-        // I suspect there's a better way to do this but I haven't found one
-        Quoted::new(<Cow<'_, str> as Borrow<str>>::borrow(self).as_ref())
+        let text: &str = self.as_ref();
+        Quoted::new(text.as_ref())
     }
 }
 
@@ -115,25 +115,49 @@ impl<'a> Quoted<'a> {
 }
 
 impl Display for Quoted<'_> {
-    #[cfg(any(unix, target_os = "wasi"))]
+    #[cfg(any(windows, unix, target_os = "wasi"))]
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        // On Unix we emulate sh syntax. On Windows Powershell.
+
         /// Characters with special meaning outside quotes.
         // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_02
         // % seems obscure enough to ignore, it's for job control only.
         // {} were used in a version elsewhere but seem unnecessary, GNU doesn't escape them.
-        // ! is a common extension.
-        const SPECIAL_SHELL_CHARS: &[u8] = b"|&;<>()$`\\\"'*?[]=! \t\n";
-        /// Characters with a special meaning at the beginning of a name.
-        const SPECIAL_SHELL_CHARS_START: &[u8] = b"~#";
+        // ! is a common extension for expanding the shell history.
+        #[cfg(any(unix, target_os = "wasi"))]
+        const SPECIAL_SHELL_CHARS: &str = "|&;<>()$`\\\"'*?[]=! \t\n";
+        // FIXME: I'm not a PowerShell wizard and don't know if this is correct.
+        // I just copied the Unix version, removed \, and added {}@ based on
+        // experimentation.
+        // I have noticed that ~?*[] only get expanded in some contexts, so watch
+        // out for that if doing your own tests.
+        // Get-ChildItem seems unwilling to quote anything so it doesn't help.
+        // There's the additional wrinkle that Windows has stricter requirements
+        // for filenames: I've been testing using a Linux build of PowerShell, but
+        // this code doesn't even compile on Linux.
+        #[cfg(windows)]
+        const SPECIAL_SHELL_CHARS: &str = "|&;<>()$`\"'*?[]=!{}@ \t\r\n";
 
-        let text = self.text.as_bytes();
+        /// Characters with a special meaning at the beginning of a name.
+        const SPECIAL_SHELL_CHARS_START: &[char] = &['~', '#'];
+
+        /// Characters that are dangerous in a double-quoted string.
+        #[cfg(any(unix, target_os = "wasi"))]
+        const DOUBLE_UNSAFE: &[char] = &['"', '`', '$', '\\'];
+        #[cfg(windows)]
+        const DOUBLE_UNSAFE: &[char] = &['"', '`', '$'];
+
+        let text = match self.text.to_str() {
+            None => return write_escaped(f, self.text, self.escape_control),
+            Some(text) => text,
+        };
 
         let mut is_single_safe = true;
         let mut is_double_safe = true;
         let mut requires_quote = self.force_quote;
 
-        if let Some(first) = text.get(0) {
-            if SPECIAL_SHELL_CHARS_START.contains(first) {
+        if let Some(first) = text.chars().next() {
+            if SPECIAL_SHELL_CHARS_START.contains(&first) {
                 requires_quote = true;
             }
         } else {
@@ -141,27 +165,27 @@ impl Display for Quoted<'_> {
             requires_quote = true;
         }
 
-        for &ch in text {
-            match ch {
-                ch if self.escape_control && ch.is_ascii_control() => {
-                    return write_escaped(f, text, self.escape_control)
+        for ch in text.chars() {
+            if ch.is_ascii() {
+                if self.escape_control && ch.is_ascii_control() {
+                    return write_escaped(f, self.text, self.escape_control);
                 }
-                b'\'' => is_single_safe = false,
-                // Unsafe characters according to:
-                // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_02_03
-                b'"' | b'`' | b'$' | b'\\' => is_double_safe = false,
-                _ => (),
+                if ch == '\'' {
+                    is_single_safe = false;
+                }
+                if DOUBLE_UNSAFE.contains(&ch) {
+                    is_double_safe = false;
+                }
+                if !requires_quote && SPECIAL_SHELL_CHARS.contains(ch) {
+                    requires_quote = true;
+                }
             }
-            if !requires_quote && SPECIAL_SHELL_CHARS.contains(&ch) {
+            if !requires_quote && ch.is_whitespace() {
+                // This includes unicode whitespace.
+                // We maybe don't have to escape it, we don't escape other lookalike
+                // characters either, but it's confusing if it goes unquoted.
                 requires_quote = true;
             }
-        }
-        let text = match from_utf8(text) {
-            Err(_) => return write_escaped(f, text, self.escape_control),
-            Ok(text) => text,
-        };
-        if !requires_quote && text.find(char::is_whitespace).is_some() {
-            requires_quote = true;
         }
 
         if !requires_quote {
@@ -174,6 +198,7 @@ impl Display for Quoted<'_> {
             return write_single_escaped(f, text);
         }
 
+        #[cfg(any(unix, target_os = "wasi"))]
         fn write_simple(f: &mut Formatter<'_>, text: &str, quote: char) -> fmt::Result {
             f.write_char(quote)?;
             f.write_str(text)?;
@@ -181,6 +206,7 @@ impl Display for Quoted<'_> {
             Ok(())
         }
 
+        #[cfg(any(unix, target_os = "wasi"))]
         fn write_single_escaped(f: &mut Formatter<'_>, text: &str) -> fmt::Result {
             let mut iter = text.split('\'');
             if let Some(chunk) = iter.next() {
@@ -210,9 +236,10 @@ impl Display for Quoted<'_> {
         /// - fish
         /// - dash
         /// - tcsh
-        fn write_escaped(f: &mut Formatter<'_>, text: &[u8], escape_control: bool) -> fmt::Result {
+        #[cfg(any(unix, target_os = "wasi"))]
+        fn write_escaped(f: &mut Formatter<'_>, text: &OsStr, escape_control: bool) -> fmt::Result {
             f.write_str("$'")?;
-            for chunk in from_utf8_iter(text) {
+            for chunk in from_utf8_iter(text.as_bytes()) {
                 match chunk {
                     Ok(chunk) => {
                         for ch in chunk.chars() {
@@ -246,74 +273,8 @@ impl Display for Quoted<'_> {
             f.write_char('\'')?;
             Ok(())
         }
-    }
 
-    #[cfg(windows)]
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        // Behavior is based on PowerShell.
-        // ` takes the role of \ since \ is already used as the path separator.
-        // Things are UTF-16-oriented, so we escape code units as "`u{1234}".
-        use std::char::decode_utf16;
-        use std::os::windows::ffi::OsStrExt;
-
-        /// Characters with special meaning outside quotes.
-        // FIXME: I'm not a PowerShell wizard and don't know if this is correct.
-        // I just copied the Unix version, removed \, and added {}@ based on
-        // experimentation.
-        // I have noticed that ~?*[] only get expanded in some contexts, so watch
-        // out for that if doing your own tests.
-        // Get-ChildItem seems unwilling to quote anything so it doesn't help.
-        // There's the additional wrinkle that Windows has stricter requirements
-        // for filenames: I've been testing using a Linux build of PowerShell, but
-        // this code doesn't even compile on Linux.
-        const SPECIAL_SHELL_CHARS: &str = "|&;<>()$`\"'*?[]=!{}@ \t\r\n";
-        /// Characters with a special meaning at the beginning of a name.
-        const SPECIAL_SHELL_CHARS_START: &[char] = &['~', '#'];
-
-        // Getting the "raw" representation of an OsStr is actually expensive,
-        // so avoid it if unnecessary.
-        let text = match self.text.to_str() {
-            None => return write_escaped(f, self.text, self.escape_control),
-            Some(text) => text,
-        };
-
-        let mut is_single_safe = true;
-        let mut is_double_safe = true;
-        let mut requires_quote = self.force_quote;
-
-        if let Some(first) = text.chars().next() {
-            if SPECIAL_SHELL_CHARS_START.contains(&first) {
-                requires_quote = true;
-            }
-        } else {
-            // Empty string
-            requires_quote = true;
-        }
-
-        for ch in text.chars() {
-            match ch {
-                ch if self.escape_control && ch.is_ascii_control() => {
-                    return write_escaped(f, self.text, self.escape_control)
-                }
-                '\'' => is_single_safe = false,
-                '"' | '`' | '$' => is_double_safe = false,
-                _ => (),
-            }
-            if !requires_quote
-                && ((ch.is_ascii() && SPECIAL_SHELL_CHARS.contains(ch)) || ch.is_whitespace())
-            {
-                requires_quote = true;
-            }
-        }
-
-        if !requires_quote {
-            return f.write_str(text);
-        } else if is_single_safe || !is_double_safe {
-            return write_simple(f, text, '\'');
-        } else {
-            return write_simple(f, text, '"');
-        }
-
+        #[cfg(windows)]
         fn write_simple(f: &mut Formatter<'_>, text: &str, quote: char) -> fmt::Result {
             // Quotes in Powershell can be escaped by doubling them
             f.write_char(quote)?;
@@ -330,7 +291,18 @@ impl Display for Quoted<'_> {
             Ok(())
         }
 
+        #[cfg(windows)]
+        fn write_single_escaped(f: &mut Formatter<'_>, text: &str) -> fmt::Result {
+            write_simple(f, text, '\'')
+        }
+
+        #[cfg(windows)]
         fn write_escaped(f: &mut Formatter<'_>, text: &OsStr, escape_control: bool) -> fmt::Result {
+            // ` takes the role of \ since \ is already used as the path separator.
+            // Things are UTF-16-oriented, so we escape code units as "`u{1234}".
+            use std::char::decode_utf16;
+            use std::os::windows::ffi::OsStrExt;
+
             f.write_char('"')?;
             for ch in decode_utf16(text.encode_wide()) {
                 match ch {
