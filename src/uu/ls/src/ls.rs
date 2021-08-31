@@ -21,6 +21,7 @@ use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use once_cell::unsync::OnceCell;
 use quoting_style::{escape_name, QuotingStyle};
+use std::ffi::OsString;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::{
@@ -1173,7 +1174,7 @@ struct PathData {
     md: OnceCell<Option<Metadata>>,
     ft: OnceCell<Option<FileType>>,
     // Name of the file - will be empty for . or ..
-    display_name: String,
+    display_name: OsString,
     // PathBuf that all above data corresponds to
     p_buf: PathBuf,
     must_dereference: bool,
@@ -1183,7 +1184,7 @@ impl PathData {
     fn new(
         p_buf: PathBuf,
         file_type: Option<std::io::Result<FileType>>,
-        file_name: Option<String>,
+        file_name: Option<OsString>,
         config: &Config,
         command_line: bool,
     ) -> Self {
@@ -1191,16 +1192,13 @@ impl PathData {
         // For '..', the filename is None
         let display_name = if let Some(name) = file_name {
             name
+        } else if command_line {
+            p_buf.clone().into()
         } else {
-            let display_os_str = if command_line {
-                p_buf.as_os_str()
-            } else {
-                p_buf
-                    .file_name()
-                    .unwrap_or_else(|| p_buf.iter().next_back().unwrap())
-            };
-
-            display_os_str.to_string_lossy().into_owned()
+            p_buf
+                .file_name()
+                .unwrap_or_else(|| p_buf.iter().next_back().unwrap())
+                .to_owned()
         };
         let must_dereference = match &config.dereference {
             Dereference::All => true,
