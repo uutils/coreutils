@@ -1915,7 +1915,41 @@ fn display_file_name(path: &PathData, config: &Config) -> Option<Cell> {
     if config.format == Format::Long && path.file_type()?.is_symlink() {
         if let Ok(target) = path.p_buf.read_link() {
             name.push_str(" -> ");
-            name.push_str(&target.to_string_lossy());
+
+            // We might as well color the symlink output after the arrow.
+            // This makes extra system calls, but provides important information that
+            // people run `ls -l --color` are very interested in.
+            if let Some(ls_colors) = &config.color {
+                // We get the absolute path to be able to construct PathData with valid Metadata.
+                // This is because relative symlinks will fail to get_metadata.
+                let mut absolute_target= target.clone();
+                if target.is_relative() {
+                    if let Some(parent) = path.p_buf.parent() {
+                        absolute_target = parent.join(absolute_target);
+                    }
+                }
+
+                let target_data = PathData::new(absolute_target, None, None, &config, false);
+
+                // If we have a symlink to a valid file, we use the metadata of said file.
+                // Because we use an absolute path, we can assume this is guaranteed to exist.
+                // Otherwise, we use path.md(), which will guarantee we color to the same
+                // color of non-existent symlinks according to style_for_path_with_metadata.
+                let target_metadata = match target_data.md() {
+                    Some(md) => md,
+                    None => path.md()?,
+                };
+
+                name.push_str(&color_name(
+                    ls_colors,
+                    &target_data.p_buf,
+                    target.to_string_lossy().into_owned(),
+                    target_metadata,
+                ));
+            } else {
+                // If no coloring is required, we just use target as is.
+                name.push_str(&target.to_string_lossy());
+            }
         }
     }
 
