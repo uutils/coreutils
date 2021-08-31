@@ -1,4 +1,4 @@
-// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup somefile somegroup somehiddenbackup somehiddenfile
+// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile
 
 #[cfg(unix)]
 extern crate unix_socket;
@@ -365,6 +365,180 @@ fn test_ls_long_format() {
     scene.ucmd().arg("-lan").arg("test-long-dir").succeeds().stdout_matches(&Regex::new(
         r"\nd([r-][w-][xt-]){3} +\d+ \d+ +\d+( +\d+)? +\d+ [A-Z][a-z]{2} {0,2}\d{0,2} {0,2}[0-9:]+ \.\."
     ).unwrap());
+}
+
+/// This test tests `ls -laR --color`.
+/// This test is mainly about coloring, but, the recursion, symlink `->` processing,
+/// and `.` and `..` being present in `-a` all need to work for the test to pass.
+/// This test does not really test anything provided by `-l` but the file names and symlinks.
+#[test]
+fn test_ls_long_symlink_color() {
+    // If you break this test after breaking mkdir, touch, or ln, do not be alarmed!
+    // This test is made for ls, but it attempts to run those utils in the process.
+
+    // Having Some([2, 0]) in a color basically means that "it has the same color as whatever
+    // is in the 2nd expected output, the 0th color", where the 0th color is the name color, and
+    // the 1st color is the target color, in a fixed-size array of size 2.
+    type ColorReference = Option<[usize; 2]>;
+
+    // The string between \x1b[ and m
+    type Color = String;
+
+    // The string between the color start and the color end is the file name itself.
+    type Name = String;
+
+    let scene = TestScenario::new(util_name!());
+
+    // .
+    // ├── test-long-symlink
+    // │   ├── existing-file
+    // │   ├── existing-dir
+    // │   │   └── inner-dir
+    // │   ├── invalid-link-to-existing-dir -> test-long-symlink/existing-dir
+    // │   ├── link-to-parent -> ../..
+    // │   └── link-to-root -> /
+    // ├── link-to-existing-file -> test-long-symlink/existing-file
+    // ├── link-to-non-existing-file -> test-long-symlink/non-existing-file
+    // └── link-to-inner-dir -> ./test-long-symlink/existing-dir/inner-dir
+    prepare_folder_structure(&scene);
+
+    // We memoize the colors so we can refer to them later.
+    // Each entry will be the colors of the link name and link target of a specific output.
+    let mut colors: Vec<[Color; 2]> = vec![];
+
+    // The contents of each tuple are the expected colors and names for the link and target.
+    // We will loop over the ls output and compare to those.
+    // None values mean that we do not know what color to expect yet, as LS_COLOR might
+    // be set differently, and as different implementations of ls may use different codes,
+    // for example, our ls uses `[1;36m` while the GNU ls uses `[01;36m`.
+    let expected_output: [(ColorReference, &str, ColorReference, &str); 6] = [
+        // We don't know what colors are what the first time we meet a link.
+        (None, "link-to-existing-file", None, "test-long-symlink/existing-file"),
+        // We have acquired [0, 0], which should be the link color, and we can compare to it.
+        (Some([0, 0]), "link-to-inner-dir", None, "./test-long-symlink/existing-dir/inner-dir"),
+        // We acquired [1, 1], the dir color.
+        (None, "link-to-non-existing-file", Some([2, 0]), "test-long-symlink/non-existing-file"),
+        // We acquired [2, 0], the non-existent file color.
+        (Some([2, 0]), "invalid-link-to-existing-dir", Some([2, 0]), "test-long-symlink/existing-dir"),
+        (Some([0, 0]), "link-to-parent", Some([1, 1]), "../.."),
+        (Some([0, 0]), "link-to-root", Some([1, 1]), "/"),
+    ];
+
+    // We are only interested in lines or the ls output that are symlinks. These start with "lrwx".
+    let result = scene.ucmd().arg("-laR").arg("--color").arg(".").succeeds();
+    let mut result_lines = result.stdout_str().lines().filter_map(|line| match line.starts_with("lrwx") {
+        true => Some(line),
+        false => None
+    }).enumerate();
+
+    // For each enumerated line, we assert that the output of ls matches the expected output.
+    while let Some((i, name, target)) = get_index_name_target(&mut result_lines) {
+        let (matched_name_color, matched_name) = capture_colored_string(&name);
+        let (matched_target_color, matched_target) = capture_colored_string(&target);
+
+        colors.push([matched_name_color, matched_target_color]);
+
+        // We borrow them again after having moved them.
+        let [matched_name_color, matched_target_color] = colors.last().unwrap();
+
+        // We look up the Colors that are expected in `colors` using the ColorReferences stored
+        // in `expected_output`.
+        let expected_name_color = match expected_output[i].0 {
+            Some(color_reference) =>  Some(colors[color_reference[0]][color_reference[1]].as_str()),
+            None => None,
+        };
+        let expected_target_color = match expected_output[i].2 {
+            Some(color_reference) =>  Some(colors[color_reference[0]][color_reference[1]].as_str()),
+            None => None,
+        };
+
+        assert_names_and_colors_are_equal(
+            &matched_name_color, expected_name_color,
+            &matched_name, expected_output[i].1,
+            &matched_target_color, expected_target_color,
+            &matched_target, expected_output[i].3,
+        );
+    }
+
+    // End of test, only definitions of the helper functions used above follows...
+
+    fn get_index_name_target<'a, I>(lines: &mut I) -> Option<(usize, Name, Name)>
+        where
+            I: Iterator<Item = (usize, &'a str)> {
+        match lines.next() {
+            Some((c, s)) => {
+                let name = String::from("\x1b") + s.split(" -> ").next().unwrap().split(" \x1b").last().unwrap();
+                let target = s.split(" -> ").last().unwrap().to_string();
+                Some((c, name, target))
+            },
+            None =>  None
+        }
+    }
+
+    fn assert_names_and_colors_are_equal(
+        name_color: &str,
+        expected_name_color: Option<&str>,
+        name: &str,
+        expected_name: &str,
+        target_color: &str,
+        expected_target_color: Option<&str>,
+        target: &str,
+        expected_target: &str,
+    ) {
+        // Names are always compared.
+        assert_eq!(&name, &expected_name);
+        assert_eq!(&target, &expected_target);
+
+        // Colors are only compared when we have inferred what color we are looking for.
+        if expected_name_color.is_some() {
+            assert_eq!(&name_color, &expected_name_color.unwrap());
+        }
+        if expected_target_color.is_some() {
+            assert_eq!(&target_color, &expected_target_color.unwrap());
+        }
+    }
+
+    fn capture_colored_string(input: &str) -> (Color, Name) {
+        let colored_name = Regex::new(r"\x1b\[([0-9;]+)m(.+)\x1b\[0m").unwrap();
+        match colored_name.captures(&input) {
+            Some(captures) => (
+                captures.get(1).unwrap().as_str().to_string(),
+                captures.get(2).unwrap().as_str().to_string()
+            ),
+            None => ("".to_string(), input.to_string())
+        }
+    }
+
+    fn prepare_folder_structure(scene: &TestScenario) {
+        // There is no way to change directory in the CI, so this is the best we can do.
+        // Also, keep in mind that windows might require privilege to symlink directories.
+        //
+        // We use scene.ccmd instead of scene.fixtures because we care about relative symlinks.
+        // So we're going to try out the built mkdir, touch, and ln here, and we expect them to succeed.
+        scene.ccmd("mkdir").arg("test-long-symlink").succeeds();
+        scene.ccmd("mkdir").arg("test-long-symlink/existing-dir").succeeds();
+        scene.ccmd("mkdir").arg("test-long-symlink/existing-dir/inner-dir").succeeds();
+        scene.ccmd("touch").arg("test-long-symlink/existing-file").succeeds();
+
+        scene.ccmd("ln").arg("-s")
+            .arg("test-long-symlink/existing-dir")
+            .arg("test-long-symlink/invalid-link-to-existing-dir").succeeds();
+        scene.ccmd("ln").arg("-s")
+            .arg("./test-long-symlink/existing-dir/inner-dir")
+            .arg("link-to-inner-dir").succeeds();
+        scene.ccmd("ln").arg("-s")
+            .arg("../..")
+            .arg("test-long-symlink/link-to-parent").succeeds();
+        scene.ccmd("ln").arg("-s")
+            .arg("/")
+            .arg("test-long-symlink/link-to-root").succeeds();
+        scene.ccmd("ln").arg("-s")
+            .arg("test-long-symlink/existing-file")
+            .arg("link-to-existing-file").succeeds();
+        scene.ccmd("ln").arg("-s")
+            .arg("test-long-symlink/non-existing-file")
+            .arg("link-to-non-existing-file").succeeds();
+    }
 }
 
 #[test]
