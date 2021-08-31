@@ -20,6 +20,7 @@
 /// # Ok::<(), std::io::Error>(())
 /// ```
 // spell-checker:ignore Fbar
+use std::borrow::{Borrow, Cow};
 use std::ffi::OsStr;
 #[cfg(any(unix, target_os = "wasi", windows))]
 use std::fmt::Write as FmtWrite;
@@ -54,15 +55,32 @@ pub trait Quotable {
     fn quote(&self) -> Quoted<'_>;
 }
 
-impl<T> Quotable for T
-where
-    T: AsRef<OsStr>,
-{
-    fn quote(&self) -> Quoted<'_> {
-        Quoted {
-            text: self.as_ref(),
-            force_quote: true,
+macro_rules! impl_as_ref {
+    ($type: ty) => {
+        impl Quotable for $type {
+            fn quote(&self) -> Quoted<'_> {
+                Quoted::new(self.as_ref())
+            }
         }
+    };
+}
+
+impl_as_ref!(&'_ str);
+impl_as_ref!(String);
+impl_as_ref!(&'_ std::path::Path);
+impl_as_ref!(std::path::PathBuf);
+impl_as_ref!(std::path::Component<'_>);
+impl_as_ref!(std::path::Components<'_>);
+impl_as_ref!(std::path::Iter<'_>);
+impl_as_ref!(&'_ std::ffi::OsStr);
+impl_as_ref!(std::ffi::OsString);
+
+// Cow<'_, str> does not implement AsRef<OsStr> and this is unlikely to be fixed
+// for backward compatibility reasons. Otherwise we'd use a blanket impl.
+impl Quotable for Cow<'_, str> {
+    fn quote(&self) -> Quoted<'_> {
+        // I suspect there's a better way to do this but I haven't found one
+        Quoted::new(<Cow<'_, str> as Borrow<str>>::borrow(self).as_ref())
     }
 }
 
@@ -71,12 +89,27 @@ where
 pub struct Quoted<'a> {
     text: &'a OsStr,
     force_quote: bool,
+    escape_control: bool,
 }
 
-impl Quoted<'_> {
+impl<'a> Quoted<'a> {
+    fn new(text: &'a OsStr) -> Self {
+        Quoted {
+            text,
+            force_quote: true,
+            escape_control: true,
+        }
+    }
+
     /// Add quotes even if not strictly necessary. `true` by default.
     pub fn force_quote(mut self, force: bool) -> Self {
         self.force_quote = force;
+        self
+    }
+
+    /// Escape control characters. `true` by default.
+    pub fn escape_control(mut self, escape: bool) -> Self {
+        self.escape_control = escape;
         self
     }
 }
@@ -89,7 +122,7 @@ impl Display for Quoted<'_> {
         // % seems obscure enough to ignore, it's for job control only.
         // {} were used in a version elsewhere but seem unnecessary, GNU doesn't escape them.
         // ! is a common extension.
-        const SPECIAL_SHELL_CHARS: &[u8] = b"|&;<>()$`\\\"'*?[]=! ";
+        const SPECIAL_SHELL_CHARS: &[u8] = b"|&;<>()$`\\\"'*?[]=! \t\n";
         /// Characters with a special meaning at the beginning of a name.
         const SPECIAL_SHELL_CHARS_START: &[u8] = b"~#";
 
@@ -110,7 +143,9 @@ impl Display for Quoted<'_> {
 
         for &ch in text {
             match ch {
-                ch if ch.is_ascii_control() => return write_escaped(f, text),
+                ch if self.escape_control && ch.is_ascii_control() => {
+                    return write_escaped(f, text, self.escape_control)
+                }
                 b'\'' => is_single_safe = false,
                 // Unsafe characters according to:
                 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_02_03
@@ -122,7 +157,7 @@ impl Display for Quoted<'_> {
             }
         }
         let text = match from_utf8(text) {
-            Err(_) => return write_escaped(f, text),
+            Err(_) => return write_escaped(f, text, self.escape_control),
             Ok(text) => text,
         };
         if !requires_quote && text.find(char::is_whitespace).is_some() {
@@ -175,7 +210,7 @@ impl Display for Quoted<'_> {
         /// - fish
         /// - dash
         /// - tcsh
-        fn write_escaped(f: &mut Formatter<'_>, text: &[u8]) -> fmt::Result {
+        fn write_escaped(f: &mut Formatter<'_>, text: &[u8], escape_control: bool) -> fmt::Result {
             f.write_str("$'")?;
             for chunk in from_utf8_iter(text) {
                 match chunk {
@@ -190,7 +225,9 @@ impl Display for Quoted<'_> {
                                 // \0 doesn't work consistently because of the
                                 // octal \nnn syntax, and null bytes can't appear
                                 // in filenames anyway.
-                                ch if ch.is_ascii_control() => write!(f, "\\x{:02X}", ch as u8)?,
+                                ch if escape_control && ch.is_ascii_control() => {
+                                    write!(f, "\\x{:02X}", ch as u8)?
+                                }
                                 '\\' | '\'' => {
                                     // '?' and '"' can also be escaped this way
                                     // but AFAICT there's no reason to do so
@@ -229,14 +266,14 @@ impl Display for Quoted<'_> {
         // There's the additional wrinkle that Windows has stricter requirements
         // for filenames: I've been testing using a Linux build of PowerShell, but
         // this code doesn't even compile on Linux.
-        const SPECIAL_SHELL_CHARS: &str = "|&;<>()$`\"'*?[]=!{}@ ";
+        const SPECIAL_SHELL_CHARS: &str = "|&;<>()$`\"'*?[]=!{}@ \t\r\n";
         /// Characters with a special meaning at the beginning of a name.
         const SPECIAL_SHELL_CHARS_START: &[char] = &['~', '#'];
 
         // Getting the "raw" representation of an OsStr is actually expensive,
         // so avoid it if unnecessary.
         let text = match self.text.to_str() {
-            None => return write_escaped(f, self.text),
+            None => return write_escaped(f, self.text, self.escape_control),
             Some(text) => text,
         };
 
@@ -255,7 +292,9 @@ impl Display for Quoted<'_> {
 
         for ch in text.chars() {
             match ch {
-                ch if ch.is_ascii_control() => return write_escaped(f, self.text),
+                ch if self.escape_control && ch.is_ascii_control() => {
+                    return write_escaped(f, self.text, self.escape_control)
+                }
                 '\'' => is_single_safe = false,
                 '"' | '`' | '$' => is_double_safe = false,
                 _ => (),
@@ -291,7 +330,7 @@ impl Display for Quoted<'_> {
             Ok(())
         }
 
-        fn write_escaped(f: &mut Formatter<'_>, text: &OsStr) -> fmt::Result {
+        fn write_escaped(f: &mut Formatter<'_>, text: &OsStr, escape_control: bool) -> fmt::Result {
             f.write_char('"')?;
             for ch in decode_utf16(text.encode_wide()) {
                 match ch {
@@ -300,7 +339,9 @@ impl Display for Quoted<'_> {
                         '\r' => f.write_str("`r")?,
                         '\n' => f.write_str("`n")?,
                         '\t' => f.write_str("`t")?,
-                        ch if ch.is_ascii_control() => write!(f, "`u{{{:04X}}}", ch as u8)?,
+                        ch if escape_control && ch.is_ascii_control() => {
+                            write!(f, "`u{{{:04X}}}", ch as u8)?
+                        }
                         '`' => f.write_str("``")?,
                         '$' => f.write_str("`$")?,
                         '"' => f.write_str("\"\"")?,
@@ -382,7 +423,7 @@ pub fn println_verbatim<S: AsRef<OsStr>>(text: S) -> io::Result<()> {
 mod tests {
     use super::*;
 
-    fn verify_quote(cases: &[(impl AsRef<OsStr>, &str)]) {
+    fn verify_quote(cases: &[(impl Quotable, &str)]) {
         for (case, expected) in cases {
             assert_eq!(case.quote().to_string(), *expected);
         }
@@ -442,7 +483,9 @@ mod tests {
     #[cfg(any(unix, target_os = "wasi"))]
     #[test]
     fn test_utf8_iter() {
-        const CASES: &[(&[u8], &[Result<&str, u8>])] = &[
+        type ByteStr = &'static [u8];
+        type Chunk = Result<&'static str, u8>;
+        const CASES: &[(ByteStr, &[Chunk])] = &[
             (b"", &[]),
             (b"hello", &[Ok("hello")]),
             // Immediately invalid
