@@ -368,7 +368,7 @@ impl UIoError {
     pub fn new<S: Into<String>>(kind: std::io::ErrorKind, context: S) -> Box<dyn UError> {
         Box::new(Self {
             context: context.into(),
-            inner: std::io::Error::new(kind, ""),
+            inner: kind.into(),
         })
     }
 }
@@ -380,32 +380,36 @@ impl Error for UIoError {}
 impl Display for UIoError {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         use std::io::ErrorKind::*;
-        write!(
-            f,
-            "{}: {}",
-            self.context,
-            match self.inner.kind() {
-                NotFound => "No such file or directory",
-                PermissionDenied => "Permission denied",
-                ConnectionRefused => "Connection refused",
-                ConnectionReset => "Connection reset",
-                ConnectionAborted => "Connection aborted",
-                NotConnected => "Not connected",
-                AddrInUse => "Address in use",
-                AddrNotAvailable => "Address not available",
-                BrokenPipe => "Broken pipe",
-                AlreadyExists => "Already exists",
-                WouldBlock => "Would block",
-                InvalidInput => "Invalid input",
-                InvalidData => "Invalid data",
-                TimedOut => "Timed out",
-                WriteZero => "Write zero",
-                Interrupted => "Interrupted",
-                Other => "Other",
-                UnexpectedEof => "Unexpected end of file",
-                _ => panic!("Unexpected io error: {}", self.inner),
-            },
-        )
+
+        let message;
+        let message = match self.inner.kind() {
+            NotFound => "No such file or directory",
+            PermissionDenied => "Permission denied",
+            ConnectionRefused => "Connection refused",
+            ConnectionReset => "Connection reset",
+            ConnectionAborted => "Connection aborted",
+            NotConnected => "Not connected",
+            AddrInUse => "Address in use",
+            AddrNotAvailable => "Address not available",
+            BrokenPipe => "Broken pipe",
+            AlreadyExists => "Already exists",
+            WouldBlock => "Would block",
+            InvalidInput => "Invalid input",
+            InvalidData => "Invalid data",
+            TimedOut => "Timed out",
+            WriteZero => "Write zero",
+            Interrupted => "Interrupted",
+            Other => "Other",
+            UnexpectedEof => "Unexpected end of file",
+            _ => {
+                // TODO: using `strip_errno()` causes the error message
+                // to not be capitalized. When the new error variants (https://github.com/rust-lang/rust/issues/86442)
+                // are stabilized, we should add them to the match statement.
+                message = strip_errno(&self.inner);
+                &message
+            }
+        };
+        write!(f, "{}: {}", self.context, message,)
     }
 }
 
