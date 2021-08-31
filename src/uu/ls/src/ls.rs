@@ -1862,7 +1862,20 @@ fn classify_file(path: &PathData) -> Option<char> {
     }
 }
 
+/// Takes a [`PathData`] struct and returns a cell with a name ready for displaying.
+///
+/// This function relies on the following parameters in the provided `&Config`:
+/// * `config.quoting_style` to decide how we will escape `name` using [`escape_name`].
+/// * `config.inode` decides whether to display inode numbers beside names using [`get_inode`].
+/// * `config.color` decides whether it's going to color `name` using [`color_name`].
+/// * `config.indicator_style` to append specific characters to `name` using [`classify_file`].
+/// * `config.format` to display symlink targets if `Format::Long`. This function is also
+///   responsible for coloring symlink target names if `config.color` is specified.
+///
+/// Note that non-unicode sequences in symlink targets are dealt with using
+/// [`std::path::Path::to_string_lossy`].
 fn display_file_name(path: &PathData, config: &Config) -> Option<Cell> {
+    // This is our return value. We start by `&path.display_name` and modify it along the way.
     let mut name = escape_name(&path.display_name, &config.quoting_style);
 
     #[cfg(unix)]
