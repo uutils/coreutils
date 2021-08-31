@@ -1935,7 +1935,7 @@ fn display_file_name(path: &PathData, config: &Config) -> Option<Cell> {
             if let Some(ls_colors) = &config.color {
                 // We get the absolute path to be able to construct PathData with valid Metadata.
                 // This is because relative symlinks will fail to get_metadata.
-                let mut absolute_target= target.clone();
+                let mut absolute_target = target.clone();
                 if target.is_relative() {
                     if let Some(parent) = path.p_buf.parent() {
                         absolute_target = parent.join(absolute_target);
