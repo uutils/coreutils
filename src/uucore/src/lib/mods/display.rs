@@ -53,6 +53,29 @@ pub trait Quotable {
     /// println!("Found file {}", path.quote()); // Prints "Found file 'foo/bar.baz'"
     /// ```
     fn quote(&self) -> Quoted<'_>;
+
+    /// Like `quote()`, but don't actually add quotes unless necessary because of
+    /// whitespace or special characters.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// #[macro_use]
+    /// extern crate uucore;
+    /// use std::path::Path;
+    /// use uucore::display::Quotable;
+    ///
+    /// let foo = Path::new("foo/bar.baz");
+    /// let bar = Path::new("foo bar");
+    ///
+    /// show_error!("{}: Not found", foo); // Prints "util: foo/bar.baz: Not found"
+    /// show_error!("{}: Not found", bar); // Prints "util: 'foo bar': Not found"
+    /// ```
+    fn maybe_quote(&self) -> Quoted<'_> {
+        let mut quoted = self.quote();
+        quoted.force_quote = false;
+        quoted
+    }
 }
 
 macro_rules! impl_as_ref {
@@ -89,7 +112,6 @@ impl Quotable for Cow<'_, str> {
 pub struct Quoted<'a> {
     text: &'a OsStr,
     force_quote: bool,
-    escape_control: bool,
 }
 
 impl<'a> Quoted<'a> {
@@ -97,20 +119,7 @@ impl<'a> Quoted<'a> {
         Quoted {
             text,
             force_quote: true,
-            escape_control: true,
         }
-    }
-
-    /// Add quotes even if not strictly necessary. `true` by default.
-    pub fn force_quote(mut self, force: bool) -> Self {
-        self.force_quote = force;
-        self
-    }
-
-    /// Escape control characters. `true` by default.
-    pub fn escape_control(mut self, escape: bool) -> Self {
-        self.escape_control = escape;
-        self
     }
 }
 
@@ -118,16 +127,18 @@ impl Display for Quoted<'_> {
     #[cfg(any(windows, unix, target_os = "wasi"))]
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         // On Unix we emulate sh syntax. On Windows Powershell.
+        // They're just similar enough to share some code.
 
         /// Characters with special meaning outside quotes.
         // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html#tag_18_02
-        // % seems obscure enough to ignore, it's for job control only.
-        // {} were used in a version elsewhere but seem unnecessary, GNU doesn't escape them.
-        // ! is a common extension for expanding the shell history.
+        // I don't know why % is in there, and GNU doesn't quote it either.
+        // {} were used in a version elsewhere but seem unnecessary, GNU doesn't
+        // quote them. They're used in function definitions but not in a way we
+        // have to worry about.
         #[cfg(any(unix, target_os = "wasi"))]
-        const SPECIAL_SHELL_CHARS: &str = "|&;<>()$`\\\"'*?[]=! \t\n";
+        const SPECIAL_SHELL_CHARS: &[u8] = b"|&;<>()$`\\\"'*?[]=";
         // FIXME: I'm not a PowerShell wizard and don't know if this is correct.
-        // I just copied the Unix version, removed \, and added {}@ based on
+        // I just copied the Unix version, removed \, and added ,{} based on
         // experimentation.
         // I have noticed that ~?*[] only get expanded in some contexts, so watch
         // out for that if doing your own tests.
@@ -136,19 +147,29 @@ impl Display for Quoted<'_> {
         // for filenames: I've been testing using a Linux build of PowerShell, but
         // this code doesn't even compile on Linux.
         #[cfg(windows)]
-        const SPECIAL_SHELL_CHARS: &str = "|&;<>()$`\"'*?[]=!{}@ \t\r\n";
+        const SPECIAL_SHELL_CHARS: &[u8] = b"|&;<>()$`\"'*?[]=,{}";
 
         /// Characters with a special meaning at the beginning of a name.
-        const SPECIAL_SHELL_CHARS_START: &[char] = &['~', '#'];
-
-        /// Characters that are dangerous in a double-quoted string.
+        // ~ expands a home directory.
+        // # starts a comment.
+        // ! is a common extension for expanding the shell history.
         #[cfg(any(unix, target_os = "wasi"))]
-        const DOUBLE_UNSAFE: &[char] = &['"', '`', '$', '\\'];
+        const SPECIAL_SHELL_CHARS_START: &[char] = &['~', '#', '!'];
+        // Same deal as before, this is possibly incomplete.
+        // '-' is included because unlike in Unix, quoting an argument may stop it
+        // from being recognized as an option. I like that very much.
+        // A single stand-alone exclamation mark seems to have some special meaning.
         #[cfg(windows)]
-        const DOUBLE_UNSAFE: &[char] = &['"', '`', '$'];
+        const SPECIAL_SHELL_CHARS_START: &[char] = &['~', '#', '@', '-', '!'];
+
+        /// Characters that are interpreted specially in a double-quoted string.
+        #[cfg(any(unix, target_os = "wasi"))]
+        const DOUBLE_UNSAFE: &[u8] = &[b'"', b'`', b'$', b'\\'];
+        #[cfg(windows)]
+        const DOUBLE_UNSAFE: &[u8] = &[b'"', b'`', b'$'];
 
         let text = match self.text.to_str() {
-            None => return write_escaped(f, self.text, self.escape_control),
+            None => return write_escaped(f, self.text),
             Some(text) => text,
         };
 
@@ -167,17 +188,18 @@ impl Display for Quoted<'_> {
 
         for ch in text.chars() {
             if ch.is_ascii() {
-                if self.escape_control && ch.is_ascii_control() {
-                    return write_escaped(f, self.text, self.escape_control);
-                }
-                if ch == '\'' {
+                let ch = ch as u8;
+                if ch == b'\'' {
                     is_single_safe = false;
                 }
                 if DOUBLE_UNSAFE.contains(&ch) {
                     is_double_safe = false;
                 }
-                if !requires_quote && SPECIAL_SHELL_CHARS.contains(ch) {
+                if !requires_quote && SPECIAL_SHELL_CHARS.contains(&ch) {
                     requires_quote = true;
+                }
+                if ch.is_ascii_control() {
+                    return write_escaped(f, self.text);
                 }
             }
             if !requires_quote && ch.is_whitespace() {
@@ -198,7 +220,6 @@ impl Display for Quoted<'_> {
             return write_single_escaped(f, text);
         }
 
-        #[cfg(any(unix, target_os = "wasi"))]
         fn write_simple(f: &mut Formatter<'_>, text: &str, quote: char) -> fmt::Result {
             f.write_char(quote)?;
             f.write_str(text)?;
@@ -237,7 +258,7 @@ impl Display for Quoted<'_> {
         /// - dash
         /// - tcsh
         #[cfg(any(unix, target_os = "wasi"))]
-        fn write_escaped(f: &mut Formatter<'_>, text: &OsStr, escape_control: bool) -> fmt::Result {
+        fn write_escaped(f: &mut Formatter<'_>, text: &OsStr) -> fmt::Result {
             f.write_str("$'")?;
             for chunk in from_utf8_iter(text.as_bytes()) {
                 match chunk {
@@ -252,9 +273,7 @@ impl Display for Quoted<'_> {
                                 // \0 doesn't work consistently because of the
                                 // octal \nnn syntax, and null bytes can't appear
                                 // in filenames anyway.
-                                ch if escape_control && ch.is_ascii_control() => {
-                                    write!(f, "\\x{:02X}", ch as u8)?
-                                }
+                                ch if ch.is_ascii_control() => write!(f, "\\x{:02X}", ch as u8)?,
                                 '\\' | '\'' => {
                                     // '?' and '"' can also be escaped this way
                                     // but AFAICT there's no reason to do so
@@ -275,29 +294,23 @@ impl Display for Quoted<'_> {
         }
 
         #[cfg(windows)]
-        fn write_simple(f: &mut Formatter<'_>, text: &str, quote: char) -> fmt::Result {
+        fn write_single_escaped(f: &mut Formatter<'_>, text: &str) -> fmt::Result {
             // Quotes in Powershell can be escaped by doubling them
-            f.write_char(quote)?;
-            let mut iter = text.split(quote);
+            f.write_char('\'')?;
+            let mut iter = text.split('\'');
             if let Some(chunk) = iter.next() {
                 f.write_str(chunk)?;
             }
             for chunk in iter {
-                f.write_char(quote)?;
-                f.write_char(quote)?;
+                f.write_str("''")?;
                 f.write_str(chunk)?;
             }
-            f.write_char(quote)?;
+            f.write_char('\'')?;
             Ok(())
         }
 
         #[cfg(windows)]
-        fn write_single_escaped(f: &mut Formatter<'_>, text: &str) -> fmt::Result {
-            write_simple(f, text, '\'')
-        }
-
-        #[cfg(windows)]
-        fn write_escaped(f: &mut Formatter<'_>, text: &OsStr, escape_control: bool) -> fmt::Result {
+        fn write_escaped(f: &mut Formatter<'_>, text: &OsStr) -> fmt::Result {
             // ` takes the role of \ since \ is already used as the path separator.
             // Things are UTF-16-oriented, so we escape code units as "`u{1234}".
             use std::char::decode_utf16;
@@ -311,9 +324,7 @@ impl Display for Quoted<'_> {
                         '\r' => f.write_str("`r")?,
                         '\n' => f.write_str("`n")?,
                         '\t' => f.write_str("`t")?,
-                        ch if escape_control && ch.is_ascii_control() => {
-                            write!(f, "`u{{{:04X}}}", ch as u8)?
-                        }
+                        ch if ch.is_ascii_control() => write!(f, "`u{{{:04X}}}", ch as u8)?,
                         '`' => f.write_str("``")?,
                         '$' => f.write_str("`$")?,
                         '"' => f.write_str("\"\"")?,
@@ -401,7 +412,13 @@ mod tests {
         }
     }
 
-    /// This should hold on any platform.
+    fn verify_maybe(cases: &[(impl Quotable, &str)]) {
+        for (case, expected) in cases {
+            assert_eq!(case.maybe_quote().to_string(), *expected);
+        }
+    }
+
+    /// This should hold on any platform, or else other tests fail.
     #[test]
     fn test_basic() {
         verify_quote(&[
@@ -409,13 +426,23 @@ mod tests {
             ("", "''"),
             ("foo/bar.baz", "'foo/bar.baz'"),
         ]);
-        assert_eq!("foo".quote().force_quote(false).to_string(), "foo");
-        assert_eq!("".quote().force_quote(false).to_string(), "''");
-        assert_eq!(
-            "foo bar".quote().force_quote(false).to_string(),
-            "'foo bar'"
-        );
-        assert_eq!("$foo".quote().force_quote(false).to_string(), "'$foo'");
+        verify_maybe(&[
+            ("foo", "foo"),
+            ("", "''"),
+            ("foo bar", "'foo bar'"),
+            ("$foo", "'$foo'"),
+        ]);
+    }
+
+    #[cfg(any(unix, target_os = "wasi", windows))]
+    #[test]
+    fn test_common() {
+        verify_maybe(&[
+            ("a#b", "a#b"),
+            ("#ab", "'#ab'"),
+            ("a~b", "a~b"),
+            ("!", "'!'"),
+        ]);
     }
 
     #[cfg(any(unix, target_os = "wasi"))]
@@ -430,6 +457,12 @@ mod tests {
             (r#"'$''"#, r#"\''$'\'\'"#),
         ]);
         verify_quote(&[(OsStr::from_bytes(b"foo\xFF"), r#"$'foo\xFF'"#)]);
+        verify_maybe(&[
+            ("-x", "-x"),
+            ("a,b", "a,b"),
+            ("a\\b", "'a\\b'"),
+            ("}", ("}")),
+        ]);
     }
 
     #[cfg(windows)]
@@ -449,7 +482,13 @@ mod tests {
         verify_quote(&[(
             OsString::from_wide(&[b'x' as u16, 0xD800]),
             r#""x`u{D800}""#,
-        )])
+        )]);
+        verify_maybe(&[
+            ("-x", "'-x'"),
+            ("a,b", "'a,b'"),
+            ("a\\b", "a\\b"),
+            ("}", "'}'"),
+        ]);
     }
 
     #[cfg(any(unix, target_os = "wasi"))]
