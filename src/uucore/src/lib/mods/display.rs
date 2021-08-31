@@ -60,16 +60,15 @@ pub trait Quotable {
     /// # Examples
     ///
     /// ```
-    /// #[macro_use]
-    /// extern crate uucore;
     /// use std::path::Path;
     /// use uucore::display::Quotable;
+    /// use uucore::show_error;
     ///
     /// let foo = Path::new("foo/bar.baz");
     /// let bar = Path::new("foo bar");
     ///
-    /// show_error!("{}: Not found", foo); // Prints "util: foo/bar.baz: Not found"
-    /// show_error!("{}: Not found", bar); // Prints "util: 'foo bar': Not found"
+    /// show_error!("{}: Not found", foo.maybe_quote()); // Prints "util: foo/bar.baz: Not found"
+    /// show_error!("{}: Not found", bar.maybe_quote()); // Prints "util: 'foo bar': Not found"
     /// ```
     fn maybe_quote(&self) -> Quoted<'_> {
         let mut quoted = self.quote();
@@ -156,11 +155,9 @@ impl Display for Quoted<'_> {
         #[cfg(any(unix, target_os = "wasi"))]
         const SPECIAL_SHELL_CHARS_START: &[char] = &['~', '#', '!'];
         // Same deal as before, this is possibly incomplete.
-        // '-' is included because unlike in Unix, quoting an argument may stop it
-        // from being recognized as an option. I like that very much.
         // A single stand-alone exclamation mark seems to have some special meaning.
         #[cfg(windows)]
-        const SPECIAL_SHELL_CHARS_START: &[char] = &['~', '#', '@', '-', '!'];
+        const SPECIAL_SHELL_CHARS_START: &[char] = &['~', '#', '@', '!'];
 
         /// Characters that are interpreted specially in a double-quoted string.
         #[cfg(any(unix, target_os = "wasi"))]
@@ -179,6 +176,14 @@ impl Display for Quoted<'_> {
 
         if let Some(first) = text.chars().next() {
             if SPECIAL_SHELL_CHARS_START.contains(&first) {
+                requires_quote = true;
+            }
+            // Unlike in Unix, quoting an argument may stop it
+            // from being recognized as an option. I like that very much.
+            // But we don't want to quote "-" because that's a common
+            // special argument and PowerShell doesn't mind it.
+            #[cfg(windows)]
+            if first == '-' && text.len() > 1 {
                 requires_quote = true;
             }
         } else {
@@ -431,6 +436,7 @@ mod tests {
             ("", "''"),
             ("foo bar", "'foo bar'"),
             ("$foo", "'$foo'"),
+            ("-", "-"),
         ]);
     }
 
