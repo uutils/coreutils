@@ -354,6 +354,7 @@ fn test_ls_long_format() {
     at.mkdir(&at.plus_as_string("test-long-dir/test-long-dir"));
 
     for arg in &["-l", "--long", "--format=long", "--format=verbose"] {
+        #[allow(unused_variables)]
         let result = scene.ucmd().arg(arg).arg("test-long-dir").succeeds();
         // Assuming sane username do not have spaces within them.
         // A line of the output should be:
@@ -373,6 +374,7 @@ fn test_ls_long_format() {
         ).unwrap());
     }
 
+    #[allow(unused_variables)]
     let result = scene.ucmd().arg("-lan").arg("test-long-dir").succeeds();
     // This checks for the line with the .. entry. The uname and group should be digits.
     #[cfg(not(windows))]
