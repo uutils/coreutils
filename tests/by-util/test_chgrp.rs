@@ -230,7 +230,7 @@ fn test_big_h() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(not(target_vendor = "apple"))]
 fn basic_succeeds() {
     let (at, mut ucmd) = at_and_ucmd!();
     let one_group = nix::unistd::getgroups().unwrap();
@@ -250,4 +250,41 @@ fn test_no_change() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("file");
     ucmd.arg("").arg(at.plus("file")).succeeds();
+}
+
+#[test]
+#[cfg(not(target_vendor = "apple"))]
+fn test_permission_denied() {
+    use std::os::unix::prelude::PermissionsExt;
+
+    if let Some(group) = nix::unistd::getgroups().unwrap().first() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkdir("dir");
+        at.touch("dir/file");
+        std::fs::set_permissions(at.plus("dir"), PermissionsExt::from_mode(0o0000)).unwrap();
+        ucmd.arg("-R")
+            .arg(group.as_raw().to_string())
+            .arg("dir")
+            .fails()
+            .stderr_only("chgrp: cannot access 'dir': Permission denied");
+    }
+}
+
+#[test]
+#[cfg(not(target_vendor = "apple"))]
+fn test_subdir_permission_denied() {
+    use std::os::unix::prelude::PermissionsExt;
+
+    if let Some(group) = nix::unistd::getgroups().unwrap().first() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkdir("dir");
+        at.mkdir("dir/subdir");
+        at.touch("dir/subdir/file");
+        std::fs::set_permissions(at.plus("dir/subdir"), PermissionsExt::from_mode(0o0000)).unwrap();
+        ucmd.arg("-R")
+            .arg(group.as_raw().to_string())
+            .arg("dir")
+            .fails()
+            .stderr_only("chgrp: cannot access 'dir/subdir': Permission denied");
+    }
 }
