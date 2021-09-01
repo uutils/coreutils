@@ -21,6 +21,7 @@ use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use once_cell::unsync::OnceCell;
 use quoting_style::{escape_name, QuotingStyle};
+use std::ffi::OsString;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::{
@@ -248,7 +249,7 @@ struct LongFormat {
 
 impl Config {
     #[allow(clippy::cognitive_complexity)]
-    fn from(options: clap::ArgMatches) -> UResult<Config> {
+    fn from(options: &clap::ArgMatches) -> UResult<Config> {
         let (mut format, opt) = if let Some(format_) = options.value_of(options::FORMAT) {
             (
                 match format_ {
@@ -428,11 +429,10 @@ impl Config {
         #[allow(clippy::needless_bool)]
         let show_control = if options.is_present(options::HIDE_CONTROL_CHARS) {
             false
-        } else if options.is_present(options::SHOW_CONTROL_CHARS) || atty::is(atty::Stream::Stdout)
-        {
+        } else if options.is_present(options::SHOW_CONTROL_CHARS) {
             true
         } else {
-            false
+            !atty::is(atty::Stream::Stdout)
         };
 
         let quoting_style = if let Some(style) = options.value_of(options::QUOTING_STYLE) {
@@ -599,22 +599,19 @@ impl Config {
 
 #[uucore_procs::gen_uumain]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args
-        .collect_str(InvalidEncodingHandling::Ignore)
-        .accept_any();
-
     let usage = usage();
 
     let app = uu_app().usage(&usage[..]);
 
     let matches = app.get_matches_from(args);
 
+    let config = Config::from(&matches)?;
     let locs = matches
-        .values_of(options::PATHS)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_else(|| vec![String::from(".")]);
+        .values_of_os(options::PATHS)
+        .map(|v| v.map(Path::new).collect())
+        .unwrap_or_else(|| vec![Path::new(".")]);
 
-    list(locs, Config::from(matches)?)
+    list(locs, config)
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -1177,7 +1174,7 @@ struct PathData {
     md: OnceCell<Option<Metadata>>,
     ft: OnceCell<Option<FileType>>,
     // Name of the file - will be empty for . or ..
-    display_name: String,
+    display_name: OsString,
     // PathBuf that all above data corresponds to
     p_buf: PathBuf,
     must_dereference: bool,
@@ -1187,7 +1184,7 @@ impl PathData {
     fn new(
         p_buf: PathBuf,
         file_type: Option<std::io::Result<FileType>>,
-        file_name: Option<String>,
+        file_name: Option<OsString>,
         config: &Config,
         command_line: bool,
     ) -> Self {
@@ -1195,16 +1192,13 @@ impl PathData {
         // For '..', the filename is None
         let display_name = if let Some(name) = file_name {
             name
+        } else if command_line {
+            p_buf.clone().into()
         } else {
-            let display_os_str = if command_line {
-                p_buf.as_os_str()
-            } else {
-                p_buf
-                    .file_name()
-                    .unwrap_or_else(|| p_buf.iter().next_back().unwrap())
-            };
-
-            display_os_str.to_string_lossy().into_owned()
+            p_buf
+                .file_name()
+                .unwrap_or_else(|| p_buf.iter().next_back().unwrap())
+                .to_owned()
         };
         let must_dereference = match &config.dereference {
             Dereference::All => true,
@@ -1249,14 +1243,14 @@ impl PathData {
     }
 }
 
-fn list(locs: Vec<String>, config: Config) -> UResult<()> {
+fn list(locs: Vec<&Path>, config: Config) -> UResult<()> {
     let mut files = Vec::<PathData>::new();
     let mut dirs = Vec::<PathData>::new();
 
     let mut out = BufWriter::new(stdout());
 
     for loc in &locs {
-        let p = PathBuf::from(&loc);
+        let p = PathBuf::from(loc);
         let path_data = PathData::new(p, None, None, &config, true);
 
         if path_data.md().is_none() {
@@ -1286,6 +1280,7 @@ fn list(locs: Vec<String>, config: Config) -> UResult<()> {
     sort_entries(&mut dirs, &config);
     for dir in dirs {
         if locs.len() > 1 || config.recursive {
+            // FIXME: This should use the quoting style and propagate errors
             let _ = writeln!(out, "\n{}:", dir.p_buf.display());
         }
         enter_directory(&dir, &config, &mut out);
@@ -1671,7 +1666,6 @@ fn get_inode(metadata: &Metadata) -> String {
 use std::sync::Mutex;
 #[cfg(unix)]
 use uucore::entries;
-use uucore::InvalidEncodingHandling;
 
 #[cfg(unix)]
 fn cached_uid2usr(uid: u32) -> String {

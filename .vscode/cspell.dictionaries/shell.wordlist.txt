@@ -8,6 +8,7 @@ csh
 globstar
 inotify
 localtime
+mksh
 mountinfo
 mountpoint
 mtab

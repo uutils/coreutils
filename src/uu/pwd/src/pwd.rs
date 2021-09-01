@@ -10,9 +10,10 @@ extern crate uucore;
 
 use clap::{crate_version, App, Arg};
 use std::env;
-use std::io::{self, Write};
-use std::path::{Path, PathBuf};
+use std::io;
+use std::path::PathBuf;
 
+use uucore::display::println_verbatim;
 use uucore::error::{FromIo, UResult};
 
 static ABOUT: &str = "Display the full filename of the current working directory.";
@@ -57,6 +58,7 @@ fn logical_path() -> io::Result<PathBuf> {
     // POSIX: https://pubs.opengroup.org/onlinepubs/9699919799/utilities/pwd.html
     #[cfg(not(windows))]
     {
+        use std::path::Path;
         fn looks_reasonable(path: &Path) -> bool {
             // First, check if it's an absolute path.
             if !path.has_root() {
@@ -148,30 +150,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(Into::into)
         .unwrap_or(cwd);
 
-    print_path(&cwd).map_err_context(|| "failed to print current directory".to_owned())?;
-
-    Ok(())
-}
-
-fn print_path(path: &Path) -> io::Result<()> {
-    let stdout = io::stdout();
-    let mut stdout = stdout.lock();
-
-    // On Unix we print non-lossily.
-    #[cfg(unix)]
-    {
-        use std::os::unix::ffi::OsStrExt;
-        stdout.write_all(path.as_os_str().as_bytes())?;
-        stdout.write_all(b"\n")?;
-    }
-
-    // On other platforms we potentially mangle it.
-    // There might be some clever way to do it correctly on Windows, but
-    // invalid unicode in filenames is rare there.
-    #[cfg(not(unix))]
-    {
-        writeln!(stdout, "{}", path.display())?;
-    }
+    println_verbatim(&cwd).map_err_context(|| "failed to print current directory".to_owned())?;
 
     Ok(())
 }

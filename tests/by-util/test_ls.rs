@@ -354,6 +354,7 @@ fn test_ls_long_format() {
     at.mkdir(&at.plus_as_string("test-long-dir/test-long-dir"));
 
     for arg in &["-l", "--long", "--format=long", "--format=verbose"] {
+        #[allow(unused_variables)]
         let result = scene.ucmd().arg(arg).arg("test-long-dir").succeeds();
         // Assuming sane username do not have spaces within them.
         // A line of the output should be:
@@ -373,6 +374,7 @@ fn test_ls_long_format() {
         ).unwrap());
     }
 
+    #[allow(unused_variables)]
     let result = scene.ucmd().arg("-lan").arg("test-long-dir").succeeds();
     // This checks for the line with the .. entry. The uname and group should be digits.
     #[cfg(not(windows))]
@@ -1416,6 +1418,7 @@ fn test_ls_quoting_style() {
         // Default is shell-escape
         scene
             .ucmd()
+            .arg("--hide-control-chars")
             .arg("one\ntwo")
             .succeeds()
             .stdout_only("'one'$'\\n''two'\n");
@@ -1437,23 +1440,8 @@ fn test_ls_quoting_style() {
         ] {
             scene
                 .ucmd()
-                .arg(arg)
-                .arg("one\ntwo")
-                .succeeds()
-                .stdout_only(format!("{}\n", correct));
-        }
-
-        for (arg, correct) in &[
-            ("--quoting-style=literal", "one?two"),
-            ("-N", "one?two"),
-            ("--literal", "one?two"),
-            ("--quoting-style=shell", "one?two"),
-            ("--quoting-style=shell-always", "'one?two'"),
-        ] {
-            scene
-                .ucmd()
-                .arg(arg)
                 .arg("--hide-control-chars")
+                .arg(arg)
                 .arg("one\ntwo")
                 .succeeds()
                 .stdout_only(format!("{}\n", correct));
@@ -1463,7 +1451,7 @@ fn test_ls_quoting_style() {
             ("--quoting-style=literal", "one\ntwo"),
             ("-N", "one\ntwo"),
             ("--literal", "one\ntwo"),
-            ("--quoting-style=shell", "one\ntwo"),
+            ("--quoting-style=shell", "one\ntwo"), // FIXME: GNU ls quotes this case
             ("--quoting-style=shell-always", "'one\ntwo'"),
         ] {
             scene
@@ -1490,6 +1478,7 @@ fn test_ls_quoting_style() {
         ] {
             scene
                 .ucmd()
+                .arg("--hide-control-chars")
                 .arg(arg)
                 .arg("one\\two")
                 .succeeds()
@@ -1505,6 +1494,7 @@ fn test_ls_quoting_style() {
         ] {
             scene
                 .ucmd()
+                .arg("--hide-control-chars")
                 .arg(arg)
                 .arg("one\n&two")
                 .succeeds()
@@ -1535,6 +1525,7 @@ fn test_ls_quoting_style() {
     ] {
         scene
             .ucmd()
+            .arg("--hide-control-chars")
             .arg(arg)
             .arg("one two")
             .succeeds()
@@ -1558,6 +1549,7 @@ fn test_ls_quoting_style() {
     ] {
         scene
             .ucmd()
+            .arg("--hide-control-chars")
             .arg(arg)
             .arg("one")
             .succeeds()
