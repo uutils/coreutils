@@ -379,6 +379,7 @@ fn test_ls_long_symlink_color() {
     // Having Some([2, 0]) in a color basically means that "it has the same color as whatever
     // is in the 2nd expected output, the 0th color", where the 0th color is the name color, and
     // the 1st color is the target color, in a fixed-size array of size 2.
+    // Basically these are references to be used for indexing the `colors` vector defined below.
     type ColorReference = Option<[usize; 2]>;
 
     // The string between \x1b[ and m
@@ -439,17 +440,22 @@ fn test_ls_long_symlink_color() {
         .enumerate();
 
     // For each enumerated line, we assert that the output of ls matches the expected output.
+    //
+    // The unwraps within get_index_name_target will panic if a line starting lrwx does
+    // not have `colored_name -> target` within it.
     while let Some((i, name, target)) = get_index_name_target(&mut result_lines) {
+        // The unwraps within capture_colored_string will panic if the name/target's color
+        // format is invalid.
         let (matched_name_color, matched_name) = capture_colored_string(&name);
         let (matched_target_color, matched_target) = capture_colored_string(&target);
 
         colors.push([matched_name_color, matched_target_color]);
 
-        // We borrow them again after having moved them.
+        // We borrow them again after having moved them. This unwrap will never panic.
         let [matched_name_color, matched_target_color] = colors.last().unwrap();
 
-        // We look up the Colors that are expected in `colors` using the ColorReferences stored
-        // in `expected_output`.
+        // We look up the Colors that are expected in `colors` using the ColorReferences
+        // stored in `expected_output`.
         let expected_name_color = match expected_output[i].0 {
             Some(color_reference) => Some(colors[color_reference[0]][color_reference[1]].as_str()),
             None => None,
@@ -459,6 +465,11 @@ fn test_ls_long_symlink_color() {
             None => None,
         };
 
+        // This is the important part. The asserts inside assert_names_and_colors_are_equal
+        // will panic if the colors or names do not match the expected colors or names.
+        // Keep in mind an expected color `Option<&str>` of None can mean either that we
+        // don't expect any color here, as in `expected_output[2], or don't know what specific
+        // color to expect yet, as in expected_output[0:1].
         assert_names_and_colors_are_equal(
             &matched_name_color,
             expected_name_color,
