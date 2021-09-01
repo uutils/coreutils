@@ -411,17 +411,20 @@ fn test_ls_long_symlink_color() {
     // None values mean that we do not know what color to expect yet, as LS_COLOR might
     // be set differently, and as different implementations of ls may use different codes,
     // for example, our ls uses `[1;36m` while the GNU ls uses `[01;36m`.
+    //
+    // These have been sorting according to default ls sort, and this affects the order of
+    // discovery of colors, so be very careful when changing directory/file names being created.
     let expected_output: [(ColorReference, &str, ColorReference, &str); 6] = [
         // We don't know what colors are what the first time we meet a link.
-        (None, "ln-file1", None, "dir1/file1"),
-        // We have acquired [0, 0], which should be the link color, and we can compare to it.
-        (Some([0, 0]), "ln-dir3", None, "./dir1/dir2/dir3"),
-        // We acquired [1, 1], the dir color.
-        (None, "ln-file-invalid", Some([2, 0]), "dir1/invalid-target"),
-        // We acquired [2, 0], the non-existent file color.
-        (Some([2, 0]), "ln-dir-invalid", Some([2, 0]), "dir1/dir2"),
-        (Some([0, 0]), "ln-up2", Some([1, 1]), "../.."),
-        (Some([0, 0]), "ln-root", Some([1, 1]), "/"),
+        (None, "ln-dir3", None, "./dir1/dir2/dir3"),
+        // We have acquired [0, 0], which should be the link color,
+        // and [0, 1], which should be the dir color, and we can compare to them from now on.
+        (None, "ln-file-invalid", Some([1, 1]), "dir1/invalid-target"),
+        // We acquired [1, 1], the non-existent color.
+        (Some([0, 0]), "ln-file1", None, "dir1/file1"),
+        (Some([1, 1]), "ln-dir-invalid", Some([1, 1]), "dir1/dir2"),
+        (Some([0, 0]), "ln-root", Some([0, 1]), "/"),
+        (Some([0, 0]), "ln-up2", Some([0, 1]), "../.."),
     ];
 
     // We are only interested in lines or the ls output that are symlinks. These start with "lrwx".
