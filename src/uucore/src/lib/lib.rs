@@ -70,6 +70,8 @@ pub use crate::features::wide;
 use std::ffi::OsString;
 use std::sync::atomic::Ordering;
 
+use once_cell::sync::Lazy;
+
 pub fn get_utility_is_second_arg() -> bool {
     crate::macros::UTILITY_IS_SECOND_ARG.load(Ordering::SeqCst)
 }
@@ -78,36 +80,40 @@ pub fn set_utility_is_second_arg() {
     crate::macros::UTILITY_IS_SECOND_ARG.store(true, Ordering::SeqCst)
 }
 
-/// Get the executable path (as `OsString`).
-fn executable_os() -> OsString {
-    args_os().next().unwrap()
-}
+// args_os() can be expensive to call, it copies all of argv before iterating.
+// So if we want only the first arg or so it's overkill. We cache it.
+static ARGV: Lazy<Vec<OsString>> = Lazy::new(|| wild::args_os().collect());
 
-/// Get the executable path (as `String`).
-fn executable() -> String {
-    executable_os().to_string_lossy().into_owned()
-}
+static UTIL_NAME: Lazy<String> = Lazy::new(|| {
+    if get_utility_is_second_arg() {
+        &ARGV[1]
+    } else {
+        &ARGV[0]
+    }
+    .to_string_lossy()
+    .into_owned()
+});
 
 /// Derive the utility name.
-pub fn util_name() -> String {
-    if get_utility_is_second_arg() {
-        args_os().nth(1).unwrap().to_string_lossy().into_owned()
-    } else {
-        executable()
-    }
+pub fn util_name() -> &'static str {
+    &UTIL_NAME
 }
 
-/// Derive the complete execution phrase for "usage".
-pub fn execution_phrase() -> String {
+static EXECUTION_PHRASE: Lazy<String> = Lazy::new(|| {
     if get_utility_is_second_arg() {
-        args_os()
+        ARGV.iter()
             .take(2)
             .map(|os_str| os_str.to_string_lossy().into_owned())
             .collect::<Vec<_>>()
             .join(" ")
     } else {
-        executable()
+        ARGV[0].to_string_lossy().into_owned()
     }
+});
+
+/// Derive the complete execution phrase for "usage".
+pub fn execution_phrase() -> &'static str {
+    &EXECUTION_PHRASE
 }
 
 pub enum InvalidEncodingHandling {
@@ -204,13 +210,8 @@ pub trait Args: Iterator<Item = OsString> + Sized {
 
 impl<T: Iterator<Item = OsString> + Sized> Args for T {}
 
-// args() ...
-pub fn args() -> impl Iterator<Item = String> {
-    wild::args()
-}
-
 pub fn args_os() -> impl Iterator<Item = OsString> {
-    wild::args_os()
+    ARGV.iter().cloned()
 }
 
 #[cfg(test)]
