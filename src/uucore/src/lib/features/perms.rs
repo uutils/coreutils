@@ -7,10 +7,14 @@
 
 use crate::error::strip_errno;
 use crate::error::UResult;
+use crate::error::USimpleError;
 pub use crate::features::entries;
 use crate::fs::resolve_relative_path;
 use crate::show_error;
-use libc::{self, gid_t, lchown, uid_t};
+use clap::App;
+use clap::Arg;
+use clap::ArgMatches;
+use libc::{self, gid_t, uid_t};
 use walkdir::WalkDir;
 
 use std::io::Error as IOError;
@@ -45,7 +49,7 @@ fn chown<P: AsRef<Path>>(path: P, uid: uid_t, gid: gid_t, follow: bool) -> IORes
         if follow {
             libc::chown(s.as_ptr(), uid, gid)
         } else {
-            lchown(s.as_ptr(), uid, gid)
+            libc::lchown(s.as_ptr(), uid, gid)
         }
     };
     if ret == 0 {
@@ -358,4 +362,149 @@ impl ChownExecutor {
             IfFrom::UserGroup(u, g) => u == uid && g == gid,
         }
     }
+}
+
+pub mod options {
+    pub mod verbosity {
+        pub const CHANGES: &str = "changes";
+        pub const QUIET: &str = "quiet";
+        pub const SILENT: &str = "silent";
+        pub const VERBOSE: &str = "verbose";
+    }
+    pub mod preserve_root {
+        pub const PRESERVE: &str = "preserve-root";
+        pub const NO_PRESERVE: &str = "no-preserve-root";
+    }
+    pub mod dereference {
+        pub const DEREFERENCE: &str = "dereference";
+        pub const NO_DEREFERENCE: &str = "no-dereference";
+    }
+    pub const FROM: &str = "from";
+    pub const RECURSIVE: &str = "recursive";
+    pub mod traverse {
+        pub const TRAVERSE: &str = "H";
+        pub const NO_TRAVERSE: &str = "P";
+        pub const EVERY: &str = "L";
+    }
+    pub const REFERENCE: &str = "reference";
+    pub const ARG_OWNER: &str = "OWNER";
+    pub const ARG_GROUP: &str = "GROUP";
+    pub const ARG_FILES: &str = "FILE";
+}
+
+type GidUidFilterParser<'a> = fn(&ArgMatches<'a>) -> UResult<(Option<u32>, Option<u32>, IfFrom)>;
+
+/// Base implementation for `chgrp` and `chown`.
+///
+/// An argument called `add_arg_if_not_reference` will be added to `app` if
+/// `args` does not contain the `--reference` option.
+/// `parse_gid_uid_and_filter` will be called to obtain the target gid and uid, and the filter,
+/// from `ArgMatches`.
+/// `groups_only` determines whether verbose output will only mention the group.
+pub fn chown_base<'a>(
+    mut app: App<'a, 'a>,
+    args: impl crate::Args,
+    add_arg_if_not_reference: &'a str,
+    parse_gid_uid_and_filter: GidUidFilterParser<'a>,
+    groups_only: bool,
+) -> UResult<()> {
+    let args: Vec<_> = args.collect();
+    let mut reference = false;
+    let mut help = false;
+    // stop processing options on --
+    for arg in args.iter().take_while(|s| *s != "--") {
+        if arg.to_string_lossy().starts_with("--reference=") || arg == "--reference" {
+            reference = true;
+        } else if arg == "--help" {
+            // we stop processing once we see --help,
+            // as it doesn't matter if we've seen reference or not
+            help = true;
+            break;
+        }
+    }
+
+    if help || !reference {
+        // add both positional arguments
+        // arg_group is only required if
+        app = app.arg(
+            Arg::with_name(add_arg_if_not_reference)
+                .value_name(add_arg_if_not_reference)
+                .required(true)
+                .takes_value(true)
+                .multiple(false),
+        )
+    }
+    app = app.arg(
+        Arg::with_name(options::ARG_FILES)
+            .value_name(options::ARG_FILES)
+            .multiple(true)
+            .takes_value(true)
+            .required(true)
+            .min_values(1),
+    );
+    let matches = app.get_matches_from(args);
+
+    let files: Vec<String> = matches
+        .values_of(options::ARG_FILES)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
+
+    let preserve_root = matches.is_present(options::preserve_root::PRESERVE);
+
+    let mut dereference = if matches.is_present(options::dereference::DEREFERENCE) {
+        1
+    } else if matches.is_present(options::dereference::NO_DEREFERENCE) {
+        0
+    } else {
+        -1
+    };
+
+    let mut bit_flag = if matches.is_present(options::traverse::TRAVERSE) {
+        FTS_COMFOLLOW | FTS_PHYSICAL
+    } else if matches.is_present(options::traverse::EVERY) {
+        FTS_LOGICAL
+    } else {
+        FTS_PHYSICAL
+    };
+
+    let recursive = matches.is_present(options::RECURSIVE);
+    if recursive {
+        if bit_flag == FTS_PHYSICAL {
+            if dereference == 1 {
+                return Err(USimpleError::new(1, "-R --dereference requires -H or -L"));
+            }
+            dereference = 0;
+        }
+    } else {
+        bit_flag = FTS_PHYSICAL;
+    }
+
+    let verbosity_level = if matches.is_present(options::verbosity::CHANGES) {
+        VerbosityLevel::Changes
+    } else if matches.is_present(options::verbosity::SILENT)
+        || matches.is_present(options::verbosity::QUIET)
+    {
+        VerbosityLevel::Silent
+    } else if matches.is_present(options::verbosity::VERBOSE) {
+        VerbosityLevel::Verbose
+    } else {
+        VerbosityLevel::Normal
+    };
+    let (dest_gid, dest_uid, filter) = parse_gid_uid_and_filter(&matches)?;
+
+    let executor = ChownExecutor {
+        bit_flag,
+        dest_gid,
+        dest_uid,
+        verbosity: Verbosity {
+            groups_only: true,
+            level: verbosity_level,
+        },
+        recursive,
+        dereference: dereference != 0,
+        preserve_root,
+        files,
+        filter,
+    };
+    executor.exec()
 }
