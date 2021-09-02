@@ -265,10 +265,21 @@ impl ChownExecutor {
     }
 
     fn dive_into<P: AsRef<Path>>(&self, root: P) -> i32 {
-        let mut ret = 0;
         let root = root.as_ref();
+
+        // walkdir always dereferences the root directory, so we have to check it ourselves
+        // TODO: replace with `root.is_symlink()` once it is stable
+        if self.traverse_symlinks == TraverseSymlinks::None
+            && std::fs::symlink_metadata(root)
+                .map(|m| m.file_type().is_symlink())
+                .unwrap_or(false)
+        {
+            return 0;
+        }
+
+        let mut ret = 0;
         let mut iterator = WalkDir::new(root)
-            .follow_links(self.dereference)
+            .follow_links(self.traverse_symlinks == TraverseSymlinks::All)
             .min_depth(1)
             .into_iter();
         // We can't use a for loop because we need to manipulate the iterator inside the loop.
