@@ -358,7 +358,12 @@ impl ChownExecutor {
             Err(e) => {
                 match self.verbosity.level {
                     VerbosityLevel::Silent => (),
-                    _ => show_error!("cannot access '{}': {}", path.display(), strip_errno(&e)),
+                    _ => show_error!(
+                        "cannot {} '{}': {}",
+                        if follow { "dereference" } else { "access" },
+                        path.display(),
+                        strip_errno(&e)
+                    ),
                 }
                 None
             }
