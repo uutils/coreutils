@@ -1,4 +1,4 @@
-// spell-checker:ignore (words) agroupthatdoesntexist auserthatdoesntexist groupname notexisting passgrp
+// spell-checker:ignore (words) agroupthatdoesntexist auserthatdoesntexist cuuser groupname notexisting passgrp
 
 use crate::common::util::*;
 #[cfg(target_os = "linux")]
