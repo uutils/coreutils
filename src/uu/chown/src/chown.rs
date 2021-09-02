@@ -160,6 +160,7 @@ pub fn uu_app() -> App<'static, 'static> {
         .arg(
             Arg::with_name(options::verbosity::VERBOSE)
                 .long(options::verbosity::VERBOSE)
+                .short("v")
                 .help("output a diagnostic for every file processed"),
         )
 }
