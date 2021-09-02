@@ -5,6 +5,7 @@
 
 //! Common functions to manage permissions
 
+use crate::error::strip_errno;
 use crate::error::UResult;
 pub use crate::features::entries;
 use crate::fs::resolve_relative_path;
@@ -172,15 +173,6 @@ pub struct ChownExecutor {
     pub dereference: bool,
 }
 
-macro_rules! unwrap {
-    ($m:expr, $e:ident, $err:block) => {
-        match $m {
-            Ok(meta) => meta,
-            Err($e) => $err,
-        }
-    };
-}
-
 pub const FTS_COMFOLLOW: u8 = 1;
 pub const FTS_PHYSICAL: u8 = 1 << 1;
 pub const FTS_LOGICAL: u8 = 1 << 2;
@@ -269,17 +261,42 @@ impl ChownExecutor {
         let mut ret = 0;
         let root = root.as_ref();
         let follow = self.dereference || self.bit_flag & FTS_LOGICAL != 0;
-        for entry in WalkDir::new(root).follow_links(follow).min_depth(1) {
-            let entry = unwrap!(entry, e, {
-                ret = 1;
-                show_error!("{}", e);
-                continue;
-            });
+        let mut iterator = WalkDir::new(root)
+            .follow_links(follow)
+            .min_depth(1)
+            .into_iter();
+        // We can't use a for loop because we need to manipulate the iterator inside the loop.
+        while let Some(entry) = iterator.next() {
+            let entry = match entry {
+                Err(e) => {
+                    ret = 1;
+                    if let Some(path) = e.path() {
+                        show_error!(
+                            "cannot access '{}': {}",
+                            path.display(),
+                            if let Some(error) = e.io_error() {
+                                strip_errno(error)
+                            } else {
+                                "Too many levels of symbolic links".into()
+                            }
+                        )
+                    } else {
+                        show_error!("{}", e)
+                    }
+                    continue;
+                }
+                Ok(entry) => entry,
+            };
             let path = entry.path();
             let meta = match self.obtain_meta(path, follow) {
                 Some(m) => m,
                 _ => {
                     ret = 1;
+                    if entry.file_type().is_dir() {
+                        // Instruct walkdir to skip this directory to avoid getting another error
+                        // when walkdir tries to query the children of this directory.
+                        iterator.skip_current_dir();
+                    }
                     continue;
                 }
             };
@@ -316,23 +333,20 @@ impl ChownExecutor {
     fn obtain_meta<P: AsRef<Path>>(&self, path: P, follow: bool) -> Option<Metadata> {
         let path = path.as_ref();
         let meta = if follow {
-            unwrap!(path.metadata(), e, {
-                match self.verbosity.level {
-                    VerbosityLevel::Silent => (),
-                    _ => show_error!("cannot access '{}': {}", path.display(), e),
-                }
-                return None;
-            })
+            path.metadata()
         } else {
-            unwrap!(path.symlink_metadata(), e, {
+            path.symlink_metadata()
+        };
+        match meta {
+            Err(e) => {
                 match self.verbosity.level {
                     VerbosityLevel::Silent => (),
-                    _ => show_error!("cannot dereference '{}': {}", path.display(), e),
+                    _ => show_error!("cannot access '{}': {}", path.display(), strip_errno(&e)),
                 }
-                return None;
-            })
-        };
-        Some(meta)
+                None
+            }
+            Ok(meta) => Some(meta),
+        }
     }
 
     #[inline]
