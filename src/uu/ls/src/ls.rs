@@ -1942,7 +1942,7 @@ fn display_file_name(path: &PathData, config: &Config) -> Option<Cell> {
                     }
                 }
 
-                let target_data = PathData::new(absolute_target, None, None, &config, false);
+                let target_data = PathData::new(absolute_target, None, None, config, false);
 
                 // If we have a symlink to a valid file, we use the metadata of said file.
                 // Because we use an absolute path, we can assume this is guaranteed to exist.
