@@ -11,45 +11,15 @@
 extern crate uucore;
 pub use uucore::entries;
 use uucore::error::{FromIo, UResult, USimpleError};
-use uucore::perms::{
-    ChownExecutor, IfFrom, Verbosity, VerbosityLevel, FTS_COMFOLLOW, FTS_LOGICAL, FTS_PHYSICAL,
-};
+use uucore::perms::{chown_base, options, IfFrom};
 
-use clap::{App, Arg};
+use clap::{App, Arg, ArgMatches};
 
 use std::fs;
 use std::os::unix::fs::MetadataExt;
 
-use uucore::InvalidEncodingHandling;
-
 static ABOUT: &str = "Change the group of each FILE to GROUP.";
 static VERSION: &str = env!("CARGO_PKG_VERSION");
-
-pub mod options {
-    pub mod verbosity {
-        pub static CHANGES: &str = "changes";
-        pub static QUIET: &str = "quiet";
-        pub static SILENT: &str = "silent";
-        pub static VERBOSE: &str = "verbose";
-    }
-    pub mod preserve_root {
-        pub static PRESERVE: &str = "preserve-root";
-        pub static NO_PRESERVE: &str = "no-preserve-root";
-    }
-    pub mod dereference {
-        pub static DEREFERENCE: &str = "dereference";
-        pub static NO_DEREFERENCE: &str = "no-dereference";
-    }
-    pub static RECURSIVE: &str = "recursive";
-    pub mod traverse {
-        pub static TRAVERSE: &str = "H";
-        pub static NO_TRAVERSE: &str = "P";
-        pub static EVERY: &str = "L";
-    }
-    pub static REFERENCE: &str = "reference";
-    pub static ARG_GROUP: &str = "GROUP";
-    pub static ARG_FILES: &str = "FILE";
-}
 
 fn get_usage() -> String {
     format!(
@@ -58,101 +28,7 @@ fn get_usage() -> String {
     )
 }
 
-#[uucore_procs::gen_uumain]
-pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args
-        .collect_str(InvalidEncodingHandling::ConvertLossy)
-        .accept_any();
-
-    let usage = get_usage();
-
-    let mut app = uu_app().usage(&usage[..]);
-
-    // we change the positional args based on whether
-    // --reference was used.
-    let mut reference = false;
-    let mut help = false;
-    // stop processing options on --
-    for arg in args.iter().take_while(|s| *s != "--") {
-        if arg.starts_with("--reference=") || arg == "--reference" {
-            reference = true;
-        } else if arg == "--help" {
-            // we stop processing once we see --help,
-            // as it doesn't matter if we've seen reference or not
-            help = true;
-            break;
-        }
-    }
-
-    if help || !reference {
-        // add both positional arguments
-        app = app.arg(
-            Arg::with_name(options::ARG_GROUP)
-                .value_name(options::ARG_GROUP)
-                .required(true)
-                .takes_value(true)
-                .multiple(false),
-        )
-    }
-    app = app.arg(
-        Arg::with_name(options::ARG_FILES)
-            .value_name(options::ARG_FILES)
-            .multiple(true)
-            .takes_value(true)
-            .required(true)
-            .min_values(1),
-    );
-
-    let matches = app.get_matches_from(args);
-
-    /* Get the list of files */
-    let files: Vec<String> = matches
-        .values_of(options::ARG_FILES)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_default();
-
-    let preserve_root = matches.is_present(options::preserve_root::PRESERVE);
-
-    let mut derefer = if matches.is_present(options::dereference::DEREFERENCE) {
-        1
-    } else if matches.is_present(options::dereference::NO_DEREFERENCE) {
-        0
-    } else {
-        -1
-    };
-
-    let mut bit_flag = if matches.is_present(options::traverse::TRAVERSE) {
-        FTS_COMFOLLOW | FTS_PHYSICAL
-    } else if matches.is_present(options::traverse::EVERY) {
-        FTS_LOGICAL
-    } else {
-        FTS_PHYSICAL
-    };
-
-    let recursive = matches.is_present(options::RECURSIVE);
-    if recursive {
-        if bit_flag == FTS_PHYSICAL {
-            if derefer == 1 {
-                return Err(USimpleError::new(1, "-R --dereference requires -H or -L"));
-            }
-            derefer = 0;
-        }
-    } else {
-        bit_flag = FTS_PHYSICAL;
-    }
-
-    let verbosity_level = if matches.is_present(options::verbosity::CHANGES) {
-        VerbosityLevel::Changes
-    } else if matches.is_present(options::verbosity::SILENT)
-        || matches.is_present(options::verbosity::QUIET)
-    {
-        VerbosityLevel::Silent
-    } else if matches.is_present(options::verbosity::VERBOSE) {
-        VerbosityLevel::Verbose
-    } else {
-        VerbosityLevel::Normal
-    };
-
+fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<(Option<u32>, Option<u32>, IfFrom)> {
     let dest_gid = if let Some(file) = matches.value_of(options::REFERENCE) {
         fs::metadata(&file)
             .map(|meta| Some(meta.gid()))
@@ -168,22 +44,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         }
     };
+    Ok((dest_gid, None, IfFrom::All))
+}
 
-    let executor = ChownExecutor {
-        bit_flag,
-        dest_gid,
-        verbosity: Verbosity {
-            groups_only: true,
-            level: verbosity_level,
-        },
-        recursive,
-        dereference: derefer != 0,
-        preserve_root,
-        files,
-        filter: IfFrom::All,
-        dest_uid: None,
-    };
-    executor.exec()
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let usage = get_usage();
+
+    chown_base(
+        uu_app().usage(&usage[..]),
+        args,
+        options::ARG_GROUP,
+        parse_gid_and_uid,
+        true,
+    )
 }
 
 pub fn uu_app() -> App<'static, 'static> {
