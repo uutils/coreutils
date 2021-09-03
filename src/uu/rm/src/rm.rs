@@ -187,6 +187,7 @@ pub fn uu_app() -> App<'static, 'static> {
         .arg(
             Arg::with_name(OPT_RECURSIVE).short("r")
             .long(OPT_RECURSIVE)
+            .multiple(true)
             .help("remove directories and their contents recursively")
         )
         .arg(
