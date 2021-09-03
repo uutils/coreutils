@@ -181,7 +181,6 @@ pub struct ChownExecutor {
     pub files: Vec<String>,
     pub recursive: bool,
     pub preserve_root: bool,
-    // Must be true if traverse_symlinks is not None
     pub dereference: bool,
 }
 
