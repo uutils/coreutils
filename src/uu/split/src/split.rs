@@ -19,6 +19,7 @@ use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 use std::{char, fs::remove_file};
+use uucore::display::Quotable;
 use uucore::parse_size::parse_size;
 
 static OPT_BYTES: &str = "bytes";
@@ -238,7 +239,11 @@ impl LineSplitter {
     fn new(settings: &Settings) -> LineSplitter {
         LineSplitter {
             lines_per_split: settings.strategy_param.parse().unwrap_or_else(|_| {
-                crash!(1, "invalid number of lines: '{}'", settings.strategy_param)
+                crash!(
+                    1,
+                    "invalid number of lines: {}",
+                    settings.strategy_param.quote()
+                )
             }),
         }
     }
@@ -373,8 +378,8 @@ fn split(settings: &Settings) -> i32 {
         let r = File::open(Path::new(&settings.input)).unwrap_or_else(|_| {
             crash!(
                 1,
-                "cannot open '{}' for reading: No such file or directory",
-                settings.input
+                "cannot open {} for reading: No such file or directory",
+                settings.input.quote()
             )
         });
         Box::new(r) as Box<dyn Read>
@@ -383,7 +388,7 @@ fn split(settings: &Settings) -> i32 {
     let mut splitter: Box<dyn Splitter> = match settings.strategy.as_str() {
         s if s == OPT_LINES => Box::new(LineSplitter::new(settings)),
         s if (s == OPT_BYTES || s == OPT_LINE_BYTES) => Box::new(ByteSplitter::new(settings)),
-        a => crash!(1, "strategy {} not supported", a),
+        a => crash!(1, "strategy {} not supported", a.quote()),
     };
 
     let mut fileno = 0;

@@ -9,6 +9,7 @@
 
 use std::io::{stdout, Read, Write};
 
+use uucore::display::Quotable;
 use uucore::encoding::{wrap_print, Data, Format};
 use uucore::InvalidEncodingHandling;
 
@@ -40,8 +41,9 @@ impl Config {
                 let name = values.next().unwrap();
                 if let Some(extra_op) = values.next() {
                     return Err(format!(
-                        "extra operand '{}'\nTry '{} --help' for more information.",
-                        extra_op, app_name
+                        "extra operand {}\nTry '{} --help' for more information.",
+                        extra_op.quote(),
+                        app_name
                     ));
                 }
 
@@ -49,7 +51,7 @@ impl Config {
                     None
                 } else {
                     if !Path::exists(Path::new(name)) {
-                        return Err(format!("{}: No such file or directory", name));
+                        return Err(format!("{}: No such file or directory", name.maybe_quote()));
                     }
                     Some(name.to_owned())
                 }
@@ -61,7 +63,7 @@ impl Config {
             .value_of(options::WRAP)
             .map(|num| {
                 num.parse::<usize>()
-                    .map_err(|_| format!("invalid wrap size: '{}'", num))
+                    .map_err(|_| format!("invalid wrap size: {}", num.quote()))
             })
             .transpose()?;
 

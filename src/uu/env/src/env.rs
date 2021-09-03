@@ -65,8 +65,14 @@ fn parse_name_value_opt<'a>(opts: &mut Options<'a>, opt: &'a str) -> Result<bool
 
 fn parse_program_opt<'a>(opts: &mut Options<'a>, opt: &'a str) -> Result<(), i32> {
     if opts.null {
-        eprintln!("{}: cannot specify --null (-0) with command", crate_name!());
-        eprintln!("Type \"{} --help\" for detailed information", crate_name!());
+        eprintln!(
+            "{}: cannot specify --null (-0) with command",
+            uucore::util_name()
+        );
+        eprintln!(
+            "Type \"{} --help\" for detailed information",
+            uucore::execution_phrase()
+        );
         Err(1)
     } else {
         opts.program.push(opt);

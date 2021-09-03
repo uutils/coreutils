@@ -1,5 +1,7 @@
 // spell-checker:ignore formatteriteminfo docopt fvox fvoxw vals acdx
 
+use uucore::display::Quotable;
+
 use crate::formatteriteminfo::FormatterItemInfo;
 use crate::prn_char::*;
 use crate::prn_float::*;
@@ -272,8 +274,9 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
     while let Some(type_char) = ch {
         let type_char = format_type(type_char).ok_or_else(|| {
             format!(
-                "unexpected char '{}' in format specification '{}'",
-                type_char, params
+                "unexpected char '{}' in format specification {}",
+                type_char,
+                params.quote()
             )
         })?;
 
@@ -293,8 +296,9 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
             if !decimal_size.is_empty() {
                 byte_size = decimal_size.parse().map_err(|_| {
                     format!(
-                        "invalid number '{}' in format specification '{}'",
-                        decimal_size, params
+                        "invalid number {} in format specification {}",
+                        decimal_size.quote(),
+                        params.quote()
                     )
                 })?;
             }
@@ -305,8 +309,9 @@ fn parse_type_string(params: &str) -> Result<Vec<ParsedFormatterItemInfo>, Strin
 
         let ft = od_format_type(type_char, byte_size).ok_or_else(|| {
             format!(
-                "invalid size '{}' in format specification '{}'",
-                byte_size, params
+                "invalid size '{}' in format specification {}",
+                byte_size,
+                params.quote()
             )
         })?;
         formats.push(ParsedFormatterItemInfo::new(ft, show_ascii_dump));

@@ -17,6 +17,7 @@ use libc::{lstat, stat, unlink};
 use libc::{S_IFLNK, S_IFMT, S_IFREG};
 use std::ffi::CString;
 use std::io::{Error, ErrorKind};
+use uucore::display::Quotable;
 use uucore::InvalidEncodingHandling;
 
 static ABOUT: &str = "Unlink the file at [FILE].";
@@ -63,7 +64,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         let result = unsafe { lstat(c_string.as_ptr(), &mut buf as *mut stat) };
 
         if result < 0 {
-            crash!(1, "Cannot stat '{}': {}", paths[0], Error::last_os_error());
+            crash!(
+                1,
+                "Cannot stat {}: {}",
+                paths[0].quote(),
+                Error::last_os_error()
+            );
         }
 
         buf.st_mode & S_IFMT

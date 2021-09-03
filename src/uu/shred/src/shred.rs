@@ -18,12 +18,12 @@ use std::io;
 use std::io::prelude::*;
 use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
-use uucore::InvalidEncodingHandling;
+use uucore::display::Quotable;
+use uucore::{util_name, InvalidEncodingHandling};
 
 #[macro_use]
 extern crate uucore;
 
-static NAME: &str = "shred";
 const BLOCK_SIZE: usize = 512;
 const NAME_CHARSET: &[u8] = b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_.";
 
@@ -281,7 +281,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     if !matches.is_present(options::FILE) {
         show_error!("Missing an argument");
-        show_error!("For help, try '{} --help'", NAME);
+        show_error!("For help, try '{} --help'", uucore::execution_phrase());
         return 0;
     }
 
@@ -289,7 +289,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         Some(s) => match s.parse::<usize>() {
             Ok(u) => u,
             Err(_) => {
-                errs.push(format!("invalid number of passes: '{}'", s));
+                errs.push(format!("invalid number of passes: {}", s.quote()));
                 0
             }
         },
@@ -414,7 +414,11 @@ fn get_size(size_str_opt: Option<String>) -> Option<u64> {
     let coefficient = match size_str.parse::<u64>() {
         Ok(u) => u,
         Err(_) => {
-            println!("{}: {}: Invalid file size", NAME, size_str_opt.unwrap());
+            println!(
+                "{}: {}: Invalid file size",
+                util_name(),
+                size_str_opt.unwrap().maybe_quote()
+            );
             exit!(1);
         }
     };
@@ -452,11 +456,11 @@ fn wipe_file(
     // Get these potential errors out of the way first
     let path: &Path = Path::new(path_str);
     if !path.exists() {
-        show_error!("{}: No such file or directory", path.display());
+        show_error!("{}: No such file or directory", path.maybe_quote());
         return;
     }
     if !path.is_file() {
-        show_error!("{}: Not a file", path.display());
+        show_error!("{}: Not a file", path.maybe_quote());
         return;
     }
 
@@ -520,7 +524,7 @@ fn wipe_file(
         let mut file: File = match OpenOptions::new().write(true).truncate(false).open(path) {
             Ok(f) => f,
             Err(e) => {
-                show_error!("{}: failed to open for writing: {}", path.display(), e);
+                show_error!("{}: failed to open for writing: {}", path.maybe_quote(), e);
                 return;
             }
         };
@@ -535,8 +539,8 @@ fn wipe_file(
                 if total_passes.to_string().len() == 1 {
                     println!(
                         "{}: {}: pass {}/{} ({})... ",
-                        NAME,
-                        path.display(),
+                        util_name(),
+                        path.maybe_quote(),
                         i + 1,
                         total_passes,
                         pass_name
@@ -544,8 +548,8 @@ fn wipe_file(
                 } else {
                     println!(
                         "{}: {}: pass {:2.0}/{:2.0} ({})... ",
-                        NAME,
-                        path.display(),
+                        util_name(),
+                        path.maybe_quote(),
                         i + 1,
                         total_passes,
                         pass_name
@@ -556,7 +560,7 @@ fn wipe_file(
             match do_pass(&mut file, path, &mut generator, *pass_type, size) {
                 Ok(_) => {}
                 Err(e) => {
-                    show_error!("{}: File write pass failed: {}", path.display(), e);
+                    show_error!("{}: File write pass failed: {}", path.maybe_quote(), e);
                 }
             }
             // Ignore failed writes; just keep trying
@@ -567,7 +571,7 @@ fn wipe_file(
         match do_remove(path, path_str, verbose) {
             Ok(_) => {}
             Err(e) => {
-                show_error!("{}: failed to remove file: {}", path.display(), e);
+                show_error!("{}: failed to remove file: {}", path.maybe_quote(), e);
             }
         }
     }
@@ -622,9 +626,9 @@ fn wipe_name(orig_path: &Path, verbose: bool) -> Option<PathBuf> {
                     if verbose {
                         println!(
                             "{}: {}: renamed to {}",
-                            NAME,
-                            last_path.display(),
-                            new_path.display()
+                            util_name(),
+                            last_path.maybe_quote(),
+                            new_path.quote()
                         );
                     }
 
@@ -641,9 +645,9 @@ fn wipe_name(orig_path: &Path, verbose: bool) -> Option<PathBuf> {
                 Err(e) => {
                     println!(
                         "{}: {}: Couldn't rename to {}: {}",
-                        NAME,
-                        last_path.display(),
-                        new_path.display(),
+                        util_name(),
+                        last_path.maybe_quote(),
+                        new_path.quote(),
                         e
                     );
                     return None;
@@ -657,7 +661,7 @@ fn wipe_name(orig_path: &Path, verbose: bool) -> Option<PathBuf> {
 
 fn do_remove(path: &Path, orig_filename: &str, verbose: bool) -> Result<(), io::Error> {
     if verbose {
-        println!("{}: {}: removing", NAME, orig_filename);
+        println!("{}: {}: removing", util_name(), orig_filename.maybe_quote());
     }
 
     let renamed_path: Option<PathBuf> = wipe_name(path, verbose);
@@ -666,7 +670,7 @@ fn do_remove(path: &Path, orig_filename: &str, verbose: bool) -> Result<(), io::
     }
 
     if verbose {
-        println!("{}: {}: removed", NAME, orig_filename);
+        println!("{}: {}: removed", util_name(), orig_filename.maybe_quote());
     }
 
     Ok(())

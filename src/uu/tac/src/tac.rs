@@ -14,6 +14,7 @@ use clap::{crate_version, App, Arg};
 use memchr::memmem;
 use std::io::{stdin, stdout, BufReader, Read, Write};
 use std::{fs::File, path::Path};
+use uucore::display::Quotable;
 use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "tac";
@@ -141,11 +142,11 @@ fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) -> i32 {
             let path = Path::new(filename);
             if path.is_dir() || path.metadata().is_err() {
                 if path.is_dir() {
-                    show_error!("{}: read error: Invalid argument", filename);
+                    show_error!("{}: read error: Invalid argument", filename.maybe_quote());
                 } else {
                     show_error!(
-                        "failed to open '{}' for reading: No such file or directory",
-                        filename
+                        "failed to open {} for reading: No such file or directory",
+                        filename.quote()
                     );
                 }
                 exit_code = 1;
@@ -154,7 +155,7 @@ fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) -> i32 {
             match File::open(path) {
                 Ok(f) => Box::new(f) as Box<dyn Read>,
                 Err(e) => {
-                    show_error!("failed to open '{}' for reading: {}", filename, e);
+                    show_error!("failed to open {} for reading: {}", filename.quote(), e);
                     exit_code = 1;
                     continue;
                 }
@@ -163,7 +164,7 @@ fn tac(filenames: Vec<String>, before: bool, _: bool, separator: &str) -> i32 {
 
         let mut data = Vec::new();
         if let Err(e) = file.read_to_end(&mut data) {
-            show_error!("failed to read '{}': {}", filename, e);
+            show_error!("failed to read {}: {}", filename.quote(), e);
             exit_code = 1;
             continue;
         };

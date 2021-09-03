@@ -16,6 +16,7 @@ use clap::{crate_version, App, Arg, ArgMatches};
 use libc::{dev_t, mode_t};
 use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
 
+use uucore::display::Quotable;
 use uucore::InvalidEncodingHandling;
 
 static ABOUT: &str = "Create the special file NAME of the given TYPE.";
@@ -219,7 +220,7 @@ fn valid_type(tpe: String) -> Result<(), String> {
             if vec!['b', 'c', 'u', 'p'].contains(&first_char) {
                 Ok(())
             } else {
-                Err(format!("invalid device type '{}'", tpe))
+                Err(format!("invalid device type {}", tpe.quote()))
             }
         })
 }

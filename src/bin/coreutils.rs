@@ -10,10 +10,12 @@ use clap::Arg;
 use clap::Shell;
 use std::cmp;
 use std::collections::hash_map::HashMap;
+use std::ffi::OsStr;
 use std::ffi::OsString;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process;
+use uucore::display::Quotable;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -76,13 +78,21 @@ fn main() {
 
     // 0th argument equals util name?
     if let Some(util_os) = util_name {
-        let util = util_os.as_os_str().to_string_lossy();
+        fn not_found(util: &OsStr) -> ! {
+            println!("{}: function/utility not found", util.maybe_quote());
+            process::exit(1);
+        }
+
+        let util = match util_os.to_str() {
+            Some(util) => util,
+            None => not_found(&util_os),
+        };
 
         if util == "completion" {
             gen_completions(args, utils);
         }
 
-        match utils.get(&util[..]) {
+        match utils.get(util) {
             Some(&(uumain, _)) => {
                 process::exit(uumain((vec![util_os].into_iter()).chain(args)));
             }
@@ -90,9 +100,12 @@ fn main() {
                 if util == "--help" || util == "-h" {
                     // see if they want help on a specific util
                     if let Some(util_os) = args.next() {
-                        let util = util_os.as_os_str().to_string_lossy();
+                        let util = match util_os.to_str() {
+                            Some(util) => util,
+                            None => not_found(&util_os),
+                        };
 
-                        match utils.get(&util[..]) {
+                        match utils.get(util) {
                             Some(&(uumain, _)) => {
                                 let code = uumain(
                                     (vec![util_os, OsString::from("--help")].into_iter())
@@ -101,17 +114,13 @@ fn main() {
                                 io::stdout().flush().expect("could not flush stdout");
                                 process::exit(code);
                             }
-                            None => {
-                                println!("{}: function/utility not found", util);
-                                process::exit(1);
-                            }
+                            None => not_found(&util_os),
                         }
                     }
                     usage(&utils, binary_as_util);
                     process::exit(0);
                 } else {
-                    println!("{}: function/utility not found", util);
-                    process::exit(1);
+                    not_found(&util_os);
                 }
             }
         }

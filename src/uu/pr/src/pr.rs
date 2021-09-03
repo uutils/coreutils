@@ -24,6 +24,8 @@ use std::io::{stdin, stdout, BufRead, BufReader, Lines, Read, Stdout, Write};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 
+use uucore::display::Quotable;
+
 type IOError = std::io::Error;
 
 const NAME: &str = "pr";
@@ -517,7 +519,7 @@ fn parse_usize(matches: &Matches, opt: &str) -> Option<Result<usize, PrError>> {
         let i = value_to_parse.0;
         let option = value_to_parse.1;
         i.parse().map_err(|_e| {
-            PrError::EncounteredErrors(format!("invalid {} argument '{}'", option, i))
+            PrError::EncounteredErrors(format!("invalid {} argument {}", option, i.quote()))
         })
     };
     matches
@@ -619,7 +621,7 @@ fn build_options(
         let unparsed_num = i.get(1).unwrap().as_str().trim();
         let x: Vec<_> = unparsed_num.split(':').collect();
         x[0].to_string().parse::<usize>().map_err(|_e| {
-            PrError::EncounteredErrors(format!("invalid {} argument '{}'", "+", unparsed_num))
+            PrError::EncounteredErrors(format!("invalid {} argument {}", "+", unparsed_num.quote()))
         })
     }) {
         Some(res) => res?,
@@ -633,7 +635,11 @@ fn build_options(
         .map(|unparsed_num| {
             let x: Vec<_> = unparsed_num.split(':').collect();
             x[1].to_string().parse::<usize>().map_err(|_e| {
-                PrError::EncounteredErrors(format!("invalid {} argument '{}'", "+", unparsed_num))
+                PrError::EncounteredErrors(format!(
+                    "invalid {} argument {}",
+                    "+",
+                    unparsed_num.quote()
+                ))
             })
         }) {
         Some(res) => Some(res?),
@@ -643,7 +649,10 @@ fn build_options(
     let invalid_pages_map = |i: String| {
         let unparsed_value = matches.opt_str(options::PAGE_RANGE_OPTION).unwrap();
         i.parse::<usize>().map_err(|_e| {
-            PrError::EncounteredErrors(format!("invalid --pages argument '{}'", unparsed_value))
+            PrError::EncounteredErrors(format!(
+                "invalid --pages argument {}",
+                unparsed_value.quote()
+            ))
         })
     };
 
@@ -741,7 +750,7 @@ fn build_options(
     let start_column_option = match re_col.captures(&free_args).map(|i| {
         let unparsed_num = i.get(1).unwrap().as_str().trim();
         unparsed_num.parse::<usize>().map_err(|_e| {
-            PrError::EncounteredErrors(format!("invalid {} argument '{}'", "-", unparsed_num))
+            PrError::EncounteredErrors(format!("invalid {} argument {}", "-", unparsed_num.quote()))
         })
     }) {
         Some(res) => Some(res?),

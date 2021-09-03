@@ -30,6 +30,7 @@ use crossterm::{
 
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
+use uucore::display::Quotable;
 
 const BELL: &str = "\x07";
 
@@ -64,12 +65,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             let file = Path::new(file);
             if file.is_dir() {
                 terminal::disable_raw_mode().unwrap();
-                show_usage_error!("'{}' is a directory.", file.display());
+                show_usage_error!("{} is a directory.", file.quote());
                 return 1;
             }
             if !file.exists() {
                 terminal::disable_raw_mode().unwrap();
-                show_error!("cannot open {}: No such file or directory", file.display());
+                show_error!("cannot open {}: No such file or directory", file.quote());
                 return 1;
             }
             if length > 1 {

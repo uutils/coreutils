@@ -11,11 +11,12 @@
 extern crate uucore;
 
 use clap::{crate_version, App, Arg};
+use uucore::display::Quotable;
 use uucore::error::{UError, UResult};
 
 use std::borrow::Cow;
 use std::error::Error;
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::fmt::Display;
 use std::fs;
 
@@ -49,26 +50,26 @@ pub enum OverwriteMode {
 
 #[derive(Debug)]
 enum LnError {
-    TargetIsDirectory(String),
+    TargetIsDirectory(PathBuf),
     SomeLinksFailed,
     FailedToLink(String),
-    MissingDestination(String),
-    ExtraOperand(String),
+    MissingDestination(PathBuf),
+    ExtraOperand(OsString),
 }
 
 impl Display for LnError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::TargetIsDirectory(s) => write!(f, "target '{}' is not a directory", s),
-            Self::FailedToLink(s) => write!(f, "failed to link '{}'", s),
+            Self::TargetIsDirectory(s) => write!(f, "target {} is not a directory", s.quote()),
+            Self::FailedToLink(e) => write!(f, "failed to link: {}", e),
             Self::SomeLinksFailed => write!(f, "some links failed to create"),
             Self::MissingDestination(s) => {
-                write!(f, "missing destination file operand after '{}'", s)
+                write!(f, "missing destination file operand after {}", s.quote())
             }
             Self::ExtraOperand(s) => write!(
                 f,
-                "extra operand '{}'\nTry '{} --help' for more information.",
-                s,
+                "extra operand {}\nTry '{} --help' for more information.",
+                s.quote(),
                 uucore::execution_phrase()
             ),
         }
@@ -279,10 +280,10 @@ fn exec(files: &[PathBuf], settings: &Settings) -> UResult<()> {
     // 1st form. Now there should be only two operands, but if -T is
     // specified we may have a wrong number of operands.
     if files.len() == 1 {
-        return Err(LnError::MissingDestination(files[0].to_string_lossy().into()).into());
+        return Err(LnError::MissingDestination(files[0].clone()).into());
     }
     if files.len() > 2 {
-        return Err(LnError::ExtraOperand(files[2].display().to_string()).into());
+        return Err(LnError::ExtraOperand(files[2].clone().into()).into());
     }
     assert!(!files.is_empty());
 
@@ -294,7 +295,7 @@ fn exec(files: &[PathBuf], settings: &Settings) -> UResult<()> {
 
 fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) -> UResult<()> {
     if !target_dir.is_dir() {
-        return Err(LnError::TargetIsDirectory(target_dir.display().to_string()).into());
+        return Err(LnError::TargetIsDirectory(target_dir.to_owned()).into());
     }
 
     let mut all_successful = true;
@@ -306,7 +307,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
                 if is_symlink(target_dir) {
                     if target_dir.is_file() {
                         if let Err(e) = fs::remove_file(target_dir) {
-                            show_error!("Could not update {}: {}", target_dir.display(), e)
+                            show_error!("Could not update {}: {}", target_dir.quote(), e)
                         };
                     }
                     if target_dir.is_dir() {
@@ -314,7 +315,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
                         // considered as a dir
                         // See test_ln::test_symlink_no_deref_dir
                         if let Err(e) = fs::remove_dir(target_dir) {
-                            show_error!("Could not update {}: {}", target_dir.display(), e)
+                            show_error!("Could not update {}: {}", target_dir.quote(), e)
                         };
                     }
                 }
@@ -332,10 +333,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
                         }
                     }
                     None => {
-                        show_error!(
-                            "cannot stat '{}': No such file or directory",
-                            srcpath.display()
-                        );
+                        show_error!("cannot stat {}: No such file or directory", srcpath.quote());
                         all_successful = false;
                         continue;
                     }
@@ -344,9 +342,9 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
 
         if let Err(e) = link(srcpath, &targetpath, settings) {
             show_error!(
-                "cannot link '{}' to '{}': {}",
-                targetpath.display(),
-                srcpath.display(),
+                "cannot link {} to {}: {}",
+                targetpath.quote(),
+                srcpath.quote(),
                 e
             );
             all_successful = false;
@@ -399,7 +397,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> Result<()> {
         match settings.overwrite {
             OverwriteMode::NoClobber => {}
             OverwriteMode::Interactive => {
-                print!("{}: overwrite '{}'? ", uucore::util_name(), dst.display());
+                print!("{}: overwrite {}? ", uucore::util_name(), dst.quote());
                 if !read_yes() {
                     return Ok(());
                 }
@@ -426,9 +424,9 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> Result<()> {
     }
 
     if settings.verbose {
-        print!("'{}' -> '{}'", dst.display(), &source.display());
+        print!("{} -> {}", dst.quote(), source.quote());
         match backup_path {
-            Some(path) => println!(" (backup: '{}')", path.display()),
+            Some(path) => println!(" (backup: {})", path.quote()),
             None => println!(),
         }
     }

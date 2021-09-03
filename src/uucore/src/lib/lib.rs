@@ -72,6 +72,8 @@ use std::sync::atomic::Ordering;
 
 use once_cell::sync::Lazy;
 
+use crate::display::Quotable;
+
 pub fn get_utility_is_second_arg() -> bool {
     crate::macros::UTILITY_IS_SECOND_ARG.load(Ordering::SeqCst)
 }
@@ -171,14 +173,15 @@ pub trait Args: Iterator<Item = OsString> + Sized {
                 Ok(string) => Ok(string),
                 Err(s_ret) => {
                     full_conversion = false;
-                    let lossy_conversion = s_ret.to_string_lossy();
                     eprintln!(
-                        "Input with broken encoding occurred! (s = '{}') ",
-                        &lossy_conversion
+                        "Input with broken encoding occurred! (s = {}) ",
+                        s_ret.quote()
                     );
                     match handling {
                         InvalidEncodingHandling::Ignore => Err(String::new()),
-                        InvalidEncodingHandling::ConvertLossy => Err(lossy_conversion.to_string()),
+                        InvalidEncodingHandling::ConvertLossy => {
+                            Err(s_ret.to_string_lossy().into_owned())
+                        }
                         InvalidEncodingHandling::Panic => {
                             panic!("Broken encoding found but caller cannot handle it")
                         }

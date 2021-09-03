@@ -45,6 +45,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::str::Utf8Error;
 use unicode_width::UnicodeWidthStr;
+use uucore::display::Quotable;
 use uucore::error::{set_exit_code, strip_errno, UError, UResult, USimpleError, UUsageError};
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::version_cmp::version_cmp;
@@ -139,7 +140,7 @@ enum SortError {
         error: std::io::Error,
     },
     ReadFailed {
-        path: String,
+        path: PathBuf,
         error: std::io::Error,
     },
     ParseKeyError {
@@ -189,7 +190,7 @@ impl Display for SortError {
                     write!(
                         f,
                         "{}:{}: disorder: {}",
-                        file.to_string_lossy(),
+                        file.maybe_quote(),
                         line_number,
                         line
                     )
@@ -198,13 +199,23 @@ impl Display for SortError {
                 }
             }
             SortError::OpenFailed { path, error } => {
-                write!(f, "open failed: {}: {}", path, strip_errno(error))
+                write!(
+                    f,
+                    "open failed: {}: {}",
+                    path.maybe_quote(),
+                    strip_errno(error)
+                )
             }
             SortError::ParseKeyError { key, msg } => {
-                write!(f, "failed to parse key `{}`: {}", key, msg)
+                write!(f, "failed to parse key {}: {}", key.quote(), msg)
             }
             SortError::ReadFailed { path, error } => {
-                write!(f, "cannot read: {}: {}", path, strip_errno(error))
+                write!(
+                    f,
+                    "cannot read: {}: {}",
+                    path.maybe_quote(),
+                    strip_errno(error)
+                )
             }
             SortError::OpenTmpFileFailed { error } => {
                 write!(f, "failed to open temporary file: {}", strip_errno(error))
@@ -213,7 +224,7 @@ impl Display for SortError {
                 write!(f, "couldn't execute compress program: errno {}", code)
             }
             SortError::CompressProgTerminatedAbnormally { prog } => {
-                write!(f, "'{}' terminated abnormally", prog)
+                write!(f, "{} terminated abnormally", prog.quote())
             }
             SortError::TmpDirCreationFailed => write!(f, "could not create temporary directory"),
             SortError::Uft8Error { error } => write!(f, "{}", error),
@@ -1179,7 +1190,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if let Some(n_merge) = matches.value_of(options::BATCH_SIZE) {
         settings.merge_batch_size = n_merge.parse().map_err(|_| {
-            UUsageError::new(2, format!("invalid --batch-size argument '{}'", n_merge))
+            UUsageError::new(
+                2,
+                format!("invalid --batch-size argument {}", n_merge.quote()),
+            )
         })?;
     }
 
@@ -1211,23 +1225,30 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else if settings.check && files.len() != 1 {
         return Err(UUsageError::new(
             2,
-            format!(
-                "extra operand `{}' not allowed with -c",
-                files[1].to_string_lossy()
-            ),
+            format!("extra operand {} not allowed with -c", files[1].quote()),
         ));
     }
 
     if let Some(arg) = matches.args.get(options::SEPARATOR) {
-        let separator = arg.vals[0].to_string_lossy();
-        let mut separator = separator.as_ref();
+        let mut separator = arg.vals[0].to_str().ok_or_else(|| {
+            UUsageError::new(
+                2,
+                format!("separator is not valid unicode: {}", arg.vals[0].quote()),
+            )
+        })?;
         if separator == "\\0" {
             separator = "\0";
         }
+        // This rejects non-ASCII codepoints, but perhaps we don't have to.
+        // On the other hand GNU accepts any single byte, valid unicode or not.
+        // (Supporting multi-byte chars would require changes in tokenize_with_separator().)
         if separator.len() != 1 {
             return Err(UUsageError::new(
                 2,
-                "separator must be exactly one character long",
+                format!(
+                    "separator must be exactly one character long: {}",
+                    separator.quote()
+                ),
             ));
         }
         settings.separator = Some(separator.chars().next().unwrap())
@@ -1816,7 +1837,7 @@ fn open(path: impl AsRef<OsStr>) -> UResult<Box<dyn Read + Send>> {
     match File::open(path) {
         Ok(f) => Ok(Box::new(f) as Box<dyn Read + Send>),
         Err(error) => Err(SortError::ReadFailed {
-            path: path.to_string_lossy().to_string(),
+            path: path.to_owned(),
             error,
         }
         .into()),
@@ -1828,8 +1849,8 @@ fn format_error_message(error: ParseSizeError, s: &str, option: &str) -> String 
     // GNU's sort echos affected flag, -S or --buffer-size, depending user's selection
     // GNU's sort does distinguish between "invalid (suffix in) argument"
     match error {
-        ParseSizeError::ParseFailure(_) => format!("invalid --{} argument '{}'", option, s),
-        ParseSizeError::SizeTooBig(_) => format!("--{} argument '{}' too large", option, s),
+        ParseSizeError::ParseFailure(_) => format!("invalid --{} argument {}", option, s.quote()),
+        ParseSizeError::SizeTooBig(_) => format!("--{} argument {} too large", option, s.quote()),
     }
 }
 

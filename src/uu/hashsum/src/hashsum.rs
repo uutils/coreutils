@@ -34,6 +34,7 @@ use std::io::{self, stdin, BufRead, BufReader, Read};
 use std::iter;
 use std::num::ParseIntError;
 use std::path::Path;
+use uucore::display::Quotable;
 
 const NAME: &str = "hashsum";
 
@@ -525,7 +526,7 @@ where
                             if options.warn {
                                 show_warning!(
                                     "{}: {}: improperly formatted {} checksum line",
-                                    filename.display(),
+                                    filename.maybe_quote(),
                                     i + 1,
                                     options.algoname
                                 );
@@ -546,6 +547,10 @@ where
                     )
                 )
                 .to_ascii_lowercase();
+                // FIXME: (How) should these be quoted?
+                // They seem like they would be processed programmatically, and
+                // our ordinary quoting might interfere, but newlines should be
+                // sanitized probably
                 if sum == real_sum {
                     if !options.quiet {
                         println!("{}: OK", ck_filename);

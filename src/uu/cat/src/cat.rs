@@ -20,6 +20,7 @@ use clap::{crate_version, App, Arg};
 use std::fs::{metadata, File};
 use std::io::{self, Read, Write};
 use thiserror::Error;
+use uucore::display::Quotable;
 use uucore::error::UResult;
 
 #[cfg(unix)]
@@ -386,7 +387,7 @@ fn cat_files(files: Vec<String>, options: &OutputOptions) -> UResult<()> {
 
     for path in &files {
         if let Err(err) = cat_path(path, options, &mut state, &out_info) {
-            error_messages.push(format!("{}: {}", path, err));
+            error_messages.push(format!("{}: {}", path.maybe_quote(), err));
         }
     }
     if state.skipped_carriage_return {

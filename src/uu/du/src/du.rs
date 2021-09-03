@@ -32,6 +32,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::{Duration, UNIX_EPOCH};
 use std::{error::Error, fmt::Display};
+use uucore::display::{print_verbatim, Quotable};
 use uucore::error::{UError, UResult};
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::InvalidEncodingHandling;
@@ -293,9 +294,9 @@ fn du(
             Err(e) => {
                 safe_writeln!(
                     stderr(),
-                    "{}: cannot read directory '{}': {}",
+                    "{}: cannot read directory {}: {}",
                     options.util_name,
-                    my_stat.path.display(),
+                    my_stat.path.quote(),
                     e
                 );
                 return Box::new(iter::once(my_stat));
@@ -334,11 +335,11 @@ fn du(
                     }
                     Err(error) => match error.kind() {
                         ErrorKind::PermissionDenied => {
-                            let description = format!("cannot access '{}'", entry.path().display());
+                            let description = format!("cannot access {}", entry.path().quote());
                             let error_message = "Permission denied";
                             show_error_custom_description!(description, "{}", error_message)
                         }
-                        _ => show_error!("cannot access '{}': {}", entry.path().display(), error),
+                        _ => show_error!("cannot access {}: {}", entry.path().quote(), error),
                     },
                 },
                 Err(error) => show_error!("{}", error),
@@ -411,26 +412,30 @@ enum DuError {
 impl Display for DuError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            DuError::InvalidMaxDepthArg(s) => write!(f, "invalid maximum depth '{}'", s),
+            DuError::InvalidMaxDepthArg(s) => write!(f, "invalid maximum depth {}", s.quote()),
             DuError::SummarizeDepthConflict(s) => {
-                write!(f, "summarizing conflicts with --max-depth={}", s)
+                write!(
+                    f,
+                    "summarizing conflicts with --max-depth={}",
+                    s.maybe_quote()
+                )
             }
             DuError::InvalidTimeStyleArg(s) => write!(
                 f,
-                "invalid argument '{}' for 'time style'
+                "invalid argument {} for 'time style'
 Valid arguments are:
 - 'full-iso'
 - 'long-iso'
 - 'iso'
 Try '{} --help' for more information.",
-                s,
+                s.quote(),
                 uucore::execution_phrase()
             ),
             DuError::InvalidTimeArg(s) => write!(
                 f,
-                "Invalid argument '{}' for --time.
+                "Invalid argument {} for --time.
 'birth' and 'creation' arguments are not supported on this platform.",
-                s
+                s.quote()
             ),
         }
     }
@@ -566,21 +571,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         };
                         if !summarize || index == len - 1 {
                             let time_str = tm.format(time_format_str).to_string();
-                            print!(
-                                "{}\t{}\t{}{}",
-                                convert_size(size),
-                                time_str,
-                                stat.path.display(),
-                                line_separator
-                            );
+                            print!("{}\t{}\t", convert_size(size), time_str);
+                            print_verbatim(stat.path).unwrap();
+                            print!("{}", line_separator);
                         }
                     } else if !summarize || index == len - 1 {
-                        print!(
-                            "{}\t{}{}",
-                            convert_size(size),
-                            stat.path.display(),
-                            line_separator
-                        );
+                        print!("{}\t", convert_size(size));
+                        print_verbatim(stat.path).unwrap();
+                        print!("{}", line_separator);
                     }
                     if options.total && index == (len - 1) {
                         // The last element will be the total size of the the path under
@@ -590,7 +588,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 }
             }
             Err(_) => {
-                show_error!("{}: {}", path_string, "No such file or directory");
+                show_error!(
+                    "{}: {}",
+                    path_string.maybe_quote(),
+                    "No such file or directory"
+                );
             }
         }
     }
@@ -837,8 +839,8 @@ fn format_error_message(error: ParseSizeError, s: &str, option: &str) -> String 
     // GNU's du echos affected flag, -B or --block-size (-t or --threshold), depending user's selection
     // GNU's du does distinguish between "invalid (suffix in) argument"
     match error {
-        ParseSizeError::ParseFailure(_) => format!("invalid --{} argument '{}'", option, s),
-        ParseSizeError::SizeTooBig(_) => format!("--{} argument '{}' too large", option, s),
+        ParseSizeError::ParseFailure(_) => format!("invalid --{} argument {}", option, s.quote()),
+        ParseSizeError::SizeTooBig(_) => format!("--{} argument {} too large", option, s.quote()),
     }
 }
 

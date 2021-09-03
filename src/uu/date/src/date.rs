@@ -17,6 +17,7 @@ use libc::{clock_settime, timespec, CLOCK_REALTIME};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
+use uucore::display::Quotable;
 #[cfg(windows)]
 use winapi::{
     shared::minwindef::WORD,
@@ -145,7 +146,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let format = if let Some(form) = matches.value_of(OPT_FORMAT) {
         if !form.starts_with('+') {
-            eprintln!("date: invalid date '{}'", form);
+            eprintln!("date: invalid date {}", form.quote());
             return 1;
         }
         let form = form[1..].to_string();
@@ -174,7 +175,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let set_to = match matches.value_of(OPT_SET).map(parse_date) {
         None => None,
         Some(Err((input, _err))) => {
-            eprintln!("date: invalid date '{}'", input);
+            eprintln!("date: invalid date {}", input.quote());
             return 1;
         }
         Some(Ok(date)) => Some(date),
@@ -240,7 +241,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     println!("{}", formatted);
                 }
                 Err((input, _err)) => {
-                    println!("date: invalid date '{}'", input);
+                    println!("date: invalid date {}", input.quote());
                 }
             }
         }

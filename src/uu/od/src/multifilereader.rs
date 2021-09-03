@@ -5,6 +5,8 @@ use std::io;
 use std::io::BufReader;
 use std::vec::Vec;
 
+use uucore::display::Quotable;
+
 pub enum InputSource<'a> {
     FileName(&'a str),
     Stdin,
@@ -57,7 +59,7 @@ impl<'b> MultifileReader<'b> {
                             // print an error at the time that the file is needed,
                             // then move on the the next file.
                             // This matches the behavior of the original `od`
-                            eprintln!("{}: '{}': {}", uucore::util_name(), fname, e);
+                            eprintln!("{}: {}: {}", uucore::util_name(), fname.maybe_quote(), e);
                             self.any_err = true
                         }
                     }

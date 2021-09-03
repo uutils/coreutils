@@ -5,6 +5,7 @@
 
 //! Common functions to manage permissions
 
+use crate::display::Quotable;
 use crate::error::strip_errno;
 use crate::error::UResult;
 use crate::error::USimpleError;
@@ -80,29 +81,29 @@ pub fn wrap_chown<P: AsRef<Path>>(
             VerbosityLevel::Silent => (),
             level => {
                 out = format!(
-                    "changing {} of '{}': {}",
+                    "changing {} of {}: {}",
                     if verbosity.groups_only {
                         "group"
                     } else {
                         "ownership"
                     },
-                    path.display(),
+                    path.quote(),
                     e
                 );
                 if level == VerbosityLevel::Verbose {
                     out = if verbosity.groups_only {
                         format!(
-                            "{}\nfailed to change group of '{}' from {} to {}",
+                            "{}\nfailed to change group of {} from {} to {}",
                             out,
-                            path.display(),
+                            path.quote(),
                             entries::gid2grp(meta.gid()).unwrap(),
                             entries::gid2grp(dest_gid).unwrap()
                         )
                     } else {
                         format!(
-                            "{}\nfailed to change ownership of '{}' from {}:{} to {}:{}",
+                            "{}\nfailed to change ownership of {} from {}:{} to {}:{}",
                             out,
-                            path.display(),
+                            path.quote(),
                             entries::uid2usr(meta.uid()).unwrap(),
                             entries::gid2grp(meta.gid()).unwrap(),
                             entries::uid2usr(dest_uid).unwrap(),
@@ -120,15 +121,15 @@ pub fn wrap_chown<P: AsRef<Path>>(
                 VerbosityLevel::Changes | VerbosityLevel::Verbose => {
                     out = if verbosity.groups_only {
                         format!(
-                            "changed group of '{}' from {} to {}",
-                            path.display(),
+                            "changed group of {} from {} to {}",
+                            path.quote(),
                             entries::gid2grp(meta.gid()).unwrap(),
                             entries::gid2grp(dest_gid).unwrap()
                         )
                     } else {
                         format!(
-                            "changed ownership of '{}' from {}:{} to {}:{}",
-                            path.display(),
+                            "changed ownership of {} from {}:{} to {}:{}",
+                            path.quote(),
                             entries::uid2usr(meta.uid()).unwrap(),
                             entries::gid2grp(meta.gid()).unwrap(),
                             entries::uid2usr(dest_uid).unwrap(),
@@ -141,14 +142,14 @@ pub fn wrap_chown<P: AsRef<Path>>(
         } else if verbosity.level == VerbosityLevel::Verbose {
             out = if verbosity.groups_only {
                 format!(
-                    "group of '{}' retained as {}",
-                    path.display(),
+                    "group of {} retained as {}",
+                    path.quote(),
                     entries::gid2grp(dest_gid).unwrap_or_default()
                 )
             } else {
                 format!(
-                    "ownership of '{}' retained as {}:{}",
-                    path.display(),
+                    "ownership of {} retained as {}:{}",
+                    path.quote(),
                     entries::uid2usr(dest_uid).unwrap(),
                     entries::gid2grp(dest_gid).unwrap()
                 )
@@ -358,9 +359,9 @@ impl ChownExecutor {
                 match self.verbosity.level {
                     VerbosityLevel::Silent => (),
                     _ => show_error!(
-                        "cannot {} '{}': {}",
+                        "cannot {} {}: {}",
                         if follow { "dereference" } else { "access" },
-                        path.display(),
+                        path.quote(),
                         strip_errno(&e)
                     ),
                 }

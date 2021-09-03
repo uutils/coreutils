@@ -1,3 +1,5 @@
+use uucore::display::Quotable;
+
 use crate::options::{NumfmtOptions, RoundMethod};
 use crate::units::{DisplayableSuffix, RawSuffix, Result, Suffix, Unit, IEC_BASES, SI_BASES};
 
@@ -78,7 +80,7 @@ fn parse_suffix(s: &str) -> Result<(f64, Option<Suffix>)> {
         Some('Z') => Some((RawSuffix::Z, with_i)),
         Some('Y') => Some((RawSuffix::Y, with_i)),
         Some('0'..='9') => None,
-        _ => return Err(format!("invalid suffix in input: '{}'", s)),
+        _ => return Err(format!("invalid suffix in input: {}", s.quote())),
     };
 
     let suffix_len = match suffix {
@@ -89,7 +91,7 @@ fn parse_suffix(s: &str) -> Result<(f64, Option<Suffix>)> {
 
     let number = s[..s.len() - suffix_len]
         .parse::<f64>()
-        .map_err(|_| format!("invalid number: '{}'", s))?;
+        .map_err(|_| format!("invalid number: {}", s.quote()))?;
 
     Ok((number, suffix))
 }

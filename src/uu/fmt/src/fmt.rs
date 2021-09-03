@@ -15,6 +15,7 @@ use std::cmp;
 use std::fs::File;
 use std::io::{stdin, stdout, Write};
 use std::io::{BufReader, BufWriter, Read};
+use uucore::display::Quotable;
 
 use self::linebreak::break_lines;
 use self::parasplit::ParagraphStream;
@@ -187,7 +188,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             _ => match File::open(i) {
                 Ok(f) => BufReader::new(Box::new(f) as Box<dyn Read + 'static>),
                 Err(e) => {
-                    show_warning!("{}: {}", i, e);
+                    show_warning!("{}: {}", i.maybe_quote(), e);
                     continue;
                 }
             },

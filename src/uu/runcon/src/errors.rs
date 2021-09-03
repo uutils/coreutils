@@ -3,6 +3,8 @@ use std::fmt::Write;
 use std::io;
 use std::str::Utf8Error;
 
+use uucore::display::Quotable;
+
 pub(crate) type Result<T> = std::result::Result<T, Error>;
 
 #[derive(thiserror::Error, Debug)]
@@ -31,7 +33,7 @@ pub(crate) enum Error {
         source: io::Error,
     },
 
-    #[error("{operation} failed on '{}'", .operand1.to_string_lossy())]
+    #[error("{operation} failed on {}", .operand1.quote())]
     Io1 {
         operation: &'static str,
         operand1: OsString,
