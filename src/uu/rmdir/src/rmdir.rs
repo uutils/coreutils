@@ -14,6 +14,7 @@ use clap::{crate_version, App, Arg};
 use std::fs::{read_dir, remove_dir};
 use std::io;
 use std::path::Path;
+use uucore::display::Quotable;
 use uucore::error::{set_exit_code, strip_errno, UResult};
 use uucore::util_name;
 
@@ -77,27 +78,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     Ok(path.metadata()?.file_type().is_dir())
                 }
 
-                let path = path.as_os_str().as_bytes();
-                if error.raw_os_error() == Some(libc::ENOTDIR) && path.ends_with(b"/") {
+                let bytes = path.as_os_str().as_bytes();
+                if error.raw_os_error() == Some(libc::ENOTDIR) && bytes.ends_with(b"/") {
                     // Strip the trailing slash or .symlink_metadata() will follow the symlink
-                    let path: &Path = OsStr::from_bytes(&path[..path.len() - 1]).as_ref();
-                    if is_symlink(path).unwrap_or(false)
-                        && points_to_directory(path).unwrap_or(true)
+                    let no_slash: &Path = OsStr::from_bytes(&bytes[..bytes.len() - 1]).as_ref();
+                    if is_symlink(no_slash).unwrap_or(false)
+                        && points_to_directory(no_slash).unwrap_or(true)
                     {
                         show_error!(
-                            "failed to remove '{}/': Symbolic link not followed",
-                            path.display()
+                            "failed to remove {}: Symbolic link not followed",
+                            path.quote()
                         );
                         continue;
                     }
                 }
             }
 
-            show_error!(
-                "failed to remove '{}': {}",
-                path.display(),
-                strip_errno(&error)
-            );
+            show_error!("failed to remove {}: {}", path.quote(), strip_errno(&error));
         }
     }
 
@@ -125,7 +122,7 @@ fn remove(mut path: &Path, opts: Opts) -> Result<(), Error<'_>> {
 
 fn remove_single(path: &Path, opts: Opts) -> Result<(), Error<'_>> {
     if opts.verbose {
-        println!("{}: removing directory, '{}'", util_name(), path.display());
+        println!("{}: removing directory, {}", util_name(), path.quote());
     }
     remove_dir(path).map_err(|error| Error { error, path })
 }

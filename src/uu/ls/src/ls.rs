@@ -21,6 +21,7 @@ use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use once_cell::unsync::OnceCell;
 use quoting_style::{escape_name, QuotingStyle};
+use std::ffi::OsString;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::{
@@ -248,7 +249,7 @@ struct LongFormat {
 
 impl Config {
     #[allow(clippy::cognitive_complexity)]
-    fn from(options: clap::ArgMatches) -> UResult<Config> {
+    fn from(options: &clap::ArgMatches) -> UResult<Config> {
         let (mut format, opt) = if let Some(format_) = options.value_of(options::FORMAT) {
             (
                 match format_ {
@@ -428,11 +429,10 @@ impl Config {
         #[allow(clippy::needless_bool)]
         let show_control = if options.is_present(options::HIDE_CONTROL_CHARS) {
             false
-        } else if options.is_present(options::SHOW_CONTROL_CHARS) || atty::is(atty::Stream::Stdout)
-        {
+        } else if options.is_present(options::SHOW_CONTROL_CHARS) {
             true
         } else {
-            false
+            !atty::is(atty::Stream::Stdout)
         };
 
         let quoting_style = if let Some(style) = options.value_of(options::QUOTING_STYLE) {
@@ -599,22 +599,19 @@ impl Config {
 
 #[uucore_procs::gen_uumain]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args
-        .collect_str(InvalidEncodingHandling::Ignore)
-        .accept_any();
-
     let usage = usage();
 
     let app = uu_app().usage(&usage[..]);
 
     let matches = app.get_matches_from(args);
 
+    let config = Config::from(&matches)?;
     let locs = matches
-        .values_of(options::PATHS)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_else(|| vec![String::from(".")]);
+        .values_of_os(options::PATHS)
+        .map(|v| v.map(Path::new).collect())
+        .unwrap_or_else(|| vec![Path::new(".")]);
 
-    list(locs, Config::from(matches)?)
+    list(locs, config)
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -1177,7 +1174,7 @@ struct PathData {
     md: OnceCell<Option<Metadata>>,
     ft: OnceCell<Option<FileType>>,
     // Name of the file - will be empty for . or ..
-    display_name: String,
+    display_name: OsString,
     // PathBuf that all above data corresponds to
     p_buf: PathBuf,
     must_dereference: bool,
@@ -1187,7 +1184,7 @@ impl PathData {
     fn new(
         p_buf: PathBuf,
         file_type: Option<std::io::Result<FileType>>,
-        file_name: Option<String>,
+        file_name: Option<OsString>,
         config: &Config,
         command_line: bool,
     ) -> Self {
@@ -1195,16 +1192,13 @@ impl PathData {
         // For '..', the filename is None
         let display_name = if let Some(name) = file_name {
             name
+        } else if command_line {
+            p_buf.clone().into()
         } else {
-            let display_os_str = if command_line {
-                p_buf.as_os_str()
-            } else {
-                p_buf
-                    .file_name()
-                    .unwrap_or_else(|| p_buf.iter().next_back().unwrap())
-            };
-
-            display_os_str.to_string_lossy().into_owned()
+            p_buf
+                .file_name()
+                .unwrap_or_else(|| p_buf.iter().next_back().unwrap())
+                .to_owned()
         };
         let must_dereference = match &config.dereference {
             Dereference::All => true,
@@ -1249,14 +1243,14 @@ impl PathData {
     }
 }
 
-fn list(locs: Vec<String>, config: Config) -> UResult<()> {
+fn list(locs: Vec<&Path>, config: Config) -> UResult<()> {
     let mut files = Vec::<PathData>::new();
     let mut dirs = Vec::<PathData>::new();
 
     let mut out = BufWriter::new(stdout());
 
     for loc in &locs {
-        let p = PathBuf::from(&loc);
+        let p = PathBuf::from(loc);
         let path_data = PathData::new(p, None, None, &config, true);
 
         if path_data.md().is_none() {
@@ -1286,6 +1280,7 @@ fn list(locs: Vec<String>, config: Config) -> UResult<()> {
     sort_entries(&mut dirs, &config);
     for dir in dirs {
         if locs.len() > 1 || config.recursive {
+            // FIXME: This should use the quoting style and propagate errors
             let _ = writeln!(out, "\n{}:", dir.p_buf.display());
         }
         enter_directory(&dir, &config, &mut out);
@@ -1394,14 +1389,17 @@ fn get_metadata(entry: &Path, dereference: bool) -> std::io::Result<Metadata> {
     }
 }
 
-fn display_dir_entry_size(entry: &PathData, config: &Config) -> (usize, usize) {
+fn display_dir_entry_size(entry: &PathData, config: &Config) -> (usize, usize, usize, usize) {
+    // TODO: Cache/memoize the display_* results so we don't have to recalculate them.
     if let Some(md) = entry.md() {
         (
             display_symlink_count(md).len(),
+            display_uname(md, config).len(),
+            display_group(md, config).len(),
             display_size_or_rdev(md, config).len(),
         )
     } else {
-        (0, 0)
+        (0, 0, 0, 0)
     }
 }
 
@@ -1409,15 +1407,28 @@ fn pad_left(string: String, count: usize) -> String {
     format!("{:>width$}", string, width = count)
 }
 
+fn pad_right(string: String, count: usize) -> String {
+    format!("{:<width$}", string, width = count)
+}
+
 fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) {
     if config.format == Format::Long {
-        let (mut max_links, mut max_width) = (1, 1);
+        let (
+            mut longest_link_count_len,
+            mut longest_uname_len,
+            mut longest_group_len,
+            mut longest_size_len,
+        ) = (1, 1, 1, 1);
         let mut total_size = 0;
 
         for item in items {
-            let (links, width) = display_dir_entry_size(item, config);
-            max_links = links.max(max_links);
-            max_width = width.max(max_width);
+            let (link_count_len, uname_len, group_len, size_len) =
+                display_dir_entry_size(item, config);
+            longest_link_count_len = link_count_len.max(longest_link_count_len);
+            longest_size_len = size_len.max(longest_size_len);
+            longest_uname_len = uname_len.max(longest_uname_len);
+            longest_group_len = group_len.max(longest_group_len);
+            longest_size_len = size_len.max(longest_size_len);
             total_size += item.md().map_or(0, |md| get_block_size(md, config));
         }
 
@@ -1426,7 +1437,15 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
         }
 
         for item in items {
-            display_item_long(item, max_links, max_width, config, out);
+            display_item_long(
+                item,
+                longest_link_count_len,
+                longest_uname_len,
+                longest_group_len,
+                longest_size_len,
+                config,
+                out,
+            );
         }
     } else {
         let names = items.iter().filter_map(|i| display_file_name(i, config));
@@ -1531,10 +1550,48 @@ fn display_grid(
     }
 }
 
+/// This writes to the BufWriter out a single string of the output of `ls -l`.
+///
+/// It writes the following keys, in order:
+/// * `inode` ([`get_inode`], config-optional)
+/// * `permissions` ([`display_permissions`])
+/// * `symlink_count` ([`display_symlink_count`])
+/// * `owner` ([`display_uname`], config-optional)
+/// * `group` ([`display_group`], config-optional)
+/// * `author` ([`display_uname`], config-optional)
+/// * `size / rdev` ([`display_size_or_rdev`])
+/// * `system_time` ([`get_system_time`])
+/// * `file_name` ([`display_file_name`])
+///
+/// This function needs to display information in columns:
+/// * permissions and system_time are already guaranteed to be pre-formatted in fixed length.
+/// * file_name is the last column and is left-aligned.
+/// * Everything else needs to be padded using [`pad_left`].
+///
+/// That's why we have the parameters:
+/// ```txt
+///    max_links: usize,
+///    longest_uname_len: usize,
+///    longest_group_len: usize,
+///    max_size: usize,
+/// ```
+/// that decide the maximum possible character count of each field.
+///
+/// [`get_inode`]: ls::get_inode
+/// [`display_permissions`]: ls::display_permissions
+/// [`display_symlink_count`]: ls::display_symlink_count
+/// [`display_uname`]: ls::display_uname
+/// [`display_group`]: ls::display_group
+/// [`display_size_or_rdev`]: ls::display_size_or_rdev
+/// [`get_system_time`]: ls::get_system_time
+/// [`display_file_name`]: ls::display_file_name
+/// [`pad_left`]: ls::pad_left
 fn display_item_long(
     item: &PathData,
-    max_links: usize,
-    max_size: usize,
+    longest_link_count_len: usize,
+    longest_uname_len: usize,
+    longest_group_len: usize,
+    longest_size_len: usize,
     config: &Config,
     out: &mut BufWriter<Stdout>,
 ) {
@@ -1557,27 +1614,39 @@ fn display_item_long(
         out,
         "{} {}",
         display_permissions(md, true),
-        pad_left(display_symlink_count(md), max_links),
+        pad_left(display_symlink_count(md), longest_link_count_len),
     );
 
     if config.long.owner {
-        let _ = write!(out, " {}", display_uname(md, config));
+        let _ = write!(
+            out,
+            " {}",
+            pad_right(display_uname(md, config), longest_uname_len)
+        );
     }
 
     if config.long.group {
-        let _ = write!(out, " {}", display_group(md, config));
+        let _ = write!(
+            out,
+            " {}",
+            pad_right(display_group(md, config), longest_group_len)
+        );
     }
 
     // Author is only different from owner on GNU/Hurd, so we reuse
     // the owner, since GNU/Hurd is not currently supported by Rust.
     if config.long.author {
-        let _ = write!(out, " {}", display_uname(md, config));
+        let _ = write!(
+            out,
+            " {}",
+            pad_right(display_uname(md, config), longest_uname_len)
+        );
     }
 
     let _ = writeln!(
         out,
         " {} {} {}",
-        pad_left(display_size_or_rdev(md, config), max_size),
+        pad_left(display_size_or_rdev(md, config), longest_size_len),
         display_date(md, config),
         // unwrap is fine because it fails when metadata is not available
         // but we already know that it is because it's checked at the
@@ -1597,7 +1666,6 @@ fn get_inode(metadata: &Metadata) -> String {
 use std::sync::Mutex;
 #[cfg(unix)]
 use uucore::entries;
-use uucore::InvalidEncodingHandling;
 
 #[cfg(unix)]
 fn cached_uid2usr(uid: u32) -> String {
