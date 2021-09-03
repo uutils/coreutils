@@ -24,6 +24,8 @@ use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
+use uucore::display::{Quotable, Quoted};
+
 /// The minimum character width for formatting counts when reading from stdin.
 const MINIMUM_WIDTH: usize = 7;
 
@@ -122,10 +124,10 @@ impl Input {
         }
     }
 
-    fn path_display(&self) -> std::path::Display<'_> {
+    fn path_display(&self) -> Quoted<'_> {
         match self {
-            Input::Path(path) => path.display(),
-            Input::Stdin(_) => Path::display("'standard input'".as_ref()),
+            Input::Path(path) => path.maybe_quote(),
+            Input::Stdin(_) => "standard input".maybe_quote(),
         }
     }
 }
@@ -448,7 +450,10 @@ fn wc(inputs: Vec<Input>, settings: &Settings) -> Result<(), u32> {
         if let Err(err) = print_stats(settings, &result, max_width) {
             show_warning!(
                 "failed to print result for {}: {}",
-                result.title.unwrap_or_else(|| "<stdin>".as_ref()).display(),
+                result
+                    .title
+                    .unwrap_or_else(|| "<stdin>".as_ref())
+                    .maybe_quote(),
                 err
             );
             failure = true;
@@ -526,7 +531,7 @@ fn print_stats(
     }
 
     if let Some(title) = result.title {
-        writeln!(stdout_lock, " {}", title.display())?;
+        writeln!(stdout_lock, " {}", title.maybe_quote())?;
     } else {
         writeln!(stdout_lock)?;
     }

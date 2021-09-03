@@ -67,6 +67,7 @@ quick_error! {
         IoErrContext(err: io::Error, path: String) {
             display("{}: {}", path, err)
             context(path: &'a str, err: io::Error) -> (err, path.to_owned())
+            context(context: String, err: io::Error) -> (err, context)
             cause(err)
         }
 
@@ -180,12 +181,15 @@ pub enum CopyMode {
     AttrOnly,
 }
 
-#[derive(Clone, Eq, PartialEq)]
+// The ordering here determines the order in which attributes are (re-)applied.
+// In particular, Ownership must be changed first to avoid interfering with mode change.
+#[derive(Clone, Eq, PartialEq, Debug, PartialOrd, Ord)]
 pub enum Attribute {
     #[cfg(unix)]
-    Mode,
     Ownership,
+    Mode,
     Timestamps,
+    #[cfg(feature = "feat_selinux")]
     Context,
     Links,
     Xattr,
@@ -240,7 +244,7 @@ mod options {
     pub const LINK: &str = "link";
     pub const NO_CLOBBER: &str = "no-clobber";
     pub const NO_DEREFERENCE: &str = "no-dereference";
-    pub const NO_DEREFERENCE_PRESERVE_LINKS: &str = "no-dereference-preserve-linkgs";
+    pub const NO_DEREFERENCE_PRESERVE_LINKS: &str = "no-dereference-preserve-links";
     pub const NO_PRESERVE: &str = "no-preserve";
     pub const NO_TARGET_DIRECTORY: &str = "no-target-directory";
     pub const ONE_FILE_SYSTEM: &str = "one-file-system";
@@ -266,6 +270,7 @@ static PRESERVABLE_ATTRIBUTES: &[&str] = &[
     "mode",
     "ownership",
     "timestamps",
+    #[cfg(feature = "feat_selinux")]
     "context",
     "links",
     "xattr",
@@ -273,18 +278,12 @@ static PRESERVABLE_ATTRIBUTES: &[&str] = &[
 ];
 
 #[cfg(not(unix))]
-static PRESERVABLE_ATTRIBUTES: &[&str] = &[
-    "ownership",
-    "timestamps",
-    "context",
-    "links",
-    "xattr",
-    "all",
-];
+static PRESERVABLE_ATTRIBUTES: &[&str] =
+    &["mode", "timestamps", "context", "links", "xattr", "all"];
 
 static DEFAULT_ATTRIBUTES: &[Attribute] = &[
-    #[cfg(unix)]
     Attribute::Mode,
+    #[cfg(unix)]
     Attribute::Ownership,
     Attribute::Timestamps,
 ];
@@ -381,13 +380,13 @@ pub fn uu_app() -> App<'static, 'static> {
              .conflicts_with_all(&[options::PRESERVE_DEFAULT_ATTRIBUTES, options::NO_PRESERVE])
              // -d sets this option
              // --archive sets this option
-             .help("Preserve the specified attributes (default: mode (unix only), ownership, timestamps), \
+             .help("Preserve the specified attributes (default: mode, ownership (unix only), timestamps), \
                     if possible additional attributes: context, links, xattr, all"))
         .arg(Arg::with_name(options::PRESERVE_DEFAULT_ATTRIBUTES)
              .short("-p")
              .long(options::PRESERVE_DEFAULT_ATTRIBUTES)
              .conflicts_with_all(&[options::PRESERVE, options::NO_PRESERVE, options::ARCHIVE])
-             .help("same as --preserve=mode(unix only),ownership,timestamps"))
+             .help("same as --preserve=mode,ownership(unix only),timestamps"))
         .arg(Arg::with_name(options::NO_PRESERVE)
              .long(options::NO_PRESERVE)
              .takes_value(true)
@@ -532,10 +531,11 @@ impl FromStr for Attribute {
 
     fn from_str(value: &str) -> CopyResult<Attribute> {
         Ok(match &*value.to_lowercase() {
-            #[cfg(unix)]
             "mode" => Attribute::Mode,
+            #[cfg(unix)]
             "ownership" => Attribute::Ownership,
             "timestamps" => Attribute::Timestamps,
+            #[cfg(feature = "feat_selinux")]
             "context" => Attribute::Context,
             "links" => Attribute::Links,
             "xattr" => Attribute::Xattr,
@@ -552,14 +552,16 @@ impl FromStr for Attribute {
 fn add_all_attributes() -> Vec<Attribute> {
     use Attribute::*;
 
-    #[cfg(target_os = "windows")]
-    let attr = vec![Ownership, Timestamps, Context, Xattr, Links];
-
-    #[cfg(not(target_os = "windows"))]
-    let mut attr = vec![Ownership, Timestamps, Context, Xattr, Links];
-
-    #[cfg(unix)]
-    attr.insert(0, Mode);
+    let attr = vec![
+        #[cfg(unix)]
+        Ownership,
+        Mode,
+        Timestamps,
+        #[cfg(feature = "feat_selinux")]
+        Context,
+        Links,
+        Xattr,
+    ];
 
     attr
 }
@@ -602,7 +604,7 @@ impl Options {
             .map(ToString::to_string);
 
         // Parse attributes to preserve
-        let preserve_attributes: Vec<Attribute> = if matches.is_present(options::PRESERVE) {
+        let mut preserve_attributes: Vec<Attribute> = if matches.is_present(options::PRESERVE) {
             match matches.values_of(options::PRESERVE) {
                 None => DEFAULT_ATTRIBUTES.to_vec(),
                 Some(attribute_strs) => {
@@ -628,6 +630,11 @@ impl Options {
         } else {
             vec![]
         };
+
+        // Make sure ownership is changed before other attributes,
+        // as chown clears some of the permission and therefore could undo previous changes
+        // if not executed first.
+        preserve_attributes.sort_unstable();
 
         let options = Options {
             attributes_only: matches.is_present(options::ATTRIBUTES_ONLY),
@@ -1050,26 +1057,65 @@ impl OverwriteMode {
 
 fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResult<()> {
     let context = &*format!("'{}' -> '{}'", source.display().to_string(), dest.display());
+    let source_metadata = fs::symlink_metadata(source).context(context)?;
     match *attribute {
-        #[cfg(unix)]
         Attribute::Mode => {
-            let mode = fs::metadata(source).context(context)?.permissions().mode();
-            let mut dest_metadata = fs::metadata(source).context(context)?.permissions();
-            dest_metadata.set_mode(mode);
+            fs::set_permissions(dest, source_metadata.permissions()).context(context)?;
+            // FIXME: Implement this for windows as well
+            #[cfg(feature = "feat_acl")]
+            exacl::getfacl(source, None)
+                .and_then(|acl| exacl::setfacl(&[dest], &acl, None))
+                .map_err(|err| Error::Error(err.to_string()))?;
         }
+        #[cfg(unix)]
         Attribute::Ownership => {
-            let metadata = fs::metadata(source).context(context)?;
-            fs::set_permissions(dest, metadata.permissions()).context(context)?;
+            use std::os::unix::prelude::MetadataExt;
+            use uucore::perms::wrap_chown;
+            use uucore::perms::Verbosity;
+            use uucore::perms::VerbosityLevel;
+
+            let dest_uid = source_metadata.uid();
+            let dest_gid = source_metadata.gid();
+
+            wrap_chown(
+                dest,
+                &dest.symlink_metadata().context(context)?,
+                Some(dest_uid),
+                Some(dest_gid),
+                false,
+                Verbosity {
+                    groups_only: false,
+                    level: VerbosityLevel::Normal,
+                },
+            )
+            .map_err(Error::Error)?;
         }
         Attribute::Timestamps => {
-            let metadata = fs::metadata(source)?;
             filetime::set_file_times(
                 Path::new(dest),
-                FileTime::from_last_access_time(&metadata),
-                FileTime::from_last_modification_time(&metadata),
+                FileTime::from_last_access_time(&source_metadata),
+                FileTime::from_last_modification_time(&source_metadata),
             )?;
         }
-        Attribute::Context => {}
+        #[cfg(feature = "feat_selinux")]
+        Attribute::Context => {
+            let context = selinux::SecurityContext::of_path(source, false, false).map_err(|e| {
+                format!(
+                    "failed to get security context of {}: {}",
+                    source.display(),
+                    e
+                )
+            })?;
+            if let Some(context) = context {
+                context.set_for_path(dest, false, false).map_err(|e| {
+                    format!(
+                        "failed to set security context for {}: {}",
+                        dest.display(),
+                        e
+                    )
+                })?;
+            }
+        }
         Attribute::Links => {}
         Attribute::Xattr => {
             #[cfg(unix)]
@@ -1143,8 +1189,8 @@ fn handle_existing_dest(source: &Path, dest: &Path, options: &Options) -> CopyRe
     Ok(())
 }
 
-/// Copy the a file from `source` to `dest`. No path manipulation is
-/// done on either `source` or `dest`, the are used as provided.
+/// Copy the a file from `source` to `dest`. `source` will be dereferenced if
+/// `options.dereference` is set to true. `dest` will always be dereferenced.
 ///
 /// Behavior when copying to existing files is contingent on the
 /// `options.overwrite` mode. If a file is skipped, the return type
@@ -1161,41 +1207,66 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
         println!("{}", context_for(source, dest));
     }
 
-    #[allow(unused)]
-    {
-        // TODO: implement --preserve flag
-        let mut preserve_context = false;
-        for attribute in &options.preserve_attributes {
-            if *attribute == Attribute::Context {
-                preserve_context = true;
-            }
+    // Calculate the context upfront before canonicalizing the path
+    let context = context_for(source, dest);
+    let context = context.as_str();
+
+    // canonicalize dest and source so that later steps can work with the paths directly
+    let dest = canonicalize(dest, MissingHandling::Missing, ResolveMode::Physical).unwrap();
+    let source = if options.dereference {
+        canonicalize(source, MissingHandling::Missing, ResolveMode::Physical).unwrap()
+    } else {
+        source.to_owned()
+    };
+
+    let dest_permissions = if dest.exists() {
+        dest.symlink_metadata().context(context)?.permissions()
+    } else {
+        #[allow(unused_mut)]
+        let mut permissions = source.symlink_metadata().context(context)?.permissions();
+        #[cfg(unix)]
+        {
+            use uucore::mode::get_umask;
+
+            let mut mode = permissions.mode();
+
+            // remove sticky bit, suid and gid bit
+            const SPECIAL_PERMS_MASK: u32 = 0o7000;
+            mode &= !SPECIAL_PERMS_MASK;
+
+            // apply umask
+            mode &= !get_umask();
+
+            permissions.set_mode(mode);
         }
-    }
+        permissions
+    };
+
     match options.copy_mode {
         CopyMode::Link => {
-            fs::hard_link(source, dest).context(&*context_for(source, dest))?;
+            fs::hard_link(&source, &dest).context(context)?;
         }
         CopyMode::Copy => {
-            copy_helper(source, dest, options)?;
+            copy_helper(&source, &dest, options, context)?;
         }
         CopyMode::SymLink => {
-            symlink_file(source, dest, &*context_for(source, dest))?;
+            symlink_file(&source, &dest, context)?;
         }
         CopyMode::Sparse => return Err(Error::NotImplemented(options::SPARSE.to_string())),
         CopyMode::Update => {
             if dest.exists() {
-                let src_metadata = fs::metadata(source)?;
-                let dest_metadata = fs::metadata(dest)?;
+                let src_metadata = fs::symlink_metadata(&source)?;
+                let dest_metadata = fs::symlink_metadata(&dest)?;
 
                 let src_time = src_metadata.modified()?;
                 let dest_time = dest_metadata.modified()?;
                 if src_time <= dest_time {
                     return Ok(());
                 } else {
-                    copy_helper(source, dest, options)?;
+                    copy_helper(&source, &dest, options, context)?;
                 }
             } else {
-                copy_helper(source, dest, options)?;
+                copy_helper(&source, &dest, options, context)?;
             }
         }
         CopyMode::AttrOnly => {
@@ -1203,53 +1274,51 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
                 .write(true)
                 .truncate(false)
                 .create(true)
-                .open(dest)
+                .open(&dest)
                 .unwrap();
         }
     };
+
+    // TODO: implement something similar to gnu's lchown
+    if fs::symlink_metadata(&dest)
+        .map(|meta| !meta.file_type().is_symlink())
+        .unwrap_or(false)
+    {
+        fs::set_permissions(&dest, dest_permissions).unwrap();
+    }
     for attribute in &options.preserve_attributes {
-        copy_attribute(source, dest, attribute)?;
+        copy_attribute(&source, &dest, attribute)?;
     }
     Ok(())
 }
 
 /// Copy the file from `source` to `dest` either using the normal `fs::copy` or a
 /// copy-on-write scheme if --reflink is specified and the filesystem supports it.
-fn copy_helper(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
+fn copy_helper(source: &Path, dest: &Path, options: &Options, context: &str) -> CopyResult<()> {
     if options.parents {
         let parent = dest.parent().unwrap_or(dest);
         fs::create_dir_all(parent)?;
     }
     let is_symlink = fs::symlink_metadata(&source)?.file_type().is_symlink();
-    if source.to_string_lossy() == "/dev/null" {
+    if source.as_os_str() == "/dev/null" {
         /* workaround a limitation of fs::copy
          * https://github.com/rust-lang/rust/issues/79390
          */
         File::create(dest)?;
-    } else if !options.dereference && is_symlink {
+    } else if is_symlink {
         copy_link(source, dest)?;
     } else if options.reflink_mode != ReflinkMode::Never {
         #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         return Err("--reflink is only supported on linux and macOS"
             .to_string()
             .into());
-        #[cfg(any(target_os = "linux", target_os = "macos"))]
-        if is_symlink {
-            assert!(options.dereference);
-            let real_path = std::fs::read_link(source)?;
 
-            #[cfg(target_os = "macos")]
-            copy_on_write_macos(&real_path, dest, options.reflink_mode)?;
-            #[cfg(target_os = "linux")]
-            copy_on_write_linux(&real_path, dest, options.reflink_mode)?;
-        } else {
-            #[cfg(target_os = "macos")]
-            copy_on_write_macos(source, dest, options.reflink_mode)?;
-            #[cfg(target_os = "linux")]
-            copy_on_write_linux(source, dest, options.reflink_mode)?;
-        }
+        #[cfg(target_os = "macos")]
+        copy_on_write_macos(source, dest, options.reflink_mode, context)?;
+        #[cfg(target_os = "linux")]
+        copy_on_write_linux(source, dest, options.reflink_mode, context)?;
     } else {
-        fs::copy(source, dest).context(&*context_for(source, dest))?;
+        fs::copy(source, dest).context(context)?;
     }
 
     Ok(())
@@ -1280,16 +1349,21 @@ fn copy_link(source: &Path, dest: &Path) -> CopyResult<()> {
 
 /// Copies `source` to `dest` using copy-on-write if possible.
 #[cfg(target_os = "linux")]
-fn copy_on_write_linux(source: &Path, dest: &Path, mode: ReflinkMode) -> CopyResult<()> {
+fn copy_on_write_linux(
+    source: &Path,
+    dest: &Path,
+    mode: ReflinkMode,
+    context: &str,
+) -> CopyResult<()> {
     debug_assert!(mode != ReflinkMode::Never);
 
-    let src_file = File::open(source).context(&*context_for(source, dest))?;
+    let src_file = File::open(source).context(context)?;
     let dst_file = OpenOptions::new()
         .write(true)
         .truncate(false)
         .create(true)
         .open(dest)
-        .context(&*context_for(source, dest))?;
+        .context(context)?;
     match mode {
         ReflinkMode::Always => unsafe {
             let result = ficlone(dst_file.as_raw_fd(), src_file.as_raw_fd() as *const i32);
@@ -1308,7 +1382,7 @@ fn copy_on_write_linux(source: &Path, dest: &Path, mode: ReflinkMode) -> CopyRes
         ReflinkMode::Auto => unsafe {
             let result = ficlone(dst_file.as_raw_fd(), src_file.as_raw_fd() as *const i32);
             if result != 0 {
-                fs::copy(source, dest).context(&*context_for(source, dest))?;
+                fs::copy(source, dest).context(context)?;
             }
             Ok(())
         },
@@ -1318,7 +1392,12 @@ fn copy_on_write_linux(source: &Path, dest: &Path, mode: ReflinkMode) -> CopyRes
 
 /// Copies `source` to `dest` using copy-on-write if possible.
 #[cfg(target_os = "macos")]
-fn copy_on_write_macos(source: &Path, dest: &Path, mode: ReflinkMode) -> CopyResult<()> {
+fn copy_on_write_macos(
+    source: &Path,
+    dest: &Path,
+    mode: ReflinkMode,
+    context: &str,
+) -> CopyResult<()> {
     debug_assert!(mode != ReflinkMode::Never);
 
     // Extract paths in a form suitable to be passed to a syscall.
@@ -1363,7 +1442,7 @@ fn copy_on_write_macos(source: &Path, dest: &Path, mode: ReflinkMode) -> CopyRes
                     format!("failed to clone {:?} from {:?}: {}", source, dest, error).into(),
                 )
             }
-            ReflinkMode::Auto => fs::copy(source, dest).context(&*context_for(source, dest))?,
+            ReflinkMode::Auto => fs::copy(source, dest).context(context)?,
             ReflinkMode::Never => unreachable!(),
         };
     }

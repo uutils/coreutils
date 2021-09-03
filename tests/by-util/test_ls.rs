@@ -1618,6 +1618,7 @@ fn test_ls_quoting_style() {
         // Default is shell-escape
         scene
             .ucmd()
+            .arg("--hide-control-chars")
             .arg("one\ntwo")
             .succeeds()
             .stdout_only("'one'$'\\n''two'\n");
@@ -1639,23 +1640,8 @@ fn test_ls_quoting_style() {
         ] {
             scene
                 .ucmd()
-                .arg(arg)
-                .arg("one\ntwo")
-                .succeeds()
-                .stdout_only(format!("{}\n", correct));
-        }
-
-        for (arg, correct) in &[
-            ("--quoting-style=literal", "one?two"),
-            ("-N", "one?two"),
-            ("--literal", "one?two"),
-            ("--quoting-style=shell", "one?two"),
-            ("--quoting-style=shell-always", "'one?two'"),
-        ] {
-            scene
-                .ucmd()
-                .arg(arg)
                 .arg("--hide-control-chars")
+                .arg(arg)
                 .arg("one\ntwo")
                 .succeeds()
                 .stdout_only(format!("{}\n", correct));
@@ -1665,7 +1651,7 @@ fn test_ls_quoting_style() {
             ("--quoting-style=literal", "one\ntwo"),
             ("-N", "one\ntwo"),
             ("--literal", "one\ntwo"),
-            ("--quoting-style=shell", "one\ntwo"),
+            ("--quoting-style=shell", "one\ntwo"), // FIXME: GNU ls quotes this case
             ("--quoting-style=shell-always", "'one\ntwo'"),
         ] {
             scene
@@ -1692,6 +1678,7 @@ fn test_ls_quoting_style() {
         ] {
             scene
                 .ucmd()
+                .arg("--hide-control-chars")
                 .arg(arg)
                 .arg("one\\two")
                 .succeeds()
@@ -1707,6 +1694,7 @@ fn test_ls_quoting_style() {
         ] {
             scene
                 .ucmd()
+                .arg("--hide-control-chars")
                 .arg(arg)
                 .arg("one\n&two")
                 .succeeds()
@@ -1737,6 +1725,7 @@ fn test_ls_quoting_style() {
     ] {
         scene
             .ucmd()
+            .arg("--hide-control-chars")
             .arg(arg)
             .arg("one two")
             .succeeds()
@@ -1760,6 +1749,7 @@ fn test_ls_quoting_style() {
     ] {
         scene
             .ucmd()
+            .arg("--hide-control-chars")
             .arg(arg)
             .arg("one")
             .succeeds()

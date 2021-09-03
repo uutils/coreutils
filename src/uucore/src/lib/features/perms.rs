@@ -5,11 +5,16 @@
 
 //! Common functions to manage permissions
 
+use crate::error::strip_errno;
 use crate::error::UResult;
+use crate::error::USimpleError;
 pub use crate::features::entries;
 use crate::fs::resolve_relative_path;
 use crate::show_error;
-use libc::{self, gid_t, lchown, uid_t};
+use clap::App;
+use clap::Arg;
+use clap::ArgMatches;
+use libc::{self, gid_t, uid_t};
 use walkdir::WalkDir;
 
 use std::io::Error as IOError;
@@ -44,7 +49,7 @@ fn chown<P: AsRef<Path>>(path: P, uid: uid_t, gid: gid_t, follow: bool) -> IORes
         if follow {
             libc::chown(s.as_ptr(), uid, gid)
         } else {
-            lchown(s.as_ptr(), uid, gid)
+            libc::lchown(s.as_ptr(), uid, gid)
         }
     };
     if ret == 0 {
@@ -160,10 +165,17 @@ pub enum IfFrom {
     UserGroup(u32, u32),
 }
 
+#[derive(PartialEq, Eq)]
+pub enum TraverseSymlinks {
+    None,
+    First,
+    All,
+}
+
 pub struct ChownExecutor {
     pub dest_uid: Option<u32>,
     pub dest_gid: Option<u32>,
-    pub bit_flag: u8,
+    pub traverse_symlinks: TraverseSymlinks,
     pub verbosity: Verbosity,
     pub filter: IfFrom,
     pub files: Vec<String>,
@@ -171,19 +183,6 @@ pub struct ChownExecutor {
     pub preserve_root: bool,
     pub dereference: bool,
 }
-
-macro_rules! unwrap {
-    ($m:expr, $e:ident, $err:block) => {
-        match $m {
-            Ok(meta) => meta,
-            Err($e) => $err,
-        }
-    };
-}
-
-pub const FTS_COMFOLLOW: u8 = 1;
-pub const FTS_PHYSICAL: u8 = 1 << 1;
-pub const FTS_LOGICAL: u8 = 1 << 2;
 
 impl ChownExecutor {
     pub fn exec(&self) -> UResult<()> {
@@ -198,9 +197,8 @@ impl ChownExecutor {
     }
 
     fn traverse<P: AsRef<Path>>(&self, root: P) -> i32 {
-        let follow_arg = self.dereference || self.bit_flag != FTS_PHYSICAL;
         let path = root.as_ref();
-        let meta = match self.obtain_meta(path, follow_arg) {
+        let meta = match self.obtain_meta(path, self.dereference) {
             Some(m) => m,
             _ => return 1,
         };
@@ -212,7 +210,7 @@ impl ChownExecutor {
         //     (argument is symlink && should follow argument && resolved to be '/')
         // )
         if self.recursive && self.preserve_root {
-            let may_exist = if follow_arg {
+            let may_exist = if self.dereference {
                 path.canonicalize().ok()
             } else {
                 let real = resolve_relative_path(path);
@@ -238,7 +236,7 @@ impl ChownExecutor {
                 &meta,
                 self.dest_uid,
                 self.dest_gid,
-                follow_arg,
+                self.dereference,
                 self.verbosity.clone(),
             ) {
                 Ok(n) => {
@@ -266,20 +264,55 @@ impl ChownExecutor {
     }
 
     fn dive_into<P: AsRef<Path>>(&self, root: P) -> i32 {
-        let mut ret = 0;
         let root = root.as_ref();
-        let follow = self.dereference || self.bit_flag & FTS_LOGICAL != 0;
-        for entry in WalkDir::new(root).follow_links(follow).min_depth(1) {
-            let entry = unwrap!(entry, e, {
-                ret = 1;
-                show_error!("{}", e);
-                continue;
-            });
+
+        // walkdir always dereferences the root directory, so we have to check it ourselves
+        // TODO: replace with `root.is_symlink()` once it is stable
+        if self.traverse_symlinks == TraverseSymlinks::None
+            && std::fs::symlink_metadata(root)
+                .map(|m| m.file_type().is_symlink())
+                .unwrap_or(false)
+        {
+            return 0;
+        }
+
+        let mut ret = 0;
+        let mut iterator = WalkDir::new(root)
+            .follow_links(self.traverse_symlinks == TraverseSymlinks::All)
+            .min_depth(1)
+            .into_iter();
+        // We can't use a for loop because we need to manipulate the iterator inside the loop.
+        while let Some(entry) = iterator.next() {
+            let entry = match entry {
+                Err(e) => {
+                    ret = 1;
+                    if let Some(path) = e.path() {
+                        show_error!(
+                            "cannot access '{}': {}",
+                            path.display(),
+                            if let Some(error) = e.io_error() {
+                                strip_errno(error)
+                            } else {
+                                "Too many levels of symbolic links".into()
+                            }
+                        )
+                    } else {
+                        show_error!("{}", e)
+                    }
+                    continue;
+                }
+                Ok(entry) => entry,
+            };
             let path = entry.path();
-            let meta = match self.obtain_meta(path, follow) {
+            let meta = match self.obtain_meta(path, self.dereference) {
                 Some(m) => m,
                 _ => {
                     ret = 1;
+                    if entry.file_type().is_dir() {
+                        // Instruct walkdir to skip this directory to avoid getting another error
+                        // when walkdir tries to query the children of this directory.
+                        iterator.skip_current_dir();
+                    }
                     continue;
                 }
             };
@@ -293,7 +326,7 @@ impl ChownExecutor {
                 &meta,
                 self.dest_uid,
                 self.dest_gid,
-                follow,
+                self.dereference,
                 self.verbosity.clone(),
             ) {
                 Ok(n) => {
@@ -316,23 +349,25 @@ impl ChownExecutor {
     fn obtain_meta<P: AsRef<Path>>(&self, path: P, follow: bool) -> Option<Metadata> {
         let path = path.as_ref();
         let meta = if follow {
-            unwrap!(path.metadata(), e, {
-                match self.verbosity.level {
-                    VerbosityLevel::Silent => (),
-                    _ => show_error!("cannot access '{}': {}", path.display(), e),
-                }
-                return None;
-            })
+            path.metadata()
         } else {
-            unwrap!(path.symlink_metadata(), e, {
+            path.symlink_metadata()
+        };
+        match meta {
+            Err(e) => {
                 match self.verbosity.level {
                     VerbosityLevel::Silent => (),
-                    _ => show_error!("cannot dereference '{}': {}", path.display(), e),
+                    _ => show_error!(
+                        "cannot {} '{}': {}",
+                        if follow { "dereference" } else { "access" },
+                        path.display(),
+                        strip_errno(&e)
+                    ),
                 }
-                return None;
-            })
-        };
-        Some(meta)
+                None
+            }
+            Ok(meta) => Some(meta),
+        }
     }
 
     #[inline]
@@ -344,4 +379,149 @@ impl ChownExecutor {
             IfFrom::UserGroup(u, g) => u == uid && g == gid,
         }
     }
+}
+
+pub mod options {
+    pub mod verbosity {
+        pub const CHANGES: &str = "changes";
+        pub const QUIET: &str = "quiet";
+        pub const SILENT: &str = "silent";
+        pub const VERBOSE: &str = "verbose";
+    }
+    pub mod preserve_root {
+        pub const PRESERVE: &str = "preserve-root";
+        pub const NO_PRESERVE: &str = "no-preserve-root";
+    }
+    pub mod dereference {
+        pub const DEREFERENCE: &str = "dereference";
+        pub const NO_DEREFERENCE: &str = "no-dereference";
+    }
+    pub const FROM: &str = "from";
+    pub const RECURSIVE: &str = "recursive";
+    pub mod traverse {
+        pub const TRAVERSE: &str = "H";
+        pub const NO_TRAVERSE: &str = "P";
+        pub const EVERY: &str = "L";
+    }
+    pub const REFERENCE: &str = "reference";
+    pub const ARG_OWNER: &str = "OWNER";
+    pub const ARG_GROUP: &str = "GROUP";
+    pub const ARG_FILES: &str = "FILE";
+}
+
+type GidUidFilterParser<'a> = fn(&ArgMatches<'a>) -> UResult<(Option<u32>, Option<u32>, IfFrom)>;
+
+/// Base implementation for `chgrp` and `chown`.
+///
+/// An argument called `add_arg_if_not_reference` will be added to `app` if
+/// `args` does not contain the `--reference` option.
+/// `parse_gid_uid_and_filter` will be called to obtain the target gid and uid, and the filter,
+/// from `ArgMatches`.
+/// `groups_only` determines whether verbose output will only mention the group.
+pub fn chown_base<'a>(
+    mut app: App<'a, 'a>,
+    args: impl crate::Args,
+    add_arg_if_not_reference: &'a str,
+    parse_gid_uid_and_filter: GidUidFilterParser<'a>,
+    groups_only: bool,
+) -> UResult<()> {
+    let args: Vec<_> = args.collect();
+    let mut reference = false;
+    let mut help = false;
+    // stop processing options on --
+    for arg in args.iter().take_while(|s| *s != "--") {
+        if arg.to_string_lossy().starts_with("--reference=") || arg == "--reference" {
+            reference = true;
+        } else if arg == "--help" {
+            // we stop processing once we see --help,
+            // as it doesn't matter if we've seen reference or not
+            help = true;
+            break;
+        }
+    }
+
+    if help || !reference {
+        // add both positional arguments
+        // arg_group is only required if
+        app = app.arg(
+            Arg::with_name(add_arg_if_not_reference)
+                .value_name(add_arg_if_not_reference)
+                .required(true)
+                .takes_value(true)
+                .multiple(false),
+        )
+    }
+    app = app.arg(
+        Arg::with_name(options::ARG_FILES)
+            .value_name(options::ARG_FILES)
+            .multiple(true)
+            .takes_value(true)
+            .required(true)
+            .min_values(1),
+    );
+    let matches = app.get_matches_from(args);
+
+    let files: Vec<String> = matches
+        .values_of(options::ARG_FILES)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
+
+    let preserve_root = matches.is_present(options::preserve_root::PRESERVE);
+
+    let mut dereference = if matches.is_present(options::dereference::DEREFERENCE) {
+        Some(true)
+    } else if matches.is_present(options::dereference::NO_DEREFERENCE) {
+        Some(false)
+    } else {
+        None
+    };
+
+    let mut traverse_symlinks = if matches.is_present(options::traverse::TRAVERSE) {
+        TraverseSymlinks::First
+    } else if matches.is_present(options::traverse::EVERY) {
+        TraverseSymlinks::All
+    } else {
+        TraverseSymlinks::None
+    };
+
+    let recursive = matches.is_present(options::RECURSIVE);
+    if recursive {
+        if traverse_symlinks == TraverseSymlinks::None {
+            if dereference == Some(true) {
+                return Err(USimpleError::new(1, "-R --dereference requires -H or -L"));
+            }
+            dereference = Some(false);
+        }
+    } else {
+        traverse_symlinks = TraverseSymlinks::None;
+    }
+
+    let verbosity_level = if matches.is_present(options::verbosity::CHANGES) {
+        VerbosityLevel::Changes
+    } else if matches.is_present(options::verbosity::SILENT)
+        || matches.is_present(options::verbosity::QUIET)
+    {
+        VerbosityLevel::Silent
+    } else if matches.is_present(options::verbosity::VERBOSE) {
+        VerbosityLevel::Verbose
+    } else {
+        VerbosityLevel::Normal
+    };
+    let (dest_gid, dest_uid, filter) = parse_gid_uid_and_filter(&matches)?;
+
+    let executor = ChownExecutor {
+        traverse_symlinks,
+        dest_gid,
+        dest_uid,
+        verbosity: Verbosity {
+            groups_only,
+            level: verbosity_level,
+        },
+        recursive,
+        dereference: dereference.unwrap_or(true),
+        preserve_root,
+        files,
+        filter,
+    };
+    executor.exec()
 }
