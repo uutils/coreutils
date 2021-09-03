@@ -36,6 +36,7 @@ falsey
 fileio
 flamegraph
 fullblock
+getfacl
 gibi
 gibibytes
 glob
@@ -50,6 +51,7 @@ iflag
 iflags
 kibi
 kibibytes
+libacl
 lcase
 lossily
 mebi
@@ -92,6 +94,7 @@ seedable
 semver
 semiprime
 semiprimes
+setfacl
 shortcode
 shortcodes
 siginfo
