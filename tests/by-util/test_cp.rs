@@ -8,6 +8,8 @@ use std::fs::set_permissions;
 use std::os::unix::fs;
 
 #[cfg(unix)]
+use std::os::unix::fs::symlink as symlink_file;
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 #[cfg(windows)]
 use std::os::windows::fs::symlink_file;
@@ -1352,4 +1354,17 @@ fn test_preserve_mode() {
         at.plus("dest").metadata().unwrap().mode() & 0o7777,
         PERMS_ALL
     );
+}
+
+#[test]
+fn test_canonicalize_symlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.touch("dir/file");
+    symlink_file("../dir/file", at.plus("dir/file-ln")).unwrap();
+    ucmd.arg("dir/file-ln")
+        .arg(".")
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
 }
