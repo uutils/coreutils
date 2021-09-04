@@ -333,6 +333,7 @@ fn test_ls_long() {
     }
 }
 
+#[cfg(not(windows))]
 #[test]
 fn test_ls_long_format() {
     let scene = TestScenario::new(util_name!());
@@ -354,14 +355,12 @@ fn test_ls_long_format() {
         // Either a year or a time, currently [0-9:]+, preceded by column whitespace,
         // and followed by a single space.
         // Whatever comes after is irrelevant to this specific test.
-        #[cfg(not(windows))]
         scene.ucmd().arg(arg).arg("test-long-dir").succeeds().stdout_matches(&Regex::new(
             r"\n[-bcCdDlMnpPsStTx?]([r-][w-][xt-]){3} +\d+ [^ ]+ +[^ ]+( +[^ ]+)? +\d+ [A-Z][a-z]{2} {0,2}\d{0,2} {0,2}[0-9:]+ "
         ).unwrap());
     }
 
     // This checks for the line with the .. entry. The uname and group should be digits.
-    #[cfg(not(windows))]
     scene.ucmd().arg("-lan").arg("test-long-dir").succeeds().stdout_matches(&Regex::new(
         r"\nd([r-][w-][xt-]){3} +\d+ \d+ +\d+( +\d+)? +\d+ [A-Z][a-z]{2} {0,2}\d{0,2} {0,2}[0-9:]+ \.\."
     ).unwrap());
