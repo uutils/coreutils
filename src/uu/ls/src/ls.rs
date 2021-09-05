@@ -1570,22 +1570,12 @@ fn display_grid(
 ///
 /// That's why we have the parameters:
 /// ```txt
-///    max_links: usize,
+///    longest_link_count_len: usize,
 ///    longest_uname_len: usize,
 ///    longest_group_len: usize,
-///    max_size: usize,
+///    longest_size_len: usize,
 /// ```
 /// that decide the maximum possible character count of each field.
-///
-/// [`get_inode`]: ls::get_inode
-/// [`display_permissions`]: ls::display_permissions
-/// [`display_symlink_count`]: ls::display_symlink_count
-/// [`display_uname`]: ls::display_uname
-/// [`display_group`]: ls::display_group
-/// [`display_size_or_rdev`]: ls::display_size_or_rdev
-/// [`get_system_time`]: ls::get_system_time
-/// [`display_file_name`]: ls::display_file_name
-/// [`pad_left`]: ls::pad_left
 fn display_item_long(
     item: &PathData,
     longest_link_count_len: usize,
@@ -1866,7 +1856,20 @@ fn classify_file(path: &PathData) -> Option<char> {
     }
 }
 
+/// Takes a [`PathData`] struct and returns a cell with a name ready for displaying.
+///
+/// This function relies on the following parameters in the provided `&Config`:
+/// * `config.quoting_style` to decide how we will escape `name` using [`escape_name`].
+/// * `config.inode` decides whether to display inode numbers beside names using [`get_inode`].
+/// * `config.color` decides whether it's going to color `name` using [`color_name`].
+/// * `config.indicator_style` to append specific characters to `name` using [`classify_file`].
+/// * `config.format` to display symlink targets if `Format::Long`. This function is also
+///   responsible for coloring symlink target names if `config.color` is specified.
+///
+/// Note that non-unicode sequences in symlink targets are dealt with using
+/// [`std::path::Path::to_string_lossy`].
 fn display_file_name(path: &PathData, config: &Config) -> Option<Cell> {
+    // This is our return value. We start by `&path.display_name` and modify it along the way.
     let mut name = escape_name(&path.display_name, &config.quoting_style);
 
     #[cfg(unix)]
@@ -1919,7 +1922,41 @@ fn display_file_name(path: &PathData, config: &Config) -> Option<Cell> {
     if config.format == Format::Long && path.file_type()?.is_symlink() {
         if let Ok(target) = path.p_buf.read_link() {
             name.push_str(" -> ");
-            name.push_str(&target.to_string_lossy());
+
+            // We might as well color the symlink output after the arrow.
+            // This makes extra system calls, but provides important information that
+            // people run `ls -l --color` are very interested in.
+            if let Some(ls_colors) = &config.color {
+                // We get the absolute path to be able to construct PathData with valid Metadata.
+                // This is because relative symlinks will fail to get_metadata.
+                let mut absolute_target = target.clone();
+                if target.is_relative() {
+                    if let Some(parent) = path.p_buf.parent() {
+                        absolute_target = parent.join(absolute_target);
+                    }
+                }
+
+                let target_data = PathData::new(absolute_target, None, None, config, false);
+
+                // If we have a symlink to a valid file, we use the metadata of said file.
+                // Because we use an absolute path, we can assume this is guaranteed to exist.
+                // Otherwise, we use path.md(), which will guarantee we color to the same
+                // color of non-existent symlinks according to style_for_path_with_metadata.
+                let target_metadata = match target_data.md() {
+                    Some(md) => md,
+                    None => path.md()?,
+                };
+
+                name.push_str(&color_name(
+                    ls_colors,
+                    &target_data.p_buf,
+                    target.to_string_lossy().into_owned(),
+                    target_metadata,
+                ));
+            } else {
+                // If no coloring is required, we just use target as is.
+                name.push_str(&target.to_string_lossy());
+            }
         }
     }
 

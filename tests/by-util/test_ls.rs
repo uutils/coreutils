@@ -1,4 +1,4 @@
-// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup somefile somegroup somehiddenbackup somehiddenfile
+// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile
 
 #[cfg(unix)]
 extern crate unix_socket;
@@ -333,20 +333,9 @@ fn test_ls_long() {
     }
 }
 
+#[cfg(not(windows))]
 #[test]
 fn test_ls_long_format() {
-    #[cfg(not(windows))]
-    let last;
-    #[cfg(not(windows))]
-    {
-        let _guard = UMASK_MUTEX.lock();
-        last = unsafe { umask(0) };
-
-        unsafe {
-            umask(0o002);
-        }
-    }
-
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.mkdir(&at.plus_as_string("test-long-dir"));
@@ -354,8 +343,6 @@ fn test_ls_long_format() {
     at.mkdir(&at.plus_as_string("test-long-dir/test-long-dir"));
 
     for arg in &["-l", "--long", "--format=long", "--format=verbose"] {
-        #[allow(unused_variables)]
-        let result = scene.ucmd().arg(arg).arg("test-long-dir").succeeds();
         // Assuming sane username do not have spaces within them.
         // A line of the output should be:
         // One of the characters -bcCdDlMnpPsStTx?
@@ -368,25 +355,237 @@ fn test_ls_long_format() {
         // Either a year or a time, currently [0-9:]+, preceded by column whitespace,
         // and followed by a single space.
         // Whatever comes after is irrelevant to this specific test.
-        #[cfg(not(windows))]
-        result.stdout_matches(&Regex::new(
+        scene.ucmd().arg(arg).arg("test-long-dir").succeeds().stdout_matches(&Regex::new(
             r"\n[-bcCdDlMnpPsStTx?]([r-][w-][xt-]){3} +\d+ [^ ]+ +[^ ]+( +[^ ]+)? +\d+ [A-Z][a-z]{2} {0,2}\d{0,2} {0,2}[0-9:]+ "
         ).unwrap());
     }
 
-    #[allow(unused_variables)]
-    let result = scene.ucmd().arg("-lan").arg("test-long-dir").succeeds();
     // This checks for the line with the .. entry. The uname and group should be digits.
-    #[cfg(not(windows))]
-    result.stdout_matches(&Regex::new(
+    scene.ucmd().arg("-lan").arg("test-long-dir").succeeds().stdout_matches(&Regex::new(
         r"\nd([r-][w-][xt-]){3} +\d+ \d+ +\d+( +\d+)? +\d+ [A-Z][a-z]{2} {0,2}\d{0,2} {0,2}[0-9:]+ \.\."
     ).unwrap());
+}
 
-    #[cfg(not(windows))]
+/// This test tests `ls -laR --color`.
+/// This test is mainly about coloring, but, the recursion, symlink `->` processing,
+/// and `.` and `..` being present in `-a` all need to work for the test to pass.
+/// This test does not really test anything provided by `-l` but the file names and symlinks.
+#[test]
+fn test_ls_long_symlink_color() {
+    // If you break this test after breaking mkdir, touch, or ln, do not be alarmed!
+    // This test is made for ls, but it attempts to run those utils in the process.
+
+    // Having Some([2, 0]) in a color basically means that "it has the same color as whatever
+    // is in the 2nd expected output, the 0th color", where the 0th color is the name color, and
+    // the 1st color is the target color, in a fixed-size array of size 2.
+    // Basically these are references to be used for indexing the `colors` vector defined below.
+    type ColorReference = Option<[usize; 2]>;
+
+    // The string between \x1b[ and m
+    type Color = String;
+
+    // The string between the color start and the color end is the file name itself.
+    type Name = String;
+
+    let scene = TestScenario::new(util_name!());
+
+    // .
+    // ├── dir1
+    // │   ├── file1
+    // │   ├── dir2
+    // │   │   └── dir3
+    // │   ├── ln-dir-invalid -> dir1/dir2
+    // │   ├── ln-up2 -> ../..
+    // │   └── ln-root -> /
+    // ├── ln-file1 -> dir1/file1
+    // ├── ln-file-invalid -> dir1/invalid-target
+    // └── ln-dir3 -> ./dir1/dir2/dir3
+    prepare_folder_structure(&scene);
+
+    // We memoize the colors so we can refer to them later.
+    // Each entry will be the colors of the link name and link target of a specific output.
+    let mut colors: Vec<[Color; 2]> = vec![];
+
+    // The contents of each tuple are the expected colors and names for the link and target.
+    // We will loop over the ls output and compare to those.
+    // None values mean that we do not know what color to expect yet, as LS_COLOR might
+    // be set differently, and as different implementations of ls may use different codes,
+    // for example, our ls uses `[1;36m` while the GNU ls uses `[01;36m`.
+    //
+    // These have been sorting according to default ls sort, and this affects the order of
+    // discovery of colors, so be very careful when changing directory/file names being created.
+    let expected_output: [(ColorReference, &str, ColorReference, &str); 6] = [
+        // We don't know what colors are what the first time we meet a link.
+        (None, "ln-dir3", None, "./dir1/dir2/dir3"),
+        // We have acquired [0, 0], which should be the link color,
+        // and [0, 1], which should be the dir color, and we can compare to them from now on.
+        (None, "ln-file-invalid", Some([1, 1]), "dir1/invalid-target"),
+        // We acquired [1, 1], the non-existent color.
+        (Some([0, 0]), "ln-file1", None, "dir1/file1"),
+        (Some([1, 1]), "ln-dir-invalid", Some([1, 1]), "dir1/dir2"),
+        (Some([0, 0]), "ln-root", Some([0, 1]), "/"),
+        (Some([0, 0]), "ln-up2", Some([0, 1]), "../.."),
+    ];
+
+    // We are only interested in lines or the ls output that are symlinks. These start with "lrwx".
+    let result = scene.ucmd().arg("-laR").arg("--color").arg(".").succeeds();
+    let mut result_lines = result
+        .stdout_str()
+        .lines()
+        .filter_map(|line| match line.starts_with("lrwx") {
+            true => Some(line),
+            false => None,
+        })
+        .enumerate();
+
+    // For each enumerated line, we assert that the output of ls matches the expected output.
+    //
+    // The unwraps within get_index_name_target will panic if a line starting lrwx does
+    // not have `colored_name -> target` within it.
+    while let Some((i, name, target)) = get_index_name_target(&mut result_lines) {
+        // The unwraps within capture_colored_string will panic if the name/target's color
+        // format is invalid.
+        let (matched_name_color, matched_name) = capture_colored_string(&name);
+        let (matched_target_color, matched_target) = capture_colored_string(&target);
+
+        colors.push([matched_name_color, matched_target_color]);
+
+        // We borrow them again after having moved them. This unwrap will never panic.
+        let [matched_name_color, matched_target_color] = colors.last().unwrap();
+
+        // We look up the Colors that are expected in `colors` using the ColorReferences
+        // stored in `expected_output`.
+        let expected_name_color = match expected_output[i].0 {
+            Some(color_reference) => Some(colors[color_reference[0]][color_reference[1]].as_str()),
+            None => None,
+        };
+        let expected_target_color = match expected_output[i].2 {
+            Some(color_reference) => Some(colors[color_reference[0]][color_reference[1]].as_str()),
+            None => None,
+        };
+
+        // This is the important part. The asserts inside assert_names_and_colors_are_equal
+        // will panic if the colors or names do not match the expected colors or names.
+        // Keep in mind an expected color `Option<&str>` of None can mean either that we
+        // don't expect any color here, as in `expected_output[2], or don't know what specific
+        // color to expect yet, as in expected_output[0:1].
+        assert_names_and_colors_are_equal(
+            &matched_name_color,
+            expected_name_color,
+            &matched_name,
+            expected_output[i].1,
+            &matched_target_color,
+            expected_target_color,
+            &matched_target,
+            expected_output[i].3,
+        );
+    }
+
+    // End of test, only definitions of the helper functions used above follows...
+
+    fn get_index_name_target<'a, I>(lines: &mut I) -> Option<(usize, Name, Name)>
+    where
+        I: Iterator<Item = (usize, &'a str)>,
     {
-        unsafe {
-            umask(last);
+        match lines.next() {
+            Some((c, s)) => {
+                // `name` is whatever comes between \x1b (inclusive) and the arrow.
+                let name = String::from("\x1b")
+                    + s.split(" -> ")
+                        .next()
+                        .unwrap()
+                        .split(" \x1b")
+                        .last()
+                        .unwrap();
+                // `target` is whatever comes after the arrow.
+                let target = s.split(" -> ").last().unwrap().to_string();
+                Some((c, name, target))
+            }
+            None => None,
         }
+    }
+
+    fn assert_names_and_colors_are_equal(
+        name_color: &str,
+        expected_name_color: Option<&str>,
+        name: &str,
+        expected_name: &str,
+        target_color: &str,
+        expected_target_color: Option<&str>,
+        target: &str,
+        expected_target: &str,
+    ) {
+        // Names are always compared.
+        assert_eq!(&name, &expected_name);
+        assert_eq!(&target, &expected_target);
+
+        // Colors are only compared when we have inferred what color we are looking for.
+        if expected_name_color.is_some() {
+            assert_eq!(&name_color, &expected_name_color.unwrap());
+        }
+        if expected_target_color.is_some() {
+            assert_eq!(&target_color, &expected_target_color.unwrap());
+        }
+    }
+
+    fn capture_colored_string(input: &str) -> (Color, Name) {
+        let colored_name = Regex::new(r"\x1b\[([0-9;]+)m(.+)\x1b\[0m").unwrap();
+        match colored_name.captures(&input) {
+            Some(captures) => (
+                captures.get(1).unwrap().as_str().to_string(),
+                captures.get(2).unwrap().as_str().to_string(),
+            ),
+            None => ("".to_string(), input.to_string()),
+        }
+    }
+
+    fn prepare_folder_structure(scene: &TestScenario) {
+        // There is no way to change directory in the CI, so this is the best we can do.
+        // Also, keep in mind that windows might require privilege to symlink directories.
+        //
+        // We use scene.ccmd instead of scene.fixtures because we care about relative symlinks.
+        // So we're going to try out the built mkdir, touch, and ln here, and we expect them to succeed.
+        scene.ccmd("mkdir").arg("dir1").succeeds();
+        scene.ccmd("mkdir").arg("dir1/dir2").succeeds();
+        scene.ccmd("mkdir").arg("dir1/dir2/dir3").succeeds();
+        scene.ccmd("touch").arg("dir1/file1").succeeds();
+
+        scene
+            .ccmd("ln")
+            .arg("-s")
+            .arg("dir1/dir2")
+            .arg("dir1/ln-dir-invalid")
+            .succeeds();
+        scene
+            .ccmd("ln")
+            .arg("-s")
+            .arg("./dir1/dir2/dir3")
+            .arg("ln-dir3")
+            .succeeds();
+        scene
+            .ccmd("ln")
+            .arg("-s")
+            .arg("../..")
+            .arg("dir1/ln-up2")
+            .succeeds();
+        scene
+            .ccmd("ln")
+            .arg("-s")
+            .arg("/")
+            .arg("dir1/ln-root")
+            .succeeds();
+        scene
+            .ccmd("ln")
+            .arg("-s")
+            .arg("dir1/file1")
+            .arg("ln-file1")
+            .succeeds();
+        scene
+            .ccmd("ln")
+            .arg("-s")
+            .arg("dir1/invalid-target")
+            .arg("ln-file-invalid")
+            .succeeds();
     }
 }
 
