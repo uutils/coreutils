@@ -1309,7 +1309,7 @@ fn test_copy_symlink_force() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "freebsd")))]
 fn test_no_preserve_mode() {
     use std::os::unix::prelude::MetadataExt;
 
@@ -1335,7 +1335,7 @@ fn test_no_preserve_mode() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "freebsd")))]
 fn test_preserve_mode() {
     use std::os::unix::prelude::MetadataExt;
 

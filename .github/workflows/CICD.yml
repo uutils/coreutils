@@ -553,6 +553,7 @@ jobs:
 
           # Needs to be done in a sudo as we are changing users
           sudo -i -u cuuser sh << EOF
+          set -e
           whoami
           curl https://sh.rustup.rs -sSf --output rustup.sh
           sh rustup.sh -y --profile=minimal
