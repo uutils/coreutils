@@ -11,10 +11,9 @@
 mod parser;
 
 use clap::{crate_version, App, AppSettings};
-use parser::{parse, Op, Symbol, UnaryOp};
+use parser::{parse, Operator, Symbol, UnaryOperator};
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
-use uucore::executable;
 
 const USAGE: &str = "test EXPRESSION
 or:  test
@@ -87,7 +86,7 @@ the version described here.  Please refer to your shell's documentation
 for details about the options it supports.";
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .setting(AppSettings::DisableHelpFlags)
         .setting(AppSettings::DisableVersion)
 }
@@ -160,19 +159,19 @@ fn eval(stack: &mut Vec<Symbol>) -> Result<bool, String> {
 
             Ok(!result)
         }
-        Some(Symbol::Op(Op::StringOp(op))) => {
+        Some(Symbol::Op(Operator::String(op))) => {
             let b = stack.pop();
             let a = stack.pop();
             Ok(if op == "!=" { a != b } else { a == b })
         }
-        Some(Symbol::Op(Op::IntOp(op))) => {
+        Some(Symbol::Op(Operator::Int(op))) => {
             let b = pop_literal!();
             let a = pop_literal!();
 
             Ok(integers(&a, &b, &op)?)
         }
-        Some(Symbol::Op(Op::FileOp(_op))) => unimplemented!(),
-        Some(Symbol::UnaryOp(UnaryOp::StrlenOp(op))) => {
+        Some(Symbol::Op(Operator::File(_op))) => unimplemented!(),
+        Some(Symbol::UnaryOp(UnaryOperator::StrlenOp(op))) => {
             let s = match stack.pop() {
                 Some(Symbol::Literal(s)) => s,
                 Some(Symbol::None) => OsString::from(""),
@@ -190,7 +189,7 @@ fn eval(stack: &mut Vec<Symbol>) -> Result<bool, String> {
                 !s.is_empty()
             })
         }
-        Some(Symbol::UnaryOp(UnaryOp::FiletestOp(op))) => {
+        Some(Symbol::UnaryOp(UnaryOperator::FiletestOp(op))) => {
             let op = op.to_string_lossy();
 
             let f = pop_literal!();
