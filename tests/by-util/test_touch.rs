@@ -6,6 +6,7 @@ use self::touch::filetime::{self, FileTime};
 extern crate time;
 
 use crate::common::util::*;
+use std::fs::remove_file;
 use std::path::PathBuf;
 
 fn get_file_times(at: &AtPath, path: &str) -> (FileTime, FileTime) {
@@ -323,7 +324,8 @@ fn test_touch_no_dereference() {
 
 #[test]
 fn test_touch_reference() {
-    let (at, mut ucmd) = at_and_ucmd!();
+    let scenario = TestScenario::new("touch");
+    let (at, mut _ucmd) = (scenario.fixtures.clone(), scenario.ucmd());
     let file_a = "test_touch_reference_a";
     let file_b = "test_touch_reference_b";
     let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
@@ -331,8 +333,23 @@ fn test_touch_reference() {
     at.touch(file_a);
     set_file_times(&at, file_a, start_of_year, start_of_year);
     assert!(at.file_exists(file_a));
-
-    ucmd.args(&["-r", file_a, file_b]).succeeds().no_stderr();
+    scenario
+        .ccmd("touch")
+        .args(&["-r", file_a, file_b])
+        .succeeds()
+        .no_stderr();
+    let _ = remove_file(file_b);
+    scenario
+        .ccmd("touch")
+        .args(&["--ref", file_a, file_b])
+        .succeeds()
+        .no_stderr();
+    let _ = remove_file(file_b);
+    scenario
+        .ccmd("touch")
+        .args(&["--reference", file_a, file_b])
+        .succeeds()
+        .no_stderr();
 
     assert!(at.file_exists(file_b));
 

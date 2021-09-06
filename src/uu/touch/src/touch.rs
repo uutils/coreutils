@@ -175,6 +175,7 @@ pub fn uu_app() -> App<'static, 'static> {
             Arg::with_name(options::sources::REFERENCE)
                 .short("r")
                 .long(options::sources::REFERENCE)
+                .alias("ref")
                 .help("use this file's times instead of the current time")
                 .value_name("FILE"),
         )
