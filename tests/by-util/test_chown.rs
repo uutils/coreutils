@@ -141,6 +141,14 @@ fn test_chown_only_owner_colon() {
 
     scene
         .ucmd()
+        .arg(format!("{}.", user_name))
+        .arg("--verbose")
+        .arg(file1)
+        .succeeds()
+        .stderr_contains(&"retained as");
+
+    scene
+        .ucmd()
         .arg("root:")
         .arg("--verbose")
         .arg(file1)
@@ -180,6 +188,14 @@ fn test_chown_only_colon() {
         .arg(file1)
         .fails()
         .stderr_contains(&"invalid group: '::'");
+
+    scene
+        .ucmd()
+        .arg("..")
+        .arg("--verbose")
+        .arg(file1)
+        .fails()
+        .stderr_contains(&"invalid group: '..'");
 }
 
 #[test]
@@ -241,6 +257,67 @@ fn test_chown_owner_group() {
         .arg(file1)
         .fails()
         .stderr_contains(&"failed to change");
+}
+
+#[test]
+// FixME: Fails on freebsd because of chown: invalid group: 'root:root'
+#[cfg(not(target_os = "freebsd"))]
+fn test_chown_various_input() {
+    // test chown username:group file.txt
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let result = scene.cmd("whoami").run();
+    if skipping_test_is_okay(&result, "whoami: cannot find name for user ID") {
+        return;
+    }
+
+    let user_name = String::from(result.stdout_str().trim());
+    assert!(!user_name.is_empty());
+
+    let file1 = "test_chown_file1";
+    at.touch(file1);
+
+    let result = scene.cmd("id").arg("-gn").run();
+    if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
+        return;
+    }
+    let group_name = String::from(result.stdout_str().trim());
+    assert!(!group_name.is_empty());
+
+    let result = scene
+        .ucmd()
+        .arg(format!("{}:{}", user_name, group_name))
+        .arg("--verbose")
+        .arg(file1)
+        .run();
+    if skipping_test_is_okay(&result, "chown: invalid group:") {
+        return;
+    }
+    result.stderr_contains(&"retained as");
+
+    // check that username.groupname is understood
+    let result = scene
+        .ucmd()
+        .arg(format!("{}.{}", user_name, group_name))
+        .arg("--verbose")
+        .arg(file1)
+        .run();
+    if skipping_test_is_okay(&result, "chown: invalid group:") {
+        return;
+    }
+    result.stderr_contains(&"retained as");
+
+    // Fails as user.name doesn't exist in the CI
+    // but it is valid
+    scene
+        .ucmd()
+        .arg(format!("{}:{}", "user.name", "groupname"))
+        .arg("--verbose")
+        .arg(file1)
+        .fails()
+        .stderr_contains(&"chown: invalid user: 'user.name:groupname'");
 }
 
 #[test]
@@ -401,6 +478,19 @@ fn test_chown_owner_group_id() {
     if skipping_test_is_okay(&result, "invalid user") {
         // From the Logs: "Build (ubuntu-18.04, x86_64-unknown-linux-gnu, feat_os_unix, use-cross)"
         // stderr: "chown: invalid user: '1001:116'
+        return;
+    }
+    result.stderr_contains(&"retained as");
+
+    let result = scene
+        .ucmd()
+        .arg(format!("{}.{}", user_id, group_id))
+        .arg("--verbose")
+        .arg(file1)
+        .run();
+    if skipping_test_is_okay(&result, "invalid user") {
+        // From the Logs: "Build (ubuntu-18.04, x86_64-unknown-linux-gnu, feat_os_unix, use-cross)"
+        // stderr: "chown: invalid user: '1001.116'
         return;
     }
     result.stderr_contains(&"retained as");
