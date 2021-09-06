@@ -12,15 +12,15 @@ use std::iter::Peekable;
 
 /// Represents one of the binary comparison operators for strings, integers, or files
 #[derive(Debug, PartialEq)]
-pub enum Op {
-    StringOp(OsString),
-    IntOp(OsString),
-    FileOp(OsString),
+pub enum Operator {
+    String(OsString),
+    Int(OsString),
+    File(OsString),
 }
 
 /// Represents one of the unary test operators for strings or files
 #[derive(Debug, PartialEq)]
-pub enum UnaryOp {
+pub enum UnaryOperator {
     StrlenOp(OsString),
     FiletestOp(OsString),
 }
@@ -32,8 +32,8 @@ pub enum Symbol {
     Bang,
     BoolOp(OsString),
     Literal(OsString),
-    Op(Op),
-    UnaryOp(UnaryOp),
+    Op(Operator),
+    UnaryOp(UnaryOperator),
     None,
 }
 
@@ -47,13 +47,13 @@ impl Symbol {
                 "(" => Symbol::LParen,
                 "!" => Symbol::Bang,
                 "-a" | "-o" => Symbol::BoolOp(s),
-                "=" | "==" | "!=" => Symbol::Op(Op::StringOp(s)),
-                "-eq" | "-ge" | "-gt" | "-le" | "-lt" | "-ne" => Symbol::Op(Op::IntOp(s)),
-                "-ef" | "-nt" | "-ot" => Symbol::Op(Op::FileOp(s)),
-                "-n" | "-z" => Symbol::UnaryOp(UnaryOp::StrlenOp(s)),
+                "=" | "==" | "!=" => Symbol::Op(Operator::String(s)),
+                "-eq" | "-ge" | "-gt" | "-le" | "-lt" | "-ne" => Symbol::Op(Operator::Int(s)),
+                "-ef" | "-nt" | "-ot" => Symbol::Op(Operator::File(s)),
+                "-n" | "-z" => Symbol::UnaryOp(UnaryOperator::StrlenOp(s)),
                 "-b" | "-c" | "-d" | "-e" | "-f" | "-g" | "-G" | "-h" | "-k" | "-L" | "-O"
                 | "-p" | "-r" | "-s" | "-S" | "-t" | "-u" | "-w" | "-x" => {
-                    Symbol::UnaryOp(UnaryOp::FiletestOp(s))
+                    Symbol::UnaryOp(UnaryOperator::FiletestOp(s))
                 }
                 _ => Symbol::Literal(s),
             },
@@ -74,11 +74,11 @@ impl Symbol {
             Symbol::Bang => OsString::from("!"),
             Symbol::BoolOp(s)
             | Symbol::Literal(s)
-            | Symbol::Op(Op::StringOp(s))
-            | Symbol::Op(Op::IntOp(s))
-            | Symbol::Op(Op::FileOp(s))
-            | Symbol::UnaryOp(UnaryOp::StrlenOp(s))
-            | Symbol::UnaryOp(UnaryOp::FiletestOp(s)) => s,
+            | Symbol::Op(Operator::String(s))
+            | Symbol::Op(Operator::Int(s))
+            | Symbol::Op(Operator::File(s))
+            | Symbol::UnaryOp(UnaryOperator::StrlenOp(s))
+            | Symbol::UnaryOp(UnaryOperator::FiletestOp(s)) => s,
             Symbol::None => panic!(),
         })
     }
@@ -373,18 +373,15 @@ impl Parser {
         self.stack.push(token.into_literal());
 
         // EXPR → str OP str
-        match self.peek() {
-            Symbol::Op(_) => {
-                let op = self.next_token();
+        if let Symbol::Op(_) = self.peek() {
+            let op = self.next_token();
 
-                match self.next_token() {
-                    Symbol::None => panic!("missing argument after {:?}", op),
-                    token => self.stack.push(token.into_literal()),
-                }
-
-                self.stack.push(op);
+            match self.next_token() {
+                Symbol::None => panic!("missing argument after {:?}", op),
+                token => self.stack.push(token.into_literal()),
             }
-            _ => {}
+
+            self.stack.push(op);
         }
     }
 
