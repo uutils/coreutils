@@ -11,7 +11,7 @@
 mod parser;
 
 use clap::{crate_version, App, AppSettings};
-use parser::{parse, Symbol};
+use parser::{parse, Operator, Symbol, UnaryOperator};
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
 
@@ -159,19 +159,19 @@ fn eval(stack: &mut Vec<Symbol>) -> Result<bool, String> {
 
             Ok(!result)
         }
-        Some(Symbol::StringOp(op)) => {
+        Some(Symbol::Op(Operator::String(op))) => {
             let b = stack.pop();
             let a = stack.pop();
             Ok(if op == "!=" { a != b } else { a == b })
         }
-        Some(Symbol::IntOp(op)) => {
+        Some(Symbol::Op(Operator::Int(op))) => {
             let b = pop_literal!();
             let a = pop_literal!();
 
             Ok(integers(&a, &b, &op)?)
         }
-        Some(Symbol::FileOp(_op)) => unimplemented!(),
-        Some(Symbol::StrlenOp(op)) => {
+        Some(Symbol::Op(Operator::File(_op))) => unimplemented!(),
+        Some(Symbol::UnaryOp(UnaryOperator::StrlenOp(op))) => {
             let s = match stack.pop() {
                 Some(Symbol::Literal(s)) => s,
                 Some(Symbol::None) => OsString::from(""),
@@ -189,7 +189,7 @@ fn eval(stack: &mut Vec<Symbol>) -> Result<bool, String> {
                 !s.is_empty()
             })
         }
-        Some(Symbol::FiletestOp(op)) => {
+        Some(Symbol::UnaryOp(UnaryOperator::FiletestOp(op))) => {
             let op = op.to_string_lossy();
 
             let f = pop_literal!();
