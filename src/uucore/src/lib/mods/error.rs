@@ -399,7 +399,6 @@ impl Display for UIoError {
             TimedOut => "Timed out",
             WriteZero => "Write zero",
             Interrupted => "Interrupted",
-            Other => "Other",
             UnexpectedEof => "Unexpected end of file",
             _ => {
                 // TODO: using `strip_errno()` causes the error message
