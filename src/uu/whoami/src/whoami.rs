@@ -14,9 +14,12 @@ extern crate clap;
 #[macro_use]
 extern crate uucore;
 
+use uucore::error::{UResult, USimpleError};
+
 mod platform;
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let app = uu_app();
 
     if let Err(err) = app.get_matches_from_safe(args) {
@@ -24,15 +27,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             || err.kind == clap::ErrorKind::VersionDisplayed
         {
             println!("{}", err);
-            0
+            Ok(())
         } else {
-            show_error!("{}", err);
-            1
+            return Err(USimpleError::new(1, format!("{}", err)));
         }
     } else {
-        exec();
-
-        0
+        exec()
     }
 }
 
@@ -40,13 +40,19 @@ pub fn uu_app() -> App<'static, 'static> {
     app_from_crate!()
 }
 
-pub fn exec() {
+pub fn exec() -> UResult<()> {
     unsafe {
         match platform::get_username() {
-            Ok(username) => println!("{}", username),
+            Ok(username) => {
+                println!("{}", username);
+                Ok(())
+            }
             Err(err) => match err.raw_os_error() {
-                Some(0) | None => crash!(1, "failed to get username"),
-                Some(_) => crash!(1, "failed to get username: {}", err),
+                Some(0) | None => Err(USimpleError::new(1, "failed to get username")),
+                Some(_) => Err(USimpleError::new(
+                    1,
+                    format!("failed to get username: {}", err),
+                )),
             },
         }
     }
