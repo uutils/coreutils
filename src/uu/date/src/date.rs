@@ -18,6 +18,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use uucore::display::Quotable;
+use uucore::show_error;
 #[cfg(windows)]
 use winapi::{
     shared::minwindef::WORD,
@@ -146,7 +147,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let format = if let Some(form) = matches.value_of(OPT_FORMAT) {
         if !form.starts_with('+') {
-            eprintln!("date: invalid date {}", form.quote());
+            show_error!("invalid date {}", form.quote());
             return 1;
         }
         let form = form[1..].to_string();
@@ -175,7 +176,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let set_to = match matches.value_of(OPT_SET).map(parse_date) {
         None => None,
         Some(Err((input, _err))) => {
-            eprintln!("date: invalid date {}", input.quote());
+            show_error!("invalid date {}", input.quote());
             return 1;
         }
         Some(Ok(date)) => Some(date),
@@ -241,7 +242,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     println!("{}", formatted);
                 }
                 Err((input, _err)) => {
-                    println!("date: invalid date {}", input.quote());
+                    show_error!("invalid date {}", input.quote());
                 }
             }
         }
@@ -353,13 +354,13 @@ fn set_system_datetime(_date: DateTime<Utc>) -> i32 {
 
 #[cfg(target_os = "macos")]
 fn set_system_datetime(_date: DateTime<Utc>) -> i32 {
-    eprintln!("date: setting the date is not supported by macOS");
+    show_error!("setting the date is not supported by macOS");
     1
 }
 
 #[cfg(target_os = "redox")]
 fn set_system_datetime(_date: DateTime<Utc>) -> i32 {
-    eprintln!("date: setting the date is not supported by Redox");
+    show_error!("setting the date is not supported by Redox");
     1
 }
 
@@ -379,7 +380,7 @@ fn set_system_datetime(date: DateTime<Utc>) -> i32 {
 
     if result != 0 {
         let error = std::io::Error::last_os_error();
-        eprintln!("date: cannot set date: {}", error);
+        show_error!("cannot set date: {}", error);
         error.raw_os_error().unwrap()
     } else {
         0
@@ -409,7 +410,7 @@ fn set_system_datetime(date: DateTime<Utc>) -> i32 {
 
     if result == 0 {
         let error = std::io::Error::last_os_error();
-        eprintln!("date: cannot set date: {}", error);
+        show_error!("cannot set date: {}", error);
         error.raw_os_error().unwrap()
     } else {
         0

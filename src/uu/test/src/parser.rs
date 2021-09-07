@@ -11,6 +11,7 @@ use std::ffi::OsString;
 use std::iter::Peekable;
 
 use uucore::display::Quotable;
+use uucore::show_error;
 
 /// Represents one of the binary comparison operators for strings, integers, or files
 #[derive(Debug, PartialEq)]
@@ -207,7 +208,7 @@ impl Parser {
 
             // case 2: error if end of stream is `( <any_token>`
             [symbol] => {
-                eprintln!("test: missing argument after ‘{:?}’", symbol);
+                show_error!("missing argument after ‘{:?}’", symbol);
                 std::process::exit(2);
             }
 

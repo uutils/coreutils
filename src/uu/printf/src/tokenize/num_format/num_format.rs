@@ -8,7 +8,7 @@ use std::env;
 use std::vec::Vec;
 
 use uucore::display::Quotable;
-use uucore::show_error;
+use uucore::{show_error, show_warning};
 
 use super::format_field::{FieldType, FormatField};
 use super::formatter::{Base, FormatPrimitive, Formatter, InitialPrefix};
@@ -30,8 +30,8 @@ fn warn_char_constant_ign(remaining_bytes: Vec<u8>) {
         Ok(_) => {}
         Err(e) => {
             if let env::VarError::NotPresent = e {
-                show_error!(
-                    "warning: {:?}: character(s) following character \
+                show_warning!(
+                    "{:?}: character(s) following character \
                      constant have been ignored",
                     &*remaining_bytes
                 );

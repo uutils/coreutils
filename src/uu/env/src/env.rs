@@ -22,6 +22,7 @@ use std::env;
 use std::io::{self, Write};
 use std::iter::Iterator;
 use std::process::Command;
+use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 
 const USAGE: &str = "env [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]";
@@ -93,7 +94,7 @@ fn load_config_file(opts: &mut Options) -> UResult<()> {
         };
 
         let conf = conf.map_err(|error| {
-            eprintln!("env: error: \"{}\": {}", file, error);
+            show_error!("{}: {}", file.maybe_quote(), error);
             1
         })?;
 
