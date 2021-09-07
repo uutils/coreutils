@@ -547,10 +547,15 @@ where
                     )
                 )
                 .to_ascii_lowercase();
-                // FIXME: (How) should these be quoted?
-                // They seem like they would be processed programmatically, and
-                // our ordinary quoting might interfere, but newlines should be
-                // sanitized probably
+                // FIXME: Filenames with newlines should be treated specially.
+                // GNU appears to replace newlines by \n and backslashes by
+                // \\ and prepend a backslash (to the hash or filename) if it did
+                // this escaping.
+                // Different sorts of output (checking vs outputting hashes) may
+                // handle this differently. Compare carefully to GNU.
+                // If you can, try to preserve invalid unicode using OsStr(ing)Ext
+                // and display it using uucore::display::print_verbatim(). This is
+                // easier (and more important) on Unix than on Windows.
                 if sum == real_sum {
                     if !options.quiet {
                         println!("{}: OK", ck_filename);
