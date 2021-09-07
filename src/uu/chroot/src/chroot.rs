@@ -150,7 +150,7 @@ fn set_context(root: &Path, options: &clap::ArgMatches) {
         Some(u) => {
             let s: Vec<&str> = u.split(':').collect();
             if s.len() != 2 || s.iter().any(|&spec| spec.is_empty()) {
-                crash!(1, "invalid userspec: `{}`", u)
+                crash!(1, "invalid userspec: {}", u.quote())
             };
             s
         }

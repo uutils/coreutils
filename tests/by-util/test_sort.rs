@@ -531,7 +531,7 @@ fn test_keys_invalid_field() {
     new_ucmd!()
         .args(&["-k", "1."])
         .fails()
-        .stderr_only("sort: failed to parse key '1.': failed to parse character index ``: cannot parse integer from empty string");
+        .stderr_only("sort: failed to parse key '1.': failed to parse character index '': cannot parse integer from empty string");
 }
 
 #[test]
@@ -539,7 +539,7 @@ fn test_keys_invalid_field_option() {
     new_ucmd!()
         .args(&["-k", "1.1x"])
         .fails()
-        .stderr_only("sort: failed to parse key '1.1x': invalid option: `x`");
+        .stderr_only("sort: failed to parse key '1.1x': invalid option: 'x'");
 }
 
 #[test]

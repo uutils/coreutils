@@ -133,7 +133,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         fmt_opts.width = match s.parse::<usize>() {
             Ok(t) => t,
             Err(e) => {
-                crash!(1, "Invalid WIDTH specification: `{}': {}", s, e);
+                crash!(1, "Invalid WIDTH specification: {}: {}", s.quote(), e);
             }
         };
         if fmt_opts.width > MAX_WIDTH {
@@ -150,7 +150,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         fmt_opts.goal = match s.parse::<usize>() {
             Ok(t) => t,
             Err(e) => {
-                crash!(1, "Invalid GOAL specification: `{}': {}", s, e);
+                crash!(1, "Invalid GOAL specification: {}: {}", s.quote(), e);
             }
         };
         if !matches.is_present(OPT_WIDTH) {
@@ -164,7 +164,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         fmt_opts.tabwidth = match s.parse::<usize>() {
             Ok(t) => t,
             Err(e) => {
-                crash!(1, "Invalid TABWIDTH specification: `{}': {}", s, e);
+                crash!(1, "Invalid TABWIDTH specification: {}: {}", s.quote(), e);
             }
         };
     };

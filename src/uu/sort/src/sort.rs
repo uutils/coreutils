@@ -767,19 +767,19 @@ impl KeyPosition {
 
         let field = field_and_char
             .next()
-            .ok_or_else(|| format!("invalid key `{}`", key))?;
+            .ok_or_else(|| format!("invalid key {}", key.quote()))?;
         let char = field_and_char.next();
 
         let field = field
             .parse()
-            .map_err(|e| format!("failed to parse field index `{}`: {}", field, e))?;
+            .map_err(|e| format!("failed to parse field index {}: {}", field.quote(), e))?;
         if field == 0 {
             return Err("field index can not be 0".to_string());
         }
 
         let char = char.map_or(Ok(default_char_index), |char| {
             char.parse()
-                .map_err(|e| format!("failed to parse character index `{}`: {}", char, e))
+                .map_err(|e| format!("failed to parse character index {}: {}", char.quote(), e))
         })?;
 
         Ok(Self {
@@ -890,7 +890,7 @@ impl FieldSelector {
                     'R' => key_settings.set_sort_mode(SortMode::Random)?,
                     'r' => key_settings.reverse = true,
                     'V' => key_settings.set_sort_mode(SortMode::Version)?,
-                    c => return Err(format!("invalid option: `{}`", c)),
+                    c => return Err(format!("invalid option: '{}'", c)),
                 }
             }
             Ok(ignore_blanks)
