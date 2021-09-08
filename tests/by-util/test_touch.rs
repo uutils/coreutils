@@ -333,30 +333,21 @@ fn test_touch_reference() {
     at.touch(file_a);
     set_file_times(&at, file_a, start_of_year, start_of_year);
     assert!(at.file_exists(file_a));
-    scenario
-        .ccmd("touch")
-        .args(&["-r", file_a, file_b])
-        .succeeds()
-        .no_stderr();
-    let _ = remove_file(file_b);
-    scenario
-        .ccmd("touch")
-        .args(&["--ref", file_a, file_b])
-        .succeeds()
-        .no_stderr();
-    let _ = remove_file(file_b);
-    scenario
-        .ccmd("touch")
-        .args(&["--reference", file_a, file_b])
-        .succeeds()
-        .no_stderr();
+    for &opt in &["-r", "--ref", "--reference"] {
+        scenario
+            .ccmd("touch")
+            .args(&[opt, file_a, file_b])
+            .succeeds()
+            .no_stderr();
 
-    assert!(at.file_exists(file_b));
+        assert!(at.file_exists(file_b));
 
-    let (atime, mtime) = get_file_times(&at, file_b);
-    assert_eq!(atime, mtime);
-    assert_eq!(atime, start_of_year);
-    assert_eq!(mtime, start_of_year);
+        let (atime, mtime) = get_file_times(&at, file_b);
+        assert_eq!(atime, mtime);
+        assert_eq!(atime, start_of_year);
+        assert_eq!(mtime, start_of_year);
+        let _ = remove_file(file_b);
+    }
 }
 
 #[test]
