@@ -248,6 +248,22 @@ fn test_chown_owner_group() {
     }
     result.stderr_contains(&"retained as");
 
+    scene
+        .ucmd()
+        .arg("root:root:root")
+        .arg("--verbose")
+        .arg(file1)
+        .fails()
+        .stderr_contains(&"invalid group");
+
+    scene
+        .ucmd()
+        .arg("root.root.root")
+        .arg("--verbose")
+        .arg(file1)
+        .fails()
+        .stderr_contains(&"invalid group");
+
     // TODO: on macos group name is not recognized correctly: "chown: invalid group: 'root:root'
     #[cfg(any(windows, all(unix, not(target_os = "macos"))))]
     scene

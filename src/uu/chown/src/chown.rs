@@ -178,12 +178,12 @@ pub fn uu_app() -> App<'static, 'static> {
 /// * `sep` - Should be ':' or '.'
 fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
     assert!(['.', ':'].contains(&sep));
-    let args = spec.split_terminator(sep).collect::<Vec<_>>();
-    let usr_only = args.len() == 1 && !args[0].is_empty();
-    let grp_only = args.len() == 2 && args[0].is_empty();
-    let usr_grp = args.len() == 2 && !args[0].is_empty() && !args[1].is_empty();
-    let uid = if usr_only || usr_grp {
-        Some(match Passwd::locate(args[0]) {
+    let mut args = spec.splitn(2, sep);
+    let user = args.next().unwrap_or("");
+    let group = args.next().unwrap_or("");
+
+    let uid = if !user.is_empty() {
+        Some(match Passwd::locate(user) {
             Ok(u) => u.uid(), // We have been able to get the uid
             Err(_) =>
             // we have NOT been able to find the uid
@@ -202,9 +202,9 @@ fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
     } else {
         None
     };
-    let gid = if grp_only || usr_grp {
+    let gid = if !group.is_empty() {
         Some(
-            Group::locate(args[1])
+            Group::locate(group)
                 .map_err(|_| USimpleError::new(1, format!("invalid group: '{}'", spec)))?
                 .gid(),
         )
