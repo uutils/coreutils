@@ -16,6 +16,7 @@ use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Stdout, Write};
 use std::str::from_utf8;
 use unicode_width::UnicodeWidthChar;
+use uucore::display::Quotable;
 use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "unexpand";
@@ -141,9 +142,9 @@ fn open(path: String) -> BufReader<Box<dyn Read + 'static>> {
     if path == "-" {
         BufReader::new(Box::new(stdin()) as Box<dyn Read>)
     } else {
-        file_buf = match File::open(&path[..]) {
+        file_buf = match File::open(&path) {
             Ok(a) => a,
-            Err(e) => crash!(1, "{}: {}", &path[..], e),
+            Err(e) => crash!(1, "{}: {}", path.maybe_quote(), e),
         };
         BufReader::new(Box::new(file_buf) as Box<dyn Read>)
     }

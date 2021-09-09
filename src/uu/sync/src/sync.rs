@@ -14,6 +14,7 @@ extern crate uucore;
 
 use clap::{crate_version, App, Arg};
 use std::path::Path;
+use uucore::display::Quotable;
 
 static EXIT_ERR: i32 = 1;
 
@@ -175,7 +176,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     for f in &files {
         if !Path::new(&f).exists() {
-            crash!(EXIT_ERR, "cannot stat '{}': No such file or directory", f);
+            crash!(
+                EXIT_ERR,
+                "cannot stat {}: No such file or directory",
+                f.quote()
+            );
         }
     }
 

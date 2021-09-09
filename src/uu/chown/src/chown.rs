@@ -9,6 +9,7 @@
 
 #[macro_use]
 extern crate uucore;
+use uucore::display::Quotable;
 pub use uucore::entries::{self, Group, Locate, Passwd};
 use uucore::perms::{chown_base, options, IfFrom};
 
@@ -44,7 +45,7 @@ fn parse_gid_uid_and_filter(matches: &ArgMatches) -> UResult<(Option<u32>, Optio
     let dest_gid: Option<u32>;
     if let Some(file) = matches.value_of(options::REFERENCE) {
         let meta = fs::metadata(&file)
-            .map_err_context(|| format!("failed to get attributes of '{}'", file))?;
+            .map_err_context(|| format!("failed to get attributes of {}", file.quote()))?;
         dest_gid = Some(meta.gid());
         dest_uid = Some(meta.uid());
     } else {
@@ -173,7 +174,7 @@ fn parse_spec(spec: &str) -> UResult<(Option<u32>, Option<u32>)> {
     let uid = if usr_only || usr_grp {
         Some(
             Passwd::locate(args[0])
-                .map_err(|_| USimpleError::new(1, format!("invalid user: '{}'", spec)))?
+                .map_err(|_| USimpleError::new(1, format!("invalid user: {}", spec.quote())))?
                 .uid(),
         )
     } else {
@@ -182,7 +183,7 @@ fn parse_spec(spec: &str) -> UResult<(Option<u32>, Option<u32>)> {
     let gid = if grp_only || usr_grp {
         Some(
             Group::locate(args[1])
-                .map_err(|_| USimpleError::new(1, format!("invalid group: '{}'", spec)))?
+                .map_err(|_| USimpleError::new(1, format!("invalid group: {}", spec.quote())))?
                 .gid(),
         )
     } else {

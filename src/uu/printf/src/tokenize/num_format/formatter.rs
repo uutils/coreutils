@@ -3,10 +3,9 @@
 
 use itertools::{put_back_n, PutBackN};
 use std::str::Chars;
+use uucore::{display::Quotable, show_error};
 
 use super::format_field::FormatField;
-
-use crate::cli;
 
 // contains the rough ingredients to final
 // output for a number, organized together
@@ -66,5 +65,5 @@ pub fn get_it_at(offset: usize, str_in: &str) -> PutBackN<Chars> {
 // TODO: put this somewhere better
 pub fn warn_incomplete_conv(pf_arg: &str) {
     // important: keep println here not print
-    cli::err_msg(&format!("{}: value not completely converted", pf_arg))
+    show_error!("{}: value not completely converted", pf_arg.maybe_quote());
 }

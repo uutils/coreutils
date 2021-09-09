@@ -14,6 +14,7 @@ use clap::{crate_version, App, Arg};
 use rand::Rng;
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
+use uucore::display::Quotable;
 use uucore::InvalidEncodingHandling;
 
 enum Mode {
@@ -76,7 +77,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             Some(count) => match count.parse::<usize>() {
                 Ok(val) => val,
                 Err(_) => {
-                    show_error!("invalid line count: '{}'", count);
+                    show_error!("invalid line count: {}", count.quote());
                     return 1;
                 }
             },
@@ -185,13 +186,13 @@ fn read_input_file(filename: &str) -> Vec<u8> {
     } else {
         match File::open(filename) {
             Ok(f) => Box::new(f) as Box<dyn Read>,
-            Err(e) => crash!(1, "failed to open '{}': {}", filename, e),
+            Err(e) => crash!(1, "failed to open {}: {}", filename.quote(), e),
         }
     });
 
     let mut data = Vec::new();
     if let Err(e) = file.read_to_end(&mut data) {
-        crash!(1, "failed reading '{}': {}", filename, e)
+        crash!(1, "failed reading {}: {}", filename.quote(), e)
     };
 
     data
@@ -235,7 +236,7 @@ fn shuf_bytes(input: &mut Vec<&[u8]>, opts: Options) {
         None => Box::new(stdout()) as Box<dyn Write>,
         Some(s) => match File::create(&s[..]) {
             Ok(f) => Box::new(f) as Box<dyn Write>,
-            Err(e) => crash!(1, "failed to open '{}' for writing: {}", &s[..], e),
+            Err(e) => crash!(1, "failed to open {} for writing: {}", s.quote(), e),
         },
     });
 
@@ -243,7 +244,7 @@ fn shuf_bytes(input: &mut Vec<&[u8]>, opts: Options) {
         Some(r) => WrappedRng::RngFile(rand::rngs::adapter::ReadRng::new(
             match File::open(&r[..]) {
                 Ok(f) => f,
-                Err(e) => crash!(1, "failed to open random source '{}': {}", &r[..], e),
+                Err(e) => crash!(1, "failed to open random source {}: {}", r.quote(), e),
             },
         )),
         None => WrappedRng::RngDefault(rand::thread_rng()),
@@ -288,14 +289,14 @@ fn shuf_bytes(input: &mut Vec<&[u8]>, opts: Options) {
 fn parse_range(input_range: &str) -> Result<(usize, usize), String> {
     let split: Vec<&str> = input_range.split('-').collect();
     if split.len() != 2 {
-        Err(format!("invalid input range: '{}'", input_range))
+        Err(format!("invalid input range: {}", input_range.quote()))
     } else {
         let begin = split[0]
             .parse::<usize>()
-            .map_err(|_| format!("invalid input range: '{}'", split[0]))?;
+            .map_err(|_| format!("invalid input range: {}", split[0].quote()))?;
         let end = split[1]
             .parse::<usize>()
-            .map_err(|_| format!("invalid input range: '{}'", split[1]))?;
+            .map_err(|_| format!("invalid input range: {}", split[1].quote()))?;
         Ok((begin, end + 1))
     }
 }

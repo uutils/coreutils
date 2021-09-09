@@ -432,10 +432,7 @@ fn test_ls_long_symlink_color() {
     let mut result_lines = result
         .stdout_str()
         .lines()
-        .filter_map(|line| match line.starts_with("lrwx") {
-            true => Some(line),
-            false => None,
-        })
+        .filter(|line| line.starts_with("lrwx"))
         .enumerate();
 
     // For each enumerated line, we assert that the output of ls matches the expected output.
@@ -455,14 +452,12 @@ fn test_ls_long_symlink_color() {
 
         // We look up the Colors that are expected in `colors` using the ColorReferences
         // stored in `expected_output`.
-        let expected_name_color = match expected_output[i].0 {
-            Some(color_reference) => Some(colors[color_reference[0]][color_reference[1]].as_str()),
-            None => None,
-        };
-        let expected_target_color = match expected_output[i].2 {
-            Some(color_reference) => Some(colors[color_reference[0]][color_reference[1]].as_str()),
-            None => None,
-        };
+        let expected_name_color = expected_output[i]
+            .0
+            .map(|color_reference| colors[color_reference[0]][color_reference[1]].as_str());
+        let expected_target_color = expected_output[i]
+            .2
+            .map(|color_reference| colors[color_reference[0]][color_reference[1]].as_str());
 
         // This is the important part. The asserts inside assert_names_and_colors_are_equal
         // will panic if the colors or names do not match the expected colors or names.
@@ -470,11 +465,11 @@ fn test_ls_long_symlink_color() {
         // don't expect any color here, as in `expected_output[2], or don't know what specific
         // color to expect yet, as in expected_output[0:1].
         assert_names_and_colors_are_equal(
-            &matched_name_color,
+            matched_name_color,
             expected_name_color,
             &matched_name,
             expected_output[i].1,
-            &matched_target_color,
+            matched_target_color,
             expected_target_color,
             &matched_target,
             expected_output[i].3,
@@ -505,6 +500,7 @@ fn test_ls_long_symlink_color() {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn assert_names_and_colors_are_equal(
         name_color: &str,
         expected_name_color: Option<&str>,
@@ -530,7 +526,7 @@ fn test_ls_long_symlink_color() {
 
     fn capture_colored_string(input: &str) -> (Color, Name) {
         let colored_name = Regex::new(r"\x1b\[([0-9;]+)m(.+)\x1b\[0m").unwrap();
-        match colored_name.captures(&input) {
+        match colored_name.captures(input) {
             Some(captures) => (
                 captures.get(1).unwrap().as_str().to_string(),
                 captures.get(2).unwrap().as_str().to_string(),

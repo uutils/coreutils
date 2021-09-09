@@ -15,6 +15,7 @@ use crate::options::*;
 use crate::units::{Result, Unit};
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches};
 use std::io::{BufRead, Write};
+use uucore::display::Quotable;
 use uucore::ranges::Range;
 
 pub mod format;
@@ -113,7 +114,7 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
                     0 => Err(value),
                     _ => Ok(n),
                 })
-                .map_err(|value| format!("invalid header value '{}'", value))
+                .map_err(|value| format!("invalid header value {}", value.quote()))
         }
     }?;
 

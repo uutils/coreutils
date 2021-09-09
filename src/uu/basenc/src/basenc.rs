@@ -47,7 +47,7 @@ fn usage() -> String {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    let mut app = base_common::base_app(&uucore::util_name(), crate_version!(), ABOUT);
+    let mut app = base_common::base_app(uucore::util_name(), crate_version!(), ABOUT);
     for encoding in ENCODINGS {
         app = app.arg(Arg::with_name(encoding.0).long(encoding.0));
     }
@@ -88,7 +88,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         config.wrap_cols,
         config.ignore_garbage,
         config.decode,
-        &name,
+        name,
     );
 
     0

@@ -14,6 +14,7 @@ use clap::{crate_version, App, Arg};
 use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
+use uucore::display::Quotable;
 use uucore::fs::display_permissions_unix;
 use uucore::libc::mode_t;
 #[cfg(not(windows))]
@@ -75,7 +76,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .value_of(options::REFERENCE)
         .and_then(|fref| match fs::metadata(fref) {
             Ok(meta) => Some(meta.mode()),
-            Err(err) => crash!(1, "cannot stat attributes of '{}': {}", fref, err),
+            Err(err) => crash!(1, "cannot stat attributes of {}: {}", fref.quote(), err),
         });
     let modes = matches.value_of(options::MODE).unwrap(); // should always be Some because required
     let cmode = if mode_had_minus_prefix {
@@ -223,21 +224,24 @@ impl Chmoder {
             if !file.exists() {
                 if is_symlink(file) {
                     println!(
-                        "failed to change mode of '{}' from 0000 (---------) to 0000 (---------)",
-                        filename
+                        "failed to change mode of {} from 0000 (---------) to 0000 (---------)",
+                        filename.quote()
                     );
                     if !self.quiet {
-                        show_error!("cannot operate on dangling symlink '{}'", filename);
+                        show_error!("cannot operate on dangling symlink {}", filename.quote());
                     }
                 } else if !self.quiet {
-                    show_error!("cannot access '{}': No such file or directory", filename);
+                    show_error!(
+                        "cannot access {}: No such file or directory",
+                        filename.quote()
+                    );
                 }
                 return Err(1);
             }
             if self.recursive && self.preserve_root && filename == "/" {
                 show_error!(
-                    "it is dangerous to operate recursively on '{}'\nuse --no-preserve-root to override this failsafe",
-                    filename
+                    "it is dangerous to operate recursively on {}\nuse --no-preserve-root to override this failsafe",
+                    filename.quote()
                 );
                 return Err(1);
             }
@@ -270,15 +274,17 @@ impl Chmoder {
                 if is_symlink(file) {
                     if self.verbose {
                         println!(
-                            "neither symbolic link '{}' nor referent has been changed",
-                            file.display()
+                            "neither symbolic link {} nor referent has been changed",
+                            file.quote()
                         );
                     }
                     return Ok(());
                 } else if err.kind() == std::io::ErrorKind::PermissionDenied {
-                    show_error!("'{}': Permission denied", file.display());
+                    // These two filenames would normally be conditionally
+                    // quoted, but GNU's tests expect them to always be quoted
+                    show_error!("{}: Permission denied", file.quote());
                 } else {
-                    show_error!("'{}': {}", file.display(), err);
+                    show_error!("{}: {}", file.quote(), err);
                 }
                 return Err(1);
             }
@@ -325,7 +331,7 @@ impl Chmoder {
                 if (new_mode & !naively_expected_new_mode) != 0 {
                     show_error!(
                         "{}: new permissions are {}, not {}",
-                        file.display(),
+                        file.maybe_quote(),
                         display_permissions_unix(new_mode as mode_t, false),
                         display_permissions_unix(naively_expected_new_mode as mode_t, false)
                     );
@@ -342,8 +348,8 @@ impl Chmoder {
         if fperm == mode {
             if self.verbose && !self.changes {
                 println!(
-                    "mode of '{}' retained as {:04o} ({})",
-                    file.display(),
+                    "mode of {} retained as {:04o} ({})",
+                    file.quote(),
                     fperm,
                     display_permissions_unix(fperm as mode_t, false),
                 );
@@ -355,8 +361,8 @@ impl Chmoder {
             }
             if self.verbose {
                 println!(
-                    "failed to change mode of file '{}' from {:04o} ({}) to {:04o} ({})",
-                    file.display(),
+                    "failed to change mode of file {} from {:04o} ({}) to {:04o} ({})",
+                    file.quote(),
                     fperm,
                     display_permissions_unix(fperm as mode_t, false),
                     mode,
@@ -367,8 +373,8 @@ impl Chmoder {
         } else {
             if self.verbose || self.changes {
                 println!(
-                    "mode of '{}' changed from {:04o} ({}) to {:04o} ({})",
-                    file.display(),
+                    "mode of {} changed from {:04o} ({}) to {:04o} ({})",
+                    file.quote(),
                     fperm,
                     display_permissions_unix(fperm as mode_t, false),
                     mode,

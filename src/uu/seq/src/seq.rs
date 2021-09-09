@@ -14,6 +14,7 @@ use num_traits::{Num, ToPrimitive};
 use std::cmp;
 use std::io::{stdout, Write};
 use std::str::FromStr;
+use uucore::display::Quotable;
 
 static ABOUT: &str = "Display numbers from FIRST to LAST, in steps of INCREMENT.";
 static OPT_SEPARATOR: &str = "separator";
@@ -115,14 +116,14 @@ impl FromStr for Number {
             }
             Err(_) => match s.parse::<f64>() {
                 Ok(value) if value.is_nan() => Err(format!(
-                    "invalid 'not-a-number' argument: '{}'\nTry '{} --help' for more information.",
-                    s,
+                    "invalid 'not-a-number' argument: {}\nTry '{} --help' for more information.",
+                    s.quote(),
                     uucore::execution_phrase(),
                 )),
                 Ok(value) => Ok(Number::F64(value)),
                 Err(_) => Err(format!(
-                    "invalid floating point argument: '{}'\nTry '{} --help' for more information.",
-                    s,
+                    "invalid floating point argument: {}\nTry '{} --help' for more information.",
+                    s.quote(),
                     uucore::execution_phrase(),
                 )),
             },

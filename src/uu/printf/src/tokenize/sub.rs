@@ -10,6 +10,7 @@ use std::iter::Peekable;
 use std::process::exit;
 use std::slice::Iter;
 use std::str::Chars;
+use uucore::show_error;
 // use std::collections::HashSet;
 
 use super::num_format::format_field::{FieldType, FormatField};
@@ -19,7 +20,7 @@ use super::unescaped_text::UnescapedText;
 use crate::cli;
 
 fn err_conv(sofar: &str) {
-    cli::err_msg(&format!("%{}: invalid conversion specification", sofar));
+    show_error!("%{}: invalid conversion specification", sofar);
     exit(cli::EXIT_ERR);
 }
 

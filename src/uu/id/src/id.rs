@@ -41,6 +41,7 @@ extern crate uucore;
 
 use clap::{crate_version, App, Arg};
 use std::ffi::CStr;
+use uucore::display::Quotable;
 use uucore::entries::{self, Group, Locate, Passwd};
 use uucore::error::UResult;
 use uucore::error::{set_exit_code, USimpleError};
@@ -230,7 +231,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             match Passwd::locate(users[i].as_str()) {
                 Ok(p) => Some(p),
                 Err(_) => {
-                    show_error!("'{}': no such user", users[i]);
+                    show_error!("{}: no such user", users[i].quote());
                     set_exit_code(1);
                     if i + 1 >= users.len() {
                         break;

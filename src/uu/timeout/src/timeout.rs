@@ -16,6 +16,7 @@ use clap::{crate_version, App, AppSettings, Arg};
 use std::io::ErrorKind;
 use std::process::{Command, Stdio};
 use std::time::Duration;
+use uucore::display::Quotable;
 use uucore::process::ChildExt;
 use uucore::signals::{signal_by_name_or_value, signal_name_by_value};
 use uucore::InvalidEncodingHandling;
@@ -61,7 +62,7 @@ impl Config {
                 let signal_result = signal_by_name_or_value(signal_);
                 match signal_result {
                     None => {
-                        unreachable!("invalid signal '{}'", signal_);
+                        unreachable!("invalid signal {}", signal_.quote());
                     }
                     Some(signal_value) => signal_value,
                 }
@@ -216,9 +217,9 @@ fn timeout(
         Ok(None) => {
             if verbose {
                 show_error!(
-                    "sending signal {} to command '{}'",
+                    "sending signal {} to command {}",
                     signal_name_by_value(signal).unwrap(),
-                    cmd[0]
+                    cmd[0].quote()
                 );
             }
             crash_if_err!(ERR_EXIT_STATUS, process.send_signal(signal));
@@ -233,7 +234,7 @@ fn timeout(
                     }
                     Ok(None) => {
                         if verbose {
-                            show_error!("sending signal KILL to command '{}'", cmd[0]);
+                            show_error!("sending signal KILL to command {}", cmd[0].quote());
                         }
                         crash_if_err!(
                             ERR_EXIT_STATUS,

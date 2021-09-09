@@ -12,6 +12,7 @@ use clap::OsValues;
 use clap::{crate_version, App, Arg};
 use std::fs;
 use std::path::Path;
+use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 
 static ABOUT: &str = "Create the given DIRECTORY(ies) if they do not exist";
@@ -43,7 +44,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Not tested on Windows
     let mode: u16 = match matches.value_of(options::MODE) {
         Some(m) => u16::from_str_radix(m, 8)
-            .map_err(|_| USimpleError::new(1, format!("invalid mode '{}'", m)))?,
+            .map_err(|_| USimpleError::new(1, format!("invalid mode {}", m.quote())))?,
         None => 0o755_u16,
     };
 
@@ -100,13 +101,13 @@ fn mkdir(path: &Path, recursive: bool, mode: u16, verbose: bool) -> UResult<()> 
         fs::create_dir
     };
 
-    create_dir(path).map_err_context(|| format!("cannot create directory '{}'", path.display()))?;
+    create_dir(path).map_err_context(|| format!("cannot create directory {}", path.quote()))?;
 
     if verbose {
         println!(
-            "{}: created directory '{}'",
+            "{}: created directory {}",
             uucore::util_name(),
-            path.display()
+            path.quote()
         );
     }
 
@@ -121,7 +122,7 @@ fn chmod(path: &Path, mode: u16) -> UResult<()> {
     let mode = Permissions::from_mode(u32::from(mode));
 
     set_permissions(path, mode)
-        .map_err_context(|| format!("cannot set permissions '{}'", path.display()))
+        .map_err_context(|| format!("cannot set permissions {}", path.quote()))
 }
 
 #[cfg(windows)]

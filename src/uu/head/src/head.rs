@@ -9,6 +9,7 @@ use clap::{crate_version, App, Arg};
 use std::convert::TryFrom;
 use std::ffi::OsString;
 use std::io::{self, ErrorKind, Read, Seek, SeekFrom, Write};
+use uucore::display::Quotable;
 use uucore::{crash, show_error_custom_description};
 
 const EXIT_FAILURE: i32 = 1;
@@ -127,10 +128,10 @@ fn arg_iterate<'a>(
             match parse::parse_obsolete(s) {
                 Some(Ok(iter)) => Ok(Box::new(vec![first].into_iter().chain(iter).chain(args))),
                 Some(Err(e)) => match e {
-                    parse::ParseError::Syntax => Err(format!("bad argument format: '{}'", s)),
+                    parse::ParseError::Syntax => Err(format!("bad argument format: {}", s.quote())),
                     parse::ParseError::Overflow => Err(format!(
-                        "invalid argument: '{}' Value too large for defined datatype",
-                        s
+                        "invalid argument: {} Value too large for defined datatype",
+                        s.quote()
                     )),
                 },
                 None => Ok(Box::new(vec![first, second].into_iter().chain(args))),
@@ -418,7 +419,7 @@ fn uu_head(options: &HeadOptions) -> Result<(), u32> {
                 let mut file = match std::fs::File::open(name) {
                     Ok(f) => f,
                     Err(err) => {
-                        let prefix = format!("cannot open '{}' for reading", name);
+                        let prefix = format!("cannot open {} for reading", name.quote());
                         match err.kind() {
                             ErrorKind::NotFound => {
                                 show_error_custom_description!(prefix, "No such file or directory");

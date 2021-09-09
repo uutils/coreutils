@@ -14,6 +14,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
+use uucore::display::Quotable;
 use uucore::InvalidEncodingHandling;
 
 static SUMMARY: &str = "Topological sort the strings in FILE.
@@ -45,7 +46,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         file_buf = match File::open(Path::new(&input)) {
             Ok(a) => a,
             _ => {
-                show_error!("{}: No such file or directory", input);
+                show_error!("{}: No such file or directory", input.maybe_quote());
                 return 1;
             }
         };
@@ -68,7 +69,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 for ab in tokens.chunks(2) {
                     match ab.len() {
                         2 => g.add_edge(&ab[0], &ab[1]),
-                        _ => crash!(1, "{}: input contains an odd number of tokens", input),
+                        _ => crash!(
+                            1,
+                            "{}: input contains an odd number of tokens",
+                            input.maybe_quote()
+                        ),
                     }
                 }
             }

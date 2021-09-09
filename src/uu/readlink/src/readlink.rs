@@ -14,6 +14,7 @@ use clap::{crate_version, App, Arg};
 use std::fs;
 use std::io::{stdout, Write};
 use std::path::{Path, PathBuf};
+use uucore::display::Quotable;
 use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
 
 const ABOUT: &str = "Print value of a symbolic link or canonical file name.";
@@ -71,10 +72,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     if no_newline && files.len() > 1 && !silent {
-        eprintln!(
-            "{}: ignoring --no-newline with multiple arguments",
-            uucore::util_name()
-        );
+        show_error!("ignoring --no-newline with multiple arguments");
         no_newline = false;
     }
 
@@ -85,12 +83,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 Ok(path) => show(&path, no_newline, use_zero),
                 Err(err) => {
                     if verbose {
-                        eprintln!(
-                            "{}: {}: errno {}",
-                            uucore::util_name(),
-                            f,
-                            err.raw_os_error().unwrap()
-                        );
+                        show_error!("{}: errno {}", f.maybe_quote(), err.raw_os_error().unwrap());
                     }
                     return 1;
                 }
@@ -100,12 +93,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 Ok(path) => show(&path, no_newline, use_zero),
                 Err(err) => {
                     if verbose {
-                        eprintln!(
-                            "{}: {}: errno {:?}",
-                            uucore::util_name(),
-                            f,
-                            err.raw_os_error().unwrap()
-                        );
+                        show_error!("{}: errno {}", f.maybe_quote(), err.raw_os_error().unwrap());
                     }
                     return 1;
                 }
