@@ -6,7 +6,7 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) filetime strptime utcoff strs datetime MMDDhhmm
+// spell-checker:ignore (ToDO) filetime strptime utcoff strs datetime MMDDhhmm clapv
 
 pub extern crate filetime;
 
@@ -176,6 +176,7 @@ pub fn uu_app() -> App<'static, 'static> {
             Arg::with_name(options::sources::REFERENCE)
                 .short("r")
                 .long(options::sources::REFERENCE)
+                .alias("ref") // clapv3
                 .help("use this file's times instead of the current time")
                 .value_name("FILE"),
         )
