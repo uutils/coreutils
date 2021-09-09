@@ -15,6 +15,7 @@ use std::ffi::CString;
 use std::io::Error;
 use std::path::Path;
 use std::process::Command;
+use uucore::display::Quotable;
 use uucore::libc::{self, chroot, setgid, setgroups, setuid};
 use uucore::{entries, InvalidEncodingHandling};
 
@@ -53,8 +54,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if !newroot.is_dir() {
         crash!(
             1,
-            "cannot change root directory to `{}`: no such directory",
-            newroot.display()
+            "cannot change root directory to {}: no such directory",
+            newroot.quote()
         );
     }
 
@@ -149,7 +150,7 @@ fn set_context(root: &Path, options: &clap::ArgMatches) {
         Some(u) => {
             let s: Vec<&str> = u.split(':').collect();
             if s.len() != 2 || s.iter().any(|&spec| spec.is_empty()) {
-                crash!(1, "invalid userspec: `{}`", u)
+                crash!(1, "invalid userspec: {}", u.quote())
             };
             s
         }
@@ -170,7 +171,6 @@ fn set_context(root: &Path, options: &clap::ArgMatches) {
 }
 
 fn enter_chroot(root: &Path) {
-    let root_str = root.display();
     std::env::set_current_dir(root).unwrap();
     let err = unsafe {
         chroot(CString::new(".").unwrap().as_bytes_with_nul().as_ptr() as *const libc::c_char)
@@ -179,7 +179,7 @@ fn enter_chroot(root: &Path) {
         crash!(
             1,
             "cannot chroot to {}: {}",
-            root_str,
+            root.quote(),
             Error::last_os_error()
         )
     };
@@ -189,7 +189,7 @@ fn set_main_group(group: &str) {
     if !group.is_empty() {
         let group_id = match entries::grp2gid(group) {
             Ok(g) => g,
-            _ => crash!(1, "no such group: {}", group),
+            _ => crash!(1, "no such group: {}", group.maybe_quote()),
         };
         let err = unsafe { setgid(group_id) };
         if err != 0 {
@@ -234,7 +234,12 @@ fn set_user(user: &str) {
         let user_id = entries::usr2uid(user).unwrap();
         let err = unsafe { setuid(user_id as libc::uid_t) };
         if err != 0 {
-            crash!(1, "cannot set user to {}: {}", user, Error::last_os_error())
+            crash!(
+                1,
+                "cannot set user to {}: {}",
+                user.maybe_quote(),
+                Error::last_os_error()
+            )
         }
     }
 }

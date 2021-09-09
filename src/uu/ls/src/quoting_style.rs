@@ -287,7 +287,7 @@ pub(super) fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
             show_control,
         } => {
             let name = name.to_string_lossy();
-            let (quotes, must_quote) = if name.contains('"') {
+            let (quotes, must_quote) = if name.contains(&['"', '`', '$', '\\'][..]) {
                 (Quotes::Single, true)
             } else if name.contains('\'') {
                 (Quotes::Double, true)
@@ -693,5 +693,38 @@ mod tests {
             vec![("some#name", "shell"), ("some#name", "shell-escape")],
         );
         check_names("name#", vec![("name#", "shell"), ("name#", "shell-escape")]);
+    }
+
+    #[test]
+    fn test_special_chars_in_double_quotes() {
+        check_names(
+            "can'$t",
+            vec![
+                ("'can'\\''$t'", "shell"),
+                ("'can'\\''$t'", "shell-always"),
+                ("'can'\\''$t'", "shell-escape"),
+                ("'can'\\''$t'", "shell-escape-always"),
+            ],
+        );
+
+        check_names(
+            "can'`t",
+            vec![
+                ("'can'\\''`t'", "shell"),
+                ("'can'\\''`t'", "shell-always"),
+                ("'can'\\''`t'", "shell-escape"),
+                ("'can'\\''`t'", "shell-escape-always"),
+            ],
+        );
+
+        check_names(
+            "can'\\t",
+            vec![
+                ("'can'\\''\\t'", "shell"),
+                ("'can'\\''\\t'", "shell-always"),
+                ("'can'\\''\\t'", "shell-escape"),
+                ("'can'\\''\\t'", "shell-escape-always"),
+            ],
+        );
     }
 }

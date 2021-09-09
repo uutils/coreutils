@@ -12,6 +12,7 @@
 extern crate uucore;
 
 use clap::{crate_version, App, Arg};
+use uucore::display::{println_verbatim, Quotable};
 use uucore::error::{FromIo, UError, UResult};
 
 use std::env;
@@ -57,16 +58,20 @@ impl Display for MkTempError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use MkTempError::*;
         match self {
-            PersistError(p) => write!(f, "could not persist file '{}'", p.display()),
-            MustEndInX(s) => write!(f, "with --suffix, template '{}' must end in X", s),
-            TooFewXs(s) => write!(f, "too few X's in template '{}'", s),
+            PersistError(p) => write!(f, "could not persist file {}", p.quote()),
+            MustEndInX(s) => write!(f, "with --suffix, template {} must end in X", s.quote()),
+            TooFewXs(s) => write!(f, "too few X's in template {}", s.quote()),
             ContainsDirSeparator(s) => {
-                write!(f, "invalid suffix '{}', contains directory separator", s)
+                write!(
+                    f,
+                    "invalid suffix {}, contains directory separator",
+                    s.quote()
+                )
             }
             InvalidTemplate(s) => write!(
                 f,
-                "invalid template, '{}'; with --tmpdir, it may not be absolute",
-                s
+                "invalid template, {}; with --tmpdir, it may not be absolute",
+                s.quote()
             ),
         }
     }
@@ -244,8 +249,7 @@ pub fn dry_exec(mut tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str) ->
         }
     }
     tmpdir.push(buf);
-    println!("{}", tmpdir.display());
-    Ok(())
+    println_verbatim(tmpdir).map_err_context(|| "failed to print directory name".to_owned())
 }
 
 fn exec(dir: PathBuf, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> UResult<()> {
@@ -274,6 +278,5 @@ fn exec(dir: PathBuf, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -
             .map_err(|e| MkTempError::PersistError(e.file.path().to_path_buf()))?
             .1
     };
-    println!("{}", path.display());
-    Ok(())
+    println_verbatim(path).map_err_context(|| "failed to print directory name".to_owned())
 }

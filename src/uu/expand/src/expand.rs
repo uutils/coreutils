@@ -17,6 +17,7 @@ use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::str::from_utf8;
 use unicode_width::UnicodeWidthChar;
+use uucore::display::Quotable;
 
 static ABOUT: &str = "Convert tabs in each FILE to spaces, writing to standard output.
  With no FILE, or when FILE is -, read standard input.";
@@ -216,7 +217,7 @@ fn open(path: String) -> BufReader<Box<dyn Read + 'static>> {
     } else {
         file_buf = match File::open(&path[..]) {
             Ok(a) => a,
-            Err(e) => crash!(1, "{}: {}\n", &path[..], e),
+            Err(e) => crash!(1, "{}: {}\n", path.maybe_quote(), e),
         };
         BufReader::new(Box::new(file_buf) as Box<dyn Read>)
     }

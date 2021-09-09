@@ -10,6 +10,7 @@
 use clap::{crate_version, App, Arg};
 use std::env;
 use std::path::{Path, PathBuf};
+use uucore::display::println_verbatim;
 use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
 use uucore::InvalidEncodingHandling;
 
@@ -48,7 +49,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         if !absto.as_path().starts_with(absbase.as_path())
             || !absfrom.as_path().starts_with(absbase.as_path())
         {
-            println!("{}", absto.display());
+            println_verbatim(absto).unwrap();
             return 0;
         }
     }
@@ -74,7 +75,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .map(|x| result.push(x.as_os_str()))
         .last();
 
-    println!("{}", result.display());
+    println_verbatim(result).unwrap();
     0
 }
 

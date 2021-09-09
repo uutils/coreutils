@@ -10,6 +10,7 @@ extern crate uucore;
 
 use clap::{crate_version, App, Arg};
 use std::path::Path;
+use uucore::display::print_verbatim;
 use uucore::error::{UResult, UUsageError};
 use uucore::InvalidEncodingHandling;
 
@@ -65,7 +66,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     if d.components().next() == None {
                         print!(".")
                     } else {
-                        print!("{}", d.to_string_lossy());
+                        print_verbatim(d).unwrap();
                     }
                 }
                 None => {

@@ -18,6 +18,7 @@ extern crate quick_error;
 #[macro_use]
 extern crate uucore;
 
+use uucore::display::Quotable;
 #[cfg(windows)]
 use winapi::um::fileapi::CreateFileW;
 #[cfg(windows)]
@@ -541,8 +542,8 @@ impl FromStr for Attribute {
             "xattr" => Attribute::Xattr,
             _ => {
                 return Err(Error::InvalidArgument(format!(
-                    "invalid attribute '{}'",
-                    value
+                    "invalid attribute {}",
+                    value.quote()
                 )));
             }
         })
@@ -659,8 +660,8 @@ impl Options {
                         "never" => ReflinkMode::Never,
                         value => {
                             return Err(Error::InvalidArgument(format!(
-                                "invalid argument '{}' for \'reflink\'",
-                                value
+                                "invalid argument {} for \'reflink\'",
+                                value.quote()
                             )));
                         }
                     }
@@ -832,7 +833,7 @@ fn copy(sources: &[Source], target: &TargetSlice, options: &Options) -> CopyResu
     let mut seen_sources = HashSet::with_capacity(sources.len());
     for source in sources {
         if seen_sources.contains(source) {
-            show_warning!("source '{}' specified more than once", source.display());
+            show_warning!("source {} specified more than once", source.quote());
         } else {
             let mut found_hard_link = false;
             if preserve_hard_links {
@@ -873,8 +874,8 @@ fn construct_dest_path(
 ) -> CopyResult<PathBuf> {
     if options.no_target_dir && target.is_dir() {
         return Err(format!(
-            "cannot overwrite directory '{}' with non-directory",
-            target.display()
+            "cannot overwrite directory {} with non-directory",
+            target.quote()
         )
         .into());
     }
@@ -941,7 +942,7 @@ fn adjust_canonicalization(p: &Path) -> Cow<Path> {
 /// will not cause a short-circuit.
 fn copy_directory(root: &Path, target: &TargetSlice, options: &Options) -> CopyResult<()> {
     if !options.recursive {
-        return Err(format!("omitting directory '{}'", root.display()).into());
+        return Err(format!("omitting directory {}", root.quote()).into());
     }
 
     // if no-dereference is enabled and this is a symlink, copy it as a file
@@ -1041,12 +1042,12 @@ impl OverwriteMode {
         match *self {
             OverwriteMode::NoClobber => Err(Error::NotAllFilesCopied),
             OverwriteMode::Interactive(_) => {
-                if prompt_yes!("{}: overwrite {}? ", uucore::util_name(), path.display()) {
+                if prompt_yes!("{}: overwrite {}? ", uucore::util_name(), path.quote()) {
                     Ok(())
                 } else {
                     Err(Error::Skipped(format!(
                         "Not overwriting {} at user request",
-                        path.display()
+                        path.quote()
                     )))
                 }
             }
@@ -1056,7 +1057,7 @@ impl OverwriteMode {
 }
 
 fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResult<()> {
-    let context = &*format!("'{}' -> '{}'", source.display().to_string(), dest.display());
+    let context = &*format!("{} -> {}", source.quote(), dest.quote());
     let source_metadata = fs::symlink_metadata(source).context(context)?;
     match *attribute {
         Attribute::Mode => {
@@ -1152,7 +1153,7 @@ fn symlink_file(source: &Path, dest: &Path, context: &str) -> CopyResult<()> {
 }
 
 fn context_for(src: &Path, dest: &Path) -> String {
-    format!("'{}' -> '{}'", src.display(), dest.display())
+    format!("{} -> {}", src.quote(), dest.quote())
 }
 
 /// Implements a simple backup copy for the destination file.
@@ -1332,8 +1333,8 @@ fn copy_link(source: &Path, dest: &Path) -> CopyResult<()> {
             Some(name) => dest.join(name).into(),
             None => crash!(
                 EXIT_ERR,
-                "cannot stat '{}': No such file or directory",
-                source.display()
+                "cannot stat {}: No such file or directory",
+                source.quote()
             ),
         }
     } else {
@@ -1454,11 +1455,11 @@ fn copy_on_write_macos(
 pub fn verify_target_type(target: &Path, target_type: &TargetType) -> CopyResult<()> {
     match (target_type, target.is_dir()) {
         (&TargetType::Directory, false) => {
-            Err(format!("target: '{}' is not a directory", target.display()).into())
+            Err(format!("target: {} is not a directory", target.quote()).into())
         }
         (&TargetType::File, true) => Err(format!(
-            "cannot overwrite directory '{}' with non-directory",
-            target.display()
+            "cannot overwrite directory {} with non-directory",
+            target.quote()
         )
         .into()),
         _ => Ok(()),

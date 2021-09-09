@@ -16,6 +16,7 @@ use clap::{crate_version, App, Arg, ArgMatches};
 use file_diff::diff;
 use filetime::{set_file_times, FileTime};
 use uucore::backup_control::{self, BackupMode};
+use uucore::display::Quotable;
 use uucore::entries::{grp2gid, usr2uid};
 use uucore::error::{FromIo, UError, UIoError, UResult};
 use uucore::mode::get_umask;
@@ -95,40 +96,30 @@ impl Display for InstallError {
                 )
             }
             IE::CreateDirFailed(dir, e) => {
-                Display::fmt(&uio_error!(e, "failed to create {}", dir.display()), f)
+                Display::fmt(&uio_error!(e, "failed to create {}", dir.quote()), f)
             }
-            IE::ChmodFailed(file) => write!(f, "failed to chmod {}", file.display()),
+            IE::ChmodFailed(file) => write!(f, "failed to chmod {}", file.quote()),
             IE::InvalidTarget(target) => write!(
                 f,
                 "invalid target {}: No such file or directory",
-                target.display()
+                target.quote()
             ),
             IE::TargetDirIsntDir(target) => {
-                write!(f, "target '{}' is not a directory", target.display())
+                write!(f, "target {} is not a directory", target.quote())
             }
             IE::BackupFailed(from, to, e) => Display::fmt(
-                &uio_error!(
-                    e,
-                    "cannot backup '{}' to '{}'",
-                    from.display(),
-                    to.display()
-                ),
+                &uio_error!(e, "cannot backup {} to {}", from.quote(), to.quote()),
                 f,
             ),
             IE::InstallFailed(from, to, e) => Display::fmt(
-                &uio_error!(
-                    e,
-                    "cannot install '{}' to '{}'",
-                    from.display(),
-                    to.display()
-                ),
+                &uio_error!(e, "cannot install {} to {}", from.quote(), to.quote()),
                 f,
             ),
             IE::StripProgramFailed(msg) => write!(f, "strip program failed: {}", msg),
             IE::MetadataFailed(e) => Display::fmt(&uio_error!(e, ""), f),
-            IE::NoSuchUser(user) => write!(f, "no such user: {}", user),
-            IE::NoSuchGroup(group) => write!(f, "no such group: {}", group),
-            IE::OmittingDirectory(dir) => write!(f, "omitting directory '{}'", dir.display()),
+            IE::NoSuchUser(user) => write!(f, "no such user: {}", user.maybe_quote()),
+            IE::NoSuchGroup(group) => write!(f, "no such group: {}", group.maybe_quote()),
+            IE::OmittingDirectory(dir) => write!(f, "omitting directory {}", dir.quote()),
         }
     }
 }
@@ -416,14 +407,14 @@ fn directory(paths: Vec<String>, b: Behavior) -> UResult<()> {
                 // the default mode. Hence it is safe to use fs::create_dir_all
                 // and then only modify the target's dir mode.
                 if let Err(e) =
-                    fs::create_dir_all(path).map_err_context(|| format!("{}", path.display()))
+                    fs::create_dir_all(path).map_err_context(|| path.maybe_quote().to_string())
                 {
                     show!(e);
                     continue;
                 }
 
                 if b.verbose {
-                    println!("creating directory '{}'", path.display());
+                    println!("creating directory {}", path.quote());
                 }
             }
 
@@ -445,7 +436,7 @@ fn directory(paths: Vec<String>, b: Behavior) -> UResult<()> {
 fn is_new_file_path(path: &Path) -> bool {
     !path.exists()
         && (path.parent().map(Path::is_dir).unwrap_or(true)
-            || path.parent().unwrap().to_string_lossy().is_empty()) // In case of a simple file
+            || path.parent().unwrap().as_os_str().is_empty()) // In case of a simple file
 }
 
 /// Perform an install, given a list of paths and behavior.
@@ -502,7 +493,7 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
         if !sourcepath.exists() {
             let err = UIoError::new(
                 std::io::ErrorKind::NotFound,
-                format!("cannot stat '{}'", sourcepath.display()),
+                format!("cannot stat {}", sourcepath.quote()),
             );
             show!(err);
             continue;
@@ -566,7 +557,7 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
         }
     }
 
-    if from.to_string_lossy() == "/dev/null" {
+    if from.as_os_str() == "/dev/null" {
         /* workaround a limitation of fs::copy
          * https://github.com/rust-lang/rust/issues/79390
          */
@@ -674,9 +665,9 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
     }
 
     if b.verbose {
-        print!("'{}' -> '{}'", from.display(), to.display());
+        print!("{} -> {}", from.quote(), to.quote());
         match backup_path {
-            Some(path) => println!(" (backup: '{}')", path.display()),
+            Some(path) => println!(" (backup: {})", path.quote()),
             None => println!(),
         }
     }

@@ -11,8 +11,14 @@
 extern crate uucore;
 
 use clap::{crate_version, App, Arg};
-use std::path::{Path, PathBuf};
-use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
+use std::{
+    io::{stdout, Write},
+    path::{Path, PathBuf},
+};
+use uucore::{
+    display::{print_verbatim, Quotable},
+    fs::{canonicalize, MissingHandling, ResolveMode},
+};
 
 static ABOUT: &str = "print the resolved path";
 
@@ -58,7 +64,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     for path in &paths {
         if let Err(e) = resolve_path(path, strip, zero, logical, can_mode) {
             if !quiet {
-                show_error!("{}: {}", e, path.display());
+                show_error!("{}: {}", path.maybe_quote(), e);
             }
             retcode = 1
         };
@@ -154,8 +160,9 @@ fn resolve_path(
         ResolveMode::Physical
     };
     let abs = canonicalize(p, can_mode, resolve)?;
-    let line_ending = if zero { '\0' } else { '\n' };
+    let line_ending = if zero { b'\0' } else { b'\n' };
 
-    print!("{}{}", abs.display(), line_ending);
+    print_verbatim(&abs)?;
+    stdout().write_all(&[line_ending])?;
     Ok(())
 }

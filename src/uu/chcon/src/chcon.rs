@@ -2,7 +2,7 @@
 
 #![allow(clippy::upper_case_acronyms)]
 
-use uucore::{show_error, show_usage_error, show_warning};
+use uucore::{display::Quotable, show_error, show_usage_error, show_warning};
 
 use clap::{App, Arg};
 use selinux::{OpaqueSecurityContext, SecurityContext};
@@ -111,13 +111,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 Ok(context) => context,
 
                 Err(_r) => {
-                    show_error!("Invalid security context '{}'.", context.to_string_lossy());
+                    show_error!("Invalid security context {}.", context.quote());
                     return libc::EXIT_FAILURE;
                 }
             };
 
             if SecurityContext::from_c_str(&c_context, false).check() == Some(false) {
-                show_error!("Invalid security context '{}'.", context.to_string_lossy());
+                show_error!("Invalid security context {}.", context.quote());
                 return libc::EXIT_FAILURE;
             }
 
@@ -564,7 +564,7 @@ fn process_file(
             println!(
                 "{}: Changing security context of: {}",
                 uucore::util_name(),
-                file_full_name.to_string_lossy()
+                file_full_name.quote()
             );
         }
 
@@ -699,9 +699,9 @@ fn root_dev_ino_warn(dir_name: &Path) {
         );
     } else {
         show_warning!(
-            "It is dangerous to operate recursively on '{}' (same as '/'). \
+            "It is dangerous to operate recursively on {} (same as '/'). \
              Use --{} to override this failsafe.",
-            dir_name.to_string_lossy(),
+            dir_name.quote(),
             options::preserve_root::NO_PRESERVE_ROOT,
         );
     }
@@ -726,8 +726,8 @@ fn emit_cycle_warning(file_name: &Path) {
         "Circular directory structure.\n\
 This almost certainly means that you have a corrupted file system.\n\
 NOTIFY YOUR SYSTEM MANAGER.\n\
-The following directory is part of the cycle '{}'.",
-        file_name.display()
+The following directory is part of the cycle {}.",
+        file_name.quote()
     )
 }
 

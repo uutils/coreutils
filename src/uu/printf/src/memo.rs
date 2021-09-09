@@ -8,8 +8,9 @@
 use itertools::put_back_n;
 use std::iter::Peekable;
 use std::slice::Iter;
+use uucore::display::Quotable;
+use uucore::show_warning;
 
-use crate::cli;
 use crate::tokenize::sub::Sub;
 use crate::tokenize::token::{Token, Tokenizer};
 use crate::tokenize::unescaped_text::UnescapedText;
@@ -19,10 +20,10 @@ pub struct Memo {
 }
 
 fn warn_excess_args(first_arg: &str) {
-    cli::err_msg(&format!(
-        "warning: ignoring excess arguments, starting with '{}'",
-        first_arg
-    ));
+    show_warning!(
+        "ignoring excess arguments, starting with {}",
+        first_arg.quote()
+    );
 }
 
 impl Memo {

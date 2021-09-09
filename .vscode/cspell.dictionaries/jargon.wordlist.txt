@@ -9,6 +9,8 @@ bytewise
 canonicalization
 canonicalize
 canonicalizing
+codepoint
+codepoints
 colorizable
 colorize
 coprime

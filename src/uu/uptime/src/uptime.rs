@@ -17,6 +17,8 @@ extern crate uucore;
 pub use uucore::libc;
 use uucore::libc::time_t;
 
+use uucore::error::{UResult, USimpleError};
+
 static ABOUT: &str = "Display the current time, the length of time the system has been up,\n\
                       the number of users on the system, and the average number of jobs\n\
                       in the run queue over the last 1, 5 and 15 minutes.";
@@ -36,21 +38,20 @@ fn usage() -> String {
     format!("{0} [OPTION]...", uucore::execution_phrase())
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     let (boot_time, user_count) = process_utmpx();
     let uptime = get_uptime(boot_time);
     if uptime < 0 {
-        show_error!("could not retrieve system uptime");
-
-        1
+        Err(USimpleError::new(1, "could not retrieve system uptime"))
     } else {
         if matches.is_present(options::SINCE) {
             let initial_date = Local.timestamp(Utc::now().timestamp() - uptime, 0);
             println!("{}", initial_date.format("%Y-%m-%d %H:%M:%S"));
-            return 0;
+            return Ok(());
         }
 
         print_time();
@@ -59,7 +60,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         print_nusers(user_count);
         print_loadavg();
 
-        0
+        Ok(())
     }
 }
 

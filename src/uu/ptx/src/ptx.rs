@@ -17,6 +17,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::default::Default;
 use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
+use uucore::display::Quotable;
 use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "ptx";
@@ -292,7 +293,11 @@ fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> 
 
 fn get_reference(config: &Config, word_ref: &WordRef, line: &str, context_reg: &Regex) -> String {
     if config.auto_ref {
-        format!("{}:{}", word_ref.filename, word_ref.local_line_nr + 1)
+        format!(
+            "{}:{}",
+            word_ref.filename.maybe_quote(),
+            word_ref.local_line_nr + 1
+        )
     } else if config.input_ref {
         let (beg, end) = match context_reg.find(line) {
             Some(x) => (x.start(), x.end()),

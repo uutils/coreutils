@@ -34,6 +34,7 @@ use std::io::{self, stdin, BufRead, BufReader, Read};
 use std::iter;
 use std::num::ParseIntError;
 use std::path::Path;
+use uucore::display::Quotable;
 
 const NAME: &str = "hashsum";
 
@@ -525,7 +526,7 @@ where
                             if options.warn {
                                 show_warning!(
                                     "{}: {}: improperly formatted {} checksum line",
-                                    filename.display(),
+                                    filename.maybe_quote(),
                                     i + 1,
                                     options.algoname
                                 );
@@ -546,6 +547,15 @@ where
                     )
                 )
                 .to_ascii_lowercase();
+                // FIXME: Filenames with newlines should be treated specially.
+                // GNU appears to replace newlines by \n and backslashes by
+                // \\ and prepend a backslash (to the hash or filename) if it did
+                // this escaping.
+                // Different sorts of output (checking vs outputting hashes) may
+                // handle this differently. Compare carefully to GNU.
+                // If you can, try to preserve invalid unicode using OsStr(ing)Ext
+                // and display it using uucore::display::print_verbatim(). This is
+                // easier (and more important) on Unix than on Windows.
                 if sum == real_sum {
                     if !options.quiet {
                         println!("{}: OK", ck_filename);

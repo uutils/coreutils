@@ -12,7 +12,8 @@ use clap::{crate_version, App, Arg};
 use retain_mut::RetainMut;
 use std::fs::OpenOptions;
 use std::io::{copy, sink, stdin, stdout, Error, ErrorKind, Read, Result, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+use uucore::display::Quotable;
 
 #[cfg(unix)]
 use uucore::libc;
@@ -167,7 +168,7 @@ impl Write for MultiWriter {
             let result = writer.write_all(buf);
             match result {
                 Err(f) => {
-                    show_error!("{}: {}", writer.name, f.to_string());
+                    show_error!("{}: {}", writer.name.maybe_quote(), f);
                     false
                 }
                 _ => true,
@@ -181,7 +182,7 @@ impl Write for MultiWriter {
             let result = writer.flush();
             match result {
                 Err(f) => {
-                    show_error!("{}: {}", writer.name, f.to_string());
+                    show_error!("{}: {}", writer.name.maybe_quote(), f);
                     false
                 }
                 _ => true,
@@ -214,7 +215,7 @@ impl Read for NamedReader {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         match self.inner.read(buf) {
             Err(f) => {
-                show_error!("{}: {}", Path::new("stdin").display(), f.to_string());
+                show_error!("stdin: {}", f);
                 Err(f)
             }
             okay => okay,

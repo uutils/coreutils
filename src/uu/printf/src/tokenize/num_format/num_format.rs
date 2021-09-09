@@ -7,6 +7,9 @@
 use std::env;
 use std::vec::Vec;
 
+use uucore::display::Quotable;
+use uucore::{show_error, show_warning};
+
 use super::format_field::{FieldType, FormatField};
 use super::formatter::{Base, FormatPrimitive, Formatter, InitialPrefix};
 use super::formatters::cninetyninehexfloatf::CninetyNineHexFloatf;
@@ -15,11 +18,9 @@ use super::formatters::floatf::Floatf;
 use super::formatters::intf::Intf;
 use super::formatters::scif::Scif;
 
-use crate::cli;
-
 pub fn warn_expected_numeric(pf_arg: &str) {
     // important: keep println here not print
-    cli::err_msg(&format!("{}: expected a numeric value", pf_arg));
+    show_error!("{}: expected a numeric value", pf_arg.maybe_quote());
 }
 
 // when character constant arguments have excess characters
@@ -29,11 +30,11 @@ fn warn_char_constant_ign(remaining_bytes: Vec<u8>) {
         Ok(_) => {}
         Err(e) => {
             if let env::VarError::NotPresent = e {
-                cli::err_msg(&format!(
-                    "warning: {:?}: character(s) following character \
+                show_warning!(
+                    "{:?}: character(s) following character \
                      constant have been ignored",
                     &*remaining_bytes
-                ));
+                );
             }
         }
     }
