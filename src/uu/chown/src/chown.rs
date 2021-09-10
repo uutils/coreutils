@@ -199,7 +199,7 @@ fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
                     return Err(USimpleError::new(
                         1,
                         format!("invalid user: {}", spec.quote()),
-                    ))?;
+                    ));
                 }
             }
         })
