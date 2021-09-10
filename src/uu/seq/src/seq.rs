@@ -12,7 +12,7 @@ use num_traits::One;
 use num_traits::Zero;
 use num_traits::{Num, ToPrimitive};
 use std::cmp;
-use std::io::{stdout, Write};
+use std::io::{stdout, ErrorKind, Write};
 use std::str::FromStr;
 use uucore::display::Quotable;
 
@@ -192,7 +192,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .num_digits()
         .max(increment.num_digits())
         .max(last.num_digits());
-    match (first, last, increment) {
+    let result = match (first, last, increment) {
         (Number::MinusZero, Number::BigInt(last), Number::BigInt(increment)) => print_seq_integers(
             (BigInt::zero(), increment, last),
             options.separator,
@@ -219,8 +219,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             options.widths,
             padding,
         ),
+    };
+    match result {
+        Ok(_) => 0,
+        Err(err) if err.kind() == ErrorKind::BrokenPipe => 0,
+        Err(_) => 1,
     }
-    0
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -276,7 +280,9 @@ fn print_seq(
     terminator: String,
     pad: bool,
     padding: usize,
-) {
+) -> std::io::Result<()> {
+    let stdout = stdout();
+    let mut stdout = stdout.lock();
     let (first, increment, last) = range;
     let mut i = 0isize;
     let mut value = first + i as f64 * increment;
@@ -286,20 +292,21 @@ fn print_seq(
         let before_dec = istr.find('.').unwrap_or(ilen);
         if pad && before_dec < padding {
             for _ in 0..(padding - before_dec) {
-                print!("0");
+                write!(stdout, "0")?;
             }
         }
-        print!("{}", istr);
+        write!(stdout, "{}", istr)?;
         i += 1;
         value = first + i as f64 * increment;
         if !done_printing(&value, &increment, &last) {
-            print!("{}", separator);
+            write!(stdout, "{}", separator)?;
         }
     }
     if (first >= last && increment < 0f64) || (first <= last && increment > 0f64) {
-        print!("{}", terminator);
+        write!(stdout, "{}", terminator)?;
     }
-    crash_if_err!(1, stdout().flush());
+    stdout.flush()?;
+    Ok(())
 }
 
 /// Print an integer sequence.
@@ -323,31 +330,34 @@ fn print_seq_integers(
     pad: bool,
     padding: usize,
     is_first_minus_zero: bool,
-) {
+) -> std::io::Result<()> {
+    let stdout = stdout();
+    let mut stdout = stdout.lock();
     let (first, increment, last) = range;
     let mut value = first;
     let mut is_first_iteration = true;
     while !done_printing(&value, &increment, &last) {
         if !is_first_iteration {
-            print!("{}", separator);
+            write!(stdout, "{}", separator)?;
         }
         let mut width = padding;
         if is_first_iteration && is_first_minus_zero {
-            print!("-");
+            write!(stdout, "-")?;
             width -= 1;
         }
         is_first_iteration = false;
         if pad {
-            print!("{number:>0width$}", number = value, width = width);
+            write!(stdout, "{number:>0width$}", number = value, width = width)?;
         } else {
-            print!("{}", value);
+            write!(stdout, "{}", value)?;
         }
         value += &increment;
     }
 
     if !is_first_iteration {
-        print!("{}", terminator);
+        write!(stdout, "{}", terminator)?;
     }
+    Ok(())
 }
 
 #[cfg(test)]
