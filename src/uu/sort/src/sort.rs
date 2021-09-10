@@ -800,7 +800,7 @@ impl Default for KeyPosition {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Default)]
 struct FieldSelector {
     from: KeyPosition,
     to: Option<KeyPosition>,
@@ -810,18 +810,6 @@ struct FieldSelector {
     // Selections are therefore not needed when this selector matches the whole line
     // or the sort mode is general-numeric.
     needs_selection: bool,
-}
-
-impl Default for FieldSelector {
-    fn default() -> Self {
-        Self {
-            from: Default::default(),
-            to: None,
-            settings: Default::default(),
-            needs_tokens: false,
-            needs_selection: false,
-        }
-    }
 }
 
 impl FieldSelector {

@@ -11,22 +11,12 @@ use super::format_field::FormatField;
 // output for a number, organized together
 // to allow for easy generalization of output manipulation
 // (e.g. max number of digits after decimal)
+#[derive(Default)]
 pub struct FormatPrimitive {
     pub prefix: Option<String>,
     pub pre_decimal: Option<String>,
     pub post_decimal: Option<String>,
     pub suffix: Option<String>,
-}
-
-impl Default for FormatPrimitive {
-    fn default() -> FormatPrimitive {
-        FormatPrimitive {
-            prefix: None,
-            pre_decimal: None,
-            post_decimal: None,
-            suffix: None,
-        }
-    }
 }
 
 #[derive(Clone, PartialEq)]
