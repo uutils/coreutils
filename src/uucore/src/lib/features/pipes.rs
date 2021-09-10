@@ -10,6 +10,9 @@ use nix::{fcntl::SpliceFFlags, sys::uio::IoVec};
 pub use nix::{Error, Result};
 
 /// A wrapper around [`nix::unistd::Pipe`] that ensures the pipe is cleaned up.
+///
+/// Returns two `File` objects: everything written to the second can be read
+/// from the first.
 pub fn pipe() -> Result<(File, File)> {
     let (read, write) = nix::unistd::pipe()?;
     // SAFETY: The file descriptors do not have other owners.
@@ -17,6 +20,14 @@ pub fn pipe() -> Result<(File, File)> {
 }
 
 /// Less noisy wrapper around [`nix::fcntl::splice`].
+///
+/// Up to `len` bytes are moved from `source` to `target`. Returns the number
+/// of successfully moved bytes.
+///
+/// At least one of `source` and `target` must be some sort of pipe.
+/// To get around this requirement, consider splicing from your source into
+/// a [`pipe`] and then from the pipe into your target (with `splice_exact`):
+/// this is still very efficient.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn splice(source: &impl AsRawFd, target: &impl AsRawFd, len: usize) -> Result<usize> {
     nix::fcntl::splice(
@@ -31,6 +42,8 @@ pub fn splice(source: &impl AsRawFd, target: &impl AsRawFd, len: usize) -> Resul
 
 /// Splice wrapper which fully finishes the write.
 ///
+/// Exactly `len` bytes are moved from `source` into `target`.
+///
 /// Panics if `source` runs out of data before `len` bytes have been moved.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn splice_exact(source: &impl AsRawFd, target: &impl AsRawFd, len: usize) -> Result<()> {
@@ -43,7 +56,9 @@ pub fn splice_exact(source: &impl AsRawFd, target: &impl AsRawFd, len: usize) ->
     Ok(())
 }
 
-/// Use vmsplice() to copy data from memory into a pipe.
+/// Copy data from `bytes` into `target`, which must be a pipe.
+///
+/// Returns the number of successfully copied bytes.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn vmsplice(target: &impl AsRawFd, bytes: &[u8]) -> Result<usize> {
     nix::fcntl::vmsplice(
