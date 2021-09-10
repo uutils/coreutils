@@ -47,6 +47,11 @@ use unicode_width::UnicodeWidthStr;
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 use uucore::{fs::display_permissions, version_cmp::version_cmp};
 
+#[cfg(not(feature = "selinux"))]
+static CONTEXT_HELP_TEXT: &str = "print any security context of each file (not enabled)";
+#[cfg(feature = "selinux")]
+static CONTEXT_HELP_TEXT: &str = "print any security context of each file";
+
 fn usage() -> String {
     format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
 }
@@ -126,6 +131,7 @@ pub mod options {
     pub static FULL_TIME: &str = "full-time";
     pub static HIDE: &str = "hide";
     pub static IGNORE: &str = "ignore";
+    pub static CONTEXT: &str = "context";
 }
 
 const DEFAULT_TERM_WIDTH: u16 = 80;
@@ -236,6 +242,8 @@ struct Config {
     quoting_style: QuotingStyle,
     indicator_style: IndicatorStyle,
     time_style: TimeStyle,
+    context: bool,
+    selinux_supported: bool,
 }
 
 // Fields that can be removed or added to the long format
@@ -247,9 +255,18 @@ struct LongFormat {
     numeric_uid_gid: bool,
 }
 
+struct PaddingCollection {
+    longest_link_count_len: usize,
+    longest_uname_len: usize,
+    longest_group_len: usize,
+    longest_context_len: usize,
+    longest_size_len: usize,
+}
+
 impl Config {
     #[allow(clippy::cognitive_complexity)]
     fn from(options: &clap::ArgMatches) -> UResult<Config> {
+        let context = options.is_present(options::CONTEXT);
         let (mut format, opt) = if let Some(format_) = options.value_of(options::FORMAT) {
             (
                 match format_ {
@@ -593,6 +610,17 @@ impl Config {
             quoting_style,
             indicator_style,
             time_style,
+            context,
+            selinux_supported: {
+                #[cfg(feature = "selinux")]
+                {
+                    selinux::kernel_support() != selinux::KernelSupport::Unsupported
+                }
+                #[cfg(not(feature = "selinux"))]
+                {
+                    false
+                }
+            },
         })
     }
 }
@@ -610,6 +638,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .values_of_os(options::PATHS)
         .map(|v| v.map(Path::new).collect())
         .unwrap_or_else(|| vec![Path::new(".")]);
+
+    if config.context && !config.selinux_supported {
+        show_warning!("--context (-Z) works only on an SELinux-enabled kernel",);
+    }
 
     list(locs, config)
 }
@@ -1154,6 +1186,12 @@ only ignore '.' and '..'.",
                 .overrides_with(options::FULL_TIME)
                 .help("like -l --time-style=full-iso"),
         )
+        .arg(
+            Arg::with_name(options::CONTEXT)
+                .short("Z")
+                .long(options::CONTEXT)
+                .help(CONTEXT_HELP_TEXT),
+        )
         // Positional arguments
         .arg(
             Arg::with_name(options::PATHS)
@@ -1178,6 +1216,7 @@ struct PathData {
     // PathBuf that all above data corresponds to
     p_buf: PathBuf,
     must_dereference: bool,
+    security_context: String,
 }
 
 impl PathData {
@@ -1221,12 +1260,39 @@ impl PathData {
             None => OnceCell::new(),
         };
 
+        let security_context: String = if config.context {
+            if config.selinux_supported {
+                #[cfg(feature = "selinux")]
+                {
+                    if let Ok(Some(context)) =
+                        selinux::SecurityContext::of_path(&p_buf, must_dereference, false)
+                    {
+                        String::from_utf8_lossy(context.as_bytes())
+                            .trim_end_matches(char::from(0))
+                            .to_string()
+                    } else {
+                        // TODO: print warning with error to stderr
+                        "?".to_string()
+                    }
+                }
+                #[cfg(not(feature = "selinux"))]
+                {
+                    "?".to_string()
+                }
+            } else {
+                "?".to_string()
+            }
+        } else {
+            String::new()
+        };
+
         Self {
             md: OnceCell::new(),
             ft,
             display_name,
             p_buf,
             must_dereference,
+            security_context,
         }
     }
 
@@ -1390,7 +1456,7 @@ fn get_metadata(entry: &Path, dereference: bool) -> std::io::Result<Metadata> {
 }
 
 fn display_dir_entry_size(entry: &PathData, config: &Config) -> (usize, usize, usize, usize) {
-    // TODO: Cache/memoize the display_* results so we don't have to recalculate them.
+    // TODO: Cache/memorize the display_* results so we don't have to recalculate them.
     if let Some(md) = entry.md() {
         (
             display_symlink_count(md).len(),
@@ -1403,31 +1469,40 @@ fn display_dir_entry_size(entry: &PathData, config: &Config) -> (usize, usize, u
     }
 }
 
-fn pad_left(string: String, count: usize) -> String {
+fn pad_left(string: &str, count: usize) -> String {
     format!("{:>width$}", string, width = count)
 }
 
-fn pad_right(string: String, count: usize) -> String {
+fn pad_right(string: &str, count: usize) -> String {
     format!("{:<width$}", string, width = count)
 }
 
 fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) {
+    // `-Z`, `--context`:
+    // Display the SELinux security context or '?' if none is found. When used with the `-l`
+    // option, print the security context to the left of the size column.
+
     if config.format == Format::Long {
         let (
             mut longest_link_count_len,
             mut longest_uname_len,
             mut longest_group_len,
+            mut longest_context_len,
             mut longest_size_len,
-        ) = (1, 1, 1, 1);
+        ) = (1, 1, 1, 1, 1);
         let mut total_size = 0;
 
         for item in items {
+            let context_len = item.security_context.len();
             let (link_count_len, uname_len, group_len, size_len) =
                 display_dir_entry_size(item, config);
             longest_link_count_len = link_count_len.max(longest_link_count_len);
             longest_size_len = size_len.max(longest_size_len);
             longest_uname_len = uname_len.max(longest_uname_len);
             longest_group_len = group_len.max(longest_group_len);
+            if config.context {
+                longest_context_len = context_len.max(longest_context_len);
+            }
             longest_size_len = size_len.max(longest_size_len);
             total_size += item.md().map_or(0, |md| get_block_size(md, config));
         }
@@ -1439,16 +1514,31 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
         for item in items {
             display_item_long(
                 item,
-                longest_link_count_len,
-                longest_uname_len,
-                longest_group_len,
-                longest_size_len,
+                PaddingCollection {
+                    longest_link_count_len,
+                    longest_uname_len,
+                    longest_group_len,
+                    longest_context_len,
+                    longest_size_len,
+                },
                 config,
                 out,
             );
         }
     } else {
-        let names = items.iter().filter_map(|i| display_file_name(i, config));
+        let mut longest_context_len = 1;
+        let prefix_context = if config.context {
+            for item in items {
+                let context_len = item.security_context.len();
+                longest_context_len = context_len.max(longest_context_len);
+            }
+            Some(longest_context_len)
+        } else {
+            None
+        };
+        let names = items
+            .iter()
+            .filter_map(|i| display_file_name(i, config, prefix_context));
 
         match config.format {
             Format::Columns => display_grid(names, config.width, Direction::TopToBottom, out),
@@ -1573,15 +1663,13 @@ fn display_grid(
 ///    longest_link_count_len: usize,
 ///    longest_uname_len: usize,
 ///    longest_group_len: usize,
+///    longest_context_len: usize,
 ///    longest_size_len: usize,
 /// ```
 /// that decide the maximum possible character count of each field.
 fn display_item_long(
     item: &PathData,
-    longest_link_count_len: usize,
-    longest_uname_len: usize,
-    longest_group_len: usize,
-    longest_size_len: usize,
+    padding: PaddingCollection,
     config: &Config,
     out: &mut BufWriter<Stdout>,
 ) {
@@ -1602,16 +1690,23 @@ fn display_item_long(
 
     let _ = write!(
         out,
-        "{} {}",
+        "{}{} {}",
         display_permissions(md, true),
-        pad_left(display_symlink_count(md), longest_link_count_len),
+        if item.security_context != "?" {
+            // GNU `ls` uses a "." character to indicate a file with a security context, but not
+            // other alternate access method.
+            "."
+        } else {
+            ""
+        },
+        pad_left(&display_symlink_count(md), padding.longest_link_count_len),
     );
 
     if config.long.owner {
         let _ = write!(
             out,
             " {}",
-            pad_right(display_uname(md, config), longest_uname_len)
+            pad_right(&display_uname(md, config), padding.longest_uname_len)
         );
     }
 
@@ -1619,7 +1714,15 @@ fn display_item_long(
         let _ = write!(
             out,
             " {}",
-            pad_right(display_group(md, config), longest_group_len)
+            pad_right(&display_group(md, config), padding.longest_group_len)
+        );
+    }
+
+    if config.context {
+        let _ = write!(
+            out,
+            " {}",
+            pad_right(&item.security_context, padding.longest_context_len)
         );
     }
 
@@ -1629,19 +1732,19 @@ fn display_item_long(
         let _ = write!(
             out,
             " {}",
-            pad_right(display_uname(md, config), longest_uname_len)
+            pad_right(&display_uname(md, config), padding.longest_uname_len)
         );
     }
 
     let _ = writeln!(
         out,
         " {} {} {}",
-        pad_left(display_size_or_rdev(md, config), longest_size_len),
+        pad_left(&display_size_or_rdev(md, config), padding.longest_size_len),
         display_date(md, config),
         // unwrap is fine because it fails when metadata is not available
         // but we already know that it is because it's checked at the
         // start of the function.
-        display_file_name(item, config).unwrap().contents,
+        display_file_name(item, config, None).unwrap().contents,
     );
 }
 
@@ -1865,10 +1968,15 @@ fn classify_file(path: &PathData) -> Option<char> {
 /// * `config.indicator_style` to append specific characters to `name` using [`classify_file`].
 /// * `config.format` to display symlink targets if `Format::Long`. This function is also
 ///   responsible for coloring symlink target names if `config.color` is specified.
+/// * `config.context` to prepend security context to `name` if compiled with `feat_selinux`.
 ///
 /// Note that non-unicode sequences in symlink targets are dealt with using
 /// [`std::path::Path::to_string_lossy`].
-fn display_file_name(path: &PathData, config: &Config) -> Option<Cell> {
+fn display_file_name(
+    path: &PathData,
+    config: &Config,
+    prefix_context: Option<usize>,
+) -> Option<Cell> {
     // This is our return value. We start by `&path.display_name` and modify it along the way.
     let mut name = escape_name(&path.display_name, &config.quoting_style);
 
@@ -1957,6 +2065,20 @@ fn display_file_name(path: &PathData, config: &Config) -> Option<Cell> {
                 // If no coloring is required, we just use target as is.
                 name.push_str(&target.to_string_lossy());
             }
+        }
+    }
+
+    // Prepend the security context to the `name` and adjust `width` in order
+    // to get correct alignment from later calls to`display_grid()`.
+    if config.context {
+        if let Some(pad_count) = prefix_context {
+            let security_context = if !matches!(config.format, Format::Commas) {
+                pad_left(&path.security_context, pad_count)
+            } else {
+                path.security_context.to_owned()
+            };
+            name = format!("{} {}", security_context, name);
+            width += security_context.len() + 1;
         }
     }
 
