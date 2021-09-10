@@ -639,10 +639,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|v| v.map(Path::new).collect())
         .unwrap_or_else(|| vec![Path::new(".")]);
 
-    if config.context && !config.selinux_supported {
-        show_warning!("--context (-Z) works only on an SELinux-enabled kernel",);
-    }
-
     list(locs, config)
 }
 
@@ -1260,7 +1256,7 @@ impl PathData {
             None => OnceCell::new(),
         };
 
-        let security_context: String = if config.context {
+        let security_context = if config.context {
             if config.selinux_supported {
                 #[cfg(feature = "selinux")]
                 {
@@ -1692,9 +1688,9 @@ fn display_item_long(
         out,
         "{}{} {}",
         display_permissions(md, true),
-        if item.security_context != "?" {
-            // GNU `ls` uses a "." character to indicate a file with a security context, but not
-            // other alternate access method.
+        if item.security_context.len() > 1 {
+            // GNU `ls` uses a "." character to indicate a file with a security context,
+            // but not other alternate access method.
             "."
         } else {
             ""

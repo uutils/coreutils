@@ -347,6 +347,7 @@ fn test_ls_long_format() {
         // A line of the output should be:
         // One of the characters -bcCdDlMnpPsStTx?
         // rwx, with - for missing permissions, thrice.
+        // Zero or one "." for indicating a file with security context
         // A number, preceded by column whitespace, and followed by a single space.
         // A username, currently [^ ], followed by column whitespace, twice (or thrice for Hurd).
         // A number, followed by a single space.
@@ -356,13 +357,13 @@ fn test_ls_long_format() {
         // and followed by a single space.
         // Whatever comes after is irrelevant to this specific test.
         scene.ucmd().arg(arg).arg("test-long-dir").succeeds().stdout_matches(&Regex::new(
-            r"\n[-bcCdDlMnpPsStTx?]([r-][w-][xt-]){3} +\d+ [^ ]+ +[^ ]+( +[^ ]+)? +\d+ [A-Z][a-z]{2} {0,2}\d{0,2} {0,2}[0-9:]+ "
+            r"\n[-bcCdDlMnpPsStTx?]([r-][w-][xt-]){3}\.? +\d+ [^ ]+ +[^ ]+( +[^ ]+)? +\d+ [A-Z][a-z]{2} {0,2}\d{0,2} {0,2}[0-9:]+ "
         ).unwrap());
     }
 
     // This checks for the line with the .. entry. The uname and group should be digits.
     scene.ucmd().arg("-lan").arg("test-long-dir").succeeds().stdout_matches(&Regex::new(
-        r"\nd([r-][w-][xt-]){3} +\d+ \d+ +\d+( +\d+)? +\d+ [A-Z][a-z]{2} {0,2}\d{0,2} {0,2}[0-9:]+ \.\."
+        r"\nd([r-][w-][xt-]){3}\.? +\d+ \d+ +\d+( +\d+)? +\d+ [A-Z][a-z]{2} {0,2}\d{0,2} {0,2}[0-9:]+ \.\."
     ).unwrap());
 }
 
@@ -370,6 +371,7 @@ fn test_ls_long_format() {
 /// This test is mainly about coloring, but, the recursion, symlink `->` processing,
 /// and `.` and `..` being present in `-a` all need to work for the test to pass.
 /// This test does not really test anything provided by `-l` but the file names and symlinks.
+#[cfg(all(feature = "ln", feature = "mkdir", feature = "touch"))]
 #[test]
 fn test_ls_long_symlink_color() {
     // If you break this test after breaking mkdir, touch, or ln, do not be alarmed!
@@ -639,55 +641,57 @@ fn test_ls_long_formats() {
     let at = &scene.fixtures;
     at.touch(&at.plus_as_string("test-long-formats"));
 
+    // Zero or one "." for indicating a file with security context
+
     // Regex for three names, so all of author, group and owner
-    let re_three = Regex::new(r"[xrw-]{9} \d ([-0-9_a-z]+ ){3}0").unwrap();
+    let re_three = Regex::new(r"[xrw-]{9}\.? \d ([-0-9_a-z]+ ){3}0").unwrap();
 
     #[cfg(unix)]
-    let re_three_num = Regex::new(r"[xrw-]{9} \d (\d+ ){3}0").unwrap();
+    let re_three_num = Regex::new(r"[xrw-]{9}\.? \d (\d+ ){3}0").unwrap();
 
     // Regex for two names, either:
     // - group and owner
     // - author and owner
     // - author and group
-    let re_two = Regex::new(r"[xrw-]{9} \d ([-0-9_a-z]+ ){2}0").unwrap();
+    let re_two = Regex::new(r"[xrw-]{9}\.? \d ([-0-9_a-z]+ ){2}0").unwrap();
 
     #[cfg(unix)]
-    let re_two_num = Regex::new(r"[xrw-]{9} \d (\d+ ){2}0").unwrap();
+    let re_two_num = Regex::new(r"[xrw-]{9}\.? \d (\d+ ){2}0").unwrap();
 
     // Regex for one name: author, group or owner
-    let re_one = Regex::new(r"[xrw-]{9} \d [-0-9_a-z]+ 0").unwrap();
+    let re_one = Regex::new(r"[xrw-]{9}\.? \d [-0-9_a-z]+ 0").unwrap();
 
     #[cfg(unix)]
-    let re_one_num = Regex::new(r"[xrw-]{9} \d \d+ 0").unwrap();
+    let re_one_num = Regex::new(r"[xrw-]{9}\.? \d \d+ 0").unwrap();
 
     // Regex for no names
-    let re_zero = Regex::new(r"[xrw-]{9} \d 0").unwrap();
+    let re_zero = Regex::new(r"[xrw-]{9}\.? \d 0").unwrap();
 
-    let result = scene
+    scene
         .ucmd()
         .arg("-l")
         .arg("--author")
         .arg("test-long-formats")
-        .succeeds();
-    assert!(re_three.is_match(result.stdout_str()));
+        .succeeds()
+        .stdout_matches(&re_three);
 
-    let result = scene
+    scene
         .ucmd()
         .arg("-l1")
         .arg("--author")
         .arg("test-long-formats")
-        .succeeds();
-    assert!(re_three.is_match(result.stdout_str()));
+        .succeeds()
+        .stdout_matches(&re_three);
 
     #[cfg(unix)]
     {
-        let result = scene
+        scene
             .ucmd()
             .arg("-n")
             .arg("--author")
             .arg("test-long-formats")
-            .succeeds();
-        assert!(re_three_num.is_match(result.stdout_str()));
+            .succeeds()
+            .stdout_matches(&re_three_num);
     }
 
     for arg in &[
@@ -697,22 +701,22 @@ fn test_ls_long_formats() {
         "-lG --author",           // only author and owner
         "-l --no-group --author", // only author and owner
     ] {
-        let result = scene
+        scene
             .ucmd()
             .args(&arg.split(' ').collect::<Vec<_>>())
             .arg("test-long-formats")
-            .succeeds();
-        assert!(re_two.is_match(result.stdout_str()));
+            .succeeds()
+            .stdout_matches(&re_two);
 
         #[cfg(unix)]
         {
-            let result = scene
+            scene
                 .ucmd()
                 .arg("-n")
                 .args(&arg.split(' ').collect::<Vec<_>>())
                 .arg("test-long-formats")
-                .succeeds();
-            assert!(re_two_num.is_match(result.stdout_str()));
+                .succeeds()
+                .stdout_matches(&re_two_num);
         }
     }
 
@@ -726,22 +730,22 @@ fn test_ls_long_formats() {
         "-l --no-group", // only owner
         "-gG --author",  // only author
     ] {
-        let result = scene
+        scene
             .ucmd()
             .args(&arg.split(' ').collect::<Vec<_>>())
             .arg("test-long-formats")
-            .succeeds();
-        assert!(re_one.is_match(result.stdout_str()));
+            .succeeds()
+            .stdout_matches(&re_one);
 
         #[cfg(unix)]
         {
-            let result = scene
+            scene
                 .ucmd()
                 .arg("-n")
                 .args(&arg.split(' ').collect::<Vec<_>>())
                 .arg("test-long-formats")
-                .succeeds();
-            assert!(re_one_num.is_match(result.stdout_str()));
+                .succeeds()
+                .stdout_matches(&re_one_num);
         }
     }
 
@@ -758,22 +762,22 @@ fn test_ls_long_formats() {
         "-og1",
         "-og1l",
     ] {
-        let result = scene
+        scene
             .ucmd()
             .args(&arg.split(' ').collect::<Vec<_>>())
             .arg("test-long-formats")
-            .succeeds();
-        assert!(re_zero.is_match(result.stdout_str()));
+            .succeeds()
+            .stdout_matches(&re_zero);
 
         #[cfg(unix)]
         {
-            let result = scene
+            scene
                 .ucmd()
                 .arg("-n")
                 .args(&arg.split(' ').collect::<Vec<_>>())
                 .arg("test-long-formats")
-                .succeeds();
-            assert!(re_zero.is_match(result.stdout_str()));
+                .succeeds()
+                .stdout_matches(&re_zero);
         }
     }
 }
@@ -1251,7 +1255,7 @@ fn test_ls_inode() {
     at.touch(file);
 
     let re_short = Regex::new(r" *(\d+) test_inode").unwrap();
-    let re_long = Regex::new(r" *(\d+) [xrw-]{10} \d .+ test_inode").unwrap();
+    let re_long = Regex::new(r" *(\d+) [xrw-]{10}\.? \d .+ test_inode").unwrap();
 
     let result = scene.ucmd().arg("test_inode").arg("-i").succeeds();
     assert!(re_short.is_match(result.stdout_str()));
@@ -2274,4 +2278,53 @@ fn test_ls_dangling_symlinks() {
         .arg("temp_dir")
         .succeeds() // this should fail, though at the moment, ls lacks a way to propagate errors encountered during display
         .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_ls_context() {
+    use selinux::{self, KernelSupport};
+    if selinux::kernel_support() == KernelSupport::Unsupported {
+        println!("test skipped: Kernel has no support for SElinux context",);
+        return;
+    }
+    let ts = TestScenario::new(util_name!());
+    for c_flag in &["-Z", "--context"] {
+        ts.ucmd()
+            .args(&[c_flag, &"/"])
+            .succeeds()
+            .stdout_only(unwrap_or_return!(expected_result(&ts, &[c_flag, &"/"])).stdout_str());
+    }
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_ls_context_format() {
+    use selinux::{self, KernelSupport};
+    if selinux::kernel_support() == KernelSupport::Unsupported {
+        println!("test skipped: Kernel has no support for SElinux context",);
+        return;
+    }
+    let ts = TestScenario::new(util_name!());
+    // NOTE:
+    // --format=long/verbose matches the output of GNU's ls for --context
+    // except for the size count which may differ to the size count reported by GNU's ls.
+    for word in &[
+        "across",
+        "commas",
+        "horizontal",
+        // "long",
+        "single-column",
+        // "verbose",
+        "vertical",
+    ] {
+        let format = format!("--format={}", word);
+        ts.ucmd()
+            .args(&[&"-Z", &format.as_str(), &"/"])
+            .succeeds()
+            .stdout_only(
+                unwrap_or_return!(expected_result(&ts, &[&"-Z", &format.as_str(), &"/"]))
+                    .stdout_str(),
+            );
+    }
 }
