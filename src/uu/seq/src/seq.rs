@@ -286,18 +286,25 @@ fn print_seq(
     let mut stdout = stdout.lock();
     let (first, increment, last) = range;
     let mut i = 0isize;
+    let is_first_minus_zero = first == -0.0 && first.is_sign_negative();
     let mut value = first + i as f64 * increment;
     let mut is_first_iteration = true;
     while !done_printing(&value, &increment, &last) {
         if !is_first_iteration {
             write!(stdout, "{}", separator)?;
         }
+        let mut width = padding;
+        if is_first_iteration && is_first_minus_zero {
+            write!(stdout, "-")?;
+            width -= 1;
+        }
         is_first_iteration = false;
+
         let istr = format!("{:.*}", largest_dec, value);
         let ilen = istr.len();
         let before_dec = istr.find('.').unwrap_or(ilen);
-        if pad && before_dec < padding {
-            for _ in 0..(padding - before_dec) {
+        if pad && before_dec < width {
+            for _ in 0..(width - before_dec) {
                 write!(stdout, "0")?;
             }
         }

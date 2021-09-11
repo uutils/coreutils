@@ -178,6 +178,15 @@ fn test_width_negative_zero() {
         .no_stderr();
 }
 
+#[test]
+fn test_width_negative_zero_scientific_notation() {
+    new_ucmd!()
+        .args(&["-w", "-0e0", "1"])
+        .succeeds()
+        .stdout_is("-0\n01\n")
+        .no_stderr();
+}
+
 // TODO This is duplicated from `test_yes.rs`; refactor them.
 /// Run `seq`, capture some of the output, close the pipe, and verify it.
 fn run(args: &[&str], expected: &[u8]) {
