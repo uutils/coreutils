@@ -67,38 +67,6 @@ impl Number {
             Number::F64(n) => n,
         }
     }
-
-    /// Number of characters needed to print the integral part of the number.
-    ///
-    /// The number of characters includes one character to represent the
-    /// minus sign ("-") if this number is negative.
-    ///
-    /// # Examples
-    ///
-    /// ```rust,ignore
-    /// use num_bigint::{BigInt, Sign};
-    ///
-    /// assert_eq!(
-    ///     Number::BigInt(BigInt::new(Sign::Plus, vec![123])).num_digits(),
-    ///     3
-    /// );
-    /// assert_eq!(
-    ///     Number::BigInt(BigInt::new(Sign::Minus, vec![123])).num_digits(),
-    ///     4
-    /// );
-    /// assert_eq!(Number::F64(123.45).num_digits(), 3);
-    /// assert_eq!(Number::MinusZero.num_digits(), 2);
-    /// ```
-    fn num_digits(&self) -> usize {
-        match self {
-            Number::MinusZero => 2,
-            Number::BigInt(n) => n.to_string().len(),
-            Number::F64(n) => {
-                let s = n.to_string();
-                s.find('.').unwrap_or_else(|| s.len())
-            }
-        }
-    }
 }
 
 impl FromStr for Number {
@@ -403,24 +371,4 @@ fn print_seq_integers(
         write!(stdout, "{}", terminator)?;
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::Number;
-    use num_bigint::{BigInt, Sign};
-
-    #[test]
-    fn test_number_num_digits() {
-        assert_eq!(
-            Number::BigInt(BigInt::new(Sign::Plus, vec![123])).num_digits(),
-            3
-        );
-        assert_eq!(
-            Number::BigInt(BigInt::new(Sign::Minus, vec![123])).num_digits(),
-            4
-        );
-        assert_eq!(Number::F64(123.45).num_digits(), 3);
-        assert_eq!(Number::MinusZero.num_digits(), 2);
-    }
 }
