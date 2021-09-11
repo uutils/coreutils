@@ -14,6 +14,11 @@ use num_traits::{Num, ToPrimitive};
 use std::cmp;
 use std::io::{stdout, ErrorKind, Write};
 use std::str::FromStr;
+
+mod digits;
+use crate::digits::num_fractional_digits;
+use crate::digits::num_integral_digits;
+
 use uucore::display::Quotable;
 
 static ABOUT: &str = "Display numbers from FIRST to LAST, in steps of INCREMENT.";
@@ -155,20 +160,49 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     };
 
     let mut largest_dec = 0;
+    let mut padding = 0;
     let first = if numbers.len() > 1 {
         let slice = numbers[0];
-        let len = slice.len();
-        let dec = slice.find('.').unwrap_or(len);
-        largest_dec = len - dec;
+        largest_dec = num_fractional_digits(slice).unwrap_or_else(|_| {
+            crash!(
+                1,
+                "invalid floating point argument: {}\n Try '{} --help' for more information.",
+                slice.quote(),
+                uucore::execution_phrase()
+            )
+        });
+        padding = num_integral_digits(slice).unwrap_or_else(|_| {
+            crash!(
+                1,
+                "invalid floating point argument: {}\n Try '{} --help' for more information.",
+                slice.quote(),
+                uucore::execution_phrase()
+            )
+        });
         crash_if_err!(1, slice.parse())
     } else {
         Number::BigInt(BigInt::one())
     };
     let increment = if numbers.len() > 2 {
         let slice = numbers[1];
-        let len = slice.len();
-        let dec = slice.find('.').unwrap_or(len);
-        largest_dec = cmp::max(largest_dec, len - dec);
+        let dec = num_fractional_digits(slice).unwrap_or_else(|_| {
+            crash!(
+                1,
+                "invalid floating point argument: {}\n Try '{} --help' for more information.",
+                slice.quote(),
+                uucore::execution_phrase()
+            )
+        });
+        let int_digits = num_integral_digits(slice).unwrap_or_else(|_| {
+            crash!(
+                1,
+                "invalid floating point argument: {}\n Try '{} --help' for more information.",
+                slice.quote(),
+                uucore::execution_phrase()
+            )
+        });
+        largest_dec = cmp::max(largest_dec, dec);
+        padding = cmp::max(padding, int_digits);
         crash_if_err!(1, slice.parse())
     } else {
         Number::BigInt(BigInt::one())
@@ -183,16 +217,18 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
     let last: Number = {
         let slice = numbers[numbers.len() - 1];
+        let int_digits = num_integral_digits(slice).unwrap_or_else(|_| {
+            crash!(
+                1,
+                "invalid floating point argument: {}\n Try '{} --help' for more information.",
+                slice.quote(),
+                uucore::execution_phrase()
+            )
+        });
+        padding = cmp::max(padding, int_digits);
         crash_if_err!(1, slice.parse())
     };
-    if largest_dec > 0 {
-        largest_dec -= 1;
-    }
 
-    let padding = first
-        .num_digits()
-        .max(increment.num_digits())
-        .max(last.num_digits());
     let result = match (first, last, increment) {
         (Number::MinusZero, Number::BigInt(last), Number::BigInt(increment)) => print_seq_integers(
             (BigInt::zero(), increment, last),
@@ -286,18 +322,24 @@ fn print_seq(
     let mut stdout = stdout.lock();
     let (first, increment, last) = range;
     let mut i = 0isize;
+    let is_first_minus_zero = first == -0.0 && first.is_sign_negative();
     let mut value = first + i as f64 * increment;
     let mut is_first_iteration = true;
     while !done_printing(&value, &increment, &last) {
         if !is_first_iteration {
             write!(stdout, "{}", separator)?;
         }
+        let mut width = padding;
+        if is_first_iteration && is_first_minus_zero {
+            write!(stdout, "-")?;
+            width -= 1;
+        }
         is_first_iteration = false;
         let istr = format!("{:.*}", largest_dec, value);
         let ilen = istr.len();
         let before_dec = istr.find('.').unwrap_or(ilen);
-        if pad && before_dec < padding {
-            for _ in 0..(padding - before_dec) {
+        if pad && before_dec < width {
+            for _ in 0..(width - before_dec) {
                 write!(stdout, "0")?;
             }
         }
