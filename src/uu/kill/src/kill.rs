@@ -160,18 +160,13 @@ fn print_signal(signal_name_or_value: &str) -> UResult<()> {
 }
 
 fn print_signals() {
-    let mut pos = 0;
     for (idx, signal) in ALL_SIGNALS.iter().enumerate() {
-        pos += signal.len();
-        print!("{}", signal);
-        if idx > 0 && pos > 73 {
-            println!();
-            pos = 0;
-        } else {
-            pos += 1;
+        if idx > 0 {
             print!(" ");
         }
+        print!("{}", signal);
     }
+    println!();
 }
 
 fn list(arg: Option<String>) -> UResult<()> {
