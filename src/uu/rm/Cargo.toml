@@ -18,11 +18,11 @@ path = "src/rm.rs"
 clap = { version = "2.33", features = ["wrap_help"] }
 walkdir = "2.2"
 remove_dir_all = "0.5.1"
-winapi = { version="0.3", features=[] }
-
 uucore = { version=">=0.0.9", package="uucore", path="../../uucore", features=["fs"] }
 uucore_procs = { version=">=0.0.6", package="uucore_procs", path="../../uucore_procs" }
 
+[target.'cfg(windows)'.dependencies]
+winapi = { version="0.3", features=[] }
 
 [[bin]]
 name = "rm"
