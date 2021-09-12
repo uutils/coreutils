@@ -2292,7 +2292,6 @@ name = "uu_csplit"
 version = "0.0.7"
 dependencies = [
  "clap",
- "glob",
  "regex",
  "thiserror",
  "uucore",
