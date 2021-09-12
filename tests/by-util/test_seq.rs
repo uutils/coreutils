@@ -200,3 +200,27 @@ fn test_neg_inf() {
 fn test_inf() {
     run(&["inf"], b"1\n2\n3\n");
 }
+
+#[test]
+fn test_ignore_leading_whitespace() {
+    new_ucmd!()
+        .arg("   1")
+        .succeeds()
+        .stdout_is("1\n")
+        .no_stderr();
+}
+
+#[test]
+fn test_trailing_whitespace_error() {
+    // In some locales, the GNU error message has curly quotes (‘)
+    // instead of straight quotes ('). We just test the straight single
+    // quotes.
+    new_ucmd!()
+        .arg("1 ")
+        .fails()
+        .no_stdout()
+        .stderr_contains("seq: invalid floating point argument: '1 '")
+        // FIXME The second line of the error message is "Try 'seq
+        // --help' for more information."
+        .stderr_contains("for more information.");
+}
