@@ -57,6 +57,14 @@ fn test_kill_list_all_signals() {
 }
 
 #[test]
+fn test_kill_list_final_new_line() {
+    new_ucmd!()
+        .arg("-l")
+        .succeeds()
+        .stdout_matches(&Regex::new("\\n$").unwrap());
+}
+
+#[test]
 fn test_kill_list_all_signals_as_table() {
     // Check for a few signals.  Do not try to be comprehensive.
     new_ucmd!()
