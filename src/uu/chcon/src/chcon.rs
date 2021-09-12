@@ -281,7 +281,6 @@ pub fn uu_app() -> App<'static, 'static> {
 #[derive(Debug)]
 struct Options {
     verbose: bool,
-    dereference: bool,
     preserve_root: bool,
     recursive_mode: RecursiveMode,
     affect_symlink_referent: bool,
@@ -331,9 +330,6 @@ fn parse_command_line(config: clap::App, args: impl uucore::Args) -> Result<Opti
         (RecursiveMode::NotRecursive, !no_dereference)
     };
 
-    // By default, dereference.
-    let dereference = !matches.is_present(options::dereference::NO_DEREFERENCE);
-
     // By default, do not preserve root.
     let preserve_root = matches.is_present(options::preserve_root::PRESERVE_ROOT);
 
@@ -369,7 +365,6 @@ fn parse_command_line(config: clap::App, args: impl uucore::Args) -> Result<Opti
 
     Ok(Options {
         verbose,
-        dereference,
         preserve_root,
         recursive_mode,
         affect_symlink_referent,
