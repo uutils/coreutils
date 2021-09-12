@@ -2913,7 +2913,6 @@ name = "uu_shred"
 version = "0.0.7"
 dependencies = [
  "clap",
- "filetime",
  "libc",
  "rand 0.7.3",
  "uucore",
