@@ -117,6 +117,7 @@ toolchain
 truthy
 ucase
 unbuffered
+udeps
 unescape
 unintuitive
 unprefixed

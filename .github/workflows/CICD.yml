@@ -708,3 +708,35 @@ jobs:
         flags: ${{ steps.vars.outputs.CODECOV_FLAGS }}
         name: codecov-umbrella
         fail_ci_if_error: false
+
+  unused_deps:
+    name: Unused deps
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: ubuntu-latest , features: feat_os_unix }
+          - { os: macos-latest   , features: feat_os_macos }
+          - { os: windows-latest , features: feat_os_windows }
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install `rust` toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly
+        default: true
+        profile: minimal
+    - name: Install `cargo-udeps`
+      uses: actions-rs/install@v0.1
+      with:
+        crate: cargo-udeps
+        version: latest
+        use-tool-cache: true
+      env:
+        RUSTUP_TOOLCHAIN: stable
+    - name: Confirms there isn't any unused deps
+      shell: bash
+      run: |
+        cargo +nightly udeps --all-targets &> udeps.log || cat udeps.log
+        grep "seem to have been used" udeps.log
