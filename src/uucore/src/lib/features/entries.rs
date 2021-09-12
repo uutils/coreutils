@@ -72,19 +72,28 @@ extern "C" {
 /// > to be used in a further call to getgroups().
 #[cfg(not(target_os = "redox"))]
 pub fn get_groups() -> IOResult<Vec<gid_t>> {
-    let ngroups = unsafe { getgroups(0, ptr::null_mut()) };
-    if ngroups == -1 {
-        return Err(IOError::last_os_error());
-    }
-    let mut groups = vec![0; ngroups.try_into().unwrap()];
-    let ngroups = unsafe { getgroups(ngroups, groups.as_mut_ptr()) };
-    if ngroups == -1 {
-        Err(IOError::last_os_error())
-    } else {
-        let ngroups = ngroups.try_into().unwrap();
-        assert!(ngroups <= groups.len());
-        groups.truncate(ngroups);
-        Ok(groups)
+    loop {
+        let ngroups = match unsafe { getgroups(0, ptr::null_mut()) } {
+            -1 => return Err(IOError::last_os_error()),
+            // Not just optimization; 0 would mess up the next call
+            0 => return Ok(Vec::new()),
+            n => n,
+        };
+
+        let mut groups = vec![0; ngroups.try_into().unwrap()];
+        let res = unsafe { getgroups(ngroups, groups.as_mut_ptr()) };
+        if res == -1 {
+            let err = IOError::last_os_error();
+            if err.raw_os_error() == Some(libc::EINVAL) {
+                // Number of groups changed, retry
+                continue;
+            } else {
+                return Err(err);
+            }
+        } else {
+            groups.truncate(ngroups.try_into().unwrap());
+            return Ok(groups);
+        }
     }
 }
 
