@@ -40,6 +40,7 @@ use std::{
     time::Duration,
 };
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
+use uucore::display::Quotable;
 use uucore::error::{set_exit_code, FromIo, UError, UResult};
 
 use unicode_width::UnicodeWidthStr;
@@ -1256,27 +1257,41 @@ impl PathData {
             None => OnceCell::new(),
         };
 
+        let substitute_string = "?".to_string();
         let security_context = if config.context {
             if config.selinux_supported {
                 #[cfg(feature = "selinux")]
                 {
-                    if let Ok(Some(context)) =
-                        selinux::SecurityContext::of_path(&p_buf, must_dereference, false)
-                    {
-                        String::from_utf8_lossy(context.as_bytes())
-                            .trim_end_matches(char::from(0))
-                            .to_string()
-                    } else {
-                        // TODO: print warning with error to stderr
-                        "?".to_string()
+                    match selinux::SecurityContext::of_path(&p_buf, must_dereference, false) {
+                        Err(_r) => {
+                            // TODO: show the actual reason why it failed
+                            show_warning!("failed to get security context of: {}", p_buf.quote());
+                            substitute_string
+                        }
+                        Ok(None) => substitute_string,
+                        Ok(Some(context)) => {
+                            let mut context = context.as_bytes();
+                            if context.ends_with(&[0]) {
+                                // TODO: replace with `strip_prefix()` when MSRV >= 1.51
+                                context = &context[..context.len() - 1]
+                            };
+                            String::from_utf8(context.to_vec()).unwrap_or_else(|e| {
+                                show_warning!(
+                                    "getting security context of: {}: {}",
+                                    p_buf.quote(),
+                                    e.to_string()
+                                );
+                                String::from_utf8_lossy(context).into_owned()
+                            })
+                        }
                     }
                 }
                 #[cfg(not(feature = "selinux"))]
                 {
-                    "?".to_string()
+                    substitute_string
                 }
             } else {
-                "?".to_string()
+                substitute_string
             }
         } else {
             String::new()

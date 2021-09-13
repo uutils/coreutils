@@ -2282,7 +2282,23 @@ fn test_ls_dangling_symlinks() {
 
 #[test]
 #[cfg(feature = "feat_selinux")]
-fn test_ls_context() {
+fn test_ls_context1() {
+    use selinux::{self, KernelSupport};
+    if selinux::kernel_support() == KernelSupport::Unsupported {
+        println!("test skipped: Kernel has no support for SElinux context",);
+        return;
+    }
+
+    let file = "test_ls_context_file";
+    let expected = format!("unconfined_u:object_r:user_tmp_t:s0 {}\n", file);
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch(file);
+    ucmd.args(&["-Z", file]).succeeds().stdout_is(expected);
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_ls_context2() {
     use selinux::{self, KernelSupport};
     if selinux::kernel_support() == KernelSupport::Unsupported {
         println!("test skipped: Kernel has no support for SElinux context",);
