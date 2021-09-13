@@ -1,4 +1,4 @@
-// spell-checker:ignore axxbxx bxxaxx axxx axxxx xxaxx xxax xxxxa
+// spell-checker:ignore axxbxx bxxaxx axxx axxxx xxaxx xxax xxxxa axyz zyax zyxa
 use crate::common::util::*;
 
 #[test]
@@ -204,4 +204,68 @@ fn test_null_separator() {
         .pipe_in("a\0b\0")
         .succeeds()
         .stdout_is("b\0a\0");
+}
+
+#[test]
+fn test_regex() {
+    new_ucmd!()
+        .args(&["-r", "-s", "[xyz]+"])
+        .pipe_in("axyz")
+        .succeeds()
+        .no_stderr()
+        .stdout_is("zyax");
+
+    new_ucmd!()
+        .args(&["-r", "-s", ":+"])
+        .pipe_in("a:b::c:::d::::")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(":::d:::c::b:a:");
+
+    new_ucmd!()
+        .args(&["-r", "-s", r"[\+]+[-]+[\+]+"])
+        //   line  0     1        2
+        //        |--||-----||--------|
+        .pipe_in("a+-+b++--++c+d-e+---+")
+        .succeeds()
+        .no_stderr()
+        //   line       2        1    0
+        //          |--------||-----||--|
+        .stdout_is("c+d-e+---+b++--++a+-+");
+}
+
+#[test]
+fn test_regex_before() {
+    new_ucmd!()
+        .args(&["-b", "-r", "-s", "[xyz]+"])
+        .pipe_in("axyz")
+        .succeeds()
+        .no_stderr()
+        .stdout_is("zyxa");
+
+    new_ucmd!()
+        .args(&["-b", "-r", "-s", ":+"])
+        .pipe_in(":a::b:::c::::d")
+        .succeeds()
+        .stdout_is(":d::::c:::b::a");
+
+    // Because `tac` searches for matches of the regular expression from
+    // right to left, the second to last line is
+    //
+    //     +--++b
+    //
+    // not
+    //
+    //     ++--++b
+    //
+    new_ucmd!()
+        .args(&["-b", "-r", "-s", r"[\+]+[-]+[\+]+"])
+        //   line   0     1       2
+        //        |---||----||--------|
+        .pipe_in("+-+a++--++b+---+c+d-e")
+        .succeeds()
+        .no_stderr()
+        //   line       2        1    0
+        //          |--------||----||---|
+        .stdout_is("+---+c+d-e+--++b+-+a+");
 }
