@@ -2799,7 +2799,6 @@ dependencies = [
  "itertools 0.10.1",
  "quick-error 2.0.1",
  "regex",
- "time",
  "uucore",
  "uucore_procs",
 ]
