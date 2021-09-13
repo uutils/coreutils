@@ -424,8 +424,15 @@ fn wc(inputs: Vec<Input>, settings: &Settings) -> Result<(), u32> {
     // The width is the number of digits needed to print the number of
     // bytes in the largest file. This is true regardless of whether
     // the `settings` indicate that the bytes will be displayed.
+    //
+    // If we only need to display a single number, set this to 0 to
+    // prevent leading spaces.
     let mut failure = false;
-    let max_width = max_width(&inputs);
+    let max_width = if settings.number_enabled() <= 1 {
+        0
+    } else {
+        max_width(&inputs)
+    };
 
     let mut total_word_count = WordCount::default();
 
@@ -475,19 +482,9 @@ fn wc(inputs: Vec<Input>, settings: &Settings) -> Result<(), u32> {
     }
 }
 
-fn print_stats(
-    settings: &Settings,
-    result: &TitledWordCount,
-    mut min_width: usize,
-) -> io::Result<()> {
+fn print_stats(settings: &Settings, result: &TitledWordCount, min_width: usize) -> io::Result<()> {
     let stdout = io::stdout();
     let mut stdout_lock = stdout.lock();
-
-    if settings.number_enabled() <= 1 {
-        // Prevent a leading space in case we only need to display a single
-        // number.
-        min_width = 0;
-    }
 
     let mut is_first: bool = true;
 
