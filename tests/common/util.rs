@@ -3,7 +3,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-//spell-checker: ignore (linux) rlimit prlimit Rlim coreutil
+//spell-checker: ignore (linux) rlimit prlimit Rlim coreutil ggroups
 
 #![allow(dead_code)]
 
@@ -1081,7 +1081,14 @@ pub fn host_name_for(util_name: &str) -> Cow<str> {
     // In some environments, e.g. macOS/freebsd, the GNU coreutils are prefixed with "g"
     // to not interfere with the BSD counterparts already in `$PATH`.
     #[cfg(not(target_os = "linux"))]
-    return format!("g{}", util_name).into();
+    {
+        // make call to `host_name_for` idempotent
+        if util_name.starts_with('g') && util_name != "groups" {
+            return util_name.into();
+        } else {
+            return format!("g{}", util_name).into();
+        }
+    }
     #[cfg(target_os = "linux")]
     return util_name.into();
 }
@@ -1195,8 +1202,8 @@ pub fn check_coreutil_version(
 ///```
 #[cfg(unix)]
 pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<CmdResult, String> {
+    println!("{}", check_coreutil_version(&ts.util_name, VERSION_MIN)?);
     let util_name = &host_name_for(&ts.util_name);
-    println!("{}", check_coreutil_version(util_name, VERSION_MIN)?);
 
     let result = ts
         .cmd_keepenv(util_name.as_ref())
@@ -1492,5 +1499,26 @@ mod tests {
         }
         let ts = TestScenario::new("no test name");
         assert!(expected_result(&ts, &[]).is_err());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_host_name_for() {
+        #[cfg(target_os = "linux")]
+        {
+            std::assert_eq!(host_name_for("id"), "id");
+            std::assert_eq!(host_name_for("groups"), "groups");
+            std::assert_eq!(host_name_for("who"), "who");
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            // spell-checker:ignore (strings) ggroups gwho
+            std::assert_eq!(host_name_for("id"), "gid");
+            std::assert_eq!(host_name_for("groups"), "ggroups");
+            std::assert_eq!(host_name_for("who"), "gwho");
+            std::assert_eq!(host_name_for("gid"), "gid");
+            std::assert_eq!(host_name_for("ggroups"), "ggroups");
+            std::assert_eq!(host_name_for("gwho"), "gwho");
+        }
     }
 }
