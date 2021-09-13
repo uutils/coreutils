@@ -2507,6 +2507,7 @@ name = "uu_head"
 version = "0.0.7"
 dependencies = [
  "clap",
+ "memchr 2.4.0",
  "uucore",
  "uucore_procs",
 ]
