@@ -61,7 +61,7 @@ fn test_kill_list_final_new_line() {
     new_ucmd!()
         .arg("-l")
         .succeeds()
-        .stdout_matches(&Regex::new("\\n$").unwrap());
+        .stdout_matches(&Regex::new("[\\n\\r]$").unwrap());
 }
 
 #[test]
