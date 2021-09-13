@@ -371,6 +371,7 @@ fn test_ls_long_format() {
 /// and `.` and `..` being present in `-a` all need to work for the test to pass.
 /// This test does not really test anything provided by `-l` but the file names and symlinks.
 #[test]
+#[cfg(all(feature = "ln", feature = "mkdir", feature = "touch"))]
 fn test_ls_long_symlink_color() {
     // If you break this test after breaking mkdir, touch, or ln, do not be alarmed!
     // This test is made for ls, but it attempts to run those utils in the process.
