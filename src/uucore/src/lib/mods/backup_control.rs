@@ -78,7 +78,10 @@
 
 // spell-checker:ignore backupopt
 
-use crate::error::{UError, UResult};
+use crate::{
+    display::Quotable,
+    error::{UError, UResult},
+};
 use clap::ArgMatches;
 use std::{
     env,
@@ -167,18 +170,22 @@ impl Display for BackupError {
         match self {
             BE::InvalidArgument(arg, origin) => write!(
                 f,
-                "invalid argument '{}' for '{}'\n{}",
-                arg, origin, VALID_ARGS_HELP
+                "invalid argument {} for '{}'\n{}",
+                arg.quote(),
+                origin,
+                VALID_ARGS_HELP
             ),
             BE::AmbiguousArgument(arg, origin) => write!(
                 f,
-                "ambiguous argument '{}' for '{}'\n{}",
-                arg, origin, VALID_ARGS_HELP
+                "ambiguous argument {} for '{}'\n{}",
+                arg.quote(),
+                origin,
+                VALID_ARGS_HELP
             ),
             BE::BackupImpossible() => write!(f, "cannot create backup"),
             // Placeholder for later
             // BE::BackupFailed(from, to, e) => Display::fmt(
-            //     &uio_error!(e, "failed to backup '{}' to '{}'", from.display(), to.display()),
+            //     &uio_error!(e, "failed to backup {} to {}", from.quote(), to.quote()),
             //     f
             // ),
         }

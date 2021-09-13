@@ -17,7 +17,10 @@
 
 #[macro_use]
 extern crate uucore;
-use uucore::entries::{get_groups_gnu, gid2grp, Locate, Passwd};
+use uucore::{
+    display::Quotable,
+    entries::{get_groups_gnu, gid2grp, Locate, Passwd},
+};
 
 use clap::{crate_version, App, Arg};
 
@@ -77,7 +80,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     .join(" ")
             );
         } else {
-            show_error!("'{}': no such user", user);
+            show_error!("{}: no such user", user.quote());
             exit_code = 1;
         }
     }

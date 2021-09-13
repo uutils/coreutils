@@ -9,6 +9,7 @@
 
 #[macro_use]
 extern crate uucore;
+use uucore::display::Quotable;
 pub use uucore::entries;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::perms::{chown_base, options, IfFrom};
@@ -32,7 +33,7 @@ fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<(Option<u32>, Option<u32>,
     let dest_gid = if let Some(file) = matches.value_of(options::REFERENCE) {
         fs::metadata(&file)
             .map(|meta| Some(meta.gid()))
-            .map_err_context(|| format!("failed to get attributes of '{}'", file))?
+            .map_err_context(|| format!("failed to get attributes of {}", file.quote()))?
     } else {
         let group = matches.value_of(options::ARG_GROUP).unwrap_or_default();
         if group.is_empty() {
@@ -40,7 +41,12 @@ fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<(Option<u32>, Option<u32>,
         } else {
             match entries::grp2gid(group) {
                 Ok(g) => Some(g),
-                _ => return Err(USimpleError::new(1, format!("invalid group: '{}'", group))),
+                _ => {
+                    return Err(USimpleError::new(
+                        1,
+                        format!("invalid group: {}", group.quote()),
+                    ))
+                }
             }
         }
     };

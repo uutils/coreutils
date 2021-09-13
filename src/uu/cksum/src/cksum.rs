@@ -14,6 +14,7 @@ use clap::{crate_version, App, Arg};
 use std::fs::File;
 use std::io::{self, stdin, BufReader, Read};
 use std::path::Path;
+use uucore::display::Quotable;
 use uucore::InvalidEncodingHandling;
 
 // NOTE: CRC_TABLE_LEN *must* be <= 256 as we cast 0..CRC_TABLE_LEN to u8
@@ -191,7 +192,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         match cksum("-") {
             Ok((crc, size)) => println!("{} {}", crc, size),
             Err(err) => {
-                show_error!("{}", err);
+                show_error!("-: {}", err);
                 return 2;
             }
         }
@@ -203,7 +204,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         match cksum(fname.as_ref()) {
             Ok((crc, size)) => println!("{} {} {}", crc, size, fname),
             Err(err) => {
-                show_error!("'{}' {}", fname, err);
+                show_error!("{}: {}", fname.maybe_quote(), err);
                 exit_code = 2;
             }
         }

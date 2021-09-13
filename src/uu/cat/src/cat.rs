@@ -20,6 +20,7 @@ use clap::{crate_version, App, Arg};
 use std::fs::{metadata, File};
 use std::io::{self, Read, Write};
 use thiserror::Error;
+use uucore::display::Quotable;
 use uucore::error::UResult;
 
 #[cfg(unix)]
@@ -28,8 +29,6 @@ use std::os::unix::io::AsRawFd;
 /// Linux splice support
 #[cfg(any(target_os = "linux", target_os = "android"))]
 mod splice;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use std::os::unix::io::RawFd;
 
 /// Unix domain socket support
 #[cfg(unix)]
@@ -136,10 +135,18 @@ struct OutputState {
     one_blank_kept: bool,
 }
 
+#[cfg(unix)]
+trait FdReadable: Read + AsRawFd {}
+#[cfg(not(unix))]
+trait FdReadable: Read {}
+
+#[cfg(unix)]
+impl<T> FdReadable for T where T: Read + AsRawFd {}
+#[cfg(not(unix))]
+impl<T> FdReadable for T where T: Read {}
+
 /// Represents an open file handle, stream, or other device
-struct InputHandle<R: Read> {
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    file_descriptor: RawFd,
+struct InputHandle<R: FdReadable> {
     reader: R,
     is_interactive: bool,
 }
@@ -296,7 +303,7 @@ pub fn uu_app() -> App<'static, 'static> {
         )
 }
 
-fn cat_handle<R: Read>(
+fn cat_handle<R: FdReadable>(
     handle: &mut InputHandle<R>,
     options: &OutputOptions,
     state: &mut OutputState,
@@ -318,8 +325,6 @@ fn cat_path(
     if path == "-" {
         let stdin = io::stdin();
         let mut handle = InputHandle {
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            file_descriptor: stdin.as_raw_fd(),
             reader: stdin,
             is_interactive: atty::is(atty::Stream::Stdin),
         };
@@ -332,8 +337,6 @@ fn cat_path(
             let socket = UnixStream::connect(path)?;
             socket.shutdown(Shutdown::Write)?;
             let mut handle = InputHandle {
-                #[cfg(any(target_os = "linux", target_os = "android"))]
-                file_descriptor: socket.as_raw_fd(),
                 reader: socket,
                 is_interactive: false,
             };
@@ -346,8 +349,6 @@ fn cat_path(
                 return Err(CatError::OutputIsInput);
             }
             let mut handle = InputHandle {
-                #[cfg(any(target_os = "linux", target_os = "android"))]
-                file_descriptor: file.as_raw_fd(),
                 reader: file,
                 is_interactive: false,
             };
@@ -386,7 +387,7 @@ fn cat_files(files: Vec<String>, options: &OutputOptions) -> UResult<()> {
 
     for path in &files {
         if let Err(err) = cat_path(path, options, &mut state, &out_info) {
-            error_messages.push(format!("{}: {}", path, err));
+            error_messages.push(format!("{}: {}", path.maybe_quote(), err));
         }
     }
     if state.skipped_carriage_return {
@@ -436,14 +437,14 @@ fn get_input_type(path: &str) -> CatResult<InputType> {
 
 /// Writes handle to stdout with no configuration. This allows a
 /// simple memory copy.
-fn write_fast<R: Read>(handle: &mut InputHandle<R>) -> CatResult<()> {
+fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
     let stdout = io::stdout();
     let mut stdout_lock = stdout.lock();
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         // If we're on Linux or Android, try to use the splice() system call
         // for faster writing. If it works, we're done.
-        if !splice::write_fast_using_splice(handle, stdout_lock.as_raw_fd())? {
+        if !splice::write_fast_using_splice(handle, &stdout_lock)? {
             return Ok(());
         }
     }
@@ -461,7 +462,7 @@ fn write_fast<R: Read>(handle: &mut InputHandle<R>) -> CatResult<()> {
 
 /// Outputs file contents to stdout in a line-by-line fashion,
 /// propagating any errors that might occur.
-fn write_lines<R: Read>(
+fn write_lines<R: FdReadable>(
     handle: &mut InputHandle<R>,
     options: &OutputOptions,
     state: &mut OutputState,

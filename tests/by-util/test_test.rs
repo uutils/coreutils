@@ -320,7 +320,7 @@ fn test_invalid_utf8_integer_compare() {
 
     cmd.run()
         .status_code(2)
-        .stderr_is("test: invalid integer 'fo�o'");
+        .stderr_is("test: invalid integer $'fo\\x80o'");
 
     let mut cmd = new_ucmd!();
     cmd.raw.arg(arg);
@@ -328,7 +328,7 @@ fn test_invalid_utf8_integer_compare() {
 
     cmd.run()
         .status_code(2)
-        .stderr_is("test: invalid integer 'fo�o'");
+        .stderr_is("test: invalid integer $'fo\\x80o'");
 }
 
 #[test]

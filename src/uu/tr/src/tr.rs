@@ -21,7 +21,7 @@ use fnv::FnvHashMap;
 use std::io::{stdin, stdout, BufRead, BufWriter, Write};
 
 use crate::expand::ExpandSet;
-use uucore::InvalidEncodingHandling;
+use uucore::{display::Quotable, InvalidEncodingHandling};
 
 static ABOUT: &str = "translate or delete characters";
 
@@ -271,8 +271,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     if !(delete_flag || squeeze_flag) && sets.len() < 2 {
         show_error!(
-            "missing operand after '{}'\nTry '{} --help' for more information.",
-            sets[0],
+            "missing operand after {}\nTry '{} --help' for more information.",
+            sets[0].quote(),
             uucore::execution_phrase()
         );
         return 1;

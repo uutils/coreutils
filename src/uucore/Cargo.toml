@@ -30,6 +30,8 @@ data-encoding = { version="2.1", optional=true }
 data-encoding-macro = { version="0.1.12", optional=true }
 z85 = { version="3.0.3", optional=true }
 libc = { version="0.2.15", optional=true }
+once_cell = "1.8.0"
+nix = { version="0.20", optional=true }
 
 [dev-dependencies]
 clap = "2.33.3"
@@ -56,3 +58,4 @@ signals = []
 utf8 = []
 utmpx = ["time", "libc", "dns-lookup"]
 wide = []
+pipes = ["nix"]

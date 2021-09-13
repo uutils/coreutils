@@ -10,6 +10,9 @@
 use std::ffi::OsString;
 use std::iter::Peekable;
 
+use uucore::display::Quotable;
+use uucore::show_error;
+
 /// Represents one of the binary comparison operators for strings, integers, or files
 #[derive(Debug, PartialEq)]
 pub enum Operator {
@@ -43,19 +46,22 @@ impl Symbol {
     /// Returns Symbol::None in place of None
     fn new(token: Option<OsString>) -> Symbol {
         match token {
-            Some(s) => match s.to_string_lossy().as_ref() {
-                "(" => Symbol::LParen,
-                "!" => Symbol::Bang,
-                "-a" | "-o" => Symbol::BoolOp(s),
-                "=" | "==" | "!=" => Symbol::Op(Operator::String(s)),
-                "-eq" | "-ge" | "-gt" | "-le" | "-lt" | "-ne" => Symbol::Op(Operator::Int(s)),
-                "-ef" | "-nt" | "-ot" => Symbol::Op(Operator::File(s)),
-                "-n" | "-z" => Symbol::UnaryOp(UnaryOperator::StrlenOp(s)),
-                "-b" | "-c" | "-d" | "-e" | "-f" | "-g" | "-G" | "-h" | "-k" | "-L" | "-O"
-                | "-p" | "-r" | "-s" | "-S" | "-t" | "-u" | "-w" | "-x" => {
-                    Symbol::UnaryOp(UnaryOperator::FiletestOp(s))
-                }
-                _ => Symbol::Literal(s),
+            Some(s) => match s.to_str() {
+                Some(t) => match t {
+                    "(" => Symbol::LParen,
+                    "!" => Symbol::Bang,
+                    "-a" | "-o" => Symbol::BoolOp(s),
+                    "=" | "==" | "!=" => Symbol::Op(Operator::String(s)),
+                    "-eq" | "-ge" | "-gt" | "-le" | "-lt" | "-ne" => Symbol::Op(Operator::Int(s)),
+                    "-ef" | "-nt" | "-ot" => Symbol::Op(Operator::File(s)),
+                    "-n" | "-z" => Symbol::UnaryOp(UnaryOperator::StrlenOp(s)),
+                    "-b" | "-c" | "-d" | "-e" | "-f" | "-g" | "-G" | "-h" | "-k" | "-L" | "-O"
+                    | "-p" | "-r" | "-s" | "-S" | "-t" | "-u" | "-w" | "-x" => {
+                        Symbol::UnaryOp(UnaryOperator::FiletestOp(s))
+                    }
+                    _ => Symbol::Literal(s),
+                },
+                None => Symbol::Literal(s),
             },
             None => Symbol::None,
         }
@@ -202,7 +208,7 @@ impl Parser {
 
             // case 2: error if end of stream is `( <any_token>`
             [symbol] => {
-                eprintln!("test: missing argument after ‘{:?}’", symbol);
+                show_error!("missing argument after ‘{:?}’", symbol);
                 std::process::exit(2);
             }
 
@@ -391,7 +397,7 @@ impl Parser {
         self.expr();
 
         match self.tokens.next() {
-            Some(token) => Err(format!("extra argument '{}'", token.to_string_lossy())),
+            Some(token) => Err(format!("extra argument {}", token.quote())),
             None => Ok(()),
         }
     }

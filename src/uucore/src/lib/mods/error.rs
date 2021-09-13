@@ -99,7 +99,10 @@ pub type UResult<T> = Result<T, Box<dyn UError>>;
 /// An example of a custom error from `ls`:
 ///
 /// ```
-/// use uucore::error::{UError, UResult};
+/// use uucore::{
+///     display::Quotable,
+///     error::{UError, UResult}
+/// };
 /// use std::{
 ///     error::Error,
 ///     fmt::{Display, Debug},
@@ -126,8 +129,8 @@ pub type UResult<T> = Result<T, Box<dyn UError>>;
 /// impl Display for LsError {
 ///     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 ///         match self {
-///             LsError::InvalidLineWidth(s) => write!(f, "invalid line width: '{}'", s),
-///             LsError::NoMetadata(p) => write!(f, "could not open file: '{}'", p.display()),
+///             LsError::InvalidLineWidth(s) => write!(f, "invalid line width: {}", s.quote()),
+///             LsError::NoMetadata(p) => write!(f, "could not open file: {}", p.quote()),
 ///         }
 ///     }
 /// }
@@ -158,7 +161,10 @@ pub trait UError: Error + Send {
     /// # Example
     ///
     /// ```
-    /// use uucore::error::{UError};
+    /// use uucore::{
+    ///     display::Quotable,
+    ///     error::UError
+    /// };
     /// use std::{
     ///     error::Error,
     ///     fmt::{Display, Debug},
@@ -189,8 +195,8 @@ pub trait UError: Error + Send {
     ///     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     ///         use MyError as ME;
     ///         match self {
-    ///             ME::Foo(s) => write!(f, "Unknown Foo: '{}'", s),
-    ///             ME::Bar(p) => write!(f, "Couldn't find Bar: '{}'", p.display()),
+    ///             ME::Foo(s) => write!(f, "Unknown Foo: {}", s.quote()),
+    ///             ME::Bar(p) => write!(f, "Couldn't find Bar: {}", p.quote()),
     ///             ME::Bing() => write!(f, "Exterminate!"),
     ///         }
     ///     }
@@ -209,7 +215,10 @@ pub trait UError: Error + Send {
     /// # Example
     ///
     /// ```
-    /// use uucore::error::{UError};
+    /// use uucore::{
+    ///     display::Quotable,
+    ///     error::UError
+    /// };
     /// use std::{
     ///     error::Error,
     ///     fmt::{Display, Debug},
@@ -240,8 +249,8 @@ pub trait UError: Error + Send {
     ///     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     ///         use MyError as ME;
     ///         match self {
-    ///             ME::Foo(s) => write!(f, "Unknown Foo: '{}'", s),
-    ///             ME::Bar(p) => write!(f, "Couldn't find Bar: '{}'", p.display()),
+    ///             ME::Foo(s) => write!(f, "Unknown Foo: {}", s.quote()),
+    ///             ME::Bar(p) => write!(f, "Couldn't find Bar: {}", p.quote()),
     ///             ME::Bing() => write!(f, "Exterminate!"),
     ///         }
     ///     }
@@ -342,7 +351,10 @@ impl UError for UUsageError {
 /// There are two ways to construct this type: with [`UIoError::new`] or by calling the
 /// [`FromIo::map_err_context`] method on a [`std::io::Result`] or [`std::io::Error`].
 /// ```
-/// use uucore::error::{FromIo, UResult, UIoError, UError};
+/// use uucore::{
+///     display::Quotable,
+///     error::{FromIo, UResult, UIoError, UError}
+/// };
 /// use std::fs::File;
 /// use std::path::Path;
 /// let path = Path::new("test.txt");
@@ -350,12 +362,12 @@ impl UError for UUsageError {
 /// // Manual construction
 /// let e: Box<dyn UError> = UIoError::new(
 ///     std::io::ErrorKind::NotFound,
-///     format!("cannot access '{}'", path.display())
+///     format!("cannot access {}", path.quote())
 /// );
 /// let res: UResult<()> = Err(e.into());
 ///
 /// // Converting from an `std::io::Error`.
-/// let res: UResult<File> = File::open(path).map_err_context(|| format!("cannot access '{}'", path.display()));
+/// let res: UResult<File> = File::open(path).map_err_context(|| format!("cannot access {}", path.quote()));
 /// ```
 #[derive(Debug)]
 pub struct UIoError {

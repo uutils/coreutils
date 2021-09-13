@@ -14,6 +14,7 @@ use clap::{crate_version, App, Arg};
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Lines, Stdin};
+use uucore::display::Quotable;
 
 static NAME: &str = "join";
 
@@ -181,18 +182,18 @@ impl Spec {
                     return Spec::Key;
                 }
 
-                crash!(1, "invalid field specifier: '{}'", format);
+                crash!(1, "invalid field specifier: {}", format.quote());
             }
             Some('1') => FileNum::File1,
             Some('2') => FileNum::File2,
-            _ => crash!(1, "invalid file number in field spec: '{}'", format),
+            _ => crash!(1, "invalid file number in field spec: {}", format.quote()),
         };
 
         if let Some('.') = chars.next() {
             return Spec::Field(file_num, parse_field_number(chars.as_str()));
         }
 
-        crash!(1, "invalid field specifier: '{}'", format);
+        crash!(1, "invalid field specifier: {}", format.quote());
     }
 }
 
@@ -245,7 +246,7 @@ impl<'a> State<'a> {
         } else {
             match File::open(name) {
                 Ok(file) => Box::new(BufReader::new(file)) as Box<dyn BufRead>,
-                Err(err) => crash!(1, "{}: {}", name, err),
+                Err(err) => crash!(1, "{}: {}", name.maybe_quote(), err),
             }
         };
 
@@ -393,7 +394,11 @@ impl<'a> State<'a> {
         let diff = input.compare(self.get_current_key(), line.get_field(self.key));
 
         if diff == Ordering::Greater {
-            eprintln!("{}:{}: is not sorted", self.file_name, self.line_num);
+            eprintln!(
+                "{}:{}: is not sorted",
+                self.file_name.maybe_quote(),
+                self.line_num
+            );
 
             // This is fatal if the check is enabled.
             if input.check_order == CheckOrder::Enabled {
@@ -727,7 +732,7 @@ fn get_field_number(keys: Option<usize>, key: Option<usize>) -> usize {
 fn parse_field_number(value: &str) -> usize {
     match value.parse::<usize>() {
         Ok(result) if result > 0 => result - 1,
-        _ => crash!(1, "invalid field number: '{}'", value),
+        _ => crash!(1, "invalid field number: {}", value.quote()),
     }
 }
 
@@ -735,7 +740,7 @@ fn parse_file_number(value: &str) -> FileNum {
     match value {
         "1" => FileNum::File1,
         "2" => FileNum::File2,
-        value => crash!(1, "invalid file number: '{}'", value),
+        value => crash!(1, "invalid file number: {}", value.quote()),
     }
 }
 

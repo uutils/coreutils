@@ -21,6 +21,7 @@ use std::os::unix;
 use std::os::windows;
 use std::path::{Path, PathBuf};
 use uucore::backup_control::{self, BackupMode};
+use uucore::display::Quotable;
 
 use fs_extra::dir::{move_dir, CopyOptions as DirCopyOptions};
 
@@ -223,10 +224,7 @@ fn exec(files: &[PathBuf], b: Behavior) -> i32 {
             // `Ok()` results unless the source does not exist, or the user
             // lacks permission to access metadata.
             if source.symlink_metadata().is_err() {
-                show_error!(
-                    "cannot stat '{}': No such file or directory",
-                    source.display()
-                );
+                show_error!("cannot stat {}: No such file or directory", source.quote());
                 return 1;
             }
 
@@ -234,8 +232,8 @@ fn exec(files: &[PathBuf], b: Behavior) -> i32 {
                 if b.no_target_dir {
                     if !source.is_dir() {
                         show_error!(
-                            "cannot overwrite directory '{}' with non-directory",
-                            target.display()
+                            "cannot overwrite directory {} with non-directory",
+                            target.quote()
                         );
                         return 1;
                     }
@@ -243,9 +241,9 @@ fn exec(files: &[PathBuf], b: Behavior) -> i32 {
                     return match rename(source, target, &b) {
                         Err(e) => {
                             show_error!(
-                                "cannot move '{}' to '{}': {}",
-                                source.display(),
-                                target.display(),
+                                "cannot move {} to {}: {}",
+                                source.quote(),
+                                target.quote(),
                                 e.to_string()
                             );
                             1
@@ -257,9 +255,9 @@ fn exec(files: &[PathBuf], b: Behavior) -> i32 {
                 return move_files_into_dir(&[source.clone()], target, &b);
             } else if target.exists() && source.is_dir() {
                 show_error!(
-                    "cannot overwrite non-directory '{}' with directory '{}'",
-                    target.display(),
-                    source.display()
+                    "cannot overwrite non-directory {} with directory {}",
+                    target.quote(),
+                    source.quote()
                 );
                 return 1;
             }
@@ -272,9 +270,9 @@ fn exec(files: &[PathBuf], b: Behavior) -> i32 {
         _ => {
             if b.no_target_dir {
                 show_error!(
-                    "mv: extra operand '{}'\n\
+                    "mv: extra operand {}\n\
                      Try '{} --help' for more information.",
-                    files[2].display(),
+                    files[2].quote(),
                     uucore::execution_phrase()
                 );
                 return 1;
@@ -288,7 +286,7 @@ fn exec(files: &[PathBuf], b: Behavior) -> i32 {
 
 fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> i32 {
     if !target_dir.is_dir() {
-        show_error!("target '{}' is not a directory", target_dir.display());
+        show_error!("target {} is not a directory", target_dir.quote());
         return 1;
     }
 
@@ -298,8 +296,8 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> i3
             Some(name) => target_dir.join(name),
             None => {
                 show_error!(
-                    "cannot stat '{}': No such file or directory",
-                    sourcepath.display()
+                    "cannot stat {}: No such file or directory",
+                    sourcepath.quote()
                 );
 
                 all_successful = false;
@@ -309,9 +307,9 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> i3
 
         if let Err(e) = rename(sourcepath, &targetpath, b) {
             show_error!(
-                "cannot move '{}' to '{}': {}",
-                sourcepath.display(),
-                targetpath.display(),
+                "cannot move {} to {}: {}",
+                sourcepath.quote(),
+                targetpath.quote(),
                 e.to_string()
             );
             all_successful = false;
@@ -332,7 +330,7 @@ fn rename(from: &Path, to: &Path, b: &Behavior) -> io::Result<()> {
         match b.overwrite {
             OverwriteMode::NoClobber => return Ok(()),
             OverwriteMode::Interactive => {
-                println!("{}: overwrite '{}'? ", uucore::util_name(), to.display());
+                println!("{}: overwrite {}? ", uucore::util_name(), to.quote());
                 if !read_yes() {
                     return Ok(());
                 }
@@ -365,9 +363,9 @@ fn rename(from: &Path, to: &Path, b: &Behavior) -> io::Result<()> {
     rename_with_fallback(from, to)?;
 
     if b.verbose {
-        print!("'{}' -> '{}'", from.display(), to.display());
+        print!("{} -> {}", from.quote(), to.quote());
         match backup_path {
-            Some(path) => println!(" (backup: '{}')", path.display()),
+            Some(path) => println!(" (backup: {})", path.quote()),
             None => println!(),
         }
     }

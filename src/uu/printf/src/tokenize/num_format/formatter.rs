@@ -3,31 +3,20 @@
 
 use itertools::{put_back_n, PutBackN};
 use std::str::Chars;
+use uucore::{display::Quotable, show_error};
 
 use super::format_field::FormatField;
-
-use crate::cli;
 
 // contains the rough ingredients to final
 // output for a number, organized together
 // to allow for easy generalization of output manipulation
 // (e.g. max number of digits after decimal)
+#[derive(Default)]
 pub struct FormatPrimitive {
     pub prefix: Option<String>,
     pub pre_decimal: Option<String>,
     pub post_decimal: Option<String>,
     pub suffix: Option<String>,
-}
-
-impl Default for FormatPrimitive {
-    fn default() -> FormatPrimitive {
-        FormatPrimitive {
-            prefix: None,
-            pre_decimal: None,
-            post_decimal: None,
-            suffix: None,
-        }
-    }
 }
 
 #[derive(Clone, PartialEq)]
@@ -66,5 +55,5 @@ pub fn get_it_at(offset: usize, str_in: &str) -> PutBackN<Chars> {
 // TODO: put this somewhere better
 pub fn warn_incomplete_conv(pf_arg: &str) {
     // important: keep println here not print
-    cli::err_msg(&format!("{}: value not completely converted", pf_arg))
+    show_error!("{}: value not completely converted", pf_arg.maybe_quote());
 }

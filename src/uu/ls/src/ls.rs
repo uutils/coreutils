@@ -40,8 +40,10 @@ use std::{
     time::Duration,
 };
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
-use uucore::display::Quotable;
-use uucore::error::{set_exit_code, FromIo, UError, UResult};
+use uucore::{
+    display::Quotable,
+    error::{set_exit_code, FromIo, UError, UResult},
+};
 
 use unicode_width::UnicodeWidthStr;
 #[cfg(unix)]
@@ -157,8 +159,8 @@ impl Error for LsError {}
 impl Display for LsError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LsError::InvalidLineWidth(s) => write!(f, "invalid line width: '{}'", s),
-            LsError::NoMetadata(p) => write!(f, "could not open file: '{}'", p.display()),
+            LsError::InvalidLineWidth(s) => write!(f, "invalid line width: {}", s.quote()),
+            LsError::NoMetadata(p) => write!(f, "could not open file: {}", p.quote()),
         }
     }
 }
@@ -428,18 +430,18 @@ impl Config {
             },
             None => match termsize::get() {
                 Some(size) => size.cols,
-                None => match std::env::var("COLUMNS") {
-                    Ok(columns) => match columns.parse() {
-                        Ok(columns) => columns,
-                        Err(_) => {
+                None => match std::env::var_os("COLUMNS") {
+                    Some(columns) => match columns.to_str().and_then(|s| s.parse().ok()) {
+                        Some(columns) => columns,
+                        None => {
                             show_error!(
-                                "ignoring invalid width in environment variable COLUMNS: '{}'",
-                                columns
+                                "ignoring invalid width in environment variable COLUMNS: {}",
+                                columns.quote()
                             );
                             DEFAULT_TERM_WIDTH
                         }
                     },
-                    Err(_) => DEFAULT_TERM_WIDTH,
+                    None => DEFAULT_TERM_WIDTH,
                 },
             },
         };
@@ -556,7 +558,7 @@ impl Config {
                 Ok(p) => {
                     ignore_patterns.add(p);
                 }
-                Err(_) => show_warning!("Invalid pattern for ignore: '{}'", pattern),
+                Err(_) => show_warning!("Invalid pattern for ignore: {}", pattern.quote()),
             }
         }
 
@@ -566,7 +568,7 @@ impl Config {
                     Ok(p) => {
                         ignore_patterns.add(p);
                     }
-                    Err(_) => show_warning!("Invalid pattern for hide: '{}'", pattern),
+                    Err(_) => show_warning!("Invalid pattern for hide: {}", pattern.quote()),
                 }
             }
         }
@@ -1332,7 +1334,7 @@ fn list(locs: Vec<&Path>, config: Config) -> UResult<()> {
 
         if path_data.md().is_none() {
             show!(std::io::ErrorKind::NotFound
-                .map_err_context(|| format!("cannot access '{}'", path_data.p_buf.display())));
+                .map_err_context(|| format!("cannot access {}", path_data.p_buf.quote())));
             // We found an error, no need to continue the execution
             continue;
         }

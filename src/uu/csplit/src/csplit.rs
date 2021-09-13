@@ -10,6 +10,7 @@ use std::{
     fs::{remove_file, File},
     io::{BufRead, BufWriter, Write},
 };
+use uucore::display::Quotable;
 
 mod csplit_error;
 mod patterns;
@@ -734,7 +735,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         let file = crash_if_err!(1, File::open(file_name));
         let file_metadata = crash_if_err!(1, file.metadata());
         if !file_metadata.is_file() {
-            crash!(1, "'{}' is not a regular file", file_name);
+            crash!(1, "{} is not a regular file", file_name.quote());
         }
         crash_if_err!(1, csplit(&options, patterns, BufReader::new(file)));
     };

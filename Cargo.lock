@@ -3198,7 +3198,6 @@ name = "uu_unlink"
 version = "0.0.7"
 dependencies = [
  "clap",
- "libc",
  "uucore",
  "uucore_procs",
 ]
@@ -3277,6 +3276,8 @@ dependencies = [
  "getopts",
  "lazy_static",
  "libc",
+ "nix 0.20.0",
+ "once_cell",
  "termion",
  "thiserror",
  "time",

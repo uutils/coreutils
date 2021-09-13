@@ -14,6 +14,7 @@ use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Result, Write}
 use std::path::Path;
 use std::str::FromStr;
 use strum_macros::{AsRefStr, EnumString};
+use uucore::display::Quotable;
 
 static ABOUT: &str = "Report or omit repeated lines.";
 pub mod options {
@@ -217,7 +218,14 @@ fn get_line_string(io_line: Result<Vec<u8>>) -> String {
 fn opt_parsed<T: FromStr>(opt_name: &str, matches: &ArgMatches) -> Option<T> {
     matches.value_of(opt_name).map(|arg_str| {
         let opt_val: Option<T> = arg_str.parse().ok();
-        opt_val.unwrap_or_else(|| crash!(1, "Invalid argument for {}: {}", opt_name, arg_str))
+        opt_val.unwrap_or_else(|| {
+            crash!(
+                1,
+                "Invalid argument for {}: {}",
+                opt_name,
+                arg_str.maybe_quote()
+            )
+        })
     })
 }
 

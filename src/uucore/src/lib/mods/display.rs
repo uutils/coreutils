@@ -87,13 +87,16 @@ macro_rules! impl_as_ref {
     };
 }
 
+impl_as_ref!(str);
 impl_as_ref!(&'_ str);
 impl_as_ref!(String);
+impl_as_ref!(std::path::Path);
 impl_as_ref!(&'_ std::path::Path);
 impl_as_ref!(std::path::PathBuf);
 impl_as_ref!(std::path::Component<'_>);
 impl_as_ref!(std::path::Components<'_>);
 impl_as_ref!(std::path::Iter<'_>);
+impl_as_ref!(std::ffi::OsStr);
 impl_as_ref!(&'_ std::ffi::OsStr);
 impl_as_ref!(std::ffi::OsString);
 
@@ -102,6 +105,13 @@ impl_as_ref!(std::ffi::OsString);
 impl Quotable for Cow<'_, str> {
     fn quote(&self) -> Quoted<'_> {
         let text: &str = self.as_ref();
+        Quoted::new(text.as_ref())
+    }
+}
+
+impl Quotable for Cow<'_, std::path::Path> {
+    fn quote(&self) -> Quoted<'_> {
+        let text: &std::path::Path = self.as_ref();
         Quoted::new(text.as_ref())
     }
 }
@@ -405,6 +415,19 @@ pub fn println_verbatim<S: AsRef<OsStr>>(text: S) -> io::Result<()> {
         writeln!(stdout, "{}", std::path::Path::new(text.as_ref()).display())?;
     }
     Ok(())
+}
+
+/// Like `println_verbatim`, without the trailing newline.
+pub fn print_verbatim<S: AsRef<OsStr>>(text: S) -> io::Result<()> {
+    let mut stdout = io::stdout();
+    #[cfg(any(unix, target_os = "wasi"))]
+    {
+        stdout.write_all(text.as_ref().as_bytes())
+    }
+    #[cfg(not(any(unix, target_os = "wasi")))]
+    {
+        write!(stdout, "{}", std::path::Path::new(text.as_ref()).display())
+    }
 }
 
 #[cfg(test)]

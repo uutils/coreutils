@@ -22,6 +22,7 @@ use std::env;
 use std::io::{self, Write};
 use std::iter::Iterator;
 use std::process::Command;
+use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 
 const USAGE: &str = "env [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]";
@@ -65,8 +66,14 @@ fn parse_name_value_opt<'a>(opts: &mut Options<'a>, opt: &'a str) -> Result<bool
 
 fn parse_program_opt<'a>(opts: &mut Options<'a>, opt: &'a str) -> Result<(), i32> {
     if opts.null {
-        eprintln!("{}: cannot specify --null (-0) with command", crate_name!());
-        eprintln!("Type \"{} --help\" for detailed information", crate_name!());
+        eprintln!(
+            "{}: cannot specify --null (-0) with command",
+            uucore::util_name()
+        );
+        eprintln!(
+            "Type \"{} --help\" for detailed information",
+            uucore::execution_phrase()
+        );
         Err(1)
     } else {
         opts.program.push(opt);
@@ -87,7 +94,7 @@ fn load_config_file(opts: &mut Options) -> UResult<()> {
         };
 
         let conf = conf.map_err(|error| {
-            eprintln!("env: error: \"{}\": {}", file, error);
+            show_error!("{}: {}", file.maybe_quote(), error);
             1
         })?;
 

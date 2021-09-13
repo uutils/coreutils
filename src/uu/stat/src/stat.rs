@@ -7,6 +7,7 @@
 
 #[macro_use]
 extern crate uucore;
+use uucore::display::Quotable;
 use uucore::entries;
 use uucore::fs::display_permissions;
 use uucore::fsext::{
@@ -24,7 +25,7 @@ use std::{cmp, fs, iter};
 macro_rules! check_bound {
     ($str: ident, $bound:expr, $beg: expr, $end: expr) => {
         if $end >= $bound {
-            return Err(format!("'{}': invalid directive", &$str[$beg..$end]));
+            return Err(format!("{}: invalid directive", $str[$beg..$end].quote()));
         }
     };
 }
@@ -652,11 +653,7 @@ impl Stater {
                                                     return 1;
                                                 }
                                             };
-                                            arg = format!(
-                                                "`{}' -> `{}'",
-                                                file,
-                                                dst.to_string_lossy()
-                                            );
+                                            arg = format!("{} -> {}", file.quote(), dst.quote());
                                         } else {
                                             arg = file.to_string();
                                         }
@@ -750,7 +747,7 @@ impl Stater {
                     }
                 }
                 Err(e) => {
-                    show_error!("cannot stat '{}': {}", file, e);
+                    show_error!("cannot stat {}: {}", file.quote(), e);
                     return 1;
                 }
             }
@@ -843,7 +840,11 @@ impl Stater {
                     }
                 }
                 Err(e) => {
-                    show_error!("cannot read file system information for '{}': {}", file, e);
+                    show_error!(
+                        "cannot read file system information for {}: {}",
+                        file.quote(),
+                        e
+                    );
                     return 1;
                 }
             }

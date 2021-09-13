@@ -66,10 +66,23 @@ fn test_wrong_argument() {
 
 #[test]
 // FixME: freebsd panic
-#[cfg(not(any(windows, target_os = "freebsd")))]
+#[cfg(all(unix, not(target_os = "freebsd")))]
 fn test_stdout_fail() {
-    let mut child = new_ucmd!().run_no_wait();
-    drop(child.stdout.take());
-    let status = child.wait().unwrap();
+    use std::process::{Command, Stdio};
+    let ts = TestScenario::new(util_name!());
+    // Sleep inside a shell to ensure the process doesn't finish before we've
+    // closed its stdout
+    let mut proc = Command::new("sh")
+        .arg("-c")
+        .arg(format!(
+            "sleep 0.2; exec {} {}",
+            ts.bin_path.to_str().unwrap(),
+            ts.util_name
+        ))
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    drop(proc.stdout.take());
+    let status = proc.wait().unwrap();
     assert_eq!(status.code(), Some(3));
 }

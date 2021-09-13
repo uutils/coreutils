@@ -43,6 +43,7 @@ use crate::partialreader::*;
 use crate::peekreader::*;
 use crate::prn_char::format_ascii_dump;
 use clap::{self, crate_version, AppSettings, Arg, ArgMatches};
+use uucore::display::Quotable;
 use uucore::parse_size::ParseSizeError;
 use uucore::InvalidEncodingHandling;
 
@@ -635,7 +636,7 @@ fn format_error_message(error: ParseSizeError, s: &str, option: &str) -> String 
     // GNU's od echos affected flag, -N or --read-bytes (-j or --skip-bytes, etc.), depending user's selection
     // GNU's od does distinguish between "invalid (suffix in) argument"
     match error {
-        ParseSizeError::ParseFailure(_) => format!("invalid --{} argument '{}'", option, s),
-        ParseSizeError::SizeTooBig(_) => format!("--{} argument '{}' too large", option, s),
+        ParseSizeError::ParseFailure(_) => format!("invalid --{} argument {}", option, s.quote()),
+        ParseSizeError::SizeTooBig(_) => format!("--{} argument {} too large", option, s.quote()),
     }
 }

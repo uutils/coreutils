@@ -15,6 +15,7 @@ use std::convert::TryFrom;
 use std::fs::{metadata, OpenOptions};
 use std::io::ErrorKind;
 use std::path::Path;
+use uucore::display::Quotable;
 use uucore::parse_size::{parse_size, ParseSizeError};
 
 #[derive(Debug, Eq, PartialEq)]
@@ -120,8 +121,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     let reference = matches.value_of(options::REFERENCE).map(String::from);
                     crash!(
                         1,
-                        "cannot stat '{}': No such file or directory",
-                        reference.unwrap_or_else(|| "".to_string())
+                        "cannot stat {}: No such file or directory",
+                        reference.as_deref().unwrap_or("").quote()
                     ); // TODO: fix '--no-create' see test_reference and test_truncate_bytes_size
                 }
                 _ => crash!(1, "{}", e.to_string()),

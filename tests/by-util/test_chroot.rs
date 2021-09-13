@@ -23,7 +23,7 @@ fn test_enter_chroot_fails() {
 
     assert!(result
         .stderr_str()
-        .starts_with("chroot: cannot chroot to jail: Operation not permitted (os error 1)"));
+        .starts_with("chroot: cannot chroot to 'jail': Operation not permitted (os error 1)"));
 }
 
 #[test]
@@ -34,7 +34,7 @@ fn test_no_such_directory() {
 
     ucmd.arg("a")
         .fails()
-        .stderr_is("chroot: cannot change root directory to `a`: no such directory");
+        .stderr_is("chroot: cannot change root directory to 'a': no such directory");
 }
 
 #[test]

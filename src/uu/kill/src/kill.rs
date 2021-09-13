@@ -13,6 +13,7 @@ extern crate uucore;
 use clap::{crate_version, App, Arg};
 use libc::{c_int, pid_t};
 use std::io::Error;
+use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::signals::ALL_SIGNALS;
 use uucore::InvalidEncodingHandling;
@@ -154,7 +155,7 @@ fn print_signal(signal_name_or_value: &str) -> UResult<()> {
     }
     Err(USimpleError::new(
         1,
-        format!("unknown signal name {}", signal_name_or_value),
+        format!("unknown signal name {}", signal_name_or_value.quote()),
     ))
 }
 
@@ -190,7 +191,7 @@ fn kill(signalname: &str, pids: &[String]) -> UResult<()> {
         None => {
             return Err(USimpleError::new(
                 1,
-                format!("unknown signal name {}", signalname),
+                format!("unknown signal name {}", signalname.quote()),
             ));
         }
     };
@@ -204,7 +205,7 @@ fn kill(signalname: &str, pids: &[String]) -> UResult<()> {
             Err(e) => {
                 return Err(USimpleError::new(
                     1,
-                    format!("failed to parse argument {}: {}", pid, e),
+                    format!("failed to parse argument {}: {}", pid.quote(), e),
                 ));
             }
         };
