@@ -72,6 +72,7 @@ extern "C" {
 /// > to be used in a further call to getgroups().
 #[cfg(not(target_os = "redox"))]
 pub fn get_groups() -> IOResult<Vec<gid_t>> {
+    let mut groups = Vec::new();
     loop {
         let ngroups = match unsafe { getgroups(0, ptr::null_mut()) } {
             -1 => return Err(IOError::last_os_error()),
@@ -80,7 +81,9 @@ pub fn get_groups() -> IOResult<Vec<gid_t>> {
             n => n,
         };
 
-        let mut groups = vec![0; ngroups.try_into().unwrap()];
+        // This is a small buffer, so we can afford to zero-initialize it and
+        // use safe Vec operations
+        groups.resize(ngroups.try_into().unwrap(), 0);
         let res = unsafe { getgroups(ngroups, groups.as_mut_ptr()) };
         if res == -1 {
             let err = IOError::last_os_error();
