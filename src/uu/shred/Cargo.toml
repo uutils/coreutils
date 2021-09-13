@@ -16,7 +16,6 @@ path = "src/shred.rs"
 
 [dependencies]
 clap = { version = "2.33", features = ["wrap_help"] }
-filetime = "0.2.1"
 libc = "0.2.42"
 rand = "0.7"
 uucore = { version=">=0.0.9", package="uucore", path="../../uucore" }

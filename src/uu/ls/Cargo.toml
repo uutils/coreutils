@@ -15,7 +15,6 @@ edition = "2018"
 path = "src/ls.rs"
 
 [dependencies]
-locale = "0.2.2"
 chrono = "0.4.19"
 clap = { version = "2.33", features = ["wrap_help"] }
 unicode-width = "0.1.8"
