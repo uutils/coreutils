@@ -2941,7 +2941,6 @@ dependencies = [
  "filetime",
  "libc",
  "rand 0.7.3",
- "time",
  "uucore",
  "uucore_procs",
 ]
