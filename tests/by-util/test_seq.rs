@@ -46,11 +46,7 @@ fn test_count_down() {
 }
 
 #[test]
-fn test_separator_and_terminator() {
-    new_ucmd!()
-        .args(&["-s", ",", "-t", "!", "2", "6"])
-        .run()
-        .stdout_is("2,3,4,5,6!");
+fn test_separator() {
     new_ucmd!()
         .args(&["-s", ",", "2", "6"])
         .run()
@@ -117,11 +113,11 @@ fn test_count_down_floats() {
 }
 
 #[test]
-fn test_separator_and_terminator_floats() {
+fn test_separator_floats() {
     new_ucmd!()
-        .args(&["-s", ",", "-t", "!", "2.0", "6"])
+        .args(&["-s", ",", "2.0", "6"])
         .run()
-        .stdout_is("2.0,3.0,4.0,5.0,6.0!");
+        .stdout_is("2.0,3.0,4.0,5.0,6.0\n");
 }
 
 #[test]

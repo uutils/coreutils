@@ -18,7 +18,6 @@ use uucore::display::Quotable;
 
 static ABOUT: &str = "Display numbers from FIRST to LAST, in steps of INCREMENT.";
 static OPT_SEPARATOR: &str = "separator";
-static OPT_TERMINATOR: &str = "terminator";
 static OPT_WIDTHS: &str = "widths";
 
 static ARG_NUMBERS: &str = "numbers";
@@ -34,7 +33,6 @@ fn usage() -> String {
 #[derive(Clone)]
 struct SeqOptions {
     separator: String,
-    terminator: String,
     widths: bool,
 }
 
@@ -149,7 +147,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let options = SeqOptions {
         separator: matches.value_of(OPT_SEPARATOR).unwrap_or("\n").to_string(),
-        terminator: matches.value_of(OPT_TERMINATOR).unwrap_or("\n").to_string(),
         widths: matches.is_present(OPT_WIDTHS),
     };
 
@@ -196,7 +193,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         (Number::MinusZero, Number::BigInt(last), Number::BigInt(increment)) => print_seq_integers(
             (BigInt::zero(), increment, last),
             options.separator,
-            options.terminator,
             options.widths,
             padding,
             true,
@@ -205,7 +201,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             print_seq_integers(
                 (first, increment, last),
                 options.separator,
-                options.terminator,
                 options.widths,
                 padding,
                 false,
@@ -215,7 +210,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             (first.into_f64(), increment.into_f64(), last.into_f64()),
             largest_dec,
             options.separator,
-            options.terminator,
             options.widths,
             padding,
         ),
@@ -237,14 +231,6 @@ pub fn uu_app() -> App<'static, 'static> {
                 .short("s")
                 .long("separator")
                 .help("Separator character (defaults to \\n)")
-                .takes_value(true)
-                .number_of_values(1),
-        )
-        .arg(
-            Arg::with_name(OPT_TERMINATOR)
-                .short("t")
-                .long("terminator")
-                .help("Terminator character (defaults to \\n)")
                 .takes_value(true)
                 .number_of_values(1),
         )
@@ -277,7 +263,6 @@ fn print_seq(
     range: RangeF64,
     largest_dec: usize,
     separator: String,
-    terminator: String,
     pad: bool,
     padding: usize,
 ) -> std::io::Result<()> {
@@ -302,9 +287,7 @@ fn print_seq(
             write!(stdout, "{}", separator)?;
         }
     }
-    if (first >= last && increment < 0f64) || (first <= last && increment > 0f64) {
-        write!(stdout, "{}", terminator)?;
-    }
+    writeln!(stdout)?;
     stdout.flush()?;
     Ok(())
 }
@@ -313,8 +296,7 @@ fn print_seq(
 ///
 /// This function prints a sequence of integers defined by `range`,
 /// which defines the first integer, last integer, and increment of the
-/// range. The `separator` is inserted between each integer and
-/// `terminator` is inserted at the end.
+/// range. The `separator` is inserted between each integer.
 ///
 /// The `pad` parameter indicates whether to pad numbers to the width
 /// given in `padding`.
@@ -326,7 +308,6 @@ fn print_seq(
 fn print_seq_integers(
     range: RangeInt,
     separator: String,
-    terminator: String,
     pad: bool,
     padding: usize,
     is_first_minus_zero: bool,
@@ -353,10 +334,7 @@ fn print_seq_integers(
         }
         value += &increment;
     }
-
-    if !is_first_iteration {
-        write!(stdout, "{}", terminator)?;
-    }
+    writeln!(stdout)?;
     Ok(())
 }
 
