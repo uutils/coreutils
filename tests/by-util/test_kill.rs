@@ -58,10 +58,8 @@ fn test_kill_list_all_signals() {
 
 #[test]
 fn test_kill_list_final_new_line() {
-    new_ucmd!()
-        .arg("-l")
-        .succeeds()
-        .stdout_matches(&Regex::new("[\\n\\r]$").unwrap());
+    let re = Regex::new("\\n$").unwrap();
+    assert!(re.is_match(new_ucmd!().arg("-l").succeeds().stdout_str()));
 }
 
 #[test]
