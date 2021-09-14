@@ -152,6 +152,15 @@ fn test_preserve_negative_zero_start() {
 }
 
 #[test]
+fn test_negative_zero_int_start_float_increment() {
+    new_ucmd!()
+        .args(&["-0", "0.1", "0.1"])
+        .succeeds()
+        .stdout_is("-0.0\n0.1\n")
+        .no_stderr();
+}
+
+#[test]
 fn test_drop_negative_zero_end() {
     new_ucmd!()
         .args(&["1", "-1", "-0"])

@@ -121,7 +121,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 false,
             )
         }
-        (Number::MinusZeroFloat, last, increment) => print_seq(
+        (Number::MinusZeroFloat | Number::MinusZeroInt, last, increment) => print_seq(
             (
                 BigDecimal::zero(),
                 increment.into_big_decimal(),
@@ -233,7 +233,7 @@ fn print_seq(
     while !done_printing(&value, &increment, &last) {
         let mut width = padding;
         if is_first_iteration && is_first_minus_zero {
-            print!("-");
+            write!(stdout, "-")?;
             width -= 1;
         }
         is_first_iteration = false;
@@ -246,7 +246,7 @@ fn print_seq(
             }
         }
         write!(stdout, "{}", istr)?;
-        value += increment.clone();
+        value += &increment;
         if !done_printing(&value, &increment, &last) {
             write!(stdout, "{}", separator)?;
         }
