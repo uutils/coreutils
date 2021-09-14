@@ -99,6 +99,7 @@ impl Number {
 impl FromStr for Number {
     type Err = String;
     fn from_str(mut s: &str) -> Result<Self, Self::Err> {
+        s = s.trim_start();
         if s.starts_with('+') {
             s = &s[1..];
         }
