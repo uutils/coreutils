@@ -426,6 +426,15 @@ fn test_width_decimal_scientific_notation_trailing_zeros_end() {
         .no_stderr();
 }
 
+#[test]
+fn test_width_floats() {
+    new_ucmd!()
+        .args(&["-w", "9.0", "10.0"])
+        .succeeds()
+        .stdout_is("09.0\n10.0\n")
+        .no_stderr();
+}
+
 // TODO This is duplicated from `test_yes.rs`; refactor them.
 /// Run `seq`, capture some of the output, close the pipe, and verify it.
 fn run(args: &[&str], expected: &[u8]) {
