@@ -490,11 +490,10 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
         return Err(InstallError::TargetDirIsntDir(target_dir.to_path_buf()).into());
     }
     for sourcepath in files.iter() {
-        if !sourcepath.exists() {
-            let err = UIoError::new(
-                std::io::ErrorKind::NotFound,
-                format!("cannot stat {}", sourcepath.quote()),
-            );
+        if let Err(err) = sourcepath
+            .metadata()
+            .map_err_context(|| format!("cannot stat {}", sourcepath.quote()))
+        {
             show!(err);
             continue;
         }

@@ -43,6 +43,9 @@ gibi
 gibibytes
 glob
 globbing
+hardcode
+hardcoded
+hardcoding
 hardfloat
 hardlink
 hardlinks
