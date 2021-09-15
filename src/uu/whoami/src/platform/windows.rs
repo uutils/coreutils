@@ -20,10 +20,8 @@ pub fn get_username() -> io::Result<OsString> {
     let mut buffer = [0_u16; BUF_LEN as usize];
     let mut len = BUF_LEN;
     // SAFETY: buffer.len() == len
-    unsafe {
-        if winbase::GetUserNameW(buffer.as_mut_ptr(), &mut len) == 0 {
-            return Err(io::Error::last_os_error());
-        }
+    if unsafe { winbase::GetUserNameW(buffer.as_mut_ptr(), &mut len) } == 0 {
+        return Err(io::Error::last_os_error());
     }
     Ok(OsString::from_wide(&buffer[..len as usize - 1]))
 }
