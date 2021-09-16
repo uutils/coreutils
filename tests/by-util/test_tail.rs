@@ -289,6 +289,22 @@ fn test_multiple_input_files() {
 }
 
 #[test]
+fn test_multiple_input_files_missing() {
+    new_ucmd!()
+        .arg(FOOBAR_TXT)
+        .arg("missing1")
+        .arg(FOOBAR_2_TXT)
+        .arg("missing2")
+        .run()
+        .stdout_is_fixture("foobar_follow_multiple.expected")
+        .stderr_is(
+            "tail: cannot open 'missing1': No such file or directory\n\
+                   tail: cannot open 'missing2': No such file or directory",
+        )
+        .code_is(1);
+}
+
+#[test]
 fn test_multiple_input_files_with_suppressed_headers() {
     new_ucmd!()
         .arg(FOOBAR_TXT)

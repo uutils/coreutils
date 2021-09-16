@@ -78,7 +78,7 @@ impl Default for Settings {
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let mut settings: Settings = Default::default();
-
+    let mut return_code = 0;
     let app = uu_app();
 
     let matches = app.get_matches_from(args);
@@ -138,7 +138,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_else(|| vec![String::from("-")]);
 
-    let multiple = files.len() > 1;
+    let mut files_count = files.len();
     let mut first_header = true;
     let mut readers: Vec<(Box<dyn BufRead>, &String)> = Vec::new();
 
@@ -147,19 +147,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     for filename in &files {
         let use_stdin = filename.as_str() == "-";
-        if (multiple || verbose) && !quiet {
-            if !first_header {
-                println!();
-            }
-            if use_stdin {
-                println!("==> standard input <==");
-            } else {
-                println!("==> {} <==", filename);
-            }
-        }
-        first_header = false;
 
         if use_stdin {
+            if verbose && !quiet {
+                println!("==> standard input <==");
+            }
             let mut reader = BufReader::new(stdin());
             unbounded_tail(&mut reader, &settings);
 
@@ -190,6 +182,19 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             if path.is_dir() {
                 continue;
             }
+            if !path.exists() {
+                show_error!("cannot open {}: No such file or directory", path.quote());
+                files_count -= 1;
+                return_code = 1;
+                continue;
+            }
+            if (files_count > 1 || verbose) && !quiet {
+                if !first_header {
+                    println!();
+                }
+                println!("==> {} <==", filename);
+            }
+            first_header = false;
             let mut file = File::open(&path).unwrap();
             let md = file.metadata().unwrap();
             if is_seekable(&mut file) && get_block_size(&md) > 0 {
@@ -212,7 +217,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         follow(&mut readers[..], &settings);
     }
 
-    0
+    return_code
 }
 
 pub fn uu_app() -> App<'static, 'static> {
