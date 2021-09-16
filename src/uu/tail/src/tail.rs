@@ -27,6 +27,7 @@ use std::io::{stdin, stdout, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
+use uucore::display::Quotable;
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::ringbuffer::RingBuffer;
 
@@ -56,7 +57,7 @@ enum FilterMode {
 
 struct Settings {
     mode: FilterMode,
-    sleep_msec: u32,
+    sleep_sec: Duration,
     beginning: bool,
     follow: bool,
     pid: platform::Pid,
@@ -66,7 +67,7 @@ impl Default for Settings {
     fn default() -> Settings {
         Settings {
             mode: FilterMode::Lines(10, b'\n'),
-            sleep_msec: 1000,
+            sleep_sec: Duration::from_secs_f32(1.0),
             beginning: false,
             follow: false,
             pid: 0,
@@ -83,12 +84,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let matches = app.get_matches_from(args);
 
     settings.follow = matches.is_present(options::FOLLOW);
-    if settings.follow {
-        if let Some(n) = matches.value_of(options::SLEEP_INT) {
-            let parsed: Option<u32> = n.parse().ok();
-            if let Some(m) = parsed {
-                settings.sleep_msec = m * 1000
-            }
+
+    if let Some(s) = matches.value_of(options::SLEEP_INT) {
+        settings.sleep_sec = match s.parse::<f32>() {
+            Ok(s) => Duration::from_secs_f32(s),
+            Err(_) => crash!(1, "invalid number of seconds: {}", s.quote()),
         }
     }
 
@@ -297,7 +297,7 @@ fn follow<T: BufRead>(readers: &mut [(T, &String)], settings: &Settings) {
     let mut process = platform::ProcessChecker::new(settings.pid);
 
     loop {
-        sleep(Duration::new(0, settings.sleep_msec * 1000));
+        sleep(settings.sleep_sec);
 
         let pid_is_dead = !read_some && settings.pid != 0 && process.is_dead();
         read_some = false;

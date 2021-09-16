@@ -326,6 +326,16 @@ fn test_negative_indexing() {
 #[test]
 fn test_sleep_interval() {
     new_ucmd!().arg("-s").arg("10").arg(FOOBAR_TXT).succeeds();
+    new_ucmd!().arg("-s").arg(".1").arg(FOOBAR_TXT).succeeds();
+    new_ucmd!().arg("-s.1").arg(FOOBAR_TXT).succeeds();
+    new_ucmd!().arg("-s").arg("-1").arg(FOOBAR_TXT).fails();
+    new_ucmd!()
+        .arg("-s")
+        .arg("1..1")
+        .arg(FOOBAR_TXT)
+        .fails()
+        .stderr_contains("invalid number of seconds: '1..1'")
+        .code_is(1);
 }
 
 /// Test for reading all but the first NUM bytes: `tail -c +3`.
