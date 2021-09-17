@@ -42,7 +42,7 @@ use std::{
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use uucore::{
     display::Quotable,
-    error::{set_exit_code, FromIo, UError, UResult},
+    error::{set_exit_code, UError, UResult},
 };
 
 use unicode_width::UnicodeWidthStr;
@@ -1333,8 +1333,13 @@ fn list(locs: Vec<&Path>, config: Config) -> UResult<()> {
         let path_data = PathData::new(p, None, None, &config, true);
 
         if path_data.md().is_none() {
-            show!(std::io::ErrorKind::NotFound
-                .map_err_context(|| format!("cannot access {}", path_data.p_buf.quote())));
+            // FIXME: Would be nice to use the actual error instead of hardcoding it
+            // Presumably other errors can happen too?
+            show_error!(
+                "cannot access {}: No such file or directory",
+                path_data.p_buf.quote()
+            );
+            set_exit_code(1);
             // We found an error, no need to continue the execution
             continue;
         }

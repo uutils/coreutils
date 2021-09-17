@@ -43,6 +43,9 @@ gibi
 gibibytes
 glob
 globbing
+hardcode
+hardcoded
+hardcoding
 hardfloat
 hardlink
 hardlinks
@@ -114,6 +117,7 @@ toolchain
 truthy
 ucase
 unbuffered
+udeps
 unescape
 unintuitive
 unprefixed

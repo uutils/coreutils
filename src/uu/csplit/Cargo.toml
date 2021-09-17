@@ -18,10 +18,13 @@ path = "src/csplit.rs"
 clap = { version = "2.33", features = ["wrap_help"] }
 thiserror = "1.0"
 regex = "1.0.0"
-glob = "0.3"
 uucore = { version=">=0.0.9", package="uucore", path="../../uucore", features=["entries", "fs"] }
 uucore_procs = { version=">=0.0.6", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]
 name = "csplit"
 path = "src/main.rs"
+
+[package.metadata.cargo-udeps.ignore]
+# Necessary for "make all"
+normal = ["uucore_procs"]

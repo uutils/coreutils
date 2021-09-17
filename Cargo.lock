@@ -1005,15 +1005,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "locale"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5fdbe492a9c0238da900a1165c42fc5067161ce292678a6fe80921f30fe307fd"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "lock_api"
 version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1102,19 +1093,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b9f1c5b025cda876f66ef43a113f91ebc9f4ccef34843000e0adf6ebbab84e21"
 dependencies = [
  "winapi 0.3.9",
-]
-
-[[package]]
-name = "nix"
-version = "0.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4dbdc256eaac2e3bd236d93ad999d3479ef775c863dbda3068c4006a92eec51b"
-dependencies = [
- "bitflags",
- "cc",
- "cfg-if 0.1.10",
- "libc",
- "void",
 ]
 
 [[package]]
@@ -2314,7 +2292,6 @@ name = "uu_csplit"
 version = "0.0.7"
 dependencies = [
  "clap",
- "glob",
  "regex",
  "thiserror",
  "uucore",
@@ -2628,7 +2605,6 @@ dependencies = [
  "clap",
  "globset",
  "lazy_static",
- "locale",
  "lscolors",
  "number_prefix",
  "once_cell",
@@ -2713,7 +2689,7 @@ version = "0.0.7"
 dependencies = [
  "clap",
  "libc",
- "nix 0.13.1",
+ "nix 0.20.0",
  "uucore",
  "uucore_procs",
 ]
@@ -2813,7 +2789,6 @@ dependencies = [
  "itertools 0.10.1",
  "quick-error 2.0.1",
  "regex",
- "time",
  "uucore",
  "uucore_procs",
 ]
@@ -2939,10 +2914,8 @@ name = "uu_shred"
 version = "0.0.7"
 dependencies = [
  "clap",
- "filetime",
  "libc",
  "rand 0.7.3",
- "time",
  "uucore",
  "uucore_procs",
 ]
@@ -3052,6 +3025,7 @@ version = "0.0.7"
 dependencies = [
  "clap",
  "memchr 2.4.0",
+ "regex",
  "uucore",
  "uucore_procs",
 ]
@@ -3313,12 +3287,6 @@ name = "version_check"
 version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5fecdca9a5291cc2b8dcf7dc02453fee791a280f3743cb0905f8822ae463b3fe"
-
-[[package]]
-name = "void"
-version = "1.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6a02e4885ed3bc0f2de90ea6dd45ebcbb66dacffe03547fadbb0eeae2770887d"
 
 [[package]]
 name = "walkdir"
