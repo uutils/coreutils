@@ -24,7 +24,7 @@
 //!
 //! ```
 //! use uucore::utmpx::Utmpx;
-//! for ut in Utmpx::iter_all_records().read_from("/some/where/else") {
+//! for ut in Utmpx::iter_all_records_from("/some/where/else") {
 //!     if ut.is_user_process() {
 //!         println!("{}: {}", ut.host(), ut.user())
 //!     }
@@ -35,9 +35,12 @@ pub extern crate time;
 use self::time::{Timespec, Tm};
 
 use std::ffi::CString;
-use std::io::Error as IOError;
 use std::io::Result as IOResult;
+use std::marker::PhantomData;
+use std::os::unix::ffi::OsStrExt;
+use std::path::Path;
 use std::ptr;
+use std::sync::{Mutex, MutexGuard};
 
 pub use self::ut::*;
 use libc::utmpx;
@@ -54,7 +57,9 @@ pub unsafe extern "C" fn utmpxname(_file: *const libc::c_char) -> libc::c_int {
     0
 }
 
-pub use crate::*; // import macros from `../../macros.rs`
+use once_cell::sync::Lazy;
+
+use crate::*; // import macros from `../../macros.rs`
 
 // In case the c_char array doesn't end with NULL
 macro_rules! chars2string {
@@ -248,30 +253,76 @@ impl Utmpx {
         Ok(host.to_string())
     }
 
+    /// Iterate through all the utmp records.
+    ///
+    /// This will use the default location, or the path [`Utmpx::iter_all_records_from`]
+    /// was most recently called with.
+    ///
+    /// Only one instance of [`UtmpxIter`] may be active at a time. This
+    /// function will block as long as one is still active. Beware!
     pub fn iter_all_records() -> UtmpxIter {
-        UtmpxIter
+        let iter = UtmpxIter::new();
+        unsafe {
+            // This can technically fail, and it would be nice to detect that,
+            // but it doesn't return anything so we'd have to do nasty things
+            // with errno.
+            setutxent();
+        }
+        iter
+    }
+
+    /// Iterate through all the utmp records from a specific file.
+    ///
+    /// No failure is reported or detected.
+    ///
+    /// This function affects subsequent calls to [`Utmpx::iter_all_records`].
+    ///
+    /// The same caveats as for [`Utmpx::iter_all_records`] apply.
+    pub fn iter_all_records_from<P: AsRef<Path>>(path: P) -> UtmpxIter {
+        let iter = UtmpxIter::new();
+        let path = CString::new(path.as_ref().as_os_str().as_bytes()).unwrap();
+        unsafe {
+            // In glibc, utmpxname() only fails if there's not enough memory
+            // to copy the string.
+            // Solaris returns 1 on success instead of 0. Supposedly there also
+            // exist systems where it returns void.
+            // GNU who on Debian seems to output nothing if an invalid filename
+            // is specified, no warning or anything.
+            // So this function is pretty crazy and we don't try to detect errors.
+            // Not much we can do besides pray.
+            utmpxname(path.as_ptr());
+            setutxent();
+        }
+        iter
     }
 }
 
+// On some systems these functions are not thread-safe. On others they're
+// thread-local. Therefore we use a mutex to allow only one guard to exist at
+// a time, and make sure UtmpxIter cannot be sent across threads.
+//
+// I believe the only technical memory unsafety that could happen is a data
+// race while copying the data out of the pointer returned by getutxent(), but
+// ordinary race conditions are also very much possible.
+static LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+
 /// Iterator of login records
-pub struct UtmpxIter;
+pub struct UtmpxIter {
+    #[allow(dead_code)]
+    guard: MutexGuard<'static, ()>,
+    /// Ensure UtmpxIter is !Send. Technically redundant because MutexGuard
+    /// is also !Send.
+    phantom: PhantomData<std::rc::Rc<()>>,
+}
 
 impl UtmpxIter {
-    /// Sets the name of the utmpx-format file for the other utmpx functions to access.
-    ///
-    /// If not set, default record file will be used(file path depends on the target OS)
-    pub fn read_from(self, f: &str) -> Self {
-        let res = unsafe {
-            let cstring = CString::new(f).unwrap();
-            utmpxname(cstring.as_ptr())
-        };
-        if res != 0 {
-            show_warning!("utmpxname: {}", IOError::last_os_error());
+    fn new() -> Self {
+        // PoisonErrors can safely be ignored
+        let guard = LOCK.lock().unwrap_or_else(|err| err.into_inner());
+        UtmpxIter {
+            guard,
+            phantom: PhantomData,
         }
-        unsafe {
-            setutxent();
-        }
-        self
     }
 }
 
@@ -281,13 +332,24 @@ impl Iterator for UtmpxIter {
         unsafe {
             let res = getutxent();
             if !res.is_null() {
+                // The data behind this pointer will be replaced by the next
+                // call to getutxent(), so we have to read it now.
+                // All the strings live inline in the struct as arrays, which
+                // makes things easier.
                 Some(Utmpx {
                     inner: ptr::read(res as *const _),
                 })
             } else {
-                endutxent();
                 None
             }
+        }
+    }
+}
+
+impl Drop for UtmpxIter {
+    fn drop(&mut self) {
+        unsafe {
+            endutxent();
         }
     }
 }
