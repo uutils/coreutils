@@ -25,7 +25,7 @@ use std::fmt;
 use std::fs::{File, Metadata};
 use std::io::{stdin, stdout, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::Path;
-use std::thread::sleep;
+use std::sync::mpsc::channel;
 use std::time::Duration;
 use uucore::display::Quotable;
 use uucore::parse_size::{parse_size, ParseSizeError};
@@ -35,6 +35,20 @@ use uucore::ringbuffer::RingBuffer;
 use crate::platform::stdin_is_pipe_or_fifo;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
+
+#[cfg(target_os = "linux")]
+pub static BACKEND: &str = "Disable 'inotify' support and use polling instead";
+#[cfg(target_os = "macos")]
+pub static BACKEND: &str = "Disable 'FSEvents' support and use polling instead";
+#[cfg(any(
+    target_os = "freebsd",
+    target_os = "openbsd",
+    target_os = "dragonflybsd",
+    target_os = "netbsd",
+))]
+pub static BACKEND: &str = "Disable 'kqueue' support and use polling instead";
+#[cfg(target_os = "windows")]
+pub static BACKEND: &str = "Disable 'ReadDirectoryChanges' support and use polling instead";
 
 pub mod options {
     pub mod verbosity {
@@ -47,6 +61,7 @@ pub mod options {
     pub static PID: &str = "pid";
     pub static SLEEP_INT: &str = "sleep-interval";
     pub static ZERO_TERM: &str = "zero-terminated";
+    pub static DISABLE_INOTIFY_TERM: &str = "disable-inotify";
     pub static ARG_FILES: &str = "files";
 }
 
@@ -60,6 +75,7 @@ struct Settings {
     sleep_sec: Duration,
     beginning: bool,
     follow: bool,
+    force_polling: bool,
     pid: platform::Pid,
 }
 
@@ -70,6 +86,7 @@ impl Default for Settings {
             sleep_sec: Duration::from_secs_f32(1.0),
             beginning: false,
             follow: false,
+            force_polling: false,
             pid: 0,
         }
     }
@@ -123,6 +140,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     };
     settings.mode = mode_and_beginning.0;
     settings.beginning = mode_and_beginning.1;
+
+    settings.force_polling = matches.is_present(options::DISABLE_INOTIFY_TERM);
 
     if matches.is_present(options::ZERO_TERM) {
         if let FilterMode::Lines(count, _) = settings.mode {
@@ -284,6 +303,11 @@ pub fn uu_app() -> App<'static, 'static> {
                 .help("Line delimiter is NUL, not newline"),
         )
         .arg(
+            Arg::with_name(options::DISABLE_INOTIFY_TERM)
+                .long(options::DISABLE_INOTIFY_TERM)
+                .help(BACKEND),
+        )
+        .arg(
             Arg::with_name(options::ARG_FILES)
                 .multiple(true)
                 .takes_value(true)
@@ -301,8 +325,30 @@ fn follow<T: BufRead>(readers: &mut [(T, &String)], settings: &Settings) {
     let mut read_some = false;
     let mut process = platform::ProcessChecker::new(settings.pid);
 
+    use notify::{PollWatcher, RecursiveMode, Watcher};
+    let (tx, rx) = channel();
+
+    let mut watcher;
+    if dbg!(settings.force_polling) {
+        watcher = PollWatcher::new(tx, settings.sleep_sec).unwrap();
+    } else {
+        // The trait `Watcher` cannot be made into an object because it requires `Self: Sized`.
+        // watcher = watcher(tx, setting.sleep_sec).unwrap();
+        todo!();
+    };
+
+    for (_, path) in readers.iter() {
+        watcher.watch(path, RecursiveMode::NonRecursive).unwrap();
+    }
+
     loop {
-        sleep(settings.sleep_sec);
+        // std::thread::sleep(settings.sleep_sec);
+        let _result = rx.recv();
+        // TODO:
+        // match rx.recv() {
+        //     Ok(event) => println!("\n{:?}", event),
+        //     Err(e) => println!("watch error: {:?}", e),
+        // }
 
         let pid_is_dead = !read_some && settings.pid != 0 && process.is_dead();
         read_some = false;
