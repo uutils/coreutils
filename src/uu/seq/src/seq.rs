@@ -67,6 +67,18 @@ impl Number {
             Number::F64(n) => n,
         }
     }
+
+    /// Convert this number into a bigint, consuming it.
+    ///
+    /// For floats, this returns the [`BigInt`] corresponding to the
+    /// floor of the number.
+    fn into_bigint(self) -> BigInt {
+        match self {
+            Number::MinusZero => BigInt::zero(),
+            Number::F64(x) => BigInt::from(x.floor() as i64),
+            Number::BigInt(n) => n,
+        }
+    }
 }
 
 impl FromStr for Number {
@@ -197,25 +209,38 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         crash_if_err!(1, slice.parse())
     };
 
+    let is_negative_zero_f64 = |x: f64| x == -0.0 && x.is_sign_negative() && largest_dec == 0;
     let result = match (first, last, increment) {
-        (Number::MinusZero, Number::BigInt(last), Number::BigInt(increment)) => print_seq_integers(
-            (BigInt::zero(), increment, last),
+        // For example, `seq -0 1 2` or `seq -0 1 2.0`.
+        (Number::MinusZero, last, Number::BigInt(increment)) => print_seq_integers(
+            (BigInt::zero(), increment, last.into_bigint()),
             options.separator,
             options.terminator,
             options.widths,
             padding,
             true,
         ),
-        (Number::BigInt(first), Number::BigInt(last), Number::BigInt(increment)) => {
+        // For example, `seq -0e0 1 2` or `seq -0e0 1 2.0`.
+        (Number::F64(x), last, Number::BigInt(increment)) if is_negative_zero_f64(x) => {
             print_seq_integers(
-                (first, increment, last),
+                (BigInt::zero(), increment, last.into_bigint()),
                 options.separator,
                 options.terminator,
                 options.widths,
                 padding,
-                false,
+                true,
             )
         }
+        // For example, `seq 0 1 2` or `seq 0 1 2.0`.
+        (Number::BigInt(first), last, Number::BigInt(increment)) => print_seq_integers(
+            (first, increment, last.into_bigint()),
+            options.separator,
+            options.terminator,
+            options.widths,
+            padding,
+            false,
+        ),
+        // For example, `seq 0 0.5 1` or `seq 0.0 0.5 1` or `seq 0.0 0.5 1.0`.
         (first, last, increment) => print_seq(
             (first.into_f64(), increment.into_f64(), last.into_f64()),
             largest_dec,
@@ -292,6 +317,7 @@ fn print_seq(
     let mut i = 0isize;
     let is_first_minus_zero = first == -0.0 && first.is_sign_negative();
     let mut value = first + i as f64 * increment;
+    let padding = if pad { padding + 1 + largest_dec } else { 0 };
     let mut is_first_iteration = true;
     while !done_printing(&value, &increment, &last) {
         if !is_first_iteration {
@@ -303,15 +329,13 @@ fn print_seq(
             width -= 1;
         }
         is_first_iteration = false;
-        let istr = format!("{:.*}", largest_dec, value);
-        let ilen = istr.len();
-        let before_dec = istr.find('.').unwrap_or(ilen);
-        if pad && before_dec < width {
-            for _ in 0..(width - before_dec) {
-                write!(stdout, "0")?;
-            }
-        }
-        write!(stdout, "{}", istr)?;
+        write!(
+            stdout,
+            "{value:>0width$.precision$}",
+            value = value,
+            width = width,
+            precision = largest_dec,
+        )?;
         i += 1;
         value = first + i as f64 * increment;
     }
