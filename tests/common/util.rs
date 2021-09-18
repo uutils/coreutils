@@ -1069,10 +1069,12 @@ pub fn whoami() -> String {
 
     // Use environment variable to get current user instead of
     // invoking `whoami` and fall back to user "nobody" on error.
-    std::env::var("USER").unwrap_or_else(|e| {
-        println!("{}: {}, using \"nobody\" instead", UUTILS_WARNING, e);
-        "nobody".to_string()
-    })
+    std::env::var("USER")
+        .or_else(|_| std::env::var("USERNAME"))
+        .unwrap_or_else(|e| {
+            println!("{}: {}, using \"nobody\" instead", UUTILS_WARNING, e);
+            "nobody".to_string()
+        })
 }
 
 /// Add prefix 'g' for `util_name` if not on linux

@@ -3,7 +3,6 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-#[cfg(unix)]
 use crate::common::util::*;
 
 #[test]
@@ -34,7 +33,6 @@ fn test_normal_compare_id() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_normal_compare_env() {
     let whoami = whoami();
     if whoami == "nobody" {
