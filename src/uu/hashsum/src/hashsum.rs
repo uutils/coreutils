@@ -7,7 +7,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) algo, algoname, regexes, nread memmem
+// spell-checker:ignore (ToDO) algo, algoname, regexes, nread
 
 #[macro_use]
 extern crate clap;
@@ -18,11 +18,11 @@ extern crate uucore;
 mod digest;
 
 use self::digest::Digest;
+use self::digest::DigestWriter;
 
 use clap::{App, Arg, ArgMatches};
 use hex::ToHex;
 use md5::Context as Md5;
-use memchr::memmem;
 use regex::Regex;
 use sha1::Sha1;
 use sha2::{Sha224, Sha256, Sha384, Sha512};
@@ -540,7 +540,7 @@ where
                 let real_sum = crash_if_err!(
                     1,
                     digest_reader(
-                        &mut *options.digest,
+                        &mut options.digest,
                         &mut ckf,
                         binary_check,
                         options.output_bits
@@ -571,7 +571,7 @@ where
             let sum = crash_if_err!(
                 1,
                 digest_reader(
-                    &mut *options.digest,
+                    &mut options.digest,
                     &mut file,
                     options.binary,
                     options.output_bits
@@ -598,48 +598,21 @@ where
     Ok(())
 }
 
-fn digest_reader<'a, T: Read>(
-    digest: &mut (dyn Digest + 'a),
+fn digest_reader<T: Read>(
+    digest: &mut Box<dyn Digest>,
     reader: &mut BufReader<T>,
     binary: bool,
     output_bits: usize,
 ) -> io::Result<String> {
     digest.reset();
 
-    // Digest file, do not hold too much in memory at any given moment
-    let windows = cfg!(windows);
-    let mut buffer = Vec::with_capacity(524_288);
-    loop {
-        match reader.read_to_end(&mut buffer) {
-            Ok(0) => {
-                break;
-            }
-            Ok(nread) => {
-                if windows && !binary {
-                    // In Windows text mode, replace each occurrence of
-                    // "\r\n" with "\n".
-                    //
-                    // Find all occurrences of "\r\n", inputting the
-                    // slice just before the "\n" in the previous
-                    // instance of "\r\n" and the beginning of this
-                    // "\r\n".
-                    //
-                    // FIXME This fails if one call to `read()` ends
-                    // with the "\r" and the next call to `read()`
-                    // begins with the "\n".
-                    let mut i_prev = 0;
-                    for i in memmem::find_iter(&buffer[0..nread], b"\r\n") {
-                        digest.input(&buffer[i_prev..i]);
-                        i_prev = i + 1;
-                    }
-                    digest.input(&buffer[i_prev..nread]);
-                } else {
-                    digest.input(&buffer[..nread]);
-                }
-            }
-            Err(e) => return Err(e),
-        }
-    }
+    // Read bytes from `reader` and write those bytes to `digest`.
+    //
+    // If `binary` is `false` and the operating system is Windows, then
+    // `DigestWriter` replaces "\r\n" with "\n" before it writes the
+    // bytes into `digest`. Otherwise, it just inserts the bytes as-is.
+    let mut digest_writer = DigestWriter::new(digest, binary);
+    std::io::copy(reader, &mut digest_writer)?;
 
     if digest.output_bits() > 0 {
         Ok(digest.result_str())
