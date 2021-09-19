@@ -19,6 +19,8 @@ use std::process::ExitStatus as StdExitStatus;
 use std::thread;
 use std::time::{Duration, Instant};
 
+// SAFETY: These functions always succeed and return simple integers.
+
 /// `geteuid()` returns the effective user ID of the calling process.
 pub fn geteuid() -> uid_t {
     unsafe { libc::geteuid() }
@@ -96,6 +98,9 @@ impl fmt::Display for ExitStatus {
 /// Missing methods for Child objects
 pub trait ChildExt {
     /// Send a signal to a Child process.
+    ///
+    /// Caller beware: if the process already exited then you may accidentally
+    /// send the signal to an unrelated process that recycled the PID.
     fn send_signal(&mut self, signal: usize) -> io::Result<()>;
 
     /// Wait for a process to finish or return after the specified duration.
