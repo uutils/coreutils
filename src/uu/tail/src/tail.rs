@@ -22,7 +22,7 @@ use chunks::ReverseChunks;
 use clap::{App, Arg};
 use std::collections::VecDeque;
 use std::fmt;
-use std::fs::File;
+use std::fs::{File, Metadata};
 use std::io::{stdin, stdout, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::thread::sleep;
@@ -32,6 +32,8 @@ use uucore::ringbuffer::RingBuffer;
 
 #[cfg(unix)]
 use crate::platform::stdin_is_pipe_or_fifo;
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 
 pub mod options {
     pub mod verbosity {
@@ -189,7 +191,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 continue;
             }
             let mut file = File::open(&path).unwrap();
-            if is_seekable(&mut file) {
+            let md = file.metadata().unwrap();
+            if is_seekable(&mut file) && get_block_size(&md) > 0 {
                 bounded_tail(&mut file, &settings);
                 if settings.follow {
                     let reader = BufReader::new(file);
@@ -213,7 +216,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about("output the last part of files")
         // TODO: add usage
@@ -437,6 +440,8 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
 
 fn is_seekable<T: Seek>(file: &mut T) -> bool {
     file.seek(SeekFrom::Current(0)).is_ok()
+        && file.seek(SeekFrom::End(0)).is_ok()
+        && file.seek(SeekFrom::Start(0)).is_ok()
 }
 
 #[inline]
@@ -463,4 +468,15 @@ fn parse_num(src: &str) -> Result<(usize, bool), ParseSizeError> {
     }
 
     parse_size(size_string).map(|n| (n, starting_with))
+}
+
+fn get_block_size(md: &Metadata) -> u64 {
+    #[cfg(unix)]
+    {
+        md.blocks()
+    }
+    #[cfg(not(unix))]
+    {
+        md.len()
+    }
 }

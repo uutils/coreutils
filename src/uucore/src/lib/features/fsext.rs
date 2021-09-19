@@ -7,6 +7,8 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
+//! Set of functions to manage file systems
+
 // spell-checker:ignore (arch) bitrig ; (fs) cifs smbfs
 
 extern crate time;
@@ -86,13 +88,12 @@ use std::time::UNIX_EPOCH;
     target_os = "linux",
     target_vendor = "apple",
     target_os = "android",
-    target_os = "freebsd"
+    target_os = "freebsd",
+    target_os = "openbsd"
 ))]
 pub use libc::statfs as StatFs;
 #[cfg(any(
-    target_os = "openbsd",
     target_os = "netbsd",
-    target_os = "openbsd",
     target_os = "bitrig",
     target_os = "dragonfly",
     target_os = "redox"
@@ -103,13 +104,12 @@ pub use libc::statvfs as StatFs;
     target_os = "linux",
     target_vendor = "apple",
     target_os = "android",
-    target_os = "freebsd"
+    target_os = "freebsd",
+    target_os = "openbsd",
 ))]
 pub use libc::statfs as statfs_fn;
 #[cfg(any(
-    target_os = "openbsd",
     target_os = "netbsd",
-    target_os = "openbsd",
     target_os = "bitrig",
     target_os = "dragonfly",
     target_os = "redox"
@@ -309,9 +309,19 @@ impl MountInfo {
     }
 }
 
-#[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
+#[cfg(any(
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
 use std::ffi::CStr;
-#[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+#[cfg(any(
+    target_os = "freebsd",
+    target_vendor = "apple",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
 impl From<StatFs> for MountInfo {
     fn from(statfs: StatFs) -> Self {
         let mut info = MountInfo {
@@ -344,9 +354,19 @@ impl From<StatFs> for MountInfo {
     }
 }
 
-#[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+#[cfg(any(
+    target_os = "freebsd",
+    target_vendor = "apple",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
 use libc::c_int;
-#[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+#[cfg(any(
+    target_os = "freebsd",
+    target_vendor = "apple",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
 extern "C" {
     #[cfg(all(target_vendor = "apple", target_arch = "x86_64"))]
     #[link_name = "getmntinfo$INODE64"] // spell-checker:disable-line
@@ -354,6 +374,8 @@ extern "C" {
 
     #[cfg(any(
         all(target_os = "freebsd"),
+        all(target_os = "netbsd"),
+        all(target_os = "openbsd"),
         all(target_vendor = "apple", target_arch = "aarch64")
     ))]
     #[link_name = "getmntinfo"] // spell-checker:disable-line
@@ -364,9 +386,20 @@ extern "C" {
 use std::fs::File;
 #[cfg(target_os = "linux")]
 use std::io::{BufRead, BufReader};
-#[cfg(any(target_vendor = "apple", target_os = "freebsd", target_os = "windows"))]
+#[cfg(any(
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "windows",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
 use std::ptr;
-#[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
+#[cfg(any(
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
 use std::slice;
 /// Read file system list.
 pub fn read_fs_list() -> Vec<MountInfo> {
@@ -386,7 +419,12 @@ pub fn read_fs_list() -> Vec<MountInfo> {
             })
             .collect::<Vec<_>>()
     }
-    #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+    #[cfg(any(
+        target_os = "freebsd",
+        target_vendor = "apple",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
     {
         let mut mount_buffer_ptr: *mut StatFs = ptr::null_mut();
         let len = unsafe { get_mount_info(&mut mount_buffer_ptr, 1_i32) };
@@ -582,12 +620,17 @@ impl FsMeta for StatFs {
     fn io_size(&self) -> u64 {
         self.f_frsize as u64
     }
-    #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
+    #[cfg(any(target_vendor = "apple", target_os = "freebsd", target_os = "netbsd"))]
     fn io_size(&self) -> u64 {
         self.f_iosize as u64
     }
     // XXX: dunno if this is right
-    #[cfg(not(any(target_vendor = "apple", target_os = "freebsd", target_os = "linux")))]
+    #[cfg(not(any(
+        target_vendor = "apple",
+        target_os = "freebsd",
+        target_os = "linux",
+        target_os = "netbsd"
+    )))]
     fn io_size(&self) -> u64 {
         self.f_bsize as u64
     }
@@ -598,13 +641,23 @@ impl FsMeta for StatFs {
     //
     // Solaris, Irix and POSIX have a system call statvfs(2) that returns a
     // struct statvfs, containing an  unsigned  long  f_fsid
-    #[cfg(any(target_vendor = "apple", target_os = "freebsd", target_os = "linux"))]
+    #[cfg(any(
+        target_vendor = "apple",
+        target_os = "freebsd",
+        target_os = "linux",
+        target_os = "openbsd"
+    ))]
     fn fsid(&self) -> u64 {
         let f_fsid: &[u32; 2] =
             unsafe { &*(&self.f_fsid as *const libc::fsid_t as *const [u32; 2]) };
         (u64::from(f_fsid[0])) << 32 | u64::from(f_fsid[1])
     }
-    #[cfg(not(any(target_vendor = "apple", target_os = "freebsd", target_os = "linux")))]
+    #[cfg(not(any(
+        target_vendor = "apple",
+        target_os = "freebsd",
+        target_os = "linux",
+        target_os = "openbsd"
+    )))]
     fn fsid(&self) -> u64 {
         self.f_fsid as u64
     }
@@ -617,12 +670,18 @@ impl FsMeta for StatFs {
     fn namelen(&self) -> u64 {
         1024
     }
-    #[cfg(target_os = "freebsd")]
+    #[cfg(any(target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))]
     fn namelen(&self) -> u64 {
         self.f_namemax as u64 // spell-checker:disable-line
     }
     // XXX: should everything just use statvfs?
-    #[cfg(not(any(target_vendor = "apple", target_os = "freebsd", target_os = "linux")))]
+    #[cfg(not(any(
+        target_vendor = "apple",
+        target_os = "freebsd",
+        target_os = "linux",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    )))]
     fn namelen(&self) -> u64 {
         self.f_namemax as u64 // spell-checker:disable-line
     }

@@ -16,14 +16,18 @@ use clap::{crate_version, App, AppSettings, Arg};
 use std::io::ErrorKind;
 use std::process::{Command, Stdio};
 use std::time::Duration;
+use uucore::display::Quotable;
 use uucore::process::ChildExt;
 use uucore::signals::{signal_by_name_or_value, signal_name_by_value};
 use uucore::InvalidEncodingHandling;
 
 static ABOUT: &str = "Start COMMAND, and kill it if still running after DURATION.";
 
-fn get_usage() -> String {
-    format!("{0} [OPTION] DURATION COMMAND...", executable!())
+fn usage() -> String {
+    format!(
+        "{0} [OPTION] DURATION COMMAND...",
+        uucore::execution_phrase()
+    )
 }
 
 const ERR_EXIT_STATUS: i32 = 125;
@@ -58,7 +62,7 @@ impl Config {
                 let signal_result = signal_by_name_or_value(signal_);
                 match signal_result {
                     None => {
-                        unreachable!("invalid signal '{}'", signal_);
+                        unreachable!("invalid signal {}", signal_.quote());
                     }
                     Some(signal_value) => signal_value,
                 }
@@ -100,7 +104,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let usage = get_usage();
+    let usage = usage();
 
     let app = uu_app().usage(&usage[..]);
 
@@ -213,12 +217,12 @@ fn timeout(
         Ok(None) => {
             if verbose {
                 show_error!(
-                    "sending signal {} to command '{}'",
+                    "sending signal {} to command {}",
                     signal_name_by_value(signal).unwrap(),
-                    cmd[0]
+                    cmd[0].quote()
                 );
             }
-            return_if_err!(ERR_EXIT_STATUS, process.send_signal(signal));
+            crash_if_err!(ERR_EXIT_STATUS, process.send_signal(signal));
             if let Some(kill_after) = kill_after {
                 match process.wait_or_timeout(kill_after) {
                     Ok(Some(status)) => {
@@ -230,15 +234,15 @@ fn timeout(
                     }
                     Ok(None) => {
                         if verbose {
-                            show_error!("sending signal KILL to command '{}'", cmd[0]);
+                            show_error!("sending signal KILL to command {}", cmd[0].quote());
                         }
-                        return_if_err!(
+                        crash_if_err!(
                             ERR_EXIT_STATUS,
                             process.send_signal(
                                 uucore::signals::signal_by_name_or_value("KILL").unwrap()
                             )
                         );
-                        return_if_err!(ERR_EXIT_STATUS, process.wait());
+                        crash_if_err!(ERR_EXIT_STATUS, process.wait());
                         137
                     }
                     Err(_) => 124,
@@ -248,7 +252,7 @@ fn timeout(
             }
         }
         Err(_) => {
-            return_if_err!(ERR_EXIT_STATUS, process.send_signal(signal));
+            crash_if_err!(ERR_EXIT_STATUS, process.send_signal(signal));
             ERR_EXIT_STATUS
         }
     }

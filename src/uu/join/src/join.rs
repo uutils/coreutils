@@ -11,9 +11,10 @@
 extern crate uucore;
 
 use clap::{crate_version, App, Arg};
-use std::cmp::{min, Ordering};
+use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Lines, Stdin};
+use uucore::display::Quotable;
 
 static NAME: &str = "join";
 
@@ -102,15 +103,10 @@ impl<'a> Repr<'a> {
     }
 
     /// Print each field except the one at the index.
-    fn print_fields(&self, line: &Line, index: usize, max_fields: Option<usize>) {
-        for i in 0..min(max_fields.unwrap_or(usize::max_value()), line.fields.len()) {
+    fn print_fields(&self, line: &Line, index: usize) {
+        for i in 0..line.fields.len() {
             if i != index {
                 print!("{}{}", self.separator, line.fields[i]);
-            }
-        }
-        if let Some(n) = max_fields {
-            for _ in line.fields.len()..n {
-                print!("{}", self.separator)
             }
         }
     }
@@ -186,18 +182,18 @@ impl Spec {
                     return Spec::Key;
                 }
 
-                crash!(1, "invalid field specifier: '{}'", format);
+                crash!(1, "invalid field specifier: {}", format.quote());
             }
             Some('1') => FileNum::File1,
             Some('2') => FileNum::File2,
-            _ => crash!(1, "invalid file number in field spec: '{}'", format),
+            _ => crash!(1, "invalid file number in field spec: {}", format.quote()),
         };
 
         if let Some('.') = chars.next() {
             return Spec::Field(file_num, parse_field_number(chars.as_str()));
         }
 
-        crash!(1, "invalid field specifier: '{}'", format);
+        crash!(1, "invalid field specifier: {}", format.quote());
     }
 }
 
@@ -233,7 +229,6 @@ struct State<'a> {
     print_unpaired: bool,
     lines: Lines<Box<dyn BufRead + 'a>>,
     seq: Vec<Line>,
-    max_fields: Option<usize>,
     line_num: usize,
     has_failed: bool,
 }
@@ -251,7 +246,7 @@ impl<'a> State<'a> {
         } else {
             match File::open(name) {
                 Ok(file) => Box::new(BufReader::new(file)) as Box<dyn BufRead>,
-                Err(err) => crash!(1, "{}: {}", name, err),
+                Err(err) => crash!(1, "{}: {}", name.maybe_quote(), err),
             }
         };
 
@@ -262,7 +257,6 @@ impl<'a> State<'a> {
             print_unpaired,
             lines: f.lines(),
             seq: Vec::new(),
-            max_fields: None,
             line_num: 0,
             has_failed: false,
         }
@@ -329,8 +323,8 @@ impl<'a> State<'a> {
                     });
                 } else {
                     repr.print_field(key);
-                    repr.print_fields(line1, self.key, self.max_fields);
-                    repr.print_fields(line2, other.key, other.max_fields);
+                    repr.print_fields(line1, self.key);
+                    repr.print_fields(line2, other.key);
                 }
 
                 println!();
@@ -361,14 +355,15 @@ impl<'a> State<'a> {
         !self.seq.is_empty()
     }
 
-    fn initialize(&mut self, read_sep: Sep, autoformat: bool) {
+    fn initialize(&mut self, read_sep: Sep, autoformat: bool) -> usize {
         if let Some(line) = self.read_line(read_sep) {
-            if autoformat {
-                self.max_fields = Some(line.fields.len());
-            }
-
             self.seq.push(line);
+
+            if autoformat {
+                return self.seq[0].fields.len();
+            }
         }
+        0
     }
 
     fn finalize(&mut self, input: &Input, repr: &Repr) {
@@ -399,7 +394,11 @@ impl<'a> State<'a> {
         let diff = input.compare(self.get_current_key(), line.get_field(self.key));
 
         if diff == Ordering::Greater {
-            eprintln!("{}:{}: is not sorted", self.file_name, self.line_num);
+            eprintln!(
+                "{}:{}: is not sorted",
+                self.file_name.maybe_quote(),
+                self.line_num
+            );
 
             // This is fatal if the check is enabled.
             if input.check_order == CheckOrder::Enabled {
@@ -431,7 +430,7 @@ impl<'a> State<'a> {
             });
         } else {
             repr.print_field(line.get_field(self.key));
-            repr.print_fields(line, self.key, self.max_fields);
+            repr.print_fields(line, self.key);
         }
 
         println!();
@@ -512,7 +511,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         crash!(1, "both files cannot be standard input");
     }
 
-    exec(file1, file2, &settings)
+    exec(file1, file2, settings)
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -622,7 +621,7 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
         )
 }
 
-fn exec(file1: &str, file2: &str, settings: &Settings) -> i32 {
+fn exec(file1: &str, file2: &str, settings: Settings) -> i32 {
     let stdin = stdin();
 
     let mut state1 = State::new(
@@ -647,17 +646,33 @@ fn exec(file1: &str, file2: &str, settings: &Settings) -> i32 {
         settings.check_order,
     );
 
+    let format = if settings.autoformat {
+        let mut format = vec![Spec::Key];
+        let mut initialize = |state: &mut State| {
+            let max_fields = state.initialize(settings.separator, settings.autoformat);
+            for i in 0..max_fields {
+                if i != state.key {
+                    format.push(Spec::Field(state.file_num, i));
+                }
+            }
+        };
+        initialize(&mut state1);
+        initialize(&mut state2);
+        format
+    } else {
+        state1.initialize(settings.separator, settings.autoformat);
+        state2.initialize(settings.separator, settings.autoformat);
+        settings.format
+    };
+
     let repr = Repr::new(
         match settings.separator {
             Sep::Char(sep) => sep,
             _ => ' ',
         },
-        &settings.format,
+        &format,
         &settings.empty,
     );
-
-    state1.initialize(settings.separator, settings.autoformat);
-    state2.initialize(settings.separator, settings.autoformat);
 
     if settings.headers {
         state1.print_headers(&state2, &repr);
@@ -717,7 +732,7 @@ fn get_field_number(keys: Option<usize>, key: Option<usize>) -> usize {
 fn parse_field_number(value: &str) -> usize {
     match value.parse::<usize>() {
         Ok(result) if result > 0 => result - 1,
-        _ => crash!(1, "invalid field number: '{}'", value),
+        _ => crash!(1, "invalid field number: {}", value.quote()),
     }
 }
 
@@ -725,7 +740,7 @@ fn parse_file_number(value: &str) -> FileNum {
     match value {
         "1" => FileNum::File1,
         "2" => FileNum::File2,
-        value => crash!(1, "invalid file number: '{}'", value),
+        value => crash!(1, "invalid file number: {}", value.quote()),
     }
 }
 

@@ -44,8 +44,11 @@ static RUNLEVEL_HELP: &str = "print current runlevel";
 #[cfg(not(target_os = "linux"))]
 static RUNLEVEL_HELP: &str = "print current runlevel (This is meaningless on non Linux)";
 
-fn get_usage() -> String {
-    format!("{0} [OPTION]... [ FILE | ARG1 ARG2 ]", executable!())
+fn usage() -> String {
+    format!(
+        "{0} [OPTION]... [ FILE | ARG1 ARG2 ]",
+        uucore::execution_phrase()
+    )
 }
 
 fn get_long_usage() -> String {
@@ -61,7 +64,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let usage = get_usage();
+    let usage = usage();
     let after_help = get_long_usage();
 
     let matches = uu_app()
@@ -160,7 +163,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(
@@ -338,15 +341,14 @@ impl Who {
             utmpx::DEFAULT_FILE
         };
         if self.short_list {
-            let users = Utmpx::iter_all_records()
-                .read_from(f)
+            let users = Utmpx::iter_all_records_from(f)
                 .filter(Utmpx::is_user_process)
                 .map(|ut| ut.user())
                 .collect::<Vec<_>>();
             println!("{}", users.join(" "));
             println!("# users={}", users.len());
         } else {
-            let records = Utmpx::iter_all_records().read_from(f).peekable();
+            let records = Utmpx::iter_all_records_from(f).peekable();
 
             if self.include_heading {
                 self.print_heading()
@@ -489,7 +491,7 @@ impl Who {
         };
 
         let s = if self.do_lookup {
-            safe_unwrap!(ut.canon_host())
+            crash_if_err!(1, ut.canon_host())
         } else {
             ut.host()
         };

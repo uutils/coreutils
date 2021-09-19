@@ -41,6 +41,7 @@ extern crate uucore;
 
 use clap::{crate_version, App, Arg};
 use std::ffi::CStr;
+use uucore::display::Quotable;
 use uucore::entries::{self, Group, Locate, Passwd};
 use uucore::error::UResult;
 use uucore::error::{set_exit_code, USimpleError};
@@ -76,8 +77,8 @@ mod options {
     pub const ARG_USERS: &str = "USER";
 }
 
-fn get_usage() -> String {
-    format!("{0} [OPTION]... [USER]...", executable!())
+fn usage() -> String {
+    format!("{0} [OPTION]... [USER]...", uucore::execution_phrase())
 }
 
 fn get_description() -> String {
@@ -127,7 +128,7 @@ struct State {
 
 #[uucore_procs::gen_uumain]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = get_usage();
+    let usage = usage();
     let after_help = get_description();
 
     let matches = uu_app()
@@ -230,7 +231,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             match Passwd::locate(users[i].as_str()) {
                 Ok(p) => Some(p),
                 Err(_) => {
-                    show_error!("'{}': no such user", users[i]);
+                    show_error!("{}: no such user", users[i].quote());
                     set_exit_code(1);
                     if i + 1 >= users.len() {
                         break;
@@ -347,7 +348,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(

@@ -1,3 +1,29 @@
+Documentation
+-------------
+
+The source of the documentation is available on:
+
+https://uutils.github.io/coreutils-docs/coreutils/
+
+The documentation is updated everyday on this repository:
+
+https://github.com/uutils/coreutils-docs
+
+Running GNU tests
+-----------------
+
+<!-- spell-checker:ignore gnulib -->
+
+- Check out https://github.com/coreutils/coreutils next to your fork as gnu
+- Check out https://github.com/coreutils/gnulib next to your fork as gnulib
+- Rename the checkout of your fork to uutils
+
+At the end you should have uutils, gnu and gnulib checked out next to each other.
+
+- Run `cd uutils && ./util/build-gnu.sh && cd ..` to get everything ready (this may take a while)
+- Finally, you can run `tests with bash uutils/util/run-gnu-test.sh <test>`. Instead of `<test>` insert the test you want to run, e.g. `tests/misc/wc-proc`.
+
+
 Code Coverage Report Generation
 ---------------------------------
 

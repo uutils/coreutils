@@ -425,3 +425,23 @@ fn test_tail_num_with_undocumented_sign_bytes() {
         .succeeds()
         .stdout_is("efghijklmnopqrstuvwxyz");
 }
+
+#[test]
+#[cfg(unix)]
+fn test_tail_bytes_for_funny_files() {
+    // gnu/tests/tail-2/tail-c.sh
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    for &file in &["/proc/version", "/sys/kernel/profiling"] {
+        if !at.file_exists(file) {
+            continue;
+        }
+        let args = ["--bytes", "1", file];
+        let result = ts.ucmd().args(&args).run();
+        let exp_result = unwrap_or_return!(expected_result(&ts, &args));
+        result
+            .stdout_is(exp_result.stdout_str())
+            .stderr_is(exp_result.stderr_str())
+            .code_is(exp_result.code());
+    }
+}

@@ -21,6 +21,7 @@ use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use once_cell::unsync::OnceCell;
 use quoting_style::{escape_name, QuotingStyle};
+use std::ffi::OsString;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::{
@@ -39,15 +40,18 @@ use std::{
     time::Duration,
 };
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
-use uucore::error::{set_exit_code, FromIo, UError, UResult};
+use uucore::{
+    display::Quotable,
+    error::{set_exit_code, UError, UResult},
+};
 
 use unicode_width::UnicodeWidthStr;
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 use uucore::{fs::display_permissions, version_cmp::version_cmp};
 
-fn get_usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", executable!())
+fn usage() -> String {
+    format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
 }
 
 pub mod options {
@@ -149,8 +153,8 @@ impl Error for LsError {}
 impl Display for LsError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LsError::InvalidLineWidth(s) => write!(f, "invalid line width: '{}'", s),
-            LsError::NoMetadata(p) => write!(f, "could not open file: '{}'", p.display()),
+            LsError::InvalidLineWidth(s) => write!(f, "invalid line width: {}", s.quote()),
+            LsError::NoMetadata(p) => write!(f, "could not open file: {}", p.quote()),
         }
     }
 }
@@ -248,7 +252,7 @@ struct LongFormat {
 
 impl Config {
     #[allow(clippy::cognitive_complexity)]
-    fn from(options: clap::ArgMatches) -> UResult<Config> {
+    fn from(options: &clap::ArgMatches) -> UResult<Config> {
         let (mut format, opt) = if let Some(format_) = options.value_of(options::FORMAT) {
             (
                 match format_ {
@@ -409,18 +413,18 @@ impl Config {
             },
             None => match termsize::get() {
                 Some(size) => size.cols,
-                None => match std::env::var("COLUMNS") {
-                    Ok(columns) => match columns.parse() {
-                        Ok(columns) => columns,
-                        Err(_) => {
+                None => match std::env::var_os("COLUMNS") {
+                    Some(columns) => match columns.to_str().and_then(|s| s.parse().ok()) {
+                        Some(columns) => columns,
+                        None => {
                             show_error!(
-                                "ignoring invalid width in environment variable COLUMNS: '{}'",
-                                columns
+                                "ignoring invalid width in environment variable COLUMNS: {}",
+                                columns.quote()
                             );
                             DEFAULT_TERM_WIDTH
                         }
                     },
-                    Err(_) => DEFAULT_TERM_WIDTH,
+                    None => DEFAULT_TERM_WIDTH,
                 },
             },
         };
@@ -428,11 +432,10 @@ impl Config {
         #[allow(clippy::needless_bool)]
         let show_control = if options.is_present(options::HIDE_CONTROL_CHARS) {
             false
-        } else if options.is_present(options::SHOW_CONTROL_CHARS) || atty::is(atty::Stream::Stdout)
-        {
+        } else if options.is_present(options::SHOW_CONTROL_CHARS) {
             true
         } else {
-            false
+            !atty::is(atty::Stream::Stdout)
         };
 
         let quoting_style = if let Some(style) = options.value_of(options::QUOTING_STYLE) {
@@ -538,7 +541,7 @@ impl Config {
                 Ok(p) => {
                     ignore_patterns.add(p);
                 }
-                Err(_) => show_warning!("Invalid pattern for ignore: '{}'", pattern),
+                Err(_) => show_warning!("Invalid pattern for ignore: {}", pattern.quote()),
             }
         }
 
@@ -548,7 +551,7 @@ impl Config {
                     Ok(p) => {
                         ignore_patterns.add(p);
                     }
-                    Err(_) => show_warning!("Invalid pattern for hide: '{}'", pattern),
+                    Err(_) => show_warning!("Invalid pattern for hide: {}", pattern.quote()),
                 }
             }
         }
@@ -599,26 +602,23 @@ impl Config {
 
 #[uucore_procs::gen_uumain]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args
-        .collect_str(InvalidEncodingHandling::Ignore)
-        .accept_any();
-
-    let usage = get_usage();
+    let usage = usage();
 
     let app = uu_app().usage(&usage[..]);
 
     let matches = app.get_matches_from(args);
 
+    let config = Config::from(&matches)?;
     let locs = matches
-        .values_of(options::PATHS)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_else(|| vec![String::from(".")]);
+        .values_of_os(options::PATHS)
+        .map(|v| v.map(Path::new).collect())
+        .unwrap_or_else(|| vec![Path::new(".")]);
 
-    list(locs, Config::from(matches)?)
+    list(locs, config)
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(
             "By default, ls will list the files and contents of any directories on \
@@ -1177,7 +1177,7 @@ struct PathData {
     md: OnceCell<Option<Metadata>>,
     ft: OnceCell<Option<FileType>>,
     // Name of the file - will be empty for . or ..
-    display_name: String,
+    display_name: OsString,
     // PathBuf that all above data corresponds to
     p_buf: PathBuf,
     must_dereference: bool,
@@ -1187,7 +1187,7 @@ impl PathData {
     fn new(
         p_buf: PathBuf,
         file_type: Option<std::io::Result<FileType>>,
-        file_name: Option<String>,
+        file_name: Option<OsString>,
         config: &Config,
         command_line: bool,
     ) -> Self {
@@ -1195,16 +1195,13 @@ impl PathData {
         // For '..', the filename is None
         let display_name = if let Some(name) = file_name {
             name
+        } else if command_line {
+            p_buf.clone().into()
         } else {
-            let display_os_str = if command_line {
-                p_buf.as_os_str()
-            } else {
-                p_buf
-                    .file_name()
-                    .unwrap_or_else(|| p_buf.iter().next_back().unwrap())
-            };
-
-            display_os_str.to_string_lossy().into_owned()
+            p_buf
+                .file_name()
+                .unwrap_or_else(|| p_buf.iter().next_back().unwrap())
+                .to_owned()
         };
         let must_dereference = match &config.dereference {
             Dereference::All => true,
@@ -1249,19 +1246,24 @@ impl PathData {
     }
 }
 
-fn list(locs: Vec<String>, config: Config) -> UResult<()> {
+fn list(locs: Vec<&Path>, config: Config) -> UResult<()> {
     let mut files = Vec::<PathData>::new();
     let mut dirs = Vec::<PathData>::new();
 
     let mut out = BufWriter::new(stdout());
 
     for loc in &locs {
-        let p = PathBuf::from(&loc);
+        let p = PathBuf::from(loc);
         let path_data = PathData::new(p, None, None, &config, true);
 
         if path_data.md().is_none() {
-            show!(std::io::ErrorKind::NotFound
-                .map_err_context(|| format!("cannot access '{}'", path_data.p_buf.display())));
+            // FIXME: Would be nice to use the actual error instead of hardcoding it
+            // Presumably other errors can happen too?
+            show_error!(
+                "cannot access {}: No such file or directory",
+                path_data.p_buf.quote()
+            );
+            set_exit_code(1);
             // We found an error, no need to continue the execution
             continue;
         }
@@ -1286,6 +1288,7 @@ fn list(locs: Vec<String>, config: Config) -> UResult<()> {
     sort_entries(&mut dirs, &config);
     for dir in dirs {
         if locs.len() > 1 || config.recursive {
+            // FIXME: This should use the quoting style and propagate errors
             let _ = writeln!(out, "\n{}:", dir.p_buf.display());
         }
         enter_directory(&dir, &config, &mut out);
@@ -1362,8 +1365,8 @@ fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>)
         vec![]
     };
 
-    let mut temp: Vec<_> = safe_unwrap!(fs::read_dir(&dir.p_buf))
-        .map(|res| safe_unwrap!(res))
+    let mut temp: Vec<_> = crash_if_err!(1, fs::read_dir(&dir.p_buf))
+        .map(|res| crash_if_err!(1, res))
         .filter(|e| should_display(e, config))
         .map(|e| PathData::new(DirEntry::path(&e), Some(e.file_type()), None, config, false))
         .collect();
@@ -1394,14 +1397,17 @@ fn get_metadata(entry: &Path, dereference: bool) -> std::io::Result<Metadata> {
     }
 }
 
-fn display_dir_entry_size(entry: &PathData, config: &Config) -> (usize, usize) {
+fn display_dir_entry_size(entry: &PathData, config: &Config) -> (usize, usize, usize, usize) {
+    // TODO: Cache/memoize the display_* results so we don't have to recalculate them.
     if let Some(md) = entry.md() {
         (
             display_symlink_count(md).len(),
+            display_uname(md, config).len(),
+            display_group(md, config).len(),
             display_size_or_rdev(md, config).len(),
         )
     } else {
-        (0, 0)
+        (0, 0, 0, 0)
     }
 }
 
@@ -1409,15 +1415,28 @@ fn pad_left(string: String, count: usize) -> String {
     format!("{:>width$}", string, width = count)
 }
 
+fn pad_right(string: String, count: usize) -> String {
+    format!("{:<width$}", string, width = count)
+}
+
 fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) {
     if config.format == Format::Long {
-        let (mut max_links, mut max_width) = (1, 1);
+        let (
+            mut longest_link_count_len,
+            mut longest_uname_len,
+            mut longest_group_len,
+            mut longest_size_len,
+        ) = (1, 1, 1, 1);
         let mut total_size = 0;
 
         for item in items {
-            let (links, width) = display_dir_entry_size(item, config);
-            max_links = links.max(max_links);
-            max_width = width.max(max_width);
+            let (link_count_len, uname_len, group_len, size_len) =
+                display_dir_entry_size(item, config);
+            longest_link_count_len = link_count_len.max(longest_link_count_len);
+            longest_size_len = size_len.max(longest_size_len);
+            longest_uname_len = uname_len.max(longest_uname_len);
+            longest_group_len = group_len.max(longest_group_len);
+            longest_size_len = size_len.max(longest_size_len);
             total_size += item.md().map_or(0, |md| get_block_size(md, config));
         }
 
@@ -1426,7 +1445,15 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
         }
 
         for item in items {
-            display_item_long(item, max_links, max_width, config, out);
+            display_item_long(
+                item,
+                longest_link_count_len,
+                longest_uname_len,
+                longest_group_len,
+                longest_size_len,
+                config,
+                out,
+            );
         }
     } else {
         let names = items.iter().filter_map(|i| display_file_name(i, config));
@@ -1531,10 +1558,38 @@ fn display_grid(
     }
 }
 
+/// This writes to the BufWriter out a single string of the output of `ls -l`.
+///
+/// It writes the following keys, in order:
+/// * `inode` ([`get_inode`], config-optional)
+/// * `permissions` ([`display_permissions`])
+/// * `symlink_count` ([`display_symlink_count`])
+/// * `owner` ([`display_uname`], config-optional)
+/// * `group` ([`display_group`], config-optional)
+/// * `author` ([`display_uname`], config-optional)
+/// * `size / rdev` ([`display_size_or_rdev`])
+/// * `system_time` ([`get_system_time`])
+/// * `file_name` ([`display_file_name`])
+///
+/// This function needs to display information in columns:
+/// * permissions and system_time are already guaranteed to be pre-formatted in fixed length.
+/// * file_name is the last column and is left-aligned.
+/// * Everything else needs to be padded using [`pad_left`].
+///
+/// That's why we have the parameters:
+/// ```txt
+///    longest_link_count_len: usize,
+///    longest_uname_len: usize,
+///    longest_group_len: usize,
+///    longest_size_len: usize,
+/// ```
+/// that decide the maximum possible character count of each field.
 fn display_item_long(
     item: &PathData,
-    max_links: usize,
-    max_size: usize,
+    longest_link_count_len: usize,
+    longest_uname_len: usize,
+    longest_group_len: usize,
+    longest_size_len: usize,
     config: &Config,
     out: &mut BufWriter<Stdout>,
 ) {
@@ -1557,27 +1612,39 @@ fn display_item_long(
         out,
         "{} {}",
         display_permissions(md, true),
-        pad_left(display_symlink_count(md), max_links),
+        pad_left(display_symlink_count(md), longest_link_count_len),
     );
 
     if config.long.owner {
-        let _ = write!(out, " {}", display_uname(md, config));
+        let _ = write!(
+            out,
+            " {}",
+            pad_right(display_uname(md, config), longest_uname_len)
+        );
     }
 
     if config.long.group {
-        let _ = write!(out, " {}", display_group(md, config));
+        let _ = write!(
+            out,
+            " {}",
+            pad_right(display_group(md, config), longest_group_len)
+        );
     }
 
     // Author is only different from owner on GNU/Hurd, so we reuse
     // the owner, since GNU/Hurd is not currently supported by Rust.
     if config.long.author {
-        let _ = write!(out, " {}", display_uname(md, config));
+        let _ = write!(
+            out,
+            " {}",
+            pad_right(display_uname(md, config), longest_uname_len)
+        );
     }
 
     let _ = writeln!(
         out,
         " {} {} {}",
-        pad_left(display_size_or_rdev(md, config), max_size),
+        pad_left(display_size_or_rdev(md, config), longest_size_len),
         display_date(md, config),
         // unwrap is fine because it fails when metadata is not available
         // but we already know that it is because it's checked at the
@@ -1597,7 +1664,6 @@ fn get_inode(metadata: &Metadata) -> String {
 use std::sync::Mutex;
 #[cfg(unix)]
 use uucore::entries;
-use uucore::InvalidEncodingHandling;
 
 #[cfg(unix)]
 fn cached_uid2usr(uid: u32) -> String {
@@ -1798,7 +1864,20 @@ fn classify_file(path: &PathData) -> Option<char> {
     }
 }
 
+/// Takes a [`PathData`] struct and returns a cell with a name ready for displaying.
+///
+/// This function relies on the following parameters in the provided `&Config`:
+/// * `config.quoting_style` to decide how we will escape `name` using [`escape_name`].
+/// * `config.inode` decides whether to display inode numbers beside names using [`get_inode`].
+/// * `config.color` decides whether it's going to color `name` using [`color_name`].
+/// * `config.indicator_style` to append specific characters to `name` using [`classify_file`].
+/// * `config.format` to display symlink targets if `Format::Long`. This function is also
+///   responsible for coloring symlink target names if `config.color` is specified.
+///
+/// Note that non-unicode sequences in symlink targets are dealt with using
+/// [`std::path::Path::to_string_lossy`].
 fn display_file_name(path: &PathData, config: &Config) -> Option<Cell> {
+    // This is our return value. We start by `&path.display_name` and modify it along the way.
     let mut name = escape_name(&path.display_name, &config.quoting_style);
 
     #[cfg(unix)]
@@ -1851,7 +1930,41 @@ fn display_file_name(path: &PathData, config: &Config) -> Option<Cell> {
     if config.format == Format::Long && path.file_type()?.is_symlink() {
         if let Ok(target) = path.p_buf.read_link() {
             name.push_str(" -> ");
-            name.push_str(&target.to_string_lossy());
+
+            // We might as well color the symlink output after the arrow.
+            // This makes extra system calls, but provides important information that
+            // people run `ls -l --color` are very interested in.
+            if let Some(ls_colors) = &config.color {
+                // We get the absolute path to be able to construct PathData with valid Metadata.
+                // This is because relative symlinks will fail to get_metadata.
+                let mut absolute_target = target.clone();
+                if target.is_relative() {
+                    if let Some(parent) = path.p_buf.parent() {
+                        absolute_target = parent.join(absolute_target);
+                    }
+                }
+
+                let target_data = PathData::new(absolute_target, None, None, config, false);
+
+                // If we have a symlink to a valid file, we use the metadata of said file.
+                // Because we use an absolute path, we can assume this is guaranteed to exist.
+                // Otherwise, we use path.md(), which will guarantee we color to the same
+                // color of non-existent symlinks according to style_for_path_with_metadata.
+                let target_metadata = match target_data.md() {
+                    Some(md) => md,
+                    None => path.md()?,
+                };
+
+                name.push_str(&color_name(
+                    ls_colors,
+                    &target_data.p_buf,
+                    target.to_string_lossy().into_owned(),
+                    target_metadata,
+                ));
+            } else {
+                // If no coloring is required, we just use target as is.
+                name.push_str(&target.to_string_lossy());
+            }
         }
     }
 

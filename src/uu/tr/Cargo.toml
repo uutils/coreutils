@@ -23,3 +23,7 @@ nom = "5.1.2"
 [[bin]]
 name = "tr"
 path = "src/main.rs"
+
+[package.metadata.cargo-udeps.ignore]
+# Necessary for "make all"
+normal = ["uucore_procs"]

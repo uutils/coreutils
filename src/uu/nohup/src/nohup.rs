@@ -19,6 +19,7 @@ use std::fs::{File, OpenOptions};
 use std::io::Error;
 use std::os::unix::prelude::*;
 use std::path::{Path, PathBuf};
+use uucore::display::Quotable;
 use uucore::InvalidEncodingHandling;
 
 static ABOUT: &str = "Run COMMAND ignoring hangup signals.";
@@ -40,7 +41,7 @@ mod options {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
@@ -71,7 +72,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)
@@ -122,13 +123,16 @@ fn find_stdout() -> File {
         .open(Path::new(NOHUP_OUT))
     {
         Ok(t) => {
-            show_error!("ignoring input and appending output to '{}'", NOHUP_OUT);
+            show_error!(
+                "ignoring input and appending output to {}",
+                NOHUP_OUT.quote()
+            );
             t
         }
         Err(e1) => {
             let home = match env::var("HOME") {
                 Err(_) => {
-                    show_error!("failed to open '{}': {}", NOHUP_OUT, e1);
+                    show_error!("failed to open {}: {}", NOHUP_OUT.quote(), e1);
                     exit!(internal_failure_code)
                 }
                 Ok(h) => h,
@@ -143,12 +147,15 @@ fn find_stdout() -> File {
                 .open(&homeout)
             {
                 Ok(t) => {
-                    show_error!("ignoring input and appending output to '{}'", homeout_str);
+                    show_error!(
+                        "ignoring input and appending output to {}",
+                        homeout_str.quote()
+                    );
                     t
                 }
                 Err(e2) => {
-                    show_error!("failed to open '{}': {}", NOHUP_OUT, e1);
-                    show_error!("failed to open '{}': {}", homeout_str, e2);
+                    show_error!("failed to open {}: {}", NOHUP_OUT.quote(), e1);
+                    show_error!("failed to open {}: {}", homeout_str.quote(), e2);
                     exit!(internal_failure_code)
                 }
             }
@@ -156,8 +163,11 @@ fn find_stdout() -> File {
     }
 }
 
-fn get_usage() -> String {
-    format!("{0} COMMAND [ARG]...\n    {0} FLAG", executable!())
+fn usage() -> String {
+    format!(
+        "{0} COMMAND [ARG]...\n    {0} FLAG",
+        uucore::execution_phrase()
+    )
 }
 
 #[cfg(target_vendor = "apple")]

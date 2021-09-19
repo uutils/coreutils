@@ -22,7 +22,7 @@ pub mod options {
     pub static COMMAND: &str = "COMMAND";
 }
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!(
         "
   {0} [OPTIONS] [COMMAND [ARGS]]
@@ -31,12 +31,12 @@ Run COMMAND with an adjusted niceness, which affects process scheduling.
 With no COMMAND, print the current niceness.  Niceness values range from at
 least -20 (most favorable to the process) to 19 (least favorable to the
 process).",
-        executable!()
+        uucore::execution_phrase()
     )
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
@@ -53,8 +53,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         Some(nstr) => {
             if !matches.is_present(options::COMMAND) {
                 show_error!(
-                    "A command must be given with an adjustment.\nTry \"{} --help\" for more information.",
-                    executable!()
+                    "A command must be given with an adjustment.\nTry '{} --help' for more information.",
+                    uucore::execution_phrase()
                 );
                 return 125;
             }
@@ -101,7 +101,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .setting(AppSettings::TrailingVarArg)
         .version(crate_version!())
         .arg(

@@ -11,7 +11,7 @@ repos:
     -   id: rust-clippy
         name: Rust clippy
         description: Run cargo clippy on files included in the commit.
-        entry: cargo +nightly clippy --all-targets --all-features --
+        entry: cargo +nightly clippy --workspace --all-targets --all-features --
         pass_filenames: false
         types: [file, rust]
         language: system

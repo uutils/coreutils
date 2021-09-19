@@ -18,7 +18,7 @@ path = "src/cat.rs"
 clap = { version = "2.33", features = ["wrap_help"] }
 thiserror = "1.0"
 atty = "0.2"
-uucore = { version=">=0.0.9", package="uucore", path="../../uucore", features=["fs"] }
+uucore = { version=">=0.0.9", package="uucore", path="../../uucore", features=["fs", "pipes"] }
 uucore_procs = { version=">=0.0.6", package="uucore_procs", path="../../uucore_procs" }
 
 [target.'cfg(unix)'.dependencies]

@@ -17,6 +17,7 @@ use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::str::from_utf8;
 use unicode_width::UnicodeWidthChar;
+use uucore::display::Quotable;
 
 static ABOUT: &str = "Convert tabs in each FILE to spaces, writing to standard output.
  With no FILE, or when FILE is -, read standard input.";
@@ -32,8 +33,8 @@ static LONG_HELP: &str = "";
 
 static DEFAULT_TABSTOP: usize = 8;
 
-fn get_usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", executable!())
+fn usage() -> String {
+    format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
 }
 
 /// The mode to use when replacing tabs beyond the last one specified in
@@ -170,7 +171,7 @@ impl Options {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     expand(Options::new(&matches));
@@ -178,7 +179,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)
@@ -216,7 +217,7 @@ fn open(path: String) -> BufReader<Box<dyn Read + 'static>> {
     } else {
         file_buf = match File::open(&path[..]) {
             Ok(a) => a,
-            Err(e) => crash!(1, "{}: {}\n", &path[..], e),
+            Err(e) => crash!(1, "{}: {}\n", path.maybe_quote(), e),
         };
         BufReader::new(Box::new(file_buf) as Box<dyn Read>)
     }
@@ -329,12 +330,15 @@ fn expand(options: Options) {
                         // now dump out either spaces if we're expanding, or a literal tab if we're not
                         if init || !options.iflag {
                             if nts <= options.tspaces.len() {
-                                safe_unwrap!(output.write_all(options.tspaces[..nts].as_bytes()));
+                                crash_if_err!(
+                                    1,
+                                    output.write_all(options.tspaces[..nts].as_bytes())
+                                );
                             } else {
-                                safe_unwrap!(output.write_all(" ".repeat(nts).as_bytes()));
+                                crash_if_err!(1, output.write_all(" ".repeat(nts).as_bytes()));
                             };
                         } else {
-                            safe_unwrap!(output.write_all(&buf[byte..byte + nbytes]));
+                            crash_if_err!(1, output.write_all(&buf[byte..byte + nbytes]));
                         }
                     }
                     _ => {
@@ -352,14 +356,14 @@ fn expand(options: Options) {
                             init = false;
                         }
 
-                        safe_unwrap!(output.write_all(&buf[byte..byte + nbytes]));
+                        crash_if_err!(1, output.write_all(&buf[byte..byte + nbytes]));
                     }
                 }
 
                 byte += nbytes; // advance the pointer
             }
 
-            safe_unwrap!(output.flush());
+            crash_if_err!(1, output.flush());
             buf.truncate(0); // clear the buffer
         }
     }

@@ -8,8 +8,6 @@ pub mod fs;
 pub mod fsext;
 #[cfg(feature = "ringbuffer")]
 pub mod ringbuffer;
-#[cfg(feature = "zero-copy")]
-pub mod zero_copy;
 
 // * (platform-specific) feature-gated modules
 // ** non-windows
@@ -21,6 +19,8 @@ pub mod mode;
 pub mod entries;
 #[cfg(all(unix, feature = "perms"))]
 pub mod perms;
+#[cfg(all(unix, feature = "pipes"))]
+pub mod pipes;
 #[cfg(all(unix, feature = "process"))]
 pub mod process;
 

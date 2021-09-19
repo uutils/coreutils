@@ -10,6 +10,7 @@ use std::{
     fs::{remove_file, File},
     io::{BufRead, BufWriter, Write},
 };
+use uucore::display::Quotable;
 
 mod csplit_error;
 mod patterns;
@@ -34,8 +35,11 @@ mod options {
     pub const PATTERN: &str = "pattern";
 }
 
-fn get_usage() -> String {
-    format!("{0} [OPTION]... FILE PATTERN...", executable!())
+fn usage() -> String {
+    format!(
+        "{0} [OPTION]... FILE PATTERN...",
+        uucore::execution_phrase()
+    )
 }
 
 /// Command line options for csplit.
@@ -565,7 +569,7 @@ mod tests {
                 assert_eq!(input_splitter.add_line_to_buffer(0, line), None);
                 assert_eq!(input_splitter.buffer_len(), 1);
             }
-            item @ _ => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {:?}", item),
         };
 
         match input_splitter.next() {
@@ -574,7 +578,7 @@ mod tests {
                 assert_eq!(input_splitter.add_line_to_buffer(1, line), None);
                 assert_eq!(input_splitter.buffer_len(), 2);
             }
-            item @ _ => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {:?}", item),
         };
 
         match input_splitter.next() {
@@ -586,7 +590,7 @@ mod tests {
                 );
                 assert_eq!(input_splitter.buffer_len(), 2);
             }
-            item @ _ => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {:?}", item),
         };
 
         input_splitter.rewind_buffer();
@@ -596,7 +600,7 @@ mod tests {
                 assert_eq!(line, String::from("bbb"));
                 assert_eq!(input_splitter.buffer_len(), 1);
             }
-            item @ _ => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {:?}", item),
         };
 
         match input_splitter.next() {
@@ -604,7 +608,7 @@ mod tests {
                 assert_eq!(line, String::from("ccc"));
                 assert_eq!(input_splitter.buffer_len(), 0);
             }
-            item @ _ => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {:?}", item),
         };
 
         match input_splitter.next() {
@@ -612,7 +616,7 @@ mod tests {
                 assert_eq!(line, String::from("ddd"));
                 assert_eq!(input_splitter.buffer_len(), 0);
             }
-            item @ _ => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {:?}", item),
         };
 
         assert!(input_splitter.next().is_none());
@@ -637,7 +641,7 @@ mod tests {
                 assert_eq!(input_splitter.add_line_to_buffer(0, line), None);
                 assert_eq!(input_splitter.buffer_len(), 1);
             }
-            item @ _ => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {:?}", item),
         };
 
         match input_splitter.next() {
@@ -646,7 +650,7 @@ mod tests {
                 assert_eq!(input_splitter.add_line_to_buffer(1, line), None);
                 assert_eq!(input_splitter.buffer_len(), 2);
             }
-            item @ _ => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {:?}", item),
         };
 
         match input_splitter.next() {
@@ -655,7 +659,7 @@ mod tests {
                 assert_eq!(input_splitter.add_line_to_buffer(2, line), None);
                 assert_eq!(input_splitter.buffer_len(), 3);
             }
-            item @ _ => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {:?}", item),
         };
 
         input_splitter.rewind_buffer();
@@ -666,7 +670,7 @@ mod tests {
                 assert_eq!(input_splitter.add_line_to_buffer(0, line), None);
                 assert_eq!(input_splitter.buffer_len(), 3);
             }
-            item @ _ => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {:?}", item),
         };
 
         match input_splitter.next() {
@@ -674,7 +678,7 @@ mod tests {
                 assert_eq!(line, String::from("aaa"));
                 assert_eq!(input_splitter.buffer_len(), 2);
             }
-            item @ _ => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {:?}", item),
         };
 
         match input_splitter.next() {
@@ -682,7 +686,7 @@ mod tests {
                 assert_eq!(line, String::from("bbb"));
                 assert_eq!(input_splitter.buffer_len(), 1);
             }
-            item @ _ => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {:?}", item),
         };
 
         match input_splitter.next() {
@@ -690,7 +694,7 @@ mod tests {
                 assert_eq!(line, String::from("ccc"));
                 assert_eq!(input_splitter.buffer_len(), 0);
             }
-            item @ _ => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {:?}", item),
         };
 
         match input_splitter.next() {
@@ -698,7 +702,7 @@ mod tests {
                 assert_eq!(line, String::from("ddd"));
                 assert_eq!(input_splitter.buffer_len(), 0);
             }
-            item @ _ => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {:?}", item),
         };
 
         assert!(input_splitter.next().is_none());
@@ -706,7 +710,7 @@ mod tests {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
@@ -722,16 +726,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .unwrap()
         .map(str::to_string)
         .collect();
-    let patterns = return_if_err!(1, patterns::get_patterns(&patterns[..]));
+    let patterns = crash_if_err!(1, patterns::get_patterns(&patterns[..]));
     let options = CsplitOptions::new(&matches);
     if file_name == "-" {
         let stdin = io::stdin();
         crash_if_err!(1, csplit(&options, patterns, stdin.lock()));
     } else {
-        let file = return_if_err!(1, File::open(file_name));
-        let file_metadata = return_if_err!(1, file.metadata());
+        let file = crash_if_err!(1, File::open(file_name));
+        let file_metadata = crash_if_err!(1, file.metadata());
         if !file_metadata.is_file() {
-            crash!(1, "'{}' is not a regular file", file_name);
+            crash!(1, "{} is not a regular file", file_name.quote());
         }
         crash_if_err!(1, csplit(&options, patterns, BufReader::new(file)));
     };
@@ -739,7 +743,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(SUMMARY)
         .arg(

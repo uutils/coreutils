@@ -9,7 +9,8 @@ use clap::{crate_version, App, Arg};
 use std::convert::TryFrom;
 use std::ffi::OsString;
 use std::io::{self, ErrorKind, Read, Seek, SeekFrom, Write};
-use uucore::{crash, executable, show_error, show_error_custom_description};
+use uucore::display::Quotable;
+use uucore::{crash, show_error_custom_description};
 
 const EXIT_FAILURE: i32 = 1;
 const EXIT_SUCCESS: i32 = 0;
@@ -41,7 +42,7 @@ use lines::zlines;
 use take::take_all_but;
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .usage(USAGE)
@@ -127,10 +128,10 @@ fn arg_iterate<'a>(
             match parse::parse_obsolete(s) {
                 Some(Ok(iter)) => Ok(Box::new(vec![first].into_iter().chain(iter).chain(args))),
                 Some(Err(e)) => match e {
-                    parse::ParseError::Syntax => Err(format!("bad argument format: '{}'", s)),
+                    parse::ParseError::Syntax => Err(format!("bad argument format: {}", s.quote())),
                     parse::ParseError::Overflow => Err(format!(
-                        "invalid argument: '{}' Value too large for defined datatype",
-                        s
+                        "invalid argument: {} Value too large for defined datatype",
+                        s.quote()
                     )),
                 },
                 None => Ok(Box::new(vec![first, second].into_iter().chain(args))),
@@ -418,7 +419,7 @@ fn uu_head(options: &HeadOptions) -> Result<(), u32> {
                 let mut file = match std::fs::File::open(name) {
                     Ok(f) => f,
                     Err(err) => {
-                        let prefix = format!("cannot open '{}' for reading", name);
+                        let prefix = format!("cannot open {} for reading", name.quote());
                         match err.kind() {
                             ErrorKind::NotFound => {
                                 show_error_custom_description!(prefix, "No such file or directory");
@@ -483,7 +484,7 @@ mod tests {
     fn options(args: &str) -> Result<HeadOptions, String> {
         let combined = "head ".to_owned() + args;
         let args = combined.split_whitespace();
-        HeadOptions::get_from(args.map(|s| OsString::from(s)))
+        HeadOptions::get_from(args.map(OsString::from))
     }
     #[test]
     fn test_args_modes() {
@@ -522,6 +523,7 @@ mod tests {
         assert!(options("-c IsThisJustFantasy").is_err());
     }
     #[test]
+    #[allow(clippy::bool_comparison)]
     fn test_options_correct_defaults() {
         let opts = HeadOptions::new();
         let opts2: HeadOptions = Default::default();
@@ -552,7 +554,7 @@ mod tests {
         assert!(parse_mode("1T", Modes::Bytes).is_err());
     }
     fn arg_outputs(src: &str) -> Result<String, String> {
-        let split = src.split_whitespace().map(|x| OsString::from(x));
+        let split = src.split_whitespace().map(OsString::from);
         match arg_iterate(split) {
             Ok(args) => {
                 let vec = args

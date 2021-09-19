@@ -31,3 +31,7 @@ signal-hook = "0.3.9"
 [[bin]]
 name = "dd"
 path = "src/main.rs"
+
+[package.metadata.cargo-udeps.ignore]
+# Necessary for "make all"
+normal = ["uucore_procs"]

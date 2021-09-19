@@ -9,6 +9,8 @@
 
 use std::str::FromStr;
 
+use crate::display::Quotable;
+
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct Range {
     pub low: usize,
@@ -86,7 +88,7 @@ impl Range {
 
         for item in list.split(',') {
             let range_item = FromStr::from_str(item)
-                .map_err(|e| format!("range '{}' was invalid: {}", item, e))?;
+                .map_err(|e| format!("range {} was invalid: {}", item.quote(), e))?;
             ranges.push(range_item);
         }
 

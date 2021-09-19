@@ -10,8 +10,8 @@ fn test_hostname() {
     assert!(ls_default_res.stdout().len() >= ls_domain_res.stdout().len());
 }
 
-// FixME: fails for "MacOS"
-#[cfg(not(target_vendor = "apple"))]
+// FixME: fails for "MacOS" and "freebsd" "failed to lookup address information: Name does not resolve"
+#[cfg(not(any(target_os = "macos", target_os = "freebsd")))]
 #[test]
 fn test_hostname_ip() {
     let result = new_ucmd!().arg("-i").succeeds();

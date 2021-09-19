@@ -9,7 +9,8 @@
 // spell-checker:ignore (words) writeback wipesync
 
 use clap::{crate_version, App, Arg};
-use rand::{Rng, ThreadRng};
+use rand::prelude::SliceRandom;
+use rand::Rng;
 use std::cell::{Cell, RefCell};
 use std::fs;
 use std::fs::{File, OpenOptions};
@@ -17,12 +18,12 @@ use std::io;
 use std::io::prelude::*;
 use std::io::SeekFrom;
 use std::path::{Path, PathBuf};
-use uucore::InvalidEncodingHandling;
+use uucore::display::Quotable;
+use uucore::{util_name, InvalidEncodingHandling};
 
 #[macro_use]
 extern crate uucore;
 
-static NAME: &str = "shred";
 const BLOCK_SIZE: usize = 512;
 const NAME_CHARSET: &[u8] = b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_.";
 
@@ -119,7 +120,7 @@ struct BytesGenerator<'a> {
     block_size: usize,
     exact: bool, // if false, every block's size is block_size
     gen_type: PassType<'a>,
-    rng: Option<RefCell<ThreadRng>>,
+    rng: Option<RefCell<rand::rngs::ThreadRng>>,
     bytes: [u8; BLOCK_SIZE],
 }
 
@@ -213,8 +214,8 @@ static ABOUT: &str = "Overwrite the specified FILE(s) repeatedly, in order to ma
 for even very expensive hardware probing to recover the data.
 ";
 
-fn get_usage() -> String {
-    format!("{} [OPTION]... FILE...", executable!())
+fn usage() -> String {
+    format!("{} [OPTION]... FILE...", uucore::execution_phrase())
 }
 
 static AFTER_HELP: &str =
@@ -270,7 +271,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let usage = get_usage();
+    let usage = usage();
 
     let app = uu_app().usage(&usage[..]);
 
@@ -280,7 +281,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     if !matches.is_present(options::FILE) {
         show_error!("Missing an argument");
-        show_error!("For help, try '{} --help'", NAME);
+        show_error!("For help, try '{} --help'", uucore::execution_phrase());
         return 0;
     }
 
@@ -288,7 +289,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         Some(s) => match s.parse::<usize>() {
             Ok(u) => u,
             Err(_) => {
-                errs.push(format!("invalid number of passes: '{}'", s));
+                errs.push(format!("invalid number of passes: {}", s.quote()));
                 0
             }
         },
@@ -330,7 +331,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(AFTER_HELP)
@@ -413,7 +414,11 @@ fn get_size(size_str_opt: Option<String>) -> Option<u64> {
     let coefficient = match size_str.parse::<u64>() {
         Ok(u) => u,
         Err(_) => {
-            println!("{}: {}: Invalid file size", NAME, size_str_opt.unwrap());
+            println!(
+                "{}: {}: Invalid file size",
+                util_name(),
+                size_str_opt.unwrap().maybe_quote()
+            );
             exit!(1);
         }
     };
@@ -451,11 +456,11 @@ fn wipe_file(
     // Get these potential errors out of the way first
     let path: &Path = Path::new(path_str);
     if !path.exists() {
-        show_error!("{}: No such file or directory", path.display());
+        show_error!("{}: No such file or directory", path.maybe_quote());
         return;
     }
     if !path.is_file() {
-        show_error!("{}: Not a file", path.display());
+        show_error!("{}: Not a file", path.maybe_quote());
         return;
     }
 
@@ -499,7 +504,8 @@ fn wipe_file(
         for pattern in PATTERNS.iter().take(remainder) {
             pass_sequence.push(PassType::Pattern(pattern));
         }
-        rand::thread_rng().shuffle(&mut pass_sequence[..]); // randomize the order of application
+        let mut rng = rand::thread_rng();
+        pass_sequence.shuffle(&mut rng); // randomize the order of application
 
         let n_random = 3 + n_passes / 10; // Minimum 3 random passes; ratio of 10 after
                                           // Evenly space random passes; ensures one at the beginning and end
@@ -518,7 +524,7 @@ fn wipe_file(
         let mut file: File = match OpenOptions::new().write(true).truncate(false).open(path) {
             Ok(f) => f,
             Err(e) => {
-                show_error!("{}: failed to open for writing: {}", path.display(), e);
+                show_error!("{}: failed to open for writing: {}", path.maybe_quote(), e);
                 return;
             }
         };
@@ -533,8 +539,8 @@ fn wipe_file(
                 if total_passes.to_string().len() == 1 {
                     println!(
                         "{}: {}: pass {}/{} ({})... ",
-                        NAME,
-                        path.display(),
+                        util_name(),
+                        path.maybe_quote(),
                         i + 1,
                         total_passes,
                         pass_name
@@ -542,8 +548,8 @@ fn wipe_file(
                 } else {
                     println!(
                         "{}: {}: pass {:2.0}/{:2.0} ({})... ",
-                        NAME,
-                        path.display(),
+                        util_name(),
+                        path.maybe_quote(),
                         i + 1,
                         total_passes,
                         pass_name
@@ -554,7 +560,7 @@ fn wipe_file(
             match do_pass(&mut file, path, &mut generator, *pass_type, size) {
                 Ok(_) => {}
                 Err(e) => {
-                    show_error!("{}: File write pass failed: {}", path.display(), e);
+                    show_error!("{}: File write pass failed: {}", path.maybe_quote(), e);
                 }
             }
             // Ignore failed writes; just keep trying
@@ -565,7 +571,7 @@ fn wipe_file(
         match do_remove(path, path_str, verbose) {
             Ok(_) => {}
             Err(e) => {
-                show_error!("{}: failed to remove file: {}", path.display(), e);
+                show_error!("{}: failed to remove file: {}", path.maybe_quote(), e);
             }
         }
     }
@@ -620,9 +626,9 @@ fn wipe_name(orig_path: &Path, verbose: bool) -> Option<PathBuf> {
                     if verbose {
                         println!(
                             "{}: {}: renamed to {}",
-                            NAME,
-                            last_path.display(),
-                            new_path.display()
+                            util_name(),
+                            last_path.maybe_quote(),
+                            new_path.quote()
                         );
                     }
 
@@ -639,9 +645,9 @@ fn wipe_name(orig_path: &Path, verbose: bool) -> Option<PathBuf> {
                 Err(e) => {
                     println!(
                         "{}: {}: Couldn't rename to {}: {}",
-                        NAME,
-                        last_path.display(),
-                        new_path.display(),
+                        util_name(),
+                        last_path.maybe_quote(),
+                        new_path.quote(),
                         e
                     );
                     return None;
@@ -655,7 +661,7 @@ fn wipe_name(orig_path: &Path, verbose: bool) -> Option<PathBuf> {
 
 fn do_remove(path: &Path, orig_filename: &str, verbose: bool) -> Result<(), io::Error> {
     if verbose {
-        println!("{}: {}: removing", NAME, orig_filename);
+        println!("{}: {}: removing", util_name(), orig_filename.maybe_quote());
     }
 
     let renamed_path: Option<PathBuf> = wipe_name(path, verbose);
@@ -664,7 +670,7 @@ fn do_remove(path: &Path, orig_filename: &str, verbose: bool) -> Result<(), io::
     }
 
     if verbose {
-        println!("{}: {}: removed", NAME, orig_filename);
+        println!("{}: {}: removed", util_name(), orig_filename.maybe_quote());
     }
 
     Ok(())

@@ -27,12 +27,12 @@ static OPT_IGNORE: &str = "ignore";
 
 static ABOUT: &str = "Print the number of cores available to the current process.";
 
-fn get_usage() -> String {
-    format!("{0} [OPTIONS]...", executable!())
+fn usage() -> String {
+    format!("{0} [OPTIONS]...", uucore::execution_phrase())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     let mut ignore = match matches.value_of(OPT_IGNORE) {
@@ -70,7 +70,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(

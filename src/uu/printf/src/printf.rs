@@ -2,9 +2,6 @@
 // spell-checker:ignore (change!) each's
 // spell-checker:ignore (ToDO) LONGHELP FORMATSTRING templating parameterizing formatstr
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, App, Arg};
 use uucore::InvalidEncodingHandling;
 
@@ -281,11 +278,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let location = &args[0];
     if args.len() <= 1 {
         println!(
-            "{0}: missing operand\nTry '{0} --help' for more information.",
-            location
+            "{0}: missing operand\nTry '{1} --help' for more information.",
+            uucore::util_name(),
+            uucore::execution_phrase()
         );
         return 1;
     }
@@ -294,7 +291,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if formatstr == "--help" {
         print!("{} {}", LONGHELP_LEAD, LONGHELP_BODY);
     } else if formatstr == "--version" {
-        println!("{} {}", executable!(), crate_version!());
+        println!("{} {}", uucore::util_name(), crate_version!());
     } else {
         let printf_args = &args[2..];
         memo::Memo::run_all(formatstr, printf_args);
@@ -303,7 +300,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .arg(Arg::with_name(VERSION).long(VERSION))
         .arg(Arg::with_name(HELP).long(HELP))
 }

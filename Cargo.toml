@@ -95,8 +95,10 @@ feat_common_core = [
     "true",
     "truncate",
     "tsort",
+    "touch",
     "unexpand",
     "uniq",
+    "unlink",
     "wc",
     "yes",
 ]
@@ -146,7 +148,12 @@ feat_os_unix_musl = [
 # NOTE:
 # The selinux(-sys) crate requires `libselinux` headers and shared library to be accessible in the C toolchain at compile time.
 # Running a uutils compiled with `feat_selinux` requires an SELinux enabled Kernel at run time.
-feat_selinux = ["id/selinux", "selinux", "feat_require_selinux"]
+feat_selinux = ["cp/selinux", "id/selinux", "selinux", "feat_require_selinux"]
+# "feat_acl" == set of utilities providing support for acl (access control lists) if enabled with `--features feat_acl`.
+# NOTE:
+# On linux, the posix-acl/acl-sys crate requires `libacl` headers and shared library to be accessible in the C toolchain at compile time.
+# On FreeBSD and macOS this is not required.
+feat_acl = ["cp/feat_acl"]
 ## feature sets with requirements (restricting cross-platform availability)
 #
 # ** NOTE: these `feat_require_...` sets should be minimized as much as possible to encourage cross-platform availability of utilities
@@ -176,7 +183,6 @@ feat_require_unix = [
     "timeout",
     "tty",
     "uname",
-    "unlink",
 ]
 # "feat_require_unix_utmpx" == set of utilities requiring unix utmp/utmpx support
 # * ref: <https://wiki.musl-libc.org/faq.html#Q:-Why-is-the-utmp/wtmp-functionality-only-implemented-as-stubs?>
@@ -189,6 +195,7 @@ feat_require_unix_utmpx = [
 # "feat_require_selinux" == set of utilities depending on SELinux.
 feat_require_selinux = [
     "chcon",
+    "runcon",
 ]
 ## (alternate/newer/smaller platforms) feature sets
 # "feat_os_unix_fuchsia" == set of utilities which can be built/run on the "Fuchsia" OS (refs: <https://fuchsia.dev>; <https://en.wikipedia.org/wiki/Google_Fuchsia>)
@@ -239,9 +246,9 @@ test = [ "uu_test" ]
 [dependencies]
 clap = { version = "2.33", features = ["wrap_help"] }
 lazy_static = { version="1.3" }
-textwrap = { version="=0.11.0", features=["term_size"] } # !maint: [2020-05-10; rivy] unstable crate using undocumented features; pinned currently, will review
+textwrap = { version="0.14", features=["terminal_size"] }
 uucore = { version=">=0.0.9", package="uucore", path="src/uucore" }
-selinux = { version="0.2.1", optional = true }
+selinux = { version="0.2.3", optional = true }
 # * uutils
 uu_test  = { optional=true, version="0.0.7", package="uu_test", path="src/uu/test" }
 #
@@ -313,6 +320,7 @@ realpath = { optional=true, version="0.0.7", package="uu_realpath", path="src/uu
 relpath  = { optional=true, version="0.0.7", package="uu_relpath", path="src/uu/relpath" }
 rm       = { optional=true, version="0.0.7", package="uu_rm", path="src/uu/rm" }
 rmdir    = { optional=true, version="0.0.7", package="uu_rmdir", path="src/uu/rmdir" }
+runcon   = { optional=true, version="0.0.7", package="uu_runcon", path="src/uu/runcon" }
 seq      = { optional=true, version="0.0.7", package="uu_seq", path="src/uu/seq" }
 shred    = { optional=true, version="0.0.7", package="uu_shred", path="src/uu/shred" }
 shuf     = { optional=true, version="0.0.7", package="uu_shuf", path="src/uu/shuf" }
@@ -358,7 +366,6 @@ conv = "0.3"
 filetime = "0.2"
 glob = "0.3.0"
 libc = "0.2"
-nix = "0.20.0"
 pretty_assertions = "0.7.2"
 rand = "0.7"
 regex = "1.0"
@@ -370,8 +377,12 @@ uucore = { version=">=0.0.9", package="uucore", path="src/uucore", features=["en
 walkdir = "2.2"
 atty = "0.2"
 
-[target.'cfg(unix)'.dev-dependencies]
+[target.'cfg(target_os = "linux")'.dev-dependencies]
 rlimit = "0.4.0"
+
+[target.'cfg(unix)'.dev-dependencies]
+nix = "0.20.0"
+
 rust-users = { version="0.10", package="users" }
 unix_socket = "0.5.0"
 

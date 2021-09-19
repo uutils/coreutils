@@ -16,13 +16,15 @@ path = "src/shred.rs"
 
 [dependencies]
 clap = { version = "2.33", features = ["wrap_help"] }
-filetime = "0.2.1"
 libc = "0.2.42"
-rand = "0.5"
-time = "0.1.40"
+rand = "0.7"
 uucore = { version=">=0.0.9", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.6", package="uucore_procs", path="../../uucore_procs" }
 
 [[bin]]
 name = "shred"
 path = "src/main.rs"
+
+[package.metadata.cargo-udeps.ignore]
+# Necessary for "make all"
+normal = ["uucore_procs"]

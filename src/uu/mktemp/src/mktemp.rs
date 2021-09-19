@@ -12,6 +12,7 @@
 extern crate uucore;
 
 use clap::{crate_version, App, Arg};
+use uucore::display::{println_verbatim, Quotable};
 use uucore::error::{FromIo, UError, UResult};
 
 use std::env;
@@ -36,8 +37,8 @@ static OPT_T: &str = "t";
 
 static ARG_TEMPLATE: &str = "template";
 
-fn get_usage() -> String {
-    format!("{0} [OPTION]... [TEMPLATE]", executable!())
+fn usage() -> String {
+    format!("{0} [OPTION]... [TEMPLATE]", uucore::execution_phrase())
 }
 
 #[derive(Debug)]
@@ -57,16 +58,20 @@ impl Display for MkTempError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use MkTempError::*;
         match self {
-            PersistError(p) => write!(f, "could not persist file '{}'", p.display()),
-            MustEndInX(s) => write!(f, "with --suffix, template '{}' must end in X", s),
-            TooFewXs(s) => write!(f, "too few X's in template '{}'", s),
+            PersistError(p) => write!(f, "could not persist file {}", p.quote()),
+            MustEndInX(s) => write!(f, "with --suffix, template {} must end in X", s.quote()),
+            TooFewXs(s) => write!(f, "too few X's in template {}", s.quote()),
             ContainsDirSeparator(s) => {
-                write!(f, "invalid suffix '{}', contains directory separator", s)
+                write!(
+                    f,
+                    "invalid suffix {}, contains directory separator",
+                    s.quote()
+                )
             }
             InvalidTemplate(s) => write!(
                 f,
-                "invalid template, '{}'; with --tmpdir, it may not be absolute",
-                s
+                "invalid template, {}; with --tmpdir, it may not be absolute",
+                s.quote()
             ),
         }
     }
@@ -74,7 +79,7 @@ impl Display for MkTempError {
 
 #[uucore_procs::gen_uumain]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = get_usage();
+    let usage = usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
@@ -134,7 +139,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(
@@ -224,28 +229,26 @@ fn parse_template<'a>(
 
 pub fn dry_exec(mut tmpdir: PathBuf, prefix: &str, rand: usize, suffix: &str) -> UResult<()> {
     let len = prefix.len() + suffix.len() + rand;
-    let mut buf = String::with_capacity(len);
-    buf.push_str(prefix);
-    buf.extend(iter::repeat('X').take(rand));
-    buf.push_str(suffix);
+    let mut buf = Vec::with_capacity(len);
+    buf.extend(prefix.as_bytes());
+    buf.extend(iter::repeat(b'X').take(rand));
+    buf.extend(suffix.as_bytes());
 
     // Randomize.
-    unsafe {
-        // We guarantee utf8.
-        let bytes = &mut buf.as_mut_vec()[prefix.len()..prefix.len() + rand];
-        rand::thread_rng().fill(bytes);
-        for byte in bytes.iter_mut() {
-            *byte = match *byte % 62 {
-                v @ 0..=9 => (v + b'0'),
-                v @ 10..=35 => (v - 10 + b'a'),
-                v @ 36..=61 => (v - 36 + b'A'),
-                _ => unreachable!(),
-            }
+    let bytes = &mut buf[prefix.len()..prefix.len() + rand];
+    rand::thread_rng().fill(bytes);
+    for byte in bytes.iter_mut() {
+        *byte = match *byte % 62 {
+            v @ 0..=9 => (v + b'0'),
+            v @ 10..=35 => (v - 10 + b'a'),
+            v @ 36..=61 => (v - 36 + b'A'),
+            _ => unreachable!(),
         }
     }
+    // We guarantee utf8.
+    let buf = String::from_utf8(buf).unwrap();
     tmpdir.push(buf);
-    println!("{}", tmpdir.display());
-    Ok(())
+    println_verbatim(tmpdir).map_err_context(|| "failed to print directory name".to_owned())
 }
 
 fn exec(dir: PathBuf, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> UResult<()> {
@@ -274,6 +277,5 @@ fn exec(dir: PathBuf, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -
             .map_err(|e| MkTempError::PersistError(e.file.path().to_path_buf()))?
             .1
     };
-    println!("{}", path.display());
-    Ok(())
+    println_verbatim(path).map_err_context(|| "failed to print directory name".to_owned())
 }

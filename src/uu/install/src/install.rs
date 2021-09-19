@@ -16,9 +16,11 @@ use clap::{crate_version, App, Arg, ArgMatches};
 use file_diff::diff;
 use filetime::{set_file_times, FileTime};
 use uucore::backup_control::{self, BackupMode};
+use uucore::display::Quotable;
 use uucore::entries::{grp2gid, usr2uid};
-use uucore::error::{FromIo, UError, UIoError, UResult, USimpleError};
-use uucore::perms::{wrap_chgrp, wrap_chown, Verbosity};
+use uucore::error::{FromIo, UError, UIoError, UResult};
+use uucore::mode::get_umask;
+use uucore::perms::{wrap_chown, Verbosity, VerbosityLevel};
 
 use libc::{getegid, geteuid};
 use std::error::Error;
@@ -86,46 +88,38 @@ impl Display for InstallError {
         use InstallError as IE;
         match self {
             IE::Unimplemented(opt) => write!(f, "Unimplemented feature: {}", opt),
-            IE::DirNeedsArg() => write!(
-                f,
-                "{} with -d requires at least one argument.",
-                executable!()
-            ),
-            IE::CreateDirFailed(dir, e) => {
-                Display::fmt(&uio_error!(e, "failed to create {}", dir.display()), f)
+            IE::DirNeedsArg() => {
+                write!(
+                    f,
+                    "{} with -d requires at least one argument.",
+                    uucore::util_name()
+                )
             }
-            IE::ChmodFailed(file) => write!(f, "failed to chmod {}", file.display()),
+            IE::CreateDirFailed(dir, e) => {
+                Display::fmt(&uio_error!(e, "failed to create {}", dir.quote()), f)
+            }
+            IE::ChmodFailed(file) => write!(f, "failed to chmod {}", file.quote()),
             IE::InvalidTarget(target) => write!(
                 f,
                 "invalid target {}: No such file or directory",
-                target.display()
+                target.quote()
             ),
             IE::TargetDirIsntDir(target) => {
-                write!(f, "target '{}' is not a directory", target.display())
+                write!(f, "target {} is not a directory", target.quote())
             }
             IE::BackupFailed(from, to, e) => Display::fmt(
-                &uio_error!(
-                    e,
-                    "cannot backup '{}' to '{}'",
-                    from.display(),
-                    to.display()
-                ),
+                &uio_error!(e, "cannot backup {} to {}", from.quote(), to.quote()),
                 f,
             ),
             IE::InstallFailed(from, to, e) => Display::fmt(
-                &uio_error!(
-                    e,
-                    "cannot install '{}' to '{}'",
-                    from.display(),
-                    to.display()
-                ),
+                &uio_error!(e, "cannot install {} to {}", from.quote(), to.quote()),
                 f,
             ),
             IE::StripProgramFailed(msg) => write!(f, "strip program failed: {}", msg),
             IE::MetadataFailed(e) => Display::fmt(&uio_error!(e, ""), f),
-            IE::NoSuchUser(user) => write!(f, "no such user: {}", user),
-            IE::NoSuchGroup(group) => write!(f, "no such group: {}", group),
-            IE::OmittingDirectory(dir) => write!(f, "omitting directory '{}'", dir.display()),
+            IE::NoSuchUser(user) => write!(f, "no such user: {}", user.maybe_quote()),
+            IE::NoSuchGroup(group) => write!(f, "no such group: {}", group.maybe_quote()),
+            IE::OmittingDirectory(dir) => write!(f, "omitting directory {}", dir.quote()),
         }
     }
 }
@@ -152,8 +146,6 @@ static ABOUT: &str = "Copy SOURCE to DEST or multiple SOURCE(s) to the existing
  DIRECTORY, while setting permission modes and owner/group";
 
 static OPT_COMPARE: &str = "compare";
-static OPT_BACKUP: &str = "backup";
-static OPT_BACKUP_NO_ARG: &str = "backup2";
 static OPT_DIRECTORY: &str = "directory";
 static OPT_IGNORED: &str = "ignored";
 static OPT_CREATE_LEADING: &str = "create-leading";
@@ -163,7 +155,6 @@ static OPT_OWNER: &str = "owner";
 static OPT_PRESERVE_TIMESTAMPS: &str = "preserve-timestamps";
 static OPT_STRIP: &str = "strip";
 static OPT_STRIP_PROGRAM: &str = "strip-program";
-static OPT_SUFFIX: &str = "suffix";
 static OPT_TARGET_DIRECTORY: &str = "target-directory";
 static OPT_NO_TARGET_DIRECTORY: &str = "no-target-directory";
 static OPT_VERBOSE: &str = "verbose";
@@ -172,8 +163,8 @@ static OPT_CONTEXT: &str = "context";
 
 static ARG_FILES: &str = "files";
 
-fn get_usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", executable!())
+fn usage() -> String {
+    format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
 }
 
 /// Main install utility function, called from main.rs.
@@ -182,7 +173,7 @@ fn get_usage() -> String {
 ///
 #[uucore_procs::gen_uumain]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = get_usage();
+    let usage = usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
@@ -202,23 +193,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(
-                Arg::with_name(OPT_BACKUP)
-                .long(OPT_BACKUP)
-                .help("make a backup of each existing destination file")
-                .takes_value(true)
-                .require_equals(true)
-                .min_values(0)
-                .value_name("CONTROL")
+            backup_control::arguments::backup()
         )
         .arg(
-            // TODO implement flag
-            Arg::with_name(OPT_BACKUP_NO_ARG)
-            .short("b")
-            .help("like --backup but does not accept an argument")
+            backup_control::arguments::backup_no_args()
         )
         .arg(
             Arg::with_name(OPT_IGNORED)
@@ -276,9 +258,9 @@ pub fn uu_app() -> App<'static, 'static> {
         )
         .arg(
             Arg::with_name(OPT_STRIP)
-            .short("s")
-            .long(OPT_STRIP)
-            .help("strip symbol tables (no action Windows)")
+                .short("s")
+                .long(OPT_STRIP)
+                .help("strip symbol tables (no action Windows)")
         )
         .arg(
             Arg::with_name(OPT_STRIP_PROGRAM)
@@ -287,14 +269,7 @@ pub fn uu_app() -> App<'static, 'static> {
                 .value_name("PROGRAM")
         )
         .arg(
-            // TODO implement flag
-            Arg::with_name(OPT_SUFFIX)
-                .short("S")
-                .long(OPT_SUFFIX)
-                .help("override the usual backup suffix")
-                .value_name("SUFFIX")
-                .takes_value(true)
-                .min_values(1)
+            backup_control::arguments::suffix()
         )
         .arg(
             // TODO implement flag
@@ -376,7 +351,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
 
     let specified_mode: Option<u32> = if matches.is_present(OPT_MODE) {
         let x = matches.value_of(OPT_MODE).ok_or(1)?;
-        Some(mode::parse(x, considering_dir).map_err(|err| {
+        Some(mode::parse(x, considering_dir, get_umask()).map_err(|err| {
             show_error!("Invalid mode string: {}", err);
             1
         })?)
@@ -384,23 +359,14 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         None
     };
 
-    let backup_mode = backup_control::determine_backup_mode(
-        matches.is_present(OPT_BACKUP_NO_ARG),
-        matches.is_present(OPT_BACKUP),
-        matches.value_of(OPT_BACKUP),
-    );
-    let backup_mode = match backup_mode {
-        Err(err) => return Err(USimpleError::new(1, err)),
-        Ok(mode) => mode,
-    };
-
+    let backup_mode = backup_control::determine_backup_mode(matches)?;
     let target_dir = matches.value_of(OPT_TARGET_DIRECTORY).map(|d| d.to_owned());
 
     Ok(Behavior {
         main_function,
         specified_mode,
         backup_mode,
-        suffix: backup_control::determine_backup_suffix(matches.value_of(OPT_SUFFIX)),
+        suffix: backup_control::determine_backup_suffix(matches),
         owner: matches.value_of(OPT_OWNER).unwrap_or("").to_string(),
         group: matches.value_of(OPT_GROUP).unwrap_or("").to_string(),
         verbose: matches.is_present(OPT_VERBOSE),
@@ -441,14 +407,14 @@ fn directory(paths: Vec<String>, b: Behavior) -> UResult<()> {
                 // the default mode. Hence it is safe to use fs::create_dir_all
                 // and then only modify the target's dir mode.
                 if let Err(e) =
-                    fs::create_dir_all(path).map_err_context(|| format!("{}", path.display()))
+                    fs::create_dir_all(path).map_err_context(|| path.maybe_quote().to_string())
                 {
                     show!(e);
                     continue;
                 }
 
                 if b.verbose {
-                    println!("creating directory '{}'", path.display());
+                    println!("creating directory {}", path.quote());
                 }
             }
 
@@ -470,7 +436,7 @@ fn directory(paths: Vec<String>, b: Behavior) -> UResult<()> {
 fn is_new_file_path(path: &Path) -> bool {
     !path.exists()
         && (path.parent().map(Path::is_dir).unwrap_or(true)
-            || path.parent().unwrap().to_string_lossy().is_empty()) // In case of a simple file
+            || path.parent().unwrap().as_os_str().is_empty()) // In case of a simple file
 }
 
 /// Perform an install, given a list of paths and behavior.
@@ -524,11 +490,10 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
         return Err(InstallError::TargetDirIsntDir(target_dir.to_path_buf()).into());
     }
     for sourcepath in files.iter() {
-        if !sourcepath.exists() {
-            let err = UIoError::new(
-                std::io::ErrorKind::NotFound,
-                format!("cannot stat '{}'", sourcepath.display()),
-            );
+        if let Err(err) = sourcepath
+            .metadata()
+            .map_err_context(|| format!("cannot stat {}", sourcepath.quote()))
+        {
             show!(err);
             continue;
         }
@@ -591,7 +556,7 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
         }
     }
 
-    if from.to_string_lossy() == "/dev/null" {
+    if from.as_os_str() == "/dev/null" {
         /* workaround a limitation of fs::copy
          * https://github.com/rust-lang/rust/issues/79390
          */
@@ -639,7 +604,10 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
             Some(owner_id),
             Some(gid),
             false,
-            Verbosity::Normal,
+            Verbosity {
+                groups_only: false,
+                level: VerbosityLevel::Normal,
+            },
         ) {
             Ok(n) => {
                 if !n.is_empty() {
@@ -660,7 +628,17 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
             Ok(g) => g,
             _ => return Err(InstallError::NoSuchGroup(b.group.clone()).into()),
         };
-        match wrap_chgrp(to, &meta, Some(group_id), false, Verbosity::Normal) {
+        match wrap_chown(
+            to,
+            &meta,
+            Some(group_id),
+            None,
+            false,
+            Verbosity {
+                groups_only: true,
+                level: VerbosityLevel::Normal,
+            },
+        ) {
             Ok(n) => {
                 if !n.is_empty() {
                     show_error!("{}", n);
@@ -686,9 +664,9 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
     }
 
     if b.verbose {
-        print!("'{}' -> '{}'", from.display(), to.display());
+        print!("{} -> {}", from.quote(), to.quote());
         match backup_path {
-            Some(path) => println!(" (backup: '{}')", path.display()),
+            Some(path) => println!(" (backup: {})", path.quote()),
             None => println!(),
         }
     }

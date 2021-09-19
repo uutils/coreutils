@@ -9,7 +9,7 @@
 extern crate uucore;
 
 use clap::App;
-use uucore::{error::UResult, executable};
+use uucore::error::UResult;
 
 #[uucore_procs::gen_uumain]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -18,5 +18,5 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
 }

@@ -255,10 +255,12 @@ fn test_rm_force_no_operand() {
 
 #[test]
 fn test_rm_no_operand() {
-    let mut ucmd = new_ucmd!();
-
-    ucmd.fails()
-        .stderr_is("rm: missing an argument\nrm: for help, try 'rm --help'\n");
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd().fails().stderr_is(&format!(
+        "{0}: missing an argument\n{0}: for help, try '{1} {0} --help'\n",
+        ts.util_name,
+        ts.bin_path.to_string_lossy()
+    ));
 }
 
 #[test]
