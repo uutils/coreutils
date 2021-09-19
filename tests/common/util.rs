@@ -1767,6 +1767,7 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
+    #[cfg(feature = "whoami")]
     fn test_run_ucmd_as_root() {
         // We need non-interactive `sudo.
         // CICD environment should allow non-interactive `sudo`.
