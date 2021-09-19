@@ -89,3 +89,24 @@ fn test_preference_of_userspec() {
     println!("result.stdout = {}", result.stdout_str());
     println!("result.stderr = {}", result.stderr_str());
 }
+
+#[test]
+fn test_default_shell() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let dir = "CHROOT_DIR";
+    at.mkdir(dir);
+
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
+    let expected = format!(
+        "chroot: failed to run command '{}': No such file or directory",
+        shell
+    );
+
+    if let Ok(result) = run_ucmd_as_root(&ts, &[dir]) {
+        result.stderr_contains(expected);
+    } else {
+        print!("TEST SKIPPED");
+    }
+}
