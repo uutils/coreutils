@@ -1,3 +1,4 @@
+// spell-checker:ignore abcdefabcdef dabcdef abcdefabcdef xyzzzzxyzzzz alnum abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFGHIJKLMNOPQRSTUVWXYZ PQRST ABCDEFGHIJKLMNOPQRS xycde xyyye abcdefghijklmnop aabbcc abcc xdigit acbdef wxyzz wxyzz abcdefghijk aabbaa ABCDEFZZ abcdefghijklmn upcase cclass cefgm cntrl Zamz AMZXAMZ bbbd Gzabcdefg ZABCDEF compl
 use crate::common::util::*;
 
 #[test]
