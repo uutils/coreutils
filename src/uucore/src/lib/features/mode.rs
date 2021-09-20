@@ -143,6 +143,13 @@ pub fn parse_mode(mode: &str) -> Result<mode_t, String> {
 }
 
 pub fn get_umask() -> u32 {
+    // There's no portable way to read the umask without changing it.
+    // We have to replace it and then quickly set it back, hopefully before
+    // some other thread is affected.
+    // On modern Linux kernels the current umask could instead be read
+    // from /proc/self/status. But that's a lot of work.
+    // SAFETY: umask always succeeds and doesn't operate on memory. Races are
+    // possible but it can't violate Rust's guarantees.
     let mask = unsafe { umask(0) };
     unsafe { umask(mask) };
     mask as u32

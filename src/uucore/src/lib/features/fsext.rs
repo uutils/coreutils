@@ -26,15 +26,11 @@ const MAX_PATH: usize = 266;
 static EXIT_ERR: i32 = 1;
 
 #[cfg(windows)]
-use std::ffi::OsString;
+use std::ffi::OsStr;
 #[cfg(windows)]
 use std::os::windows::ffi::OsStrExt;
 #[cfg(windows)]
-use std::os::windows::ffi::OsStringExt;
-#[cfg(windows)]
 use winapi::shared::minwindef::DWORD;
-#[cfg(windows)]
-use winapi::um::errhandlingapi::GetLastError;
 #[cfg(windows)]
 use winapi::um::fileapi::GetDiskFreeSpaceW;
 #[cfg(windows)]
@@ -47,11 +43,12 @@ use winapi::um::handleapi::INVALID_HANDLE_VALUE;
 #[cfg(windows)]
 use winapi::um::winbase::DRIVE_REMOTE;
 
+// Warning: the pointer has to be used *immediately* or the Vec
+// it points to will be dropped!
 #[cfg(windows)]
 macro_rules! String2LPWSTR {
     ($str: expr) => {
-        OsString::from($str.clone())
-            .as_os_str()
+        OsStr::new(&$str)
             .encode_wide()
             .chain(Some(0))
             .collect::<Vec<u16>>()
@@ -62,10 +59,8 @@ macro_rules! String2LPWSTR {
 #[cfg(windows)]
 #[allow(non_snake_case)]
 fn LPWSTR2String(buf: &[u16]) -> String {
-    let len = unsafe { libc::wcslen(buf.as_ptr()) };
-    OsString::from_wide(&buf[..len as usize])
-        .into_string()
-        .unwrap()
+    let len = buf.iter().position(|&n| n == 0).unwrap();
+    String::from_utf16(&buf[..len]).unwrap()
 }
 
 use self::time::Timespec;
@@ -77,7 +72,6 @@ use std::borrow::Cow;
 use std::convert::{AsRef, From};
 #[cfg(unix)]
 use std::ffi::CString;
-#[cfg(unix)]
 use std::io::Error as IOError;
 #[cfg(unix)]
 use std::mem;
@@ -157,16 +151,14 @@ impl MountInfo {
     fn set_missing_fields(&mut self) {
         #[cfg(unix)]
         {
+            use std::os::unix::fs::MetadataExt;
             // We want to keep the dev_id on Windows
             // but set dev_id
-            let path = CString::new(self.mount_dir.clone()).unwrap();
-            unsafe {
-                let mut stat = mem::zeroed();
-                if libc::stat(path.as_ptr(), &mut stat) == 0 {
-                    self.dev_id = (stat.st_dev as i32).to_string();
-                } else {
-                    self.dev_id = "".to_string();
-                }
+            if let Ok(stat) = std::fs::metadata(&self.mount_dir) {
+                // Why do we cast this to i32?
+                self.dev_id = (stat.dev() as i32).to_string()
+            } else {
+                self.dev_id = "".to_string();
             }
         }
         // set MountInfo::dummy
@@ -247,8 +239,7 @@ impl MountInfo {
         volume_name.pop();
         unsafe {
             QueryDosDeviceW(
-                OsString::from(volume_name.clone())
-                    .as_os_str()
+                OsStr::new(&volume_name)
                     .encode_wide()
                     .chain(Some(0))
                     .skip(4)
@@ -445,9 +436,11 @@ pub fn read_fs_list() -> Vec<MountInfo> {
             FindFirstVolumeW(volume_name_buf.as_mut_ptr(), volume_name_buf.len() as DWORD)
         };
         if INVALID_HANDLE_VALUE == find_handle {
-            crash!(EXIT_ERR, "FindFirstVolumeW failed: {}", unsafe {
-                GetLastError()
-            });
+            crash!(
+                EXIT_ERR,
+                "FindFirstVolumeW failed: {}",
+                IOError::last_os_error()
+            );
         }
         let mut mounts = Vec::<MountInfo>::new();
         loop {
@@ -466,8 +459,9 @@ pub fn read_fs_list() -> Vec<MountInfo> {
                     volume_name_buf.len() as DWORD,
                 )
             } {
-                let err = unsafe { GetLastError() };
-                if err != winapi::shared::winerror::ERROR_NO_MORE_FILES {
+                let err = IOError::last_os_error();
+                if err.raw_os_error() != Some(winapi::shared::winerror::ERROR_NO_MORE_FILES as i32)
+                {
                     crash!(EXIT_ERR, "FindNextVolumeW failed: {}", err);
                 }
                 break;
@@ -527,7 +521,7 @@ impl FsUsage {
             crash!(
                 EXIT_ERR,
                 "GetVolumePathNamesForVolumeNameW failed: {}",
-                unsafe { GetLastError() }
+                IOError::last_os_error()
             );
         }
 
@@ -547,9 +541,11 @@ impl FsUsage {
         };
         if 0 == success {
             // Fails in case of CD for example
-            //crash!(EXIT_ERR, "GetDiskFreeSpaceW failed: {}", unsafe {
-            //GetLastError()
-            //});
+            // crash!(
+            //     EXIT_ERR,
+            //     "GetDiskFreeSpaceW failed: {}",
+            //     IOError::last_os_error()
+            // );
         }
 
         let bytes_per_cluster = sectors_per_cluster as u64 * bytes_per_sector as u64;
