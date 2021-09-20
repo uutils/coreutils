@@ -1364,7 +1364,7 @@ pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<
 
 /// This is a convenience wrapper to run a ucmd with root permissions.
 /// This runs 'sudo -E --non-interactive target/debug/coreutils util_name args`
-/// This is primarily designed to run in the CICD environment where whoami is in $path
+/// This is primarily designed to run in an environment where whoami is in $path
 /// and where non-interactive sudo is possible.
 /// To check if i) non-interactive sudo is possible and ii) if sudo works, this runs:
 /// 'sudo -E --non-interactive whoami' first.
@@ -1389,6 +1389,7 @@ pub fn run_ucmd_as_root(
     ts: &TestScenario,
     args: &[&str],
 ) -> std::result::Result<CmdResult, String> {
+    // Apparently CICD environment has no `sudo`?
     if ts
         .cmd_keepenv("sudo")
         .env("LC_ALL", "C")
@@ -1769,16 +1770,18 @@ mod tests {
     #[cfg(unix)]
     #[cfg(feature = "whoami")]
     fn test_run_ucmd_as_root() {
-        // We need non-interactive `sudo.
-        // CICD environment should allow non-interactive `sudo`.
-        // Return early if we can't guarantee non-interactive `sudo`
-        if !is_ci() {
-            return;
+        // Skip test if we can't guarantee non-interactive `sudo`.
+        if let Ok(_status) = Command::new("sudo")
+            .args(&["-E", "-v", "--non-interactive"])
+            .status()
+        {
+            let ts = TestScenario::new("whoami");
+            std::assert_eq!(
+                run_ucmd_as_root(&ts, &[]).unwrap().stdout_str().trim(),
+                "root"
+            );
+        } else {
+            print!("TEST SKIPPED");
         }
-        let ts = TestScenario::new("whoami");
-        std::assert_eq!(
-            run_ucmd_as_root(&ts, &[]).unwrap().stdout_str().trim(),
-            "root"
-        );
     }
 }
