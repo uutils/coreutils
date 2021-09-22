@@ -77,11 +77,15 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         _ => commands,
     };
 
+    assert!(!command.is_empty());
+    let chroot_command = command[0];
+    let chroot_args = &command[1..];
+
+    // NOTE: Tests can only trigger code beyond this point if they're invoked with root permissions
     set_context(newroot, &matches);
 
-    assert!(!command.is_empty());
-    let pstatus = Command::new(command[0])
-        .args(&command[1..])
+    let pstatus = Command::new(chroot_command)
+        .args(chroot_args)
         .status()
         .unwrap_or_else(|e| {
             // TODO: Exit status:
