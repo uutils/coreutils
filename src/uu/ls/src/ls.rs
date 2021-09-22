@@ -1259,45 +1259,7 @@ impl PathData {
             None => OnceCell::new(),
         };
 
-        let substitute_string = "?".to_string();
-        let security_context = if config.context {
-            if config.selinux_supported {
-                #[cfg(feature = "selinux")]
-                {
-                    match selinux::SecurityContext::of_path(&p_buf, must_dereference, false) {
-                        Err(_r) => {
-                            // TODO: show the actual reason why it failed
-                            show_warning!("failed to get security context of: {}", p_buf.quote());
-                            substitute_string
-                        }
-                        Ok(None) => substitute_string,
-                        Ok(Some(context)) => {
-                            let mut context = context.as_bytes();
-                            if context.ends_with(&[0]) {
-                                // TODO: replace with `strip_prefix()` when MSRV >= 1.51
-                                context = &context[..context.len() - 1]
-                            };
-                            String::from_utf8(context.to_vec()).unwrap_or_else(|e| {
-                                show_warning!(
-                                    "getting security context of: {}: {}",
-                                    p_buf.quote(),
-                                    e.to_string()
-                                );
-                                String::from_utf8_lossy(context).into_owned()
-                            })
-                        }
-                    }
-                }
-                #[cfg(not(feature = "selinux"))]
-                {
-                    substitute_string
-                }
-            } else {
-                substitute_string
-            }
-        } else {
-            String::new()
-        };
+        let security_context = get_security_context(config, &p_buf, must_dereference);
 
         Self {
             md: OnceCell::new(),
@@ -2123,4 +2085,48 @@ fn display_symlink_count(_metadata: &Metadata) -> String {
 #[cfg(unix)]
 fn display_symlink_count(metadata: &Metadata) -> String {
     metadata.nlink().to_string()
+}
+
+// This returns the SELinux security context as UTF8 `String`.
+// In the long term this should be changed to `OsStr`, see discussions at #2621/#2656
+fn get_security_context(config: &Config, p_buf: &PathBuf, must_dereference: bool) -> String {
+    let substitute_string = "?".to_string();
+    if config.context {
+        if config.selinux_supported {
+            #[cfg(feature = "selinux")]
+            {
+                match selinux::SecurityContext::of_path(p_buf, must_dereference, false) {
+                    Err(_r) => {
+                        // TODO: show the actual reason why it failed
+                        show_warning!("failed to get security context of: {}", p_buf.quote());
+                        substitute_string
+                    }
+                    Ok(None) => substitute_string,
+                    Ok(Some(context)) => {
+                        let mut context = context.as_bytes();
+                        if context.ends_with(&[0]) {
+                            // TODO: replace with `strip_prefix()` when MSRV >= 1.51
+                            context = &context[..context.len() - 1]
+                        };
+                        String::from_utf8(context.to_vec()).unwrap_or_else(|e| {
+                            show_warning!(
+                                "getting security context of: {}: {}",
+                                p_buf.quote(),
+                                e.to_string()
+                            );
+                            String::from_utf8_lossy(context).into_owned()
+                        })
+                    }
+                }
+            }
+            #[cfg(not(feature = "selinux"))]
+            {
+                substitute_string
+            }
+        } else {
+            substitute_string
+        }
+    } else {
+        String::new()
+    }
 }
