@@ -24,7 +24,7 @@ use std::collections::VecDeque;
 use std::fmt;
 use std::fs::{File, Metadata};
 use std::io::{stdin, stdout, BufRead, BufReader, Read, Seek, SeekFrom, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::channel;
 use std::time::Duration;
 use uucore::display::Quotable;
@@ -152,20 +152,20 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let verbose = matches.is_present(options::verbosity::VERBOSE);
     let quiet = matches.is_present(options::verbosity::QUIET);
 
-    let files: Vec<String> = matches
+    let paths: Vec<PathBuf> = matches
         .values_of(options::ARG_FILES)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_else(|| vec![String::from("-")]);
+        .map(|v| v.map(PathBuf::from).collect())
+        .unwrap_or_else(|| vec![PathBuf::from("-")]);
 
-    let mut files_count = files.len();
+    let mut files_count = paths.len();
     let mut first_header = true;
-    let mut readers: Vec<(Box<dyn BufRead>, &String)> = Vec::new();
+    let mut readers: Vec<(Box<dyn BufRead>, &PathBuf)> = Vec::new();
 
     #[cfg(unix)]
-    let stdin_string = String::from("standard input");
+    let stdin_string = PathBuf::from("standard input");
 
-    for filename in &files {
-        let use_stdin = filename.as_str() == "-";
+    for filename in &paths {
+        let use_stdin = filename.to_str() == Some("-");
 
         if use_stdin {
             if verbose && !quiet {
@@ -211,7 +211,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 if !first_header {
                     println!();
                 }
-                println!("==> {} <==", filename);
+                println!("==> {} <==", filename.display());
             }
             first_header = false;
             let mut file = File::open(&path).unwrap();
@@ -315,7 +315,7 @@ pub fn uu_app() -> App<'static, 'static> {
         )
 }
 
-fn follow<T: BufRead>(readers: &mut [(T, &String)], settings: &Settings) {
+fn follow<T: BufRead>(readers: &mut [(T, &PathBuf)], settings: &Settings) {
     assert!(settings.follow);
     if readers.is_empty() {
         return;
@@ -325,16 +325,17 @@ fn follow<T: BufRead>(readers: &mut [(T, &String)], settings: &Settings) {
     let mut read_some = false;
     let mut process = platform::ProcessChecker::new(settings.pid);
 
-    use notify::{PollWatcher, RecursiveMode, Watcher};
+    use notify::{RecursiveMode, Watcher};
+    use std::sync::{Arc, Mutex};
     let (tx, rx) = channel();
 
-    let mut watcher;
+    let mut watcher: Box<dyn Watcher>;
     if dbg!(settings.force_polling) {
-        watcher = PollWatcher::new(tx, settings.sleep_sec).unwrap();
+        watcher = Box::new(
+            notify::PollWatcher::with_delay(Arc::new(Mutex::new(tx)), settings.sleep_sec).unwrap(),
+        );
     } else {
-        // The trait `Watcher` cannot be made into an object because it requires `Self: Sized`.
-        // watcher = watcher(tx, setting.sleep_sec).unwrap();
-        todo!();
+        watcher = Box::new(notify::RecommendedWatcher::new(tx).unwrap());
     };
 
     for (_, path) in readers.iter() {
@@ -362,7 +363,7 @@ fn follow<T: BufRead>(readers: &mut [(T, &String)], settings: &Settings) {
                     Ok(_) => {
                         read_some = true;
                         if i != last {
-                            println!("\n==> {} <==", filename);
+                            println!("\n==> {} <==", filename.display());
                             last = i;
                         }
                         print!("{}", datum);

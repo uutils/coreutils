@@ -16,7 +16,7 @@ path = "src/tail.rs"
 
 [dependencies]
 clap = { version = "2.33", features = ["wrap_help"] }
-notify = "4.0.17"
+notify = "5.0.0-pre.13"
 libc = "0.2.42"
 uucore = { version=">=0.0.9", package="uucore", path="../../uucore", features=["ringbuffer"] }
 uucore_procs = { version=">=0.0.6", package="uucore_procs", path="../../uucore_procs" }
