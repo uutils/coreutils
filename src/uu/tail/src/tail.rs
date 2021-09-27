@@ -70,11 +70,17 @@ enum FilterMode {
     Lines(usize, u8), // (number of lines, delimiter)
 }
 
+#[derive(Debug, PartialEq)]
+enum FollowMode {
+    Descriptor,
+    Name,
+}
+
 struct Settings {
     mode: FilterMode,
     sleep_sec: Duration,
     beginning: bool,
-    follow: bool,
+    follow: Option<FollowMode>,
     force_polling: bool,
     pid: platform::Pid,
 }
@@ -85,7 +91,7 @@ impl Default for Settings {
             mode: FilterMode::Lines(10, b'\n'),
             sleep_sec: Duration::from_secs_f32(1.0),
             beginning: false,
-            follow: false,
+            follow: None,
             force_polling: false,
             pid: 0,
         }
@@ -100,7 +106,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let matches = app.get_matches_from(args);
 
-    settings.follow = matches.is_present(options::FOLLOW);
+    settings.follow = if matches.occurrences_of(options::FOLLOW) == 0 {
+        None
+    } else if matches.value_of(options::FOLLOW) == Some("name") {
+        Some(FollowMode::Name)
+    } else {
+        Some(FollowMode::Descriptor)
+    };
 
     if let Some(s) = matches.value_of(options::SLEEP_INT) {
         settings.sleep_sec = match s.parse::<f32>() {
@@ -113,7 +125,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         if let Ok(pid) = pid_str.parse() {
             settings.pid = pid;
             if pid != 0 {
-                if !settings.follow {
+                if settings.follow.is_none() {
                     show_warning!("PID ignored; --pid=PID is useful only when following");
                 }
 
@@ -192,7 +204,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 not the -f option shall be ignored.
                 */
 
-                if settings.follow && !stdin_is_pipe_or_fifo() {
+                if settings.follow.is_some() && !stdin_is_pipe_or_fifo() {
                     readers.push((Box::new(reader), &stdin_string));
                 }
             }
@@ -218,22 +230,22 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             let md = file.metadata().unwrap();
             if is_seekable(&mut file) && get_block_size(&md) > 0 {
                 bounded_tail(&mut file, &settings);
-                if settings.follow {
+                if settings.follow.is_some() {
                     let reader = BufReader::new(file);
                     readers.push((Box::new(reader), filename));
                 }
             } else {
                 let mut reader = BufReader::new(file);
                 unbounded_tail(&mut reader, &settings);
-                if settings.follow {
+                if settings.follow.is_some() {
                     readers.push((Box::new(reader), filename));
                 }
             }
         }
     }
 
-    if settings.follow {
-        follow(&mut readers[..], &settings);
+    if settings.follow.is_some() {
+        follow(&mut readers, &settings);
     }
 
     return_code
@@ -257,6 +269,12 @@ pub fn uu_app() -> App<'static, 'static> {
             Arg::with_name(options::FOLLOW)
                 .short("f")
                 .long(options::FOLLOW)
+                .default_value("descriptor")
+                .takes_value(true)
+                .min_values(0)
+                .max_values(1)
+                .require_equals(true)
+                .possible_values(&["descriptor", "name"])
                 .help("Print the file as it grows"),
         )
         .arg(
@@ -315,13 +333,13 @@ pub fn uu_app() -> App<'static, 'static> {
         )
 }
 
-fn follow<T: BufRead>(readers: &mut [(T, &PathBuf)], settings: &Settings) {
-    assert!(settings.follow);
+fn follow(readers: &mut Vec<(Box<dyn BufRead>, &PathBuf)>, settings: &Settings) {
+    assert!(settings.follow.is_some());
     if readers.is_empty() {
         return;
     }
 
-    let mut last = readers.len() - 1;
+    let last = readers.len() - 1;
     let mut read_some = false;
     let mut process = platform::ProcessChecker::new(settings.pid);
 
@@ -330,7 +348,7 @@ fn follow<T: BufRead>(readers: &mut [(T, &PathBuf)], settings: &Settings) {
     let (tx, rx) = channel();
 
     let mut watcher: Box<dyn Watcher>;
-    if dbg!(settings.force_polling) {
+    if settings.force_polling {
         watcher = Box::new(
             notify::PollWatcher::with_delay(Arc::new(Mutex::new(tx)), settings.sleep_sec).unwrap(),
         );
@@ -339,44 +357,130 @@ fn follow<T: BufRead>(readers: &mut [(T, &PathBuf)], settings: &Settings) {
     };
 
     for (_, path) in readers.iter() {
+        // NOTE: Using the parent directory here instead of the file is a workaround.
+        // On Linux (other OSs not tested yet) the watcher can crash for rename/delete/move
+        // operations if a file is watched directly.
+        // This is the recommendation of the notify crate authors:
+        // > On some platforms, if the `path` is renamed or removed while being watched, behaviour may
+        // > be unexpected. See discussions in [#165] and [#166]. If less surprising behaviour is wanted
+        // > one may non-recursively watch the _parent_ directory as well and manage related events.
+        let parent = path.parent().unwrap(); // This should never be `None` if `path.is_file()`
+        let path = if parent.is_dir() {
+            parent
+        } else {
+            Path::new(".")
+        };
         watcher.watch(path, RecursiveMode::NonRecursive).unwrap();
     }
 
     loop {
-        // std::thread::sleep(settings.sleep_sec);
-        let _result = rx.recv();
-        // TODO:
-        // match rx.recv() {
-        //     Ok(event) => println!("\n{:?}", event),
-        //     Err(e) => println!("watch error: {:?}", e),
-        // }
+        match rx.recv() {
+            Ok(Ok(event)) => {
+                // println!("\n{:?}", event);
+                if settings.follow == Some(FollowMode::Name) {
+                    use notify::event::*;
+                    for (i, (reader, path)) in readers.iter_mut().enumerate() {
+                        if let Some(event_path) = event.paths.first() {
+                            if path.ends_with(
+                                event_path
+                                    .file_name()
+                                    .unwrap_or_else(|| std::ffi::OsStr::new("")),
+                            ) {
+                                match event.kind {
+                                    // notify::EventKind::Any => {}
+                                    // EventKind::Access(AccessKind::Close(AccessMode::Write)) => {}
+                                    EventKind::Create(CreateKind::File)
+                                    | EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
+                                        // This triggers for e.g.:
+                                        // Create: cp log.bak log.dat
+                                        // Rename: mv log.bak log.dat
 
-        let pid_is_dead = !read_some && settings.pid != 0 && process.is_dead();
-        read_some = false;
+                                        let msg = if settings.force_polling {
+                                            format!(
+                                                "{} has been replaced;  following new file",
+                                                path.quote()
+                                            )
+                                        } else {
+                                            format!(
+                                                "{} has appeared;  following new file",
+                                                path.quote()
+                                            )
+                                        };
+                                        show_error!("{}", msg);
+                                        // Since Files are automatically closed when they go out of
+                                        // scope, we resume tracking from the start of the file,
+                                        // assuming it has been truncated to 0, which is the usual
+                                        // truncation operation for log files.
 
-        for (i, (reader, filename)) in readers.iter_mut().enumerate() {
-            // Print all new content since the last pass
-            loop {
-                let mut datum = String::new();
-                match reader.read_line(&mut datum) {
-                    Ok(0) => break,
-                    Ok(_) => {
-                        read_some = true;
-                        if i != last {
-                            println!("\n==> {} <==", filename.display());
-                            last = i;
+                                        // Open file again and then print it from the beginning.
+                                        let new_reader =
+                                            Box::new(BufReader::new(File::open(&path).unwrap()));
+                                        let _ = std::mem::replace(reader, new_reader);
+                                        read_some =
+                                            print_file((i, &mut (reader, path)), last, read_some);
+                                    }
+                                    // EventKind::Modify(ModifyKind::Metadata(_)) => {}
+                                    // EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {}
+                                    // EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {}
+                                    EventKind::Remove(RemoveKind::File)
+                                    | EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
+                                        // This triggers for e.g.:
+                                        // Create: cp log.dat log.bak
+                                        // Rename: mv log.dat log.bak
+                                        if !settings.force_polling {
+                                            show_error!(
+                                                "{}: No such file or directory",
+                                                path.display()
+                                            );
+                                        }
+                                    }
+                                    // notify::EventKind::Other => {}
+                                    _ => {} // println!("{:?}", event.kind),
+                                }
+                            }
                         }
-                        print!("{}", datum);
                     }
-                    Err(err) => panic!("{}", err),
                 }
             }
+            Err(e) => println!("{:?}", e),
+            _ => print!("UnknownError"),
+        }
+
+        let pid_is_dead = !read_some && settings.pid != 0 && process.is_dead();
+
+        for reader_i in readers.iter_mut().enumerate() {
+            read_some = print_file(reader_i, last, read_some);
         }
 
         if pid_is_dead {
             break;
         }
     }
+}
+
+// Print all new content since the last pass
+fn print_file<T: BufRead>(
+    reader_i: (usize, &mut (T, &PathBuf)),
+    mut last: usize,
+    mut read_some: bool,
+) -> bool {
+    let (i, (reader, filename)) = reader_i;
+    loop {
+        let mut datum = String::new();
+        match reader.read_line(&mut datum) {
+            Ok(0) => break,
+            Ok(_) => {
+                read_some = true;
+                if i != last {
+                    println!("\n==> {} <==", filename.display());
+                    last = i;
+                }
+                print!("{}", datum);
+            }
+            Err(err) => panic!("{}", err),
+        }
+    }
+    read_some
 }
 
 /// Iterate over bytes in the file, in reverse, until we find the
