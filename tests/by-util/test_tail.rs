@@ -9,11 +9,15 @@ extern crate tail;
 
 use crate::common::util::*;
 use std::char::from_digit;
-use std::io::Write;
+use std::io::{Read, Write};
+use std::thread::sleep;
+use std::time::Duration;
 
 static FOOBAR_TXT: &str = "foobar.txt";
 static FOOBAR_2_TXT: &str = "foobar2.txt";
 static FOOBAR_WITH_NULL_TXT: &str = "foobar_with_null.txt";
+static FOLLOW_NAME_TXT: &str = "follow_name.txt";
+static FOLLOW_NAME_EXP: &str = "follow_name.expected";
 
 #[test]
 fn test_stdin_default() {
@@ -470,4 +474,92 @@ fn test_tail_bytes_for_funny_files() {
             .stderr_is(exp_result.stderr_str())
             .code_is(exp_result.code());
     }
+}
+
+#[test]
+fn test_follow_name_create() {
+    // This test triggers a remove/create event while `tail --follow=name logfile` is running.
+    // cp logfile backup && rm logfile && sleep 1 && cp backup logfile
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let source = FOLLOW_NAME_TXT;
+    let source_canonical = &at.plus(source);
+    let backup = at.plus_as_string("backup");
+
+    let expected_stdout = at.read(FOLLOW_NAME_EXP);
+    let expected_stderr = format!(
+        "{}: {}: No such file or directory\n{0}: '{1}' has appeared;  following new file\n",
+        ts.util_name, source
+    );
+
+    let args = ["--follow=name", source];
+    let mut p = ts.ucmd().args(&args).run_no_wait();
+
+    let delay = 5;
+
+    std::fs::copy(&source_canonical, &backup).unwrap();
+    sleep(Duration::from_millis(delay));
+
+    std::fs::remove_file(source_canonical).unwrap();
+    sleep(Duration::from_millis(delay));
+
+    std::fs::copy(&backup, &source_canonical).unwrap();
+    sleep(Duration::from_millis(delay));
+
+    p.kill().unwrap();
+
+    let mut buf_stdout = String::new();
+    let mut p_stdout = p.stdout.take().unwrap();
+    p_stdout.read_to_string(&mut buf_stdout).unwrap();
+    assert_eq!(buf_stdout, expected_stdout);
+
+    let mut buf_stderr = String::new();
+    let mut p_stderr = p.stderr.take().unwrap();
+    p_stderr.read_to_string(&mut buf_stderr).unwrap();
+    assert_eq!(buf_stderr, expected_stderr);
+}
+
+#[test]
+fn test_follow_name_move() {
+    // This test triggers a move event while `tail --follow=name logfile` is running.
+    // mv logfile backup && sleep 1 && mv backup file
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let source = FOLLOW_NAME_TXT;
+    let source_canonical = &at.plus(source);
+    let backup = at.plus_as_string("backup");
+
+    let expected_stdout = at.read("follow_name.expected");
+    let expected_stderr = format!(
+        "{}: {}: No such file or directory\n{0}: '{1}' has appeared;  following new file\n",
+        ts.util_name, source
+    );
+
+    let args = ["--follow=name", source];
+    let mut p = ts.ucmd().args(&args).run_no_wait();
+
+    let delay = 5;
+
+    sleep(Duration::from_millis(delay));
+    std::fs::rename(&source_canonical, &backup).unwrap();
+    sleep(Duration::from_millis(delay));
+
+    std::fs::rename(&backup, &source_canonical).unwrap();
+    sleep(Duration::from_millis(delay));
+
+    p.kill().unwrap();
+
+    let mut buf_stdout = String::new();
+    let mut p_stdout = p.stdout.take().unwrap();
+    p_stdout.read_to_string(&mut buf_stdout).unwrap();
+    assert_eq!(buf_stdout, expected_stdout);
+
+    let mut buf_stderr = String::new();
+    let mut p_stderr = p.stderr.take().unwrap();
+    p_stderr.read_to_string(&mut buf_stderr).unwrap();
+    assert_eq!(buf_stderr, expected_stderr);
 }
