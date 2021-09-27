@@ -522,6 +522,51 @@ fn test_follow_name_create() {
 }
 
 #[test]
+fn test_follow_name_create_polling() {
+    // This test triggers a remove/create event while `tail --follow=name --disable-inotify logfile` is running.
+    // cp logfile backup && rm logfile && sleep 1 && cp backup logfile
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let source = FOLLOW_NAME_TXT;
+    let source_canonical = &at.plus(source);
+    let backup = at.plus_as_string("backup");
+
+    let expected_stdout = at.read(FOLLOW_NAME_EXP);
+    let expected_stderr = format!(
+        "{}: '{}' has been replaced;  following new file\n",
+        ts.util_name, source
+    );
+
+    let args = ["--follow=name", "--disable-inotify", source];
+    let mut p = ts.ucmd().args(&args).run_no_wait();
+
+    let delay = 750;
+
+    std::fs::copy(&source_canonical, &backup).unwrap();
+    sleep(Duration::from_millis(delay));
+
+    std::fs::remove_file(source_canonical).unwrap();
+    sleep(Duration::from_millis(delay));
+
+    std::fs::copy(&backup, &source_canonical).unwrap();
+    sleep(Duration::from_millis(delay));
+
+    p.kill().unwrap();
+
+    let mut buf_stdout = String::new();
+    let mut p_stdout = p.stdout.take().unwrap();
+    p_stdout.read_to_string(&mut buf_stdout).unwrap();
+    assert_eq!(buf_stdout, expected_stdout);
+
+    let mut buf_stderr = String::new();
+    let mut p_stderr = p.stderr.take().unwrap();
+    p_stderr.read_to_string(&mut buf_stderr).unwrap();
+    assert_eq!(buf_stderr, expected_stderr);
+}
+
+#[test]
 fn test_follow_name_move() {
     // This test triggers a move event while `tail --follow=name logfile` is running.
     // mv logfile backup && sleep 1 && mv backup file
@@ -543,6 +588,49 @@ fn test_follow_name_move() {
     let mut p = ts.ucmd().args(&args).run_no_wait();
 
     let delay = 5;
+
+    sleep(Duration::from_millis(delay));
+    std::fs::rename(&source_canonical, &backup).unwrap();
+    sleep(Duration::from_millis(delay));
+
+    std::fs::rename(&backup, &source_canonical).unwrap();
+    sleep(Duration::from_millis(delay));
+
+    p.kill().unwrap();
+
+    let mut buf_stdout = String::new();
+    let mut p_stdout = p.stdout.take().unwrap();
+    p_stdout.read_to_string(&mut buf_stdout).unwrap();
+    assert_eq!(buf_stdout, expected_stdout);
+
+    let mut buf_stderr = String::new();
+    let mut p_stderr = p.stderr.take().unwrap();
+    p_stderr.read_to_string(&mut buf_stderr).unwrap();
+    assert_eq!(buf_stderr, expected_stderr);
+}
+
+#[test]
+fn test_follow_name_move_polling() {
+    // This test triggers a move event while `tail --follow=name --disable-inotify logfile` is running.
+    // mv logfile backup && sleep 1 && mv backup file
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let source = FOLLOW_NAME_TXT;
+    let source_canonical = &at.plus(source);
+    let backup = at.plus_as_string("backup");
+
+    let expected_stdout = at.read("follow_name.expected");
+    let expected_stderr = format!(
+        "{}: '{}' has been replaced;  following new file\n",
+        ts.util_name, source
+    );
+
+    let args = ["--follow=name", "--disable-inotify", source];
+    let mut p = ts.ucmd().args(&args).run_no_wait();
+
+    let delay = 750;
 
     sleep(Duration::from_millis(delay));
     std::fs::rename(&source_canonical, &backup).unwrap();

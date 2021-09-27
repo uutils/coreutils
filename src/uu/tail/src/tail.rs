@@ -390,6 +390,7 @@ fn follow(readers: &mut Vec<(Box<dyn BufRead>, &PathBuf)>, settings: &Settings) 
                                     // notify::EventKind::Any => {}
                                     // EventKind::Access(AccessKind::Close(AccessMode::Write)) => {}
                                     EventKind::Create(CreateKind::File)
+                                    | EventKind::Create(CreateKind::Any)
                                     | EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
                                         // This triggers for e.g.:
                                         // Create: cp log.bak log.dat
@@ -423,6 +424,7 @@ fn follow(readers: &mut Vec<(Box<dyn BufRead>, &PathBuf)>, settings: &Settings) 
                                     // EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {}
                                     // EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {}
                                     EventKind::Remove(RemoveKind::File)
+                                    | EventKind::Remove(RemoveKind::Any)
                                     | EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
                                         // This triggers for e.g.:
                                         // Create: cp log.dat log.bak
