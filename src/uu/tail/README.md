@@ -6,12 +6,20 @@
 
 ### Flags with features
 
-- [ ] `--max-unchanged-stats` : with `--follow=name`, reopen a FILE which has not changed size after N (default 5) iterations  to see if it has been unlinked or renamed (this is the usual case of rotated log files).  With `inotify`, this option is rarely useful.
-- [ ] `--retry` : keep trying to open a file even when it is or becomes inaccessible; useful when follow‐ing by name, i.e., with `--follow=name`
+- [x] fastpoll='-s.1 --max-unchanged-stats=1'
+    - [x] sub-second sleep interval e.g. `-s.1`
+    - [ ] `--max-unchanged-stats` (only meaningful with `--follow=name` `---disable-inotify`)
+- [x] `---disable-inotify` (three hyphens is correct)
+- [x] `--follow=name'
+- [ ] `--retry'
+- [ ] `-F' (same as `--follow=name` `--retry`)
 
 ### Others
 
 - [ ] The current implementation doesn't follow stdin in non-unix platforms
+- [ ] Since the current implementation uses a crate for polling, the following is difficult to implement:
+    - [ ] `--max-unchanged-stats`
+    - [ ] check whether process p is alive at least every number of seconds (relevant for `--pid`)
 
 ## Possible optimizations
 

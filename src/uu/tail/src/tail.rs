@@ -62,6 +62,7 @@ pub mod options {
     pub static SLEEP_INT: &str = "sleep-interval";
     pub static ZERO_TERM: &str = "zero-terminated";
     pub static DISABLE_INOTIFY_TERM: &str = "disable-inotify";
+    pub static MAX_UNCHANGED_STATS: &str = "max-unchanged-stats";
     pub static ARG_FILES: &str = "files";
 }
 
@@ -79,6 +80,7 @@ enum FollowMode {
 struct Settings {
     mode: FilterMode,
     sleep_sec: Duration,
+    max_unchanged_stats: usize,
     beginning: bool,
     follow: Option<FollowMode>,
     force_polling: bool,
@@ -90,6 +92,7 @@ impl Default for Settings {
         Settings {
             mode: FilterMode::Lines(10, b'\n'),
             sleep_sec: Duration::from_secs_f32(1.0),
+            max_unchanged_stats: 5,
             beginning: false,
             follow: None,
             force_polling: false,
@@ -118,6 +121,17 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         settings.sleep_sec = match s.parse::<f32>() {
             Ok(s) => Duration::from_secs_f32(s),
             Err(_) => crash!(1, "invalid number of seconds: {}", s.quote()),
+        }
+    }
+
+    if let Some(s) = matches.value_of(options::MAX_UNCHANGED_STATS) {
+        settings.max_unchanged_stats = match s.parse::<usize>() {
+            Ok(s) => s,
+            Err(_) => crash!(
+                1,
+                "invalid maximum number of unchanged stats between opens: {}",
+                s.quote()
+            ),
         }
     }
 
@@ -308,6 +322,17 @@ pub fn uu_app() -> App<'static, 'static> {
                 .help("Number or seconds to sleep between polling the file when running with -f"),
         )
         .arg(
+            Arg::with_name(options::MAX_UNCHANGED_STATS)
+                .takes_value(true)
+                .long(options::MAX_UNCHANGED_STATS)
+                .help(
+                    "Reopen a FILE which has not changed size after N (default 5) iterations to \
+                    see if it has been unlinked or renamed (this is the usual case of rotated log \
+                        files); This option is meaningful only when polling \
+                    (i.e., with --disable-inotify) and when --follow=name.",
+                ),
+        )
+        .arg(
             Arg::with_name(options::verbosity::VERBOSE)
                 .short("v")
                 .long(options::verbosity::VERBOSE)
@@ -404,6 +429,11 @@ fn follow(readers: &mut Vec<(Box<dyn BufRead>, &PathBuf, Option<Metadata>)>, set
             // pid is dead
             break;
         }
+
+        // TODO:
+        // Implement `--max-unchanged-stats`, however right now we use the `PollWatcher` from the
+        // notify crate if `--disable-inotify` is selected. This means we cannot do any thing
+        // useful with `--max-unchanged-stats` here.
     }
 }
 
