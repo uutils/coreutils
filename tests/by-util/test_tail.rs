@@ -106,6 +106,30 @@ fn test_follow_multiple() {
 }
 
 #[test]
+fn test_follow_name_multiple() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut child = ucmd
+        .arg("--follow=name")
+        .arg(FOOBAR_TXT)
+        .arg(FOOBAR_2_TXT)
+        .run_no_wait();
+
+    let expected = at.read("foobar_follow_multiple.expected");
+    assert_eq!(read_size(&mut child, expected.len()), expected);
+
+    let first_append = "trois\n";
+    at.append(FOOBAR_2_TXT, first_append);
+    assert_eq!(read_size(&mut child, first_append.len()), first_append);
+
+    let second_append = "twenty\nthirty\n";
+    let expected = at.read("foobar_follow_multiple_appended.expected");
+    at.append(FOOBAR_TXT, second_append);
+    assert_eq!(read_size(&mut child, expected.len()), expected);
+
+    child.kill().unwrap();
+}
+
+#[test]
 fn test_follow_stdin() {
     new_ucmd!()
         .arg("-f")
@@ -503,6 +527,48 @@ fn test_follow_name_create() {
     sleep(Duration::from_millis(delay));
 
     std::fs::remove_file(source_canonical).unwrap();
+    sleep(Duration::from_millis(delay));
+
+    std::fs::copy(&backup, &source_canonical).unwrap();
+    sleep(Duration::from_millis(delay));
+
+    p.kill().unwrap();
+
+    let mut buf_stdout = String::new();
+    let mut p_stdout = p.stdout.take().unwrap();
+    p_stdout.read_to_string(&mut buf_stdout).unwrap();
+    assert_eq!(buf_stdout, expected_stdout);
+
+    let mut buf_stderr = String::new();
+    let mut p_stderr = p.stderr.take().unwrap();
+    p_stderr.read_to_string(&mut buf_stderr).unwrap();
+    assert_eq!(buf_stderr, expected_stderr);
+}
+
+#[test]
+fn test_follow_name_truncate() {
+    // This test triggers a truncate event while `tail --follow=name logfile` is running.
+    // cp logfile backup && head logfile > logfile && sleep 1 && cp backup logfile
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let source = FOLLOW_NAME_TXT;
+    let source_canonical = &at.plus(source);
+    let backup = at.plus_as_string("backup");
+
+    let expected_stdout = at.read(FOLLOW_NAME_EXP);
+    let expected_stderr = format!("{}: {}: file truncated\n", ts.util_name, source);
+
+    let args = ["--follow=name", source];
+    let mut p = ts.ucmd().args(&args).run_no_wait();
+
+    let delay = 10;
+
+    std::fs::copy(&source_canonical, &backup).unwrap();
+    sleep(Duration::from_millis(delay));
+
+    let _ = std::fs::File::create(source_canonical).unwrap(); // trigger truncate
     sleep(Duration::from_millis(delay));
 
     std::fs::copy(&backup, &source_canonical).unwrap();

@@ -171,7 +171,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let mut files_count = paths.len();
     let mut first_header = true;
-    let mut readers: Vec<(Box<dyn BufRead>, &PathBuf)> = Vec::new();
+    let mut readers: Vec<(Box<dyn BufRead>, &PathBuf, Option<Metadata>)> = Vec::new();
 
     #[cfg(unix)]
     let stdin_string = PathBuf::from("standard input");
@@ -205,7 +205,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 */
 
                 if settings.follow.is_some() && !stdin_is_pipe_or_fifo() {
-                    readers.push((Box::new(reader), &stdin_string));
+                    readers.push((Box::new(reader), &stdin_string, None));
                 }
             }
         } else {
@@ -227,18 +227,18 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             }
             first_header = false;
             let mut file = File::open(&path).unwrap();
-            let md = file.metadata().unwrap();
-            if is_seekable(&mut file) && get_block_size(&md) > 0 {
+            let md = file.metadata().ok();
+            if is_seekable(&mut file) && get_block_size(md.as_ref().unwrap()) > 0 {
                 bounded_tail(&mut file, &settings);
                 if settings.follow.is_some() {
                     let reader = BufReader::new(file);
-                    readers.push((Box::new(reader), filename));
+                    readers.push((Box::new(reader), filename, md));
                 }
             } else {
                 let mut reader = BufReader::new(file);
                 unbounded_tail(&mut reader, &settings);
                 if settings.follow.is_some() {
-                    readers.push((Box::new(reader), filename));
+                    readers.push((Box::new(reader), filename, md));
                 }
             }
         }
@@ -333,14 +333,12 @@ pub fn uu_app() -> App<'static, 'static> {
         )
 }
 
-fn follow(readers: &mut Vec<(Box<dyn BufRead>, &PathBuf)>, settings: &Settings) {
+fn follow(readers: &mut Vec<(Box<dyn BufRead>, &PathBuf, Option<Metadata>)>, settings: &Settings) {
     assert!(settings.follow.is_some());
     if readers.is_empty() {
         return;
     }
 
-    let last = readers.len() - 1;
-    let mut read_some = false;
     let mut process = platform::ProcessChecker::new(settings.pid);
 
     use notify::{RecursiveMode, Watcher};
@@ -349,14 +347,23 @@ fn follow(readers: &mut Vec<(Box<dyn BufRead>, &PathBuf)>, settings: &Settings) 
 
     let mut watcher: Box<dyn Watcher>;
     if settings.force_polling {
+        // Polling based Watcher implementation
         watcher = Box::new(
             notify::PollWatcher::with_delay(Arc::new(Mutex::new(tx)), settings.sleep_sec).unwrap(),
         );
     } else {
+        // Watcher is implemented per platform using the best implementation available on that
+        // platform. In addition to such event driven implementations, a polling implementation
+        // is also provided that should work on any platform.
+        // Linux / Android: inotify
+        // macOS: FSEvents
+        // Windows: ReadDirectoryChangesW
+        // FreeBSD / NetBSD / OpenBSD / DragonflyBSD: kqueue
+        // Fallback: polling (default delay is 30 seconds!)
         watcher = Box::new(notify::RecommendedWatcher::new(tx).unwrap());
     };
 
-    for (_, path) in readers.iter() {
+    for (_, path, _) in readers.iter() {
         // NOTE: Using the parent directory here instead of the file is a workaround.
         // On Linux (other OSs not tested yet) the watcher can crash for rename/delete/move
         // operations if a file is watched directly.
@@ -373,100 +380,122 @@ fn follow(readers: &mut Vec<(Box<dyn BufRead>, &PathBuf)>, settings: &Settings) 
         watcher.watch(path, RecursiveMode::NonRecursive).unwrap();
     }
 
+    let mut read_some;
+    let last = readers.len() - 1;
+
     loop {
+        read_some = false;
         match rx.recv() {
             Ok(Ok(event)) => {
-                // println!("\n{:?}", event);
+                // println!("\n{:?}\n", event);
                 if settings.follow == Some(FollowMode::Name) {
-                    use notify::event::*;
-                    for (i, (reader, path)) in readers.iter_mut().enumerate() {
-                        if let Some(event_path) = event.paths.first() {
-                            if path.ends_with(
-                                event_path
-                                    .file_name()
-                                    .unwrap_or_else(|| std::ffi::OsStr::new("")),
-                            ) {
-                                match event.kind {
-                                    // notify::EventKind::Any => {}
-                                    // EventKind::Access(AccessKind::Close(AccessMode::Write)) => {}
-                                    EventKind::Create(CreateKind::File)
-                                    | EventKind::Create(CreateKind::Any)
-                                    | EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
-                                        // This triggers for e.g.:
-                                        // Create: cp log.bak log.dat
-                                        // Rename: mv log.bak log.dat
-
-                                        let msg = if settings.force_polling {
-                                            format!(
-                                                "{} has been replaced;  following new file",
-                                                path.quote()
-                                            )
-                                        } else {
-                                            format!(
-                                                "{} has appeared;  following new file",
-                                                path.quote()
-                                            )
-                                        };
-                                        show_error!("{}", msg);
-                                        // Since Files are automatically closed when they go out of
-                                        // scope, we resume tracking from the start of the file,
-                                        // assuming it has been truncated to 0, which is the usual
-                                        // truncation operation for log files.
-
-                                        // Open file again and then print it from the beginning.
-                                        let new_reader =
-                                            Box::new(BufReader::new(File::open(&path).unwrap()));
-                                        let _ = std::mem::replace(reader, new_reader);
-                                        read_some =
-                                            print_file((i, &mut (reader, path)), last, read_some);
-                                    }
-                                    // EventKind::Modify(ModifyKind::Metadata(_)) => {}
-                                    // EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {}
-                                    // EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {}
-                                    EventKind::Remove(RemoveKind::File)
-                                    | EventKind::Remove(RemoveKind::Any)
-                                    | EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
-                                        // This triggers for e.g.:
-                                        // Create: cp log.dat log.bak
-                                        // Rename: mv log.dat log.bak
-                                        if !settings.force_polling {
-                                            show_error!(
-                                                "{}: No such file or directory",
-                                                path.display()
-                                            );
-                                        }
-                                    }
-                                    // notify::EventKind::Other => {}
-                                    _ => {} // println!("{:?}", event.kind),
-                                }
-                            }
-                        }
-                    }
+                    handle_event(event, readers, settings, last);
                 }
             }
-            Err(e) => println!("{:?}", e),
-            _ => print!("UnknownError"),
+            Err(e) => eprintln!("{:?}", e),
+            _ => eprintln!("UnknownError"),
         }
-
-        let pid_is_dead = !read_some && settings.pid != 0 && process.is_dead();
 
         for reader_i in readers.iter_mut().enumerate() {
-            read_some = print_file(reader_i, last, read_some);
+            read_some = print_file(reader_i, last);
         }
 
-        if pid_is_dead {
+        if !read_some && settings.pid != 0 && process.is_dead() {
+            // pid is dead
             break;
         }
     }
 }
 
-// Print all new content since the last pass
-fn print_file<T: BufRead>(
-    reader_i: (usize, &mut (T, &PathBuf)),
-    mut last: usize,
-    mut read_some: bool,
+fn handle_event(
+    event: notify::Event,
+    readers: &mut Vec<(Box<dyn BufRead>, &PathBuf, Option<Metadata>)>,
+    settings: &Settings,
+    last: usize,
 ) -> bool {
-    let (i, (reader, filename)) = reader_i;
+    let mut read_some = false;
+    use notify::event::*;
+    for (i, (reader, path, metadata)) in readers.iter_mut().enumerate() {
+        if let Some(event_path) = event.paths.first() {
+            if path.ends_with(
+                event_path
+                    .file_name()
+                    .unwrap_or_else(|| std::ffi::OsStr::new("")),
+            ) {
+                match event.kind {
+                    // notify::EventKind::Any => {}
+                    EventKind::Access(AccessKind::Close(AccessMode::Write))
+                    | EventKind::Modify(ModifyKind::Data(DataChange::Any)) => {
+                        // This triggers for e.g.:
+                        // head log.dat > log.dat
+                        if let Ok(new_md) = path.metadata() {
+                            if let Some(old_md) = metadata {
+                                if new_md.len() < old_md.len() {
+                                    show_error!("{}: file truncated", path.display());
+                                    // Update Metadata, open file again and print from beginning.
+                                    let _ = std::mem::replace(metadata, Some(new_md));
+                                    let new_reader = BufReader::new(File::open(&path).unwrap());
+                                    // let _ = new_reader.seek(SeekFrom::End(0));
+                                    let _ = std::mem::replace(reader, Box::new(new_reader));
+                                    read_some = print_file((i, &mut (reader, path, None)), last);
+                                }
+                            }
+                        }
+                    }
+                    EventKind::Create(CreateKind::File)
+                    | EventKind::Create(CreateKind::Any)
+                    | EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
+                        // This triggers for e.g.:
+                        // Create: cp log.bak log.dat
+                        // Rename: mv log.bak log.dat
+
+                        let msg = if settings.force_polling {
+                            format!("{} has been replaced", path.quote())
+                        } else {
+                            format!("{} has appeared", path.quote())
+                        };
+                        show_error!("{};  following new file", msg);
+                        // Since Files are automatically closed when they go out of
+                        // scope, we resume tracking from the start of the file,
+                        // assuming it has been truncated to 0, which is the usual
+                        // truncation operation for log files.
+
+                        // Open file again and then print it from the beginning.
+                        let new_reader = BufReader::new(File::open(&path).unwrap());
+                        let _ = std::mem::replace(reader, Box::new(new_reader));
+                        read_some = print_file((i, &mut (reader, path, None)), last);
+                    }
+                    // EventKind::Modify(ModifyKind::Metadata(_)) => {}
+                    // EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {}
+                    // EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {}
+                    EventKind::Remove(RemoveKind::File)
+                    | EventKind::Remove(RemoveKind::Any)
+                    | EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
+                        // This triggers for e.g.:
+                        // Create: cp log.dat log.bak
+                        // Rename: mv log.dat log.bak
+                        if !settings.force_polling {
+                            show_error!("{}: No such file or directory", path.display());
+                        }
+                    }
+                    // notify::EventKind::Other => {}
+                    _ => {} // println!("{:?}", event.kind),
+                }
+            }
+        }
+    }
+    read_some
+}
+
+// Print all new content since the last pass.
+// This prints from the current seek position forward.
+// `last` determines if a header needs to be printed.
+fn print_file<T: BufRead>(
+    reader_i: (usize, &mut (T, &PathBuf, Option<Metadata>)),
+    mut last: usize,
+) -> bool {
+    let mut read_some = false;
+    let (i, (reader, filename, _)) = reader_i;
     loop {
         let mut datum = String::new();
         match reader.read_line(&mut datum) {
