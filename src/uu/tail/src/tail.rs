@@ -7,7 +7,8 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) seekable seek'd tail'ing ringbuffer ringbuf
+// spell-checker:ignore (ToDO) seekable seek'd tail'ing ringbuffer ringbuf unwatch
+// spell-checker:ignore (libs) kqueue
 
 #[macro_use]
 extern crate clap;
@@ -38,13 +39,12 @@ use std::os::unix::fs::MetadataExt;
 
 #[cfg(target_os = "linux")]
 pub static BACKEND: &str = "Disable 'inotify' support and use polling instead";
-#[cfg(target_os = "macos")]
-pub static BACKEND: &str = "Disable 'FSEvents' support and use polling instead";
 #[cfg(any(
     target_os = "freebsd",
     target_os = "openbsd",
     target_os = "dragonflybsd",
     target_os = "netbsd",
+    target_os = "macos",
 ))]
 pub static BACKEND: &str = "Disable 'kqueue' support and use polling instead";
 #[cfg(target_os = "windows")]
@@ -374,6 +374,8 @@ fn follow(readers: &mut Vec<(Box<dyn BufRead>, &PathBuf, Option<Metadata>)>, set
     if settings.force_polling {
         // Polling based Watcher implementation
         watcher = Box::new(
+            // TODO: [2021-09; jhscheer] remove arc/mutex if upstream merges:
+            // https://github.com/notify-rs/notify/pull/360
             notify::PollWatcher::with_delay(Arc::new(Mutex::new(tx)), settings.sleep_sec).unwrap(),
         );
     } else {
@@ -381,27 +383,47 @@ fn follow(readers: &mut Vec<(Box<dyn BufRead>, &PathBuf, Option<Metadata>)>, set
         // platform. In addition to such event driven implementations, a polling implementation
         // is also provided that should work on any platform.
         // Linux / Android: inotify
-        // macOS: FSEvents
-        // Windows: ReadDirectoryChangesW
+        // macOS: FSEvents / kqueue
+        // Windows: ReadDirectoryChangesWatcher
         // FreeBSD / NetBSD / OpenBSD / DragonflyBSD: kqueue
         // Fallback: polling (default delay is 30 seconds!)
-        watcher = Box::new(notify::RecommendedWatcher::new(tx).unwrap());
+
+        // NOTE: On macOS only `kqueue` is suitable for our use case since `FSEvents` waits until
+        // file close to delivers modify events. See:
+        // https://github.com/notify-rs/notify/issues/240
+
+        // TODO: [2021-09; jhscheer] change to RecommendedWatcher if upstream merges:
+        // https://github.com/notify-rs/notify/pull/362
+        #[cfg(target_os = "macos")]
+        {
+            watcher = Box::new(notify::kqueue::KqueueWatcher::new(tx).unwrap());
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            watcher = Box::new(notify::RecommendedWatcher::new(tx).unwrap());
+        }
+        // TODO: [2021-09; jhscheer] adjust `delay` if upstream merges:
+        // https://github.com/notify-rs/notify/pull/364
     };
 
     for (_, path, _) in readers.iter() {
-        // NOTE: Using the parent directory here instead of the file is a workaround.
-        // On Linux (other OSs not tested yet) the watcher can crash for rename/delete/move
-        // operations if a file is watched directly.
-        // This is the recommendation of the notify crate authors:
-        // > On some platforms, if the `path` is renamed or removed while being watched, behaviour may
-        // > be unexpected. See discussions in [#165] and [#166]. If less surprising behaviour is wanted
-        // > one may non-recursively watch the _parent_ directory as well and manage related events.
-        let parent = path.parent().unwrap(); // This should never be `None` if `path.is_file()`
-        let path = if parent.is_dir() {
-            parent
+        let path = if cfg!(target_os = "linux") || settings.force_polling == true {
+            // NOTE: Using the parent directory here instead of the file is a workaround.
+            // On Linux the watcher can crash for rename/delete/move operations if a file is watched directly.
+            // This workaround follows the recommendation of the notify crate authors:
+            // > On some platforms, if the `path` is renamed or removed while being watched, behavior may
+            // > be unexpected. See discussions in [#165] and [#166]. If less surprising behavior is wanted
+            // > one may non-recursively watch the _parent_ directory as well and manage related events.
+            let parent = path.parent().unwrap(); // This should never be `None` if `path.is_file()`
+            if parent.is_dir() {
+                parent
+            } else {
+                Path::new(".")
+            }
         } else {
-            Path::new(".")
+            path.as_path()
         };
+
         watcher.watch(path, RecursiveMode::NonRecursive).unwrap();
     }
 
@@ -412,13 +434,37 @@ fn follow(readers: &mut Vec<(Box<dyn BufRead>, &PathBuf, Option<Metadata>)>, set
         read_some = false;
         match rx.recv() {
             Ok(Ok(event)) => {
-                // println!("\n{:?}\n", event);
+                // dbg!(&event);
                 if settings.follow == Some(FollowMode::Name) {
                     handle_event(event, readers, settings, last);
                 }
             }
-            Err(e) => eprintln!("{:?}", e),
-            _ => eprintln!("UnknownError"),
+            // Handle a previously existing `Path` that was removed while watching it:
+            Ok(Err(notify::Error {
+                kind: notify::ErrorKind::Io(ref e),
+                paths,
+            })) if e.kind() == std::io::ErrorKind::NotFound => {
+                // dbg!(e, &paths);
+                for (_, path, _) in readers.iter() {
+                    if let Some(event_path) = paths.first() {
+                        if path.ends_with(
+                            event_path
+                                .file_name()
+                                .unwrap_or_else(|| std::ffi::OsStr::new("")),
+                        ) {
+                            watcher.unwatch(path).unwrap();
+                            show_error!("{}: No such file or directory", path.display());
+                            // TODO: handle `no files remaining`
+                        }
+                    }
+                }
+            }
+            Ok(Err(notify::Error {
+                kind: notify::ErrorKind::MaxFilesWatch,
+                ..
+            })) => todo!(), // TODO: handle limit of total inotify numbers reached
+            Ok(Err(e)) => crash!(1, "{:?}", e),
+            Err(e) => crash!(1, "{:?}", e),
         }
 
         for reader_i in readers.iter_mut().enumerate() {
@@ -430,10 +476,9 @@ fn follow(readers: &mut Vec<(Box<dyn BufRead>, &PathBuf, Option<Metadata>)>, set
             break;
         }
 
-        // TODO:
-        // Implement `--max-unchanged-stats`, however right now we use the `PollWatcher` from the
-        // notify crate if `--disable-inotify` is selected. This means we cannot do any thing
-        // useful with `--max-unchanged-stats` here.
+        // TODO: [2021-09; jhscheer] Implement `--max-unchanged-stats`, however the current
+        // implementation uses the `PollWatcher` from the notify crate if `--disable-inotify` is
+        // selected. This means we cannot do any thing useful with `--max-unchanged-stats` here.
     }
 }
 
@@ -455,6 +500,7 @@ fn handle_event(
                 match event.kind {
                     // notify::EventKind::Any => {}
                     EventKind::Access(AccessKind::Close(AccessMode::Write))
+                    | EventKind::Modify(ModifyKind::Metadata(MetadataKind::Any))
                     | EventKind::Modify(ModifyKind::Data(DataChange::Any)) => {
                         // This triggers for e.g.:
                         // head log.dat > log.dat
@@ -487,8 +533,8 @@ fn handle_event(
                         show_error!("{};  following new file", msg);
                         // Since Files are automatically closed when they go out of
                         // scope, we resume tracking from the start of the file,
-                        // assuming it has been truncated to 0, which is the usual
-                        // truncation operation for log files.
+                        // assuming it has been truncated to 0. This mimics GNU's `tail`
+                        // behavior and is the usual truncation operation for log files.
 
                         // Open file again and then print it from the beginning.
                         let new_reader = BufReader::new(File::open(&path).unwrap());
@@ -499,14 +545,17 @@ fn handle_event(
                     // EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {}
                     // EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {}
                     EventKind::Remove(RemoveKind::File)
-                    | EventKind::Remove(RemoveKind::Any)
+                    | EventKind::Modify(ModifyKind::Name(RenameMode::Any))
                     | EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
                         // This triggers for e.g.:
                         // Create: cp log.dat log.bak
                         // Rename: mv log.dat log.bak
-                        if !settings.force_polling {
-                            show_error!("{}: No such file or directory", path.display());
-                        }
+                        show_error!("{}: No such file or directory", path.display());
+                        // TODO: handle `no files remaining`
+                    }
+                    EventKind::Remove(RemoveKind::Any) => {
+                        show_error!("{}: No such file or directory", path.display());
+                        // TODO: handle `no files remaining`
                     }
                     // notify::EventKind::Other => {}
                     _ => {} // println!("{:?}", event.kind),

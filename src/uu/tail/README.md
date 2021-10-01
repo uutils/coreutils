@@ -6,7 +6,7 @@
 
 ### Flags with features
 
-- [x] fastpoll='-s.1 --max-unchanged-stats=1'
+- [x] fast poll := '-s.1 --max-unchanged-stats=1'
     - [x] sub-second sleep interval e.g. `-s.1`
     - [ ] `--max-unchanged-stats` (only meaningful with `--follow=name` `---disable-inotify`)
 - [x] `---disable-inotify` (three hyphens is correct)

@@ -3,7 +3,8 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) abcdefghijklmnopqrstuvwxyz efghijklmnopqrstuvwxyz vwxyz emptyfile
+// spell-checker:ignore (ToDO) abcdefghijklmnopqrstuvwxyz efghijklmnopqrstuvwxyz vwxyz emptyfile logfile
+// spell-checker:ignore (libs) kqueue
 
 extern crate tail;
 
@@ -512,23 +513,30 @@ fn test_follow_name_create() {
     let source_canonical = &at.plus(source);
     let backup = at.plus_as_string("backup");
 
+    #[cfg(target_os = "linux")]
     let expected_stdout = at.read(FOLLOW_NAME_EXP);
+    #[cfg(target_os = "linux")]
     let expected_stderr = format!(
         "{}: {}: No such file or directory\n{0}: '{1}' has appeared;  following new file\n",
         ts.util_name, source
     );
+    // TODO: [2021-09; jhscheer] kqueue backend on macos does not trigger an event for create:
+    // https://github.com/notify-rs/notify/issues/365
+    // NOTE: We are less strict if not on Linux (inotify backend).
+    #[cfg(not(target_os = "linux"))]
+    let expected_stdout = at.read("follow_name_short.expected");
+    #[cfg(not(target_os = "linux"))]
+    let expected_stderr = format!("{}: {}: No such file or directory\n", ts.util_name, source);
 
     let args = ["--follow=name", source];
     let mut p = ts.ucmd().args(&args).run_no_wait();
 
-    let delay = 5;
+    let delay = 1000;
 
     std::fs::copy(&source_canonical, &backup).unwrap();
     sleep(Duration::from_millis(delay));
-
     std::fs::remove_file(source_canonical).unwrap();
     sleep(Duration::from_millis(delay));
-
     std::fs::copy(&backup, &source_canonical).unwrap();
     sleep(Duration::from_millis(delay));
 
@@ -563,14 +571,12 @@ fn test_follow_name_truncate() {
     let args = ["--follow=name", source];
     let mut p = ts.ucmd().args(&args).run_no_wait();
 
-    let delay = 10;
+    let delay = 1000;
 
     std::fs::copy(&source_canonical, &backup).unwrap();
     sleep(Duration::from_millis(delay));
-
     let _ = std::fs::File::create(source_canonical).unwrap(); // trigger truncate
     sleep(Duration::from_millis(delay));
-
     std::fs::copy(&backup, &source_canonical).unwrap();
     sleep(Duration::from_millis(delay));
 
@@ -601,21 +607,19 @@ fn test_follow_name_create_polling() {
 
     let expected_stdout = at.read(FOLLOW_NAME_EXP);
     let expected_stderr = format!(
-        "{}: '{}' has been replaced;  following new file\n",
+        "{}: {}: No such file or directory\n{0}: '{1}' has been replaced;  following new file\n",
         ts.util_name, source
     );
 
     let args = ["--follow=name", "--disable-inotify", source];
     let mut p = ts.ucmd().args(&args).run_no_wait();
 
-    let delay = 750;
+    let delay = 1000;
 
     std::fs::copy(&source_canonical, &backup).unwrap();
     sleep(Duration::from_millis(delay));
-
     std::fs::remove_file(source_canonical).unwrap();
     sleep(Duration::from_millis(delay));
-
     std::fs::copy(&backup, &source_canonical).unwrap();
     sleep(Duration::from_millis(delay));
 
@@ -644,21 +648,28 @@ fn test_follow_name_move() {
     let source_canonical = &at.plus(source);
     let backup = at.plus_as_string("backup");
 
-    let expected_stdout = at.read("follow_name.expected");
+    #[cfg(target_os = "linux")]
+    let expected_stdout = at.read(FOLLOW_NAME_EXP);
+    #[cfg(target_os = "linux")]
     let expected_stderr = format!(
         "{}: {}: No such file or directory\n{0}: '{1}' has appeared;  following new file\n",
         ts.util_name, source
     );
 
+    // NOTE: We are less strict if not on Linux (inotify backend).
+    #[cfg(not(target_os = "linux"))]
+    let expected_stdout = at.read("follow_name_short.expected");
+    #[cfg(not(target_os = "linux"))]
+    let expected_stderr = format!("{}: {}: No such file or directory\n", ts.util_name, source);
+
     let args = ["--follow=name", source];
     let mut p = ts.ucmd().args(&args).run_no_wait();
 
-    let delay = 5;
+    let delay = 1000;
 
     sleep(Duration::from_millis(delay));
     std::fs::rename(&source_canonical, &backup).unwrap();
     sleep(Duration::from_millis(delay));
-
     std::fs::rename(&backup, &source_canonical).unwrap();
     sleep(Duration::from_millis(delay));
 
@@ -687,22 +698,16 @@ fn test_follow_name_move_polling() {
     let source_canonical = &at.plus(source);
     let backup = at.plus_as_string("backup");
 
-    let expected_stdout = at.read("follow_name.expected");
-    let expected_stderr = format!(
-        "{}: '{}' has been replaced;  following new file\n",
-        ts.util_name, source
-    );
+    let expected_stdout = at.read("follow_name_short.expected");
+    let expected_stderr = format!("{}: {}: No such file or directory\n", ts.util_name, source);
 
     let args = ["--follow=name", "--disable-inotify", source];
     let mut p = ts.ucmd().args(&args).run_no_wait();
 
-    let delay = 750;
+    let delay = 1000;
 
     sleep(Duration::from_millis(delay));
     std::fs::rename(&source_canonical, &backup).unwrap();
-    sleep(Duration::from_millis(delay));
-
-    std::fs::rename(&backup, &source_canonical).unwrap();
     sleep(Duration::from_millis(delay));
 
     p.kill().unwrap();
