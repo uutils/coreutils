@@ -1169,7 +1169,7 @@ pub fn check_coreutil_version(
                 if s.contains(&format!("(GNU coreutils) {}", version_expected)) {
                     Ok(format!("{}: {}", UUTILS_INFO, s.to_string()))
                 } else if s.contains("(GNU coreutils)") {
-                    let version_found = s.split_whitespace().last().unwrap()[..4].parse::<f32>().unwrap_or_default();
+                    let version_found = parse_coreutil_version(s);
                     let version_expected = version_expected.parse::<f32>().unwrap_or_default();
                     if version_found > version_expected {
                     Ok(format!("{}: version for the reference coreutil '{}' is higher than expected; expected: {}, found: {}", UUTILS_INFO, util_name, version_expected, version_found))
@@ -1180,6 +1180,20 @@ pub fn check_coreutil_version(
                 }
             },
         )
+}
+
+// simple heuristic to parse the coreutils SemVer string, e.g. "id (GNU coreutils) 8.32.263-0475"
+fn parse_coreutil_version(version_string: &str) -> f32 {
+    version_string
+        .split_whitespace()
+        .last()
+        .unwrap()
+        .split('.')
+        .take(2)
+        .collect::<Vec<_>>()
+        .join(".")
+        .parse::<f32>()
+        .unwrap_or_default()
 }
 
 /// This runs the GNU coreutils `util_name` binary in `$PATH` in order to
@@ -1472,6 +1486,36 @@ mod tests {
         };
 
         res.normalized_newlines_stdout_is("A\r\nB\nC\n");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_parse_coreutil_version() {
+        use std::assert_eq;
+        assert_eq!(
+            parse_coreutil_version("id (GNU coreutils) 9.0.123-0123").to_string(),
+            "9"
+        );
+        assert_eq!(
+            parse_coreutil_version("id (GNU coreutils) 8.32.263-0475").to_string(),
+            "8.32"
+        );
+        assert_eq!(
+            parse_coreutil_version("id (GNU coreutils) 8.25.123-0123").to_string(),
+            "8.25"
+        );
+        assert_eq!(
+            parse_coreutil_version("id (GNU coreutils) 9.0").to_string(),
+            "9"
+        );
+        assert_eq!(
+            parse_coreutil_version("id (GNU coreutils) 8.32").to_string(),
+            "8.32"
+        );
+        assert_eq!(
+            parse_coreutil_version("id (GNU coreutils) 8.25").to_string(),
+            "8.25"
+        );
     }
 
     #[test]
