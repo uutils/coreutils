@@ -108,7 +108,7 @@ quick_error! {
 
 impl UError for Error {
     fn code(&self) -> i32 {
-        1
+        EXIT_ERR
     }
 }
 
