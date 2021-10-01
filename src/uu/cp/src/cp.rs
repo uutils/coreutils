@@ -49,7 +49,7 @@ use std::path::{Path, PathBuf, StripPrefixError};
 use std::str::FromStr;
 use std::string::ToString;
 use uucore::backup_control::{self, BackupMode};
-use uucore::error::{set_exit_code, UError, UResult};
+use uucore::error::{set_exit_code, ExitCode, UError, UResult};
 use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
 use walkdir::WalkDir;
 
@@ -452,6 +452,7 @@ pub fn uu_app() -> App<'static, 'static> {
              .multiple(true))
 }
 
+#[uucore_procs::gen_uumain]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let matches = uu_app()
@@ -467,8 +468,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if options.overwrite == OverwriteMode::NoClobber && options.backup != BackupMode::NoBackup {
         show_usage_error!("options --backup and --no-clobber are mutually exclusive");
-        set_exit_code(EXIT_ERR);
-        return Ok(());
+        return Err(ExitCode(EXIT_ERR).into());
     }
 
     let paths: Vec<String> = matches
