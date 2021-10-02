@@ -14,6 +14,11 @@ use num_traits::{Num, ToPrimitive};
 use std::cmp;
 use std::io::{stdout, ErrorKind, Write};
 use std::str::FromStr;
+
+mod digits;
+use crate::digits::num_fractional_digits;
+use crate::digits::num_integral_digits;
+
 use uucore::display::Quotable;
 
 static ABOUT: &str = "Display numbers from FIRST to LAST, in steps of INCREMENT.";
@@ -63,35 +68,15 @@ impl Number {
         }
     }
 
-    /// Number of characters needed to print the integral part of the number.
+    /// Convert this number into a bigint, consuming it.
     ///
-    /// The number of characters includes one character to represent the
-    /// minus sign ("-") if this number is negative.
-    ///
-    /// # Examples
-    ///
-    /// ```rust,ignore
-    /// use num_bigint::{BigInt, Sign};
-    ///
-    /// assert_eq!(
-    ///     Number::BigInt(BigInt::new(Sign::Plus, vec![123])).num_digits(),
-    ///     3
-    /// );
-    /// assert_eq!(
-    ///     Number::BigInt(BigInt::new(Sign::Minus, vec![123])).num_digits(),
-    ///     4
-    /// );
-    /// assert_eq!(Number::F64(123.45).num_digits(), 3);
-    /// assert_eq!(Number::MinusZero.num_digits(), 2);
-    /// ```
-    fn num_digits(&self) -> usize {
+    /// For floats, this returns the [`BigInt`] corresponding to the
+    /// floor of the number.
+    fn into_bigint(self) -> BigInt {
         match self {
-            Number::MinusZero => 2,
-            Number::BigInt(n) => n.to_string().len(),
-            Number::F64(n) => {
-                let s = n.to_string();
-                s.find('.').unwrap_or_else(|| s.len())
-            }
+            Number::MinusZero => BigInt::zero(),
+            Number::F64(x) => BigInt::from(x.floor() as i64),
+            Number::BigInt(n) => n,
         }
     }
 }
@@ -155,20 +140,49 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     };
 
     let mut largest_dec = 0;
+    let mut padding = 0;
     let first = if numbers.len() > 1 {
         let slice = numbers[0];
-        let len = slice.len();
-        let dec = slice.find('.').unwrap_or(len);
-        largest_dec = len - dec;
+        largest_dec = num_fractional_digits(slice).unwrap_or_else(|_| {
+            crash!(
+                1,
+                "invalid floating point argument: {}\n Try '{} --help' for more information.",
+                slice.quote(),
+                uucore::execution_phrase()
+            )
+        });
+        padding = num_integral_digits(slice).unwrap_or_else(|_| {
+            crash!(
+                1,
+                "invalid floating point argument: {}\n Try '{} --help' for more information.",
+                slice.quote(),
+                uucore::execution_phrase()
+            )
+        });
         crash_if_err!(1, slice.parse())
     } else {
         Number::BigInt(BigInt::one())
     };
     let increment = if numbers.len() > 2 {
         let slice = numbers[1];
-        let len = slice.len();
-        let dec = slice.find('.').unwrap_or(len);
-        largest_dec = cmp::max(largest_dec, len - dec);
+        let dec = num_fractional_digits(slice).unwrap_or_else(|_| {
+            crash!(
+                1,
+                "invalid floating point argument: {}\n Try '{} --help' for more information.",
+                slice.quote(),
+                uucore::execution_phrase()
+            )
+        });
+        let int_digits = num_integral_digits(slice).unwrap_or_else(|_| {
+            crash!(
+                1,
+                "invalid floating point argument: {}\n Try '{} --help' for more information.",
+                slice.quote(),
+                uucore::execution_phrase()
+            )
+        });
+        largest_dec = cmp::max(largest_dec, dec);
+        padding = cmp::max(padding, int_digits);
         crash_if_err!(1, slice.parse())
     } else {
         Number::BigInt(BigInt::one())
@@ -183,35 +197,50 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
     let last: Number = {
         let slice = numbers[numbers.len() - 1];
+        let int_digits = num_integral_digits(slice).unwrap_or_else(|_| {
+            crash!(
+                1,
+                "invalid floating point argument: {}\n Try '{} --help' for more information.",
+                slice.quote(),
+                uucore::execution_phrase()
+            )
+        });
+        padding = cmp::max(padding, int_digits);
         crash_if_err!(1, slice.parse())
     };
-    if largest_dec > 0 {
-        largest_dec -= 1;
-    }
 
-    let padding = first
-        .num_digits()
-        .max(increment.num_digits())
-        .max(last.num_digits());
+    let is_negative_zero_f64 = |x: f64| x == -0.0 && x.is_sign_negative() && largest_dec == 0;
     let result = match (first, last, increment) {
-        (Number::MinusZero, Number::BigInt(last), Number::BigInt(increment)) => print_seq_integers(
-            (BigInt::zero(), increment, last),
+        // For example, `seq -0 1 2` or `seq -0 1 2.0`.
+        (Number::MinusZero, last, Number::BigInt(increment)) => print_seq_integers(
+            (BigInt::zero(), increment, last.into_bigint()),
             options.separator,
             options.terminator,
             options.widths,
             padding,
             true,
         ),
-        (Number::BigInt(first), Number::BigInt(last), Number::BigInt(increment)) => {
+        // For example, `seq -0e0 1 2` or `seq -0e0 1 2.0`.
+        (Number::F64(x), last, Number::BigInt(increment)) if is_negative_zero_f64(x) => {
             print_seq_integers(
-                (first, increment, last),
+                (BigInt::zero(), increment, last.into_bigint()),
                 options.separator,
                 options.terminator,
                 options.widths,
                 padding,
-                false,
+                true,
             )
         }
+        // For example, `seq 0 1 2` or `seq 0 1 2.0`.
+        (Number::BigInt(first), last, Number::BigInt(increment)) => print_seq_integers(
+            (first, increment, last.into_bigint()),
+            options.separator,
+            options.terminator,
+            options.widths,
+            padding,
+            false,
+        ),
+        // For example, `seq 0 0.5 1` or `seq 0.0 0.5 1` or `seq 0.0 0.5 1.0`.
         (first, last, increment) => print_seq(
             (first.into_f64(), increment.into_f64(), last.into_f64()),
             largest_dec,
@@ -286,24 +315,31 @@ fn print_seq(
     let mut stdout = stdout.lock();
     let (first, increment, last) = range;
     let mut i = 0isize;
+    let is_first_minus_zero = first == -0.0 && first.is_sign_negative();
     let mut value = first + i as f64 * increment;
+    let padding = if pad { padding + 1 + largest_dec } else { 0 };
+    let mut is_first_iteration = true;
     while !done_printing(&value, &increment, &last) {
-        let istr = format!("{:.*}", largest_dec, value);
-        let ilen = istr.len();
-        let before_dec = istr.find('.').unwrap_or(ilen);
-        if pad && before_dec < padding {
-            for _ in 0..(padding - before_dec) {
-                write!(stdout, "0")?;
-            }
-        }
-        write!(stdout, "{}", istr)?;
-        i += 1;
-        value = first + i as f64 * increment;
-        if !done_printing(&value, &increment, &last) {
+        if !is_first_iteration {
             write!(stdout, "{}", separator)?;
         }
+        let mut width = padding;
+        if is_first_iteration && is_first_minus_zero {
+            write!(stdout, "-")?;
+            width -= 1;
+        }
+        is_first_iteration = false;
+        write!(
+            stdout,
+            "{value:>0width$.precision$}",
+            value = value,
+            width = width,
+            precision = largest_dec,
+        )?;
+        i += 1;
+        value = first + i as f64 * increment;
     }
-    if (first >= last && increment < 0f64) || (first <= last && increment > 0f64) {
+    if !is_first_iteration {
         write!(stdout, "{}", terminator)?;
     }
     stdout.flush()?;
@@ -359,24 +395,4 @@ fn print_seq_integers(
         write!(stdout, "{}", terminator)?;
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::Number;
-    use num_bigint::{BigInt, Sign};
-
-    #[test]
-    fn test_number_num_digits() {
-        assert_eq!(
-            Number::BigInt(BigInt::new(Sign::Plus, vec![123])).num_digits(),
-            3
-        );
-        assert_eq!(
-            Number::BigInt(BigInt::new(Sign::Minus, vec![123])).num_digits(),
-            4
-        );
-        assert_eq!(Number::F64(123.45).num_digits(), 3);
-        assert_eq!(Number::MinusZero.num_digits(), 2);
-    }
 }

@@ -68,6 +68,7 @@ structs
 substr
 splitn
 trunc
+uninit
 
 # * uutils
 basenc
@@ -277,6 +278,7 @@ ULONG
 ULONGLONG
 UNLEN
 WCHAR
+WSADATA
 errhandlingapi
 fileapi
 handleapi

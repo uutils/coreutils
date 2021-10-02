@@ -8,6 +8,8 @@
 
 // spell-checker:ignore (paths) wtmp
 
+use std::path::Path;
+
 use clap::{crate_version, App, Arg};
 use uucore::utmpx::{self, Utmpx};
 
@@ -36,19 +38,18 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .after_help(&after_help[..])
         .get_matches_from(args);
 
-    let files: Vec<String> = matches
-        .values_of(ARG_FILES)
-        .map(|v| v.map(ToString::to_string).collect())
+    let files: Vec<&Path> = matches
+        .values_of_os(ARG_FILES)
+        .map(|v| v.map(AsRef::as_ref).collect())
         .unwrap_or_default();
 
     let filename = if !files.is_empty() {
-        files[0].as_ref()
+        files[0]
     } else {
-        utmpx::DEFAULT_FILE
+        utmpx::DEFAULT_FILE.as_ref()
     };
 
-    let mut users = Utmpx::iter_all_records()
-        .read_from(filename)
+    let mut users = Utmpx::iter_all_records_from(filename)
         .filter(Utmpx::is_user_process)
         .map(|ut| ut.user())
         .collect::<Vec<_>>();

@@ -1,10 +1,22 @@
+// spell-checker:ignore memmem
+//! Implementations of digest functions, like md5 and sha1.
+//!
+//! The [`Digest`] trait represents the interface for providing inputs
+//! to these digest functions and accessing the resulting hash. The
+//! [`DigestWriter`] struct provides a wrapper around [`Digest`] that
+//! implements the [`Write`] trait, for use in situations where calling
+//! [`write`] would be useful.
 extern crate digest;
 extern crate md5;
 extern crate sha1;
 extern crate sha2;
 extern crate sha3;
 
+use std::io::Write;
+
 use hex::ToHex;
+#[cfg(windows)]
+use memchr::memmem;
 
 use crate::digest::digest::{ExtendableOutput, Input, XofReader};
 
@@ -158,3 +170,76 @@ impl_digest_sha!(sha3::Sha3_384, 384);
 impl_digest_sha!(sha3::Sha3_512, 512);
 impl_digest_shake!(sha3::Shake128);
 impl_digest_shake!(sha3::Shake256);
+
+/// A struct that writes to a digest.
+///
+/// This struct wraps a [`Digest`] and provides a [`Write`]
+/// implementation that passes input bytes directly to the
+/// [`Digest::input`].
+///
+/// On Windows, if `binary` is `false`, then the [`write`]
+/// implementation replaces instances of "\r\n" with "\n" before passing
+/// the input bytes to the [`digest`].
+pub struct DigestWriter<'a> {
+    digest: &'a mut Box<dyn Digest>,
+
+    /// Whether to write to the digest in binary mode or text mode on Windows.
+    ///
+    /// If this is `false`, then instances of "\r\n" are replaced with
+    /// "\n" before passing input bytes to the [`digest`].
+    #[allow(dead_code)]
+    binary: bool,
+    // TODO This is dead code only on non-Windows operating systems. It
+    // might be better to use a `#[cfg(windows)]` guard here.
+}
+
+impl<'a> DigestWriter<'a> {
+    pub fn new(digest: &'a mut Box<dyn Digest>, binary: bool) -> DigestWriter {
+        DigestWriter { digest, binary }
+    }
+}
+
+impl<'a> Write for DigestWriter<'a> {
+    #[cfg(not(windows))]
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.digest.input(buf);
+        Ok(buf.len())
+    }
+
+    #[cfg(windows)]
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        if self.binary {
+            self.digest.input(buf);
+            return Ok(buf.len());
+        }
+
+        // In Windows text mode, replace each occurrence of "\r\n"
+        // with "\n".
+        //
+        // Find all occurrences of "\r\n", inputting the slice just
+        // before the "\n" in the previous instance of "\r\n" and
+        // the beginning of this "\r\n".
+        //
+        // FIXME This fails if one call to `write()` ends with the
+        // "\r" and the next call to `write()` begins with the "\n".
+        let n = buf.len();
+        let mut i_prev = 0;
+        for i in memmem::find_iter(buf, b"\r\n") {
+            self.digest.input(&buf[i_prev..i]);
+            i_prev = i + 1;
+        }
+        self.digest.input(&buf[i_prev..n]);
+
+        // Even though we dropped a "\r" for each "\r\n" we found, we
+        // still report the number of bytes written as `n`. This is
+        // because the meaning of the returned number is supposed to be
+        // the number of bytes consumed by the writer, so that if the
+        // calling code were calling `write()` in a loop, it would know
+        // where the next contiguous slice of the buffer starts.
+        Ok(n)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
