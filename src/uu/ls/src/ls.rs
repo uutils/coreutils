@@ -1668,7 +1668,7 @@ fn display_item_long(
     #[cfg(unix)]
     {
         if config.inode {
-            let _ = write!(out, "{} ", get_inode(md));
+            let _ = write!(out, "{} ", get_inode(item.md()));
         }
     }
 
@@ -1733,8 +1733,8 @@ fn display_item_long(
 }
 
 #[cfg(unix)]
-fn get_inode(metadata: &Metadata) -> String {
-    format!("{:8}", metadata.ino())
+fn get_inode(metadata: Option<&Metadata>) -> String {
+    metadata.map_or_else(|| format!("{:>8}", "?"), |md| format!("{:>8}", md.ino()))
 }
 
 // Currently getpwuid is `linux` target only. If it's broken out into
@@ -1967,11 +1967,7 @@ fn display_file_name(
     #[cfg(unix)]
     {
         if config.format != Format::Long && config.inode {
-            name = path
-                .md()
-                .map_or_else(|| "?".to_string(), |md| get_inode(md))
-                + " "
-                + &name;
+            name = get_inode(path.md()) + " " + &name;
         }
     }
 
