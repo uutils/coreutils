@@ -2,6 +2,46 @@ use crate::common::util::*;
 use std::io::Read;
 
 #[test]
+fn test_hex_rejects_posneg_after_identifier() {
+    new_ucmd!()
+        .args(&["0x-123ABC"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("invalid hexadecimal argument: '0x-123ABC'")
+        .stderr_contains("for more information.");
+    new_ucmd!()
+        .args(&["0x+123ABC"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("invalid hexadecimal argument: '0x+123ABC'")
+        .stderr_contains("for more information.");
+    new_ucmd!()
+        .args(&["-0x-123ABC"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("invalid hexadecimal argument: '-0x-123ABC'")
+        .stderr_contains("for more information.");
+    new_ucmd!()
+        .args(&["-0x+123ABC"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("invalid hexadecimal argument: '-0x+123ABC'")
+        .stderr_contains("for more information.");
+}
+
+#[test]
+fn test_hex_lowercase_uppercase() {
+    new_ucmd!()
+        .args(&["0xa", "0xA"])
+        .succeeds()
+        .stdout_is("10\n");
+    new_ucmd!()
+        .args(&["0Xa", "0XA"])
+        .succeeds()
+        .stdout_is("10\n");
+}
+
+#[test]
 fn test_rejects_nan() {
     let ts = TestScenario::new(util_name!());
 
