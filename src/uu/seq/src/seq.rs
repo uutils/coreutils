@@ -88,30 +88,76 @@ impl FromStr for Number {
         if s.starts_with('+') {
             s = &s[1..];
         }
-
-        match s.parse::<BigInt>() {
-            Ok(n) => {
-                // If `s` is '-0', then `parse()` returns
-                // `BigInt::zero()`, but we need to return
-                // `Number::MinusZero` instead.
-                if n == BigInt::zero() && s.starts_with('-') {
-                    Ok(Number::MinusZero)
-                } else {
-                    Ok(Number::BigInt(n))
-                }
+        let is_neg = s.starts_with('-');
+        let is_hex = {
+            // GNU 20.11.2 - Parsing of Floats
+            match s.find("0x") {
+                Some(i) => (true, i),
+                None => match s.find("0X") {
+                    Some(i) => (true, i),
+                    None => (false, 0),
+                },
             }
-            Err(_) => match s.parse::<f64>() {
-                Ok(value) if value.is_nan() => Err(format!(
+        };
+
+        match is_hex {
+            (true, i) => match i <= 1 {
+                false => Err(format!(
+                    "invalid hexadecimal argument: {}\nTry '{} --help' for more information.",
+                    s.quote(),
+                    uucore::execution_phrase(),
+                )),
+                true => match &s.as_bytes()[i + 2] {
+                    b'-' | b'+' => Err(format!(
+                    "invalid hexadecimal argument: {}\nTry '{} --help' for more information.",
+                    s.quote(),
+                    uucore::execution_phrase(),
+                )),
+                    // TODO: hexadecimal floating point parsing (see #2660)
+                    b'.' => Err(format!(
+                    "NotImplemented: hexadecimal floating point numbers: {}\nTry '{} --help' for more information.",
+                    s.quote(),
+                    uucore::execution_phrase(),
+                )),
+                    _ => {
+                        let num = BigInt::from_str_radix(&s[i + 2..], 16)
+                            .map_err(|_| format!(
+                    "invalid hexadecimal argument: {}\nTry '{} --help' for more information.",
+                    s.quote(),
+                    uucore::execution_phrase(),
+                ))?;
+                        match (is_neg, num == BigInt::zero()) {
+                            (true, true) => Ok(Number::MinusZero),
+                            (true, false) => Ok(Number::BigInt(-num)),
+                            (false, _) => Ok(Number::BigInt(num)),
+                        }
+                    }
+                },
+            },
+            (false, _) => match s.parse::<BigInt>() {
+                Ok(n) => {
+                    // If `s` is '-0', then `parse()` returns
+                    // `BigInt::zero()`, but we need to return
+                    // `Number::MinusZero` instead.
+                    if n == BigInt::zero() && is_neg {
+                        Ok(Number::MinusZero)
+                    } else {
+                        Ok(Number::BigInt(n))
+                    }
+                }
+                Err(_) => match s.parse::<f64>() {
+                    Ok(value) if value.is_nan() => Err(format!(
                     "invalid 'not-a-number' argument: {}\nTry '{} --help' for more information.",
                     s.quote(),
                     uucore::execution_phrase(),
                 )),
-                Ok(value) => Ok(Number::F64(value)),
-                Err(_) => Err(format!(
+                    Ok(value) => Ok(Number::F64(value)),
+                    Err(_) => Err(format!(
                     "invalid floating point argument: {}\nTry '{} --help' for more information.",
                     s.quote(),
                     uucore::execution_phrase(),
                 )),
+                },
             },
         }
     }
