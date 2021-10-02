@@ -2259,6 +2259,7 @@ fn test_ls_dangling_symlinks() {
 
     at.mkdir("temp_dir");
     at.symlink_file("does_not_exist", "temp_dir/dangle");
+    at.symlink_file("temp_dir", "temp_dir/a");
 
     scene.ucmd().arg("-L").arg("temp_dir/dangle").fails();
     scene.ucmd().arg("-H").arg("temp_dir/dangle").fails();
@@ -2274,7 +2275,7 @@ fn test_ls_dangling_symlinks() {
         .arg("-Li")
         .arg("temp_dir")
         .succeeds() // this should fail, though at the moment, ls lacks a way to propagate errors encountered during display
-        .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
+        .stdout_contains(if cfg!(windows) { " dangle" } else { "      ? dangle" });
 }
 
 #[test]
