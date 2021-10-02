@@ -27,6 +27,7 @@ uucore = { version = ">=0.0.8", package = "uucore", path = "../../uucore", featu
 uucore_procs = { version=">=0.0.6", package = "uucore_procs", path = "../../uucore_procs" }
 once_cell = "1.7.2"
 atty = "0.2"
+selinux = { version="0.2.1", optional = true }
 
 [target.'cfg(unix)'.dependencies]
 lazy_static = "1.4.0"
@@ -34,6 +35,9 @@ lazy_static = "1.4.0"
 [[bin]]
 name = "ls"
 path = "src/main.rs"
+
+[features]
+feat_selinux = ["selinux"]
 
 [package.metadata.cargo-udeps.ignore]
 # Necessary for "make all"
