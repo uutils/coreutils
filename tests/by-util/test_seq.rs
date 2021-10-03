@@ -2,7 +2,7 @@ use crate::common::util::*;
 use std::io::Read;
 
 #[test]
-fn test_hex_rejects_posneg_after_identifier() {
+fn test_hex_rejects_sign_after_identifier() {
     new_ucmd!()
         .args(&["0x-123ABC"])
         .fails()
@@ -39,6 +39,19 @@ fn test_hex_lowercase_uppercase() {
         .args(&["0Xa", "0XA"])
         .succeeds()
         .stdout_is("10\n");
+}
+
+#[test]
+fn test_hex_big_number() {
+    new_ucmd!()
+        .args(&[
+            "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "0x100000000000000000000000000000000",
+        ])
+        .succeeds()
+        .stdout_is(
+            "340282366920938463463374607431768211455\n340282366920938463463374607431768211456\n",
+        );
 }
 
 #[test]
