@@ -18,6 +18,7 @@ static FOOBAR_TXT: &str = "foobar.txt";
 static FOOBAR_2_TXT: &str = "foobar2.txt";
 static FOOBAR_WITH_NULL_TXT: &str = "foobar_with_null.txt";
 static FOLLOW_NAME_TXT: &str = "follow_name.txt";
+static FOLLOW_NAME_SHORT_EXP: &str = "follow_name_short.expected";
 static FOLLOW_NAME_EXP: &str = "follow_name.expected";
 
 #[test]
@@ -107,6 +108,7 @@ fn test_follow_multiple() {
 }
 
 #[test]
+#[cfg(not(windows))]
 fn test_follow_name_multiple() {
     let (at, mut ucmd) = at_and_ucmd!();
     let mut child = ucmd
@@ -502,42 +504,30 @@ fn test_tail_bytes_for_funny_files() {
 }
 
 #[test]
-fn test_follow_name_create() {
-    // This test triggers a remove/create event while `tail --follow=name logfile` is running.
-    // cp logfile backup && rm logfile && sleep 1 && cp backup logfile
+#[cfg(not(windows))]
+fn test_follow_name_remove() {
+    // This test triggers a remove event while `tail --follow=name logfile` is running.
+    // ((sleep 1 && rm logfile &)>/dev/null 2>&1 &) ; tail --follow=name logfile
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
     let source = FOLLOW_NAME_TXT;
     let source_canonical = &at.plus(source);
-    let backup = at.plus_as_string("backup");
 
-    #[cfg(target_os = "linux")]
-    let expected_stdout = at.read(FOLLOW_NAME_EXP);
-    #[cfg(target_os = "linux")]
+    let expected_stdout = at.read(FOLLOW_NAME_SHORT_EXP);
     let expected_stderr = format!(
-        "{}: {}: No such file or directory\n{0}: '{1}' has appeared;  following new file\n",
+        "{}: {}: No such file or directory\n{0}: no files remaining\n",
         ts.util_name, source
     );
-    // TODO: [2021-09; jhscheer] kqueue backend on macos does not trigger an event for create:
-    // https://github.com/notify-rs/notify/issues/365
-    // NOTE: We are less strict if not on Linux (inotify backend).
-    #[cfg(not(target_os = "linux"))]
-    let expected_stdout = at.read("follow_name_short.expected");
-    #[cfg(not(target_os = "linux"))]
-    let expected_stderr = format!("{}: {}: No such file or directory\n", ts.util_name, source);
 
     let args = ["--follow=name", source];
     let mut p = ts.ucmd().args(&args).run_no_wait();
 
     let delay = 1000;
 
-    std::fs::copy(&source_canonical, &backup).unwrap();
     sleep(Duration::from_millis(delay));
     std::fs::remove_file(source_canonical).unwrap();
-    sleep(Duration::from_millis(delay));
-    std::fs::copy(&backup, &source_canonical).unwrap();
     sleep(Duration::from_millis(delay));
 
     p.kill().unwrap();
@@ -554,6 +544,7 @@ fn test_follow_name_create() {
 }
 
 #[test]
+#[cfg(not(windows))]
 fn test_follow_name_truncate() {
     // This test triggers a truncate event while `tail --follow=name logfile` is running.
     // cp logfile backup && head logfile > logfile && sleep 1 && cp backup logfile
@@ -594,20 +585,20 @@ fn test_follow_name_truncate() {
 }
 
 #[test]
-fn test_follow_name_create_polling() {
-    // This test triggers a remove/create event while `tail --follow=name --disable-inotify logfile` is running.
-    // cp logfile backup && rm logfile && sleep 1 && cp backup logfile
+#[cfg(not(windows))]
+fn test_follow_name_remove_polling() {
+    // This test triggers a remove event while `tail --follow=name ---disable-inotify logfile` is running.
+    // ((sleep 1 && rm logfile &)>/dev/null 2>&1 &) ; tail --follow=name ---disable-inotify logfile
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
     let source = FOLLOW_NAME_TXT;
     let source_canonical = &at.plus(source);
-    let backup = at.plus_as_string("backup");
 
-    let expected_stdout = at.read(FOLLOW_NAME_EXP);
+    let expected_stdout = at.read(FOLLOW_NAME_SHORT_EXP);
     let expected_stderr = format!(
-        "{}: {}: No such file or directory\n{0}: '{1}' has been replaced;  following new file\n",
+        "{}: {}: No such file or directory\n{0}: no files remaining\n",
         ts.util_name, source
     );
 
@@ -616,11 +607,8 @@ fn test_follow_name_create_polling() {
 
     let delay = 1000;
 
-    std::fs::copy(&source_canonical, &backup).unwrap();
     sleep(Duration::from_millis(delay));
     std::fs::remove_file(source_canonical).unwrap();
-    sleep(Duration::from_millis(delay));
-    std::fs::copy(&backup, &source_canonical).unwrap();
     sleep(Duration::from_millis(delay));
 
     p.kill().unwrap();
@@ -637,9 +625,10 @@ fn test_follow_name_create_polling() {
 }
 
 #[test]
-fn test_follow_name_move() {
-    // This test triggers a move event while `tail --follow=name logfile` is running.
-    // mv logfile backup && sleep 1 && mv backup file
+#[cfg(not(windows))]
+fn test_follow_name_move_create() {
+    // This test triggers a move/create event while `tail --follow=name logfile` is running.
+    // ((sleep 1 && mv logfile backup && sleep 1 && cp backup logfile &)>/dev/null 2>&1 &) ; tail --follow=name logfile
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -658,7 +647,7 @@ fn test_follow_name_move() {
 
     // NOTE: We are less strict if not on Linux (inotify backend).
     #[cfg(not(target_os = "linux"))]
-    let expected_stdout = at.read("follow_name_short.expected");
+    let expected_stdout = at.read(FOLLOW_NAME_SHORT_EXP);
     #[cfg(not(target_os = "linux"))]
     let expected_stderr = format!("{}: {}: No such file or directory\n", ts.util_name, source);
 
@@ -670,7 +659,7 @@ fn test_follow_name_move() {
     sleep(Duration::from_millis(delay));
     std::fs::rename(&source_canonical, &backup).unwrap();
     sleep(Duration::from_millis(delay));
-    std::fs::rename(&backup, &source_canonical).unwrap();
+    std::fs::copy(&backup, &source_canonical).unwrap();
     sleep(Duration::from_millis(delay));
 
     p.kill().unwrap();
@@ -687,9 +676,11 @@ fn test_follow_name_move() {
 }
 
 #[test]
+#[cfg(not(windows))]
 fn test_follow_name_move_polling() {
     // This test triggers a move event while `tail --follow=name --disable-inotify logfile` is running.
-    // mv logfile backup && sleep 1 && mv backup file
+    // ((sleep 1 && mv logfile backup && sleep 1 && cp backup logfile &)>/dev/null 2>&1 &) ; tail --follow=name ---disable-inotify logfile
+    // NOTE: GNU's tail does not recognize this move event for `---disable-inotify`
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -698,8 +689,11 @@ fn test_follow_name_move_polling() {
     let source_canonical = &at.plus(source);
     let backup = at.plus_as_string("backup");
 
-    let expected_stdout = at.read("follow_name_short.expected");
-    let expected_stderr = format!("{}: {}: No such file or directory\n", ts.util_name, source);
+    let expected_stdout = at.read(FOLLOW_NAME_SHORT_EXP);
+    let expected_stderr = format!(
+        "{}: {}: No such file or directory\n{0}: no files remaining\n",
+        ts.util_name, source
+    );
 
     let args = ["--follow=name", "--disable-inotify", source];
     let mut p = ts.ucmd().args(&args).run_no_wait();
