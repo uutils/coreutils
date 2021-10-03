@@ -1967,11 +1967,7 @@ fn display_file_name(
     #[cfg(unix)]
     {
         if config.format != Format::Long && config.inode {
-            name = path
-                .md()
-                .map_or_else(|| "?".to_string(), |md| get_inode(md))
-                + " "
-                + &name;
+            name = path.md().map_or_else(|| "?".to_string(), get_inode) + " " + &name;
         }
     }
 
