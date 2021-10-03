@@ -12,7 +12,7 @@ extern crate uucore;
 use uu_base32::base_common;
 pub use uu_base32::uu_app;
 
-use uucore::encoding::Format;
+use uucore::{encoding::Format, error::UResult};
 
 use std::io::{stdin, Read};
 
@@ -25,26 +25,22 @@ static ABOUT: &str = "
  to attempt to recover from any other non-alphabet bytes in the
  encoded stream.
 ";
-static VERSION: &str = env!("CARGO_PKG_VERSION");
-
-static BASE_CMD_PARSE_ERROR: i32 = 1;
 
 fn usage() -> String {
     format!("{0} [OPTION]... [FILE]", uucore::execution_phrase())
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let format = Format::Base64;
     let usage = usage();
-    let name = uucore::util_name();
-    let config_result: Result<base_common::Config, String> =
-        base_common::parse_base_cmd_args(args, name, VERSION, ABOUT, &usage);
-    let config = config_result.unwrap_or_else(|s| crash!(BASE_CMD_PARSE_ERROR, "{}", s));
+
+    let config: base_common::Config = base_common::parse_base_cmd_args(args, ABOUT, &usage)?;
 
     // Create a reference to stdin so we can return a locked stdin from
     // parse_base_cmd_args
     let stdin_raw = stdin();
-    let mut input: Box<dyn Read> = base_common::get_input(&config, &stdin_raw);
+    let mut input: Box<dyn Read> = base_common::get_input(&config, &stdin_raw)?;
 
     base_common::handle_input(
         &mut input,
@@ -52,8 +48,5 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         config.wrap_cols,
         config.ignore_garbage,
         config.decode,
-        name,
-    );
-
-    0
+    )
 }
