@@ -8,9 +8,6 @@
 
 // spell-checker:ignore (paths) GPGHome
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, App, Arg};
 use uucore::display::{println_verbatim, Quotable};
 use uucore::error::{FromIo, UError, UResult};

@@ -12,8 +12,6 @@
 
 #[cfg(unix)]
 extern crate unix_socket;
-#[macro_use]
-extern crate uucore;
 
 // last synced with: cat (GNU coreutils) 8.13
 use clap::{crate_version, App, Arg};

@@ -9,8 +9,6 @@
 
 #[macro_use]
 extern crate clap;
-#[macro_use]
-extern crate uucore;
 
 use clap::App;
 

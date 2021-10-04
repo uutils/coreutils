@@ -8,9 +8,6 @@
 
 //spell-checker:ignore (args) lsbf msbf
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{App, Arg};
 use uu_base32::base_common::{self, Config, BASE_CMD_PARSE_ERROR};
 
