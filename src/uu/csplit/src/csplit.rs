@@ -320,18 +320,19 @@ impl<'a> SplitWriter<'a> {
             let l = line?;
             match n.cmp(&(&ln + 1)) {
                 Ordering::Less => {
-                    if input_iter.add_line_to_buffer(ln, l).is_some() {
-                        panic!("the buffer is big enough to contain 1 line");
-                    }
+                    assert!(
+                        input_iter.add_line_to_buffer(ln, l).is_none(),
+                        "the buffer is big enough to contain 1 line"
+                    );
                     ret = Ok(());
                     break;
                 }
                 Ordering::Equal => {
-                    if !self.options.suppress_matched
-                        && input_iter.add_line_to_buffer(ln, l).is_some()
-                    {
-                        panic!("the buffer is big enough to contain 1 line");
-                    }
+                    assert!(
+                        self.options.suppress_matched
+                            || input_iter.add_line_to_buffer(ln, l).is_none(),
+                        "the buffer is big enough to contain 1 line"
+                    );
                     ret = Ok(());
                     break;
                 }
@@ -378,9 +379,10 @@ impl<'a> SplitWriter<'a> {
                     match (self.options.suppress_matched, offset) {
                         // no offset, add the line to the next split
                         (false, 0) => {
-                            if input_iter.add_line_to_buffer(ln, l).is_some() {
-                                panic!("the buffer is big enough to contain 1 line");
-                            }
+                            assert!(
+                                input_iter.add_line_to_buffer(ln, l).is_none(),
+                                "the buffer is big enough to contain 1 line"
+                            );
                         }
                         // a positive offset, some more lines need to be added to the current split
                         (false, _) => self.writeln(l)?,
@@ -425,9 +427,10 @@ impl<'a> SplitWriter<'a> {
                     if !self.options.suppress_matched {
                         // add 1 to the buffer size to make place for the matched line
                         input_iter.set_size_of_buffer(offset_usize + 1);
-                        if input_iter.add_line_to_buffer(ln, l).is_some() {
-                            panic!("should be big enough to hold every lines");
-                        }
+                        assert!(
+                            input_iter.add_line_to_buffer(ln, l).is_none(),
+                            "should be big enough to hold every lines"
+                        );
                     }
                     self.finish_split();
                     if input_iter.buffer_len() < offset_usize {
