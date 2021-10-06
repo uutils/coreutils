@@ -44,9 +44,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         raw_separator
     };
 
-    let files: Vec<String> = match matches.values_of(options::FILE) {
-        Some(v) => v.map(|v| v.to_owned()).collect(),
-        None => vec!["-".to_owned()],
+    let files: Vec<&str> = match matches.values_of(options::FILE) {
+        Some(v) => v.collect(),
+        None => vec!["-"],
     };
 
     tac(files, before, regex, separator)
@@ -102,7 +102,7 @@ pub fn uu_app() -> App<'static, 'static> {
 /// returns [`std::io::Error`].
 fn buffer_tac_regex(
     data: &[u8],
-    pattern: regex::bytes::Regex,
+    pattern: &regex::bytes::Regex,
     before: bool,
 ) -> std::io::Result<()> {
     let mut out = stdout();
@@ -208,10 +208,16 @@ fn buffer_tac(data: &[u8], before: bool, separator: &str) -> std::io::Result<()>
     Ok(())
 }
 
-fn tac(filenames: Vec<String>, before: bool, regex: bool, separator: &str) -> i32 {
+fn tac(filenames: Vec<&str>, before: bool, regex: bool, separator: &str) -> i32 {
     let mut exit_code = 0;
 
-    for filename in &filenames {
+    let pattern = if regex {
+        Some(crash_if_err!(1, regex::bytes::Regex::new(separator)))
+    } else {
+        None
+    };
+
+    for &filename in &filenames {
         let mut file = BufReader::new(if filename == "-" {
             Box::new(stdin()) as Box<dyn Read>
         } else {
@@ -244,8 +250,7 @@ fn tac(filenames: Vec<String>, before: bool, regex: bool, separator: &str) -> i3
             exit_code = 1;
             continue;
         };
-        if regex {
-            let pattern = crash_if_err!(1, regex::bytes::Regex::new(separator));
+        if let Some(pattern) = &pattern {
             buffer_tac_regex(&data, pattern, before)
         } else {
             buffer_tac(&data, before, separator)
