@@ -5,15 +5,19 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) sbytes slen dlen memmem
+// spell-checker:ignore (ToDO) sbytes slen dlen memmem memmap Mmap mmap SIGBUS
 
 #[macro_use]
 extern crate uucore;
 
 use clap::{crate_version, App, Arg};
 use memchr::memmem;
+use memmap2::Mmap;
 use std::io::{stdin, stdout, BufWriter, Read, Write};
-use std::{fs::read, path::Path};
+use std::{
+    fs::{read, File},
+    path::Path,
+};
 use uucore::display::Quotable;
 use uucore::InvalidEncodingHandling;
 
@@ -220,14 +224,23 @@ fn tac(filenames: Vec<&str>, before: bool, regex: bool, separator: &str) -> i32 
     };
 
     for &filename in &filenames {
-        let data = if filename == "-" {
-            let mut data = Vec::new();
-            if let Err(e) = stdin().read_to_end(&mut data) {
-                show_error!("failed to read from stdin: {}", e);
-                exit_code = 1;
-                continue;
+        let mmap;
+        let buf;
+
+        let data: &[u8] = if filename == "-" {
+            if let Some(mmap1) = try_mmap_stdin() {
+                mmap = mmap1;
+                &mmap
+            } else {
+                let mut buf1 = Vec::new();
+                if let Err(e) = stdin().read_to_end(&mut buf1) {
+                    show_error!("failed to read from stdin: {}", e);
+                    exit_code = 1;
+                    continue;
+                }
+                buf = buf1;
+                &buf
             }
-            data
         } else {
             let path = Path::new(filename);
             if path.is_dir() || path.metadata().is_err() {
@@ -242,22 +255,47 @@ fn tac(filenames: Vec<&str>, before: bool, regex: bool, separator: &str) -> i32 
                 exit_code = 1;
                 continue;
             }
-            match read(path) {
-                Ok(data) => data,
-                Err(e) => {
-                    show_error!("failed to read {}: {}", filename.quote(), e);
-                    exit_code = 1;
-                    continue;
+
+            if let Some(mmap1) = try_mmap_path(path) {
+                mmap = mmap1;
+                &mmap
+            } else {
+                match read(path) {
+                    Ok(buf1) => {
+                        buf = buf1;
+                        &buf
+                    }
+                    Err(e) => {
+                        show_error!("failed to read {}: {}", filename.quote(), e);
+                        exit_code = 1;
+                        continue;
+                    }
                 }
             }
         };
 
         if let Some(pattern) = &pattern {
-            buffer_tac_regex(&data, pattern, before)
+            buffer_tac_regex(data, pattern, before)
         } else {
-            buffer_tac(&data, before, separator)
+            buffer_tac(data, before, separator)
         }
         .unwrap_or_else(|e| crash!(1, "failed to write to stdout: {}", e));
     }
     exit_code
+}
+
+fn try_mmap_stdin() -> Option<Mmap> {
+    // SAFETY: If the file is truncated while we map it, SIGBUS will be raised
+    // and our process will be terminated, thus preventing access of invalid memory.
+    unsafe { Mmap::map(&stdin()).ok() }
+}
+
+fn try_mmap_path(path: &Path) -> Option<Mmap> {
+    let file = File::open(path).ok()?;
+
+    // SAFETY: If the file is truncated while we map it, SIGBUS will be raised
+    // and our process will be terminated, thus preventing access of invalid memory.
+    let mmap = unsafe { Mmap::map(&file).ok()? };
+
+    Some(mmap)
 }
