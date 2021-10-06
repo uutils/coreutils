@@ -531,6 +531,22 @@ fn test_inf() {
 }
 
 #[test]
+fn test_inf_width() {
+    run(
+        &["-w", "1.000", "inf", "inf"],
+        b"1.000\n  inf\n  inf\n  inf\n",
+    );
+}
+
+#[test]
+fn test_neg_inf_width() {
+    run(
+        &["-w", "1.000", "-inf", "-inf"],
+        b"1.000\n -inf\n -inf\n -inf\n",
+    );
+}
+
+#[test]
 fn test_ignore_leading_whitespace() {
     new_ucmd!()
         .arg("   1")
