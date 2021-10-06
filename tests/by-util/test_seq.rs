@@ -55,6 +55,16 @@ fn test_hex_big_number() {
 }
 
 #[test]
+fn test_hex_identifier_in_wrong_place() {
+    new_ucmd!()
+        .args(&["1234ABCD0x"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("invalid hexadecimal argument: '1234ABCD0x'")
+        .stderr_contains("for more information.");
+}
+
+#[test]
 fn test_rejects_nan() {
     let ts = TestScenario::new(util_name!());
 

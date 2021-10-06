@@ -89,25 +89,9 @@ impl FromStr for Number {
             s = &s[1..];
         }
         let is_neg = s.starts_with('-');
-        let is_hex = {
-            // GNU 20.11.2 - Parsing of Floats
-            match s.find("0x") {
-                Some(i) => (true, i),
-                None => match s.find("0X") {
-                    Some(i) => (true, i),
-                    None => (false, 0),
-                },
-            }
-        };
 
-        match is_hex {
-            (true, i) => match i <= 1 {
-                false => Err(format!(
-                    "invalid hexadecimal argument: {}\nTry '{} --help' for more information.",
-                    s.quote(),
-                    uucore::execution_phrase(),
-                )),
-                true => match &s.as_bytes()[i + 2] {
+        match s.to_lowercase().find("0x") {
+            Some(i) if i <= 1 => match &s.as_bytes()[i + 2] {
                     b'-' | b'+' => Err(format!(
                     "invalid hexadecimal argument: {}\nTry '{} --help' for more information.",
                     s.quote(),
@@ -133,8 +117,13 @@ impl FromStr for Number {
                         }
                     }
                 },
-            },
-            (false, _) => match s.parse::<BigInt>() {
+            Some(_) => Err(format!(
+                "invalid hexadecimal argument: {}\nTry '{} --help' for more information.",
+                s.quote(),
+                uucore::execution_phrase(),
+            )),
+
+            None => match s.parse::<BigInt>() {
                 Ok(n) => {
                     // If `s` is '-0', then `parse()` returns
                     // `BigInt::zero()`, but we need to return
