@@ -7,9 +7,6 @@
 
 /* last synced with: unlink (GNU coreutils) 8.21 */
 
-#[macro_use]
-extern crate uucore;
-
 use std::fs::remove_file;
 use std::path::Path;
 

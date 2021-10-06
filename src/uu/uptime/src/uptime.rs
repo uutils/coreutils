@@ -11,8 +11,6 @@
 use chrono::{Local, TimeZone, Utc};
 use clap::{crate_version, App, Arg};
 
-#[macro_use]
-extern crate uucore;
 // import crate time from utmpx
 pub use uucore::libc;
 use uucore::libc::time_t;

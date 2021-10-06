@@ -7,9 +7,6 @@
 
 // spell-checker:ignore (ToDO) MAKEWORD addrs hashset
 
-#[macro_use]
-extern crate uucore;
-
 use std::collections::hash_set::HashSet;
 use std::net::ToSocketAddrs;
 use std::str;
