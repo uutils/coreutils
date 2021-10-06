@@ -105,7 +105,8 @@ fn buffer_tac_regex(
     pattern: &regex::bytes::Regex,
     before: bool,
 ) -> std::io::Result<()> {
-    let mut out = stdout();
+    let out = stdout();
+    let mut out = out.lock();
 
     // The index of the line separator for the current line.
     //
@@ -171,7 +172,8 @@ fn buffer_tac_regex(
 /// `separator` appears at the beginning of each line, as in
 /// `"/abc/def"`.
 fn buffer_tac(data: &[u8], before: bool, separator: &str) -> std::io::Result<()> {
-    let mut out = stdout();
+    let out = stdout();
+    let mut out = out.lock();
 
     // The number of bytes in the line separator.
     let slen = separator.as_bytes().len();
