@@ -12,8 +12,8 @@ extern crate uucore;
 
 use clap::{crate_version, App, Arg};
 use memchr::memmem;
-use std::io::{stdin, stdout, BufReader, Read, Write};
-use std::{fs::File, path::Path};
+use std::io::{stdin, stdout, Read, Write};
+use std::{fs::read, path::Path};
 use uucore::display::Quotable;
 use uucore::InvalidEncodingHandling;
 
@@ -220,8 +220,14 @@ fn tac(filenames: Vec<&str>, before: bool, regex: bool, separator: &str) -> i32 
     };
 
     for &filename in &filenames {
-        let mut file = BufReader::new(if filename == "-" {
-            Box::new(stdin()) as Box<dyn Read>
+        let data = if filename == "-" {
+            let mut data = Vec::new();
+            if let Err(e) = stdin().read_to_end(&mut data) {
+                show_error!("failed to read from stdin: {}", e);
+                exit_code = 1;
+                continue;
+            }
+            data
         } else {
             let path = Path::new(filename);
             if path.is_dir() || path.metadata().is_err() {
@@ -236,22 +242,16 @@ fn tac(filenames: Vec<&str>, before: bool, regex: bool, separator: &str) -> i32 
                 exit_code = 1;
                 continue;
             }
-            match File::open(path) {
-                Ok(f) => Box::new(f) as Box<dyn Read>,
+            match read(path) {
+                Ok(data) => data,
                 Err(e) => {
-                    show_error!("failed to open {} for reading: {}", filename.quote(), e);
+                    show_error!("failed to read {}: {}", filename.quote(), e);
                     exit_code = 1;
                     continue;
                 }
             }
-        });
-
-        let mut data = Vec::new();
-        if let Err(e) = file.read_to_end(&mut data) {
-            show_error!("failed to read {}: {}", filename.quote(), e);
-            exit_code = 1;
-            continue;
         };
+
         if let Some(pattern) = &pattern {
             buffer_tac_regex(&data, pattern, before)
         } else {
