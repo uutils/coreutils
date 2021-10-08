@@ -329,8 +329,8 @@ fn test_multiple_input_files_missing() {
         .run()
         .stdout_is_fixture("foobar_follow_multiple.expected")
         .stderr_is(
-            "tail: cannot open 'missing1': No such file or directory\n\
-                   tail: cannot open 'missing2': No such file or directory",
+            "tail: cannot open 'missing1' for reading: No such file or directory\n\
+                   tail: cannot open 'missing2' for reading: No such file or directory",
         )
         .code_is(1);
 }
@@ -354,6 +354,19 @@ fn test_multiple_input_quiet_flag_overrides_verbose_flag_for_suppressing_headers
         .arg("-q")
         .run()
         .stdout_is_fixture("foobar_multiple_quiet.expected");
+}
+
+#[test]
+fn test_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("DIR");
+    ucmd.arg("DIR")
+        .run()
+        .stderr_is(
+            "tail: error reading 'DIR': Is a directory\n\
+            tail: DIR: cannot follow end of this type of file; giving up on this name",
+        )
+        .code_is(1);
 }
 
 #[test]
@@ -500,6 +513,107 @@ fn test_tail_bytes_for_funny_files() {
             .stdout_is(exp_result.stdout_str())
             .stderr_is(exp_result.stderr_str())
             .code_is(exp_result.code());
+    }
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_tail_follow_descriptor_vs_rename() {
+    // gnu/tests/tail-2/descriptor-vs-rename.sh
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let file_a = "FILE_A";
+    let file_b = "FILE_B";
+
+    let mut args = vec![
+        "--follow=descriptor",
+        "-s.1",
+        "--max-unchanged-stats=1",
+        file_a,
+        "--disable-inotify",
+    ];
+
+    #[cfg(target_os = "linux")]
+    let i = 2;
+    // TODO: fix the case without `--disable-inotify` for bsd/macos
+    #[cfg(not(target_os = "linux"))]
+    let i = 1;
+
+    let delay = 100;
+    for _ in 0..i {
+        at.touch(file_a);
+        let mut p = ts.ucmd().args(&args).run_no_wait();
+        sleep(Duration::from_millis(delay));
+        at.append(file_a, "x\n");
+        sleep(Duration::from_millis(delay));
+        at.rename(file_a, file_b);
+        sleep(Duration::from_millis(1000));
+        at.append(file_b, "y\n");
+        sleep(Duration::from_millis(delay));
+        p.kill().unwrap();
+        sleep(Duration::from_millis(delay));
+
+        let mut buf_stderr = String::new();
+        let mut p_stderr = p.stderr.take().unwrap();
+        p_stderr.read_to_string(&mut buf_stderr).unwrap();
+        println!("stderr:\n{}", buf_stderr);
+
+        let mut buf_stdout = String::new();
+        let mut p_stdout = p.stdout.take().unwrap();
+        p_stdout.read_to_string(&mut buf_stdout).unwrap();
+        assert_eq!(buf_stdout, "x\ny\n");
+
+        let _ = args.pop();
+    }
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_tail_follow_descriptor_vs_rename_verbose() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let file_a = "FILE_A";
+    let file_b = "FILE_B";
+    let file_c = "FILE_C";
+
+    let mut args = vec![
+        "--follow=descriptor",
+        "-s.1",
+        "--max-unchanged-stats=1",
+        file_a,
+        file_b,
+        "--verbose",
+        "--disable-inotify",
+    ];
+
+    #[cfg(target_os = "linux")]
+    let i = 2;
+    // TODO: fix the case without `--disable-inotify` for bsd/macos
+    #[cfg(not(target_os = "linux"))]
+    let i = 1;
+
+    let delay = 100;
+    for _ in 0..i {
+        at.touch(file_a);
+        at.touch(file_b);
+        let mut p = ts.ucmd().args(&args).run_no_wait();
+        sleep(Duration::from_millis(delay));
+        at.rename(file_a, file_c);
+        sleep(Duration::from_millis(1000));
+        at.append(file_c, "x\n");
+        sleep(Duration::from_millis(delay));
+        p.kill().unwrap();
+        sleep(Duration::from_millis(delay));
+
+        let mut buf_stdout = String::new();
+        let mut p_stdout = p.stdout.take().unwrap();
+        p_stdout.read_to_string(&mut buf_stdout).unwrap();
+        assert_eq!(
+            buf_stdout,
+            "==> FILE_A <==\n\n==> FILE_B <==\n\n==> FILE_A <==\nx\n"
+        );
+
+        let _ = args.pop();
     }
 }
 

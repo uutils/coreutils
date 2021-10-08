@@ -21,6 +21,7 @@ mod platform;
 use chunks::ReverseChunks;
 
 use clap::{App, Arg};
+use notify::{RecursiveMode, Watcher};
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::fmt;
@@ -187,11 +188,19 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             if path.is_dir() {
                 return_code = 1;
                 show_error!("error reading {}: Is a directory", path.quote());
+                show_error!(
+                    "{}: cannot follow end of this type of file; giving up on this name",
+                    path.display()
+                );
                 // TODO: add test for this
             }
             if !path.exists() {
                 return_code = 1;
-                show_error!("cannot open {}: {}", path.quote(), text::NO_SUCH_FILE);
+                show_error!(
+                    "cannot open {} for reading: {}",
+                    path.quote(),
+                    text::NO_SUCH_FILE
+                );
             }
         }
         path.is_file() || path.to_str() == Some("-")
@@ -342,7 +351,7 @@ pub fn uu_app() -> App<'static, 'static> {
             Arg::with_name(options::PID)
                 .long(options::PID)
                 .takes_value(true)
-                .help("with -f, terminate after process ID, PID dies"),
+                .help("With -f, terminate after process ID, PID dies"),
         )
         .arg(
             Arg::with_name(options::verbosity::QUIET)
@@ -350,7 +359,7 @@ pub fn uu_app() -> App<'static, 'static> {
                 .long(options::verbosity::QUIET)
                 .visible_alias("silent")
                 .overrides_with_all(&[options::verbosity::QUIET, options::verbosity::VERBOSE])
-                .help("never output headers giving file names"),
+                .help("Never output headers giving file names"),
         )
         .arg(
             Arg::with_name(options::SLEEP_INT)
@@ -375,7 +384,7 @@ pub fn uu_app() -> App<'static, 'static> {
                 .short("v")
                 .long(options::verbosity::VERBOSE)
                 .overrides_with_all(&[options::verbosity::QUIET, options::verbosity::VERBOSE])
-                .help("always output headers giving file names"),
+                .help("Always output headers giving file names"),
         )
         .arg(
             Arg::with_name(options::ZERO_TERM)
@@ -385,6 +394,7 @@ pub fn uu_app() -> App<'static, 'static> {
         )
         .arg(
             Arg::with_name(options::DISABLE_INOTIFY_TERM)
+                .visible_alias("use-polling")
                 .long(options::DISABLE_INOTIFY_TERM)
                 .help(text::BACKEND),
         )
@@ -399,7 +409,6 @@ pub fn uu_app() -> App<'static, 'static> {
 fn follow(files: &mut FileHandling, settings: &Settings) {
     let mut process = platform::ProcessChecker::new(settings.pid);
 
-    use notify::{RecursiveMode, Watcher};
     use std::sync::{Arc, Mutex};
     let (tx, rx) = channel();
 
@@ -440,24 +449,8 @@ fn follow(files: &mut FileHandling, settings: &Settings) {
     };
 
     for path in files.map.keys() {
-        let path = if cfg!(target_os = "linux") || settings.force_polling {
-            // NOTE: Using the parent directory here instead of the file is a workaround.
-            // On Linux the watcher can crash for rename/delete/move operations if a file is watched directly.
-            // This workaround follows the recommendation of the notify crate authors:
-            // > On some platforms, if the `path` is renamed or removed while being watched, behavior may
-            // > be unexpected. See discussions in [#165] and [#166]. If less surprising behavior is wanted
-            // > one may non-recursively watch the _parent_ directory as well and manage related events.
-            let parent = path.parent().unwrap(); // This should never be `None` if `path.is_file()`
-            if parent.is_dir() {
-                parent
-            } else {
-                Path::new(".")
-            }
-        } else {
-            path.as_path()
-        };
-
-        watcher.watch(path, RecursiveMode::NonRecursive).unwrap();
+        let path = get_path(path, settings);
+        watcher.watch(&path, RecursiveMode::NonRecursive).unwrap();
     }
 
     let mut read_some;
@@ -466,7 +459,7 @@ fn follow(files: &mut FileHandling, settings: &Settings) {
         match rx.recv() {
             Ok(Ok(event)) => {
                 // dbg!(&event);
-                handle_event(event, files, settings);
+                handle_event(event, files, settings, &mut watcher);
             }
             Ok(Err(notify::Error {
                 kind: notify::ErrorKind::Io(ref e),
@@ -498,7 +491,7 @@ fn follow(files: &mut FileHandling, settings: &Settings) {
         }
 
         for path in files.map.keys().cloned().collect::<Vec<_>>() {
-            read_some = files.print_file(&path);
+            read_some = files.print_file(&path, settings);
         }
 
         if !read_some && settings.pid != 0 && process.is_dead() {
@@ -512,13 +505,23 @@ fn follow(files: &mut FileHandling, settings: &Settings) {
     }
 }
 
-fn handle_event(event: notify::Event, files: &mut FileHandling, settings: &Settings) -> bool {
+fn handle_event(
+    event: notify::Event,
+    files: &mut FileHandling,
+    settings: &Settings,
+    watcher: &mut Box<dyn Watcher>,
+) -> bool {
     let mut read_some = false;
     use notify::event::*;
 
     if let Some(event_path) = event.paths.first() {
         if files.map.contains_key(event_path) {
-            let display_name = &files.map.get(event_path).unwrap().display_name;
+            let display_name = files
+                .map
+                .get(event_path)
+                .unwrap()
+                .display_name
+                .to_path_buf();
             match event.kind {
                 // notify::EventKind::Any => {}
                 EventKind::Access(AccessKind::Close(AccessMode::Write))
@@ -534,7 +537,7 @@ fn handle_event(event: notify::Event, files: &mut FileHandling, settings: &Setti
                                 files.update_metadata(event_path, Some(new_md)).unwrap();
                                 // TODO is reopening really necessary?
                                 files.reopen_file(event_path).unwrap();
-                                read_some = files.print_file(event_path);
+                                read_some = files.print_file(event_path, settings);
                             }
                         }
                     }
@@ -546,12 +549,14 @@ fn handle_event(event: notify::Event, files: &mut FileHandling, settings: &Setti
                     // Create: cp log.bak log.dat
                     // Rename: mv log.bak log.dat
 
-                    let msg = if settings.force_polling {
-                        format!("{} has been replaced", display_name.quote())
-                    } else {
-                        format!("{} has appeared", display_name.quote())
-                    };
-                    show_error!("{};  following new file", msg);
+                    if settings.follow == Some(FollowMode::Name) {
+                        let msg = if settings.force_polling {
+                            format!("{} has been replaced", display_name.quote())
+                        } else {
+                            format!("{} has appeared", display_name.quote())
+                        };
+                        show_error!("{};  following new file", msg);
+                    }
                     // Since Files are automatically closed when they go out of
                     // scope, we resume tracking from the start of the file,
                     // assuming it has been truncated to 0. This mimics GNU's `tail`
@@ -559,18 +564,17 @@ fn handle_event(event: notify::Event, files: &mut FileHandling, settings: &Setti
 
                     // Open file again and then print it from the beginning.
                     files.reopen_file(event_path).unwrap();
-                    read_some = files.print_file(event_path);
+                    read_some = files.print_file(event_path, settings);
                 }
                 // EventKind::Modify(ModifyKind::Metadata(_)) => {}
-                // EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {}
-                // EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {}
                 EventKind::Remove(RemoveKind::File) | EventKind::Remove(RemoveKind::Any) => {
                     // This triggers for e.g.: rm log.dat
-                    show_error!("{}: {}", display_name.display(), text::NO_SUCH_FILE);
-                    // TODO: change behavior if --retry
-                    if !files.files_remaining() {
-                        // TODO: add test for this
-                        crash!(1, "{}", text::NO_FILES_REMAINING);
+                    if settings.follow == Some(FollowMode::Name) {
+                        show_error!("{}: {}", display_name.display(), text::NO_SUCH_FILE);
+                        // TODO: change behavior if --retry
+                        if !files.files_remaining() {
+                            crash!(1, "{}", text::NO_FILES_REMAINING);
+                        }
                     }
                 }
                 EventKind::Modify(ModifyKind::Name(RenameMode::Any))
@@ -578,10 +582,37 @@ fn handle_event(event: notify::Event, files: &mut FileHandling, settings: &Setti
                     // This triggers for e.g.: mv log.dat log.bak
                     // The behavior here differs from `rm log.dat`
                     // because this doesn't close if no files remaining.
-                    // NOTE:
-                    // For `--follow=descriptor` or `---disable-inotify` this behavior
-                    // differs from GNU's tail, because GNU's tail does not recognize this case.
-                    show_error!("{}: {}", display_name.display(), text::NO_SUCH_FILE);
+                    if settings.follow == Some(FollowMode::Name) {
+                        show_error!("{}: {}", display_name.display(), text::NO_SUCH_FILE);
+                    }
+                }
+                EventKind::Modify(ModifyKind::Name(RenameMode::Both)) => {
+                    if settings.follow == Some(FollowMode::Descriptor) {
+                        if let Some(new_path) = event.paths.last() {
+                            // Open new file and seek to End:
+                            let mut file = File::open(&new_path).unwrap();
+                            let _ = file.seek(SeekFrom::End(0));
+                            // Add new reader and remove old reader:
+                            files.map.insert(
+                                new_path.to_path_buf(),
+                                PathData {
+                                    metadata: file.metadata().ok(),
+                                    reader: Box::new(BufReader::new(file)),
+                                    display_name, // mimic GNU's tail and show old name in header
+                                },
+                            );
+                            files.map.remove(event_path).unwrap();
+                            if files.last == *event_path {
+                                files.last = new_path.to_path_buf();
+                            }
+                            // Watch new path and unwatch old path:
+                            let new_path = get_path(new_path, settings);
+                            watcher
+                                .watch(&new_path, RecursiveMode::NonRecursive)
+                                .unwrap();
+                            let _ = watcher.unwatch(event_path);
+                        }
+                    }
                 }
                 // notify::EventKind::Other => {}
                 _ => {} // println!("{:?}", event.kind),
@@ -589,6 +620,26 @@ fn handle_event(event: notify::Event, files: &mut FileHandling, settings: &Setti
         }
     }
     read_some
+}
+
+fn get_path(path: &Path, settings: &Settings) -> PathBuf {
+    if cfg!(target_os = "linux") || settings.force_polling {
+        // NOTE: Using the parent directory here instead of the file is a workaround.
+        // On Linux the watcher can crash for rename/delete/move operations if a file is watched directly.
+        // This workaround follows the recommendation of the notify crate authors:
+        // > On some platforms, if the `path` is renamed or removed while being watched, behavior may
+        // > be unexpected. See discussions in [#165] and [#166]. If less surprising behavior is wanted
+        // > one may non-recursively watch the _parent_ directory as well and manage related events.
+        // TODO: make this into a function
+        let parent = path.parent().unwrap(); // This should never be `None` if `path.is_file()`
+        if parent.is_dir() {
+            parent.to_path_buf()
+        } else {
+            PathBuf::from(".")
+        }
+    } else {
+        path.to_path_buf()
+    }
 }
 
 struct PathData {
@@ -636,8 +687,9 @@ impl FileHandling {
     }
 
     // This prints from the current seek position forward.
-    fn print_file(&mut self, path: &Path) -> bool {
+    fn print_file(&mut self, path: &Path, settings: &Settings) -> bool {
         let mut read_some = false;
+        let mut last_display_name = self.map.get(&self.last).unwrap().display_name.to_path_buf();
         if let Some(pd) = self.map.get_mut(path) {
             loop {
                 let mut datum = String::new();
@@ -645,9 +697,13 @@ impl FileHandling {
                     Ok(0) => break,
                     Ok(_) => {
                         read_some = true;
-                        if *path != self.last {
-                            println!("\n==> {} <==", pd.display_name.display());
+                        if last_display_name != pd.display_name {
                             self.last = path.to_path_buf();
+                            last_display_name = pd.display_name.to_path_buf();
+                            if settings.verbose {
+                                // print header
+                                println!("\n==> {} <==", pd.display_name.display());
+                            }
                         }
                         print!("{}", datum);
                     }

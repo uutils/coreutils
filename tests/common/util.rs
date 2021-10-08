@@ -547,6 +547,14 @@ impl AtPath {
             .unwrap_or_else(|e| panic!("Couldn't append to {}: {}", name, e));
     }
 
+    pub fn rename(&self, source: &str, target: &str) {
+        let source = self.plus(source);
+        let target = self.plus(target);
+        log_info("rename", format!("{:?} {:?}", source, target));
+        std::fs::rename(&source, &target)
+            .unwrap_or_else(|e| panic!("Couldn't rename {:?} -> {:?}: {}", source, target, e));
+    }
+
     pub fn mkdir(&self, dir: &str) {
         log_info("mkdir", self.plus_as_string(dir));
         fs::create_dir(&self.plus(dir)).unwrap();
