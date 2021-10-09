@@ -8,13 +8,14 @@
 
 //spell-checker:ignore (args) lsbf msbf
 
-#[macro_use]
-extern crate uucore;
+use clap::{App, Arg};
+use uu_base32::base_common::{self, Config, BASE_CMD_PARSE_ERROR};
 
-use clap::{crate_version, App, Arg};
-use uu_base32::base_common::{self, Config};
-
-use uucore::{encoding::Format, InvalidEncodingHandling};
+use uucore::{
+    encoding::Format,
+    error::{UResult, UUsageError},
+    InvalidEncodingHandling,
+};
 
 use std::io::{stdin, Read};
 
@@ -25,8 +26,6 @@ static ABOUT: &str = "
  the formal alphabet. Use --ignore-garbage to attempt to recover
  from any other non-alphabet bytes in the encoded stream.
 ";
-
-static BASE_CMD_PARSE_ERROR: i32 = 1;
 
 const ENCODINGS: &[(&str, Format)] = &[
     ("base64", Format::Base64),
@@ -47,14 +46,14 @@ fn usage() -> String {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    let mut app = base_common::base_app(uucore::util_name(), crate_version!(), ABOUT);
+    let mut app = base_common::base_app(ABOUT);
     for encoding in ENCODINGS {
         app = app.arg(Arg::with_name(encoding.0).long(encoding.0));
     }
     app
 }
 
-fn parse_cmd_args(args: impl uucore::Args) -> (Config, Format) {
+fn parse_cmd_args(args: impl uucore::Args) -> UResult<(Config, Format)> {
     let usage = usage();
     let matches = uu_app().usage(&usage[..]).get_matches_from(
         args.collect_str(InvalidEncodingHandling::ConvertLossy)
@@ -63,24 +62,19 @@ fn parse_cmd_args(args: impl uucore::Args) -> (Config, Format) {
     let format = ENCODINGS
         .iter()
         .find(|encoding| matches.is_present(encoding.0))
-        .unwrap_or_else(|| {
-            show_usage_error!("missing encoding type");
-            std::process::exit(1)
-        })
+        .ok_or_else(|| UUsageError::new(BASE_CMD_PARSE_ERROR, "missing encoding type"))?
         .1;
-    (
-        Config::from("basenc", &matches).unwrap_or_else(|s| crash!(BASE_CMD_PARSE_ERROR, "{}", s)),
-        format,
-    )
+    let config = Config::from(&matches)?;
+    Ok((config, format))
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let name = uucore::util_name();
-    let (config, format) = parse_cmd_args(args);
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let (config, format) = parse_cmd_args(args)?;
     // Create a reference to stdin so we can return a locked stdin from
     // parse_base_cmd_args
     let stdin_raw = stdin();
-    let mut input: Box<dyn Read> = base_common::get_input(&config, &stdin_raw);
+    let mut input: Box<dyn Read> = base_common::get_input(&config, &stdin_raw)?;
 
     base_common::handle_input(
         &mut input,
@@ -88,8 +82,5 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         config.wrap_cols,
         config.ignore_garbage,
         config.decode,
-        name,
-    );
-
-    0
+    )
 }

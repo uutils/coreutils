@@ -10,7 +10,7 @@ pub mod fsext;
 pub mod ringbuffer;
 
 // * (platform-specific) feature-gated modules
-// ** non-windows
+// ** non-windows (i.e. Unix + Fuchsia)
 #[cfg(all(not(windows), feature = "mode"))]
 pub mod mode;
 

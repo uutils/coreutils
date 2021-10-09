@@ -2,6 +2,69 @@ use crate::common::util::*;
 use std::io::Read;
 
 #[test]
+fn test_hex_rejects_sign_after_identifier() {
+    new_ucmd!()
+        .args(&["0x-123ABC"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("invalid hexadecimal argument: '0x-123ABC'")
+        .stderr_contains("for more information.");
+    new_ucmd!()
+        .args(&["0x+123ABC"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("invalid hexadecimal argument: '0x+123ABC'")
+        .stderr_contains("for more information.");
+    new_ucmd!()
+        .args(&["-0x-123ABC"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("invalid hexadecimal argument: '-0x-123ABC'")
+        .stderr_contains("for more information.");
+    new_ucmd!()
+        .args(&["-0x+123ABC"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("invalid hexadecimal argument: '-0x+123ABC'")
+        .stderr_contains("for more information.");
+}
+
+#[test]
+fn test_hex_lowercase_uppercase() {
+    new_ucmd!()
+        .args(&["0xa", "0xA"])
+        .succeeds()
+        .stdout_is("10\n");
+    new_ucmd!()
+        .args(&["0Xa", "0XA"])
+        .succeeds()
+        .stdout_is("10\n");
+}
+
+#[test]
+fn test_hex_big_number() {
+    new_ucmd!()
+        .args(&[
+            "0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+            "0x100000000000000000000000000000000",
+        ])
+        .succeeds()
+        .stdout_is(
+            "340282366920938463463374607431768211455\n340282366920938463463374607431768211456\n",
+        );
+}
+
+#[test]
+fn test_hex_identifier_in_wrong_place() {
+    new_ucmd!()
+        .args(&["1234ABCD0x"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("invalid hexadecimal argument: '1234ABCD0x'")
+        .stderr_contains("for more information.");
+}
+
+#[test]
 fn test_rejects_nan() {
     let ts = TestScenario::new(util_name!());
 

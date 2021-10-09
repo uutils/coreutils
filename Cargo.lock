@@ -669,9 +669,9 @@ checksum = "0e25ea47919b1560c4e3b7fe0aaab9becf5b84a10325ddf7db0f0ba5e1026499"
 
 [[package]]
 name = "digest"
-version = "0.6.2"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e5b29bf156f3f4b3c4f610a25ff69370616ae6e0657d416de22645483e72af0a"
+checksum = "ecae1c064e29fcabb6c2e9939e53dc7da72ed90234ae36ebfe03a478742efbd1"
 dependencies = [
  "generic-array",
 ]
@@ -2608,6 +2608,7 @@ dependencies = [
  "lscolors",
  "number_prefix",
  "once_cell",
+ "selinux",
  "term_grid",
  "termsize",
  "unicode-width",
