@@ -63,6 +63,7 @@ pub mod options {
     pub static SLEEP_INT: &str = "sleep-interval";
     pub static ZERO_TERM: &str = "zero-terminated";
     pub static DISABLE_INOTIFY_TERM: &str = "disable-inotify";
+    pub static USE_POLLING: &str = "use-polling";
     pub static MAX_UNCHANGED_STATS: &str = "max-unchanged-stats";
     pub static ARG_FILES: &str = "files";
 }
@@ -84,7 +85,7 @@ struct Settings {
     max_unchanged_stats: usize,
     beginning: bool,
     follow: Option<FollowMode>,
-    force_polling: bool,
+    use_polling: bool,
     verbose: bool,
     pid: platform::Pid,
 }
@@ -97,7 +98,7 @@ impl Default for Settings {
             max_unchanged_stats: 5,
             beginning: false,
             follow: None,
-            force_polling: false,
+            use_polling: false,
             verbose: false,
             pid: 0,
         }
@@ -170,7 +171,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     settings.mode = mode_and_beginning.0;
     settings.beginning = mode_and_beginning.1;
 
-    settings.force_polling = matches.is_present(options::DISABLE_INOTIFY_TERM);
+    settings.use_polling = matches.is_present(options::USE_POLLING);
 
     if matches.is_present(options::ZERO_TERM) {
         if let FilterMode::Lines(count, _) = settings.mode {
@@ -393,9 +394,9 @@ pub fn uu_app() -> App<'static, 'static> {
                 .help("Line delimiter is NUL, not newline"),
         )
         .arg(
-            Arg::with_name(options::DISABLE_INOTIFY_TERM)
-                .visible_alias("use-polling")
-                .long(options::DISABLE_INOTIFY_TERM)
+            Arg::with_name(options::USE_POLLING)
+                .visible_alias(options::DISABLE_INOTIFY_TERM)
+                .long(options::USE_POLLING)
                 .help(text::BACKEND),
         )
         .arg(
@@ -413,7 +414,7 @@ fn follow(files: &mut FileHandling, settings: &Settings) {
     let (tx, rx) = channel();
 
     let mut watcher: Box<dyn Watcher>;
-    if settings.force_polling {
+    if settings.use_polling {
         // Polling based Watcher implementation
         watcher = Box::new(
             // TODO: [2021-09; jhscheer] remove arc/mutex if upstream merges:
@@ -550,7 +551,7 @@ fn handle_event(
                     // Rename: mv log.bak log.dat
 
                     if settings.follow == Some(FollowMode::Name) {
-                        let msg = if settings.force_polling {
+                        let msg = if settings.use_polling {
                             format!("{} has been replaced", display_name.quote())
                         } else {
                             format!("{} has appeared", display_name.quote())
@@ -623,7 +624,7 @@ fn handle_event(
 }
 
 fn get_path(path: &Path, settings: &Settings) -> PathBuf {
-    if cfg!(target_os = "linux") || settings.force_polling {
+    if cfg!(target_os = "linux") || settings.use_polling {
         // NOTE: Using the parent directory here instead of the file is a workaround.
         // On Linux the watcher can crash for rename/delete/move operations if a file is watched directly.
         // This workaround follows the recommendation of the notify crate authors:

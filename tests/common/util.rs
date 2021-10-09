@@ -555,6 +555,21 @@ impl AtPath {
             .unwrap_or_else(|e| panic!("Couldn't rename {:?} -> {:?}: {}", source, target, e));
     }
 
+    pub fn remove(&self, source: &str) {
+        let source = self.plus(source);
+        log_info("remove", format!("{:?}", source));
+        std::fs::remove_file(&source)
+            .unwrap_or_else(|e| panic!("Couldn't remove {:?}: {}", source, e));
+    }
+
+    pub fn copy(&self, source: &str, target: &str) {
+        let source = self.plus(source);
+        let target = self.plus(target);
+        log_info("copy", format!("{:?} {:?}", source, target));
+        std::fs::copy(&source, &target)
+            .unwrap_or_else(|e| panic!("Couldn't copy {:?} -> {:?}: {}", source, target, e));
+    }
+
     pub fn mkdir(&self, dir: &str) {
         log_info("mkdir", self.plus_as_string(dir));
         fs::create_dir(&self.plus(dir)).unwrap();
@@ -1044,6 +1059,8 @@ impl UCommand {
     }
 }
 
+/// Wrapper for `child.stdout.read_exact()`.
+/// Careful, this blocks indefinitely if `size` bytes is never reached.
 pub fn read_size(child: &mut Child, size: usize) -> String {
     let mut output = Vec::new();
     output.resize(size, 0);

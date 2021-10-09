@@ -553,17 +553,10 @@ fn test_tail_follow_descriptor_vs_rename() {
         p.kill().unwrap();
         sleep(Duration::from_millis(delay));
 
-        let mut buf_stderr = String::new();
-        let mut p_stderr = p.stderr.take().unwrap();
-        p_stderr.read_to_string(&mut buf_stderr).unwrap();
-        println!("stderr:\n{}", buf_stderr);
-
-        let mut buf_stdout = String::new();
-        let mut p_stdout = p.stdout.take().unwrap();
-        p_stdout.read_to_string(&mut buf_stdout).unwrap();
+        let (buf_stdout, _) = take_stdout_stderr(&mut p);
         assert_eq!(buf_stdout, "x\ny\n");
 
-        let _ = args.pop();
+        args.pop();
     }
 }
 
@@ -605,15 +598,13 @@ fn test_tail_follow_descriptor_vs_rename_verbose() {
         p.kill().unwrap();
         sleep(Duration::from_millis(delay));
 
-        let mut buf_stdout = String::new();
-        let mut p_stdout = p.stdout.take().unwrap();
-        p_stdout.read_to_string(&mut buf_stdout).unwrap();
+        let (buf_stdout, _) = take_stdout_stderr(&mut p);
         assert_eq!(
             buf_stdout,
             "==> FILE_A <==\n\n==> FILE_B <==\n\n==> FILE_A <==\nx\n"
         );
 
-        let _ = args.pop();
+        args.pop();
     }
 }
 
@@ -627,34 +618,34 @@ fn test_follow_name_remove() {
     let at = &ts.fixtures;
 
     let source = FOLLOW_NAME_TXT;
-    let source_canonical = &at.plus(source);
+    let source_copy = "source_copy";
+    at.copy(source, source_copy);
 
     let expected_stdout = at.read(FOLLOW_NAME_SHORT_EXP);
     let expected_stderr = format!(
         "{}: {}: No such file or directory\n{0}: no files remaining\n",
-        ts.util_name, source
+        ts.util_name, source_copy
     );
 
-    let args = ["--follow=name", source];
-    let mut p = ts.ucmd().args(&args).run_no_wait();
-
     let delay = 1000;
+    let mut args = vec!["--follow=name", source_copy, "--use-polling"];
 
-    sleep(Duration::from_millis(delay));
-    std::fs::remove_file(source_canonical).unwrap();
-    sleep(Duration::from_millis(delay));
+    for _ in 0..2 {
+        at.copy(source, source_copy);
+        let mut p = ts.ucmd().args(&args).run_no_wait();
 
-    p.kill().unwrap();
+        sleep(Duration::from_millis(delay));
+        at.remove(source_copy);
+        sleep(Duration::from_millis(delay));
 
-    let mut buf_stdout = String::new();
-    let mut p_stdout = p.stdout.take().unwrap();
-    p_stdout.read_to_string(&mut buf_stdout).unwrap();
-    assert_eq!(buf_stdout, expected_stdout);
+        p.kill().unwrap();
 
-    let mut buf_stderr = String::new();
-    let mut p_stderr = p.stderr.take().unwrap();
-    p_stderr.read_to_string(&mut buf_stderr).unwrap();
-    assert_eq!(buf_stderr, expected_stderr);
+        let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
+        assert_eq!(buf_stdout, expected_stdout);
+        assert_eq!(buf_stderr, expected_stderr);
+
+        args.pop();
+    }
 }
 
 #[test]
@@ -667,8 +658,7 @@ fn test_follow_name_truncate() {
     let at = &ts.fixtures;
 
     let source = FOLLOW_NAME_TXT;
-    let source_canonical = &at.plus(source);
-    let backup = at.plus_as_string("backup");
+    let backup = "backup";
 
     let expected_stdout = at.read(FOLLOW_NAME_EXP);
     let expected_stderr = format!("{}: {}: file truncated\n", ts.util_name, source);
@@ -678,63 +668,17 @@ fn test_follow_name_truncate() {
 
     let delay = 1000;
 
-    std::fs::copy(&source_canonical, &backup).unwrap();
+    at.copy(source, backup);
     sleep(Duration::from_millis(delay));
-    let _ = std::fs::File::create(source_canonical).unwrap(); // trigger truncate
+    at.touch(source); // trigger truncate
     sleep(Duration::from_millis(delay));
-    std::fs::copy(&backup, &source_canonical).unwrap();
-    sleep(Duration::from_millis(delay));
-
-    p.kill().unwrap();
-
-    let mut buf_stdout = String::new();
-    let mut p_stdout = p.stdout.take().unwrap();
-    p_stdout.read_to_string(&mut buf_stdout).unwrap();
-    assert_eq!(buf_stdout, expected_stdout);
-
-    let mut buf_stderr = String::new();
-    let mut p_stderr = p.stderr.take().unwrap();
-    p_stderr.read_to_string(&mut buf_stderr).unwrap();
-    assert_eq!(buf_stderr, expected_stderr);
-}
-
-#[test]
-#[cfg(not(windows))]
-fn test_follow_name_remove_polling() {
-    // This test triggers a remove event while `tail --follow=name ---disable-inotify logfile` is running.
-    // ((sleep 1 && rm logfile &)>/dev/null 2>&1 &) ; tail --follow=name ---disable-inotify logfile
-
-    let ts = TestScenario::new(util_name!());
-    let at = &ts.fixtures;
-
-    let source = FOLLOW_NAME_TXT;
-    let source_canonical = &at.plus(source);
-
-    let expected_stdout = at.read(FOLLOW_NAME_SHORT_EXP);
-    let expected_stderr = format!(
-        "{}: {}: No such file or directory\n{0}: no files remaining\n",
-        ts.util_name, source
-    );
-
-    let args = ["--follow=name", "--disable-inotify", source];
-    let mut p = ts.ucmd().args(&args).run_no_wait();
-
-    let delay = 1000;
-
-    sleep(Duration::from_millis(delay));
-    std::fs::remove_file(source_canonical).unwrap();
+    at.copy(backup, source);
     sleep(Duration::from_millis(delay));
 
     p.kill().unwrap();
 
-    let mut buf_stdout = String::new();
-    let mut p_stdout = p.stdout.take().unwrap();
-    p_stdout.read_to_string(&mut buf_stdout).unwrap();
+    let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
     assert_eq!(buf_stdout, expected_stdout);
-
-    let mut buf_stderr = String::new();
-    let mut p_stderr = p.stderr.take().unwrap();
-    p_stderr.read_to_string(&mut buf_stderr).unwrap();
     assert_eq!(buf_stderr, expected_stderr);
 }
 
@@ -748,8 +692,7 @@ fn test_follow_name_move_create() {
     let at = &ts.fixtures;
 
     let source = FOLLOW_NAME_TXT;
-    let source_canonical = &at.plus(source);
-    let backup = at.plus_as_string("backup");
+    let backup = "backup";
 
     #[cfg(target_os = "linux")]
     let expected_stdout = at.read(FOLLOW_NAME_EXP);
@@ -771,62 +714,68 @@ fn test_follow_name_move_create() {
     let delay = 1000;
 
     sleep(Duration::from_millis(delay));
-    std::fs::rename(&source_canonical, &backup).unwrap();
+    at.rename(source, backup);
     sleep(Duration::from_millis(delay));
-    std::fs::copy(&backup, &source_canonical).unwrap();
+    at.copy(backup, source);
     sleep(Duration::from_millis(delay));
 
     p.kill().unwrap();
 
-    let mut buf_stdout = String::new();
-    let mut p_stdout = p.stdout.take().unwrap();
-    p_stdout.read_to_string(&mut buf_stdout).unwrap();
+    let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
     assert_eq!(buf_stdout, expected_stdout);
-
-    let mut buf_stderr = String::new();
-    let mut p_stderr = p.stderr.take().unwrap();
-    p_stderr.read_to_string(&mut buf_stderr).unwrap();
     assert_eq!(buf_stderr, expected_stderr);
 }
 
 #[test]
 #[cfg(not(windows))]
-fn test_follow_name_move_polling() {
-    // This test triggers a move event while `tail --follow=name --disable-inotify logfile` is running.
-    // ((sleep 1 && mv logfile backup && sleep 1 && cp backup logfile &)>/dev/null 2>&1 &) ; tail --follow=name ---disable-inotify logfile
-    // NOTE: GNU's tail does not recognize this move event for `---disable-inotify`
+fn test_follow_name_move() {
+    // This test triggers a move event while `tail --follow=name logfile` is running.
+    // ((sleep 1 && mv logfile backup && sleep 1 && cp backup logfile &)>/dev/null 2>&1 &) ; tail --follow=name logfile
+    // NOTE: GNU's tail does not seem to recognize this move event with `---disable-inotify`
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
     let source = FOLLOW_NAME_TXT;
-    let source_canonical = &at.plus(source);
-    let backup = at.plus_as_string("backup");
+    let backup = "backup";
 
     let expected_stdout = at.read(FOLLOW_NAME_SHORT_EXP);
-    let expected_stderr = format!(
-        "{}: {}: No such file or directory\n{0}: no files remaining\n",
-        ts.util_name, source
-    );
+    let expected_stderr = [
+        format!(
+            "{}: {}: No such file or directory\n{0}: no files remaining\n",
+            ts.util_name, source
+        ),
+        format!("{}: {}: No such file or directory\n", ts.util_name, source),
+    ];
 
-    let args = ["--follow=name", "--disable-inotify", source];
-    let mut p = ts.ucmd().args(&args).run_no_wait();
+    let mut args = vec!["--follow=name", source, "--use-polling"];
 
-    let delay = 1000;
+    #[allow(clippy::needless_range_loop)]
+    for i in 0..2 {
+        let mut p = ts.ucmd().args(&args).run_no_wait();
+        let delay = 1000;
 
-    sleep(Duration::from_millis(delay));
-    std::fs::rename(&source_canonical, &backup).unwrap();
-    sleep(Duration::from_millis(delay));
+        sleep(Duration::from_millis(delay));
+        at.rename(source, backup);
+        sleep(Duration::from_millis(delay));
 
-    p.kill().unwrap();
+        p.kill().unwrap();
 
+        let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
+        assert_eq!(buf_stdout, expected_stdout);
+        assert_eq!(buf_stderr, expected_stderr[i]);
+
+        at.rename(backup, source);
+        args.pop();
+    }
+}
+
+fn take_stdout_stderr(p: &mut std::process::Child) -> (String, String) {
     let mut buf_stdout = String::new();
     let mut p_stdout = p.stdout.take().unwrap();
     p_stdout.read_to_string(&mut buf_stdout).unwrap();
-    assert_eq!(buf_stdout, expected_stdout);
-
     let mut buf_stderr = String::new();
     let mut p_stderr = p.stderr.take().unwrap();
     p_stderr.read_to_string(&mut buf_stderr).unwrap();
-    assert_eq!(buf_stderr, expected_stderr);
+    (buf_stdout, buf_stderr)
 }
