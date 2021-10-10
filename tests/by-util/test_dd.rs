@@ -28,9 +28,7 @@ macro_rules! fixture_path {
 macro_rules! assert_fixture_exists {
     ($fname:expr) => {{
         let fpath = fixture_path!($fname);
-        if !fpath.exists() {
-            panic!("Fixture missing: {:?}", fpath);
-        }
+        assert!(fpath.exists(), "Fixture missing: {:?}", fpath);
     }};
 }
 
@@ -38,9 +36,7 @@ macro_rules! assert_fixture_exists {
 macro_rules! assert_fixture_not_exists {
     ($fname:expr) => {{
         let fpath = PathBuf::from(format!("./fixtures/dd/{}", $fname));
-        if fpath.exists() {
-            panic!("Fixture present: {:?}", fpath);
-        }
+        assert!(!fpath.exists(), "Fixture present: {:?}", fpath);
     }};
 }
 
