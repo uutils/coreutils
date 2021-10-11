@@ -7,8 +7,6 @@
 
 // spell-checker:ignore (ToDO) COMFOLLOW Chowner RFILE RFILE's derefer dgid nonblank nonprint nonprinting
 
-#[macro_use]
-extern crate uucore;
 use uucore::display::Quotable;
 pub use uucore::entries;
 use uucore::error::{FromIo, UResult, USimpleError};

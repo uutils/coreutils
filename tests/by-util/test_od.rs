@@ -1,3 +1,4 @@
+// spell-checker:ignore abcdefghijklmnopqrstuvwxyz
 //  * This file is part of the uutils coreutils package.
 //  *
 //  * For the full copyright and license information, please view the LICENSE
@@ -35,9 +36,10 @@ fn test_file() {
     {
         let mut f = File::create(&file).unwrap();
         // spell-checker:disable-next-line
-        if f.write_all(b"abcdefghijklmnopqrstuvwxyz\n").is_err() {
-            panic!("Test setup failed - could not write file");
-        }
+        assert!(
+            !f.write_all(b"abcdefghijklmnopqrstuvwxyz\n").is_err(),
+            "Test setup failed - could not write file"
+        );
     }
 
     new_ucmd!()
@@ -75,9 +77,10 @@ fn test_2files() {
     // spell-checker:disable-next-line
     for &(path, data) in &[(&file1, "abcdefghijklmnop"), (&file2, "qrstuvwxyz\n")] {
         let mut f = File::create(&path).unwrap();
-        if f.write_all(data.as_bytes()).is_err() {
-            panic!("Test setup failed - could not write file");
-        }
+        assert!(
+            !f.write_all(data.as_bytes()).is_err(),
+            "Test setup failed - could not write file"
+        );
     }
 
     new_ucmd!()
@@ -126,9 +129,10 @@ fn test_from_mixed() {
     let (data1, data2, data3) = ("abcdefg", "hijklmnop", "qrstuvwxyz\n");
     for &(path, data) in &[(&file1, data1), (&file3, data3)] {
         let mut f = File::create(&path).unwrap();
-        if f.write_all(data.as_bytes()).is_err() {
-            panic!("Test setup failed - could not write file");
-        }
+        assert!(
+            !f.write_all(data.as_bytes()).is_err(),
+            "Test setup failed - could not write file"
+        );
     }
 
     new_ucmd!()
