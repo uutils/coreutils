@@ -864,7 +864,7 @@ impl UCommand {
     /// Add a parameter to the invocation. Path arguments are treated relative
     /// to the test environment directory.
     pub fn arg<S: AsRef<OsStr>>(&mut self, arg: S) -> &mut UCommand {
-        assert!(!self.has_run, ALREADY_RUN);
+        assert!(!self.has_run, "{}", ALREADY_RUN);
         self.comm_string.push(' ');
         self.comm_string
             .push_str(arg.as_ref().to_str().unwrap_or_default());
@@ -875,7 +875,7 @@ impl UCommand {
     /// Add multiple parameters to the invocation. Path arguments are treated relative
     /// to the test environment directory.
     pub fn args<S: AsRef<OsStr>>(&mut self, args: &[S]) -> &mut UCommand {
-        assert!(!self.has_run, MULTIPLE_STDIN_MEANINGLESS);
+        assert!(!self.has_run, "{}", MULTIPLE_STDIN_MEANINGLESS);
         let strings = args
             .iter()
             .map(|s| s.as_ref().to_os_string())
@@ -893,7 +893,11 @@ impl UCommand {
 
     /// provides standard input to feed in to the command when spawned
     pub fn pipe_in<T: Into<Vec<u8>>>(&mut self, input: T) -> &mut UCommand {
-        assert!(!self.bytes_into_stdin.is_some(), MULTIPLE_STDIN_MEANINGLESS);
+        assert!(
+            !self.bytes_into_stdin.is_some(),
+            "{}",
+            MULTIPLE_STDIN_MEANINGLESS
+        );
         self.bytes_into_stdin = Some(input.into());
         self
     }
@@ -908,7 +912,7 @@ impl UCommand {
     /// This is typically useful to test non-standard workflows
     /// like feeding something to a command that does not read it
     pub fn ignore_stdin_write_error(&mut self) -> &mut UCommand {
-        assert!(!self.bytes_into_stdin.is_none(), NO_STDIN_MEANINGLESS);
+        assert!(!self.bytes_into_stdin.is_none(), "{}", NO_STDIN_MEANINGLESS);
         self.ignore_stdin_write_error = true;
         self
     }
@@ -918,7 +922,7 @@ impl UCommand {
         K: AsRef<OsStr>,
         V: AsRef<OsStr>,
     {
-        assert!(!self.has_run, ALREADY_RUN);
+        assert!(!self.has_run, "{}", ALREADY_RUN);
         self.raw.env(key, val);
         self
     }
@@ -937,7 +941,7 @@ impl UCommand {
     /// Spawns the command, feeds the stdin if any, and returns the
     /// child process immediately.
     pub fn run_no_wait(&mut self) -> Child {
-        assert!(!self.has_run, ALREADY_RUN);
+        assert!(!self.has_run, "{}", ALREADY_RUN);
         self.has_run = true;
         log_info("run", &self.comm_string);
         let mut child = self
