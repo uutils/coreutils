@@ -57,7 +57,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     // Before we can parse 'args' with clap (and previously getopts),
     // a possible MODE prefix '-' needs to be removed (e.g. "chmod -x FILE").
-    let mode_had_minus_prefix = strip_minus_from_mode(&mut args);
+    let mode_had_minus_prefix = mode::strip_minus_from_mode(&mut args);
 
     let usage = usage();
     let after_help = get_long_usage();
@@ -178,30 +178,6 @@ pub fn uu_app() -> App<'static, 'static> {
                 .required_unless(options::MODE)
                 .multiple(true),
         )
-}
-
-// Iterate 'args' and delete the first occurrence
-// of a prefix '-' if it's associated with MODE
-// e.g. "chmod -v -xw -R FILE" -> "chmod -v xw -R FILE"
-pub fn strip_minus_from_mode(args: &mut Vec<String>) -> bool {
-    for arg in args {
-        if arg == "--" {
-            break;
-        }
-        if arg.starts_with('-') {
-            if let Some(second) = arg.chars().nth(1) {
-                match second {
-                    'r' | 'w' | 'x' | 'X' | 's' | 't' | 'u' | 'g' | 'o' | '0'..='7' => {
-                        // TODO: use strip_prefix() once minimum rust version reaches 1.45.0
-                        *arg = arg[1..arg.len()].to_string();
-                        return true;
-                    }
-                    _ => {}
-                }
-            }
-        }
-    }
-    false
 }
 
 struct Chmoder {
