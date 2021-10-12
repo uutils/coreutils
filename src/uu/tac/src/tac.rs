@@ -5,15 +5,19 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) sbytes slen dlen memmem
+// spell-checker:ignore (ToDO) sbytes slen dlen memmem memmap Mmap mmap SIGBUS
 
 #[macro_use]
 extern crate uucore;
 
 use clap::{crate_version, App, Arg};
 use memchr::memmem;
-use std::io::{stdin, stdout, BufReader, Read, Write};
-use std::{fs::File, path::Path};
+use memmap2::Mmap;
+use std::io::{stdin, stdout, BufWriter, Read, Write};
+use std::{
+    fs::{read, File},
+    path::Path,
+};
 use uucore::display::Quotable;
 use uucore::InvalidEncodingHandling;
 
@@ -44,9 +48,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         raw_separator
     };
 
-    let files: Vec<String> = match matches.values_of(options::FILE) {
-        Some(v) => v.map(|v| v.to_owned()).collect(),
-        None => vec!["-".to_owned()],
+    let files: Vec<&str> = match matches.values_of(options::FILE) {
+        Some(v) => v.collect(),
+        None => vec!["-"],
     };
 
     tac(files, before, regex, separator)
@@ -102,10 +106,11 @@ pub fn uu_app() -> App<'static, 'static> {
 /// returns [`std::io::Error`].
 fn buffer_tac_regex(
     data: &[u8],
-    pattern: regex::bytes::Regex,
+    pattern: &regex::bytes::Regex,
     before: bool,
 ) -> std::io::Result<()> {
-    let mut out = stdout();
+    let out = stdout();
+    let mut out = BufWriter::new(out.lock());
 
     // The index of the line separator for the current line.
     //
@@ -171,7 +176,8 @@ fn buffer_tac_regex(
 /// `separator` appears at the beginning of each line, as in
 /// `"/abc/def"`.
 fn buffer_tac(data: &[u8], before: bool, separator: &str) -> std::io::Result<()> {
-    let mut out = stdout();
+    let out = stdout();
+    let mut out = BufWriter::new(out.lock());
 
     // The number of bytes in the line separator.
     let slen = separator.as_bytes().len();
@@ -208,12 +214,33 @@ fn buffer_tac(data: &[u8], before: bool, separator: &str) -> std::io::Result<()>
     Ok(())
 }
 
-fn tac(filenames: Vec<String>, before: bool, regex: bool, separator: &str) -> i32 {
+fn tac(filenames: Vec<&str>, before: bool, regex: bool, separator: &str) -> i32 {
     let mut exit_code = 0;
 
-    for filename in &filenames {
-        let mut file = BufReader::new(if filename == "-" {
-            Box::new(stdin()) as Box<dyn Read>
+    let pattern = if regex {
+        Some(crash_if_err!(1, regex::bytes::Regex::new(separator)))
+    } else {
+        None
+    };
+
+    for &filename in &filenames {
+        let mmap;
+        let buf;
+
+        let data: &[u8] = if filename == "-" {
+            if let Some(mmap1) = try_mmap_stdin() {
+                mmap = mmap1;
+                &mmap
+            } else {
+                let mut buf1 = Vec::new();
+                if let Err(e) = stdin().read_to_end(&mut buf1) {
+                    show_error!("failed to read from stdin: {}", e);
+                    exit_code = 1;
+                    continue;
+                }
+                buf = buf1;
+                &buf
+            }
         } else {
             let path = Path::new(filename);
             if path.is_dir() || path.metadata().is_err() {
@@ -228,29 +255,47 @@ fn tac(filenames: Vec<String>, before: bool, regex: bool, separator: &str) -> i3
                 exit_code = 1;
                 continue;
             }
-            match File::open(path) {
-                Ok(f) => Box::new(f) as Box<dyn Read>,
-                Err(e) => {
-                    show_error!("failed to open {} for reading: {}", filename.quote(), e);
-                    exit_code = 1;
-                    continue;
+
+            if let Some(mmap1) = try_mmap_path(path) {
+                mmap = mmap1;
+                &mmap
+            } else {
+                match read(path) {
+                    Ok(buf1) => {
+                        buf = buf1;
+                        &buf
+                    }
+                    Err(e) => {
+                        show_error!("failed to read {}: {}", filename.quote(), e);
+                        exit_code = 1;
+                        continue;
+                    }
                 }
             }
-        });
-
-        let mut data = Vec::new();
-        if let Err(e) = file.read_to_end(&mut data) {
-            show_error!("failed to read {}: {}", filename.quote(), e);
-            exit_code = 1;
-            continue;
         };
-        if regex {
-            let pattern = crash_if_err!(1, regex::bytes::Regex::new(separator));
-            buffer_tac_regex(&data, pattern, before)
+
+        if let Some(pattern) = &pattern {
+            buffer_tac_regex(data, pattern, before)
         } else {
-            buffer_tac(&data, before, separator)
+            buffer_tac(data, before, separator)
         }
         .unwrap_or_else(|e| crash!(1, "failed to write to stdout: {}", e));
     }
     exit_code
+}
+
+fn try_mmap_stdin() -> Option<Mmap> {
+    // SAFETY: If the file is truncated while we map it, SIGBUS will be raised
+    // and our process will be terminated, thus preventing access of invalid memory.
+    unsafe { Mmap::map(&stdin()).ok() }
+}
+
+fn try_mmap_path(path: &Path) -> Option<Mmap> {
+    let file = File::open(path).ok()?;
+
+    // SAFETY: If the file is truncated while we map it, SIGBUS will be raised
+    // and our process will be terminated, thus preventing access of invalid memory.
+    let mmap = unsafe { Mmap::map(&file).ok()? };
+
+    Some(mmap)
 }
