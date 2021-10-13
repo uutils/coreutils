@@ -1292,6 +1292,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "os_display"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "748cc1d0dc55247316a5bedd8dc8c5478c8a0c2e2001176b38ce7c0ed732c7a5"
+dependencies = [
+ "unicode-width",
+]
+
+[[package]]
 name = "ouroboros"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2102,9 +2111,9 @@ checksum = "8895849a949e7845e06bd6dc1aa51731a103c42707010a5b591c0038fb73385b"
 
 [[package]]
 name = "unicode-width"
-version = "0.1.8"
+version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9337591893a19b88d8d87f2cec1e73fad5cdfd10e5a6f349f498ad6ea2ffb1e3"
+checksum = "3ed742d4ea2bd1176e236172c8429aaf54486e7ac098db29ffe6529e0ce50973"
 
 [[package]]
 name = "unicode-xid"
@@ -3276,6 +3285,7 @@ dependencies = [
  "libc",
  "nix 0.20.0",
  "once_cell",
+ "os_display",
  "termion",
  "thiserror",
  "time",
