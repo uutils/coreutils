@@ -163,25 +163,23 @@ impl CmdResult {
 
     /// asserts that the command resulted in a success (zero) status code
     pub fn success(&self) -> &CmdResult {
-        if !self.success {
-            panic!(
-                "Command was expected to succeed.\nstdout = {}\n stderr = {}",
-                self.stdout_str(),
-                self.stderr_str()
-            );
-        }
+        assert!(
+            self.success,
+            "Command was expected to succeed.\nstdout = {}\n stderr = {}",
+            self.stdout_str(),
+            self.stderr_str()
+        );
         self
     }
 
     /// asserts that the command resulted in a failure (non-zero) status code
     pub fn failure(&self) -> &CmdResult {
-        if self.success {
-            panic!(
-                "Command was expected to fail.\nstdout = {}\n stderr = {}",
-                self.stdout_str(),
-                self.stderr_str()
-            );
-        }
+        assert!(
+            !self.success,
+            "Command was expected to fail.\nstdout = {}\n stderr = {}",
+            self.stdout_str(),
+            self.stderr_str()
+        );
         self
     }
 
@@ -197,12 +195,11 @@ impl CmdResult {
     /// 1.  you can not know exactly what stdout will be or
     /// 2.  you know that stdout will also be empty
     pub fn no_stderr(&self) -> &CmdResult {
-        if !self.stderr.is_empty() {
-            panic!(
-                "Expected stderr to be empty, but it's:\n{}",
-                self.stderr_str()
-            );
-        }
+        assert!(
+            self.stderr.is_empty(),
+            "Expected stderr to be empty, but it's:\n{}",
+            self.stderr_str()
+        );
         self
     }
 
@@ -213,12 +210,11 @@ impl CmdResult {
     /// 1.  you can not know exactly what stderr will be or
     /// 2.  you know that stderr will also be empty
     pub fn no_stdout(&self) -> &CmdResult {
-        if !self.stdout.is_empty() {
-            panic!(
-                "Expected stdout to be empty, but it's:\n{}",
-                self.stderr_str()
-            );
-        }
+        assert!(
+            self.stdout.is_empty(),
+            "Expected stdout to be empty, but it's:\n{}",
+            self.stderr_str()
+        );
         self
     }
 
@@ -868,9 +864,7 @@ impl UCommand {
     /// Add a parameter to the invocation. Path arguments are treated relative
     /// to the test environment directory.
     pub fn arg<S: AsRef<OsStr>>(&mut self, arg: S) -> &mut UCommand {
-        if self.has_run {
-            panic!("{}", ALREADY_RUN);
-        }
+        assert!(!self.has_run, ALREADY_RUN);
         self.comm_string.push(' ');
         self.comm_string
             .push_str(arg.as_ref().to_str().unwrap_or_default());
@@ -881,9 +875,7 @@ impl UCommand {
     /// Add multiple parameters to the invocation. Path arguments are treated relative
     /// to the test environment directory.
     pub fn args<S: AsRef<OsStr>>(&mut self, args: &[S]) -> &mut UCommand {
-        if self.has_run {
-            panic!("{}", MULTIPLE_STDIN_MEANINGLESS);
-        }
+        assert!(!self.has_run, MULTIPLE_STDIN_MEANINGLESS);
         let strings = args
             .iter()
             .map(|s| s.as_ref().to_os_string())
@@ -901,9 +893,7 @@ impl UCommand {
 
     /// provides standard input to feed in to the command when spawned
     pub fn pipe_in<T: Into<Vec<u8>>>(&mut self, input: T) -> &mut UCommand {
-        if self.bytes_into_stdin.is_some() {
-            panic!("{}", MULTIPLE_STDIN_MEANINGLESS);
-        }
+        assert!(!self.bytes_into_stdin.is_some(), MULTIPLE_STDIN_MEANINGLESS);
         self.bytes_into_stdin = Some(input.into());
         self
     }
@@ -918,9 +908,7 @@ impl UCommand {
     /// This is typically useful to test non-standard workflows
     /// like feeding something to a command that does not read it
     pub fn ignore_stdin_write_error(&mut self) -> &mut UCommand {
-        if self.bytes_into_stdin.is_none() {
-            panic!("{}", NO_STDIN_MEANINGLESS);
-        }
+        assert!(!self.bytes_into_stdin.is_none(), NO_STDIN_MEANINGLESS);
         self.ignore_stdin_write_error = true;
         self
     }
@@ -930,9 +918,7 @@ impl UCommand {
         K: AsRef<OsStr>,
         V: AsRef<OsStr>,
     {
-        if self.has_run {
-            panic!("{}", ALREADY_RUN);
-        }
+        assert!(!self.has_run, ALREADY_RUN);
         self.raw.env(key, val);
         self
     }
@@ -951,9 +937,7 @@ impl UCommand {
     /// Spawns the command, feeds the stdin if any, and returns the
     /// child process immediately.
     pub fn run_no_wait(&mut self) -> Child {
-        if self.has_run {
-            panic!("{}", ALREADY_RUN);
-        }
+        assert!(!self.has_run, ALREADY_RUN);
         self.has_run = true;
         log_info("run", &self.comm_string);
         let mut child = self
@@ -1169,7 +1153,7 @@ pub fn check_coreutil_version(
                 if s.contains(&format!("(GNU coreutils) {}", version_expected)) {
                     Ok(format!("{}: {}", UUTILS_INFO, s.to_string()))
                 } else if s.contains("(GNU coreutils)") {
-                    let version_found = s.split_whitespace().last().unwrap()[..4].parse::<f32>().unwrap_or_default();
+                    let version_found = parse_coreutil_version(s);
                     let version_expected = version_expected.parse::<f32>().unwrap_or_default();
                     if version_found > version_expected {
                     Ok(format!("{}: version for the reference coreutil '{}' is higher than expected; expected: {}, found: {}", UUTILS_INFO, util_name, version_expected, version_found))
@@ -1180,6 +1164,20 @@ pub fn check_coreutil_version(
                 }
             },
         )
+}
+
+// simple heuristic to parse the coreutils SemVer string, e.g. "id (GNU coreutils) 8.32.263-0475"
+fn parse_coreutil_version(version_string: &str) -> f32 {
+    version_string
+        .split_whitespace()
+        .last()
+        .unwrap()
+        .split('.')
+        .take(2)
+        .collect::<Vec<_>>()
+        .join(".")
+        .parse::<f32>()
+        .unwrap_or_default()
 }
 
 /// This runs the GNU coreutils `util_name` binary in `$PATH` in order to
@@ -1472,6 +1470,36 @@ mod tests {
         };
 
         res.normalized_newlines_stdout_is("A\r\nB\nC\n");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_parse_coreutil_version() {
+        use std::assert_eq;
+        assert_eq!(
+            parse_coreutil_version("id (GNU coreutils) 9.0.123-0123").to_string(),
+            "9"
+        );
+        assert_eq!(
+            parse_coreutil_version("id (GNU coreutils) 8.32.263-0475").to_string(),
+            "8.32"
+        );
+        assert_eq!(
+            parse_coreutil_version("id (GNU coreutils) 8.25.123-0123").to_string(),
+            "8.25"
+        );
+        assert_eq!(
+            parse_coreutil_version("id (GNU coreutils) 9.0").to_string(),
+            "9"
+        );
+        assert_eq!(
+            parse_coreutil_version("id (GNU coreutils) 8.32").to_string(),
+            "8.32"
+        );
+        assert_eq!(
+            parse_coreutil_version("id (GNU coreutils) 8.25").to_string(),
+            "8.25"
+        );
     }
 
     #[test]

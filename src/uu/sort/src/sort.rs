@@ -825,7 +825,7 @@ impl FieldSelector {
     fn parse(key: &str, global_settings: &GlobalSettings) -> UResult<Self> {
         let mut from_to = key.split(',');
         let (from, from_options) = Self::split_key_options(from_to.next().unwrap());
-        let to = from_to.next().map(|to| Self::split_key_options(to));
+        let to = from_to.next().map(Self::split_key_options);
         let options_are_empty = from_options.is_empty() && matches!(to, None | Some((_, "")));
 
         if options_are_empty {

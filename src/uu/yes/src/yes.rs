@@ -12,8 +12,6 @@ use std::io::{self, Write};
 
 #[macro_use]
 extern crate clap;
-#[macro_use]
-extern crate uucore;
 
 use clap::{App, Arg};
 use uucore::error::{UResult, USimpleError};

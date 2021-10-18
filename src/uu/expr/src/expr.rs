@@ -5,10 +5,8 @@
 //* For the full copyright and license information, please view the LICENSE
 //* file that was distributed with this source code.
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, App, Arg};
+use uucore::error::{UResult, USimpleError};
 use uucore::InvalidEncodingHandling;
 
 mod syntax_tree;
@@ -23,7 +21,8 @@ pub fn uu_app() -> App<'static, 'static> {
         .arg(Arg::with_name(HELP).long(HELP))
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
@@ -32,13 +31,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     // The following usage should work without escaping hyphens: `expr -15 = 1 +  2 \* \( 3 - -4 \)`
 
     if maybe_handle_help_or_version(&args) {
-        0
+        Ok(())
     } else {
         let token_strings = args[1..].to_vec();
 
         match process_expr(&token_strings) {
             Ok(expr_result) => print_expr_ok(&expr_result),
-            Err(expr_error) => print_expr_error(&expr_error),
+            Err(expr_error) => Err(USimpleError::new(2, &expr_error)),
         }
     }
 }
@@ -49,17 +48,13 @@ fn process_expr(token_strings: &[String]) -> Result<String, String> {
     evaluate_ast(maybe_ast)
 }
 
-fn print_expr_ok(expr_result: &str) -> i32 {
+fn print_expr_ok(expr_result: &str) -> UResult<()> {
     println!("{}", expr_result);
     if expr_result == "0" || expr_result.is_empty() {
-        1
+        Err(1.into())
     } else {
-        0
+        Ok(())
     }
-}
-
-fn print_expr_error(expr_error: &str) -> ! {
-    crash!(2, "{}", expr_error)
 }
 
 fn evaluate_ast(maybe_ast: Result<Box<syntax_tree::AstNode>, String>) -> Result<String, String> {

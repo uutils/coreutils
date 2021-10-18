@@ -108,6 +108,12 @@ enum Modes {
     Bytes(usize),
 }
 
+impl Default for Modes {
+    fn default() -> Self {
+        Modes::Lines(10)
+    }
+}
+
 fn parse_mode<F>(src: &str, closure: F) -> Result<(Modes, bool), String>
 where
     F: FnOnce(usize) -> Modes,
@@ -144,7 +150,7 @@ fn arg_iterate<'a>(
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Default)]
 struct HeadOptions {
     pub quiet: bool,
     pub verbose: bool,
@@ -155,22 +161,11 @@ struct HeadOptions {
 }
 
 impl HeadOptions {
-    pub fn new() -> HeadOptions {
-        HeadOptions {
-            quiet: false,
-            verbose: false,
-            zeroed: false,
-            all_but_last: false,
-            mode: Modes::Lines(10),
-            files: Vec::new(),
-        }
-    }
-
     ///Construct options from matches
     pub fn get_from(args: impl uucore::Args) -> Result<Self, String> {
         let matches = uu_app().get_matches_from(arg_iterate(args)?);
 
-        let mut options = HeadOptions::new();
+        let mut options: HeadOptions = Default::default();
 
         options.quiet = matches.is_present(options::QUIET_NAME);
         options.verbose = matches.is_present(options::VERBOSE_NAME);
@@ -195,12 +190,6 @@ impl HeadOptions {
         };
         //println!("{:#?}", options);
         Ok(options)
-    }
-}
-// to make clippy shut up
-impl Default for HeadOptions {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -523,17 +512,13 @@ mod tests {
         assert!(options("-c IsThisJustFantasy").is_err());
     }
     #[test]
-    #[allow(clippy::bool_comparison)]
     fn test_options_correct_defaults() {
-        let opts = HeadOptions::new();
-        let opts2: HeadOptions = Default::default();
+        let opts: HeadOptions = Default::default();
 
-        assert_eq!(opts, opts2);
-
-        assert!(opts.verbose == false);
-        assert!(opts.quiet == false);
-        assert!(opts.zeroed == false);
-        assert!(opts.all_but_last == false);
+        assert!(!opts.verbose);
+        assert!(!opts.quiet);
+        assert!(!opts.zeroed);
+        assert!(!opts.all_but_last);
         assert_eq!(opts.mode, Modes::Lines(10));
         assert!(opts.files.is_empty());
     }

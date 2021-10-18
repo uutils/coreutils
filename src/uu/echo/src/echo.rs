@@ -6,9 +6,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, App, Arg};
 use std::io::{self, Write};
 use std::iter::Peekable;

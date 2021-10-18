@@ -7,8 +7,6 @@
 
 // spell-checker:ignore (ToDO) COMFOLLOW Passwd RFILE RFILE's derefer dgid duid groupname
 
-#[macro_use]
-extern crate uucore;
 use uucore::display::Quotable;
 pub use uucore::entries::{self, Group, Locate, Passwd};
 use uucore::perms::{chown_base, options, IfFrom};
