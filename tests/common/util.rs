@@ -510,43 +510,86 @@ impl AtPath {
     }
 
     pub fn write(&self, name: &str, contents: &str) {
-        log_info("open(write)", self.plus_as_string(name));
+        log_info("write(default)", self.plus_as_string(name));
         std::fs::write(self.plus(name), contents)
             .unwrap_or_else(|e| panic!("Couldn't write {}: {}", name, e));
     }
 
     pub fn write_bytes(&self, name: &str, contents: &[u8]) {
-        log_info("open(write)", self.plus_as_string(name));
+        log_info("write(default)", self.plus_as_string(name));
         std::fs::write(self.plus(name), contents)
             .unwrap_or_else(|e| panic!("Couldn't write {}: {}", name, e));
     }
 
     pub fn append(&self, name: &str, contents: &str) {
-        log_info("open(append)", self.plus_as_string(name));
+        log_info("write(append)", self.plus_as_string(name));
         let mut f = OpenOptions::new()
             .write(true)
             .append(true)
+            .create(true)
             .open(self.plus(name))
             .unwrap();
         f.write_all(contents.as_bytes())
-            .unwrap_or_else(|e| panic!("Couldn't write {}: {}", name, e));
+            .unwrap_or_else(|e| panic!("Couldn't write(append) {}: {}", name, e));
     }
 
     pub fn append_bytes(&self, name: &str, contents: &[u8]) {
-        log_info("open(append)", self.plus_as_string(name));
+        log_info("write(append)", self.plus_as_string(name));
         let mut f = OpenOptions::new()
             .write(true)
             .append(true)
+            .create(true)
             .open(self.plus(name))
             .unwrap();
         f.write_all(contents)
-            .unwrap_or_else(|e| panic!("Couldn't append to {}: {}", name, e));
+            .unwrap_or_else(|e| panic!("Couldn't write(append) to {}: {}", name, e));
+    }
+
+    pub fn truncate(&self, name: &str, contents: &str) {
+        log_info("write(truncate)", self.plus_as_string(name));
+        let mut f = OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .create(true)
+            .open(self.plus(name))
+            .unwrap();
+        f.write_all(contents.as_bytes())
+            .unwrap_or_else(|e| panic!("Couldn't write(truncate) {}: {}", name, e));
+    }
+
+    pub fn rename(&self, source: &str, target: &str) {
+        let source = self.plus(source);
+        let target = self.plus(target);
+        log_info("rename", format!("{:?} {:?}", source, target));
+        std::fs::rename(&source, &target)
+            .unwrap_or_else(|e| panic!("Couldn't rename {:?} -> {:?}: {}", source, target, e));
+    }
+
+    pub fn remove(&self, source: &str) {
+        let source = self.plus(source);
+        log_info("remove", format!("{:?}", source));
+        std::fs::remove_file(&source)
+            .unwrap_or_else(|e| panic!("Couldn't remove {:?}: {}", source, e));
+    }
+
+    pub fn copy(&self, source: &str, target: &str) {
+        let source = self.plus(source);
+        let target = self.plus(target);
+        log_info("copy", format!("{:?} {:?}", source, target));
+        std::fs::copy(&source, &target)
+            .unwrap_or_else(|e| panic!("Couldn't copy {:?} -> {:?}: {}", source, target, e));
+    }
+
+    pub fn rmdir(&self, dir: &str) {
+        log_info("rmdir", self.plus_as_string(dir));
+        fs::remove_dir(&self.plus(dir)).unwrap();
     }
 
     pub fn mkdir(&self, dir: &str) {
         log_info("mkdir", self.plus_as_string(dir));
         fs::create_dir(&self.plus(dir)).unwrap();
     }
+
     pub fn mkdir_all(&self, dir: &str) {
         log_info("mkdir_all", self.plus_as_string(dir));
         fs::create_dir_all(self.plus(dir)).unwrap();
@@ -1020,6 +1063,8 @@ impl UCommand {
     }
 }
 
+/// Wrapper for `child.stdout.read_exact()`.
+/// Careful, this blocks indefinitely if `size` bytes is never reached.
 pub fn read_size(child: &mut Child, size: usize) -> String {
     let mut output = Vec::new();
     output.resize(size, 0);
