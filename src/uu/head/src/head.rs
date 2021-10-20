@@ -444,7 +444,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
         first = false;
     }
     if error_count > 0 {
-        Err(USimpleError::new(1, format!("")))
+        Err(USimpleError::new(1, ""))
     } else {
         Ok(())
     }
@@ -455,7 +455,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = match HeadOptions::get_from(args) {
         Ok(o) => o,
         Err(s) => {
-            return Err(USimpleError::new(1, format!("{}", s)));
+            return Err(USimpleError::new(1, s.to_string()));
         }
     };
     uu_head(&args)
