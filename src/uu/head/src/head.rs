@@ -10,10 +10,9 @@ use std::convert::TryFrom;
 use std::ffi::OsString;
 use std::io::{self, ErrorKind, Read, Seek, SeekFrom, Write};
 use uucore::display::Quotable;
-use uucore::{crash, show_error_custom_description};
+use uucore::error::{UResult, USimpleError};
+use uucore::show_error_custom_description;
 
-const EXIT_FAILURE: i32 = 1;
-const EXIT_SUCCESS: i32 = 0;
 const BUF_SIZE: usize = 65536;
 
 const ABOUT: &str = "\
@@ -372,7 +371,7 @@ fn head_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Resul
     }
 }
 
-fn uu_head(options: &HeadOptions) -> Result<(), u32> {
+fn uu_head(options: &HeadOptions) -> UResult<()> {
     let mut error_count = 0;
     let mut first = true;
     for file in &options.files {
@@ -445,23 +444,21 @@ fn uu_head(options: &HeadOptions) -> Result<(), u32> {
         first = false;
     }
     if error_count > 0 {
-        Err(error_count)
+        Err(USimpleError::new(1, format!("")))
     } else {
         Ok(())
     }
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = match HeadOptions::get_from(args) {
         Ok(o) => o,
         Err(s) => {
-            crash!(EXIT_FAILURE, "{}", s);
+            return Err(USimpleError::new(1, format!("{}", s)));
         }
     };
-    match uu_head(&args) {
-        Ok(_) => EXIT_SUCCESS,
-        Err(_) => EXIT_FAILURE,
-    }
+    uu_head(&args)
 }
 
 #[cfg(test)]
