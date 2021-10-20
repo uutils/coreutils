@@ -455,7 +455,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = match HeadOptions::get_from(args) {
         Ok(o) => o,
         Err(s) => {
-            return Err(USimpleError::new(1, s.to_string()));
+            return Err(USimpleError::new(1, s));
         }
     };
     uu_head(&args)
