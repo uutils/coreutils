@@ -510,43 +510,86 @@ impl AtPath {
     }
 
     pub fn write(&self, name: &str, contents: &str) {
-        log_info("open(write)", self.plus_as_string(name));
+        log_info("write(default)", self.plus_as_string(name));
         std::fs::write(self.plus(name), contents)
             .unwrap_or_else(|e| panic!("Couldn't write {}: {}", name, e));
     }
 
     pub fn write_bytes(&self, name: &str, contents: &[u8]) {
-        log_info("open(write)", self.plus_as_string(name));
+        log_info("write(default)", self.plus_as_string(name));
         std::fs::write(self.plus(name), contents)
             .unwrap_or_else(|e| panic!("Couldn't write {}: {}", name, e));
     }
 
     pub fn append(&self, name: &str, contents: &str) {
-        log_info("open(append)", self.plus_as_string(name));
+        log_info("write(append)", self.plus_as_string(name));
         let mut f = OpenOptions::new()
             .write(true)
             .append(true)
+            .create(true)
             .open(self.plus(name))
             .unwrap();
         f.write_all(contents.as_bytes())
-            .unwrap_or_else(|e| panic!("Couldn't write {}: {}", name, e));
+            .unwrap_or_else(|e| panic!("Couldn't write(append) {}: {}", name, e));
     }
 
     pub fn append_bytes(&self, name: &str, contents: &[u8]) {
-        log_info("open(append)", self.plus_as_string(name));
+        log_info("write(append)", self.plus_as_string(name));
         let mut f = OpenOptions::new()
             .write(true)
             .append(true)
+            .create(true)
             .open(self.plus(name))
             .unwrap();
         f.write_all(contents)
-            .unwrap_or_else(|e| panic!("Couldn't append to {}: {}", name, e));
+            .unwrap_or_else(|e| panic!("Couldn't write(append) to {}: {}", name, e));
+    }
+
+    pub fn truncate(&self, name: &str, contents: &str) {
+        log_info("write(truncate)", self.plus_as_string(name));
+        let mut f = OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .create(true)
+            .open(self.plus(name))
+            .unwrap();
+        f.write_all(contents.as_bytes())
+            .unwrap_or_else(|e| panic!("Couldn't write(truncate) {}: {}", name, e));
+    }
+
+    pub fn rename(&self, source: &str, target: &str) {
+        let source = self.plus(source);
+        let target = self.plus(target);
+        log_info("rename", format!("{:?} {:?}", source, target));
+        std::fs::rename(&source, &target)
+            .unwrap_or_else(|e| panic!("Couldn't rename {:?} -> {:?}: {}", source, target, e));
+    }
+
+    pub fn remove(&self, source: &str) {
+        let source = self.plus(source);
+        log_info("remove", format!("{:?}", source));
+        std::fs::remove_file(&source)
+            .unwrap_or_else(|e| panic!("Couldn't remove {:?}: {}", source, e));
+    }
+
+    pub fn copy(&self, source: &str, target: &str) {
+        let source = self.plus(source);
+        let target = self.plus(target);
+        log_info("copy", format!("{:?} {:?}", source, target));
+        std::fs::copy(&source, &target)
+            .unwrap_or_else(|e| panic!("Couldn't copy {:?} -> {:?}: {}", source, target, e));
+    }
+
+    pub fn rmdir(&self, dir: &str) {
+        log_info("rmdir", self.plus_as_string(dir));
+        fs::remove_dir(&self.plus(dir)).unwrap();
     }
 
     pub fn mkdir(&self, dir: &str) {
         log_info("mkdir", self.plus_as_string(dir));
         fs::create_dir(&self.plus(dir)).unwrap();
     }
+
     pub fn mkdir_all(&self, dir: &str) {
         log_info("mkdir_all", self.plus_as_string(dir));
         fs::create_dir_all(self.plus(dir)).unwrap();
@@ -864,7 +907,7 @@ impl UCommand {
     /// Add a parameter to the invocation. Path arguments are treated relative
     /// to the test environment directory.
     pub fn arg<S: AsRef<OsStr>>(&mut self, arg: S) -> &mut UCommand {
-        assert!(!self.has_run, ALREADY_RUN);
+        assert!(!self.has_run, "{}", ALREADY_RUN);
         self.comm_string.push(' ');
         self.comm_string
             .push_str(arg.as_ref().to_str().unwrap_or_default());
@@ -875,7 +918,7 @@ impl UCommand {
     /// Add multiple parameters to the invocation. Path arguments are treated relative
     /// to the test environment directory.
     pub fn args<S: AsRef<OsStr>>(&mut self, args: &[S]) -> &mut UCommand {
-        assert!(!self.has_run, MULTIPLE_STDIN_MEANINGLESS);
+        assert!(!self.has_run, "{}", MULTIPLE_STDIN_MEANINGLESS);
         let strings = args
             .iter()
             .map(|s| s.as_ref().to_os_string())
@@ -893,7 +936,11 @@ impl UCommand {
 
     /// provides standard input to feed in to the command when spawned
     pub fn pipe_in<T: Into<Vec<u8>>>(&mut self, input: T) -> &mut UCommand {
-        assert!(!self.bytes_into_stdin.is_some(), MULTIPLE_STDIN_MEANINGLESS);
+        assert!(
+            !self.bytes_into_stdin.is_some(),
+            "{}",
+            MULTIPLE_STDIN_MEANINGLESS
+        );
         self.bytes_into_stdin = Some(input.into());
         self
     }
@@ -908,7 +955,7 @@ impl UCommand {
     /// This is typically useful to test non-standard workflows
     /// like feeding something to a command that does not read it
     pub fn ignore_stdin_write_error(&mut self) -> &mut UCommand {
-        assert!(!self.bytes_into_stdin.is_none(), NO_STDIN_MEANINGLESS);
+        assert!(!self.bytes_into_stdin.is_none(), "{}", NO_STDIN_MEANINGLESS);
         self.ignore_stdin_write_error = true;
         self
     }
@@ -918,7 +965,7 @@ impl UCommand {
         K: AsRef<OsStr>,
         V: AsRef<OsStr>,
     {
-        assert!(!self.has_run, ALREADY_RUN);
+        assert!(!self.has_run, "{}", ALREADY_RUN);
         self.raw.env(key, val);
         self
     }
@@ -937,7 +984,7 @@ impl UCommand {
     /// Spawns the command, feeds the stdin if any, and returns the
     /// child process immediately.
     pub fn run_no_wait(&mut self) -> Child {
-        assert!(!self.has_run, ALREADY_RUN);
+        assert!(!self.has_run, "{}", ALREADY_RUN);
         self.has_run = true;
         log_info("run", &self.comm_string);
         let mut child = self
@@ -1020,6 +1067,8 @@ impl UCommand {
     }
 }
 
+/// Wrapper for `child.stdout.read_exact()`.
+/// Careful, this blocks indefinitely if `size` bytes is never reached.
 pub fn read_size(child: &mut Child, size: usize) -> String {
     let mut output = Vec::new();
     output.resize(size, 0);
