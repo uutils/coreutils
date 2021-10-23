@@ -155,6 +155,30 @@ pub fn get_umask() -> u32 {
     mask as u32
 }
 
+// Iterate 'args' and delete the first occurrence
+// of a prefix '-' if it's associated with MODE
+// e.g. "chmod -v -xw -R FILE" -> "chmod -v xw -R FILE"
+pub fn strip_minus_from_mode(args: &mut Vec<String>) -> bool {
+    for arg in args {
+        if arg == "--" {
+            break;
+        }
+        if arg.starts_with('-') {
+            if let Some(second) = arg.chars().nth(1) {
+                match second {
+                    'r' | 'w' | 'x' | 'X' | 's' | 't' | 'u' | 'g' | 'o' | '0'..='7' => {
+                        // TODO: use strip_prefix() once minimum rust version reaches 1.45.0
+                        *arg = arg[1..arg.len()].to_string();
+                        return true;
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+    false
+}
+
 #[cfg(test)]
 mod test {
 
