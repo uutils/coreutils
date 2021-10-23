@@ -22,7 +22,7 @@ clap = { version = "2.33", features = ["wrap_help"] }
 filetime = "0.2"
 file_diff = "1.0.0"
 libc = ">= 0.2"
-uucore = { version=">=0.0.10", package="uucore", path="../../uucore", features=["mode", "perms", "entries"] }
+uucore = { version=">=0.0.10", package="uucore", path="../../uucore", features=["fs", "mode", "perms", "entries"] }
 uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
 
 [dev-dependencies]
