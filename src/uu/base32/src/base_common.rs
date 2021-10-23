@@ -163,6 +163,8 @@ pub fn handle_input<R: Read>(
     } else {
         match data.decode() {
             Ok(s) => {
+                // Silent the warning as we want to the error message
+                #[allow(clippy::question_mark)]
                 if stdout().write_all(&s).is_err() {
                     // on windows console, writing invalid utf8 returns an error
                     return Err(USimpleError::new(1, "error: cannot write non-utf8 data"));

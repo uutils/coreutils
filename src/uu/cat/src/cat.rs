@@ -588,7 +588,7 @@ fn write_tab_to_end<W: Write>(mut in_buf: &[u8], writer: &mut W) -> usize {
 fn write_nonprint_to_end<W: Write>(in_buf: &[u8], writer: &mut W, tab: &[u8]) -> usize {
     let mut count = 0;
 
-    for byte in in_buf.iter().map(|c| *c) {
+    for byte in in_buf.iter().copied() {
         if byte == b'\n' {
             break;
         }
