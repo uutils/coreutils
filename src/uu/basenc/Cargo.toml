@@ -18,7 +18,7 @@ path = "src/basenc.rs"
 clap = { version = "2.33", features = ["wrap_help"] }
 uucore = { version=">=0.0.10", package="uucore", path="../../uucore", features = ["encoding"] }
 uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
-uu_base32 = { version=">=0.0.6", package="uu_base32", path="../base32"}
+uu_base32 = { version=">=0.0.8", package="uu_base32", path="../base32"}
 
 [[bin]]
 name = "basenc"
