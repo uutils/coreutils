@@ -148,6 +148,8 @@ fn cksum(fname: &str) -> io::Result<(u32, usize)> {
                     "Is a directory",
                 ));
             };
+            // Silent the warning as we want to the error message
+            #[allow(clippy::question_mark)]
             if path.metadata().is_err() {
                 return Err(std::io::Error::new(
                     io::ErrorKind::NotFound,
