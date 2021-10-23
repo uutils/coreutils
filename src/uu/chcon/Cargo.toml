@@ -1,6 +1,6 @@
 [package]
 name = "uu_chcon"
-version = "0.0.7"
+version = "0.0.8"
 authors = ["uutils developers"]
 license = "MIT"
 description = "chcon ~ (uutils) change file security context"

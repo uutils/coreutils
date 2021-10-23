@@ -1,6 +1,6 @@
 [package]
 name = "uucore"
-version = "0.0.9"
+version = "0.0.10"
 authors = ["uutils developers"]
 license = "MIT"
 description = "uutils ~ 'core' uutils code library (cross-platform)"

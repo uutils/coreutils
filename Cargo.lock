@@ -299,7 +299,7 @@ dependencies = [
 
 [[package]]
 name = "coreutils"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "atty",
  "chrono",
@@ -2147,7 +2147,7 @@ checksum = "7cf7d77f457ef8dfa11e4cd5933c5ddb5dc52a94664071951219a97710f0a32b"
 
 [[package]]
 name = "uu_arch"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "platform-info",
@@ -2157,7 +2157,7 @@ dependencies = [
 
 [[package]]
 name = "uu_base32"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "uucore",
@@ -2166,7 +2166,7 @@ dependencies = [
 
 [[package]]
 name = "uu_base64"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "uu_base32",
@@ -2176,7 +2176,7 @@ dependencies = [
 
 [[package]]
 name = "uu_basename"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "uucore",
@@ -2185,7 +2185,7 @@ dependencies = [
 
 [[package]]
 name = "uu_basenc"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "uu_base32",
@@ -2195,7 +2195,7 @@ dependencies = [
 
 [[package]]
 name = "uu_cat"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "atty",
  "clap",
@@ -2209,7 +2209,7 @@ dependencies = [
 
 [[package]]
 name = "uu_chcon"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "fts-sys",
@@ -2222,7 +2222,7 @@ dependencies = [
 
 [[package]]
 name = "uu_chgrp"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "uucore",
@@ -2231,7 +2231,7 @@ dependencies = [
 
 [[package]]
 name = "uu_chmod"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "libc",
@@ -2242,7 +2242,7 @@ dependencies = [
 
 [[package]]
 name = "uu_chown"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "uucore",
@@ -2251,7 +2251,7 @@ dependencies = [
 
 [[package]]
 name = "uu_chroot"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "uucore",
@@ -2260,7 +2260,7 @@ dependencies = [
 
 [[package]]
 name = "uu_cksum"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "libc",
@@ -2270,7 +2270,7 @@ dependencies = [
 
 [[package]]
 name = "uu_comm"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "libc",
@@ -2280,7 +2280,7 @@ dependencies = [
 
 [[package]]
 name = "uu_cp"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "exacl",
@@ -2298,7 +2298,7 @@ dependencies = [
 
 [[package]]
 name = "uu_csplit"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "regex",
@@ -2309,7 +2309,7 @@ dependencies = [
 
 [[package]]
 name = "uu_cut"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "atty",
  "bstr",
@@ -2321,7 +2321,7 @@ dependencies = [
 
 [[package]]
 name = "uu_date"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "chrono",
  "clap",
@@ -2333,7 +2333,7 @@ dependencies = [
 
 [[package]]
 name = "uu_dd"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "byte-unit",
  "clap",
@@ -2347,7 +2347,7 @@ dependencies = [
 
 [[package]]
 name = "uu_df"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "number_prefix",
@@ -2357,7 +2357,7 @@ dependencies = [
 
 [[package]]
 name = "uu_dircolors"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "glob",
@@ -2367,7 +2367,7 @@ dependencies = [
 
 [[package]]
 name = "uu_dirname"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "libc",
@@ -2377,7 +2377,7 @@ dependencies = [
 
 [[package]]
 name = "uu_du"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "chrono",
  "clap",
@@ -2388,7 +2388,7 @@ dependencies = [
 
 [[package]]
 name = "uu_echo"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "uucore",
@@ -2397,7 +2397,7 @@ dependencies = [
 
 [[package]]
 name = "uu_env"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "libc",
@@ -2408,7 +2408,7 @@ dependencies = [
 
 [[package]]
 name = "uu_expand"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "unicode-width",
@@ -2418,7 +2418,7 @@ dependencies = [
 
 [[package]]
 name = "uu_expr"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "libc",
@@ -2431,7 +2431,7 @@ dependencies = [
 
 [[package]]
 name = "uu_factor"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "coz",
@@ -2446,7 +2446,7 @@ dependencies = [
 
 [[package]]
 name = "uu_false"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "uucore",
@@ -2455,7 +2455,7 @@ dependencies = [
 
 [[package]]
 name = "uu_fmt"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "libc",
@@ -2466,7 +2466,7 @@ dependencies = [
 
 [[package]]
 name = "uu_fold"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "uucore",
@@ -2475,7 +2475,7 @@ dependencies = [
 
 [[package]]
 name = "uu_groups"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "uucore",
@@ -2484,7 +2484,7 @@ dependencies = [
 
 [[package]]
 name = "uu_hashsum"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "blake2b_simd",
  "clap",
@@ -2504,7 +2504,7 @@ dependencies = [
 
 [[package]]
 name = "uu_head"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "memchr 2.4.0",
@@ -2514,7 +2514,7 @@ dependencies = [
 
 [[package]]
 name = "uu_hostid"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "libc",
@@ -2524,7 +2524,7 @@ dependencies = [
 
 [[package]]
 name = "uu_hostname"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "hostname",
@@ -2536,7 +2536,7 @@ dependencies = [
 
 [[package]]
 name = "uu_id"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "selinux",
@@ -2546,7 +2546,7 @@ dependencies = [
 
 [[package]]
 name = "uu_install"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "file_diff",
@@ -2559,7 +2559,7 @@ dependencies = [
 
 [[package]]
 name = "uu_join"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "uucore",
@@ -2568,7 +2568,7 @@ dependencies = [
 
 [[package]]
 name = "uu_kill"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "libc",
@@ -2578,7 +2578,7 @@ dependencies = [
 
 [[package]]
 name = "uu_link"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "libc",
@@ -2588,7 +2588,7 @@ dependencies = [
 
 [[package]]
 name = "uu_ln"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "libc",
@@ -2598,7 +2598,7 @@ dependencies = [
 
 [[package]]
 name = "uu_logname"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "libc",
@@ -2608,7 +2608,7 @@ dependencies = [
 
 [[package]]
 name = "uu_ls"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "atty",
  "chrono",
@@ -2628,7 +2628,7 @@ dependencies = [
 
 [[package]]
 name = "uu_mkdir"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "libc",
@@ -2638,7 +2638,7 @@ dependencies = [
 
 [[package]]
 name = "uu_mkfifo"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "libc",
@@ -2648,7 +2648,7 @@ dependencies = [
 
 [[package]]
 name = "uu_mknod"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "libc",
@@ -2658,7 +2658,7 @@ dependencies = [
 
 [[package]]
 name = "uu_mktemp"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "rand 0.5.6",
@@ -2669,7 +2669,7 @@ dependencies = [
 
 [[package]]
 name = "uu_more"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "atty",
  "clap",
@@ -2685,7 +2685,7 @@ dependencies = [
 
 [[package]]
 name = "uu_mv"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "fs_extra",
@@ -2695,7 +2695,7 @@ dependencies = [
 
 [[package]]
 name = "uu_nice"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "libc",
@@ -2706,7 +2706,7 @@ dependencies = [
 
 [[package]]
 name = "uu_nl"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "aho-corasick",
  "clap",
@@ -2720,7 +2720,7 @@ dependencies = [
 
 [[package]]
 name = "uu_nohup"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "atty",
  "clap",
@@ -2731,7 +2731,7 @@ dependencies = [
 
 [[package]]
 name = "uu_nproc"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "libc",
@@ -2742,7 +2742,7 @@ dependencies = [
 
 [[package]]
 name = "uu_numfmt"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "uucore",
@@ -2751,7 +2751,7 @@ dependencies = [
 
 [[package]]
 name = "uu_od"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "byteorder",
  "clap",
@@ -2763,7 +2763,7 @@ dependencies = [
 
 [[package]]
 name = "uu_paste"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "uucore",
@@ -2772,7 +2772,7 @@ dependencies = [
 
 [[package]]
 name = "uu_pathchk"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "libc",
@@ -2782,7 +2782,7 @@ dependencies = [
 
 [[package]]
 name = "uu_pinky"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "uucore",
@@ -2791,7 +2791,7 @@ dependencies = [
 
 [[package]]
 name = "uu_pr"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "chrono",
  "clap",
@@ -2805,7 +2805,7 @@ dependencies = [
 
 [[package]]
 name = "uu_printenv"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "uucore",
@@ -2814,7 +2814,7 @@ dependencies = [
 
 [[package]]
 name = "uu_printf"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "itertools 0.8.2",
@@ -2824,7 +2824,7 @@ dependencies = [
 
 [[package]]
 name = "uu_ptx"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "aho-corasick",
  "clap",
@@ -2838,7 +2838,7 @@ dependencies = [
 
 [[package]]
 name = "uu_pwd"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "uucore",
@@ -2847,7 +2847,7 @@ dependencies = [
 
 [[package]]
 name = "uu_readlink"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "libc",
@@ -2857,7 +2857,7 @@ dependencies = [
 
 [[package]]
 name = "uu_realpath"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "uucore",
@@ -2866,7 +2866,7 @@ dependencies = [
 
 [[package]]
 name = "uu_relpath"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "uucore",
@@ -2875,7 +2875,7 @@ dependencies = [
 
 [[package]]
 name = "uu_rm"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "remove_dir_all",
@@ -2887,7 +2887,7 @@ dependencies = [
 
 [[package]]
 name = "uu_rmdir"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "libc",
@@ -2897,7 +2897,7 @@ dependencies = [
 
 [[package]]
 name = "uu_runcon"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "fts-sys",
@@ -2910,7 +2910,7 @@ dependencies = [
 
 [[package]]
 name = "uu_seq"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "num-bigint",
@@ -2921,7 +2921,7 @@ dependencies = [
 
 [[package]]
 name = "uu_shred"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "libc",
@@ -2932,7 +2932,7 @@ dependencies = [
 
 [[package]]
 name = "uu_shuf"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "rand 0.5.6",
@@ -2942,7 +2942,7 @@ dependencies = [
 
 [[package]]
 name = "uu_sleep"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "uucore",
@@ -2951,7 +2951,7 @@ dependencies = [
 
 [[package]]
 name = "uu_sort"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "binary-heap-plus",
  "clap",
@@ -2971,7 +2971,7 @@ dependencies = [
 
 [[package]]
 name = "uu_split"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "uucore",
@@ -2980,7 +2980,7 @@ dependencies = [
 
 [[package]]
 name = "uu_stat"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "uucore",
@@ -2989,7 +2989,7 @@ dependencies = [
 
 [[package]]
 name = "uu_stdbuf"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "tempfile",
@@ -3000,7 +3000,7 @@ dependencies = [
 
 [[package]]
 name = "uu_stdbuf_libstdbuf"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "cpp",
  "cpp_build",
@@ -3011,7 +3011,7 @@ dependencies = [
 
 [[package]]
 name = "uu_sum"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "uucore",
@@ -3020,7 +3020,7 @@ dependencies = [
 
 [[package]]
 name = "uu_sync"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "libc",
@@ -3031,7 +3031,7 @@ dependencies = [
 
 [[package]]
 name = "uu_tac"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "memchr 2.4.0",
@@ -3043,7 +3043,7 @@ dependencies = [
 
 [[package]]
 name = "uu_tail"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "libc",
@@ -3056,7 +3056,7 @@ dependencies = [
 
 [[package]]
 name = "uu_tee"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "libc",
@@ -3067,7 +3067,7 @@ dependencies = [
 
 [[package]]
 name = "uu_test"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "libc",
@@ -3078,7 +3078,7 @@ dependencies = [
 
 [[package]]
 name = "uu_timeout"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "libc",
@@ -3089,7 +3089,7 @@ dependencies = [
 
 [[package]]
 name = "uu_touch"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "filetime",
@@ -3100,7 +3100,7 @@ dependencies = [
 
 [[package]]
 name = "uu_tr"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "bit-set",
  "clap",
@@ -3111,7 +3111,7 @@ dependencies = [
 
 [[package]]
 name = "uu_true"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "uucore",
@@ -3120,7 +3120,7 @@ dependencies = [
 
 [[package]]
 name = "uu_truncate"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "uucore",
@@ -3129,7 +3129,7 @@ dependencies = [
 
 [[package]]
 name = "uu_tsort"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "uucore",
@@ -3138,7 +3138,7 @@ dependencies = [
 
 [[package]]
 name = "uu_tty"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "atty",
  "clap",
@@ -3149,7 +3149,7 @@ dependencies = [
 
 [[package]]
 name = "uu_uname"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "platform-info",
@@ -3159,7 +3159,7 @@ dependencies = [
 
 [[package]]
 name = "uu_unexpand"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "unicode-width",
@@ -3169,7 +3169,7 @@ dependencies = [
 
 [[package]]
 name = "uu_uniq"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "strum",
@@ -3180,7 +3180,7 @@ dependencies = [
 
 [[package]]
 name = "uu_unlink"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "uucore",
@@ -3189,7 +3189,7 @@ dependencies = [
 
 [[package]]
 name = "uu_uptime"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "chrono",
  "clap",
@@ -3199,7 +3199,7 @@ dependencies = [
 
 [[package]]
 name = "uu_users"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "uucore",
@@ -3208,7 +3208,7 @@ dependencies = [
 
 [[package]]
 name = "uu_wc"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "bytecount",
  "clap",
@@ -3222,7 +3222,7 @@ dependencies = [
 
 [[package]]
 name = "uu_who"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "uucore",
@@ -3231,7 +3231,7 @@ dependencies = [
 
 [[package]]
 name = "uu_whoami"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "libc",
@@ -3242,7 +3242,7 @@ dependencies = [
 
 [[package]]
 name = "uu_yes"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "clap",
  "nix 0.20.0",
@@ -3252,7 +3252,7 @@ dependencies = [
 
 [[package]]
 name = "uucore"
-version = "0.0.9"
+version = "0.0.10"
 dependencies = [
  "clap",
  "data-encoding",
@@ -3275,7 +3275,7 @@ dependencies = [
 
 [[package]]
 name = "uucore_procs"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "proc-macro2",
  "quote 1.0.9",
