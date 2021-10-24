@@ -894,11 +894,21 @@ fn test_retry9() {
     assert_eq!(buf_stderr, expected_stderr);
 }
 
+#[test]
+#[cfg(unix)]
+fn test_follow_descriptor_vs_rename1() {
     // gnu/tests/tail-2/descriptor-vs-rename.sh
+    // $ ((rm -f A && touch A && sleep 1 && echo -n "A\n" >> A && sleep 1 && \
+    // mv A B && sleep 1 && echo -n "B\n" >> B &)>/dev/null 2>&1 &) ; \
+    // sleep 1 && target/debug/tail --follow=descriptor A ---disable-inotify
+    // $ A
+    // $ B
+
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     let file_a = "FILE_A";
     let file_b = "FILE_B";
+    let file_c = "FILE_C";
 
     let mut args = vec![
         "--follow=descriptor",
@@ -910,34 +920,48 @@ fn test_retry9() {
 
     #[cfg(target_os = "linux")]
     let i = 2;
-    // TODO: fix the case without `--disable-inotify` for bsd/macos
+    // FIXME: fix the case without `--disable-inotify` for BSD/macOS
     #[cfg(not(target_os = "linux"))]
     let i = 1;
 
-    let delay = 100;
+    let delay = 500;
     for _ in 0..i {
         at.touch(file_a);
+
         let mut p = ts.ucmd().args(&args).run_no_wait();
         sleep(Duration::from_millis(delay));
-        at.append(file_a, "x\n");
+
+        at.append(file_a, "A\n");
         sleep(Duration::from_millis(delay));
+
         at.rename(file_a, file_b);
-        sleep(Duration::from_millis(1000));
-        at.append(file_b, "y\n");
         sleep(Duration::from_millis(delay));
+
+        at.append(file_b, "B\n");
+        sleep(Duration::from_millis(delay));
+
+        at.rename(file_b, file_c);
+        sleep(Duration::from_millis(delay));
+
+        at.append(file_c, "C\n");
+        sleep(Duration::from_millis(delay));
+
         p.kill().unwrap();
         sleep(Duration::from_millis(delay));
 
-        let (buf_stdout, _) = take_stdout_stderr(&mut p);
-        assert_eq!(buf_stdout, "x\ny\n");
+        let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
+        assert_eq!(buf_stdout, "A\nB\nC\n");
+        assert!(buf_stderr.is_empty());
 
         args.pop();
     }
 }
 
 #[test]
-#[cfg(not(windows))]
-fn test_tail_follow_descriptor_vs_rename_verbose() {
+#[cfg(target_os = "linux")] // FIXME: fix this test for BSD/macOS
+fn test_follow_descriptor_vs_rename2() {
+    // Ensure the headers are correct for --verbose.
+
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     let file_a = "FILE_A";
@@ -973,11 +997,12 @@ fn test_tail_follow_descriptor_vs_rename_verbose() {
         p.kill().unwrap();
         sleep(Duration::from_millis(delay));
 
-        let (buf_stdout, _) = take_stdout_stderr(&mut p);
+        let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
         assert_eq!(
             buf_stdout,
             "==> FILE_A <==\n\n==> FILE_B <==\n\n==> FILE_A <==\nx\n"
         );
+        assert!(buf_stderr.is_empty());
 
         args.pop();
     }
