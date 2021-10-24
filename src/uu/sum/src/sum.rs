@@ -14,6 +14,7 @@ use clap::{crate_version, App, Arg};
 use std::fs::File;
 use std::io::{stdin, Read, Result};
 use std::path::Path;
+use uucore::display::Quotable;
 use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "sum";
@@ -75,6 +76,8 @@ fn open(name: &str) -> Result<Box<dyn Read>> {
                     "Is a directory",
                 ));
             };
+            // Silent the warning as we want to the error message
+            #[allow(clippy::question_mark)]
             if path.metadata().is_err() {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::NotFound,
@@ -118,7 +121,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         let reader = match open(file) {
             Ok(f) => f,
             Err(error) => {
-                show_error!("'{}' {}", file, error);
+                show_error!("{}: {}", file.maybe_quote(), error);
                 exit_code = 2;
                 continue;
             }
@@ -140,7 +143,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
         .usage(USAGE)

@@ -2,7 +2,7 @@
 
 #![allow(clippy::upper_case_acronyms)]
 
-use uucore::{executable, show_error, show_usage_error, show_warning};
+use uucore::{display::Quotable, show_error, show_usage_error, show_warning};
 
 use clap::{App, Arg};
 use selinux::{OpaqueSecurityContext, SecurityContext};
@@ -56,7 +56,7 @@ fn get_usage() -> String {
         "{0} [OPTION]... CONTEXT FILE... \n    \
          {0} [OPTION]... [-u USER] [-r ROLE] [-l RANGE] [-t TYPE] FILE... \n    \
          {0} [OPTION]... --reference=RFILE FILE...",
-        executable!()
+        uucore::execution_phrase()
     )
 }
 
@@ -111,13 +111,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 Ok(context) => context,
 
                 Err(_r) => {
-                    show_error!("Invalid security context '{}'.", context.to_string_lossy());
+                    show_error!("Invalid security context {}.", context.quote());
                     return libc::EXIT_FAILURE;
                 }
             };
 
             if SecurityContext::from_c_str(&c_context, false).check() == Some(false) {
-                show_error!("Invalid security context '{}'.", context.to_string_lossy());
+                show_error!("Invalid security context {}.", context.quote());
                 return libc::EXIT_FAILURE;
             }
 
@@ -152,7 +152,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(VERSION)
         .about(ABOUT)
         .arg(
@@ -281,7 +281,6 @@ pub fn uu_app() -> App<'static, 'static> {
 #[derive(Debug)]
 struct Options {
     verbose: bool,
-    dereference: bool,
     preserve_root: bool,
     recursive_mode: RecursiveMode,
     affect_symlink_referent: bool,
@@ -331,9 +330,6 @@ fn parse_command_line(config: clap::App, args: impl uucore::Args) -> Result<Opti
         (RecursiveMode::NotRecursive, !no_dereference)
     };
 
-    // By default, dereference.
-    let dereference = !matches.is_present(options::dereference::NO_DEREFERENCE);
-
     // By default, do not preserve root.
     let preserve_root = matches.is_present(options::preserve_root::PRESERVE_ROOT);
 
@@ -369,7 +365,6 @@ fn parse_command_line(config: clap::App, args: impl uucore::Args) -> Result<Opti
 
     Ok(Options {
         verbose,
-        dereference,
         preserve_root,
         recursive_mode,
         affect_symlink_referent,
@@ -563,8 +558,8 @@ fn process_file(
         if options.verbose {
             println!(
                 "{}: Changing security context of: {}",
-                executable!(),
-                file_full_name.to_string_lossy()
+                uucore::util_name(),
+                file_full_name.quote()
             );
         }
 
@@ -699,9 +694,9 @@ fn root_dev_ino_warn(dir_name: &Path) {
         );
     } else {
         show_warning!(
-            "It is dangerous to operate recursively on '{}' (same as '/'). \
+            "It is dangerous to operate recursively on {} (same as '/'). \
              Use --{} to override this failsafe.",
-            dir_name.to_string_lossy(),
+            dir_name.quote(),
             options::preserve_root::NO_PRESERVE_ROOT,
         );
     }
@@ -726,8 +721,8 @@ fn emit_cycle_warning(file_name: &Path) {
         "Circular directory structure.\n\
 This almost certainly means that you have a corrupted file system.\n\
 NOTIFY YOUR SYSTEM MANAGER.\n\
-The following directory is part of the cycle '{}'.",
-        file_name.display()
+The following directory is part of the cycle {}.",
+        file_name.quote()
     )
 }
 

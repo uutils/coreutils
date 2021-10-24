@@ -8,32 +8,26 @@
 #[macro_use]
 extern crate uucore;
 
-mod count_bytes;
+mod count_fast;
 mod countable;
 mod word_count;
-use count_bytes::count_bytes_fast;
+use count_fast::{count_bytes_and_lines_fast, count_bytes_fast};
 use countable::WordCountable;
+use unicode_width::UnicodeWidthChar;
+use utf8::{BufReadDecoder, BufReadDecoderError};
 use word_count::{TitledWordCount, WordCount};
 
 use clap::{crate_version, App, Arg, ArgMatches};
-use thiserror::Error;
 
+use std::cmp::max;
 use std::fs::{self, File};
-use std::io::{self, ErrorKind, Write};
-use std::path::Path;
+use std::io::{self, Write};
+use std::path::{Path, PathBuf};
+
+use uucore::display::{Quotable, Quoted};
 
 /// The minimum character width for formatting counts when reading from stdin.
 const MINIMUM_WIDTH: usize = 7;
-
-#[derive(Error, Debug)]
-pub enum WcError {
-    #[error("{0}")]
-    Io(#[from] io::Error),
-    #[error("Expected a file, found directory {0}")]
-    IsDirectory(String),
-}
-
-type WcResult<T> = Result<T, WcError>;
 
 struct Settings {
     show_bytes: bool,
@@ -95,11 +89,11 @@ pub mod options {
 
 static ARG_FILES: &str = "files";
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!(
         "{0} [OPTION]... [FILE]...
  With no FILE, or when FILE is -, read standard input.",
-        executable!()
+        uucore::execution_phrase()
     )
 }
 
@@ -114,7 +108,7 @@ enum StdinKind {
 /// Supported inputs.
 enum Input {
     /// A regular file.
-    Path(String),
+    Path(PathBuf),
 
     /// Standard input.
     Stdin(StdinKind),
@@ -122,28 +116,35 @@ enum Input {
 
 impl Input {
     /// Converts input to title that appears in stats.
-    fn to_title(&self) -> Option<&str> {
+    fn to_title(&self) -> Option<&Path> {
         match self {
             Input::Path(path) => Some(path),
-            Input::Stdin(StdinKind::Explicit) => Some("-"),
+            Input::Stdin(StdinKind::Explicit) => Some("-".as_ref()),
             Input::Stdin(StdinKind::Implicit) => None,
+        }
+    }
+
+    fn path_display(&self) -> Quoted<'_> {
+        match self {
+            Input::Path(path) => path.maybe_quote(),
+            Input::Stdin(_) => "standard input".maybe_quote(),
         }
     }
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     let mut inputs: Vec<Input> = matches
-        .values_of(ARG_FILES)
+        .values_of_os(ARG_FILES)
         .map(|v| {
             v.map(|i| {
                 if i == "-" {
                     Input::Stdin(StdinKind::Explicit)
                 } else {
-                    Input::Path(ToString::to_string(i))
+                    Input::Path(i.into())
                 }
             })
             .collect()
@@ -164,7 +165,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(
@@ -203,55 +204,125 @@ pub fn uu_app() -> App<'static, 'static> {
 fn word_count_from_reader<T: WordCountable>(
     mut reader: T,
     settings: &Settings,
-    path: &str,
-) -> WcResult<WordCount> {
+) -> (WordCount, Option<io::Error>) {
     let only_count_bytes = settings.show_bytes
         && (!(settings.show_chars
             || settings.show_lines
             || settings.show_max_line_length
             || settings.show_words));
     if only_count_bytes {
-        return Ok(WordCount {
-            bytes: count_bytes_fast(&mut reader)?,
-            ..WordCount::default()
-        });
+        let (bytes, error) = count_bytes_fast(&mut reader);
+        return (
+            WordCount {
+                bytes,
+                ..WordCount::default()
+            },
+            error,
+        );
     }
 
     // we do not need to decode the byte stream if we're only counting bytes/newlines
     let decode_chars = settings.show_chars || settings.show_words || settings.show_max_line_length;
 
-    // Sum the WordCount for each line. Show a warning for each line
-    // that results in an IO error when trying to read it.
-    let total = reader
-        .lines()
-        .filter_map(|res| match res {
-            Ok(line) => Some(line),
-            Err(e) => {
-                show_warning!("Error while reading {}: {}", path, e);
-                None
+    if !decode_chars {
+        return count_bytes_and_lines_fast(&mut reader);
+    }
+
+    let mut total = WordCount::default();
+    let mut reader = BufReadDecoder::new(reader.buffered());
+    let mut in_word = false;
+    let mut current_len = 0;
+
+    while let Some(chunk) = reader.next_strict() {
+        match chunk {
+            Ok(text) => {
+                for ch in text.chars() {
+                    if settings.show_words {
+                        if ch.is_whitespace() {
+                            in_word = false;
+                        } else if ch.is_ascii_control() {
+                            // These count as characters but do not affect the word state
+                        } else if !in_word {
+                            in_word = true;
+                            total.words += 1;
+                        }
+                    }
+                    if settings.show_max_line_length {
+                        match ch {
+                            '\n' => {
+                                total.max_line_length = max(current_len, total.max_line_length);
+                                current_len = 0;
+                            }
+                            // '\x0c' = '\f'
+                            '\r' | '\x0c' => {
+                                total.max_line_length = max(current_len, total.max_line_length);
+                                current_len = 0;
+                            }
+                            '\t' => {
+                                current_len -= current_len % 8;
+                                current_len += 8;
+                            }
+                            _ => {
+                                current_len += ch.width().unwrap_or(0);
+                            }
+                        }
+                    }
+                    if settings.show_lines && ch == '\n' {
+                        total.lines += 1;
+                    }
+                    if settings.show_chars {
+                        total.chars += 1;
+                    }
+                }
+                total.bytes += text.len();
             }
-        })
-        .map(|line| WordCount::from_line(&line, decode_chars))
-        .sum();
-    Ok(total)
+            Err(BufReadDecoderError::InvalidByteSequence(bytes)) => {
+                // GNU wc treats invalid data as neither word nor char nor whitespace,
+                // so no other counters are affected
+                total.bytes += bytes.len();
+            }
+            Err(BufReadDecoderError::Io(e)) => {
+                return (total, Some(e));
+            }
+        }
+    }
+
+    total.max_line_length = max(current_len, total.max_line_length);
+
+    (total, None)
 }
 
-fn word_count_from_input(input: &Input, settings: &Settings) -> WcResult<WordCount> {
+enum CountResult {
+    /// Nothing went wrong.
+    Success(WordCount),
+    /// Managed to open but failed to read.
+    Interrupted(WordCount, io::Error),
+    /// Didn't even manage to open.
+    Failure(io::Error),
+}
+
+/// If we fail opening a file we only show the error. If we fail reading it
+/// we show a count for what we managed to read.
+///
+/// Therefore the reading implementations always return a total and sometimes
+/// return an error: (WordCount, Option<io::Error>).
+fn word_count_from_input(input: &Input, settings: &Settings) -> CountResult {
     match input {
         Input::Stdin(_) => {
             let stdin = io::stdin();
             let stdin_lock = stdin.lock();
-            word_count_from_reader(stdin_lock, settings, "-")
-        }
-        Input::Path(path) => {
-            let path_obj = Path::new(path);
-            if path_obj.is_dir() {
-                Err(WcError::IsDirectory(path.to_owned()))
-            } else {
-                let file = File::open(path)?;
-                word_count_from_reader(file, settings, path)
+            match word_count_from_reader(stdin_lock, settings) {
+                (total, Some(error)) => CountResult::Interrupted(total, error),
+                (total, None) => CountResult::Success(total),
             }
         }
+        Input::Path(path) => match File::open(path) {
+            Err(error) => CountResult::Failure(error),
+            Ok(file) => match word_count_from_reader(file, settings) {
+                (total, Some(error)) => CountResult::Interrupted(total, error),
+                (total, None) => CountResult::Success(total),
+            },
+        },
     }
 }
 
@@ -264,18 +335,8 @@ fn word_count_from_input(input: &Input, settings: &Settings) -> WcResult<WordCou
 /// ```rust,ignore
 /// show_error(Input::Path("/tmp"), WcError::IsDirectory("/tmp"))
 /// ```
-fn show_error(input: &Input, err: WcError) {
-    match (input, err) {
-        (_, WcError::IsDirectory(path)) => {
-            show_error_custom_description!(path, "Is a directory");
-        }
-        (Input::Path(path), WcError::Io(e)) if e.kind() == ErrorKind::NotFound => {
-            show_error_custom_description!(path, "No such file or directory");
-        }
-        (_, e) => {
-            show_error!("{}", e);
-        }
-    };
+fn show_error(input: &Input, err: io::Error) {
+    show_error!("{}: {}", input.path_display(), err);
 }
 
 /// Compute the number of digits needed to represent any count for this input.
@@ -297,9 +358,9 @@ fn show_error(input: &Input, err: WcError) {
 /// let input = Input::Stdin(StdinKind::Explicit);
 /// assert_eq!(7, digit_width(input));
 /// ```
-fn digit_width(input: &Input) -> WcResult<Option<usize>> {
+fn digit_width(input: &Input) -> io::Result<usize> {
     match input {
-        Input::Stdin(_) => Ok(Some(MINIMUM_WIDTH)),
+        Input::Stdin(_) => Ok(MINIMUM_WIDTH),
         Input::Path(filename) => {
             let path = Path::new(filename);
             let metadata = fs::metadata(path)?;
@@ -310,9 +371,9 @@ fn digit_width(input: &Input) -> WcResult<Option<usize>> {
                 // instead). See GitHub issue #2201.
                 let num_bytes = metadata.len();
                 let num_digits = num_bytes.to_string().len();
-                Ok(Some(num_digits))
+                Ok(num_digits)
             } else {
-                Ok(None)
+                Ok(MINIMUM_WIDTH)
             }
         }
     }
@@ -350,13 +411,8 @@ fn digit_width(input: &Input) -> WcResult<Option<usize>> {
 fn max_width(inputs: &[Input]) -> usize {
     let mut result = 1;
     for input in inputs {
-        match digit_width(input) {
-            Ok(maybe_n) => {
-                if let Some(n) = maybe_n {
-                    result = result.max(n);
-                }
-            }
-            Err(_) => continue,
+        if let Ok(n) = digit_width(input) {
+            result = result.max(n);
         }
     }
     result
@@ -368,59 +424,67 @@ fn wc(inputs: Vec<Input>, settings: &Settings) -> Result<(), u32> {
     // The width is the number of digits needed to print the number of
     // bytes in the largest file. This is true regardless of whether
     // the `settings` indicate that the bytes will be displayed.
-    let mut error_count = 0;
-    let max_width = max_width(&inputs);
+    //
+    // If we only need to display a single number, set this to 0 to
+    // prevent leading spaces.
+    let mut failure = false;
+    let max_width = if settings.number_enabled() <= 1 {
+        0
+    } else {
+        max_width(&inputs)
+    };
 
     let mut total_word_count = WordCount::default();
 
     let num_inputs = inputs.len();
 
     for input in &inputs {
-        let word_count = word_count_from_input(input, settings).unwrap_or_else(|err| {
-            show_error(input, err);
-            error_count += 1;
-            WordCount::default()
-        });
+        let word_count = match word_count_from_input(input, settings) {
+            CountResult::Success(word_count) => word_count,
+            CountResult::Interrupted(word_count, error) => {
+                show_error(input, error);
+                failure = true;
+                word_count
+            }
+            CountResult::Failure(error) => {
+                show_error(input, error);
+                failure = true;
+                continue;
+            }
+        };
         total_word_count += word_count;
         let result = word_count.with_title(input.to_title());
         if let Err(err) = print_stats(settings, &result, max_width) {
             show_warning!(
                 "failed to print result for {}: {}",
-                result.title.unwrap_or("<stdin>"),
+                result
+                    .title
+                    .unwrap_or_else(|| "<stdin>".as_ref())
+                    .maybe_quote(),
                 err
             );
-            error_count += 1;
+            failure = true;
         }
     }
 
     if num_inputs > 1 {
-        let total_result = total_word_count.with_title(Some("total"));
+        let total_result = total_word_count.with_title(Some("total".as_ref()));
         if let Err(err) = print_stats(settings, &total_result, max_width) {
             show_warning!("failed to print total: {}", err);
-            error_count += 1;
+            failure = true;
         }
     }
 
-    if error_count == 0 {
-        Ok(())
+    if failure {
+        Err(1)
     } else {
-        Err(error_count)
+        Ok(())
     }
 }
 
-fn print_stats(
-    settings: &Settings,
-    result: &TitledWordCount,
-    mut min_width: usize,
-) -> WcResult<()> {
+fn print_stats(settings: &Settings, result: &TitledWordCount, min_width: usize) -> io::Result<()> {
     let stdout = io::stdout();
     let mut stdout_lock = stdout.lock();
-
-    if settings.number_enabled() <= 1 {
-        // Prevent a leading space in case we only need to display a single
-        // number.
-        min_width = 0;
-    }
 
     let mut is_first: bool = true;
 
@@ -438,18 +502,18 @@ fn print_stats(
         write!(stdout_lock, "{:1$}", result.count.words, min_width)?;
         is_first = false;
     }
-    if settings.show_bytes {
-        if !is_first {
-            write!(stdout_lock, " ")?;
-        }
-        write!(stdout_lock, "{:1$}", result.count.bytes, min_width)?;
-        is_first = false;
-    }
     if settings.show_chars {
         if !is_first {
             write!(stdout_lock, " ")?;
         }
         write!(stdout_lock, "{:1$}", result.count.chars, min_width)?;
+        is_first = false;
+    }
+    if settings.show_bytes {
+        if !is_first {
+            write!(stdout_lock, " ")?;
+        }
+        write!(stdout_lock, "{:1$}", result.count.bytes, min_width)?;
         is_first = false;
     }
     if settings.show_max_line_length {
@@ -464,7 +528,7 @@ fn print_stats(
     }
 
     if let Some(title) = result.title {
-        writeln!(stdout_lock, " {}", title)?;
+        writeln!(stdout_lock, " {}", title.maybe_quote())?;
     } else {
         writeln!(stdout_lock)?;
     }

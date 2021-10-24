@@ -12,6 +12,7 @@
 //! The buffers for the individual chunks are recycled. There are two buffers.
 
 use std::cmp::Ordering;
+use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 use std::{
@@ -238,7 +239,7 @@ fn read_write_loop<I: WriteableTmpFile>(
 
         let tmp_file = write::<I>(
             &mut chunk,
-            tmp_dir.next_file_path()?,
+            tmp_dir.next_file()?,
             settings.compress_prog.as_deref(),
             separator,
         )?;
@@ -268,7 +269,7 @@ fn read_write_loop<I: WriteableTmpFile>(
 /// `compress_prog` is used to optionally compress file contents.
 fn write<I: WriteableTmpFile>(
     chunk: &mut Chunk,
-    file: PathBuf,
+    file: (File, PathBuf),
     compress_prog: Option<&str>,
     separator: u8,
 ) -> UResult<I::Closed> {

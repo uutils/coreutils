@@ -114,9 +114,12 @@ fn test_no_args() {
 
 #[test]
 fn test_no_args_output() {
-    new_ucmd!()
-        .fails()
-        .stderr_is("basename: missing operand\nTry 'basename --help' for more information.");
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd().fails().stderr_is(&format!(
+        "{0}: missing operand\nTry '{1} {0} --help' for more information.",
+        ts.util_name,
+        ts.bin_path.to_string_lossy()
+    ));
 }
 
 #[test]
@@ -126,10 +129,12 @@ fn test_too_many_args() {
 
 #[test]
 fn test_too_many_args_output() {
-    new_ucmd!()
-        .args(&["a", "b", "c"])
-        .fails()
-        .stderr_is("basename: extra operand 'c'\nTry 'basename --help' for more information.");
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd().args(&["a", "b", "c"]).fails().stderr_is(format!(
+        "{0}: extra operand 'c'\nTry '{1} {0} --help' for more information.",
+        ts.util_name,
+        ts.bin_path.to_string_lossy()
+    ));
 }
 
 #[cfg(any(unix, target_os = "redox"))]
@@ -146,4 +151,33 @@ fn invalid_utf8_args_unix() {
     let source = [0x66, 0x6f, 0x80, 0x6f];
     let os_str = OsStr::from_bytes(&source[..]);
     test_invalid_utf8_args(os_str);
+}
+
+#[test]
+fn test_root() {
+    let expected = if cfg!(windows) { "\\\n" } else { "/\n" };
+    new_ucmd!().arg("/").succeeds().stdout_is(expected);
+}
+
+#[test]
+fn test_double_slash() {
+    // TODO The GNU tests seem to suggest that some systems treat "//"
+    // as the same directory as "/" directory but not all systems. We
+    // should extend this test to account for that possibility.
+    let expected = if cfg!(windows) { "\\\n" } else { "/\n" };
+    new_ucmd!().arg("//").succeeds().stdout_is(expected);
+    new_ucmd!()
+        .args(&["//", "/"])
+        .succeeds()
+        .stdout_is(expected);
+    new_ucmd!()
+        .args(&["//", "//"])
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+fn test_triple_slash() {
+    let expected = if cfg!(windows) { "\\\n" } else { "/\n" };
+    new_ucmd!().arg("///").succeeds().stdout_is(expected);
 }

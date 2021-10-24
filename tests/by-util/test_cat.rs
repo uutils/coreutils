@@ -1,7 +1,12 @@
+// spell-checker:ignore NOFILE
+
 use crate::common::util::*;
 use std::fs::OpenOptions;
 #[cfg(unix)]
 use std::io::Read;
+
+#[cfg(target_os = "linux")]
+use rlimit::Resource;
 
 #[test]
 fn test_output_simple() {
@@ -85,6 +90,23 @@ fn test_fifo_symlink() {
     let output = proc.wait_with_output().unwrap();
     assert_eq!(&output.stdout, &data2);
     thread.join().unwrap();
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_closes_file_descriptors() {
+    // Each file creates a pipe, which has two file descriptors.
+    // If they are not closed then five is certainly too many.
+    new_ucmd!()
+        .args(&[
+            "alpha.txt",
+            "alpha.txt",
+            "alpha.txt",
+            "alpha.txt",
+            "alpha.txt",
+        ])
+        .with_limit(Resource::NOFILE, 9, 9)
+        .succeeds();
 }
 
 #[test]

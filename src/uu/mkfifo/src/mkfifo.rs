@@ -11,7 +11,7 @@ extern crate uucore;
 use clap::{crate_version, App, Arg};
 use libc::mkfifo;
 use std::ffi::CString;
-use uucore::InvalidEncodingHandling;
+use uucore::{display::Quotable, InvalidEncodingHandling};
 
 static NAME: &str = "mkfifo";
 static USAGE: &str = "mkfifo [OPTION]... NAME...";
@@ -61,7 +61,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             mkfifo(name.as_ptr(), mode as libc::mode_t)
         };
         if err == -1 {
-            show_error!("cannot create fifo '{}': File exists", f);
+            show_error!("cannot create fifo {}: File exists", f.quote());
             exit_code = 1;
         }
     }
@@ -70,7 +70,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
         .usage(USAGE)

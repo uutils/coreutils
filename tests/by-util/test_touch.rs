@@ -6,6 +6,7 @@ use self::touch::filetime::{self, FileTime};
 extern crate time;
 
 use crate::common::util::*;
+use std::fs::remove_file;
 use std::path::PathBuf;
 
 fn get_file_times(at: &AtPath, path: &str) -> (FileTime, FileTime) {
@@ -16,6 +17,7 @@ fn get_file_times(at: &AtPath, path: &str) -> (FileTime, FileTime) {
     )
 }
 
+#[cfg(not(target_os = "freebsd"))]
 fn get_symlink_times(at: &AtPath, path: &str) -> (FileTime, FileTime) {
     let m = at.symlink_metadata(path);
     (
@@ -290,6 +292,8 @@ fn test_touch_set_both() {
 }
 
 #[test]
+// FixME: Fails on freebsd because of a different nanos
+#[cfg(not(target_os = "freebsd"))]
 fn test_touch_no_dereference() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_touch_no_dereference_a";
@@ -320,7 +324,8 @@ fn test_touch_no_dereference() {
 
 #[test]
 fn test_touch_reference() {
-    let (at, mut ucmd) = at_and_ucmd!();
+    let scenario = TestScenario::new("touch");
+    let (at, mut _ucmd) = (scenario.fixtures.clone(), scenario.ucmd());
     let file_a = "test_touch_reference_a";
     let file_b = "test_touch_reference_b";
     let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
@@ -328,15 +333,21 @@ fn test_touch_reference() {
     at.touch(file_a);
     set_file_times(&at, file_a, start_of_year, start_of_year);
     assert!(at.file_exists(file_a));
+    for &opt in &["-r", "--ref", "--reference"] {
+        scenario
+            .ccmd("touch")
+            .args(&[opt, file_a, file_b])
+            .succeeds()
+            .no_stderr();
 
-    ucmd.args(&["-r", file_a, file_b]).succeeds().no_stderr();
+        assert!(at.file_exists(file_b));
 
-    assert!(at.file_exists(file_b));
-
-    let (atime, mtime) = get_file_times(&at, file_b);
-    assert_eq!(atime, mtime);
-    assert_eq!(atime, start_of_year);
-    assert_eq!(mtime, start_of_year);
+        let (atime, mtime) = get_file_times(&at, file_b);
+        assert_eq!(atime, mtime);
+        assert_eq!(atime, start_of_year);
+        assert_eq!(mtime, start_of_year);
+        let _ = remove_file(file_b);
+    }
 }
 
 #[test]

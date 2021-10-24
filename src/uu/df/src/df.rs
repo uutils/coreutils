@@ -6,8 +6,6 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
-#[macro_use]
-extern crate uucore;
 use uucore::error::UError;
 use uucore::error::UResult;
 #[cfg(unix)]
@@ -27,9 +25,6 @@ use std::ffi::CString;
 use std::fmt::Display;
 #[cfg(unix)]
 use std::mem;
-
-#[cfg(target_os = "freebsd")]
-use uucore::libc::{c_char, fsid_t, uid_t};
 
 #[cfg(windows)]
 use std::path::Path;
@@ -79,8 +74,8 @@ struct Filesystem {
     usage: FsUsage,
 }
 
-fn get_usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", executable!())
+fn usage() -> String {
+    format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
 }
 
 impl FsSelector {
@@ -284,7 +279,7 @@ impl UError for DfError {
 
 #[uucore_procs::gen_uumain]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = get_usage();
+    let usage = usage();
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
     let paths: Vec<String> = matches
@@ -295,7 +290,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     #[cfg(windows)]
     {
         if matches.is_present(OPT_INODES) {
-            println!("{}: doesn't support -i option", executable!());
+            println!("{}: doesn't support -i option", uucore::util_name());
             return Ok(());
         }
     }
@@ -427,7 +422,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(

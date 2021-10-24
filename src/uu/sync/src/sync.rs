@@ -14,6 +14,7 @@ extern crate uucore;
 
 use clap::{crate_version, App, Arg};
 use std::path::Path;
+use uucore::display::Quotable;
 
 static EXIT_ERR: i32 = 1;
 
@@ -159,12 +160,12 @@ mod platform {
     }
 }
 
-fn get_usage() -> String {
-    format!("{0} [OPTION]... FILE...", executable!())
+fn usage() -> String {
+    format!("{0} [OPTION]... FILE...", uucore::execution_phrase())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
@@ -175,7 +176,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     for f in &files {
         if !Path::new(&f).exists() {
-            crash!(EXIT_ERR, "cannot stat '{}': No such file or directory", f);
+            crash!(
+                EXIT_ERR,
+                "cannot stat {}: No such file or directory",
+                f.quote()
+            );
         }
     }
 
@@ -193,7 +198,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(

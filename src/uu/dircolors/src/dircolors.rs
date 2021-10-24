@@ -17,6 +17,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 
 use clap::{crate_version, App, Arg};
+use uucore::display::Quotable;
 
 mod options {
     pub const BOURNE_SHELL: &str = "bourne-shell";
@@ -62,8 +63,8 @@ pub fn guess_syntax() -> OutputFmt {
     }
 }
 
-fn get_usage() -> String {
-    format!("{0} {1}", executable!(), SYNTAX)
+fn usage() -> String {
+    format!("{0} {1}", uucore::execution_phrase(), SYNTAX)
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
@@ -71,7 +72,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
 
-    let usage = get_usage();
+    let usage = usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(&args);
 
@@ -94,9 +95,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if matches.is_present(options::PRINT_DATABASE) {
         if !files.is_empty() {
             show_usage_error!(
-                "extra operand '{}'\nfile operands cannot be combined with \
+                "extra operand {}\nfile operands cannot be combined with \
                  --print-database (-p)",
-                files[0]
+                files[0].quote()
             );
             return 1;
         }
@@ -126,7 +127,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         result = parse(INTERNAL_DB.lines(), out_format, "")
     } else {
         if files.len() > 1 {
-            show_usage_error!("extra operand '{}'", files[1]);
+            show_usage_error!("extra operand {}", files[1].quote());
             return 1;
         }
         match File::open(files[0]) {
@@ -135,7 +136,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 result = parse(fin.lines().filter_map(Result::ok), out_format, files[0])
             }
             Err(e) => {
-                show_error!("{}: {}", files[0], e);
+                show_error!("{}: {}", files[0].maybe_quote(), e);
                 return 1;
             }
         }
@@ -153,7 +154,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(SUMMARY)
         .after_help(LONG_HELP)
@@ -314,7 +315,8 @@ where
         if val.is_empty() {
             return Err(format!(
                 "{}:{}: invalid line;  missing second token",
-                fp, num
+                fp.maybe_quote(),
+                num
             ));
         }
         let lower = key.to_lowercase();
@@ -341,7 +343,12 @@ where
                 } else if let Some(s) = table.get(lower.as_str()) {
                     result.push_str(format!("{}={}:", s, val).as_str());
                 } else {
-                    return Err(format!("{}:{}: unrecognized keyword {}", fp, num, key));
+                    return Err(format!(
+                        "{}:{}: unrecognized keyword {}",
+                        fp.maybe_quote(),
+                        num,
+                        key
+                    ));
                 }
             }
         }

@@ -9,6 +9,8 @@ use std::convert::TryFrom;
 use std::error::Error;
 use std::fmt;
 
+use crate::display::Quotable;
+
 /// Parse a size string into a number of bytes.
 ///
 /// A size string comprises an integer and an optional unit. The unit
@@ -107,6 +109,9 @@ impl fmt::Display for ParseSizeError {
     }
 }
 
+// FIXME: It's more idiomatic to move the formatting into the Display impl,
+// but there's a lot of downstream code that constructs these errors manually
+// that would be affected
 impl ParseSizeError {
     fn parse_failure(s: &str) -> ParseSizeError {
         // stderr on linux (GNU coreutils 8.32) (LC_ALL=C)
@@ -140,7 +145,7 @@ impl ParseSizeError {
         //                   --width
         //                   --strings
         // etc.
-        ParseSizeError::ParseFailure(format!("'{}'", s))
+        ParseSizeError::ParseFailure(format!("{}", s.quote()))
     }
 
     fn size_too_big(s: &str) -> ParseSizeError {
@@ -160,7 +165,10 @@ impl ParseSizeError {
         // stderr on macos (brew - GNU coreutils 8.32) also differs for the same version, e.g.:
         // ghead:   invalid number of bytes: '1Y': Value too large to be stored in data type
         // gtail:   invalid number of bytes: '1Y': Value too large to be stored in data type
-        ParseSizeError::SizeTooBig(format!("'{}': Value too large for defined data type", s))
+        ParseSizeError::SizeTooBig(format!(
+            "{}: Value too large for defined data type",
+            s.quote()
+        ))
     }
 }
 
@@ -262,7 +270,7 @@ mod tests {
         for &test_string in &test_strings {
             assert_eq!(
                 parse_size(test_string).unwrap_err(),
-                ParseSizeError::ParseFailure(format!("'{}'", test_string))
+                ParseSizeError::ParseFailure(format!("{}", test_string.quote()))
             );
         }
     }

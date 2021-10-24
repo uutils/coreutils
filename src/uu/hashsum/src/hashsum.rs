@@ -18,6 +18,7 @@ extern crate uucore;
 mod digest;
 
 use self::digest::Digest;
+use self::digest::DigestWriter;
 
 use clap::{App, Arg, ArgMatches};
 use hex::ToHex;
@@ -33,6 +34,7 @@ use std::io::{self, stdin, BufRead, BufReader, Read};
 use std::iter;
 use std::num::ParseIntError;
 use std::path::Path;
+use uucore::display::Quotable;
 
 const NAME: &str = "hashsum";
 
@@ -342,7 +344,7 @@ pub fn uu_app_common() -> App<'static, 'static> {
     const TEXT_HELP: &str = "read in text mode";
     #[cfg(not(windows))]
     const TEXT_HELP: &str = "read in text mode (default)";
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about("Compute and check message digests.")
         .arg(
@@ -468,25 +470,42 @@ where
             stdin_buf = stdin();
             Box::new(stdin_buf) as Box<dyn Read>
         } else {
-            file_buf = safe_unwrap!(File::open(filename));
+            file_buf = crash_if_err!(1, File::open(filename));
             Box::new(file_buf) as Box<dyn Read>
         });
         if options.check {
             // Set up Regexes for line validation and parsing
+            //
+            // First, we compute the number of bytes we expect to be in
+            // the digest string. If the algorithm has a variable number
+            // of output bits, then we use the `+` modifier in the
+            // regular expression, otherwise we use the `{n}` modifier,
+            // where `n` is the number of bytes.
             let bytes = options.digest.output_bits() / 4;
-            let gnu_re = safe_unwrap!(Regex::new(&format!(
-                r"^(?P<digest>[a-fA-F0-9]{{{}}}) (?P<binary>[ \*])(?P<fileName>.*)",
-                bytes
-            )));
-            let bsd_re = safe_unwrap!(Regex::new(&format!(
-                r"^{algorithm} \((?P<fileName>.*)\) = (?P<digest>[a-fA-F0-9]{{{digest_size}}})",
-                algorithm = options.algoname,
-                digest_size = bytes
-            )));
+            let modifier = if bytes > 0 {
+                format!("{{{}}}", bytes)
+            } else {
+                "+".to_string()
+            };
+            let gnu_re = crash_if_err!(
+                1,
+                Regex::new(&format!(
+                    r"^(?P<digest>[a-fA-F0-9]{}) (?P<binary>[ \*])(?P<fileName>.*)",
+                    modifier,
+                ))
+            );
+            let bsd_re = crash_if_err!(
+                1,
+                Regex::new(&format!(
+                    r"^{algorithm} \((?P<fileName>.*)\) = (?P<digest>[a-fA-F0-9]{digest_size})",
+                    algorithm = options.algoname,
+                    digest_size = modifier,
+                ))
+            );
 
             let buffer = file;
             for (i, line) in buffer.lines().enumerate() {
-                let line = safe_unwrap!(line);
+                let line = crash_if_err!(1, line);
                 let (ck_filename, sum, binary_check) = match gnu_re.captures(&line) {
                     Some(caps) => (
                         caps.name("fileName").unwrap().as_str(),
@@ -507,7 +526,7 @@ where
                             if options.warn {
                                 show_warning!(
                                     "{}: {}: improperly formatted {} checksum line",
-                                    filename.display(),
+                                    filename.maybe_quote(),
                                     i + 1,
                                     options.algoname
                                 );
@@ -516,15 +535,27 @@ where
                         }
                     },
                 };
-                let f = safe_unwrap!(File::open(ck_filename));
+                let f = crash_if_err!(1, File::open(ck_filename));
                 let mut ckf = BufReader::new(Box::new(f) as Box<dyn Read>);
-                let real_sum = safe_unwrap!(digest_reader(
-                    &mut *options.digest,
-                    &mut ckf,
-                    binary_check,
-                    options.output_bits
-                ))
+                let real_sum = crash_if_err!(
+                    1,
+                    digest_reader(
+                        &mut options.digest,
+                        &mut ckf,
+                        binary_check,
+                        options.output_bits
+                    )
+                )
                 .to_ascii_lowercase();
+                // FIXME: Filenames with newlines should be treated specially.
+                // GNU appears to replace newlines by \n and backslashes by
+                // \\ and prepend a backslash (to the hash or filename) if it did
+                // this escaping.
+                // Different sorts of output (checking vs outputting hashes) may
+                // handle this differently. Compare carefully to GNU.
+                // If you can, try to preserve invalid unicode using OsStr(ing)Ext
+                // and display it using uucore::display::print_verbatim(). This is
+                // easier (and more important) on Unix than on Windows.
                 if sum == real_sum {
                     if !options.quiet {
                         println!("{}: OK", ck_filename);
@@ -537,12 +568,15 @@ where
                 }
             }
         } else {
-            let sum = safe_unwrap!(digest_reader(
-                &mut *options.digest,
-                &mut file,
-                options.binary,
-                options.output_bits
-            ));
+            let sum = crash_if_err!(
+                1,
+                digest_reader(
+                    &mut options.digest,
+                    &mut file,
+                    options.binary,
+                    options.output_bits
+                )
+            );
             if options.tag {
                 println!("{} ({}) = {}", options.algoname, filename.display(), sum);
             } else {
@@ -564,55 +598,29 @@ where
     Ok(())
 }
 
-fn digest_reader<'a, T: Read>(
-    digest: &mut (dyn Digest + 'a),
+fn digest_reader<T: Read>(
+    digest: &mut Box<dyn Digest>,
     reader: &mut BufReader<T>,
     binary: bool,
     output_bits: usize,
 ) -> io::Result<String> {
     digest.reset();
 
-    // Digest file, do not hold too much in memory at any given moment
-    let windows = cfg!(windows);
-    let mut buffer = Vec::with_capacity(524_288);
-    let mut vec = Vec::with_capacity(524_288);
-    let mut looking_for_newline = false;
-    loop {
-        match reader.read_to_end(&mut buffer) {
-            Ok(0) => {
-                break;
-            }
-            Ok(nread) => {
-                if windows && !binary {
-                    // Windows text mode returns '\n' when reading '\r\n'
-                    for &b in buffer.iter().take(nread) {
-                        if looking_for_newline {
-                            if b != b'\n' {
-                                vec.push(b'\r');
-                            }
-                            if b != b'\r' {
-                                vec.push(b);
-                                looking_for_newline = false;
-                            }
-                        } else if b != b'\r' {
-                            vec.push(b);
-                        } else {
-                            looking_for_newline = true;
-                        }
-                    }
-                    digest.input(&vec);
-                    vec.clear();
-                } else {
-                    digest.input(&buffer[..nread]);
-                }
-            }
-            Err(e) => return Err(e),
-        }
-    }
-    if windows && looking_for_newline {
-        vec.push(b'\r');
-        digest.input(&vec);
-    }
+    // Read bytes from `reader` and write those bytes to `digest`.
+    //
+    // If `binary` is `false` and the operating system is Windows, then
+    // `DigestWriter` replaces "\r\n" with "\n" before it writes the
+    // bytes into `digest`. Otherwise, it just inserts the bytes as-is.
+    //
+    // In order to support replacing "\r\n", we must call `finalize()`
+    // in order to support the possibility that the last character read
+    // from the reader was "\r". (This character gets buffered by
+    // `DigestWriter` and only written if the following character is
+    // "\n". But when "\r" is the last character read, we need to force
+    // it to be written.)
+    let mut digest_writer = DigestWriter::new(digest, binary);
+    std::io::copy(reader, &mut digest_writer)?;
+    digest_writer.finalize();
 
     if digest.output_bits() > 0 {
         Ok(digest.result_str())

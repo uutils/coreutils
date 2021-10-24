@@ -101,10 +101,10 @@ pub fn gen_uumain(_args: TokenStream, stream: TokenStream) -> TokenStream {
                 Err(e) => {
                     let s = format!("{}", e);
                     if s != "" {
-                        show_error!("{}", s);
+                        uucore::show_error!("{}", s);
                     }
                     if e.usage() {
-                        eprintln!("Try '{} --help' for more information.", executable!());
+                        eprintln!("Try '{} --help' for more information.", uucore::execution_phrase());
                     }
                     e.code()
                 }

@@ -6,9 +6,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-#[macro_use]
-extern crate uucore;
-
 use platform_info::*;
 
 use clap::{crate_version, App};
@@ -27,7 +24,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(SUMMARY)

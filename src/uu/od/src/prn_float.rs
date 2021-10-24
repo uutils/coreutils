@@ -91,6 +91,7 @@ fn format_float(f: f64, width: usize, precision: usize) -> String {
 }
 
 #[test]
+#[allow(clippy::excessive_precision)]
 fn test_format_flo32() {
     assert_eq!(format_flo32(1.0), "     1.0000000");
     assert_eq!(format_flo32(9.9999990), "     9.9999990");

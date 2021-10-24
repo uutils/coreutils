@@ -9,14 +9,18 @@
 
 use std::io::{stdout, Read, Write};
 
+use uucore::display::Quotable;
 use uucore::encoding::{wrap_print, Data, Format};
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::InvalidEncodingHandling;
 
 use std::fs::File;
 use std::io::{BufReader, Stdin};
 use std::path::Path;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
+
+pub static BASE_CMD_PARSE_ERROR: i32 = 1;
 
 // Config.
 pub struct Config {
@@ -34,14 +38,14 @@ pub mod options {
 }
 
 impl Config {
-    pub fn from(app_name: &str, options: &clap::ArgMatches) -> Result<Config, String> {
+    pub fn from(options: &clap::ArgMatches) -> UResult<Config> {
         let file: Option<String> = match options.values_of(options::FILE) {
             Some(mut values) => {
                 let name = values.next().unwrap();
                 if let Some(extra_op) = values.next() {
-                    return Err(format!(
-                        "extra operand '{}'\nTry '{} --help' for more information.",
-                        extra_op, app_name
+                    return Err(UUsageError::new(
+                        BASE_CMD_PARSE_ERROR,
+                        format!("extra operand {}", extra_op.quote(),),
                     ));
                 }
 
@@ -49,7 +53,10 @@ impl Config {
                     None
                 } else {
                     if !Path::exists(Path::new(name)) {
-                        return Err(format!("{}: No such file or directory", name));
+                        return Err(USimpleError::new(
+                            BASE_CMD_PARSE_ERROR,
+                            format!("{}: No such file or directory", name.maybe_quote()),
+                        ));
                     }
                     Some(name.to_owned())
                 }
@@ -60,8 +67,12 @@ impl Config {
         let cols = options
             .value_of(options::WRAP)
             .map(|num| {
-                num.parse::<usize>()
-                    .map_err(|_| format!("invalid wrap size: '{}'", num))
+                num.parse::<usize>().map_err(|_| {
+                    USimpleError::new(
+                        BASE_CMD_PARSE_ERROR,
+                        format!("invalid wrap size: {}", num.quote()),
+                    )
+                })
             })
             .transpose()?;
 
@@ -74,23 +85,17 @@ impl Config {
     }
 }
 
-pub fn parse_base_cmd_args(
-    args: impl uucore::Args,
-    name: &str,
-    version: &str,
-    about: &str,
-    usage: &str,
-) -> Result<Config, String> {
-    let app = base_app(name, version, about).usage(usage);
+pub fn parse_base_cmd_args(args: impl uucore::Args, about: &str, usage: &str) -> UResult<Config> {
+    let app = base_app(about).usage(usage);
     let arg_list = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
-    Config::from(name, &app.get_matches_from(arg_list))
+    Config::from(&app.get_matches_from(arg_list))
 }
 
-pub fn base_app<'a>(name: &str, version: &'a str, about: &'a str) -> App<'static, 'a> {
-    App::new(name)
-        .version(version)
+pub fn base_app<'a>(about: &'a str) -> App<'static, 'a> {
+    App::new(uucore::util_name())
+        .version(crate_version!())
         .about(about)
         // Format arguments.
         .arg(
@@ -119,14 +124,15 @@ pub fn base_app<'a>(name: &str, version: &'a str, about: &'a str) -> App<'static
         .arg(Arg::with_name(options::FILE).index(1).multiple(true))
 }
 
-pub fn get_input<'a>(config: &Config, stdin_ref: &'a Stdin) -> Box<dyn Read + 'a> {
+pub fn get_input<'a>(config: &Config, stdin_ref: &'a Stdin) -> UResult<Box<dyn Read + 'a>> {
     match &config.to_read {
         Some(name) => {
-            let file_buf = safe_unwrap!(File::open(Path::new(name)));
-            Box::new(BufReader::new(file_buf)) // as Box<dyn Read>
+            let file_buf =
+                File::open(Path::new(name)).map_err_context(|| name.maybe_quote().to_string())?;
+            Ok(Box::new(BufReader::new(file_buf))) // as Box<dyn Read>
         }
         None => {
-            Box::new(stdin_ref.lock()) // as Box<dyn Read>
+            Ok(Box::new(stdin_ref.lock())) // as Box<dyn Read>
         }
     }
 }
@@ -137,8 +143,7 @@ pub fn handle_input<R: Read>(
     line_wrap: Option<usize>,
     ignore_garbage: bool,
     decode: bool,
-    name: &str,
-) {
+) -> UResult<()> {
     let mut data = Data::new(input, format).ignore_garbage(ignore_garbage);
     if let Some(wrap) = line_wrap {
         data = data.line_wrap(wrap);
@@ -148,28 +153,25 @@ pub fn handle_input<R: Read>(
         match data.encode() {
             Ok(s) => {
                 wrap_print(&data, s);
+                Ok(())
             }
-            Err(_) => {
-                eprintln!(
-                    "{}: error: invalid input (length must be multiple of 4 characters)",
-                    name
-                );
-                exit!(1)
-            }
+            Err(_) => Err(USimpleError::new(
+                1,
+                "error: invalid input (length must be multiple of 4 characters)",
+            )),
         }
     } else {
         match data.decode() {
             Ok(s) => {
+                // Silent the warning as we want to the error message
+                #[allow(clippy::question_mark)]
                 if stdout().write_all(&s).is_err() {
                     // on windows console, writing invalid utf8 returns an error
-                    eprintln!("{}: error: Cannot write non-utf8 data", name);
-                    exit!(1)
+                    return Err(USimpleError::new(1, "error: cannot write non-utf8 data"));
                 }
+                Ok(())
             }
-            Err(_) => {
-                eprintln!("{}: error: invalid input", name);
-                exit!(1)
-            }
+            Err(_) => Err(USimpleError::new(1, "error: invalid input")),
         }
     }
 }

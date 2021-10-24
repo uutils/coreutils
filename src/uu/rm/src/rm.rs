@@ -17,6 +17,7 @@ use std::fs;
 use std::io::{stderr, stdin, BufRead, Write};
 use std::ops::BitOr;
 use std::path::{Path, PathBuf};
+use uucore::display::Quotable;
 use walkdir::{DirEntry, WalkDir};
 
 #[derive(Eq, PartialEq, Clone, Copy)]
@@ -52,8 +53,8 @@ static OPT_VERBOSE: &str = "verbose";
 
 static ARG_FILES: &str = "files";
 
-fn get_usage() -> String {
-    format!("{0} [OPTION]... FILE...", executable!())
+fn usage() -> String {
+    format!("{0} [OPTION]... FILE...", uucore::execution_phrase())
 }
 
 fn get_long_usage() -> String {
@@ -74,7 +75,7 @@ fn get_long_usage() -> String {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
     let long_usage = get_long_usage();
 
     let matches = uu_app()
@@ -93,7 +94,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         // Still check by hand and not use clap
         // Because "rm -f" is a thing
         show_error!("missing an argument");
-        show_error!("for help, try '{0} --help'", executable!());
+        show_error!("for help, try '{0} --help'", uucore::execution_phrase());
         return 1;
     } else {
         let options = Options {
@@ -140,7 +141,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
 
@@ -236,7 +237,10 @@ fn remove(files: Vec<String>, options: Options) -> bool {
                 // (e.g., permission), even rm -f should fail with
                 // outputting the error, but there's no easy eay.
                 if !options.force {
-                    show_error!("cannot remove '{}': No such file or directory", filename);
+                    show_error!(
+                        "cannot remove {}: No such file or directory",
+                        filename.quote()
+                    );
                     true
                 } else {
                     false
@@ -263,13 +267,9 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
                     // GNU compatibility (rm/fail-eacces.sh)
                     // here, GNU doesn't use some kind of remove_dir_all
                     // It will show directory+file
-                    show_error!(
-                        "cannot remove '{}': {}",
-                        path.display(),
-                        "Permission denied"
-                    );
+                    show_error!("cannot remove {}: {}", path.quote(), "Permission denied");
                 } else {
-                    show_error!("cannot remove '{}': {}", path.display(), e);
+                    show_error!("cannot remove {}: {}", path.quote(), e);
                 }
             }
         } else {
@@ -287,7 +287,7 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
                     }
                     Err(e) => {
                         had_err = true;
-                        show_error!("recursing in '{}': {}", path.display(), e);
+                        show_error!("recursing in {}: {}", path.quote(), e);
                     }
                 }
             }
@@ -299,12 +299,12 @@ fn handle_dir(path: &Path, options: &Options) -> bool {
     } else if options.dir && (!is_root || !options.preserve_root) {
         had_err = remove_dir(path, options).bitor(had_err);
     } else if options.recursive {
-        show_error!("could not remove directory '{}'", path.display());
+        show_error!("could not remove directory {}", path.quote());
         had_err = true;
     } else {
         show_error!(
-            "cannot remove '{}': Is a directory", // GNU's rm error message does not include help
-            path.display()
+            "cannot remove {}: Is a directory", // GNU's rm error message does not include help
+            path.quote()
         );
         had_err = true;
     }
@@ -325,36 +325,36 @@ fn remove_dir(path: &Path, options: &Options) -> bool {
                     match fs::remove_dir(path) {
                         Ok(_) => {
                             if options.verbose {
-                                println!("removed directory '{}'", normalize(path).display());
+                                println!("removed directory {}", normalize(path).quote());
                             }
                         }
                         Err(e) => {
                             if e.kind() == std::io::ErrorKind::PermissionDenied {
                                 // GNU compatibility (rm/fail-eacces.sh)
                                 show_error!(
-                                    "cannot remove '{}': {}",
-                                    path.display(),
+                                    "cannot remove {}: {}",
+                                    path.quote(),
                                     "Permission denied"
                                 );
                             } else {
-                                show_error!("cannot remove '{}': {}", path.display(), e);
+                                show_error!("cannot remove {}: {}", path.quote(), e);
                             }
                             return true;
                         }
                     }
                 } else {
                     // directory can be read but is not empty
-                    show_error!("cannot remove '{}': Directory not empty", path.display());
+                    show_error!("cannot remove {}: Directory not empty", path.quote());
                     return true;
                 }
             } else {
                 // called to remove a symlink_dir (windows) without "-r"/"-R" or "-d"
-                show_error!("cannot remove '{}': Is a directory", path.display());
+                show_error!("cannot remove {}: Is a directory", path.quote());
                 return true;
             }
         } else {
             // GNU's rm shows this message if directory is empty but not readable
-            show_error!("cannot remove '{}': Directory not empty", path.display());
+            show_error!("cannot remove {}: Directory not empty", path.quote());
             return true;
         }
     }
@@ -372,19 +372,15 @@ fn remove_file(path: &Path, options: &Options) -> bool {
         match fs::remove_file(path) {
             Ok(_) => {
                 if options.verbose {
-                    println!("removed '{}'", normalize(path).display());
+                    println!("removed {}", normalize(path).quote());
                 }
             }
             Err(e) => {
                 if e.kind() == std::io::ErrorKind::PermissionDenied {
                     // GNU compatibility (rm/fail-eacces.sh)
-                    show_error!(
-                        "cannot remove '{}': {}",
-                        path.display(),
-                        "Permission denied"
-                    );
+                    show_error!("cannot remove {}: {}", path.quote(), "Permission denied");
                 } else {
-                    show_error!("cannot remove '{}': {}", path.display(), e);
+                    show_error!("cannot remove {}: {}", path.quote(), e);
                 }
                 return true;
             }
@@ -396,9 +392,9 @@ fn remove_file(path: &Path, options: &Options) -> bool {
 
 fn prompt_file(path: &Path, is_dir: bool) -> bool {
     if is_dir {
-        prompt(&(format!("rm: remove directory '{}'? ", path.display())))
+        prompt(&(format!("rm: remove directory {}? ", path.quote())))
     } else {
-        prompt(&(format!("rm: remove file '{}'? ", path.display())))
+        prompt(&(format!("rm: remove file {}? ", path.quote())))
     }
 }
 

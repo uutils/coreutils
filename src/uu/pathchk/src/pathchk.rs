@@ -15,6 +15,7 @@ extern crate uucore;
 use clap::{crate_version, App, Arg};
 use std::fs;
 use std::io::{ErrorKind, Write};
+use uucore::display::Quotable;
 use uucore::InvalidEncodingHandling;
 
 // operating mode
@@ -25,7 +26,6 @@ enum Mode {
     Both,    // a combination of `Basic` and `Extra`
 }
 
-static NAME: &str = "pathchk";
 static ABOUT: &str = "Check whether file names are valid or portable";
 
 mod options {
@@ -39,12 +39,12 @@ mod options {
 const POSIX_PATH_MAX: usize = 256;
 const POSIX_NAME_MAX: usize = 14;
 
-fn get_usage() -> String {
-    format!("{0} [OPTION]... NAME...", executable!())
+fn usage() -> String {
+    format!("{0} [OPTION]... NAME...", uucore::execution_phrase())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
@@ -69,7 +69,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     // take necessary actions
     let paths = matches.values_of(options::PATH);
     let mut res = if paths.is_none() {
-        show_error!("missing operand\nTry {} --help for more information", NAME);
+        show_error!(
+            "missing operand\nTry '{} --help' for more information",
+            uucore::execution_phrase()
+        );
         false
     } else {
         true
@@ -96,7 +99,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(
@@ -151,10 +154,10 @@ fn check_basic(path: &[String]) -> bool {
         if component_len > POSIX_NAME_MAX {
             writeln!(
                 &mut std::io::stderr(),
-                "limit {} exceeded by length {} of file name component '{}'",
+                "limit {} exceeded by length {} of file name component {}",
                 POSIX_NAME_MAX,
                 component_len,
-                p
+                p.quote()
             );
             return false;
         }
@@ -173,8 +176,8 @@ fn check_extra(path: &[String]) -> bool {
         if p.starts_with('-') {
             writeln!(
                 &mut std::io::stderr(),
-                "leading hyphen in file name component '{}'",
-                p
+                "leading hyphen in file name component {}",
+                p.quote()
             );
             return false;
         }
@@ -195,10 +198,10 @@ fn check_default(path: &[String]) -> bool {
     if total_len > libc::PATH_MAX as usize {
         writeln!(
             &mut std::io::stderr(),
-            "limit {} exceeded by length {} of file name '{}'",
+            "limit {} exceeded by length {} of file name {}",
             libc::PATH_MAX,
             total_len,
-            joined_path
+            joined_path.quote()
         );
         return false;
     }
@@ -208,10 +211,10 @@ fn check_default(path: &[String]) -> bool {
         if component_len > libc::FILENAME_MAX as usize {
             writeln!(
                 &mut std::io::stderr(),
-                "limit {} exceeded by length {} of file name component '{}'",
+                "limit {} exceeded by length {} of file name component {}",
                 libc::FILENAME_MAX,
                 component_len,
-                p
+                p.quote()
             );
             return false;
         }
@@ -244,9 +247,9 @@ fn check_portable_chars(path_segment: &str) -> bool {
             let invalid = path_segment[i..].chars().next().unwrap();
             writeln!(
                 &mut std::io::stderr(),
-                "nonportable character '{}' in file name component '{}'",
+                "nonportable character '{}' in file name component {}",
                 invalid,
-                path_segment
+                path_segment.quote()
             );
             return false;
         }

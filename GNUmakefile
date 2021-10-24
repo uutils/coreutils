@@ -157,7 +157,8 @@ UNIX_PROGS := \
 	who
 
 SELINUX_PROGS := \
-	chcon
+	chcon \
+	runcon
 
 ifneq ($(OS),Windows_NT)
 	PROGS    := $(PROGS) $(UNIX_PROGS)
@@ -216,6 +217,7 @@ TEST_PROGS  := \
 	realpath \
 	rm \
 	rmdir \
+	runcon \
 	seq \
 	sort \
 	split \

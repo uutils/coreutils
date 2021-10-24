@@ -16,6 +16,7 @@ use std::io::{self, stdin, stdout, BufRead, Write};
 mod factor;
 use clap::{crate_version, App, Arg};
 pub use factor::*;
+use uucore::display::Quotable;
 
 mod miller_rabin;
 pub mod numeric;
@@ -52,7 +53,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if let Some(values) = matches.values_of(options::NUMBER) {
         for number in values {
             if let Err(e) = print_factors_str(number, &mut w, &mut factors_buffer) {
-                show_warning!("{}: {}", number, e);
+                show_warning!("{}: {}", number.maybe_quote(), e);
             }
         }
     } else {
@@ -61,7 +62,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         for line in stdin.lock().lines() {
             for number in line.unwrap().split_whitespace() {
                 if let Err(e) = print_factors_str(number, &mut w, &mut factors_buffer) {
-                    show_warning!("{}: {}", number, e);
+                    show_warning!("{}: {}", number.maybe_quote(), e);
                 }
             }
         }
@@ -75,7 +76,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(SUMMARY)
         .arg(Arg::with_name(options::NUMBER).multiple(true))

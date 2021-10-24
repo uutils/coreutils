@@ -7,6 +7,8 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
+//! Set of functions to manage file systems
+
 // spell-checker:ignore (arch) bitrig ; (fs) cifs smbfs
 
 extern crate time;
@@ -24,15 +26,11 @@ const MAX_PATH: usize = 266;
 static EXIT_ERR: i32 = 1;
 
 #[cfg(windows)]
-use std::ffi::OsString;
+use std::ffi::OsStr;
 #[cfg(windows)]
 use std::os::windows::ffi::OsStrExt;
 #[cfg(windows)]
-use std::os::windows::ffi::OsStringExt;
-#[cfg(windows)]
 use winapi::shared::minwindef::DWORD;
-#[cfg(windows)]
-use winapi::um::errhandlingapi::GetLastError;
 #[cfg(windows)]
 use winapi::um::fileapi::GetDiskFreeSpaceW;
 #[cfg(windows)]
@@ -45,11 +43,12 @@ use winapi::um::handleapi::INVALID_HANDLE_VALUE;
 #[cfg(windows)]
 use winapi::um::winbase::DRIVE_REMOTE;
 
+// Warning: the pointer has to be used *immediately* or the Vec
+// it points to will be dropped!
 #[cfg(windows)]
 macro_rules! String2LPWSTR {
     ($str: expr) => {
-        OsString::from($str.clone())
-            .as_os_str()
+        OsStr::new(&$str)
             .encode_wide()
             .chain(Some(0))
             .collect::<Vec<u16>>()
@@ -60,10 +59,8 @@ macro_rules! String2LPWSTR {
 #[cfg(windows)]
 #[allow(non_snake_case)]
 fn LPWSTR2String(buf: &[u16]) -> String {
-    let len = unsafe { libc::wcslen(buf.as_ptr()) };
-    OsString::from_wide(&buf[..len as usize])
-        .into_string()
-        .unwrap()
+    let len = buf.iter().position(|&n| n == 0).unwrap();
+    String::from_utf16(&buf[..len]).unwrap()
 }
 
 use self::time::Timespec;
@@ -75,7 +72,6 @@ use std::borrow::Cow;
 use std::convert::{AsRef, From};
 #[cfg(unix)]
 use std::ffi::CString;
-#[cfg(unix)]
 use std::io::Error as IOError;
 #[cfg(unix)]
 use std::mem;
@@ -86,13 +82,12 @@ use std::time::UNIX_EPOCH;
     target_os = "linux",
     target_vendor = "apple",
     target_os = "android",
-    target_os = "freebsd"
+    target_os = "freebsd",
+    target_os = "openbsd"
 ))]
 pub use libc::statfs as StatFs;
 #[cfg(any(
-    target_os = "openbsd",
     target_os = "netbsd",
-    target_os = "openbsd",
     target_os = "bitrig",
     target_os = "dragonfly",
     target_os = "redox"
@@ -103,13 +98,12 @@ pub use libc::statvfs as StatFs;
     target_os = "linux",
     target_vendor = "apple",
     target_os = "android",
-    target_os = "freebsd"
+    target_os = "freebsd",
+    target_os = "openbsd",
 ))]
 pub use libc::statfs as statfs_fn;
 #[cfg(any(
-    target_os = "openbsd",
     target_os = "netbsd",
-    target_os = "openbsd",
     target_os = "bitrig",
     target_os = "dragonfly",
     target_os = "redox"
@@ -157,16 +151,14 @@ impl MountInfo {
     fn set_missing_fields(&mut self) {
         #[cfg(unix)]
         {
+            use std::os::unix::fs::MetadataExt;
             // We want to keep the dev_id on Windows
             // but set dev_id
-            let path = CString::new(self.mount_dir.clone()).unwrap();
-            unsafe {
-                let mut stat = mem::zeroed();
-                if libc::stat(path.as_ptr(), &mut stat) == 0 {
-                    self.dev_id = (stat.st_dev as i32).to_string();
-                } else {
-                    self.dev_id = "".to_string();
-                }
+            if let Ok(stat) = std::fs::metadata(&self.mount_dir) {
+                // Why do we cast this to i32?
+                self.dev_id = (stat.dev() as i32).to_string()
+            } else {
+                self.dev_id = "".to_string();
             }
         }
         // set MountInfo::dummy
@@ -247,8 +239,7 @@ impl MountInfo {
         volume_name.pop();
         unsafe {
             QueryDosDeviceW(
-                OsString::from(volume_name.clone())
-                    .as_os_str()
+                OsStr::new(&volume_name)
                     .encode_wide()
                     .chain(Some(0))
                     .skip(4)
@@ -309,9 +300,19 @@ impl MountInfo {
     }
 }
 
-#[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
+#[cfg(any(
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
 use std::ffi::CStr;
-#[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+#[cfg(any(
+    target_os = "freebsd",
+    target_vendor = "apple",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
 impl From<StatFs> for MountInfo {
     fn from(statfs: StatFs) -> Self {
         let mut info = MountInfo {
@@ -344,9 +345,19 @@ impl From<StatFs> for MountInfo {
     }
 }
 
-#[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+#[cfg(any(
+    target_os = "freebsd",
+    target_vendor = "apple",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
 use libc::c_int;
-#[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+#[cfg(any(
+    target_os = "freebsd",
+    target_vendor = "apple",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
 extern "C" {
     #[cfg(all(target_vendor = "apple", target_arch = "x86_64"))]
     #[link_name = "getmntinfo$INODE64"] // spell-checker:disable-line
@@ -354,6 +365,8 @@ extern "C" {
 
     #[cfg(any(
         all(target_os = "freebsd"),
+        all(target_os = "netbsd"),
+        all(target_os = "openbsd"),
         all(target_vendor = "apple", target_arch = "aarch64")
     ))]
     #[link_name = "getmntinfo"] // spell-checker:disable-line
@@ -364,9 +377,20 @@ extern "C" {
 use std::fs::File;
 #[cfg(target_os = "linux")]
 use std::io::{BufRead, BufReader};
-#[cfg(any(target_vendor = "apple", target_os = "freebsd", target_os = "windows"))]
+#[cfg(any(
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "windows",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
 use std::ptr;
-#[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
+#[cfg(any(
+    target_vendor = "apple",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd"
+))]
 use std::slice;
 /// Read file system list.
 pub fn read_fs_list() -> Vec<MountInfo> {
@@ -386,7 +410,12 @@ pub fn read_fs_list() -> Vec<MountInfo> {
             })
             .collect::<Vec<_>>()
     }
-    #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+    #[cfg(any(
+        target_os = "freebsd",
+        target_vendor = "apple",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    ))]
     {
         let mut mount_buffer_ptr: *mut StatFs = ptr::null_mut();
         let len = unsafe { get_mount_info(&mut mount_buffer_ptr, 1_i32) };
@@ -407,9 +436,11 @@ pub fn read_fs_list() -> Vec<MountInfo> {
             FindFirstVolumeW(volume_name_buf.as_mut_ptr(), volume_name_buf.len() as DWORD)
         };
         if INVALID_HANDLE_VALUE == find_handle {
-            crash!(EXIT_ERR, "FindFirstVolumeW failed: {}", unsafe {
-                GetLastError()
-            });
+            crash!(
+                EXIT_ERR,
+                "FindFirstVolumeW failed: {}",
+                IOError::last_os_error()
+            );
         }
         let mut mounts = Vec::<MountInfo>::new();
         loop {
@@ -428,8 +459,9 @@ pub fn read_fs_list() -> Vec<MountInfo> {
                     volume_name_buf.len() as DWORD,
                 )
             } {
-                let err = unsafe { GetLastError() };
-                if err != winapi::shared::winerror::ERROR_NO_MORE_FILES {
+                let err = IOError::last_os_error();
+                if err.raw_os_error() != Some(winapi::shared::winerror::ERROR_NO_MORE_FILES as i32)
+                {
                     crash!(EXIT_ERR, "FindNextVolumeW failed: {}", err);
                 }
                 break;
@@ -489,7 +521,7 @@ impl FsUsage {
             crash!(
                 EXIT_ERR,
                 "GetVolumePathNamesForVolumeNameW failed: {}",
-                unsafe { GetLastError() }
+                IOError::last_os_error()
             );
         }
 
@@ -509,9 +541,11 @@ impl FsUsage {
         };
         if 0 == success {
             // Fails in case of CD for example
-            //crash!(EXIT_ERR, "GetDiskFreeSpaceW failed: {}", unsafe {
-            //GetLastError()
-            //});
+            // crash!(
+            //     EXIT_ERR,
+            //     "GetDiskFreeSpaceW failed: {}",
+            //     IOError::last_os_error()
+            // );
         }
 
         let bytes_per_cluster = sectors_per_cluster as u64 * bytes_per_sector as u64;
@@ -582,12 +616,17 @@ impl FsMeta for StatFs {
     fn io_size(&self) -> u64 {
         self.f_frsize as u64
     }
-    #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
+    #[cfg(any(target_vendor = "apple", target_os = "freebsd", target_os = "netbsd"))]
     fn io_size(&self) -> u64 {
         self.f_iosize as u64
     }
     // XXX: dunno if this is right
-    #[cfg(not(any(target_vendor = "apple", target_os = "freebsd", target_os = "linux")))]
+    #[cfg(not(any(
+        target_vendor = "apple",
+        target_os = "freebsd",
+        target_os = "linux",
+        target_os = "netbsd"
+    )))]
     fn io_size(&self) -> u64 {
         self.f_bsize as u64
     }
@@ -598,13 +637,23 @@ impl FsMeta for StatFs {
     //
     // Solaris, Irix and POSIX have a system call statvfs(2) that returns a
     // struct statvfs, containing an  unsigned  long  f_fsid
-    #[cfg(any(target_vendor = "apple", target_os = "freebsd", target_os = "linux"))]
+    #[cfg(any(
+        target_vendor = "apple",
+        target_os = "freebsd",
+        target_os = "linux",
+        target_os = "openbsd"
+    ))]
     fn fsid(&self) -> u64 {
         let f_fsid: &[u32; 2] =
             unsafe { &*(&self.f_fsid as *const libc::fsid_t as *const [u32; 2]) };
         (u64::from(f_fsid[0])) << 32 | u64::from(f_fsid[1])
     }
-    #[cfg(not(any(target_vendor = "apple", target_os = "freebsd", target_os = "linux")))]
+    #[cfg(not(any(
+        target_vendor = "apple",
+        target_os = "freebsd",
+        target_os = "linux",
+        target_os = "openbsd"
+    )))]
     fn fsid(&self) -> u64 {
         self.f_fsid as u64
     }
@@ -617,12 +666,18 @@ impl FsMeta for StatFs {
     fn namelen(&self) -> u64 {
         1024
     }
-    #[cfg(target_os = "freebsd")]
+    #[cfg(any(target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))]
     fn namelen(&self) -> u64 {
         self.f_namemax as u64 // spell-checker:disable-line
     }
     // XXX: should everything just use statvfs?
-    #[cfg(not(any(target_vendor = "apple", target_os = "freebsd", target_os = "linux")))]
+    #[cfg(not(any(
+        target_vendor = "apple",
+        target_os = "freebsd",
+        target_os = "linux",
+        target_os = "netbsd",
+        target_os = "openbsd"
+    )))]
     fn namelen(&self) -> u64 {
         self.f_namemax as u64 // spell-checker:disable-line
     }

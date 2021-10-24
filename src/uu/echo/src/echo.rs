@@ -6,9 +6,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, App, Arg};
 use std::io::{self, Write};
 use std::iter::Peekable;
@@ -132,7 +129,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .name(NAME)
         // TrailingVarArg specifies the final positional argument is a VarArg
         // and it doesn't attempts the parse any further args.

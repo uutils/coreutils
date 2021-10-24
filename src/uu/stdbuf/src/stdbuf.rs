@@ -47,8 +47,8 @@ mod options {
     pub const COMMAND: &str = "command";
 }
 
-fn get_usage() -> String {
-    format!("{0} OPTION... COMMAND", executable!())
+fn usage() -> String {
+    format!("{0} OPTION... COMMAND", uucore::execution_phrase())
 }
 
 const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.so"));
@@ -152,19 +152,25 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
-    let usage = get_usage();
+    let usage = usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
-    let options = ProgramOptions::try_from(&matches)
-        .unwrap_or_else(|e| crash!(125, "{}\nTry 'stdbuf --help' for more information.", e.0));
+    let options = ProgramOptions::try_from(&matches).unwrap_or_else(|e| {
+        crash!(
+            125,
+            "{}\nTry '{} --help' for more information.",
+            e.0,
+            uucore::execution_phrase()
+        )
+    });
 
     let mut command_values = matches.values_of::<&str>(options::COMMAND).unwrap();
     let mut command = Command::new(command_values.next().unwrap());
     let command_params: Vec<&str> = command_values.collect();
 
     let mut tmp_dir = tempdir().unwrap();
-    let (preload_env, libstdbuf) = return_if_err!(1, get_preload_env(&mut tmp_dir));
+    let (preload_env, libstdbuf) = crash_if_err!(1, get_preload_env(&mut tmp_dir));
     command.env(preload_env, libstdbuf);
     set_command_env(&mut command, "_STDBUF_I", options.stdin);
     set_command_env(&mut command, "_STDBUF_O", options.stdout);
@@ -185,7 +191,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)

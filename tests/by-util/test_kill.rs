@@ -57,6 +57,12 @@ fn test_kill_list_all_signals() {
 }
 
 #[test]
+fn test_kill_list_final_new_line() {
+    let re = Regex::new("\\n$").unwrap();
+    assert!(re.is_match(new_ucmd!().arg("-l").succeeds().stdout_str()));
+}
+
+#[test]
 fn test_kill_list_all_signals_as_table() {
     // Check for a few signals.  Do not try to be comprehensive.
     new_ucmd!()
@@ -105,6 +111,26 @@ fn test_kill_with_signal_number_old_form() {
 }
 
 #[test]
+fn test_kill_with_signal_name_old_form() {
+    let mut target = Target::new();
+    new_ucmd!()
+        .arg("-KILL")
+        .arg(format!("{}", target.pid()))
+        .succeeds();
+    assert_eq!(target.wait_for_signal(), Some(libc::SIGKILL));
+}
+
+#[test]
+fn test_kill_with_signal_prefixed_name_old_form() {
+    let mut target = Target::new();
+    new_ucmd!()
+        .arg("-SIGKILL")
+        .arg(format!("{}", target.pid()))
+        .succeeds();
+    assert_eq!(target.wait_for_signal(), Some(libc::SIGKILL));
+}
+
+#[test]
 fn test_kill_with_signal_number_new_form() {
     let mut target = Target::new();
     new_ucmd!()
@@ -121,6 +147,17 @@ fn test_kill_with_signal_name_new_form() {
     new_ucmd!()
         .arg("-s")
         .arg("KILL")
+        .arg(format!("{}", target.pid()))
+        .succeeds();
+    assert_eq!(target.wait_for_signal(), Some(libc::SIGKILL));
+}
+
+#[test]
+fn test_kill_with_signal_prefixed_name_new_form() {
+    let mut target = Target::new();
+    new_ucmd!()
+        .arg("-s")
+        .arg("SIGKILL")
         .arg(format!("{}", target.pid()))
         .succeeds();
     assert_eq!(target.wait_for_signal(), Some(libc::SIGKILL));

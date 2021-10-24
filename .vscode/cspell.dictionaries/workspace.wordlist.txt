@@ -9,12 +9,14 @@ aho-corasick
 backtrace
 blake2b_simd
 bstr
+bytecount
 byteorder
 chacha
 chrono
 conv
 corasick
 crossterm
+exacl
 filetime
 formatteriteminfo
 fsext
@@ -66,6 +68,7 @@ structs
 substr
 splitn
 trunc
+uninit
 
 # * uutils
 basenc
@@ -106,12 +109,18 @@ whoami
 
 # * vars/errno
 errno
+EACCES
+EBADF
+EBUSY
 EEXIST
+EINVAL
 ENODATA
 ENOENT
 ENOSYS
-EPERM
+ENOTEMPTY
 EOPNOTSUPP
+EPERM
+EROFS
 
 # * vars/fcntl
 F_GETFL
@@ -162,6 +171,7 @@ blocksize
 canonname
 chroot
 dlsym
+execvp
 fdatasync
 freeaddrinfo
 getaddrinfo
@@ -268,6 +278,7 @@ ULONG
 ULONGLONG
 UNLEN
 WCHAR
+WSADATA
 errhandlingapi
 fileapi
 handleapi
@@ -313,3 +324,6 @@ uucore_procs
 uumain
 uutil
 uutils
+
+# * function names
+getcwd

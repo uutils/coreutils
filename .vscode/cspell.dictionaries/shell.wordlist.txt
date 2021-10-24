@@ -8,6 +8,7 @@ csh
 globstar
 inotify
 localtime
+mksh
 mountinfo
 mountpoint
 mtab
@@ -91,6 +92,7 @@ rerast
 rollup
 sed
 selinuxenabled
+sestatus
 wslpath
 xargs
 

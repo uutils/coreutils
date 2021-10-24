@@ -365,8 +365,8 @@ To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 
 | Done      | Semi-Done | To Do  |
 |-----------|-----------|--------|
-| arch      | cp        | runcon |
-| base32    | date      | stty   |
+| arch      | cp        | stty   |
+| base32    | date      |        |
 | base64    | dd        |        |
 | basename  | df        |        |
 | basenc    | expr      |        |
@@ -426,6 +426,7 @@ To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 | relpath   |           |        |
 | rm        |           |        |
 | rmdir     |           |        |
+| runcon    |           |        |
 | seq       |           |        |
 | shred     |           |        |
 | shuf      |           |        |

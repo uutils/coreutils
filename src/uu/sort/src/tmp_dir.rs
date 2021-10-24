@@ -1,4 +1,5 @@
 use std::{
+    fs::File,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
@@ -54,7 +55,7 @@ impl TmpDirWrapper {
         .map_err(|e| USimpleError::new(2, format!("failed to set up signal handler: {}", e)))
     }
 
-    pub fn next_file_path(&mut self) -> UResult<PathBuf> {
+    pub fn next_file(&mut self) -> UResult<(File, PathBuf)> {
         if self.temp_dir.is_none() {
             self.init_tmp_dir()?;
         }
@@ -62,7 +63,11 @@ impl TmpDirWrapper {
         let _lock = self.lock.lock().unwrap();
         let file_name = self.size.to_string();
         self.size += 1;
-        Ok(self.temp_dir.as_ref().unwrap().path().join(file_name))
+        let path = self.temp_dir.as_ref().unwrap().path().join(file_name);
+        Ok((
+            File::create(&path).map_err(|error| SortError::OpenTmpFileFailed { error })?,
+            path,
+        ))
     }
 }
 

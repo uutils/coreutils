@@ -227,6 +227,19 @@ fn autoformat() {
         .pipe_in("1 x y z\n2 p")
         .succeeds()
         .stdout_only("1 x y z a\n2 p   b\n");
+
+    new_ucmd!()
+        .arg("-")
+        .arg("fields_2.txt")
+        .arg("-a")
+        .arg("1")
+        .arg("-o")
+        .arg("auto")
+        .arg("-e")
+        .arg(".")
+        .pipe_in("1 x y z\n2 p\n99 a b\n")
+        .succeeds()
+        .stdout_only("1 x y z a\n2 p . . b\n99 a b . .\n");
 }
 
 #[test]
