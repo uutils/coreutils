@@ -370,6 +370,25 @@ fn test_dir() {
 }
 
 #[test]
+fn test_dir_follow_retry() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir("DIR");
+    ts.ucmd()
+        .arg("--follow=descriptor")
+        .arg("--retry")
+        .arg("DIR")
+        .run()
+        .stderr_is(
+            "tail: warning: --retry only effective for the initial open\n\
+                 tail: error reading 'DIR': Is a directory\n\
+                 tail: DIR: cannot follow end of this type of file\n\
+                 tail: no files remaining\n",
+        )
+        .code_is(1);
+}
+
+#[test]
 fn test_negative_indexing() {
     let positive_lines_index = new_ucmd!().arg("-n").arg("5").arg(FOOBAR_TXT).run();
 
@@ -517,8 +536,40 @@ fn test_tail_bytes_for_funny_files() {
 }
 
 #[test]
-#[cfg(not(windows))]
-fn test_tail_follow_descriptor_vs_rename() {
+#[cfg(unix)]
+fn test_retry1() {
+    // gnu/tests/tail-2/retry.sh
+    // Ensure --retry without --follow results in a warning.
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let file_name = "FILE";
+    at.touch("FILE");
+
+    let result = ts.ucmd().arg(file_name).arg("--retry").run();
+    result
+        .stderr_is("tail: warning: --retry ignored; --retry is useful only when following\n")
+        .code_is(0);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_retry2() {
+    // gnu/tests/tail-2/retry.sh
+    // The same as test_retry2 with a missing file: expect error message and exit 1.
+
+    let ts = TestScenario::new(util_name!());
+    let missing = "missing";
+
+    let result = ts.ucmd().arg(missing).arg("--retry").run();
+    result
+        .stderr_is(
+            "tail: warning: --retry ignored; --retry is useful only when following\n\
+                tail: cannot open 'missing' for reading: No such file or directory\n",
+        )
+        .code_is(1);
+}
+
     // gnu/tests/tail-2/descriptor-vs-rename.sh
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
