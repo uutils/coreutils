@@ -2103,11 +2103,9 @@ fn get_security_context(config: &Config, p_buf: &Path, must_dereference: bool) -
                 }
                 Ok(None) => substitute_string,
                 Ok(Some(context)) => {
-                    let mut context = context.as_bytes();
-                    if context.ends_with(&[0]) {
-                        // TODO: replace with `strip_prefix()` when MSRV >= 1.51
-                        context = &context[..context.len() - 1]
-                    };
+                    let context = context.as_bytes();
+
+                    let context = context.strip_suffix(&[0]).unwrap_or(context);
                     String::from_utf8(context.to_vec()).unwrap_or_else(|e| {
                         show_warning!(
                             "getting security context of: {}: {}",

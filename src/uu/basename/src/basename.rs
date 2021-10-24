@@ -131,21 +131,15 @@ fn basename(fullname: &str, suffix: &str) -> String {
     // Convert to path buffer and get last path component
     let pb = PathBuf::from(path);
     match pb.components().last() {
-        Some(c) => strip_suffix(c.as_os_str().to_str().unwrap(), suffix),
+        Some(c) => {
+            let name = c.as_os_str().to_str().unwrap();
+            if name == suffix {
+                name.to_string()
+            } else {
+                name.strip_suffix(suffix).unwrap_or(name).to_string()
+            }
+        }
+
         None => "".to_owned(),
     }
-}
-
-// can be replaced with strip_suffix once MSRV is 1.45
-#[allow(clippy::manual_strip)]
-fn strip_suffix(name: &str, suffix: &str) -> String {
-    if name == suffix {
-        return name.to_owned();
-    }
-
-    if name.ends_with(suffix) {
-        return name[..name.len() - suffix.len()].to_owned();
-    }
-
-    name.to_owned()
 }
