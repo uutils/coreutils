@@ -14,6 +14,13 @@ use std::io::{Read, Write};
 use std::thread::sleep;
 use std::time::Duration;
 
+#[cfg(target_os = "linux")]
+pub static BACKEND: &str = "inotify";
+#[cfg(all(unix, not(target_os = "linux")))]
+pub static BACKEND: &str = "kqueue";
+#[cfg(target_os = "windows")]
+pub static BACKEND: &str = "ReadDirectoryChanges";
+
 static FOOBAR_TXT: &str = "foobar.txt";
 static FOOBAR_2_TXT: &str = "foobar2.txt";
 static FOOBAR_WITH_NULL_TXT: &str = "foobar_with_null.txt";
@@ -66,7 +73,7 @@ fn test_null_default() {
 }
 
 #[test]
-fn test_follow() {
+fn test_follow_single() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     let mut child = ucmd.arg("-f").arg(FOOBAR_TXT).run_no_wait();
@@ -108,7 +115,7 @@ fn test_follow_multiple() {
 }
 
 #[test]
-#[cfg(not(windows))]
+#[cfg(unix)]
 fn test_follow_name_multiple() {
     let (at, mut ucmd) = at_and_ucmd!();
     let mut child = ucmd
@@ -336,6 +343,46 @@ fn test_multiple_input_files_missing() {
 }
 
 #[test]
+fn test_follow_missing() {
+    // Ensure that --follow=name does not imply --retry.
+    // Ensure that --follow={descriptor,name} (without --retry) does *not wait* for the
+    // file to appear.
+    for follow_mode in &["--follow=descriptor", "--follow=name"] {
+        new_ucmd!()
+            .arg(follow_mode)
+            .arg("missing")
+            .run()
+            .stderr_is(
+                "tail: cannot open 'missing' for reading: No such file or directory\n\
+                 tail: no files remaining",
+            )
+            .code_is(1);
+    }
+}
+
+#[test]
+fn test_follow_name_stdin() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("FILE1");
+    at.touch("FILE2");
+    ts.ucmd()
+        .arg("--follow=name")
+        .arg("-")
+        .run()
+        .stderr_is("tail: cannot follow '-' by name")
+        .code_is(1);
+    ts.ucmd()
+        .arg("--follow=name")
+        .arg("FILE1")
+        .arg("-")
+        .arg("FILE2")
+        .run()
+        .stderr_is("tail: cannot follow '-' by name")
+        .code_is(1);
+}
+
+#[test]
 fn test_multiple_input_files_with_suppressed_headers() {
     new_ucmd!()
         .arg(FOOBAR_TXT)
@@ -362,11 +409,27 @@ fn test_dir() {
     at.mkdir("DIR");
     ucmd.arg("DIR")
         .run()
-        .stderr_is(
-            "tail: error reading 'DIR': Is a directory\n\
-            tail: DIR: cannot follow end of this type of file; giving up on this name",
-        )
+        .stderr_is("tail: error reading 'DIR': Is a directory\n")
         .code_is(1);
+}
+
+#[test]
+fn test_dir_follow() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir("DIR");
+    for mode in &["--follow=descriptor", "--follow=name"] {
+        ts.ucmd()
+            .arg(mode)
+            .arg("DIR")
+            .run()
+            .stderr_is(
+                "tail: error reading 'DIR': Is a directory\n\
+                 tail: DIR: cannot follow end of this type of file; giving up on this name\n\
+                 tail: no files remaining\n",
+            )
+            .code_is(1);
+    }
 }
 
 #[test]
@@ -458,7 +521,7 @@ fn test_positive_zero_lines() {
 }
 
 #[test]
-fn test_tail_invalid_num() {
+fn test_invalid_num() {
     new_ucmd!()
         .args(&["-c", "1024R", "emptyfile.txt"])
         .fails()
@@ -494,7 +557,7 @@ fn test_tail_invalid_num() {
 }
 
 #[test]
-fn test_tail_num_with_undocumented_sign_bytes() {
+fn test_num_with_undocumented_sign_bytes() {
     // tail: '-' is not documented (8.32 man pages)
     // head: '+' is not documented (8.32 man pages)
     const ALPHABET: &str = "abcdefghijklmnopqrstuvwxyz";
@@ -517,7 +580,7 @@ fn test_tail_num_with_undocumented_sign_bytes() {
 
 #[test]
 #[cfg(unix)]
-fn test_tail_bytes_for_funny_files() {
+fn test_bytes_for_funny_files() {
     // gnu/tests/tail-2/tail-c.sh
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -781,7 +844,6 @@ fn test_retry8() {
     let watched_file = std::path::Path::new("watched_file");
     let parent_dir = std::path::Path::new("parent_dir");
     let user_path = parent_dir.join(watched_file);
-    // let watched_file = watched_file.to_str().unwrap();
     let parent_dir = parent_dir.to_str().unwrap();
     let user_path = user_path.to_str().unwrap();
 
@@ -845,7 +907,9 @@ fn test_retry9() {
         tail: 'parent_dir/watched_file' has become inaccessible: No such file or directory\n\
         tail: 'parent_dir/watched_file' has appeared;  following new file\n\
         tail: 'parent_dir/watched_file' has become inaccessible: No such file or directory\n\
-        tail: 'parent_dir/watched_file' has appeared;  following new file\n", BACKEND);
+        tail: 'parent_dir/watched_file' has appeared;  following new file\n",
+        BACKEND
+    );
     let expected_stdout = "foo\nbar\nfoo\nbar\n";
 
     let delay = 1000;
@@ -1009,10 +1073,10 @@ fn test_follow_descriptor_vs_rename2() {
 }
 
 #[test]
-#[cfg(not(windows))]
+#[cfg(unix)]
 fn test_follow_name_remove() {
     // This test triggers a remove event while `tail --follow=name logfile` is running.
-    // ((sleep 1 && rm logfile &)>/dev/null 2>&1 &) ; tail --follow=name logfile
+    // ((sleep 2 && rm logfile &)>/dev/null 2>&1 &) ; tail --follow=name logfile
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1027,7 +1091,7 @@ fn test_follow_name_remove() {
         ts.util_name, source_copy
     );
 
-    let delay = 1000;
+    let delay = 2000;
     let mut args = vec!["--follow=name", source_copy, "--use-polling"];
 
     for _ in 0..2 {
@@ -1155,9 +1219,11 @@ fn test_follow_name_truncate3() {
     assert!(buf_stderr.is_empty());
 }
 
+#[test]
+#[cfg(unix)]
 fn test_follow_name_move_create() {
     // This test triggers a move/create event while `tail --follow=name logfile` is running.
-    // ((sleep 1 && mv logfile backup && sleep 1 && cp backup logfile &)>/dev/null 2>&1 &) ; tail --follow=name logfile
+    // ((sleep 2 && mv logfile backup && sleep 2 && cp backup logfile &)>/dev/null 2>&1 &) ; tail --follow=name logfile
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1182,7 +1248,7 @@ fn test_follow_name_move_create() {
     let args = ["--follow=name", source];
     let mut p = ts.ucmd().args(&args).run_no_wait();
 
-    let delay = 1000;
+    let delay = 2000;
 
     sleep(Duration::from_millis(delay));
     at.rename(source, backup);
@@ -1198,11 +1264,10 @@ fn test_follow_name_move_create() {
 }
 
 #[test]
-#[cfg(not(windows))]
+#[cfg(unix)]
 fn test_follow_name_move() {
     // This test triggers a move event while `tail --follow=name logfile` is running.
-    // ((sleep 1 && mv logfile backup && sleep 1 && cp backup logfile &)>/dev/null 2>&1 &) ; tail --follow=name logfile
-    // NOTE: GNU's tail does not seem to recognize this move event with `---disable-inotify`
+    // ((sleep 2 && mv logfile backup &)>/dev/null 2>&1 &) ; tail --follow=name logfile
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1224,11 +1289,10 @@ fn test_follow_name_move() {
     #[allow(clippy::needless_range_loop)]
     for i in 0..2 {
         let mut p = ts.ucmd().args(&args).run_no_wait();
-        let delay = 1000;
 
-        sleep(Duration::from_millis(delay));
+        sleep(Duration::from_millis(2000));
         at.rename(source, backup);
-        sleep(Duration::from_millis(delay));
+        sleep(Duration::from_millis(5000));
 
         p.kill().unwrap();
 
