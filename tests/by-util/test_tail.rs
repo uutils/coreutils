@@ -1049,10 +1049,10 @@ fn test_follow_name_remove() {
 }
 
 #[test]
-#[cfg(not(windows))]
-fn test_follow_name_truncate() {
+#[cfg(target_os = "linux")] // FIXME: fix this test for BSD/macOS
+fn test_follow_name_truncate1() {
     // This test triggers a truncate event while `tail --follow=name logfile` is running.
-    // cp logfile backup && head logfile > logfile && sleep 1 && cp backup logfile
+    // $ cp logfile backup && head logfile > logfile && sleep 1 && cp backup logfile
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1083,7 +1083,78 @@ fn test_follow_name_truncate() {
 }
 
 #[test]
-#[cfg(not(windows))]
+#[cfg(unix)]
+fn test_follow_name_truncate2() {
+    // This test triggers a truncate event while `tail --follow=name logfile` is running.
+    // $ ((sleep 1 && echo -n "x\nx\nx\n" >> logfile && sleep 1 && \
+    // echo -n "x\n" > logfile &)>/dev/null 2>&1 &) ; tail --follow=name logfile
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let source = "logfile";
+    at.touch(source);
+
+    let expected_stdout = "x\nx\nx\nx\n";
+    let expected_stderr = format!("{}: {}: file truncated\n", ts.util_name, source);
+
+    let args = ["--follow=name", source];
+    let mut p = ts.ucmd().args(&args).run_no_wait();
+
+    let delay = 1000;
+
+    at.append(source, "x\n");
+    sleep(Duration::from_millis(delay));
+    at.append(source, "x\n");
+    sleep(Duration::from_millis(delay));
+    at.append(source, "x\n");
+    sleep(Duration::from_millis(delay));
+    at.truncate(source, "x\n");
+    sleep(Duration::from_millis(delay));
+
+    p.kill().unwrap();
+
+    let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
+    assert_eq!(buf_stdout, expected_stdout);
+    assert_eq!(buf_stderr, expected_stderr);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_follow_name_truncate3() {
+    // Opening an empty file in truncate mode should not trigger a truncate event while.
+    // $ rm -f logfile && touch logfile
+    // $ ((sleep 1 && echo -n "x\n" > logfile &)>/dev/null 2>&1 &) ; tail --follow=name logfile
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let source = "logfile";
+    at.touch(source);
+
+    let expected_stdout = "x\n";
+
+    let args = ["--follow=name", source];
+    let mut p = ts.ucmd().args(&args).run_no_wait();
+
+    let delay = 1000;
+    sleep(Duration::from_millis(delay));
+    use std::fs::OpenOptions;
+    let mut file = OpenOptions::new()
+        .write(true)
+        .truncate(true)
+        .open(at.plus(source))
+        .unwrap();
+    file.write_all(b"x\n").unwrap();
+    sleep(Duration::from_millis(delay));
+
+    p.kill().unwrap();
+
+    let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
+    assert_eq!(buf_stdout, expected_stdout);
+    assert!(buf_stderr.is_empty());
+}
+
 fn test_follow_name_move_create() {
     // This test triggers a move/create event while `tail --follow=name logfile` is running.
     // ((sleep 1 && mv logfile backup && sleep 1 && cp backup logfile &)>/dev/null 2>&1 &) ; tail --follow=name logfile
