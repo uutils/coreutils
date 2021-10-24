@@ -171,10 +171,6 @@ impl UError for SortError {
             _ => 2,
         }
     }
-
-    fn usage(&self) -> bool {
-        false
-    }
 }
 
 impl Display for SortError {
