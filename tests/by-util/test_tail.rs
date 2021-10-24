@@ -767,6 +767,133 @@ fn test_retry7() {
     assert_eq!(buf_stderr, expected_stderr);
 }
 
+#[test]
+#[cfg(unix)]
+fn test_retry8() {
+    // Ensure that inotify will switch to polling mode if directory
+    // of the watched file was initially missing and later created.
+    // This is similar to test_retry9, but without:
+    // tail: directory containing watched file was removed\n\
+    // tail: inotify cannot be used, reverting to polling\n\
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let watched_file = std::path::Path::new("watched_file");
+    let parent_dir = std::path::Path::new("parent_dir");
+    let user_path = parent_dir.join(watched_file);
+    // let watched_file = watched_file.to_str().unwrap();
+    let parent_dir = parent_dir.to_str().unwrap();
+    let user_path = user_path.to_str().unwrap();
+
+    let expected_stderr = "\
+        tail: cannot open 'parent_dir/watched_file' for reading: No such file or directory\n\
+        tail: 'parent_dir/watched_file' has appeared;  following new file\n\
+        tail: 'parent_dir/watched_file' has become inaccessible: No such file or directory\n\
+        tail: 'parent_dir/watched_file' has appeared;  following new file\n";
+    let expected_stdout = "foo\nbar\n";
+
+    let delay = 1000;
+
+    let mut p = ts
+        .ucmd()
+        .arg("-F")
+        .arg("-s.1")
+        .arg("--max-unchanged-stats=1")
+        .arg(user_path)
+        .run_no_wait();
+    sleep(Duration::from_millis(delay));
+
+    at.mkdir(parent_dir);
+    at.append(user_path, "foo\n");
+    sleep(Duration::from_millis(delay));
+
+    at.remove(user_path);
+    at.rmdir(parent_dir);
+    sleep(Duration::from_millis(delay));
+
+    at.mkdir(parent_dir);
+    at.append(user_path, "bar\n");
+    sleep(Duration::from_millis(delay));
+
+    p.kill().unwrap();
+
+    let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
+    assert_eq!(buf_stdout, expected_stdout);
+    assert_eq!(buf_stderr, expected_stderr);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_retry9() {
+    // gnu/tests/tail-2/inotify-dir-recreate.sh
+    // Ensure that inotify will switch to polling mode if directory
+    // of the watched file was removed and recreated.
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let watched_file = std::path::Path::new("watched_file");
+    let parent_dir = std::path::Path::new("parent_dir");
+    let user_path = parent_dir.join(watched_file);
+    let parent_dir = parent_dir.to_str().unwrap();
+    let user_path = user_path.to_str().unwrap();
+
+    let expected_stderr = format!("\
+        tail: 'parent_dir/watched_file' has become inaccessible: No such file or directory\n\
+        tail: directory containing watched file was removed\n\
+        tail: {} cannot be used, reverting to polling\n\
+        tail: 'parent_dir/watched_file' has appeared;  following new file\n\
+        tail: 'parent_dir/watched_file' has become inaccessible: No such file or directory\n\
+        tail: 'parent_dir/watched_file' has appeared;  following new file\n\
+        tail: 'parent_dir/watched_file' has become inaccessible: No such file or directory\n\
+        tail: 'parent_dir/watched_file' has appeared;  following new file\n", BACKEND);
+    let expected_stdout = "foo\nbar\nfoo\nbar\n";
+
+    let delay = 1000;
+
+    at.mkdir(parent_dir);
+    at.truncate(user_path, "foo\n");
+    let mut p = ts
+        .ucmd()
+        .arg("-F")
+        .arg("-s.1")
+        .arg("--max-unchanged-stats=1")
+        .arg(user_path)
+        .run_no_wait();
+
+    sleep(Duration::from_millis(delay));
+
+    at.remove(user_path);
+    at.rmdir(parent_dir);
+    sleep(Duration::from_millis(delay));
+
+    at.mkdir(parent_dir);
+    at.truncate(user_path, "bar\n");
+    sleep(Duration::from_millis(delay));
+
+    at.remove(user_path);
+    at.rmdir(parent_dir);
+    sleep(Duration::from_millis(delay));
+
+    at.mkdir(parent_dir);
+    at.truncate(user_path, "foo\n");
+    sleep(Duration::from_millis(delay));
+
+    at.remove(user_path);
+    at.rmdir(parent_dir);
+    sleep(Duration::from_millis(delay));
+
+    at.mkdir(parent_dir);
+    at.truncate(user_path, "bar\n");
+    sleep(Duration::from_millis(delay));
+
+    p.kill().unwrap();
+
+    let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
+    // println!("stdout:\n{}\nstderr:\n{}", buf_stdout, buf_stderr); // dbg
+    assert_eq!(buf_stdout, expected_stdout);
+    assert_eq!(buf_stderr, expected_stderr);
+}
+
     // gnu/tests/tail-2/descriptor-vs-rename.sh
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
