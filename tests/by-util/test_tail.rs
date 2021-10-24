@@ -570,6 +570,41 @@ fn test_retry2() {
         .code_is(1);
 }
 
+#[test]
+#[cfg(target_os = "linux")] // FIXME: fix this test for BSD/macOS
+fn test_retry3() {
+    // gnu/tests/tail-2/retry.sh
+    // Ensure that `tail --retry --follow=name` waits for the file to appear.
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let missing = "missing";
+
+    let expected_stderr = "tail: cannot open 'missing' for reading: No such file or directory\n\
+                           tail: 'missing' has appeared;  following new file\n";
+    let expected_stdout = "X\n";
+    let delay = 1000;
+    let mut args = vec!["--follow=name", "--retry", missing, "--use-polling"];
+    for _ in 0..2 {
+        let mut p = ts.ucmd().args(&args).run_no_wait();
+
+        sleep(Duration::from_millis(delay));
+        at.touch(missing);
+        sleep(Duration::from_millis(delay));
+        at.truncate(missing, "X\n");
+        sleep(Duration::from_millis(2 * delay));
+
+        p.kill().unwrap();
+
+        let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
+        assert_eq!(buf_stdout, expected_stdout);
+        assert_eq!(buf_stderr, expected_stderr);
+
+        at.remove(missing);
+        args.pop();
+    }
+}
+
     // gnu/tests/tail-2/descriptor-vs-rename.sh
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
