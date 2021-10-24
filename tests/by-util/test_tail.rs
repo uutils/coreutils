@@ -716,6 +716,57 @@ fn test_retry6() {
     assert_eq!(buf_stderr, expected_stderr);
 }
 
+#[test]
+#[cfg(target_os = "linux")] // FIXME: fix this test for BSD/macOS
+fn test_retry7() {
+    // gnu/tests/tail-2/retry.sh
+    // Ensure that `tail -F` retries when the file is initially untailable.
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let untailable = "untailable";
+
+    let expected_stderr = "tail: error reading 'untailable': Is a directory\n\
+                           tail: untailable: cannot follow end of this type of file\n\
+                           tail: 'untailable' has appeared;  following new file\n\
+                           tail: 'untailable' has become inaccessible: No such file or directory\n\
+                           tail: 'untailable' has been replaced with an untailable file\n\
+                           tail: 'untailable' has appeared;  following new file\n";
+    let expected_stdout = "foo\nbar\n";
+
+    let delay = 1000;
+
+    at.mkdir(untailable);
+    let mut p = ts.ucmd().arg("-F").arg(untailable).run_no_wait();
+    sleep(Duration::from_millis(delay));
+
+    // tail: 'untailable' has become accessible
+    // or (The first is the common case, "has appeared" arises with slow rmdir.)
+    // tail: 'untailable' has appeared;  following new file
+    at.rmdir(untailable);
+    at.truncate(untailable, "foo\n");
+    sleep(Duration::from_millis(delay));
+
+    // tail: 'untailable' has become inaccessible: No such file or directory
+    at.remove(untailable);
+    sleep(Duration::from_millis(delay));
+
+    // tail: 'untailable' has been replaced with an untailable file\n";
+    at.mkdir(untailable);
+    sleep(Duration::from_millis(delay));
+
+    // full circle, back to the beginning
+    at.rmdir(untailable);
+    at.truncate(untailable, "bar\n");
+    sleep(Duration::from_millis(delay));
+
+    p.kill().unwrap();
+
+    let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
+    assert_eq!(buf_stdout, expected_stdout);
+    assert_eq!(buf_stderr, expected_stderr);
+}
+
     // gnu/tests/tail-2/descriptor-vs-rename.sh
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
