@@ -679,6 +679,43 @@ fn test_retry5() {
     }
 }
 
+#[test]
+#[cfg(unix)]
+fn test_retry6() {
+    // gnu/tests/tail-2/retry.sh
+    // Ensure that --follow=descriptor (without --retry) does *not* try
+    // to open a file after an initial fail, even when there are other tailable files.
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let missing = "missing";
+    let existing = "existing";
+    at.touch(existing);
+
+    let expected_stderr = "tail: cannot open 'missing' for reading: No such file or directory\n";
+    let expected_stdout = "==> existing <==\nX\n";
+
+    let mut p = ts
+        .ucmd()
+        .arg("--follow=descriptor")
+        .arg("missing")
+        .arg("existing")
+        .run_no_wait();
+
+    let delay = 1000;
+    sleep(Duration::from_millis(delay));
+    at.truncate(missing, "Y\n");
+    sleep(Duration::from_millis(delay));
+    at.truncate(existing, "X\n");
+    sleep(Duration::from_millis(delay));
+
+    p.kill().unwrap();
+
+    let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
+    assert_eq!(buf_stdout, expected_stdout);
+    assert_eq!(buf_stderr, expected_stderr);
+}
+
     // gnu/tests/tail-2/descriptor-vs-rename.sh
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
