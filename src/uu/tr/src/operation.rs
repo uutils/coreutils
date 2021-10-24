@@ -76,7 +76,7 @@ impl Sequence {
     pub fn flatten(&self) -> Box<dyn Iterator<Item = char>> {
         match self {
             Sequence::Char(c) => Box::new(std::iter::once(*c)),
-            Sequence::CharRange(l, r) => Box::new((*l..=*r).flat_map(char::from_u32)),
+            Sequence::CharRange(l, r) => Box::new((*l..=*r).flat_map(std::char::from_u32)),
             Sequence::CharStar(c) => Box::new(std::iter::repeat(*c)),
             Sequence::CharRepeat(c, n) => Box::new(std::iter::repeat(*c).take(*n)),
             Sequence::Alnum => Box::new(('0'..='9').chain('A'..='Z').chain('a'..='z')),
@@ -85,7 +85,7 @@ impl Sequence {
             Sequence::Control => Box::new(
                 (0..=31)
                     .chain(std::iter::once(127))
-                    .flat_map(char::from_u32),
+                    .flat_map(std::char::from_u32),
             ),
             Sequence::Digit => Box::new('0'..='9'),
             Sequence::Graph => Box::new(
@@ -98,7 +98,7 @@ impl Sequence {
                     .chain(91..=96)
                     .chain(123..=126)
                     .chain(std::iter::once(32)) // space
-                    .flat_map(char::from_u32),
+                    .flat_map(std::char::from_u32),
             ),
             Sequence::Lower => Box::new('a'..='z'),
             Sequence::Print => Box::new(
@@ -110,14 +110,14 @@ impl Sequence {
                     .chain(58..=64)
                     .chain(91..=96)
                     .chain(123..=126)
-                    .flat_map(char::from_u32),
+                    .flat_map(std::char::from_u32),
             ),
             Sequence::Punct => Box::new(
                 (33..=47)
                     .chain(58..=64)
                     .chain(91..=96)
                     .chain(123..=126)
-                    .flat_map(char::from_u32),
+                    .flat_map(std::char::from_u32),
             ),
             Sequence::Space => Box::new(unicode_table::SPACES.iter().cloned()),
             Sequence::Upper => Box::new('A'..='Z'),
@@ -410,7 +410,11 @@ impl DeleteOperation {
 impl SymbolTranslator for DeleteOperation {
     fn translate(&mut self, current: char) -> Option<char> {
         let found = self.set.iter().any(|sequence| sequence.eq(&current));
-        (self.complement_flag == found).then(|| current)
+        if self.complement_flag == found {
+            Some(current)
+        } else {
+            None
+        }
     }
 }
 
@@ -466,7 +470,7 @@ pub enum TranslateOperation {
 impl TranslateOperation {
     fn next_complement_char(iter: u32, ignore_list: &[char]) -> (u32, char) {
         (iter..)
-            .filter_map(char::from_u32)
+            .filter_map(std::char::from_u32)
             .filter(|c| !ignore_list.iter().any(|s| s.eq(c)))
             .map(|c| (u32::from(c) + 1, c))
             .next()
@@ -498,7 +502,7 @@ impl SymbolTranslator for TranslateOperation {
             TranslateOperation::Standard(TranslateOperationStandard { translation_map }) => Some(
                 translation_map
                     .iter()
-                    .find_map(|(l, r)| l.eq(&current).then(|| *r))
+                    .find_map(|(l, r)| if l.eq(&current) { Some(*r) } else { None })
                     .unwrap_or(current),
             ),
             TranslateOperation::Complement(TranslateOperationComplement {
