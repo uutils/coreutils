@@ -7,9 +7,6 @@
 
 // spell-checker:ignore (ToDO) gethostid
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, App};
 use libc::c_long;
 use uucore::error::UResult;

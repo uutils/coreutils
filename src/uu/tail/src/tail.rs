@@ -46,6 +46,15 @@ use crate::platform::stdin_is_pipe_or_fifo;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 
+const ABOUT: &str = "\
+                     Print the last 10 lines of each FILE to standard output.\n\
+                     With more than one FILE, precede each with a header giving the file name.\n\
+                     With no FILE, or when FILE is -, read standard input.\n\
+                     \n\
+                     Mandatory arguments to long flags are mandatory for short flags too.\
+                     ";
+const USAGE: &str = "tail [FLAG]... [FILE]...";
+
 pub mod text {
     pub static STDIN_STR: &str = "standard input";
     pub static NO_FILES_REMAINING: &str = "no files remaining";
@@ -370,8 +379,8 @@ pub fn uu_app() -> App<'static, 'static> {
 
     App::new(uucore::util_name())
         .version(crate_version!())
-        .about("output the last part of files")
-        // TODO: add usage
+        .about(ABOUT)
+        .usage(USAGE)
         .arg(
             Arg::with_name(options::BYTES)
                 .short("c")

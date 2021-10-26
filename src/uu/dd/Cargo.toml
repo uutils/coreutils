@@ -1,6 +1,6 @@
 [package]
 name = "uu_dd"
-version = "0.0.7"
+version = "0.0.8"
 authors = ["uutils developers"]
 license = "MIT"
 description = "dd ~ (uutils) copy and convert files"

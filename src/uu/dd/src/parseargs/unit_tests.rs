@@ -35,12 +35,11 @@ fn unimplemented_flags_should_error_non_linux() {
         }
     }
 
-    if !succeeded.is_empty() {
-        panic!(
-            "The following flags did not panic as expected: {:?}",
-            succeeded
-        );
-    }
+    assert!(
+        succeeded.is_empty(),
+        "The following flags did not panic as expected: {:?}",
+        succeeded
+    );
 }
 
 #[test]
@@ -64,12 +63,11 @@ fn unimplemented_flags_should_error() {
         }
     }
 
-    if !succeeded.is_empty() {
-        panic!(
-            "The following flags did not panic as expected: {:?}",
-            succeeded
-        );
-    }
+    assert!(
+        succeeded.is_empty(),
+        "The following flags did not panic as expected: {:?}",
+        succeeded
+    );
 }
 
 #[test]

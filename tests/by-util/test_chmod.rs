@@ -4,7 +4,7 @@ use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::sync::Mutex;
 
 extern crate libc;
-use self::chmod::strip_minus_from_mode;
+use uucore::mode::strip_minus_from_mode;
 extern crate chmod;
 use self::libc::umask;
 

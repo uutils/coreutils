@@ -76,6 +76,8 @@ fn open(name: &str) -> Result<Box<dyn Read>> {
                     "Is a directory",
                 ));
             };
+            // Silent the warning as we want to the error message
+            #[allow(clippy::question_mark)]
             if path.metadata().is_err() {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::NotFound,
