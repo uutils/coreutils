@@ -9,6 +9,12 @@
 
 // spell-checker:ignore (ToDO) seekable seek'd tail'ing ringbuffer ringbuf unwatch
 // spell-checker:ignore (libs) kqueue
+// spell-checker:ignore (acronyms)
+// spell-checker:ignore (env/flags)
+// spell-checker:ignore (jargon)
+// spell-checker:ignore (names)
+// spell-checker:ignore (shell/tools)
+// spell-checker:ignore (misc)
 
 #[macro_use]
 extern crate clap;
@@ -29,7 +35,7 @@ use std::fs::{File, Metadata};
 use std::io::{stdin, stdout, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::io::{Error, ErrorKind};
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::channel;
+use std::sync::mpsc::{self, channel};
 use std::time::Duration;
 use uucore::display::Quotable;
 use uucore::parse_size::{parse_size, ParseSizeError};
@@ -41,14 +47,15 @@ use crate::platform::stdin_is_pipe_or_fifo;
 use std::os::unix::fs::MetadataExt;
 
 pub mod text {
+    pub static STDIN_STR: &str = "standard input";
     pub static NO_FILES_REMAINING: &str = "no files remaining";
     pub static NO_SUCH_FILE: &str = "No such file or directory";
     #[cfg(target_os = "linux")]
-    pub static BACKEND: &str = "Disable 'inotify' support and use polling instead";
+    pub static BACKEND: &str = "inotify";
     #[cfg(all(unix, not(target_os = "linux")))]
-    pub static BACKEND: &str = "Disable 'kqueue' support and use polling instead";
+    pub static BACKEND: &str = "kqueue";
     #[cfg(target_os = "windows")]
-    pub static BACKEND: &str = "Disable 'ReadDirectoryChanges' support and use polling instead";
+    pub static BACKEND: &str = "ReadDirectoryChanges";
 }
 
 pub mod options {
@@ -64,10 +71,13 @@ pub mod options {
     pub static ZERO_TERM: &str = "zero-terminated";
     pub static DISABLE_INOTIFY_TERM: &str = "disable-inotify";
     pub static USE_POLLING: &str = "use-polling";
+    pub static RETRY: &str = "retry";
+    pub static FOLLOW_RETRY: &str = "F";
     pub static MAX_UNCHANGED_STATS: &str = "max-unchanged-stats";
     pub static ARG_FILES: &str = "files";
 }
 
+#[derive(Debug)]
 enum FilterMode {
     Bytes(usize),
     Lines(usize, u8), // (number of lines, delimiter)
@@ -79,14 +89,16 @@ enum FollowMode {
     Name,
 }
 
+#[derive(Debug)]
 struct Settings {
     mode: FilterMode,
     sleep_sec: Duration,
-    max_unchanged_stats: usize,
+    max_unchanged_stats: u32,
     beginning: bool,
     follow: Option<FollowMode>,
     use_polling: bool,
     verbose: bool,
+    retry: bool,
     pid: platform::Pid,
 }
 
@@ -100,6 +112,7 @@ impl Default for Settings {
             follow: None,
             use_polling: false,
             verbose: false,
+            retry: false,
             pid: 0,
         }
     }
@@ -113,7 +126,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let mut settings: Settings = Default::default();
     let mut return_code = 0;
 
-    settings.follow = if matches.occurrences_of(options::FOLLOW) == 0 {
+    settings.follow = if matches.is_present(options::FOLLOW_RETRY) {
+        Some(FollowMode::Name)
+    } else if matches.occurrences_of(options::FOLLOW) == 0 {
         None
     } else if matches.value_of(options::FOLLOW) == Some("name") {
         Some(FollowMode::Name)
@@ -129,7 +144,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     if let Some(s) = matches.value_of(options::MAX_UNCHANGED_STATS) {
-        settings.max_unchanged_stats = match s.parse::<usize>() {
+        settings.max_unchanged_stats = match s.parse::<u32>() {
             Ok(s) => s,
             Err(_) => crash!(
                 1,
@@ -172,6 +187,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     settings.beginning = mode_and_beginning.1;
 
     settings.use_polling = matches.is_present(options::USE_POLLING);
+    settings.retry =
+        matches.is_present(options::RETRY) || matches.is_present(options::FOLLOW_RETRY);
+
+    if settings.retry && settings.follow.is_none() {
+        show_warning!("--retry ignored; --retry is useful only when following");
+    }
 
     if matches.is_present(options::ZERO_TERM) {
         if let FilterMode::Lines(count, _) = settings.mode {
@@ -184,56 +205,65 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .map(|v| v.map(PathBuf::from).collect())
         .unwrap_or_else(|| vec![PathBuf::from("-")]);
 
+    // Filter out paths depending on `FollowMode`.
     paths.retain(|path| {
-        if path.to_str() != Some("-") {
-            if path.is_dir() {
+        if !path.is_stdin() {
+            if !path.is_file() {
                 return_code = 1;
-                show_error!("error reading {}: Is a directory", path.quote());
-                show_error!(
-                    "{}: cannot follow end of this type of file; giving up on this name",
-                    path.display()
-                );
-                // TODO: add test for this
+                if settings.follow == Some(FollowMode::Descriptor) && settings.retry {
+                    show_warning!("--retry only effective for the initial open");
+                }
+                if path.is_dir() {
+                    show_error!("error reading {}: Is a directory", path.quote());
+                    if settings.follow.is_some() {
+                        let msg = if !settings.retry {
+                            "; giving up on this name"
+                        } else {
+                            ""
+                        };
+                        show_error!(
+                            "{}: cannot follow end of this type of file{}",
+                            path.display(),
+                            msg
+                        );
+                    }
+                } else {
+                    show_error!(
+                        "cannot open {} for reading: {}",
+                        path.quote(),
+                        text::NO_SUCH_FILE
+                    );
+                }
             }
-            if !path.exists() {
-                return_code = 1;
-                show_error!(
-                    "cannot open {} for reading: {}",
-                    path.quote(),
-                    text::NO_SUCH_FILE
-                );
-            }
+        } else if settings.follow == Some(FollowMode::Name) {
+            // Mimic GNU's tail; Exit immediately even though there might be other valid files.
+            crash!(1, "cannot follow '-' by name");
         }
-        path.is_file() || path.to_str() == Some("-")
+        if settings.follow == Some(FollowMode::Name) && settings.retry {
+            true
+        } else {
+            !path.is_dir() || path.is_stdin()
+        }
     });
 
-    // TODO: add test for this
     settings.verbose = (matches.is_present(options::verbosity::VERBOSE) || paths.len() > 1)
         && !matches.is_present(options::verbosity::QUIET);
 
-    for path in &paths {
-        if path.to_str() == Some("-") && settings.follow == Some(FollowMode::Name) {
-            // Mimic GNU; Exit immediately even though there might be other valid files.
-            // TODO: add test for this
-            crash!(1, "cannot follow '-' by name");
-        }
-    }
     let mut first_header = true;
     let mut files = FileHandling {
         map: HashMap::with_capacity(paths.len()),
-        last: PathBuf::new(),
+        last: None,
     };
 
-    // Iterate `paths` and do an initial tail print of each path's content.
+    // Do an initial tail print of each path's content.
     // Add `path` to `files` map if `--follow` is selected.
     for path in &paths {
-        if path.to_str() == Some("-") {
-            let stdin_str = "standard input";
+        if path.is_stdin() {
             if settings.verbose {
                 if !first_header {
                     println!();
                 }
-                println!("==> {} <==", stdin_str);
+                Path::new(text::STDIN_STR).print_header();
             }
             let mut reader = BufReader::new(stdin());
             unbounded_tail(&mut reader, &settings);
@@ -257,22 +287,23 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 */
 
                 if settings.follow == Some(FollowMode::Descriptor) && !stdin_is_pipe_or_fifo() {
+                    // Insert `stdin` into `files.map`.
                     files.map.insert(
-                        PathBuf::from(stdin_str),
+                        PathBuf::from(text::STDIN_STR),
                         PathData {
-                            reader: Box::new(reader),
+                            reader: Some(Box::new(reader)),
                             metadata: None,
-                            display_name: PathBuf::from(stdin_str),
+                            display_name: PathBuf::from(text::STDIN_STR),
                         },
                     );
                 }
             }
-        } else {
+        } else if path.is_file() {
             if settings.verbose {
                 if !first_header {
                     println!();
                 }
-                println!("==> {} <==", path.display());
+                path.print_header();
             }
             first_header = false;
             let mut file = File::open(&path).unwrap();
@@ -287,25 +318,40 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 unbounded_tail(&mut reader, &settings);
             }
             if settings.follow.is_some() {
+                // Insert existing/file `path` into `files.map`.
                 files.map.insert(
                     path.canonicalize().unwrap(),
                     PathData {
-                        reader: Box::new(reader),
+                        reader: Some(Box::new(reader)),
                         metadata: md,
                         display_name: path.to_owned(),
                     },
                 );
+                files.last = Some(path.canonicalize().unwrap());
             }
+        } else if settings.retry && settings.follow.is_some() {
+            // Insert non-is_file() paths into `files.map`.
+            let key = if path.is_relative() {
+                std::env::current_dir().unwrap().join(path)
+            } else {
+                path.to_path_buf()
+            };
+            files.map.insert(
+                key.to_path_buf(),
+                PathData {
+                    reader: None,
+                    metadata: None,
+                    display_name: path.to_path_buf(),
+                },
+            );
+            files.last = Some(key);
         }
     }
 
     if settings.follow.is_some() {
-        if paths.is_empty() {
-            show_warning!("{}", text::NO_FILES_REMAINING);
-        // TODO: add test for this
-        } else if !files.map.is_empty() {
-            // TODO: add test for this
-            files.last = paths.last().unwrap().canonicalize().unwrap();
+        if files.map.is_empty() || !files.files_remaining() && !settings.retry {
+            show_error!("{}", text::NO_FILES_REMAINING);
+        } else {
             follow(&mut files, &settings);
         }
     }
@@ -314,6 +360,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
+    #[cfg(target_os = "linux")]
+    pub static POLLING_HELP: &str = "Disable 'inotify' support and use polling instead";
+    #[cfg(all(unix, not(target_os = "linux")))]
+    pub static POLLING_HELP: &str = "Disable 'kqueue' support and use polling instead";
+    #[cfg(target_os = "windows")]
+    pub static POLLING_HELP: &str =
+        "Disable 'ReadDirectoryChanges' support and use polling instead";
+
     App::new(uucore::util_name())
         .version(crate_version!())
         .about("output the last part of files")
@@ -374,10 +428,10 @@ pub fn uu_app() -> App<'static, 'static> {
                 .takes_value(true)
                 .long(options::MAX_UNCHANGED_STATS)
                 .help(
-                    "Reopen a FILE which has not changed size after N (default 5) iterations to \
-                    see if it has been unlinked or renamed (this is the usual case of rotated log \
-                        files); This option is meaningful only when polling \
-                    (i.e., with --disable-inotify) and when --follow=name.",
+                    "Reopen a FILE which has not changed size after N (default 5) iterations \
+                    to see if it has been unlinked or renamed (this is the usual case of rotated \
+                    log files); This option is meaningful only when polling \
+                    (i.e., with --use-polling) and when --follow=name",
                 ),
         )
         .arg(
@@ -396,8 +450,20 @@ pub fn uu_app() -> App<'static, 'static> {
         .arg(
             Arg::with_name(options::USE_POLLING)
                 .visible_alias(options::DISABLE_INOTIFY_TERM)
+                .alias("dis") // Used by GNU's test suite
                 .long(options::USE_POLLING)
-                .help(text::BACKEND),
+                .help(POLLING_HELP),
+        )
+        .arg(
+            Arg::with_name(options::RETRY)
+                .long(options::RETRY)
+                .help("Keep trying to open a file if it is inaccessible"),
+        )
+        .arg(
+            Arg::with_name(options::FOLLOW_RETRY)
+                .short(options::FOLLOW_RETRY)
+                .help("Same as --follow=name --retry")
+                .overrides_with_all(&[options::RETRY, options::FOLLOW]),
         )
         .arg(
             Arg::with_name(options::ARG_FILES)
@@ -449,34 +515,95 @@ fn follow(files: &mut FileHandling, settings: &Settings) {
         // https://github.com/notify-rs/notify/pull/364
     };
 
+    // Iterate user provided `paths`.
+    // Add existing files to `Watcher` (InotifyWatcher).
+    // If `path` is not an existing file, add its parent to `Watcher`.
+    // If there is no parent, add `path` to `orphans`.
+    let mut orphans = Vec::with_capacity(files.map.len());
     for path in files.map.keys() {
-        let path = get_path(path, settings);
-        watcher.watch(&path, RecursiveMode::NonRecursive).unwrap();
+        if path.is_file() {
+            let path = get_path(path, settings);
+            watcher
+                .watch(&path.canonicalize().unwrap(), RecursiveMode::NonRecursive)
+                .unwrap();
+        } else if settings.follow.is_some() && settings.retry {
+            if path.is_orphan() {
+                orphans.push(path.to_path_buf());
+            } else {
+                let parent = path.parent().unwrap();
+                watcher
+                    .watch(&parent.canonicalize().unwrap(), RecursiveMode::NonRecursive)
+                    .unwrap();
+            }
+        } else {
+            unreachable!()
+        }
     }
 
-    let mut read_some;
+    let mut _event_counter = 0;
+    let mut _timeout_counter = 0;
+
     loop {
-        read_some = false;
-        match rx.recv() {
+        let mut read_some = false;
+
+        // For `-F` we need to poll if an orphan path becomes available during runtime.
+        // If a path becomes an orphan during runtime, it will be added to orphans.
+        // To be able to differentiate between the cases of test_retry8 and test_retry9,
+        // here paths will not be removed from orphans if the path becomes available.
+        if settings.retry && settings.follow == Some(FollowMode::Name) {
+            for new_path in orphans.iter() {
+                if new_path.exists() {
+                    let display_name = files.map.get(new_path).unwrap().display_name.to_path_buf();
+                    if new_path.is_file() && files.map.get(new_path).unwrap().metadata.is_none() {
+                        show_error!("{} has appeared;  following new file", display_name.quote());
+                        if let Ok(new_path_canonical) = new_path.canonicalize() {
+                            files.update_metadata(&new_path_canonical, None);
+                            files.reopen_file(&new_path_canonical).unwrap();
+                            read_some = files.print_file(&new_path_canonical, settings);
+                            let new_path = get_path(&new_path_canonical, settings);
+                            watcher
+                                .watch(&new_path, RecursiveMode::NonRecursive)
+                                .unwrap();
+                        } else {
+                            unreachable!()
+                        }
+                    } else if new_path.is_dir() {
+                        // TODO: does is_dir() need handling?
+                        todo!();
+                    }
+                }
+            }
+        }
+
+        let rx_result = rx.recv_timeout(settings.sleep_sec);
+        if rx_result.is_ok() {
+            _event_counter += 1;
+            _timeout_counter = 0;
+        }
+        match rx_result {
             Ok(Ok(event)) => {
+                // eprintln!("=={:=>3}===========================", _event_counter);
                 // dbg!(&event);
-                handle_event(event, files, settings, &mut watcher);
+                // dbg!(files.map.keys());
+                // eprintln!("=={:=>3}===========================", _event_counter);
+                handle_event(event, files, settings, &mut watcher, &mut orphans);
             }
             Ok(Err(notify::Error {
                 kind: notify::ErrorKind::Io(ref e),
                 paths,
             })) if e.kind() == std::io::ErrorKind::NotFound => {
                 // dbg!(e, &paths);
-                // Handle a previously existing `Path` that was removed while watching it:
+                // TODO: is this still needed ?
                 if let Some(event_path) = paths.first() {
                     if files.map.contains_key(event_path) {
-                        watcher.unwatch(event_path).unwrap();
+                        // TODO: handle this case for --follow=name --retry
+                        let _ = watcher.unwatch(event_path);
                         show_error!(
                             "{}: {}",
                             files.map.get(event_path).unwrap().display_name.display(),
                             text::NO_SUCH_FILE
                         );
-                        if !files.files_remaining() {
+                        if !files.files_remaining() && !settings.retry {
                             // TODO: add test for this
                             crash!(1, "{}", text::NO_FILES_REMAINING);
                         }
@@ -486,9 +613,12 @@ fn follow(files: &mut FileHandling, settings: &Settings) {
             Ok(Err(notify::Error {
                 kind: notify::ErrorKind::MaxFilesWatch,
                 ..
-            })) => todo!(), // TODO: handle limit of total inotify numbers reached
+            })) => crash!(1, "inotify resources exhausted"),
             Ok(Err(e)) => crash!(1, "{:?}", e),
-            Err(e) => crash!(1, "{:?}", e),
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                _timeout_counter += 1;
+            }
+            Err(e) => crash!(1, "RecvError: {:?}", e),
         }
 
         for path in files.map.keys().cloned().collect::<Vec<_>>() {
@@ -500,9 +630,19 @@ fn follow(files: &mut FileHandling, settings: &Settings) {
             break;
         }
 
-        // TODO: [2021-09; jhscheer] Implement `--max-unchanged-stats`, however the current
-        // implementation uses the `PollWatcher` from the notify crate if `--disable-inotify` is
-        // selected. This means we cannot do any thing useful with `--max-unchanged-stats` here.
+        if _timeout_counter == settings.max_unchanged_stats {
+            // TODO: [2021-10; jhscheer] implement timeout_counter for each file.
+            // ‘--max-unchanged-stats=n’
+            // When tailing a file by name, if there have been n (default n=5) consecutive iterations
+            // for which the file has not changed, then open/fstat the file to determine if that file
+            // name is still associated with the same device/inode-number pair as before. When
+            // following a log file that is rotated, this is approximately the number of seconds
+            // between when tail prints the last pre-rotation lines and when it prints the lines that
+            // have accumulated in the new log file. This option is meaningful only when polling
+            // (i.e., without inotify) and when following by name.
+            // TODO: [2021-10; jhscheer] `--sleep-interval=N`: implement: if `--pid=p`,
+            // tail checks whether process p is alive at least every N seconds
+        }
     }
 }
 
@@ -511,8 +651,8 @@ fn handle_event(
     files: &mut FileHandling,
     settings: &Settings,
     watcher: &mut Box<dyn Watcher>,
-) -> bool {
-    let mut read_some = false;
+    orphans: &mut Vec<PathBuf>,
+) {
     use notify::event::*;
 
     if let Some(event_path) = event.paths.first() {
@@ -527,92 +667,156 @@ fn handle_event(
                 // notify::EventKind::Any => {}
                 EventKind::Access(AccessKind::Close(AccessMode::Write))
                 | EventKind::Modify(ModifyKind::Metadata(MetadataKind::Any))
+                | EventKind::Modify(ModifyKind::Metadata(MetadataKind::WriteTime))
                 | EventKind::Modify(ModifyKind::Data(DataChange::Any)) => {
-                    // This triggers for e.g.:
-                    // head log.dat > log.dat
                     if let Ok(new_md) = event_path.metadata() {
                         if let Some(old_md) = &files.map.get(event_path).unwrap().metadata {
-                            if new_md.len() < old_md.len() {
+                            if new_md.len() <= old_md.len()
+                                && new_md.modified().unwrap() != old_md.modified().unwrap()
+                            {
                                 show_error!("{}: file truncated", display_name.display());
-                                // Update Metadata, open file again and print from beginning.
-                                files.update_metadata(event_path, Some(new_md)).unwrap();
-                                // TODO is reopening really necessary?
+                                files.update_metadata(event_path, None);
                                 files.reopen_file(event_path).unwrap();
-                                read_some = files.print_file(event_path, settings);
                             }
                         }
                     }
                 }
                 EventKind::Create(CreateKind::File)
+                | EventKind::Create(CreateKind::Folder)
                 | EventKind::Create(CreateKind::Any)
                 | EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
-                    // This triggers for e.g.:
-                    // Create: cp log.bak log.dat
-                    // Rename: mv log.bak log.dat
+                    if event_path.is_file() {
+                        if settings.follow.is_some() {
+                            let msg = if settings.use_polling && !settings.retry {
+                                format!("{} has been replaced", display_name.quote())
+                            } else {
+                                format!("{} has appeared", display_name.quote())
+                            };
+                            show_error!("{};  following new file", msg);
+                        }
 
-                    if settings.follow == Some(FollowMode::Name) {
-                        let msg = if settings.use_polling {
-                            format!("{} has been replaced", display_name.quote())
-                        } else {
-                            format!("{} has appeared", display_name.quote())
-                        };
-                        show_error!("{};  following new file", msg);
+                        // Since Files are automatically closed when they go out of
+                        // scope, we resume tracking from the start of the file,
+                        // assuming it has been truncated to 0. This mimics GNU's `tail`
+                        // behavior and is the usual truncation operation for log files.
+                        files.reopen_file(event_path).unwrap();
+                        if settings.follow == Some(FollowMode::Name) && settings.retry {
+                            // Path has appeared, it's not an orphan any more.
+                            orphans.retain(|path| path != event_path);
+                        }
+                    } else {
+                        // If the path pointed to a file and now points to something else:
+                        let md = &files.map.get(event_path).unwrap().metadata;
+                        if md.is_none() || md.as_ref().unwrap().is_file() {
+                            let msg = "has been replaced with an untailable file";
+                            if settings.follow == Some(FollowMode::Descriptor) {
+                                show_error!(
+                                    "{} {}; giving up on this name",
+                                    display_name.quote(),
+                                    msg
+                                );
+                                let _ = watcher.unwatch(event_path);
+                                files.map.remove(event_path).unwrap();
+                                if files.map.is_empty() {
+                                    crash!(1, "{}", text::NO_FILES_REMAINING);
+                                }
+                            } else if settings.follow == Some(FollowMode::Name) {
+                                files.update_metadata(event_path, None);
+                                show_error!("{} {}", display_name.quote(), msg);
+                            }
+                        }
                     }
-                    // Since Files are automatically closed when they go out of
-                    // scope, we resume tracking from the start of the file,
-                    // assuming it has been truncated to 0. This mimics GNU's `tail`
-                    // behavior and is the usual truncation operation for log files.
-
-                    // Open file again and then print it from the beginning.
-                    files.reopen_file(event_path).unwrap();
-                    read_some = files.print_file(event_path, settings);
                 }
                 // EventKind::Modify(ModifyKind::Metadata(_)) => {}
+                // | EventKind::Remove(RemoveKind::Folder)
                 EventKind::Remove(RemoveKind::File) | EventKind::Remove(RemoveKind::Any) => {
-                    // This triggers for e.g.: rm log.dat
                     if settings.follow == Some(FollowMode::Name) {
-                        show_error!("{}: {}", display_name.display(), text::NO_SUCH_FILE);
-                        // TODO: change behavior if --retry
-                        if !files.files_remaining() {
-                            crash!(1, "{}", text::NO_FILES_REMAINING);
+                        if settings.retry {
+                            show_error!(
+                                "{} has become inaccessible: {}",
+                                display_name.quote(),
+                                text::NO_SUCH_FILE
+                            );
+                            if event_path.is_orphan() {
+                                if !orphans.contains(event_path) {
+                                    show_error!("directory containing watched file was removed");
+                                    show_error!(
+                                        "{} cannot be used, reverting to polling",
+                                        text::BACKEND
+                                    );
+                                    orphans.push(event_path.to_path_buf());
+                                }
+                                let _ = watcher.unwatch(event_path);
+                            }
+                            // Update `files.map` to indicate that `event_path`
+                            // is not an existing file anymore.
+                            files.map.insert(
+                                event_path.to_path_buf(),
+                                PathData {
+                                    reader: None,
+                                    metadata: None,
+                                    display_name,
+                                },
+                            );
+                        } else {
+                            show_error!("{}: {}", display_name.display(), text::NO_SUCH_FILE);
+                            if !files.files_remaining() {
+                                crash!(1, "{}", text::NO_FILES_REMAINING);
+                            }
                         }
+                    } else if settings.follow == Some(FollowMode::Descriptor) && settings.retry {
+                        // --retry only effective for the initial open
+                        let _ = watcher.unwatch(event_path);
+                        files.map.remove(event_path).unwrap();
                     }
                 }
                 EventKind::Modify(ModifyKind::Name(RenameMode::Any))
                 | EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
-                    // This triggers for e.g.: mv log.dat log.bak
-                    // The behavior here differs from `rm log.dat`
-                    // because this doesn't close if no files remaining.
                     if settings.follow == Some(FollowMode::Name) {
                         show_error!("{}: {}", display_name.display(), text::NO_SUCH_FILE);
                     }
                 }
                 EventKind::Modify(ModifyKind::Name(RenameMode::Both)) => {
+                    // NOTE: For `tail -f a`, keep tracking additions to b after `mv a b`
+                    // (gnu/tests/tail-2/descriptor-vs-rename.sh)
+                    // NOTE: The File/BufReader doesn't need to be updated.
+                    // However, we need to update our `files.map`.
+                    // This can only be done for inotify, because this EventKind does not
+                    // trigger for the PollWatcher.
+                    // BUG: As a result, there's a bug if polling is used:
+                    // $ tail -f file_a ---disable-inotify
+                    // $ mv file_a file_b
+                    // $ echo A >> file_a
+                    // The last append to file_a is printed, however this shouldn't be because
+                    // after the "mv" tail should only follow "file_b".
+
                     if settings.follow == Some(FollowMode::Descriptor) {
-                        if let Some(new_path) = event.paths.last() {
-                            // Open new file and seek to End:
-                            let mut file = File::open(&new_path).unwrap();
-                            let _ = file.seek(SeekFrom::End(0));
-                            // Add new reader and remove old reader:
-                            files.map.insert(
-                                new_path.to_path_buf(),
-                                PathData {
-                                    metadata: file.metadata().ok(),
-                                    reader: Box::new(BufReader::new(file)),
-                                    display_name, // mimic GNU's tail and show old name in header
-                                },
-                            );
-                            files.map.remove(event_path).unwrap();
-                            if files.last == *event_path {
-                                files.last = new_path.to_path_buf();
-                            }
-                            // Watch new path and unwatch old path:
-                            let new_path = get_path(new_path, settings);
-                            watcher
-                                .watch(&new_path, RecursiveMode::NonRecursive)
-                                .unwrap();
-                            let _ = watcher.unwatch(event_path);
+                        let new_path = event.paths.last().unwrap().canonicalize().unwrap();
+                        // Open new file and seek to End:
+                        let mut file = File::open(&new_path).unwrap();
+                        let _ = file.seek(SeekFrom::End(0));
+                        // Add new reader and remove old reader:
+                        files.map.insert(
+                            new_path.to_owned(),
+                            PathData {
+                                metadata: file.metadata().ok(),
+                                reader: Some(Box::new(BufReader::new(file))),
+                                display_name, // mimic GNU's tail and show old name in header
+                            },
+                        );
+                        files.map.remove(event_path).unwrap();
+                        if files.last.as_ref().unwrap() == event_path {
+                            files.last = Some(new_path.to_owned());
                         }
+                        // Unwatch old path and watch new path:
+                        let _ = watcher.unwatch(event_path);
+                        let new_path = get_path(&new_path, settings);
+                        watcher
+                            .watch(
+                                &new_path.canonicalize().unwrap(),
+                                RecursiveMode::NonRecursive,
+                            )
+                            .unwrap();
                     }
                 }
                 // notify::EventKind::Other => {}
@@ -620,7 +824,6 @@ fn handle_event(
             }
         }
     }
-    read_some
 }
 
 fn get_path(path: &Path, settings: &Settings) -> PathBuf {
@@ -631,8 +834,10 @@ fn get_path(path: &Path, settings: &Settings) -> PathBuf {
         // > On some platforms, if the `path` is renamed or removed while being watched, behavior may
         // > be unexpected. See discussions in [#165] and [#166]. If less surprising behavior is wanted
         // > one may non-recursively watch the _parent_ directory as well and manage related events.
-        // TODO: make this into a function
-        let parent = path.parent().unwrap(); // This should never be `None` if `path.is_file()`
+        let parent = path
+            .parent()
+            .unwrap_or_else(|| crash!(1, "cannot watch parent directory of {}", path.display()));
+        // TODO: add test for this - "cannot watch parent directory"
         if parent.is_dir() {
             parent.to_path_buf()
         } else {
@@ -643,21 +848,28 @@ fn get_path(path: &Path, settings: &Settings) -> PathBuf {
     }
 }
 
+/// Data structure to keep a handle on the BufReader, Metadata
+/// and the display_name (header_name) of files that are being followed.
 struct PathData {
-    reader: Box<dyn BufRead>,
+    reader: Option<Box<dyn BufRead>>,
     metadata: Option<Metadata>,
-    display_name: PathBuf,
+    display_name: PathBuf, // the path the user provided, used for headers
 }
 
+/// Data structure to keep a handle on files to follow.
+/// `last` always holds the path/key of the last file that was printed from.
+/// The keys of the HashMap can point to an existing file path (normal case),
+/// or stdin ("-"), or to a non existing path (--retry).
+/// With the exception of stdin, all keys in the HashMap are absolute Paths.
 struct FileHandling {
     map: HashMap<PathBuf, PathData>,
-    last: PathBuf,
+    last: Option<PathBuf>,
 }
 
 impl FileHandling {
     fn files_remaining(&self) -> bool {
         for path in self.map.keys() {
-            if path.exists() {
+            if path.is_file() {
                 return true;
             }
         }
@@ -665,9 +877,10 @@ impl FileHandling {
     }
 
     fn reopen_file(&mut self, path: &Path) -> Result<(), Error> {
+        assert!(self.map.contains_key(path));
         if let Some(pd) = self.map.get_mut(path) {
             let new_reader = BufReader::new(File::open(&path)?);
-            pd.reader = Box::new(new_reader);
+            pd.reader = Some(Box::new(new_reader));
             return Ok(());
         }
         Err(Error::new(
@@ -676,34 +889,41 @@ impl FileHandling {
         ))
     }
 
-    fn update_metadata(&mut self, path: &Path, md: Option<Metadata>) -> Result<(), Error> {
+    fn update_metadata(&mut self, path: &Path, md: Option<Metadata>) {
+        assert!(self.map.contains_key(path));
         if let Some(pd) = self.map.get_mut(path) {
-            pd.metadata = md;
-            return Ok(());
+            if let Some(md) = md {
+                pd.metadata = Some(md);
+            } else {
+                pd.metadata = path.metadata().ok();
+            }
         }
-        Err(Error::new(
-            ErrorKind::Other,
-            "Entry should have been there, but wasn't!",
-        ))
     }
 
     // This prints from the current seek position forward.
     fn print_file(&mut self, path: &Path, settings: &Settings) -> bool {
+        assert!(self.map.contains_key(path));
+        let mut last_display_name = self
+            .map
+            .get(self.last.as_ref().unwrap())
+            .unwrap()
+            .display_name
+            .to_path_buf();
         let mut read_some = false;
-        let mut last_display_name = self.map.get(&self.last).unwrap().display_name.to_path_buf();
-        if let Some(pd) = self.map.get_mut(path) {
+        let pd = self.map.get_mut(path).unwrap();
+        if let Some(reader) = pd.reader.as_mut() {
             loop {
                 let mut datum = String::new();
-                match pd.reader.read_line(&mut datum) {
+                match reader.read_line(&mut datum) {
                     Ok(0) => break,
                     Ok(_) => {
                         read_some = true;
                         if last_display_name != pd.display_name {
-                            self.last = path.to_path_buf();
+                            self.last = Some(path.to_path_buf());
                             last_display_name = pd.display_name.to_path_buf();
                             if settings.verbose {
-                                // print header
-                                println!("\n==> {} <==", pd.display_name.display());
+                                println!();
+                                pd.display_name.print_header();
                             }
                         }
                         print!("{}", datum);
@@ -711,6 +931,12 @@ impl FileHandling {
                     Err(err) => panic!("{}", err),
                 }
             }
+        } else {
+            return read_some;
+        }
+        if read_some {
+            self.update_metadata(path, None);
+            // TODO: add test for this
         }
         read_some
     }
@@ -867,5 +1093,23 @@ fn get_block_size(md: &Metadata) -> u64 {
     #[cfg(not(unix))]
     {
         md.len()
+    }
+}
+
+trait PathExt {
+    fn is_stdin(&self) -> bool;
+    fn print_header(&self);
+    fn is_orphan(&self) -> bool;
+}
+
+impl PathExt for Path {
+    fn is_stdin(&self) -> bool {
+        self.to_str() == Some("-")
+    }
+    fn print_header(&self) {
+        println!("==> {} <==", self.display());
+    }
+    fn is_orphan(&self) -> bool {
+        !matches!(self.parent(), Some(parent) if parent.is_dir())
     }
 }
