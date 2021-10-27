@@ -171,10 +171,6 @@ impl UError for SortError {
             _ => 2,
         }
     }
-
-    fn usage(&self) -> bool {
-        false
-    }
 }
 
 impl Display for SortError {
@@ -663,18 +659,14 @@ impl<'a> Line<'a> {
                 " ".repeat(UnicodeWidthStr::width(&line[..selection.start]))
             )?;
 
-            // TODO: Once our minimum supported rust version is at least 1.47, use selection.is_empty() instead.
-            #[allow(clippy::len_zero)]
-            {
-                if selection.len() == 0 {
-                    writeln!(writer, "^ no match for key")?;
-                } else {
-                    writeln!(
-                        writer,
-                        "{}",
-                        "_".repeat(UnicodeWidthStr::width(&line[selection]))
-                    )?;
-                }
+            if selection.is_empty() {
+                writeln!(writer, "^ no match for key")?;
+            } else {
+                writeln!(
+                    writer,
+                    "{}",
+                    "_".repeat(UnicodeWidthStr::width(&line[selection]))
+                )?;
             }
         }
         if settings.mode != SortMode::Random

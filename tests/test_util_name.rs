@@ -1,3 +1,4 @@
+#![allow(unused_imports)]
 mod common;
 
 use common::util::TestScenario;
@@ -25,6 +26,7 @@ fn execution_phrase_double() {
 
 #[test]
 #[cfg(feature = "ls")]
+#[cfg(any(unix, windows))]
 fn execution_phrase_single() {
     use std::process::Command;
 
@@ -63,6 +65,7 @@ fn util_name_double() {
 
 #[test]
 #[cfg(feature = "sort")]
+#[cfg(any(unix, windows))]
 fn util_name_single() {
     use std::{
         io::Write,
