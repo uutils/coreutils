@@ -170,6 +170,29 @@ fn test_rm_recursive() {
 }
 
 #[test]
+fn test_rm_recursive_multiple() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_rm_recursive_directory";
+    let file_a = "test_rm_recursive_directory/test_rm_recursive_file_a";
+    let file_b = "test_rm_recursive_directory/test_rm_recursive_file_b";
+
+    at.mkdir(dir);
+    at.touch(file_a);
+    at.touch(file_b);
+
+    ucmd.arg("-r")
+        .arg("-r")
+        .arg("-r")
+        .arg(dir)
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.dir_exists(dir));
+    assert!(!at.file_exists(file_a));
+    assert!(!at.file_exists(file_b));
+}
+
+#[test]
 fn test_rm_directory_without_flag() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_rm_directory_without_flag_dir";
