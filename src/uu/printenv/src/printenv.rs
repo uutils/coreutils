@@ -45,13 +45,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Ok(());
     }
 
+    let mut not_found = false;
     for env_var in variables {
         if let Ok(var) = env::var(env_var) {
             print!("{}{}", var, separator);
+        } else {
+            not_found = true;
         }
     }
 
-    Ok(())
+    if not_found {
+        Err(1.into())
+    } else {
+        Ok(())
+    }
 }
 
 pub fn uu_app() -> App<'static, 'static> {
