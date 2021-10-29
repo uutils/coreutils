@@ -9,6 +9,7 @@
 
 use clap::{crate_version, App, Arg};
 use std::env;
+use uucore::error::UResult;
 
 static ABOUT: &str = "Display the values of the specified environment VARIABLE(s), or (with no VARIABLE) display name and value pairs for them all.";
 
@@ -20,7 +21,8 @@ fn usage() -> String {
     format!("{0} [VARIABLE]... [OPTION]...", uucore::execution_phrase())
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
@@ -40,7 +42,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         for (env_var, value) in env::vars() {
             print!("{}={}{}", env_var, value, separator);
         }
-        return 0;
+        return Ok(());
     }
 
     for env_var in variables {
@@ -48,7 +50,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             print!("{}{}", var, separator);
         }
     }
-    0
+
+    Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {
