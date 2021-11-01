@@ -11,18 +11,20 @@
  *
  * - Implement actual cutting: At files, bytes and chars
  * - Implement file handling
+ * - FIX: In cut_bytes iterator also joins empty matches --> wrong!
  */
 
 #[macro_use]
 extern crate uucore;
 
+// use bstr::io::BufReadExt;
 use clap::{crate_version, App, Arg, ArgMatches};
 use std::error::Error;
 use std::fmt::{Debug, Display};
 use std::fs::File;
-use std::io::{stdout, BufReader, BufWriter, Read, Write};
-use std::path::Path;
-use uucore::display::Quotable;
+use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
+use std::path::{Path, PathBuf};
+// use uucore::display::Quotable;
 
 use uucore::error::{UError, UIoError, UResult};
 use uucore::ranges::Range;
