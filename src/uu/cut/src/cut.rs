@@ -367,58 +367,52 @@ fn cut_bytes(reader: impl Read, ranges: &Vec<Range>, opts: &Behavior) -> UResult
 //     0
 // }
 
-fn cut_files(behav: Behavior) -> UResult<()> {
-    let mut stdin_read = false;
-    let mut exit_code = 0;
-    let mut filenames = behav.files;
-
-    if filenames.is_empty() {
-        filenames.push("-".to_owned());
-    }
-
-    for filename in &filenames {
+fn cut_files(opts: &Behavior) -> UResult<()> {
+    for filename in &opts.files {
         if filename == "-" {
-            if stdin_read {
-                continue;
-            }
-
             // exit_code |= match mode {
             //     Mode::Bytes(ref ranges, ref opts) => cut_bytes(stdin(), ranges, opts),
             //     Mode::Characters(ref ranges, ref opts) => cut_bytes(stdin(), ranges, opts),
             //     Mode::Fields(ref ranges, ref opts) => cut_fields(stdin(), ranges, opts),
             // };
+            show_if_err!(match &opts.mode {
+                Mode::Bytes(range) => cut_bytes(stdin(), range, opts),
+                _ => return Err(CutError::NotImplemented(
+                    String::from("Modes except Bytes")).into()),
+            });
 
-            stdin_read = true;
         } else {
             let path = Path::new(&filename[..]);
 
             if path.is_dir() {
-                show_error!("{}: Is a directory", filename.maybe_quote());
+                show!(CutError::IsDirectory(path.to_path_buf()));
                 continue;
             }
 
             if path.metadata().is_err() {
-                show_error!("{}: No such file or directory", filename.maybe_quote());
+                show!(UIoError::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("{}", path.display())
+                ));
                 continue;
             }
 
             let file = match File::open(&path) {
                 Ok(f) => f,
                 Err(e) => {
-                    show_error!("opening {}: {}", filename.quote(), e);
+                    show!(uio_error!(e, "opening {}", path.display()));
                     continue;
                 }
             };
 
-            // exit_code |= match mode {
-            //     Mode::Bytes(ref ranges, ref opts) => cut_bytes(file, ranges, opts),
-            //     Mode::Characters(ref ranges, ref opts) => cut_bytes(file, ranges, opts),
-            //     Mode::Fields(ref ranges, ref opts) => cut_fields(file, ranges, opts),
-            // };
+            show_if_err!(match &opts.mode {
+                Mode::Bytes(range) => cut_bytes(file, range, opts),
+                _ => return Err(CutError::NotImplemented(
+                    String::from("Modes except Bytes")).into()),
+            });
         }
     }
 
-    uucore::error::set_exit_code(exit_code);
     Ok(())
 }
 
