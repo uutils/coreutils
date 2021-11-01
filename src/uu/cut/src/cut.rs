@@ -459,13 +459,18 @@ fn get_behavior(matches: &ArgMatches) -> UResult<Behavior> {
         _ => return Err(CutError::OnlyOneListAllowed().into()),
     };
 
-    let output_delimiter = Some(" ".to_owned());
+//    let output_delimiter = Some(" ".to_owned());
+    let output_delimiter = matches.value_of(options::OUTPUT_DELIMITER).map(String::from);
 
-    let files: Vec<String> = matches
+    let mut files: Vec<String> = matches
         .values_of(options::FILE)
         .unwrap_or_default()
         .map(str::to_owned)
         .collect();
+
+    // Drop duplicate files
+    files.sort_unstable();
+    files.dedup();
 
     Ok(Behavior {
         // Flags
@@ -499,7 +504,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     //     Mode::Characters(_) => cut_characters(&behavior),
     //     Mode::Fields(_) => cut_fields(&behavior),
     // }
-    return Ok(());
+    // match behavior.mode {
+    //     Mode::Bytes(_) => cut_bytes(stdin(), &behavior)?,
+    //     _ => return Ok(()),
+    // }
+    cut_files(&behavior)
 }
 
 pub fn uu_app() -> App<'static, 'static> {
