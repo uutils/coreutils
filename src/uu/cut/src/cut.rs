@@ -9,9 +9,8 @@
 
 /* TODO
  *
- * - Implement actual cutting: At files, bytes and chars
+ * - Implement actual cutting: At files and chars
  * - Implement file handling
- * - FIX: In cut_bytes iterator also joins empty matches --> wrong!
  */
 
 #[macro_use]
@@ -180,7 +179,7 @@ fn cut_bytes(reader: impl Read, ranges: &Vec<Range>, opts: &Behavior) -> UResult
     let delim = opts
         .output_delimiter
         .as_ref()
-        .map_or("", String::as_str)
+        .unwrap()
         .as_bytes();
 
     let mut buf = vec![];
@@ -194,11 +193,14 @@ fn cut_bytes(reader: impl Read, ranges: &Vec<Range>, opts: &Behavior) -> UResult
             return Ok(());
         }
 
-        if buf.is_empty() { continue };
+        // Input delimiter (newline_char) is by default included in the `buf`
+        // returned by `BufReader::read_until`. The GNU version simply ignores
+        // these, and so do we.
+        buf.pop();
 
         let out_bytes = ranges.iter()
             // Act only on ranges that make sense with this buffers length
-            .filter(|range| { range.low < buf.len() })
+            .filter(|range| { range.low <= buf.len() })
             .map(|&Range { low, high }| {
                 // Make sure we don't act on ranges that are out of bounds
                 let l = (low - 1).min(buf.len());
@@ -208,7 +210,6 @@ fn cut_bytes(reader: impl Read, ranges: &Vec<Range>, opts: &Behavior) -> UResult
             .collect::<Vec<&[u8]>>()
             // Add the output delimiters between the slices
             .join(delim);
-        if out_bytes.is_empty() { continue };
 
         out.write_all(&out_bytes[..]).unwrap();
         out.write_all(&[newline_char]).unwrap();
@@ -459,18 +460,12 @@ fn get_behavior(matches: &ArgMatches) -> UResult<Behavior> {
         _ => return Err(CutError::OnlyOneListAllowed().into()),
     };
 
-//    let output_delimiter = Some(" ".to_owned());
     let output_delimiter = matches.value_of(options::OUTPUT_DELIMITER).map(String::from);
-
     let mut files: Vec<String> = matches
         .values_of(options::FILE)
         .unwrap_or_default()
         .map(str::to_owned)
         .collect();
-
-    // Drop duplicate files
-    files.sort_unstable();
-    files.dedup();
 
     Ok(Behavior {
         // Flags
