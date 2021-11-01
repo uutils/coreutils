@@ -575,7 +575,8 @@ pub fn uu_app() -> App<'static, 'static> {
   the default is to use the input delimiter",
                 )
                 .takes_value(true)
-                .value_name("STRING"),
+                .value_name("STRING")
+                .default_value("")
         )
         .arg(
             Arg::with_name(options::ZERO_TERMINATED)
@@ -584,5 +585,10 @@ pub fn uu_app() -> App<'static, 'static> {
                 .help("line delimiter is NUL, not newline")
                 .takes_value(false),
         )
-        .arg(Arg::with_name(options::FILE).hidden(false).multiple(true))
+        .arg(
+            Arg::with_name(options::FILE)
+                .hidden(false)
+                .multiple(true)
+                .default_value("-")
+        )
 }
