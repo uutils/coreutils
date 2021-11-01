@@ -11,6 +11,7 @@
  *
  * - Implement actual cutting: At files and chars
  * - Implement file handling
+ * - Handle syntax for special chars, like in "-d$'\n'"
  */
 
 #[macro_use]
@@ -25,7 +26,7 @@ use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 // use uucore::display::Quotable;
 
-use uucore::error::{UError, UIoError, UResult};
+use uucore::error::{FromIo, UError, UIoError, UResult};
 use uucore::ranges::Range;
 use uucore::InvalidEncodingHandling;
 
@@ -179,7 +180,8 @@ fn cut_bytes(reader: impl Read, ranges: &Vec<Range>, opts: &Behavior) -> UResult
     let delim = opts
         .output_delimiter
         .as_ref()
-        .unwrap()
+        .map_or("", String::as_str)
+        // .unwrap()
         .as_bytes();
 
     let mut buf = vec![];
@@ -217,6 +219,44 @@ fn cut_bytes(reader: impl Read, ranges: &Vec<Range>, opts: &Behavior) -> UResult
 
     Ok(())
 }
+
+fn cut_fields(reader: impl Read, ranges: &Vec<Range>, 
+    field_delim: &String, opts: &Behavior) -> UResult<()> {
+
+    let newline_char = if opts.zero_terminated { b'\0' } else { b'\n' };
+    let mut buf_in = BufReader::new(reader);
+    let mut out = stdout_writer();
+    let delim = opts.output_delimiter
+        .as_ref()
+        .map_or(&field_delim[..], String::as_str);
+
+    let mut out_buf: Vec<&[u8]> = vec![];
+
+    for line in buf_in.lines() {
+        // For reasons I don't understand pulling this into the next line
+        // throws an error E0716...
+        let line = line.map_err_context(|| format!("cannot read line"))?;
+        let cur_line = line
+            .split(field_delim)
+            .collect::<Vec<&str>>();
+
+        let out_str = ranges.iter()
+            .filter(|range| range.low <= cur_line.len() )
+            .map(|&Range { low, high }| {
+                // Make sure we don't act on ranges that are out of bounds
+                let l = (low - 1).min(cur_line.len());
+                let h = high.min(cur_line.len());
+                &cur_line[l..h]
+            })
+            .collect::<Vec<&[&str]>>()
+            .join(&&delim[..]);
+
+        println!("{}", out_str.concat());
+    }
+
+    Ok(())
+}
+
 
 // #[allow(clippy::cognitive_complexity)]
 // fn cut_fields_delimiter<R: Read>(
@@ -373,16 +413,13 @@ fn cut_bytes(reader: impl Read, ranges: &Vec<Range>, opts: &Behavior) -> UResult
 fn cut_files(opts: &Behavior) -> UResult<()> {
     for filename in &opts.files {
         if filename == "-" {
-            // exit_code |= match mode {
-            //     Mode::Bytes(ref ranges, ref opts) => cut_bytes(stdin(), ranges, opts),
-            //     Mode::Characters(ref ranges, ref opts) => cut_bytes(stdin(), ranges, opts),
-            //     Mode::Fields(ref ranges, ref opts) => cut_fields(stdin(), ranges, opts),
-            // };
-            show_if_err!(match &opts.mode {
-                Mode::Bytes(range) => cut_bytes(stdin(), range, opts),
-                _ => return Err(CutError::NotImplemented(
-                    String::from("Modes except Bytes")).into()),
-            });
+            show_if_err!(
+                match &opts.mode {
+                    Mode::Bytes(range) => cut_bytes(stdin(), range, opts),
+                    Mode::Fields(range, delim) => cut_fields(stdin(), range, delim, opts),
+                    _ => return Err(CutError::NotImplemented(
+                        String::from("Modes except Bytes")).into()),
+                });
 
         } else {
             let path = Path::new(&filename[..]);
@@ -408,11 +445,13 @@ fn cut_files(opts: &Behavior) -> UResult<()> {
                 }
             };
 
-            show_if_err!(match &opts.mode {
-                Mode::Bytes(range) => cut_bytes(file, range, opts),
-                _ => return Err(CutError::NotImplemented(
-                    String::from("Modes except Bytes")).into()),
-            });
+            show_if_err!(
+                match &opts.mode {
+                    Mode::Bytes(range) => cut_bytes(file, range, opts),
+                    Mode::Fields(range, delim) => cut_fields(file, range, delim, opts),
+                    _ => return Err(CutError::NotImplemented(
+                        String::from("Modes except Bytes")).into()),
+                });
         }
     }
 
@@ -582,7 +621,7 @@ pub fn uu_app() -> App<'static, 'static> {
                 )
                 .takes_value(true)
                 .value_name("STRING")
-                .default_value("")
+                // .default_value("")
         )
         .arg(
             Arg::with_name(options::ZERO_TERMINATED)
