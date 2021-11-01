@@ -171,38 +171,49 @@ fn list_to_ranges(list: &str, complement: bool) -> Result<Vec<Range>, String> {
     }
 }
 
-// fn cut_bytes<R: Read>(reader: R,, opts: &Behavior) -> i32 {
-//     let newline_char = if opts.zero_terminated { b'\0' } else { b'\n' };
-//     let buf_in = BufReader::new(reader);
-//     let mut out = stdout_writer();
-//     let delim = opts
-//         .output_delimiter
-//         .as_ref()
-//         .map_or("", String::as_str)
-//         .as_bytes();
+fn cut_bytes(reader: impl Read, ranges: &Vec<Range>, opts: &Behavior) -> UResult<()> {
+    let newline_char = if opts.zero_terminated { b'\0' } else { b'\n' };
+    let mut buf_in = BufReader::new(reader);
+    let mut out = stdout_writer();
+    let delim = opts
+        .output_delimiter
+        .as_ref()
+        .map_or("", String::as_str)
+        .as_bytes();
 
-//     let res = buf_in.for_byte_record(newline_char, |line| {
-//         let mut print_delim = false;
-//         for &Range { low, high } in ranges {
-//             if low > line.len() {
-//                 break;
-//             }
-//             if print_delim {
-//                 out.write_all(delim)?;
-//             } else if opts.out_delim.is_some() {
-//                 print_delim = true;
-//             }
-//             // change `low` from 1-indexed value to 0-index value
-//             let low = low - 1;
-//             let high = high.min(line.len());
-//             out.write_all(&line[low..high])?;
-//         }
-//         out.write_all(&[newline_char])?;
-//         Ok(true)
-//     });
-//     crash_if_err!(1, res);
-//     0
-// }
+    let mut buf = vec![];
+    let mut out_buf: Vec<&[u8]> = vec![];
+
+    loop {
+        buf.clear();
+        out_buf.clear();
+        if buf_in.read_until(newline_char, &mut buf).unwrap() == 0 {
+            // File read completely
+            return Ok(());
+        }
+
+        if buf.is_empty() { continue };
+
+        let out_bytes = ranges.iter()
+            // Act only on ranges that make sense with this buffers length
+            .filter(|range| { range.low < buf.len() })
+            .map(|&Range { low, high }| {
+                // Make sure we don't act on ranges that are out of bounds
+                let l = (low - 1).min(buf.len());
+                let h = high.min(buf.len());
+                &buf[l..h]
+            })
+            .collect::<Vec<&[u8]>>()
+            // Add the output delimiters between the slices
+            .join(delim);
+        if out_bytes.is_empty() { continue };
+
+        out.write_all(&out_bytes[..]).unwrap();
+        out.write_all(&[newline_char]).unwrap();
+    }
+
+    Ok(())
+}
 
 // #[allow(clippy::cognitive_complexity)]
 // fn cut_fields_delimiter<R: Read>(
