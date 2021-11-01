@@ -24,7 +24,7 @@ use std::io::{stdout, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 use uucore::display::Quotable;
 
-use uucore::error::{UError, UResult};
+use uucore::error::{UError, UIoError, UResult};
 use uucore::ranges::Range;
 use uucore::InvalidEncodingHandling;
 
@@ -77,8 +77,10 @@ enum CutError {
     InvalidFieldList(String),
     InvalidByteCharList(String),
     InputDelimOnlyOnFields(),
+    IsDirectory(PathBuf),
     SuppressingOnlyOnFields(),
     DelimSingleChar(),
+    NotImplemented(String),
 }
 
 impl UError for CutError {
@@ -111,11 +113,17 @@ impl Display for CutError {
                 f,
                 "an input delimiter may be specified only when operating on fields"
             ),
+            CE::IsDirectory(dir) => {
+                write!(f, "{}: Is a directory", dir.display())
+            },
             CE::SuppressingOnlyOnFields() => write!(
                 f,
                 "suppressing non-delimited lines makes sense\n        only when operating on fields"
             ),
             CE::DelimSingleChar() => write!(f, "the delimiter must be a single character"),
+            CE::NotImplemented(thing) => write!(
+                f, "'{}' isn't implemented yet.", thing
+            )
         }
     }
 }
