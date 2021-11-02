@@ -109,6 +109,15 @@ fn test_ignore_environment() {
 }
 
 #[test]
+fn test_empty_name() {
+    new_ucmd!()
+        .arg("-i")
+        .arg("=xyz")
+        .run()
+        .stderr_only("env: warning: no name specified for value 'xyz'");
+}
+
+#[test]
 fn test_null_delimiter() {
     let out = new_ucmd!()
         .arg("-i")
