@@ -7,7 +7,7 @@
 
 /* last synced with: env (GNU coreutils) 8.13 */
 
-// spell-checker:ignore (ToDO) chdir execvp progname subcommand subcommands unsets setenv putenv
+// spell-checker:ignore (ToDO) chdir execvp progname subcommand subcommands unsets setenv putenv posix_spawnp
 
 #[macro_use]
 extern crate clap;
@@ -289,7 +289,12 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
         // we need to execute a command
         let (prog, args) = build_command(&mut opts.program);
 
-        // FIXME: this should just use execvp() (no fork()) on Unix-like systems
+        /*
+         * On Unix-like systems Command::status either ends up calling either fork or posix_spawnp
+         * (which ends up calling clone). Keep using the current process would be ideal, but the
+         * standard library contains many checks and fail-safes to ensure the process ends up being
+         * created. This is much simpler than dealing with the hassles of calling execvp directly.
+         */
         match Command::new(&*prog).args(args).status() {
             Ok(exit) if !exit.success() => return Err(exit.code().unwrap().into()),
             Err(ref err) if err.kind() == io::ErrorKind::NotFound => return Err(127.into()),
