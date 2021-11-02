@@ -244,6 +244,13 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
 
     // unset specified env vars
     for name in &opts.unsets {
+        if name.is_empty() || name.contains(0 as char) || name.contains('=') {
+            return Err(USimpleError::new(
+                125,
+                format!("cannot unset {}: Invalid argument", name.quote()),
+            ));
+        }
+
         env::remove_var(name);
     }
 
