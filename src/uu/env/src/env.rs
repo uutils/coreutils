@@ -229,6 +229,14 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
+    // GNU env tests this behavior
+    if opts.program.is_empty() && running_directory.is_some() {
+        return Err(UUsageError::new(
+            125,
+            "must specify command with --chdir (-C)".to_string(),
+        ));
+    }
+
     // NOTE: we manually set and unset the env vars below rather than using Command::env() to more
     //       easily handle the case where no command is given
 
