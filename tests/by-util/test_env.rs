@@ -1,4 +1,4 @@
-// spell-checker:ignore (words) bamf chdir
+// spell-checker:ignore (words) bamf chdir rlimit prlimit
 
 #[cfg(not(windows))]
 use std::fs;
@@ -78,6 +78,20 @@ fn test_combined_file_set_unset() {
             .count(),
         1
     );
+}
+
+#[test]
+fn test_unset_invalid_variables() {
+    use uucore::display::Quotable;
+
+    // Cannot test input with \0 in it, since output will also contain \0. rlimit::prlimit fails
+    // with this error: Error { kind: InvalidInput, message: "nul byte found in provided data" }
+    for var in &["", "a=b"] {
+        new_ucmd!().arg("-u").arg(var).run().stderr_only(format!(
+            "env: cannot unset {}: Invalid argument",
+            var.quote()
+        ));
+    }
 }
 
 #[test]
