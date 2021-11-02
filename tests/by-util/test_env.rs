@@ -1,7 +1,4 @@
-// spell-checker:ignore (words) bamf chdir rlimit prlimit
-
-#[cfg(not(windows))]
-use std::fs;
+// spell-checker:ignore (words) bamf chdir rlimit prlimit COMSPEC
 
 use crate::common::util::*;
 use std::env;
@@ -177,7 +174,7 @@ fn test_fail_null_with_program() {
 fn test_change_directory() {
     let scene = TestScenario::new(util_name!());
     let temporary_directory = tempdir().unwrap();
-    let temporary_path = fs::canonicalize(temporary_directory.path()).unwrap();
+    let temporary_path = std::fs::canonicalize(temporary_directory.path()).unwrap();
     assert_ne!(env::current_dir().unwrap(), temporary_path);
 
     // command to print out current working directory
@@ -193,27 +190,36 @@ fn test_change_directory() {
     assert_eq!(out.trim(), temporary_path.as_os_str())
 }
 
-// no way to consistently get "current working directory", `cd` doesn't work @ CI
-// instead, we test that the unique temporary directory appears somewhere in the printed variables
 #[cfg(windows)]
 #[test]
 fn test_change_directory() {
     let scene = TestScenario::new(util_name!());
     let temporary_directory = tempdir().unwrap();
-    let temporary_path = temporary_directory.path();
 
-    assert_ne!(env::current_dir().unwrap(), temporary_path);
+    let temporary_path = temporary_directory.path();
+    let temporary_path = temporary_path
+        .strip_prefix(r"\\?\")
+        .unwrap_or(temporary_path);
+
+    let env_cd = env::current_dir().unwrap();
+    let env_cd = env_cd.strip_prefix(r"\\?\").unwrap_or(&env_cd);
+
+    assert_ne!(env_cd, temporary_path);
+
+    // COMSPEC is a variable that contains the full path to cmd.exe
+    let cmd_path = env::var("COMSPEC").unwrap();
+
+    // command to print out current working directory
+    let pwd = [&*cmd_path, "/C", "cd"];
 
     let out = scene
         .ucmd()
         .arg("--chdir")
         .arg(&temporary_path)
+        .args(&pwd)
         .succeeds()
         .stdout_move_str();
-
-    assert!(!out
-        .lines()
-        .any(|line| line.ends_with(temporary_path.file_name().unwrap().to_str().unwrap())));
+    assert_eq!(out.trim(), temporary_path.as_os_str())
 }
 
 #[test]
