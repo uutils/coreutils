@@ -131,7 +131,7 @@ pub fn uu_app() -> App<'static, 'static> {
             .long("ignore-environment")
             .help("start with an empty environment"))
         .arg(Arg::with_name("chdir")
-            .short("c")
+            .short("C") // GNU env compatibility
             .long("chdir")
             .takes_value(true)
             .number_of_values(1)
