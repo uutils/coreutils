@@ -11,7 +11,7 @@
 // spell-checker:ignore (libs) kqueue
 // spell-checker:ignore (acronyms)
 // spell-checker:ignore (env/flags)
-// spell-checker:ignore (jargon)
+// spell-checker:ignore (jargon) tailable untailable
 // spell-checker:ignore (names)
 // spell-checker:ignore (shell/tools)
 // spell-checker:ignore (misc)
@@ -155,11 +155,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     if let Some(s) = matches.value_of(options::MAX_UNCHANGED_STATS) {
         settings.max_unchanged_stats = match s.parse::<u32>() {
             Ok(s) => s,
-            Err(_) => crash!(
-                1,
-                "invalid maximum number of unchanged stats between opens: {}",
-                s.quote()
-            ),
+            Err(_) => {
+                // TODO: add test for this
+                crash!(
+                    1,
+                    "invalid maximum number of unchanged stats between opens: {}",
+                    s.quote()
+                )
+            }
         }
     }
 
@@ -267,6 +270,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     // Do an initial tail print of each path's content.
     // Add `path` to `files` map if `--follow` is selected.
     for path in &paths {
+        let md = path.metadata().ok();
         if path.is_stdin() {
             if settings.verbose {
                 if !first_header {
@@ -316,7 +320,6 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             }
             first_header = false;
             let mut file = File::open(&path).unwrap();
-            let md = file.metadata().ok();
             let mut reader;
 
             if is_seekable(&mut file) && get_block_size(md.as_ref().unwrap()) > 0 {
@@ -349,7 +352,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                 key.to_path_buf(),
                 PathData {
                     reader: None,
-                    metadata: None,
+                    metadata: md,
                     display_name: path.to_path_buf(),
                 },
             );
@@ -538,6 +541,7 @@ fn follow(files: &mut FileHandling, settings: &Settings) {
         } else if settings.follow.is_some() && settings.retry {
             if path.is_orphan() {
                 orphans.push(path.to_path_buf());
+                // TODO: add test for this
             } else {
                 let parent = path.parent().unwrap();
                 watcher
@@ -564,6 +568,7 @@ fn follow(files: &mut FileHandling, settings: &Settings) {
                 if new_path.exists() {
                     let display_name = files.map.get(new_path).unwrap().display_name.to_path_buf();
                     if new_path.is_file() && files.map.get(new_path).unwrap().metadata.is_none() {
+                        // TODO: add test for this
                         show_error!("{} has appeared;  following new file", display_name.quote());
                         if let Ok(new_path_canonical) = new_path.canonicalize() {
                             files.update_metadata(&new_path_canonical, None);
@@ -607,6 +612,7 @@ fn follow(files: &mut FileHandling, settings: &Settings) {
                     if files.map.contains_key(event_path) {
                         // TODO: handle this case for --follow=name --retry
                         let _ = watcher.unwatch(event_path);
+                        // TODO: add test for this
                         show_error!(
                             "{}: {}",
                             files.map.get(event_path).unwrap().display_name.display(),
@@ -622,7 +628,7 @@ fn follow(files: &mut FileHandling, settings: &Settings) {
             Ok(Err(notify::Error {
                 kind: notify::ErrorKind::MaxFilesWatch,
                 ..
-            })) => crash!(1, "inotify resources exhausted"),
+            })) => crash!(1, "inotify resources exhausted"), // NOTE: Cannot test this in the CICD.
             Ok(Err(e)) => crash!(1, "{:?}", e),
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 _timeout_counter += 1;
@@ -680,9 +686,31 @@ fn handle_event(
                 | EventKind::Modify(ModifyKind::Data(DataChange::Any)) => {
                     if let Ok(new_md) = event_path.metadata() {
                         if let Some(old_md) = &files.map.get(event_path).unwrap().metadata {
-                            if new_md.len() <= old_md.len()
+                            if new_md.is_file() && !old_md.is_file() {
+                                show_error!(
+                                    "{} has appeared;  following new file",
+                                    display_name.quote()
+                                );
+                                files.update_metadata(event_path, None);
+                                files.reopen_file(event_path).unwrap();
+                            } else if !new_md.is_file() && old_md.is_file() {
+                                show_error!(
+                                    "{} has been replaced with an untailable file",
+                                    display_name.quote()
+                                );
+                                files.map.insert(
+                                    event_path.to_path_buf(),
+                                    PathData {
+                                        reader: None,
+                                        metadata: None,
+                                        display_name,
+                                    },
+                                );
+                                files.update_metadata(event_path, None);
+                            } else if new_md.len() <= old_md.len()
                                 && new_md.modified().unwrap() != old_md.modified().unwrap()
                             {
+                                // TODO: add test for this
                                 show_error!("{}: file truncated", display_name.display());
                                 files.update_metadata(event_path, None);
                                 files.reopen_file(event_path).unwrap();
@@ -696,6 +724,7 @@ fn handle_event(
                 | EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
                     if event_path.is_file() {
                         if settings.follow.is_some() {
+                            // TODO: add test for this
                             let msg = if settings.use_polling && !settings.retry {
                                 format!("{} has been replaced", display_name.quote())
                             } else {
@@ -710,6 +739,7 @@ fn handle_event(
                         // behavior and is the usual truncation operation for log files.
                         files.reopen_file(event_path).unwrap();
                         if settings.follow == Some(FollowMode::Name) && settings.retry {
+                            // TODO: add test for this
                             // Path has appeared, it's not an orphan any more.
                             orphans.retain(|path| path != event_path);
                         }
@@ -730,6 +760,7 @@ fn handle_event(
                                     crash!(1, "{}", text::NO_FILES_REMAINING);
                                 }
                             } else if settings.follow == Some(FollowMode::Name) {
+                                // TODO: add test for this
                                 files.update_metadata(event_path, None);
                                 show_error!("{} {}", display_name.quote(), msg);
                             }
@@ -741,11 +772,15 @@ fn handle_event(
                 EventKind::Remove(RemoveKind::File) | EventKind::Remove(RemoveKind::Any) => {
                     if settings.follow == Some(FollowMode::Name) {
                         if settings.retry {
-                            show_error!(
-                                "{} has become inaccessible: {}",
-                                display_name.quote(),
-                                text::NO_SUCH_FILE
-                            );
+                            if let Some(old_md) = &files.map.get(event_path).unwrap().metadata {
+                                if old_md.is_file() {
+                                    show_error!(
+                                        "{} has become inaccessible: {}",
+                                        display_name.quote(),
+                                        text::NO_SUCH_FILE
+                                    );
+                                }
+                            }
                             if event_path.is_orphan() {
                                 if !orphans.contains(event_path) {
                                     show_error!("directory containing watched file was removed");
@@ -885,6 +920,7 @@ impl FileHandling {
         false
     }
 
+    // TODO: change to update_reader() without error return
     fn reopen_file(&mut self, path: &Path) -> Result<(), Error> {
         assert!(self.map.contains_key(path));
         if let Some(pd) = self.map.get_mut(path) {

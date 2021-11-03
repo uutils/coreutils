@@ -5,6 +5,7 @@
 
 // spell-checker:ignore (ToDO) abcdefghijklmnopqrstuvwxyz efghijklmnopqrstuvwxyz vwxyz emptyfile logfile
 // spell-checker:ignore (libs) kqueue
+// spell-checker:ignore (jargon) tailable untailable
 
 extern crate tail;
 
@@ -743,7 +744,7 @@ fn test_retry5() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(target_os = "linux")] // FIXME: fix this test for BSD/macOS
 fn test_retry6() {
     // gnu/tests/tail-2/retry.sh
     // Ensure that --follow=descriptor (without --retry) does *not* try
@@ -799,35 +800,50 @@ fn test_retry7() {
 
     let delay = 1000;
 
-    at.mkdir(untailable);
-    let mut p = ts.ucmd().arg("-F").arg(untailable).run_no_wait();
-    sleep(Duration::from_millis(delay));
+    let mut args = vec![
+        "-s.1",
+        "--max-unchanged-stats=1",
+        "-F",
+        untailable,
+        "--use-polling",
+    ];
+    for _ in 0..2 {
+        at.mkdir(untailable);
+        let mut p = ts.ucmd().args(&args).run_no_wait();
+        sleep(Duration::from_millis(delay));
 
-    // tail: 'untailable' has become accessible
-    // or (The first is the common case, "has appeared" arises with slow rmdir.)
-    // tail: 'untailable' has appeared;  following new file
-    at.rmdir(untailable);
-    at.truncate(untailable, "foo\n");
-    sleep(Duration::from_millis(delay));
+        // tail: 'untailable' has become accessible
+        // or (The first is the common case, "has appeared" arises with slow rmdir):
+        // tail: 'untailable' has appeared;  following new file
+        at.rmdir(untailable);
+        at.truncate(untailable, "foo\n");
+        sleep(Duration::from_millis(delay));
 
-    // tail: 'untailable' has become inaccessible: No such file or directory
-    at.remove(untailable);
-    sleep(Duration::from_millis(delay));
+        // NOTE: GNU's `tail` only shows "become inaccessible"
+        // if there's a delay between rm and mkdir.
+        // tail: 'untailable' has become inaccessible: No such file or directory
+        at.remove(untailable);
+        sleep(Duration::from_millis(delay));
 
-    // tail: 'untailable' has been replaced with an untailable file\n";
-    at.mkdir(untailable);
-    sleep(Duration::from_millis(delay));
+        // tail: 'untailable' has been replaced with an untailable file\n";
+        at.mkdir(untailable);
+        sleep(Duration::from_millis(delay));
 
-    // full circle, back to the beginning
-    at.rmdir(untailable);
-    at.truncate(untailable, "bar\n");
-    sleep(Duration::from_millis(delay));
+        // full circle, back to the beginning
+        at.rmdir(untailable);
+        at.truncate(untailable, "bar\n");
+        sleep(Duration::from_millis(delay));
 
-    p.kill().unwrap();
+        p.kill().unwrap();
 
-    let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
-    assert_eq!(buf_stdout, expected_stdout);
-    assert_eq!(buf_stderr, expected_stderr);
+        let (buf_stdout, buf_stderr) = take_stdout_stderr(&mut p);
+        assert_eq!(buf_stdout, expected_stdout);
+        assert_eq!(buf_stderr, expected_stderr);
+
+        args.pop();
+        at.remove(untailable);
+        sleep(Duration::from_millis(delay));
+    }
 }
 
 #[test]
@@ -899,7 +915,8 @@ fn test_retry9() {
     let parent_dir = parent_dir.to_str().unwrap();
     let user_path = user_path.to_str().unwrap();
 
-    let expected_stderr = format!("\
+    let expected_stderr = format!(
+        "\
         tail: 'parent_dir/watched_file' has become inaccessible: No such file or directory\n\
         tail: directory containing watched file was removed\n\
         tail: {} cannot be used, reverting to polling\n\
@@ -1184,7 +1201,7 @@ fn test_follow_name_truncate2() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(target_os = "linux")] // FIXME: fix this test for BSD/macOS
 fn test_follow_name_truncate3() {
     // Opening an empty file in truncate mode should not trigger a truncate event while.
     // $ rm -f logfile && touch logfile
@@ -1203,13 +1220,7 @@ fn test_follow_name_truncate3() {
 
     let delay = 1000;
     sleep(Duration::from_millis(delay));
-    use std::fs::OpenOptions;
-    let mut file = OpenOptions::new()
-        .write(true)
-        .truncate(true)
-        .open(at.plus(source))
-        .unwrap();
-    file.write_all(b"x\n").unwrap();
+    at.truncate(source, "x\n");
     sleep(Duration::from_millis(delay));
 
     p.kill().unwrap();
