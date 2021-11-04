@@ -7,7 +7,7 @@
 
 /* last synced with: env (GNU coreutils) 8.13 */
 
-// spell-checker:ignore (ToDO) chdir execvp progname subcommand subcommands unsets
+// spell-checker:ignore (ToDO) chdir execvp progname subcommand subcommands unsets setenv putenv posix_spawnp
 
 #[macro_use]
 extern crate clap;
@@ -256,7 +256,32 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
 
     // set specified env vars
     for &(name, val) in &opts.sets {
-        // FIXME: set_var() panics if name is an empty string
+        /*
+         * set_var panics if name is an empty string
+         * set_var internally calls setenv (on unix at least), while GNU env calls putenv instead.
+         *
+         * putenv returns successfully if provided with something like "=a" and modifies the environ
+         * variable to contain "=a" inside it, effectively modifying the process' current environment
+         * to contain a malformed string in it. Using GNU's implementation, the command `env =a`
+         * prints out the malformed string and even invokes the child process with that environment.
+         * This can be seen by using `env -i =a env` or `env -i =a cat /proc/self/environ`
+         *
+         * POSIX.1-2017 doesn't seem to mention what to do if the string is malformed (at least
+         * not in "Chapter 8, Environment Variables" or in the definition for environ and various
+         * exec*'s or in the description of env in the "Shell & Utilities" volume).
+         *
+         * It also doesn't specify any checks for putenv before modifying the environ variable, which
+         * is likely why glibc doesn't do so. However, setenv's first argument cannot point to
+         * an empty string or a string containing '='.
+         *
+         * There is no benefit in replicating GNU's env behavior, since it will only modify the
+         * environment in weird ways
+         */
+
+        if name.is_empty() {
+            show_warning!("no name specified for value {}", val.quote());
+            continue;
+        }
         env::set_var(name, val);
     }
 
@@ -264,7 +289,12 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
         // we need to execute a command
         let (prog, args) = build_command(&mut opts.program);
 
-        // FIXME: this should just use execvp() (no fork()) on Unix-like systems
+        /*
+         * On Unix-like systems Command::status either ends up calling either fork or posix_spawnp
+         * (which ends up calling clone). Keep using the current process would be ideal, but the
+         * standard library contains many checks and fail-safes to ensure the process ends up being
+         * created. This is much simpler than dealing with the hassles of calling execvp directly.
+         */
         match Command::new(&*prog).args(args).status() {
             Ok(exit) if !exit.success() => return Err(exit.code().unwrap().into()),
             Err(ref err) if err.kind() == io::ErrorKind::NotFound => return Err(127.into()),
