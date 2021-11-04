@@ -10,11 +10,13 @@
 extern crate uucore;
 
 use std::error::Error;
+use std::fmt::Write as FmtWrite;
 use std::io::{self, stdin, stdout, BufRead, Write};
 
 mod factor;
 use clap::{crate_version, App, Arg};
 pub use factor::*;
+use uucore::display::Quotable;
 
 mod miller_rabin;
 pub mod numeric;
@@ -28,22 +30,30 @@ mod options {
     pub static NUMBER: &str = "NUMBER";
 }
 
-fn print_factors_str(num_str: &str, w: &mut impl io::Write) -> Result<(), Box<dyn Error>> {
-    num_str
-        .parse::<u64>()
-        .map_err(|e| e.into())
-        .and_then(|x| writeln!(w, "{}:{}", x, factor(x)).map_err(|e| e.into()))
+fn print_factors_str(
+    num_str: &str,
+    w: &mut io::BufWriter<impl io::Write>,
+    factors_buffer: &mut String,
+) -> Result<(), Box<dyn Error>> {
+    num_str.parse::<u64>().map_err(|e| e.into()).and_then(|x| {
+        factors_buffer.clear();
+        writeln!(factors_buffer, "{}:{}", x, factor(x))?;
+        w.write_all(factors_buffer.as_bytes())?;
+        Ok(())
+    })
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
     let matches = uu_app().get_matches_from(args);
     let stdout = stdout();
-    let mut w = io::BufWriter::new(stdout.lock());
+    // We use a smaller buffer here to pass a gnu test. 4KiB appears to be the default pipe size for bash.
+    let mut w = io::BufWriter::with_capacity(4 * 1024, stdout.lock());
+    let mut factors_buffer = String::new();
 
     if let Some(values) = matches.values_of(options::NUMBER) {
         for number in values {
-            if let Err(e) = print_factors_str(number, &mut w) {
-                show_warning!("{}: {}", number, e);
+            if let Err(e) = print_factors_str(number, &mut w, &mut factors_buffer) {
+                show_warning!("{}: {}", number.maybe_quote(), e);
             }
         }
     } else {
@@ -51,8 +61,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
         for line in stdin.lock().lines() {
             for number in line.unwrap().split_whitespace() {
-                if let Err(e) = print_factors_str(number, &mut w) {
-                    show_warning!("{}: {}", number, e);
+                if let Err(e) = print_factors_str(number, &mut w, &mut factors_buffer) {
+                    show_warning!("{}: {}", number.maybe_quote(), e);
                 }
             }
         }
@@ -66,7 +76,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(SUMMARY)
         .arg(Arg::with_name(options::NUMBER).multiple(true))

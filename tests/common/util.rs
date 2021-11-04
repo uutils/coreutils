@@ -3,7 +3,7 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-//spell-checker: ignore (linux) rlimit prlimit Rlim coreutil
+//spell-checker: ignore (linux) rlimit prlimit Rlim coreutil ggroups
 
 #![allow(dead_code)]
 
@@ -163,25 +163,23 @@ impl CmdResult {
 
     /// asserts that the command resulted in a success (zero) status code
     pub fn success(&self) -> &CmdResult {
-        if !self.success {
-            panic!(
-                "Command was expected to succeed.\nstdout = {}\n stderr = {}",
-                self.stdout_str(),
-                self.stderr_str()
-            );
-        }
+        assert!(
+            self.success,
+            "Command was expected to succeed.\nstdout = {}\n stderr = {}",
+            self.stdout_str(),
+            self.stderr_str()
+        );
         self
     }
 
     /// asserts that the command resulted in a failure (non-zero) status code
     pub fn failure(&self) -> &CmdResult {
-        if self.success {
-            panic!(
-                "Command was expected to fail.\nstdout = {}\n stderr = {}",
-                self.stdout_str(),
-                self.stderr_str()
-            );
-        }
+        assert!(
+            !self.success,
+            "Command was expected to fail.\nstdout = {}\n stderr = {}",
+            self.stdout_str(),
+            self.stderr_str()
+        );
         self
     }
 
@@ -197,12 +195,11 @@ impl CmdResult {
     /// 1.  you can not know exactly what stdout will be or
     /// 2.  you know that stdout will also be empty
     pub fn no_stderr(&self) -> &CmdResult {
-        if !self.stderr.is_empty() {
-            panic!(
-                "Expected stderr to be empty, but it's:\n{}",
-                self.stderr_str()
-            );
-        }
+        assert!(
+            self.stderr.is_empty(),
+            "Expected stderr to be empty, but it's:\n{}",
+            self.stderr_str()
+        );
         self
     }
 
@@ -213,12 +210,11 @@ impl CmdResult {
     /// 1.  you can not know exactly what stderr will be or
     /// 2.  you know that stderr will also be empty
     pub fn no_stdout(&self) -> &CmdResult {
-        if !self.stdout.is_empty() {
-            panic!(
-                "Expected stdout to be empty, but it's:\n{}",
-                self.stderr_str()
-            );
-        }
+        assert!(
+            self.stdout.is_empty(),
+            "Expected stdout to be empty, but it's:\n{}",
+            self.stderr_str()
+        );
         self
     }
 
@@ -514,43 +510,86 @@ impl AtPath {
     }
 
     pub fn write(&self, name: &str, contents: &str) {
-        log_info("open(write)", self.plus_as_string(name));
+        log_info("write(default)", self.plus_as_string(name));
         std::fs::write(self.plus(name), contents)
             .unwrap_or_else(|e| panic!("Couldn't write {}: {}", name, e));
     }
 
     pub fn write_bytes(&self, name: &str, contents: &[u8]) {
-        log_info("open(write)", self.plus_as_string(name));
+        log_info("write(default)", self.plus_as_string(name));
         std::fs::write(self.plus(name), contents)
             .unwrap_or_else(|e| panic!("Couldn't write {}: {}", name, e));
     }
 
     pub fn append(&self, name: &str, contents: &str) {
-        log_info("open(append)", self.plus_as_string(name));
+        log_info("write(append)", self.plus_as_string(name));
         let mut f = OpenOptions::new()
             .write(true)
             .append(true)
+            .create(true)
             .open(self.plus(name))
             .unwrap();
         f.write_all(contents.as_bytes())
-            .unwrap_or_else(|e| panic!("Couldn't write {}: {}", name, e));
+            .unwrap_or_else(|e| panic!("Couldn't write(append) {}: {}", name, e));
     }
 
     pub fn append_bytes(&self, name: &str, contents: &[u8]) {
-        log_info("open(append)", self.plus_as_string(name));
+        log_info("write(append)", self.plus_as_string(name));
         let mut f = OpenOptions::new()
             .write(true)
             .append(true)
+            .create(true)
             .open(self.plus(name))
             .unwrap();
         f.write_all(contents)
-            .unwrap_or_else(|e| panic!("Couldn't append to {}: {}", name, e));
+            .unwrap_or_else(|e| panic!("Couldn't write(append) to {}: {}", name, e));
+    }
+
+    pub fn truncate(&self, name: &str, contents: &str) {
+        log_info("write(truncate)", self.plus_as_string(name));
+        let mut f = OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .create(true)
+            .open(self.plus(name))
+            .unwrap();
+        f.write_all(contents.as_bytes())
+            .unwrap_or_else(|e| panic!("Couldn't write(truncate) {}: {}", name, e));
+    }
+
+    pub fn rename(&self, source: &str, target: &str) {
+        let source = self.plus(source);
+        let target = self.plus(target);
+        log_info("rename", format!("{:?} {:?}", source, target));
+        std::fs::rename(&source, &target)
+            .unwrap_or_else(|e| panic!("Couldn't rename {:?} -> {:?}: {}", source, target, e));
+    }
+
+    pub fn remove(&self, source: &str) {
+        let source = self.plus(source);
+        log_info("remove", format!("{:?}", source));
+        std::fs::remove_file(&source)
+            .unwrap_or_else(|e| panic!("Couldn't remove {:?}: {}", source, e));
+    }
+
+    pub fn copy(&self, source: &str, target: &str) {
+        let source = self.plus(source);
+        let target = self.plus(target);
+        log_info("copy", format!("{:?} {:?}", source, target));
+        std::fs::copy(&source, &target)
+            .unwrap_or_else(|e| panic!("Couldn't copy {:?} -> {:?}: {}", source, target, e));
+    }
+
+    pub fn rmdir(&self, dir: &str) {
+        log_info("rmdir", self.plus_as_string(dir));
+        fs::remove_dir(&self.plus(dir)).unwrap();
     }
 
     pub fn mkdir(&self, dir: &str) {
         log_info("mkdir", self.plus_as_string(dir));
         fs::create_dir(&self.plus(dir)).unwrap();
     }
+
     pub fn mkdir_all(&self, dir: &str) {
         log_info("mkdir_all", self.plus_as_string(dir));
         fs::create_dir_all(self.plus(dir)).unwrap();
@@ -591,28 +630,40 @@ impl AtPath {
         }
     }
 
-    pub fn hard_link(&self, src: &str, dst: &str) {
+    pub fn hard_link(&self, original: &str, link: &str) {
         log_info(
             "hard_link",
-            &format!("{},{}", self.plus_as_string(src), self.plus_as_string(dst)),
+            &format!(
+                "{},{}",
+                self.plus_as_string(original),
+                self.plus_as_string(link)
+            ),
         );
-        hard_link(&self.plus(src), &self.plus(dst)).unwrap();
+        hard_link(&self.plus(original), &self.plus(link)).unwrap();
     }
 
-    pub fn symlink_file(&self, src: &str, dst: &str) {
+    pub fn symlink_file(&self, original: &str, link: &str) {
         log_info(
             "symlink",
-            &format!("{},{}", self.plus_as_string(src), self.plus_as_string(dst)),
+            &format!(
+                "{},{}",
+                self.plus_as_string(original),
+                self.plus_as_string(link)
+            ),
         );
-        symlink_file(&self.plus(src), &self.plus(dst)).unwrap();
+        symlink_file(&self.plus(original), &self.plus(link)).unwrap();
     }
 
-    pub fn symlink_dir(&self, src: &str, dst: &str) {
+    pub fn symlink_dir(&self, original: &str, link: &str) {
         log_info(
             "symlink",
-            &format!("{},{}", self.plus_as_string(src), self.plus_as_string(dst)),
+            &format!(
+                "{},{}",
+                self.plus_as_string(original),
+                self.plus_as_string(link)
+            ),
         );
-        symlink_dir(&self.plus(src), &self.plus(dst)).unwrap();
+        symlink_dir(&self.plus(original), &self.plus(link)).unwrap();
     }
 
     pub fn is_symlink(&self, path: &str) -> bool {
@@ -677,20 +728,12 @@ impl AtPath {
         // Source:
         // http://stackoverflow.com/questions/31439011/getfinalpathnamebyhandle-without-prepended
         let prefix = "\\\\?\\";
-        // FixME: replace ...
-        #[allow(clippy::manual_strip)]
-        if s.starts_with(prefix) {
-            String::from(&s[prefix.len()..])
+
+        if let Some(stripped) = s.strip_prefix(prefix) {
+            String::from(stripped)
         } else {
             s
         }
-        // ... with ...
-        // if let Some(stripped) = s.strip_prefix(prefix) {
-        //     String::from(stripped)
-        // } else {
-        //     s
-        // }
-        // ... when using MSRV with stabilized `strip_prefix()`
     }
 }
 
@@ -701,7 +744,7 @@ impl AtPath {
 ///
 /// Fixtures can be found under `tests/fixtures/$util_name/`
 pub struct TestScenario {
-    bin_path: PathBuf,
+    pub bin_path: PathBuf,
     pub util_name: String,
     pub fixtures: AtPath,
     tmpd: Rc<TempDir>,
@@ -856,9 +899,7 @@ impl UCommand {
     /// Add a parameter to the invocation. Path arguments are treated relative
     /// to the test environment directory.
     pub fn arg<S: AsRef<OsStr>>(&mut self, arg: S) -> &mut UCommand {
-        if self.has_run {
-            panic!("{}", ALREADY_RUN);
-        }
+        assert!(!self.has_run, "{}", ALREADY_RUN);
         self.comm_string.push(' ');
         self.comm_string
             .push_str(arg.as_ref().to_str().unwrap_or_default());
@@ -869,9 +910,7 @@ impl UCommand {
     /// Add multiple parameters to the invocation. Path arguments are treated relative
     /// to the test environment directory.
     pub fn args<S: AsRef<OsStr>>(&mut self, args: &[S]) -> &mut UCommand {
-        if self.has_run {
-            panic!("{}", MULTIPLE_STDIN_MEANINGLESS);
-        }
+        assert!(!self.has_run, "{}", MULTIPLE_STDIN_MEANINGLESS);
         let strings = args
             .iter()
             .map(|s| s.as_ref().to_os_string())
@@ -889,9 +928,11 @@ impl UCommand {
 
     /// provides standard input to feed in to the command when spawned
     pub fn pipe_in<T: Into<Vec<u8>>>(&mut self, input: T) -> &mut UCommand {
-        if self.bytes_into_stdin.is_some() {
-            panic!("{}", MULTIPLE_STDIN_MEANINGLESS);
-        }
+        assert!(
+            !self.bytes_into_stdin.is_some(),
+            "{}",
+            MULTIPLE_STDIN_MEANINGLESS
+        );
         self.bytes_into_stdin = Some(input.into());
         self
     }
@@ -906,9 +947,7 @@ impl UCommand {
     /// This is typically useful to test non-standard workflows
     /// like feeding something to a command that does not read it
     pub fn ignore_stdin_write_error(&mut self) -> &mut UCommand {
-        if self.bytes_into_stdin.is_none() {
-            panic!("{}", NO_STDIN_MEANINGLESS);
-        }
+        assert!(!self.bytes_into_stdin.is_none(), "{}", NO_STDIN_MEANINGLESS);
         self.ignore_stdin_write_error = true;
         self
     }
@@ -918,9 +957,7 @@ impl UCommand {
         K: AsRef<OsStr>,
         V: AsRef<OsStr>,
     {
-        if self.has_run {
-            panic!("{}", ALREADY_RUN);
-        }
+        assert!(!self.has_run, "{}", ALREADY_RUN);
         self.raw.env(key, val);
         self
     }
@@ -939,9 +976,7 @@ impl UCommand {
     /// Spawns the command, feeds the stdin if any, and returns the
     /// child process immediately.
     pub fn run_no_wait(&mut self) -> Child {
-        if self.has_run {
-            panic!("{}", ALREADY_RUN);
-        }
+        assert!(!self.has_run, "{}", ALREADY_RUN);
         self.has_run = true;
         log_info("run", &self.comm_string);
         let mut child = self
@@ -1024,6 +1059,8 @@ impl UCommand {
     }
 }
 
+/// Wrapper for `child.stdout.read_exact()`.
+/// Careful, this blocks indefinitely if `size` bytes is never reached.
 pub fn read_size(child: &mut Child, size: usize) -> String {
     let mut output = Vec::new();
     output.resize(size, 0);
@@ -1057,10 +1094,12 @@ pub fn whoami() -> String {
 
     // Use environment variable to get current user instead of
     // invoking `whoami` and fall back to user "nobody" on error.
-    std::env::var("USER").unwrap_or_else(|e| {
-        println!("{}: {}, using \"nobody\" instead", UUTILS_WARNING, e);
-        "nobody".to_string()
-    })
+    std::env::var("USER")
+        .or_else(|_| std::env::var("USERNAME"))
+        .unwrap_or_else(|e| {
+            println!("{}: {}, using \"nobody\" instead", UUTILS_WARNING, e);
+            "nobody".to_string()
+        })
 }
 
 /// Add prefix 'g' for `util_name` if not on linux
@@ -1069,7 +1108,14 @@ pub fn host_name_for(util_name: &str) -> Cow<str> {
     // In some environments, e.g. macOS/freebsd, the GNU coreutils are prefixed with "g"
     // to not interfere with the BSD counterparts already in `$PATH`.
     #[cfg(not(target_os = "linux"))]
-    return format!("g{}", util_name).into();
+    {
+        // make call to `host_name_for` idempotent
+        if util_name.starts_with('g') && util_name != "groups" {
+            return util_name.into();
+        } else {
+            return format!("g{}", util_name).into();
+        }
+    }
     #[cfg(target_os = "linux")]
     return util_name.into();
 }
@@ -1148,7 +1194,7 @@ pub fn check_coreutil_version(
                 if s.contains(&format!("(GNU coreutils) {}", version_expected)) {
                     Ok(format!("{}: {}", UUTILS_INFO, s.to_string()))
                 } else if s.contains("(GNU coreutils)") {
-                    let version_found = s.split_whitespace().last().unwrap()[..4].parse::<f32>().unwrap_or_default();
+                    let version_found = parse_coreutil_version(s);
                     let version_expected = version_expected.parse::<f32>().unwrap_or_default();
                     if version_found > version_expected {
                     Ok(format!("{}: version for the reference coreutil '{}' is higher than expected; expected: {}, found: {}", UUTILS_INFO, util_name, version_expected, version_found))
@@ -1159,6 +1205,20 @@ pub fn check_coreutil_version(
                 }
             },
         )
+}
+
+// simple heuristic to parse the coreutils SemVer string, e.g. "id (GNU coreutils) 8.32.263-0475"
+fn parse_coreutil_version(version_string: &str) -> f32 {
+    version_string
+        .split_whitespace()
+        .last()
+        .unwrap()
+        .split('.')
+        .take(2)
+        .collect::<Vec<_>>()
+        .join(".")
+        .parse::<f32>()
+        .unwrap_or_default()
 }
 
 /// This runs the GNU coreutils `util_name` binary in `$PATH` in order to
@@ -1183,8 +1243,8 @@ pub fn check_coreutil_version(
 ///```
 #[cfg(unix)]
 pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<CmdResult, String> {
+    println!("{}", check_coreutil_version(&ts.util_name, VERSION_MIN)?);
     let util_name = &host_name_for(&ts.util_name);
-    println!("{}", check_coreutil_version(util_name, VERSION_MIN)?);
 
     let result = ts
         .cmd_keepenv(util_name.as_ref())
@@ -1455,6 +1515,36 @@ mod tests {
 
     #[test]
     #[cfg(unix)]
+    fn test_parse_coreutil_version() {
+        use std::assert_eq;
+        assert_eq!(
+            parse_coreutil_version("id (GNU coreutils) 9.0.123-0123").to_string(),
+            "9"
+        );
+        assert_eq!(
+            parse_coreutil_version("id (GNU coreutils) 8.32.263-0475").to_string(),
+            "8.32"
+        );
+        assert_eq!(
+            parse_coreutil_version("id (GNU coreutils) 8.25.123-0123").to_string(),
+            "8.25"
+        );
+        assert_eq!(
+            parse_coreutil_version("id (GNU coreutils) 9.0").to_string(),
+            "9"
+        );
+        assert_eq!(
+            parse_coreutil_version("id (GNU coreutils) 8.32").to_string(),
+            "8.32"
+        );
+        assert_eq!(
+            parse_coreutil_version("id (GNU coreutils) 8.25").to_string(),
+            "8.25"
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
     fn test_check_coreutil_version() {
         match check_coreutil_version("id", VERSION_MIN) {
             Ok(s) => assert!(s.starts_with("uutils-tests-")),
@@ -1480,5 +1570,26 @@ mod tests {
         }
         let ts = TestScenario::new("no test name");
         assert!(expected_result(&ts, &[]).is_err());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_host_name_for() {
+        #[cfg(target_os = "linux")]
+        {
+            std::assert_eq!(host_name_for("id"), "id");
+            std::assert_eq!(host_name_for("groups"), "groups");
+            std::assert_eq!(host_name_for("who"), "who");
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            // spell-checker:ignore (strings) ggroups gwho
+            std::assert_eq!(host_name_for("id"), "gid");
+            std::assert_eq!(host_name_for("groups"), "ggroups");
+            std::assert_eq!(host_name_for("who"), "gwho");
+            std::assert_eq!(host_name_for("gid"), "gid");
+            std::assert_eq!(host_name_for("ggroups"), "ggroups");
+            std::assert_eq!(host_name_for("gwho"), "gwho");
+        }
     }
 }

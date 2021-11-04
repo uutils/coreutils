@@ -1,4 +1,4 @@
-// spell-checker:ignore (words) agroupthatdoesntexist auserthatdoesntexist groupname notexisting passgrp
+// spell-checker:ignore (words) agroupthatdoesntexist auserthatdoesntexist cuuser groupname notexisting passgrp
 
 use crate::common::util::*;
 #[cfg(target_os = "linux")]
@@ -141,6 +141,14 @@ fn test_chown_only_owner_colon() {
 
     scene
         .ucmd()
+        .arg(format!("{}.", user_name))
+        .arg("--verbose")
+        .arg(file1)
+        .succeeds()
+        .stderr_contains(&"retained as");
+
+    scene
+        .ucmd()
         .arg("root:")
         .arg("--verbose")
         .arg(file1)
@@ -180,6 +188,14 @@ fn test_chown_only_colon() {
         .arg(file1)
         .fails()
         .stderr_contains(&"invalid group: '::'");
+
+    scene
+        .ucmd()
+        .arg("..")
+        .arg("--verbose")
+        .arg(file1)
+        .fails()
+        .stderr_contains(&"invalid group: '..'");
 }
 
 #[test]
@@ -195,6 +211,8 @@ fn test_chown_failed_stdout() {
 }
 
 #[test]
+// FixME: Fails on freebsd because of chown: invalid group: 'root:root'
+#[cfg(not(target_os = "freebsd"))]
 fn test_chown_owner_group() {
     // test chown username:group file.txt
 
@@ -230,6 +248,22 @@ fn test_chown_owner_group() {
     }
     result.stderr_contains(&"retained as");
 
+    scene
+        .ucmd()
+        .arg("root:root:root")
+        .arg("--verbose")
+        .arg(file1)
+        .fails()
+        .stderr_contains(&"invalid group");
+
+    scene
+        .ucmd()
+        .arg("root.root.root")
+        .arg("--verbose")
+        .arg(file1)
+        .fails()
+        .stderr_contains(&"invalid group");
+
     // TODO: on macos group name is not recognized correctly: "chown: invalid group: 'root:root'
     #[cfg(any(windows, all(unix, not(target_os = "macos"))))]
     scene
@@ -242,8 +276,72 @@ fn test_chown_owner_group() {
 }
 
 #[test]
-// TODO: on macos group name is not recognized correctly: "chown: invalid group: ':groupname'
-#[cfg(any(windows, all(unix, not(target_os = "macos"))))]
+// FixME: Fails on freebsd because of chown: invalid group: 'root:root'
+#[cfg(not(target_os = "freebsd"))]
+fn test_chown_various_input() {
+    // test chown username:group file.txt
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let result = scene.cmd("whoami").run();
+    if skipping_test_is_okay(&result, "whoami: cannot find name for user ID") {
+        return;
+    }
+
+    let user_name = String::from(result.stdout_str().trim());
+    assert!(!user_name.is_empty());
+
+    let file1 = "test_chown_file1";
+    at.touch(file1);
+
+    let result = scene.cmd("id").arg("-gn").run();
+    if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
+        return;
+    }
+    let group_name = String::from(result.stdout_str().trim());
+    assert!(!group_name.is_empty());
+
+    let result = scene
+        .ucmd()
+        .arg(format!("{}:{}", user_name, group_name))
+        .arg("--verbose")
+        .arg(file1)
+        .run();
+    if skipping_test_is_okay(&result, "chown: invalid group:") {
+        return;
+    }
+    result.stderr_contains(&"retained as");
+
+    // check that username.groupname is understood
+    let result = scene
+        .ucmd()
+        .arg(format!("{}.{}", user_name, group_name))
+        .arg("--verbose")
+        .arg(file1)
+        .run();
+    if skipping_test_is_okay(&result, "chown: invalid group:") {
+        return;
+    }
+    result.stderr_contains(&"retained as");
+
+    // Fails as user.name doesn't exist in the CI
+    // but it is valid
+    scene
+        .ucmd()
+        .arg(format!("{}:{}", "user.name", "groupname"))
+        .arg("--verbose")
+        .arg(file1)
+        .fails()
+        .stderr_contains(&"chown: invalid user: 'user.name:groupname'");
+}
+
+#[test]
+// FixME: on macos & freebsd group name is not recognized correctly: "chown: invalid group: ':groupname'
+#[cfg(any(
+    windows,
+    all(unix, not(any(target_os = "macos", target_os = "freebsd")))
+))]
 fn test_chown_only_group() {
     // test chown :group file.txt
 
@@ -321,6 +419,8 @@ fn test_chown_only_user_id() {
 }
 
 #[test]
+// FixME: stderr = chown: ownership of 'test_chown_file1' retained as cuuser:wheel
+#[cfg(not(target_os = "freebsd"))]
 fn test_chown_only_group_id() {
     // test chown :1111 file.txt
 
@@ -398,6 +498,19 @@ fn test_chown_owner_group_id() {
     }
     result.stderr_contains(&"retained as");
 
+    let result = scene
+        .ucmd()
+        .arg(format!("{}.{}", user_id, group_id))
+        .arg("--verbose")
+        .arg(file1)
+        .run();
+    if skipping_test_is_okay(&result, "invalid user") {
+        // From the Logs: "Build (ubuntu-18.04, x86_64-unknown-linux-gnu, feat_os_unix, use-cross)"
+        // stderr: "chown: invalid user: '1001.116'
+        return;
+    }
+    result.stderr_contains(&"retained as");
+
     scene
         .ucmd()
         .arg("0:0")
@@ -408,6 +521,8 @@ fn test_chown_owner_group_id() {
 }
 
 #[test]
+// FixME: Fails on freebsd because of chown: invalid group: '0:root'
+#[cfg(not(target_os = "freebsd"))]
 fn test_chown_owner_group_mix() {
     // test chown 1111:group file.txt
 

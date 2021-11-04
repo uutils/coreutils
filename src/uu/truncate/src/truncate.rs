@@ -15,6 +15,7 @@ use std::convert::TryFrom;
 use std::fs::{metadata, OpenOptions};
 use std::io::ErrorKind;
 use std::path::Path;
+use uucore::display::Quotable;
 use uucore::parse_size::{parse_size, ParseSizeError};
 
 #[derive(Debug, Eq, PartialEq)]
@@ -63,8 +64,8 @@ pub mod options {
     pub static ARG_FILES: &str = "files";
 }
 
-fn get_usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", executable!())
+fn usage() -> String {
+    format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
 }
 
 fn get_long_usage() -> String {
@@ -90,7 +91,7 @@ fn get_long_usage() -> String {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
     let long_usage = get_long_usage();
 
     let matches = uu_app()
@@ -120,8 +121,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     let reference = matches.value_of(options::REFERENCE).map(String::from);
                     crash!(
                         1,
-                        "cannot stat '{}': No such file or directory",
-                        reference.unwrap_or_else(|| "".to_string())
+                        "cannot stat {}: No such file or directory",
+                        reference.as_deref().unwrap_or("").quote()
                     ); // TODO: fix '--no-create' see test_reference and test_truncate_bytes_size
                 }
                 _ => crash!(1, "{}", e.to_string()),
@@ -133,7 +134,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(

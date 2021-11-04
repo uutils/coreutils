@@ -12,7 +12,8 @@ use clap::{crate_version, App, Arg};
 use retain_mut::RetainMut;
 use std::fs::OpenOptions;
 use std::io::{copy, sink, stdin, stdout, Error, ErrorKind, Read, Result, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+use uucore::display::Quotable;
 
 #[cfg(unix)]
 use uucore::libc;
@@ -32,12 +33,12 @@ struct Options {
     files: Vec<String>,
 }
 
-fn get_usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", executable!())
+fn usage() -> String {
+    format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
@@ -57,7 +58,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help("If a FILE is -, it refers to a file named - .")
@@ -167,7 +168,7 @@ impl Write for MultiWriter {
             let result = writer.write_all(buf);
             match result {
                 Err(f) => {
-                    show_error!("{}: {}", writer.name, f.to_string());
+                    show_error!("{}: {}", writer.name.maybe_quote(), f);
                     false
                 }
                 _ => true,
@@ -181,7 +182,7 @@ impl Write for MultiWriter {
             let result = writer.flush();
             match result {
                 Err(f) => {
-                    show_error!("{}: {}", writer.name, f.to_string());
+                    show_error!("{}: {}", writer.name.maybe_quote(), f);
                     false
                 }
                 _ => true,
@@ -214,7 +215,7 @@ impl Read for NamedReader {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
         match self.inner.read(buf) {
             Err(f) => {
-                show_error!("{}: {}", Path::new("stdin").display(), f.to_string());
+                show_error!("stdin: {}", f);
                 Err(f)
             }
             okay => okay,

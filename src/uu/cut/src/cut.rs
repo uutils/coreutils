@@ -15,6 +15,7 @@ use clap::{crate_version, App, Arg};
 use std::fs::File;
 use std::io::{stdin, stdout, BufReader, BufWriter, Read, Write};
 use std::path::Path;
+use uucore::display::Quotable;
 
 use self::searcher::Searcher;
 use uucore::ranges::Range;
@@ -351,19 +352,19 @@ fn cut_files(mut filenames: Vec<String>, mode: Mode) -> i32 {
             let path = Path::new(&filename[..]);
 
             if path.is_dir() {
-                show_error!("{}: Is a directory", filename);
+                show_error!("{}: Is a directory", filename.maybe_quote());
                 continue;
             }
 
             if path.metadata().is_err() {
-                show_error!("{}: No such file or directory", filename);
+                show_error!("{}: No such file or directory", filename.maybe_quote());
                 continue;
             }
 
             let file = match File::open(&path) {
                 Ok(f) => f,
                 Err(e) => {
-                    show_error!("opening '{}': {}", &filename[..], e);
+                    show_error!("opening {}: {}", filename.quote(), e);
                     continue;
                 }
             };
@@ -548,7 +549,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
         .usage(SYNTAX)

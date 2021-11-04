@@ -21,7 +21,7 @@ use fnv::FnvHashMap;
 use std::io::{stdin, stdout, BufRead, BufWriter, Write};
 
 use crate::expand::ExpandSet;
-use uucore::InvalidEncodingHandling;
+use uucore::{display::Quotable, InvalidEncodingHandling};
 
 static ABOUT: &str = "translate or delete characters";
 
@@ -228,8 +228,8 @@ fn translate_input<T: SymbolTranslator>(
     }
 }
 
-fn get_usage() -> String {
-    format!("{} [OPTION]... SET1 [SET2]", executable!())
+fn usage() -> String {
+    format!("{} [OPTION]... SET1 [SET2]", uucore::execution_phrase())
 }
 
 fn get_long_usage() -> String {
@@ -243,7 +243,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let usage = get_usage();
+    let usage = usage();
     let after_help = get_long_usage();
 
     let matches = uu_app()
@@ -263,17 +263,17 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     if sets.is_empty() {
         show_error!(
-            "missing operand\nTry `{} --help` for more information.",
-            executable!()
+            "missing operand\nTry '{} --help' for more information.",
+            uucore::execution_phrase()
         );
         return 1;
     }
 
     if !(delete_flag || squeeze_flag) && sets.len() < 2 {
         show_error!(
-            "missing operand after '{}'\nTry `{} --help` for more information.",
-            sets[0],
-            executable!()
+            "missing operand after {}\nTry '{} --help' for more information.",
+            sets[0].quote(),
+            uucore::execution_phrase()
         );
         return 1;
     }
@@ -312,7 +312,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(

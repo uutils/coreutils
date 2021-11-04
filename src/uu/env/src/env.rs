@@ -7,10 +7,13 @@
 
 /* last synced with: env (GNU coreutils) 8.13 */
 
-// spell-checker:ignore (ToDO) chdir execvp progname subcommand subcommands unsets
+// spell-checker:ignore (ToDO) chdir execvp progname subcommand subcommands unsets setenv putenv posix_spawnp
 
 #[macro_use]
 extern crate clap;
+
+#[macro_use]
+extern crate uucore;
 
 use clap::{App, AppSettings, Arg};
 use ini::Ini;
@@ -19,6 +22,8 @@ use std::env;
 use std::io::{self, Write};
 use std::iter::Iterator;
 use std::process::Command;
+use uucore::display::Quotable;
+use uucore::error::{UResult, USimpleError};
 
 const USAGE: &str = "env [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]";
 const AFTER_HELP: &str = "\
@@ -61,8 +66,14 @@ fn parse_name_value_opt<'a>(opts: &mut Options<'a>, opt: &'a str) -> Result<bool
 
 fn parse_program_opt<'a>(opts: &mut Options<'a>, opt: &'a str) -> Result<(), i32> {
     if opts.null {
-        eprintln!("{}: cannot specify --null (-0) with command", crate_name!());
-        eprintln!("Type \"{} --help\" for detailed information", crate_name!());
+        eprintln!(
+            "{}: cannot specify --null (-0) with command",
+            uucore::util_name()
+        );
+        eprintln!(
+            "Type \"{} --help\" for detailed information",
+            uucore::execution_phrase()
+        );
         Err(1)
     } else {
         opts.program.push(opt);
@@ -70,7 +81,7 @@ fn parse_program_opt<'a>(opts: &mut Options<'a>, opt: &'a str) -> Result<(), i32
     }
 }
 
-fn load_config_file(opts: &mut Options) -> Result<(), i32> {
+fn load_config_file(opts: &mut Options) -> UResult<()> {
     // NOTE: config files are parsed using an INI parser b/c it's available and compatible with ".env"-style files
     //   ... * but support for actual INI files, although working, is not intended, nor claimed
     for &file in &opts.files {
@@ -83,13 +94,13 @@ fn load_config_file(opts: &mut Options) -> Result<(), i32> {
         };
 
         let conf = conf.map_err(|error| {
-            eprintln!("env: error: \"{}\": {}", file, error);
+            show_error!("{}: {}", file.maybe_quote(), error);
             1
         })?;
 
         for (_, prop) in &conf {
             // ignore all INI section lines (treat them as comments)
-            for (key, value) in prop {
+            for (key, value) in prop.iter() {
                 env::set_var(key, value);
             }
         }
@@ -157,7 +168,7 @@ pub fn uu_app() -> App<'static, 'static> {
             .help("remove variable from the environment"))
 }
 
-fn run_env(args: impl uucore::Args) -> Result<(), i32> {
+fn run_env(args: impl uucore::Args) -> UResult<()> {
     let app = uu_app();
     let matches = app.get_matches_from(args);
 
@@ -188,8 +199,10 @@ fn run_env(args: impl uucore::Args) -> Result<(), i32> {
         match env::set_current_dir(d) {
             Ok(()) => d,
             Err(error) => {
-                eprintln!("env: cannot change directory to \"{}\": {}", d, error);
-                return Err(125);
+                return Err(USimpleError::new(
+                    125,
+                    format!("cannot change directory to \"{}\": {}", d, error),
+                ));
             }
         };
     }
@@ -243,7 +256,32 @@ fn run_env(args: impl uucore::Args) -> Result<(), i32> {
 
     // set specified env vars
     for &(name, val) in &opts.sets {
-        // FIXME: set_var() panics if name is an empty string
+        /*
+         * set_var panics if name is an empty string
+         * set_var internally calls setenv (on unix at least), while GNU env calls putenv instead.
+         *
+         * putenv returns successfully if provided with something like "=a" and modifies the environ
+         * variable to contain "=a" inside it, effectively modifying the process' current environment
+         * to contain a malformed string in it. Using GNU's implementation, the command `env =a`
+         * prints out the malformed string and even invokes the child process with that environment.
+         * This can be seen by using `env -i =a env` or `env -i =a cat /proc/self/environ`
+         *
+         * POSIX.1-2017 doesn't seem to mention what to do if the string is malformed (at least
+         * not in "Chapter 8, Environment Variables" or in the definition for environ and various
+         * exec*'s or in the description of env in the "Shell & Utilities" volume).
+         *
+         * It also doesn't specify any checks for putenv before modifying the environ variable, which
+         * is likely why glibc doesn't do so. However, setenv's first argument cannot point to
+         * an empty string or a string containing '='.
+         *
+         * There is no benefit in replicating GNU's env behavior, since it will only modify the
+         * environment in weird ways
+         */
+
+        if name.is_empty() {
+            show_warning!("no name specified for value {}", val.quote());
+            continue;
+        }
         env::set_var(name, val);
     }
 
@@ -251,11 +289,16 @@ fn run_env(args: impl uucore::Args) -> Result<(), i32> {
         // we need to execute a command
         let (prog, args) = build_command(&mut opts.program);
 
-        // FIXME: this should just use execvp() (no fork()) on Unix-like systems
+        /*
+         * On Unix-like systems Command::status either ends up calling either fork or posix_spawnp
+         * (which ends up calling clone). Keep using the current process would be ideal, but the
+         * standard library contains many checks and fail-safes to ensure the process ends up being
+         * created. This is much simpler than dealing with the hassles of calling execvp directly.
+         */
         match Command::new(&*prog).args(args).status() {
-            Ok(exit) if !exit.success() => return Err(exit.code().unwrap()),
-            Err(ref err) if err.kind() == io::ErrorKind::NotFound => return Err(127),
-            Err(_) => return Err(126),
+            Ok(exit) if !exit.success() => return Err(exit.code().unwrap().into()),
+            Err(ref err) if err.kind() == io::ErrorKind::NotFound => return Err(127.into()),
+            Err(_) => return Err(126.into()),
             Ok(_) => (),
         }
     } else {
@@ -266,9 +309,7 @@ fn run_env(args: impl uucore::Args) -> Result<(), i32> {
     Ok(())
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    match run_env(args) {
-        Ok(()) => 0,
-        Err(code) => code,
-    }
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    run_env(args)
 }

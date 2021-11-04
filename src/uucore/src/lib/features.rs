@@ -8,11 +8,9 @@ pub mod fs;
 pub mod fsext;
 #[cfg(feature = "ringbuffer")]
 pub mod ringbuffer;
-#[cfg(feature = "zero-copy")]
-pub mod zero_copy;
 
 // * (platform-specific) feature-gated modules
-// ** non-windows
+// ** non-windows (i.e. Unix + Fuchsia)
 #[cfg(all(not(windows), feature = "mode"))]
 pub mod mode;
 
@@ -21,6 +19,8 @@ pub mod mode;
 pub mod entries;
 #[cfg(all(unix, feature = "perms"))]
 pub mod perms;
+#[cfg(all(unix, feature = "pipes"))]
+pub mod pipes;
 #[cfg(all(unix, feature = "process"))]
 pub mod process;
 
@@ -29,6 +29,7 @@ pub mod signals;
 #[cfg(all(
     unix,
     not(target_os = "fuchsia"),
+    not(target_os = "redox"),
     not(target_env = "musl"),
     feature = "utmpx"
 ))]

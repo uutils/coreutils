@@ -30,6 +30,7 @@ use crossterm::{
 
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
+use uucore::display::Quotable;
 
 const BELL: &str = "\x07";
 
@@ -64,12 +65,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             let file = Path::new(file);
             if file.is_dir() {
                 terminal::disable_raw_mode().unwrap();
-                show_usage_error!("'{}' is a directory.", file.display());
+                show_usage_error!("{} is a directory.", file.quote());
                 return 1;
             }
             if !file.exists() {
                 terminal::disable_raw_mode().unwrap();
-                show_error!("cannot open {}: No such file or directory", file.display());
+                show_error!("cannot open {}: No such file or directory", file.quote());
                 return 1;
             }
             if length > 1 {
@@ -93,7 +94,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .about("A file perusal filter for CRT viewing.")
         .version(crate_version!())
         .arg(
@@ -209,7 +210,7 @@ fn reset_term(stdout: &mut std::io::Stdout) {
 #[inline(always)]
 fn reset_term(_: &mut usize) {}
 
-fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>, silent: bool) {
+fn more(buff: &str, stdout: &mut Stdout, next_file: Option<&str>, silent: bool) {
     let (cols, rows) = terminal::size().unwrap();
     let lines = break_buff(buff, usize::from(cols));
 
@@ -231,7 +232,7 @@ fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>, silent: bo
                     code: KeyCode::Char('c'),
                     modifiers: KeyModifiers::CONTROL,
                 }) => {
-                    reset_term(&mut stdout);
+                    reset_term(stdout);
                     std::process::exit(0);
                 }
                 Event::Key(KeyEvent {

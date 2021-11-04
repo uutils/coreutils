@@ -3,14 +3,6 @@
 // Copyright (C) ~ Alex Lyon <arcterus@mail.com>
 // Copyright (C) ~ Roy Ivy III <rivy.dev@gmail.com>; MIT license
 
-// * feature-gated external crates
-#[cfg(all(feature = "lazy_static", target_os = "linux"))]
-extern crate lazy_static;
-#[cfg(feature = "nix")]
-extern crate nix;
-#[cfg(feature = "platform-info")]
-extern crate platform_info;
-
 // * feature-gated external crates (re-shared as public internal modules)
 #[cfg(feature = "libc")]
 pub extern crate libc;
@@ -27,6 +19,7 @@ mod parser; // string parsing modules
 // * cross-platform modules
 pub use crate::mods::backup_control;
 pub use crate::mods::coreopts;
+pub use crate::mods::display;
 pub use crate::mods::error;
 pub use crate::mods::os;
 pub use crate::mods::panic;
@@ -46,11 +39,9 @@ pub use crate::features::fs;
 pub use crate::features::fsext;
 #[cfg(feature = "ringbuffer")]
 pub use crate::features::ringbuffer;
-#[cfg(feature = "zero-copy")]
-pub use crate::features::zero_copy;
 
 // * (platform-specific) feature-gated modules
-// ** non-windows
+// ** non-windows (i.e. Unix + Fuchsia)
 #[cfg(all(not(windows), feature = "mode"))]
 pub use crate::features::mode;
 // ** unix-only
@@ -58,6 +49,8 @@ pub use crate::features::mode;
 pub use crate::features::entries;
 #[cfg(all(unix, feature = "perms"))]
 pub use crate::features::perms;
+#[cfg(all(unix, feature = "pipes"))]
+pub use crate::features::pipes;
 #[cfg(all(unix, feature = "process"))]
 pub use crate::features::process;
 #[cfg(all(unix, not(target_os = "fuchsia"), feature = "signals"))]
@@ -65,6 +58,7 @@ pub use crate::features::signals;
 #[cfg(all(
     unix,
     not(target_os = "fuchsia"),
+    not(target_os = "redox"),
     not(target_env = "musl"),
     feature = "utmpx"
 ))]
@@ -76,6 +70,55 @@ pub use crate::features::wide;
 //## core functions
 
 use std::ffi::OsString;
+use std::sync::atomic::Ordering;
+
+use once_cell::sync::Lazy;
+
+use crate::display::Quotable;
+
+pub fn get_utility_is_second_arg() -> bool {
+    crate::macros::UTILITY_IS_SECOND_ARG.load(Ordering::SeqCst)
+}
+
+pub fn set_utility_is_second_arg() {
+    crate::macros::UTILITY_IS_SECOND_ARG.store(true, Ordering::SeqCst)
+}
+
+// args_os() can be expensive to call, it copies all of argv before iterating.
+// So if we want only the first arg or so it's overkill. We cache it.
+static ARGV: Lazy<Vec<OsString>> = Lazy::new(|| wild::args_os().collect());
+
+static UTIL_NAME: Lazy<String> = Lazy::new(|| {
+    if get_utility_is_second_arg() {
+        &ARGV[1]
+    } else {
+        &ARGV[0]
+    }
+    .to_string_lossy()
+    .into_owned()
+});
+
+/// Derive the utility name.
+pub fn util_name() -> &'static str {
+    &UTIL_NAME
+}
+
+static EXECUTION_PHRASE: Lazy<String> = Lazy::new(|| {
+    if get_utility_is_second_arg() {
+        ARGV.iter()
+            .take(2)
+            .map(|os_str| os_str.to_string_lossy().into_owned())
+            .collect::<Vec<_>>()
+            .join(" ")
+    } else {
+        ARGV[0].to_string_lossy().into_owned()
+    }
+});
+
+/// Derive the complete execution phrase for "usage".
+pub fn execution_phrase() -> &'static str {
+    &EXECUTION_PHRASE
+}
 
 pub enum InvalidEncodingHandling {
     Ignore,
@@ -132,14 +175,15 @@ pub trait Args: Iterator<Item = OsString> + Sized {
                 Ok(string) => Ok(string),
                 Err(s_ret) => {
                     full_conversion = false;
-                    let lossy_conversion = s_ret.to_string_lossy();
                     eprintln!(
-                        "Input with broken encoding occurred! (s = '{}') ",
-                        &lossy_conversion
+                        "Input with broken encoding occurred! (s = {}) ",
+                        s_ret.quote()
                     );
                     match handling {
                         InvalidEncodingHandling::Ignore => Err(String::new()),
-                        InvalidEncodingHandling::ConvertLossy => Err(lossy_conversion.to_string()),
+                        InvalidEncodingHandling::ConvertLossy => {
+                            Err(s_ret.to_string_lossy().into_owned())
+                        }
                         InvalidEncodingHandling::Panic => {
                             panic!("Broken encoding found but caller cannot handle it")
                         }
@@ -171,13 +215,8 @@ pub trait Args: Iterator<Item = OsString> + Sized {
 
 impl<T: Iterator<Item = OsString> + Sized> Args for T {}
 
-// args() ...
-pub fn args() -> impl Iterator<Item = String> {
-    wild::args()
-}
-
 pub fn args_os() -> impl Iterator<Item = OsString> {
-    wild::args_os()
+    ARGV.iter().cloned()
 }
 
 #[cfg(test)]

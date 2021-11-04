@@ -21,6 +21,7 @@ use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use once_cell::unsync::OnceCell;
 use quoting_style::{escape_name, QuotingStyle};
+use std::ffi::OsString;
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 use std::{
@@ -39,15 +40,23 @@ use std::{
     time::Duration,
 };
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
-use uucore::error::{set_exit_code, FromIo, UCustomError, UResult};
+use uucore::{
+    display::Quotable,
+    error::{set_exit_code, UError, UResult},
+};
 
 use unicode_width::UnicodeWidthStr;
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 use uucore::{fs::display_permissions, version_cmp::version_cmp};
 
-fn get_usage() -> String {
-    format!("{0} [OPTION]... [FILE]...", executable!())
+#[cfg(not(feature = "selinux"))]
+static CONTEXT_HELP_TEXT: &str = "print any security context of each file (not enabled)";
+#[cfg(feature = "selinux")]
+static CONTEXT_HELP_TEXT: &str = "print any security context of each file";
+
+fn usage() -> String {
+    format!("{0} [OPTION]... [FILE]...", uucore::execution_phrase())
 }
 
 pub mod options {
@@ -125,7 +134,10 @@ pub mod options {
     pub static FULL_TIME: &str = "full-time";
     pub static HIDE: &str = "hide";
     pub static IGNORE: &str = "ignore";
+    pub static CONTEXT: &str = "context";
 }
+
+const DEFAULT_TERM_WIDTH: u16 = 80;
 
 #[derive(Debug)]
 enum LsError {
@@ -133,7 +145,7 @@ enum LsError {
     NoMetadata(PathBuf),
 }
 
-impl UCustomError for LsError {
+impl UError for LsError {
     fn code(&self) -> i32 {
         match self {
             LsError::InvalidLineWidth(_) => 2,
@@ -147,8 +159,8 @@ impl Error for LsError {}
 impl Display for LsError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LsError::InvalidLineWidth(s) => write!(f, "invalid line width: '{}'", s),
-            LsError::NoMetadata(p) => write!(f, "could not open file: '{}'", p.display()),
+            LsError::InvalidLineWidth(s) => write!(f, "invalid line width: {}", s.quote()),
+            LsError::NoMetadata(p) => write!(f, "could not open file: {}", p.quote()),
         }
     }
 }
@@ -229,10 +241,12 @@ struct Config {
     inode: bool,
     color: Option<LsColors>,
     long: LongFormat,
-    width: Option<u16>,
+    width: u16,
     quoting_style: QuotingStyle,
     indicator_style: IndicatorStyle,
     time_style: TimeStyle,
+    context: bool,
+    selinux_supported: bool,
 }
 
 // Fields that can be removed or added to the long format
@@ -244,9 +258,18 @@ struct LongFormat {
     numeric_uid_gid: bool,
 }
 
+struct PaddingCollection {
+    longest_link_count_len: usize,
+    longest_uname_len: usize,
+    longest_group_len: usize,
+    longest_context_len: usize,
+    longest_size_len: usize,
+}
+
 impl Config {
     #[allow(clippy::cognitive_complexity)]
-    fn from(options: clap::ArgMatches) -> UResult<Config> {
+    fn from(options: &clap::ArgMatches) -> UResult<Config> {
+        let context = options.is_present(options::CONTEXT);
         let (mut format, opt) = if let Some(format_) = options.value_of(options::FORMAT) {
             (
                 match format_ {
@@ -258,16 +281,20 @@ impl Config {
                     // below should never happen as clap already restricts the values.
                     _ => unreachable!("Invalid field for --format"),
                 },
-                options::FORMAT,
+                Some(options::FORMAT),
             )
         } else if options.is_present(options::format::LONG) {
-            (Format::Long, options::format::LONG)
+            (Format::Long, Some(options::format::LONG))
         } else if options.is_present(options::format::ACROSS) {
-            (Format::Across, options::format::ACROSS)
+            (Format::Across, Some(options::format::ACROSS))
         } else if options.is_present(options::format::COMMAS) {
-            (Format::Commas, options::format::COMMAS)
+            (Format::Commas, Some(options::format::COMMAS))
+        } else if options.is_present(options::format::COLUMNS) {
+            (Format::Columns, Some(options::format::COLUMNS))
+        } else if atty::is(atty::Stream::Stdout) {
+            (Format::Columns, None)
         } else {
-            (Format::Columns, options::format::COLUMNS)
+            (Format::OneLine, None)
         };
 
         // The -o, -n and -g options are tricky. They cannot override with each
@@ -286,9 +313,8 @@ impl Config {
         // options, but manually whether they have an index that's greater than
         // the other format options. If so, we set the appropriate format.
         if format != Format::Long {
-            let idx = options
-                .indices_of(opt)
-                .map(|x| x.max().unwrap())
+            let idx = opt
+                .and_then(|opt| options.indices_of(opt).map(|x| x.max().unwrap()))
                 .unwrap_or(0);
             if [
                 options::format::LONG_NO_OWNER,
@@ -399,20 +425,34 @@ impl Config {
 
         let width = match options.value_of(options::WIDTH) {
             Some(x) => match x.parse::<u16>() {
-                Ok(u) => Some(u),
+                Ok(u) => u,
                 Err(_) => return Err(LsError::InvalidLineWidth(x.into()).into()),
             },
-            None => termsize::get().map(|s| s.cols),
+            None => match termsize::get() {
+                Some(size) => size.cols,
+                None => match std::env::var_os("COLUMNS") {
+                    Some(columns) => match columns.to_str().and_then(|s| s.parse().ok()) {
+                        Some(columns) => columns,
+                        None => {
+                            show_error!(
+                                "ignoring invalid width in environment variable COLUMNS: {}",
+                                columns.quote()
+                            );
+                            DEFAULT_TERM_WIDTH
+                        }
+                    },
+                    None => DEFAULT_TERM_WIDTH,
+                },
+            },
         };
 
         #[allow(clippy::needless_bool)]
         let show_control = if options.is_present(options::HIDE_CONTROL_CHARS) {
             false
-        } else if options.is_present(options::SHOW_CONTROL_CHARS) || atty::is(atty::Stream::Stdout)
-        {
+        } else if options.is_present(options::SHOW_CONTROL_CHARS) {
             true
         } else {
-            false
+            !atty::is(atty::Stream::Stdout)
         };
 
         let quoting_style = if let Some(style) = options.value_of(options::QUOTING_STYLE) {
@@ -518,7 +558,7 @@ impl Config {
                 Ok(p) => {
                     ignore_patterns.add(p);
                 }
-                Err(_) => show_warning!("Invalid pattern for ignore: '{}'", pattern),
+                Err(_) => show_warning!("Invalid pattern for ignore: {}", pattern.quote()),
             }
         }
 
@@ -528,7 +568,7 @@ impl Config {
                     Ok(p) => {
                         ignore_patterns.add(p);
                     }
-                    Err(_) => show_warning!("Invalid pattern for hide: '{}'", pattern),
+                    Err(_) => show_warning!("Invalid pattern for hide: {}", pattern.quote()),
                 }
             }
         }
@@ -573,32 +613,40 @@ impl Config {
             quoting_style,
             indicator_style,
             time_style,
+            context,
+            selinux_supported: {
+                #[cfg(feature = "selinux")]
+                {
+                    selinux::kernel_support() != selinux::KernelSupport::Unsupported
+                }
+                #[cfg(not(feature = "selinux"))]
+                {
+                    false
+                }
+            },
         })
     }
 }
 
 #[uucore_procs::gen_uumain]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args
-        .collect_str(InvalidEncodingHandling::Ignore)
-        .accept_any();
-
-    let usage = get_usage();
+    let usage = usage();
 
     let app = uu_app().usage(&usage[..]);
 
     let matches = app.get_matches_from(args);
 
+    let config = Config::from(&matches)?;
     let locs = matches
-        .values_of(options::PATHS)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_else(|| vec![String::from(".")]);
+        .values_of_os(options::PATHS)
+        .map(|v| v.map(Path::new).collect())
+        .unwrap_or_else(|| vec![Path::new(".")]);
 
-    list(locs, Config::from(matches)?)
+    list(locs, config)
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(
             "By default, ls will list the files and contents of any directories on \
@@ -1137,6 +1185,12 @@ only ignore '.' and '..'.",
                 .overrides_with(options::FULL_TIME)
                 .help("like -l --time-style=full-iso"),
         )
+        .arg(
+            Arg::with_name(options::CONTEXT)
+                .short("Z")
+                .long(options::CONTEXT)
+                .help(CONTEXT_HELP_TEXT),
+        )
         // Positional arguments
         .arg(
             Arg::with_name(options::PATHS)
@@ -1157,17 +1211,18 @@ struct PathData {
     md: OnceCell<Option<Metadata>>,
     ft: OnceCell<Option<FileType>>,
     // Name of the file - will be empty for . or ..
-    display_name: String,
+    display_name: OsString,
     // PathBuf that all above data corresponds to
     p_buf: PathBuf,
     must_dereference: bool,
+    security_context: String,
 }
 
 impl PathData {
     fn new(
         p_buf: PathBuf,
         file_type: Option<std::io::Result<FileType>>,
-        file_name: Option<String>,
+        file_name: Option<OsString>,
         config: &Config,
         command_line: bool,
     ) -> Self {
@@ -1175,16 +1230,13 @@ impl PathData {
         // For '..', the filename is None
         let display_name = if let Some(name) = file_name {
             name
+        } else if command_line {
+            p_buf.clone().into()
         } else {
-            let display_os_str = if command_line {
-                p_buf.as_os_str()
-            } else {
-                p_buf
-                    .file_name()
-                    .unwrap_or_else(|| p_buf.iter().next_back().unwrap())
-            };
-
-            display_os_str.to_string_lossy().into_owned()
+            p_buf
+                .file_name()
+                .unwrap_or_else(|| p_buf.iter().next_back().unwrap())
+                .to_owned()
         };
         let must_dereference = match &config.dereference {
             Dereference::All => true,
@@ -1207,12 +1259,19 @@ impl PathData {
             None => OnceCell::new(),
         };
 
+        let security_context = if config.context {
+            get_security_context(config, &p_buf, must_dereference)
+        } else {
+            String::new()
+        };
+
         Self {
             md: OnceCell::new(),
             ft,
             display_name,
             p_buf,
             must_dereference,
+            security_context,
         }
     }
 
@@ -1229,19 +1288,24 @@ impl PathData {
     }
 }
 
-fn list(locs: Vec<String>, config: Config) -> UResult<()> {
+fn list(locs: Vec<&Path>, config: Config) -> UResult<()> {
     let mut files = Vec::<PathData>::new();
     let mut dirs = Vec::<PathData>::new();
 
     let mut out = BufWriter::new(stdout());
 
     for loc in &locs {
-        let p = PathBuf::from(&loc);
+        let p = PathBuf::from(loc);
         let path_data = PathData::new(p, None, None, &config, true);
 
         if path_data.md().is_none() {
-            show!(std::io::ErrorKind::NotFound
-                .map_err_context(|| format!("cannot access '{}'", path_data.p_buf.display())));
+            // FIXME: Would be nice to use the actual error instead of hardcoding it
+            // Presumably other errors can happen too?
+            show_error!(
+                "cannot access {}: No such file or directory",
+                path_data.p_buf.quote()
+            );
+            set_exit_code(1);
             // We found an error, no need to continue the execution
             continue;
         }
@@ -1266,6 +1330,7 @@ fn list(locs: Vec<String>, config: Config) -> UResult<()> {
     sort_entries(&mut dirs, &config);
     for dir in dirs {
         if locs.len() > 1 || config.recursive {
+            // FIXME: This should use the quoting style and propagate errors
             let _ = writeln!(out, "\n{}:", dir.p_buf.display());
         }
         enter_directory(&dir, &config, &mut out);
@@ -1342,8 +1407,8 @@ fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>)
         vec![]
     };
 
-    let mut temp: Vec<_> = safe_unwrap!(fs::read_dir(&dir.p_buf))
-        .map(|res| safe_unwrap!(res))
+    let mut temp: Vec<_> = crash_if_err!(1, fs::read_dir(&dir.p_buf))
+        .map(|res| crash_if_err!(1, res))
         .filter(|e| should_display(e, config))
         .map(|e| PathData::new(DirEntry::path(&e), Some(e.file_type()), None, config, false))
         .collect();
@@ -1374,30 +1439,55 @@ fn get_metadata(entry: &Path, dereference: bool) -> std::io::Result<Metadata> {
     }
 }
 
-fn display_dir_entry_size(entry: &PathData, config: &Config) -> (usize, usize) {
+fn display_dir_entry_size(entry: &PathData, config: &Config) -> (usize, usize, usize, usize) {
+    // TODO: Cache/memorize the display_* results so we don't have to recalculate them.
     if let Some(md) = entry.md() {
         (
             display_symlink_count(md).len(),
+            display_uname(md, config).len(),
+            display_group(md, config).len(),
             display_size_or_rdev(md, config).len(),
         )
     } else {
-        (0, 0)
+        (0, 0, 0, 0)
     }
 }
 
-fn pad_left(string: String, count: usize) -> String {
+fn pad_left(string: &str, count: usize) -> String {
     format!("{:>width$}", string, width = count)
 }
 
+fn pad_right(string: &str, count: usize) -> String {
+    format!("{:<width$}", string, width = count)
+}
+
 fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) {
+    // `-Z`, `--context`:
+    // Display the SELinux security context or '?' if none is found. When used with the `-l`
+    // option, print the security context to the left of the size column.
+
     if config.format == Format::Long {
-        let (mut max_links, mut max_width) = (1, 1);
+        let (
+            mut longest_link_count_len,
+            mut longest_uname_len,
+            mut longest_group_len,
+            mut longest_context_len,
+            mut longest_size_len,
+        ) = (1, 1, 1, 1, 1);
         let mut total_size = 0;
 
         for item in items {
-            let (links, width) = display_dir_entry_size(item, config);
-            max_links = links.max(max_links);
-            max_width = width.max(max_width);
+            let context_len = item.security_context.len();
+            let (link_count_len, uname_len, group_len, size_len) =
+                display_dir_entry_size(item, config);
+            longest_link_count_len = link_count_len.max(longest_link_count_len);
+            longest_size_len = size_len.max(longest_size_len);
+            longest_uname_len = uname_len.max(longest_uname_len);
+            longest_group_len = group_len.max(longest_group_len);
+            if config.context {
+                longest_context_len = context_len.max(longest_context_len);
+            }
+            longest_size_len = size_len.max(longest_size_len);
             total_size += item.md().map_or(0, |md| get_block_size(md, config));
         }
 
@@ -1406,20 +1496,38 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
         }
 
         for item in items {
-            display_item_long(item, max_links, max_width, config, out);
+            display_item_long(
+                item,
+                PaddingCollection {
+                    longest_link_count_len,
+                    longest_uname_len,
+                    longest_group_len,
+                    longest_context_len,
+                    longest_size_len,
+                },
+                config,
+                out,
+            );
         }
     } else {
-        let names = items.iter().filter_map(|i| display_file_name(i, config));
+        let mut longest_context_len = 1;
+        let prefix_context = if config.context {
+            for item in items {
+                let context_len = item.security_context.len();
+                longest_context_len = context_len.max(longest_context_len);
+            }
+            Some(longest_context_len)
+        } else {
+            None
+        };
+        let names = items
+            .iter()
+            .filter_map(|i| display_file_name(i, config, prefix_context));
 
-        match (&config.format, config.width) {
-            (Format::Columns, Some(width)) => {
-                display_grid(names, width, Direction::TopToBottom, out)
-            }
-            (Format::Across, Some(width)) => {
-                display_grid(names, width, Direction::LeftToRight, out)
-            }
-            (Format::Commas, width_opt) => {
-                let term_width = width_opt.unwrap_or(1);
+        match config.format {
+            Format::Columns => display_grid(names, config.width, Direction::TopToBottom, out),
+            Format::Across => display_grid(names, config.width, Direction::LeftToRight, out),
+            Format::Commas => {
                 let mut current_col = 0;
                 let mut names = names;
                 if let Some(name) = names.next() {
@@ -1428,7 +1536,8 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
                 }
                 for name in names {
                     let name_width = name.width as u16;
-                    if current_col + name_width + 1 > term_width {
+                    // If the width is 0 we print one single line
+                    if config.width != 0 && current_col + name_width + 1 > config.width {
                         current_col = name_width + 2;
                         let _ = write!(out, ",\n{}", name.contents);
                     } else {
@@ -1480,30 +1589,71 @@ fn display_grid(
     direction: Direction,
     out: &mut BufWriter<Stdout>,
 ) {
-    let mut grid = Grid::new(GridOptions {
-        filling: Filling::Spaces(2),
-        direction,
-    });
-
-    for name in names {
-        grid.add(name);
-    }
-
-    match grid.fit_into_width(width as usize) {
-        Some(output) => {
-            let _ = write!(out, "{}", output);
+    if width == 0 {
+        // If the width is 0 we print one single line
+        let mut printed_something = false;
+        for name in names {
+            if printed_something {
+                let _ = write!(out, "  ");
+            }
+            printed_something = true;
+            let _ = write!(out, "{}", name.contents);
         }
-        // Width is too small for the grid, so we fit it in one column
-        None => {
-            let _ = write!(out, "{}", grid.fit_into_columns(1));
+        if printed_something {
+            let _ = writeln!(out);
+        }
+    } else {
+        let mut grid = Grid::new(GridOptions {
+            filling: Filling::Spaces(2),
+            direction,
+        });
+
+        for name in names {
+            grid.add(name);
+        }
+
+        match grid.fit_into_width(width as usize) {
+            Some(output) => {
+                let _ = write!(out, "{}", output);
+            }
+            // Width is too small for the grid, so we fit it in one column
+            None => {
+                let _ = write!(out, "{}", grid.fit_into_columns(1));
+            }
         }
     }
 }
 
+/// This writes to the BufWriter out a single string of the output of `ls -l`.
+///
+/// It writes the following keys, in order:
+/// * `inode` ([`get_inode`], config-optional)
+/// * `permissions` ([`display_permissions`])
+/// * `symlink_count` ([`display_symlink_count`])
+/// * `owner` ([`display_uname`], config-optional)
+/// * `group` ([`display_group`], config-optional)
+/// * `author` ([`display_uname`], config-optional)
+/// * `size / rdev` ([`display_size_or_rdev`])
+/// * `system_time` ([`get_system_time`])
+/// * `file_name` ([`display_file_name`])
+///
+/// This function needs to display information in columns:
+/// * permissions and system_time are already guaranteed to be pre-formatted in fixed length.
+/// * file_name is the last column and is left-aligned.
+/// * Everything else needs to be padded using [`pad_left`].
+///
+/// That's why we have the parameters:
+/// ```txt
+///    longest_link_count_len: usize,
+///    longest_uname_len: usize,
+///    longest_group_len: usize,
+///    longest_context_len: usize,
+///    longest_size_len: usize,
+/// ```
+/// that decide the maximum possible character count of each field.
 fn display_item_long(
     item: &PathData,
-    max_links: usize,
-    max_size: usize,
+    padding: PaddingCollection,
     config: &Config,
     out: &mut BufWriter<Stdout>,
 ) {
@@ -1524,34 +1674,61 @@ fn display_item_long(
 
     let _ = write!(
         out,
-        "{} {}",
+        "{}{} {}",
         display_permissions(md, true),
-        pad_left(display_symlink_count(md), max_links),
+        if item.security_context.len() > 1 {
+            // GNU `ls` uses a "." character to indicate a file with a security context,
+            // but not other alternate access method.
+            "."
+        } else {
+            ""
+        },
+        pad_left(&display_symlink_count(md), padding.longest_link_count_len),
     );
 
     if config.long.owner {
-        let _ = write!(out, " {}", display_uname(md, config));
+        let _ = write!(
+            out,
+            " {}",
+            pad_right(&display_uname(md, config), padding.longest_uname_len)
+        );
     }
 
     if config.long.group {
-        let _ = write!(out, " {}", display_group(md, config));
+        let _ = write!(
+            out,
+            " {}",
+            pad_right(&display_group(md, config), padding.longest_group_len)
+        );
+    }
+
+    if config.context {
+        let _ = write!(
+            out,
+            " {}",
+            pad_right(&item.security_context, padding.longest_context_len)
+        );
     }
 
     // Author is only different from owner on GNU/Hurd, so we reuse
     // the owner, since GNU/Hurd is not currently supported by Rust.
     if config.long.author {
-        let _ = write!(out, " {}", display_uname(md, config));
+        let _ = write!(
+            out,
+            " {}",
+            pad_right(&display_uname(md, config), padding.longest_uname_len)
+        );
     }
 
     let _ = writeln!(
         out,
         " {} {} {}",
-        pad_left(display_size_or_rdev(md, config), max_size),
+        pad_left(&display_size_or_rdev(md, config), padding.longest_size_len),
         display_date(md, config),
         // unwrap is fine because it fails when metadata is not available
         // but we already know that it is because it's checked at the
         // start of the function.
-        display_file_name(item, config).unwrap().contents,
+        display_file_name(item, config, None).unwrap().contents,
     );
 }
 
@@ -1566,7 +1743,6 @@ fn get_inode(metadata: &Metadata) -> String {
 use std::sync::Mutex;
 #[cfg(unix)]
 use uucore::entries;
-use uucore::InvalidEncodingHandling;
 
 #[cfg(unix)]
 fn cached_uid2usr(uid: u32) -> String {
@@ -1590,7 +1766,7 @@ fn display_uname(metadata: &Metadata, config: &Config) -> String {
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "redox")))]
 fn cached_gid2grp(gid: u32) -> String {
     lazy_static! {
         static ref GID_CACHE: Mutex<HashMap<u32, String>> = Mutex::new(HashMap::new());
@@ -1603,13 +1779,18 @@ fn cached_gid2grp(gid: u32) -> String {
         .clone()
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "redox")))]
 fn display_group(metadata: &Metadata, config: &Config) -> String {
     if config.long.numeric_uid_gid {
         metadata.gid().to_string()
     } else {
         cached_gid2grp(metadata.gid())
     }
+}
+
+#[cfg(target_os = "redox")]
+fn display_group(metadata: &Metadata, config: &Config) -> String {
+    metadata.gid().to_string()
 }
 
 #[cfg(not(unix))]
@@ -1762,17 +1943,31 @@ fn classify_file(path: &PathData) -> Option<char> {
     }
 }
 
-fn display_file_name(path: &PathData, config: &Config) -> Option<Cell> {
+/// Takes a [`PathData`] struct and returns a cell with a name ready for displaying.
+///
+/// This function relies on the following parameters in the provided `&Config`:
+/// * `config.quoting_style` to decide how we will escape `name` using [`escape_name`].
+/// * `config.inode` decides whether to display inode numbers beside names using [`get_inode`].
+/// * `config.color` decides whether it's going to color `name` using [`color_name`].
+/// * `config.indicator_style` to append specific characters to `name` using [`classify_file`].
+/// * `config.format` to display symlink targets if `Format::Long`. This function is also
+///   responsible for coloring symlink target names if `config.color` is specified.
+/// * `config.context` to prepend security context to `name` if compiled with `feat_selinux`.
+///
+/// Note that non-unicode sequences in symlink targets are dealt with using
+/// [`std::path::Path::to_string_lossy`].
+fn display_file_name(
+    path: &PathData,
+    config: &Config,
+    prefix_context: Option<usize>,
+) -> Option<Cell> {
+    // This is our return value. We start by `&path.display_name` and modify it along the way.
     let mut name = escape_name(&path.display_name, &config.quoting_style);
 
     #[cfg(unix)]
     {
         if config.format != Format::Long && config.inode {
-            name = path
-                .md()
-                .map_or_else(|| "?".to_string(), |md| get_inode(md))
-                + " "
-                + &name;
+            name = path.md().map_or_else(|| "?".to_string(), get_inode) + " " + &name;
         }
     }
 
@@ -1815,7 +2010,55 @@ fn display_file_name(path: &PathData, config: &Config) -> Option<Cell> {
     if config.format == Format::Long && path.file_type()?.is_symlink() {
         if let Ok(target) = path.p_buf.read_link() {
             name.push_str(" -> ");
-            name.push_str(&target.to_string_lossy());
+
+            // We might as well color the symlink output after the arrow.
+            // This makes extra system calls, but provides important information that
+            // people run `ls -l --color` are very interested in.
+            if let Some(ls_colors) = &config.color {
+                // We get the absolute path to be able to construct PathData with valid Metadata.
+                // This is because relative symlinks will fail to get_metadata.
+                let mut absolute_target = target.clone();
+                if target.is_relative() {
+                    if let Some(parent) = path.p_buf.parent() {
+                        absolute_target = parent.join(absolute_target);
+                    }
+                }
+
+                let target_data = PathData::new(absolute_target, None, None, config, false);
+
+                // If we have a symlink to a valid file, we use the metadata of said file.
+                // Because we use an absolute path, we can assume this is guaranteed to exist.
+                // Otherwise, we use path.md(), which will guarantee we color to the same
+                // color of non-existent symlinks according to style_for_path_with_metadata.
+                let target_metadata = match target_data.md() {
+                    Some(md) => md,
+                    None => path.md()?,
+                };
+
+                name.push_str(&color_name(
+                    ls_colors,
+                    &target_data.p_buf,
+                    target.to_string_lossy().into_owned(),
+                    target_metadata,
+                ));
+            } else {
+                // If no coloring is required, we just use target as is.
+                name.push_str(&target.to_string_lossy());
+            }
+        }
+    }
+
+    // Prepend the security context to the `name` and adjust `width` in order
+    // to get correct alignment from later calls to`display_grid()`.
+    if config.context {
+        if let Some(pad_count) = prefix_context {
+            let security_context = if !matches!(config.format, Format::Commas) {
+                pad_left(&path.security_context, pad_count)
+            } else {
+                path.security_context.to_owned()
+            };
+            name = format!("{} {}", security_context, name);
+            width += security_context.len() + 1;
         }
     }
 
@@ -1842,4 +2085,43 @@ fn display_symlink_count(_metadata: &Metadata) -> String {
 #[cfg(unix)]
 fn display_symlink_count(metadata: &Metadata) -> String {
     metadata.nlink().to_string()
+}
+
+// This returns the SELinux security context as UTF8 `String`.
+// In the long term this should be changed to `OsStr`, see discussions at #2621/#2656
+#[allow(unused_variables)]
+fn get_security_context(config: &Config, p_buf: &Path, must_dereference: bool) -> String {
+    let substitute_string = "?".to_string();
+    if config.selinux_supported {
+        #[cfg(feature = "selinux")]
+        {
+            match selinux::SecurityContext::of_path(p_buf, must_dereference, false) {
+                Err(_r) => {
+                    // TODO: show the actual reason why it failed
+                    show_warning!("failed to get security context of: {}", p_buf.quote());
+                    substitute_string
+                }
+                Ok(None) => substitute_string,
+                Ok(Some(context)) => {
+                    let context = context.as_bytes();
+
+                    let context = context.strip_suffix(&[0]).unwrap_or(context);
+                    String::from_utf8(context.to_vec()).unwrap_or_else(|e| {
+                        show_warning!(
+                            "getting security context of: {}: {}",
+                            p_buf.quote(),
+                            e.to_string()
+                        );
+                        String::from_utf8_lossy(context).into_owned()
+                    })
+                }
+            }
+        }
+        #[cfg(not(feature = "selinux"))]
+        {
+            substitute_string
+        }
+    } else {
+        substitute_string
+    }
 }

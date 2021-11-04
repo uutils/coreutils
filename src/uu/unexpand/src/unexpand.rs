@@ -16,6 +16,7 @@ use std::fs::File;
 use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Stdout, Write};
 use std::str::from_utf8;
 use unicode_width::UnicodeWidthChar;
+use uucore::display::Quotable;
 use uucore::InvalidEncodingHandling;
 
 static NAME: &str = "unexpand";
@@ -102,7 +103,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
         .usage(USAGE)
@@ -141,9 +142,9 @@ fn open(path: String) -> BufReader<Box<dyn Read + 'static>> {
     if path == "-" {
         BufReader::new(Box::new(stdin()) as Box<dyn Read>)
     } else {
-        file_buf = match File::open(&path[..]) {
+        file_buf = match File::open(&path) {
             Ok(a) => a,
-            Err(e) => crash!(1, "{}: {}", &path[..], e),
+            Err(e) => crash!(1, "{}: {}", path.maybe_quote(), e),
         };
         BufReader::new(Box::new(file_buf) as Box<dyn Read>)
     }
@@ -178,13 +179,13 @@ fn write_tabs(
                 break;
             }
 
-            safe_unwrap!(output.write_all(b"\t"));
+            crash_if_err!(1, output.write_all(b"\t"));
             scol += nts;
         }
     }
 
     while col > scol {
-        safe_unwrap!(output.write_all(b" "));
+        crash_if_err!(1, output.write_all(b" "));
         scol += 1;
     }
 }
@@ -272,7 +273,7 @@ fn unexpand(options: Options) {
                         init,
                         true,
                     );
-                    safe_unwrap!(output.write_all(&buf[byte..]));
+                    crash_if_err!(1, output.write_all(&buf[byte..]));
                     scol = col;
                     break;
                 }
@@ -292,7 +293,7 @@ fn unexpand(options: Options) {
                         };
 
                         if !tabs_buffered {
-                            safe_unwrap!(output.write_all(&buf[byte..byte + nbytes]));
+                            crash_if_err!(1, output.write_all(&buf[byte..byte + nbytes]));
                             scol = col; // now printed up to this column
                         }
                     }
@@ -317,7 +318,7 @@ fn unexpand(options: Options) {
                         } else {
                             0
                         };
-                        safe_unwrap!(output.write_all(&buf[byte..byte + nbytes]));
+                        crash_if_err!(1, output.write_all(&buf[byte..byte + nbytes]));
                         scol = col; // we've now printed up to this column
                     }
                 }
@@ -336,7 +337,7 @@ fn unexpand(options: Options) {
                 init,
                 true,
             );
-            safe_unwrap!(output.flush());
+            crash_if_err!(1, output.flush());
             buf.truncate(0); // clear out the buffer
         }
     }

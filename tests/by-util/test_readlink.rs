@@ -3,6 +3,17 @@ use crate::common::util::*;
 static GIBBERISH: &str = "supercalifragilisticexpialidocious";
 
 #[test]
+fn test_resolve() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("foo");
+    at.symlink_file("foo", "bar");
+
+    scene.ucmd().arg("bar").succeeds().stdout_contains("foo\n");
+}
+
+#[test]
 fn test_canonicalize() {
     let (at, mut ucmd) = at_and_ucmd!();
     let actual = ucmd.arg("-f").arg(".").run().stdout_move_str();

@@ -10,6 +10,7 @@ use std::{
     fs::{remove_file, File},
     io::{BufRead, BufWriter, Write},
 };
+use uucore::display::Quotable;
 
 mod csplit_error;
 mod patterns;
@@ -34,8 +35,11 @@ mod options {
     pub const PATTERN: &str = "pattern";
 }
 
-fn get_usage() -> String {
-    format!("{0} [OPTION]... FILE PATTERN...", executable!())
+fn usage() -> String {
+    format!(
+        "{0} [OPTION]... FILE PATTERN...",
+        uucore::execution_phrase()
+    )
 }
 
 /// Command line options for csplit.
@@ -316,18 +320,19 @@ impl<'a> SplitWriter<'a> {
             let l = line?;
             match n.cmp(&(&ln + 1)) {
                 Ordering::Less => {
-                    if input_iter.add_line_to_buffer(ln, l).is_some() {
-                        panic!("the buffer is big enough to contain 1 line");
-                    }
+                    assert!(
+                        input_iter.add_line_to_buffer(ln, l).is_none(),
+                        "the buffer is big enough to contain 1 line"
+                    );
                     ret = Ok(());
                     break;
                 }
                 Ordering::Equal => {
-                    if !self.options.suppress_matched
-                        && input_iter.add_line_to_buffer(ln, l).is_some()
-                    {
-                        panic!("the buffer is big enough to contain 1 line");
-                    }
+                    assert!(
+                        self.options.suppress_matched
+                            || input_iter.add_line_to_buffer(ln, l).is_none(),
+                        "the buffer is big enough to contain 1 line"
+                    );
                     ret = Ok(());
                     break;
                 }
@@ -374,9 +379,10 @@ impl<'a> SplitWriter<'a> {
                     match (self.options.suppress_matched, offset) {
                         // no offset, add the line to the next split
                         (false, 0) => {
-                            if input_iter.add_line_to_buffer(ln, l).is_some() {
-                                panic!("the buffer is big enough to contain 1 line");
-                            }
+                            assert!(
+                                input_iter.add_line_to_buffer(ln, l).is_none(),
+                                "the buffer is big enough to contain 1 line"
+                            );
                         }
                         // a positive offset, some more lines need to be added to the current split
                         (false, _) => self.writeln(l)?,
@@ -421,9 +427,10 @@ impl<'a> SplitWriter<'a> {
                     if !self.options.suppress_matched {
                         // add 1 to the buffer size to make place for the matched line
                         input_iter.set_size_of_buffer(offset_usize + 1);
-                        if input_iter.add_line_to_buffer(ln, l).is_some() {
-                            panic!("should be big enough to hold every lines");
-                        }
+                        assert!(
+                            input_iter.add_line_to_buffer(ln, l).is_none(),
+                            "should be big enough to hold every lines"
+                        );
                     }
                     self.finish_split();
                     if input_iter.buffer_len() < offset_usize {
@@ -565,7 +572,7 @@ mod tests {
                 assert_eq!(input_splitter.add_line_to_buffer(0, line), None);
                 assert_eq!(input_splitter.buffer_len(), 1);
             }
-            item @ _ => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {:?}", item),
         };
 
         match input_splitter.next() {
@@ -574,7 +581,7 @@ mod tests {
                 assert_eq!(input_splitter.add_line_to_buffer(1, line), None);
                 assert_eq!(input_splitter.buffer_len(), 2);
             }
-            item @ _ => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {:?}", item),
         };
 
         match input_splitter.next() {
@@ -586,7 +593,7 @@ mod tests {
                 );
                 assert_eq!(input_splitter.buffer_len(), 2);
             }
-            item @ _ => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {:?}", item),
         };
 
         input_splitter.rewind_buffer();
@@ -596,7 +603,7 @@ mod tests {
                 assert_eq!(line, String::from("bbb"));
                 assert_eq!(input_splitter.buffer_len(), 1);
             }
-            item @ _ => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {:?}", item),
         };
 
         match input_splitter.next() {
@@ -604,7 +611,7 @@ mod tests {
                 assert_eq!(line, String::from("ccc"));
                 assert_eq!(input_splitter.buffer_len(), 0);
             }
-            item @ _ => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {:?}", item),
         };
 
         match input_splitter.next() {
@@ -612,7 +619,7 @@ mod tests {
                 assert_eq!(line, String::from("ddd"));
                 assert_eq!(input_splitter.buffer_len(), 0);
             }
-            item @ _ => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {:?}", item),
         };
 
         assert!(input_splitter.next().is_none());
@@ -637,7 +644,7 @@ mod tests {
                 assert_eq!(input_splitter.add_line_to_buffer(0, line), None);
                 assert_eq!(input_splitter.buffer_len(), 1);
             }
-            item @ _ => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {:?}", item),
         };
 
         match input_splitter.next() {
@@ -646,7 +653,7 @@ mod tests {
                 assert_eq!(input_splitter.add_line_to_buffer(1, line), None);
                 assert_eq!(input_splitter.buffer_len(), 2);
             }
-            item @ _ => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {:?}", item),
         };
 
         match input_splitter.next() {
@@ -655,7 +662,7 @@ mod tests {
                 assert_eq!(input_splitter.add_line_to_buffer(2, line), None);
                 assert_eq!(input_splitter.buffer_len(), 3);
             }
-            item @ _ => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {:?}", item),
         };
 
         input_splitter.rewind_buffer();
@@ -666,7 +673,7 @@ mod tests {
                 assert_eq!(input_splitter.add_line_to_buffer(0, line), None);
                 assert_eq!(input_splitter.buffer_len(), 3);
             }
-            item @ _ => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {:?}", item),
         };
 
         match input_splitter.next() {
@@ -674,7 +681,7 @@ mod tests {
                 assert_eq!(line, String::from("aaa"));
                 assert_eq!(input_splitter.buffer_len(), 2);
             }
-            item @ _ => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {:?}", item),
         };
 
         match input_splitter.next() {
@@ -682,7 +689,7 @@ mod tests {
                 assert_eq!(line, String::from("bbb"));
                 assert_eq!(input_splitter.buffer_len(), 1);
             }
-            item @ _ => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {:?}", item),
         };
 
         match input_splitter.next() {
@@ -690,7 +697,7 @@ mod tests {
                 assert_eq!(line, String::from("ccc"));
                 assert_eq!(input_splitter.buffer_len(), 0);
             }
-            item @ _ => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {:?}", item),
         };
 
         match input_splitter.next() {
@@ -698,7 +705,7 @@ mod tests {
                 assert_eq!(line, String::from("ddd"));
                 assert_eq!(input_splitter.buffer_len(), 0);
             }
-            item @ _ => panic!("wrong item: {:?}", item),
+            item => panic!("wrong item: {:?}", item),
         };
 
         assert!(input_splitter.next().is_none());
@@ -706,7 +713,7 @@ mod tests {
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
@@ -722,16 +729,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .unwrap()
         .map(str::to_string)
         .collect();
-    let patterns = return_if_err!(1, patterns::get_patterns(&patterns[..]));
+    let patterns = crash_if_err!(1, patterns::get_patterns(&patterns[..]));
     let options = CsplitOptions::new(&matches);
     if file_name == "-" {
         let stdin = io::stdin();
         crash_if_err!(1, csplit(&options, patterns, stdin.lock()));
     } else {
-        let file = return_if_err!(1, File::open(file_name));
-        let file_metadata = return_if_err!(1, file.metadata());
+        let file = crash_if_err!(1, File::open(file_name));
+        let file_metadata = crash_if_err!(1, file.metadata());
         if !file_metadata.is_file() {
-            crash!(1, "'{}' is not a regular file", file_name);
+            crash!(1, "{} is not a regular file", file_name.quote());
         }
         crash_if_err!(1, csplit(&options, patterns, BufReader::new(file)));
     };
@@ -739,7 +746,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(SUMMARY)
         .arg(

@@ -9,12 +9,14 @@ aho-corasick
 backtrace
 blake2b_simd
 bstr
+bytecount
 byteorder
 chacha
 chrono
 conv
 corasick
 crossterm
+exacl
 filetime
 formatteriteminfo
 fsext
@@ -66,8 +68,10 @@ structs
 substr
 splitn
 trunc
+uninit
 
 # * uutils
+basenc
 chcon
 chgrp
 chmod
@@ -105,11 +109,18 @@ whoami
 
 # * vars/errno
 errno
+EACCES
+EBADF
+EBUSY
 EEXIST
+EINVAL
+ENODATA
 ENOENT
 ENOSYS
-EPERM
+ENOTEMPTY
 EOPNOTSUPP
+EPERM
+EROFS
 
 # * vars/fcntl
 F_GETFL
@@ -118,7 +129,9 @@ fcntl
 vmsplice
 
 # * vars/libc
+COMFOLLOW
 FILENO
+FTSENT
 HOSTSIZE
 IDSIZE
 IFBLK
@@ -151,12 +164,14 @@ SIGTERM
 SYS_fdatasync
 SYS_syncfs
 USERSIZE
+accpath
 addrinfo
 addrlen
 blocksize
 canonname
 chroot
 dlsym
+execvp
 fdatasync
 freeaddrinfo
 getaddrinfo
@@ -174,15 +189,18 @@ inode
 inodes
 isatty
 lchown
+pathlen
 setgid
 setgroups
 settime
 setuid
 socktype
 statfs
+statp
 statvfs
 strcmp
 strerror
+strlen
 syncfs
 umask
 waitpid
@@ -260,6 +278,7 @@ ULONG
 ULONGLONG
 UNLEN
 WCHAR
+WSADATA
 errhandlingapi
 fileapi
 handleapi
@@ -273,6 +292,13 @@ winbase
 winerror
 winnt
 winsock
+
+# * vars/selinux
+freecon
+getfilecon
+lgetfilecon
+lsetfilecon
+setfilecon
 
 # * vars/uucore
 optflag
@@ -298,3 +324,6 @@ uucore_procs
 uumain
 uutil
 uutils
+
+# * function names
+getcwd

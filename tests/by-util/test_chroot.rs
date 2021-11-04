@@ -15,6 +15,7 @@ fn test_missing_operand() {
 
 #[test]
 fn test_enter_chroot_fails() {
+    // NOTE: since #2689 this test also ensures that we don't regress #2687
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.mkdir("jail");
@@ -23,7 +24,7 @@ fn test_enter_chroot_fails() {
 
     assert!(result
         .stderr_str()
-        .starts_with("chroot: cannot chroot to jail: Operation not permitted (os error 1)"));
+        .starts_with("chroot: cannot chroot to 'jail': Operation not permitted (os error 1)"));
 }
 
 #[test]
@@ -34,7 +35,7 @@ fn test_no_such_directory() {
 
     ucmd.arg("a")
         .fails()
-        .stderr_is("chroot: cannot change root directory to `a`: no such directory");
+        .stderr_is("chroot: cannot change root directory to 'a': no such directory");
 }
 
 #[test]
@@ -88,4 +89,27 @@ fn test_preference_of_userspec() {
 
     println!("result.stdout = {}", result.stdout_str());
     println!("result.stderr = {}", result.stderr_str());
+}
+
+#[test]
+fn test_default_shell() {
+    // NOTE: This test intends to trigger code which can only be reached with root permissions.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let dir = "CHROOT_DIR";
+    at.mkdir(dir);
+
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
+    let _expected = format!(
+        "chroot: failed to run command '{}': No such file or directory",
+        shell
+    );
+
+    // TODO: [2021-09; jhscheer] uncomment if/when #2692 gets merged
+    // if let Ok(result) = run_ucmd_as_root(&ts, &[dir]) {
+    //     result.stderr_contains(expected);
+    // } else {
+    //     print!("TEST SKIPPED");
+    // }
 }

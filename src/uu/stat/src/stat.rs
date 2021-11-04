@@ -7,6 +7,7 @@
 
 #[macro_use]
 extern crate uucore;
+use uucore::display::Quotable;
 use uucore::entries;
 use uucore::fs::display_permissions;
 use uucore::fsext::{
@@ -24,7 +25,7 @@ use std::{cmp, fs, iter};
 macro_rules! check_bound {
     ($str: ident, $bound:expr, $beg: expr, $end: expr) => {
         if $end >= $bound {
-            return Err(format!("'{}': invalid directive", &$str[$beg..$end]));
+            return Err(format!("{}: invalid directive", $str[$beg..$end].quote()));
         }
     };
 }
@@ -436,6 +437,7 @@ impl Stater {
                             'f' => tokens.push(Token::Char('\x0C')),
                             'n' => tokens.push(Token::Char('\n')),
                             'r' => tokens.push(Token::Char('\r')),
+                            't' => tokens.push(Token::Char('\t')),
                             'v' => tokens.push(Token::Char('\x0B')),
                             c => {
                                 show_warning!("unrecognized escape '\\{}'", c);
@@ -651,11 +653,7 @@ impl Stater {
                                                     return 1;
                                                 }
                                             };
-                                            arg = format!(
-                                                "`{}' -> `{}'",
-                                                file,
-                                                dst.to_string_lossy()
-                                            );
+                                            arg = format!("{} -> {}", file.quote(), dst.quote());
                                         } else {
                                             arg = file.to_string();
                                         }
@@ -749,7 +747,7 @@ impl Stater {
                     }
                 }
                 Err(e) => {
-                    show_error!("cannot stat '{}': {}", file, e);
+                    show_error!("cannot stat {}: {}", file.quote(), e);
                     return 1;
                 }
             }
@@ -842,7 +840,11 @@ impl Stater {
                     }
                 }
                 Err(e) => {
-                    show_error!("cannot read file system information for '{}': {}", file, e);
+                    show_error!(
+                        "cannot read file system information for {}: {}",
+                        file.quote(),
+                        e
+                    );
                     return 1;
                 }
             }
@@ -881,8 +883,8 @@ impl Stater {
     }
 }
 
-fn get_usage() -> String {
-    format!("{0} [OPTION]... FILE...", executable!())
+fn usage() -> String {
+    format!("{0} [OPTION]... FILE...", uucore::execution_phrase())
 }
 
 fn get_long_usage() -> String {
@@ -944,7 +946,7 @@ for details about the options it supports.
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
     let long_usage = get_long_usage();
 
     let matches = uu_app()
@@ -962,7 +964,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(

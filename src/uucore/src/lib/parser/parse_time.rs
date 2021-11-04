@@ -9,6 +9,8 @@
 
 use std::time::Duration;
 
+use crate::display::Quotable;
+
 pub fn from_str(string: &str) -> Result<Duration, String> {
     let len = string.len();
     if len == 0 {
@@ -25,13 +27,13 @@ pub fn from_str(string: &str) -> Result<Duration, String> {
             if string == "inf" || string == "infinity" {
                 ("inf", 1)
             } else {
-                return Err(format!("invalid time interval '{}'", string));
+                return Err(format!("invalid time interval {}", string.quote()));
             }
         }
     };
     let num = numstr
         .parse::<f64>()
-        .map_err(|e| format!("invalid time interval '{}': {}", string, e))?;
+        .map_err(|e| format!("invalid time interval {}: {}", string.quote(), e))?;
 
     const NANOS_PER_SEC: u32 = 1_000_000_000;
     let whole_secs = num.trunc();

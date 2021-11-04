@@ -1,6 +1,10 @@
 use std::char::from_digit;
+use std::ffi::OsStr;
 
-const SPECIAL_SHELL_CHARS: &str = "~`#$&*()|[]{};\\'\"<>?! ";
+// These are characters with special meaning in the shell (e.g. bash).
+// The first const contains characters that only have a special meaning when they appear at the beginning of a name.
+const SPECIAL_SHELL_CHARS_START: &[char] = &['~', '#'];
+const SPECIAL_SHELL_CHARS: &str = "`$&*()|[]{};\\'\"<>?! ";
 
 pub(super) enum QuotingStyle {
     Shell {
@@ -198,6 +202,8 @@ fn shell_without_escape(name: &str, quotes: Quotes, show_control_chars: bool) ->
             }
         }
     }
+
+    must_quote = must_quote || name.starts_with(SPECIAL_SHELL_CHARS_START);
     (escaped_str, must_quote)
 }
 
@@ -246,22 +252,25 @@ fn shell_with_escape(name: &str, quotes: Quotes) -> (String, bool) {
             }
         }
     }
+    must_quote = must_quote || name.starts_with(SPECIAL_SHELL_CHARS_START);
     (escaped_str, must_quote)
 }
 
-pub(super) fn escape_name(name: &str, style: &QuotingStyle) -> String {
+pub(super) fn escape_name(name: &OsStr, style: &QuotingStyle) -> String {
     match style {
         QuotingStyle::Literal { show_control } => {
             if !show_control {
-                name.chars()
+                name.to_string_lossy()
+                    .chars()
                     .flat_map(|c| EscapedChar::new_literal(c).hide_control())
                     .collect()
             } else {
-                name.into()
+                name.to_string_lossy().into_owned()
             }
         }
         QuotingStyle::C { quotes } => {
             let escaped_str: String = name
+                .to_string_lossy()
                 .chars()
                 .flat_map(|c| EscapedChar::new_c(c, *quotes))
                 .collect();
@@ -277,7 +286,8 @@ pub(super) fn escape_name(name: &str, style: &QuotingStyle) -> String {
             always_quote,
             show_control,
         } => {
-            let (quotes, must_quote) = if name.contains('"') {
+            let name = name.to_string_lossy();
+            let (quotes, must_quote) = if name.contains(&['"', '`', '$', '\\'][..]) {
                 (Quotes::Single, true)
             } else if name.contains('\'') {
                 (Quotes::Double, true)
@@ -288,9 +298,9 @@ pub(super) fn escape_name(name: &str, style: &QuotingStyle) -> String {
             };
 
             let (escaped_str, contains_quote_chars) = if *escape {
-                shell_with_escape(name, quotes)
+                shell_with_escape(&name, quotes)
             } else {
-                shell_without_escape(name, quotes, *show_control)
+                shell_without_escape(&name, quotes, *show_control)
             };
 
             match (must_quote | contains_quote_chars, quotes) {
@@ -356,7 +366,7 @@ mod tests {
     fn check_names(name: &str, map: Vec<(&str, &str)>) {
         assert_eq!(
             map.iter()
-                .map(|(_, style)| escape_name(name, &get_style(style)))
+                .map(|(_, style)| escape_name(name.as_ref(), &get_style(style)))
                 .collect::<Vec<String>>(),
             map.iter()
                 .map(|(correct, _)| correct.to_string())
@@ -656,6 +666,64 @@ mod tests {
                 ("\'one\\two\'", "shell-always"),
                 ("'one\\two'", "shell-escape"),
                 ("'one\\two'", "shell-escape-always"),
+            ],
+        );
+    }
+
+    #[test]
+    fn test_tilde_and_hash() {
+        check_names("~", vec![("'~'", "shell"), ("'~'", "shell-escape")]);
+        check_names(
+            "~name",
+            vec![("'~name'", "shell"), ("'~name'", "shell-escape")],
+        );
+        check_names(
+            "some~name",
+            vec![("some~name", "shell"), ("some~name", "shell-escape")],
+        );
+        check_names("name~", vec![("name~", "shell"), ("name~", "shell-escape")]);
+
+        check_names("#", vec![("'#'", "shell"), ("'#'", "shell-escape")]);
+        check_names(
+            "#name",
+            vec![("'#name'", "shell"), ("'#name'", "shell-escape")],
+        );
+        check_names(
+            "some#name",
+            vec![("some#name", "shell"), ("some#name", "shell-escape")],
+        );
+        check_names("name#", vec![("name#", "shell"), ("name#", "shell-escape")]);
+    }
+
+    #[test]
+    fn test_special_chars_in_double_quotes() {
+        check_names(
+            "can'$t",
+            vec![
+                ("'can'\\''$t'", "shell"),
+                ("'can'\\''$t'", "shell-always"),
+                ("'can'\\''$t'", "shell-escape"),
+                ("'can'\\''$t'", "shell-escape-always"),
+            ],
+        );
+
+        check_names(
+            "can'`t",
+            vec![
+                ("'can'\\''`t'", "shell"),
+                ("'can'\\''`t'", "shell-always"),
+                ("'can'\\''`t'", "shell-escape"),
+                ("'can'\\''`t'", "shell-escape-always"),
+            ],
+        );
+
+        check_names(
+            "can'\\t",
+            vec![
+                ("'can'\\''\\t'", "shell"),
+                ("'can'\\''\\t'", "shell-always"),
+                ("'can'\\''\\t'", "shell-escape"),
+                ("'can'\\''\\t'", "shell-escape-always"),
             ],
         );
     }

@@ -2,6 +2,7 @@
 //  *
 //  * (c) Morten Olsen Lysgaard <morten@lysgaard.no>
 //  * (c) Alexander Batischev <eual.jp@gmail.com>
+//  * (c) Thomas Queiroz <thomasqueirozb@gmail.com>
 //  *
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
@@ -21,13 +22,27 @@ use chunks::ReverseChunks;
 use clap::{App, Arg};
 use std::collections::VecDeque;
 use std::fmt;
-use std::fs::File;
+use std::fs::{File, Metadata};
 use std::io::{stdin, stdout, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::ringbuffer::RingBuffer;
+
+#[cfg(unix)]
+use crate::platform::stdin_is_pipe_or_fifo;
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
+
+const ABOUT: &str = "\
+                     Print the last 10 lines of each FILE to standard output.\n\
+                     With more than one FILE, precede each with a header giving the file name.\n\
+                     With no FILE, or when FILE is -, read standard input.\n\
+                     \n\
+                     Mandatory arguments to long flags are mandatory for short flags too.\
+                     ";
+const USAGE: &str = "tail [FLAG]... [FILE]...";
 
 pub mod options {
     pub mod verbosity {
@@ -130,58 +145,90 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let files: Vec<String> = matches
         .values_of(options::ARG_FILES)
         .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_default();
+        .unwrap_or_else(|| vec![String::from("-")]);
 
-    if files.is_empty() {
-        let mut buffer = BufReader::new(stdin());
-        unbounded_tail(&mut buffer, &settings);
-    } else {
-        let multiple = files.len() > 1;
-        let mut first_header = true;
-        let mut readers = Vec::new();
+    let multiple = files.len() > 1;
+    let mut first_header = true;
+    let mut readers: Vec<(Box<dyn BufRead>, &String)> = Vec::new();
 
-        for filename in &files {
-            if (multiple || verbose) && !quiet {
-                if !first_header {
-                    println!();
-                }
+    #[cfg(unix)]
+    let stdin_string = String::from("standard input");
+
+    for filename in &files {
+        let use_stdin = filename.as_str() == "-";
+        if (multiple || verbose) && !quiet {
+            if !first_header {
+                println!();
+            }
+            if use_stdin {
+                println!("==> standard input <==");
+            } else {
                 println!("==> {} <==", filename);
             }
-            first_header = false;
+        }
+        first_header = false;
 
+        if use_stdin {
+            let mut reader = BufReader::new(stdin());
+            unbounded_tail(&mut reader, &settings);
+
+            // Don't follow stdin since there are no checks for pipes/FIFOs
+            //
+            // FIXME windows has GetFileType which can determine if the file is a pipe/FIFO
+            // so this check can also be performed
+
+            #[cfg(unix)]
+            {
+                /*
+                POSIX specification regarding tail -f
+
+                If the input file is a regular file or if the file operand specifies a FIFO, do not
+                terminate after the last line of the input file has been copied, but read and copy
+                further bytes from the input file when they become available. If no file operand is
+                specified and standard input is a pipe or FIFO, the -f option shall be ignored. If
+                the input file is not a FIFO, pipe, or regular file, it is unspecified whether or
+                not the -f option shall be ignored.
+                */
+
+                if settings.follow && !stdin_is_pipe_or_fifo() {
+                    readers.push((Box::new(reader), &stdin_string));
+                }
+            }
+        } else {
             let path = Path::new(filename);
             if path.is_dir() {
                 continue;
             }
             let mut file = File::open(&path).unwrap();
-            if is_seekable(&mut file) {
+            let md = file.metadata().unwrap();
+            if is_seekable(&mut file) && get_block_size(&md) > 0 {
                 bounded_tail(&mut file, &settings);
                 if settings.follow {
                     let reader = BufReader::new(file);
-                    readers.push(reader);
+                    readers.push((Box::new(reader), filename));
                 }
             } else {
                 let mut reader = BufReader::new(file);
                 unbounded_tail(&mut reader, &settings);
                 if settings.follow {
-                    readers.push(reader);
+                    readers.push((Box::new(reader), filename));
                 }
             }
         }
+    }
 
-        if settings.follow {
-            follow(&mut readers[..], &files[..], &settings);
-        }
+    if settings.follow {
+        follow(&mut readers[..], &settings);
     }
 
     0
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
-        .about("output the last part of files")
-        // TODO: add usage
+        .about(ABOUT)
+        .usage(USAGE)
         .arg(
             Arg::with_name(options::BYTES)
                 .short("c")
@@ -248,8 +295,12 @@ pub fn uu_app() -> App<'static, 'static> {
         )
 }
 
-fn follow<T: Read>(readers: &mut [BufReader<T>], filenames: &[String], settings: &Settings) {
+fn follow<T: BufRead>(readers: &mut [(T, &String)], settings: &Settings) {
     assert!(settings.follow);
+    if readers.is_empty() {
+        return;
+    }
+
     let mut last = readers.len() - 1;
     let mut read_some = false;
     let mut process = platform::ProcessChecker::new(settings.pid);
@@ -260,7 +311,7 @@ fn follow<T: Read>(readers: &mut [BufReader<T>], filenames: &[String], settings:
         let pid_is_dead = !read_some && settings.pid != 0 && process.is_dead();
         read_some = false;
 
-        for (i, reader) in readers.iter_mut().enumerate() {
+        for (i, (reader, filename)) in readers.iter_mut().enumerate() {
             // Print all new content since the last pass
             loop {
                 let mut datum = String::new();
@@ -269,7 +320,7 @@ fn follow<T: Read>(readers: &mut [BufReader<T>], filenames: &[String], settings:
                     Ok(_) => {
                         read_some = true;
                         if i != last {
-                            println!("\n==> {} <==", filenames[i]);
+                            println!("\n==> {} <==", filename);
                             last = i;
                         }
                         print!("{}", datum);
@@ -398,6 +449,8 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
 
 fn is_seekable<T: Seek>(file: &mut T) -> bool {
     file.seek(SeekFrom::Current(0)).is_ok()
+        && file.seek(SeekFrom::End(0)).is_ok()
+        && file.seek(SeekFrom::Start(0)).is_ok()
 }
 
 #[inline]
@@ -424,4 +477,15 @@ fn parse_num(src: &str) -> Result<(usize, bool), ParseSizeError> {
     }
 
     parse_size(size_string).map(|n| (n, starting_with))
+}
+
+fn get_block_size(md: &Metadata) -> u64 {
+    #[cfg(unix)]
+    {
+        md.blocks()
+    }
+    #[cfg(not(unix))]
+    {
+        md.len()
+    }
 }

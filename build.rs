@@ -28,8 +28,8 @@ pub fn main() {
         if val == "1" && key.starts_with(env_feature_prefix) {
             let krate = key[env_feature_prefix.len()..].to_lowercase();
             match krate.as_ref() {
-                "default" | "macos" | "unix" | "windows" => continue, // common/standard feature names
-                "nightly" | "test_unimplemented" => continue,         // crate-local custom features
+                "default" | "macos" | "unix" | "windows" | "selinux" => continue, // common/standard feature names
+                "nightly" | "test_unimplemented" => continue, // crate-local custom features
                 "test" => continue, // over-ridden with 'uu_test' to avoid collision with rust core crate 'test'
                 s if s.starts_with(feature_prefix) => continue, // crate feature sets
                 _ => {}             // util feature name
@@ -46,6 +46,8 @@ pub fn main() {
         "type UtilityMap<T> = HashMap<&'static str, (fn(T) -> i32, fn() -> App<'static, 'static>)>;\n\
          \n\
          fn util_map<T: uucore::Args>() -> UtilityMap<T> {\n\
+         \t#[allow(unused_mut)]\n\
+         \t#[allow(clippy::let_and_return)]\n\
          \tlet mut map = UtilityMap::new();\n\
          "
         .as_bytes(),

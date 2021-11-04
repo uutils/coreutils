@@ -5,9 +5,6 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-#[macro_use]
-extern crate uucore;
-
 use std::thread;
 use std::time::Duration;
 
@@ -26,17 +23,17 @@ mod options {
     pub const NUMBER: &str = "NUMBER";
 }
 
-fn get_usage() -> String {
+fn usage() -> String {
     format!(
         "{0} {1}[SUFFIX]... \n    {0} OPTION",
-        executable!(),
+        uucore::execution_phrase(),
         options::NUMBER
     )
 }
 
 #[uucore_procs::gen_uumain]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = get_usage();
+    let usage = usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
@@ -49,7 +46,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .after_help(LONG_HELP)

@@ -181,7 +181,7 @@ fn test_check_zero_terminated_failure() {
         .arg("-c")
         .arg("zero-terminated.txt")
         .fails()
-        .stdout_is("sort: zero-terminated.txt:2: disorder: ../../fixtures/du\n");
+        .stderr_only("sort: zero-terminated.txt:2: disorder: ../../fixtures/du\n");
 }
 
 #[test]
@@ -220,32 +220,29 @@ fn test_random_shuffle_contains_all_lines() {
 
 #[test]
 fn test_random_shuffle_two_runs_not_the_same() {
-    // check to verify that two random shuffles are not equal; this has the
-    // potential to fail in the very unlikely event that the random order is the same
-    // as the starting order, or if both random sorts end up having the same order.
-    const FILE: &str = "default_unsorted_ints.expected";
-    let (at, _ucmd) = at_and_ucmd!();
-    let result = new_ucmd!().arg("-R").arg(FILE).run().stdout_move_str();
-    let expected = at.read(FILE);
-    let unexpected = new_ucmd!().arg("-R").arg(FILE).run().stdout_move_str();
+    for arg in &["-R", "-k1,1R"] {
+        // check to verify that two random shuffles are not equal; this has the
+        // potential to fail in the very unlikely event that the random order is the same
+        // as the starting order, or if both random sorts end up having the same order.
+        const FILE: &str = "default_unsorted_ints.expected";
+        let (at, _ucmd) = at_and_ucmd!();
+        let result = new_ucmd!().arg(arg).arg(FILE).run().stdout_move_str();
+        let expected = at.read(FILE);
+        let unexpected = new_ucmd!().arg(arg).arg(FILE).run().stdout_move_str();
 
-    assert_ne!(result, expected);
-    assert_ne!(result, unexpected);
+        assert_ne!(result, expected);
+        assert_ne!(result, unexpected);
+    }
 }
 
 #[test]
-fn test_random_shuffle_contains_two_runs_not_the_same() {
-    // check to verify that two random shuffles are not equal; this has the
-    // potential to fail in the unlikely event that random order is the same
-    // as the starting order, or if both random sorts end up having the same order.
-    const FILE: &str = "default_unsorted_ints.expected";
-    let (at, _ucmd) = at_and_ucmd!();
-    let result = new_ucmd!().arg("-R").arg(FILE).run().stdout_move_str();
-    let expected = at.read(FILE);
-    let unexpected = new_ucmd!().arg("-R").arg(FILE).run().stdout_move_str();
-
-    assert_ne!(result, expected);
-    assert_ne!(result, unexpected);
+fn test_random_ignore_case() {
+    let input = "ABC\nABc\nAbC\nAbc\naBC\naBc\nabC\nabc\n";
+    new_ucmd!()
+        .args(&["-fR"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(input);
 }
 
 #[test]
@@ -534,7 +531,7 @@ fn test_keys_invalid_field() {
     new_ucmd!()
         .args(&["-k", "1."])
         .fails()
-        .stderr_only("sort: failed to parse key `1.`: failed to parse character index ``: cannot parse integer from empty string");
+        .stderr_only("sort: failed to parse key '1.': failed to parse character index '': cannot parse integer from empty string");
 }
 
 #[test]
@@ -542,7 +539,7 @@ fn test_keys_invalid_field_option() {
     new_ucmd!()
         .args(&["-k", "1.1x"])
         .fails()
-        .stderr_only("sort: failed to parse key `1.1x`: invalid option: `x`");
+        .stderr_only("sort: failed to parse key '1.1x': invalid option: 'x'");
 }
 
 #[test]
@@ -550,7 +547,7 @@ fn test_keys_invalid_field_zero() {
     new_ucmd!()
         .args(&["-k", "0.1"])
         .fails()
-        .stderr_only("sort: failed to parse key `0.1`: field index can not be 0");
+        .stderr_only("sort: failed to parse key '0.1': field index can not be 0");
 }
 
 #[test]
@@ -558,7 +555,7 @@ fn test_keys_invalid_char_zero() {
     new_ucmd!()
         .args(&["-k", "1.0"])
         .fails()
-        .stderr_only("sort: failed to parse key `1.0`: invalid character index 0 for the start position of a field");
+        .stderr_only("sort: failed to parse key '1.0': invalid character index 0 for the start position of a field");
 }
 
 #[test]
@@ -774,14 +771,15 @@ fn test_check() {
         new_ucmd!()
             .arg(diagnose_arg)
             .arg("check_fail.txt")
+            .arg("--buffer-size=10b")
             .fails()
-            .stdout_is("sort: check_fail.txt:6: disorder: 5\n");
+            .stderr_only("sort: check_fail.txt:6: disorder: 5\n");
 
         new_ucmd!()
             .arg(diagnose_arg)
             .arg("multiple_files.expected")
             .succeeds()
-            .stdout_is("");
+            .stderr_is("");
     }
 }
 
@@ -794,6 +792,18 @@ fn test_check_silent() {
             .fails()
             .stdout_is("");
     }
+}
+
+#[test]
+fn test_check_unique() {
+    // Due to a clap bug the combination "-cu" does not work. "-c -u" works.
+    // See https://github.com/clap-rs/clap/issues/2624
+    new_ucmd!()
+        .args(&["-c", "-u"])
+        .pipe_in("A\nA\n")
+        .fails()
+        .code_is(1)
+        .stderr_only("sort: -:2: disorder: A");
 }
 
 #[test]
@@ -839,9 +849,9 @@ fn test_nonexistent_file() {
         .status_code(2)
         .stderr_only(
             #[cfg(not(windows))]
-            "sort: cannot read: \"nonexistent.txt\": No such file or directory (os error 2)",
+            "sort: cannot read: nonexistent.txt: No such file or directory",
             #[cfg(windows)]
-            "sort: cannot read: \"nonexistent.txt\": The system cannot find the file specified. (os error 2)",
+            "sort: cannot read: nonexistent.txt: The system cannot find the file specified.",
         );
 }
 
@@ -881,6 +891,29 @@ fn test_compress() {
         ])
         .succeeds()
         .stdout_only_fixture("ext_sort.expected");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_compress_merge() {
+    new_ucmd!()
+        .args(&[
+            "--compress-program",
+            "gzip",
+            "-S",
+            "10",
+            "--batch-size=2",
+            "-m",
+            "--unique",
+            "merge_ints_interleaved_1.txt",
+            "merge_ints_interleaved_2.txt",
+            "merge_ints_interleaved_3.txt",
+            "merge_ints_interleaved_3.txt",
+            "merge_ints_interleaved_2.txt",
+            "merge_ints_interleaved_1.txt",
+        ])
+        .succeeds()
+        .stdout_only_fixture("merge_ints_interleaved.expected");
 }
 
 #[test]
@@ -958,4 +991,130 @@ fn test_key_takes_one_arg() {
         .args(&["-k", "2.3", "keys_open_ended.txt"])
         .succeeds()
         .stdout_is_fixture("keys_open_ended.expected");
+}
+
+#[test]
+fn test_verifies_out_file() {
+    let inputs = ["" /* no input */, "some input"];
+    for &input in &inputs {
+        new_ucmd!()
+            .args(&["-o", "nonexistent_dir/nonexistent_file"])
+            .pipe_in(input)
+            .ignore_stdin_write_error()
+            .fails()
+            .status_code(2)
+            .stderr_only(
+                #[cfg(not(windows))]
+                "sort: open failed: nonexistent_dir/nonexistent_file: No such file or directory",
+                #[cfg(windows)]
+                "sort: open failed: nonexistent_dir/nonexistent_file: The system cannot find the path specified.",
+            );
+    }
+}
+
+#[test]
+fn test_verifies_files_after_keys() {
+    new_ucmd!()
+        .args(&[
+            "-o",
+            "nonexistent_dir/nonexistent_file",
+            "-k",
+            "0",
+            "nonexistent_dir/input_file",
+        ])
+        .fails()
+        .status_code(2)
+        .stderr_contains("failed to parse key");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_verifies_input_files() {
+    new_ucmd!()
+        .args(&["/dev/random", "nonexistent_file"])
+        .fails()
+        .status_code(2)
+        .stderr_is("sort: cannot read: nonexistent_file: No such file or directory");
+}
+
+#[test]
+fn test_separator_null() {
+    new_ucmd!()
+        .args(&["-k1,1", "-k3,3", "-t", "\\0"])
+        .pipe_in("z\0a\0b\nz\0b\0a\na\0z\0z\n")
+        .succeeds()
+        .stdout_only("a\0z\0z\nz\0b\0a\nz\0a\0b\n");
+}
+
+#[test]
+fn test_output_is_input() {
+    let input = "a\nb\nc\n";
+    let (at, mut cmd) = at_and_ucmd!();
+    at.touch("file");
+    at.append("file", input);
+    cmd.args(&["-m", "-u", "-o", "file", "file", "file", "file"])
+        .succeeds();
+    assert_eq!(at.read("file"), input);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_output_device() {
+    new_ucmd!()
+        .args(&["-o", "/dev/null"])
+        .pipe_in("input")
+        .succeeds();
+}
+
+#[test]
+fn test_merge_empty_input() {
+    new_ucmd!()
+        .args(&["-m", "empty.txt"])
+        .succeeds()
+        .no_stderr()
+        .no_stdout();
+}
+
+#[test]
+fn test_no_error_for_version() {
+    new_ucmd!()
+        .arg("--version")
+        .succeeds()
+        .stdout_contains("sort");
+}
+
+#[test]
+fn test_wrong_args_exit_code() {
+    new_ucmd!()
+        .arg("--misspelled")
+        .fails()
+        .status_code(2)
+        .stderr_contains("--misspelled");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_tmp_files_deleted_on_sigint() {
+    use std::{fs::read_dir, time::Duration};
+
+    use nix::{sys::signal, unistd::Pid};
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("tmp_dir");
+    ucmd.args(&[
+        "ext_sort.txt",
+        "--buffer-size=1", // with a small buffer size `sort` will be forced to create a temporary directory very soon.
+        "--temporary-directory=tmp_dir",
+    ]);
+    let mut child = ucmd.run_no_wait();
+    // wait a short amount of time so that `sort` can create a temporary directory.
+    std::thread::sleep(Duration::from_millis(100));
+    // `sort` should have created a temporary directory.
+    assert!(read_dir(at.plus("tmp_dir")).unwrap().next().is_some());
+    // kill sort with SIGINT
+    signal::kill(Pid::from_raw(child.id() as i32), signal::SIGINT).unwrap();
+    // wait for `sort` to exit
+    assert_eq!(child.wait().unwrap().code(), Some(2));
+    // `sort` should have deleted the temporary directory again.
+    assert!(read_dir(at.plus("tmp_dir")).unwrap().next().is_none());
 }

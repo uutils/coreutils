@@ -64,7 +64,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .name(NAME)
         .version(crate_version!())
         .usage(SYNTAX)
@@ -119,7 +119,7 @@ fn fold(filenames: Vec<String>, bytes: bool, spaces: bool, width: usize) {
             stdin_buf = stdin();
             &mut stdin_buf as &mut dyn Read
         } else {
-            file_buf = safe_unwrap!(File::open(Path::new(filename)));
+            file_buf = crash_if_err!(1, File::open(Path::new(filename)));
             &mut file_buf as &mut dyn Read
         });
 

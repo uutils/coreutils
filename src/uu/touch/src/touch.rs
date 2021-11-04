@@ -6,7 +6,7 @@
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) filetime strptime utcoff strs datetime MMDDhhmm
+// spell-checker:ignore (ToDO) filetime strptime utcoff strs datetime MMDDhhmm clapv
 
 pub extern crate filetime;
 
@@ -17,7 +17,8 @@ use clap::{crate_version, App, Arg, ArgGroup};
 use filetime::*;
 use std::fs::{self, File};
 use std::path::Path;
-use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::display::Quotable;
+use uucore::error::{FromIo, UError, UResult, USimpleError};
 
 static ABOUT: &str = "Update the access and modification times of each FILE to the current time.";
 pub mod options {
@@ -47,13 +48,13 @@ fn local_tm_to_filetime(tm: time::Tm) -> FileTime {
     FileTime::from_unix_time(ts.sec as i64, ts.nsec as u32)
 }
 
-fn get_usage() -> String {
-    format!("{0} [OPTION]... [USER]", executable!())
+fn usage() -> String {
+    format!("{0} [OPTION]... [USER]", uucore::execution_phrase())
 }
 
 #[uucore_procs::gen_uumain]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let usage = get_usage();
+    let usage = usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
@@ -82,7 +83,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
 
             if let Err(e) = File::create(path) {
-                show!(e.map_err_context(|| format!("cannot touch '{}'", path.display())));
+                show!(e.map_err_context(|| format!("cannot touch {}", path.quote())));
                 continue;
             };
 
@@ -122,14 +123,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         } else {
             filetime::set_file_times(path, atime, mtime)
         }
-        .map_err_context(|| format!("setting times of '{}'", path.display()))?;
+        .map_err_context(|| format!("setting times of {}", path.quote()))?;
     }
 
     Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
         .arg(
@@ -175,6 +176,7 @@ pub fn uu_app() -> App<'static, 'static> {
             Arg::with_name(options::sources::REFERENCE)
                 .short("r")
                 .long(options::sources::REFERENCE)
+                .alias("ref") // clapv3
                 .help("use this file's times instead of the current time")
                 .value_name("FILE"),
         )
@@ -209,7 +211,7 @@ fn stat(path: &Path, follow: bool) -> UResult<(FileTime, FileTime)> {
     } else {
         fs::metadata(path)
     }
-    .map_err_context(|| format!("failed to get attributes of '{}'", path.display()))?;
+    .map_err_context(|| format!("failed to get attributes of {}", path.quote()))?;
 
     Ok((
         FileTime::from_last_access_time(&metadata),
@@ -249,11 +251,16 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
         10 => ("%y%m%d%H%M", s.to_owned()),
         11 => ("%Y%m%d%H%M.%S", format!("{}{}", now.tm_year + 1900, s)),
         8 => ("%Y%m%d%H%M", format!("{}{}", now.tm_year + 1900, s)),
-        _ => return Err(USimpleError::new(1, format!("invalid date format '{}'", s))),
+        _ => {
+            return Err(USimpleError::new(
+                1,
+                format!("invalid date format {}", s.quote()),
+            ))
+        }
     };
 
     let tm = time::strptime(&ts, format)
-        .map_err(|_| USimpleError::new(1, format!("invalid date format '{}'", s)))?;
+        .map_err(|_| USimpleError::new(1, format!("invalid date format {}", s.quote())))?;
 
     let mut local = to_local(tm);
     local.tm_isdst = -1;
@@ -269,7 +276,10 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
     };
     let tm2 = time::at(ts);
     if tm.tm_hour != tm2.tm_hour {
-        return Err(USimpleError::new(1, format!("invalid date format '{}'", s)));
+        return Err(USimpleError::new(
+            1,
+            format!("invalid date format {}", s.quote()),
+        ));
     }
 
     Ok(ft)

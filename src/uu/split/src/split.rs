@@ -19,9 +19,8 @@ use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 use std::{char, fs::remove_file};
+use uucore::display::Quotable;
 use uucore::parse_size::parse_size;
-
-static NAME: &str = "split";
 
 static OPT_BYTES: &str = "bytes";
 static OPT_LINE_BYTES: &str = "line-bytes";
@@ -36,8 +35,11 @@ static OPT_VERBOSE: &str = "verbose";
 static ARG_INPUT: &str = "input";
 static ARG_PREFIX: &str = "prefix";
 
-fn get_usage() -> String {
-    format!("{0} [OPTION]... [INPUT [PREFIX]]", NAME)
+fn usage() -> String {
+    format!(
+        "{0} [OPTION]... [INPUT [PREFIX]]",
+        uucore::execution_phrase()
+    )
 }
 fn get_long_usage() -> String {
     format!(
@@ -47,12 +49,12 @@ fn get_long_usage() -> String {
 Output fixed-size pieces of INPUT to PREFIXaa, PREFIX ab, ...; default
 size is 1000, and default PREFIX is 'x'. With no INPUT, or when INPUT is
 -, read standard input.",
-        get_usage()
+        usage()
     )
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
+    let usage = usage();
     let long_usage = get_long_usage();
 
     let matches = uu_app()
@@ -103,7 +105,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     settings.strategy = String::from(OPT_LINES);
     settings.strategy_param = matches.value_of(OPT_LINES).unwrap().to_owned();
     // take any (other) defined strategy
-    for strategy in vec![OPT_LINE_BYTES, OPT_BYTES].into_iter() {
+    for &strategy in &[OPT_LINE_BYTES, OPT_BYTES] {
         if matches.occurrences_of(strategy) > 0 {
             settings.strategy = String::from(strategy);
             settings.strategy_param = matches.value_of(strategy).unwrap().to_owned();
@@ -127,7 +129,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about("Create output files containing consecutive or interleaved sections of input")
         // strategy (mutually exclusive)
@@ -237,7 +239,11 @@ impl LineSplitter {
     fn new(settings: &Settings) -> LineSplitter {
         LineSplitter {
             lines_per_split: settings.strategy_param.parse().unwrap_or_else(|_| {
-                crash!(1, "invalid number of lines: '{}'", settings.strategy_param)
+                crash!(
+                    1,
+                    "invalid number of lines: {}",
+                    settings.strategy_param.quote()
+                )
             }),
         }
     }
@@ -372,8 +378,8 @@ fn split(settings: &Settings) -> i32 {
         let r = File::open(Path::new(&settings.input)).unwrap_or_else(|_| {
             crash!(
                 1,
-                "cannot open '{}' for reading: No such file or directory",
-                settings.input
+                "cannot open {} for reading: No such file or directory",
+                settings.input.quote()
             )
         });
         Box::new(r) as Box<dyn Read>
@@ -382,7 +388,7 @@ fn split(settings: &Settings) -> i32 {
     let mut splitter: Box<dyn Splitter> = match settings.strategy.as_str() {
         s if s == OPT_LINES => Box::new(LineSplitter::new(settings)),
         s if (s == OPT_BYTES || s == OPT_LINE_BYTES) => Box::new(ByteSplitter::new(settings)),
-        a => crash!(1, "strategy {} not supported", a),
+        a => crash!(1, "strategy {} not supported", a.quote()),
     };
 
     let mut fileno = 0;

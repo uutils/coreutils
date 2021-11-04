@@ -11,9 +11,13 @@
 extern crate uucore;
 
 use clap::{crate_version, App, Arg};
+use uucore::display::Quotable;
+use uucore::error::{UError, UResult};
 
 use std::borrow::Cow;
-use std::ffi::OsStr;
+use std::error::Error;
+use std::ffi::{OsStr, OsString};
+use std::fmt::Display;
 use std::fs;
 
 use std::io::{stdin, Result};
@@ -23,7 +27,7 @@ use std::os::unix::fs::symlink;
 use std::os::windows::fs::{symlink_dir, symlink_file};
 use std::path::{Path, PathBuf};
 use uucore::backup_control::{self, BackupMode};
-use uucore::fs::{canonicalize, CanonicalizeMode};
+use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
 
 pub struct Settings {
     overwrite: OverwriteMode,
@@ -44,17 +48,59 @@ pub enum OverwriteMode {
     Force,
 }
 
-fn get_usage() -> String {
+#[derive(Debug)]
+enum LnError {
+    TargetIsDirectory(PathBuf),
+    SomeLinksFailed,
+    FailedToLink(String),
+    MissingDestination(PathBuf),
+    ExtraOperand(OsString),
+}
+
+impl Display for LnError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::TargetIsDirectory(s) => write!(f, "target {} is not a directory", s.quote()),
+            Self::FailedToLink(e) => write!(f, "failed to link: {}", e),
+            Self::SomeLinksFailed => write!(f, "some links failed to create"),
+            Self::MissingDestination(s) => {
+                write!(f, "missing destination file operand after {}", s.quote())
+            }
+            Self::ExtraOperand(s) => write!(
+                f,
+                "extra operand {}\nTry '{} --help' for more information.",
+                s.quote(),
+                uucore::execution_phrase()
+            ),
+        }
+    }
+}
+
+impl Error for LnError {}
+
+impl UError for LnError {
+    fn code(&self) -> i32 {
+        match self {
+            Self::TargetIsDirectory(_) => 1,
+            Self::SomeLinksFailed => 1,
+            Self::FailedToLink(_) => 1,
+            Self::MissingDestination(_) => 1,
+            Self::ExtraOperand(_) => 1,
+        }
+    }
+}
+
+fn usage() -> String {
     format!(
         "{0} [OPTION]... [-T] TARGET LINK_NAME   (1st form)
        {0} [OPTION]... TARGET                  (2nd form)
        {0} [OPTION]... TARGET... DIRECTORY     (3rd form)
        {0} [OPTION]... -t DIRECTORY TARGET...  (4th form)",
-        executable!()
+        uucore::execution_phrase()
     )
 }
 
-fn get_long_usage() -> String {
+fn long_usage() -> String {
     String::from(
         " In the 1st form, create a link to TARGET with the name LINK_NAME.
         In the 2nd form, create a link to TARGET in the current directory.
@@ -71,13 +117,10 @@ fn get_long_usage() -> String {
 static ABOUT: &str = "change file owner and group";
 
 mod options {
-    pub const BACKUP_NO_ARG: &str = "b";
-    pub const BACKUP: &str = "backup";
     pub const FORCE: &str = "force";
     pub const INTERACTIVE: &str = "interactive";
     pub const NO_DEREFERENCE: &str = "no-dereference";
     pub const SYMBOLIC: &str = "symbolic";
-    pub const SUFFIX: &str = "suffix";
     pub const TARGET_DIRECTORY: &str = "target-directory";
     pub const NO_TARGET_DIRECTORY: &str = "no-target-directory";
     pub const RELATIVE: &str = "relative";
@@ -86,9 +129,10 @@ mod options {
 
 static ARG_FILES: &str = "files";
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let usage = get_usage();
-    let long_usage = get_long_usage();
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let usage = usage();
+    let long_usage = long_usage();
 
     let matches = uu_app()
         .usage(&usage[..])
@@ -115,20 +159,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         OverwriteMode::NoClobber
     };
 
-    let backup_mode = backup_control::determine_backup_mode(
-        matches.is_present(options::BACKUP_NO_ARG),
-        matches.is_present(options::BACKUP),
-        matches.value_of(options::BACKUP),
-    );
-    let backup_mode = match backup_mode {
-        Err(err) => {
-            show_usage_error!("{}", err);
-            return 1;
-        }
-        Ok(mode) => mode,
-    };
-
-    let backup_suffix = backup_control::determine_backup_suffix(matches.value_of(options::SUFFIX));
+    let backup_mode = backup_control::determine_backup_mode(&matches)?;
+    let backup_suffix = backup_control::determine_backup_suffix(&matches);
 
     let settings = Settings {
         overwrite: overwrite_mode,
@@ -148,23 +180,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .version(crate_version!())
         .about(ABOUT)
-        .arg(
-            Arg::with_name(options::BACKUP)
-                .long(options::BACKUP)
-                .help("make a backup of each existing destination file")
-                .takes_value(true)
-                .require_equals(true)
-                .min_values(0)
-                .value_name("CONTROL"),
-        )
-        .arg(
-            Arg::with_name(options::BACKUP_NO_ARG)
-                .short(options::BACKUP_NO_ARG)
-                .help("like --backup but does not accept an argument"),
-        )
+        .arg(backup_control::arguments::backup())
+        .arg(backup_control::arguments::backup_no_args())
         // TODO: opts.arg(
         //    Arg::with_name(("d", "directory", "allow users with appropriate privileges to attempt \
         //                                       to make hard links to directories");
@@ -202,14 +222,7 @@ pub fn uu_app() -> App<'static, 'static> {
                 // override added for https://github.com/uutils/coreutils/issues/2359
                 .overrides_with(options::SYMBOLIC),
         )
-        .arg(
-            Arg::with_name(options::SUFFIX)
-                .short("S")
-                .long(options::SUFFIX)
-                .help("override the usual backup suffix")
-                .value_name("SUFFIX")
-                .takes_value(true),
-        )
+        .arg(backup_control::arguments::suffix())
         .arg(
             Arg::with_name(options::TARGET_DIRECTORY)
                 .short("t")
@@ -246,7 +259,7 @@ pub fn uu_app() -> App<'static, 'static> {
         )
 }
 
-fn exec(files: &[PathBuf], settings: &Settings) -> i32 {
+fn exec(files: &[PathBuf], settings: &Settings) -> UResult<()> {
     // Handle cases where we create links in a directory first.
     if let Some(ref name) = settings.target_dir {
         // 4th form: a directory is specified by -t.
@@ -267,35 +280,22 @@ fn exec(files: &[PathBuf], settings: &Settings) -> i32 {
     // 1st form. Now there should be only two operands, but if -T is
     // specified we may have a wrong number of operands.
     if files.len() == 1 {
-        show_error!(
-            "missing destination file operand after '{}'",
-            files[0].to_string_lossy()
-        );
-        return 1;
+        return Err(LnError::MissingDestination(files[0].clone()).into());
     }
     if files.len() > 2 {
-        show_error!(
-            "extra operand '{}'\nTry '{} --help' for more information.",
-            files[2].display(),
-            executable!()
-        );
-        return 1;
+        return Err(LnError::ExtraOperand(files[2].clone().into()).into());
     }
     assert!(!files.is_empty());
 
     match link(&files[0], &files[1], settings) {
-        Ok(_) => 0,
-        Err(e) => {
-            show_error!("{}", e);
-            1
-        }
+        Ok(_) => Ok(()),
+        Err(e) => Err(LnError::FailedToLink(e.to_string()).into()),
     }
 }
 
-fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) -> i32 {
+fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) -> UResult<()> {
     if !target_dir.is_dir() {
-        show_error!("target '{}' is not a directory", target_dir.display());
-        return 1;
+        return Err(LnError::TargetIsDirectory(target_dir.to_owned()).into());
     }
 
     let mut all_successful = true;
@@ -307,7 +307,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
                 if is_symlink(target_dir) {
                     if target_dir.is_file() {
                         if let Err(e) = fs::remove_file(target_dir) {
-                            show_error!("Could not update {}: {}", target_dir.display(), e)
+                            show_error!("Could not update {}: {}", target_dir.quote(), e)
                         };
                     }
                     if target_dir.is_dir() {
@@ -315,7 +315,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
                         // considered as a dir
                         // See test_ln::test_symlink_no_deref_dir
                         if let Err(e) = fs::remove_dir(target_dir) {
-                            show_error!("Could not update {}: {}", target_dir.display(), e)
+                            show_error!("Could not update {}: {}", target_dir.quote(), e)
                         };
                     }
                 }
@@ -333,10 +333,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
                         }
                     }
                     None => {
-                        show_error!(
-                            "cannot stat '{}': No such file or directory",
-                            srcpath.display()
-                        );
+                        show_error!("cannot stat {}: No such file or directory", srcpath.quote());
                         all_successful = false;
                         continue;
                     }
@@ -345,24 +342,28 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
 
         if let Err(e) = link(srcpath, &targetpath, settings) {
             show_error!(
-                "cannot link '{}' to '{}': {}",
-                targetpath.display(),
-                srcpath.display(),
+                "cannot link {} to {}: {}",
+                targetpath.quote(),
+                srcpath.quote(),
                 e
             );
             all_successful = false;
         }
     }
     if all_successful {
-        0
+        Ok(())
     } else {
-        1
+        Err(LnError::SomeLinksFailed.into())
     }
 }
 
 fn relative_path<'a>(src: &Path, dst: &Path) -> Result<Cow<'a, Path>> {
-    let src_abs = canonicalize(src, CanonicalizeMode::Normal)?;
-    let mut dst_abs = canonicalize(dst.parent().unwrap(), CanonicalizeMode::Normal)?;
+    let src_abs = canonicalize(src, MissingHandling::Normal, ResolveMode::Logical)?;
+    let mut dst_abs = canonicalize(
+        dst.parent().unwrap(),
+        MissingHandling::Normal,
+        ResolveMode::Logical,
+    )?;
     dst_abs.push(dst.components().last().unwrap());
     let suffix_pos = src_abs
         .components()
@@ -396,7 +397,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> Result<()> {
         match settings.overwrite {
             OverwriteMode::NoClobber => {}
             OverwriteMode::Interactive => {
-                print!("{}: overwrite '{}'? ", executable!(), dst.display());
+                print!("{}: overwrite {}? ", uucore::util_name(), dst.quote());
                 if !read_yes() {
                     return Ok(());
                 }
@@ -423,9 +424,9 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> Result<()> {
     }
 
     if settings.verbose {
-        print!("'{}' -> '{}'", dst.display(), &source.display());
+        print!("{} -> {}", dst.quote(), source.quote());
         match backup_path {
-            Some(path) => println!(" (backup: '{}')", path.display()),
+            Some(path) => println!(" (backup: {})", path.quote()),
             None => println!(),
         }
     }

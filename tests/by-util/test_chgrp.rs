@@ -43,7 +43,7 @@ fn test_invalid_group() {
         .arg("__nosuchgroup__")
         .arg("/")
         .fails()
-        .stderr_is("chgrp: invalid group: __nosuchgroup__");
+        .stderr_is("chgrp: invalid group: '__nosuchgroup__'");
 }
 
 #[test]
@@ -225,6 +225,131 @@ fn test_big_h() {
                 .lines()
                 .fold(0, |acc, _| acc + 1)
                 > 1
+        );
+    }
+}
+
+#[test]
+#[cfg(not(target_vendor = "apple"))]
+fn basic_succeeds() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let one_group = nix::unistd::getgroups().unwrap();
+    // if there are no groups we can't run this test.
+    if let Some(group) = one_group.first() {
+        at.touch("f1");
+        ucmd.arg(group.as_raw().to_string())
+            .arg("f1")
+            .succeeds()
+            .no_stdout()
+            .no_stderr();
+    }
+}
+
+#[test]
+fn test_no_change() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file");
+    ucmd.arg("").arg(at.plus("file")).succeeds();
+}
+
+#[test]
+#[cfg(not(target_vendor = "apple"))]
+fn test_permission_denied() {
+    use std::os::unix::prelude::PermissionsExt;
+
+    if let Some(group) = nix::unistd::getgroups().unwrap().first() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkdir("dir");
+        at.touch("dir/file");
+        std::fs::set_permissions(at.plus("dir"), PermissionsExt::from_mode(0o0000)).unwrap();
+        ucmd.arg("-R")
+            .arg(group.as_raw().to_string())
+            .arg("dir")
+            .fails()
+            .stderr_only("chgrp: cannot access 'dir': Permission denied");
+    }
+}
+
+#[test]
+#[cfg(not(target_vendor = "apple"))]
+fn test_subdir_permission_denied() {
+    use std::os::unix::prelude::PermissionsExt;
+
+    if let Some(group) = nix::unistd::getgroups().unwrap().first() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkdir("dir");
+        at.mkdir("dir/subdir");
+        at.touch("dir/subdir/file");
+        std::fs::set_permissions(at.plus("dir/subdir"), PermissionsExt::from_mode(0o0000)).unwrap();
+        ucmd.arg("-R")
+            .arg(group.as_raw().to_string())
+            .arg("dir")
+            .fails()
+            .stderr_only("chgrp: cannot access 'dir/subdir': Permission denied");
+    }
+}
+
+#[test]
+#[cfg(not(target_vendor = "apple"))]
+fn test_traverse_symlinks() {
+    use std::os::unix::prelude::MetadataExt;
+    let groups = nix::unistd::getgroups().unwrap();
+    if groups.len() < 2 {
+        return;
+    }
+    let (first_group, second_group) = (groups[0], groups[1]);
+
+    for &(args, traverse_first, traverse_second) in &[
+        (&[][..] as &[&str], false, false),
+        (&["-H"][..], true, false),
+        (&["-P"][..], false, false),
+        (&["-L"][..], true, true),
+    ] {
+        let scenario = TestScenario::new("chgrp");
+
+        let (at, mut ucmd) = (scenario.fixtures.clone(), scenario.ucmd());
+
+        at.mkdir("dir");
+        at.mkdir("dir2");
+        at.touch("dir2/file");
+        at.mkdir("dir3");
+        at.touch("dir3/file");
+        at.symlink_dir("dir2", "dir/dir2_ln");
+        at.symlink_dir("dir3", "dir3_ln");
+
+        scenario
+            .ccmd("chgrp")
+            .arg(first_group.to_string())
+            .arg("dir2/file")
+            .arg("dir3/file")
+            .succeeds();
+
+        assert!(at.plus("dir2/file").metadata().unwrap().gid() == first_group.as_raw());
+        assert!(at.plus("dir3/file").metadata().unwrap().gid() == first_group.as_raw());
+
+        ucmd.arg("-R")
+            .args(args)
+            .arg(second_group.to_string())
+            .arg("dir")
+            .arg("dir3_ln")
+            .succeeds()
+            .no_stderr();
+
+        assert_eq!(
+            at.plus("dir2/file").metadata().unwrap().gid(),
+            if traverse_second {
+                second_group.as_raw()
+            } else {
+                first_group.as_raw()
+            }
+        );
+        assert_eq!(
+            at.plus("dir3/file").metadata().unwrap().gid(),
+            if traverse_first {
+                second_group.as_raw()
+            } else {
+                first_group.as_raw()
+            }
         );
     }
 }

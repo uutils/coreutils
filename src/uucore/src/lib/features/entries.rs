@@ -37,7 +37,9 @@
 #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
 use libc::time_t;
 use libc::{c_char, c_int, gid_t, uid_t};
-use libc::{getgrgid, getgrnam, getgroups, getpwnam, getpwuid, group, passwd};
+#[cfg(not(target_os = "redox"))]
+use libc::{getgrgid, getgrnam, getgroups};
+use libc::{getpwnam, getpwuid, group, passwd};
 
 use std::borrow::Cow;
 use std::ffi::{CStr, CString};
@@ -65,6 +67,7 @@ extern "C" {
 /// > supplementary group IDs for the process is returned.  This allows
 /// > the caller to determine the size of a dynamically allocated list
 /// > to be used in a further call to getgroups().
+#[cfg(not(target_os = "redox"))]
 pub fn get_groups() -> IOResult<Vec<gid_t>> {
     let ngroups = unsafe { getgroups(0, ptr::null_mut()) };
     if ngroups == -1 {
@@ -104,7 +107,7 @@ pub fn get_groups() -> IOResult<Vec<gid_t>> {
 /// > groups is the same (in the mathematical sense of ``set''). (The
 /// > history of a process and its parents could affect the details of
 /// > the result.)
-#[cfg(all(unix, feature = "process"))]
+#[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
 pub fn get_groups_gnu(arg_id: Option<u32>) -> IOResult<Vec<gid_t>> {
     let groups = get_groups()?;
     let egid = arg_id.unwrap_or_else(crate::features::process::getegid);
@@ -319,6 +322,7 @@ macro_rules! f {
 }
 
 f!(getpwnam, getpwuid, uid_t, Passwd);
+#[cfg(not(target_os = "redox"))]
 f!(getgrnam, getgrgid, gid_t, Group);
 
 #[inline]
@@ -326,6 +330,7 @@ pub fn uid2usr(id: uid_t) -> IOResult<String> {
     Passwd::locate(id).map(|p| p.name().into_owned())
 }
 
+#[cfg(not(target_os = "redox"))]
 #[inline]
 pub fn gid2grp(id: gid_t) -> IOResult<String> {
     Group::locate(id).map(|p| p.name().into_owned())
@@ -336,6 +341,7 @@ pub fn usr2uid(name: &str) -> IOResult<uid_t> {
     Passwd::locate(name).map(|p| p.uid())
 }
 
+#[cfg(not(target_os = "redox"))]
 #[inline]
 pub fn grp2gid(name: &str) -> IOResult<gid_t> {
     Group::locate(name).map(|p| p.gid())

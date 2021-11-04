@@ -64,7 +64,7 @@ mod test_generate_tokens {
 
     #[test]
     fn printf_format() {
-        let s = "%-# 15a\\r\\\"\\\\\\a\\b\\e\\f\\v%+020.-23w\\x12\\167\\132\\112\\n";
+        let s = "%-# 15a\\t\\r\\\"\\\\\\a\\b\\e\\f\\v%+020.-23w\\x12\\167\\132\\112\\n";
         let expected = vec![
             Token::Directive {
                 flag: F_LEFT | F_ALTER | F_SPACE,
@@ -72,6 +72,7 @@ mod test_generate_tokens {
                 precision: -1,
                 format: 'a',
             },
+            Token::Char('\t'),
             Token::Char('\r'),
             Token::Char('"'),
             Token::Char('\\'),
@@ -101,7 +102,7 @@ fn test_invalid_option() {
     new_ucmd!().arg("-w").arg("-q").arg("/").fails();
 }
 
-#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+#[cfg(unix)]
 const NORMAL_FORMAT_STR: &str =
     "%a %A %b %B %d %D %f %F %g %G %h %i %m %n %o %s %u %U %x %X %y %Y %z %Z"; // avoid "%w %W" (birth/creation) due to `stat` limitations and linux kernel & rust version capability variations
 #[cfg(any(target_os = "linux"))]

@@ -5,11 +5,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, App, Arg};
 use std::path::Path;
+use uucore::display::print_verbatim;
 use uucore::error::{UResult, UUsageError};
 use uucore::InvalidEncodingHandling;
 
@@ -20,8 +18,8 @@ mod options {
     pub const DIR: &str = "dir";
 }
 
-fn get_usage() -> String {
-    format!("{0} [OPTION] NAME...", executable!())
+fn usage() -> String {
+    format!("{0} [OPTION] NAME...", uucore::execution_phrase())
 }
 
 fn get_long_usage() -> String {
@@ -37,7 +35,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
-    let usage = get_usage();
+    let usage = usage();
     let after_help = get_long_usage();
 
     let matches = uu_app()
@@ -65,7 +63,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     if d.components().next() == None {
                         print!(".")
                     } else {
-                        print!("{}", d.to_string_lossy());
+                        print_verbatim(d).unwrap();
                     }
                 }
                 None => {
@@ -79,14 +77,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             print!("{}", separator);
         }
     } else {
-        return Err(UUsageError::new(1, "missing operand".to_string()));
+        return Err(UUsageError::new(1, "missing operand"));
     }
 
     Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {
-    App::new(executable!())
+    App::new(uucore::util_name())
         .about(ABOUT)
         .version(crate_version!())
         .arg(

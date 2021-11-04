@@ -8,6 +8,7 @@ csh
 globstar
 inotify
 localtime
+mksh
 mountinfo
 mountpoint
 mtab
@@ -63,6 +64,7 @@ abspath
 addprefix
 addsuffix
 endef
+findstring
 firstword
 ifeq
 ifneq
@@ -89,5 +91,10 @@ markdownlint
 rerast
 rollup
 sed
+selinuxenabled
+sestatus
 wslpath
 xargs
+
+# * directories
+sbin

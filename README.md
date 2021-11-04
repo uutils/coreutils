@@ -39,7 +39,7 @@ to compile anywhere, and this is as good a way as any to try and learn it.
 ### Rust Version
 
 uutils follows Rust's release channels and is tested against stable, beta and nightly.
-The current oldest supported version of the Rust compiler is `1.43.1`.
+The current oldest supported version of the Rust compiler is `1.47`.
 
 On both Windows and Redox, only the nightly version is tested currently.
 
@@ -365,23 +365,25 @@ To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 
 | Done      | Semi-Done | To Do  |
 |-----------|-----------|--------|
-| arch      | cp        | chcon  |
-| base32    | date      | dd     |
-| base64    | df        | runcon |
-| basename  | expr      | stty   |
+| arch      | cp        | stty   |
+| base32    | date      |        |
+| base64    | dd        |        |
+| basename  | df        |        |
+| basenc    | expr      |        |
 | cat       | install   |        |
-| chgrp     | join      |        |
-| chmod     | ls        |        |
-| chown     | more      |        |
-| chroot    | numfmt    |        |
-| cksum     | od (`--strings` and 128-bit data types missing) | |
-| comm      | pr        |        |
-| csplit    | printf    |        |
-| cut       | sort      |        |
-| dircolors | split     |        |
-| dirname   | tac       |        |
-| du        | tail      |        |
-| echo      | test      |        |
+| chcon     | join      |        |
+| chgrp     | ls        |        |
+| chmod     | more      |        |
+| chown     | numfmt    |        |
+| chroot    | od (`--strings` and 128-bit data types missing) | |
+| cksum     | pr        |        |
+| comm      | printf    |        |
+| csplit    | sort      |        |
+| cut       | split     |        |
+| dircolors | tac       |        |
+| dirname   | tail      |        |
+| du        | test      |        |
+| echo      |           |        |
 | env       |           |        |
 | expand    |           |        |
 | factor    |           |        |
@@ -424,6 +426,7 @@ To contribute to uutils, please see [CONTRIBUTING](CONTRIBUTING.md).
 | relpath   |           |        |
 | rm        |           |        |
 | rmdir     |           |        |
+| runcon    |           |        |
 | seq       |           |        |
 | shred     |           |        |
 | shuf      |           |        |

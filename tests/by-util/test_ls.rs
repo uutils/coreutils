@@ -1,4 +1,4 @@
-// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup somefile somegroup somehiddenbackup somehiddenfile
+// spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile
 
 #[cfg(unix)]
 extern crate unix_socket;
@@ -128,6 +128,7 @@ fn test_ls_width() {
         scene
             .ucmd()
             .args(&option.split(' ').collect::<Vec<_>>())
+            .arg("-C")
             .succeeds()
             .stdout_only("test-width-1  test-width-2  test-width-3  test-width-4\n");
     }
@@ -136,30 +137,33 @@ fn test_ls_width() {
         scene
             .ucmd()
             .args(&option.split(' ').collect::<Vec<_>>())
+            .arg("-C")
             .succeeds()
             .stdout_only("test-width-1  test-width-3\ntest-width-2  test-width-4\n");
     }
 
-    for option in &[
-        "-w 25",
-        "-w=25",
-        "--width=25",
-        "--width 25",
-        "-w 0",
-        "-w=0",
-        "--width=0",
-        "--width 0",
-    ] {
+    for option in &["-w 25", "-w=25", "--width=25", "--width 25"] {
         scene
             .ucmd()
             .args(&option.split(' ').collect::<Vec<_>>())
+            .arg("-C")
             .succeeds()
             .stdout_only("test-width-1\ntest-width-2\ntest-width-3\ntest-width-4\n");
+    }
+
+    for option in &["-w 0", "-w=0", "--width=0", "--width 0"] {
+        scene
+            .ucmd()
+            .args(&option.split(' ').collect::<Vec<_>>())
+            .arg("-C")
+            .succeeds()
+            .stdout_only("test-width-1  test-width-2  test-width-3  test-width-4\n");
     }
 
     scene
         .ucmd()
         .arg("-w=bad")
+        .arg("-C")
         .fails()
         .stderr_contains("invalid line width");
 
@@ -167,6 +171,7 @@ fn test_ls_width() {
         scene
             .ucmd()
             .args(&option.split(' ').collect::<Vec<_>>())
+            .arg("-C")
             .fails()
             .stderr_only("ls: invalid line width: '1a'");
     }
@@ -184,16 +189,10 @@ fn test_ls_columns() {
     // Columns is the default
     let result = scene.ucmd().succeeds();
 
-    #[cfg(not(windows))]
     result.stdout_only("test-columns-1\ntest-columns-2\ntest-columns-3\ntest-columns-4\n");
-    #[cfg(windows)]
-    result.stdout_only("test-columns-1  test-columns-2  test-columns-3  test-columns-4\n");
 
     for option in &["-C", "--format=columns"] {
         let result = scene.ucmd().arg(option).succeeds();
-        #[cfg(not(windows))]
-        result.stdout_only("test-columns-1\ntest-columns-2\ntest-columns-3\ntest-columns-4\n");
-        #[cfg(windows)]
         result.stdout_only("test-columns-1  test-columns-2  test-columns-3  test-columns-4\n");
     }
 
@@ -205,6 +204,38 @@ fn test_ls_columns() {
             .succeeds()
             .stdout_only("test-columns-1  test-columns-3\ntest-columns-2  test-columns-4\n");
     }
+
+    // On windows we are always able to get the terminal size, so we can't simulate falling back to the
+    // environment variable.
+    #[cfg(not(windows))]
+    {
+        for option in &["-C", "--format=columns"] {
+            scene
+                .ucmd()
+                .env("COLUMNS", "40")
+                .arg(option)
+                .succeeds()
+                .stdout_only("test-columns-1  test-columns-3\ntest-columns-2  test-columns-4\n");
+        }
+
+        scene
+            .ucmd()
+            .env("COLUMNS", "garbage")
+            .arg("-C")
+            .succeeds()
+            .stdout_is("test-columns-1  test-columns-2  test-columns-3  test-columns-4\n")
+            .stderr_is("ls: ignoring invalid width in environment variable COLUMNS: 'garbage'");
+    }
+    scene
+        .ucmd()
+        .arg("-Cw0")
+        .succeeds()
+        .stdout_only("test-columns-1  test-columns-2  test-columns-3  test-columns-4\n");
+    scene
+        .ucmd()
+        .arg("-mw0")
+        .succeeds()
+        .stdout_only("test-columns-1, test-columns-2, test-columns-3, test-columns-4\n");
 }
 
 #[test]
@@ -220,11 +251,7 @@ fn test_ls_across() {
         let result = scene.ucmd().arg(option).succeeds();
         // Because the test terminal has width 0, this is the same output as
         // the columns option.
-        if cfg!(unix) {
-            result.stdout_only("test-across-1\ntest-across-2\ntest-across-3\ntest-across-4\n");
-        } else {
-            result.stdout_only("test-across-1  test-across-2  test-across-3  test-across-4\n");
-        }
+        result.stdout_only("test-across-1  test-across-2  test-across-3  test-across-4\n");
     }
 
     for option in &["-x", "--format=across"] {
@@ -250,11 +277,7 @@ fn test_ls_commas() {
 
     for option in &["-m", "--format=commas"] {
         let result = scene.ucmd().arg(option).succeeds();
-        if cfg!(unix) {
-            result.stdout_only("test-commas-1,\ntest-commas-2,\ntest-commas-3,\ntest-commas-4\n");
-        } else {
-            result.stdout_only("test-commas-1, test-commas-2, test-commas-3, test-commas-4\n");
-        }
+        result.stdout_only("test-commas-1, test-commas-2, test-commas-3, test-commas-4\n");
     }
 
     for option in &["-m", "--format=commas"] {
@@ -310,6 +333,261 @@ fn test_ls_long() {
     }
 }
 
+#[cfg(not(windows))]
+#[test]
+fn test_ls_long_format() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir(&at.plus_as_string("test-long-dir"));
+    at.touch(&at.plus_as_string("test-long-dir/test-long-file"));
+    at.mkdir(&at.plus_as_string("test-long-dir/test-long-dir"));
+
+    for arg in &["-l", "--long", "--format=long", "--format=verbose"] {
+        // Assuming sane username do not have spaces within them.
+        // A line of the output should be:
+        // One of the characters -bcCdDlMnpPsStTx?
+        // rwx, with - for missing permissions, thrice.
+        // Zero or one "." for indicating a file with security context
+        // A number, preceded by column whitespace, and followed by a single space.
+        // A username, currently [^ ], followed by column whitespace, twice (or thrice for Hurd).
+        // A number, followed by a single space.
+        // A month, followed by a single space.
+        // A day, preceded by column whitespace, and followed by a single space.
+        // Either a year or a time, currently [0-9:]+, preceded by column whitespace,
+        // and followed by a single space.
+        // Whatever comes after is irrelevant to this specific test.
+        scene.ucmd().arg(arg).arg("test-long-dir").succeeds().stdout_matches(&Regex::new(
+            r"\n[-bcCdDlMnpPsStTx?]([r-][w-][xt-]){3}\.? +\d+ [^ ]+ +[^ ]+( +[^ ]+)? +\d+ [A-Z][a-z]{2} {0,2}\d{0,2} {0,2}[0-9:]+ "
+        ).unwrap());
+    }
+
+    // This checks for the line with the .. entry. The uname and group should be digits.
+    scene.ucmd().arg("-lan").arg("test-long-dir").succeeds().stdout_matches(&Regex::new(
+        r"\nd([r-][w-][xt-]){3}\.? +\d+ \d+ +\d+( +\d+)? +\d+ [A-Z][a-z]{2} {0,2}\d{0,2} {0,2}[0-9:]+ \.\."
+    ).unwrap());
+}
+
+/// This test tests `ls -laR --color`.
+/// This test is mainly about coloring, but, the recursion, symlink `->` processing,
+/// and `.` and `..` being present in `-a` all need to work for the test to pass.
+/// This test does not really test anything provided by `-l` but the file names and symlinks.
+#[cfg(all(feature = "ln", feature = "mkdir", feature = "touch"))]
+#[test]
+#[cfg(all(feature = "ln", feature = "mkdir", feature = "touch"))]
+fn test_ls_long_symlink_color() {
+    // If you break this test after breaking mkdir, touch, or ln, do not be alarmed!
+    // This test is made for ls, but it attempts to run those utils in the process.
+
+    // Having Some([2, 0]) in a color basically means that "it has the same color as whatever
+    // is in the 2nd expected output, the 0th color", where the 0th color is the name color, and
+    // the 1st color is the target color, in a fixed-size array of size 2.
+    // Basically these are references to be used for indexing the `colors` vector defined below.
+    type ColorReference = Option<[usize; 2]>;
+
+    // The string between \x1b[ and m
+    type Color = String;
+
+    // The string between the color start and the color end is the file name itself.
+    type Name = String;
+
+    let scene = TestScenario::new(util_name!());
+
+    // .
+    // ├── dir1
+    // │   ├── file1
+    // │   ├── dir2
+    // │   │   └── dir3
+    // │   ├── ln-dir-invalid -> dir1/dir2
+    // │   ├── ln-up2 -> ../..
+    // │   └── ln-root -> /
+    // ├── ln-file1 -> dir1/file1
+    // ├── ln-file-invalid -> dir1/invalid-target
+    // └── ln-dir3 -> ./dir1/dir2/dir3
+    prepare_folder_structure(&scene);
+
+    // We memoize the colors so we can refer to them later.
+    // Each entry will be the colors of the link name and link target of a specific output.
+    let mut colors: Vec<[Color; 2]> = vec![];
+
+    // The contents of each tuple are the expected colors and names for the link and target.
+    // We will loop over the ls output and compare to those.
+    // None values mean that we do not know what color to expect yet, as LS_COLOR might
+    // be set differently, and as different implementations of ls may use different codes,
+    // for example, our ls uses `[1;36m` while the GNU ls uses `[01;36m`.
+    //
+    // These have been sorting according to default ls sort, and this affects the order of
+    // discovery of colors, so be very careful when changing directory/file names being created.
+    let expected_output: [(ColorReference, &str, ColorReference, &str); 6] = [
+        // We don't know what colors are what the first time we meet a link.
+        (None, "ln-dir3", None, "./dir1/dir2/dir3"),
+        // We have acquired [0, 0], which should be the link color,
+        // and [0, 1], which should be the dir color, and we can compare to them from now on.
+        (None, "ln-file-invalid", Some([1, 1]), "dir1/invalid-target"),
+        // We acquired [1, 1], the non-existent color.
+        (Some([0, 0]), "ln-file1", None, "dir1/file1"),
+        (Some([1, 1]), "ln-dir-invalid", Some([1, 1]), "dir1/dir2"),
+        (Some([0, 0]), "ln-root", Some([0, 1]), "/"),
+        (Some([0, 0]), "ln-up2", Some([0, 1]), "../.."),
+    ];
+
+    // We are only interested in lines or the ls output that are symlinks. These start with "lrwx".
+    let result = scene.ucmd().arg("-laR").arg("--color").arg(".").succeeds();
+    let mut result_lines = result
+        .stdout_str()
+        .lines()
+        .filter(|line| line.starts_with("lrwx"))
+        .enumerate();
+
+    // For each enumerated line, we assert that the output of ls matches the expected output.
+    //
+    // The unwraps within get_index_name_target will panic if a line starting lrwx does
+    // not have `colored_name -> target` within it.
+    while let Some((i, name, target)) = get_index_name_target(&mut result_lines) {
+        // The unwraps within capture_colored_string will panic if the name/target's color
+        // format is invalid.
+        let (matched_name_color, matched_name) = capture_colored_string(&name);
+        let (matched_target_color, matched_target) = capture_colored_string(&target);
+
+        colors.push([matched_name_color, matched_target_color]);
+
+        // We borrow them again after having moved them. This unwrap will never panic.
+        let [matched_name_color, matched_target_color] = colors.last().unwrap();
+
+        // We look up the Colors that are expected in `colors` using the ColorReferences
+        // stored in `expected_output`.
+        let expected_name_color = expected_output[i]
+            .0
+            .map(|color_reference| colors[color_reference[0]][color_reference[1]].as_str());
+        let expected_target_color = expected_output[i]
+            .2
+            .map(|color_reference| colors[color_reference[0]][color_reference[1]].as_str());
+
+        // This is the important part. The asserts inside assert_names_and_colors_are_equal
+        // will panic if the colors or names do not match the expected colors or names.
+        // Keep in mind an expected color `Option<&str>` of None can mean either that we
+        // don't expect any color here, as in `expected_output[2], or don't know what specific
+        // color to expect yet, as in expected_output[0:1].
+        assert_names_and_colors_are_equal(
+            matched_name_color,
+            expected_name_color,
+            &matched_name,
+            expected_output[i].1,
+            matched_target_color,
+            expected_target_color,
+            &matched_target,
+            expected_output[i].3,
+        );
+    }
+
+    // End of test, only definitions of the helper functions used above follows...
+
+    fn get_index_name_target<'a, I>(lines: &mut I) -> Option<(usize, Name, Name)>
+    where
+        I: Iterator<Item = (usize, &'a str)>,
+    {
+        match lines.next() {
+            Some((c, s)) => {
+                // `name` is whatever comes between \x1b (inclusive) and the arrow.
+                let name = String::from("\x1b")
+                    + s.split(" -> ")
+                        .next()
+                        .unwrap()
+                        .split(" \x1b")
+                        .last()
+                        .unwrap();
+                // `target` is whatever comes after the arrow.
+                let target = s.split(" -> ").last().unwrap().to_string();
+                Some((c, name, target))
+            }
+            None => None,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn assert_names_and_colors_are_equal(
+        name_color: &str,
+        expected_name_color: Option<&str>,
+        name: &str,
+        expected_name: &str,
+        target_color: &str,
+        expected_target_color: Option<&str>,
+        target: &str,
+        expected_target: &str,
+    ) {
+        // Names are always compared.
+        assert_eq!(&name, &expected_name);
+        assert_eq!(&target, &expected_target);
+
+        // Colors are only compared when we have inferred what color we are looking for.
+        if expected_name_color.is_some() {
+            assert_eq!(&name_color, &expected_name_color.unwrap());
+        }
+        if expected_target_color.is_some() {
+            assert_eq!(&target_color, &expected_target_color.unwrap());
+        }
+    }
+
+    fn capture_colored_string(input: &str) -> (Color, Name) {
+        let colored_name = Regex::new(r"\x1b\[([0-9;]+)m(.+)\x1b\[0m").unwrap();
+        match colored_name.captures(input) {
+            Some(captures) => (
+                captures.get(1).unwrap().as_str().to_string(),
+                captures.get(2).unwrap().as_str().to_string(),
+            ),
+            None => ("".to_string(), input.to_string()),
+        }
+    }
+
+    fn prepare_folder_structure(scene: &TestScenario) {
+        // There is no way to change directory in the CI, so this is the best we can do.
+        // Also, keep in mind that windows might require privilege to symlink directories.
+        //
+        // We use scene.ccmd instead of scene.fixtures because we care about relative symlinks.
+        // So we're going to try out the built mkdir, touch, and ln here, and we expect them to succeed.
+        scene.ccmd("mkdir").arg("dir1").succeeds();
+        scene.ccmd("mkdir").arg("dir1/dir2").succeeds();
+        scene.ccmd("mkdir").arg("dir1/dir2/dir3").succeeds();
+        scene.ccmd("touch").arg("dir1/file1").succeeds();
+
+        scene
+            .ccmd("ln")
+            .arg("-s")
+            .arg("dir1/dir2")
+            .arg("dir1/ln-dir-invalid")
+            .succeeds();
+        scene
+            .ccmd("ln")
+            .arg("-s")
+            .arg("./dir1/dir2/dir3")
+            .arg("ln-dir3")
+            .succeeds();
+        scene
+            .ccmd("ln")
+            .arg("-s")
+            .arg("../..")
+            .arg("dir1/ln-up2")
+            .succeeds();
+        scene
+            .ccmd("ln")
+            .arg("-s")
+            .arg("/")
+            .arg("dir1/ln-root")
+            .succeeds();
+        scene
+            .ccmd("ln")
+            .arg("-s")
+            .arg("dir1/file1")
+            .arg("ln-file1")
+            .succeeds();
+        scene
+            .ccmd("ln")
+            .arg("-s")
+            .arg("dir1/invalid-target")
+            .arg("ln-file-invalid")
+            .succeeds();
+    }
+}
+
 #[test]
 fn test_ls_long_total_size() {
     let scene = TestScenario::new(util_name!());
@@ -360,55 +638,57 @@ fn test_ls_long_formats() {
     let at = &scene.fixtures;
     at.touch(&at.plus_as_string("test-long-formats"));
 
+    // Zero or one "." for indicating a file with security context
+
     // Regex for three names, so all of author, group and owner
-    let re_three = Regex::new(r"[xrw-]{9} \d ([-0-9_a-z]+ ){3}0").unwrap();
+    let re_three = Regex::new(r"[xrw-]{9}\.? \d ([-0-9_a-z]+ ){3}0").unwrap();
 
     #[cfg(unix)]
-    let re_three_num = Regex::new(r"[xrw-]{9} \d (\d+ ){3}0").unwrap();
+    let re_three_num = Regex::new(r"[xrw-]{9}\.? \d (\d+ ){3}0").unwrap();
 
     // Regex for two names, either:
     // - group and owner
     // - author and owner
     // - author and group
-    let re_two = Regex::new(r"[xrw-]{9} \d ([-0-9_a-z]+ ){2}0").unwrap();
+    let re_two = Regex::new(r"[xrw-]{9}\.? \d ([-0-9_a-z]+ ){2}0").unwrap();
 
     #[cfg(unix)]
-    let re_two_num = Regex::new(r"[xrw-]{9} \d (\d+ ){2}0").unwrap();
+    let re_two_num = Regex::new(r"[xrw-]{9}\.? \d (\d+ ){2}0").unwrap();
 
     // Regex for one name: author, group or owner
-    let re_one = Regex::new(r"[xrw-]{9} \d [-0-9_a-z]+ 0").unwrap();
+    let re_one = Regex::new(r"[xrw-]{9}\.? \d [-0-9_a-z]+ 0").unwrap();
 
     #[cfg(unix)]
-    let re_one_num = Regex::new(r"[xrw-]{9} \d \d+ 0").unwrap();
+    let re_one_num = Regex::new(r"[xrw-]{9}\.? \d \d+ 0").unwrap();
 
     // Regex for no names
-    let re_zero = Regex::new(r"[xrw-]{9} \d 0").unwrap();
+    let re_zero = Regex::new(r"[xrw-]{9}\.? \d 0").unwrap();
 
-    let result = scene
+    scene
         .ucmd()
         .arg("-l")
         .arg("--author")
         .arg("test-long-formats")
-        .succeeds();
-    assert!(re_three.is_match(result.stdout_str()));
+        .succeeds()
+        .stdout_matches(&re_three);
 
-    let result = scene
+    scene
         .ucmd()
         .arg("-l1")
         .arg("--author")
         .arg("test-long-formats")
-        .succeeds();
-    assert!(re_three.is_match(result.stdout_str()));
+        .succeeds()
+        .stdout_matches(&re_three);
 
     #[cfg(unix)]
     {
-        let result = scene
+        scene
             .ucmd()
             .arg("-n")
             .arg("--author")
             .arg("test-long-formats")
-            .succeeds();
-        assert!(re_three_num.is_match(result.stdout_str()));
+            .succeeds()
+            .stdout_matches(&re_three_num);
     }
 
     for arg in &[
@@ -418,22 +698,22 @@ fn test_ls_long_formats() {
         "-lG --author",           // only author and owner
         "-l --no-group --author", // only author and owner
     ] {
-        let result = scene
+        scene
             .ucmd()
             .args(&arg.split(' ').collect::<Vec<_>>())
             .arg("test-long-formats")
-            .succeeds();
-        assert!(re_two.is_match(result.stdout_str()));
+            .succeeds()
+            .stdout_matches(&re_two);
 
         #[cfg(unix)]
         {
-            let result = scene
+            scene
                 .ucmd()
                 .arg("-n")
                 .args(&arg.split(' ').collect::<Vec<_>>())
                 .arg("test-long-formats")
-                .succeeds();
-            assert!(re_two_num.is_match(result.stdout_str()));
+                .succeeds()
+                .stdout_matches(&re_two_num);
         }
     }
 
@@ -447,22 +727,22 @@ fn test_ls_long_formats() {
         "-l --no-group", // only owner
         "-gG --author",  // only author
     ] {
-        let result = scene
+        scene
             .ucmd()
             .args(&arg.split(' ').collect::<Vec<_>>())
             .arg("test-long-formats")
-            .succeeds();
-        assert!(re_one.is_match(result.stdout_str()));
+            .succeeds()
+            .stdout_matches(&re_one);
 
         #[cfg(unix)]
         {
-            let result = scene
+            scene
                 .ucmd()
                 .arg("-n")
                 .args(&arg.split(' ').collect::<Vec<_>>())
                 .arg("test-long-formats")
-                .succeeds();
-            assert!(re_one_num.is_match(result.stdout_str()));
+                .succeeds()
+                .stdout_matches(&re_one_num);
         }
     }
 
@@ -479,22 +759,22 @@ fn test_ls_long_formats() {
         "-og1",
         "-og1l",
     ] {
-        let result = scene
+        scene
             .ucmd()
             .args(&arg.split(' ').collect::<Vec<_>>())
             .arg("test-long-formats")
-            .succeeds();
-        assert!(re_zero.is_match(result.stdout_str()));
+            .succeeds()
+            .stdout_matches(&re_zero);
 
         #[cfg(unix)]
         {
-            let result = scene
+            scene
                 .ucmd()
                 .arg("-n")
                 .args(&arg.split(' ').collect::<Vec<_>>())
                 .arg("test-long-formats")
-                .succeeds();
-            assert!(re_zero.is_match(result.stdout_str()));
+                .succeeds()
+                .stdout_matches(&re_zero);
         }
     }
 }
@@ -571,13 +851,11 @@ fn test_ls_sort_name() {
     at.touch("test-1");
     at.touch("test-2");
 
-    let sep = if cfg!(unix) { "\n" } else { "  " };
-
     scene
         .ucmd()
         .arg("--sort=name")
         .succeeds()
-        .stdout_is(["test-1", "test-2", "test-3\n"].join(sep));
+        .stdout_is("test-1\ntest-2\ntest-3\n");
 
     let scene_dot = TestScenario::new(util_name!());
     let at = &scene_dot.fixtures;
@@ -591,7 +869,7 @@ fn test_ls_sort_name() {
         .arg("--sort=name")
         .arg("-A")
         .succeeds()
-        .stdout_is([".a", ".b", "a", "b\n"].join(sep));
+        .stdout_is(".a\n.b\na\nb\n");
 }
 
 #[test]
@@ -612,28 +890,16 @@ fn test_ls_order_size() {
     scene.ucmd().arg("-al").succeeds();
 
     let result = scene.ucmd().arg("-S").succeeds();
-    #[cfg(not(windows))]
     result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
-    #[cfg(windows)]
-    result.stdout_only("test-4  test-3  test-2  test-1\n");
 
     let result = scene.ucmd().arg("-S").arg("-r").succeeds();
-    #[cfg(not(windows))]
     result.stdout_only("test-1\ntest-2\ntest-3\ntest-4\n");
-    #[cfg(windows)]
-    result.stdout_only("test-1  test-2  test-3  test-4\n");
 
     let result = scene.ucmd().arg("--sort=size").succeeds();
-    #[cfg(not(windows))]
     result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
-    #[cfg(windows)]
-    result.stdout_only("test-4  test-3  test-2  test-1\n");
 
     let result = scene.ucmd().arg("--sort=size").arg("-r").succeeds();
-    #[cfg(not(windows))]
     result.stdout_only("test-1\ntest-2\ntest-3\ntest-4\n");
-    #[cfg(windows)]
-    result.stdout_only("test-1  test-2  test-3  test-4\n");
 }
 
 #[test]
@@ -755,9 +1021,6 @@ fn test_ls_styles() {
 
     at.touch("test2");
     let result = scene.ucmd().arg("--full-time").arg("-x").succeeds();
-    #[cfg(not(windows))]
-    assert_eq!(result.stdout_str(), "test\ntest2\n");
-    #[cfg(windows)]
     assert_eq!(result.stdout_str(), "test  test2\n");
 }
 
@@ -794,28 +1057,16 @@ fn test_ls_order_time() {
 
     // ctime was changed at write, so the order is 4 3 2 1
     let result = scene.ucmd().arg("-t").succeeds();
-    #[cfg(not(windows))]
     result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
-    #[cfg(windows)]
-    result.stdout_only("test-4  test-3  test-2  test-1\n");
 
     let result = scene.ucmd().arg("--sort=time").succeeds();
-    #[cfg(not(windows))]
     result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
-    #[cfg(windows)]
-    result.stdout_only("test-4  test-3  test-2  test-1\n");
 
     let result = scene.ucmd().arg("-tr").succeeds();
-    #[cfg(not(windows))]
     result.stdout_only("test-1\ntest-2\ntest-3\ntest-4\n");
-    #[cfg(windows)]
-    result.stdout_only("test-1  test-2  test-3  test-4\n");
 
     let result = scene.ucmd().arg("--sort=time").arg("-r").succeeds();
-    #[cfg(not(windows))]
     result.stdout_only("test-1\ntest-2\ntest-3\ntest-4\n");
-    #[cfg(windows)]
-    result.stdout_only("test-1  test-2  test-3  test-4\n");
 
     // 3 was accessed last in the read
     // So the order should be 2 3 4 1
@@ -826,19 +1077,11 @@ fn test_ls_order_time() {
 
         // It seems to be dependent on the platform whether the access time is actually set
         if file3_access > file4_access {
-            if cfg!(not(windows)) {
-                result.stdout_only("test-3\ntest-4\ntest-2\ntest-1\n");
-            } else {
-                result.stdout_only("test-3  test-4  test-2  test-1\n");
-            }
+            result.stdout_only("test-3\ntest-4\ntest-2\ntest-1\n");
         } else {
             // Access time does not seem to be set on Windows and some other
             // systems so the order is 4 3 2 1
-            if cfg!(not(windows)) {
-                result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
-            } else {
-                result.stdout_only("test-4  test-3  test-2  test-1\n");
-            }
+            result.stdout_only("test-4\ntest-3\ntest-2\ntest-1\n");
         }
     }
 
@@ -991,6 +1234,7 @@ fn test_ls_color() {
         .ucmd()
         .arg("--color")
         .arg("-w=15")
+        .arg("-C")
         .succeeds()
         .stdout_only(format!(
             "{}  test-color\nb  {}\n",
@@ -1008,7 +1252,7 @@ fn test_ls_inode() {
     at.touch(file);
 
     let re_short = Regex::new(r" *(\d+) test_inode").unwrap();
-    let re_long = Regex::new(r" *(\d+) [xrw-]{10} \d .+ test_inode").unwrap();
+    let re_long = Regex::new(r" *(\d+) [xrw-]{10}\.? \d .+ test_inode").unwrap();
 
     let result = scene.ucmd().arg("test_inode").arg("-i").succeeds();
     assert!(re_short.is_match(result.stdout_str()));
@@ -1374,6 +1618,7 @@ fn test_ls_quoting_style() {
         // Default is shell-escape
         scene
             .ucmd()
+            .arg("--hide-control-chars")
             .arg("one\ntwo")
             .succeeds()
             .stdout_only("'one'$'\\n''two'\n");
@@ -1395,23 +1640,8 @@ fn test_ls_quoting_style() {
         ] {
             scene
                 .ucmd()
-                .arg(arg)
-                .arg("one\ntwo")
-                .succeeds()
-                .stdout_only(format!("{}\n", correct));
-        }
-
-        for (arg, correct) in &[
-            ("--quoting-style=literal", "one?two"),
-            ("-N", "one?two"),
-            ("--literal", "one?two"),
-            ("--quoting-style=shell", "one?two"),
-            ("--quoting-style=shell-always", "'one?two'"),
-        ] {
-            scene
-                .ucmd()
-                .arg(arg)
                 .arg("--hide-control-chars")
+                .arg(arg)
                 .arg("one\ntwo")
                 .succeeds()
                 .stdout_only(format!("{}\n", correct));
@@ -1421,7 +1651,7 @@ fn test_ls_quoting_style() {
             ("--quoting-style=literal", "one\ntwo"),
             ("-N", "one\ntwo"),
             ("--literal", "one\ntwo"),
-            ("--quoting-style=shell", "one\ntwo"),
+            ("--quoting-style=shell", "one\ntwo"), // FIXME: GNU ls quotes this case
             ("--quoting-style=shell-always", "'one\ntwo'"),
         ] {
             scene
@@ -1448,6 +1678,7 @@ fn test_ls_quoting_style() {
         ] {
             scene
                 .ucmd()
+                .arg("--hide-control-chars")
                 .arg(arg)
                 .arg("one\\two")
                 .succeeds()
@@ -1463,6 +1694,7 @@ fn test_ls_quoting_style() {
         ] {
             scene
                 .ucmd()
+                .arg("--hide-control-chars")
                 .arg(arg)
                 .arg("one\n&two")
                 .succeeds()
@@ -1493,6 +1725,7 @@ fn test_ls_quoting_style() {
     ] {
         scene
             .ucmd()
+            .arg("--hide-control-chars")
             .arg(arg)
             .arg("one two")
             .succeeds()
@@ -1516,6 +1749,7 @@ fn test_ls_quoting_style() {
     ] {
         scene
             .ucmd()
+            .arg("--hide-control-chars")
             .arg(arg)
             .arg("one")
             .succeeds()
@@ -2009,11 +2243,7 @@ fn test_ls_path() {
     };
     scene.ucmd().arg(&abs_path).run().stdout_is(expected_stdout);
 
-    let expected_stdout = if cfg!(windows) {
-        format!("{}  {}\n", path, file1)
-    } else {
-        format!("{}\n{}\n", path, file1)
-    };
+    let expected_stdout = format!("{}\n{}\n", path, file1);
     scene
         .ucmd()
         .arg(file1)
@@ -2045,4 +2275,69 @@ fn test_ls_dangling_symlinks() {
         .arg("temp_dir")
         .succeeds() // this should fail, though at the moment, ls lacks a way to propagate errors encountered during display
         .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_ls_context1() {
+    use selinux::{self, KernelSupport};
+    if selinux::kernel_support() == KernelSupport::Unsupported {
+        println!("test skipped: Kernel has no support for SElinux context",);
+        return;
+    }
+
+    let file = "test_ls_context_file";
+    let expected = format!("unconfined_u:object_r:user_tmp_t:s0 {}\n", file);
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch(file);
+    ucmd.args(&["-Z", file]).succeeds().stdout_is(expected);
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_ls_context2() {
+    use selinux::{self, KernelSupport};
+    if selinux::kernel_support() == KernelSupport::Unsupported {
+        println!("test skipped: Kernel has no support for SElinux context",);
+        return;
+    }
+    let ts = TestScenario::new(util_name!());
+    for c_flag in &["-Z", "--context"] {
+        ts.ucmd()
+            .args(&[c_flag, &"/"])
+            .succeeds()
+            .stdout_only(unwrap_or_return!(expected_result(&ts, &[c_flag, &"/"])).stdout_str());
+    }
+}
+
+#[test]
+#[cfg(feature = "feat_selinux")]
+fn test_ls_context_format() {
+    use selinux::{self, KernelSupport};
+    if selinux::kernel_support() == KernelSupport::Unsupported {
+        println!("test skipped: Kernel has no support for SElinux context",);
+        return;
+    }
+    let ts = TestScenario::new(util_name!());
+    // NOTE:
+    // --format=long/verbose matches the output of GNU's ls for --context
+    // except for the size count which may differ to the size count reported by GNU's ls.
+    for word in &[
+        "across",
+        "commas",
+        "horizontal",
+        // "long",
+        "single-column",
+        // "verbose",
+        "vertical",
+    ] {
+        let format = format!("--format={}", word);
+        ts.ucmd()
+            .args(&[&"-Z", &format.as_str(), &"/"])
+            .succeeds()
+            .stdout_only(
+                unwrap_or_return!(expected_result(&ts, &[&"-Z", &format.as_str(), &"/"]))
+                    .stdout_str(),
+            );
+    }
 }
