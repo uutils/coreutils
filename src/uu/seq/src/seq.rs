@@ -71,7 +71,7 @@ type RangeFloat = (ExtendedBigDecimal, ExtendedBigDecimal, ExtendedBigDecimal);
 /// let s = "1.2e-3";
 /// s.parse::<PreciseNumber>.unwrap_or_else(|e| exit_with_error(s, e))
 /// ```
-fn exit_with_error(arg: &str, e: ParseNumberError) -> PreciseNumber {
+fn exit_with_error(arg: &str, e: ParseNumberError) -> ! {
     match e {
         ParseNumberError::Float => crash!(
             1,
@@ -92,8 +92,6 @@ fn exit_with_error(arg: &str, e: ParseNumberError) -> PreciseNumber {
             uucore::execution_phrase()
         ),
     }
-    #[allow(unreachable_code)]
-    PreciseNumber::one()
 }
 
 pub fn uumain(args: impl uucore::Args) -> i32 {
