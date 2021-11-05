@@ -225,27 +225,20 @@ fn write_value_float(
     precision: usize,
     is_first_iteration: bool,
 ) -> std::io::Result<()> {
-    let value_as_str = {
-        let s = if *value == ExtendedBigDecimal::MinusZero && is_first_iteration {
-            format!(
-                "-{value:>0width$.precision$}",
-                value = value,
-                width = if width > 0 { width - 1 } else { width },
-                precision = precision,
-            )
-        } else {
-            format!(
-                "{value:>0width$.precision$}",
-                value = value,
-                width = width,
-                precision = precision,
-            )
-        };
-        if *value == ExtendedBigDecimal::MinusZero && !s.starts_with('-') {
-            [String::from("-"), s].concat()
-        } else {
-            s
-        }
+    let value_as_str = if *value == ExtendedBigDecimal::MinusZero && is_first_iteration {
+        format!(
+            "-{value:>0width$.precision$}",
+            value = value,
+            width = if width > 0 { width - 1 } else { width },
+            precision = precision,
+        )
+    } else {
+        format!(
+            "{value:>0width$.precision$}",
+            value = value,
+            width = width,
+            precision = precision,
+        )
     };
     write!(writer, "{}", value_as_str)
 }
@@ -259,15 +252,10 @@ fn write_value_int(
     is_first_iteration: bool,
 ) -> std::io::Result<()> {
     let value_as_str = if pad {
-        let s = if *value == ExtendedBigInt::MinusZero && is_first_iteration {
+        if *value == ExtendedBigInt::MinusZero && is_first_iteration {
             format!("-{value:>0width$}", value = value, width = width - 1,)
         } else {
             format!("{value:>0width$}", value = value, width = width,)
-        };
-        if *value == ExtendedBigInt::MinusZero && !s.starts_with('-') {
-            [String::from("-"), s].concat()
-        } else {
-            s
         }
     } else if *value == ExtendedBigInt::MinusZero && is_first_iteration {
         format!("-{}", value)
