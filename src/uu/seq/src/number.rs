@@ -37,23 +37,39 @@ impl Number {
         }
     }
 
-    /// Convert this number into a bigint, consuming it.
-    ///
-    /// For floats, this returns the [`ExtendedBigInt`] corresponding to
-    /// the floor of the number.
-    pub fn into_extended_big_int(self) -> ExtendedBigInt {
-        match self {
-            Number::Int(n) => n,
-            Number::Float(x) => ExtendedBigInt::from(x),
-        }
-    }
-
     /// The integer number one.
     pub fn one() -> Self {
         // We would like to implement `num_traits::One`, but it requires
         // a multiplication implementation, and we don't want to
         // implement that here.
         Number::Int(ExtendedBigInt::one())
+    }
+
+    /// Round this number towards the given other number.
+    ///
+    /// If `other` is greater, then round up. If `other` is smaller,
+    /// then round down.
+    pub fn round_towards(self, other: &ExtendedBigInt) -> ExtendedBigInt {
+        match self {
+            // If this number is already an integer, it is already
+            // rounded to the nearest integer in the direction of
+            // `other`.
+            Number::Int(num) => num,
+            // Otherwise, if this number is a float, we need to decide
+            // whether `other` is larger or smaller than it, and thus
+            // whether to round up or round down, respectively.
+            Number::Float(num) => {
+                let other: ExtendedBigDecimal = From::from(other.clone());
+                if other > num {
+                    num.ceil()
+                } else {
+                    // If they are equal, then `self` is already an
+                    // integer, so calling `floor()` does no harm and
+                    // will just return that integer anyway.
+                    num.floor()
+                }
+            }
+        }
     }
 }
 

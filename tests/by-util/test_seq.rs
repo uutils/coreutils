@@ -604,3 +604,12 @@ fn test_zero_not_first() {
         .stdout_is("-0.1\n00.0\n00.1\n")
         .no_stderr();
 }
+
+#[test]
+fn test_rounding_end() {
+    new_ucmd!()
+        .args(&["1", "-1", "0.1"])
+        .succeeds()
+        .stdout_is("1\n")
+        .no_stderr();
+}

@@ -21,6 +21,9 @@ use std::fmt::Display;
 use std::ops::Add;
 
 use bigdecimal::BigDecimal;
+use num_bigint::BigInt;
+use num_bigint::ToBigInt;
+use num_traits::One;
 use num_traits::Zero;
 
 use crate::extendedbigint::ExtendedBigInt;
@@ -63,6 +66,44 @@ pub enum ExtendedBigDecimal {
     ///
     /// [0]: https://github.com/akubera/bigdecimal-rs/issues/67
     Nan,
+}
+
+/// The smallest integer greater than or equal to this number.
+fn ceil(x: BigDecimal) -> BigInt {
+    if x.is_integer() {
+        // Unwrapping the Option because it always returns Some
+        x.to_bigint().unwrap()
+    } else {
+        (x + BigDecimal::one().half()).round(0).to_bigint().unwrap()
+    }
+}
+
+/// The largest integer less than or equal to this number.
+fn floor(x: BigDecimal) -> BigInt {
+    if x.is_integer() {
+        // Unwrapping the Option because it always returns Some
+        x.to_bigint().unwrap()
+    } else {
+        (x - BigDecimal::one().half()).round(0).to_bigint().unwrap()
+    }
+}
+
+impl ExtendedBigDecimal {
+    /// The smallest integer greater than or equal to this number.
+    pub fn ceil(self) -> ExtendedBigInt {
+        match self {
+            ExtendedBigDecimal::BigDecimal(x) => ExtendedBigInt::BigInt(ceil(x)),
+            other => From::from(other),
+        }
+    }
+
+    /// The largest integer less than or equal to this number.
+    pub fn floor(self) -> ExtendedBigInt {
+        match self {
+            ExtendedBigDecimal::BigDecimal(x) => ExtendedBigInt::BigInt(floor(x)),
+            other => From::from(other),
+        }
+    }
 }
 
 impl From<ExtendedBigInt> for ExtendedBigDecimal {

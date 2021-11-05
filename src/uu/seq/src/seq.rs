@@ -140,13 +140,18 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .max(increment.num_fractional_digits);
 
     let result = match (first.number, increment.number, last.number) {
-        (Number::Int(first), Number::Int(increment), last) => print_seq_integers(
-            (first, increment, last.into_extended_big_int()),
-            options.separator,
-            options.terminator,
-            options.widths,
-            padding,
-        ),
+        (Number::Int(first), Number::Int(increment), last) => {
+            // println!("before rounding: {:?}", last);
+            let last = last.round_towards(&first);
+            // println!("after rounding: {:?}", last);
+            print_seq_integers(
+                (first, increment, last),
+                options.separator,
+                options.terminator,
+                options.widths,
+                padding,
+            )
+        }
         (first, increment, last) => print_seq(
             (
                 first.into_extended_big_decimal(),
