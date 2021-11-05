@@ -1111,6 +1111,9 @@ only ignore '.' and '..'.",
                 .long(options::COLOR)
                 .help("Color output based on file type.")
                 .takes_value(true)
+                .possible_values(&[
+                    "always", "yes", "force", "auto", "tty", "if-tty", "never", "no", "none",
+                ])
                 .require_equals(true)
                 .min_values(0),
         )
