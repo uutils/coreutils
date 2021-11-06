@@ -141,9 +141,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let result = match (first.number, increment.number, last.number) {
         (Number::Int(first), Number::Int(increment), last) => {
-            // println!("before rounding: {:?}", last);
             let last = last.round_towards(&first);
-            // println!("after rounding: {:?}", last);
             print_seq_integers(
                 (first, increment, last),
                 options.separator,
