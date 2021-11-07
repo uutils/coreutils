@@ -13,7 +13,7 @@ a newer version of `rustc`.
 We currently use [`criterion`] to benchmark deterministic functions,
 such as `gcd` and `table::factor`.
 
-However, µbenchmarks are by nature unstable: not only are they specific to
+However, microbenchmarks are by nature unstable: not only are they specific to
 the hardware, operating system version, etc., but they are noisy and affected
 by other tasks on the system (browser, compile jobs, etc.), which can cause
 `criterion` to report spurious performance improvements and regressions.
@@ -36,7 +36,7 @@ as possible:
 [frequency stays constant]: XXXTODO
 
 
-### Guidance for designing µbenchmarks
+### Guidance for designing microbenchmarks
 
 *Note:* this guidance is specific to `factor` and takes its application domain
 into account; do not expect it to generalise to other projects.  It is based
@@ -71,7 +71,7 @@ which I recommend reading if you want to add benchmarks to `factor`.
 
 ### Configurable statistical estimators
 
-`criterion` always uses the arithmetic average as estimator; in µbenchmarks,
+`criterion` always uses the arithmetic average as estimator; in microbenchmarks,
 where the code under test is fully deterministic and the measurements are
 subject to additive, positive noise, [the minimum is more appropriate][lemire].
 
@@ -84,7 +84,7 @@ to the constraints of the real-world, and aren't perfectly reproducible.
 Moreover, the mitigations for it (described above) aren't achievable in
 virtualized, multi-tenant environments such as CI.
 
-Instead, we could run the µbenchmarks in a simulated CPU with [`cachegrind`],
+Instead, we could run the microbenchmarks in a simulated CPU with [`cachegrind`],
 measure execution “time” in that model (in CI), and use it to detect and report
 performance improvements and regressions.
 
