@@ -1,7 +1,5 @@
 # Benchmarking `factor`
 
-<!-- spell-checker:ignore (names) Daniel Lemire * Lemire's ; (misc) nohz -->
-
 The benchmarks for `factor` are located under `tests/benches/factor`
 and can be invoked with `cargo bench` in that directory.
 
@@ -15,7 +13,7 @@ a newer version of `rustc`.
 We currently use [`criterion`] to benchmark deterministic functions,
 such as `gcd` and `table::factor`.
 
-However, microbenchmarks are by nature unstable: not only are they specific to
+However, µbenchmarks are by nature unstable: not only are they specific to
 the hardware, operating system version, etc., but they are noisy and affected
 by other tasks on the system (browser, compile jobs, etc.), which can cause
 `criterion` to report spurious performance improvements and regressions.
@@ -35,13 +33,13 @@ as possible:
 [`criterion`]: https://bheisler.github.io/criterion.rs/book/index.html
 [lemire]: https://lemire.me/blog/2018/01/16/microbenchmarking-calls-for-idealized-conditions/
 [isolate a **physical** core]: https://pyperf.readthedocs.io/en/latest/system.html#isolate-cpus-on-linux
-[frequency stays constant]: ... <!-- ToDO -->
+[frequency stays constant]: XXXTODO
 
 
-### Guidance for designing microbenchmarks
+### Guidance for designing µbenchmarks
 
 *Note:* this guidance is specific to `factor` and takes its application domain
-into account; do not expect it to generalize to other projects.  It is based
+into account; do not expect it to generalise to other projects.  It is based
 on Daniel Lemire's [*Microbenchmarking calls for idealized conditions*][lemire],
 which I recommend reading if you want to add benchmarks to `factor`.
 
@@ -73,7 +71,7 @@ which I recommend reading if you want to add benchmarks to `factor`.
 
 ### Configurable statistical estimators
 
-`criterion` always uses the arithmetic average as estimator; in microbenchmarks,
+`criterion` always uses the arithmetic average as estimator; in µbenchmarks,
 where the code under test is fully deterministic and the measurements are
 subject to additive, positive noise, [the minimum is more appropriate][lemire].
 
@@ -83,10 +81,10 @@ subject to additive, positive noise, [the minimum is more appropriate][lemire].
 Measuring performance on real hardware is important, as it relates directly
 to what users of `factor` experience; however, such measurements are subject
 to the constraints of the real-world, and aren't perfectly reproducible.
-Moreover, the mitigation for it (described above) isn't achievable in
+Moreover, the mitigations for it (described above) aren't achievable in
 virtualized, multi-tenant environments such as CI.
 
-Instead, we could run the microbenchmarks in a simulated CPU with [`cachegrind`],
+Instead, we could run the µbenchmarks in a simulated CPU with [`cachegrind`],
 measure execution “time” in that model (in CI), and use it to detect and report
 performance improvements and regressions.
 

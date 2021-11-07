@@ -93,7 +93,7 @@ mod tests {
             gcd(a, gcd(b, c)) == gcd(gcd(a, b), c)
         }
 
-        fn scalar_multiplication(a: u64, b: u64, k: u64) -> bool {
+        fn scalar_mult(a: u64, b: u64, k: u64) -> bool {
             gcd(k * a, k * b) == k * gcd(a, b)
         }
 

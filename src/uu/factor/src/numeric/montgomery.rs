@@ -69,7 +69,7 @@ impl<T: DoubleInt> Montgomery<T> {
         let t_bits = T::zero().count_zeros() as usize;
 
         debug_assert!(x < (self.n.as_double_width()) << t_bits);
-        // TODO: optimize
+        // TODO: optimiiiiiiise
         let Montgomery { a, n } = self;
         let m = T::from_double_width(x).wrapping_mul(a);
         let nm = (n.as_double_width()) * (m.as_double_width());
@@ -138,7 +138,7 @@ impl<T: DoubleInt> Arithmetic for Montgomery<T> {
             r + self.n.wrapping_neg()
         };
 
-        // Normalize to [0; n[
+        // Normalise to [0; n[
         let r = if r < self.n { r } else { r - self.n };
 
         // Check that r (reduced back to the usual representation) equals
@@ -200,7 +200,7 @@ mod tests {
     }
     parametrized_check!(test_add);
 
-    fn test_multiplication<A: DoubleInt>() {
+    fn test_mult<A: DoubleInt>() {
         for n in 0..100 {
             let n = 2 * n + 1;
             let m = Montgomery::<A>::new(n);
@@ -213,7 +213,7 @@ mod tests {
             }
         }
     }
-    parametrized_check!(test_multiplication);
+    parametrized_check!(test_mult);
 
     fn test_roundtrip<A: DoubleInt>() {
         for n in 0..100 {
