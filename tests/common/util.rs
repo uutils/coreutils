@@ -780,9 +780,18 @@ impl TestScenario {
     /// Returns builder for invoking the target uutils binary. Paths given are
     /// treated relative to the environment's unique temporary test directory.
     pub fn ucmd(&self) -> UCommand {
-        let mut cmd = self.cmd(&self.bin_path);
-        cmd.arg(&self.util_name);
-        cmd
+        self.composite_cmd(&self.bin_path, &self.util_name, true)
+    }
+
+    /// Returns builder for invoking the target uutils binary. Paths given are
+    /// treated relative to the environment's unique temporary test directory.
+    pub fn composite_cmd<S: AsRef<OsStr>, T: AsRef<OsStr>>(
+        &self,
+        bin: S,
+        util_name: T,
+        env_clear: bool,
+    ) -> UCommand {
+        UCommand::new_from_tmp(bin, Some(util_name), self.tmpd.clone(), env_clear)
     }
 
     /// Returns builder for invoking any system command. Paths given are treated
@@ -794,17 +803,13 @@ impl TestScenario {
     /// Returns builder for invoking any uutils command. Paths given are treated
     /// relative to the environment's unique temporary test directory.
     pub fn ccmd<S: AsRef<OsStr>>(&self, bin: S) -> UCommand {
-        let mut cmd = self.cmd(&self.bin_path);
-        cmd.arg(bin);
-        cmd
+        self.composite_cmd(&self.bin_path, bin, true)
     }
 
     // different names are used rather than an argument
     // because the need to keep the environment is exceedingly rare.
     pub fn ucmd_keepenv(&self) -> UCommand {
-        let mut cmd = self.cmd_keepenv(&self.bin_path);
-        cmd.arg(&self.util_name);
-        cmd
+        self.composite_cmd(&self.bin_path, &self.util_name, false)
     }
 
     /// Returns builder for invoking any system command. Paths given are treated
