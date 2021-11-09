@@ -838,12 +838,17 @@ pub struct UCommand {
 }
 
 impl UCommand {
-    pub fn new<T: AsRef<OsStr>, U: AsRef<OsStr>>(arg: T, curdir: U, env_clear: bool) -> UCommand {
+    pub fn new<T: AsRef<OsStr>, U: AsRef<OsStr>>(
+        bin_path: T,
+        curdir: U,
+        env_clear: bool,
+    ) -> UCommand {
+        let bin_path = bin_path.as_ref();
         UCommand {
             tmpd: None,
             has_run: false,
             raw: {
-                let mut cmd = Command::new(arg.as_ref());
+                let mut cmd = Command::new(bin_path);
                 cmd.current_dir(curdir.as_ref());
                 if env_clear {
                     if cfg!(windows) {
@@ -863,7 +868,7 @@ impl UCommand {
                 }
                 cmd
             },
-            comm_string: String::from(arg.as_ref().to_str().unwrap()),
+            comm_string: String::from(bin_path.to_str().unwrap()),
             ignore_stdin_write_error: false,
             bytes_into_stdin: None,
             stdin: None,
@@ -874,9 +879,13 @@ impl UCommand {
         }
     }
 
-    pub fn new_from_tmp<T: AsRef<OsStr>>(arg: T, tmpd: Rc<TempDir>, env_clear: bool) -> UCommand {
+    pub fn new_from_tmp<T: AsRef<OsStr>>(
+        bin_path: T,
+        tmpd: Rc<TempDir>,
+        env_clear: bool,
+    ) -> UCommand {
         let tmpd_path_buf = String::from(&(*tmpd.as_ref().path().to_str().unwrap()));
-        let mut ucmd: UCommand = UCommand::new(arg.as_ref(), tmpd_path_buf, env_clear);
+        let mut ucmd: UCommand = UCommand::new(bin_path, tmpd_path_buf, env_clear);
         ucmd.tmpd = Some(tmpd);
         ucmd
     }
