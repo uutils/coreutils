@@ -62,6 +62,10 @@ fn read_scenario_fixture<S: AsRef<OsStr>>(tmpd: &Option<Rc<TempDir>>, file_rel_p
 /// within a struct which has convenience assertion functions about those outputs
 #[derive(Debug, Clone)]
 pub struct CmdResult {
+    /// bin_path provided by `TestScenario` or `UCommand`
+    bin_path: String,
+    /// util_name provided by `TestScenario` or `UCommand`
+    util_name: Option<String>,
     //tmpd is used for convenience functions for asserts against fixtures
     tmpd: Option<Rc<TempDir>>,
     /// exit status for command (if there is one)
@@ -77,6 +81,8 @@ pub struct CmdResult {
 
 impl CmdResult {
     pub fn new(
+        bin_path: String,
+        util_name: Option<String>,
         tmpd: Option<Rc<TempDir>>,
         code: Option<i32>,
         success: bool,
@@ -84,6 +90,8 @@ impl CmdResult {
         stderr: &[u8],
     ) -> CmdResult {
         CmdResult {
+            bin_path,
+            util_name,
             tmpd,
             code,
             success,
@@ -1049,6 +1057,8 @@ impl UCommand {
         let prog = self.run_no_wait().wait_with_output().unwrap();
 
         CmdResult {
+            bin_path: self.bin_path.clone(),
+            util_name: self.util_name.clone(),
             tmpd: self.tmpd.clone(),
             code: prog.status.code(),
             success: prog.status.success(),
@@ -1296,6 +1306,8 @@ pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<
     };
 
     Ok(CmdResult::new(
+        ts.bin_path.as_os_str().to_str().unwrap().to_string(),
+        Some(ts.util_name.clone()),
         Some(result.tmpd()),
         Some(result.code()),
         result.succeeded(),
@@ -1313,6 +1325,8 @@ mod tests {
     #[test]
     fn test_code_is() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: Some(32),
             success: false,
@@ -1326,6 +1340,8 @@ mod tests {
     #[should_panic]
     fn test_code_is_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: Some(32),
             success: false,
@@ -1338,6 +1354,8 @@ mod tests {
     #[test]
     fn test_failure() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: false,
@@ -1351,6 +1369,8 @@ mod tests {
     #[should_panic]
     fn test_failure_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1363,6 +1383,8 @@ mod tests {
     #[test]
     fn test_success() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1376,6 +1398,8 @@ mod tests {
     #[should_panic]
     fn test_success_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: false,
@@ -1388,6 +1412,8 @@ mod tests {
     #[test]
     fn test_no_stderr_output() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1402,6 +1428,8 @@ mod tests {
     #[should_panic]
     fn test_no_stderr_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1416,6 +1444,8 @@ mod tests {
     #[should_panic]
     fn test_no_stdout_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1429,6 +1459,8 @@ mod tests {
     #[test]
     fn test_std_does_not_contain() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1443,6 +1475,8 @@ mod tests {
     #[should_panic]
     fn test_stdout_does_not_contain_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1457,6 +1491,8 @@ mod tests {
     #[should_panic]
     fn test_stderr_does_not_contain_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1470,6 +1506,8 @@ mod tests {
     #[test]
     fn test_stdout_matches() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1486,6 +1524,8 @@ mod tests {
     #[should_panic]
     fn test_stdout_matches_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1501,6 +1541,8 @@ mod tests {
     #[should_panic]
     fn test_stdout_not_matches_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1515,6 +1557,8 @@ mod tests {
     #[test]
     fn test_normalized_newlines_stdout_is() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1531,6 +1575,8 @@ mod tests {
     #[should_panic]
     fn test_normalized_newlines_stdout_is_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
