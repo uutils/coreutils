@@ -53,16 +53,10 @@ fn test_stdbuf_trailing_var_arg() {
 #[cfg(not(target_os = "windows"))]
 #[test]
 fn test_stdbuf_line_buffering_stdin_fails() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd()
+    new_ucmd!()
         .args(&["-i", "L", "head"])
         .fails()
-        .stderr_is(&format!(
-            "{0}: line buffering stdin is meaningless\nTry '{1} {0} --help' for more information.",
-            ts.util_name,
-            ts.bin_path.to_string_lossy()
-        ));
+        .usage_error("line buffering stdin is meaningless");
 }
 
 #[cfg(not(target_os = "windows"))]

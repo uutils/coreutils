@@ -114,12 +114,7 @@ fn test_no_args() {
 
 #[test]
 fn test_no_args_output() {
-    let ts = TestScenario::new(util_name!());
-    ts.ucmd().fails().stderr_is(&format!(
-        "{0}: missing operand\nTry '{1} {0} --help' for more information.",
-        ts.util_name,
-        ts.bin_path.to_string_lossy()
-    ));
+    new_ucmd!().fails().usage_error("missing operand");
 }
 
 #[test]
@@ -129,12 +124,10 @@ fn test_too_many_args() {
 
 #[test]
 fn test_too_many_args_output() {
-    let ts = TestScenario::new(util_name!());
-    ts.ucmd().args(&["a", "b", "c"]).fails().stderr_is(format!(
-        "{0}: extra operand 'c'\nTry '{1} {0} --help' for more information.",
-        ts.util_name,
-        ts.bin_path.to_string_lossy()
-    ));
+    new_ucmd!()
+        .args(&["a", "b", "c"])
+        .fails()
+        .usage_error("extra operand 'c'");
 }
 
 #[cfg(any(unix, target_os = "redox"))]
