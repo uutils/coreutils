@@ -7,8 +7,8 @@
 
 // spell-checker:ignore (ToDO) ttyname hostnames runlevel mesg wtmp statted boottime deadprocs initspawn clockchange curr runlvline pidstr exitstr hoststr
 
-#[macro_use]
-extern crate uucore;
+use uucore::display::Quotable;
+use uucore::error::{FromIo, UResult};
 use uucore::libc::{ttyname, STDIN_FILENO, S_IWGRP};
 use uucore::utmpx::{self, time, Utmpx};
 
@@ -59,7 +59,8 @@ fn get_long_usage() -> String {
     )
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
@@ -157,9 +158,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         args: files,
     };
 
-    who.exec();
-
-    0
+    who.exec()
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -326,7 +325,7 @@ fn current_tty() -> String {
 }
 
 impl Who {
-    fn exec(&mut self) {
+    fn exec(&mut self) -> UResult<()> {
         let run_level_chk = |_record: i16| {
             #[cfg(not(target_os = "linux"))]
             return false;
@@ -362,7 +361,7 @@ impl Who {
             for ut in records {
                 if !self.my_line_only || cur_tty == ut.tty_device() {
                     if self.need_users && ut.is_user_process() {
-                        self.print_user(&ut);
+                        self.print_user(&ut)?;
                     } else if self.need_runlevel && run_level_chk(ut.record_type()) {
                         if cfg!(target_os = "linux") {
                             self.print_runlevel(&ut);
@@ -383,6 +382,7 @@ impl Who {
                 if ut.record_type() == utmpx::BOOT_TIME {}
             }
         }
+        Ok(())
     }
 
     #[inline]
@@ -464,7 +464,7 @@ impl Who {
         self.print_line("", ' ', "system boot", &time_string(ut), "", "", "", "");
     }
 
-    fn print_user(&self, ut: &Utmpx) {
+    fn print_user(&self, ut: &Utmpx) -> UResult<()> {
         let mut p = PathBuf::from("/dev");
         p.push(ut.tty_device().as_str());
         let mesg;
@@ -491,7 +491,13 @@ impl Who {
         };
 
         let s = if self.do_lookup {
-            crash_if_err!(1, ut.canon_host())
+            ut.canon_host().map_err_context(|| {
+                let host = ut.host();
+                format!(
+                    "failed to canonicalize {}",
+                    host.split(':').next().unwrap_or(&host).quote()
+                )
+            })?
         } else {
             ut.host()
         };
@@ -507,6 +513,8 @@ impl Who {
             hoststr.as_str(),
             "",
         );
+
+        Ok(())
     }
 
     #[allow(clippy::too_many_arguments)]
