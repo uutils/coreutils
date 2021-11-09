@@ -365,6 +365,23 @@ impl CmdResult {
         self
     }
 
+    /// asserts that
+    /// 1.  the command resulted in stderr stream output that equals the
+    ///     the following format when both are trimmed of trailing whitespace
+    ///     `"{util_name}: {msg}\nTry '{bin_path} {util_name} --help' for more information."`
+    ///     This the expected format when a UUsageError is returned or when show_error! is called
+    ///     `msg` should be the same as the one provided to UUsageError::new or show_error!
+    ///
+    /// 2.  the command resulted in empty (zero-length) stdout stream output
+    pub fn usage_error<T: AsRef<str>>(&self, msg: T) -> &CmdResult {
+        self.stderr_only(format!(
+            "{0}: {2}\nTry '{1} {0} --help' for more information.",
+            self.util_name.as_ref().unwrap(), // This shouldn't be called using a normal command
+            self.bin_path,
+            msg.as_ref()
+        ))
+    }
+
     pub fn stdout_contains<T: AsRef<str>>(&self, cmp: T) -> &CmdResult {
         assert!(
             self.stdout_str().contains(cmp.as_ref()),
