@@ -788,7 +788,7 @@ impl TestScenario {
     /// Returns builder for invoking any system command. Paths given are treated
     /// relative to the environment's unique temporary test directory.
     pub fn cmd<S: AsRef<OsStr>>(&self, bin: S) -> UCommand {
-        UCommand::new_from_tmp(bin, self.tmpd.clone(), true)
+        UCommand::new_from_tmp::<S, S>(bin, None, self.tmpd.clone(), true)
     }
 
     /// Returns builder for invoking any uutils command. Paths given are treated
@@ -812,7 +812,7 @@ impl TestScenario {
     /// Differs from the builder returned by `cmd` in that `cmd_keepenv` does not call
     /// `Command::env_clear` (Clears the entire environment map for the child process.)
     pub fn cmd_keepenv<S: AsRef<OsStr>>(&self, bin: S) -> UCommand {
-        UCommand::new_from_tmp(bin, self.tmpd.clone(), false)
+        UCommand::new_from_tmp::<S, S>(bin, None, self.tmpd.clone(), false)
     }
 }
 
@@ -826,6 +826,8 @@ impl TestScenario {
 pub struct UCommand {
     pub raw: Command,
     comm_string: String,
+    bin_path: String,
+    util_name: Option<String>,
     tmpd: Option<Rc<TempDir>>,
     has_run: bool,
     ignore_stdin_write_error: bool,
@@ -838,13 +840,16 @@ pub struct UCommand {
 }
 
 impl UCommand {
-    pub fn new<T: AsRef<OsStr>, U: AsRef<OsStr>>(
+    pub fn new<T: AsRef<OsStr>, S: AsRef<OsStr>, U: AsRef<OsStr>>(
         bin_path: T,
+        util_name: Option<S>,
         curdir: U,
         env_clear: bool,
     ) -> UCommand {
         let bin_path = bin_path.as_ref();
-        UCommand {
+        let util_name = util_name.as_ref().map(|un| un.as_ref());
+
+        let mut ucmd = UCommand {
             tmpd: None,
             has_run: false,
             raw: {
@@ -869,6 +874,8 @@ impl UCommand {
                 cmd
             },
             comm_string: String::from(bin_path.to_str().unwrap()),
+            bin_path: bin_path.to_str().unwrap().to_string(),
+            util_name: util_name.map(|un| un.to_str().unwrap().to_string()),
             ignore_stdin_write_error: false,
             bytes_into_stdin: None,
             stdin: None,
@@ -876,16 +883,23 @@ impl UCommand {
             stderr: None,
             #[cfg(target_os = "linux")]
             limits: vec![],
+        };
+
+        if let Some(un) = util_name {
+            ucmd.arg(un);
         }
+
+        ucmd
     }
 
-    pub fn new_from_tmp<T: AsRef<OsStr>>(
+    pub fn new_from_tmp<T: AsRef<OsStr>, S: AsRef<OsStr>>(
         bin_path: T,
+        util_name: Option<S>,
         tmpd: Rc<TempDir>,
         env_clear: bool,
     ) -> UCommand {
         let tmpd_path_buf = String::from(&(*tmpd.as_ref().path().to_str().unwrap()));
-        let mut ucmd: UCommand = UCommand::new(bin_path, tmpd_path_buf, env_clear);
+        let mut ucmd: UCommand = UCommand::new(bin_path, util_name, tmpd_path_buf, env_clear);
         ucmd.tmpd = Some(tmpd);
         ucmd
     }
