@@ -90,7 +90,7 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest }
+          - { os: ubuntu-latest  , features: feat_os_unix }
           - { os: macos-latest   , features: feat_os_macos }
           - { os: windows-latest , features: feat_os_windows }
     steps:
@@ -149,7 +149,7 @@ jobs:
     strategy:
       matrix:
         job:
-          - { os: ubuntu-latest }
+          - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v2
     - name: Initialize workflow variables
@@ -282,7 +282,7 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest }
+          - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v2
     - name: Install `rust` toolchain
