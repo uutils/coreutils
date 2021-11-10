@@ -15,11 +15,73 @@ env:
   PROJECT_AUTH: "uutils"
   RUST_MIN_SRV: "1.47.0" ## MSRV v1.47.0
   # * style job configuration
-  STYLE_FAIL_ON_FAULT: true ## fail the build if a style job contains a fault (error or warning); boolean
+  STYLE_FAIL_ON_FAULT: true ## (bool) fail the build if a style job contains a fault (error or warning); may be overridden on a per-job basis
 
 on: [push, pull_request]
 
 jobs:
+  style_deps:
+    ## ToDO: [2021-11-10; rivy] 'Style/deps' needs more informative output and better integration of results into the GHA dashboard
+    name: Style/deps
+    runs-on: ${{ matrix.job.os }}
+    # env:
+    #   STYLE_FAIL_ON_FAULT: false # overrides workflow default
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          # note: `cargo-udeps` panics when processing stdbuf/libstdbuf ("uu_stdbuf_libstdbuf"); either b/c of the 'cpp' crate or 'libstdbuf' itself
+          #   ... b/c of the panic, a more limited feature set is tested (though only excluding `stdbuf`)
+          - { os: ubuntu-latest  , features: "feat_Tier1,feat_require_unix,feat_require_unix_utmpx" }
+          - { os: macos-latest   , features: "feat_Tier1,feat_require_unix,feat_require_unix_utmpx" }
+          - { os: windows-latest , features: feat_os_windows }
+    steps:
+    - uses: actions/checkout@v2
+    ## note: requires 'nightly' toolchain b/c `cargo-udeps` uses the `rustc` '-Z save-analysis' option
+    ## * ... ref: <https://github.com/est31/cargo-udeps/issues/73>
+    - name: Initialize workflow variables
+      id: vars
+      shell: bash
+      run: |
+        ## VARs setup
+        outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
+        # failure mode
+        unset FAIL_ON_FAULT ; case '${{ env.STYLE_FAIL_ON_FAULT }}' in
+          ''|0|f|false|n|no|off) FAULT_TYPE=warning ;;
+          *) FAIL_ON_FAULT=true ; FAULT_TYPE=error ;;
+        esac;
+        outputs FAIL_ON_FAULT FAULT_TYPE
+        # target-specific options
+        # * CARGO_FEATURES_OPTION
+        CARGO_FEATURES_OPTION='' ;
+        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
+        outputs CARGO_FEATURES_OPTION
+    - name: Install `rust` toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly
+        default: true
+        profile: minimal
+    - name: Install `cargo-udeps`
+      uses: actions-rs/install@v0.1
+      with:
+        crate: cargo-udeps
+        version: latest
+        use-tool-cache: true
+      env:
+        RUSTUP_TOOLCHAIN: stable
+    - name: Detect unused dependencies
+      shell: bash
+      run: |
+        ## Detect unused dependencies
+        unset fault
+        fault_type="${{ steps.vars.outputs.FAULT_TYPE }}"
+        fault_prefix=$(echo "$fault_type" | tr '[:lower:]' '[:upper:]')
+        #
+        cargo +nightly udeps ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --all-targets &> udeps.log || cat udeps.log
+        grep --ignore-case "all deps seem to have been used" udeps.log || { printf "%s\n" "::${fault_type} ::${fault_prefix}: \`cargo udeps\`: style violation (unused dependency found)" ; fault=true ; }
+        if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
+
   style_format:
     name: Style/format
     runs-on: ${{ matrix.job.os }}
@@ -758,35 +820,3 @@ jobs:
         flags: ${{ steps.vars.outputs.CODECOV_FLAGS }}
         name: codecov-umbrella
         fail_ci_if_error: false
-
-  unused_deps:
-    name: Unused deps
-    runs-on: ${{ matrix.job.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - { os: ubuntu-latest  , features: feat_os_unix }
-          - { os: macos-latest   , features: feat_os_macos }
-          - { os: windows-latest , features: feat_os_windows }
-    steps:
-    - uses: actions/checkout@v2
-    - name: Install `rust` toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: nightly
-        default: true
-        profile: minimal
-    - name: Install `cargo-udeps`
-      uses: actions-rs/install@v0.1
-      with:
-        crate: cargo-udeps
-        version: latest
-        use-tool-cache: true
-      env:
-        RUSTUP_TOOLCHAIN: stable
-    - name: Confirms there isn't any unused deps
-      shell: bash
-      run: |
-        cargo +nightly udeps --all-targets &> udeps.log || cat udeps.log
-        grep "seem to have been used" udeps.log
