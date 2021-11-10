@@ -67,7 +67,7 @@ jobs:
       with:
         crate: cargo-udeps
         version: latest
-        use-tool-cache: true
+        use-tool-cache: false
       env:
         RUSTUP_TOOLCHAIN: stable
     - name: Detect unused dependencies
