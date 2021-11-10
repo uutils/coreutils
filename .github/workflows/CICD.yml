@@ -343,6 +343,7 @@ jobs:
 
   build_makefile:
     name: Build/Makefile
+    needs: [ min_version, deps ]
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
@@ -373,6 +374,7 @@ jobs:
 
   build:
     name: Build
+    needs: [ min_version, deps ]
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
@@ -635,6 +637,7 @@ jobs:
 
   test_busybox:
     name: Tests/BusyBox test suite
+    needs: [ min_version, deps ]
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
@@ -667,6 +670,7 @@ jobs:
 
   test_freebsd:
     name: Tests/FreeBSD test suite
+    needs: [ min_version, deps ]
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
@@ -733,6 +737,7 @@ jobs:
 
   coverage:
     name: Code Coverage
+    needs: build
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: true
