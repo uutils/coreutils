@@ -66,24 +66,18 @@ fn test_hex_identifier_in_wrong_place() {
 
 #[test]
 fn test_rejects_nan() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd().args(&["NaN"]).fails().stderr_only(format!(
-        "{0}: invalid 'not-a-number' argument: 'NaN'\nTry '{1} {0} --help' for more information.",
-        ts.util_name,
-        ts.bin_path.to_string_lossy()
-    ));
+    new_ucmd!()
+        .arg("NaN")
+        .fails()
+        .usage_error("invalid 'not-a-number' argument: 'NaN'");
 }
 
 #[test]
 fn test_rejects_non_floats() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd().args(&["foo"]).fails().stderr_only(&format!(
-        "{0}: invalid floating point argument: 'foo'\nTry '{1} {0} --help' for more information.",
-        ts.util_name,
-        ts.bin_path.to_string_lossy()
-    ));
+    new_ucmd!()
+        .arg("foo")
+        .fails()
+        .usage_error("invalid floating point argument: 'foo'");
 }
 
 #[test]
@@ -547,11 +541,7 @@ fn test_trailing_whitespace_error() {
     new_ucmd!()
         .arg("1 ")
         .fails()
-        .no_stdout()
-        .stderr_contains("seq: invalid floating point argument: '1 '")
-        // FIXME The second line of the error message is "Try 'seq
-        // --help' for more information."
-        .stderr_contains("for more information.");
+        .usage_error("invalid floating point argument: '1 '");
 }
 
 #[test]
