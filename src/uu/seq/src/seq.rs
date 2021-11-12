@@ -235,6 +235,14 @@ fn write_value_float(
             width = if width > 0 { width - 1 } else { width },
             precision = precision,
         )
+    } else if *value == ExtendedBigDecimal::Infinity || *value == ExtendedBigDecimal::MinusInfinity
+    {
+        format!(
+            "{value:>width$.precision$}",
+            value = value,
+            width = width,
+            precision = precision,
+        )
     } else {
         format!(
             "{value:>0width$.precision$}",
