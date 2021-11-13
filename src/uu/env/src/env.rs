@@ -8,7 +8,7 @@
 
 /* last synced with: env (GNU coreutils) 8.13 */
 
-// spell-checker:ignore (ToDO) chdir execvp progname subcommand subcommands unsets setenv putenv posix_spawnp
+// spell-checker:ignore (ToDO) chdir execvp progname subcommand subcommands unsets setenv putenv spawnp
 
 #[macro_use]
 extern crate clap;
@@ -280,7 +280,7 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
          * exec*'s or in the description of env in the "Shell & Utilities" volume).
          *
          * It also doesn't specify any checks for putenv before modifying the environ variable, which
-         * is likely why glibc doesn't do so. However, setenv's first argument cannot point to
+         * is likely why glibc doesn't do so. However, the first set_var argument cannot point to
          * an empty string or a string containing '='.
          *
          * There is no benefit in replicating GNU's env behavior, since it will only modify the
