@@ -22,3 +22,6 @@ clap = { version = "2.33", features = ["wrap_help"] }
 [[bin]]
 name = "pinky"
 path = "src/main.rs"
+
+[package.metadata.cargo-udeps.ignore]
+normal = ["uucore_procs"]
