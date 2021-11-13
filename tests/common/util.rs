@@ -62,6 +62,10 @@ fn read_scenario_fixture<S: AsRef<OsStr>>(tmpd: &Option<Rc<TempDir>>, file_rel_p
 /// within a struct which has convenience assertion functions about those outputs
 #[derive(Debug, Clone)]
 pub struct CmdResult {
+    /// bin_path provided by `TestScenario` or `UCommand`
+    bin_path: String,
+    /// util_name provided by `TestScenario` or `UCommand`
+    util_name: Option<String>,
     //tmpd is used for convenience functions for asserts against fixtures
     tmpd: Option<Rc<TempDir>>,
     /// exit status for command (if there is one)
@@ -77,6 +81,8 @@ pub struct CmdResult {
 
 impl CmdResult {
     pub fn new(
+        bin_path: String,
+        util_name: Option<String>,
         tmpd: Option<Rc<TempDir>>,
         code: Option<i32>,
         success: bool,
@@ -84,6 +90,8 @@ impl CmdResult {
         stderr: &[u8],
     ) -> CmdResult {
         CmdResult {
+            bin_path,
+            util_name,
             tmpd,
             code,
             success,
@@ -355,6 +363,23 @@ impl CmdResult {
         assert!(!self.success);
         assert!(self.stderr.is_empty());
         self
+    }
+
+    /// asserts that
+    /// 1.  the command resulted in stderr stream output that equals the
+    ///     the following format when both are trimmed of trailing whitespace
+    ///     `"{util_name}: {msg}\nTry '{bin_path} {util_name} --help' for more information."`
+    ///     This the expected format when a UUsageError is returned or when show_error! is called
+    ///     `msg` should be the same as the one provided to UUsageError::new or show_error!
+    ///
+    /// 2.  the command resulted in empty (zero-length) stdout stream output
+    pub fn usage_error<T: AsRef<str>>(&self, msg: T) -> &CmdResult {
+        self.stderr_only(format!(
+            "{0}: {2}\nTry '{1} {0} --help' for more information.",
+            self.util_name.as_ref().unwrap(), // This shouldn't be called using a normal command
+            self.bin_path,
+            msg.as_ref()
+        ))
     }
 
     pub fn stdout_contains<T: AsRef<str>>(&self, cmp: T) -> &CmdResult {
@@ -780,31 +805,36 @@ impl TestScenario {
     /// Returns builder for invoking the target uutils binary. Paths given are
     /// treated relative to the environment's unique temporary test directory.
     pub fn ucmd(&self) -> UCommand {
-        let mut cmd = self.cmd(&self.bin_path);
-        cmd.arg(&self.util_name);
-        cmd
+        self.composite_cmd(&self.bin_path, &self.util_name, true)
+    }
+
+    /// Returns builder for invoking the target uutils binary. Paths given are
+    /// treated relative to the environment's unique temporary test directory.
+    pub fn composite_cmd<S: AsRef<OsStr>, T: AsRef<OsStr>>(
+        &self,
+        bin: S,
+        util_name: T,
+        env_clear: bool,
+    ) -> UCommand {
+        UCommand::new_from_tmp(bin, Some(util_name), self.tmpd.clone(), env_clear)
     }
 
     /// Returns builder for invoking any system command. Paths given are treated
     /// relative to the environment's unique temporary test directory.
     pub fn cmd<S: AsRef<OsStr>>(&self, bin: S) -> UCommand {
-        UCommand::new_from_tmp(bin, self.tmpd.clone(), true)
+        UCommand::new_from_tmp::<S, S>(bin, None, self.tmpd.clone(), true)
     }
 
     /// Returns builder for invoking any uutils command. Paths given are treated
     /// relative to the environment's unique temporary test directory.
     pub fn ccmd<S: AsRef<OsStr>>(&self, bin: S) -> UCommand {
-        let mut cmd = self.cmd(&self.bin_path);
-        cmd.arg(bin);
-        cmd
+        self.composite_cmd(&self.bin_path, bin, true)
     }
 
     // different names are used rather than an argument
     // because the need to keep the environment is exceedingly rare.
     pub fn ucmd_keepenv(&self) -> UCommand {
-        let mut cmd = self.cmd_keepenv(&self.bin_path);
-        cmd.arg(&self.util_name);
-        cmd
+        self.composite_cmd(&self.bin_path, &self.util_name, false)
     }
 
     /// Returns builder for invoking any system command. Paths given are treated
@@ -812,7 +842,7 @@ impl TestScenario {
     /// Differs from the builder returned by `cmd` in that `cmd_keepenv` does not call
     /// `Command::env_clear` (Clears the entire environment map for the child process.)
     pub fn cmd_keepenv<S: AsRef<OsStr>>(&self, bin: S) -> UCommand {
-        UCommand::new_from_tmp(bin, self.tmpd.clone(), false)
+        UCommand::new_from_tmp::<S, S>(bin, None, self.tmpd.clone(), false)
     }
 }
 
@@ -826,6 +856,8 @@ impl TestScenario {
 pub struct UCommand {
     pub raw: Command,
     comm_string: String,
+    bin_path: String,
+    util_name: Option<String>,
     tmpd: Option<Rc<TempDir>>,
     has_run: bool,
     ignore_stdin_write_error: bool,
@@ -838,12 +870,20 @@ pub struct UCommand {
 }
 
 impl UCommand {
-    pub fn new<T: AsRef<OsStr>, U: AsRef<OsStr>>(arg: T, curdir: U, env_clear: bool) -> UCommand {
-        UCommand {
+    pub fn new<T: AsRef<OsStr>, S: AsRef<OsStr>, U: AsRef<OsStr>>(
+        bin_path: T,
+        util_name: Option<S>,
+        curdir: U,
+        env_clear: bool,
+    ) -> UCommand {
+        let bin_path = bin_path.as_ref();
+        let util_name = util_name.as_ref().map(|un| un.as_ref());
+
+        let mut ucmd = UCommand {
             tmpd: None,
             has_run: false,
             raw: {
-                let mut cmd = Command::new(arg.as_ref());
+                let mut cmd = Command::new(bin_path);
                 cmd.current_dir(curdir.as_ref());
                 if env_clear {
                     if cfg!(windows) {
@@ -863,7 +903,9 @@ impl UCommand {
                 }
                 cmd
             },
-            comm_string: String::from(arg.as_ref().to_str().unwrap()),
+            comm_string: String::from(bin_path.to_str().unwrap()),
+            bin_path: bin_path.to_str().unwrap().to_string(),
+            util_name: util_name.map(|un| un.to_str().unwrap().to_string()),
             ignore_stdin_write_error: false,
             bytes_into_stdin: None,
             stdin: None,
@@ -871,12 +913,23 @@ impl UCommand {
             stderr: None,
             #[cfg(target_os = "linux")]
             limits: vec![],
+        };
+
+        if let Some(un) = util_name {
+            ucmd.arg(un);
         }
+
+        ucmd
     }
 
-    pub fn new_from_tmp<T: AsRef<OsStr>>(arg: T, tmpd: Rc<TempDir>, env_clear: bool) -> UCommand {
+    pub fn new_from_tmp<T: AsRef<OsStr>, S: AsRef<OsStr>>(
+        bin_path: T,
+        util_name: Option<S>,
+        tmpd: Rc<TempDir>,
+        env_clear: bool,
+    ) -> UCommand {
         let tmpd_path_buf = String::from(&(*tmpd.as_ref().path().to_str().unwrap()));
-        let mut ucmd: UCommand = UCommand::new(arg.as_ref(), tmpd_path_buf, env_clear);
+        let mut ucmd: UCommand = UCommand::new(bin_path, util_name, tmpd_path_buf, env_clear);
         ucmd.tmpd = Some(tmpd);
         ucmd
     }
@@ -1021,6 +1074,8 @@ impl UCommand {
         let prog = self.run_no_wait().wait_with_output().unwrap();
 
         CmdResult {
+            bin_path: self.bin_path.clone(),
+            util_name: self.util_name.clone(),
             tmpd: self.tmpd.clone(),
             code: prog.status.code(),
             success: prog.status.success(),
@@ -1268,6 +1323,8 @@ pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<
     };
 
     Ok(CmdResult::new(
+        ts.bin_path.as_os_str().to_str().unwrap().to_string(),
+        Some(ts.util_name.clone()),
         Some(result.tmpd()),
         Some(result.code()),
         result.succeeded(),
@@ -1285,6 +1342,8 @@ mod tests {
     #[test]
     fn test_code_is() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: Some(32),
             success: false,
@@ -1298,6 +1357,8 @@ mod tests {
     #[should_panic]
     fn test_code_is_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: Some(32),
             success: false,
@@ -1310,6 +1371,8 @@ mod tests {
     #[test]
     fn test_failure() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: false,
@@ -1323,6 +1386,8 @@ mod tests {
     #[should_panic]
     fn test_failure_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1335,6 +1400,8 @@ mod tests {
     #[test]
     fn test_success() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1348,6 +1415,8 @@ mod tests {
     #[should_panic]
     fn test_success_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: false,
@@ -1360,6 +1429,8 @@ mod tests {
     #[test]
     fn test_no_stderr_output() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1374,6 +1445,8 @@ mod tests {
     #[should_panic]
     fn test_no_stderr_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1388,6 +1461,8 @@ mod tests {
     #[should_panic]
     fn test_no_stdout_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1401,6 +1476,8 @@ mod tests {
     #[test]
     fn test_std_does_not_contain() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1415,6 +1492,8 @@ mod tests {
     #[should_panic]
     fn test_stdout_does_not_contain_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1429,6 +1508,8 @@ mod tests {
     #[should_panic]
     fn test_stderr_does_not_contain_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1442,6 +1523,8 @@ mod tests {
     #[test]
     fn test_stdout_matches() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1458,6 +1541,8 @@ mod tests {
     #[should_panic]
     fn test_stdout_matches_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1473,6 +1558,8 @@ mod tests {
     #[should_panic]
     fn test_stdout_not_matches_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1487,6 +1574,8 @@ mod tests {
     #[test]
     fn test_normalized_newlines_stdout_is() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1503,6 +1592,8 @@ mod tests {
     #[should_panic]
     fn test_normalized_newlines_stdout_is_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
