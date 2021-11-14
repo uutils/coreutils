@@ -358,6 +358,16 @@ fn test_positive_lines() {
         .stdout_is("c\nd\ne\n");
 }
 
+/// Test for reading all but the first NUM lines: `tail -3`.
+#[test]
+fn test_obsolete_syntax() {
+    new_ucmd!()
+        .args(&["-3"])
+        .pipe_in("a\nb\nc\nd\ne\n")
+        .succeeds()
+        .stdout_is("c\nd\ne\n");
+}
+
 /// Test for reading all lines, specified by `tail -n +0`.
 #[test]
 fn test_positive_zero_lines() {
