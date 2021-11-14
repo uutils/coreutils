@@ -68,7 +68,13 @@ enum FilterMode {
     Lines(usize, u8), // (number of lines, delimiter)
 }
 
-#[derive(Debug)]
+impl Default for FilterMode {
+    fn default() -> Self {
+        FilterMode::Lines(10, b'\n')
+    }
+}
+
+#[derive(Debug, Default)]
 struct Settings {
     quiet: bool,
     verbose: bool,
@@ -80,28 +86,16 @@ struct Settings {
     files: Vec<String>,
 }
 
-impl Default for Settings {
-    fn default() -> Settings {
-        Settings {
-            quiet: false,
-            verbose: false,
-            mode: FilterMode::Lines(10, b'\n'),
-            sleep_msec: 1000,
-            beginning: false,
-            follow: false,
-            pid: 0,
-            files: Vec::new(),
-        }
-    }
-}
-
 impl Settings {
     pub fn get_from(args: impl uucore::Args) -> Result<Self, String> {
         let matches = uu_app().get_matches_from(arg_iterate(args)?);
 
-        let mut settings: Settings = Default::default();
+        let mut settings: Settings = Settings {
+            sleep_msec: 1000,
+            follow: matches.is_present(options::FOLLOW),
+            ..Default::default()
+        };
 
-        settings.follow = matches.is_present(options::FOLLOW);
         if settings.follow {
             if let Some(n) = matches.value_of(options::SLEEP_INT) {
                 let parsed: Option<u32> = n.parse().ok();
@@ -197,7 +191,7 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
 
         if use_stdin {
             let mut reader = BufReader::new(stdin());
-            unbounded_tail(&mut reader, &settings);
+            unbounded_tail(&mut reader, settings);
 
             // Don't follow stdin since there are no checks for pipes/FIFOs
             //
@@ -229,14 +223,14 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
             let mut file = File::open(&path).unwrap();
             let md = file.metadata().unwrap();
             if is_seekable(&mut file) && get_block_size(&md) > 0 {
-                bounded_tail(&mut file, &settings);
+                bounded_tail(&mut file, settings);
                 if settings.follow {
                     let reader = BufReader::new(file);
                     readers.push((Box::new(reader), filename));
                 }
             } else {
                 let mut reader = BufReader::new(file);
-                unbounded_tail(&mut reader, &settings);
+                unbounded_tail(&mut reader, settings);
                 if settings.follow {
                     readers.push((Box::new(reader), filename));
                 }
@@ -245,7 +239,7 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
     }
 
     if settings.follow {
-        follow(&mut readers[..], &settings);
+        follow(&mut readers[..], settings);
     }
 
     Ok(())
