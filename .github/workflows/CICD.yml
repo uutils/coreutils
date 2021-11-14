@@ -37,8 +37,6 @@ jobs:
           - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v2
-    ## note: requires 'nightly' toolchain b/c `cargo-udeps` uses the `rustc` '-Z save-analysis' option
-    ## * ... ref: <https://github.com/est31/cargo-udeps/issues/73>
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -56,6 +54,8 @@ jobs:
         CARGO_FEATURES_OPTION='' ;
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
         outputs CARGO_FEATURES_OPTION
+    ## note: requires 'nightly' toolchain b/c `cargo-udeps` uses the `rustc` '-Z save-analysis' option
+    ## * ... ref: <https://github.com/est31/cargo-udeps/issues/73>
     - name: Install `rust` toolchain
       uses: actions-rs/toolchain@v1
       with:
@@ -351,17 +351,17 @@ jobs:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v2
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        ## Install/setup prerequisites
+        sudo apt-get -y update ; sudo apt-get -y install python3-sphinx ;
     - name: Install `rust` toolchain
       uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
         default: true
         profile: minimal # minimal component installation (ie, no documentation)
-    - name: Install/setup prerequisites
-      shell: bash
-      run: |
-        ## Install/setup prerequisites
-        sudo apt-get -y update ; sudo apt-get -y install python3-sphinx ;
     - name: "`make build`"
       shell: bash
       run: |
@@ -502,6 +502,17 @@ jobs:
         mkdir -p '${{ steps.vars.outputs.STAGING }}'
         mkdir -p '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}'
         mkdir -p '${{ steps.vars.outputs.STAGING }}/dpkg'
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        ## Install/setup prerequisites
+        case '${{ matrix.job.target }}' in
+          arm-unknown-linux-gnueabihf) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf ;;
+          aarch64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu ;;
+        esac
+        case '${{ matrix.job.os }}' in
+          macos-latest) brew install coreutils ;; # needed for testing
+        esac
     - name: rust toolchain ~ install
       uses: actions-rs/toolchain@v1
       # env:
@@ -632,16 +643,17 @@ jobs:
           - { os: ubuntu-latest }
     steps:
     - uses: actions/checkout@v2
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        ## Install/setup prerequisites
+        make prepare-busytest
     - name: Install `rust` toolchain
       uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
         default: true
         profile: minimal # minimal component installation (ie, no documentation)
-    - name: Install/setup prerequisites
-      shell: bash
-      run: |
-        make prepare-busytest
     - name: "Run BusyBox test suite"
       shell: bash
       run: |
@@ -654,48 +666,69 @@ jobs:
         if [ $n_fails -gt 0 ] ; then echo "::warning ::${n_fails}+ test failures" ; fi
 
   test_freebsd:
-    runs-on: macos-10.15
     name: Tests/FreeBSD test suite
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: macos-10.15 , features: unix } ## GHA MacOS-11.0 VM won't have VirtualBox; refs: <https://github.com/actions/virtual-environments/issues/4060> , <https://github.com/actions/virtual-environments/pull/4010>
     env:
       mem: 2048
     steps:
     - uses: actions/checkout@v2
     - name: Prepare, build and test
-      id: test
+      ## spell-checker:ignore (ToDO) sshfs usesh vmactions
       uses: vmactions/freebsd-vm@v0.1.5
       with:
         usesh: true
+        # sync: sshfs
         prepare: pkg install -y curl gmake sudo
         run: |
-          # Need to be run in the same block. Otherwise, we are back on the mac host.
+          ## Prepare, build, and test
+          # implementation modelled after ref: <https://github.com/rust-lang/rustup/pull/2783>
+          # * NOTE: All steps need to be run in this block, otherwise, we are operating back on the mac host
           set -e
-          pw adduser -n cuuser -d /root/ -g wheel -c "Coreutils user to build" -w random
-          chown -R cuuser:wheel /root/ /Users/runner/work/coreutils/
+          #
+          TEST_USER=tester
+          REPO_NAME=${GITHUB_WORKSPACE##*/}
+          WORKSPACE_PARENT="/Users/runner/work/${REPO_NAME}"
+          WORKSPACE="${WORKSPACE_PARENT}/${REPO_NAME}"
+          #
+          pw adduser -n ${TEST_USER} -d /root/ -g wheel -c "Coreutils user to build" -w random
+          # chown -R ${TEST_USER}:wheel /root/ "${WORKSPACE_PARENT}"/
+          chown -R ${TEST_USER}:wheel /root/ "/Users/runner/work/${REPO_NAME}"/
           whoami
-
-          # Needs to be done in a sudo as we are changing users
-          sudo -i -u cuuser sh << EOF
+          #
+          # Further work needs to be done in a sudo as we are changing users
+          sudo -i -u ${TEST_USER} sh << EOF
           set -e
           whoami
           curl https://sh.rustup.rs -sSf --output rustup.sh
           sh rustup.sh -y --profile=minimal
+          . $HOME/.cargo/env
           ## Info
           # environment
           echo "## environment"
           echo "CI='${CI}'"
-          # tooling info display
-          echo "## tooling"
-          . $HOME/.cargo/env
+          echo "REPO_NAME='${REPO_NAME}'"
+          echo "TEST_USER='${TEST_USER}'"
+          echo "WORKSPACE_PARENT='${WORKSPACE_PARENT}'"
+          echo "WORKSPACE='${WORKSPACE}'"
+          env | sort
+          # tooling info
+          echo "## tooling info"
           cargo -V
           rustc -V
-          env
-
-          # where the files are resynced
-          cd /Users/runner/work/coreutils/coreutils/
-          cargo build
-          cargo test --features feat_os_unix -p uucore -p coreutils
+          #
+          cd "${WORKSPACE}"
+          unset FAULT
+          cargo build || FAULT=1
+          cargo test --features "${{ matrix.job.features }}" || FAULT=1
+          cargo test --features "${{ matrix.job.features }}" -p uucore || FAULT=1
           # Clean to avoid to rsync back the files
           cargo clean
+          if (test -n "$FAULT"); then exit 1 ; fi
           EOF
 
   coverage:
@@ -711,13 +744,6 @@ jobs:
           - { os: windows-latest , features: windows }
     steps:
     - uses: actions/checkout@v2
-    - name: Install/setup prerequisites
-      shell: bash
-      run: |
-        ## Install/setup prerequisites
-        case '${{ matrix.job.os }}' in
-          macos-latest) brew install coreutils ;; # needed for testing
-        esac
     # - name: Reattach HEAD ## may be needed for accurate code coverage info
     #   run: git checkout ${{ github.head_ref }}
     - name: Initialize workflow variables
@@ -744,6 +770,13 @@ jobs:
         # * CODECOV_FLAGS
         CODECOV_FLAGS=$( echo "${{ matrix.job.os }}" | sed 's/[^[:alnum:]]/_/g' )
         outputs CODECOV_FLAGS
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        ## Install/setup prerequisites
+        case '${{ matrix.job.os }}' in
+          macos-latest) brew install coreutils ;; # needed for testing
+        esac
     - name: rust toolchain ~ install
       uses: actions-rs/toolchain@v1
       with:
