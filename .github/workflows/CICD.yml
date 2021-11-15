@@ -484,6 +484,17 @@ jobs:
           *-pc-windows-msvc) STRIP="" ;;
         esac;
         outputs STRIP
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        ## Install/setup prerequisites
+        case '${{ matrix.job.target }}' in
+          arm-unknown-linux-gnueabihf) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf ;;
+          aarch64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu ;;
+        esac
+        case '${{ matrix.job.os }}' in
+          macos-latest) brew install coreutils ;; # needed for testing
+        esac
     - name: Create all needed build/work directories
       shell: bash
       run: |
@@ -493,10 +504,10 @@ jobs:
         mkdir -p '${{ steps.vars.outputs.STAGING }}/dpkg'
     - name: rust toolchain ~ install
       uses: actions-rs/toolchain@v1
-      env:
-        # Override auto-detection of RAM for Rustc install.
-        # https://github.com/rust-lang/rustup/issues/2229#issuecomment-585855925
-        RUSTUP_UNPACK_RAM: "21474836480"
+      # env:
+      #   # Override auto-detection of RAM for Rustc install.
+      #   # https://github.com/rust-lang/rustup/issues/2229#issuecomment-585855925
+      #   RUSTUP_UNPACK_RAM: "21474836480"
       with:
         toolchain: ${{ steps.vars.outputs.TOOLCHAIN }}
         target: ${{ matrix.job.target }}
@@ -513,17 +524,6 @@ jobs:
         echo UTILITY_LIST=${UTILITY_LIST}
         CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo "-puu_${u}"; done;)"
         outputs CARGO_UTILITY_LIST_OPTIONS
-    - name: Install/setup prerequisites
-      shell: bash
-      run: |
-        ## Install/setup prerequisites
-        case '${{ matrix.job.target }}' in
-          arm-unknown-linux-gnueabihf) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf ;;
-          aarch64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu ;;
-        esac
-        case '${{ matrix.job.os }}' in
-          macos-latest) brew install coreutils ;; # needed for testing
-        esac
     - name: Install `cargo-tree` # for dependency information
       uses: actions-rs/install@v0.1
       with:
