@@ -7,11 +7,10 @@
 
 // spell-checker:ignore (ToDO) fullname
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, App, Arg};
 use std::path::{is_separator, PathBuf};
+use uucore::display::Quotable;
+use uucore::error::{UResult, UUsageError};
 use uucore::InvalidEncodingHandling;
 
 static SUMMARY: &str = "Print NAME with any leading directory components removed
@@ -32,7 +31,8 @@ pub mod options {
     pub static ZERO: &str = "zero";
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
@@ -44,12 +44,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     // too few arguments
     if !matches.is_present(options::NAME) {
-        crash!(
-            1,
-            "{1}\nTry '{0} --help' for more information.",
-            uucore::execution_phrase(),
-            "missing operand"
-        );
+        return Err(UUsageError::new(1, "missing operand".to_string()));
     }
 
     let opt_suffix = matches.is_present(options::SUFFIX);
@@ -58,12 +53,18 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let multiple_paths = opt_suffix || opt_multiple;
     // too many arguments
     if !multiple_paths && matches.occurrences_of(options::NAME) > 2 {
-        crash!(
+        return Err(UUsageError::new(
             1,
-            "extra operand '{1}'\nTry '{0} --help' for more information.",
-            uucore::execution_phrase(),
-            matches.values_of(options::NAME).unwrap().nth(2).unwrap()
-        );
+            format!(
+                "extra operand {}",
+                matches
+                    .values_of(options::NAME)
+                    .unwrap()
+                    .nth(2)
+                    .unwrap()
+                    .quote()
+            ),
+        ));
     }
 
     let suffix = if opt_suffix {
@@ -89,7 +90,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         print!("{}{}", basename(path, suffix), line_ending);
     }
 
-    0
+    Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {
