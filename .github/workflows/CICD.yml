@@ -615,11 +615,6 @@ jobs:
         # staging directory
         STAGING='_staging'
         outputs STAGING
-        ## # check for CODECOV_TOKEN availability (work-around for inaccessible 'secrets' object for 'if'; see <https://github.community/t5/GitHub-Actions/jobs-lt-job-id-gt-if-does-not-work-with-env-secrets/m-p/38549>)
-        ## # note: CODECOV_TOKEN / HAS_CODECOV_TOKEN is not needed for public repositories when using AppVeyor, Azure Pipelines, CircleCI, GitHub Actions, Travis (see <https://docs.codecov.io/docs/about-the-codecov-bash-uploader#section-upload-token>)
-        ## unset HAS_CODECOV_TOKEN
-        ## if [ -n $CODECOV_TOKEN ]; then HAS_CODECOV_TOKEN='true' ; fi
-        ## outputs HAS_CODECOV_TOKEN
         # target-specific options
         # * CARGO_FEATURES_OPTION
         CARGO_FEATURES_OPTION='--all-features' ;  ## default to '--all-features' for code coverage
