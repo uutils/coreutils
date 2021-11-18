@@ -7,25 +7,25 @@ fn test_hex_rejects_sign_after_identifier() {
         .args(&["0x-123ABC"])
         .fails()
         .no_stdout()
-        .stderr_contains("invalid hexadecimal argument: '0x-123ABC'")
+        .stderr_contains("invalid floating point argument: '0x-123ABC'")
         .stderr_contains("for more information.");
     new_ucmd!()
         .args(&["0x+123ABC"])
         .fails()
         .no_stdout()
-        .stderr_contains("invalid hexadecimal argument: '0x+123ABC'")
+        .stderr_contains("invalid floating point argument: '0x+123ABC'")
         .stderr_contains("for more information.");
     new_ucmd!()
         .args(&["-0x-123ABC"])
         .fails()
         .no_stdout()
-        .stderr_contains("invalid hexadecimal argument: '-0x-123ABC'")
+        .stderr_contains("invalid floating point argument: '-0x-123ABC'")
         .stderr_contains("for more information.");
     new_ucmd!()
         .args(&["-0x+123ABC"])
         .fails()
         .no_stdout()
-        .stderr_contains("invalid hexadecimal argument: '-0x+123ABC'")
+        .stderr_contains("invalid floating point argument: '-0x+123ABC'")
         .stderr_contains("for more information.");
 }
 
@@ -60,30 +60,24 @@ fn test_hex_identifier_in_wrong_place() {
         .args(&["1234ABCD0x"])
         .fails()
         .no_stdout()
-        .stderr_contains("invalid hexadecimal argument: '1234ABCD0x'")
+        .stderr_contains("invalid floating point argument: '1234ABCD0x'")
         .stderr_contains("for more information.");
 }
 
 #[test]
 fn test_rejects_nan() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd().args(&["NaN"]).fails().stderr_only(format!(
-        "{0}: invalid 'not-a-number' argument: 'NaN'\nTry '{1} {0} --help' for more information.",
-        ts.util_name,
-        ts.bin_path.to_string_lossy()
-    ));
+    new_ucmd!()
+        .arg("NaN")
+        .fails()
+        .usage_error("invalid 'not-a-number' argument: 'NaN'");
 }
 
 #[test]
 fn test_rejects_non_floats() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd().args(&["foo"]).fails().stderr_only(&format!(
-        "{0}: invalid floating point argument: 'foo'\nTry '{1} {0} --help' for more information.",
-        ts.util_name,
-        ts.bin_path.to_string_lossy()
-    ));
+    new_ucmd!()
+        .arg("foo")
+        .fails()
+        .usage_error("invalid floating point argument: 'foo'");
 }
 
 #[test]
@@ -479,6 +473,15 @@ fn test_width_decimal_scientific_notation_trailing_zeros_increment() {
         .no_stderr();
 }
 
+#[test]
+fn test_width_negative_scientific_notation() {
+    new_ucmd!()
+        .args(&["-w", "-1e-3", "1"])
+        .succeeds()
+        .stdout_is("-0.001\n00.999\n")
+        .no_stderr();
+}
+
 /// Test that trailing zeros in the end argument do not contribute to width.
 #[test]
 fn test_width_decimal_scientific_notation_trailing_zeros_end() {
@@ -522,6 +525,22 @@ fn test_inf() {
 }
 
 #[test]
+fn test_inf_width() {
+    run(
+        &["-w", "1.000", "inf", "inf"],
+        b"1.000\n  inf\n  inf\n  inf\n",
+    );
+}
+
+#[test]
+fn test_neg_inf_width() {
+    run(
+        &["-w", "1.000", "-inf", "-inf"],
+        b"1.000\n -inf\n -inf\n -inf\n",
+    );
+}
+
+#[test]
 fn test_ignore_leading_whitespace() {
     new_ucmd!()
         .arg("   1")
@@ -538,9 +557,65 @@ fn test_trailing_whitespace_error() {
     new_ucmd!()
         .arg("1 ")
         .fails()
-        .no_stdout()
-        .stderr_contains("seq: invalid floating point argument: '1 '")
-        // FIXME The second line of the error message is "Try 'seq
-        // --help' for more information."
-        .stderr_contains("for more information.");
+        .usage_error("invalid floating point argument: '1 '");
+}
+
+#[test]
+fn test_negative_zero_int_start_float_increment() {
+    new_ucmd!()
+        .args(&["-0", "0.1", "0.1"])
+        .succeeds()
+        .stdout_is("-0.0\n0.1\n")
+        .no_stderr();
+}
+
+#[test]
+fn test_float_precision_increment() {
+    new_ucmd!()
+        .args(&["999", "0.1", "1000.1"])
+        .succeeds()
+        .stdout_is(
+            "999.0
+999.1
+999.2
+999.3
+999.4
+999.5
+999.6
+999.7
+999.8
+999.9
+1000.0
+1000.1
+",
+        )
+        .no_stderr();
+}
+
+/// Test for floating point precision issues.
+#[test]
+fn test_negative_increment_decimal() {
+    new_ucmd!()
+        .args(&["0.1", "-0.1", "-0.2"])
+        .succeeds()
+        .stdout_is("0.1\n0.0\n-0.1\n-0.2\n")
+        .no_stderr();
+}
+
+#[test]
+fn test_zero_not_first() {
+    new_ucmd!()
+        .args(&["-w", "-0.1", "0.1", "0.1"])
+        .succeeds()
+        .stdout_is("-0.1\n00.0\n00.1\n")
+        .no_stderr();
+}
+
+#[test]
+fn test_rounding_end() {
+    new_ucmd!()
+        .args(&["1", "-1", "0.1"])
+        .succeeds()
+        .stdout_is("1\n")
+        .no_stderr();
 }
