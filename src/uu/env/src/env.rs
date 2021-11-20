@@ -1,6 +1,7 @@
 // This file is part of the uutils coreutils package.
 //
 // (c) Jordi Boggiano <j.boggiano@seld.be>
+// (c) Thomas Queiroz <thomasqueirozb@gmail.com>
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
@@ -23,7 +24,7 @@ use std::io::{self, Write};
 use std::iter::Iterator;
 use std::process::Command;
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError};
+use uucore::error::{UResult, USimpleError, UUsageError};
 
 const USAGE: &str = "env [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]";
 const AFTER_HELP: &str = "\
@@ -50,7 +51,7 @@ fn print_env(null: bool) {
     }
 }
 
-fn parse_name_value_opt<'a>(opts: &mut Options<'a>, opt: &'a str) -> Result<bool, i32> {
+fn parse_name_value_opt<'a>(opts: &mut Options<'a>, opt: &'a str) -> UResult<bool> {
     // is it a NAME=VALUE like opt ?
     if let Some(idx) = opt.find('=') {
         // yes, so push name, value pair
@@ -64,17 +65,12 @@ fn parse_name_value_opt<'a>(opts: &mut Options<'a>, opt: &'a str) -> Result<bool
     }
 }
 
-fn parse_program_opt<'a>(opts: &mut Options<'a>, opt: &'a str) -> Result<(), i32> {
+fn parse_program_opt<'a>(opts: &mut Options<'a>, opt: &'a str) -> UResult<()> {
     if opts.null {
-        eprintln!(
-            "{}: cannot specify --null (-0) with command",
-            uucore::util_name()
-        );
-        eprintln!(
-            "Type \"{} --help\" for detailed information",
-            uucore::execution_phrase()
-        );
-        Err(1)
+        Err(UUsageError::new(
+            125,
+            "cannot specify --null (-0) with command".to_string(),
+        ))
     } else {
         opts.program.push(opt);
         Ok(())
@@ -93,10 +89,8 @@ fn load_config_file(opts: &mut Options) -> UResult<()> {
             Ini::load_from_file(file)
         };
 
-        let conf = conf.map_err(|error| {
-            show_error!("{}: {}", file.maybe_quote(), error);
-            1
-        })?;
+        let conf =
+            conf.map_err(|e| USimpleError::new(1, format!("{}: {}", file.maybe_quote(), e)))?;
 
         for (_, prop) in &conf {
             // ignore all INI section lines (treat them as comments)
@@ -138,7 +132,7 @@ pub fn uu_app() -> App<'static, 'static> {
             .long("ignore-environment")
             .help("start with an empty environment"))
         .arg(Arg::with_name("chdir")
-            .short("c")
+            .short("C") // GNU env compatibility
             .long("chdir")
             .takes_value(true)
             .number_of_values(1)
@@ -236,6 +230,14 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
+    // GNU env tests this behavior
+    if opts.program.is_empty() && running_directory.is_some() {
+        return Err(UUsageError::new(
+            125,
+            "must specify command with --chdir (-C)".to_string(),
+        ));
+    }
+
     // NOTE: we manually set and unset the env vars below rather than using Command::env() to more
     //       easily handle the case where no command is given
 
@@ -251,6 +253,13 @@ fn run_env(args: impl uucore::Args) -> UResult<()> {
 
     // unset specified env vars
     for name in &opts.unsets {
+        if name.is_empty() || name.contains(0 as char) || name.contains('=') {
+            return Err(USimpleError::new(
+                125,
+                format!("cannot unset {}: Invalid argument", name.quote()),
+            ));
+        }
+
         env::remove_var(name);
     }
 

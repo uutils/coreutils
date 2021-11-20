@@ -52,7 +52,7 @@ pub fn gcd(mut u: u64, mut v: u64) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quickcheck::quickcheck;
+    use quickcheck::{quickcheck, TestResult};
 
     quickcheck! {
         fn euclidean(a: u64, b: u64) -> bool {
@@ -76,13 +76,12 @@ mod tests {
             gcd(0, a) == a
         }
 
-        fn divisor(a: u64, b: u64) -> () {
+        fn divisor(a: u64, b: u64) -> TestResult {
             // Test that gcd(a, b) divides a and b, unless a == b == 0
-            if a == 0 && b == 0 { return; }
+            if a == 0 && b == 0 { return TestResult::discard(); } // restrict test domain to !(a == b == 0)
 
             let g = gcd(a, b);
-            assert_eq!(a % g, 0);
-            assert_eq!(b % g, 0);
+            TestResult::from_bool( g != 0 && a % g == 0 && b % g == 0 )
         }
 
         fn commutative(a: u64, b: u64) -> bool {

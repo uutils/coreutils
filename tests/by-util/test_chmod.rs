@@ -541,7 +541,7 @@ fn test_no_operands() {
         .arg("777")
         .fails()
         .code_is(1)
-        .stderr_is("chmod: missing operand");
+        .usage_error("missing operand");
 }
 
 #[test]
