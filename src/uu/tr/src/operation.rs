@@ -1,3 +1,12 @@
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * (c) Michael Gehring <mg@ebfe.org>
+//  * (c) kwantam <kwantam@gmail.com>
+//  * (c) Sergey "Shnatsel" Davidoff <shnatsel@gmail.com>
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
+
 // spell-checker:ignore (strings) anychar combinator Alnum Punct Xdigit alnum punct xdigit cntrl
 
 use nom::{
@@ -30,9 +39,7 @@ pub enum BadSequence {
 impl Display for BadSequence {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            BadSequence::MissingCharClassName => {
-                writeln!(f, "missing character class name '[::]'")
-            }
+            BadSequence::MissingCharClassName => writeln!(f, "missing character class name '[::]'"),
             BadSequence::MissingEquivalentClassChar => {
                 writeln!(f, "missing equivalence class character '[==]'")
             }
