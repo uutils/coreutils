@@ -27,13 +27,11 @@ winapi = { version="0.3", features=["fileapi", "handleapi", "processthreadsapi",
 redox_syscall = "0.2"
 
 [target.'cfg(unix)'.dependencies]
-nix = "0.20"
-libc = "0.2"
+nix = "=0.23.1"
 
 [[bin]]
 name = "tail"
 path = "src/main.rs"
 
 [package.metadata.cargo-udeps.ignore]
-# Necessary for "make all"
 normal = ["uucore_procs"]

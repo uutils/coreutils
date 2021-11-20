@@ -18,7 +18,7 @@ static OPT_LOGICAL: &str = "logical";
 static OPT_PHYSICAL: &str = "physical";
 
 fn physical_path() -> io::Result<PathBuf> {
-    // std::env::current_dir() is a thin wrapper around libc's getcwd().
+    // std::env::current_dir() is a thin wrapper around libc::getcwd().
 
     // On Unix, getcwd() must return the physical path:
     // https://pubs.opengroup.org/onlinepubs/9699919799/functions/getcwd.html
