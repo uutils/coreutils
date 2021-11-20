@@ -1174,7 +1174,7 @@ version = "7.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ffd9d26838a953b4af82cbeb9f1592c6798916983959be223a7124e992742c1"
 dependencies = [
- "memchr 2.4.0",
+ "memchr 2.4.1",
  "minimal-lexical",
  "version_check",
 ]
