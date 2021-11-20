@@ -191,7 +191,7 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
 
         if use_stdin {
             let mut reader = BufReader::new(stdin());
-            unbounded_tail(&mut reader, settings);
+            unbounded_tail(&mut reader, settings)?;
 
             // Don't follow stdin since there are no checks for pipes/FIFOs
             //
@@ -230,7 +230,7 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
                 }
             } else {
                 let mut reader = BufReader::new(file);
-                unbounded_tail(&mut reader, settings);
+                unbounded_tail(&mut reader, settings)?;
                 if settings.follow {
                     readers.push((Box::new(reader), filename));
                 }
@@ -475,7 +475,7 @@ where
     }
 }
 
-fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
+fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
     // Read through each line/char and store them in a ringbuffer that always
     // contains count lines/chars. When reaching the end of file, output the
     // data in the ringbuf.
@@ -487,24 +487,19 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
         }
         FilterMode::Bytes(count) => {
             for byte in unbounded_tail_collect(reader.bytes(), count, settings.beginning) {
-                let mut stdout = stdout();
-                print_byte(&mut stdout, byte);
+                if let Err(err) = stdout().write(&[byte]) {
+                    return Err(USimpleError::new(1, err.to_string()));
+                }
             }
         }
     }
+    return Ok(());
 }
 
 fn is_seekable<T: Seek>(file: &mut T) -> bool {
     file.seek(SeekFrom::Current(0)).is_ok()
         && file.seek(SeekFrom::End(0)).is_ok()
         && file.seek(SeekFrom::Start(0)).is_ok()
-}
-
-#[inline]
-fn print_byte<T: Write>(stdout: &mut T, ch: u8) {
-    if let Err(err) = stdout.write(&[ch]) {
-        crash!(1, "{}", err);
-    }
 }
 
 fn parse_num(src: &str) -> Result<(usize, bool), ParseSizeError> {
