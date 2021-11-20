@@ -16,17 +16,21 @@ extern crate clap;
 extern crate uucore;
 
 mod chunks;
+mod parse;
 mod platform;
 use chunks::ReverseChunks;
 
 use clap::{App, Arg};
 use std::collections::VecDeque;
+use std::ffi::OsString;
 use std::fmt;
 use std::fs::{File, Metadata};
 use std::io::{stdin, stdout, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
+use uucore::display::Quotable;
+use uucore::error::{UResult, USimpleError};
 use uucore::parse_size::{parse_size, ParseSizeError};
 use uucore::ringbuffer::RingBuffer;
 
@@ -58,105 +62,122 @@ pub mod options {
     pub static ARG_FILES: &str = "files";
 }
 
+#[derive(Debug)]
 enum FilterMode {
     Bytes(usize),
     Lines(usize, u8), // (number of lines, delimiter)
 }
 
+impl Default for FilterMode {
+    fn default() -> Self {
+        FilterMode::Lines(10, b'\n')
+    }
+}
+
+#[derive(Debug, Default)]
 struct Settings {
+    quiet: bool,
+    verbose: bool,
     mode: FilterMode,
     sleep_msec: u32,
     beginning: bool,
     follow: bool,
     pid: platform::Pid,
+    files: Vec<String>,
 }
 
-impl Default for Settings {
-    fn default() -> Settings {
-        Settings {
-            mode: FilterMode::Lines(10, b'\n'),
+impl Settings {
+    pub fn get_from(args: impl uucore::Args) -> Result<Self, String> {
+        let matches = uu_app().get_matches_from(arg_iterate(args)?);
+
+        let mut settings: Settings = Settings {
             sleep_msec: 1000,
-            beginning: false,
-            follow: false,
-            pid: 0,
+            follow: matches.is_present(options::FOLLOW),
+            ..Default::default()
+        };
+
+        if settings.follow {
+            if let Some(n) = matches.value_of(options::SLEEP_INT) {
+                let parsed: Option<u32> = n.parse().ok();
+                if let Some(m) = parsed {
+                    settings.sleep_msec = m * 1000
+                }
+            }
         }
+
+        if let Some(pid_str) = matches.value_of(options::PID) {
+            if let Ok(pid) = pid_str.parse() {
+                settings.pid = pid;
+                if pid != 0 {
+                    if !settings.follow {
+                        show_warning!("PID ignored; --pid=PID is useful only when following");
+                    }
+
+                    if !platform::supports_pid_checks(pid) {
+                        show_warning!("--pid=PID is not supported on this system");
+                        settings.pid = 0;
+                    }
+                }
+            }
+        }
+
+        let mode_and_beginning = if let Some(arg) = matches.value_of(options::BYTES) {
+            match parse_num(arg) {
+                Ok((n, beginning)) => (FilterMode::Bytes(n), beginning),
+                Err(e) => return Err(format!("invalid number of bytes: {}", e)),
+            }
+        } else if let Some(arg) = matches.value_of(options::LINES) {
+            match parse_num(arg) {
+                Ok((n, beginning)) => (FilterMode::Lines(n, b'\n'), beginning),
+                Err(e) => return Err(format!("invalid number of lines: {}", e)),
+            }
+        } else {
+            (FilterMode::Lines(10, b'\n'), false)
+        };
+        settings.mode = mode_and_beginning.0;
+        settings.beginning = mode_and_beginning.1;
+
+        if matches.is_present(options::ZERO_TERM) {
+            if let FilterMode::Lines(count, _) = settings.mode {
+                settings.mode = FilterMode::Lines(count, 0);
+            }
+        }
+
+        settings.verbose = matches.is_present(options::verbosity::VERBOSE);
+        settings.quiet = matches.is_present(options::verbosity::QUIET);
+
+        settings.files = match matches.values_of(options::ARG_FILES) {
+            Some(v) => v.map(|s| s.to_owned()).collect(),
+            None => vec!["-".to_owned()],
+        };
+
+        Ok(settings)
     }
 }
 
 #[allow(clippy::cognitive_complexity)]
-pub fn uumain(args: impl uucore::Args) -> i32 {
-    let mut settings: Settings = Default::default();
-
-    let app = uu_app();
-
-    let matches = app.get_matches_from(args);
-
-    settings.follow = matches.is_present(options::FOLLOW);
-    if settings.follow {
-        if let Some(n) = matches.value_of(options::SLEEP_INT) {
-            let parsed: Option<u32> = n.parse().ok();
-            if let Some(m) = parsed {
-                settings.sleep_msec = m * 1000
-            }
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let args = match Settings::get_from(args) {
+        Ok(o) => o,
+        Err(s) => {
+            return Err(USimpleError::new(1, s));
         }
-    }
-
-    if let Some(pid_str) = matches.value_of(options::PID) {
-        if let Ok(pid) = pid_str.parse() {
-            settings.pid = pid;
-            if pid != 0 {
-                if !settings.follow {
-                    show_warning!("PID ignored; --pid=PID is useful only when following");
-                }
-
-                if !platform::supports_pid_checks(pid) {
-                    show_warning!("--pid=PID is not supported on this system");
-                    settings.pid = 0;
-                }
-            }
-        }
-    }
-
-    let mode_and_beginning = if let Some(arg) = matches.value_of(options::BYTES) {
-        match parse_num(arg) {
-            Ok((n, beginning)) => (FilterMode::Bytes(n), beginning),
-            Err(e) => crash!(1, "invalid number of bytes: {}", e.to_string()),
-        }
-    } else if let Some(arg) = matches.value_of(options::LINES) {
-        match parse_num(arg) {
-            Ok((n, beginning)) => (FilterMode::Lines(n, b'\n'), beginning),
-            Err(e) => crash!(1, "invalid number of lines: {}", e.to_string()),
-        }
-    } else {
-        (FilterMode::Lines(10, b'\n'), false)
     };
-    settings.mode = mode_and_beginning.0;
-    settings.beginning = mode_and_beginning.1;
+    uu_tail(&args)
+}
 
-    if matches.is_present(options::ZERO_TERM) {
-        if let FilterMode::Lines(count, _) = settings.mode {
-            settings.mode = FilterMode::Lines(count, 0);
-        }
-    }
-
-    let verbose = matches.is_present(options::verbosity::VERBOSE);
-    let quiet = matches.is_present(options::verbosity::QUIET);
-
-    let files: Vec<String> = matches
-        .values_of(options::ARG_FILES)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_else(|| vec![String::from("-")]);
-
-    let multiple = files.len() > 1;
+fn uu_tail(settings: &Settings) -> UResult<()> {
+    let multiple = settings.files.len() > 1;
     let mut first_header = true;
     let mut readers: Vec<(Box<dyn BufRead>, &String)> = Vec::new();
 
     #[cfg(unix)]
     let stdin_string = String::from("standard input");
 
-    for filename in &files {
+    for filename in &settings.files {
         let use_stdin = filename.as_str() == "-";
-        if (multiple || verbose) && !quiet {
+        if (multiple || settings.verbose) && !settings.quiet {
             if !first_header {
                 println!();
             }
@@ -170,7 +191,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
         if use_stdin {
             let mut reader = BufReader::new(stdin());
-            unbounded_tail(&mut reader, &settings);
+            unbounded_tail(&mut reader, settings);
 
             // Don't follow stdin since there are no checks for pipes/FIFOs
             //
@@ -202,14 +223,14 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             let mut file = File::open(&path).unwrap();
             let md = file.metadata().unwrap();
             if is_seekable(&mut file) && get_block_size(&md) > 0 {
-                bounded_tail(&mut file, &settings);
+                bounded_tail(&mut file, settings);
                 if settings.follow {
                     let reader = BufReader::new(file);
                     readers.push((Box::new(reader), filename));
                 }
             } else {
                 let mut reader = BufReader::new(file);
-                unbounded_tail(&mut reader, &settings);
+                unbounded_tail(&mut reader, settings);
                 if settings.follow {
                     readers.push((Box::new(reader), filename));
                 }
@@ -218,10 +239,36 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     if settings.follow {
-        follow(&mut readers[..], &settings);
+        follow(&mut readers[..], settings);
     }
 
-    0
+    Ok(())
+}
+
+fn arg_iterate<'a>(
+    mut args: impl uucore::Args + 'a,
+) -> Result<Box<dyn Iterator<Item = OsString> + 'a>, String> {
+    // argv[0] is always present
+    let first = args.next().unwrap();
+    if let Some(second) = args.next() {
+        if let Some(s) = second.to_str() {
+            match parse::parse_obsolete(s) {
+                Some(Ok(iter)) => Ok(Box::new(vec![first].into_iter().chain(iter).chain(args))),
+                Some(Err(e)) => match e {
+                    parse::ParseError::Syntax => Err(format!("bad argument format: {}", s.quote())),
+                    parse::ParseError::Overflow => Err(format!(
+                        "invalid argument: {} Value too large for defined datatype",
+                        s.quote()
+                    )),
+                },
+                None => Ok(Box::new(vec![first, second].into_iter().chain(args))),
+            }
+        } else {
+            Err("bad argument encoding".to_owned())
+        }
+    } else {
+        Ok(Box::new(vec![first].into_iter()))
+    }
 }
 
 pub fn uu_app() -> App<'static, 'static> {
