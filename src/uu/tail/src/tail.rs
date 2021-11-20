@@ -239,7 +239,7 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
     }
 
     if settings.follow {
-        follow(&mut readers[..], settings);
+        follow(&mut readers[..], settings)?;
     }
 
     Ok(())
@@ -342,10 +342,10 @@ pub fn uu_app() -> App<'static, 'static> {
         )
 }
 
-fn follow<T: BufRead>(readers: &mut [(T, &String)], settings: &Settings) {
+fn follow<T: BufRead>(readers: &mut [(T, &String)], settings: &Settings) -> UResult<()> {
     assert!(settings.follow);
     if readers.is_empty() {
-        return;
+        return Ok(());
     }
 
     let mut last = readers.len() - 1;
@@ -372,7 +372,7 @@ fn follow<T: BufRead>(readers: &mut [(T, &String)], settings: &Settings) {
                         }
                         print!("{}", datum);
                     }
-                    Err(err) => panic!("{}", err),
+                    Err(err) => return Err(USimpleError::new(1, err.to_string())),
                 }
             }
         }
@@ -381,6 +381,7 @@ fn follow<T: BufRead>(readers: &mut [(T, &String)], settings: &Settings) {
             break;
         }
     }
+    Ok(())
 }
 
 /// Iterate over bytes in the file, in reverse, until we find the
@@ -493,7 +494,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
             }
         }
     }
-    return Ok(());
+    Ok(())
 }
 
 fn is_seekable<T: Seek>(file: &mut T) -> bool {
