@@ -1,6 +1,6 @@
 [package]
 name = "uu_chcon"
-version = "0.0.7"
+version = "0.0.8"
 authors = ["uutils developers"]
 license = "MIT"
 description = "chcon ~ (uutils) change file security context"
@@ -25,3 +25,6 @@ libc         = { version = "0.2"   }
 [[bin]]
 name = "chcon"
 path = "src/main.rs"
+
+[package.metadata.cargo-udeps.ignore]
+normal = ["uucore_procs"]

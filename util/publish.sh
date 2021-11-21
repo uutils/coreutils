@@ -9,10 +9,17 @@ fi
 cd src/uucore/
 cargo publish $ARG
 cd -
+sleep 2s
+
+cd src/uucore_procs/
+cargo publish $ARG
+cd -
+sleep 2s
 
 cd src/uu/stdbuf/src/libstdbuf/
 cargo publish $ARG
 cd -
+sleep 2s
 
 PROGS=$(ls -1d src/uu/*/)
 for p in $PROGS; do

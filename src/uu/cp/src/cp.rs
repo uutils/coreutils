@@ -49,6 +49,7 @@ use std::path::{Path, PathBuf, StripPrefixError};
 use std::str::FromStr;
 use std::string::ToString;
 use uucore::backup_control::{self, BackupMode};
+use uucore::error::{set_exit_code, ExitCode, UError, UResult};
 use uucore::fs::{canonicalize, MissingHandling, ResolveMode};
 use walkdir::WalkDir;
 
@@ -102,6 +103,12 @@ quick_error! {
 
         /// Invalid arguments to backup
         Backup(description: String) { display("{}\nTry '{} --help' for more information.", description, uucore::execution_phrase()) }
+    }
+}
+
+impl UError for Error {
+    fn code(&self) -> i32 {
+        EXIT_ERR
     }
 }
 
@@ -220,7 +227,6 @@ pub struct Options {
 
 static ABOUT: &str = "Copy SOURCE to DEST, or multiple SOURCE(s) to DIRECTORY.";
 static LONG_HELP: &str = "";
-static EXIT_OK: i32 = 0;
 static EXIT_ERR: i32 = 1;
 
 fn usage() -> String {
@@ -446,7 +452,8 @@ pub fn uu_app() -> App<'static, 'static> {
              .multiple(true))
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let matches = uu_app()
         .after_help(&*format!(
@@ -457,11 +464,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .usage(&usage[..])
         .get_matches_from(args);
 
-    let options = crash_if_err!(EXIT_ERR, Options::from_matches(&matches));
+    let options = Options::from_matches(&matches)?;
 
     if options.overwrite == OverwriteMode::NoClobber && options.backup != BackupMode::NoBackup {
         show_usage_error!("options --backup and --no-clobber are mutually exclusive");
-        return 1;
+        return Err(ExitCode(EXIT_ERR).into());
     }
 
     let paths: Vec<String> = matches
@@ -469,7 +476,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    let (sources, target) = crash_if_err!(EXIT_ERR, parse_path_args(&paths, &options));
+    let (sources, target) = parse_path_args(&paths, &options)?;
 
     if let Err(error) = copy(&sources, &target, &options) {
         match error {
@@ -479,10 +486,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             // Else we caught a fatal bubbled-up error, log it to stderr
             _ => show_error!("{}", error),
         };
-        return EXIT_ERR;
+        set_exit_code(EXIT_ERR);
     }
 
-    EXIT_OK
+    Ok(())
 }
 
 impl ClobberMode {
@@ -1124,7 +1131,7 @@ fn copy_attribute(source: &Path, dest: &Path, attribute: &Attribute) -> CopyResu
                 let xattrs = xattr::list(source)?;
                 for attr in xattrs {
                     if let Some(attr_value) = xattr::get(source, attr.clone())? {
-                        crash_if_err!(EXIT_ERR, xattr::set(dest, attr, &attr_value[..]));
+                        xattr::set(dest, attr, &attr_value[..])?;
                     }
                 }
             }

@@ -210,7 +210,7 @@ fn reset_term(stdout: &mut std::io::Stdout) {
 #[inline(always)]
 fn reset_term(_: &mut usize) {}
 
-fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>, silent: bool) {
+fn more(buff: &str, stdout: &mut Stdout, next_file: Option<&str>, silent: bool) {
     let (cols, rows) = terminal::size().unwrap();
     let lines = break_buff(buff, usize::from(cols));
 
@@ -232,7 +232,7 @@ fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>, silent: bo
                     code: KeyCode::Char('c'),
                     modifiers: KeyModifiers::CONTROL,
                 }) => {
-                    reset_term(&mut stdout);
+                    reset_term(stdout);
                     std::process::exit(0);
                 }
                 Event::Key(KeyEvent {

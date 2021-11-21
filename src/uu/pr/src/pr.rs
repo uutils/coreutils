@@ -20,7 +20,7 @@ use quick_error::ResultExt;
 use regex::Regex;
 use std::convert::From;
 use std::fs::{metadata, File};
-use std::io::{stdin, stdout, BufRead, BufReader, Lines, Read, Stdout, Write};
+use std::io::{stdin, stdout, BufRead, BufReader, Lines, Read, Write};
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 
@@ -1036,15 +1036,16 @@ fn print_page(lines: &[FileLine], options: &OutputOptions, page: usize) -> Resul
 
     let header = header_content(options, page);
     let trailer_content = trailer_content(options);
-    let out = &mut stdout();
 
-    out.lock();
+    let out = stdout();
+    let mut out = out.lock();
+
     for x in header {
         out.write_all(x.as_bytes())?;
         out.write_all(line_separator)?;
     }
 
-    let lines_written = write_columns(lines, options, out)?;
+    let lines_written = write_columns(lines, options, &mut out)?;
 
     for (index, x) in trailer_content.iter().enumerate() {
         out.write_all(x.as_bytes())?;
@@ -1060,7 +1061,7 @@ fn print_page(lines: &[FileLine], options: &OutputOptions, page: usize) -> Resul
 fn write_columns(
     lines: &[FileLine],
     options: &OutputOptions,
-    out: &mut Stdout,
+    out: &mut impl Write,
 ) -> Result<usize, IOError> {
     let line_separator = options.content_line_separator.as_bytes();
 

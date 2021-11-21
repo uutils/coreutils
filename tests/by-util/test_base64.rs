@@ -100,7 +100,7 @@ fn test_base64_extra_operand() {
         .arg("a.txt")
         .arg("b.txt")
         .fails()
-        .stderr_only("base64: extra operand 'b.txt'\nTry 'base64 --help' for more information.");
+        .usage_error("extra operand 'b.txt'");
 }
 
 #[test]

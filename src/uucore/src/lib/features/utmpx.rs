@@ -236,17 +236,20 @@ impl Utmpx {
                 flags: AI_CANONNAME,
                 ..AddrInfoHints::default()
             };
-            let sockets = getaddrinfo(Some(hostname), None, Some(hints))
-                .unwrap()
-                .collect::<IOResult<Vec<_>>>()?;
-            for socket in sockets {
-                if let Some(ai_canonname) = socket.canonname {
-                    return Ok(if display.is_empty() {
-                        ai_canonname
-                    } else {
-                        format!("{}:{}", ai_canonname, display)
-                    });
+            if let Ok(sockets) = getaddrinfo(Some(hostname), None, Some(hints)) {
+                let sockets = sockets.collect::<IOResult<Vec<_>>>()?;
+                for socket in sockets {
+                    if let Some(ai_canonname) = socket.canonname {
+                        return Ok(if display.is_empty() {
+                            ai_canonname
+                        } else {
+                            format!("{}:{}", ai_canonname, display)
+                        });
+                    }
                 }
+            } else {
+                // GNU coreutils has this behavior
+                return Ok(hostname.to_string());
             }
         }
 

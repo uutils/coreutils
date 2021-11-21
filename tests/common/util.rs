@@ -62,6 +62,10 @@ fn read_scenario_fixture<S: AsRef<OsStr>>(tmpd: &Option<Rc<TempDir>>, file_rel_p
 /// within a struct which has convenience assertion functions about those outputs
 #[derive(Debug, Clone)]
 pub struct CmdResult {
+    /// bin_path provided by `TestScenario` or `UCommand`
+    bin_path: String,
+    /// util_name provided by `TestScenario` or `UCommand`
+    util_name: Option<String>,
     //tmpd is used for convenience functions for asserts against fixtures
     tmpd: Option<Rc<TempDir>>,
     /// exit status for command (if there is one)
@@ -77,6 +81,8 @@ pub struct CmdResult {
 
 impl CmdResult {
     pub fn new(
+        bin_path: String,
+        util_name: Option<String>,
         tmpd: Option<Rc<TempDir>>,
         code: Option<i32>,
         success: bool,
@@ -84,6 +90,8 @@ impl CmdResult {
         stderr: &[u8],
     ) -> CmdResult {
         CmdResult {
+            bin_path,
+            util_name,
             tmpd,
             code,
             success,
@@ -163,25 +171,23 @@ impl CmdResult {
 
     /// asserts that the command resulted in a success (zero) status code
     pub fn success(&self) -> &CmdResult {
-        if !self.success {
-            panic!(
-                "Command was expected to succeed.\nstdout = {}\n stderr = {}",
-                self.stdout_str(),
-                self.stderr_str()
-            );
-        }
+        assert!(
+            self.success,
+            "Command was expected to succeed.\nstdout = {}\n stderr = {}",
+            self.stdout_str(),
+            self.stderr_str()
+        );
         self
     }
 
     /// asserts that the command resulted in a failure (non-zero) status code
     pub fn failure(&self) -> &CmdResult {
-        if self.success {
-            panic!(
-                "Command was expected to fail.\nstdout = {}\n stderr = {}",
-                self.stdout_str(),
-                self.stderr_str()
-            );
-        }
+        assert!(
+            !self.success,
+            "Command was expected to fail.\nstdout = {}\n stderr = {}",
+            self.stdout_str(),
+            self.stderr_str()
+        );
         self
     }
 
@@ -197,12 +203,11 @@ impl CmdResult {
     /// 1.  you can not know exactly what stdout will be or
     /// 2.  you know that stdout will also be empty
     pub fn no_stderr(&self) -> &CmdResult {
-        if !self.stderr.is_empty() {
-            panic!(
-                "Expected stderr to be empty, but it's:\n{}",
-                self.stderr_str()
-            );
-        }
+        assert!(
+            self.stderr.is_empty(),
+            "Expected stderr to be empty, but it's:\n{}",
+            self.stderr_str()
+        );
         self
     }
 
@@ -213,12 +218,11 @@ impl CmdResult {
     /// 1.  you can not know exactly what stderr will be or
     /// 2.  you know that stderr will also be empty
     pub fn no_stdout(&self) -> &CmdResult {
-        if !self.stdout.is_empty() {
-            panic!(
-                "Expected stdout to be empty, but it's:\n{}",
-                self.stderr_str()
-            );
-        }
+        assert!(
+            self.stdout.is_empty(),
+            "Expected stdout to be empty, but it's:\n{}",
+            self.stderr_str()
+        );
         self
     }
 
@@ -359,6 +363,23 @@ impl CmdResult {
         assert!(!self.success);
         assert!(self.stderr.is_empty());
         self
+    }
+
+    /// asserts that
+    /// 1.  the command resulted in stderr stream output that equals the
+    ///     the following format when both are trimmed of trailing whitespace
+    ///     `"{util_name}: {msg}\nTry '{bin_path} {util_name} --help' for more information."`
+    ///     This the expected format when a UUsageError is returned or when show_error! is called
+    ///     `msg` should be the same as the one provided to UUsageError::new or show_error!
+    ///
+    /// 2.  the command resulted in empty (zero-length) stdout stream output
+    pub fn usage_error<T: AsRef<str>>(&self, msg: T) -> &CmdResult {
+        self.stderr_only(format!(
+            "{0}: {2}\nTry '{1} {0} --help' for more information.",
+            self.util_name.as_ref().unwrap(), // This shouldn't be called using a normal command
+            self.bin_path,
+            msg.as_ref()
+        ))
     }
 
     pub fn stdout_contains<T: AsRef<str>>(&self, cmp: T) -> &CmdResult {
@@ -514,43 +535,86 @@ impl AtPath {
     }
 
     pub fn write(&self, name: &str, contents: &str) {
-        log_info("open(write)", self.plus_as_string(name));
+        log_info("write(default)", self.plus_as_string(name));
         std::fs::write(self.plus(name), contents)
             .unwrap_or_else(|e| panic!("Couldn't write {}: {}", name, e));
     }
 
     pub fn write_bytes(&self, name: &str, contents: &[u8]) {
-        log_info("open(write)", self.plus_as_string(name));
+        log_info("write(default)", self.plus_as_string(name));
         std::fs::write(self.plus(name), contents)
             .unwrap_or_else(|e| panic!("Couldn't write {}: {}", name, e));
     }
 
     pub fn append(&self, name: &str, contents: &str) {
-        log_info("open(append)", self.plus_as_string(name));
+        log_info("write(append)", self.plus_as_string(name));
         let mut f = OpenOptions::new()
             .write(true)
             .append(true)
+            .create(true)
             .open(self.plus(name))
             .unwrap();
         f.write_all(contents.as_bytes())
-            .unwrap_or_else(|e| panic!("Couldn't write {}: {}", name, e));
+            .unwrap_or_else(|e| panic!("Couldn't write(append) {}: {}", name, e));
     }
 
     pub fn append_bytes(&self, name: &str, contents: &[u8]) {
-        log_info("open(append)", self.plus_as_string(name));
+        log_info("write(append)", self.plus_as_string(name));
         let mut f = OpenOptions::new()
             .write(true)
             .append(true)
+            .create(true)
             .open(self.plus(name))
             .unwrap();
         f.write_all(contents)
-            .unwrap_or_else(|e| panic!("Couldn't append to {}: {}", name, e));
+            .unwrap_or_else(|e| panic!("Couldn't write(append) to {}: {}", name, e));
+    }
+
+    pub fn truncate(&self, name: &str, contents: &str) {
+        log_info("write(truncate)", self.plus_as_string(name));
+        let mut f = OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .create(true)
+            .open(self.plus(name))
+            .unwrap();
+        f.write_all(contents.as_bytes())
+            .unwrap_or_else(|e| panic!("Couldn't write(truncate) {}: {}", name, e));
+    }
+
+    pub fn rename(&self, source: &str, target: &str) {
+        let source = self.plus(source);
+        let target = self.plus(target);
+        log_info("rename", format!("{:?} {:?}", source, target));
+        std::fs::rename(&source, &target)
+            .unwrap_or_else(|e| panic!("Couldn't rename {:?} -> {:?}: {}", source, target, e));
+    }
+
+    pub fn remove(&self, source: &str) {
+        let source = self.plus(source);
+        log_info("remove", format!("{:?}", source));
+        std::fs::remove_file(&source)
+            .unwrap_or_else(|e| panic!("Couldn't remove {:?}: {}", source, e));
+    }
+
+    pub fn copy(&self, source: &str, target: &str) {
+        let source = self.plus(source);
+        let target = self.plus(target);
+        log_info("copy", format!("{:?} {:?}", source, target));
+        std::fs::copy(&source, &target)
+            .unwrap_or_else(|e| panic!("Couldn't copy {:?} -> {:?}: {}", source, target, e));
+    }
+
+    pub fn rmdir(&self, dir: &str) {
+        log_info("rmdir", self.plus_as_string(dir));
+        fs::remove_dir(&self.plus(dir)).unwrap();
     }
 
     pub fn mkdir(&self, dir: &str) {
         log_info("mkdir", self.plus_as_string(dir));
         fs::create_dir(&self.plus(dir)).unwrap();
     }
+
     pub fn mkdir_all(&self, dir: &str) {
         log_info("mkdir_all", self.plus_as_string(dir));
         fs::create_dir_all(self.plus(dir)).unwrap();
@@ -689,20 +753,12 @@ impl AtPath {
         // Source:
         // http://stackoverflow.com/questions/31439011/getfinalpathnamebyhandle-without-prepended
         let prefix = "\\\\?\\";
-        // FixME: replace ...
-        #[allow(clippy::manual_strip)]
-        if s.starts_with(prefix) {
-            String::from(&s[prefix.len()..])
+
+        if let Some(stripped) = s.strip_prefix(prefix) {
+            String::from(stripped)
         } else {
             s
         }
-        // ... with ...
-        // if let Some(stripped) = s.strip_prefix(prefix) {
-        //     String::from(stripped)
-        // } else {
-        //     s
-        // }
-        // ... when using MSRV with stabilized `strip_prefix()`
     }
 }
 
@@ -749,31 +805,36 @@ impl TestScenario {
     /// Returns builder for invoking the target uutils binary. Paths given are
     /// treated relative to the environment's unique temporary test directory.
     pub fn ucmd(&self) -> UCommand {
-        let mut cmd = self.cmd(&self.bin_path);
-        cmd.arg(&self.util_name);
-        cmd
+        self.composite_cmd(&self.bin_path, &self.util_name, true)
+    }
+
+    /// Returns builder for invoking the target uutils binary. Paths given are
+    /// treated relative to the environment's unique temporary test directory.
+    pub fn composite_cmd<S: AsRef<OsStr>, T: AsRef<OsStr>>(
+        &self,
+        bin: S,
+        util_name: T,
+        env_clear: bool,
+    ) -> UCommand {
+        UCommand::new_from_tmp(bin, Some(util_name), self.tmpd.clone(), env_clear)
     }
 
     /// Returns builder for invoking any system command. Paths given are treated
     /// relative to the environment's unique temporary test directory.
     pub fn cmd<S: AsRef<OsStr>>(&self, bin: S) -> UCommand {
-        UCommand::new_from_tmp(bin, self.tmpd.clone(), true)
+        UCommand::new_from_tmp::<S, S>(bin, None, self.tmpd.clone(), true)
     }
 
     /// Returns builder for invoking any uutils command. Paths given are treated
     /// relative to the environment's unique temporary test directory.
     pub fn ccmd<S: AsRef<OsStr>>(&self, bin: S) -> UCommand {
-        let mut cmd = self.cmd(&self.bin_path);
-        cmd.arg(bin);
-        cmd
+        self.composite_cmd(&self.bin_path, bin, true)
     }
 
     // different names are used rather than an argument
     // because the need to keep the environment is exceedingly rare.
     pub fn ucmd_keepenv(&self) -> UCommand {
-        let mut cmd = self.cmd_keepenv(&self.bin_path);
-        cmd.arg(&self.util_name);
-        cmd
+        self.composite_cmd(&self.bin_path, &self.util_name, false)
     }
 
     /// Returns builder for invoking any system command. Paths given are treated
@@ -781,7 +842,7 @@ impl TestScenario {
     /// Differs from the builder returned by `cmd` in that `cmd_keepenv` does not call
     /// `Command::env_clear` (Clears the entire environment map for the child process.)
     pub fn cmd_keepenv<S: AsRef<OsStr>>(&self, bin: S) -> UCommand {
-        UCommand::new_from_tmp(bin, self.tmpd.clone(), false)
+        UCommand::new_from_tmp::<S, S>(bin, None, self.tmpd.clone(), false)
     }
 }
 
@@ -795,6 +856,8 @@ impl TestScenario {
 pub struct UCommand {
     pub raw: Command,
     comm_string: String,
+    bin_path: String,
+    util_name: Option<String>,
     tmpd: Option<Rc<TempDir>>,
     has_run: bool,
     ignore_stdin_write_error: bool,
@@ -807,12 +870,20 @@ pub struct UCommand {
 }
 
 impl UCommand {
-    pub fn new<T: AsRef<OsStr>, U: AsRef<OsStr>>(arg: T, curdir: U, env_clear: bool) -> UCommand {
-        UCommand {
+    pub fn new<T: AsRef<OsStr>, S: AsRef<OsStr>, U: AsRef<OsStr>>(
+        bin_path: T,
+        util_name: Option<S>,
+        curdir: U,
+        env_clear: bool,
+    ) -> UCommand {
+        let bin_path = bin_path.as_ref();
+        let util_name = util_name.as_ref().map(|un| un.as_ref());
+
+        let mut ucmd = UCommand {
             tmpd: None,
             has_run: false,
             raw: {
-                let mut cmd = Command::new(arg.as_ref());
+                let mut cmd = Command::new(bin_path);
                 cmd.current_dir(curdir.as_ref());
                 if env_clear {
                     if cfg!(windows) {
@@ -832,7 +903,9 @@ impl UCommand {
                 }
                 cmd
             },
-            comm_string: String::from(arg.as_ref().to_str().unwrap()),
+            comm_string: String::from(bin_path.to_str().unwrap()),
+            bin_path: bin_path.to_str().unwrap().to_string(),
+            util_name: util_name.map(|un| un.to_str().unwrap().to_string()),
             ignore_stdin_write_error: false,
             bytes_into_stdin: None,
             stdin: None,
@@ -840,12 +913,23 @@ impl UCommand {
             stderr: None,
             #[cfg(target_os = "linux")]
             limits: vec![],
+        };
+
+        if let Some(un) = util_name {
+            ucmd.arg(un);
         }
+
+        ucmd
     }
 
-    pub fn new_from_tmp<T: AsRef<OsStr>>(arg: T, tmpd: Rc<TempDir>, env_clear: bool) -> UCommand {
+    pub fn new_from_tmp<T: AsRef<OsStr>, S: AsRef<OsStr>>(
+        bin_path: T,
+        util_name: Option<S>,
+        tmpd: Rc<TempDir>,
+        env_clear: bool,
+    ) -> UCommand {
         let tmpd_path_buf = String::from(&(*tmpd.as_ref().path().to_str().unwrap()));
-        let mut ucmd: UCommand = UCommand::new(arg.as_ref(), tmpd_path_buf, env_clear);
+        let mut ucmd: UCommand = UCommand::new(bin_path, util_name, tmpd_path_buf, env_clear);
         ucmd.tmpd = Some(tmpd);
         ucmd
     }
@@ -868,9 +952,7 @@ impl UCommand {
     /// Add a parameter to the invocation. Path arguments are treated relative
     /// to the test environment directory.
     pub fn arg<S: AsRef<OsStr>>(&mut self, arg: S) -> &mut UCommand {
-        if self.has_run {
-            panic!("{}", ALREADY_RUN);
-        }
+        assert!(!self.has_run, "{}", ALREADY_RUN);
         self.comm_string.push(' ');
         self.comm_string
             .push_str(arg.as_ref().to_str().unwrap_or_default());
@@ -881,9 +963,7 @@ impl UCommand {
     /// Add multiple parameters to the invocation. Path arguments are treated relative
     /// to the test environment directory.
     pub fn args<S: AsRef<OsStr>>(&mut self, args: &[S]) -> &mut UCommand {
-        if self.has_run {
-            panic!("{}", MULTIPLE_STDIN_MEANINGLESS);
-        }
+        assert!(!self.has_run, "{}", MULTIPLE_STDIN_MEANINGLESS);
         let strings = args
             .iter()
             .map(|s| s.as_ref().to_os_string())
@@ -901,9 +981,11 @@ impl UCommand {
 
     /// provides standard input to feed in to the command when spawned
     pub fn pipe_in<T: Into<Vec<u8>>>(&mut self, input: T) -> &mut UCommand {
-        if self.bytes_into_stdin.is_some() {
-            panic!("{}", MULTIPLE_STDIN_MEANINGLESS);
-        }
+        assert!(
+            !self.bytes_into_stdin.is_some(),
+            "{}",
+            MULTIPLE_STDIN_MEANINGLESS
+        );
         self.bytes_into_stdin = Some(input.into());
         self
     }
@@ -918,9 +1000,7 @@ impl UCommand {
     /// This is typically useful to test non-standard workflows
     /// like feeding something to a command that does not read it
     pub fn ignore_stdin_write_error(&mut self) -> &mut UCommand {
-        if self.bytes_into_stdin.is_none() {
-            panic!("{}", NO_STDIN_MEANINGLESS);
-        }
+        assert!(!self.bytes_into_stdin.is_none(), "{}", NO_STDIN_MEANINGLESS);
         self.ignore_stdin_write_error = true;
         self
     }
@@ -930,9 +1010,7 @@ impl UCommand {
         K: AsRef<OsStr>,
         V: AsRef<OsStr>,
     {
-        if self.has_run {
-            panic!("{}", ALREADY_RUN);
-        }
+        assert!(!self.has_run, "{}", ALREADY_RUN);
         self.raw.env(key, val);
         self
     }
@@ -951,9 +1029,7 @@ impl UCommand {
     /// Spawns the command, feeds the stdin if any, and returns the
     /// child process immediately.
     pub fn run_no_wait(&mut self) -> Child {
-        if self.has_run {
-            panic!("{}", ALREADY_RUN);
-        }
+        assert!(!self.has_run, "{}", ALREADY_RUN);
         self.has_run = true;
         log_info("run", &self.comm_string);
         let mut child = self
@@ -998,6 +1074,8 @@ impl UCommand {
         let prog = self.run_no_wait().wait_with_output().unwrap();
 
         CmdResult {
+            bin_path: self.bin_path.clone(),
+            util_name: self.util_name.clone(),
             tmpd: self.tmpd.clone(),
             code: prog.status.code(),
             success: prog.status.success(),
@@ -1036,6 +1114,8 @@ impl UCommand {
     }
 }
 
+/// Wrapper for `child.stdout.read_exact()`.
+/// Careful, this blocks indefinitely if `size` bytes is never reached.
 pub fn read_size(child: &mut Child, size: usize) -> String {
     let mut output = Vec::new();
     output.resize(size, 0);
@@ -1086,13 +1166,13 @@ pub fn host_name_for(util_name: &str) -> Cow<str> {
     {
         // make call to `host_name_for` idempotent
         if util_name.starts_with('g') && util_name != "groups" {
-            return util_name.into();
+            util_name.into()
         } else {
-            return format!("g{}", util_name).into();
+            format!("g{}", util_name).into()
         }
     }
     #[cfg(target_os = "linux")]
-    return util_name.into();
+    util_name.into()
 }
 
 // GNU coreutils version 8.32 is the reference version since it is the latest version and the
@@ -1169,7 +1249,7 @@ pub fn check_coreutil_version(
                 if s.contains(&format!("(GNU coreutils) {}", version_expected)) {
                     Ok(format!("{}: {}", UUTILS_INFO, s.to_string()))
                 } else if s.contains("(GNU coreutils)") {
-                    let version_found = s.split_whitespace().last().unwrap()[..4].parse::<f32>().unwrap_or_default();
+                    let version_found = parse_coreutil_version(s);
                     let version_expected = version_expected.parse::<f32>().unwrap_or_default();
                     if version_found > version_expected {
                     Ok(format!("{}: version for the reference coreutil '{}' is higher than expected; expected: {}, found: {}", UUTILS_INFO, util_name, version_expected, version_found))
@@ -1180,6 +1260,20 @@ pub fn check_coreutil_version(
                 }
             },
         )
+}
+
+// simple heuristic to parse the coreutils SemVer string, e.g. "id (GNU coreutils) 8.32.263-0475"
+fn parse_coreutil_version(version_string: &str) -> f32 {
+    version_string
+        .split_whitespace()
+        .last()
+        .unwrap()
+        .split('.')
+        .take(2)
+        .collect::<Vec<_>>()
+        .join(".")
+        .parse::<f32>()
+        .unwrap_or_default()
 }
 
 /// This runs the GNU coreutils `util_name` binary in `$PATH` in order to
@@ -1229,6 +1323,8 @@ pub fn expected_result(ts: &TestScenario, args: &[&str]) -> std::result::Result<
     };
 
     Ok(CmdResult::new(
+        ts.bin_path.as_os_str().to_str().unwrap().to_string(),
+        Some(ts.util_name.clone()),
         Some(result.tmpd()),
         Some(result.code()),
         result.succeeded(),
@@ -1299,6 +1395,8 @@ mod tests {
     #[test]
     fn test_code_is() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: Some(32),
             success: false,
@@ -1312,6 +1410,8 @@ mod tests {
     #[should_panic]
     fn test_code_is_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: Some(32),
             success: false,
@@ -1324,6 +1424,8 @@ mod tests {
     #[test]
     fn test_failure() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: false,
@@ -1337,6 +1439,8 @@ mod tests {
     #[should_panic]
     fn test_failure_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1349,6 +1453,8 @@ mod tests {
     #[test]
     fn test_success() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1362,6 +1468,8 @@ mod tests {
     #[should_panic]
     fn test_success_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: false,
@@ -1374,6 +1482,8 @@ mod tests {
     #[test]
     fn test_no_stderr_output() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1388,6 +1498,8 @@ mod tests {
     #[should_panic]
     fn test_no_stderr_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1402,6 +1514,8 @@ mod tests {
     #[should_panic]
     fn test_no_stdout_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1415,6 +1529,8 @@ mod tests {
     #[test]
     fn test_std_does_not_contain() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1429,6 +1545,8 @@ mod tests {
     #[should_panic]
     fn test_stdout_does_not_contain_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1443,6 +1561,8 @@ mod tests {
     #[should_panic]
     fn test_stderr_does_not_contain_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1456,6 +1576,8 @@ mod tests {
     #[test]
     fn test_stdout_matches() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1472,6 +1594,8 @@ mod tests {
     #[should_panic]
     fn test_stdout_matches_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1487,6 +1611,8 @@ mod tests {
     #[should_panic]
     fn test_stdout_not_matches_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1501,6 +1627,8 @@ mod tests {
     #[test]
     fn test_normalized_newlines_stdout_is() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1517,6 +1645,8 @@ mod tests {
     #[should_panic]
     fn test_normalized_newlines_stdout_is_fail() {
         let res = CmdResult {
+            bin_path: "".into(),
+            util_name: None,
             tmpd: None,
             code: None,
             success: true,
@@ -1525,6 +1655,36 @@ mod tests {
         };
 
         res.normalized_newlines_stdout_is("A\r\nB\nC\n");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_parse_coreutil_version() {
+        use std::assert_eq;
+        assert_eq!(
+            parse_coreutil_version("id (GNU coreutils) 9.0.123-0123").to_string(),
+            "9"
+        );
+        assert_eq!(
+            parse_coreutil_version("id (GNU coreutils) 8.32.263-0475").to_string(),
+            "8.32"
+        );
+        assert_eq!(
+            parse_coreutil_version("id (GNU coreutils) 8.25.123-0123").to_string(),
+            "8.25"
+        );
+        assert_eq!(
+            parse_coreutil_version("id (GNU coreutils) 9.0").to_string(),
+            "9"
+        );
+        assert_eq!(
+            parse_coreutil_version("id (GNU coreutils) 8.32").to_string(),
+            "8.32"
+        );
+        assert_eq!(
+            parse_coreutil_version("id (GNU coreutils) 8.25").to_string(),
+            "8.25"
+        );
     }
 
     #[test]

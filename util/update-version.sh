@@ -3,14 +3,14 @@
 # So, it should be triple-checked
 
 
-FROM="0.0.6"
-TO="0.0.7"
+FROM="0.0.7"
+TO="0.0.8"
 
-UUCORE_PROCS_FROM="0.0.5"
-UUCORE_PROCS_TO="0.0.6"
+UUCORE_PROCS_FROM="0.0.6"
+UUCORE_PROCS_TO="0.0.7"
 
-UUCORE_FROM="0.0.8"
-UUCORE_TO="0.0.9"
+UUCORE_FROM="0.0.9"
+UUCORE_TO="0.0.10"
 
 PROGS=$(ls -1d src/uu/*/Cargo.toml src/uu/stdbuf/src/libstdbuf/Cargo.toml Cargo.toml src/uu/base64/Cargo.toml)
 

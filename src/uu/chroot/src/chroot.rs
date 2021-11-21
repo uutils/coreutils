@@ -67,7 +67,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     // TODO: refactor the args and command matching
     // See: https://github.com/uutils/coreutils/pull/2365#discussion_r647849967
     let command: Vec<&str> = match commands.len() {
-        1 => {
+        0 => {
             let shell: &str = match user_shell {
                 Err(_) => default_shell,
                 Ok(ref s) => s.as_ref(),
@@ -77,12 +77,28 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         _ => commands,
     };
 
+    assert!(!command.is_empty());
+    let chroot_command = command[0];
+    let chroot_args = &command[1..];
+
+    // NOTE: Tests can only trigger code beyond this point if they're invoked with root permissions
     set_context(newroot, &matches);
 
-    let pstatus = Command::new(command[0])
-        .args(&command[1..])
+    let pstatus = Command::new(chroot_command)
+        .args(chroot_args)
         .status()
-        .unwrap_or_else(|e| crash!(1, "Cannot exec: {}", e));
+        .unwrap_or_else(|e| {
+            // TODO: Exit status:
+            // 125 if chroot itself fails
+            // 126 if command is found but cannot be invoked
+            // 127 if command cannot be found
+            crash!(
+                1,
+                "failed to run command {}: {}",
+                command[0].to_string().quote(),
+                e
+            )
+        });
 
     if pstatus.success() {
         0

@@ -5,16 +5,14 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, App, Arg, ArgMatches};
 use std::fs::File;
-use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Result, Write};
+use std::io::{self, stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::path::Path;
 use std::str::FromStr;
 use strum_macros::{AsRefStr, EnumString};
 use uucore::display::Quotable;
+use uucore::error::{FromIo, UResult, USimpleError};
 
 static ABOUT: &str = "Report or omit repeated lines.";
 pub mod options {
@@ -55,36 +53,45 @@ struct Uniq {
     zero_terminated: bool,
 }
 
+macro_rules! write_line_terminator {
+    ($writer:expr, $line_terminator:expr) => {
+        $writer
+            .write_all(&[$line_terminator])
+            .map_err_context(|| "Could not write line terminator".to_string())
+    };
+}
+
 impl Uniq {
     pub fn print_uniq<R: Read, W: Write>(
         &self,
         reader: &mut BufReader<R>,
         writer: &mut BufWriter<W>,
-    ) {
+    ) -> UResult<()> {
         let mut first_line_printed = false;
         let mut group_count = 1;
         let line_terminator = self.get_line_terminator();
         let mut lines = reader.split(line_terminator).map(get_line_string);
         let mut line = match lines.next() {
-            Some(l) => l,
-            None => return,
+            Some(l) => l?,
+            None => return Ok(()),
         };
 
         // compare current `line` with consecutive lines (`next_line`) of the input
         // and if needed, print `line` based on the command line options provided
         for next_line in lines {
+            let next_line = next_line?;
             if self.cmp_keys(&line, &next_line) {
                 if (group_count == 1 && !self.repeats_only)
                     || (group_count > 1 && !self.uniques_only)
                 {
-                    self.print_line(writer, &line, group_count, first_line_printed);
+                    self.print_line(writer, &line, group_count, first_line_printed)?;
                     first_line_printed = true;
                 }
                 line = next_line;
                 group_count = 1;
             } else {
                 if self.all_repeated {
-                    self.print_line(writer, &line, group_count, first_line_printed);
+                    self.print_line(writer, &line, group_count, first_line_printed)?;
                     first_line_printed = true;
                     line = next_line;
                 }
@@ -92,14 +99,15 @@ impl Uniq {
             }
         }
         if (group_count == 1 && !self.repeats_only) || (group_count > 1 && !self.uniques_only) {
-            self.print_line(writer, &line, group_count, first_line_printed);
+            self.print_line(writer, &line, group_count, first_line_printed)?;
             first_line_printed = true;
         }
         if (self.delimiters == Delimiters::Append || self.delimiters == Delimiters::Both)
             && first_line_printed
         {
-            crash_if_err!(1, writer.write_all(&[line_terminator]));
+            write_line_terminator!(writer, line_terminator)?;
         }
+        Ok(())
     }
 
     fn skip_fields<'a>(&self, line: &'a str) -> &'a str {
@@ -191,41 +199,43 @@ impl Uniq {
         line: &str,
         count: usize,
         first_line_printed: bool,
-    ) {
+    ) -> UResult<()> {
         let line_terminator = self.get_line_terminator();
 
         if self.should_print_delimiter(count, first_line_printed) {
-            crash_if_err!(1, writer.write_all(&[line_terminator]));
+            write_line_terminator!(writer, line_terminator)?;
         }
 
-        crash_if_err!(
-            1,
-            if self.show_counts {
-                writer.write_all(format!("{:7} {}", count, line).as_bytes())
-            } else {
-                writer.write_all(line.as_bytes())
-            }
-        );
-        crash_if_err!(1, writer.write_all(&[line_terminator]));
+        if self.show_counts {
+            writer.write_all(format!("{:7} {}", count, line).as_bytes())
+        } else {
+            writer.write_all(line.as_bytes())
+        }
+        .map_err_context(|| "Failed to write line".to_string())?;
+
+        write_line_terminator!(writer, line_terminator)
     }
 }
 
-fn get_line_string(io_line: Result<Vec<u8>>) -> String {
-    let line_bytes = crash_if_err!(1, io_line);
-    crash_if_err!(1, String::from_utf8(line_bytes))
+fn get_line_string(io_line: io::Result<Vec<u8>>) -> UResult<String> {
+    let line_bytes = io_line.map_err_context(|| "failed to split lines".to_string())?;
+    String::from_utf8(line_bytes)
+        .map_err(|e| USimpleError::new(1, format!("failed to convert line to utf8: {}", e)))
 }
 
-fn opt_parsed<T: FromStr>(opt_name: &str, matches: &ArgMatches) -> Option<T> {
-    matches.value_of(opt_name).map(|arg_str| {
-        let opt_val: Option<T> = arg_str.parse().ok();
-        opt_val.unwrap_or_else(|| {
-            crash!(
+fn opt_parsed<T: FromStr>(opt_name: &str, matches: &ArgMatches) -> UResult<Option<T>> {
+    Ok(match matches.value_of(opt_name) {
+        Some(arg_str) => Some(arg_str.parse().map_err(|_| {
+            USimpleError::new(
                 1,
-                "Invalid argument for {}: {}",
-                opt_name,
-                arg_str.maybe_quote()
+                format!(
+                    "Invalid argument for {}: {}",
+                    opt_name,
+                    arg_str.maybe_quote()
+                ),
             )
-        })
+        })?),
+        None => None,
     })
 }
 
@@ -245,7 +255,8 @@ fn get_long_usage() -> String {
     )
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let long_usage = get_long_usage();
 
@@ -264,8 +275,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         1 => (files[0].clone(), "-".to_owned()),
         2 => (files[0].clone(), files[1].clone()),
         _ => {
-            // Cannot happen as clap will fail earlier
-            crash!(1, "Extra operand: {}", files[2]);
+            unreachable!() // Cannot happen as clap will fail earlier
         }
     };
 
@@ -277,18 +287,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             || matches.is_present(options::GROUP),
         delimiters: get_delimiter(&matches),
         show_counts: matches.is_present(options::COUNT),
-        skip_fields: opt_parsed(options::SKIP_FIELDS, &matches),
-        slice_start: opt_parsed(options::SKIP_CHARS, &matches),
-        slice_stop: opt_parsed(options::CHECK_CHARS, &matches),
+        skip_fields: opt_parsed(options::SKIP_FIELDS, &matches)?,
+        slice_start: opt_parsed(options::SKIP_CHARS, &matches)?,
+        slice_stop: opt_parsed(options::CHECK_CHARS, &matches)?,
         ignore_case: matches.is_present(options::IGNORE_CASE),
         zero_terminated: matches.is_present(options::ZERO_TERMINATED),
     };
     uniq.print_uniq(
-        &mut open_input_file(in_file_name),
-        &mut open_output_file(out_file_name),
-    );
-
-    0
+        &mut open_input_file(in_file_name)?,
+        &mut open_output_file(out_file_name)?,
+    )
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -388,7 +396,7 @@ fn get_delimiter(matches: &ArgMatches) -> Delimiters {
         .value_of(options::ALL_REPEATED)
         .or_else(|| matches.value_of(options::GROUP));
     if let Some(delimiter_arg) = value {
-        crash_if_err!(1, Delimiters::from_str(delimiter_arg))
+        Delimiters::from_str(delimiter_arg).unwrap() // All possible values for ALL_REPEATED are Delimiters (of type `&str`)
     } else if matches.is_present(options::GROUP) {
         Delimiters::Separate
     } else {
@@ -396,26 +404,26 @@ fn get_delimiter(matches: &ArgMatches) -> Delimiters {
     }
 }
 
-fn open_input_file(in_file_name: String) -> BufReader<Box<dyn Read + 'static>> {
+fn open_input_file(in_file_name: String) -> UResult<BufReader<Box<dyn Read + 'static>>> {
     let in_file = if in_file_name == "-" {
         Box::new(stdin()) as Box<dyn Read>
     } else {
         let path = Path::new(&in_file_name[..]);
-        let in_file = File::open(&path);
-        let r = crash_if_err!(1, in_file);
-        Box::new(r) as Box<dyn Read>
+        let in_file = File::open(&path)
+            .map_err_context(|| format!("Could not open {}", in_file_name.maybe_quote()))?;
+        Box::new(in_file) as Box<dyn Read>
     };
-    BufReader::new(in_file)
+    Ok(BufReader::new(in_file))
 }
 
-fn open_output_file(out_file_name: String) -> BufWriter<Box<dyn Write + 'static>> {
+fn open_output_file(out_file_name: String) -> UResult<BufWriter<Box<dyn Write + 'static>>> {
     let out_file = if out_file_name == "-" {
         Box::new(stdout()) as Box<dyn Write>
     } else {
         let path = Path::new(&out_file_name[..]);
-        let in_file = File::create(&path);
-        let w = crash_if_err!(1, in_file);
-        Box::new(w) as Box<dyn Write>
+        let out_file = File::create(&path)
+            .map_err_context(|| format!("Could not create {}", out_file_name.maybe_quote()))?;
+        Box::new(out_file) as Box<dyn Write>
     };
-    BufWriter::new(out_file)
+    Ok(BufWriter::new(out_file))
 }

@@ -611,8 +611,16 @@ fn digest_reader<T: Read>(
     // If `binary` is `false` and the operating system is Windows, then
     // `DigestWriter` replaces "\r\n" with "\n" before it writes the
     // bytes into `digest`. Otherwise, it just inserts the bytes as-is.
+    //
+    // In order to support replacing "\r\n", we must call `finalize()`
+    // in order to support the possibility that the last character read
+    // from the reader was "\r". (This character gets buffered by
+    // `DigestWriter` and only written if the following character is
+    // "\n". But when "\r" is the last character read, we need to force
+    // it to be written.)
     let mut digest_writer = DigestWriter::new(digest, binary);
     std::io::copy(reader, &mut digest_writer)?;
+    digest_writer.finalize();
 
     if digest.output_bits() > 0 {
         Ok(digest.result_str())

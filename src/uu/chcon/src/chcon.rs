@@ -707,7 +707,7 @@ fn root_dev_ino_warn(dir_name: &Path) {
 // When a program like chgrp performs a recursive traversal that requires traversing symbolic links,
 // it is *not* a problem.
 // However, when invoked with "-P -R", it deserves a warning.
-// The fts_options parameter records the options that control this aspect of fts's behavior,
+// The fts_options parameter records the options that control this aspect of fts behavior,
 // so test that.
 fn cycle_warning_required(fts_options: c_int, entry: &fts::EntryRef) -> bool {
     // When dereferencing no symlinks, or when dereferencing only those listed on the command line

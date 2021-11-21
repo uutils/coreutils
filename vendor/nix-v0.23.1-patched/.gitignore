@@ -1,0 +1,10 @@
+syntax: glob
+Cargo.lock
+target
+*.diff
+*.rej
+*.orig
+.*.swn
+.*.swo
+.*.swp
+*.a

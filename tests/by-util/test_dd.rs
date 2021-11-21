@@ -28,9 +28,7 @@ macro_rules! fixture_path {
 macro_rules! assert_fixture_exists {
     ($fname:expr) => {{
         let fpath = fixture_path!($fname);
-        if !fpath.exists() {
-            panic!("Fixture missing: {:?}", fpath);
-        }
+        assert!(fpath.exists(), "Fixture missing: {:?}", fpath);
     }};
 }
 
@@ -38,9 +36,7 @@ macro_rules! assert_fixture_exists {
 macro_rules! assert_fixture_not_exists {
     ($fname:expr) => {{
         let fpath = PathBuf::from(format!("./fixtures/dd/{}", $fname));
-        if fpath.exists() {
-            panic!("Fixture present: {:?}", fpath);
-        }
+        assert!(!fpath.exists(), "Fixture present: {:?}", fpath);
     }};
 }
 
@@ -361,7 +357,7 @@ fn test_fullblock() {
             of!(&tmp_fn),
             "bs=128M",
             // Note: In order for this test to actually test iflag=fullblock, the bs=VALUE
-            // must be big enough to 'overwhelm' urandom's store of bytes.
+            // must be big enough to 'overwhelm' the urandom store of bytes.
             // Try executing 'dd if=/dev/urandom bs=128M count=1' (i.e without iflag=fullblock).
             // The stats should contain the line: '0+1 records in' indicating a partial read.
             // Since my system only copies 32 MiB without fullblock, I expect 128 MiB to be

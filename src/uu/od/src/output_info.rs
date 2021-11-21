@@ -145,13 +145,12 @@ impl OutputInfo {
         byte_size_block: usize,
         print_width_block: usize,
     ) -> [usize; MAX_BYTES_PER_UNIT] {
-        if byte_size_block > MAX_BYTES_PER_UNIT {
-            panic!(
-                "{}-bits types are unsupported. Current max={}-bits.",
-                8 * byte_size_block,
-                8 * MAX_BYTES_PER_UNIT
-            );
-        }
+        assert!(
+            byte_size_block <= MAX_BYTES_PER_UNIT,
+            "{}-bits types are unsupported. Current max={}-bits.",
+            8 * byte_size_block,
+            8 * MAX_BYTES_PER_UNIT
+        );
         let mut spacing = [0; MAX_BYTES_PER_UNIT];
 
         let mut byte_size = sf.byte_size();
