@@ -8,14 +8,12 @@
 
 // spell-checker:ignore (ToDO) corasick memchr
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, App, Arg};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::iter::repeat;
 use std::path::Path;
+use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::InvalidEncodingHandling;
 
 mod helper;
@@ -83,7 +81,8 @@ pub mod options {
     pub const NUMBER_WIDTH: &str = "number-width";
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
@@ -109,11 +108,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     // program if some options could not successfully be parsed.
     let parse_errors = helper::parse_options(&mut settings, &matches);
     if !parse_errors.is_empty() {
-        show_error!("Invalid arguments supplied.");
-        for message in &parse_errors {
-            println!("{}", message);
-        }
-        return 1;
+        return Err(USimpleError::new(
+            1,
+            format!("Invalid arguments supplied.\n{}", parse_errors.join("\n")),
+        ));
     }
 
     let mut read_stdin = false;
@@ -130,16 +128,16 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             continue;
         }
         let path = Path::new(file);
-        let reader = File::open(path).unwrap();
+        let reader = File::open(path).map_err_context(|| file.to_string())?;
         let mut buffer = BufReader::new(reader);
-        nl(&mut buffer, &settings);
+        nl(&mut buffer, &settings)?;
     }
 
     if read_stdin {
         let mut buffer = BufReader::new(stdin());
-        nl(&mut buffer, &settings);
+        nl(&mut buffer, &settings)?;
     }
-    0
+    Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -227,7 +225,7 @@ pub fn uu_app() -> App<'static, 'static> {
 }
 
 // nl implements the main functionality for an individual buffer.
-fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
+fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
     let regexp: regex::Regex = regex::Regex::new(r".?").unwrap();
     let mut line_no = settings.starting_line_number;
     // The current line number's width as a string. Using to_string is inefficient
@@ -248,7 +246,8 @@ fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
         _ => &regexp,
     };
     let mut line_filter: fn(&str, &regex::Regex) -> bool = pass_regex;
-    for mut l in reader.lines().map(|r| r.unwrap()) {
+    for l in reader.lines() {
+        let mut l = l.map_err_context(|| "could not read line".to_string())?;
         // Sanitize the string. We want to print the newline ourselves.
         if l.ends_with('\n') {
             l.pop();
@@ -372,6 +371,7 @@ fn nl<T: Read>(reader: &mut BufReader<T>, settings: &Settings) {
             line_no_width += 1;
         }
     }
+    Ok(())
 }
 
 fn pass_regex(line: &str, re: &regex::Regex) -> bool {

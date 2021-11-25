@@ -7,13 +7,12 @@
 
 // spell-checker:ignore (ToDOs) ncount routput
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, App, Arg};
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Read};
 use std::path::Path;
+use uucore::display::Quotable;
+use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::InvalidEncodingHandling;
 
 const TAB_WIDTH: usize = 8;
@@ -30,7 +29,8 @@ mod options {
     pub const FILE: &str = "file";
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
@@ -46,10 +46,12 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     };
 
     let width = match poss_width {
-        Some(inp_width) => match inp_width.parse::<usize>() {
-            Ok(width) => width,
-            Err(e) => crash!(1, "illegal width value (\"{}\"): {}", inp_width, e),
-        },
+        Some(inp_width) => inp_width.parse::<usize>().map_err(|e| {
+            USimpleError::new(
+                1,
+                format!("illegal width value ({}): {}", inp_width.quote(), e),
+            )
+        })?,
         None => 80,
     };
 
@@ -58,9 +60,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         None => vec!["-".to_owned()],
     };
 
-    fold(files, bytes, spaces, width);
-
-    0
+    fold(files, bytes, spaces, width)
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -110,7 +110,7 @@ fn handle_obsolete(args: &[String]) -> (Vec<String>, Option<String>) {
     (args.to_vec(), None)
 }
 
-fn fold(filenames: Vec<String>, bytes: bool, spaces: bool, width: usize) {
+fn fold(filenames: Vec<String>, bytes: bool, spaces: bool, width: usize) -> UResult<()> {
     for filename in &filenames {
         let filename: &str = filename;
         let mut stdin_buf;
@@ -119,16 +119,17 @@ fn fold(filenames: Vec<String>, bytes: bool, spaces: bool, width: usize) {
             stdin_buf = stdin();
             &mut stdin_buf as &mut dyn Read
         } else {
-            file_buf = crash_if_err!(1, File::open(Path::new(filename)));
+            file_buf = File::open(Path::new(filename)).map_err_context(|| filename.to_string())?;
             &mut file_buf as &mut dyn Read
         });
 
         if bytes {
-            fold_file_bytewise(buffer, spaces, width);
+            fold_file_bytewise(buffer, spaces, width)?;
         } else {
-            fold_file(buffer, spaces, width);
+            fold_file(buffer, spaces, width)?;
         }
     }
+    Ok(())
 }
 
 /// Fold `file` to fit `width` (number of columns), counting all characters as
@@ -139,11 +140,15 @@ fn fold(filenames: Vec<String>, bytes: bool, spaces: bool, width: usize) {
 /// to all other characters in the stream.
 ///
 ///  If `spaces` is `true`, attempt to break lines at whitespace boundaries.
-fn fold_file_bytewise<T: Read>(mut file: BufReader<T>, spaces: bool, width: usize) {
+fn fold_file_bytewise<T: Read>(mut file: BufReader<T>, spaces: bool, width: usize) -> UResult<()> {
     let mut line = String::new();
 
     loop {
-        if let Ok(0) = file.read_line(&mut line) {
+        if file
+            .read_line(&mut line)
+            .map_err_context(|| "failed to read line".to_string())?
+            == 0
+        {
             break;
         }
 
@@ -190,6 +195,8 @@ fn fold_file_bytewise<T: Read>(mut file: BufReader<T>, spaces: bool, width: usiz
 
         line.truncate(0);
     }
+
+    Ok(())
 }
 
 /// Fold `file` to fit `width` (number of columns).
@@ -200,7 +207,7 @@ fn fold_file_bytewise<T: Read>(mut file: BufReader<T>, spaces: bool, width: usiz
 ///
 /// If `spaces` is `true`, attempt to break lines at whitespace boundaries.
 #[allow(unused_assignments)]
-fn fold_file<T: Read>(mut file: BufReader<T>, spaces: bool, width: usize) {
+fn fold_file<T: Read>(mut file: BufReader<T>, spaces: bool, width: usize) -> UResult<()> {
     let mut line = String::new();
     let mut output = String::new();
     let mut col_count = 0;
@@ -230,7 +237,11 @@ fn fold_file<T: Read>(mut file: BufReader<T>, spaces: bool, width: usize) {
     }
 
     loop {
-        if let Ok(0) = file.read_line(&mut line) {
+        if file
+            .read_line(&mut line)
+            .map_err_context(|| "failed to read line".to_string())?
+            == 0
+        {
             break;
         }
 
@@ -281,4 +292,6 @@ fn fold_file<T: Read>(mut file: BufReader<T>, spaces: bool, width: usize) {
 
         line.truncate(0);
     }
+
+    Ok(())
 }
