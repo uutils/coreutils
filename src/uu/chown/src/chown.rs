@@ -183,7 +183,7 @@ fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
 
     let uid = if !user.is_empty() {
         Some(match Passwd::locate(user) {
-            Ok(u) => u.uid(), // We have been able to get the uid
+            Ok(u) => u.uid, // We have been able to get the uid
             Err(_) =>
             // we have NOT been able to find the uid
             // but we could be in the case where we have user.group
@@ -208,7 +208,7 @@ fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
         Some(
             Group::locate(group)
                 .map_err(|_| USimpleError::new(1, format!("invalid group: {}", spec.quote())))?
-                .gid(),
+                .gid,
         )
     } else {
         None
