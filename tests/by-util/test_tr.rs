@@ -291,7 +291,7 @@ fn test_interpret_backslash_at_eol_literally() {
 #[cfg(not(target_os = "freebsd"))]
 fn test_more_than_2_sets() {
     new_ucmd!()
-        .args(&["'abcdefgh'", "'a", "'b'"])
+        .args(&["'abcdef'", "'a'", "'b'"])
         .pipe_in("hello world")
         .fails();
 }

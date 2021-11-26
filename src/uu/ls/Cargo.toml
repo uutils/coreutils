@@ -40,5 +40,4 @@ path = "src/main.rs"
 feat_selinux = ["selinux"]
 
 [package.metadata.cargo-udeps.ignore]
-# Necessary for "make all"
 normal = ["uucore_procs"]

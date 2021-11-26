@@ -1166,13 +1166,13 @@ pub fn host_name_for(util_name: &str) -> Cow<str> {
     {
         // make call to `host_name_for` idempotent
         if util_name.starts_with('g') && util_name != "groups" {
-            return util_name.into();
+            util_name.into()
         } else {
-            return format!("g{}", util_name).into();
+            format!("g{}", util_name).into()
         }
     }
     #[cfg(target_os = "linux")]
-    return util_name.into();
+    util_name.into()
 }
 
 // GNU coreutils version 8.32 is the reference version since it is the latest version and the

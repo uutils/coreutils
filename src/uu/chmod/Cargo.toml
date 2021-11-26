@@ -24,3 +24,6 @@ walkdir = "2.2"
 [[bin]]
 name = "chmod"
 path = "src/main.rs"
+
+[package.metadata.cargo-udeps.ignore]
+normal = ["uucore_procs"]

@@ -25,3 +25,6 @@ winapi = { version="0.3", features=["sysinfoapi", "winsock2"] }
 [[bin]]
 name = "hostname"
 path = "src/main.rs"
+
+[package.metadata.cargo-udeps.ignore]
+normal = ["uucore_procs", "winapi"]

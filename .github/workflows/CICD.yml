@@ -2,10 +2,10 @@ name: CICD
 
 # spell-checker:ignore (acronyms) CICD MSVC musl
 # spell-checker:ignore (env/flags) Awarnings Ccodegen Coverflow Cpanic RUSTDOCFLAGS RUSTFLAGS Zpanic
-# spell-checker:ignore (jargon) SHAs deps softprops toolchain
+# spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain
 # spell-checker:ignore (names) CodeCOV MacOS MinGW Peltoche rivy
 # spell-checker:ignore (shell/tools) choco clippy dmake dpkg esac fakeroot gmake grcov halium lcov libssl mkdir popd printf pushd rustc rustfmt rustup shopt xargs
-# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils gnueabihf issuecomment maint nullglob onexitbegin onexitend runtest tempfile testsuite uutils
+# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils gnueabihf issuecomment maint nullglob onexitbegin onexitend pell runtest tempfile testsuite uutils
 
 # ToDO: [2021-06; rivy] change from `cargo-tree` to `cargo tree` once MSRV is >= 1.45
 
@@ -14,18 +14,27 @@ env:
   PROJECT_DESC: "Core universal (cross-platform) utilities"
   PROJECT_AUTH: "uutils"
   RUST_MIN_SRV: "1.47.0" ## MSRV v1.47.0
+  # * style job configuration
+  STYLE_FAIL_ON_FAULT: true ## (bool) fail the build if a style job contains a fault (error or warning); may be overridden on a per-job basis
 
 on: [push, pull_request]
 
 jobs:
-  code_deps:
-    name: Style/dependencies
+  style_deps:
+    ## ToDO: [2021-11-10; rivy] 'Style/deps' needs more informative output and better integration of results into the GHA dashboard
+    name: Style/deps
     runs-on: ${{ matrix.job.os }}
+    # env:
+    #   STYLE_FAIL_ON_FAULT: false # overrides workflow default
     strategy:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest , features: feat_os_unix }
+          # note: `cargo-udeps` panics when processing stdbuf/libstdbuf ("uu_stdbuf_libstdbuf"); either b/c of the 'cpp' crate or 'libstdbuf' itself
+          #   ... b/c of the panic, a more limited feature set is tested (though only excluding `stdbuf`)
+          - { os: ubuntu-latest  , features: "feat_Tier1,feat_require_unix,feat_require_unix_utmpx" }
+          - { os: macos-latest   , features: "feat_Tier1,feat_require_unix,feat_require_unix_utmpx" }
+          - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v2
     - name: Initialize workflow variables
@@ -34,27 +43,50 @@ jobs:
       run: |
         ## VARs setup
         outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
+        # failure mode
+        unset FAIL_ON_FAULT ; case '${{ env.STYLE_FAIL_ON_FAULT }}' in
+          ''|0|f|false|n|no|off) FAULT_TYPE=warning ;;
+          *) FAIL_ON_FAULT=true ; FAULT_TYPE=error ;;
+        esac;
+        outputs FAIL_ON_FAULT FAULT_TYPE
         # target-specific options
         # * CARGO_FEATURES_OPTION
         CARGO_FEATURES_OPTION='' ;
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
         outputs CARGO_FEATURES_OPTION
+    ## note: requires 'nightly' toolchain b/c `cargo-udeps` uses the `rustc` '-Z save-analysis' option
+    ## * ... ref: <https://github.com/est31/cargo-udeps/issues/73>
     - name: Install `rust` toolchain
       uses: actions-rs/toolchain@v1
       with:
-        toolchain: stable
+        toolchain: nightly
         default: true
-        profile: minimal # minimal component installation (ie, no documentation)
-    - name: "`cargo update` testing"
+        profile: minimal
+    - name: Install `cargo-udeps`
+      uses: actions-rs/install@v0.1
+      with:
+        crate: cargo-udeps
+        version: latest
+        use-tool-cache: false
+      env:
+        RUSTUP_TOOLCHAIN: stable
+    - name: Detect unused dependencies
       shell: bash
       run: |
-        ## `cargo update` testing
-        # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-        cargo fetch --locked --quiet || { echo "::error file=Cargo.lock::'Cargo.lock' file requires update (use \`cargo +${{ env.RUST_MIN_SRV }} update\`)" ; exit 1 ; }
+        ## Detect unused dependencies
+        unset fault
+        fault_type="${{ steps.vars.outputs.FAULT_TYPE }}"
+        fault_prefix=$(echo "$fault_type" | tr '[:lower:]' '[:upper:]')
+        #
+        cargo +nightly udeps ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --all-targets &> udeps.log || cat udeps.log
+        grep --ignore-case "all deps seem to have been used" udeps.log || { printf "%s\n" "::${fault_type} ::${fault_prefix}: \`cargo udeps\`: style violation (unused dependency found)" ; fault=true ; }
+        if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
 
-  code_format:
+  style_format:
     name: Style/format
     runs-on: ${{ matrix.job.os }}
+    # env:
+    #   STYLE_FAIL_ON_FAULT: false # overrides workflow default
     strategy:
       fail-fast: false
       matrix:
@@ -68,6 +100,12 @@ jobs:
       run: |
         ## VARs setup
         outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
+        # failure mode
+        unset FAIL_ON_FAULT ; case '${{ env.STYLE_FAIL_ON_FAULT }}' in
+          ''|0|f|false|n|no|off) FAULT_TYPE=warning ;;
+          *) FAIL_ON_FAULT=true ; FAULT_TYPE=error ;;
+        esac;
+        outputs FAIL_ON_FAULT FAULT_TYPE
         # target-specific options
         # * CARGO_FEATURES_OPTION
         CARGO_FEATURES_OPTION='' ;
@@ -80,38 +118,147 @@ jobs:
         default: true
         profile: minimal # minimal component installation (ie, no documentation)
         components: rustfmt
-    - name: "`fmt` testing"
+    - name: "`cargo fmt` testing"
       shell: bash
       run: |
-        ## `fmt` testing
-        # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-        S=$(cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s\n" "$S" | sed -E -n -e "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::error file=\1,line=\2::ERROR: \`cargo fmt\`: style violation (file:'\1', line:\2; use \`cargo fmt \"\1\"\`)/p" ; exit 1 ; }
-    - name: "`fmt` testing of tests"
+        ## `cargo fmt` testing
+        unset fault
+        fault_type="${{ steps.vars.outputs.FAULT_TYPE }}"
+        fault_prefix=$(echo "$fault_type" | tr '[:lower:]' '[:upper:]')
+        # * convert any errors/warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
+        S=$(cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s\n" "$S" | sed -E -n -e "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::${fault_type} file=\1,line=\2::${fault_prefix}: \`cargo fmt\`: style violation (file:'\1', line:\2; use \`cargo fmt -- \"\1\"\`)/p" ; fault=true ; }
+        if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
+    - name: "`cargo fmt` testing of integration tests"
       if: success() || failure() # run regardless of prior step success/failure
       shell: bash
       run: |
-        ## `fmt` testing of tests
-        # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-        S=$(find tests -name "*.rs" -print0 | xargs -0 cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s\n" "$S" | sed -E -n "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::error file=\1,line=\2::ERROR: \`cargo fmt\`: style violation (file:'\1', line:\2; use \`cargo fmt \"\1\"\`)/p" ; exit 1 ; }
+        ## `cargo fmt` testing of integration tests
+        unset fault
+        fault_type="${{ steps.vars.outputs.FAULT_TYPE }}"
+        fault_prefix=$(echo "$fault_type" | tr '[:lower:]' '[:upper:]')
+        # 'tests' is the standard/usual integration test directory
+        if [ -d tests ]; then
+          # * convert any errors/warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
+          S=$(find tests -name "*.rs" -print0 | xargs -0 cargo fmt -- --check) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s\n" "$S" | sed -E -n "s/^Diff[[:space:]]+in[[:space:]]+${PWD//\//\\/}\/(.*)[[:space:]]+at[[:space:]]+[^0-9]+([0-9]+).*$/::${fault_type} file=\1,line=\2::${fault_prefix}: \`cargo fmt\`: style violation (file:'\1', line:\2; use \`cargo fmt \"\1\"\`)/p" ; fault=true ; }
+        fi
+        if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
 
-  code_lint:
+  style_lint:
     name: Style/lint
     runs-on: ${{ matrix.job.os }}
+    # env:
+    #   STYLE_FAIL_ON_FAULT: false # overrides workflow default
     strategy:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest }
+          - { os: ubuntu-latest  , features: feat_os_unix }
           - { os: macos-latest   , features: feat_os_macos }
           - { os: windows-latest , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v2
+    - name: Initialize workflow variables
+      id: vars
+      shell: bash
+      run: |
+        ## VARs setup
+        outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
+        # failure mode
+        unset FAIL_ON_FAULT ; case '${{ env.STYLE_FAIL_ON_FAULT }}' in
+          ''|0|f|false|n|no|off) FAULT_TYPE=warning ;;
+          *) FAIL_ON_FAULT=true ; FAULT_TYPE=error ;;
+        esac;
+        outputs FAIL_ON_FAULT FAULT_TYPE
+        # target-specific options
+        # * CARGO_FEATURES_OPTION
+        CARGO_FEATURES_OPTION='--all-features' ;
+        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
+        outputs CARGO_FEATURES_OPTION
+        # * determine sub-crate utility list
+        UTILITY_LIST="$(./util/show-utils.sh ${CARGO_FEATURES_OPTION})"
+        echo UTILITY_LIST=${UTILITY_LIST}
+        CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo "-puu_${u}"; done;)"
+        outputs CARGO_UTILITY_LIST_OPTIONS
     - name: Install/setup prerequisites
       shell: bash
       run: |
         case '${{ matrix.job.os }}' in
           macos-latest) brew install coreutils ;; # needed for show-utils.sh
         esac
+    - name: Install `rust` toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        default: true
+        profile: minimal # minimal component installation (ie, no documentation)
+        components: clippy
+    - name: "`cargo clippy` lint testing"
+      shell: bash
+      run: |
+        ## `cargo clippy` lint testing
+        unset fault
+        fault_type="${{ steps.vars.outputs.FAULT_TYPE }}"
+        fault_prefix=$(echo "$fault_type" | tr '[:lower:]' '[:upper:]')
+        # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
+        S=$(cargo clippy --all-targets ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_UTILITY_LIST_OPTIONS }} -- -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+(.*):([0-9]+):([0-9]+).*$/::${fault_type} file=\2,line=\3,col=\4::${fault_prefix}: \`cargo clippy\`: \1 (file:'\2', line:\3)/p;" -e '}' ; fault=true ; }
+        if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
+
+  style_spellcheck:
+    name: Style/spelling
+    runs-on: ${{ matrix.job.os }}
+    # env:
+    #   STYLE_FAIL_ON_FAULT: false # overrides workflow default
+    strategy:
+      matrix:
+        job:
+          - { os: ubuntu-latest , features: feat_os_unix }
+    steps:
+    - uses: actions/checkout@v2
+    - name: Initialize workflow variables
+      id: vars
+      shell: bash
+      run: |
+        ## VARs setup
+        outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
+        # failure mode
+        unset FAIL_ON_FAULT ; case '${{ env.STYLE_FAIL_ON_FAULT }}' in
+          ''|0|f|false|n|no|off) FAULT_TYPE=warning ;;
+          *) FAIL_ON_FAULT=true ; FAULT_TYPE=error ;;
+        esac;
+        outputs FAIL_ON_FAULT FAULT_TYPE
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        ## Install/setup prerequisites
+        # * pin installed cspell to v4.2.8 (cspell v5+ is broken for NodeJS < v12)
+        ## maint: [2021-11-10; rivy] `cspell` version may be advanced to v5 when used with NodeJS >= v12
+        sudo apt-get -y update ; sudo apt-get -y install npm ; sudo npm install cspell@4.2.8 -g ;
+    - name: Run `cspell`
+      shell: bash
+      run: |
+        ## Run `cspell`
+        unset fault
+        fault_type="${{ steps.vars.outputs.FAULT_TYPE }}"
+        fault_prefix=$(echo "$fault_type" | tr '[:lower:]' '[:upper:]')
+        # * find cspell configuration ; note: avoid quotes around ${cfg_file} b/c `cspell` (v4) doesn't correctly dequote the config argument (or perhaps a subshell expansion issue?)
+        cfg_files=($(shopt -s nullglob ; echo {.vscode,.}/{,.}c[sS]pell{.json,.config{.js,.cjs,.json,.yaml,.yml},.yaml,.yml} ;))
+        cfg_file=${cfg_files[0]}
+        unset CSPELL_CFG_OPTION ; if [ -n "$cfg_file" ]; then CSPELL_CFG_OPTION="--config $cfg_file" ; fi
+        # * `cspell`
+        ## maint: [2021-11-10; rivy] the `--no-progress` option for `cspell` is a `cspell` v5+ option
+        # S=$(cspell ${CSPELL_CFG_OPTION} --no-summary --no-progress "**/*") && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n "s/${PWD//\//\\/}\/(.*):(.*):(.*) - (.*)/::${fault_type} file=\1,line=\2,col=\3::${fault_type^^}: \4 (file:'\1', line:\2)/p" ; fault=true ; true ; }
+        S=$(cspell ${CSPELL_CFG_OPTION} --no-summary "**/*") && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n "s/${PWD//\//\\/}\/(.*):(.*):(.*) - (.*)/::${fault_type} file=\1,line=\2,col=\3::${fault_type^^}: \4 (file:'\1', line:\2)/p" ; fault=true ; true ; }
+        if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
+
+  min_version:
+    name: MinRustV # Minimum supported rust version (aka, MinSRV or MSRV)
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      matrix:
+        job:
+          - { os: ubuntu-latest , features: feat_os_unix }
+    steps:
+    - uses: actions/checkout@v2
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -120,57 +267,9 @@ jobs:
         outputs() { step_id="vars"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo ::set-output name=${var}::${!var}; done; }
         # target-specific options
         # * CARGO_FEATURES_OPTION
-        CARGO_FEATURES_OPTION='--all-features' ;
-        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features ${{ matrix.job.features }}' ; fi
+        unset CARGO_FEATURES_OPTION
+        if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
         outputs CARGO_FEATURES_OPTION
-        # * determine sub-crate utility list
-        UTILITY_LIST="$(./util/show-utils.sh ${CARGO_FEATURES_OPTION})"
-        echo UTILITY_LIST=${UTILITY_LIST}
-        CARGO_UTILITY_LIST_OPTIONS="$(for u in ${UTILITY_LIST}; do echo "-puu_${u}"; done;)"
-        outputs CARGO_UTILITY_LIST_OPTIONS
-    - name: Install `rust` toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: nightly
-        default: true
-        profile: minimal # minimal component installation (ie, no documentation)
-        components: clippy
-    - name: "`clippy` lint testing"
-      shell: bash
-      run: |
-        ## `clippy` lint testing
-        # * convert any warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
-        S=$(cargo +nightly clippy --all-targets ${{ steps.vars.outputs.CARGO_UTILITY_LIST_OPTIONS }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -- -D warnings 2>&1) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n -e '/^error:/{' -e "N; s/^error:[[:space:]]+(.*)\\n[[:space:]]+-->[[:space:]]+${PWD//\//\\/}\/(.*):([0-9]+):([0-9]+).*$/::error file=\2,line=\3,col=\4::ERROR: \`cargo clippy\`: \1 (file:'\2', line:\3)/p;" -e '}' ; exit 1 ; }
-
-  code_spellcheck:
-    name: Style/spelling
-    runs-on: ${{ matrix.job.os }}
-    strategy:
-      matrix:
-        job:
-          - { os: ubuntu-latest }
-    steps:
-    - uses: actions/checkout@v2
-    - name: Install/setup prerequisites
-      shell: bash
-      run: |
-        ## Install/setup prerequisites
-        sudo apt-get -y update ; sudo apt-get -y install npm ; sudo npm install cspell -g ;
-    - name: Run `cspell`
-      shell: bash
-      run: |
-        ## Run `cspell`
-        cspell --config .vscode/cSpell.json --no-summary --no-progress "**/*" | sed -E -n "s/${PWD//\//\\/}\/(.*):(.*):(.*) - (.*)/::error file=\1,line=\2,col=\3::ERROR: \4 (file:'\1', line:\2)/p"
-
-  min_version:
-    name: MinRustV # Minimum supported rust version
-    runs-on: ${{ matrix.job.os }}
-    strategy:
-      matrix:
-        job:
-          - { os: ubuntu-latest , features: feat_os_unix }
-    steps:
-    - uses: actions/checkout@v2
     - name: Install `rust` toolchain (v${{ env.RUST_MIN_SRV }})
       uses: actions-rs/toolchain@v1
       with:
@@ -208,25 +307,25 @@ jobs:
         cargo-tree tree -V
         # dependencies
         echo "## dependency list"
-        cargo fetch --locked --quiet
         ## * using the 'stable' toolchain is necessary to avoid "unexpected '--filter-platform'" errors
-        RUSTUP_TOOLCHAIN=stable cargo-tree tree --locked --all --no-dev-dependencies --no-indent --features ${{ matrix.job.features }} | grep -vE "$PWD" | sort --unique
+        RUSTUP_TOOLCHAIN=stable cargo fetch --locked --quiet
+        RUSTUP_TOOLCHAIN=stable cargo-tree tree --all --locked --no-dev-dependencies --no-indent ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} | grep -vE "$PWD" | sort --unique
     - name: Test
       uses: actions-rs/cargo@v1
       with:
         command: test
-        args: --features "feat_os_unix" -p uucore -p coreutils
+        args: ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -p uucore -p coreutils
       env:
-        RUSTFLAGS: '-Awarnings'
+        RUSTFLAGS: "-Awarnings"
 
-  build_makefile:
-    name: Build/Makefile
+  deps:
+    name: Dependencies
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest }
+          - { os: ubuntu-latest , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v2
     - name: Install `rust` toolchain
@@ -235,11 +334,35 @@ jobs:
         toolchain: stable
         default: true
         profile: minimal # minimal component installation (ie, no documentation)
+    - name: "`cargo update` testing"
+      shell: bash
+      run: |
+        ## `cargo update` testing
+        # * convert any errors/warnings to GHA UI annotations; ref: <https://help.github.com/en/actions/reference/workflow-commands-for-github-actions#setting-a-warning-message>
+        cargo fetch --locked --quiet || { echo "::error file=Cargo.lock::'Cargo.lock' file requires update (use \`cargo +${{ env.RUST_MIN_SRV }} update\`)" ; exit 1 ; }
+
+  build_makefile:
+    name: Build/Makefile
+    needs: [ min_version, deps ]
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: ubuntu-latest , features: feat_os_unix }
+    steps:
+    - uses: actions/checkout@v2
     - name: Install/setup prerequisites
       shell: bash
       run: |
         ## Install/setup prerequisites
         sudo apt-get -y update ; sudo apt-get -y install python3-sphinx ;
+    - name: Install `rust` toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        default: true
+        profile: minimal # minimal component installation (ie, no documentation)
     - name: "`make build`"
       shell: bash
       run: |
@@ -251,13 +374,14 @@ jobs:
 
   build:
     name: Build
+    needs: [ min_version, deps ]
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
       matrix:
         job:
-          # { os, target, cargo-options, features, use-cross, toolchain }
-          - { os: ubuntu-latest  , target: arm-unknown-linux-gnueabihf , features: feat_os_unix_gnueabihf , use-cross: use-cross }
+          # { os , target , cargo-options , features , use-cross , toolchain }
+          - { os: ubuntu-latest  , target: arm-unknown-linux-gnueabihf, features: feat_os_unix_gnueabihf, use-cross: use-cross, }
           - { os: ubuntu-latest  , target: aarch64-unknown-linux-gnu   , features: feat_os_unix_gnueabihf , use-cross: use-cross }
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: feat_os_unix           , use-cross: use-cross }
           # - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: feat_selinux           , use-cross: use-cross }
@@ -270,21 +394,10 @@ jobs:
           - { os: macos-latest   , target: x86_64-apple-darwin         , features: feat_os_macos }
           - { os: windows-latest , target: i686-pc-windows-gnu         , features: feat_os_windows }
           - { os: windows-latest , target: i686-pc-windows-msvc        , features: feat_os_windows }
-          - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows }  ## note: requires rust >= 1.43.0 to link correctly
+          - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows } ## note: requires rust >= 1.43.0 to link correctly
           - { os: windows-latest , target: x86_64-pc-windows-msvc      , features: feat_os_windows }
     steps:
     - uses: actions/checkout@v2
-    - name: Install/setup prerequisites
-      shell: bash
-      run: |
-        ## Install/setup prerequisites
-        case '${{ matrix.job.target }}' in
-          arm-unknown-linux-gnueabihf) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf ;;
-          aarch64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu ;;
-        esac
-        case '${{ matrix.job.os }}' in
-          macos-latest) brew install coreutils ;; # needed for testing
-        esac
     - name: Initialize workflow variables
       id: vars
       shell: bash
@@ -373,6 +486,17 @@ jobs:
           *-pc-windows-msvc) STRIP="" ;;
         esac;
         outputs STRIP
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        ## Install/setup prerequisites
+        case '${{ matrix.job.target }}' in
+          arm-unknown-linux-gnueabihf) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf ;;
+          aarch64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu ;;
+        esac
+        case '${{ matrix.job.os }}' in
+          macos-latest) brew install coreutils ;; # needed for testing
+        esac
     - name: Create all needed build/work directories
       shell: bash
       run: |
@@ -380,12 +504,23 @@ jobs:
         mkdir -p '${{ steps.vars.outputs.STAGING }}'
         mkdir -p '${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_BASENAME }}'
         mkdir -p '${{ steps.vars.outputs.STAGING }}/dpkg'
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        ## Install/setup prerequisites
+        case '${{ matrix.job.target }}' in
+          arm-unknown-linux-gnueabihf) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf ;;
+          aarch64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu ;;
+        esac
+        case '${{ matrix.job.os }}' in
+          macos-latest) brew install coreutils ;; # needed for testing
+        esac
     - name: rust toolchain ~ install
       uses: actions-rs/toolchain@v1
-      env:
-        # Override auto-detection of RAM for Rustc install.
-        # https://github.com/rust-lang/rustup/issues/2229#issuecomment-585855925
-        RUSTUP_UNPACK_RAM: "21474836480"
+      # env:
+      #   # Override auto-detection of RAM for Rustc install.
+      #   # https://github.com/rust-lang/rustup/issues/2229#issuecomment-585855925
+      #   RUSTUP_UNPACK_RAM: "21474836480"
       with:
         toolchain: ${{ steps.vars.outputs.TOOLCHAIN }}
         target: ${{ matrix.job.target }}
@@ -502,6 +637,7 @@ jobs:
 
   test_busybox:
     name: Tests/BusyBox test suite
+    needs: [ min_version, deps ]
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: false
@@ -510,16 +646,17 @@ jobs:
           - { os: ubuntu-latest }
     steps:
     - uses: actions/checkout@v2
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        ## Install/setup prerequisites
+        make prepare-busytest
     - name: Install `rust` toolchain
       uses: actions-rs/toolchain@v1
       with:
         toolchain: stable
         default: true
         profile: minimal # minimal component installation (ie, no documentation)
-    - name: Install/setup prerequisites
-      shell: bash
-      run: |
-        make prepare-busytest
     - name: "Run BusyBox test suite"
       shell: bash
       run: |
@@ -532,53 +669,75 @@ jobs:
         if [ $n_fails -gt 0 ] ; then echo "::warning ::${n_fails}+ test failures" ; fi
 
   test_freebsd:
-    runs-on: macos-10.15
     name: Tests/FreeBSD test suite
+    needs: [ min_version, deps ]
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: macos-10.15 , features: unix } ## GHA MacOS-11.0 VM won't have VirtualBox; refs: <https://github.com/actions/virtual-environments/issues/4060> , <https://github.com/actions/virtual-environments/pull/4010>
     env:
       mem: 2048
     steps:
     - uses: actions/checkout@v2
     - name: Prepare, build and test
-      id: test
+      ## spell-checker:ignore (ToDO) sshfs usesh vmactions
       uses: vmactions/freebsd-vm@v0.1.5
       with:
         usesh: true
+        # sync: sshfs
         prepare: pkg install -y curl gmake sudo
         run: |
-          # Need to be run in the same block. Otherwise, we are back on the mac host.
+          ## Prepare, build, and test
+          # implementation modelled after ref: <https://github.com/rust-lang/rustup/pull/2783>
+          # * NOTE: All steps need to be run in this block, otherwise, we are operating back on the mac host
           set -e
-          pw adduser -n cuuser -d /root/ -g wheel -c "Coreutils user to build" -w random
-          chown -R cuuser:wheel /root/ /Users/runner/work/coreutils/
+          #
+          TEST_USER=tester
+          REPO_NAME=${GITHUB_WORKSPACE##*/}
+          WORKSPACE_PARENT="/Users/runner/work/${REPO_NAME}"
+          WORKSPACE="${WORKSPACE_PARENT}/${REPO_NAME}"
+          #
+          pw adduser -n ${TEST_USER} -d /root/ -g wheel -c "Coreutils user to build" -w random
+          # chown -R ${TEST_USER}:wheel /root/ "${WORKSPACE_PARENT}"/
+          chown -R ${TEST_USER}:wheel /root/ "/Users/runner/work/${REPO_NAME}"/
           whoami
-
-          # Needs to be done in a sudo as we are changing users
-          sudo -i -u cuuser sh << EOF
+          #
+          # Further work needs to be done in a sudo as we are changing users
+          sudo -i -u ${TEST_USER} sh << EOF
           set -e
           whoami
           curl https://sh.rustup.rs -sSf --output rustup.sh
           sh rustup.sh -y --profile=minimal
+          . $HOME/.cargo/env
           ## Info
           # environment
           echo "## environment"
           echo "CI='${CI}'"
-          # tooling info display
-          echo "## tooling"
-          . $HOME/.cargo/env
+          echo "REPO_NAME='${REPO_NAME}'"
+          echo "TEST_USER='${TEST_USER}'"
+          echo "WORKSPACE_PARENT='${WORKSPACE_PARENT}'"
+          echo "WORKSPACE='${WORKSPACE}'"
+          env | sort
+          # tooling info
+          echo "## tooling info"
           cargo -V
           rustc -V
-          env
-
-          # where the files are resynced
-          cd /Users/runner/work/coreutils/coreutils/
-          cargo build
-          cargo test --features feat_os_unix -p uucore -p coreutils
+          #
+          cd "${WORKSPACE}"
+          unset FAULT
+          cargo build || FAULT=1
+          cargo test --features "${{ matrix.job.features }}" || FAULT=1
+          cargo test --features "${{ matrix.job.features }}" -p uucore || FAULT=1
           # Clean to avoid to rsync back the files
           cargo clean
+          if (test -n "$FAULT"); then exit 1 ; fi
           EOF
-
 
   coverage:
     name: Code Coverage
+    needs: build
     runs-on: ${{ matrix.job.os }}
     strategy:
       fail-fast: true
@@ -590,13 +749,6 @@ jobs:
           - { os: windows-latest , features: windows }
     steps:
     - uses: actions/checkout@v2
-    - name: Install/setup prerequisites
-      shell: bash
-      run: |
-        ## Install/setup prerequisites
-        case '${{ matrix.job.os }}' in
-          macos-latest) brew install coreutils ;; # needed for testing
-        esac
     # - name: Reattach HEAD ## may be needed for accurate code coverage info
     #   run: git checkout ${{ github.head_ref }}
     - name: Initialize workflow variables
@@ -623,6 +775,13 @@ jobs:
         # * CODECOV_FLAGS
         CODECOV_FLAGS=$( echo "${{ matrix.job.os }}" | sed 's/[^[:alnum:]]/_/g' )
         outputs CODECOV_FLAGS
+    - name: Install/setup prerequisites
+      shell: bash
+      run: |
+        ## Install/setup prerequisites
+        case '${{ matrix.job.os }}' in
+          macos-latest) brew install coreutils ;; # needed for testing
+        esac
     - name: rust toolchain ~ install
       uses: actions-rs/toolchain@v1
       with:
@@ -645,10 +804,10 @@ jobs:
         command: test
         args: ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --no-fail-fast -p uucore
       env:
-        CARGO_INCREMENTAL: '0'
-        RUSTC_WRAPPER: ''
-        RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
-        RUSTDOCFLAGS: '-Cpanic=abort'
+        CARGO_INCREMENTAL: "0"
+        RUSTC_WRAPPER: ""
+        RUSTFLAGS: "-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
+        RUSTDOCFLAGS: "-Cpanic=abort"
         # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
     - name: Test
       uses: actions-rs/cargo@v1
@@ -656,10 +815,10 @@ jobs:
         command: test
         args: ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --no-fail-fast
       env:
-        CARGO_INCREMENTAL: '0'
-        RUSTC_WRAPPER: ''
-        RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
-        RUSTDOCFLAGS: '-Cpanic=abort'
+        CARGO_INCREMENTAL: "0"
+        RUSTC_WRAPPER: ""
+        RUSTFLAGS: "-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
+        RUSTDOCFLAGS: "-Cpanic=abort"
         # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
     - name: Test individual utilities
       uses: actions-rs/cargo@v1
@@ -667,10 +826,10 @@ jobs:
         command: test
         args: ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --no-fail-fast ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
       env:
-        CARGO_INCREMENTAL: '0'
-        RUSTC_WRAPPER: ''
-        RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
-        RUSTDOCFLAGS: '-Cpanic=abort'
+        CARGO_INCREMENTAL: "0"
+        RUSTC_WRAPPER: ""
+        RUSTFLAGS: "-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
+        RUSTDOCFLAGS: "-Cpanic=abort"
         # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
     - name: "`grcov` ~ install"
       uses: actions-rs/install@v0.1
@@ -703,35 +862,3 @@ jobs:
         flags: ${{ steps.vars.outputs.CODECOV_FLAGS }}
         name: codecov-umbrella
         fail_ci_if_error: false
-
-  unused_deps:
-    name: Unused deps
-    runs-on: ${{ matrix.job.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        job:
-          - { os: ubuntu-latest , features: feat_os_unix }
-          - { os: macos-latest   , features: feat_os_macos }
-          - { os: windows-latest , features: feat_os_windows }
-    steps:
-    - uses: actions/checkout@v2
-    - name: Install `rust` toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: nightly
-        default: true
-        profile: minimal
-    - name: Install `cargo-udeps`
-      uses: actions-rs/install@v0.1
-      with:
-        crate: cargo-udeps
-        version: latest
-        use-tool-cache: true
-      env:
-        RUSTUP_TOOLCHAIN: stable
-    - name: Confirms there isn't any unused deps
-      shell: bash
-      run: |
-        cargo +nightly udeps --all-targets &> udeps.log || cat udeps.log
-        grep "seem to have been used" udeps.log

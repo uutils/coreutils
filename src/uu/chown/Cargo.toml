@@ -22,3 +22,6 @@ uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_p
 [[bin]]
 name = "chown"
 path = "src/main.rs"
+
+[package.metadata.cargo-udeps.ignore]
+normal = ["uucore_procs"]

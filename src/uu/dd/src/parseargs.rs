@@ -20,7 +20,7 @@ pub enum ParseError {
     MultipleFmtTable,
     MultipleUCaseLCase,
     MultipleBlockUnblock,
-    MultipleExclNoCreat,
+    MultipleExclNoCreate,
     FlagNoMatch(String),
     ConvFlagNoMatch(String),
     MultiplierStringParseFailure(String),
@@ -45,7 +45,7 @@ impl std::fmt::Display for ParseError {
             Self::MultipleBlockUnblock => {
                 write!(f, "Only one of conv=block or conv=unblock may be specified")
             }
-            Self::MultipleExclNoCreat => {
+            Self::MultipleExclNoCreate => {
                 write!(f, "Only one ov conv=excl or conv=nocreat may be specified")
             }
             Self::FlagNoMatch(arg) => {
@@ -523,14 +523,14 @@ pub fn parse_conv_flag_output(matches: &Matches) -> Result<OConvFlags, ParseErro
                 if !oconvflags.nocreat {
                     oconvflags.excl = true;
                 } else {
-                    return Err(ParseError::MultipleExclNoCreat);
+                    return Err(ParseError::MultipleExclNoCreate);
                 }
             }
             ConvFlag::NoCreat => {
                 if !oconvflags.excl {
                     oconvflags.nocreat = true;
                 } else {
-                    return Err(ParseError::MultipleExclNoCreat);
+                    return Err(ParseError::MultipleExclNoCreate);
                 }
             }
             ConvFlag::NoTrunc => oconvflags.notrunc = true,

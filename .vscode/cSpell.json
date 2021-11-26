@@ -11,7 +11,7 @@
     { "name": "workspace", "path": "./cspell.dictionaries/workspace.wordlist.txt" }
   ],
   // ignorePaths -  a list of globs to specify which files are to be ignored
-  "ignorePaths": ["Cargo.lock", "target/**", "tests/**/fixtures/**", "src/uu/dd/test-resources/**"],
+  "ignorePaths": ["Cargo.lock", "target/**", "tests/**/fixtures/**", "src/uu/dd/test-resources/**", "vendor/**"],
   // ignoreWords - a list of words to be ignored (even if they are in the flagWords)
   "ignoreWords": [],
   // words - list of words to be always considered correct

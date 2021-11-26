@@ -10,11 +10,9 @@
 
 // spell-checker:ignore (ToDO) nodename kernelname kernelrelease kernelversion sysname hwplatform mnrsv
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, App, Arg};
 use platform_info::*;
+use uucore::error::{FromIo, UResult};
 
 const ABOUT: &str = "Print certain system information.  With no OPTION, same as -s.";
 
@@ -49,11 +47,13 @@ const HOST_OS: &str = "Fuchsia";
 #[cfg(target_os = "redox")]
 const HOST_OS: &str = "Redox";
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = format!("{} [OPTION]...", uucore::execution_phrase());
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
-    let uname = crash_if_err!(1, PlatformInfo::new());
+    let uname =
+        PlatformInfo::new().map_err_context(|| "failed to create PlatformInfo".to_string())?;
     let mut output = String::new();
 
     let all = matches.is_present(options::ALL);
@@ -115,7 +115,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
     println!("{}", output.trim_end());
 
-    0
+    Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {

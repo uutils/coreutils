@@ -164,7 +164,7 @@ impl MultiWriter {
 
 impl Write for MultiWriter {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        self.writers.retain_mut(|writer| {
+        RetainMut::retain_mut(&mut self.writers, |writer| {
             let result = writer.write_all(buf);
             match result {
                 Err(f) => {
@@ -178,7 +178,7 @@ impl Write for MultiWriter {
     }
 
     fn flush(&mut self) -> Result<()> {
-        self.writers.retain_mut(|writer| {
+        RetainMut::retain_mut(&mut self.writers, |writer| {
             let result = writer.flush();
             match result {
                 Err(f) => {

@@ -396,7 +396,7 @@ fn get_delimiter(matches: &ArgMatches) -> Delimiters {
         .value_of(options::ALL_REPEATED)
         .or_else(|| matches.value_of(options::GROUP));
     if let Some(delimiter_arg) = value {
-        Delimiters::from_str(delimiter_arg).unwrap() // All possible values for ALL_REPEATED are &str's of Delimiters
+        Delimiters::from_str(delimiter_arg).unwrap() // All possible values for ALL_REPEATED are Delimiters (of type `&str`)
     } else if matches.is_present(options::GROUP) {
         Delimiters::Separate
     } else {

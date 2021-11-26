@@ -25,3 +25,6 @@ libc         = { version = "0.2"   }
 [[bin]]
 name = "chcon"
 path = "src/main.rs"
+
+[package.metadata.cargo-udeps.ignore]
+normal = ["uucore_procs"]

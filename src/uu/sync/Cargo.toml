@@ -24,3 +24,6 @@ winapi = { version = "0.3", features = ["errhandlingapi", "fileapi", "handleapi"
 [[bin]]
 name = "sync"
 path = "src/main.rs"
+
+[package.metadata.cargo-udeps.ignore]
+normal = ["uucore_procs", "winapi"]
