@@ -5,12 +5,12 @@
 //! it is created by Sub's implementation of the Tokenizer trait
 //! Subs which have numeric field chars make use of the num_format
 //! submodule
+use crate::show_error;
 use itertools::{put_back_n, PutBackN};
 use std::iter::Peekable;
 use std::process::exit;
 use std::slice::Iter;
 use std::str::Chars;
-use uucore::show_error;
 // use std::collections::HashSet;
 
 use super::num_format::format_field::{FieldType, FormatField};

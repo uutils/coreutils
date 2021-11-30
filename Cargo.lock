@@ -3212,6 +3212,7 @@ dependencies = [
  "data-encoding-macro",
  "dns-lookup",
  "dunce",
+ "itertools 0.8.2",
  "lazy_static",
  "libc",
  "nix 0.23.1",

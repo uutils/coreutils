@@ -32,17 +32,20 @@ pub fn arrnum_int_mult(arr_num: &[u8], basenum: u8, base_ten_int_fact: u8) -> Ve
     ret
 }
 
+#[allow(dead_code)]
 pub struct Remainder<'a> {
     pub position: usize,
     pub replace: Vec<u8>,
     pub arr_num: &'a Vec<u8>,
 }
 
+#[allow(dead_code)]
 pub struct DivOut<'a> {
     pub quotient: u8,
     pub remainder: Remainder<'a>,
 }
 
+#[allow(dead_code)]
 pub fn arrnum_int_div_step(
     rem_in: Remainder,
     radix_in: u8,
@@ -141,6 +144,7 @@ pub fn base_conv_vec(src: &[u8], radix_src: u8, radix_dest: u8) -> Vec<u8> {
     result
 }
 
+#[allow(dead_code)]
 pub fn unsigned_to_arrnum(src: u16) -> Vec<u8> {
     let mut result: Vec<u8> = Vec::new();
     let mut src_tmp: u16 = src;
