@@ -199,13 +199,14 @@ fn determine_overwrite_mode(matches: &ArgMatches) -> OverwriteMode {
 }
 
 fn exec(files: &[String], b: Behavior) -> i32 {
-
     let paths: Vec<PathBuf> = {
         let paths = files.iter().map(Path::new);
-        
+
         // Strip slashes from path, if strip opt present
         if b.strip_slashes {
-            paths.map(|p| p.components().as_path().to_owned()).collect::<Vec<PathBuf>>()
+            paths
+                .map(|p| p.components().as_path().to_owned())
+                .collect::<Vec<PathBuf>>()
         } else {
             paths.map(|p| p.to_owned()).collect::<Vec<PathBuf>>()
         }
@@ -231,7 +232,9 @@ fn exec(files: &[String], b: Behavior) -> i32 {
             // GNU semantics are: if the source and target are the same, no move occurs and we print an error
             if source.eq(target) {
                 show_error!(
-                    "'{}' and '{}' are the same file", source.display(), target.display()
+                    "'{}' and '{}' are the same file",
+                    source.display(),
+                    target.display()
                 );
                 return 1;
             }
@@ -356,15 +359,13 @@ fn rename(from: &Path, to: &Path, b: &Behavior) -> io::Result<()> {
         }
     }
 
-
-    
     // "to" may no longer exist if it was backed up
     if to.exists() && to.is_dir() {
         // normalize behavior between *nix and windows
         if from.is_dir() {
             if is_empty_dir(to) {
                 fs::remove_dir(to)?
-        } else {
+            } else {
                 return Err(io::Error::new(io::ErrorKind::Other, "Directory not empty"));
             }
         }
