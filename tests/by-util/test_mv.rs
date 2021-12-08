@@ -233,6 +233,20 @@ fn test_mv_force_replace_file() {
 }
 
 #[test]
+fn test_mv_same_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file_a = "test_mv_same_file_a";
+
+    at.touch(file_a);
+    ucmd.arg(file_a)
+        .arg(file_a)
+        .fails()
+        .stderr_is(format!(
+            "mv: '{}' and '{}' are the same file\n", file_a, file_a
+        ));
+}
+
+#[test]
 fn test_mv_simple_backup() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_simple_backup_file_a";

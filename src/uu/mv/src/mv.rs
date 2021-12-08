@@ -33,6 +33,7 @@ pub struct Behavior {
     target_dir: Option<String>,
     no_target_dir: bool,
     verbose: bool,
+    strip_slashes: bool,
 }
 
 #[derive(Clone, Eq, PartialEq)]
@@ -106,23 +107,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         target_dir: matches.value_of(OPT_TARGET_DIRECTORY).map(String::from),
         no_target_dir: matches.is_present(OPT_NO_TARGET_DIRECTORY),
         verbose: matches.is_present(OPT_VERBOSE),
+        strip_slashes: matches.is_present(OPT_STRIP_TRAILING_SLASHES),
     };
 
-    let paths: Vec<PathBuf> = {
-        fn strip_slashes(p: &Path) -> &Path {
-            p.components().as_path()
-        }
-        let to_owned = |p: &Path| p.to_owned();
-        let paths = files.iter().map(Path::new);
-
-        if matches.is_present(OPT_STRIP_TRAILING_SLASHES) {
-            paths.map(strip_slashes).map(to_owned).collect()
-        } else {
-            paths.map(to_owned).collect()
-        }
-    };
-
-    exec(&paths[..], behavior)
+    exec(&files[..], behavior)
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -210,21 +198,41 @@ fn determine_overwrite_mode(matches: &ArgMatches) -> OverwriteMode {
     }
 }
 
-fn exec(files: &[PathBuf], b: Behavior) -> i32 {
+fn exec(files: &[String], b: Behavior) -> i32 {
+
+    let paths: Vec<PathBuf> = {
+        let paths = files.iter().map(Path::new);
+        
+        // Strip slashes from path, if strip opt present
+        if b.strip_slashes {
+            paths.map(|p| p.components().as_path().to_owned()).collect::<Vec<PathBuf>>()
+        } else {
+            paths.map(|p| p.to_owned()).collect::<Vec<PathBuf>>()
+        }
+    };
+
     if let Some(ref name) = b.target_dir {
-        return move_files_into_dir(files, &PathBuf::from(name), &b);
+        return move_files_into_dir(&paths, &PathBuf::from(name), &b);
     }
-    match files.len() {
+    match paths.len() {
         /* case 0/1 are not possible thanks to clap */
         2 => {
-            let source = &files[0];
-            let target = &files[1];
+            let source = &paths[0];
+            let target = &paths[1];
             // Here we use the `symlink_metadata()` method instead of `exists()`,
             // since it handles dangling symlinks correctly. The method gives an
             // `Ok()` results unless the source does not exist, or the user
             // lacks permission to access metadata.
-            if source.symlink_metadata().is_err() {
+            if source.metadata().is_err() {
                 show_error!("cannot stat {}: No such file or directory", source.quote());
+                return 1;
+            }
+
+            // GNU semantics are: if the source and target are the same, no move occurs and we print an error
+            if source.eq(target) {
+                show_error!(
+                    "'{}' and '{}' are the same file", source.display(), target.display()
+                );
                 return 1;
             }
 
@@ -277,8 +285,8 @@ fn exec(files: &[PathBuf], b: Behavior) -> i32 {
                 );
                 return 1;
             }
-            let target_dir = files.last().unwrap();
-            move_files_into_dir(&files[..files.len() - 1], target_dir, &b);
+            let target_dir = paths.last().unwrap();
+            move_files_into_dir(&paths[..paths.len() - 1], target_dir, &b);
         }
     }
     0
@@ -348,13 +356,15 @@ fn rename(from: &Path, to: &Path, b: &Behavior) -> io::Result<()> {
         }
     }
 
+
+    
     // "to" may no longer exist if it was backed up
     if to.exists() && to.is_dir() {
         // normalize behavior between *nix and windows
         if from.is_dir() {
             if is_empty_dir(to) {
                 fs::remove_dir(to)?
-            } else {
+        } else {
                 return Err(io::Error::new(io::ErrorKind::Other, "Directory not empty"));
             }
         }
