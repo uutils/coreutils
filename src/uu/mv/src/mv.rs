@@ -219,7 +219,7 @@ fn exec(files: &[String], b: Behavior) -> i32 {
         2 => {
             let source = &paths[0];
             let target = &paths[1];
-            // Here we use the `symlink_metadata()` method instead of `exists()`,
+            // Here we use the `metadata()` method instead of `exists()`,
             // since it handles dangling symlinks correctly. The method gives an
             // `Ok()` results unless the source does not exist, or the user
             // lacks permission to access metadata.
