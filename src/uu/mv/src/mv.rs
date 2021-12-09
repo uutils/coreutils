@@ -13,6 +13,7 @@ extern crate uucore;
 
 use clap::{crate_version, App, Arg, ArgMatches};
 use std::env;
+use std::ffi::OsString;
 use std::fs;
 use std::io::{self, stdin};
 #[cfg(unix)]
@@ -30,7 +31,7 @@ pub struct Behavior {
     backup: BackupMode,
     suffix: String,
     update: bool,
-    target_dir: Option<String>,
+    target_dir: Option<OsString>,
     no_target_dir: bool,
     verbose: bool,
     strip_slashes: bool,
@@ -78,10 +79,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .usage(&usage[..])
         .get_matches_from(args);
 
-    let files: Vec<String> = matches
-        .values_of(ARG_FILES)
-        .map(|v| v.map(ToString::to_string).collect())
-        .unwrap_or_default();
+    let files: Vec<OsString> = matches
+        .values_of_os(ARG_FILES)
+        .unwrap()
+        .map(|v| v.to_os_string())
+        .collect();
 
     let overwrite_mode = determine_overwrite_mode(&matches);
     let backup_mode = match backup_control::determine_backup_mode(&matches) {
@@ -104,7 +106,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         backup: backup_mode,
         suffix: backup_suffix,
         update: matches.is_present(OPT_UPDATE),
-        target_dir: matches.value_of(OPT_TARGET_DIRECTORY).map(String::from),
+        target_dir: matches
+            .value_of_os(OPT_TARGET_DIRECTORY)
+            .map(OsString::from),
         no_target_dir: matches.is_present(OPT_NO_TARGET_DIRECTORY),
         verbose: matches.is_present(OPT_VERBOSE),
         strip_slashes: matches.is_present(OPT_STRIP_TRAILING_SLASHES),
@@ -198,7 +202,7 @@ fn determine_overwrite_mode(matches: &ArgMatches) -> OverwriteMode {
     }
 }
 
-fn exec(files: &[String], b: Behavior) -> i32 {
+fn exec(files: &[OsString], b: Behavior) -> i32 {
     let paths: Vec<PathBuf> = {
         let paths = files.iter().map(Path::new);
 
