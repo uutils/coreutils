@@ -239,26 +239,26 @@ fn test_mv_same_file() {
 
     at.touch(file_a);
     ucmd.arg(file_a).arg(file_a).fails().stderr_is(format!(
-        "mv: '{}' and '{}' are the same file\n",
-        file_a, file_a
+        "mv: '{f}' and '{f}' are the same file\n",
+        f = file_a,
     ));
 }
 
 #[test]
-fn test_mv_same_file_nondot_dir() {
+fn test_mv_same_file_not_dot_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_mv_errors_dir";
 
     at.mkdir(dir);
     ucmd.arg(dir).arg(dir).fails().stderr_is(format!(
-        "mv: cannot move '{}' to a subdirectory of itself, '{}/{}'",
-        dir, dir, dir
+        "mv: cannot move '{d}' to a subdirectory of itself, '{d}/{d}'",
+        d = dir,
     ));
 }
 
 #[test]
 fn test_mv_same_file_dot_dir() {
-    let (at, mut ucmd) = at_and_ucmd!();
+    let (_at, mut ucmd) = at_and_ucmd!();
 
     ucmd.arg(".")
         .arg(".")
