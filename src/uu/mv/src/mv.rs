@@ -81,7 +81,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let files: Vec<OsString> = matches
         .values_of_os(ARG_FILES)
-        .unwrap()
+        .unwrap_or_default()
         .map(|v| v.to_os_string())
         .collect();
 
