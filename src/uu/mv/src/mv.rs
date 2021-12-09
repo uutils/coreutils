@@ -232,7 +232,10 @@ fn exec(files: &[String], b: Behavior) -> i32 {
             // GNU semantics are: if the source and target are the same, no move occurs and we print an error
             if source.eq(target) {
                 // Done to match GNU semantics for the dot file
-                if source.eq(Path::new(".")) || source.is_file() {
+                if source.eq(Path::new("."))
+                    || source.to_string_lossy().ends_with("/.")
+                    || source.is_file()
+                {
                     show_error!(
                         "'{}' and '{}' are the same file",
                         source.display(),

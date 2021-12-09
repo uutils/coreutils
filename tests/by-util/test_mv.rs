@@ -245,6 +245,28 @@ fn test_mv_same_file() {
 }
 
 #[test]
+fn test_mv_same_file_nondot_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_mv_errors_dir";
+
+    at.mkdir(dir);
+    ucmd.arg(dir).arg(dir).fails().stderr_is(format!(
+        "mv: cannot move '{}' to a subdirectory of itself, '{}/{}'",
+        dir, dir, dir
+    ));
+}
+
+#[test]
+fn test_mv_same_file_dot_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg(".")
+        .arg(".")
+        .fails()
+        .stderr_is(format!("mv: '.' and '.' are the same file\n"));
+}
+
+#[test]
 fn test_mv_simple_backup() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_simple_backup_file_a";
