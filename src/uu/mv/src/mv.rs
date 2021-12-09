@@ -243,10 +243,8 @@ fn exec(files: &[String], b: Behavior) -> i32 {
                     )
                 } else {
                     show_error!(
-                        "cannot move '{}' to a subdirectory of itself, '{}/{}'",
-                        source.display(),
-                        source.display(),
-                        source.display(),
+                        "cannot move '{s}' to a subdirectory of itself, '{s}/{s}'",
+                        s = source.display(),
                     )
                 }
                 return 1;
