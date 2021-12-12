@@ -5,7 +5,7 @@
 set -e
 if test ! -d ../gnu; then
     echo "Could not find ../gnu"
-    echo "git clone https://github.com:coreutils/coreutils.git gnu"
+    echo "git clone https://github.com/coreutils/coreutils.git gnu"
     exit 1
 fi
 if test ! -d ../gnulib; then
