@@ -63,7 +63,7 @@ quick_error! {
     #[derive(Debug)]
     pub enum Error {
         /// Simple io::Error wrapper
-        IoErr(err: io::Error) { from() cause(err) display("{}", err )}
+        IoErr(err: io::Error) { from() cause(err) display("{}", err)}
 
         /// Wrapper for io::Error with path context
         IoErrContext(err: io::Error, path: String) {
@@ -1292,7 +1292,7 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
         .map(|meta| !meta.file_type().is_symlink())
         .unwrap_or(false)
     {
-        // Here, we quietly ignore if user does not 
+        // Here, we quietly ignore if a user does not 
         // have the permission to modify the permissions of a file.  
         // The OS will throw an error later, on the write op if 
         // the user does not have permission to write to the file.
