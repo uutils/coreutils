@@ -1316,7 +1316,7 @@ fn copy_helper(source: &Path, dest: &Path, options: &Options, context: &str) -> 
         /* workaround a limitation of fs::copy
          * https://github.com/rust-lang/rust/issues/79390
          */
-        File::create(dest)?;
+        File::create(dest).context(dest.display().to_string())?;
     } else if is_symlink {
         copy_link(source, dest)?;
     } else if options.reflink_mode != ReflinkMode::Never {
