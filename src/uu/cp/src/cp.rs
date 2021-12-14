@@ -63,7 +63,7 @@ quick_error! {
     #[derive(Debug)]
     pub enum Error {
         /// Simple io::Error wrapper
-        IoErr(err: io::Error) { from() cause(err) display("{}", err) }
+        IoErr(err: io::Error) { from() cause(err) display("{}", err)}
 
         /// Wrapper for io::Error with path context
         IoErrContext(err: io::Error, path: String) {
@@ -1292,7 +1292,13 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
         .map(|meta| !meta.file_type().is_symlink())
         .unwrap_or(false)
     {
-        fs::set_permissions(&dest, dest_permissions).unwrap();
+        // Here, to match GNU semantics, we quietly ignore an error 
+        // if a user does not have the correct ownership to modify 
+        // the permissions of a file.
+        //  
+        // FWIW, the OS will throw an error later, on the write op, if 
+        // the user does not have permission to write to the file.
+        fs::set_permissions(&dest, dest_permissions).ok();
     }
     for attribute in &options.preserve_attributes {
         copy_attribute(&source, &dest, attribute)?;
@@ -1312,7 +1318,7 @@ fn copy_helper(source: &Path, dest: &Path, options: &Options, context: &str) -> 
         /* workaround a limitation of fs::copy
          * https://github.com/rust-lang/rust/issues/79390
          */
-        File::create(dest)?;
+        File::create(dest).context(dest.display().to_string())?;
     } else if is_symlink {
         copy_link(source, dest)?;
     } else if options.reflink_mode != ReflinkMode::Never {
