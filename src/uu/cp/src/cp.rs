@@ -1292,9 +1292,11 @@ fn copy_file(source: &Path, dest: &Path, options: &Options) -> CopyResult<()> {
         .map(|meta| !meta.file_type().is_symlink())
         .unwrap_or(false)
     {
-        // Here, we quietly ignore if a user does not 
-        // have the permission to modify the permissions of a file.  
-        // The OS will throw an error later, on the write op if 
+        // Here, to match GNU semantics, we quietly ignore an error 
+        // if a user does not have the correct ownership to modify 
+        // the permissions of a file.
+        //  
+        // FWIW, the OS will throw an error later, on the write op, if 
         // the user does not have permission to write to the file.
         fs::set_permissions(&dest, dest_permissions).ok();
     }
