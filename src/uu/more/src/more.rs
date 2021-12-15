@@ -255,6 +255,22 @@ fn more(buff: &str, stdout: &mut Stdout, next_file: Option<&str>, silent: bool) 
                 }) => {
                     pager.page_up();
                 }
+                Event::Key(KeyEvent {
+                    code: KeyCode::Char('j'),
+                    modifiers: KeyModifiers::NONE,
+                }) => {
+                    if pager.should_close() {
+                        return;
+                    } else {
+                        pager.next_line();
+                    }
+                }
+                Event::Key(KeyEvent {
+                    code: KeyCode::Char('k'),
+                    modifiers: KeyModifiers::NONE,
+                }) => {
+                    pager.prev_line();
+                }
                 Event::Resize(col, row) => {
                     pager.page_resize(col, row);
                 }
@@ -301,11 +317,30 @@ impl<'a> Pager<'a> {
     }
 
     fn page_down(&mut self) {
+        // If the next page down position __after redraw__ is greater than the total line count,
+        // the upper mark must not grow past top of the screen at the end of the open file.
+        if self
+            .upper_mark
+            .saturating_add(self.content_rows as usize * 2)
+            .ge(&self.line_count)
+        {
+            self.upper_mark = self.line_count - self.content_rows as usize;
+            return;
+        }
+
         self.upper_mark = self.upper_mark.saturating_add(self.content_rows.into());
     }
 
     fn page_up(&mut self) {
         self.upper_mark = self.upper_mark.saturating_sub(self.content_rows.into());
+    }
+
+    fn next_line(&mut self) {
+        self.upper_mark = self.upper_mark.saturating_add(1);
+    }
+
+    fn prev_line(&mut self) {
+        self.upper_mark = self.upper_mark.saturating_sub(1);
     }
 
     // TODO: Deal with column size changes.
