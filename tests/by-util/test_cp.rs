@@ -728,10 +728,7 @@ fn test_cp_parents_dest_not_directory() {
 #[test]
 #[cfg(unix)]
 fn test_cp_writable_special_file_permissions() {
-    new_ucmd!()
-        .arg("/dev/null")
-        .arg("/dev/zero")
-        .succeeds();
+    new_ucmd!().arg("/dev/null").arg("/dev/zero").succeeds();
 }
 
 #[test]
