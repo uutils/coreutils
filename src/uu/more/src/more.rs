@@ -263,7 +263,7 @@ fn more(buff: &str, stdout: &mut Stdout, next_file: Option<&str>, silent: bool) 
                     modifiers: KeyModifiers::NONE,
                 }) => {
                     if pager.should_close() {
-                        return;
+                        return Ok(());
                     } else {
                         pager.next_line();
                     }
