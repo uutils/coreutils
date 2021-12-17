@@ -16,7 +16,7 @@ path = "src/uname.rs"
 
 [dependencies]
 clap = { version = "2.33", features = ["wrap_help"] }
-platform-info = "0.1"
+platform-info = "0.2"
 uucore = { version=">=0.0.10", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
 
