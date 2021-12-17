@@ -6,7 +6,6 @@ use clap::{crate_version, App, Arg};
 use uucore::error::{UResult, UUsageError};
 use uucore::InvalidEncodingHandling;
 
-mod cli;
 mod memo;
 mod tokenize;
 

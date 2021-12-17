@@ -17,11 +17,12 @@ use super::num_format::format_field::{FieldType, FormatField};
 use super::num_format::num_format;
 use super::token;
 use super::unescaped_text::UnescapedText;
-use crate::cli;
+
+const EXIT_ERR: i32 = 1;
 
 fn err_conv(sofar: &str) {
     show_error!("%{}: invalid conversion specification", sofar);
-    exit(cli::EXIT_ERR);
+    exit(EXIT_ERR);
 }
 
 fn convert_asterisk_arg_int(asterisk_arg: &str) -> isize {
@@ -80,7 +81,7 @@ impl Sub {
             _ => {
                 // should be unreachable.
                 println!("Invalid field type");
-                exit(cli::EXIT_ERR);
+                exit(EXIT_ERR);
             }
         };
         Sub {

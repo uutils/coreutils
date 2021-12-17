@@ -7,6 +7,7 @@
 
 use itertools::PutBackN;
 use std::char::from_u32;
+use std::io::{stdout, Write};
 use std::iter::Peekable;
 use std::process::exit;
 use std::slice::Iter;
@@ -14,7 +15,25 @@ use std::str::Chars;
 
 use super::token;
 
-use crate::cli;
+const EXIT_OK: i32 = 0;
+const EXIT_ERR: i32 = 1;
+
+// by default stdout only flushes
+// to console when a newline is passed.
+fn flush_char(c: char) {
+    print!("{}", c);
+    let _ = stdout().flush();
+}
+
+fn flush_str(s: &str) {
+    print!("{}", s);
+    let _ = stdout().flush();
+}
+
+fn flush_bytes(bslice: &[u8]) {
+    let _ = stdout().write(bslice);
+    let _ = stdout().flush();
+}
 
 pub struct UnescapedText(Vec<u8>);
 impl UnescapedText {
@@ -53,7 +72,7 @@ impl UnescapedText {
         if found < min_chars {
             // only ever expected for hex
             println!("missing hexadecimal number in escape"); //todo stderr
-            exit(cli::EXIT_ERR);
+            exit(EXIT_ERR);
         }
         retval
     }
@@ -76,7 +95,7 @@ impl UnescapedText {
         );
         if (val < 159 && (val != 36 && val != 64 && val != 96)) || (val > 55296 && val < 57343) {
             println!("{}", err_msg); //todo stderr
-            exit(cli::EXIT_ERR);
+            exit(EXIT_ERR);
         }
     }
     // pass an iterator that succeeds an '/',
@@ -117,7 +136,7 @@ impl UnescapedText {
                     let val = (UnescapedText::base_to_u32(min_len, max_len, base, it) % 256) as u8;
                     byte_vec.push(val);
                     let bvec = [val];
-                    cli::flush_bytes(&bvec);
+                    flush_bytes(&bvec);
                 } else {
                     byte_vec.push(ch as u8);
                 }
@@ -145,7 +164,7 @@ impl UnescapedText {
                     'f' => '\x0C',
                     // escape character
                     'e' => '\x1B',
-                    'c' => exit(cli::EXIT_OK),
+                    'c' => exit(EXIT_OK),
                     'u' | 'U' => {
                         let len = match e {
                             'u' => 4,
@@ -165,7 +184,7 @@ impl UnescapedText {
                     }
                 };
                 s.push(ch);
-                cli::flush_str(&s);
+                flush_str(&s);
                 byte_vec.extend(s.bytes());
             }
         };
@@ -193,7 +212,7 @@ impl UnescapedText {
                         // lazy branch eval
                         // remember this fn could be called
                         // many times in a single exec through %b
-                        cli::flush_char(ch);
+                        flush_char(ch);
                         tmp_str.push(ch);
                     }
                     '\\' => {
@@ -213,7 +232,7 @@ impl UnescapedText {
                     x if x == '%' && !subs_mode => {
                         if let Some(follow) = it.next() {
                             if follow == '%' {
-                                cli::flush_char(ch);
+                                flush_char(ch);
                                 tmp_str.push(ch);
                             } else {
                                 it.put_back(follow);
@@ -226,7 +245,7 @@ impl UnescapedText {
                         }
                     }
                     _ => {
-                        cli::flush_char(ch);
+                        flush_char(ch);
                         tmp_str.push(ch);
                     }
                 }
@@ -252,6 +271,6 @@ impl token::Tokenizer for UnescapedText {
 }
 impl token::Token for UnescapedText {
     fn print(&self, _: &mut Peekable<Iter<String>>) {
-        cli::flush_bytes(&self.0[..]);
+        flush_bytes(&self.0[..]);
     }
 }
