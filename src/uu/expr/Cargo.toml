@@ -19,7 +19,7 @@ clap = { version = "2.33", features = ["wrap_help"] }
 libc = "0.2.42"
 num-bigint = "0.4.0"
 num-traits = "0.2.14"
-onig = "~4.3.2"
+onig = "6"
 uucore = { version=">=0.0.10", package="uucore", path="../../uucore" }
 uucore_procs = { version=">=0.0.7", package="uucore_procs", path="../../uucore_procs" }
 
