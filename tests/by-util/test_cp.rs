@@ -732,6 +732,15 @@ fn test_cp_writable_special_file_permissions() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_cp_issue_1665() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("/dev/null").arg("foo").succeeds();
+    assert!(at.file_exists("foo"));
+    assert_eq!(at.read("foo"), "");
+}
+
+#[test]
 fn test_cp_preserve_no_args() {
     new_ucmd!()
         .arg(TEST_COPY_FROM_FOLDER_FILE)
