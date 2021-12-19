@@ -1381,7 +1381,7 @@ fn is_hidden(file_path: &DirEntry) -> bool {
         file_path
             .file_name()
             .to_str()
-            .map(|res| res.starts_with("."))
+            .map(|res| res.starts_with('.'))
             .unwrap_or(false)
     }
 }
