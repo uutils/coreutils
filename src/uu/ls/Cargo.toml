@@ -22,7 +22,6 @@ number_prefix = "0.4"
 term_grid = "0.1.5"
 termsize = "0.1.6"
 glob = "0.3.0"
-walkdir = "2.3.2"
 lscolors = { version = "0.7.1", features = ["ansi_term"] }
 uucore = { version = ">=0.0.8", package = "uucore", path = "../../uucore", features = ["entries", "fs"] }
 uucore_procs = { version=">=0.0.7", package = "uucore_procs", path = "../../uucore_procs" }

@@ -2602,7 +2602,6 @@ dependencies = [
  "unicode-width",
  "uucore",
  "uucore_procs",
- "walkdir",
 ]
 
 [[package]]
