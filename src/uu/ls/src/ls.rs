@@ -16,7 +16,7 @@ extern crate lazy_static;
 mod quoting_style;
 
 use clap::{crate_version, App, Arg};
-use globset::{self, Glob, GlobSet, GlobSetBuilder};
+use glob::Pattern;
 use lscolors::LsColors;
 use number_prefix::NumberPrefix;
 use once_cell::unsync::OnceCell;
@@ -233,7 +233,7 @@ struct Config {
     recursive: bool,
     reverse: bool,
     dereference: Dereference,
-    ignore_patterns: GlobSet,
+    ignore_patterns: Vec<Pattern>,
     size_format: SizeFormat,
     directory: bool,
     time: Time,
@@ -547,16 +547,18 @@ impl Config {
         } else {
             TimeStyle::Locale
         };
-        let mut ignore_patterns = GlobSetBuilder::new();
+
+        let mut ignore_patterns: Vec<Pattern> = Vec::new();
+
         if options.is_present(options::IGNORE_BACKUPS) {
-            ignore_patterns.add(Glob::new("*~").unwrap());
-            ignore_patterns.add(Glob::new(".*~").unwrap());
+            ignore_patterns.push(Pattern::new("*~").unwrap());
+            ignore_patterns.push(Pattern::new(".*~").unwrap());
         }
 
         for pattern in options.values_of(options::IGNORE).into_iter().flatten() {
-            match Glob::new(pattern) {
+            match Pattern::new(pattern) {
                 Ok(p) => {
-                    ignore_patterns.add(p);
+                    ignore_patterns.push(p);
                 }
                 Err(_) => show_warning!("Invalid pattern for ignore: {}", pattern.quote()),
             }
@@ -564,20 +566,14 @@ impl Config {
 
         if files == Files::Normal {
             for pattern in options.values_of(options::HIDE).into_iter().flatten() {
-                match Glob::new(pattern) {
+                match Pattern::new(pattern) {
                     Ok(p) => {
-                        ignore_patterns.add(p);
+                        ignore_patterns.push(p);
                     }
                     Err(_) => show_warning!("Invalid pattern for hide: {}", pattern.quote()),
                 }
             }
         }
-
-        if files == Files::Normal {
-            ignore_patterns.add(Glob::new(".*").unwrap());
-        }
-
-        let ignore_patterns = ignore_patterns.build().unwrap();
 
         let dereference = if options.is_present(options::dereference::ALL) {
             Dereference::All
@@ -1372,26 +1368,38 @@ fn sort_entries(entries: &mut Vec<PathData>, config: &Config) {
     }
 }
 
-#[cfg(windows)]
 fn is_hidden(file_path: &DirEntry) -> bool {
-    let path = file_path.path();
-    let metadata = fs::metadata(&path).unwrap_or_else(|_| fs::symlink_metadata(&path).unwrap());
-    let attr = metadata.file_attributes();
-    (attr & 0x2) > 0
+    #[cfg(windows)]
+    {
+        let path = file_path.path();
+        let metadata = fs::metadata(&path).unwrap_or_else(|_| fs::symlink_metadata(&path).unwrap());
+        let attr = metadata.file_attributes();
+        (attr & 0x2) > 0
+    }
+    #[cfg(unix)]
+    {
+        file_path
+            .file_name()
+            .to_str()
+            .map(|s| s.starts_with("."))
+            .unwrap_or(false)
+    }
 }
 
 fn should_display(entry: &DirEntry, config: &Config) -> bool {
-    let ffi_name = entry.file_name();
-
-    // For unix, the hidden files are already included in the ignore pattern
-    #[cfg(windows)]
     {
         if config.files == Files::Normal && is_hidden(entry) {
             return false;
         }
     }
 
-    !config.ignore_patterns.is_match(&ffi_name)
+    for pattern in &config.ignore_patterns {
+        if pattern.matches(entry.file_name().to_str().unwrap()) {
+            return false;
+        };
+        continue;
+    }
+    return true;
 }
 
 fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>) {
@@ -1413,7 +1421,15 @@ fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>)
     let mut temp: Vec<_> = crash_if_err!(1, fs::read_dir(&dir.p_buf))
         .map(|res| crash_if_err!(1, res))
         .filter(|e| should_display(e, config))
-        .map(|e| PathData::new(DirEntry::path(&e), Some(e.file_type()), None, config, false))
+        .map(|e| {
+            PathData::new(
+                DirEntry::path(&e).to_path_buf(),
+                Some(e.file_type()),
+                None,
+                config,
+                false,
+            )
+        })
         .collect();
 
     sort_entries(&mut temp, config);
