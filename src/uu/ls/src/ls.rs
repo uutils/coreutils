@@ -1387,19 +1387,20 @@ fn is_hidden(file_path: &DirEntry) -> bool {
 }
 
 fn should_display(entry: &DirEntry, config: &Config) -> bool {
-    {
-        if config.files == Files::Normal && is_hidden(entry) {
-            return false;
-        }
+    // check if hidden
+    if config.files == Files::Normal && is_hidden(entry) {
+        return false;
     }
 
+    // check if explicitly ignored
     for pattern in &config.ignore_patterns {
         if pattern.matches(entry.file_name().to_str().unwrap()) {
             return false;
         };
         continue;
     }
-    return true;
+    // else default to display
+    true
 }
 
 fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>) {
@@ -1420,11 +1421,11 @@ fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>)
 
     let mut temp: Vec<_> = crash_if_err!(1, fs::read_dir(&dir.p_buf))
         .map(|res| crash_if_err!(1, res))
-        .filter(|e| should_display(e, config))
-        .map(|e| {
+        .filter(|res| should_display(res, config))
+        .map(|res| {
             PathData::new(
-                DirEntry::path(&e).to_path_buf(),
-                Some(e.file_type()),
+                DirEntry::path(&res),
+                Some(res.file_type()),
                 None,
                 config,
                 false,
