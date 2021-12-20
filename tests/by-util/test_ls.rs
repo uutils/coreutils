@@ -267,6 +267,7 @@ fn test_ls_columns() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_ls_across() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1931,6 +1932,7 @@ fn test_ls_ignore_hide() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_ls_ignore_backups() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
