@@ -68,6 +68,7 @@ fn test_ls_walk_glob() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_ls_a() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -267,7 +268,6 @@ fn test_ls_columns() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_ls_across() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
