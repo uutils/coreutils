@@ -1,26 +1,27 @@
-// TODO: Make -w flag work with decimals
+//  * This file is part of the uutils coreutils package.
+//  *
+//  * For the full copyright and license information, please view the LICENSE
+//  * file that was distributed with this source code.
 // TODO: Support -f flag
-
 // spell-checker:ignore (ToDO) istr chiter argptr ilen extendedbigdecimal extendedbigint numberparse
-
-#[macro_use]
-extern crate uucore;
+use std::io::{stdout, ErrorKind, Write};
 
 use clap::{crate_version, App, AppSettings, Arg};
 use num_traits::Zero;
-use std::io::{stdout, ErrorKind, Write};
 
+use uucore::error::FromIo;
+use uucore::error::UResult;
+
+mod error;
 mod extendedbigdecimal;
 mod extendedbigint;
 mod number;
 mod numberparse;
+use crate::error::SeqError;
 use crate::extendedbigdecimal::ExtendedBigDecimal;
 use crate::extendedbigint::ExtendedBigInt;
 use crate::number::Number;
 use crate::number::PreciseNumber;
-use crate::numberparse::ParseNumberError;
-
-use uucore::display::Quotable;
 
 static ABOUT: &str = "Display numbers from FIRST to LAST, in steps of INCREMENT.";
 static OPT_SEPARATOR: &str = "separator";
@@ -54,47 +55,8 @@ type RangeInt = (ExtendedBigInt, ExtendedBigInt, ExtendedBigInt);
 /// The elements are (first, increment, last).
 type RangeFloat = (ExtendedBigDecimal, ExtendedBigDecimal, ExtendedBigDecimal);
 
-/// Terminate the process with error code 1.
-///
-/// Before terminating the process, this function prints an error
-/// message that depends on `arg` and `e`.
-///
-/// Although the signature of this function states that it returns a
-/// [`PreciseNumber`], it never reaches the return statement. It is just
-/// there to make it easier to use this function when unwrapping the
-/// result of calling [`str::parse`] when attempting to parse a
-/// [`PreciseNumber`].
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// let s = "1.2e-3";
-/// s.parse::<PreciseNumber>.unwrap_or_else(|e| exit_with_error(s, e))
-/// ```
-fn exit_with_error(arg: &str, e: ParseNumberError) -> ! {
-    match e {
-        ParseNumberError::Float => crash!(
-            1,
-            "invalid floating point argument: {}\nTry '{} --help' for more information.",
-            arg.quote(),
-            uucore::execution_phrase()
-        ),
-        ParseNumberError::Nan => crash!(
-            1,
-            "invalid 'not-a-number' argument: {}\nTry '{} --help' for more information.",
-            arg.quote(),
-            uucore::execution_phrase()
-        ),
-        ParseNumberError::Hex => crash!(
-            1,
-            "invalid hexadecimal argument: {}\nTry '{} --help' for more information.",
-            arg.quote(),
-            uucore::execution_phrase()
-        ),
-    }
-}
-
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
@@ -107,28 +69,33 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     };
 
     let first = if numbers.len() > 1 {
-        let slice = numbers[0];
-        slice.parse().unwrap_or_else(|e| exit_with_error(slice, e))
+        match numbers[0].parse() {
+            Ok(num) => num,
+            Err(e) => return Err(SeqError::ParseError(numbers[0].to_string(), e).into()),
+        }
     } else {
         PreciseNumber::one()
     };
     let increment = if numbers.len() > 2 {
-        let slice = numbers[1];
-        slice.parse().unwrap_or_else(|e| exit_with_error(slice, e))
+        match numbers[1].parse() {
+            Ok(num) => num,
+            Err(e) => return Err(SeqError::ParseError(numbers[1].to_string(), e).into()),
+        }
     } else {
         PreciseNumber::one()
     };
     if increment.is_zero() {
-        show_error!(
-            "invalid Zero increment value: '{}'\nTry '{} --help' for more information.",
-            numbers[1],
-            uucore::execution_phrase()
-        );
-        return 1;
+        return Err(SeqError::ZeroIncrement(numbers[1].to_string()).into());
     }
     let last: PreciseNumber = {
-        let slice = numbers[numbers.len() - 1];
-        slice.parse().unwrap_or_else(|e| exit_with_error(slice, e))
+        // We are guaranteed that `numbers.len()` is greater than zero
+        // and at most three because of the argument specification in
+        // `uu_app()`.
+        let n: usize = numbers.len();
+        match numbers[n - 1].parse() {
+            Ok(num) => num,
+            Err(e) => return Err(SeqError::ParseError(numbers[n - 1].to_string(), e).into()),
+        }
     };
 
     let padding = first
@@ -164,9 +131,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         ),
     };
     match result {
-        Ok(_) => 0,
-        Err(err) if err.kind() == ErrorKind::BrokenPipe => 0,
-        Err(_) => 1,
+        Ok(_) => Ok(()),
+        Err(err) if err.kind() == ErrorKind::BrokenPipe => Ok(()),
+        Err(e) => Err(e.map_err_context(|| "write error".into())),
     }
 }
 
