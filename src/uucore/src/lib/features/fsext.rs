@@ -203,10 +203,14 @@ impl MountInfo {
             // Format: 36 35 98:0 /mnt1 /mnt2 rw,noatime master:1 - ext3 /dev/root rw,errors=continue
             // "man proc" for more details
             LINUX_MOUNTINFO => {
+                const FIELDS_OFFSET: usize = 6;
+                let after_fields = raw[FIELDS_OFFSET..].iter().position(|c| *c == "-").unwrap()
+                    + FIELDS_OFFSET
+                    + 1;
                 let mut m = MountInfo {
                     dev_id: "".to_string(),
-                    dev_name: raw[9].to_string(),
-                    fs_type: raw[8].to_string(),
+                    dev_name: raw[after_fields + 1].to_string(),
+                    fs_type: raw[after_fields].to_string(),
                     mount_root: raw[3].to_string(),
                     mount_dir: raw[4].to_string(),
                     mount_option: raw[5].to_string(),
@@ -890,5 +894,47 @@ mod tests {
         assert_eq!("fat", pretty_fstype(0x4006));
         assert_eq!("UNKNOWN (0x1234)", pretty_fstype(0x1234));
         // spell-checker:enable
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_mountinfo() {
+        // spell-checker:ignore (word) relatime
+        let info = MountInfo::new(
+            LINUX_MOUNTINFO,
+            "106 109 253:6 / /mnt rw,relatime - xfs /dev/fs0 rw"
+                .split_ascii_whitespace()
+                .collect(),
+        )
+        .unwrap();
+
+        assert_eq!(info.mount_root, "/");
+        assert_eq!(info.mount_dir, "/mnt");
+        assert_eq!(info.mount_option, "rw,relatime");
+        assert_eq!(info.fs_type, "xfs");
+        assert_eq!(info.dev_name, "/dev/fs0");
+
+        // Test parsing with different amounts of optional fields.
+        let info = MountInfo::new(
+            LINUX_MOUNTINFO,
+            "106 109 253:6 / /mnt rw,relatime master:1 - xfs /dev/fs0 rw"
+                .split_ascii_whitespace()
+                .collect(),
+        )
+        .unwrap();
+
+        assert_eq!(info.fs_type, "xfs");
+        assert_eq!(info.dev_name, "/dev/fs0");
+
+        let info = MountInfo::new(
+            LINUX_MOUNTINFO,
+            "106 109 253:6 / /mnt rw,relatime master:1 shared:2 - xfs /dev/fs0 rw"
+                .split_ascii_whitespace()
+                .collect(),
+        )
+        .unwrap();
+
+        assert_eq!(info.fs_type, "xfs");
+        assert_eq!(info.dev_name, "/dev/fs0");
     }
 }
