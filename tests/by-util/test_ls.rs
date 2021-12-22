@@ -2274,6 +2274,7 @@ fn test_ls_dangling_symlinks() {
         .ucmd()
         .arg("-Li")
         .arg("temp_dir")
+        .arg("-w40")
         .succeeds() // this should fail, though at the moment, ls lacks a way to propagate errors encountered during display
         .stdout_contains(if cfg!(windows) {
             " dangle"
