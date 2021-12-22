@@ -11,8 +11,6 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::thread::sleep;
 use std::time::Duration;
-use std::os::unix::fs::PermissionsExt;
-
 #[cfg(not(windows))]
 extern crate libc;
 #[cfg(not(windows))]
@@ -67,7 +65,7 @@ fn test_ls_io_errors() {
         .arg("-1")
         .arg("./some-dir/no_file_here")
         .fails()
-        .stderr_contains("cannot access");;
+        .stderr_contains("cannot access");
 }
 
 #[test]
