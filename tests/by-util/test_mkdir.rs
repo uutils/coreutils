@@ -1,4 +1,6 @@
 use crate::common::util::*;
+#[cfg(not(windows))]
+use std::os::unix::fs::PermissionsExt;
 
 static TEST_DIR1: &str = "mkdir_test1";
 static TEST_DIR2: &str = "mkdir_test2";
@@ -64,4 +66,37 @@ fn test_mkdir_dup_file() {
 
     // mkdir should fail for a file even if -p is specified.
     scene.ucmd().arg("-p").arg(TEST_FILE7).fails();
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_symbolic_mode() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("-m").arg("a=rwx").arg(TEST_DIR1).succeeds();
+    let perms = at.metadata(TEST_DIR1).permissions().mode();
+    assert_eq!(perms, 0o40777)
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_symbolic_alteration() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("-m").arg("-w").arg(TEST_DIR1).succeeds();
+    let perms = at.metadata(TEST_DIR1).permissions().mode();
+    assert_eq!(perms, 0o40555)
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_multi_symbolic() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("-m")
+        .arg("u=rwx,g=rx,o=")
+        .arg(TEST_DIR1)
+        .succeeds();
+    let perms = at.metadata(TEST_DIR1).permissions().mode();
+    assert_eq!(perms, 0o40750)
 }

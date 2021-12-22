@@ -267,11 +267,11 @@ impl Pinky {
 
         if self.include_fullname {
             if let Ok(pw) = Passwd::locate(ut.user().as_ref()) {
-                let mut gecos = pw.user_info().into_owned();
+                let mut gecos = pw.user_info;
                 if let Some(n) = gecos.find(',') {
                     gecos.truncate(n + 1);
                 }
-                print!(" {:<19.19}", gecos.replace("&", &pw.name().capitalize()));
+                print!(" {:<19.19}", gecos.replace("&", &pw.name.capitalize()));
             } else {
                 print!(" {:19}", "        ???");
             }
@@ -333,13 +333,13 @@ impl Pinky {
         for u in &self.names {
             print!("Login name: {:<28}In real life: ", u);
             if let Ok(pw) = Passwd::locate(u.as_str()) {
-                println!(" {}", pw.user_info().replace("&", &pw.name().capitalize()));
+                println!(" {}", pw.user_info.replace("&", &pw.name.capitalize()));
                 if self.include_home_and_shell {
-                    print!("Directory: {:<29}", pw.user_dir());
-                    println!("Shell:  {}", pw.user_shell());
+                    print!("Directory: {:<29}", pw.user_dir);
+                    println!("Shell:  {}", pw.user_shell);
                 }
                 if self.include_project {
-                    let mut p = PathBuf::from(pw.user_dir().as_ref());
+                    let mut p = PathBuf::from(&pw.user_dir);
                     p.push(".project");
                     if let Ok(f) = File::open(p) {
                         print!("Project: ");
@@ -347,7 +347,7 @@ impl Pinky {
                     }
                 }
                 if self.include_plan {
-                    let mut p = PathBuf::from(pw.user_dir().as_ref());
+                    let mut p = PathBuf::from(&pw.user_dir);
                     p.push(".plan");
                     if let Ok(f) = File::open(p) {
                         println!("Plan:");

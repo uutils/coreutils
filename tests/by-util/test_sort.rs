@@ -918,6 +918,7 @@ fn test_compress_merge() {
 
 #[test]
 fn test_compress_fail() {
+    #[cfg(not(windows))]
     TestScenario::new(util_name!())
         .ucmd_keepenv()
         .args(&[
@@ -930,6 +931,21 @@ fn test_compress_fail() {
         ])
         .fails()
         .stderr_only("sort: couldn't execute compress program: errno 2");
+    // With coverage, it fails with a different error:
+    // "thread 'main' panicked at 'called `Option::unwrap()` on ...
+    // So, don't check the output
+    #[cfg(windows)]
+    TestScenario::new(util_name!())
+        .ucmd_keepenv()
+        .args(&[
+            "ext_sort.txt",
+            "-n",
+            "--compress-program",
+            "nonexistent-program",
+            "-S",
+            "10",
+        ])
+        .fails();
 }
 
 #[test]

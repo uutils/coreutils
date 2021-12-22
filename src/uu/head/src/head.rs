@@ -3,23 +3,24 @@
 //  * For the full copyright and license information, please view the LICENSE
 //  * file that was distributed with this source code.
 
-// spell-checker:ignore (vars) zlines
+// spell-checker:ignore (vars) zlines BUFWRITER
 
 use clap::{crate_version, App, Arg};
 use std::convert::TryFrom;
 use std::ffi::OsString;
-use std::io::{self, ErrorKind, Read, Seek, SeekFrom, Write};
+use std::io::{self, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write};
 use uucore::display::Quotable;
-use uucore::{crash, show_error_custom_description};
+use uucore::error::{UResult, USimpleError};
+use uucore::show_error_custom_description;
 
-const EXIT_FAILURE: i32 = 1;
-const EXIT_SUCCESS: i32 = 0;
 const BUF_SIZE: usize = 65536;
+
+/// The capacity in bytes for buffered writers.
+const BUFWRITER_CAPACITY: usize = 16_384; // 16 kilobytes
 
 const ABOUT: &str = "\
                      Print the first 10 lines of each FILE to standard output.\n\
                      With more than one FILE, precede each with a header giving the file name.\n\
-                     \n\
                      With no FILE, or when FILE is -, read standard input.\n\
                      \n\
                      Mandatory arguments to long flags are mandatory for short flags too.\
@@ -36,10 +37,10 @@ mod options {
 }
 mod lines;
 mod parse;
-mod split;
 mod take;
 use lines::zlines;
 use take::take_all_but;
+use take::take_lines;
 
 pub fn uu_app() -> App<'static, 'static> {
     App::new(uucore::util_name())
@@ -108,6 +109,12 @@ enum Modes {
     Bytes(usize),
 }
 
+impl Default for Modes {
+    fn default() -> Self {
+        Modes::Lines(10)
+    }
+}
+
 fn parse_mode<F>(src: &str, closure: F) -> Result<(Modes, bool), String>
 where
     F: FnOnce(usize) -> Modes,
@@ -144,7 +151,7 @@ fn arg_iterate<'a>(
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Default)]
 struct HeadOptions {
     pub quiet: bool,
     pub verbose: bool,
@@ -155,22 +162,11 @@ struct HeadOptions {
 }
 
 impl HeadOptions {
-    pub fn new() -> HeadOptions {
-        HeadOptions {
-            quiet: false,
-            verbose: false,
-            zeroed: false,
-            all_but_last: false,
-            mode: Modes::Lines(10),
-            files: Vec::new(),
-        }
-    }
-
     ///Construct options from matches
     pub fn get_from(args: impl uucore::Args) -> Result<Self, String> {
         let matches = uu_app().get_matches_from(arg_iterate(args)?);
 
-        let mut options = HeadOptions::new();
+        let mut options: HeadOptions = Default::default();
 
         options.quiet = matches.is_present(options::QUIET_NAME);
         options.verbose = matches.is_present(options::VERBOSE_NAME);
@@ -197,12 +193,6 @@ impl HeadOptions {
         Ok(options)
     }
 }
-// to make clippy shut up
-impl Default for HeadOptions {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
 fn read_n_bytes<R>(input: R, n: usize) -> std::io::Result<()>
 where
@@ -221,26 +211,18 @@ where
 }
 
 fn read_n_lines(input: &mut impl std::io::BufRead, n: usize, zero: bool) -> std::io::Result<()> {
-    if n == 0 {
-        return Ok(());
-    }
+    // Read the first `n` lines from the `input` reader.
+    let separator = if zero { b'\0' } else { b'\n' };
+    let mut reader = take_lines(input, n, separator);
+
+    // Write those bytes to `stdout`.
     let stdout = std::io::stdout();
-    let mut stdout = stdout.lock();
-    let mut lines = 0usize;
-    split::walk_lines(input, zero, |e| match e {
-        split::Event::Data(dat) => {
-            stdout.write_all(dat)?;
-            Ok(true)
-        }
-        split::Event::Line => {
-            lines += 1;
-            if lines == n {
-                Ok(false)
-            } else {
-                Ok(true)
-            }
-        }
-    })
+    let stdout = stdout.lock();
+    let mut writer = BufWriter::with_capacity(BUFWRITER_CAPACITY, stdout);
+
+    io::copy(&mut reader, &mut writer)?;
+
+    Ok(())
 }
 
 fn read_but_last_n_bytes(input: &mut impl std::io::BufRead, n: usize) -> std::io::Result<()> {
@@ -384,7 +366,7 @@ fn head_file(input: &mut std::fs::File, options: &HeadOptions) -> std::io::Resul
     }
 }
 
-fn uu_head(options: &HeadOptions) -> Result<(), u32> {
+fn uu_head(options: &HeadOptions) -> UResult<()> {
     let mut error_count = 0;
     let mut first = true;
     for file in &options.files {
@@ -457,23 +439,21 @@ fn uu_head(options: &HeadOptions) -> Result<(), u32> {
         first = false;
     }
     if error_count > 0 {
-        Err(error_count)
+        Err(USimpleError::new(1, ""))
     } else {
         Ok(())
     }
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = match HeadOptions::get_from(args) {
         Ok(o) => o,
         Err(s) => {
-            crash!(EXIT_FAILURE, "{}", s);
+            return Err(USimpleError::new(1, s));
         }
     };
-    match uu_head(&args) {
-        Ok(_) => EXIT_SUCCESS,
-        Err(_) => EXIT_FAILURE,
-    }
+    uu_head(&args)
 }
 
 #[cfg(test)]
@@ -523,17 +503,13 @@ mod tests {
         assert!(options("-c IsThisJustFantasy").is_err());
     }
     #[test]
-    #[allow(clippy::bool_comparison)]
     fn test_options_correct_defaults() {
-        let opts = HeadOptions::new();
-        let opts2: HeadOptions = Default::default();
+        let opts: HeadOptions = Default::default();
 
-        assert_eq!(opts, opts2);
-
-        assert!(opts.verbose == false);
-        assert!(opts.quiet == false);
-        assert!(opts.zeroed == false);
-        assert!(opts.all_but_last == false);
+        assert!(!opts.verbose);
+        assert!(!opts.quiet);
+        assert!(!opts.zeroed);
+        assert!(!opts.all_but_last);
         assert_eq!(opts.mode, Modes::Lines(10));
         assert!(opts.files.is_empty());
     }

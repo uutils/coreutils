@@ -45,7 +45,7 @@ fn test_long_input() {
     // try something long.
     #[cfg(windows)]
     const TIMES: usize = 500;
-    let arg = "abcdefg".repeat(TIMES) + "\n";
+    let arg = "abcdef".repeat(TIMES) + "\n";
     let expected_out = arg.repeat(30);
     run(&[&arg[..arg.len() - 1]], expected_out.as_bytes());
 }

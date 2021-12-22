@@ -44,7 +44,8 @@ on Daniel Lemire's [*Microbenchmarking calls for idealized conditions*][lemire],
 which I recommend reading if you want to add benchmarks to `factor`.
 
 1. Select a small, self-contained, deterministic component
-   `gcd` and `table::factor` are good example of such:
+   (`gcd` and `table::factor` are good examples):
+
    - no I/O or access to external data structures ;
    - no call into other components ;
    - behavior is deterministic: no RNG, no concurrency, ... ;
@@ -53,16 +54,19 @@ which I recommend reading if you want to add benchmarks to `factor`.
      maximizing the numbers of samples we can take in a given time.
 
 2. Benchmarks are immutable (once merged in `uutils`)
+
    Modifying a benchmark means previously-collected values cannot meaningfully
    be compared, silently giving nonsensical results.  If you must modify an
    existing benchmark, rename it.
 
 3. Test common cases
+
    We are interested in overall performance, rather than specific edge-cases;
    use **reproducibly-randomized inputs**, sampling from either all possible
    input values or some subset of interest.
 
 4. Use [`criterion`], `criterion::black_box`, ...
+
    `criterion` isn't perfect, but it is also much better than ad-hoc
    solutions in each benchmark.
 

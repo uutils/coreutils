@@ -563,17 +563,13 @@ fn test_cp_backup_off() {
 
 #[test]
 fn test_cp_backup_no_clobber_conflicting_options() {
-    let ts = TestScenario::new(util_name!());
-    ts.ucmd()
+    new_ucmd!()
         .arg("--backup")
         .arg("--no-clobber")
         .arg(TEST_HELLO_WORLD_SOURCE)
         .arg(TEST_HOW_ARE_YOU_SOURCE)
-        .fails().stderr_is(&format!(
-            "{0}: options --backup and --no-clobber are mutually exclusive\nTry '{1} {0} --help' for more information.",
-            ts.util_name,
-            ts.bin_path.to_string_lossy()
-        ));
+        .fails()
+        .usage_error("options --backup and --no-clobber are mutually exclusive");
 }
 
 #[test]
@@ -727,6 +723,21 @@ fn test_cp_parents_dest_not_directory() {
         .arg(TEST_HELLO_WORLD_DEST)
         .fails()
         .stderr_contains("with --parents, the destination must be a directory");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_writable_special_file_permissions() {
+    new_ucmd!().arg("/dev/null").arg("/dev/zero").succeeds();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_issue_1665() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("/dev/null").arg("foo").succeeds();
+    assert!(at.file_exists("foo"));
+    assert_eq!(at.read("foo"), "");
 }
 
 #[test]

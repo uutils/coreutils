@@ -145,7 +145,9 @@ fn test_invalid_utf8() {
         .arg("not-utf8-sequence.txt")
         .run()
         .failure()
-        .stderr_only("uniq: invalid utf-8 sequence of 1 bytes from index 0");
+        .stderr_only(
+            "uniq: failed to convert line to utf8: invalid utf-8 sequence of 1 bytes from index 0",
+        );
 }
 
 #[test]

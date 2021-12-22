@@ -7,19 +7,17 @@
 
 // spell-checker:ignore (ToDO) Chmoder cmode fmode fperm fref ugoa RFILE RFILE's
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, App, Arg};
 use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
 use uucore::display::Quotable;
+use uucore::error::{ExitCode, UResult, USimpleError, UUsageError};
 use uucore::fs::display_permissions_unix;
 use uucore::libc::mode_t;
 #[cfg(not(windows))]
 use uucore::mode;
-use uucore::InvalidEncodingHandling;
+use uucore::{show_error, InvalidEncodingHandling};
 use walkdir::WalkDir;
 
 static ABOUT: &str = "Change the mode of each FILE to MODE.
@@ -50,14 +48,15 @@ fn get_long_usage() -> String {
     String::from("Each MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=]?[0-7]+'.")
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
 
     // Before we can parse 'args' with clap (and previously getopts),
     // a possible MODE prefix '-' needs to be removed (e.g. "chmod -x FILE").
-    let mode_had_minus_prefix = strip_minus_from_mode(&mut args);
+    let mode_had_minus_prefix = mode::strip_minus_from_mode(&mut args);
 
     let usage = usage();
     let after_help = get_long_usage();
@@ -72,12 +71,18 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let verbose = matches.is_present(options::VERBOSE);
     let preserve_root = matches.is_present(options::PRESERVE_ROOT);
     let recursive = matches.is_present(options::RECURSIVE);
-    let fmode = matches
-        .value_of(options::REFERENCE)
-        .and_then(|fref| match fs::metadata(fref) {
+    let fmode = match matches.value_of(options::REFERENCE) {
+        Some(fref) => match fs::metadata(fref) {
             Ok(meta) => Some(meta.mode()),
-            Err(err) => crash!(1, "cannot stat attributes of {}: {}", fref.quote(), err),
-        });
+            Err(err) => {
+                return Err(USimpleError::new(
+                    1,
+                    format!("cannot stat attributes of {}: {}", fref.quote(), err),
+                ))
+            }
+        },
+        None => None,
+    };
     let modes = matches.value_of(options::MODE).unwrap(); // should always be Some because required
     let cmode = if mode_had_minus_prefix {
         // clap parsing is finished, now put prefix back
@@ -100,7 +105,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     };
 
     if files.is_empty() {
-        crash!(1, "missing operand");
+        return Err(UUsageError::new(1, "missing operand".to_string()));
     }
 
     let chmoder = Chmoder {
@@ -112,12 +117,8 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         fmode,
         cmode,
     };
-    match chmoder.chmod(files) {
-        Ok(()) => {}
-        Err(e) => return e,
-    }
 
-    0
+    chmoder.chmod(files)
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -180,30 +181,6 @@ pub fn uu_app() -> App<'static, 'static> {
         )
 }
 
-// Iterate 'args' and delete the first occurrence
-// of a prefix '-' if it's associated with MODE
-// e.g. "chmod -v -xw -R FILE" -> "chmod -v xw -R FILE"
-pub fn strip_minus_from_mode(args: &mut Vec<String>) -> bool {
-    for arg in args {
-        if arg == "--" {
-            break;
-        }
-        if arg.starts_with('-') {
-            if let Some(second) = arg.chars().nth(1) {
-                match second {
-                    'r' | 'w' | 'x' | 'X' | 's' | 't' | 'u' | 'g' | 'o' | '0'..='7' => {
-                        // TODO: use strip_prefix() once minimum rust version reaches 1.45.0
-                        *arg = arg[1..arg.len()].to_string();
-                        return true;
-                    }
-                    _ => {}
-                }
-            }
-        }
-    }
-    false
-}
-
 struct Chmoder {
     changes: bool,
     quiet: bool,
@@ -215,7 +192,7 @@ struct Chmoder {
 }
 
 impl Chmoder {
-    fn chmod(&self, files: Vec<String>) -> Result<(), i32> {
+    fn chmod(&self, files: Vec<String>) -> UResult<()> {
         let mut r = Ok(());
 
         for filename in &files {
@@ -228,22 +205,30 @@ impl Chmoder {
                         filename.quote()
                     );
                     if !self.quiet {
-                        show_error!("cannot operate on dangling symlink {}", filename.quote());
+                        return Err(USimpleError::new(
+                            1,
+                            format!("cannot operate on dangling symlink {}", filename.quote()),
+                        ));
                     }
                 } else if !self.quiet {
-                    show_error!(
-                        "cannot access {}: No such file or directory",
-                        filename.quote()
-                    );
+                    return Err(USimpleError::new(
+                        1,
+                        format!(
+                            "cannot access {}: No such file or directory",
+                            filename.quote()
+                        ),
+                    ));
                 }
-                return Err(1);
+                return Err(ExitCode::new(1));
             }
             if self.recursive && self.preserve_root && filename == "/" {
-                show_error!(
-                    "it is dangerous to operate recursively on {}\nuse --no-preserve-root to override this failsafe",
-                    filename.quote()
-                );
-                return Err(1);
+                return Err(USimpleError::new(
+                    1,
+                    format!(
+                        "it is dangerous to operate recursively on {}\nuse --no-preserve-root to override this failsafe",
+                        filename.quote()
+                    )
+                ));
             }
             if !self.recursive {
                 r = self.chmod_file(file).and(r);
@@ -258,14 +243,14 @@ impl Chmoder {
     }
 
     #[cfg(windows)]
-    fn chmod_file(&self, file: &Path) -> Result<(), i32> {
+    fn chmod_file(&self, file: &Path) -> UResult<()> {
         // chmod is useless on Windows
         // it doesn't set any permissions at all
         // instead it just sets the readonly attribute on the file
-        Err(0)
+        Ok(())
     }
     #[cfg(unix)]
-    fn chmod_file(&self, file: &Path) -> Result<(), i32> {
+    fn chmod_file(&self, file: &Path) -> UResult<()> {
         use uucore::mode::get_umask;
 
         let fperm = match fs::metadata(file) {
@@ -282,11 +267,13 @@ impl Chmoder {
                 } else if err.kind() == std::io::ErrorKind::PermissionDenied {
                     // These two filenames would normally be conditionally
                     // quoted, but GNU's tests expect them to always be quoted
-                    show_error!("{}: Permission denied", file.quote());
+                    return Err(USimpleError::new(
+                        1,
+                        format!("{}: Permission denied", file.quote()),
+                    ));
                 } else {
-                    show_error!("{}: {}", file.quote(), err);
+                    return Err(USimpleError::new(1, format!("{}: {}", file.quote(), err)));
                 }
-                return Err(1);
             }
         };
         match self.fmode {
@@ -320,22 +307,25 @@ impl Chmoder {
                         }
                         Err(f) => {
                             if !self.quiet {
-                                show_error!("{}", f);
+                                return Err(USimpleError::new(1, f));
+                            } else {
+                                return Err(ExitCode::new(1));
                             }
-                            return Err(1);
                         }
                     }
                 }
                 self.change_file(fperm, new_mode, file)?;
                 // if a permission would have been removed if umask was 0, but it wasn't because umask was not 0, print an error and fail
                 if (new_mode & !naively_expected_new_mode) != 0 {
-                    show_error!(
-                        "{}: new permissions are {}, not {}",
-                        file.maybe_quote(),
-                        display_permissions_unix(new_mode as mode_t, false),
-                        display_permissions_unix(naively_expected_new_mode as mode_t, false)
-                    );
-                    return Err(1);
+                    return Err(USimpleError::new(
+                        1,
+                        format!(
+                            "{}: new permissions are {}, not {}",
+                            file.maybe_quote(),
+                            display_permissions_unix(new_mode as mode_t, false),
+                            display_permissions_unix(naively_expected_new_mode as mode_t, false)
+                        ),
+                    ));
                 }
             }
         }

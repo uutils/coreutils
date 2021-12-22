@@ -46,6 +46,8 @@ pub fn main() {
         "type UtilityMap<T> = HashMap<&'static str, (fn(T) -> i32, fn() -> App<'static, 'static>)>;\n\
          \n\
          fn util_map<T: uucore::Args>() -> UtilityMap<T> {\n\
+         \t#[allow(unused_mut)]\n\
+         \t#[allow(clippy::let_and_return)]\n\
          \tlet mut map = UtilityMap::new();\n\
          "
         .as_bytes(),

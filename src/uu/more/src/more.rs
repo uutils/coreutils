@@ -7,9 +7,6 @@
 
 // spell-checker:ignore (methods) isnt
 
-#[macro_use]
-extern crate uucore;
-
 use std::{
     fs::File,
     io::{stdin, stdout, BufReader, Read, Stdout, Write},
@@ -31,6 +28,7 @@ use crossterm::{
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 use uucore::display::Quotable;
+use uucore::error::{UResult, USimpleError, UUsageError};
 
 const BELL: &str = "\x07";
 
@@ -51,7 +49,8 @@ pub mod options {
 
 const MULTI_FILE_TOP_PROMPT: &str = "::::::::::::::\n{}\n::::::::::::::\n";
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
     let mut buff = String::new();
@@ -65,32 +64,36 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
             let file = Path::new(file);
             if file.is_dir() {
                 terminal::disable_raw_mode().unwrap();
-                show_usage_error!("{} is a directory.", file.quote());
-                return 1;
+                return Err(UUsageError::new(
+                    1,
+                    format!("{} is a directory.", file.quote()),
+                ));
             }
             if !file.exists() {
                 terminal::disable_raw_mode().unwrap();
-                show_error!("cannot open {}: No such file or directory", file.quote());
-                return 1;
+                return Err(USimpleError::new(
+                    1,
+                    format!("cannot open {}: No such file or directory", file.quote()),
+                ));
             }
             if length > 1 {
                 buff.push_str(&MULTI_FILE_TOP_PROMPT.replace("{}", file.to_str().unwrap()));
             }
             let mut reader = BufReader::new(File::open(file).unwrap());
             reader.read_to_string(&mut buff).unwrap();
-            more(&buff, &mut stdout, next_file.copied(), silent);
+            more(&buff, &mut stdout, next_file.copied(), silent)?;
             buff.clear();
         }
         reset_term(&mut stdout);
     } else if atty::isnt(atty::Stream::Stdin) {
         stdin().read_to_string(&mut buff).unwrap();
         let mut stdout = setup_term();
-        more(&buff, &mut stdout, None, silent);
+        more(&buff, &mut stdout, None, silent)?;
         reset_term(&mut stdout);
     } else {
-        show_usage_error!("bad usage");
+        return Err(UUsageError::new(1, "bad usage"));
     }
-    0
+    Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -210,14 +213,14 @@ fn reset_term(stdout: &mut std::io::Stdout) {
 #[inline(always)]
 fn reset_term(_: &mut usize) {}
 
-fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>, silent: bool) {
+fn more(buff: &str, stdout: &mut Stdout, next_file: Option<&str>, silent: bool) -> UResult<()> {
     let (cols, rows) = terminal::size().unwrap();
     let lines = break_buff(buff, usize::from(cols));
 
     let mut pager = Pager::new(rows, lines, next_file, silent);
     pager.draw(stdout, None);
     if pager.should_close() {
-        return;
+        return Ok(());
     }
 
     loop {
@@ -232,7 +235,7 @@ fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>, silent: bo
                     code: KeyCode::Char('c'),
                     modifiers: KeyModifiers::CONTROL,
                 }) => {
-                    reset_term(&mut stdout);
+                    reset_term(stdout);
                     std::process::exit(0);
                 }
                 Event::Key(KeyEvent {
@@ -244,7 +247,7 @@ fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>, silent: bo
                     modifiers: KeyModifiers::NONE,
                 }) => {
                     if pager.should_close() {
-                        return;
+                        return Ok(());
                     } else {
                         pager.page_down();
                     }
@@ -254,6 +257,22 @@ fn more(buff: &str, mut stdout: &mut Stdout, next_file: Option<&str>, silent: bo
                     modifiers: KeyModifiers::NONE,
                 }) => {
                     pager.page_up();
+                }
+                Event::Key(KeyEvent {
+                    code: KeyCode::Char('j'),
+                    modifiers: KeyModifiers::NONE,
+                }) => {
+                    if pager.should_close() {
+                        return Ok(());
+                    } else {
+                        pager.next_line();
+                    }
+                }
+                Event::Key(KeyEvent {
+                    code: KeyCode::Char('k'),
+                    modifiers: KeyModifiers::NONE,
+                }) => {
+                    pager.prev_line();
                 }
                 Event::Resize(col, row) => {
                     pager.page_resize(col, row);
@@ -301,11 +320,30 @@ impl<'a> Pager<'a> {
     }
 
     fn page_down(&mut self) {
+        // If the next page down position __after redraw__ is greater than the total line count,
+        // the upper mark must not grow past top of the screen at the end of the open file.
+        if self
+            .upper_mark
+            .saturating_add(self.content_rows as usize * 2)
+            .ge(&self.line_count)
+        {
+            self.upper_mark = self.line_count - self.content_rows as usize;
+            return;
+        }
+
         self.upper_mark = self.upper_mark.saturating_add(self.content_rows.into());
     }
 
     fn page_up(&mut self) {
         self.upper_mark = self.upper_mark.saturating_sub(self.content_rows.into());
+    }
+
+    fn next_line(&mut self) {
+        self.upper_mark = self.upper_mark.saturating_add(1);
+    }
+
+    fn prev_line(&mut self) {
+        self.upper_mark = self.upper_mark.saturating_sub(1);
     }
 
     // TODO: Deal with column size changes.

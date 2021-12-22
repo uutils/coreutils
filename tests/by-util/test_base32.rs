@@ -118,7 +118,7 @@ fn test_base32_extra_operand() {
         .arg("a.txt")
         .arg("b.txt")
         .fails()
-        .stderr_only("base32: extra operand 'b.txt'\nTry 'base32 --help' for more information.");
+        .usage_error("extra operand 'b.txt'");
 }
 
 #[test]

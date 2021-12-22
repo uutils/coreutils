@@ -7,11 +7,10 @@
 
 // spell-checker:ignore (ToDO) NPROCESSORS nprocs numstr threadstr sysconf
 
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, App, Arg};
 use std::env;
+use uucore::display::Quotable;
+use uucore::error::{UResult, USimpleError};
 
 #[cfg(target_os = "linux")]
 pub const _SC_NPROCESSORS_CONF: libc::c_int = 83;
@@ -31,7 +30,8 @@ fn usage() -> String {
     format!("{0} [OPTIONS]...", uucore::execution_phrase())
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
@@ -39,8 +39,10 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         Some(numstr) => match numstr.parse() {
             Ok(num) => num,
             Err(e) => {
-                show_error!("\"{}\" is not a valid number: {}", numstr, e);
-                return 1;
+                return Err(USimpleError::new(
+                    1,
+                    format!("{} is not a valid number: {}", numstr.quote(), e),
+                ));
             }
         },
         None => 0,
@@ -66,7 +68,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         cores -= ignore;
     }
     println!("{}", cores);
-    0
+    Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {

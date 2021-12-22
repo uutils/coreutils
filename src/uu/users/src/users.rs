@@ -11,6 +11,7 @@
 use std::path::Path;
 
 use clap::{crate_version, App, Arg};
+use uucore::error::UResult;
 use uucore::utmpx::{self, Utmpx};
 
 static ABOUT: &str = "Print the user names of users currently logged in to the current host";
@@ -29,7 +30,8 @@ If FILE is not specified, use {}.  /var/log/wtmp as FILE is common.",
     )
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let after_help = get_long_usage();
 
@@ -59,7 +61,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         println!("{}", users.join(" "));
     }
 
-    0
+    Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {

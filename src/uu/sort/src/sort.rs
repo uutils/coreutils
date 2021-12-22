@@ -171,10 +171,6 @@ impl UError for SortError {
             _ => 2,
         }
     }
-
-    fn usage(&self) -> bool {
-        false
-    }
 }
 
 impl Display for SortError {
@@ -663,18 +659,14 @@ impl<'a> Line<'a> {
                 " ".repeat(UnicodeWidthStr::width(&line[..selection.start]))
             )?;
 
-            // TODO: Once our minimum supported rust version is at least 1.47, use selection.is_empty() instead.
-            #[allow(clippy::len_zero)]
-            {
-                if selection.len() == 0 {
-                    writeln!(writer, "^ no match for key")?;
-                } else {
-                    writeln!(
-                        writer,
-                        "{}",
-                        "_".repeat(UnicodeWidthStr::width(&line[selection]))
-                    )?;
-                }
+            if selection.is_empty() {
+                writeln!(writer, "^ no match for key")?;
+            } else {
+                writeln!(
+                    writer,
+                    "{}",
+                    "_".repeat(UnicodeWidthStr::width(&line[selection]))
+                )?;
             }
         }
         if settings.mode != SortMode::Random
@@ -825,7 +817,7 @@ impl FieldSelector {
     fn parse(key: &str, global_settings: &GlobalSettings) -> UResult<Self> {
         let mut from_to = key.split(',');
         let (from, from_options) = Self::split_key_options(from_to.next().unwrap());
-        let to = from_to.next().map(|to| Self::split_key_options(to));
+        let to = from_to.next().map(Self::split_key_options);
         let options_are_empty = from_options.is_empty() && matches!(to, None | Some((_, "")));
 
         if options_are_empty {

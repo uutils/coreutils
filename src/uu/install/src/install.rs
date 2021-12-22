@@ -461,6 +461,8 @@ fn standard(mut paths: Vec<String>, b: Behavior) -> UResult<()> {
                     return Err(InstallError::CreateDirFailed(parent.to_path_buf(), e).into());
                 }
 
+                // Silent the warning as we want to the error message
+                #[allow(clippy::question_mark)]
                 if mode::chmod(parent, b.mode()).is_err() {
                     return Err(InstallError::ChmodFailed(parent.to_path_buf()).into());
                 }
@@ -583,6 +585,8 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
         }
     }
 
+    // Silent the warning as we want to the error message
+    #[allow(clippy::question_mark)]
     if mode::chmod(to, b.mode()).is_err() {
         return Err(InstallError::ChmodFailed(to.to_path_buf()).into());
     }

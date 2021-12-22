@@ -233,6 +233,40 @@ fn test_mv_force_replace_file() {
 }
 
 #[test]
+fn test_mv_same_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file_a = "test_mv_same_file_a";
+
+    at.touch(file_a);
+    ucmd.arg(file_a).arg(file_a).fails().stderr_is(format!(
+        "mv: '{f}' and '{f}' are the same file\n",
+        f = file_a,
+    ));
+}
+
+#[test]
+fn test_mv_same_file_not_dot_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_mv_errors_dir";
+
+    at.mkdir(dir);
+    ucmd.arg(dir).arg(dir).fails().stderr_is(format!(
+        "mv: cannot move '{d}' to a subdirectory of itself, '{d}/{d}'",
+        d = dir,
+    ));
+}
+
+#[test]
+fn test_mv_same_file_dot_dir() {
+    let (_at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg(".")
+        .arg(".")
+        .fails()
+        .stderr_is("mv: '.' and '.' are the same file\n".to_string());
+}
+
+#[test]
 fn test_mv_simple_backup() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_mv_simple_backup_file_a";
@@ -522,17 +556,13 @@ fn test_mv_backup_off() {
 
 #[test]
 fn test_mv_backup_no_clobber_conflicting_options() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd().arg("--backup")
+    new_ucmd!()
+        .arg("--backup")
         .arg("--no-clobber")
         .arg("file1")
         .arg("file2")
         .fails()
-        .stderr_is(&format!("{0}: options --backup and --no-clobber are mutually exclusive\nTry '{1} {0} --help' for more information.",
-            ts.util_name,
-            ts.bin_path.to_string_lossy()
-        ));
+        .usage_error("options --backup and --no-clobber are mutually exclusive");
 }
 
 #[test]

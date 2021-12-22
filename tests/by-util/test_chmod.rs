@@ -4,7 +4,7 @@ use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::sync::Mutex;
 
 extern crate libc;
-use self::chmod::strip_minus_from_mode;
+use uucore::mode::strip_minus_from_mode;
 extern crate chmod;
 use self::libc::umask;
 
@@ -541,7 +541,7 @@ fn test_no_operands() {
         .arg("777")
         .fails()
         .code_is(1)
-        .stderr_is("chmod: missing operand");
+        .usage_error("missing operand");
 }
 
 #[test]
