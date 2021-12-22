@@ -40,6 +40,35 @@ fn test_ls_i() {
 }
 
 #[test]
+fn test_ls_walk_glob() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch(".test-1");
+    at.mkdir("some-dir");
+    at.touch(
+        Path::new("some-dir")
+            .join("test-2~")
+            .as_os_str()
+            .to_str()
+            .unwrap(),
+    );
+
+    #[allow(clippy::trivial_regex)]
+    let re_pwd = Regex::new(r"^\.\n").unwrap();
+
+    scene
+        .ucmd()
+        .arg("-1")
+        .arg("--ignore-backups")
+        .arg("some-dir")
+        .succeeds()
+        .stdout_does_not_contain("test-2~")
+        .stdout_does_not_contain("..")
+        .stdout_does_not_match(&re_pwd);
+}
+
+#[test]
+#[cfg(unix)]
 fn test_ls_a() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1903,6 +1932,7 @@ fn test_ls_ignore_hide() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_ls_ignore_backups() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
