@@ -1,7 +1,6 @@
 // This file is part of the uutils coreutils package.
 //
 // (c) Jeremiah Peschka <jeremiah.peschka@gmail.com>
-// (c) Robert Swinford <robert.swinford(at)gmail.com>
 //
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
@@ -2076,6 +2075,11 @@ fn display_file_name(
             } + " "
                 + &name;
         }
+    }
+    // In order to get a lint error off my back, must use 
+    #[cfg(not(unix))]
+    {
+        let _ = out;
     }
 
     // We need to keep track of the width ourselves instead of letting term_grid
