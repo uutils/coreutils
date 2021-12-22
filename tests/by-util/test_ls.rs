@@ -40,6 +40,36 @@ fn test_ls_i() {
 }
 
 #[test]
+fn test_ls_io_errors() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("some-dir");
+
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    scene
+        .ucmd()
+        .arg("-1")
+        .arg("/var/root")
+        .fails()
+        .stderr_contains("cannot open directory");
+
+    #[cfg(linux)]
+    scene
+        .ucmd()
+        .arg("-1")
+        .arg("/sys/kernel/tracing")
+        .fails()
+        .stderr_contains("cannot open directory");
+
+    scene
+        .ucmd()
+        .arg("-1")
+        .arg("./some-dir/no_file_here")
+        .fails()
+        .stderr_contains("cannot access");
+}
+
+#[test]
 fn test_ls_walk_glob() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -2303,8 +2333,8 @@ fn test_ls_dangling_symlinks() {
         .ucmd()
         .arg("-Li")
         .arg("temp_dir")
-        .succeeds() // this should fail, though at the moment, ls lacks a way to propagate errors encountered during display
-        .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
+        .fails() // this should fail, though at the moment, ls lacks a way to propagate errors encountered during display
+        .stderr_contains("cannot access");
 }
 
 #[test]

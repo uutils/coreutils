@@ -1,6 +1,7 @@
 // This file is part of the uutils coreutils package.
 //
 // (c) Jeremiah Peschka <jeremiah.peschka@gmail.com>
+// (c) Robert Swinford <robert.swinford(at)gmail.com>
 //
 // For the full copyright and license information, please view the LICENSE file
 // that was distributed with this source code.
@@ -29,7 +30,7 @@ use std::{
     error::Error,
     fmt::Display,
     fs::{self, DirEntry, FileType, Metadata},
-    io::{stdout, BufWriter, Stdout, Write},
+    io::{stdout, BufWriter, ErrorKind, Stdout, Write},
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -142,14 +143,16 @@ const DEFAULT_TERM_WIDTH: u16 = 80;
 #[derive(Debug)]
 enum LsError {
     InvalidLineWidth(String),
-    NoMetadata(PathBuf),
+    IOError(std::io::Error),
+    IOErrorContext(std::io::Error, OsString),
 }
 
 impl UError for LsError {
     fn code(&self) -> i32 {
         match self {
             LsError::InvalidLineWidth(_) => 2,
-            LsError::NoMetadata(_) => 1,
+            LsError::IOError(_) => 1,
+            LsError::IOErrorContext(_, _) => 1,
         }
     }
 }
@@ -160,7 +163,40 @@ impl Display for LsError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             LsError::InvalidLineWidth(s) => write!(f, "invalid line width: {}", s.quote()),
-            LsError::NoMetadata(p) => write!(f, "could not open file: {}", p.quote()),
+            LsError::IOError(e) => write!(f, "general io error: {}", e),
+            LsError::IOErrorContext(e, s) => {
+                let path = Path::new(s);
+                let error_kind = e.kind();
+
+                match error_kind {
+                    ErrorKind::NotFound => write!(
+                        f,
+                        "cannot access '{}': No such file or directory",
+                        s.to_string_lossy()
+                    ),
+                    ErrorKind::PermissionDenied => {
+                        if path.is_dir() {
+                            write!(
+                                f,
+                                "cannot open directory '{}': Permission denied",
+                                s.to_string_lossy()
+                            )
+                        } else {
+                            write!(
+                                f,
+                                "cannot open file '{}': Permission denied",
+                                s.to_string_lossy()
+                            )
+                        }
+                    }
+                    _ => write!(
+                        f,
+                        "unknown io error: '{:?}', '{:?}'",
+                        s.to_string_lossy(),
+                        e
+                    ),
+                }
+            }
         }
     }
 }
@@ -1205,6 +1241,7 @@ only ignore '.' and '..'.",
 /// Represents a Path along with it's associated data
 /// Any data that will be reused several times makes sense to be added to this structure
 /// Caching data here helps eliminate redundant syscalls to fetch same information
+#[derive(Debug, Clone)]
 struct PathData {
     // Result<MetaData> got from symlink_metadata() or metadata() based on config
     md: OnceCell<Option<Metadata>>,
@@ -1298,13 +1335,11 @@ fn list(locs: Vec<&Path>, config: Config) -> UResult<()> {
         let path_data = PathData::new(p, None, None, &config, true);
 
         if path_data.md().is_none() {
-            // FIXME: Would be nice to use the actual error instead of hardcoding it
-            // Presumably other errors can happen too?
-            show_error!(
-                "cannot access {}: No such file or directory",
-                path_data.p_buf.quote()
-            );
-            set_exit_code(1);
+            let _ = out.flush();
+            show!(LsError::IOErrorContext(
+                std::io::Error::new(ErrorKind::NotFound, "NotFound"),
+                path_data.p_buf.as_os_str().to_owned()
+            ));
             // We found an error, no need to continue the execution
             continue;
         }
@@ -1324,10 +1359,19 @@ fn list(locs: Vec<&Path>, config: Config) -> UResult<()> {
         }
     }
     sort_entries(&mut files, &config);
+    sort_entries(&mut dirs, &config);
+
     display_items(&files, &config, &mut out);
 
-    sort_entries(&mut dirs, &config);
     for dir in dirs {
+        // check for errors early, and ignore entries with errors
+        if let Err(err) = fs::read_dir(&dir.p_buf) {
+            // flush buffer because the error may get printed in the wrong order
+            let _ = out.flush();
+            show!(LsError::IOErrorContext(err, dir.display_name.to_owned()));
+            // exit loop and don't print error dir entries, this matches GNU semantics
+            continue;
+        }
         if locs.len() > 1 || config.recursive {
             // FIXME: This should use the quoting style and propagate errors
             let _ = writeln!(out, "\n{}:", dir.p_buf.display());
@@ -1399,11 +1443,13 @@ fn should_display(entry: &DirEntry, config: &Config) -> bool {
         };
         continue;
     }
+
     // else default to display
     true
 }
 
 fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>) {
+    // Create vec of entries with initial dot files
     let mut entries: Vec<_> = if config.files == Files::All {
         vec![
             PathData::new(
@@ -1419,23 +1465,39 @@ fn enter_directory(dir: &PathData, config: &Config, out: &mut BufWriter<Stdout>)
         vec![]
     };
 
-    let mut temp: Vec<_> = crash_if_err!(1, fs::read_dir(&dir.p_buf))
-        .map(|res| crash_if_err!(1, res))
-        .filter(|res| should_display(res, config))
-        .map(|res| {
-            PathData::new(
-                DirEntry::path(&res),
-                Some(res.file_type()),
+    // Read target dir entries, error is empty as already checked and displayed
+    // in the preceding 'list' function
+    let read_dir = match fs::read_dir(&dir.p_buf) {
+        Ok(res) => res,
+        Err(_) => return,
+    };
+
+    // Convert those entries to the PathData struct
+    let mut path_data = Vec::new();
+
+    for entry in read_dir {
+        let unwrapped = match entry {
+            Ok(path) => path,
+            Err(error) => {
+                let _ = out.flush();
+                show!(LsError::IOError(error));
+                break;
+            }
+        };
+        if should_display(&unwrapped, config) {
+            path_data.push(PathData::new(
+                DirEntry::path(&unwrapped),
+                Some(unwrapped.file_type()),
                 None,
                 config,
                 false,
-            )
-        })
-        .collect();
+            ))
+        }
+    }
 
-    sort_entries(&mut temp, config);
+    sort_entries(&mut path_data, config);
 
-    entries.append(&mut temp);
+    entries.append(&mut path_data);
 
     display_items(&entries, config, out);
 
@@ -1540,9 +1602,16 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
         } else {
             None
         };
-        let names = items
-            .iter()
-            .filter_map(|i| display_file_name(i, config, prefix_context));
+
+        // closure prevents using stdout with display_file_name
+        // where we need to flush the buffer on error
+        let mut vec = Vec::new();
+        for item in items {
+            if let Some(res) = display_file_name(item, config, prefix_context, out) {
+                vec.push(res)
+            }
+        }
+        let names = vec.into_iter();
 
         match config.format {
             Format::Columns => display_grid(names, config.width, Direction::TopToBottom, out),
@@ -1679,7 +1748,11 @@ fn display_item_long(
 ) {
     let md = match item.md() {
         None => {
-            show!(LsError::NoMetadata(item.p_buf.clone()));
+            let _ = out.flush();
+            show!(LsError::IOErrorContext(
+                std::io::Error::new(ErrorKind::NotFound, "NotFound"),
+                item.p_buf.as_os_str().to_owned()
+            ));
             return;
         }
         Some(md) => md,
@@ -1740,15 +1813,17 @@ fn display_item_long(
         );
     }
 
+    // unwrap is fine because it fails when metadata is not available
+    // but we already know that it is because it's checked at the
+    // start of the function.
+    let dfn = display_file_name(item, config, None, out).unwrap().contents;
+
     let _ = writeln!(
         out,
         " {} {} {}",
         pad_left(&display_size_or_rdev(md, config), padding.longest_size_len),
         display_date(md, config),
-        // unwrap is fine because it fails when metadata is not available
-        // but we already know that it is because it's checked at the
-        // start of the function.
-        display_file_name(item, config, None).unwrap().contents,
+        dfn,
     );
 }
 
@@ -1980,6 +2055,7 @@ fn display_file_name(
     path: &PathData,
     config: &Config,
     prefix_context: Option<usize>,
+    out: &mut BufWriter<Stdout>,
 ) -> Option<Cell> {
     // This is our return value. We start by `&path.display_name` and modify it along the way.
     let mut name = escape_name(&path.display_name, &config.quoting_style);
@@ -1987,7 +2063,18 @@ fn display_file_name(
     #[cfg(unix)]
     {
         if config.format != Format::Long && config.inode {
-            name = path.md().map_or_else(|| "?".to_string(), get_inode) + " " + &name;
+            name = match path.md() {
+                Some(md) => get_inode(md),
+                None => {
+                    let _ = out.flush();
+                    show!(LsError::IOErrorContext(
+                        std::io::Error::new(ErrorKind::NotFound, "NotFound"),
+                        path.display_name.to_owned()
+                    ));
+                    "?".to_string()
+                }
+            } + " "
+                + &name;
         }
     }
 
