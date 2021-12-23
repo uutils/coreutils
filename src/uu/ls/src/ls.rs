@@ -42,8 +42,7 @@ use std::{
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use uucore::{
     display::Quotable,
-    error::{set_exit_code, UError, UIoError, UResult},
-    //error::{set_exit_code, UError, UResult},
+    error::{set_exit_code, UError, UResult},
 };
 
 use unicode_width::UnicodeWidthStr;
@@ -1335,14 +1334,10 @@ fn list(locs: Vec<&Path>, config: Config) -> UResult<()> {
 
         if path_data.md().is_none() {
             let _ = out.flush();
-             show!(UIoError::new(
-                 ErrorKind::NotFound,
-                 format!("cannot access {}", path_data.display_name.quote())
+            show!(LsError::IOErrorContext(
+                std::io::Error::new(ErrorKind::NotFound, "NotFound"),
+                path_data.p_buf.as_os_str().to_owned()
             ));
-            // show!(LsError::IOErrorContext(
-            //     std::io::Error::new(ErrorKind::NotFound, "NotFound"),
-            //     path_data.p_buf.as_os_str().to_owned()
-            // ));
             // We found an error, no need to continue the execution
             continue;
         }
@@ -1606,11 +1601,11 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             None
         };
 
-        let names: Vec<_> = items
+        let names: std::vec::IntoIter<Cell> = items
             .iter()
             .filter_map(|i| display_file_name(i, config, prefix_context, out))
-            .collect();
-        let names = names.into_iter();
+            .collect::<Vec<Cell>>()
+            .into_iter();
 
         match config.format {
             Format::Columns => display_grid(names, config.width, Direction::TopToBottom, out),
@@ -2073,7 +2068,8 @@ fn display_file_name(
                     ));
                     "?".to_string()
                 }
-            } + " " + &name;
+            } + " "
+                + &name;
         }
     }
 
@@ -2100,7 +2096,7 @@ fn display_file_name(
             IndicatorStyle::Classify => sym,
             IndicatorStyle::FileType => {
                 // Don't append an asterisk.
-                match sym { 
+                match sym {
                     Some('*') => None,
                     _ => sym,
                 }
