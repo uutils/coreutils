@@ -2332,8 +2332,9 @@ fn test_ls_dangling_symlinks() {
         .ucmd()
         .arg("-Li")
         .arg("temp_dir")
-        .fails() // this should fail, though at the moment, ls lacks a way to propagate errors encountered during display
-        .stderr_contains("cannot access");
+        .fails() 
+        .stderr_contains("cannot access")
+        .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
 }
 
 #[test]

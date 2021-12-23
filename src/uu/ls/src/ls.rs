@@ -1240,7 +1240,6 @@ only ignore '.' and '..'.",
 /// Represents a Path along with it's associated data
 /// Any data that will be reused several times makes sense to be added to this structure
 /// Caching data here helps eliminate redundant syscalls to fetch same information
-#[derive(Debug, Clone)]
 struct PathData {
     // Result<MetaData> got from symlink_metadata() or metadata() based on config
     md: OnceCell<Option<Metadata>>,
@@ -1602,15 +1601,11 @@ fn display_items(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout
             None
         };
 
-        // closure prevents using stdout with display_file_name
-        // where we need to flush the buffer on error
-        let mut vec = Vec::new();
-        for item in items {
-            if let Some(res) = display_file_name(item, config, prefix_context, out) {
-                vec.push(res)
-            }
-        }
-        let names = vec.into_iter();
+        let names: Vec<_> = items
+            .iter()
+            .filter_map(|i| display_file_name(i, config, prefix_context, out))
+            .collect();
+        let names = names.into_iter();
 
         match config.format {
             Format::Columns => display_grid(names, config.width, Direction::TopToBottom, out),
@@ -2076,7 +2071,7 @@ fn display_file_name(
                 + &name;
         }
     }
-    // In order to get a lint error off my back, must use 
+    // In order to get a lint error off my back, must use the following.
     #[cfg(not(unix))]
     {
         let _ = out;
