@@ -2082,7 +2082,14 @@ fn display_file_name(
     let mut width = name.width();
 
     if let Some(ls_colors) = &config.color {
-        name = color_name(ls_colors, &path.p_buf, name, path.md()?);
+        // quietly ignore error, we already printed that error above
+        if let Some(metadata) = path.md() {
+            name = color_name(ls_colors, &path.p_buf, name, metadata);
+        }
+        // is dangling symlink?
+        if let Ok(metadata) = path.p_buf.symlink_metadata() {
+            name = color_name(ls_colors, &path.p_buf, name, &metadata);
+        }
     }
 
     if config.indicator_style != IndicatorStyle::None {
