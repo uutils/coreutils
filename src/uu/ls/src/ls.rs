@@ -2082,13 +2082,14 @@ fn display_file_name(
     let mut width = name.width();
 
     if let Some(ls_colors) = &config.color {
-        // quietly ignore error, we already printed that error above
+        // quietly ignore any error here, we already printed the error above
         if let Some(metadata) = path.md() {
             name = color_name(ls_colors, &path.p_buf, name, metadata);
-        }
-        // is dangling symlink?
-        if let Ok(metadata) = path.p_buf.symlink_metadata() {
-            name = color_name(ls_colors, &path.p_buf, name, &metadata);
+        } else {
+            // dereference: is dangling symlink?
+            if let Ok(metadata) = path.p_buf.symlink_metadata() {
+                name = color_name(ls_colors, &path.p_buf, name, &metadata);
+            }
         }
     }
 
@@ -2099,7 +2100,7 @@ fn display_file_name(
             IndicatorStyle::Classify => sym,
             IndicatorStyle::FileType => {
                 // Don't append an asterisk.
-                match sym {
+                match sym { 
                     Some('*') => None,
                     _ => sym,
                 }
