@@ -42,7 +42,8 @@ use std::{
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use uucore::{
     display::Quotable,
-    error::{set_exit_code, UError, UIoError, UResult},
+    //error::{set_exit_code, UError, UIoError, UResult},
+    error::{set_exit_code, UError, UResult},
 };
 
 use unicode_width::UnicodeWidthStr;
@@ -1334,7 +1335,7 @@ fn list(locs: Vec<&Path>, config: Config) -> UResult<()> {
 
         if path_data.md().is_none() {
             let _ = out.flush();
-            // show!(UIoError::new(
+            // show!(IoError::new(
             //     ErrorKind::NotFound,
             //     format!("cannot access {}", path_data.p_buf.as_os_str().quote())
             // ));
@@ -2059,7 +2060,7 @@ fn display_file_name(
     // This is our return value. We start by `&path.display_name` and modify it along the way.
     let mut name = escape_name(&path.display_name, &config.quoting_style);
 
-    #[cfg(unix)]
+    #[cfg(not(windows))]
     {
         if config.format != Format::Long && config.inode {
             name = match path.md() {
@@ -2072,8 +2073,7 @@ fn display_file_name(
                     ));
                     "?".to_string()
                 }
-            } + " "
-                + &name;
+            } + " " + &name;
         }
     }
 
