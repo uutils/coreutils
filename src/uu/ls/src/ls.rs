@@ -42,8 +42,8 @@ use std::{
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use uucore::{
     display::Quotable,
-    //error::{set_exit_code, UError, UIoError, UResult},
-    error::{set_exit_code, UError, UResult},
+    error::{set_exit_code, UError, UIoError, UResult},
+    //error::{set_exit_code, UError, UResult},
 };
 
 use unicode_width::UnicodeWidthStr;
@@ -1335,14 +1335,14 @@ fn list(locs: Vec<&Path>, config: Config) -> UResult<()> {
 
         if path_data.md().is_none() {
             let _ = out.flush();
-            // show!(IoError::new(
-            //     ErrorKind::NotFound,
-            //     format!("cannot access {}", path_data.p_buf.as_os_str().quote())
-            // ));
-            show!(LsError::IOErrorContext(
-                std::io::Error::new(ErrorKind::NotFound, "NotFound"),
-                path_data.p_buf.as_os_str().to_owned()
+             show!(UIoError::new(
+                 ErrorKind::NotFound,
+                 format!("cannot access {}", path_data.display_name.quote())
             ));
+            // show!(LsError::IOErrorContext(
+            //     std::io::Error::new(ErrorKind::NotFound, "NotFound"),
+            //     path_data.p_buf.as_os_str().to_owned()
+            // ));
             // We found an error, no need to continue the execution
             continue;
         }
