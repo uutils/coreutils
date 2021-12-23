@@ -42,7 +42,7 @@ use std::{
 use term_grid::{Cell, Direction, Filling, Grid, GridOptions};
 use uucore::{
     display::Quotable,
-    error::{set_exit_code, UError, UResult},
+    error::{set_exit_code, UError, UIoError, UResult},
 };
 
 use unicode_width::UnicodeWidthStr;
@@ -1334,6 +1334,10 @@ fn list(locs: Vec<&Path>, config: Config) -> UResult<()> {
 
         if path_data.md().is_none() {
             let _ = out.flush();
+            // show!(UIoError::new(
+            //     ErrorKind::NotFound,
+            //     format!("cannot access {}", path_data.p_buf.as_os_str().quote())
+            // ));
             show!(LsError::IOErrorContext(
                 std::io::Error::new(ErrorKind::NotFound, "NotFound"),
                 path_data.p_buf.as_os_str().to_owned()
@@ -2045,6 +2049,7 @@ fn classify_file(path: &PathData) -> Option<char> {
 ///
 /// Note that non-unicode sequences in symlink targets are dealt with using
 /// [`std::path::Path::to_string_lossy`].
+#[allow(unused_variables)]
 fn display_file_name(
     path: &PathData,
     config: &Config,
@@ -2070,11 +2075,6 @@ fn display_file_name(
             } + " "
                 + &name;
         }
-    }
-    // In order to get a lint error off my back, must use the following.
-    #[cfg(not(unix))]
-    {
-        let _ = out;
     }
 
     // We need to keep track of the width ourselves instead of letting term_grid

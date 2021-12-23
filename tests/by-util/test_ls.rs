@@ -2332,7 +2332,7 @@ fn test_ls_dangling_symlinks() {
         .ucmd()
         .arg("-Li")
         .arg("temp_dir")
-        .fails() 
+        .fails()
         .stderr_contains("cannot access")
         .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
 }
