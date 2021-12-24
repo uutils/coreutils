@@ -6,15 +6,14 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) fname
-
-#[macro_use]
-extern crate uucore;
-
 use clap::{crate_version, App, Arg};
 use std::fs::File;
 use std::io::{self, stdin, BufReader, Read};
 use std::path::Path;
 use uucore::display::Quotable;
+use uucore::error::UResult;
+use uucore::error::USimpleError;
+use uucore::show;
 use uucore::InvalidEncodingHandling;
 
 // NOTE: CRC_TABLE_LEN *must* be <= 256 as we cast 0..CRC_TABLE_LEN to u8
@@ -123,7 +122,8 @@ mod options {
     pub static FILE: &str = "file";
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
@@ -139,25 +139,22 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         match cksum("-") {
             Ok((crc, size)) => println!("{} {}", crc, size),
             Err(err) => {
-                show_error!("-: {}", err);
-                return 2;
+                return Err(USimpleError::new(2, format!("{}", err)));
             }
         }
-        return 0;
+        return Ok(());
     }
 
-    let mut exit_code = 0;
     for fname in &files {
         match cksum(fname.as_ref()) {
             Ok((crc, size)) => println!("{} {} {}", crc, size, fname),
-            Err(err) => {
-                show_error!("{}: {}", fname.maybe_quote(), err);
-                exit_code = 2;
-            }
+            Err(err) => show!(USimpleError::new(
+                2,
+                format!("{}: {}", fname.maybe_quote(), err)
+            )),
         }
     }
-
-    exit_code
+    Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {
