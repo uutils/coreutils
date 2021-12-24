@@ -6,9 +6,7 @@
 //  * file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) sbytes slen dlen memmem memmap Mmap mmap SIGBUS
-
-#[macro_use]
-extern crate uucore;
+mod error;
 
 use clap::{crate_version, App, Arg};
 use memchr::memmem;
@@ -19,7 +17,12 @@ use std::{
     path::Path,
 };
 use uucore::display::Quotable;
+use uucore::error::UError;
+use uucore::error::UResult;
+use uucore::show;
 use uucore::InvalidEncodingHandling;
+
+use crate::error::TacError;
 
 static NAME: &str = "tac";
 static USAGE: &str = "[OPTION]... [FILE]...";
@@ -32,7 +35,8 @@ mod options {
     pub static FILE: &str = "file";
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::ConvertLossy)
         .accept_any();
@@ -214,11 +218,13 @@ fn buffer_tac(data: &[u8], before: bool, separator: &str) -> std::io::Result<()>
     Ok(())
 }
 
-fn tac(filenames: Vec<&str>, before: bool, regex: bool, separator: &str) -> i32 {
-    let mut exit_code = 0;
-
-    let pattern = if regex {
-        Some(crash_if_err!(1, regex::bytes::Regex::new(separator)))
+fn tac(filenames: Vec<&str>, before: bool, regex: bool, separator: &str) -> UResult<()> {
+    // Compile the regular expression pattern if it is provided.
+    let maybe_pattern = if regex {
+        match regex::bytes::Regex::new(separator) {
+            Ok(p) => Some(p),
+            Err(e) => return Err(TacError::InvalidRegex(e).into()),
+        }
     } else {
         None
     };
@@ -234,8 +240,8 @@ fn tac(filenames: Vec<&str>, before: bool, regex: bool, separator: &str) -> i32 
             } else {
                 let mut buf1 = Vec::new();
                 if let Err(e) = stdin().read_to_end(&mut buf1) {
-                    show_error!("failed to read from stdin: {}", e);
-                    exit_code = 1;
+                    let e: Box<dyn UError> = TacError::ReadError("stdin".to_string(), e).into();
+                    show!(e);
                     continue;
                 }
                 buf = buf1;
@@ -243,16 +249,15 @@ fn tac(filenames: Vec<&str>, before: bool, regex: bool, separator: &str) -> i32 
             }
         } else {
             let path = Path::new(filename);
-            if path.is_dir() || path.metadata().is_err() {
-                if path.is_dir() {
-                    show_error!("{}: read error: Invalid argument", filename.maybe_quote());
-                } else {
-                    show_error!(
-                        "failed to open {} for reading: No such file or directory",
-                        filename.quote()
-                    );
-                }
-                exit_code = 1;
+            if path.is_dir() {
+                let e: Box<dyn UError> = TacError::InvalidArgument(String::from(filename)).into();
+                show!(e);
+                continue;
+            }
+
+            if path.metadata().is_err() {
+                let e: Box<dyn UError> = TacError::FileNotFound(String::from(filename)).into();
+                show!(e);
                 continue;
             }
 
@@ -266,22 +271,28 @@ fn tac(filenames: Vec<&str>, before: bool, regex: bool, separator: &str) -> i32 
                         &buf
                     }
                     Err(e) => {
-                        show_error!("failed to read {}: {}", filename.quote(), e);
-                        exit_code = 1;
+                        let s = format!("{}", filename.quote());
+                        let e: Box<dyn UError> = TacError::ReadError(s.to_string(), e).into();
+                        show!(e);
                         continue;
                     }
                 }
             }
         };
 
-        if let Some(pattern) = &pattern {
-            buffer_tac_regex(data, pattern, before)
-        } else {
-            buffer_tac(data, before, separator)
+        // Select the appropriate `tac` algorithm based on whether the
+        // separator is given as a regular expression or a fixed string.
+        let result = match maybe_pattern {
+            Some(ref pattern) => buffer_tac_regex(data, pattern, before),
+            None => buffer_tac(data, before, separator),
+        };
+
+        // If there is any error in writing the output, terminate immediately.
+        if let Err(e) = result {
+            return Err(TacError::WriteError(e).into());
         }
-        .unwrap_or_else(|e| crash!(1, "failed to write to stdout: {}", e));
     }
-    exit_code
+    Ok(())
 }
 
 fn try_mmap_stdin() -> Option<Mmap> {
