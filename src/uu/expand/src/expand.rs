@@ -18,6 +18,7 @@ use std::io::{stdin, stdout, BufRead, BufReader, BufWriter, Read, Write};
 use std::str::from_utf8;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
+use uucore::error::{FromIo, UResult};
 
 static ABOUT: &str = "Convert tabs in each FILE to spaces, writing to standard output.
  With no FILE, or when FILE is -, read standard input.";
@@ -170,12 +171,12 @@ impl Options {
     }
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
 
-    expand(Options::new(&matches));
-    0
+    expand(Options::new(&matches)).map_err_context(|| "failed to write output".to_string())
 }
 
 pub fn uu_app() -> App<'static, 'static> {
@@ -269,7 +270,7 @@ enum CharType {
     Other,
 }
 
-fn expand(options: Options) {
+fn expand(options: Options) -> std::io::Result<()> {
     use self::CharType::*;
 
     let mut output = BufWriter::new(stdout());
@@ -330,15 +331,12 @@ fn expand(options: Options) {
                         // now dump out either spaces if we're expanding, or a literal tab if we're not
                         if init || !options.iflag {
                             if nts <= options.tspaces.len() {
-                                crash_if_err!(
-                                    1,
-                                    output.write_all(options.tspaces[..nts].as_bytes())
-                                );
+                                output.write_all(options.tspaces[..nts].as_bytes())?
                             } else {
-                                crash_if_err!(1, output.write_all(" ".repeat(nts).as_bytes()));
+                                output.write_all(" ".repeat(nts).as_bytes())?;
                             };
                         } else {
-                            crash_if_err!(1, output.write_all(&buf[byte..byte + nbytes]));
+                            output.write_all(&buf[byte..byte + nbytes])?;
                         }
                     }
                     _ => {
@@ -356,17 +354,18 @@ fn expand(options: Options) {
                             init = false;
                         }
 
-                        crash_if_err!(1, output.write_all(&buf[byte..byte + nbytes]));
+                        output.write_all(&buf[byte..byte + nbytes])?;
                     }
                 }
 
                 byte += nbytes; // advance the pointer
             }
 
-            crash_if_err!(1, output.flush());
+            output.flush()?;
             buf.truncate(0); // clear the buffer
         }
     }
+    Ok(())
 }
 
 #[cfg(test)]
