@@ -80,12 +80,18 @@ fn cksum(fname: &str) -> io::Result<(u32, usize)> {
     let mut crc = 0u32;
     let mut size = 0usize;
 
-    let file;
     let mut rd: Box<dyn Read> = match fname {
         "-" => Box::new(stdin()),
         _ => {
-            file = File::open(Path::new(fname))?;
-            Box::new(BufReader::new(file))
+            let p = Path::new(fname);
+
+            // Directories should not give an error, but should be interpreted
+            // as empty files to match GNU semantics.
+            if p.is_dir() {
+                Box::new(BufReader::new(io::empty())) as Box<dyn Read>
+            } else {
+                Box::new(BufReader::new(File::open(p)?)) as Box<dyn Read>
+            }
         }
     };
 
