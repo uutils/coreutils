@@ -40,7 +40,11 @@ impl<'a> BreakArgs<'a> {
     }
 }
 
-pub fn break_lines(para: &Paragraph, opts: &FmtOptions, ostream: &mut BufWriter<Stdout>) {
+pub fn break_lines(
+    para: &Paragraph,
+    opts: &FmtOptions,
+    ostream: &mut BufWriter<Stdout>,
+) -> std::io::Result<()> {
     // indent
     let p_indent = &para.indent_str[..];
     let p_indent_len = para.indent_len;
@@ -54,26 +58,25 @@ pub fn break_lines(para: &Paragraph, opts: &FmtOptions, ostream: &mut BufWriter<
     let (w, w_len) = match p_words_words.next() {
         Some(winfo) => (winfo.word, winfo.word_nchars),
         None => {
-            silent_unwrap!(ostream.write_all(b"\n"));
-            return;
+            return ostream.write_all(b"\n");
         }
     };
     // print the init, if it exists, and get its length
     let p_init_len = w_len
         + if opts.crown || opts.tagged {
             // handle "init" portion
-            silent_unwrap!(ostream.write_all(para.init_str.as_bytes()));
+            ostream.write_all(para.init_str.as_bytes())?;
             para.init_len
         } else if !para.mail_header {
             // for non-(crown, tagged) that's the same as a normal indent
-            silent_unwrap!(ostream.write_all(p_indent.as_bytes()));
+            ostream.write_all(p_indent.as_bytes())?;
             p_indent_len
         } else {
             // except that mail headers get no indent at all
             0
         };
     // write first word after writing init
-    silent_unwrap!(ostream.write_all(w.as_bytes()));
+    ostream.write_all(w.as_bytes())?;
 
     // does this paragraph require uniform spacing?
     let uniform = para.mail_header || opts.uniform;
@@ -88,26 +91,29 @@ pub fn break_lines(para: &Paragraph, opts: &FmtOptions, ostream: &mut BufWriter<
     };
 
     if opts.quick || para.mail_header {
-        break_simple(p_words_words, &mut break_args);
+        break_simple(p_words_words, &mut break_args)
     } else {
-        break_knuth_plass(p_words_words, &mut break_args);
+        break_knuth_plass(p_words_words, &mut break_args)
     }
 }
 
 // break_simple implements a "greedy" breaking algorithm: print words until
 // maxlength would be exceeded, then print a linebreak and indent and continue.
-fn break_simple<'a, T: Iterator<Item = &'a WordInfo<'a>>>(iter: T, args: &mut BreakArgs<'a>) {
-    iter.fold((args.init_len, false), |l, winfo| {
+fn break_simple<'a, T: Iterator<Item = &'a WordInfo<'a>>>(
+    mut iter: T,
+    args: &mut BreakArgs<'a>,
+) -> std::io::Result<()> {
+    iter.try_fold((args.init_len, false), |l, winfo| {
         accum_words_simple(args, l, winfo)
-    });
-    silent_unwrap!(args.ostream.write_all(b"\n"));
+    })?;
+    args.ostream.write_all(b"\n")
 }
 
 fn accum_words_simple<'a>(
     args: &mut BreakArgs<'a>,
     (l, prev_punct): (usize, bool),
     winfo: &'a WordInfo<'a>,
-) -> (usize, bool) {
+) -> std::io::Result<(usize, bool)> {
     // compute the length of this word, considering how tabs will expand at this position on the line
     let wlen = winfo.word_nchars + args.compute_width(winfo, l, false);
 
@@ -119,12 +125,12 @@ fn accum_words_simple<'a>(
     );
 
     if l + wlen + slen > args.opts.width {
-        write_newline(args.indent_str, args.ostream);
-        write_with_spaces(&winfo.word[winfo.word_start..], 0, args.ostream);
-        (args.indent_len + winfo.word_nchars, winfo.ends_punct)
+        write_newline(args.indent_str, args.ostream)?;
+        write_with_spaces(&winfo.word[winfo.word_start..], 0, args.ostream)?;
+        Ok((args.indent_len + winfo.word_nchars, winfo.ends_punct))
     } else {
-        write_with_spaces(winfo.word, slen, args.ostream);
-        (l + wlen + slen, winfo.ends_punct)
+        write_with_spaces(winfo.word, slen, args.ostream)?;
+        Ok((l + wlen + slen, winfo.ends_punct))
     }
 }
 
@@ -135,16 +141,16 @@ fn accum_words_simple<'a>(
 fn break_knuth_plass<'a, T: Clone + Iterator<Item = &'a WordInfo<'a>>>(
     mut iter: T,
     args: &mut BreakArgs<'a>,
-) {
+) -> std::io::Result<()> {
     // run the algorithm to get the breakpoints
     let breakpoints = find_kp_breakpoints(iter.clone(), args);
 
     // iterate through the breakpoints (note that breakpoints is in reverse break order, so we .rev() it
-    let (mut prev_punct, mut fresh) = breakpoints.iter().rev().fold(
+    let result: std::io::Result<(bool, bool)> = breakpoints.iter().rev().try_fold(
         (false, false),
         |(mut prev_punct, mut fresh), &(next_break, break_before)| {
             if fresh {
-                write_newline(args.indent_str, args.ostream);
+                write_newline(args.indent_str, args.ostream)?;
             }
             // at each breakpoint, keep emitting words until we find the word matching this breakpoint
             for winfo in &mut iter {
@@ -167,26 +173,27 @@ fn break_knuth_plass<'a, T: Clone + Iterator<Item = &'a WordInfo<'a>>>(
                 if winfo_ptr == next_break_ptr {
                     // OK, we found the matching word
                     if break_before {
-                        write_newline(args.indent_str, args.ostream);
-                        write_with_spaces(&winfo.word[winfo.word_start..], 0, args.ostream);
+                        write_newline(args.indent_str, args.ostream)?;
+                        write_with_spaces(&winfo.word[winfo.word_start..], 0, args.ostream)?;
                     } else {
                         // breaking after this word, so that means "fresh" is true for the next iteration
-                        write_with_spaces(word, slen, args.ostream);
+                        write_with_spaces(word, slen, args.ostream)?;
                         fresh = true;
                     }
                     break;
                 } else {
-                    write_with_spaces(word, slen, args.ostream);
+                    write_with_spaces(word, slen, args.ostream)?;
                 }
             }
-            (prev_punct, fresh)
+            Ok((prev_punct, fresh))
         },
     );
+    let (mut prev_punct, mut fresh) = result?;
 
     // after the last linebreak, write out the rest of the final line.
     for winfo in iter {
         if fresh {
-            write_newline(args.indent_str, args.ostream);
+            write_newline(args.indent_str, args.ostream)?;
         }
         let (slen, word) = slice_if_fresh(
             fresh,
@@ -199,9 +206,9 @@ fn break_knuth_plass<'a, T: Clone + Iterator<Item = &'a WordInfo<'a>>>(
         );
         prev_punct = winfo.ends_punct;
         fresh = false;
-        write_with_spaces(word, slen, args.ostream);
+        write_with_spaces(word, slen, args.ostream)?;
     }
-    silent_unwrap!(args.ostream.write_all(b"\n"));
+    args.ostream.write_all(b"\n")
 }
 
 struct LineBreak<'a> {
@@ -494,17 +501,21 @@ fn slice_if_fresh(
 }
 
 // Write a newline and add the indent.
-fn write_newline(indent: &str, ostream: &mut BufWriter<Stdout>) {
-    silent_unwrap!(ostream.write_all(b"\n"));
-    silent_unwrap!(ostream.write_all(indent.as_bytes()));
+fn write_newline(indent: &str, ostream: &mut BufWriter<Stdout>) -> std::io::Result<()> {
+    ostream.write_all(b"\n")?;
+    ostream.write_all(indent.as_bytes())
 }
 
 // Write the word, along with slen spaces.
-fn write_with_spaces(word: &str, slen: usize, ostream: &mut BufWriter<Stdout>) {
+fn write_with_spaces(
+    word: &str,
+    slen: usize,
+    ostream: &mut BufWriter<Stdout>,
+) -> std::io::Result<()> {
     if slen == 2 {
-        silent_unwrap!(ostream.write_all(b"  "));
+        ostream.write_all(b"  ")?;
     } else if slen == 1 {
-        silent_unwrap!(ostream.write_all(b" "));
+        ostream.write_all(b" ")?;
     }
-    silent_unwrap!(ostream.write_all(word.as_bytes()));
+    ostream.write_all(word.as_bytes())
 }
