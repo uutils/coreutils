@@ -916,8 +916,7 @@ fn read_stream_and_create_pages(
 
     Box::new(
         lines
-            .map(split_lines_if_form_feed)
-            .flatten()
+            .flat_map(split_lines_if_form_feed)
             .enumerate()
             .map(move |(i, line)| FileLine {
                 line_number: i + start_line_number,
@@ -982,20 +981,18 @@ fn mpr(paths: &[String], options: &OutputOptions) -> Result<i32, PrError> {
         .map(|(i, path)| {
             let lines = BufReader::with_capacity(READ_BUFFER_SIZE, open(path).unwrap()).lines();
 
-            read_stream_and_create_pages(options, lines, i)
-                .map(move |(x, line)| {
-                    let file_line = line;
-                    let page_number = x + 1;
-                    file_line
-                        .into_iter()
-                        .map(|fl| FileLine {
-                            page_number,
-                            group_key: page_number * n_files + fl.file_id,
-                            ..fl
-                        })
-                        .collect::<Vec<_>>()
-                })
-                .flatten()
+            read_stream_and_create_pages(options, lines, i).flat_map(move |(x, line)| {
+                let file_line = line;
+                let page_number = x + 1;
+                file_line
+                    .into_iter()
+                    .map(|fl| FileLine {
+                        page_number,
+                        group_key: page_number * n_files + fl.file_id,
+                        ..fl
+                    })
+                    .collect::<Vec<_>>()
+            })
         })
         .kmerge_by(|a, b| {
             if a.group_key == b.group_key {

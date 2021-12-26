@@ -18,7 +18,7 @@ pub fn main() {
 
     let out_dir = env::var("OUT_DIR").unwrap();
     // println!("cargo:warning=out_dir={}", out_dir);
-    let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap().replace("\\", "/");
+    let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap().replace('\\', "/");
     // println!("cargo:warning=manifest_dir={}", manifest_dir);
     let util_tests_dir = format!("{}/tests/by-util", manifest_dir);
     // println!("cargo:warning=util_tests_dir={}", util_tests_dir);

@@ -45,13 +45,13 @@ impl<'a> Iterator for WhitespaceSplitter<'a> {
         let (prefix, field) = haystack.split_at(
             haystack
                 .find(|c: char| !c.is_whitespace())
-                .unwrap_or_else(|| haystack.len()),
+                .unwrap_or(haystack.len()),
         );
 
         let (field, rest) = field.split_at(
             field
                 .find(|c: char| c.is_whitespace())
-                .unwrap_or_else(|| field.len()),
+                .unwrap_or(field.len()),
         );
 
         self.s = if !rest.is_empty() { Some(rest) } else { None };
@@ -269,7 +269,7 @@ fn format_and_print_whitespace(s: &str, options: &NumfmtOptions) -> Result<()> {
                 print!(" ");
                 &prefix[1..]
             } else {
-                &prefix
+                prefix
             };
 
             let implicit_padding = if !empty_prefix && options.padding == 0 {
