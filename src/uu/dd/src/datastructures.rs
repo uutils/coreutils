@@ -156,12 +156,7 @@ impl std::fmt::Display for InternalError {
 }
 
 impl Error for InternalError {}
-
-impl UError for InternalError {
-    fn code(&self) -> i32 {
-        1
-    }
-}
+impl UError for InternalError {}
 
 pub mod options {
     pub const INFILE: &str = "if";

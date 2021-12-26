@@ -22,6 +22,7 @@ use conversion_tables::*;
 use std::cmp;
 use std::convert::TryInto;
 use std::env;
+#[cfg(target_os = "linux")]
 use std::error::Error;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, Write};
