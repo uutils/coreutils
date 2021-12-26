@@ -2,15 +2,19 @@
 
 #[macro_use]
 extern crate uucore;
-use clap::{crate_version, App, Arg, ArgMatches};
-use regex::Regex;
+
 use std::cmp::Ordering;
 use std::io::{self, BufReader};
 use std::{
     fs::{remove_file, File},
     io::{BufRead, BufWriter, Write},
 };
+
+use clap::{crate_version, App, Arg, ArgMatches};
+use regex::Regex;
 use uucore::display::Quotable;
+use uucore::error::{FromIo, UError, UResult};
+use uucore::InvalidEncodingHandling;
 
 mod csplit_error;
 mod patterns;
@@ -18,7 +22,6 @@ mod split_name;
 
 use crate::csplit_error::CsplitError;
 use crate::split_name::SplitName;
-use uucore::InvalidEncodingHandling;
 
 static SUMMARY: &str = "split a file into sections determined by context lines";
 static LONG_HELP: &str = "Output pieces of FILE separated by PATTERN(s) to files 'xx00', 'xx01', ..., and output byte counts of each piece to standard output.";
@@ -712,7 +715,15 @@ mod tests {
     }
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+fn to_box<E>(e: E) -> Box<dyn UError>
+where
+    E: UError + 'static,
+{
+    Box::new(e)
+}
+
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
@@ -729,20 +740,22 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .unwrap()
         .map(str::to_string)
         .collect();
-    let patterns = crash_if_err!(1, patterns::get_patterns(&patterns[..]));
+    let patterns = patterns::get_patterns(&patterns[..])?;
     let options = CsplitOptions::new(&matches);
     if file_name == "-" {
         let stdin = io::stdin();
-        crash_if_err!(1, csplit(&options, patterns, stdin.lock()));
+        csplit(&options, patterns, stdin.lock()).map_err(to_box)
     } else {
-        let file = crash_if_err!(1, File::open(file_name));
-        let file_metadata = crash_if_err!(1, file.metadata());
+        let file = File::open(file_name)
+            .map_err_context(|| format!("cannot access {}", file_name.quote()))?;
+        let file_metadata = file
+            .metadata()
+            .map_err_context(|| format!("cannot access {}", file_name.quote()))?;
         if !file_metadata.is_file() {
-            crash!(1, "{} is not a regular file", file_name.quote());
+            return Err(CsplitError::NotRegularFile(file_name.to_string()).into());
         }
-        crash_if_err!(1, csplit(&options, patterns, BufReader::new(file)));
-    };
-    0
+        csplit(&options, patterns, BufReader::new(file)).map_err(to_box)
+    }
 }
 
 pub fn uu_app() -> App<'static, 'static> {
