@@ -17,6 +17,7 @@ mod factor;
 use clap::{crate_version, App, Arg};
 pub use factor::*;
 use uucore::display::Quotable;
+use uucore::error::UResult;
 
 mod miller_rabin;
 pub mod numeric;
@@ -43,7 +44,8 @@ fn print_factors_str(
     })
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
     let stdout = stdout();
     // We use a smaller buffer here to pass a gnu test. 4KiB appears to be the default pipe size for bash.
@@ -72,7 +74,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         show_error!("{}", e);
     }
 
-    0
+    Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {
