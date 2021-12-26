@@ -6,10 +6,12 @@
 // file that was distributed with this source code.
 // spell-checker:ignore ctable, outfile
 
-use crate::conversion_tables::*;
-
 use std::error::Error;
 use std::time;
+
+use uucore::error::UError;
+
+use crate::conversion_tables::*;
 
 pub struct ProgUpdate {
     pub read_stat: ReadStat,
@@ -154,6 +156,12 @@ impl std::fmt::Display for InternalError {
 }
 
 impl Error for InternalError {}
+
+impl UError for InternalError {
+    fn code(&self) -> i32 {
+        1
+    }
+}
 
 pub mod options {
     pub const INFILE: &str = "if";

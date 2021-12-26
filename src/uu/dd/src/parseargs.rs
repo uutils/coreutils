@@ -11,6 +11,7 @@ mod unit_tests;
 
 use super::*;
 use std::error::Error;
+use uucore::error::UError;
 
 pub type Matches = clap::ArgMatches<'static>;
 
@@ -78,6 +79,12 @@ impl std::fmt::Display for ParseError {
 }
 
 impl Error for ParseError {}
+
+impl UError for ParseError {
+    fn code(&self) -> i32 {
+        1
+    }
+}
 
 /// Some flags specified as part of a conv=CONV[,CONV]... block
 /// relate to the input file, others to the output file.

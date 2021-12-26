@@ -262,7 +262,9 @@ fn test_nocreat_causes_failure_when_outfile_not_present() {
     ucmd.args(&["conv=nocreat", of!(&fname)])
         .pipe_in("")
         .fails()
-        .stderr_is("dd Error: No such file or directory (os error 2)");
+        .stderr_only(
+            "dd: failed to open 'this-file-does-not-exist.txt': No such file or directory",
+        );
     assert!(!fix.file_exists(fname));
 }
 

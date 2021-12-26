@@ -7,8 +7,6 @@
 
 // spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat
 
-use uucore::InvalidEncodingHandling;
-
 #[cfg(test)]
 mod dd_unit_tests;
 
@@ -21,11 +19,6 @@ use parseargs::Matches;
 mod conversion_tables;
 use conversion_tables::*;
 
-use byte_unit::Byte;
-use clap::{self, crate_version};
-use gcd::Gcd;
-#[cfg(target_os = "linux")]
-use signal_hook::consts::signal;
 use std::cmp;
 use std::convert::TryInto;
 use std::env;
@@ -41,10 +34,17 @@ use std::sync::{atomic::AtomicUsize, atomic::Ordering, Arc};
 use std::thread;
 use std::time;
 
+use byte_unit::Byte;
+use clap::{self, crate_version};
+use gcd::Gcd;
+#[cfg(target_os = "linux")]
+use signal_hook::consts::signal;
+use uucore::display::Quotable;
+use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::InvalidEncodingHandling;
+
 const ABOUT: &str = "copy, and optionally convert, a file system resource";
 const BUF_INIT_BYTE: u8 = 0xDD;
-const RTN_SUCCESS: i32 = 0;
-const RTN_FAILURE: i32 = 1;
 const NEWLINE: u8 = b'\n';
 const SPACE: u8 = b' ';
 
@@ -59,7 +59,7 @@ struct Input<R: Read> {
 }
 
 impl Input<io::Stdin> {
-    fn new(matches: &Matches) -> Result<Self, Box<dyn Error>> {
+    fn new(matches: &Matches) -> UResult<Self> {
         let ibs = parseargs::parse_ibs(matches)?;
         let non_ascii = parseargs::parse_input_non_ascii(matches)?;
         let print_level = parseargs::parse_status_level(matches)?;
@@ -80,8 +80,8 @@ impl Input<io::Stdin> {
 
         if let Some(amt) = skip {
             let mut buf = vec![BUF_INIT_BYTE; amt];
-
-            i.force_fill(&mut buf, amt)?;
+            i.force_fill(&mut buf, amt)
+                .map_err_context(|| "failed to read input".to_string())?;
         }
 
         Ok(i)
@@ -125,7 +125,7 @@ fn make_linux_iflags(iflags: &IFlags) -> Option<libc::c_int> {
 }
 
 impl Input<File> {
-    fn new(matches: &Matches) -> Result<Self, Box<dyn Error>> {
+    fn new(matches: &Matches) -> UResult<Self> {
         let ibs = parseargs::parse_ibs(matches)?;
         let non_ascii = parseargs::parse_input_non_ascii(matches)?;
         let print_level = parseargs::parse_status_level(matches)?;
@@ -144,12 +144,16 @@ impl Input<File> {
                     opts.custom_flags(libc_flags);
                 }
 
-                opts.open(fname)?
+                opts.open(fname)
+                    .map_err_context(|| "failed to open input file".to_string())?
             };
 
             if let Some(amt) = skip {
-                let amt: u64 = amt.try_into()?;
-                src.seek(io::SeekFrom::Start(amt))?;
+                let amt: u64 = amt
+                    .try_into()
+                    .map_err(|_| USimpleError::new(1, "failed to parse seek amount"))?;
+                src.seek(io::SeekFrom::Start(amt))
+                    .map_err_context(|| "failed to seek in input file".to_string())?;
             }
 
             let i = Input {
@@ -196,7 +200,7 @@ impl<R: Read> Input<R> {
     /// Fills a given buffer.
     /// Reads in increments of 'self.ibs'.
     /// The start of each ibs-sized read follows the previous one.
-    fn fill_consecutive(&mut self, buf: &mut Vec<u8>) -> Result<ReadStat, Box<dyn Error>> {
+    fn fill_consecutive(&mut self, buf: &mut Vec<u8>) -> std::io::Result<ReadStat> {
         let mut reads_complete = 0;
         let mut reads_partial = 0;
         let mut bytes_total = 0;
@@ -227,7 +231,7 @@ impl<R: Read> Input<R> {
     /// Fills a given buffer.
     /// Reads in increments of 'self.ibs'.
     /// The start of each ibs-sized read is aligned to multiples of ibs; remaining space is filled with the 'pad' byte.
-    fn fill_blocks(&mut self, buf: &mut Vec<u8>, pad: u8) -> Result<ReadStat, Box<dyn Error>> {
+    fn fill_blocks(&mut self, buf: &mut Vec<u8>, pad: u8) -> std::io::Result<ReadStat> {
         let mut reads_complete = 0;
         let mut reads_partial = 0;
         let mut base_idx = 0;
@@ -263,7 +267,7 @@ impl<R: Read> Input<R> {
     /// interpreted as EOF.
     /// Note: This will not return unless the source (eventually) produces
     /// enough bytes to meet target_len.
-    fn force_fill(&mut self, buf: &mut [u8], target_len: usize) -> Result<usize, Box<dyn Error>> {
+    fn force_fill(&mut self, buf: &mut [u8], target_len: usize) -> std::io::Result<usize> {
         let mut base_idx = 0;
         while base_idx < target_len {
             base_idx += self.read(&mut buf[base_idx..target_len])?;
@@ -274,7 +278,7 @@ impl<R: Read> Input<R> {
 }
 
 trait OutputTrait: Sized + Write {
-    fn new(matches: &Matches) -> Result<Self, Box<dyn Error>>;
+    fn new(matches: &Matches) -> UResult<Self>;
     fn fsync(&mut self) -> io::Result<()>;
     fn fdatasync(&mut self) -> io::Result<()>;
 }
@@ -286,7 +290,7 @@ struct Output<W: Write> {
 }
 
 impl OutputTrait for Output<io::Stdout> {
-    fn new(matches: &Matches) -> Result<Self, Box<dyn Error>> {
+    fn new(matches: &Matches) -> UResult<Self> {
         let obs = parseargs::parse_obs(matches)?;
         let cflags = parseargs::parse_conv_flag_output(matches)?;
 
@@ -333,7 +337,7 @@ where
         })
     }
 
-    fn dd_out<R: Read>(mut self, mut i: Input<R>) -> Result<(), Box<dyn Error>> {
+    fn dd_out<R: Read>(mut self, mut i: Input<R>) -> UResult<()> {
         let mut rstat = ReadStat {
             reads_complete: 0,
             reads_partial: 0,
@@ -366,24 +370,30 @@ where
                     _,
                 ) => break,
                 (rstat_update, buf) => {
-                    let wstat_update = self.write_blocks(buf)?;
+                    let wstat_update = self
+                        .write_blocks(buf)
+                        .map_err_context(|| "failed to write output".to_string())?;
 
                     rstat += rstat_update;
                     wstat += wstat_update;
                 }
             };
             // Update Prog
-            prog_tx.send(ProgUpdate {
-                read_stat: rstat,
-                write_stat: wstat,
-                duration: start.elapsed(),
-            })?;
+            prog_tx
+                .send(ProgUpdate {
+                    read_stat: rstat,
+                    write_stat: wstat,
+                    duration: start.elapsed(),
+                })
+                .map_err(|_| USimpleError::new(1, "failed to write output"))?;
         }
 
         if self.cflags.fsync {
-            self.fsync()?;
+            self.fsync()
+                .map_err_context(|| "failed to write output".to_string())?;
         } else if self.cflags.fdatasync {
-            self.fdatasync()?;
+            self.fdatasync()
+                .map_err_context(|| "failed to write output".to_string())?;
         }
 
         match i.print_level {
@@ -439,7 +449,7 @@ fn make_linux_oflags(oflags: &OFlags) -> Option<libc::c_int> {
 }
 
 impl OutputTrait for Output<File> {
-    fn new(matches: &Matches) -> Result<Self, Box<dyn Error>> {
+    fn new(matches: &Matches) -> UResult<Self> {
         fn open_dst(path: &Path, cflags: &OConvFlags, oflags: &OFlags) -> Result<File, io::Error> {
             let mut opts = OpenOptions::new();
             opts.write(true)
@@ -461,11 +471,15 @@ impl OutputTrait for Output<File> {
         let seek = parseargs::parse_seek_amt(&obs, &oflags, matches)?;
 
         if let Some(fname) = matches.value_of(options::OUTFILE) {
-            let mut dst = open_dst(Path::new(&fname), &cflags, &oflags)?;
+            let mut dst = open_dst(Path::new(&fname), &cflags, &oflags)
+                .map_err_context(|| format!("failed to open {}", fname.quote()))?;
 
             if let Some(amt) = seek {
-                let amt: u64 = amt.try_into()?;
-                dst.seek(io::SeekFrom::Start(amt))?;
+                let amt: u64 = amt
+                    .try_into()
+                    .map_err(|_| USimpleError::new(1, "failed to parse seek amount"))?;
+                dst.seek(io::SeekFrom::Start(amt))
+                    .map_err_context(|| "failed to seek in output file".to_string())?;
             }
 
             Ok(Output { dst, obs, cflags })
@@ -580,7 +594,7 @@ fn conv_block_unblock_helper<R: Read>(
     mut buf: Vec<u8>,
     i: &mut Input<R>,
     rstat: &mut ReadStat,
-) -> Result<Vec<u8>, Box<dyn Error>> {
+) -> Result<Vec<u8>, InternalError> {
     // Local Predicate Fns -------------------------------------------------
     fn should_block_then_conv<R: Read>(i: &Input<R>) -> bool {
         !i.non_ascii && i.cflags.block.is_some()
@@ -664,15 +678,12 @@ fn conv_block_unblock_helper<R: Read>(
         // by the parser before making it this far.
         // Producing this error is an alternative to risking an unwrap call
         // on 'cbs' if the required data is not provided.
-        Err(Box::new(InternalError::InvalidConvBlockUnblockCase))
+        Err(InternalError::InvalidConvBlockUnblockCase)
     }
 }
 
 /// Read helper performs read operations common to all dd reads, and dispatches the buffer to relevant helper functions as dictated by the operations requested by the user.
-fn read_helper<R: Read>(
-    i: &mut Input<R>,
-    bsize: usize,
-) -> Result<(ReadStat, Vec<u8>), Box<dyn Error>> {
+fn read_helper<R: Read>(i: &mut Input<R>, bsize: usize) -> UResult<(ReadStat, Vec<u8>)> {
     // Local Predicate Fns -----------------------------------------------
     fn is_conv<R: Read>(i: &Input<R>) -> bool {
         i.cflags.ctable.is_some()
@@ -693,8 +704,12 @@ fn read_helper<R: Read>(
     // Read
     let mut buf = vec![BUF_INIT_BYTE; bsize];
     let mut rstat = match i.cflags.sync {
-        Some(ch) => i.fill_blocks(&mut buf, ch)?,
-        _ => i.fill_consecutive(&mut buf)?,
+        Some(ch) => i
+            .fill_blocks(&mut buf, ch)
+            .map_err_context(|| "failed to write output".to_string())?,
+        _ => i
+            .fill_consecutive(&mut buf)
+            .map_err_context(|| "failed to write output".to_string())?,
     };
     // Return early if no data
     if rstat.reads_complete == 0 && rstat.reads_partial == 0 {
@@ -877,28 +892,8 @@ fn append_dashes_if_not_present(mut acc: Vec<String>, mut s: String) -> Vec<Stri
     acc
 }
 
-macro_rules! unpack_or_rtn (
-    ($i:expr, $o:expr) =>
-    {{
-        match ($i, $o)
-        {
-            (Ok(i), Ok(o)) =>
-                (i,o),
-            (Err(e), _) =>
-            {
-                eprintln!("dd Error: {}", e);
-                return RTN_FAILURE;
-            },
-            (_, Err(e)) =>
-            {
-                eprintln!("dd Error: {}", e);
-                return RTN_FAILURE;
-            },
-        }
-    }};
-);
-
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let dashed_args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any()
@@ -909,46 +904,29 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         //.after_help(TODO: Add note about multiplier strings here.)
         .get_matches_from(dashed_args);
 
-    let result = match (
+    match (
         matches.is_present(options::INFILE),
         matches.is_present(options::OUTFILE),
     ) {
         (true, true) => {
-            let (i, o) =
-                unpack_or_rtn!(Input::<File>::new(&matches), Output::<File>::new(&matches));
-
+            let i = Input::<File>::new(&matches)?;
+            let o = Output::<File>::new(&matches)?;
             o.dd_out(i)
         }
         (false, true) => {
-            let (i, o) = unpack_or_rtn!(
-                Input::<io::Stdin>::new(&matches),
-                Output::<File>::new(&matches)
-            );
-
+            let i = Input::<io::Stdin>::new(&matches)?;
+            let o = Output::<File>::new(&matches)?;
             o.dd_out(i)
         }
         (true, false) => {
-            let (i, o) = unpack_or_rtn!(
-                Input::<File>::new(&matches),
-                Output::<io::Stdout>::new(&matches)
-            );
-
+            let i = Input::<File>::new(&matches)?;
+            let o = Output::<io::Stdout>::new(&matches)?;
             o.dd_out(i)
         }
         (false, false) => {
-            let (i, o) = unpack_or_rtn!(
-                Input::<io::Stdin>::new(&matches),
-                Output::<io::Stdout>::new(&matches)
-            );
-
+            let i = Input::<io::Stdin>::new(&matches)?;
+            let o = Output::<io::Stdout>::new(&matches)?;
             o.dd_out(i)
-        }
-    };
-    match result {
-        Ok(_) => RTN_SUCCESS,
-        Err(e) => {
-            eprintln!("dd exiting with error:\n\t{}", e);
-            RTN_FAILURE
         }
     }
 }
