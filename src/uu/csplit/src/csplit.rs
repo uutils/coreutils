@@ -13,7 +13,7 @@ use std::{
 use clap::{crate_version, App, Arg, ArgMatches};
 use regex::Regex;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult};
+use uucore::error::{FromIo, UResult};
 use uucore::InvalidEncodingHandling;
 
 mod csplit_error;
@@ -715,13 +715,6 @@ mod tests {
     }
 }
 
-fn to_box<E>(e: E) -> Box<dyn UError>
-where
-    E: UError + 'static,
-{
-    Box::new(e)
-}
-
 #[uucore_procs::gen_uumain]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
@@ -744,7 +737,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let options = CsplitOptions::new(&matches);
     if file_name == "-" {
         let stdin = io::stdin();
-        csplit(&options, patterns, stdin.lock()).map_err(to_box)
+        Ok(csplit(&options, patterns, stdin.lock())?)
     } else {
         let file = File::open(file_name)
             .map_err_context(|| format!("cannot access {}", file_name.quote()))?;
@@ -754,7 +747,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if !file_metadata.is_file() {
             return Err(CsplitError::NotRegularFile(file_name.to_string()).into());
         }
-        csplit(&options, patterns, BufReader::new(file)).map_err(to_box)
+        Ok(csplit(&options, patterns, BufReader::new(file))?)
     }
 }
 
