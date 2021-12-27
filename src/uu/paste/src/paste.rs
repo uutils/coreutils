@@ -151,5 +151,5 @@ fn unescape(s: String) -> String {
     s.replace("\\n", "\n")
         .replace("\\t", "\t")
         .replace("\\\\", "\\")
-        .replace("\\", "")
+        .replace('\\', "")
 }

@@ -526,7 +526,7 @@ fn format_tex_line(
 }
 
 fn format_roff_field(s: &str) -> String {
-    s.replace("\"", "\"\"")
+    s.replace('\"', "\"\"")
 }
 
 fn format_roff_line(
