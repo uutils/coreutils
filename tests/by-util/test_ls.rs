@@ -54,8 +54,11 @@ fn test_ls_ordering() {
         .arg("-i")
         .succeeds()
         .stdout_matches(&Regex::new(".*some-dir1.*some-dir3.*some-dir5\\n").unwrap())
-        .stdout_matches(&Regex::new(".*some-dir2.*some-dir4.*some-dir6").unwrap())        
-        .stdout_does_not_match(&Regex::new(".*some-dir1.*some-dir2.*some-dir3.*some-dir4.*some-dir5.*some-dir6").unwrap());
+        .stdout_matches(&Regex::new(".*some-dir2.*some-dir4.*some-dir6").unwrap())
+        .stdout_does_not_match(
+            &Regex::new(".*some-dir1.*some-dir2.*some-dir3.*some-dir4.*some-dir5.*some-dir6")
+                .unwrap(),
+        );
 
     scene
         .ucmd()
@@ -95,7 +98,7 @@ fn test_ls_io_errors() {
         .arg("some-dir")
         .fails()
         .stderr_contains("cannot access")
-        .stderr_contains("No such file or directory")        
+        .stderr_contains("No such file or directory")
         .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
 }
 
@@ -1329,7 +1332,7 @@ fn test_ls_color() {
             "{}  test-color\nb  {}\n",
             a_with_colors, z_with_colors
         ));
-    
+
     // link resolution should not contain colors
     at.mkdir("temp_dir");
     at.symlink_file("temp_dir/does_not_exist", "temp_dir/dangle");
@@ -1340,7 +1343,11 @@ fn test_ls_color() {
         .arg("-l")
         .arg("temp_dir")
         .succeeds()
-        .stdout_contains(format!("{} -> {}/temp_dir/does_not_exist", dangle_colors, at.subdir.to_string_lossy()));
+        .stdout_contains(format!(
+            "{} -> {}/temp_dir/does_not_exist",
+            dangle_colors,
+            at.subdir.to_string_lossy()
+        ));
 }
 
 #[cfg(unix)]
