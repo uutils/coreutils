@@ -668,10 +668,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut config = Config::from(&matches)?;
 
-    // There may be more formatting issues like this.
-    // Be on the look out!
-    if config.inode && config.format == Format::OneLine {
-        config.format = Format::Columns;
+    #[cfg(unix)]
+    {
+        // There may be more formatting issues like this.
+        // Be on the look out!
+        if config.inode && config.format == Format::OneLine {
+            config.format = Format::Columns;
+        }
     }
 
     let locs = matches

@@ -1336,7 +1336,7 @@ fn test_ls_color() {
     // link resolution should not contain colors
     at.mkdir("temp_dir");
     at.symlink_file("temp_dir/does_not_exist", "temp_dir/dangle");
-    let dangle_colors = "\x1b[1;40;31mdangle\x1b[0m";
+    let dangle_colors = format!("\x1b[1;40;31m{}\x1b[0m", "dangle");
     scene
         .ucmd()
         .arg("--color")
