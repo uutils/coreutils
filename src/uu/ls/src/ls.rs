@@ -671,7 +671,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     #[cfg(unix)]
     {
-        
         // There may be more formatting issues like this.
         // Be on the look out!
         if config.inode && config.format == Format::OneLine {
