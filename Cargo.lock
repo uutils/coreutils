@@ -2595,7 +2595,6 @@ dependencies = [
  "lazy_static",
  "lscolors",
  "number_prefix",
- "once_cell",
  "selinux",
  "term_grid",
  "termsize",

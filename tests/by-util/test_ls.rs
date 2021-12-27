@@ -39,10 +39,37 @@ fn test_ls_i() {
 }
 
 #[test]
+fn test_ls_ordering() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("some-dir1");
+    at.mkdir("some-dir2");
+    at.mkdir("some-dir3");
+    at.mkdir("some-dir4");
+    at.mkdir("some-dir5");
+    at.mkdir("some-dir6");
+
+    scene
+        .ucmd()
+        .arg("-i")
+        .succeeds()
+        .stdout_matches(&Regex::new(".*some-dir1.*some-dir3.*some-dir5\\n").unwrap())
+        .stdout_matches(&Regex::new(".*some-dir2.*some-dir4.*some-dir6").unwrap())        
+        .stdout_does_not_match(&Regex::new(".*some-dir1.*some-dir2.*some-dir3.*some-dir4.*some-dir5.*some-dir6").unwrap());
+
+    scene
+        .ucmd()
+        .arg("-Rl")
+        .succeeds()
+        .stdout_matches(&Regex::new("some-dir1:\\ntotal 0").unwrap());
+}
+
+#[test]
 fn test_ls_io_errors() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.mkdir("some-dir");
+    at.symlink_file("does_not_exist", "some-dir/dangle");
 
     #[cfg(any(target_os = "macos", target_os = "ios"))]
     scene
@@ -50,7 +77,8 @@ fn test_ls_io_errors() {
         .arg("-1")
         .arg("/var/root")
         .fails()
-        .stderr_contains("cannot open directory");
+        .stderr_contains("cannot open directory")
+        .stderr_contains("Permission denied");
 
     #[cfg(target_os = "linux")]
     scene
@@ -58,14 +86,17 @@ fn test_ls_io_errors() {
         .arg("-1")
         .arg("/sys/kernel/tracing")
         .fails()
-        .stderr_contains("cannot open directory");
+        .stderr_contains("cannot open directory")
+        .stderr_contains("Permission denied");
 
     scene
         .ucmd()
-        .arg("-1")
-        .arg("./some-dir/no_file_here")
+        .arg("-Li")
+        .arg("some-dir")
         .fails()
-        .stderr_contains("cannot access");
+        .stderr_contains("cannot access")
+        .stderr_contains("No such file or directory")        
+        .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
 }
 
 #[test]
@@ -1298,6 +1329,18 @@ fn test_ls_color() {
             "{}  test-color\nb  {}\n",
             a_with_colors, z_with_colors
         ));
+    
+    // link resolution should not contain colors
+    at.mkdir("temp_dir");
+    at.symlink_file("temp_dir/does_not_exist", "temp_dir/dangle");
+    let dangle_colors = "\x1b[1;40;31mdangle\x1b[0m";
+    scene
+        .ucmd()
+        .arg("--color")
+        .arg("-l")
+        .arg("temp_dir")
+        .succeeds()
+        .stdout_contains(format!("{} -> {}/temp_dir/does_not_exist", dangle_colors, at.subdir.to_string_lossy()));
 }
 
 #[cfg(unix)]
@@ -2335,6 +2378,13 @@ fn test_ls_dangling_symlinks() {
         .fails()
         .stderr_contains("cannot access")
         .stdout_contains(if cfg!(windows) { "dangle" } else { "? dangle" });
+
+    scene
+        .ucmd()
+        .arg("-Ll")
+        .arg("temp_dir")
+        .fails()
+        .stdout_contains("l?????????");
 }
 
 #[test]
