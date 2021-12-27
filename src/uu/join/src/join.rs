@@ -15,6 +15,7 @@ use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{stdin, BufRead, BufReader, Lines, Stdin};
 use uucore::display::Quotable;
+use uucore::error::{set_exit_code, UResult, USimpleError};
 
 static NAME: &str = "join";
 
@@ -172,28 +173,38 @@ enum Spec {
 }
 
 impl Spec {
-    fn parse(format: &str) -> Spec {
+    fn parse(format: &str) -> UResult<Spec> {
         let mut chars = format.chars();
 
         let file_num = match chars.next() {
             Some('0') => {
                 // Must be all alone without a field specifier.
                 if chars.next().is_none() {
-                    return Spec::Key;
+                    return Ok(Spec::Key);
                 }
-
-                crash!(1, "invalid field specifier: {}", format.quote());
+                return Err(USimpleError::new(
+                    1,
+                    format!("invalid field specifier: {}", format.quote()),
+                ));
             }
             Some('1') => FileNum::File1,
             Some('2') => FileNum::File2,
-            _ => crash!(1, "invalid file number in field spec: {}", format.quote()),
+            _ => {
+                return Err(USimpleError::new(
+                    1,
+                    format!("invalid file number in field spec: {}", format.quote()),
+                ));
+            }
         };
 
         if let Some('.') = chars.next() {
-            return Spec::Field(file_num, parse_field_number(chars.as_str()));
+            return Ok(Spec::Field(file_num, parse_field_number(chars.as_str())?));
         }
 
-        crash!(1, "invalid field specifier: {}", format.quote());
+        Err(USimpleError::new(
+            1,
+            format!("invalid field specifier: {}", format.quote()),
+        ))
     }
 }
 
@@ -441,12 +452,13 @@ impl<'a> State<'a> {
     }
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uu_app().get_matches_from(args);
 
-    let keys = parse_field_number_option(matches.value_of("j"));
-    let key1 = parse_field_number_option(matches.value_of("1"));
-    let key2 = parse_field_number_option(matches.value_of("2"));
+    let keys = parse_field_number_option(matches.value_of("j"))?;
+    let key1 = parse_field_number_option(matches.value_of("1"))?;
+    let key2 = parse_field_number_option(matches.value_of("2"))?;
 
     let mut settings: Settings = Default::default();
 
@@ -459,21 +471,26 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .unwrap_or_default()
         .chain(matches.values_of("a").unwrap_or_default());
     for file_num in unpaired {
-        match parse_file_number(file_num) {
+        match parse_file_number(file_num)? {
             FileNum::File1 => settings.print_unpaired1 = true,
             FileNum::File2 => settings.print_unpaired2 = true,
         }
     }
 
     settings.ignore_case = matches.is_present("i");
-    settings.key1 = get_field_number(keys, key1);
-    settings.key2 = get_field_number(keys, key2);
+    settings.key1 = get_field_number(keys, key1)?;
+    settings.key2 = get_field_number(keys, key2)?;
 
     if let Some(value) = matches.value_of("t") {
         settings.separator = match value.len() {
             0 => Sep::Line,
             1 => Sep::Char(value.chars().next().unwrap()),
-            _ => crash!(1, "multi-character tab {}", value),
+            _ => {
+                return Err(USimpleError::new(
+                    1,
+                    format!("multi-character tab {}", value),
+                ))
+            }
         };
     }
 
@@ -481,10 +498,11 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         if format == "auto" {
             settings.autoformat = true;
         } else {
-            settings.format = format
-                .split(|c| c == ' ' || c == ',' || c == '\t')
-                .map(Spec::parse)
-                .collect();
+            let mut specs = vec![];
+            for part in format.split(|c| c == ' ' || c == ',' || c == '\t') {
+                specs.push(Spec::parse(part)?);
+            }
+            settings.format = specs;
         }
     }
 
@@ -508,7 +526,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     let file2 = matches.value_of("file2").unwrap();
 
     if file1 == "-" && file2 == "-" {
-        crash!(1, "both files cannot be standard input");
+        return Err(USimpleError::new(1, "both files cannot be standard input"));
     }
 
     exec(file1, file2, settings)
@@ -621,7 +639,7 @@ FILENUM is 1 or 2, corresponding to FILE1 or FILE2",
         )
 }
 
-fn exec(file1: &str, file2: &str, settings: Settings) -> i32 {
+fn exec(file1: &str, file2: &str, settings: Settings) -> UResult<()> {
     let stdin = stdin();
 
     let mut state1 = State::new(
@@ -707,43 +725,58 @@ fn exec(file1: &str, file2: &str, settings: Settings) -> i32 {
     state1.finalize(&input, &repr);
     state2.finalize(&input, &repr);
 
-    (state1.has_failed || state2.has_failed) as i32
+    if state1.has_failed || state2.has_failed {
+        set_exit_code(1);
+    }
+    Ok(())
 }
 
 /// Check that keys for both files and for a particular file are not
 /// contradictory and return the key index.
-fn get_field_number(keys: Option<usize>, key: Option<usize>) -> usize {
+fn get_field_number(keys: Option<usize>, key: Option<usize>) -> UResult<usize> {
     if let Some(keys) = keys {
         if let Some(key) = key {
             if keys != key {
                 // Show zero-based field numbers as one-based.
-                crash!(1, "incompatible join fields {}, {}", keys + 1, key + 1);
+                return Err(USimpleError::new(
+                    1,
+                    format!("incompatible join fields {}, {}", keys + 1, key + 1),
+                ));
             }
         }
 
-        return keys;
+        return Ok(keys);
     }
 
-    key.unwrap_or(0)
+    Ok(key.unwrap_or(0))
 }
 
 /// Parse the specified field string as a natural number and return
 /// the zero-based field number.
-fn parse_field_number(value: &str) -> usize {
+fn parse_field_number(value: &str) -> UResult<usize> {
     match value.parse::<usize>() {
-        Ok(result) if result > 0 => result - 1,
-        _ => crash!(1, "invalid field number: {}", value.quote()),
+        Ok(result) if result > 0 => Ok(result - 1),
+        _ => Err(USimpleError::new(
+            1,
+            format!("invalid field number: {}", value.quote()),
+        )),
     }
 }
 
-fn parse_file_number(value: &str) -> FileNum {
+fn parse_file_number(value: &str) -> UResult<FileNum> {
     match value {
-        "1" => FileNum::File1,
-        "2" => FileNum::File2,
-        value => crash!(1, "invalid file number: {}", value.quote()),
+        "1" => Ok(FileNum::File1),
+        "2" => Ok(FileNum::File2),
+        value => Err(USimpleError::new(
+            1,
+            format!("invalid file number: {}", value.quote()),
+        )),
     }
 }
 
-fn parse_field_number_option(value: Option<&str>) -> Option<usize> {
-    Some(parse_field_number(value?))
+fn parse_field_number_option(value: Option<&str>) -> UResult<Option<usize>> {
+    match value {
+        None => Ok(None),
+        Some(val) => Ok(Some(parse_field_number(val)?)),
+    }
 }
