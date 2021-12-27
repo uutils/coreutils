@@ -659,6 +659,7 @@ impl Config {
 }
 
 #[uucore_procs::gen_uumain]
+#[allow(unused_mut)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
@@ -670,6 +671,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     #[cfg(unix)]
     {
+        
         // There may be more formatting issues like this.
         // Be on the look out!
         if config.inode && config.format == Format::OneLine {
