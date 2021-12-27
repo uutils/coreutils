@@ -17,9 +17,12 @@
 
 #[macro_use]
 extern crate uucore;
+use std::error::Error;
+use std::fmt::Display;
 use uucore::{
     display::Quotable,
     entries::{get_groups_gnu, gid2grp, Locate, Passwd},
+    error::{UError, UResult},
 };
 
 use clap::{crate_version, App, Arg};
@@ -35,7 +38,39 @@ fn usage() -> String {
     format!("{0} [OPTION]... [USERNAME]...", uucore::execution_phrase())
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[derive(Debug)]
+enum GroupsError {
+    GetGroupsFailed,
+    GroupNotFound(u32),
+    UserNotFound(String),
+}
+
+impl Error for GroupsError {}
+impl UError for GroupsError {}
+
+impl Display for GroupsError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            GroupsError::GetGroupsFailed => write!(f, "failed to fetch groups"),
+            GroupsError::GroupNotFound(gid) => write!(f, "cannot find name for group ID {}", gid),
+            GroupsError::UserNotFound(user) => write!(f, "{}: no such user", user.quote()),
+        }
+    }
+}
+
+fn infallible_gid2grp(gid: &u32) -> String {
+    match gid2grp(*gid) {
+        Ok(grp) => grp,
+        Err(_) => {
+            // The `show!()` macro sets the global exit code for the program.
+            show!(GroupsError::GroupNotFound(*gid));
+            gid.to_string()
+        }
+    }
+}
+
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
@@ -45,46 +80,29 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .map(|v| v.map(ToString::to_string).collect())
         .unwrap_or_default();
 
-    let mut exit_code = 0;
-
     if users.is_empty() {
-        println!(
-            "{}",
-            get_groups_gnu(None)
-                .unwrap()
-                .iter()
-                .map(|&gid| gid2grp(gid).unwrap_or_else(|_| {
-                    show_error!("cannot find name for group ID {}", gid);
-                    exit_code = 1;
-                    gid.to_string()
-                }))
-                .collect::<Vec<_>>()
-                .join(" ")
-        );
-        return exit_code;
+        let gids = match get_groups_gnu(None) {
+            Ok(v) => v,
+            Err(_) => return Err(GroupsError::GetGroupsFailed.into()),
+        };
+        let groups: Vec<String> = gids.iter().map(infallible_gid2grp).collect();
+        println!("{}", groups.join(" "));
+        return Ok(());
     }
 
     for user in users {
-        if let Ok(p) = Passwd::locate(user.as_str()) {
-            println!(
-                "{} : {}",
-                user,
-                p.belongs_to()
-                    .iter()
-                    .map(|&gid| gid2grp(gid).unwrap_or_else(|_| {
-                        show_error!("cannot find name for group ID {}", gid);
-                        exit_code = 1;
-                        gid.to_string()
-                    }))
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            );
-        } else {
-            show_error!("{}: no such user", user.quote());
-            exit_code = 1;
+        match Passwd::locate(user.as_str()) {
+            Ok(p) => {
+                let groups: Vec<String> = p.belongs_to().iter().map(infallible_gid2grp).collect();
+                println!("{} : {}", user, groups.join(" "));
+            }
+            Err(_) => {
+                // The `show!()` macro sets the global exit code for the program.
+                show!(GroupsError::UserNotFound(user));
+            }
         }
     }
-    exit_code
+    Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {
