@@ -1313,6 +1313,7 @@ impl PathData {
             String::new()
         };
 
+        #[allow(clippy::match_like_matches_macro)]
         let store_md: bool = match config.sort {
             Sort::None => false,
             _ => true,
@@ -1329,11 +1330,19 @@ impl PathData {
         }
     }
 
+    #[allow(clippy::redundant_clone)]
     fn md(&self) -> Option<Metadata> {
-        let res = get_metadata(&self.p_buf, &self.must_dereference).ok();
-        if self.store_md {
-            self.md.get_or_init(|| res.to_owned());
-        }
+        let res = if self.store_md {
+            self.md
+                .get_or_init(|| {
+                    get_metadata(&self.p_buf.clone(), &self.must_dereference.clone()).ok()
+                })
+                .to_owned()
+        } else {
+            get_metadata(&self.p_buf.clone(), &self.must_dereference.clone())
+                .ok()
+                .to_owned()
+        };
         res
     }
 
@@ -1357,7 +1366,9 @@ fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
     for loc in locs {
         let pd = PathData::new(PathBuf::from(loc), None, None, &config, true);
 
-        if get_metadata(&pd.p_buf, &pd.must_dereference).ok().is_none() {
+        // Getting metadata here is no big deal as it's just the CWD
+        // and we really just want to know if the strings exist as files/dirs
+        if pd.md().is_none() {
             let _ = out.flush();
             show!(LsError::IOErrorContext(
                 std::io::Error::new(ErrorKind::NotFound, "NotFound"),
@@ -1404,11 +1415,14 @@ fn sort_entries(entries: &mut Vec<PathData>, config: &Config) {
         Sort::Time => entries.sort_by_key(|k| {
             Reverse(
                 k.md()
+                    .as_ref()
                     .and_then(|md| get_system_time(&md, config))
                     .unwrap_or(UNIX_EPOCH),
             )
         }),
-        Sort::Size => entries.sort_by_key(|k| Reverse(k.md().map(|md| md.len()).unwrap_or(0))),
+        Sort::Size => {
+            entries.sort_by_key(|k| Reverse(k.md().as_ref().map(|md| md.len()).unwrap_or(0)))
+        }
         // The default sort in GNU ls is case insensitive
         Sort::Name => entries.sort_by(|a, b| a.display_name.cmp(&b.display_name)),
         Sort::Version => entries
@@ -1572,7 +1586,9 @@ fn pad_right(string: &str, count: usize) -> String {
 fn display_total(items: &[PathData], config: &Config, out: &mut BufWriter<Stdout>) {
     let mut total_size = 0;
     for item in items {
-        total_size += get_metadata(&item.p_buf, &item.must_dereference)
+        total_size += item
+            .md()
+            .as_ref()
             .map_or(0, |md| get_block_size(&md, config));
     }
     let _ = writeln!(out, "total {}", display_size(total_size, config));
@@ -2103,7 +2119,7 @@ fn classify_file(path: &PathData) -> Option<char> {
                 Some('=')
             } else if file_type.is_fifo() {
                 Some('|')
-            } else if file_type.is_file() && file_is_executable(&path.md().unwrap()) {
+            } else if file_type.is_file() && file_is_executable(&path.md().as_ref().unwrap()) {
                 Some('*')
             } else {
                 None
