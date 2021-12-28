@@ -8,6 +8,8 @@
 
 // spell-checker:ignore (ToDO) sourcepath targetpath
 
+mod error;
+
 #[macro_use]
 extern crate uucore;
 
@@ -23,8 +25,11 @@ use std::os::windows;
 use std::path::{Path, PathBuf};
 use uucore::backup_control::{self, BackupMode};
 use uucore::display::Quotable;
+use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError};
 
 use fs_extra::dir::{move_dir, CopyOptions as DirCopyOptions};
+
+use crate::error::MvError;
 
 pub struct Behavior {
     overwrite: OverwriteMode,
@@ -67,7 +72,8 @@ fn usage() -> String {
     )
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
     let matches = uu_app()
@@ -86,17 +92,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         .collect();
 
     let overwrite_mode = determine_overwrite_mode(&matches);
-    let backup_mode = match backup_control::determine_backup_mode(&matches) {
-        Err(e) => {
-            show!(e);
-            return 1;
-        }
-        Ok(mode) => mode,
-    };
+    let backup_mode = backup_control::determine_backup_mode(&matches)?;
 
     if overwrite_mode == OverwriteMode::NoClobber && backup_mode != BackupMode::NoBackup {
-        show_usage_error!("options --backup and --no-clobber are mutually exclusive");
-        return 1;
+        return Err(UUsageError::new(
+            1,
+            "options --backup and --no-clobber are mutually exclusive",
+        ));
     }
 
     let backup_suffix = backup_control::determine_backup_suffix(&matches);
@@ -202,7 +204,7 @@ fn determine_overwrite_mode(matches: &ArgMatches) -> OverwriteMode {
     }
 }
 
-fn exec(files: &[OsString], b: Behavior) -> i32 {
+fn exec(files: &[OsString], b: Behavior) -> UResult<()> {
     let paths: Vec<PathBuf> = {
         let paths = files.iter().map(Path::new);
 
@@ -229,121 +231,80 @@ fn exec(files: &[OsString], b: Behavior) -> i32 {
             // `Ok()` results unless the source does not exist, or the user
             // lacks permission to access metadata.
             if source.symlink_metadata().is_err() {
-                show_error!("cannot stat {}: No such file or directory", source.quote());
-                return 1;
+                return Err(MvError::NoSuchFile(source.quote().to_string()).into());
             }
 
             // GNU semantics are: if the source and target are the same, no move occurs and we print an error
             if source.eq(target) {
                 // Done to match GNU semantics for the dot file
                 if source.eq(Path::new(".")) || source.ends_with("/.") || source.is_file() {
-                    show_error!(
-                        "'{}' and '{}' are the same file",
-                        source.display(),
-                        target.display(),
+                    return Err(MvError::SameFile(
+                        source.quote().to_string(),
+                        target.quote().to_string(),
                     )
+                    .into());
                 } else {
-                    show_error!(
-                        "cannot move '{s}' to a subdirectory of itself, '{s}/{s}'",
-                        s = source.display(),
-                    )
+                    return Err(MvError::SelfSubdirectory(source.display().to_string()).into());
                 }
-                return 1;
             }
 
             if target.is_dir() {
                 if b.no_target_dir {
                     if !source.is_dir() {
-                        show_error!(
-                            "cannot overwrite directory {} with non-directory",
-                            target.quote()
-                        );
-                        return 1;
+                        Err(MvError::DirectoryToNonDirectory(target.quote().to_string()).into())
+                    } else {
+                        rename(source, target, &b).map_err_context(|| {
+                            format!("cannot move {} to {}", source.quote(), target.quote())
+                        })
                     }
-
-                    return match rename(source, target, &b) {
-                        Err(e) => {
-                            show_error!(
-                                "cannot move {} to {}: {}",
-                                source.quote(),
-                                target.quote(),
-                                e.to_string()
-                            );
-                            1
-                        }
-                        _ => 0,
-                    };
+                } else {
+                    move_files_into_dir(&[source.clone()], target, &b)
                 }
-
-                return move_files_into_dir(&[source.clone()], target, &b);
             } else if target.exists() && source.is_dir() {
-                show_error!(
-                    "cannot overwrite non-directory {} with directory {}",
-                    target.quote(),
-                    source.quote()
-                );
-                return 1;
-            }
-
-            if let Err(e) = rename(source, target, &b) {
-                show_error!("{}", e);
-                return 1;
+                Err(MvError::NonDirectoryToDirectory(
+                    source.quote().to_string(),
+                    target.quote().to_string(),
+                )
+                .into())
+            } else {
+                rename(source, target, &b).map_err(|e| USimpleError::new(1, format!("{}", e)))
             }
         }
         _ => {
             if b.no_target_dir {
-                show_error!(
-                    "mv: extra operand {}\n\
-                     Try '{} --help' for more information.",
-                    files[2].quote(),
-                    uucore::execution_phrase()
-                );
-                return 1;
+                return Err(UUsageError::new(
+                    1,
+                    format!("mv: extra operand {}", files[2].quote()),
+                ));
             }
             let target_dir = paths.last().unwrap();
-            move_files_into_dir(&paths[..paths.len() - 1], target_dir, &b);
+            move_files_into_dir(&paths[..paths.len() - 1], target_dir, &b)
         }
     }
-    0
 }
 
-fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> i32 {
+fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UResult<()> {
     if !target_dir.is_dir() {
-        show_error!("target {} is not a directory", target_dir.quote());
-        return 1;
+        return Err(MvError::NotADirectory(target_dir.quote().to_string()).into());
     }
 
-    let mut all_successful = true;
     for sourcepath in files.iter() {
         let targetpath = match sourcepath.file_name() {
             Some(name) => target_dir.join(name),
             None => {
-                show_error!(
-                    "cannot stat {}: No such file or directory",
-                    sourcepath.quote()
-                );
-
-                all_successful = false;
+                show!(MvError::NoSuchFile(sourcepath.quote().to_string()));
                 continue;
             }
         };
-
-        if let Err(e) = rename(sourcepath, &targetpath, b) {
-            show_error!(
-                "cannot move {} to {}: {}",
+        show_if_err!(
+            rename(sourcepath, &targetpath, b).map_err_context(|| format!(
+                "cannot move {} to {}",
                 sourcepath.quote(),
-                targetpath.quote(),
-                e.to_string()
-            );
-            all_successful = false;
-        }
+                targetpath.quote()
+            ))
+        )
     }
-
-    if all_successful {
-        0
-    } else {
-        1
-    }
+    Ok(())
 }
 
 fn rename(from: &Path, to: &Path, b: &Behavior) -> io::Result<()> {
