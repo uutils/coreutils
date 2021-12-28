@@ -16,6 +16,7 @@ use std::io::Error;
 use std::ptr;
 
 use clap::{crate_version, App, AppSettings, Arg};
+use uucore::error::{set_exit_code, UResult, USimpleError, UUsageError};
 
 pub mod options {
     pub static ADJUSTMENT: &str = "adjustment";
@@ -35,7 +36,8 @@ process).",
     )
 }
 
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let usage = usage();
 
     let matches = uu_app().usage(&usage[..]).get_matches_from(args);
@@ -45,31 +47,34 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
         libc::getpriority(PRIO_PROCESS, 0)
     };
     if Error::last_os_error().raw_os_error().unwrap() != 0 {
-        show_error!("getpriority: {}", Error::last_os_error());
-        return 125;
+        return Err(USimpleError::new(
+            125,
+            format!("getpriority: {}", Error::last_os_error()),
+        ));
     }
 
     let adjustment = match matches.value_of(options::ADJUSTMENT) {
         Some(nstr) => {
             if !matches.is_present(options::COMMAND) {
-                show_error!(
-                    "A command must be given with an adjustment.\nTry '{} --help' for more information.",
-                    uucore::execution_phrase()
-                );
-                return 125;
+                return Err(UUsageError::new(
+                    125,
+                    "A command must be given with an adjustment.",
+                ));
             }
             match nstr.parse() {
                 Ok(num) => num,
                 Err(e) => {
-                    show_error!("\"{}\" is not a valid number: {}", nstr, e);
-                    return 125;
+                    return Err(USimpleError::new(
+                        125,
+                        format!("\"{}\" is not a valid number: {}", nstr, e),
+                    ))
                 }
             }
         }
         None => {
             if !matches.is_present(options::COMMAND) {
                 println!("{}", niceness);
-                return 0;
+                return Ok(());
             }
             10_i32
         }
@@ -93,11 +98,13 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
     }
 
     show_error!("execvp: {}", Error::last_os_error());
-    if Error::last_os_error().raw_os_error().unwrap() as c_int == libc::ENOENT {
+    let exit_code = if Error::last_os_error().raw_os_error().unwrap() as c_int == libc::ENOENT {
         127
     } else {
         126
-    }
+    };
+    set_exit_code(exit_code);
+    Ok(())
 }
 
 pub fn uu_app() -> App<'static, 'static> {
