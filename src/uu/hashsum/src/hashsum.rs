@@ -28,6 +28,7 @@ use sha1::Sha1;
 use sha2::{Sha224, Sha256, Sha384, Sha512};
 use sha3::{Sha3_224, Sha3_256, Sha3_384, Sha3_512, Shake128, Shake256};
 use std::cmp::Ordering;
+use std::error::Error;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::{self, stdin, BufRead, BufReader, Read};
@@ -35,6 +36,7 @@ use std::iter;
 use std::num::ParseIntError;
 use std::path::Path;
 use uucore::display::Quotable;
+use uucore::error::{FromIo, UError, UResult};
 
 const NAME: &str = "hashsum";
 
@@ -274,7 +276,8 @@ fn is_valid_bit_num(arg: String) -> Result<(), String> {
         .map_err(|e| format!("{}", e))
 }
 
-pub fn uumain(mut args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     // if there is no program name for some reason, default to "hashsum"
     let program = args.next().unwrap_or_else(|| OsString::from(NAME));
     let binary_name = Path::new(&program)
@@ -324,14 +327,9 @@ pub fn uumain(mut args: impl uucore::Args) -> i32 {
         warn,
     };
 
-    let res = match matches.values_of_os("FILE") {
+    match matches.values_of_os("FILE") {
         Some(files) => hashsum(opts, files),
         None => hashsum(opts, iter::once(OsStr::new("-"))),
-    };
-
-    match res {
-        Ok(()) => 0,
-        Err(e) => e,
     }
 }
 
@@ -453,8 +451,26 @@ fn uu_app(binary_name: &str) -> App<'static, 'static> {
     }
 }
 
+#[derive(Debug)]
+enum HashsumError {
+    InvalidRegex,
+    InvalidFormat,
+}
+
+impl Error for HashsumError {}
+impl UError for HashsumError {}
+
+impl std::fmt::Display for HashsumError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            HashsumError::InvalidRegex => write!(f, "invalid regular expression"),
+            HashsumError::InvalidFormat => Ok(()),
+        }
+    }
+}
+
 #[allow(clippy::cognitive_complexity)]
-fn hashsum<'a, I>(mut options: Options, files: I) -> Result<(), i32>
+fn hashsum<'a, I>(mut options: Options, files: I) -> UResult<()>
 where
     I: Iterator<Item = &'a OsStr>,
 {
@@ -470,7 +486,8 @@ where
             stdin_buf = stdin();
             Box::new(stdin_buf) as Box<dyn Read>
         } else {
-            file_buf = crash_if_err!(1, File::open(filename));
+            file_buf =
+                File::open(filename).map_err_context(|| "failed to open file".to_string())?;
             Box::new(file_buf) as Box<dyn Read>
         });
         if options.check {
@@ -487,25 +504,24 @@ where
             } else {
                 "+".to_string()
             };
-            let gnu_re = crash_if_err!(
-                1,
-                Regex::new(&format!(
-                    r"^(?P<digest>[a-fA-F0-9]{}) (?P<binary>[ \*])(?P<fileName>.*)",
-                    modifier,
-                ))
-            );
-            let bsd_re = crash_if_err!(
-                1,
-                Regex::new(&format!(
-                    r"^{algorithm} \((?P<fileName>.*)\) = (?P<digest>[a-fA-F0-9]{digest_size})",
-                    algorithm = options.algoname,
-                    digest_size = modifier,
-                ))
-            );
+            let gnu_re = Regex::new(&format!(
+                r"^(?P<digest>[a-fA-F0-9]{}) (?P<binary>[ \*])(?P<fileName>.*)",
+                modifier,
+            ))
+            .map_err(|_| HashsumError::InvalidRegex)?;
+            let bsd_re = Regex::new(&format!(
+                r"^{algorithm} \((?P<fileName>.*)\) = (?P<digest>[a-fA-F0-9]{digest_size})",
+                algorithm = options.algoname,
+                digest_size = modifier,
+            ))
+            .map_err(|_| HashsumError::InvalidRegex)?;
 
             let buffer = file;
-            for (i, line) in buffer.lines().enumerate() {
-                let line = crash_if_err!(1, line);
+            for (i, maybe_line) in buffer.lines().enumerate() {
+                let line = match maybe_line {
+                    Ok(l) => l,
+                    Err(e) => return Err(e.map_err_context(|| "failed to read file".to_string())),
+                };
                 let (ck_filename, sum, binary_check) = match gnu_re.captures(&line) {
                     Some(caps) => (
                         caps.name("fileName").unwrap().as_str(),
@@ -521,7 +537,7 @@ where
                         None => {
                             bad_format += 1;
                             if options.strict {
-                                return Err(1);
+                                return Err(HashsumError::InvalidFormat.into());
                             }
                             if options.warn {
                                 show_warning!(
@@ -535,17 +551,16 @@ where
                         }
                     },
                 };
-                let f = crash_if_err!(1, File::open(ck_filename));
+                let f = File::open(ck_filename)
+                    .map_err_context(|| "failed to open file".to_string())?;
                 let mut ckf = BufReader::new(Box::new(f) as Box<dyn Read>);
-                let real_sum = crash_if_err!(
-                    1,
-                    digest_reader(
-                        &mut options.digest,
-                        &mut ckf,
-                        binary_check,
-                        options.output_bits
-                    )
+                let real_sum = digest_reader(
+                    &mut options.digest,
+                    &mut ckf,
+                    binary_check,
+                    options.output_bits,
                 )
+                .map_err_context(|| "failed to read input".to_string())?
                 .to_ascii_lowercase();
                 // FIXME: Filenames with newlines should be treated specially.
                 // GNU appears to replace newlines by \n and backslashes by
@@ -568,15 +583,13 @@ where
                 }
             }
         } else {
-            let sum = crash_if_err!(
-                1,
-                digest_reader(
-                    &mut options.digest,
-                    &mut file,
-                    options.binary,
-                    options.output_bits
-                )
-            );
+            let sum = digest_reader(
+                &mut options.digest,
+                &mut file,
+                options.binary,
+                options.output_bits,
+            )
+            .map_err_context(|| "failed to read input".to_string())?;
             if options.tag {
                 println!("{} ({}) = {}", options.algoname, filename.display(), sum);
             } else {
