@@ -23,7 +23,7 @@ fn test_link_no_circular() {
 
     ucmd.args(&[link, link])
         .fails()
-        .stderr_is("link: No such file or directory (os error 2)\n");
+        .stderr_is("link: cannot create link 'test_link_no_circular' to 'test_link_no_circular': No such file or directory");
     assert!(!at.file_exists(link));
 }
 
@@ -35,7 +35,7 @@ fn test_link_nonexistent_file() {
 
     ucmd.args(&[file, link])
         .fails()
-        .stderr_is("link: No such file or directory (os error 2)\n");
+        .stderr_only("link: cannot create link 'test_link_nonexistent_file_link' to 'test_link_nonexistent_file': No such file or directory");
     assert!(!at.file_exists(file));
     assert!(!at.file_exists(link));
 }
