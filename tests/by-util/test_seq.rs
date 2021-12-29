@@ -1,3 +1,4 @@
+// spell-checker:ignore lmnop xlmnop
 use crate::common::util::*;
 use std::io::Read;
 
@@ -675,4 +676,20 @@ fn test_rounding_end() {
         .succeeds()
         .stdout_is("1\n")
         .no_stderr();
+}
+
+#[test]
+fn test_parse_error_float() {
+    new_ucmd!()
+        .arg("lmnop")
+        .fails()
+        .usage_error("invalid floating point argument: 'lmnop'");
+}
+
+#[test]
+fn test_parse_error_hex() {
+    new_ucmd!()
+        .arg("0xlmnop")
+        .fails()
+        .usage_error("invalid hexadecimal argument: '0xlmnop'");
 }
