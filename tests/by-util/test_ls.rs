@@ -51,17 +51,6 @@ fn test_ls_ordering() {
 
     scene
         .ucmd()
-        .arg("-i")
-        .succeeds()
-        .stdout_matches(&Regex::new(".*some-dir1.*some-dir3.*some-dir5\\n").unwrap())
-        .stdout_matches(&Regex::new(".*some-dir2.*some-dir4.*some-dir6").unwrap())
-        .stdout_does_not_match(
-            &Regex::new(".*some-dir1.*some-dir2.*some-dir3.*some-dir4.*some-dir5.*some-dir6")
-                .unwrap(),
-        );
-
-    scene
-        .ucmd()
         .arg("-Rl")
         .succeeds()
         .stdout_matches(&Regex::new("some-dir1:\\ntotal 0").unwrap());
@@ -1334,20 +1323,22 @@ fn test_ls_color() {
         ));
 
     // link resolution should not contain colors
-    at.mkdir("temp_dir");
-    at.symlink_file("temp_dir/does_not_exist", "temp_dir/dangle");
-    let dangle_colors = format!("\x1b[1;40;31m{}\x1b[0m", "dangle");
-    scene
-        .ucmd()
-        .arg("--color")
-        .arg("-l")
-        .arg("temp_dir")
-        .succeeds()
-        .stdout_contains(format!(
-            "{} -> {}/temp_dir/does_not_exist",
-            dangle_colors,
-            at.subdir.to_string_lossy()
-        ));
+    // this is GNU behavior but is not the present behavior uutils
+    // keeping here as we may choose later to make an option
+    // at.mkdir("temp_dir");
+    // at.symlink_file("temp_dir/does_not_exist", "temp_dir/dangle");
+    // let dangle_colors = format!("\x1b[1;40;31m{}\x1b[0m", "dangle");
+    // scene
+    //     .ucmd()
+    //     .arg("--color")
+    //     .arg("-l")
+    //     .arg("temp_dir")
+    //     .succeeds()
+    //     .stdout_contains(format!(
+    //         "{} -> {}/temp_dir/does_not_exist",
+    //         dangle_colors,
+    //         at.subdir.to_string_lossy()
+    //     ));
 }
 
 #[cfg(unix)]
