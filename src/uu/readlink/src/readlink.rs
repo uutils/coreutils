@@ -78,25 +78,18 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     for f in &files {
         let p = PathBuf::from(f);
-        if res_mode == ResolveMode::None {
-            match fs::read_link(&p) {
-                Ok(path) => show(&path, no_newline, use_zero),
-                Err(err) => {
-                    if verbose {
-                        show_error!("{}: errno {}", f.maybe_quote(), err.raw_os_error().unwrap());
-                    }
-                    return 1;
-                }
-            }
+        let path_result = if res_mode == ResolveMode::None {
+            fs::read_link(&p)
         } else {
-            match canonicalize(&p, can_mode, res_mode) {
-                Ok(path) => show(&path, no_newline, use_zero),
-                Err(err) => {
-                    if verbose {
-                        show_error!("{}: errno {}", f.maybe_quote(), err.raw_os_error().unwrap());
-                    }
-                    return 1;
+            canonicalize(&p, can_mode, res_mode)
+        };
+        match path_result {
+            Ok(path) => show(&path, no_newline, use_zero),
+            Err(err) => {
+                if verbose {
+                    show_error!("{}: errno {}", f.maybe_quote(), err.raw_os_error().unwrap());
                 }
+                return 1;
             }
         }
     }
