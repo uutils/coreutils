@@ -7,9 +7,6 @@
 
 // spell-checker:ignore (ToDO) parsemode makedev sysmacros perror IFBLK IFCHR IFIFO
 
-#[macro_use]
-extern crate uucore;
-
 use std::ffi::CString;
 
 use clap::{crate_version, App, Arg, ArgMatches};
@@ -17,6 +14,7 @@ use libc::{dev_t, mode_t};
 use libc::{S_IFBLK, S_IFCHR, S_IFIFO, S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR};
 
 use uucore::display::Quotable;
+use uucore::error::{set_exit_code, UResult, USimpleError, UUsageError};
 use uucore::InvalidEncodingHandling;
 
 static ABOUT: &str = "Create the special file NAME of the given TYPE.";
@@ -81,8 +79,8 @@ fn _mknod(file_name: &str, mode: mode_t, dev: dev_t) -> i32 {
     }
 }
 
-#[allow(clippy::cognitive_complexity)]
-pub fn uumain(args: impl uucore::Args) -> i32 {
+#[uucore_procs::gen_uumain]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args
         .collect_str(InvalidEncodingHandling::Ignore)
         .accept_any();
@@ -92,13 +90,7 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     let matches = uu_app().get_matches_from(args);
 
-    let mode = match get_mode(&matches) {
-        Ok(mode) => mode,
-        Err(err) => {
-            show_error!("{}", err);
-            return 1;
-        }
-    };
+    let mode = get_mode(&matches).map_err(|e| USimpleError::new(1, e))?;
 
     let file_name = matches.value_of("name").expect("Missing argument 'NAME'");
 
@@ -113,31 +105,29 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
 
     if ch == 'p' {
         if matches.is_present("major") || matches.is_present("minor") {
-            eprintln!("Fifos do not have major and minor device numbers.");
-            eprintln!(
-                "Try '{} --help' for more information.",
-                uucore::execution_phrase()
-            );
-            1
+            Err(UUsageError::new(
+                1,
+                "Fifos do not have major and minor device numbers.",
+            ))
         } else {
-            _mknod(file_name, S_IFIFO | mode, 0)
+            let exit_code = _mknod(file_name, S_IFIFO | mode, 0);
+            set_exit_code(exit_code);
+            Ok(())
         }
     } else {
         match (matches.value_of("major"), matches.value_of("minor")) {
             (None, None) | (_, None) | (None, _) => {
-                eprintln!("Special files require major and minor device numbers.");
-                eprintln!(
-                    "Try '{} --help' for more information.",
-                    uucore::execution_phrase()
-                );
-                1
+                return Err(UUsageError::new(
+                    1,
+                    "Special files require major and minor device numbers.",
+                ));
             }
             (Some(major), Some(minor)) => {
                 let major = major.parse::<u64>().expect("validated by clap");
                 let minor = minor.parse::<u64>().expect("validated by clap");
 
                 let dev = makedev(major, minor);
-                if ch == 'b' {
+                let exit_code = if ch == 'b' {
                     // block special file
                     _mknod(file_name, S_IFBLK | mode, dev)
                 } else if ch == 'c' || ch == 'u' {
@@ -145,7 +135,9 @@ pub fn uumain(args: impl uucore::Args) -> i32 {
                     _mknod(file_name, S_IFCHR | mode, dev)
                 } else {
                     unreachable!("{} was validated to be only b, c or u", ch);
-                }
+                };
+                set_exit_code(exit_code);
+                Ok(())
             }
         }
     }
